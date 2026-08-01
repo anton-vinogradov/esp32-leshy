@@ -405,7 +405,7 @@ static void drawHiddenScreen() {
     drawNetBadge();
 }
 
-static void gotoHidden() { Serial.printf("[Hidden] screen opened: count=%d\n", revealer.count()); st = ST_HIDDEN; drawHiddenScreen(); }
+static void gotoHidden() { st = ST_HIDDEN; drawHiddenScreen(); }
 
 // ---- connection screen (one menu item: full status + contextual actions) ----
 enum ConnAct { CA_SETUP, CA_CONNECT, CA_DISCONNECT, CA_FORGET };

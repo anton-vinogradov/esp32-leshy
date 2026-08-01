@@ -1,4 +1,5 @@
 #include "Display.h"
+#include "font_ru_small.h"
 
 TFT_eSPI tft;
 
@@ -40,7 +41,11 @@ void uiFooter(const char* hint) {
 TFT_eSprite& uiRow() {
     static TFT_eSprite row(&tft);
     static bool made = false;
-    if (!made) { row.createSprite(240, UI_ROW_H); made = true; }
+    if (!made) {
+        row.createSprite(240, UI_ROW_H);
+        row.loadFont(font_ru_small);   // Cyrillic-capable rows (SSID names, "раскрываю", etc.)
+        made = true;
+    }
     return row;
 }
 

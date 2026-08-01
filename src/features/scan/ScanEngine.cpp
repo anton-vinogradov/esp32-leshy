@@ -33,8 +33,6 @@ void ScanEngine::taskLoop() {
 
         if (m != SCAN_BLE) {
             int n = ws_.scan();
-            int dbgHid = 0, dbgNamed = 0;
-            char dbgMacs[8 * 18 + 1]; int mp = 0; dbgMacs[0] = 0;
             xSemaphoreTake(mtx_, portMAX_DELAY);
             wifiN_ = n < MAX ? n : MAX;
             for (int i = 0; i < wifiN_; i++) {
@@ -46,22 +44,9 @@ void ScanEngine::taskLoop() {
                 memcpy(wifi_[i].bssid, a.bssid, 6);
                 String name;                                   // fill hidden names we already know
                 if (wifi_[i].hidden && rev_ && rev_->lookup(a.bssid, name)) wifi_[i].ssid = name;
-                if (wifi_[i].hidden) {
-                    dbgHid++;
-                    if (wifi_[i].ssid.length()) dbgNamed++;
-                    else if (mp < (int)sizeof(dbgMacs) - 19)
-                        mp += snprintf(dbgMacs + mp, sizeof(dbgMacs) - mp, "%02X:%02X:%02X:%02X:%02X:%02X ",
-                                       a.bssid[0], a.bssid[1], a.bssid[2], a.bssid[3], a.bssid[4], a.bssid[5]);
-                }
             }
             wifiGen_ = wifiGen_ + 1;      // (avoid ++ on volatile — deprecated in C++20)
             xSemaphoreGive(mtx_);
-            static uint32_t dbgLast = 0;
-            if (millis() - dbgLast > 2500) {
-                dbgLast = millis();
-                Serial.printf("[ScanFill] wifi=%d hidden=%d named=%d cache=%d unnamed=%s\n",
-                              wifiN_, dbgHid, dbgNamed, rev_ ? rev_->count() : -1, dbgMacs);
-            }
         }
 
         if (m == SCAN_WIFI) {

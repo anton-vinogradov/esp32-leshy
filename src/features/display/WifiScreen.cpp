@@ -26,31 +26,33 @@ void WifiScreen::rows(ScanEngine& e, int offset) {
             if (r.auth != 0) {
                 row.setTextDatum(ML_DATUM);
                 row.setTextColor(dim, bg);
-                row.drawString("#", 24, 12, 2);
+                row.drawString("#", 24, 12);
             }
             String mine;
             bool isMine = net_ && net_->isMine(r.bssid, mine);
             bool named = r.ssid.length() > 0;        // real name (broadcast or revealed)
             bool unrev = r.hidden && !named && !isMine;   // hidden, name not revealed yet
-            String ss = named ? r.ssid : (isMine ? mine : String("revealing"));  // waiting on traffic to reveal
-            if (ss.length() > 14) ss = ss.substring(0, 13) + "~";
+            String ss = named ? r.ssid : (isMine ? mine : String("раскрываю"));  // waiting on traffic to reveal
             if (isMine) ss = "*" + ss;              // your own network
+            bool trunc = false;                      // fit the name column (proportional font)
+            while (ss.length() > 3 && row.textWidth(ss) > 160) { ss = ss.substring(0, ss.length() - 1); trunc = true; }
+            if (trunc) ss += "~";
             row.setTextDatum(ML_DATUM);
             uint16_t nameCol = isMine ? tft.color565(0xff, 0xcf, 0x3f) : (unrev ? grey : bright);
             row.setTextColor(nameCol, bg);
-            row.drawString(ss, 34, 12, 2);
+            row.drawString(ss, 34, 12);
             if (r.hidden && (named || isMine)) {    // known name, but still a hidden SSID
-                int hx = 34 + row.textWidth(ss, 2) + 5;
-                if (hx < 206) {
+                int hx = 34 + row.textWidth(ss) + 5;
+                if (hx < 196) {
                     row.setTextColor(tft.color565(0xff, 0xa5, 0x2a), bg);
-                    row.drawString("H", hx, 12, 2);
+                    row.drawString("H", hx, 12);
                 }
             }
             char b[8];
             sprintf(b, "%d", r.rssi);
             row.setTextDatum(MR_DATUM);
             row.setTextColor(col, bg);
-            row.drawString(b, 232, 12, 2);
+            row.drawString(b, 232, 12);
         }
         row.pushSprite(0, y);
     }

@@ -29,9 +29,9 @@ void uiHeaderRu(const char* title, const char* right) {
 void uiFooterRu(const char* hint) {
     const uint16_t bg  = uiBg();
     const uint16_t dim = tft.color565(0x9a, 0xaa, 0x9a);   // brighter hint
-    tft.fillRect(0, 298, 240, 22, bg);                     // taller band so descenders aren't clipped
+    tft.fillRect(0, 288, 240, 32, bg);                     // raised well clear of the panel's hidden bottom edge
     fontSmall();
     tft.setTextDatum(MC_DATUM);
     tft.setTextColor(dim, bg);
-    tft.drawString(hint, 120, 308);
+    tft.drawString(hint, 120, 301);
 }

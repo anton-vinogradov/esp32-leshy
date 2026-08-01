@@ -23,15 +23,17 @@ void BleScreen::rows(ScanEngine& e, int offset) {
             uint16_t col = uiRssiColor(d.rssi);
             uiSignalBars(row, 6, 5, d.rssi, col);
             String label = d.label;
-            if (label.length() > 16) label = label.substring(0, 15) + "~";
+            bool trunc = false;
+            while (label.length() > 3 && row.textWidth(label) > 160) { label = label.substring(0, label.length() - 1); trunc = true; }
+            if (trunc) label += "~";
             row.setTextDatum(ML_DATUM);
             row.setTextColor(d.tracker ? amber : white, bg);
-            row.drawString(label, 34, 12, 2);
+            row.drawString(label, 34, 12);
             char b[8];
             sprintf(b, "%d", d.rssi);
             row.setTextDatum(MR_DATUM);
             row.setTextColor(col, bg);
-            row.drawString(b, 232, 12, 2);
+            row.drawString(b, 232, 12);
         }
         row.pushSprite(0, y);
     }
