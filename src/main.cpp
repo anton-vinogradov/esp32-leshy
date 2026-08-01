@@ -240,7 +240,7 @@ static void openNetOptions();    // RIGHT on a scan row -> per-network options
 static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
-enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG };
+enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV };
 enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
@@ -251,10 +251,13 @@ static const MenuItem ROOT_I[] = {
     {"Settings", "Language, touch, about",   "Настройки", "Язык, тач, о девайсе",     K_SUB, M_SETTINGS},
 };
 static const MenuItem WIFI_I[] = {
-    {"Wi-Fi Scan",     "Signal, channel, lock",  "Скан Wi-Fi",     "Сигнал, канал, шифр", K_FEAT, F_WIFI_SCAN},
-    {"Hidden names",   "Revealed hidden SSIDs",  "Скрытые сети",   "Раскрытые имена",     K_FEAT, F_HIDDEN},
-    {"Deauth monitor", "Alarm on deauth bursts", "Детектор deauth","Тревога на всплески", K_FEAT, F_DEAUTH},
-    {"Channels 2.4G",  "Airtime by channel",     "Каналы 2.4ГГц",  "Загрузка по каналам", K_FEAT, F_CHANNELS},
+    {"Wi-Fi Scan",    "Signal, channel, lock", "Скан Wi-Fi",    "Сигнал, канал, шифр",   K_FEAT, F_WIFI_SCAN},
+    {"Channels 2.4G", "Load by channel",       "Каналы 2.4ГГц", "Загрузка по каналам",   K_FEAT, F_CHANNELS},
+    {"Advanced",      "Deeper Wi-Fi tools",    "Продвинутое",   "Инструменты поглубже",  K_SUB,  M_WIFI_ADV},
+};
+static const MenuItem WADV_I[] = {
+    {"Hidden names",   "Revealed hidden SSIDs",  "Скрытые сети",  "Раскрытые имена",       K_FEAT, F_HIDDEN},
+    {"Deauth monitor", "Alarm on deauth bursts", "Детектор атак", "Тревога на отключения", K_FEAT, F_DEAUTH},
 };
 static const MenuItem BLE_I[] = {
     {"BLE Scan", "Devices & trackers nearby", "Скан BLE", "Устройства и трекеры рядом", K_FEAT, F_BLE_SCAN},
@@ -275,11 +278,12 @@ static const MenuItem LANG_I[] = {
 };
 static const Menu MENUS[] = {
     {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
-    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 4},
+    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 3},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
     {"Settings",    "Настройки",   SET_I,  5},
     {"Language",    "Язык",        LANG_I, 2},
+    {"Advanced",    "Продвинутое", WADV_I, 2},
 };
 
 // ---- navigation state ----
@@ -764,7 +768,7 @@ static void deauthRefresh() {                        // called on a timer; touch
 static void drawDeauthScreen() {                     // full paint: static chrome + labels, then values
     const uint16_t bg = uiBg();
     const uint16_t dim = tft.color565(0x8f, 0xa9, 0x8f);
-    uiHeaderRu(i18n::tr("Deauth monitor", "Детектор deauth"));
+    uiHeaderRu(i18n::tr("Deauth monitor", "Детектор атак"));
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     daLastAlert = -1; daLastRecent = -1; daLastTotal = -1; daLastChan = -1; daLastMac = "";
     fontSmall();
@@ -780,8 +784,8 @@ static void drawDeauthScreen() {                     // full paint: static chrom
 }
 
 // ---- Channel analyzer: per-channel scrolling area graphs (cardiograph style) ----
-static const int CH_HIST = 118;                 // samples kept per channel (graph width)
-static const int CH_ROWH = 20, CH_TOP = 34, CH_GX = 26, CH_GW = CH_HIST, CH_GH = 17;
+static const int CH_HIST = 212;                 // samples kept per channel (graph width)
+static const int CH_ROWH = 20, CH_TOP = 34, CH_GX = 24, CH_GW = CH_HIST, CH_GH = 17;
 static uint8_t chHist[14][CH_HIST];             // load history per channel (0..CH_GH)
 static int     chHead = 0;                      // ring write position
 static bool    chReady = false;
@@ -799,28 +803,43 @@ static void channelSample() {                   // push one column from the late
     chReady = true;
 }
 
-static void channelGraphs() {                   // redraw the 13 area graphs (no header/footer touch)
-    const uint16_t bg   = uiBg();
+// Each graph row is composed off-screen and pushed in one go — fast and flicker-free.
+static void channelGraphs() {
     const uint16_t grid = tft.color565(0x1b, 0x24, 0x1b);
-    const uint16_t gold = tft.color565(0xff, 0xcf, 0x3f);
-    const uint16_t dim  = tft.color565(0x8f, 0xa9, 0x8f);
+    static TFT_eSprite g(&tft);
+    static bool made = false;
+    if (!made) { g.createSprite(CH_GW, CH_GH); made = true; }
     for (int ch = 1; ch <= 13; ch++) {
         int gy = CH_TOP + (ch - 1) * CH_ROWH;
-        bool clean = (ch == 1 || ch == 6 || ch == 11);   // non-overlapping
+        bool clean = (ch == 1 || ch == 6 || ch == 11);   // non-overlapping channels
+        uint16_t line = clean ? tft.color565(0x5c, 0xe1, 0x74) : tft.color565(0x4a, 0x9a, 0xaa);
+        uint16_t fill = clean ? tft.color565(0x1e, 0x4a, 0x28) : tft.color565(0x1b, 0x3a, 0x42);
+        g.fillSprite(grid);
+        for (int x = 0; x < CH_HIST; x++) {
+            int v = chHist[ch][(chHead + x) % CH_HIST];   // oldest -> newest, left to right
+            if (v > 0) {
+                g.drawFastVLine(x, CH_GH - v, v, fill);   // filled volume
+                g.drawPixel(x, CH_GH - v, line);          // the trace on top
+            } else {
+                g.drawPixel(x, CH_GH - 1, line);
+            }
+        }
+        g.pushSprite(CH_GX, gy);
+    }
+}
+
+static void channelLabels() {                    // static column of channel numbers
+    const uint16_t bg   = uiBg();
+    const uint16_t gold = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t dim  = tft.color565(0x8f, 0xa9, 0x8f);
+    fontOff();
+    for (int ch = 1; ch <= 13; ch++) {
+        int gy = CH_TOP + (ch - 1) * CH_ROWH;
+        bool clean = (ch == 1 || ch == 6 || ch == 11);
         tft.fillRect(0, gy, CH_GX, CH_ROWH, bg);
         tft.setTextDatum(MR_DATUM);
         tft.setTextColor(clean ? gold : dim, bg);
-        tft.drawString(String(ch), 22, gy + CH_GH / 2, 2);
-        tft.fillRect(CH_GX, gy, CH_GW, CH_GH, grid);      // graph background
-        uint16_t line = clean ? tft.color565(0x4c, 0xd1, 0x64) : tft.color565(0x3a, 0x8a, 0x9a);
-        uint16_t fill = clean ? tft.color565(0x1e, 0x4a, 0x28) : tft.color565(0x1b, 0x3a, 0x42);
-        for (int x = 0; x < CH_HIST; x++) {
-            int idx = (chHead + x) % CH_HIST;             // oldest -> newest, left to right
-            int v = chHist[ch][idx];
-            int col = CH_GX + x;
-            if (v > 0) tft.drawFastVLine(col, gy + CH_GH - v, v, fill);   // filled volume
-            tft.drawPixel(col, gy + CH_GH - 1 - (v > 0 ? v - 1 : 0), line);
-        }
+        tft.drawString(String(ch), 21, gy + CH_GH / 2, 1);
     }
 }
 
@@ -830,7 +849,7 @@ static void drawChannelScreen() {
     char right[20]; snprintf(right, sizeof(right), "%d %s", n, i18n::tr("nets", "сетей"));
     uiHeaderRu(i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"), right);
     tft.fillRect(0, 28, 240, 320 - 28, bg);
-    fontOff();
+    channelLabels();
     channelGraphs();
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
     drawNetBadge();
@@ -899,7 +918,8 @@ static void back() {
     switch (st) {
         case ST_DEAUTH:    detector.stop(); showMenu();                    return;
         case ST_NETINFO:   gotoWifi();                                     return;
-        case ST_OTA:       if (ota.phase() == OtaManager::DOWNLOADING) return; showMenu(); return;
+        case ST_OTA:       if (ota.busy()) return;   // checking or downloading — stay put
+                           showMenu();                                     return;
         case ST_PROVISION: net.stopProvision(); gotoConn();               return;
         case ST_CONFIRM:   cancelConfirm();                               return;
         case ST_OPTIONS:   if (optReturn == ST_HIDDEN) gotoHidden(); else if (optReturn == ST_WIFI) gotoWifi(); else showMenu(); return;
@@ -909,13 +929,17 @@ static void back() {
 }
 
 static void launch(int feat) {
+    // An OTA check/download owns the radio — never start a screen that touches it.
+    if (ota.busy() && feat != F_OTA) return;
+    if (st == ST_DEAUTH)    detector.stop();       // release promiscuous before anything else
+    if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
     switch (feat) {
         case F_WIFI_SCAN:   wifiSel = 0; off = 0; gotoWifi(); break;
         case F_CONN:        connSel = 0; gotoConn(); break;
         case F_HIDDEN:      hidSel = 0; hidOff = 0; gotoHidden(); break;
-        case F_DEAUTH:      engine.pause();
+        case F_DEAUTH:      engine.pauseAndWait();     // promiscuous needs the radio to itself
                             if (detector.begin()) { st = ST_DEAUTH; drawDeauthScreen(); }
-                            else { infoTitle = i18n::tr("Deauth monitor", "Детектор deauth"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
+                            else { infoTitle = i18n::tr("Deauth monitor", "Детектор атак"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
         case F_CHANNELS:    engine.setMode(ScanEngine::SCAN_WIFI); engine.resume(); st = ST_CHANNELS; seenWifiGen = engine.wifiGen();
                             memset(chHist, 0, sizeof(chHist)); chHead = 0; channelSample(); drawChannelScreen(); break;
@@ -1000,7 +1024,10 @@ static void serialControl() {
             else if (!strcmp(buf, "ota"))    launch(F_OTA);
             else if (!strcmp(buf, "deauth")) launch(F_DEAUTH);
             else if (!strcmp(buf, "chan"))   launch(F_CHANNELS);
-            else if (!strcmp(buf, "menu"))   { depth = 0; showMenu(); }
+            else if (!strcmp(buf, "menu"))   { if (ota.busy()) continue;
+                                               if (st == ST_DEAUTH) detector.stop();
+                                               if (st == ST_PROVISION) net.stopProvision();
+                                               depth = 0; showMenu(); }
             else { Serial.printf("[cmd] ? '%s'\n", buf); continue; }
             Serial.printf("[cmd] %s -> st=%d\n", buf, (int)st);
         } else if (len < sizeof(buf) - 1) {
@@ -1103,10 +1130,16 @@ void loop() {
         seenOtaGen = ota.gen();
         if ((int)ota.phase() != seenOtaPhase) { seenOtaPhase = (int)ota.phase(); drawOtaScreen(); }
         else otaBar();                       // % change → repaint just the slider (no bg redraw)
-    } else if (st == ST_CHANNELS && engine.wifiGen() != seenWifiGen) {
-        seenWifiGen = engine.wifiGen();
-        channelSample();
-        channelGraphs();            // scroll the graphs; header/footer untouched (no flicker)
+    }
+
+    // Channel graphs scroll on a steady tick (cardiograph feel) using the latest scan.
+    if (st == ST_CHANNELS) {
+        static uint32_t nextCh = 0;
+        if (millis() - nextCh > 120) {
+            nextCh = millis();
+            channelSample();
+            channelGraphs();        // header/footer untouched — no flicker
+        }
     }
 
     if (millis() > 8000) ota.markHealthy();  // once the UI has clearly been up, confirm this image

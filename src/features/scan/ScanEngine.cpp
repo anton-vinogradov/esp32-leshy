@@ -20,6 +20,16 @@ void ScanEngine::pause() {
     paused_ = true;      // task finishes any in-flight scan then idles (non-blocking)
 }
 
+// Anything that reconfigures the radio (promiscuous, TLS/OTA) must wait for the
+// scan task to actually leave scanNetworks()/reveal — otherwise two cores drive
+// esp_wifi at once. A scan sweep plus reveal dwell can take a few seconds.
+bool ScanEngine::pauseAndWait(uint32_t timeoutMs) {
+    paused_ = true;
+    uint32_t t0 = millis();
+    while (!idle_ && (millis() - t0) < timeoutMs) vTaskDelay(pdMS_TO_TICKS(20));
+    return idle_;
+}
+
 void ScanEngine::resume() {
     idle_ = false;
     paused_ = false;

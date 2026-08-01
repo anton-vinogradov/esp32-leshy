@@ -20,7 +20,9 @@ public:
     enum ScanMode { SCAN_BOTH, SCAN_WIFI, SCAN_BLE };
 
     void begin();                        // start the background scan task
-    void pause();                        // stop scanning and release the radio (blocks until idle)
+    void pause();                        // ask the task to stop scanning (returns immediately)
+    bool pauseAndWait(uint32_t timeoutMs = 6000);  // pause AND wait until the radio is really free
+    bool isIdle() const { return idle_; }
     void resume();                       // resume background scanning
     void setMode(ScanMode m) { mode_ = m; }   // WIFI = refresh Wi-Fi fast (skip BLE)
     void attachRevealer(HiddenRevealer* r) { rev_ = r; }   // passively reveal hidden SSIDs

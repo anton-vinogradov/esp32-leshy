@@ -57,8 +57,10 @@ bool OtaManager::syncTime() {
 }
 
 bool OtaManager::prep() {
-    if (eng_) eng_->pause();
-    vTaskDelay(pdMS_TO_TICKS(150));       // let any in-flight scan finish
+    if (eng_ && !eng_->pauseAndWait()) {  // radio must be free before TLS — don't race the scan task
+        Serial.println("[OTA] scan engine did not go idle");
+        return false;
+    }
     esp_wifi_set_promiscuous(false);      // reveal may have left it on
     WiFi.mode(WIFI_STA);
     if (net_ && !net_->connected()) net_->connect();
@@ -131,6 +133,7 @@ void OtaManager::doDownload() {
     if (!Update.begin(total)) { http.end(); fail(E_BEGIN); return; }
 
     bool useSha = strncmp(digest_, "sha256:", 7) == 0;
+    if (!useSha) Serial.println("[OTA] WARNING: release asset has no sha256 digest — image not checksum-verified");
     mbedtls_sha256_context sha;
     if (useSha) { mbedtls_sha256_init(&sha); mbedtls_sha256_starts(&sha, 0); }
 
