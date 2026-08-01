@@ -9,6 +9,8 @@
 #include "features/display/Display.h"
 #include "features/display/BootScreen.h"
 #include "features/display/WifiScreen.h"
+#include "features/display/BleScreen.h"
+#include "features/input/Buttons.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -18,6 +20,7 @@
 #define DEMO_POLITE_PORTAL   5
 #define DEMO_DISPLAY         6
 #define DEMO_DASHBOARD       7
+#define DEMO_BTNTEST         8
 #ifndef DEMO                      // override at build time: pio run -DDEMO=3
 #define DEMO DEMO_DASHBOARD
 #endif
@@ -207,6 +210,24 @@ void loop() {}
 #elif DEMO == DEMO_DASHBOARD
 
 WifiScreen wifiScreen;
+BleScreen  bleScreen;
+Buttons    buttons;
+
+enum Screen { SCR_WIFI, SCR_BLE };
+static Screen   scr = SCR_WIFI;
+static int      off = 0;
+static uint32_t lastScan = 0;
+
+static int  curCount() { return scr == SCR_WIFI ? wifiScreen.count() : bleScreen.count(); }
+static void renderCur() { if (scr == SCR_WIFI) wifiScreen.render(off); else bleScreen.render(off); }
+
+static void rescan() {
+    if (scr == SCR_WIFI) { wifiScreen.scanCue(); wifiScreen.scan(); }
+    else                 { bleScreen.scanCue();  bleScreen.scan();  }
+    if (off >= curCount()) off = 0;
+    renderCur();
+    lastScan = millis();
+}
 
 void setup() {
     Serial.begin(115200);
@@ -215,11 +236,54 @@ void setup() {
     displayInit();
     BootScreen().show();
     delay(1800);
+    if (!buttons.begin()) Serial.println("[Dashboard] buttons (PCF8574) not found.");
+    rescan();
 }
 
 void loop() {
-    wifiScreen.refresh();
-    delay(4000);
+    switch (buttons.poll()) {
+        case Buttons::SELECT:
+            scr = (scr == SCR_WIFI) ? SCR_BLE : SCR_WIFI;
+            off = 0;
+            rescan();
+            break;
+        case Buttons::UP:
+            if (off > 0) { off--; renderCur(); }
+            break;
+        case Buttons::DOWN:
+            if (off < curCount() - 1) { off++; renderCur(); }
+            break;
+        default:
+            break;
+    }
+    if (millis() - lastScan > 6000) rescan();
+    delay(10);
+}
+
+#elif DEMO == DEMO_BTNTEST
+
+Buttons buttons;
+
+void setup() {
+    Serial.begin(115200);
+    delay(300);
+    if (!buttons.begin()) {
+        Serial.println("[BtnTest] PCF8574 not found on I2C (0x20-0x27).");
+        return;
+    }
+    Serial.printf("[BtnTest] PCF8574 @ 0x%02X. Press one button at a time; I'll print its bit.\n",
+                  buttons.addr());
+}
+
+void loop() {
+    static uint8_t last = 0xFF;
+    uint8_t v = buttons.readRaw();
+    uint8_t edge = last & ~v;                    // released -> pressed
+    for (int b = 0; b < 8; b++) {
+        if (edge & (1 << b)) Serial.printf("pressed bit %d  (raw=0x%02X)\n", b, v);
+    }
+    last = v;
+    delay(30);
 }
 
 #endif
