@@ -6,25 +6,27 @@
 
 *Read this in: **English** · [Русский](README.ru.md)*
 
-**A friendlier, more playful alternative firmware for [ESP32-DIV](https://github.com/cifertech/ESP32-DIV) hardware.**
+**A playful, trickster-themed alternative firmware for the [ESP32-DIV](https://github.com/cifertech/ESP32-DIV) multitool.**
 
-> Same great hardware — nicer to use, and a lot more fun. 😈
+> The same great hardware — with a mischievous streak. 😈
 
 > 🛑 **Only your own equipment.** ESP32-Leshy is an **educational security-research** project. Use it **only** on networks, devices and radios you **own** or are **explicitly authorized in writing** to test. **Never** point these tools at anything that isn't yours — not a neighbor's Wi-Fi, not someone else's phone, not a stranger's alarm or car. Full terms: **[DISCLAIMER.md](DISCLAIMER.md)**.
 
-> ⚠️ **Status: early WIP.** The project just started. Right now this repo is the plan, a skeleton, and the first working modules; code lands module by module. Watch/star to follow along.
+> ⚠️ **Status: actively developed.** A working, menu-driven firmware with Wi-Fi and BLE tools already runs on real hardware; more features land regularly. Watch/star to follow along.
 
 ---
 
 ## What is this?
 
-**ESP32-Leshy** is a from-scratch firmware that runs on the **ESP32-DIV** wireless multitool by [CiferTech](https://github.com/cifertech/ESP32-DIV) — the same ESP32-S3 board with its display, NRF24, CC1101, RFID/NFC, GPS and IR modules.
+**ESP32-Leshy** is an independent, from-scratch firmware for the excellent **ESP32-DIV** wireless multitool by [CiferTech](https://github.com/cifertech/ESP32-DIV) — the same ESP32-S3 board with its display, NRF24, CC1101, RFID/NFC, GPS and IR modules.
 
-We love the hardware. We just want a firmware that is:
+CiferTech's **ESP32-DIV — both the board and its firmware — is a fantastic, generous open-source project**, and it's the whole reason this one can exist. ESP32-Leshy isn't a "better" replacement; it's a **different flavor** with its own personality:
 
-- **easier to live with** — snappy UI, buttons that don't double-fire, a keyboard that can actually type a full Wi-Fi password, no random reboots;
-- **more fun** — a mischievous "trickster" toolkit built around spoofing, redirects and playful RF pranks;
-- **cleaner inside** — modular code you can build and extend, instead of one giant sketch.
+- **a playful "trickster" theme** — a toolkit built around spoofing, redirects and good-natured RF mischief rather than brute force;
+- **its own UI take** — a menu-driven interface with keypad + touch, on-screen Wi-Fi setup from your phone, and a bilingual EN/RU interface;
+- **a modular codebase** — small, separate modules that are easy to build on and learn from.
+
+If you enjoy ESP32-DIV, please **star and support the original first** — Leshy simply stands on its shoulders. 🙏
 
 ## Why "Leshy"?
 
@@ -49,16 +51,19 @@ You need the ESP32-DIV board (or a compatible DIY build) to run Leshy. We don't 
 
 ## Features
 
-Working today (tested on real ESP32-DIV hardware unless noted):
+Working today on real hardware, in a touch- and keypad-driven menu:
 
-- **Wi-Fi scanner** — nearby APs with SSID, channel, RSSI and encryption.
-- **Wi-Fi deauth detector** — passive and defensive: watches the air and alerts on deauth/disassoc bursts. Receive-only, fully legal.
+- **Wi-Fi scanner** — live list of nearby APs with signal bars, channel, RSSI and encryption. **Your own network is marked ★** (matched by BSSID, even when it's hidden), and hidden networks are flagged.
+- **Hidden-SSID reveal** — while scanning, the device passively recovers the *names* of hidden networks from the Probe-Response / (Re)Association frames that carry the SSID in cleartext (only for the BSSIDs the scan actually sees as hidden). Revealed names are saved to flash (survive a reboot) and shown on a dedicated **Hidden names** screen where you can delete them. Passive — it fills in as there's traffic to those networks.
+- **Connect to your Wi-Fi without a keyboard** — under *Settings → Connection*: the device raises an `ESP32-Leshy-setup` captive-portal AP, you enter your SSID/password from your **phone**, and it saves them and connects (status shown on screen). This is how it will get online for OTA updates.
 - **BLE scanner + tracker detector** — lists nearby BLE devices and flags known trackers (Apple Find My / Tile / Samsung SmartTag).
-- **Signal Finder** — a "hot / cold" RSSI direction finder that homes in on a chosen Wi-Fi AP as you walk toward it.
-- **Polite Portal** — a captive portal with **no credential logging**: it asks the operator of a nearby AP to lower its Wi-Fi power, verifies the drop via beacon RSSI, and shuts itself down.
-- **Bilingual UI (EN / RU)** with an in-app language switch.
+- **Bilingual UI (EN / RU)** with an in-app language switch, a multi-level menu, smooth Cyrillic fonts, keypad **and** touch navigation, and touch-screen calibration.
 
-The firmware is early WIP — this list is only what actually runs; more lands module by module.
+Also in the tree (defensive / passive modules): a **deauth detector** (receive-only, alerts on deauth/disassoc bursts) and a **Polite Portal** that asks a nearby AP's operator to lower Wi-Fi power **without ever logging credentials**.
+
+**Coming next:** over-the-air firmware update straight from GitHub releases, and a Sub-GHz recorder (CC1101).
+
+This is actively developed — the list above is what actually runs today; more lands regularly.
 
 ## ⚖️ Legal & responsible use
 

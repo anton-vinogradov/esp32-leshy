@@ -96,7 +96,7 @@ void ScanEngine::revealHidden() {
     }
     if (nt == 0) return;                            // nothing hidden to reveal → no promiscuous dwell
     rev_->setTargets(tgts, nt);                     // only these BSSIDs will be stored
-    for (int k = 0; k < nc; k++) rev_->listen(chans[k], 220);
+    for (int k = 0; k < nc; k++) rev_->listen(chans[k], 450);
 }
 
 int ScanEngine::wifiCount() {

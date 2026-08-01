@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <string.h>
 
 #include "core/i18n.h"
 #include "features/wifi_scanner/WifiScanner.h"
@@ -614,6 +615,71 @@ static void activate() {
     else launch(it.target);
 }
 
+// One place that handles a navigation event, whether it came from the keypad or the serial remote.
+static void onKey(int ev) {
+    switch (ev) {
+        case Buttons::UP:
+            if (st == ST_MENU) { if (curSel() > 0) { int p = curSel(); curSel()--; menuScreen.repaint(p, curSel()); } }
+            else if (st == ST_WIFI || st == ST_BLE) { if (off > 0) { off--; drawList(false); } }
+            else if (st == ST_CONN)    { if (connSel > 0) { int p = connSel; connSel--; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
+            else if (st == ST_OPTIONS) { if (optSel > 0)  { int p = optSel;  optSel--;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
+            else if (st == ST_HIDDEN)  { if (hidSel > 0)  { int p = hidSel; hidSel--; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
+            break;
+        case Buttons::DOWN:
+            if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
+            else if (st == ST_WIFI || st == ST_BLE) { int m = listCount() - UI_VISIBLE; if (m < 0) m = 0; if (off < m) { off++; drawList(false); } }
+            else if (st == ST_CONN)    { if (connSel < connActN - 1) { int p = connSel; connSel++; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
+            else if (st == ST_OPTIONS) { if (optSel < optN - 1)      { int p = optSel;  optSel++;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
+            else if (st == ST_HIDDEN)  { if (hidSel < revealer.count() - 1) { int p = hidSel; hidSel++; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
+            break;
+        case Buttons::SELECT:                    // middle = enter / confirm
+            if (st == ST_MENU) activate();
+            else if (st == ST_CONN) connActivate();
+            else if (st == ST_OPTIONS) optActivate();
+            else if (st == ST_CONFIRM) doConfirm();
+            break;
+        case Buttons::RIGHT:                      // right = options / action
+            if (st == ST_MENU) activate();
+            else if (st == ST_CONN) connActivate();
+            else if (st == ST_OPTIONS) optActivate();
+            else if (st == ST_CONFIRM) doConfirm();
+            else if (st == ST_HIDDEN) openHiddenOptions();
+            break;
+        case Buttons::LEFT:
+            back();
+            break;
+        default:
+            break;
+    }
+}
+
+// Serial remote (headless testing over USB): u/d/l/r/o = keys; scan/ble/hidden/conn/menu = jump.
+static void serialControl() {
+    static char buf[24];
+    static uint8_t len = 0;
+    while (Serial.available()) {
+        char c = Serial.read();
+        if (c == '\n' || c == '\r') {
+            if (!len) continue;
+            buf[len] = 0; len = 0;
+            if      (!strcmp(buf, "u")) onKey(Buttons::UP);
+            else if (!strcmp(buf, "d")) onKey(Buttons::DOWN);
+            else if (!strcmp(buf, "l")) onKey(Buttons::LEFT);
+            else if (!strcmp(buf, "r")) onKey(Buttons::RIGHT);
+            else if (!strcmp(buf, "o") || !strcmp(buf, "s")) onKey(Buttons::SELECT);
+            else if (!strcmp(buf, "scan"))   launch(F_WIFI_SCAN);
+            else if (!strcmp(buf, "ble"))    launch(F_BLE_SCAN);
+            else if (!strcmp(buf, "hidden")) launch(F_HIDDEN);
+            else if (!strcmp(buf, "conn"))   launch(F_CONN);
+            else if (!strcmp(buf, "menu"))   { depth = 0; showMenu(); }
+            else { Serial.printf("[cmd] ? '%s'\n", buf); continue; }
+            Serial.printf("[cmd] %s -> st=%d\n", buf, (int)st);
+        } else if (len < sizeof(buf) - 1) {
+            buf[len++] = c;
+        }
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     delay(200);
@@ -664,41 +730,9 @@ void loop() {
         touchDown = false;
     }
 
-    // ---- keypad ----
-    switch (buttons.poll()) {
-        case Buttons::UP:
-            if (st == ST_MENU) { if (curSel() > 0) { int p = curSel(); curSel()--; menuScreen.repaint(p, curSel()); } }
-            else if (st == ST_WIFI || st == ST_BLE) { if (off > 0) { off--; drawList(false); } }
-            else if (st == ST_CONN)    { if (connSel > 0) { int p = connSel; connSel--; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
-            else if (st == ST_OPTIONS) { if (optSel > 0)  { int p = optSel;  optSel--;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
-            else if (st == ST_HIDDEN)  { if (hidSel > 0)  { int p = hidSel; hidSel--; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
-            break;
-        case Buttons::DOWN:
-            if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
-            else if (st == ST_WIFI || st == ST_BLE) { int m = listCount() - UI_VISIBLE; if (m < 0) m = 0; if (off < m) { off++; drawList(false); } }
-            else if (st == ST_CONN)    { if (connSel < connActN - 1) { int p = connSel; connSel++; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
-            else if (st == ST_OPTIONS) { if (optSel < optN - 1)      { int p = optSel;  optSel++;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
-            else if (st == ST_HIDDEN)  { if (hidSel < revealer.count() - 1) { int p = hidSel; hidSel++; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
-            break;
-        case Buttons::SELECT:                    // middle = enter / confirm
-            if (st == ST_MENU) activate();
-            else if (st == ST_CONN) connActivate();
-            else if (st == ST_OPTIONS) optActivate();
-            else if (st == ST_CONFIRM) doConfirm();
-            break;
-        case Buttons::RIGHT:                      // right = options / action
-            if (st == ST_MENU) activate();
-            else if (st == ST_CONN) connActivate();
-            else if (st == ST_OPTIONS) optActivate();
-            else if (st == ST_CONFIRM) doConfirm();
-            else if (st == ST_HIDDEN) openHiddenOptions();
-            break;
-        case Buttons::LEFT:
-            back();
-            break;
-        default:
-            break;
-    }
+    // ---- keypad + serial remote ----
+    onKey(buttons.poll());
+    serialControl();
 
     // ---- provisioning portal ----
     if (st == ST_PROVISION) {
