@@ -25,11 +25,14 @@ jobs:
       - name: Install PlatformIO
         run: pip install --upgrade platformio
 
-      - name: Build firmware (version from the tag)
+      - name: Bake the tag version into the firmware
         run: |
           VER="${GITHUB_REF_NAME#v}"          # v1.2.3 -> 1.2.3
-          echo "Building ESP32-Leshy $VER"
-          PLATFORMIO_BUILD_FLAGS="-DLESHY_FW_VERSION=\"$VER\"" pio run -e esp32-div
+          printf '#pragma once\n#define LESHY_FW_VERSION "%s"\n' "$VER" > src/core/version.h
+          echo "Building ESP32-Leshy $VER"; cat src/core/version.h
+
+      - name: Build firmware
+        run: pio run -e esp32-div
 
       - name: Attach firmware.bin to the release
         uses: softprops/action-gh-release@v2

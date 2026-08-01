@@ -40,7 +40,7 @@ void WifiScreen::rows(ScanEngine& e, int offset, int sel) {
             // sparkline — this AP's presence/RSSI over recent scans (its "footprint" in the air)
             int8_t sp[ScanEngine::SPARK_N];
             int sc = e.sparkOf(r.bssid, sp);
-            const int sx = 96, sw = 72, base = 19;    // continuous filled area, no gaps
+            const int sx = 96, sw = 62, base = 19;    // continuous filled area, no gaps
             const uint16_t fillc = tft.color565(0x2a, 0x53, 0x48);
             if (sc >= 1) {
                 for (int px = 0; px < sw; px++) {
@@ -55,12 +55,12 @@ void WifiScreen::rows(ScanEngine& e, int offset, int sel) {
             if (r.channel >= 1) {                     // channel — hugging the RSSI
                 row.setTextDatum(MR_DATUM);
                 row.setTextColor(dim, rbg);
-                row.drawString("c" + String(r.channel), 198, 12);
+                row.drawString("c" + String(r.channel), 202, 12);
             }
             char b[8]; sprintf(b, "%d", r.rssi);      // signal, at the right edge
             row.setTextDatum(MR_DATUM);
             row.setTextColor(col, rbg);
-            row.drawString(b, 236, 12);
+            row.drawString(b, 238, 12);
         }
         row.pushSprite(0, y);
     }

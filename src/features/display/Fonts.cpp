@@ -31,9 +31,9 @@ void uiHeaderRu(const char* title, const char* right) {
 void uiFooterRu(const char* left, const char* right) {
     const uint16_t bg  = uiBg();
     const uint16_t dim = tft.color565(0x9a, 0xaa, 0x9a);
-    tft.fillRect(0, 296, 240, 24, bg);                     // thin band hugging the bottom edge
+    tft.fillRect(0, 301, 240, 19, bg);                     // thin band, clears a 5th menu card (bottom 300)
     fontTiny();
     tft.setTextColor(dim, bg);
-    if (left && left[0])   { tft.setTextDatum(ML_DATUM); tft.drawString(left, 6, 306); }
-    if (right && right[0]) { tft.setTextDatum(MR_DATUM); tft.drawString(right, 234, 306); }
+    if (left && left[0])   { tft.setTextDatum(ML_DATUM); tft.drawString(left, 6, 309); }
+    if (right && right[0]) { tft.setTextDatum(MR_DATUM); tft.drawString(right, 234, 309); }
 }

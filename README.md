@@ -51,19 +51,14 @@ You need the ESP32-DIV board (or a compatible DIY build) to run Leshy. We don't 
 
 ## Features
 
-Working today on real hardware, in a touch- and keypad-driven menu:
+A working, menu-driven firmware — highlights, all passive / own-equipment:
 
-- **Wi-Fi scanner** — live list of nearby APs with signal bars, channel, RSSI and encryption. **Your own network is marked ★** (matched by BSSID, even when it's hidden), and hidden networks are flagged.
-- **Hidden-SSID reveal** — while scanning, the device passively recovers the *names* of hidden networks from the Probe-Response / (Re)Association frames that carry the SSID in cleartext (only for the BSSIDs the scan actually sees as hidden). Revealed names are saved to flash (survive a reboot) and shown on a dedicated **Hidden names** screen where you can delete them. Passive — it fills in as there's traffic to those networks.
-- **Connect to your Wi-Fi without a keyboard** — under *Settings → Connection*: the device raises an `ESP32-Leshy-setup` captive-portal AP, you enter your SSID/password from your **phone**, and it saves them and connects (status shown on screen). This is how it will get online for OTA updates.
-- **BLE scanner + tracker detector** — lists nearby BLE devices and flags known trackers (Apple Find My / Tile / Samsung SmartTag).
-- **Bilingual UI (EN / RU)** with an in-app language switch, a multi-level menu, smooth Cyrillic fonts, keypad **and** touch navigation, and touch-screen calibration.
+- **Wi-Fi** — scan (signal, channel, security, ★your net, per-AP sparkline; **▶** = per-network options), live 2.4 GHz channel graphs, hidden-SSID reveal, deauth monitor.
+- **BLE** — devices + tracker detector.
+- **Connectivity** — join your Wi-Fi from your phone (no keyboard); **OTA update from GitHub releases** (SHA-256 + auto-rollback, auto-check on connect).
+- Bilingual **EN / RU**, multi-level menu, keypad **and** touch.
 
-Also in the tree (defensive / passive modules): a **deauth detector** (receive-only, alerts on deauth/disassoc bursts) and a **Polite Portal** that asks a nearby AP's operator to lower Wi-Fi power **without ever logging credentials**.
-
-**Coming next:** over-the-air firmware update straight from GitHub releases, and a Sub-GHz recorder (CC1101).
-
-This is actively developed — the list above is what actually runs today; more lands regularly.
+📖 **Full feature list and menu map: [docs/features.md](docs/features.md).**  Coming: Sub-GHz recorder (CC1101), raw 2.4 GHz spectrum (NRF24).
 
 ## ⚖️ Legal & responsible use
 
