@@ -28,8 +28,9 @@ jobs:
       - name: Bake the tag version into the firmware
         run: |
           VER="${GITHUB_REF_NAME#v}"          # v1.2.3 -> 1.2.3
-          printf '#pragma once\n#define LESHY_FW_VERSION "%s"\n' "$VER" > src/core/version.h
-          echo "Building ESP32-Leshy $VER"; cat src/core/version.h
+          DATE="$(date -u +%d.%m.%Y)"
+          printf '#pragma once\n#define LESHY_FW_VERSION "%s"\n#define LESHY_FW_DATE "%s"\n' "$VER" "$DATE" > src/core/version.h
+          echo "Building ESP32-Leshy $VER ($DATE)"; cat src/core/version.h
 
       - name: Build firmware
         run: pio run -e esp32-div

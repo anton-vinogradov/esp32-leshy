@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Буквица Ж">
+  <title>Ж</title>
+  <rect width="120" height="120" rx="6" fill="#e9dcbb"/>
+  <rect x="3.5" y="3.5" width="113" height="113" rx="5" fill="none" stroke="#6b4f2a" stroke-width="3"/>
+  <rect x="9.5" y="9.5" width="101" height="101" rx="3" fill="none" stroke="#c8952b" stroke-width="1.2" opacity="0.9"/>
+  <!-- woven corner knots -->
+  <g fill="none" stroke="#6b4f2a" stroke-width="2.4" stroke-linecap="round">
+    <path d="M12 26 q8-14 22-14 M26 12 q-14 8-14 22"/>
+    <path d="M108 26 q-8-14-22-14 M94 12 q14 8 14 22"/>
+    <path d="M12 94 q8 14 22 14 M26 108 q-14-8-14-22"/>
+    <path d="M108 94 q-8 14-22 14 M94 108 q14-8 14-22"/>
+  </g>
+  <!-- forest sprigs + berries -->
+  <g stroke="#3f6b3a" stroke-width="2" fill="none" stroke-linecap="round">
+    <path d="M20 100 q10-16 6-30 M26 86 l-8 4 M26 78 l-8 4 M26 70 l-8 4"/>
+    <path d="M100 20 q-10 16-6 30 M94 34 l8-4 M94 42 l8-4 M94 50 l8-4"/>
+  </g>
+  <circle cx="98" cy="98" r="3.4" fill="#a33a2a"/>
+  <circle cx="89" cy="104" r="2.6" fill="#a33a2a"/>
+  <circle cx="22" cy="22" r="3.4" fill="#a33a2a"/>
+  <!-- the letter -->
+  <text x="60.0" y="63.0" text-anchor="middle" dominant-baseline="middle"
+        font-family="Georgia, 'Times New Roman', serif" font-size="62" font-weight="700"
+        fill="#c8952b" stroke="#4a3721" stroke-width="1.4" paint-order="stroke">Ж</text>
+</svg>

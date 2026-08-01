@@ -37,10 +37,15 @@ void WifiScreen::rows(ScanEngine& e, int offset, int sel) {
             row.setTextDatum(ML_DATUM);
             row.setTextColor(isMine ? gold : (unrev ? grey : bright), rbg);
             row.drawString(ss, 6, 12);
-            // sparkline — this AP's presence/RSSI over recent scans (its "footprint" in the air)
+            if (r.channel >= 1) {                     // channel — right after the name
+                row.setTextDatum(MR_DATUM);
+                row.setTextColor(dim, rbg);
+                row.drawString("c" + String(r.channel), 118, 12);
+            }
+            // signal graph — this AP's RSSI over recent scans, sitting next to the RSSI number
             int8_t sp[ScanEngine::SPARK_N];
             int sc = e.sparkOf(r.bssid, sp);
-            const int sx = 96, sw = 62, base = 19;    // continuous filled area, no gaps
+            const int sx = 126, sw = 70, base = 19;   // continuous filled area, no gaps
             const uint16_t fillc = tft.color565(0x2a, 0x53, 0x48);
             if (sc >= 1) {
                 for (int px = 0; px < sw; px++) {
@@ -51,11 +56,6 @@ void WifiScreen::rows(ScanEngine& e, int offset, int sel) {
                     row.drawFastVLine(sx + px, base - hh, hh, fillc);
                     row.drawPixel(sx + px, base - hh, uiRssiColor(v));
                 }
-            }
-            if (r.channel >= 1) {                     // channel — hugging the RSSI
-                row.setTextDatum(MR_DATUM);
-                row.setTextColor(dim, rbg);
-                row.drawString("c" + String(r.channel), 202, 12);
             }
             char b[8]; sprintf(b, "%d", r.rssi);      // signal, at the right edge
             row.setTextDatum(MR_DATUM);

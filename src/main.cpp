@@ -222,6 +222,7 @@ void loop() {}
 #include "features/ota/OtaManager.h"
 #include "features/display/img_rider.h"
 #include "features/display/font_ru_small.h"
+#include "features/legal/LegalText.h"
 #include "core/version.h"
 
 ScanEngine     engine;
@@ -242,7 +243,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -272,6 +273,7 @@ static const MenuItem SET_I[] = {
     {"Language",        "Interface language",      "Язык",        "Язык интерфейса",       K_SUB,  M_LANG},
     {"Calibrate touch", "Redo screen calibration", "Калибровка",  "Перекалибровать экран", K_FEAT, F_RECAL},
     {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
+    {"Responsible use", "Legal terms — read it",   "Ответственность", "Правила — прочти",  K_FEAT, F_LEGAL},
 };
 static const MenuItem LANG_I[] = {
     {"English", "", "English", "", K_FEAT, F_LANG_EN},
@@ -282,13 +284,13 @@ static const Menu MENUS[] = {
     {"Wi-Fi",       "Wi-Fi",       WIFI_I, 3},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
-    {"Settings",    "Настройки",   SET_I,  5},
+    {"Settings",    "Настройки",   SET_I,  6},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 2},
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_NETINFO };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_NETINFO, ST_LEGAL, ST_LANGPICK };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -719,7 +721,8 @@ static void drawAboutScreen() {
     tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("by CiferTech", "от CiferTech"), 22, y); y += 32;
     tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("Firmware", "Прошивка"), 14, y); y += 22;
     tft.setTextColor(gold, bg);  tft.drawString("ESP32-Leshy", 22, y); y += 20;
-    tft.setTextColor(white, bg); tft.drawString(String(i18n::tr("version v", "версия v")) + LESHY_FW_VERSION, 22, y); y += 32;
+    tft.setTextColor(white, bg); tft.drawString(String(i18n::tr("version v", "версия v")) + LESHY_FW_VERSION, 22, y); y += 20;
+    tft.setTextColor(dim, bg);   tft.drawString(String(i18n::tr("released ", "выпуск ")) + LESHY_FW_DATE, 22, y); y += 30;
     tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("Author", "Автор"), 14, y); y += 22;
     tft.setTextColor(white, bg); tft.drawString(i18n::tr("Anton Vinogradov", "Антон Виноградов"), 22, y); y += 30;
     tft.setTextColor(dim, bg);   tft.drawString("GitHub", 14, y); y += 20;
@@ -929,8 +932,101 @@ static void drawNetDetails() {
     drawNetBadge();
 }
 
+// ---- Responsible-use notice: full text, scrollable, must be read to the end ----
+static const int LEG_TOP = 34, LEG_LH = 15, LEG_LINES = 17;   // visible text lines
+static String  legLines[220];                                  // wrapped lines
+static int     legN = 0, legOff = 0;
+static bool    legAccepted = false;      // read to the end in this viewing
+static bool    legFirstRun = false;      // gate at boot (must accept once)
+
+static bool legalSeen() { Preferences p; p.begin("leshy", true); bool v = p.getBool("legal_ok", false); p.end(); return v; }
+static void legalMarkSeen() { Preferences p; p.begin("leshy", false); p.putBool("legal_ok", true); p.end(); }
+
+static void legalWrap() {                 // wrap the doc into display lines (smooth font metrics)
+    const LegalDoc& d = i18n::isRu() ? LEGAL_DOC_RU : LEGAL_DOC_EN;
+    fontTiny();
+    legN = 0; legOff = 0; legAccepted = false;
+    for (int i = 0; i < d.n && legN < 218; i++) {
+        String par = d.p[i];
+        if (par.length() == 0) { legLines[legN++] = ""; continue; }
+        bool head = par.startsWith("#");
+        if (head) par = par.substring(2);
+        String cur, word;
+        for (int k = 0; k <= (int)par.length(); k++) {
+            char c = (k < (int)par.length()) ? par[k] : ' ';
+            if (c == ' ') {
+                String test = cur.length() ? cur + " " + word : word;
+                if (tft.textWidth(test) > 222 && cur.length()) { legLines[legN++] = (head ? "#" : "") + cur; cur = word; }
+                else cur = test;
+                word = "";
+                if (legN >= 218) break;
+            } else word += c;
+        }
+        if (cur.length() && legN < 218) legLines[legN++] = (head ? "#" : "") + cur;
+    }
+    fontOff();
+}
+
+static void drawLegalScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
+    int maxOff = legN - LEG_LINES; if (maxOff < 0) maxOff = 0;
+    if (legOff >= maxOff) legAccepted = true;         // scrolled to the end = read
+    char pct[12]; snprintf(pct, sizeof(pct), "%d%%", maxOff ? (legOff * 100 / maxOff) : 100);
+    uiHeaderRu(i18n::tr("Responsible use", "Ответственность"), pct);
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    fontTiny();
+    tft.setTextDatum(TL_DATUM);
+    for (int i = 0; i < LEG_LINES; i++) {
+        int idx = legOff + i;
+        if (idx >= legN) break;
+        String ln = legLines[idx];
+        bool head = ln.startsWith("#");
+        if (head) ln = ln.substring(1);
+        tft.setTextColor(head ? gold : white, bg);
+        tft.drawString(ln, 9, LEG_TOP + i * LEG_LH);
+    }
+    if (legFirstRun)
+        uiFooterRu(legAccepted ? (i18n::isRu() ? "OK — принимаю" : "OK — I accept")
+                               : (i18n::isRu() ? "листай вниз" : "scroll down"),
+                   legAccepted ? "" : (i18n::isRu() ? "до конца ▼" : "to the end ▼"));
+    else
+        uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "листай ▼" : "scroll ▼");
+    fontOff();
+}
+
+static void gotoLegal(bool firstRun) {
+    legFirstRun = firstRun;
+    legalWrap();
+    st = ST_LEGAL;
+    drawLegalScreen();
+}
+
+// First boot: pick the language, then the notice must be read before anything else.
+static const char* const LANGPICK[] = { "English", "Русский" };
+static int langPickSel = 1;
+
+static void drawLangPick() {
+    const uint16_t bg = uiBg();
+    const uint16_t gold = tft.color565(0xff, 0xcf, 0x3f);
+    uiHeaderRu("ESP32-Leshy");
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    fontSmall();
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(gold, bg);
+    tft.drawString("Language / Язык", 120, 70);
+    fontOff();
+    for (int i = 0; i < 2; i++) drawActionBtn(120 + i * 48, LANGPICK[i], i == langPickSel);
+    uiFooterRu("", "OK ▶");
+}
+
 static void back() {
     switch (st) {
+        case ST_LANGPICK:  return;                                         // no way out before choosing
+        case ST_LEGAL:     if (legFirstRun) return;                        // must accept on first run
+                           showMenu();                                     return;
         case ST_DEAUTH:    detector.stop(); showMenu();                    return;
         case ST_NETINFO:   gotoWifi();                                     return;
         case ST_OTA:       if (ota.busy()) return;   // checking or downloading — stay put
@@ -961,6 +1057,7 @@ static void launch(int feat) {
         case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); break;
         case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
         case F_ABOUT:       st = ST_INFO; drawAboutScreen(); break;
+        case F_LEGAL:       gotoLegal(false); break;
         case F_OTA:         gotoOta(); break;
         case F_RECAL:       touchRecalibrate(); showMenu(); break;
         case F_LANG_EN:     i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
@@ -984,6 +1081,8 @@ static void onKey(int ev) {
             else if (st == ST_CONN)    { if (connSel > 0) { int p = connSel; connSel--; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
             else if (st == ST_OPTIONS) { if (optSel > 0)  { int p = optSel;  optSel--;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
             else if (st == ST_HIDDEN)  { if (hidSel > 0)  { int p = hidSel; hidSel--; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
+            else if (st == ST_LEGAL)   { if (legOff > 0) { legOff -= 4; if (legOff < 0) legOff = 0; drawLegalScreen(); } }
+            else if (st == ST_LANGPICK){ if (langPickSel > 0) { langPickSel--; drawLangPick(); } }
             break;
         case Buttons::DOWN:
             if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
@@ -992,9 +1091,16 @@ static void onKey(int ev) {
             else if (st == ST_CONN)    { if (connSel < connActN - 1) { int p = connSel; connSel++; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
             else if (st == ST_OPTIONS) { if (optSel < optN - 1)      { int p = optSel;  optSel++;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
             else if (st == ST_HIDDEN)  { if (hidSel < revealer.count() - 1) { int p = hidSel; hidSel++; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
+            else if (st == ST_LEGAL)   { int m = legN - LEG_LINES; if (m < 0) m = 0; if (legOff < m) { legOff += 4; if (legOff > m) legOff = m; drawLegalScreen(); } }
+            else if (st == ST_LANGPICK){ if (langPickSel < 1) { langPickSel++; drawLangPick(); } }
             break;
         case Buttons::SELECT:                    // middle = enter / confirm
-            if (st == ST_MENU) activate();
+            if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
+            else if (st == ST_LEGAL) {
+                if (!legFirstRun) { showMenu(); }
+                else if (legAccepted) { legalMarkSeen(); legFirstRun = false; depth = 0; showMenu(); }
+            }
+            else if (st == ST_MENU) activate();
             else if (st == ST_CONN) connActivate();
             else if (st == ST_OPTIONS) optActivate();
             else if (st == ST_CONFIRM) doConfirm();
@@ -1002,7 +1108,12 @@ static void onKey(int ev) {
             else if (st == ST_WIFI) openNetOptions();
             break;
         case Buttons::RIGHT:                      // right = options / action
-            if (st == ST_MENU) activate();
+            if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
+            else if (st == ST_LEGAL) {
+                if (!legFirstRun) { showMenu(); }
+                else if (legAccepted) { legalMarkSeen(); legFirstRun = false; depth = 0; showMenu(); }
+            }
+            else if (st == ST_MENU) activate();
             else if (st == ST_CONN) connActivate();
             else if (st == ST_OPTIONS) optActivate();
             else if (st == ST_CONFIRM) doConfirm();
@@ -1027,6 +1138,14 @@ static void serialControl() {
         if (c == '\n' || c == '\r') {
             if (!len) continue;
             buf[len] = 0; len = 0;
+            // the first-run notice must not be bypassed — only nav keys work there
+            if (st == ST_LANGPICK || (st == ST_LEGAL && legFirstRun)) {
+                if      (!strcmp(buf, "u")) onKey(Buttons::UP);
+                else if (!strcmp(buf, "d")) onKey(Buttons::DOWN);
+                else if (!strcmp(buf, "o") || !strcmp(buf, "s") || !strcmp(buf, "r")) onKey(Buttons::SELECT);
+                Serial.printf("[cmd] %s -> st=%d\n", buf, (int)st);
+                continue;
+            }
             if      (!strcmp(buf, "u")) onKey(Buttons::UP);
             else if (!strcmp(buf, "d")) onKey(Buttons::DOWN);
             else if (!strcmp(buf, "l")) onKey(Buttons::LEFT);
@@ -1039,6 +1158,8 @@ static void serialControl() {
             else if (!strcmp(buf, "ota"))    launch(F_OTA);
             else if (!strcmp(buf, "deauth")) launch(F_DEAUTH);
             else if (!strcmp(buf, "chan"))   launch(F_CHANNELS);
+            else if (!strcmp(buf, "legal"))  launch(F_LEGAL);
+            else if (!strcmp(buf, "legalreset")) { Preferences p; p.begin("leshy", false); p.remove("legal_ok"); p.end(); Serial.println("[cmd] legal flag cleared — reboot to see the gate"); }
             else if (!strcmp(buf, "menu"))   { if (ota.busy()) continue;
                                                if (st == ST_DEAUTH) detector.stop();
                                                if (st == ST_PROVISION) net.stopProvision();
@@ -1066,7 +1187,8 @@ void setup() {
     engine.attachRevealer(&revealer);// passively reveal hidden SSIDs during Wi-Fi scans
     engine.begin();                  // background scan task
     ota.begin(&engine, &net);        // OTA needs the radio (pauses scan) and the connection
-    showMenu();
+    if (!legalSeen()) { st = ST_LANGPICK; drawLangPick(); }   // first run: language, then the notice
+    else showMenu();
 }
 
 void loop() {
@@ -1075,7 +1197,19 @@ void loop() {
     if (touchGet(tx, ty)) {
         if (!touchDown) {
             touchDown = true;
-            if (st == ST_MENU) {
+            if (st == ST_LANGPICK) {
+                for (int i = 0; i < 2; i++)
+                    if (ty >= 120 + i * 48 && ty < 120 + i * 48 + 34) {
+                        langPickSel = i; Lang l = i ? Lang::RU : Lang::EN;
+                        i18n::set(l); saveLang(l); gotoLegal(true); break;
+                    }
+            } else if (st == ST_LEGAL) {
+                if (ty > 260) { int m = legN - LEG_LINES; if (m < 0) m = 0;   // tap low = scroll on
+                                if (legOff < m) { legOff += 4; if (legOff > m) legOff = m; drawLegalScreen(); }
+                                else if (legFirstRun && legAccepted) { legalMarkSeen(); legFirstRun = false; depth = 0; showMenu(); }
+                                else if (!legFirstRun) showMenu(); }
+                else if (ty < 60 && legOff > 0) { legOff -= 4; if (legOff < 0) legOff = 0; drawLegalScreen(); }
+            } else if (st == ST_MENU) {
                 int hit = menuScreen.hitTest(tx, ty);
                 if (hit >= 0) { int p = curSel(); curSel() = hit; menuScreen.repaint(p, hit); activate(); }
             } else if (st == ST_CONN) {

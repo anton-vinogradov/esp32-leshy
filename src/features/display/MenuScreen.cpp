@@ -13,7 +13,9 @@ static const int CARD_W    = 228;
 static const int TEXT_X   = CARD_X + 10;
 static const int TEXT_MAXW = CARD_W - 16;      // usable text width inside a card
 
-static int cardY(int i) { return CARD_TOP + i * CARD_STEP; }
+static const int VISIBLE = 5;                       // cards that fit above the footer
+static int s_off = 0;                               // shared with cardY (slot = i - off)
+static int cardY(int i) { return CARD_TOP + (i - s_off) * CARD_STEP; }
 static const char* T(const char* en, const char* ru) { return (i18n::isRu() && ru && ru[0]) ? ru : en; }
 
 // Truncate a UTF-8 string with "..." so it fits maxW at the currently loaded
@@ -64,34 +66,51 @@ void MenuScreen::desc_(int i, bool sel) {
     tft.drawString(fit(d, TEXT_MAXW), TEXT_X, y + 30);
 }
 
-void MenuScreen::show(const Menu* m, int sel, bool canBack) {
-    m_ = m;
+void MenuScreen::redraw_(int sel) {                 // full paint of the visible window
     uiHeaderRu(T(m_->en, m_->ru));
-    tft.fillRect(0, 28, 240, 320 - 28, uiBg());
-    for (int i = 0; i < m_->n; i++) bg_(i, i == sel);
-    fontBig();   for (int i = 0; i < m_->n; i++) title_(i, i == sel);
-    fontSmall(); for (int i = 0; i < m_->n; i++) desc_(i, i == sel);
-    uiFooterRu(canBack ? (i18n::isRu() ? "◀ назад" : "◀ back") : "",
-               i18n::isRu() ? "выбрать ▶" : "open ▶");
+    tft.fillRect(0, 28, 240, 300 - 28, uiBg());
+    int last = off_ + VISIBLE; if (last > m_->n) last = m_->n;
+    for (int i = off_; i < last; i++) bg_(i, i == sel);
+    fontBig();   for (int i = off_; i < last; i++) title_(i, i == sel);
+    fontSmall(); for (int i = off_; i < last; i++) desc_(i, i == sel);
+    bool more = (m_->n > off_ + VISIBLE);           // hint that the list continues
+    uiFooterRu(canBack_ ? (i18n::isRu() ? "◀ назад" : "◀ back") : "",
+               more ? (i18n::isRu() ? "ниже ▼" : "more ▼") : (i18n::isRu() ? "выбрать ▶" : "open ▶"));
     fontOff();
+}
+
+void MenuScreen::show(const Menu* m, int sel, bool canBack) {
+    m_ = m; canBack_ = canBack;
+    off_ = 0;
+    if (sel >= VISIBLE) off_ = sel - VISIBLE + 1;   // open with the selection visible
+    s_off = off_;
+    redraw_(sel);
 }
 
 void MenuScreen::repaint(int prev, int cur) {
     if (!m_) return;
-    if (prev >= 0 && prev < m_->n) bg_(prev, false);
-    if (cur  >= 0 && cur  < m_->n) bg_(cur, true);
+    int want = off_;                                 // scroll only when the selection leaves the window
+    if (cur < off_) want = cur;
+    else if (cur >= off_ + VISIBLE) want = cur - VISIBLE + 1;
+    if (want != off_) { off_ = want; s_off = off_; redraw_(cur); return; }
+
+    bool pv = (prev >= off_ && prev < off_ + VISIBLE && prev >= 0 && prev < m_->n);
+    bool cv = (cur  >= off_ && cur  < off_ + VISIBLE && cur  >= 0 && cur  < m_->n);
+    if (pv) bg_(prev, false);
+    if (cv) bg_(cur, true);
     fontBig();
-    if (prev >= 0 && prev < m_->n) title_(prev, false);
-    if (cur  >= 0 && cur  < m_->n) title_(cur, true);
+    if (pv) title_(prev, false);
+    if (cv) title_(cur, true);
     fontSmall();
-    if (prev >= 0 && prev < m_->n) desc_(prev, false);
-    if (cur  >= 0 && cur  < m_->n) desc_(cur, true);
+    if (pv) desc_(prev, false);
+    if (cv) desc_(cur, true);
     fontOff();
 }
 
 int MenuScreen::hitTest(int x, int y) {
     if (!m_) return -1;
-    for (int i = 0; i < m_->n; i++) {
+    int last = off_ + VISIBLE; if (last > m_->n) last = m_->n;
+    for (int i = off_; i < last; i++) {
         int cy = cardY(i);
         if (x >= CARD_X && x <= CARD_X + CARD_W && y >= cy && y <= cy + CARD_H) return i;
     }
