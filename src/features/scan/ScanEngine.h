@@ -3,10 +3,13 @@
 #include <Arduino.h>
 
 #include "../wifi_scanner/WifiScanner.h"
+#include "../wifi_scanner/HiddenRevealer.h"
 #include "../ble_scanner/BleScanner.h"
 
 // Render-ready snapshot rows (decoupled from the scanner internals).
-struct WifiRow { String ssid; int8_t rssi; uint8_t auth; uint8_t bssid[6]; };
+// hidden = the AP broadcast an empty SSID; ssid may still be filled from a
+// revealed name (HiddenRevealer) or the user's own saved name.
+struct WifiRow { String ssid; int8_t rssi; uint8_t auth; uint8_t bssid[6]; bool hidden; };
 struct BleRow  { String label; int rssi; bool tracker; };
 
 // ScanEngine runs Wi-Fi and BLE scans in a background FreeRTOS task (pinned to
@@ -20,6 +23,7 @@ public:
     void pause();                        // stop scanning and release the radio (blocks until idle)
     void resume();                       // resume background scanning
     void setMode(ScanMode m) { mode_ = m; }   // WIFI = refresh Wi-Fi fast (skip BLE)
+    void attachRevealer(HiddenRevealer* r) { rev_ = r; }   // passively reveal hidden SSIDs
 
     int  wifiCount();
     bool wifiRow(int i, WifiRow& out);
@@ -32,6 +36,7 @@ public:
     void taskLoop();                     // internal (runs in the task)
 
 private:
+    void revealHidden();                 // sniff hidden-AP channels for their names
     static const int MAX = 48;
     WifiRow wifi_[MAX]; int wifiN_ = 0;
     BleRow  ble_[MAX];  int bleN_  = 0;
@@ -40,6 +45,7 @@ private:
     volatile bool idle_ = false;         // true when the task is paused and not scanning
     volatile ScanMode mode_ = SCAN_BOTH;
     SemaphoreHandle_t mtx_ = nullptr;
-    WifiScanner ws_;
-    BleScanner  bs_;
+    WifiScanner    ws_;
+    BleScanner     bs_;
+    HiddenRevealer* rev_ = nullptr;
 };

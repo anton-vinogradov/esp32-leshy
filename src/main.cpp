@@ -217,17 +217,21 @@ void loop() {}
 
 #include <Preferences.h>
 
-ScanEngine engine;
-WifiScreen wifiScreen;
-BleScreen  bleScreen;
-MenuScreen menuScreen;
-Buttons    buttons;
-NetManager net;
+#include "features/wifi_scanner/HiddenRevealer.h"
+
+ScanEngine     engine;
+WifiScreen     wifiScreen;
+BleScreen      bleScreen;
+MenuScreen     menuScreen;
+Buttons        buttons;
+NetManager     net;
+HiddenRevealer revealer;
+
+static void drawNetBadge();      // small "connected" mark in the header (defined below)
 
 // ---- menu tree ----
-enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_CONNECT };
-enum { F_WIFI_SCAN, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_LANG_EN, F_LANG_RU,
-       F_PROVISION, F_CONNECT, F_FORGET };
+enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -237,13 +241,9 @@ static const MenuItem ROOT_I[] = {
     {"Settings", "Language, touch, about",   "Настройки", "Язык, тач, о девайсе",     K_SUB, M_SETTINGS},
 };
 static const MenuItem WIFI_I[] = {
-    {"Wi-Fi Scan", "Signal, channel, lock", "Скан Wi-Fi",  "Сигнал, канал, шифр", K_FEAT, F_WIFI_SCAN},
-    {"Connect",    "Join your network",     "Подключение", "Войти в свою сеть",   K_SUB,  M_CONNECT},
-};
-static const MenuItem CONN_I[] = {
-    {"Setup (phone)", "Enter password via phone", "Настроить (телефон)", "Ввести пароль с телефона", K_FEAT, F_PROVISION},
-    {"Connect",       "Join saved network",       "Подключиться",        "К сохранённой сети",       K_FEAT, F_CONNECT},
-    {"Forget",        "Clear saved Wi-Fi",        "Забыть",              "Стереть сохранённое",      K_FEAT, F_FORGET},
+    {"Wi-Fi Scan",   "Signal, channel, lock", "Скан Wi-Fi",   "Сигнал, канал, шифр", K_FEAT, F_WIFI_SCAN},
+    {"Connection",   "Status, join, exit",    "Подключение",  "Статус, вход, выход", K_FEAT, F_CONN},
+    {"Hidden names", "Revealed hidden SSIDs", "Скрытые сети", "Раскрытые имена",     K_FEAT, F_HIDDEN},
 };
 static const MenuItem BLE_I[] = {
     {"BLE Scan", "Devices & trackers nearby", "Скан BLE", "Устройства и трекеры рядом", K_FEAT, F_BLE_SCAN},
@@ -262,16 +262,15 @@ static const MenuItem LANG_I[] = {
 };
 static const Menu MENUS[] = {
     {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
-    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 2},
+    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 3},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
     {"Settings",    "Настройки",   SET_I,  3},
     {"Language",    "Язык",        LANG_I, 2},
-    {"Connect",     "Подключение", CONN_I, 3},
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -284,7 +283,7 @@ static String   infoTitle, infoBody, infoNote;
 static int  curMenu() { return menuStack[depth]; }
 static int& curSel()  { return selStack[depth]; }
 // In a menu the radios are idle — scanning only runs on a scan screen.
-static void showMenu() { engine.pause(); st = ST_MENU; menuScreen.show(&MENUS[curMenu()], curSel()); }
+static void showMenu() { engine.pause(); st = ST_MENU; menuScreen.show(&MENUS[curMenu()], curSel()); drawNetBadge(); }
 
 static void saveLang(Lang l) { Preferences p; p.begin("leshy", false); p.putUChar("lang", (uint8_t)l); p.end(); }
 static Lang loadLang() { Preferences p; p.begin("leshy", true); uint8_t v = p.getUChar("lang", (uint8_t)UI_LANG); p.end(); return (Lang)v; }
@@ -306,6 +305,7 @@ static void drawInfo() {
     tft.drawString(infoNote, 10, 80);
     uiFooterRu(i18n::isRu() ? "НАЗАД: LEFT" : "LEFT: back");
     fontOff();
+    drawNetBadge();
 }
 
 static void drawProvisionScreen() {
@@ -329,33 +329,225 @@ static void drawProvisionScreen() {
     fontOff();
 }
 
+// Small "connected" mark in the top-right of the header: three gold bars, drawn
+// only while actually associated. Scanning drops the link, so it honestly
+// disappears on the scan screens.
+static void drawNetBadge() {
+    if (!net.connected()) return;
+    const uint16_t gold = tft.color565(0xff, 0xcf, 0x3f);
+    int x = 210, base = 21;
+    tft.fillRect(x,      base - 6,  4, 6,  gold);
+    tft.fillRect(x + 6,  base - 10, 4, 10, gold);
+    tft.fillRect(x + 12, base - 14, 4, 14, gold);
+}
+
+// ---- hidden (revealed) SSID list ----
+static const int HID_TOP = 40, HID_ROW_H = 30, HID_VISIBLE = 8;
+static int hidSel = 0, hidOff = 0, hidRowY[HID_VISIBLE];
+
+static void drawHiddenScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
+    int n = revealer.count();
+    uiHeaderRu(i18n::tr("Hidden names", "Скрытые сети"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    fontOff();
+    if (n == 0) {
+        fontSmall();
+        tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
+        tft.drawString(i18n::tr("Empty yet.", "Пока пусто."), 12, 70);
+        tft.drawString(i18n::tr("Scan near a hidden", "Сканируй рядом со"), 12, 96);
+        tft.drawString(i18n::tr("network to reveal.", "скрытой сетью."), 12, 118);
+        uiFooterRu(i18n::isRu() ? "LEFT назад" : "LEFT back");
+        fontOff(); drawNetBadge(); return;
+    }
+    if (hidSel < hidOff) hidOff = hidSel;
+    if (hidSel >= hidOff + HID_VISIBLE) hidOff = hidSel - HID_VISIBLE + 1;
+    for (int i = 0; i < HID_VISIBLE; i++) {
+        int idx = hidOff + i;
+        int y = HID_TOP + i * HID_ROW_H;
+        hidRowY[i] = (idx < n) ? y : -1;
+        if (idx >= n) continue;
+        uint8_t b[6]; String ss;
+        revealer.get(idx, b, ss);
+        bool sel = (idx == hidSel);
+        uint16_t rowbg = sel ? tft.color565(0x22, 0x33, 0x22) : bg;
+        if (sel) tft.fillRoundRect(6, y, 228, HID_ROW_H - 4, 6, rowbg);
+        if (ss.length() > 18) ss = ss.substring(0, 17) + "~";
+        tft.setTextDatum(TL_DATUM);
+        tft.setTextColor(sel ? gold : white, rowbg);
+        tft.drawString(ss, 12, y + 1, 2);
+        char mac[18];
+        snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", b[0], b[1], b[2], b[3], b[4], b[5]);
+        tft.setTextColor(dim, rowbg);
+        tft.drawString(mac, 12, y + 16, 1);
+    }
+    uiFooterRu(i18n::isRu() ? "LEFT назад  вправо удалить" : "LEFT back  right delete");
+    drawNetBadge();
+}
+
+static void gotoHidden() { st = ST_HIDDEN; drawHiddenScreen(); }
+
+// ---- connection screen (one menu item: full status + contextual actions) ----
+enum ConnAct { CA_SETUP, CA_CONNECT, CA_DISCONNECT, CA_FORGET };
+static ConnAct connActs[4];
+static int     connActN = 0, connSel = 0, connActY[4];
+
+static void buildConnActions() {
+    connActN = 0;
+    bool has = net.hasCreds(), on = net.connected();
+    if (!has) { connActs[connActN++] = CA_SETUP; }
+    else {
+        connActs[connActN++] = on ? CA_DISCONNECT : CA_CONNECT;
+        connActs[connActN++] = CA_SETUP;
+        connActs[connActN++] = CA_FORGET;
+    }
+    if (connSel >= connActN) connSel = 0;
+}
+
+static const char* connLabel(ConnAct a) {
+    switch (a) {
+        case CA_SETUP:      return i18n::tr("Set up (phone)", "Настроить (телефон)");
+        case CA_CONNECT:    return i18n::tr("Connect",        "Подключиться");
+        case CA_DISCONNECT: return i18n::tr("Disconnect",     "Отключиться");
+        case CA_FORGET:     return i18n::tr("Forget network", "Забыть сеть");
+    }
+    return "";
+}
+
+static void drawConnScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
+    uiHeaderRu(i18n::tr("Connection", "Подключение"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    tft.setTextDatum(TL_DATUM);
+    fontSmall();
+    int y = 44;
+    bool has = net.hasCreds(), on = net.connected();
+    if (on) {
+        tft.setTextColor(gold, bg);  tft.drawString(i18n::tr("Connected:", "Подключено:"), 10, y); y += 24;
+        tft.setTextColor(white, bg); tft.drawString(net.savedSsid(), 12, y); y += 22;
+        tft.setTextColor(dim, bg);   tft.drawString("IP " + net.ip(), 12, y); y += 26;
+    } else if (has) {
+        tft.setTextColor(white, bg); tft.drawString(i18n::tr("Saved network:", "Сохранённая сеть:"), 10, y); y += 24;
+        tft.setTextColor(gold, bg);  tft.drawString(net.savedSsid(), 12, y); y += 22;
+        tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("not connected", "не подключено"), 12, y); y += 26;
+    } else {
+        tft.setTextColor(white, bg); tft.drawString(i18n::tr("Not set up", "Не настроено"), 10, y); y += 24;
+        tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("add via phone below", "настрой с телефона ниже"), 12, y); y += 26;
+    }
+    y += 6;
+    for (int i = 0; i < connActN; i++) {
+        bool sel = (i == connSel);
+        connActY[i] = y;
+        uint16_t box = sel ? tft.color565(0x2c, 0x5a, 0x2c) : tft.color565(0x1b, 0x27, 0x1b);
+        tft.fillRoundRect(10, y, 220, 34, 8, box);
+        tft.setTextColor(sel ? gold : white, box);
+        tft.setTextDatum(ML_DATUM);
+        tft.drawString(connLabel(connActs[i]), 22, y + 17);
+        y += 42;
+    }
+    uiFooterRu(i18n::isRu() ? "LEFT назад  OK/вправо выбор" : "LEFT back  OK/right select");
+    fontOff();
+    drawNetBadge();
+}
+
+static void gotoConn() { buildConnActions(); st = ST_CONN; drawConnScreen(); }
+
+// ---- confirm dialog (destructive actions) ----
+enum PendKind { PK_NONE, PK_FORGET, PK_DEL_HIDDEN };
+static PendKind pendKind = PK_NONE;
+static int      pendIdx = 0;
+static State    confirmReturn = ST_MENU;
+static String   confirmMsg, confirmSub;
+static const int okBtnY = 214, cancelBtnY = 262;
+
+static void drawConfirm() {
+    const uint16_t bg = uiBg();
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t okbg  = tft.color565(0x7a, 0x25, 0x25);
+    const uint16_t cbg   = tft.color565(0x22, 0x2a, 0x22);
+    uiHeaderRu(i18n::tr("Confirm", "Подтверждение"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    tft.setTextDatum(TL_DATUM);
+    fontSmall();
+    tft.setTextColor(white, bg); tft.drawString(confirmMsg, 12, 74);
+    tft.setTextColor(gold, bg);  tft.drawString(confirmSub, 12, 104);
+    tft.fillRoundRect(10, okBtnY, 220, 40, 8, okbg);
+    tft.setTextDatum(MC_DATUM); tft.setTextColor(white, okbg);
+    tft.drawString(i18n::tr("OK (middle)", "OK (средняя)"), 120, okBtnY + 20);
+    tft.fillRoundRect(10, cancelBtnY, 220, 40, 8, cbg);
+    tft.setTextColor(white, cbg);
+    tft.drawString(i18n::tr("Cancel (LEFT)", "Отмена (LEFT)"), 120, cancelBtnY + 20);
+    fontOff();
+}
+
+static void askConfirm(PendKind kind, int idx, const char* msg, const String& sub, State ret) {
+    pendKind = kind; pendIdx = idx; confirmMsg = msg; confirmSub = sub; confirmReturn = ret;
+    st = ST_CONFIRM; drawConfirm();
+}
+
+static void doConfirm() {
+    switch (pendKind) {
+        case PK_FORGET:     net.forget();             break;
+        case PK_DEL_HIDDEN: revealer.remove(pendIdx); break;
+        default: break;
+    }
+    pendKind = PK_NONE;
+    if (confirmReturn == ST_HIDDEN) gotoHidden(); else gotoConn();
+}
+
+static void cancelConfirm() {
+    pendKind = PK_NONE;
+    if (confirmReturn == ST_HIDDEN) gotoHidden(); else gotoConn();
+}
+
+static void connActivate() {
+    switch (connActs[connSel]) {
+        case CA_SETUP: net.startProvision(); st = ST_PROVISION; drawProvisionScreen(); break;
+        case CA_CONNECT:
+            infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = "";
+            st = ST_INFO; drawInfo();
+            net.connect();
+            gotoConn();
+            break;
+        case CA_DISCONNECT: net.disconnect(); connSel = 0; gotoConn(); break;
+        case CA_FORGET:     askConfirm(PK_FORGET, 0, i18n::tr("Forget this network?", "Забыть эту сеть?"), net.savedSsid(), ST_CONN); break;
+    }
+}
+
+static void askDeleteHidden() {
+    if (revealer.count() == 0) return;
+    uint8_t b[6]; String ss;
+    revealer.get(hidSel, b, ss);
+    askConfirm(PK_DEL_HIDDEN, hidSel, i18n::tr("Delete this name?", "Удалить имя?"), ss, ST_HIDDEN);
+}
+
 static void back() {
-    if (st == ST_PROVISION) net.stopProvision();
-    if (st != ST_MENU) { showMenu(); return; }      // leaf -> its menu (showMenu pauses scanning)
-    if (depth > 0) { depth--; showMenu(); }          // submenu -> parent
+    switch (st) {
+        case ST_PROVISION: net.stopProvision(); gotoConn();               return;
+        case ST_CONFIRM:   cancelConfirm();                               return;
+        case ST_MENU:      if (depth > 0) { depth--; showMenu(); }        return;
+        default:           showMenu();                                    return;  // WIFI/BLE/INFO/CONN/HIDDEN
+    }
 }
 
 static void launch(int feat) {
     switch (feat) {
-        case F_WIFI_SCAN:     engine.setMode(ScanEngine::SCAN_WIFI); engine.resume(); st = ST_WIFI; off = 0; seenWifiGen = engine.wifiGen(); drawList(true); break;
-        case F_BLE_SCAN:      engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); break;
-        case F_SUBGHZ_SOON:   infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
-        case F_ABOUT:         infoTitle = i18n::tr("About", "О девайсе"); infoBody = i18n::tr("ESP32-Leshy - open firmware", "ESP32-Leshy - открытая прошивка"); infoNote = "anton-vinogradov/esp32-leshy"; st = ST_INFO; drawInfo(); break;
-        case F_RECAL:         touchRecalibrate(); showMenu(); break;
-        case F_LANG_EN:       i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
-        case F_LANG_RU:       i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
-        case F_PROVISION:     net.startProvision(); st = ST_PROVISION; drawProvisionScreen(); break;
-        case F_CONNECT: {
-            infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = "";
-            st = ST_INFO; drawInfo();
-            bool ok = net.connect();
-            infoTitle = ok ? i18n::tr("Connected", "Подключено") : i18n::tr("Failed", "Не вышло");
-            infoBody  = ok ? ("IP " + net.ip()) : String(i18n::tr("Wrong password?", "Неверный пароль?"));
-            infoNote  = ok ? net.savedSsid() : String("");
-            drawInfo();
-            break;
-        }
-        case F_FORGET:        net.forget(); infoTitle = i18n::tr("Forgotten", "Забыто"); infoBody = i18n::tr("Wi-Fi cleared", "Данные стёрты"); infoNote = ""; st = ST_INFO; drawInfo(); break;
+        case F_WIFI_SCAN:   engine.setMode(ScanEngine::SCAN_WIFI); engine.resume(); st = ST_WIFI; off = 0; seenWifiGen = engine.wifiGen(); drawList(true); break;
+        case F_CONN:        connSel = 0; gotoConn(); break;
+        case F_HIDDEN:      hidSel = 0; hidOff = 0; gotoHidden(); break;
+        case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); break;
+        case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
+        case F_ABOUT:       infoTitle = i18n::tr("About", "О девайсе"); infoBody = i18n::tr("ESP32-Leshy - open firmware", "ESP32-Leshy - открытая прошивка"); infoNote = "anton-vinogradov/esp32-leshy"; st = ST_INFO; drawInfo(); break;
+        case F_RECAL:       touchRecalibrate(); showMenu(); break;
+        case F_LANG_EN:     i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
+        case F_LANG_RU:     i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
     }
 }
 
@@ -375,7 +567,9 @@ void setup() {
     buttons.begin();
     touchBegin();                    // loads NVS calibration, or calibrates once
     net.begin();
+    revealer.begin();                // load saved revealed hidden-SSID names from NVS
     wifiScreen.attachNet(&net);      // so the scanner can mark your own network (*)
+    engine.attachRevealer(&revealer);// passively reveal hidden SSIDs during Wi-Fi scans
     engine.begin();                  // background scan task
     showMenu();
 }
@@ -389,7 +583,19 @@ void loop() {
             if (st == ST_MENU) {
                 int hit = menuScreen.hitTest(tx, ty);
                 if (hit >= 0) { int p = curSel(); curSel() = hit; menuScreen.repaint(p, hit); activate(); }
-            } else if (ty < 28) {           // WIFI / BLE / INFO: tap header to go back
+            } else if (st == ST_CONN) {
+                if (ty < 28) back();
+                else for (int i = 0; i < connActN; i++)
+                    if (ty >= connActY[i] && ty < connActY[i] + 34) { connSel = i; connActivate(); break; }
+            } else if (st == ST_HIDDEN) {
+                if (ty < 28) back();
+                else for (int i = 0; i < HID_VISIBLE; i++)
+                    if (hidRowY[i] >= 0 && ty >= hidRowY[i] && ty < hidRowY[i] + HID_ROW_H) { hidSel = hidOff + i; askDeleteHidden(); break; }
+            } else if (st == ST_CONFIRM) {
+                if (ty >= okBtnY && ty < okBtnY + 40) doConfirm();
+                else if (ty >= cancelBtnY && ty < cancelBtnY + 40) cancelConfirm();
+                else if (ty < 28) cancelConfirm();
+            } else if (ty < 28) {           // WIFI / BLE / INFO / PROVISION: tap header to go back
                 back();
             }
         }
@@ -402,14 +608,25 @@ void loop() {
         case Buttons::UP:
             if (st == ST_MENU) { if (curSel() > 0) { int p = curSel(); curSel()--; menuScreen.repaint(p, curSel()); } }
             else if (st == ST_WIFI || st == ST_BLE) { if (off > 0) { off--; drawList(false); } }
+            else if (st == ST_CONN)   { if (connSel > 0) { connSel--; drawConnScreen(); } }
+            else if (st == ST_HIDDEN) { if (hidSel > 0)  { hidSel--;  drawHiddenScreen(); } }
             break;
         case Buttons::DOWN:
             if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
             else if (st == ST_WIFI || st == ST_BLE) { if (off < listCount() - 1) { off++; drawList(false); } }
+            else if (st == ST_CONN)   { if (connSel < connActN - 1) { connSel++; drawConnScreen(); } }
+            else if (st == ST_HIDDEN) { if (hidSel < revealer.count() - 1) { hidSel++; drawHiddenScreen(); } }
             break;
-        case Buttons::SELECT:
-        case Buttons::RIGHT:
+        case Buttons::SELECT:                    // middle = enter / confirm
             if (st == ST_MENU) activate();
+            else if (st == ST_CONN) connActivate();
+            else if (st == ST_CONFIRM) doConfirm();
+            break;
+        case Buttons::RIGHT:                      // right = action
+            if (st == ST_MENU) activate();
+            else if (st == ST_CONN) connActivate();
+            else if (st == ST_CONFIRM) doConfirm();
+            else if (st == ST_HIDDEN) askDeleteHidden();
             break;
         case Buttons::LEFT:
             back();
@@ -425,11 +642,8 @@ void loop() {
             net.stopProvision();     // saves creds + switches to STA (AP drops)
             infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = "";
             st = ST_INFO; drawInfo();
-            bool ok = net.connect();
-            infoTitle = ok ? i18n::tr("Connected", "Подключено") : i18n::tr("Failed", "Не вышло");
-            infoBody  = ok ? ("IP " + net.ip()) : String(i18n::tr("Wrong password?", "Неверный пароль?"));
-            infoNote  = ok ? net.savedSsid() : String("");
-            drawInfo();
+            net.connect();
+            gotoConn();              // land on the connection screen with the fresh status
         }
     }
 

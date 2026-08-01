@@ -41,7 +41,12 @@ String NetManager::savedSsid() {
     return s;
 }
 
+void NetManager::disconnect() {
+    WiFi.disconnect(false);               // keep the driver up, just drop the association
+}
+
 void NetManager::forget() {
+    WiFi.disconnect(false);
     Preferences p; p.begin("leshy", false);
     p.remove("wifi_ssid"); p.remove("wifi_pass");
     p.remove("my_ssid");   p.remove("my_bssid");

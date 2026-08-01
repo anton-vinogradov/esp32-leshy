@@ -37,16 +37,23 @@ void ScanEngine::taskLoop() {
             wifiN_ = n < MAX ? n : MAX;
             for (int i = 0; i < wifiN_; i++) {
                 const WifiAp& a = ws_.at(i);
-                wifi_[i].ssid = a.ssid;
-                wifi_[i].rssi = a.rssi;
-                wifi_[i].auth = a.auth;
+                wifi_[i].hidden = a.ssid.isEmpty();
+                wifi_[i].ssid   = a.ssid;
+                wifi_[i].rssi   = a.rssi;
+                wifi_[i].auth   = a.auth;
                 memcpy(wifi_[i].bssid, a.bssid, 6);
+                String name;                                   // fill hidden names we already know
+                if (wifi_[i].hidden && rev_ && rev_->lookup(a.bssid, name)) wifi_[i].ssid = name;
             }
             wifiGen_ = wifiGen_ + 1;      // (avoid ++ on volatile — deprecated in C++20)
             xSemaphoreGive(mtx_);
         }
 
-        if (m == SCAN_WIFI) { vTaskDelay(pdMS_TO_TICKS(60)); continue; }  // Wi-Fi only: loop fast
+        if (m == SCAN_WIFI) {
+            revealHidden();                                    // passive sniff on hidden channels
+            vTaskDelay(pdMS_TO_TICKS(60));
+            continue;                                          // Wi-Fi only: loop fast
+        }
 
         if (m != SCAN_WIFI) {
             int mm = bs_.scan(4);
@@ -65,6 +72,28 @@ void ScanEngine::taskLoop() {
         }
         vTaskDelay(pdMS_TO_TICKS(200));
     }
+}
+
+// After a Wi-Fi sweep, briefly listen on the channel of each still-unnamed hidden
+// AP. Names arrive only if there's traffic (a client probing / (re)associating),
+// so this is a passive best-effort — no dwell at all when nothing is hidden.
+void ScanEngine::revealHidden() {
+    if (!rev_) return;
+    uint8_t chans[6];
+    int nc = 0;
+    int n = ws_.count();
+    for (int i = 0; i < n && nc < 6; i++) {
+        const WifiAp& a = ws_.at(i);
+        if (!a.ssid.isEmpty()) continue;            // only hidden APs
+        String name;
+        if (rev_->lookup(a.bssid, name)) continue;  // already revealed
+        uint8_t ch = a.channel;
+        if (ch < 1 || ch > 14) continue;
+        bool dup = false;
+        for (int k = 0; k < nc; k++) if (chans[k] == ch) dup = true;
+        if (!dup) chans[nc++] = ch;
+    }
+    for (int k = 0; k < nc; k++) rev_->listen(chans[k], 220);
 }
 
 int ScanEngine::wifiCount() {

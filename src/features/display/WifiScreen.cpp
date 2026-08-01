@@ -27,12 +27,20 @@ void WifiScreen::rows(ScanEngine& e, int offset) {
             }
             String mine;
             bool isMine = net_ && net_->isMine(r.bssid, mine);
-            String ss = r.ssid.length() ? r.ssid : (isMine ? mine : String("<hidden>"));
-            if (ss.length() > 15) ss = ss.substring(0, 14) + "~";
+            bool named  = r.ssid.length() > 0;       // real name (broadcast or revealed)
+            String ss = named ? r.ssid : (isMine ? mine : String("<hidden>"));
+            if (ss.length() > 14) ss = ss.substring(0, 13) + "~";
             if (isMine) ss = "*" + ss;              // your own network
             row.setTextDatum(ML_DATUM);
             row.setTextColor(isMine ? tft.color565(0xff, 0xcf, 0x3f) : white, bg);
             row.drawString(ss, 34, 12, 2);
+            if (r.hidden && (named || isMine)) {    // known name, but still a hidden SSID
+                int hx = 34 + row.textWidth(ss, 2) + 5;
+                if (hx < 206) {
+                    row.setTextColor(tft.color565(0xff, 0xa5, 0x2a), bg);
+                    row.drawString("H", hx, 12, 2);
+                }
+            }
             char b[8];
             sprintf(b, "%d", r.rssi);
             row.setTextDatum(MR_DATUM);

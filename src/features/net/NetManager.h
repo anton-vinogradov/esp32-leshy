@@ -15,7 +15,8 @@ public:
     bool   connect(uint32_t timeoutMs = 12000);  // connect with saved creds; learns & saves own BSSID
     bool   connected();
     String ip();
-    void   forget();
+    void   disconnect();                  // drop the link, keep saved creds
+    void   forget();                      // drop the link and erase saved creds
 
     // provisioning via phone captive portal
     void   startProvision();              // raise "ESP32-Leshy-setup" AP + portal
