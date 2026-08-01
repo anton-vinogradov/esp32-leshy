@@ -2,23 +2,31 @@
 
 #include <Arduino.h>
 
+// A menu item: a card with a title + one-line description. `kind` says whether
+// it opens a submenu or launches a feature; `target` is the submenu index or
+// feature id (interpreted by the caller).
 struct MenuItem {
     const char* title;
     const char* desc;
+    uint8_t     kind;      // 0 = submenu, 1 = feature
+    uint8_t     target;
 };
 
-// MenuScreen — the home screen: a list of feature cards (title + one-line
-// explanation). Selectable by keypad (highlight + activate) or by touch.
+struct Menu {
+    const char*     title;
+    const MenuItem* items;
+    uint8_t         n;
+};
+
+// MenuScreen — renders one Menu (feature cards). Selectable by keypad or touch.
 class MenuScreen {
 public:
-    void begin(const MenuItem* items, int n) { items_ = items; n_ = n; }
-    void draw(int sel);              // full render with `sel` highlighted
-    void repaint(int prev, int cur); // repaint just the two changed cards
-    int  hitTest(int x, int y);      // card index at (x,y), or -1
-    int  count() const { return n_; }
+    void show(const Menu* m, int sel);   // store menu + full render
+    void repaint(int prev, int cur);     // repaint just the two changed cards
+    int  hitTest(int x, int y);          // card index at (x,y), or -1
+    int  count() const { return m_ ? m_->n : 0; }
 
 private:
-    const MenuItem* items_ = nullptr;
-    int n_ = 0;
+    const Menu* m_ = nullptr;
     void card(int i, bool selected);
 };

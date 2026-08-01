@@ -2,11 +2,11 @@
 
 #include "Display.h"
 
-static const int CARD_TOP = 32;
-static const int CARD_H   = 52;
+static const int CARD_TOP  = 32;
+static const int CARD_H    = 52;
 static const int CARD_STEP = 54;
-static const int CARD_X   = 6;
-static const int CARD_W   = 228;
+static const int CARD_X    = 6;
+static const int CARD_W    = 228;
 
 static int cardY(int i) { return CARD_TOP + i * CARD_STEP; }
 
@@ -23,25 +23,30 @@ void MenuScreen::card(int i, bool sel) {
 
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(tc, bg);
-    tft.drawString(items_[i].title, CARD_X + 10, y + 6, 4);
-    tft.setTextColor(dc, bg);
-    tft.drawString(items_[i].desc, CARD_X + 10, y + 33, 2);
+    tft.drawString(m_->items[i].title, CARD_X + 10, y + 6, 4);
+    if (m_->items[i].desc && m_->items[i].desc[0]) {
+        tft.setTextColor(dc, bg);
+        tft.drawString(m_->items[i].desc, CARD_X + 10, y + 33, 2);
+    }
 }
 
-void MenuScreen::draw(int sel) {
-    uiHeader("ESP32-Leshy", "menu");
+void MenuScreen::show(const Menu* m, int sel) {
+    m_ = m;
+    uiHeader(m_->title, "menu");
     tft.fillRect(0, 28, 240, 320 - 28, uiBg());
-    for (int i = 0; i < n_; i++) card(i, i == sel);
+    for (int i = 0; i < m_->n; i++) card(i, i == sel);
     uiFooter("UP/DN + SEL, or tap");
 }
 
 void MenuScreen::repaint(int prev, int cur) {
-    if (prev >= 0 && prev < n_) card(prev, false);
-    if (cur  >= 0 && cur  < n_) card(cur, true);
+    if (!m_) return;
+    if (prev >= 0 && prev < m_->n) card(prev, false);
+    if (cur  >= 0 && cur  < m_->n) card(cur, true);
 }
 
 int MenuScreen::hitTest(int x, int y) {
-    for (int i = 0; i < n_; i++) {
+    if (!m_) return -1;
+    for (int i = 0; i < m_->n; i++) {
         int cy = cardY(i);
         if (x >= CARD_X && x <= CARD_X + CARD_W && y >= cy && y <= cy + CARD_H) return i;
     }

@@ -214,6 +214,8 @@ void loop() {}
 
 #elif DEMO == DEMO_DASHBOARD
 
+#include <Preferences.h>
+
 ScanEngine engine;
 WifiScreen wifiScreen;
 BleScreen  bleScreen;
@@ -221,22 +223,64 @@ MenuScreen menuScreen;
 SignalFinderScreen sfScreen;
 Buttons    buttons;
 
-static const MenuItem MENU_ITEMS[] = {
-    {"Wi-Fi Scan",    "Networks: signal, channel, lock"},
-    {"BLE Scan",      "Devices & trackers nearby"},
-    {"Signal Finder", "Hot/cold locate a Wi-Fi AP"},
-    {"Sub-GHz Rec",   "Record RF signals (soon)"},
-    {"About",         "About ESP32-Leshy"},
-};
-static const int MENU_N = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
+// ---- menu tree ----
+enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG };
+enum { F_WIFI_SCAN, F_SIGNAL_FINDER, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_LANG_EN, F_LANG_RU };
+static const uint8_t K_SUB = 0, K_FEAT = 1;
 
+static const MenuItem ROOT_I[] = {
+    {"Wi-Fi",    "Scan & locate networks",   K_SUB,  M_WIFI},
+    {"BLE",      "Bluetooth devices & tags", K_SUB,  M_BLE},
+    {"Sub-GHz",  "315/433/868 MHz radio",    K_SUB,  M_SUBGHZ},
+    {"Settings", "Language, touch, about",   K_SUB,  M_SETTINGS},
+};
+static const MenuItem WIFI_I[] = {
+    {"Wi-Fi Scan",    "Networks: signal, channel, lock", K_FEAT, F_WIFI_SCAN},
+    {"Signal Finder", "Hot/cold locate an AP",           K_FEAT, F_SIGNAL_FINDER},
+};
+static const MenuItem BLE_I[] = {
+    {"BLE Scan", "Devices & trackers nearby", K_FEAT, F_BLE_SCAN},
+};
+static const MenuItem SUB_I[] = {
+    {"Recorder", "Record RF signals (soon)", K_FEAT, F_SUBGHZ_SOON},
+};
+static const MenuItem SET_I[] = {
+    {"Language",        "Interface language",      K_SUB,  M_LANG},
+    {"Calibrate touch", "Redo screen calibration", K_FEAT, F_RECAL},
+    {"About",           "About ESP32-Leshy",       K_FEAT, F_ABOUT},
+};
+static const MenuItem LANG_I[] = {
+    {"English", "", K_FEAT, F_LANG_EN},
+    {"Russian", "", K_FEAT, F_LANG_RU},
+};
+static const Menu MENUS[] = {
+    {"ESP32-Leshy", ROOT_I, 4},
+    {"Wi-Fi",       WIFI_I, 2},
+    {"BLE",         BLE_I,  1},
+    {"Sub-GHz",     SUB_I,  1},
+    {"Settings",    SET_I,  3},
+    {"Language",    LANG_I, 2},
+};
+
+// ---- navigation state ----
 enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_SF_PICK, ST_SF_TRACK };
-static State    st  = ST_MENU;
-static int      sel = 0;                 // menu selection
-static int      off = 0;                 // list scroll
-static int      sfSel = 0;               // Signal Finder target selection
+static State    st = ST_MENU;
+static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
+static int      selStack[6]  = { 0 };        // selection per level
+static int      depth = 0;
+static int      off = 0, sfSel = 0;
 static uint32_t seenWifiGen = 0, seenBleGen = 0;
 static bool     touchDown = false;
+static const char* infoTitle = "";
+static const char* infoBody  = "";
+static const char* infoNote  = "";
+
+static int  curMenu() { return menuStack[depth]; }
+static int& curSel()  { return selStack[depth]; }
+static void showMenu() { st = ST_MENU; menuScreen.show(&MENUS[curMenu()], curSel()); }
+
+static void saveLang(Lang l) { Preferences p; p.begin("leshy", false); p.putUChar("lang", (uint8_t)l); p.end(); }
+static Lang loadLang() { Preferences p; p.begin("leshy", true); uint8_t v = p.getUChar("lang", (uint8_t)UI_LANG); p.end(); return (Lang)v; }
 
 static int  listCount() { return st == ST_WIFI ? engine.wifiCount() : engine.bleCount(); }
 static void drawList(bool full) {
@@ -244,20 +288,18 @@ static void drawList(bool full) {
     else               { if (full) bleScreen.draw(engine, off);  else bleScreen.rows(engine, off); }
 }
 
-static void drawInfo(int i) {
-    uiHeader(MENU_ITEMS[i].title, "");
+static void drawInfo() {
+    uiHeader(infoTitle, "");
     tft.fillRect(0, 28, 240, 320 - 28, uiBg());
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(tft.color565(0xe8, 0xe8, 0xe0), uiBg());
-    tft.drawString(MENU_ITEMS[i].desc, 10, 48, 2);
+    tft.drawString(infoBody, 10, 50, 2);
     tft.setTextColor(tft.color565(0xff, 0xcf, 0x3f), uiBg());
-    tft.drawString("Coming soon", 10, 84, 4);
+    tft.drawString(infoNote, 10, 78, 2);
     uiFooter("LEFT: back");
 }
 
-static void goMenu() { st = ST_MENU; menuScreen.draw(sel); }
-
-static void tryTrack() {   // pick the highlighted target and start tracking
+static void tryTrack() {
     String ssid;
     if (sfScreen.ssidAt(engine, sfSel, ssid) && sfScreen.startTrack(ssid)) {
         st = ST_SF_TRACK;
@@ -265,25 +307,42 @@ static void tryTrack() {   // pick the highlighted target and start tracking
     }
 }
 
-static void activate(int i) {
-    if (i == 0)      { st = ST_WIFI; off = 0; seenWifiGen = engine.wifiGen(); drawList(true); }
-    else if (i == 1) { st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); }
-    else if (i == 2) { engine.pause(); st = ST_SF_PICK; sfSel = 0; sfScreen.drawPicker(engine, sfSel); }
-    else             { st = ST_INFO; drawInfo(i); }
+static void back() {
+    if (st == ST_SF_PICK) engine.resume();
+    if (st != ST_MENU) { showMenu(); return; }      // leaf -> its menu
+    if (depth > 0) { depth--; showMenu(); }          // submenu -> parent
+}
+
+static void launch(int feat) {
+    switch (feat) {
+        case F_WIFI_SCAN:     st = ST_WIFI; off = 0; seenWifiGen = engine.wifiGen(); drawList(true); break;
+        case F_BLE_SCAN:      st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); break;
+        case F_SIGNAL_FINDER: engine.pause(); st = ST_SF_PICK; sfSel = 0; sfScreen.drawPicker(engine, sfSel); break;
+        case F_SUBGHZ_SOON:   infoTitle = "Sub-GHz Recorder"; infoBody = "Record / replay 315-868 MHz"; infoNote = "Coming soon (needs CC1101)"; st = ST_INFO; drawInfo(); break;
+        case F_ABOUT:         infoTitle = "About"; infoBody = "ESP32-Leshy - open firmware"; infoNote = "anton-vinogradov/esp32-leshy"; st = ST_INFO; drawInfo(); break;
+        case F_RECAL:         touchRecalibrate(); showMenu(); break;
+        case F_LANG_EN:       i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
+        case F_LANG_RU:       i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
+    }
+}
+
+static void activate() {
+    const MenuItem& it = MENUS[curMenu()].items[curSel()];
+    if (it.kind == K_SUB) { depth++; menuStack[depth] = it.target; selStack[depth] = 0; showMenu(); }
+    else launch(it.target);
 }
 
 void setup() {
     Serial.begin(115200);
     delay(200);
-    i18n::set(UI_LANG);
     displayInit();
     BootScreen().show();
     delay(1500);
+    i18n::set(loadLang());
     buttons.begin();
     touchBegin();                    // loads NVS calibration, or calibrates once
     engine.begin();                  // background scan task
-    menuScreen.begin(MENU_ITEMS, MENU_N);
-    menuScreen.draw(sel);
+    showMenu();
 }
 
 void loop() {
@@ -294,9 +353,9 @@ void loop() {
             touchDown = true;
             if (st == ST_MENU) {
                 int hit = menuScreen.hitTest(tx, ty);
-                if (hit >= 0) { int p = sel; sel = hit; menuScreen.repaint(p, sel); activate(sel); }
+                if (hit >= 0) { int p = curSel(); curSel() = hit; menuScreen.repaint(p, hit); activate(); }
             } else if (st == ST_SF_PICK) {
-                if (ty < 28) { engine.resume(); goMenu(); }
+                if (ty < 28) back();
                 else if (ty >= UI_LIST_TOP && ty < UI_LIST_TOP + UI_VISIBLE * UI_ROW_H) {
                     int idx = sfScreen.pickerOffset(sfSel) + (ty - UI_LIST_TOP) / UI_ROW_H;
                     if (idx < engine.wifiCount()) { sfSel = idx; sfScreen.pickerRows(engine, sfSel); tryTrack(); }
@@ -304,7 +363,7 @@ void loop() {
             } else if (st == ST_SF_TRACK) {
                 if (ty < 28) { sfScreen.stopTrack(); st = ST_SF_PICK; sfScreen.drawPicker(engine, sfSel); }
             } else if (ty < 28) {           // WIFI / BLE / INFO: tap header to go back
-                goMenu();
+                back();
             }
         }
     } else {
@@ -314,23 +373,23 @@ void loop() {
     // ---- keypad ----
     switch (buttons.poll()) {
         case Buttons::UP:
-            if (st == ST_MENU) { if (sel > 0) { int p = sel; sel--; menuScreen.repaint(p, sel); } }
+            if (st == ST_MENU) { if (curSel() > 0) { int p = curSel(); curSel()--; menuScreen.repaint(p, curSel()); } }
             else if (st == ST_WIFI || st == ST_BLE) { if (off > 0) { off--; drawList(false); } }
             else if (st == ST_SF_PICK) { if (sfSel > 0) { sfSel--; sfScreen.pickerRows(engine, sfSel); } }
             break;
         case Buttons::DOWN:
-            if (st == ST_MENU) { if (sel < MENU_N - 1) { int p = sel; sel++; menuScreen.repaint(p, sel); } }
+            if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
             else if (st == ST_WIFI || st == ST_BLE) { if (off < listCount() - 1) { off++; drawList(false); } }
             else if (st == ST_SF_PICK) { if (sfSel < engine.wifiCount() - 1) { sfSel++; sfScreen.pickerRows(engine, sfSel); } }
             break;
         case Buttons::SELECT:
-            if (st == ST_MENU) activate(sel);
+        case Buttons::RIGHT:
+            if (st == ST_MENU) activate();
             else if (st == ST_SF_PICK) tryTrack();
             break;
         case Buttons::LEFT:
-            if (st == ST_SF_PICK) { engine.resume(); goMenu(); }
-            else if (st == ST_SF_TRACK) { sfScreen.stopTrack(); st = ST_SF_PICK; sfScreen.drawPicker(engine, sfSel); }
-            else if (st != ST_MENU) { goMenu(); }
+            if (st == ST_SF_TRACK) { sfScreen.stopTrack(); st = ST_SF_PICK; sfScreen.drawPicker(engine, sfSel); }
+            else back();
             break;
         default:
             break;
