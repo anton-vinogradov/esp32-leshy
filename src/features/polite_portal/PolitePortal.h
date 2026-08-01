@@ -60,7 +60,7 @@ private:
 
     static const size_t CAP = 128;            // beacon RSSI ring buffer
     Sample  ring_[CAP]{};
-    volatile uint64_t head_ = 0;              // 64-bit so it never wraps in practice
+    uint64_t head_ = 0;                       // guarded by portMUX; 64-bit never wraps in practice
 
     bool     running_ = false;
     bool     baselineReady_ = false;          // baseline still being measured until true

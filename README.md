@@ -1,4 +1,10 @@
-# 🌲👺 ESP32-Leshy
+<p align="center">
+  <img src="docs/leshy.svg" alt="ESP32-Leshy — a Leshy and a rider broadcasting Wi-Fi" width="820">
+</p>
+
+# ESP32-Leshy
+
+*Read this in: **English** · [Русский](README.ru.md)*
 
 **A friendlier, more playful alternative firmware for [ESP32-DIV](https://github.com/cifertech/ESP32-DIV) hardware.**
 
@@ -6,7 +12,7 @@
 
 > 🛑 **Only your own equipment.** ESP32-Leshy is an **educational security-research** project. Use it **only** on networks, devices and radios you **own** or are **explicitly authorized in writing** to test. **Never** point these tools at anything that isn't yours — not a neighbor's Wi-Fi, not someone else's phone, not a stranger's alarm or car. Full terms: **[DISCLAIMER.md](DISCLAIMER.md)**.
 
-> ⚠️ **Status: early WIP.** The project just started. Right now this repo is the plan and the skeleton; code lands module by module. Watch/star to follow along.
+> ⚠️ **Status: early WIP.** The project just started. Right now this repo is the plan, a skeleton, and the first working modules; code lands module by module. Watch/star to follow along.
 
 ---
 
@@ -26,7 +32,7 @@ The **Leshy** (Ле́ший) is a shapeshifting trickster spirit of the Slavic f
 
 ## Hardware
 
-Targets the **ESP32-DIV v2** platform:
+Targets the **ESP32-DIV v2** platform (details in [docs/hardware.md](docs/hardware.md)):
 
 | Part | Role |
 |------|------|
@@ -41,33 +47,18 @@ Targets the **ESP32-DIV v2** platform:
 
 You need the ESP32-DIV board (or a compatible DIY build) to run Leshy. We don't sell hardware — buy or build the [ESP32-DIV](https://github.com/cifertech/ESP32-DIV).
 
-## Planned features
+## Features
 
-**🛠️ Quality of life (the "finally usable" bucket)**
-- Responsive UI — radio scans never freeze input or drawing
-- Solid button debounce (no more one-press-counts-as-two)
-- On-screen keyboard with the **full** character set
-- No spurious reboots / memory leaks (NimBLE, heap discipline, watchdog)
-- Honest battery gauge (IP5306 over I²C), brightness control, screen sleep
-- Export to SD: CSV / JSON / PCAP with timestamps
-- Split SPI buses (touch / radio / SD) — fixes the classic "touch dies after RF" bug
-- Bilingual UI (EN / RU) with an in-app language switch
+Working today (tested on real ESP32-DIV hardware unless noted):
 
-**😈 Trickster toolkit (the fun bucket)**
-- Evil-twin AP + captive portal (demo/lab)
-- BLE notification spam (Apple/Android proximity pop-ups)
-- Fake beacon / SSID flood
-- "Lead astray" mode — playful redirects
+- **Wi-Fi scanner** — nearby APs with SSID, channel, RSSI and encryption.
+- **Wi-Fi deauth detector** — passive and defensive: watches the air and alerts on deauth/disassoc bursts. Receive-only, fully legal.
+- **BLE scanner + tracker detector** — lists nearby BLE devices and flags known trackers (Apple Find My / Tile / Samsung SmartTag).
+- **Signal Finder** — a "hot / cold" RSSI direction finder that homes in on a chosen Wi-Fi AP as you walk toward it.
+- **Polite Portal** — a captive portal with **no credential logging**: it asks the operator of a nearby AP to lower its Wi-Fi power, verifies the drop via beacon RSSI, and shuts itself down.
+- **Bilingual UI (EN / RU)** with an in-app language switch.
 
-**📡 Analysis & defense (the responsible bucket)**
-- Wi-Fi deauth **detector** (passive, fully legal)
-- 2.4 GHz activity waterfall (NRF24 RPD sweep)
-- Wi-Fi sniffer + PCAP for Wireshark
-- BLE scanner + tracker / skimmer / hidden-camera detectors
-- GPS wardriving (WiGLE CSV)
-- IR record / replay / universal remote
-
-See [ROADMAP.md](ROADMAP.md) for the prioritized plan.
+The firmware is early WIP — this list is only what actually runs; more lands module by module.
 
 ## ⚖️ Legal & responsible use
 
@@ -89,62 +80,5 @@ You alone are responsible for what you do with this firmware. The authors accept
 ## Credits
 
 - **Hardware & original firmware:** [CiferTech — ESP32-DIV](https://github.com/cifertech/ESP32-DIV) (MIT). Huge thanks — none of this exists without their board.
+- **Banner art (public domain):** ["Leshy", 1906](https://commons.wikimedia.org/wiki/File:Leshy_(1906).jpg) (from the journal *Leshy*) and Ivan Bilibin's ["Red Rider"](https://commons.wikimedia.org/wiki/File:Ivan_Bilibin_-_red-rider-illustration-for-the-fairy-tale-vasilisa-the-beautiful-1899.jpg) (*Vasilisa the Beautiful*, c. 1900) — both in the public domain, via Wikimedia Commons. The Wi-Fi motif was added for this project.
 - ESP32-Leshy is an **independent, unofficial** firmware. Not affiliated with or endorsed by CiferTech.
-
----
----
-
-# 🌲👺 ESP32-Leshy (по-русски)
-
-**Более удобная и весёлая альтернативная прошивка для железа [ESP32-DIV](https://github.com/cifertech/ESP32-DIV).**
-
-> То же отличное железо — но пользоваться приятнее, и куда прикольнее. 😈
-
-> 🛑 **Только своё оборудование.** ESP32-Leshy — **образовательный** проект по **исследованию безопасности**. Применяйте его **только** к сетям, устройствам и радио, которые вам **принадлежат** или на тест которых есть **явное письменное разрешение**. **Никогда** не направляйте эти инструменты на чужое — ни на Wi-Fi соседа, ни на чужой телефон, ни на чью-то сигнализацию или машину. Полные условия: **[DISCLAIMER.md](DISCLAIMER.md)**.
-
-> ⚠️ **Статус: ранний WIP.** Проект только стартовал. Пока в репе план и каркас; код приезжает модуль за модулем. Ставь ⭐ и watch, чтобы следить.
-
-## Что это?
-
-**ESP32-Leshy** — прошивка, написанная с нуля под беспроводной мультитул **ESP32-DIV** от [CiferTech](https://github.com/cifertech/ESP32-DIV): та же плата на ESP32-S3 с дисплеем, NRF24, CC1101, RFID/NFC, GPS и ИК.
-
-Железо — супер. Хочется прошивку, которая:
-
-- **удобнее в быту** — отзывчивый UI, кнопки без двойных срабатываний, клавиатура, которой реально можно ввести полный пароль Wi-Fi, без случайных ребутов;
-- **прикольнее** — набор «трикстера»-пакостника: подмена, редиректы и игривые RF-каверзы;
-- **чище внутри** — модульный код, который легко собирать и расширять, а не один гигантский скетч.
-
-## Почему «Leshy»?
-
-**Леший** — дух-оборотень славянского леса. Он не разрушает, а **морочит**: меняет облик, аукается знакомым голосом и **уводит путников не туда**. Ровно наш настрой: оборотничество (спуфинг), увод устройств не туда (редиректы, evil-twin, captive-portal) и игривые каверзы вместо грубой силы.
-
-## Железо
-
-Целевая платформа — **ESP32-DIV v2** (ESP32-S3, TFT 2.8" + тач, 3× NRF24L01, CC1101, PN532, GPS NEO-6M, ИК, microSD). Чтобы запустить Leshy, нужна плата ESP32-DIV (или совместимая DIY-сборка). Железо мы не продаём — берите/собирайте [ESP32-DIV](https://github.com/cifertech/ESP32-DIV).
-
-## Что планируется
-
-- **🛠️ Удобство:** отзывчивый UI, нормальный дебаунс, клавиатура со всеми символами, без ребутов и утечек, честный индикатор батареи, яркость/сон экрана, экспорт CSV/JSON/PCAP, раздельные SPI-шины (лечит «залипание тача после RF»), **двуязычный интерфейс (EN/RU)** с переключателем.
-- **😈 Пакости:** evil-twin + captive-portal (демо/лаба), BLE-спам всплывашек, фейковые beacon/SSID, режим «увести не туда».
-- **📡 Анализ и защита:** **детектор** deauth (пассивный, легальный), водопад активности 2.4 ГГц, Wi-Fi-сниффер + PCAP, BLE-скан + детекторы трекеров/скиммеров/скрытых камер, wardriving (WiGLE CSV), ИК запись/повтор/универсальный пульт.
-
-Подробный приоритизированный план — в [ROADMAP.md](ROADMAP.md).
-
-## ⚖️ Ответственное использование
-
-**Проект — для обучения и тестирования СВОЕГО оборудования. И ничего больше.**
-
-- ✅ **Можно:** свой Wi-Fi, свои устройства, своё радио и свои карты — или стенд/сеть, на тест которых есть **явное письменное разрешение**.
-- 🛑 **Никогда не делайте так не со своим.** Ни с Wi-Fi соседа. Ни с чужим телефоном. Ни с чьей-то сигнализацией, воротами или машиной. Без исключений, без «я же просто проверить», без «всего один раз».
-
-Атаковать, перехватывать или создавать помехи устройствам и сетям, которые вам не принадлежат, **без разрешения — это преступление** в большинстве стран (неправомерный доступ, незаконный перехват, создание радиопомех) — и просто подлость.
-
-**Про «глушение»:** излучать глушилку *в эфир* **незаконно почти везде даже против своих устройств**, потому что помеху нельзя удержать внутри «своего» — она уходит в общий спектр. Любая функция помех/глушения здесь — **только для экранированного стенда и выключена по умолчанию**. (Отправить прицельный deauth в *свою собственную* сеть, чтобы проверить её устойчивость, — это другое, легитимное дело.)
-
-Ответственность за использование прошивки — целиком на вас. Авторы **ответственности не несут**. Полные условия по каждой фиче — в **[DISCLAIMER.md](DISCLAIMER.md)**.
-
-## Лицензия и благодарности
-
-Лицензия — [MIT](LICENSE), в духе оригинального ESP32-DIV.
-
-Отдельное спасибо [CiferTech — ESP32-DIV](https://github.com/cifertech/ESP32-DIV) за железо и оригинальную прошивку (MIT). ESP32-Leshy — **независимая, неофициальная** прошивка, не связана с CiferTech.

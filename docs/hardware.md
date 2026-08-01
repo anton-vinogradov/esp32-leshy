@@ -1,10 +1,10 @@
-# Hardware / Железо
+# Hardware
+
+*Read this in: **English** · [Русский](hardware.ru.md)*
 
 ESP32-Leshy targets the **ESP32-DIV v2** platform by [CiferTech](https://github.com/cifertech/ESP32-DIV). We do not make or sell hardware — get the board there (or build a compatible DIY version).
 
-Целевая платформа — **ESP32-DIV v2**. Железо мы не делаем и не продаём; плату берите у CiferTech или собирайте совместимую.
-
-## Modules / Модули
+## Modules
 
 | Part | Bus | Role |
 |------|-----|------|
@@ -22,7 +22,7 @@ ESP32-Leshy targets the **ESP32-DIV v2** platform by [CiferTech](https://github.
 | WS2812 ×4 | GPIO1 | status LEDs |
 | CP2102 | USB | flashing / serial |
 
-## Known hardware gotchas / Аппаратные грабли
+## Known hardware gotchas
 
 - **Shared SPI bus** between touch, radios and SD is the #1 source of bugs (touch freezes after RF). Leshy splits touch onto a second SPI bus. The ESP32-S3 has two hardware SPI peripherals — use them.
 - **Battery gauge**: the board uses the **IP5306-I2C** variant and the ADC divider pin may not be wired — read charge over I²C registers, not analog voltage.
@@ -31,5 +31,3 @@ ESP32-Leshy targets the **ESP32-DIV v2** platform by [CiferTech](https://github.
 - **NRF24 PA/LNA** modules draw pulsed current — add a 10–100 µF cap on 3.3 V or the ESP32 browns out.
 
 > Exact pin map will be committed once verified on real hardware. If your build differs, pins will live in a single board-config header.
->
-> Точную распиновку зафиксируем после проверки на живой плате; она будет в одном board-config заголовке.

@@ -39,7 +39,7 @@ private:
 
     static const size_t CAP = 64;
     Sample  ring_[CAP]{};
-    volatile uint64_t head_ = 0;              // 64-bit so it never wraps in practice
+    uint64_t head_ = 0;                       // guarded by portMUX; 64-bit never wraps in practice
 
     int      last_ = -127;
     bool     hasReading_ = false;             // distinguishes "no signal" from a real -127 dBm
