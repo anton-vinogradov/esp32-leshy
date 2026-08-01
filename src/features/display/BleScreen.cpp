@@ -41,5 +41,5 @@ void BleScreen::draw(ScanEngine& e, int offset) {
     if (n > 0) sprintf(right, "%d dev", n); else sprintf(right, "scanning");
     uiHeader("BLE", right);
     rows(e, offset);
-    uiFooter("SEL: Wi-Fi   UP/DN: scroll");
+    uiFooter("LEFT: menu   UP/DN: scroll");
 }

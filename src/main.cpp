@@ -10,8 +10,10 @@
 #include "features/display/BootScreen.h"
 #include "features/display/WifiScreen.h"
 #include "features/display/BleScreen.h"
+#include "features/display/MenuScreen.h"
 #include "features/scan/ScanEngine.h"
 #include "features/input/Buttons.h"
+#include "features/input/Touch.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -22,6 +24,7 @@
 #define DEMO_DISPLAY         6
 #define DEMO_DASHBOARD       7
 #define DEMO_BTNTEST         8
+#define DEMO_TOUCHCAL        9
 #ifndef DEMO                      // override at build time: pio run -DDEMO=3
 #define DEMO DEMO_DASHBOARD
 #endif
@@ -213,16 +216,49 @@ void loop() {}
 ScanEngine engine;
 WifiScreen wifiScreen;
 BleScreen  bleScreen;
+MenuScreen menuScreen;
 Buttons    buttons;
 
-enum Screen { SCR_WIFI, SCR_BLE };
-static Screen   scr = SCR_WIFI;
-static int      off = 0;
-static uint32_t seenWifiGen = 0, seenBleGen = 0;
+static const MenuItem MENU_ITEMS[] = {
+    {"Wi-Fi Scan",    "Networks: signal, channel, lock"},
+    {"BLE Scan",      "Devices & trackers nearby"},
+    {"Signal Finder", "Locate an AP by signal (soon)"},
+    {"Sub-GHz Rec",   "Record RF signals (soon)"},
+    {"About",         "About ESP32-Leshy"},
+};
+static const int MENU_N = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
 
-static int  curCount() { return scr == SCR_WIFI ? engine.wifiCount() : engine.bleCount(); }
-static void drawFull() { if (scr == SCR_WIFI) wifiScreen.draw(engine, off); else bleScreen.draw(engine, off); }
-static void drawRows() { if (scr == SCR_WIFI) wifiScreen.rows(engine, off); else bleScreen.rows(engine, off); }
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO };
+static State    st  = ST_MENU;
+static int      sel = 0;                 // menu selection
+static int      off = 0;                 // list scroll
+static uint32_t seenWifiGen = 0, seenBleGen = 0;
+static bool     touchDown = false;
+
+static int  listCount() { return st == ST_WIFI ? engine.wifiCount() : engine.bleCount(); }
+static void drawList(bool full) {
+    if (st == ST_WIFI) { if (full) wifiScreen.draw(engine, off); else wifiScreen.rows(engine, off); }
+    else               { if (full) bleScreen.draw(engine, off);  else bleScreen.rows(engine, off); }
+}
+
+static void drawInfo(int i) {
+    uiHeader(MENU_ITEMS[i].title, "");
+    tft.fillRect(0, 28, 240, 320 - 28, uiBg());
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(tft.color565(0xe8, 0xe8, 0xe0), uiBg());
+    tft.drawString(MENU_ITEMS[i].desc, 10, 48, 2);
+    tft.setTextColor(tft.color565(0xff, 0xcf, 0x3f), uiBg());
+    tft.drawString("Coming soon", 10, 84, 4);
+    uiFooter("LEFT: back");
+}
+
+static void goMenu() { st = ST_MENU; menuScreen.draw(sel); }
+
+static void activate(int i) {
+    if (i == 0)      { st = ST_WIFI; off = 0; seenWifiGen = engine.wifiGen(); drawList(true); }
+    else if (i == 1) { st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); }
+    else             { st = ST_INFO; drawInfo(i); }
+}
 
 void setup() {
     Serial.begin(115200);
@@ -231,37 +267,61 @@ void setup() {
     displayInit();
     BootScreen().show();
     delay(1500);
-    if (!buttons.begin()) Serial.println("[Dashboard] buttons (PCF8574) not found.");
-    engine.begin();                 // scanning runs in a background task from here
-    drawFull();
+    buttons.begin();
+    touchBegin();                    // loads NVS calibration, or calibrates once
+    engine.begin();                  // background scan task
+    menuScreen.begin(MENU_ITEMS, MENU_N);
+    menuScreen.draw(sel);
 }
 
 void loop() {
+    // ---- touch (edge-triggered) ----
+    uint16_t tx, ty;
+    if (touchGet(tx, ty)) {
+        if (!touchDown) {
+            touchDown = true;
+            if (st == ST_MENU) {
+                int hit = menuScreen.hitTest(tx, ty);
+                if (hit >= 0) { int p = sel; sel = hit; menuScreen.repaint(p, sel); activate(sel); }
+            } else if (ty < 28) {        // tap the header to go back
+                goMenu();
+            }
+        }
+    } else {
+        touchDown = false;
+    }
+
+    // ---- keypad ----
     switch (buttons.poll()) {
-        case Buttons::SELECT:
-            scr = (scr == SCR_WIFI) ? SCR_BLE : SCR_WIFI;
-            off = 0;
-            drawFull();
-            break;
         case Buttons::UP:
-            if (off > 0) { off--; drawRows(); }
+            if (st == ST_MENU) { if (sel > 0) { int p = sel; sel--; menuScreen.repaint(p, sel); } }
+            else if (st == ST_WIFI || st == ST_BLE) { if (off > 0) { off--; drawList(false); } }
             break;
         case Buttons::DOWN:
-            if (off < curCount() - 1) { off++; drawRows(); }
+            if (st == ST_MENU) { if (sel < MENU_N - 1) { int p = sel; sel++; menuScreen.repaint(p, sel); } }
+            else if (st == ST_WIFI || st == ST_BLE) { if (off < listCount() - 1) { off++; drawList(false); } }
+            break;
+        case Buttons::SELECT:
+            if (st == ST_MENU) activate(sel);
+            break;
+        case Buttons::LEFT:
+            if (st != ST_MENU) goMenu();
             break;
         default:
             break;
     }
-    // pick up fresh background-scan results for the current screen — never blocks
-    if (scr == SCR_WIFI && engine.wifiGen() != seenWifiGen) {
+
+    // ---- live scan updates (only while a scan screen is open) ----
+    if (st == ST_WIFI && engine.wifiGen() != seenWifiGen) {
         seenWifiGen = engine.wifiGen();
         if (off >= engine.wifiCount()) off = 0;
-        drawFull();
-    } else if (scr == SCR_BLE && engine.bleGen() != seenBleGen) {
+        drawList(true);
+    } else if (st == ST_BLE && engine.bleGen() != seenBleGen) {
         seenBleGen = engine.bleGen();
         if (off >= engine.bleCount()) off = 0;
-        drawFull();
+        drawList(true);
     }
+
     delay(10);
 }
 
@@ -289,6 +349,34 @@ void loop() {
     }
     last = v;
     delay(30);
+}
+
+#elif DEMO == DEMO_TOUCHCAL
+
+void setup() {
+    Serial.begin(115200);
+    delay(300);
+    displayInit();
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawString("Touch the arrows", 120, 160, 2);
+
+    uint16_t cal[5];
+    tft.calibrateTouch(cal, TFT_WHITE, TFT_BLACK, 18);
+    Serial.printf("TOUCH_CAL = { %u, %u, %u, %u, %u };\n",
+                  cal[0], cal[1], cal[2], cal[3], cal[4]);
+
+    tft.fillScreen(TFT_BLACK);
+    tft.drawString("Done — tap to test", 120, 160, 2);
+}
+
+void loop() {
+    uint16_t x, y;
+    if (tft.getTouch(&x, &y)) {
+        tft.fillCircle(x, y, 3, TFT_GREEN);
+        Serial.printf("touch %u,%u\n", x, y);
+    }
 }
 
 #endif

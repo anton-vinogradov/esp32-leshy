@@ -46,5 +46,5 @@ void WifiScreen::draw(ScanEngine& e, int offset) {
     if (n > 0) sprintf(right, "%d nets", n); else sprintf(right, "scanning");
     uiHeader("Wi-Fi", right);
     rows(e, offset);
-    uiFooter("SEL: BLE   UP/DN: scroll");
+    uiFooter("LEFT: menu   UP/DN: scroll");
 }
