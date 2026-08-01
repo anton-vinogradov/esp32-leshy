@@ -37,11 +37,18 @@ void uiFooter(const char* hint) {
     tft.drawString(hint, 120, 313, 1);
 }
 
-void uiSignalBars(int x, int y, int rssi, uint16_t color) {
+TFT_eSprite& uiRow() {
+    static TFT_eSprite row(&tft);
+    static bool made = false;
+    if (!made) { row.createSprite(240, UI_ROW_H); made = true; }
+    return row;
+}
+
+void uiSignalBars(TFT_eSprite& s, int x, int y, int rssi, uint16_t color) {
     int bars = rssi > -55 ? 4 : rssi > -67 ? 3 : rssi > -78 ? 2 : rssi > -88 ? 1 : 0;
     uint16_t off = tft.color565(0x33, 0x3a, 0x33);
     for (int b = 0; b < 4; b++) {
         int h = 4 + b * 3;
-        tft.fillRect(x + b * 5, y + 13 - h, 3, h, b < bars ? color : off);
+        s.fillRect(x + b * 5, y + 13 - h, 3, h, b < bars ? color : off);
     }
 }

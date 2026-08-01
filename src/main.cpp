@@ -218,14 +218,16 @@ static Screen   scr = SCR_WIFI;
 static int      off = 0;
 static uint32_t lastScan = 0;
 
+static uint32_t lastInput = 0;
+
 static int  curCount() { return scr == SCR_WIFI ? wifiScreen.count() : bleScreen.count(); }
-static void renderCur() { if (scr == SCR_WIFI) wifiScreen.render(off); else bleScreen.render(off); }
+static void renderRows() { if (scr == SCR_WIFI) wifiScreen.rows(off); else bleScreen.rows(off); }
 
 static void rescan() {
     if (scr == SCR_WIFI) { wifiScreen.scanCue(); wifiScreen.scan(); }
     else                 { bleScreen.scanCue();  bleScreen.scan();  }
     if (off >= curCount()) off = 0;
-    renderCur();
+    if (scr == SCR_WIFI) wifiScreen.draw(off); else bleScreen.draw(off);
     lastScan = millis();
 }
 
@@ -241,22 +243,25 @@ void setup() {
 }
 
 void loop() {
-    switch (buttons.poll()) {
+    Buttons::Key k = buttons.poll();
+    if (k != Buttons::NONE) lastInput = millis();
+    switch (k) {
         case Buttons::SELECT:
             scr = (scr == SCR_WIFI) ? SCR_BLE : SCR_WIFI;
             off = 0;
             rescan();
             break;
         case Buttons::UP:
-            if (off > 0) { off--; renderCur(); }
+            if (off > 0) { off--; renderRows(); }
             break;
         case Buttons::DOWN:
-            if (off < curCount() - 1) { off++; renderCur(); }
+            if (off < curCount() - 1) { off++; renderRows(); }
             break;
         default:
             break;
     }
-    if (millis() - lastScan > 6000) rescan();
+    // auto-refresh only when idle, so a blocking scan never interrupts scrolling
+    if (millis() - lastScan > 8000 && millis() - lastInput > 3000) rescan();
     delay(10);
 }
 
