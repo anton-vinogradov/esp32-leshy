@@ -63,6 +63,8 @@ void HiddenRevealer::storeLocked(const uint8_t bssid[6], const char* ssid, uint8
     memcpy(ent_[n_].bssid, bssid, 6);
     memcpy(ent_[n_].ssid, ssid, slen);
     ent_[n_].ssid[slen] = 0;
+    Serial.printf("[Hidden] revealed %02X:%02X:%02X:%02X:%02X:%02X = '%s'\n",
+                  bssid[0], bssid[1], bssid[2], bssid[3], bssid[4], bssid[5], ent_[n_].ssid);
     n_++;
     dirty_ = true;
 }
