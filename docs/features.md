@@ -9,7 +9,8 @@ What the firmware does today, on real ESP32-DIV hardware, in a touch- and keypad
 ```
 ESP32-Leshy
 ├─ Wi-Fi
-│  ├─ Wi-Fi Scan        signal · channel · security · ★your net · hidden; select a row, ▶ = per-network options
+│  ├─ Wi-Fi Scan        signal · channel · security · ★your net · hidden
+│  │  └─ ▶ on a network  Details (SSID · BSSID · channel · RSSI · security)
 │  ├─ Channels 2.4G     scrolling per-channel airtime graphs (1/6/11 highlighted)
 │  └─ Advanced
 │     ├─ Hidden names   revealed hidden SSIDs (saved to flash, deletable)

@@ -221,6 +221,7 @@ void loop() {}
 #include "features/wifi_scanner/HiddenRevealer.h"
 #include "features/ota/OtaManager.h"
 #include "features/display/img_rider.h"
+#include "features/display/font_ru_small.h"
 #include "core/version.h"
 
 ScanEngine     engine;
@@ -641,6 +642,10 @@ static const char* otaErrText(OtaManager::Err e) {
 static void otaBar() {
     const int x = 16, y = 268, w = 208, h = 26;
     const uint16_t barbg = tft.color565(0x14, 0x1a, 0x14);
+    const uint16_t panel = tft.color565(0x0b, 0x11, 0x0b);
+    static TFT_eSprite bar(&tft);
+    static bool made = false;
+    if (!made) { bar.createSprite(w, h); bar.loadFont(font_ru_small); made = true; }
     const char* label; int pct; uint16_t fill;
     switch (ota.phase()) {
         case OtaManager::CHECKING:    label = i18n::tr("Checking...", "Проверяю...");        pct = 12;  fill = tft.color565(0x7a, 0x6a, 0x2a); break;
@@ -651,14 +656,14 @@ static void otaBar() {
         case OtaManager::FAILED:      label = otaErrText(ota.err());                          pct = 100; fill = tft.color565(0x8a, 0x2a, 0x2a); break;
         default:                      label = "";                                            pct = 0;   fill = barbg; break;
     }
-    tft.fillRoundRect(x, y, w, h, 7, barbg);
+    bar.fillSprite(panel);                    // compose off-screen, push once — no flicker
+    bar.fillRoundRect(0, 0, w, h, 7, barbg);
     int fw = (w - 4) * pct / 100;
-    if (fw > 0) tft.fillRoundRect(x + 2, y + 2, fw < 6 ? 6 : fw, h - 4, 5, fill);
-    fontSmall();
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(tft.color565(0xff, 0xff, 0xf2), barbg);
-    tft.drawString(label, x + w / 2, y + h / 2);
-    fontOff();
+    if (fw > 0) bar.fillRoundRect(2, 2, fw < 6 ? 6 : fw, h - 4, 5, fill);
+    bar.setTextDatum(MC_DATUM);
+    bar.setTextColor(tft.color565(0xff, 0xff, 0xf2), barbg);
+    bar.drawString(label, w / 2, h / 2);
+    bar.pushSprite(x, y);
 }
 
 static void drawOtaScreen() {
