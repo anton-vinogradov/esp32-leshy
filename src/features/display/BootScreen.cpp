@@ -1,14 +1,8 @@
 #include "BootScreen.h"
 
-#include <TFT_eSPI.h>
-
-// TFT_eSPI reads its pin map from the build flags in platformio.ini.
-static TFT_eSPI tft;
+#include "Display.h"
 
 void BootScreen::show() {
-    tft.init();
-    tft.setRotation(2);                 // 240 x 320 portrait (ESP32-DIV panel is flipped vs rotation 0)
-
     const uint16_t bg    = tft.color565(0x12, 0x2a, 0x1c);
     const uint16_t gold  = tft.color565(0xe7, 0xcf, 0x8f);
     const uint16_t amber = tft.color565(0xff, 0xcf, 0x3f);
