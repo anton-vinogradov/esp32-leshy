@@ -12,6 +12,7 @@
 #include "features/display/BleScreen.h"
 #include "features/display/MenuScreen.h"
 #include "features/display/SignalFinderScreen.h"
+#include "features/display/Fonts.h"
 #include "features/scan/ScanEngine.h"
 #include "features/input/Buttons.h"
 #include "features/input/Touch.h"
@@ -229,37 +230,37 @@ enum { F_WIFI_SCAN, F_SIGNAL_FINDER, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
-    {"Wi-Fi",    "Scan & locate networks",   K_SUB,  M_WIFI},
-    {"BLE",      "Bluetooth devices & tags", K_SUB,  M_BLE},
-    {"Sub-GHz",  "315/433/868 MHz radio",    K_SUB,  M_SUBGHZ},
-    {"Settings", "Language, touch, about",   K_SUB,  M_SETTINGS},
+    {"Wi-Fi",    "Scan & locate networks",   "Wi-Fi",     "Скан и пеленг сетей",      K_SUB, M_WIFI},
+    {"BLE",      "Bluetooth devices & tags", "BLE",       "Устройства и метки",       K_SUB, M_BLE},
+    {"Sub-GHz",  "315/433/868 MHz radio",    "Sub-GHz",   "Радио 315/433/868 МГц",    K_SUB, M_SUBGHZ},
+    {"Settings", "Language, touch, about",   "Настройки", "Язык, тач, о девайсе",     K_SUB, M_SETTINGS},
 };
 static const MenuItem WIFI_I[] = {
-    {"Wi-Fi Scan",    "Networks: signal, channel, lock", K_FEAT, F_WIFI_SCAN},
-    {"Signal Finder", "Hot/cold locate an AP",           K_FEAT, F_SIGNAL_FINDER},
+    {"Wi-Fi Scan",    "Networks: signal, channel, lock", "Скан Wi-Fi", "Сети: сигнал, канал, замок", K_FEAT, F_WIFI_SCAN},
+    {"Signal Finder", "Hot/cold locate an AP",           "Пеленг",     "Найти точку: горячо/холодно", K_FEAT, F_SIGNAL_FINDER},
 };
 static const MenuItem BLE_I[] = {
-    {"BLE Scan", "Devices & trackers nearby", K_FEAT, F_BLE_SCAN},
+    {"BLE Scan", "Devices & trackers nearby", "Скан BLE", "Устройства и трекеры рядом", K_FEAT, F_BLE_SCAN},
 };
 static const MenuItem SUB_I[] = {
-    {"Recorder", "Record RF signals (soon)", K_FEAT, F_SUBGHZ_SOON},
+    {"Recorder", "Record RF signals (soon)", "Запись", "Запись сигналов (скоро)", K_FEAT, F_SUBGHZ_SOON},
 };
 static const MenuItem SET_I[] = {
-    {"Language",        "Interface language",      K_SUB,  M_LANG},
-    {"Calibrate touch", "Redo screen calibration", K_FEAT, F_RECAL},
-    {"About",           "About ESP32-Leshy",       K_FEAT, F_ABOUT},
+    {"Language",        "Interface language",      "Язык",       "Язык интерфейса",       K_SUB,  M_LANG},
+    {"Calibrate touch", "Redo screen calibration", "Калибровка", "Перекалибровать экран", K_FEAT, F_RECAL},
+    {"About",           "About ESP32-Leshy",       "О девайсе",  "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
 };
 static const MenuItem LANG_I[] = {
-    {"English", "", K_FEAT, F_LANG_EN},
-    {"Russian", "", K_FEAT, F_LANG_RU},
+    {"English", "", "English", "", K_FEAT, F_LANG_EN},
+    {"Русский", "", "Русский", "", K_FEAT, F_LANG_RU},
 };
 static const Menu MENUS[] = {
-    {"ESP32-Leshy", ROOT_I, 4},
-    {"Wi-Fi",       WIFI_I, 2},
-    {"BLE",         BLE_I,  1},
-    {"Sub-GHz",     SUB_I,  1},
-    {"Settings",    SET_I,  3},
-    {"Language",    LANG_I, 2},
+    {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
+    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 2},
+    {"BLE",         "BLE",         BLE_I,  1},
+    {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
+    {"Settings",    "Настройки",   SET_I,  3},
+    {"Language",    "Язык",        LANG_I, 2},
 };
 
 // ---- navigation state ----
@@ -289,14 +290,16 @@ static void drawList(bool full) {
 }
 
 static void drawInfo() {
-    uiHeader(infoTitle, "");
+    uiHeaderRu(infoTitle);
     tft.fillRect(0, 28, 240, 320 - 28, uiBg());
+    fontSmall();
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(tft.color565(0xe8, 0xe8, 0xe0), uiBg());
-    tft.drawString(infoBody, 10, 50, 2);
+    tft.drawString(infoBody, 10, 50);
     tft.setTextColor(tft.color565(0xff, 0xcf, 0x3f), uiBg());
-    tft.drawString(infoNote, 10, 78, 2);
-    uiFooter("LEFT: back");
+    tft.drawString(infoNote, 10, 80);
+    uiFooterRu(i18n::isRu() ? "НАЗАД: LEFT" : "LEFT: back");
+    fontOff();
 }
 
 static void tryTrack() {
@@ -318,8 +321,8 @@ static void launch(int feat) {
         case F_WIFI_SCAN:     st = ST_WIFI; off = 0; seenWifiGen = engine.wifiGen(); drawList(true); break;
         case F_BLE_SCAN:      st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); break;
         case F_SIGNAL_FINDER: engine.pause(); st = ST_SF_PICK; sfSel = 0; sfScreen.drawPicker(engine, sfSel); break;
-        case F_SUBGHZ_SOON:   infoTitle = "Sub-GHz Recorder"; infoBody = "Record / replay 315-868 MHz"; infoNote = "Coming soon (needs CC1101)"; st = ST_INFO; drawInfo(); break;
-        case F_ABOUT:         infoTitle = "About"; infoBody = "ESP32-Leshy - open firmware"; infoNote = "anton-vinogradov/esp32-leshy"; st = ST_INFO; drawInfo(); break;
+        case F_SUBGHZ_SOON:   infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
+        case F_ABOUT:         infoTitle = i18n::tr("About", "О девайсе"); infoBody = i18n::tr("ESP32-Leshy - open firmware", "ESP32-Leshy - открытая прошивка"); infoNote = "anton-vinogradov/esp32-leshy"; st = ST_INFO; drawInfo(); break;
         case F_RECAL:         touchRecalibrate(); showMenu(); break;
         case F_LANG_EN:       i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
         case F_LANG_RU:       i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
