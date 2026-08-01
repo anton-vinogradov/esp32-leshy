@@ -9,7 +9,7 @@ void displayInit();
 // List geometry shared by the on-screen scanners.
 static const int UI_LIST_TOP = 30;
 static const int UI_ROW_H    = 24;
-static const int UI_VISIBLE  = 10;   // last row clears the raised footer
+static const int UI_VISIBLE  = 11;   // list runs 30..294, right up to the footer band
 
 // Shared UI helpers (colors computed via tft.color565 at call time).
 uint16_t uiBg();

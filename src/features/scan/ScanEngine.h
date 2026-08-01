@@ -9,7 +9,7 @@
 // Render-ready snapshot rows (decoupled from the scanner internals).
 // hidden = the AP broadcast an empty SSID; ssid may still be filled from a
 // revealed name (HiddenRevealer) or the user's own saved name.
-struct WifiRow { String ssid; int8_t rssi; uint8_t auth; uint8_t bssid[6]; bool hidden; };
+struct WifiRow { String ssid; int8_t rssi; uint8_t auth; uint8_t channel; uint8_t bssid[6]; bool hidden; };
 struct BleRow  { String label; int rssi; bool tracker; };
 
 // ScanEngine runs Wi-Fi and BLE scans in a background FreeRTOS task (pinned to

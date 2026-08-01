@@ -37,10 +37,11 @@ void ScanEngine::taskLoop() {
             wifiN_ = n < MAX ? n : MAX;
             for (int i = 0; i < wifiN_; i++) {
                 const WifiAp& a = ws_.at(i);
-                wifi_[i].hidden = a.ssid.isEmpty();
-                wifi_[i].ssid   = a.ssid;
-                wifi_[i].rssi   = a.rssi;
-                wifi_[i].auth   = a.auth;
+                wifi_[i].hidden  = a.ssid.isEmpty();
+                wifi_[i].ssid    = a.ssid;
+                wifi_[i].rssi    = a.rssi;
+                wifi_[i].auth    = a.auth;
+                wifi_[i].channel = a.channel;
                 memcpy(wifi_[i].bssid, a.bssid, 6);
                 String name;                                   // fill hidden names we already know
                 if (wifi_[i].hidden && rev_ && rev_->lookup(a.bssid, name)) wifi_[i].ssid = name;

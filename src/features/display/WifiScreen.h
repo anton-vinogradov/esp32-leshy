@@ -10,8 +10,8 @@
 class WifiScreen {
 public:
     void attachNet(NetManager* n) { net_ = n; }
-    void draw(ScanEngine& e, int offset);
-    void rows(ScanEngine& e, int offset);
+    void draw(ScanEngine& e, int offset, int sel = -1);
+    void rows(ScanEngine& e, int offset, int sel = -1);
 
 private:
     NetManager* net_ = nullptr;

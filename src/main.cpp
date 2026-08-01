@@ -231,12 +231,17 @@ Buttons        buttons;
 NetManager     net;
 HiddenRevealer revealer;
 OtaManager     ota;
+DeauthDetector detector;
 
 static void drawNetBadge();      // small "connected" mark in the header (defined below)
+static void gotoWifi();          // (re)enter the live Wi-Fi scan
+static void ensureWifiVisible(); // keep the selected scan row on screen
+static void openNetOptions();    // RIGHT on a scan row -> per-network options
+static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -246,8 +251,10 @@ static const MenuItem ROOT_I[] = {
     {"Settings", "Language, touch, about",   "Настройки", "Язык, тач, о девайсе",     K_SUB, M_SETTINGS},
 };
 static const MenuItem WIFI_I[] = {
-    {"Wi-Fi Scan",   "Signal, channel, lock", "Скан Wi-Fi",   "Сигнал, канал, шифр", K_FEAT, F_WIFI_SCAN},
-    {"Hidden names", "Revealed hidden SSIDs", "Скрытые сети", "Раскрытые имена",     K_FEAT, F_HIDDEN},
+    {"Wi-Fi Scan",     "Signal, channel, lock",  "Скан Wi-Fi",     "Сигнал, канал, шифр", K_FEAT, F_WIFI_SCAN},
+    {"Hidden names",   "Revealed hidden SSIDs",  "Скрытые сети",   "Раскрытые имена",     K_FEAT, F_HIDDEN},
+    {"Deauth monitor", "Alarm on deauth bursts", "Детектор deauth","Тревога на всплески", K_FEAT, F_DEAUTH},
+    {"Channels 2.4G",  "Airtime by channel",     "Каналы 2.4ГГц",  "Загрузка по каналам", K_FEAT, F_CHANNELS},
 };
 static const MenuItem BLE_I[] = {
     {"BLE Scan", "Devices & trackers nearby", "Скан BLE", "Устройства и трекеры рядом", K_FEAT, F_BLE_SCAN},
@@ -268,7 +275,7 @@ static const MenuItem LANG_I[] = {
 };
 static const Menu MENUS[] = {
     {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
-    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 2},
+    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 4},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
     {"Settings",    "Настройки",   SET_I,  5},
@@ -276,12 +283,14 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_NETINFO };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
 static int      depth = 0;
 static int      off = 0;
+static int      wifiSel = 0;     // selected row in the Wi-Fi scan
+static WifiRow  netSel;          // network the per-network options act on
 static uint32_t seenWifiGen = 0, seenBleGen = 0;
 static bool     touchDown = false;
 static String   infoTitle, infoBody, infoNote;
@@ -296,7 +305,7 @@ static Lang loadLang() { Preferences p; p.begin("leshy", true); uint8_t v = p.ge
 
 static int  listCount() { return st == ST_WIFI ? engine.wifiCount() : engine.bleCount(); }
 static void drawList(bool full) {
-    if (st == ST_WIFI) { if (full) wifiScreen.draw(engine, off); else wifiScreen.rows(engine, off); }
+    if (st == ST_WIFI) { if (full) wifiScreen.draw(engine, off, wifiSel); else wifiScreen.rows(engine, off, wifiSel); }
     else               { if (full) bleScreen.draw(engine, off);  else bleScreen.rows(engine, off); }
 }
 
@@ -550,7 +559,7 @@ static void connActivate() {
 }
 
 // ---- options menu (RIGHT opens context actions for the selected item) ----
-enum OptId { OPT_DEL_HIDDEN };
+enum OptId { OPT_DEL_HIDDEN, OPT_NET_DETAILS };
 static OptId       optIds[4];
 static const char* optLabels[4];
 static int         optN = 0, optSel = 0, optY[4];
@@ -586,7 +595,8 @@ static void openHiddenOptions() {
 
 static void optActivate() {
     switch (optIds[optSel]) {
-        case OPT_DEL_HIDDEN: revealer.remove(hidSel); gotoHidden(); break;
+        case OPT_DEL_HIDDEN:  revealer.remove(hidSel); gotoHidden(); break;
+        case OPT_NET_DETAILS: drawNetDetails(); st = ST_NETINFO; break;
     }
 }
 
@@ -701,12 +711,156 @@ static void drawAboutScreen() {
     drawNetBadge();
 }
 
+// ---- Deauth monitor screen (passive/defensive) ----
+static void drawDeauthScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t red   = tft.color565(0xd1, 0x4c, 0x4c);
+    const uint16_t green = tft.color565(0x2f, 0x6a, 0x3e);
+    bool alert = detector.alerting();
+    int  recent = detector.recentCount();
+    uiHeaderRu(i18n::tr("Deauth monitor", "Детектор deauth"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    uint16_t bc = alert ? red : green;
+    tft.fillRoundRect(12, 44, 216, 42, 9, bc);
+    fontBig(); tft.setTextDatum(MC_DATUM); tft.setTextColor(tft.color565(0xff, 0xff, 0xf2), bc);
+    tft.drawString(alert ? i18n::tr("ALERT", "ТРЕВОГА") : i18n::tr("Clear", "Чисто"), 120, 66);
+    fontSmall();
+    int y = 104;
+    char num[16];
+    tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
+    tft.drawString(i18n::tr("In window", "За окно"), 14, y);
+    tft.setTextDatum(TR_DATUM); tft.setTextColor(alert ? red : white, bg);
+    tft.drawString(String(recent), 226, y); y += 28;
+    tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
+    tft.drawString(i18n::tr("Total", "Всего"), 14, y);
+    tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg);
+    snprintf(num, sizeof(num), "%lu", (unsigned long)detector.total());
+    tft.drawString(num, 226, y); y += 28;
+    tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
+    tft.drawString(i18n::tr("Channel", "Канал"), 14, y);
+    tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg);
+    tft.drawString(String(detector.channel()), 226, y); y += 32;
+    DeauthEvent e;
+    if (detector.lastEvent(e)) {
+        tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
+        tft.drawString(i18n::tr("Last source", "Источник"), 14, y); y += 22;
+        char mac[18];
+        snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", e.src[0], e.src[1], e.src[2], e.src[3], e.src[4], e.src[5]);
+        fontOff(); tft.setTextColor(gold, bg); tft.drawString(mac, 20, y, 2); fontSmall();
+    }
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
+    fontOff();
+    drawNetBadge();
+}
+
+// ---- Channel airtime analyzer (passive, from the scan) ----
+static void drawChannelScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    int counts[14] = {0};
+    int n = engine.wifiCount();
+    WifiRow r;
+    for (int i = 0; i < n; i++)
+        if (engine.wifiRow(i, r) && r.channel >= 1 && r.channel <= 13) counts[r.channel]++;
+    int maxc = 1;
+    for (int ch = 1; ch <= 13; ch++) if (counts[ch] > maxc) maxc = counts[ch];
+    char right[20]; snprintf(right, sizeof(right), "%d %s", n, i18n::tr("nets", "сетей"));
+    uiHeaderRu(i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"), right);
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    fontOff();
+    const int top = 36, rowh = 19, barx = 30, barmax = 168;
+    for (int ch = 1; ch <= 13; ch++) {
+        int y = top + (ch - 1) * rowh;
+        bool clean = (ch == 1 || ch == 6 || ch == 11);   // non-overlapping channels
+        tft.setTextDatum(MR_DATUM);
+        tft.setTextColor(clean ? gold : dim, bg);
+        tft.drawString(String(ch), 24, y + rowh / 2, 2);
+        int bw = counts[ch] * barmax / maxc;
+        uint16_t barcol = counts[ch] == 0 ? tft.color565(0x22, 0x2a, 0x22)
+                        : counts[ch] >= maxc && maxc > 1 ? tft.color565(0xd1, 0x6a, 0x4c)
+                        : tft.color565(0x3a, 0x7a, 0x4a);
+        tft.fillRoundRect(barx, y + 2, bw < 3 ? 3 : bw, rowh - 5, 2, barcol);
+        if (counts[ch] > 0) {
+            tft.setTextDatum(ML_DATUM); tft.setTextColor(white, bg);
+            tft.drawString(String(counts[ch]), barx + (bw < 3 ? 3 : bw) + 5, y + rowh / 2, 2);
+        }
+    }
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
+    drawNetBadge();
+}
+
+// ---- Wi-Fi scan selection + per-network options ----
+static void ensureWifiVisible() {
+    int n = engine.wifiCount();
+    if (wifiSel > n - 1) wifiSel = n - 1;
+    if (wifiSel < 0) wifiSel = 0;
+    if (wifiSel < off) off = wifiSel;
+    if (wifiSel >= off + UI_VISIBLE) off = wifiSel - UI_VISIBLE + 1;
+    if (off < 0) off = 0;
+}
+
+static void gotoWifi() {
+    engine.setMode(ScanEngine::SCAN_WIFI); engine.resume();
+    st = ST_WIFI; seenWifiGen = engine.wifiGen();
+    ensureWifiVisible();
+    drawList(true);
+}
+
+static void openNetOptions() {
+    if (!engine.wifiRow(wifiSel, netSel)) return;
+    engine.pause();                          // freeze the scan while the menu is open
+    String mine; bool isMine = net.isMine(netSel.bssid, mine);
+    optTitle = netSel.ssid.length() ? netSel.ssid : (isMine ? mine : String(i18n::tr("<hidden>", "<скрытая>")));
+    optN = 0;
+    optLabels[optN] = i18n::tr("Details", "Подробнее"); optIds[optN] = OPT_NET_DETAILS; optN++;
+    optSel = 0; optReturn = ST_WIFI;
+    st = ST_OPTIONS; drawOptionsScreen();
+}
+
+static void drawNetDetails() {
+    const uint16_t bg = uiBg();
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    String mine; bool isMine = net.isMine(netSel.bssid, mine);
+    bool named = netSel.ssid.length() > 0;
+    String name = named ? netSel.ssid : (isMine ? mine : String(i18n::tr("<hidden>", "<скрытая>")));
+    uiHeaderRu(i18n::tr("Network", "Сеть"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    fontSmall(); tft.setTextDatum(TL_DATUM);
+    int y = 46;
+    tft.setTextColor(dim, bg);  tft.drawString(i18n::tr("Name", "Имя"), 14, y); y += 22;
+    tft.setTextColor(isMine ? gold : white, bg);
+    tft.drawString((isMine ? String("* ") : String("")) + name, 22, y); y += 30;
+    char mac[18];
+    snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", netSel.bssid[0], netSel.bssid[1], netSel.bssid[2], netSel.bssid[3], netSel.bssid[4], netSel.bssid[5]);
+    tft.setTextColor(dim, bg); tft.drawString("BSSID", 14, y); y += 20;
+    fontOff(); tft.setTextColor(white, bg); tft.drawString(mac, 22, y, 2); fontSmall(); y += 30;
+    tft.setTextColor(dim, bg); tft.drawString(i18n::tr("Channel", "Канал"), 14, y);
+    tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg); tft.drawString(String(netSel.channel), 226, y); tft.setTextDatum(TL_DATUM); y += 24;
+    tft.setTextColor(dim, bg); tft.drawString("RSSI", 14, y);
+    tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg); tft.drawString(String(netSel.rssi) + " dBm", 226, y); tft.setTextDatum(TL_DATUM); y += 24;
+    tft.setTextColor(dim, bg); tft.drawString(i18n::tr("Security", "Шифр"), 14, y);
+    tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg); tft.drawString(WifiScanner::authName(netSel.auth), 226, y); tft.setTextDatum(TL_DATUM); y += 26;
+    if (netSel.hidden) { tft.setTextColor(tft.color565(0xff, 0xa5, 0x2a), bg); tft.drawString(i18n::tr("hidden network", "скрытая сеть"), 14, y); }
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
+    fontOff();
+    drawNetBadge();
+}
+
 static void back() {
     switch (st) {
+        case ST_DEAUTH:    detector.stop(); showMenu();                    return;
+        case ST_NETINFO:   gotoWifi();                                     return;
         case ST_OTA:       if (ota.phase() == OtaManager::DOWNLOADING) return; showMenu(); return;
         case ST_PROVISION: net.stopProvision(); gotoConn();               return;
         case ST_CONFIRM:   cancelConfirm();                               return;
-        case ST_OPTIONS:   if (optReturn == ST_HIDDEN) gotoHidden(); else showMenu(); return;
+        case ST_OPTIONS:   if (optReturn == ST_HIDDEN) gotoHidden(); else if (optReturn == ST_WIFI) gotoWifi(); else showMenu(); return;
         case ST_MENU:      if (depth > 0) { depth--; showMenu(); }        return;
         default:           showMenu();                                    return;  // WIFI/BLE/INFO/CONN/HIDDEN
     }
@@ -714,9 +868,14 @@ static void back() {
 
 static void launch(int feat) {
     switch (feat) {
-        case F_WIFI_SCAN:   engine.setMode(ScanEngine::SCAN_WIFI); engine.resume(); st = ST_WIFI; off = 0; seenWifiGen = engine.wifiGen(); drawList(true); break;
+        case F_WIFI_SCAN:   wifiSel = 0; off = 0; gotoWifi(); break;
         case F_CONN:        connSel = 0; gotoConn(); break;
         case F_HIDDEN:      hidSel = 0; hidOff = 0; gotoHidden(); break;
+        case F_DEAUTH:      engine.pause();
+                            if (detector.begin()) { st = ST_DEAUTH; drawDeauthScreen(); }
+                            else { infoTitle = i18n::tr("Deauth monitor", "Детектор deauth"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
+                            break;
+        case F_CHANNELS:    engine.setMode(ScanEngine::SCAN_WIFI); engine.resume(); st = ST_CHANNELS; seenWifiGen = engine.wifiGen(); drawChannelScreen(); break;
         case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); break;
         case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
         case F_ABOUT:       st = ST_INFO; drawAboutScreen(); break;
@@ -738,14 +897,16 @@ static void onKey(int ev) {
     switch (ev) {
         case Buttons::UP:
             if (st == ST_MENU) { if (curSel() > 0) { int p = curSel(); curSel()--; menuScreen.repaint(p, curSel()); } }
-            else if (st == ST_WIFI || st == ST_BLE) { if (off > 0) { off--; drawList(false); } }
+            else if (st == ST_WIFI)    { if (wifiSel > 0) { wifiSel--; ensureWifiVisible(); drawList(false); } }
+            else if (st == ST_BLE)     { if (off > 0) { off--; drawList(false); } }
             else if (st == ST_CONN)    { if (connSel > 0) { int p = connSel; connSel--; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
             else if (st == ST_OPTIONS) { if (optSel > 0)  { int p = optSel;  optSel--;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
             else if (st == ST_HIDDEN)  { if (hidSel > 0)  { int p = hidSel; hidSel--; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
             break;
         case Buttons::DOWN:
             if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
-            else if (st == ST_WIFI || st == ST_BLE) { int m = listCount() - UI_VISIBLE; if (m < 0) m = 0; if (off < m) { off++; drawList(false); } }
+            else if (st == ST_WIFI)    { if (wifiSel < engine.wifiCount() - 1) { wifiSel++; ensureWifiVisible(); drawList(false); } }
+            else if (st == ST_BLE)     { int m = engine.bleCount() - UI_VISIBLE; if (m < 0) m = 0; if (off < m) { off++; drawList(false); } }
             else if (st == ST_CONN)    { if (connSel < connActN - 1) { int p = connSel; connSel++; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
             else if (st == ST_OPTIONS) { if (optSel < optN - 1)      { int p = optSel;  optSel++;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
             else if (st == ST_HIDDEN)  { if (hidSel < revealer.count() - 1) { int p = hidSel; hidSel++; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
@@ -756,6 +917,7 @@ static void onKey(int ev) {
             else if (st == ST_OPTIONS) optActivate();
             else if (st == ST_CONFIRM) doConfirm();
             else if (st == ST_OTA) otaActivate();
+            else if (st == ST_WIFI) openNetOptions();
             break;
         case Buttons::RIGHT:                      // right = options / action
             if (st == ST_MENU) activate();
@@ -764,6 +926,7 @@ static void onKey(int ev) {
             else if (st == ST_CONFIRM) doConfirm();
             else if (st == ST_OTA) otaActivate();
             else if (st == ST_HIDDEN) openHiddenOptions();
+            else if (st == ST_WIFI) openNetOptions();
             break;
         case Buttons::LEFT:
             back();
@@ -792,6 +955,8 @@ static void serialControl() {
             else if (!strcmp(buf, "hidden")) launch(F_HIDDEN);
             else if (!strcmp(buf, "conn"))   launch(F_CONN);
             else if (!strcmp(buf, "ota"))    launch(F_OTA);
+            else if (!strcmp(buf, "deauth")) launch(F_DEAUTH);
+            else if (!strcmp(buf, "chan"))   launch(F_CHANNELS);
             else if (!strcmp(buf, "menu"))   { depth = 0; showMenu(); }
             else { Serial.printf("[cmd] ? '%s'\n", buf); continue; }
             Serial.printf("[cmd] %s -> st=%d\n", buf, (int)st);
@@ -840,6 +1005,10 @@ void loop() {
                 if (ty < 28) back();
                 else for (int i = 0; i < optN; i++)
                     if (ty >= optY[i] && ty < optY[i] + 34) { optSel = i; optActivate(); break; }
+            } else if (st == ST_WIFI) {
+                if (ty < 28) back();
+                else { int i = (ty - UI_LIST_TOP) / UI_ROW_H; int idx = off + i;
+                       if (i >= 0 && i < UI_VISIBLE && idx < engine.wifiCount()) { wifiSel = idx; ensureWifiVisible(); openNetOptions(); } }
             } else if (st == ST_OTA) {
                 if (ota.phase() == OtaManager::AVAILABLE) ota.startUpdate();
                 else if (ota.phase() != OtaManager::DOWNLOADING && ty < 60) back();
@@ -859,6 +1028,13 @@ void loop() {
     onKey(buttons.poll());
     serialControl();
 
+    // ---- deauth monitor: hop channels + refresh stats ----
+    if (st == ST_DEAUTH) {
+        detector.loop();
+        static uint32_t nextDeauthDraw = 0;
+        if (millis() - nextDeauthDraw > 500) { nextDeauthDraw = millis(); drawDeauthScreen(); }
+    }
+
     // ---- provisioning portal ----
     if (st == ST_PROVISION) {
         net.loopProvision();
@@ -874,7 +1050,7 @@ void loop() {
     // ---- live updates ----
     if (st == ST_WIFI && engine.wifiGen() != seenWifiGen) {
         seenWifiGen = engine.wifiGen();
-        int m = engine.wifiCount() - UI_VISIBLE; if (m < 0) m = 0; if (off > m) off = m;
+        ensureWifiVisible();
         drawList(true);
     } else if (st == ST_BLE && engine.bleGen() != seenBleGen) {
         seenBleGen = engine.bleGen();
@@ -884,6 +1060,9 @@ void loop() {
         seenOtaGen = ota.gen();
         if ((int)ota.phase() != seenOtaPhase) { seenOtaPhase = (int)ota.phase(); drawOtaScreen(); }
         else otaBar();                       // % change → repaint just the slider (no bg redraw)
+    } else if (st == ST_CHANNELS && engine.wifiGen() != seenWifiGen) {
+        seenWifiGen = engine.wifiGen();
+        drawChannelScreen();
     }
 
     if (millis() > 8000) ota.markHealthy();  // once the UI has clearly been up, confirm this image
