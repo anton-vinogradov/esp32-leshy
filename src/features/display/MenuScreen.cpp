@@ -64,14 +64,15 @@ void MenuScreen::desc_(int i, bool sel) {
     tft.drawString(fit(d, TEXT_MAXW), TEXT_X, y + 30);
 }
 
-void MenuScreen::show(const Menu* m, int sel) {
+void MenuScreen::show(const Menu* m, int sel, bool canBack) {
     m_ = m;
     uiHeaderRu(T(m_->en, m_->ru));
     tft.fillRect(0, 28, 240, 320 - 28, uiBg());
     for (int i = 0; i < m_->n; i++) bg_(i, i == sel);
     fontBig();   for (int i = 0; i < m_->n; i++) title_(i, i == sel);
     fontSmall(); for (int i = 0; i < m_->n; i++) desc_(i, i == sel);
-    uiFooterRu(i18n::isRu() ? "ВВЕРХ/ВНИЗ + ОК, или тап" : "UP/DN + SEL, or tap");
+    uiFooterRu(canBack ? (i18n::isRu() ? "◀ назад" : "◀ back") : "",
+               i18n::isRu() ? "выбрать ▶" : "open ▶");
     fontOff();
 }
 

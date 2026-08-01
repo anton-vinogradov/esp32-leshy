@@ -7,9 +7,12 @@
 // text and fontOff() before drawing with the built-in numbered fonts again.
 void fontBig();
 void fontSmall();
+void fontTiny();
 void fontOff();
 
 // Localized top bar / bottom hint drawn with the smooth font (Cyrillic-capable).
-// `right` (optional) is a small right-aligned label, e.g. a live count.
+// Header `right` (optional) is a small right-aligned label, e.g. a live count.
+// Footer: `left` hint hugs the left edge, `right` hint (optional) the right edge —
+//   e.g. uiFooterRu("◀ назад", "опции ▶").
 void uiHeaderRu(const char* title, const char* right = nullptr);
-void uiFooterRu(const char* hint);
+void uiFooterRu(const char* left, const char* right = nullptr);

@@ -25,7 +25,7 @@ struct Menu {
 // localized to the current language. Selectable by keypad or touch.
 class MenuScreen {
 public:
-    void show(const Menu* m, int sel);   // store menu + full render
+    void show(const Menu* m, int sel, bool canBack = true);   // store menu + full render
     void repaint(int prev, int cur);     // repaint just the two changed cards
     int  hitTest(int x, int y);          // card index at (x,y), or -1
     int  count() const { return m_ ? m_->n : 0; }

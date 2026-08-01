@@ -46,6 +46,6 @@ void BleScreen::draw(ScanEngine& e, int offset) {
     else       sprintf(right, "%s", i18n::tr("scanning", "скан"));
     uiHeaderRu("BLE", right);
     rows(e, offset);
-    uiFooterRu(i18n::isRu() ? "Влево: меню, листать" : "LEFT: menu, scroll");
+    uiFooterRu(i18n::isRu() ? "◀ меню" : "◀ menu");
     fontOff();
 }

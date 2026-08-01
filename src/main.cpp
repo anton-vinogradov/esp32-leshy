@@ -284,7 +284,7 @@ static String   infoTitle, infoBody, infoNote;
 static int  curMenu() { return menuStack[depth]; }
 static int& curSel()  { return selStack[depth]; }
 // In a menu the radios are idle — scanning only runs on a scan screen.
-static void showMenu() { engine.pause(); st = ST_MENU; menuScreen.show(&MENUS[curMenu()], curSel()); drawNetBadge(); }
+static void showMenu() { engine.pause(); st = ST_MENU; menuScreen.show(&MENUS[curMenu()], curSel(), depth > 0); drawNetBadge(); }
 
 static void saveLang(Lang l) { Preferences p; p.begin("leshy", false); p.putUChar("lang", (uint8_t)l); p.end(); }
 static Lang loadLang() { Preferences p; p.begin("leshy", true); uint8_t v = p.getUChar("lang", (uint8_t)UI_LANG); p.end(); return (Lang)v; }
@@ -304,7 +304,7 @@ static void drawInfo() {
     tft.drawString(infoBody, 10, 50);
     tft.setTextColor(tft.color565(0xff, 0xcf, 0x3f), uiBg());
     tft.drawString(infoNote, 10, 80);
-    uiFooterRu(i18n::isRu() ? "НАЗАД: LEFT" : "LEFT: back");
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
     fontOff();
     drawNetBadge();
 }
@@ -326,7 +326,7 @@ static void drawProvisionScreen() {
     tft.drawString("192.168.4.1", 10, 134);
     fontSmall(); tft.setTextColor(white, bg);
     tft.drawString(i18n::tr("3. Pick network + password", "3. Выбери сеть + пароль"), 10, 178);
-    uiFooterRu(i18n::tr("LEFT: cancel", "LEFT: отмена"));
+    uiFooterRu(i18n::tr("◀ cancel", "◀ отмена"));
     fontOff();
 }
 
@@ -397,12 +397,12 @@ static void drawHiddenScreen() {
         tft.drawString(i18n::tr("Empty yet.", "Пока пусто."), 12, 70);
         tft.drawString(i18n::tr("Scan near a hidden", "Сканируй рядом со"), 12, 96);
         tft.drawString(i18n::tr("network to reveal.", "скрытой сетью."), 12, 118);
-        uiFooterRu(i18n::isRu() ? "LEFT назад" : "LEFT back");
+        uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
         fontOff(); drawNetBadge(); return;
     }
     clampHidden();
     drawHiddenRowsOnly();
-    uiFooterRu(i18n::isRu() ? "LEFT назад  вправо опции" : "LEFT back  right options");
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "опции ▶" : "options ▶");
     drawNetBadge();
 }
 
@@ -474,7 +474,7 @@ static void drawConnScreen() {
     y += 6;
     fontOff();
     for (int i = 0; i < connActN; i++) { connActY[i] = y; drawActionBtn(y, connLabel(connActs[i]), i == connSel); y += 42; }
-    uiFooterRu(i18n::isRu() ? "LEFT назад  OK выбор" : "LEFT back  OK select");
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
     fontOff();
     drawNetBadge();
 }
@@ -564,7 +564,7 @@ static void drawOptionsScreen() {
     fontOff();
     int y = 84;
     for (int i = 0; i < optN; i++) { optY[i] = y; drawActionBtn(y, optLabels[i], i == optSel); y += 42; }
-    uiFooterRu(i18n::isRu() ? "LEFT назад  OK выбор" : "LEFT back  OK select");
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
     drawNetBadge();
 }
 
