@@ -25,31 +25,42 @@ void WifiScreen::rows(ScanEngine& e, int offset, int sel) {
         WifiRow r;
         if (idx < n && e.wifiRow(idx, r)) {
             uint16_t col = uiRssiColor(r.rssi);
-            uiSignalBars(row, 6, 5, r.rssi, col);
             String mine;
             bool isMine = net_ && net_->isMine(r.bssid, mine);
             bool named = r.ssid.length() > 0;
             bool unrev = r.hidden && !named && !isMine;
             String ss = named ? r.ssid : (isMine ? mine : String("раскрываю"));
             if (isMine) ss = "*" + ss;
-            bool trunc = false;                      // name column ~ up to x=142, gap before channel
-            while (ss.length() > 3 && row.textWidth(ss) > 112) { ss = ss.substring(0, ss.length() - 1); trunc = true; }
+            bool trunc = false;                       // name column: left edge .. ~x=86 (clear gap to graph)
+            while (ss.length() > 3 && row.textWidth(ss) > 80) { ss = ss.substring(0, ss.length() - 1); trunc = true; }
             if (trunc) ss += "~";
             row.setTextDatum(ML_DATUM);
             row.setTextColor(isMine ? gold : (unrev ? grey : bright), rbg);
-            row.drawString(ss, 30, 12);
-            if (r.channel >= 1) {                     // channel
-                row.setTextColor(dim, rbg);
-                row.drawString("c" + String(r.channel), 160, 12);
+            row.drawString(ss, 6, 12);
+            // sparkline — this AP's presence/RSSI over recent scans (its "footprint" in the air)
+            int8_t sp[ScanEngine::SPARK_N];
+            int sc = e.sparkOf(r.bssid, sp);
+            const int sx = 96, sw = 72, base = 19;    // continuous filled area, no gaps
+            const uint16_t fillc = tft.color565(0x2a, 0x53, 0x48);
+            if (sc >= 1) {
+                for (int px = 0; px < sw; px++) {
+                    float f = (sc <= 1) ? 0.0f : (float)px * (sc - 1) / (sw - 1);
+                    int i0 = (int)f, i1 = (i0 + 1 < sc) ? i0 + 1 : i0;
+                    int v = sp[i0] + (int)((sp[i1] - sp[i0]) * (f - i0));
+                    int hh = map(constrain(v, -92, -40), -92, -40, 1, 14);
+                    row.drawFastVLine(sx + px, base - hh, hh, fillc);
+                    row.drawPixel(sx + px, base - hh, uiRssiColor(v));
+                }
             }
-            if (r.auth != 0) {                        // encryption lock
+            if (r.channel >= 1) {                     // channel — hugging the RSSI
+                row.setTextDatum(MR_DATUM);
                 row.setTextColor(dim, rbg);
-                row.drawString("#", 196, 12);
+                row.drawString("c" + String(r.channel), 198, 12);
             }
-            char b[8]; sprintf(b, "%d", r.rssi);      // rssi
+            char b[8]; sprintf(b, "%d", r.rssi);      // signal, at the right edge
             row.setTextDatum(MR_DATUM);
             row.setTextColor(col, rbg);
-            row.drawString(b, 232, 12);
+            row.drawString(b, 236, 12);
         }
         row.pushSprite(0, y);
     }

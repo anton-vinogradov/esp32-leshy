@@ -55,6 +55,7 @@ void ScanEngine::taskLoop() {
                 memcpy(wifi_[i].bssid, a.bssid, 6);
                 String name;                                   // fill hidden names we already know
                 if (wifi_[i].hidden && rev_ && rev_->lookup(a.bssid, name)) wifi_[i].ssid = name;
+                pushSpark(a.bssid, a.rssi);                     // per-AP RSSI history (mtx held)
             }
             wifiGen_ = wifiGen_ + 1;      // (avoid ++ on volatile — deprecated in C++20)
             xSemaphoreGive(mtx_);
@@ -108,6 +109,27 @@ void ScanEngine::revealHidden() {
     if (nt == 0) return;                            // nothing hidden to reveal → no promiscuous dwell
     rev_->setTargets(tgts, nt);                     // only these BSSIDs will be stored
     for (int k = 0; k < nc; k++) rev_->listen(chans[k], 450);
+}
+
+void ScanEngine::pushSpark(const uint8_t b[6], int8_t rssi) {
+    for (int i = 0; i < sparkN_; i++) {
+        if (memcmp(spark_[i].bssid, b, 6) == 0) {
+            Spark& s = spark_[i];
+            if (s.n < SPARK_N) s.v[s.n++] = rssi;
+            else { for (int k = 0; k < SPARK_N - 1; k++) s.v[k] = s.v[k + 1]; s.v[SPARK_N - 1] = rssi; }
+            return;
+        }
+    }
+    if (sparkN_ < MAX) { Spark& s = spark_[sparkN_++]; memcpy(s.bssid, b, 6); s.v[0] = rssi; s.n = 1; }
+}
+
+int ScanEngine::sparkOf(const uint8_t b[6], int8_t* out) {
+    int r = 0;
+    xSemaphoreTake(mtx_, portMAX_DELAY);
+    for (int i = 0; i < sparkN_; i++)
+        if (memcmp(spark_[i].bssid, b, 6) == 0) { r = spark_[i].n; for (int k = 0; k < r; k++) out[k] = spark_[i].v[k]; break; }
+    xSemaphoreGive(mtx_);
+    return r;
 }
 
 int ScanEngine::wifiCount() {

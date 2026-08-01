@@ -352,12 +352,21 @@ static void drawProvisionScreen() {
 // only while actually associated. Scanning drops the link, so it honestly
 // disappears on the scan screens.
 static void drawNetBadge() {
-    if (!net.connected()) return;
-    const uint16_t gold = tft.color565(0xff, 0xcf, 0x3f);
-    int x = 210, base = 21;
-    tft.fillRect(x,      base - 6,  4, 6,  gold);
-    tft.fillRect(x + 6,  base - 10, 4, 10, gold);
-    tft.fillRect(x + 12, base - 14, 4, 14, gold);
+    bool conn = net.connected();
+    bool upd  = (ota.phase() == OtaManager::AVAILABLE);
+    if (!conn && !upd) return;
+    if (upd) {                                   // amber up-arrow: an update is waiting
+        const uint16_t amber = tft.color565(0xff, 0xa5, 0x2a);
+        tft.fillTriangle(190, 8, 184, 20, 196, 20, amber);
+        tft.fillRect(187, 18, 6, 4, amber);
+    }
+    if (conn) {                                  // gold signal bars: connected
+        const uint16_t gold = tft.color565(0xff, 0xcf, 0x3f);
+        int x = 210, base = 21;
+        tft.fillRect(x,      base - 6,  4, 6,  gold);
+        tft.fillRect(x + 6,  base - 10, 4, 10, gold);
+        tft.fillRect(x + 12, base - 14, 4, 14, gold);
+    }
 }
 
 // ---- hidden (revealed) SSID list ----
@@ -555,6 +564,7 @@ static void connActivate() {
             infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = "";
             st = ST_INFO; drawInfo();
             net.connect();
+            if (net.connected()) ota.startCheck();   // auto-check for updates on connect
             gotoConn();
             break;
         case CA_DISCONNECT: net.disconnect(); connSel = 0; gotoConn(); break;
@@ -1113,6 +1123,7 @@ void loop() {
             infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = "";
             st = ST_INFO; drawInfo();
             net.connect();
+            if (net.connected()) ota.startCheck();   // auto-check for updates on connect
             gotoConn();              // land on the connection screen with the fresh status
         }
     }

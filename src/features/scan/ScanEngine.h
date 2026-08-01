@@ -27,8 +27,10 @@ public:
     void setMode(ScanMode m) { mode_ = m; }   // WIFI = refresh Wi-Fi fast (skip BLE)
     void attachRevealer(HiddenRevealer* r) { rev_ = r; }   // passively reveal hidden SSIDs
 
+    static const int SPARK_N = 20;       // per-AP RSSI history length (sparkline)
     int  wifiCount();
     bool wifiRow(int i, WifiRow& out);
+    int  sparkOf(const uint8_t bssid[6], int8_t* out);   // fills out[0..n-1] oldest->newest, returns n
     int  bleCount();
     bool bleRow(int i, BleRow& out);
 
@@ -39,9 +41,12 @@ public:
 
 private:
     void revealHidden();                 // sniff hidden-AP channels for their names
+    void pushSpark(const uint8_t bssid[6], int8_t rssi);  // append to a BSSID's RSSI history (mtx held)
+    struct Spark { uint8_t bssid[6]; int8_t v[SPARK_N]; uint8_t n; };
     static const int MAX = 48;
     WifiRow wifi_[MAX]; int wifiN_ = 0;
     BleRow  ble_[MAX];  int bleN_  = 0;
+    Spark   spark_[MAX]; int sparkN_ = 0;
     volatile uint32_t wifiGen_ = 0, bleGen_ = 0;
     volatile bool paused_ = true;        // start idle — scanning begins only on a scan screen
     volatile bool idle_ = false;         // true when the task is paused and not scanning
