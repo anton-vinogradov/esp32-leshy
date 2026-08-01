@@ -14,8 +14,22 @@ void ScanEngine::begin() {
     xTaskCreatePinnedToCore(scanTaskEntry, "scan", 12288, nullptr, 1, nullptr, 0);
 }
 
+void ScanEngine::pause() {
+    paused_ = true;
+    uint32_t t = millis();
+    while (!idle_ && (millis() - t) < 6000) delay(10);   // wait for the in-flight scan to finish
+}
+
+void ScanEngine::resume() {
+    idle_ = false;
+    paused_ = false;
+}
+
 void ScanEngine::taskLoop() {
     for (;;) {
+        if (paused_) { idle_ = true; vTaskDelay(pdMS_TO_TICKS(50)); continue; }
+        idle_ = false;
+
         int n = ws_.scan();
         xSemaphoreTake(mtx_, portMAX_DELAY);
         wifiN_ = n < MAX ? n : MAX;
@@ -25,9 +39,11 @@ void ScanEngine::taskLoop() {
             wifi_[i].rssi = a.rssi;
             wifi_[i].auth = a.auth;
         }
-        wifiGen_++;
+        wifiGen_ = wifiGen_ + 1;         // (avoid ++ on volatile — deprecated in C++20)
         xSemaphoreGive(mtx_);
         vTaskDelay(pdMS_TO_TICKS(300));
+
+        if (paused_) continue;           // don't start the BLE scan if a pause was requested
 
         int m = bs_.scan(4);
         xSemaphoreTake(mtx_, portMAX_DELAY);
@@ -40,7 +56,7 @@ void ScanEngine::taskLoop() {
             ble_[i].rssi    = d.rssi;
             ble_[i].tracker = d.tracker.length() > 0;
         }
-        bleGen_++;
+        bleGen_ = bleGen_ + 1;
         xSemaphoreGive(mtx_);
         vTaskDelay(pdMS_TO_TICKS(300));
     }

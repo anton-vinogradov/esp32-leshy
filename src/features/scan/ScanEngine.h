@@ -15,6 +15,8 @@ struct BleRow  { String label; int rssi; bool tracker; };
 class ScanEngine {
 public:
     void begin();                        // start the background scan task
+    void pause();                        // stop scanning and release the radio (blocks until idle)
+    void resume();                       // resume background scanning
 
     int  wifiCount();
     bool wifiRow(int i, WifiRow& out);
@@ -31,6 +33,8 @@ private:
     WifiRow wifi_[MAX]; int wifiN_ = 0;
     BleRow  ble_[MAX];  int bleN_  = 0;
     volatile uint32_t wifiGen_ = 0, bleGen_ = 0;
+    volatile bool paused_ = false;
+    volatile bool idle_ = false;         // true when the task is paused and not scanning
     SemaphoreHandle_t mtx_ = nullptr;
     WifiScanner ws_;
     BleScanner  bs_;

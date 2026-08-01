@@ -11,6 +11,7 @@
 #include "features/display/WifiScreen.h"
 #include "features/display/BleScreen.h"
 #include "features/display/MenuScreen.h"
+#include "features/display/SignalFinderScreen.h"
 #include "features/scan/ScanEngine.h"
 #include "features/input/Buttons.h"
 #include "features/input/Touch.h"
@@ -217,21 +218,23 @@ ScanEngine engine;
 WifiScreen wifiScreen;
 BleScreen  bleScreen;
 MenuScreen menuScreen;
+SignalFinderScreen sfScreen;
 Buttons    buttons;
 
 static const MenuItem MENU_ITEMS[] = {
     {"Wi-Fi Scan",    "Networks: signal, channel, lock"},
     {"BLE Scan",      "Devices & trackers nearby"},
-    {"Signal Finder", "Locate an AP by signal (soon)"},
+    {"Signal Finder", "Hot/cold locate a Wi-Fi AP"},
     {"Sub-GHz Rec",   "Record RF signals (soon)"},
     {"About",         "About ESP32-Leshy"},
 };
 static const int MENU_N = sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]);
 
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_SF_PICK, ST_SF_TRACK };
 static State    st  = ST_MENU;
 static int      sel = 0;                 // menu selection
 static int      off = 0;                 // list scroll
+static int      sfSel = 0;               // Signal Finder target selection
 static uint32_t seenWifiGen = 0, seenBleGen = 0;
 static bool     touchDown = false;
 
@@ -254,9 +257,18 @@ static void drawInfo(int i) {
 
 static void goMenu() { st = ST_MENU; menuScreen.draw(sel); }
 
+static void tryTrack() {   // pick the highlighted target and start tracking
+    String ssid;
+    if (sfScreen.ssidAt(engine, sfSel, ssid) && sfScreen.startTrack(ssid)) {
+        st = ST_SF_TRACK;
+        sfScreen.drawTrackChrome();
+    }
+}
+
 static void activate(int i) {
     if (i == 0)      { st = ST_WIFI; off = 0; seenWifiGen = engine.wifiGen(); drawList(true); }
     else if (i == 1) { st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); }
+    else if (i == 2) { engine.pause(); st = ST_SF_PICK; sfSel = 0; sfScreen.drawPicker(engine, sfSel); }
     else             { st = ST_INFO; drawInfo(i); }
 }
 
@@ -283,7 +295,15 @@ void loop() {
             if (st == ST_MENU) {
                 int hit = menuScreen.hitTest(tx, ty);
                 if (hit >= 0) { int p = sel; sel = hit; menuScreen.repaint(p, sel); activate(sel); }
-            } else if (ty < 28) {        // tap the header to go back
+            } else if (st == ST_SF_PICK) {
+                if (ty < 28) { engine.resume(); goMenu(); }
+                else if (ty >= UI_LIST_TOP && ty < UI_LIST_TOP + UI_VISIBLE * UI_ROW_H) {
+                    int idx = sfScreen.pickerOffset(sfSel) + (ty - UI_LIST_TOP) / UI_ROW_H;
+                    if (idx < engine.wifiCount()) { sfSel = idx; sfScreen.pickerRows(engine, sfSel); tryTrack(); }
+                }
+            } else if (st == ST_SF_TRACK) {
+                if (ty < 28) { sfScreen.stopTrack(); st = ST_SF_PICK; sfScreen.drawPicker(engine, sfSel); }
+            } else if (ty < 28) {           // WIFI / BLE / INFO: tap header to go back
                 goMenu();
             }
         }
@@ -296,22 +316,27 @@ void loop() {
         case Buttons::UP:
             if (st == ST_MENU) { if (sel > 0) { int p = sel; sel--; menuScreen.repaint(p, sel); } }
             else if (st == ST_WIFI || st == ST_BLE) { if (off > 0) { off--; drawList(false); } }
+            else if (st == ST_SF_PICK) { if (sfSel > 0) { sfSel--; sfScreen.pickerRows(engine, sfSel); } }
             break;
         case Buttons::DOWN:
             if (st == ST_MENU) { if (sel < MENU_N - 1) { int p = sel; sel++; menuScreen.repaint(p, sel); } }
             else if (st == ST_WIFI || st == ST_BLE) { if (off < listCount() - 1) { off++; drawList(false); } }
+            else if (st == ST_SF_PICK) { if (sfSel < engine.wifiCount() - 1) { sfSel++; sfScreen.pickerRows(engine, sfSel); } }
             break;
         case Buttons::SELECT:
             if (st == ST_MENU) activate(sel);
+            else if (st == ST_SF_PICK) tryTrack();
             break;
         case Buttons::LEFT:
-            if (st != ST_MENU) goMenu();
+            if (st == ST_SF_PICK) { engine.resume(); goMenu(); }
+            else if (st == ST_SF_TRACK) { sfScreen.stopTrack(); st = ST_SF_PICK; sfScreen.drawPicker(engine, sfSel); }
+            else if (st != ST_MENU) { goMenu(); }
             break;
         default:
             break;
     }
 
-    // ---- live scan updates (only while a scan screen is open) ----
+    // ---- live updates ----
     if (st == ST_WIFI && engine.wifiGen() != seenWifiGen) {
         seenWifiGen = engine.wifiGen();
         if (off >= engine.wifiCount()) off = 0;
@@ -320,6 +345,8 @@ void loop() {
         seenBleGen = engine.bleGen();
         if (off >= engine.bleCount()) off = 0;
         drawList(true);
+    } else if (st == ST_SF_TRACK) {
+        sfScreen.updateTrack();
     }
 
     delay(10);
