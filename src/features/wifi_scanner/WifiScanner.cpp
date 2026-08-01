@@ -8,7 +8,8 @@
 int WifiScanner::scan(bool showHidden) {
     WiFi.mode(WIFI_STA);
     WiFi.disconnect(false);          // drop association only; don't tear down the driver
-    int n = WiFi.scanNetworks(false, showHidden);
+    // fast active scan (~110 ms/channel) so the live list updates responsively
+    int n = WiFi.scanNetworks(false, showHidden, false, 110);
     count_ = 0;
     for (int i = 0; i < n && count_ < MAX; i++) {
         WifiAp& a = aps_[count_];
