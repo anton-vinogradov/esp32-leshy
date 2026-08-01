@@ -62,16 +62,16 @@ A working, menu-driven firmware — highlights, all passive / own-equipment:
 
 ## ⚖️ Legal & responsible use
 
-**This project is for education and for testing your OWN equipment. Nothing else.**
+**For education and testing your OWN equipment. Nothing else.**
 
-- ✅ **Do:** run it against **your own** Wi-Fi, your own devices, your own radios and cards — or a lab/network you have **explicit written permission** to test.
-- 🛑 **Never do this to anything that isn't yours.** Not a neighbor's Wi-Fi. Not someone else's phone. Not a stranger's alarm, gate, or car. No exceptions, no "just testing," no "just once."
+- ✅ **Do:** run it against **your own** Wi-Fi, devices and radios — or a lab you have **explicit written permission** to test.
+- 🛑 **Never** point it at anything that isn't yours. No exceptions, no "just testing", no "just once".
+- 🌍 **Laws differ by country and change over time** — it's on **you** to check and obey your own jurisdiction's rules. Don't assume; verify. Unsure → treat it as illegal and don't.
+- ⚖️ **All responsibility is yours alone.** The authors accept **no liability**. Software is "as is", no warranty.
 
-Attacking, intercepting, or disrupting devices and networks you don't own — **without authorization — is a crime** in most countries (unauthorized access, illegal interception, causing radio interference), on top of being a jerk move.
+The current build is passive/defensive only. Any future **offensive tools (incl. jamming) will live behind a lock** that requires confirming, every time, that the gear is yours and that you comply with the law.
 
-**About "jamming":** radiating a jammer *over the air* is **illegal in nearly every country even against your own devices**, because interference cannot be contained to "your" device — it spills into shared spectrum. Any interference/jamming capability here is **shielded-lab-only and off by default**. (Sending targeted deauth frames to *your own* network to test its resilience is a different, legitimate thing.)
-
-You alone are responsible for what you do with this firmware. The authors accept **no liability**. See **[DISCLAIMER.md](DISCLAIMER.md)** for the full, per-feature terms.
+📜 Read the full notice — the **same text the firmware shows on first boot** — in **[DISCLAIMER.md](DISCLAIMER.md)**.
 
 ## License
 

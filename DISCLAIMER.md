@@ -1,30 +1,43 @@
-# ⚖️ Disclaimer & Responsible Use
+# ⚖️ Disclaimer & responsible use
 
 *Read this in: **English** · [Русский](DISCLAIMER.ru.md)*
 
-> **TL;DR — never do any of this to anything that isn't yours.**
+> **In short — never do any of this to anything that isn't yours.**
 
-ESP32-Leshy is an **educational, security-research** firmware. It exists so people can learn how wireless systems work and test **their own** gear. Wireless "attacks" only make sense as a learning tool when the target is yours.
+## Your own equipment only
 
-## The one rule
+ESP32-Leshy is an **educational security-research** firmware. Use it **only** on networks, devices and radios you **own**, or that you have **explicit written permission** to test.
 
-**Use it only on equipment you own, or that you have explicit written permission to test.**
+**Never** point these tools at anything that isn't yours: not a neighbor's Wi-Fi, not someone else's phone, not a stranger's alarm, gate, key fob or car. No exceptions, no "just to see if it works", no "just once", no "they won't find out".
 
-That means: **never** run these tools against a neighbor's Wi-Fi, someone else's phone, a stranger's alarm, gate, key fob or car, a shop's tags, an office network, or any device or radio that is not yours. No exceptions. Not "just to see if it works." Not "just once." Not "they'll never know."
+## Laws differ from country to country
 
-Doing so is, in most countries, a **crime** — unauthorized access to a computer system, illegal interception of communications, and/or causing unlawful radio interference — with real fines and jail time. It's also simply a rotten thing to do to another person.
+What is legal in one country is a crime in another. The rules on network access, signal interception and radio transmission **differ everywhere and change over time**. It is **your responsibility to find out and obey the laws of your own jurisdiction** — do not assume, verify; consult a lawyer if needed.
 
-## Per-feature terms
+If you are unsure whether something is legal where you are, **treat it as illegal and do not do it until you have confirmed otherwise.**
 
-- **Wi-Fi capture (handshake / PMKID), Evil Twin, captive portal, deauth:** only on **your own** network and clients, or a lab you're authorized to test. Capturing or cracking a network you don't own is illegal.
-- **"Jamming" / RF interference:** radiating a jammer over the air is **illegal in nearly every country even against your own devices** — interference spills into shared spectrum and can't be contained to "your" device. Any such capability is **shielded-lab-only and OFF by default**. Sending targeted deauth to *your own* network to test resilience is the legitimate alternative.
-- **Sub-GHz receive / record / classify:** listening and logging is generally legal. **Replaying** a signal is only OK for **your own** devices (your own gate, your own remote). **Never** replay someone else's alarm, security system, gate or car — it's illegal, and rolling-code systems won't replay anyway.
-- **RFID / NFC:** read, dump or emulate **your own** cards only. Cloning access cards you don't own is illegal.
-- **BLE spam / spoofing / trickster features:** demos on your own devices only. Bombarding other people's phones is harassment.
-- **Wardriving / scanning:** passively logging public beacons is generally legal; be mindful of local privacy law before storing or publishing.
+## Responsibility is yours alone
 
-## No warranty, no liability
+All responsibility for use rests **solely with the end user — and no one else**. The authors and contributors **accept no liability** whatsoever: not for damage, not for the legal consequences of use or misuse. The software is provided **"as is", without any warranty** (see [LICENSE](LICENSE)).
 
-This software is provided "as is", without warranty of any kind (see [LICENSE](LICENSE)). **You alone** are responsible for how you use it and for obeying the laws of your country. The authors and contributors accept **no liability** for any damage or legal consequence resulting from use or misuse.
+## What is in the firmware now
 
-If you're not sure whether something is legal where you live — **assume it isn't, and don't.**
+Everything in the current build is **passive or defensive**:
+
+- **Wi-Fi and BLE scan** — listens to what is already broadcast openly.
+- **Hidden name reveal** — reads a network name from management frames that already carry it in cleartext. Receive only, nothing is transmitted.
+- **Deauth monitor** — counts other people's deauth frames to warn you about an attack. Receive only.
+
+## Offensive tools — later, and behind a lock
+
+Some future features are **active** (for example, deauthing *your own* network to test its resilience, and jamming for a bench setup). These will live in a **separate, locked section**: each time, access will require confirming that the equipment is **yours** and that you are **complying with the law**. Off by default.
+
+**About jamming.** Radiating a jammer over the air is **illegal almost everywhere — even against your own devices**: interference cannot be contained to "yours", it spills into shared spectrum and harms neighbours, emergency services, everyone. So that capability is **shielded-bench / own-equipment only** and behind the lock.
+
+## Other people's privacy
+
+Even passive observation can touch someone's privacy. Do not collect data about other people's devices, do not track people, and do not publish other people's MAC addresses or network names.
+
+---
+
+By continuing to use this firmware you confirm: you will use it **only on your own equipment**, you have **checked the laws of your own country yourself**, and you take **all responsibility**.
