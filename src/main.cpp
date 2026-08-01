@@ -256,8 +256,8 @@ static const MenuItem SUB_I[] = {
     {"Recorder", "Record RF signals (soon)", "Запись", "Запись сигналов (скоро)", K_FEAT, F_SUBGHZ_SOON},
 };
 static const MenuItem SET_I[] = {
-    {"Connection",      "Status, join, exit",      "Подключение", "Статус, вход, выход",   K_FEAT, F_CONN},
-    {"Update",          "Update from GitHub",      "Обновление",  "Обновить с GitHub",     K_FEAT, F_OTA},
+    {"Wi-Fi connect",   "Status, join, exit",      "Wi-Fi подключение", "Статус, вход, выход",   K_FEAT, F_CONN},
+    {"Update",          "Update from GitHub",      "Обновление",        "Обновить с GitHub",     K_FEAT, F_OTA},
     {"Language",        "Interface language",      "Язык",        "Язык интерфейса",       K_SUB,  M_LANG},
     {"Calibrate touch", "Redo screen calibration", "Калибровка",  "Перекалибровать экран", K_FEAT, F_RECAL},
     {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
@@ -692,9 +692,10 @@ static void drawAboutScreen() {
     tft.setTextColor(gold, bg);  tft.drawString("ESP32-Leshy", 22, y); y += 20;
     tft.setTextColor(white, bg); tft.drawString(String(i18n::tr("version v", "версия v")) + LESHY_FW_VERSION, 22, y); y += 32;
     tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("Author", "Автор"), 14, y); y += 22;
-    tft.setTextColor(white, bg); tft.drawString(i18n::tr("Anton Vinogradov", "Антон Виноградов"), 22, y); y += 22;
-    fontTiny(); tft.setTextColor(dim, bg);
-    tft.drawString("github.com/anton-vinogradov/esp32-leshy", 14, y + 4);
+    tft.setTextColor(white, bg); tft.drawString(i18n::tr("Anton Vinogradov", "Антон Виноградов"), 22, y); y += 30;
+    tft.setTextColor(dim, bg);   tft.drawString("GitHub", 14, y); y += 20;
+    fontTiny(); tft.setTextColor(white, bg);
+    tft.drawString("anton-vinogradov/esp32-leshy", 22, y);
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
     fontOff();
     drawNetBadge();
