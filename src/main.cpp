@@ -6,6 +6,7 @@
 #include "features/ble_scanner/BleScanner.h"
 #include "features/polite_portal/PolitePortal.h"
 #include "features/signal_finder/SignalFinder.h"
+#include "features/display/BootScreen.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -13,6 +14,7 @@
 #define DEMO_BLE_SCANNER     3
 #define DEMO_SIGNAL_FINDER   4
 #define DEMO_POLITE_PORTAL   5
+#define DEMO_DISPLAY         6
 #ifndef DEMO                      // override at build time: pio run -DDEMO=3
 #define DEMO DEMO_WIFI_SCANNER
 #endif
@@ -184,5 +186,18 @@ void setup() {
 }
 
 void loop() { portal.loop(); }
+
+#elif DEMO == DEMO_DISPLAY
+
+BootScreen bootScreen;
+
+void setup() {
+    Serial.begin(115200);
+    delay(300);
+    bootScreen.show();
+    Serial.println("[BootScreen] drawn — if the TFT is still white, the pin map is off.");
+}
+
+void loop() {}
 
 #endif
