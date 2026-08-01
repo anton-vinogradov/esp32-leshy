@@ -4,6 +4,8 @@ Prioritized plan for ESP32-Leshy. Effort is a rough estimate; "interest" is how 
 
 Приоритизированный план. «Effort» — грубая оценка сложности; «⭐» — насколько фича ценная/крутая.
 
+> 🛑 Всё ниже — **только для своего оборудования и авторизованного тестирования**. Обязательно прочтите [DISCLAIMER.md](DISCLAIMER.md): никогда не применяйте это к чужому. / Everything below is **for your own equipment and authorized testing only** — see [DISCLAIMER.md](DISCLAIMER.md).
+
 ## Phase 0 — Foundation / Фундамент
 
 The boring-but-critical base. Most ESP32-DIV pain comes from here.

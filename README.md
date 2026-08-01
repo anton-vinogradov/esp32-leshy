@@ -4,6 +4,8 @@
 
 > Same great hardware — nicer to use, and a lot more fun. 😈
 
+> 🛑 **Only your own equipment.** ESP32-Leshy is an **educational security-research** project. Use it **only** on networks, devices and radios you **own** or are **explicitly authorized in writing** to test. **Never** point these tools at anything that isn't yours — not a neighbor's Wi-Fi, not someone else's phone, not a stranger's alarm or car. Full terms: **[DISCLAIMER.md](DISCLAIMER.md)**.
+
 > ⚠️ **Status: early WIP.** The project just started. Right now this repo is the plan and the skeleton; code lands module by module. Watch/star to follow along.
 
 ---
@@ -68,9 +70,16 @@ See [ROADMAP.md](ROADMAP.md) for the prioritized plan.
 
 ## ⚖️ Legal & responsible use
 
-This is an **educational and security-research** tool. Use it **only** on devices and networks **you own or have explicit permission to test**.
+**This project is for education and for testing your OWN equipment. Nothing else.**
 
-Transmitting to disrupt others (Wi-Fi deauth, jamming, RF flooding) is **illegal in most countries**. Such features, where present, are meant for shielded lab environments and are **off by default**. You are solely responsible for how you use this firmware. The authors accept no liability.
+- ✅ **Do:** run it against **your own** Wi-Fi, your own devices, your own radios and cards — or a lab/network you have **explicit written permission** to test.
+- 🛑 **Never do this to anything that isn't yours.** Not a neighbor's Wi-Fi. Not someone else's phone. Not a stranger's alarm, gate, or car. No exceptions, no "just testing," no "just once."
+
+Attacking, intercepting, or disrupting devices and networks you don't own — **without authorization — is a crime** in most countries (unauthorized access, illegal interception, causing radio interference), on top of being a jerk move.
+
+**About "jamming":** radiating a jammer *over the air* is **illegal in nearly every country even against your own devices**, because interference cannot be contained to "your" device — it spills into shared spectrum. Any interference/jamming capability here is **shielded-lab-only and off by default**. (Sending targeted deauth frames to *your own* network to test its resilience is a different, legitimate thing.)
+
+You alone are responsible for what you do with this firmware. The authors accept **no liability**. See **[DISCLAIMER.md](DISCLAIMER.md)** for the full, per-feature terms.
 
 ## License
 
@@ -89,6 +98,8 @@ Transmitting to disrupt others (Wi-Fi deauth, jamming, RF flooding) is **illegal
 **Более удобная и весёлая альтернативная прошивка для железа [ESP32-DIV](https://github.com/cifertech/ESP32-DIV).**
 
 > То же отличное железо — но пользоваться приятнее, и куда прикольнее. 😈
+
+> 🛑 **Только своё оборудование.** ESP32-Leshy — **образовательный** проект по **исследованию безопасности**. Применяйте его **только** к сетям, устройствам и радио, которые вам **принадлежат** или на тест которых есть **явное письменное разрешение**. **Никогда** не направляйте эти инструменты на чужое — ни на Wi-Fi соседа, ни на чужой телефон, ни на чью-то сигнализацию или машину. Полные условия: **[DISCLAIMER.md](DISCLAIMER.md)**.
 
 > ⚠️ **Статус: ранний WIP.** Проект только стартовал. Пока в репе план и каркас; код приезжает модуль за модулем. Ставь ⭐ и watch, чтобы следить.
 
@@ -120,9 +131,16 @@ Transmitting to disrupt others (Wi-Fi deauth, jamming, RF flooding) is **illegal
 
 ## ⚖️ Ответственное использование
 
-Это **образовательный** инструмент для **исследований безопасности**. Применяйте его **только** к устройствам и сетям, которые вам **принадлежат или на тест которых есть явное разрешение**.
+**Проект — для обучения и тестирования СВОЕГО оборудования. И ничего больше.**
 
-Передача с целью помешать другим (Wi-Fi deauth, глушение, RF-флуд) **незаконна в большинстве стран**. Такие функции, если они есть, предназначены для экранированного стенда и **выключены по умолчанию**. Ответственность за использование — полностью на вас.
+- ✅ **Можно:** свой Wi-Fi, свои устройства, своё радио и свои карты — или стенд/сеть, на тест которых есть **явное письменное разрешение**.
+- 🛑 **Никогда не делайте так не со своим.** Ни с Wi-Fi соседа. Ни с чужим телефоном. Ни с чьей-то сигнализацией, воротами или машиной. Без исключений, без «я же просто проверить», без «всего один раз».
+
+Атаковать, перехватывать или создавать помехи устройствам и сетям, которые вам не принадлежат, **без разрешения — это преступление** в большинстве стран (неправомерный доступ, незаконный перехват, создание радиопомех) — и просто подлость.
+
+**Про «глушение»:** излучать глушилку *в эфир* **незаконно почти везде даже против своих устройств**, потому что помеху нельзя удержать внутри «своего» — она уходит в общий спектр. Любая функция помех/глушения здесь — **только для экранированного стенда и выключена по умолчанию**. (Отправить прицельный deauth в *свою собственную* сеть, чтобы проверить её устойчивость, — это другое, легитимное дело.)
+
+Ответственность за использование прошивки — целиком на вас. Авторы **ответственности не несут**. Полные условия по каждой фиче — в **[DISCLAIMER.md](DISCLAIMER.md)**.
 
 ## Лицензия и благодарности
 
