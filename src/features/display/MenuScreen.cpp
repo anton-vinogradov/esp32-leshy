@@ -10,8 +10,31 @@ static const int CARD_STEP = 54;
 static const int CARD_X    = 6;
 static const int CARD_W    = 228;
 
+static const int TEXT_X   = CARD_X + 10;
+static const int TEXT_MAXW = CARD_W - 16;      // usable text width inside a card
+
 static int cardY(int i) { return CARD_TOP + i * CARD_STEP; }
 static const char* T(const char* en, const char* ru) { return (i18n::isRu() && ru && ru[0]) ? ru : en; }
+
+// Truncate a UTF-8 string with "..." so it fits maxW at the currently loaded
+// font. Steps whole codepoints so multi-byte (Cyrillic) chars are never split.
+static String fit(const char* s, int maxW) {
+    if (tft.textWidth(s) <= maxW) return String(s);
+    String out;
+    for (const char* p = s; *p; ) {
+        int len = 1;                                   // UTF-8 sequence length
+        uint8_t c = (uint8_t)*p;
+        if      (c >= 0xF0) len = 4;
+        else if (c >= 0xE0) len = 3;
+        else if (c >= 0xC0) len = 2;
+        String cand = out;
+        for (int k = 0; k < len && p[k]; k++) cand += p[k];
+        if (tft.textWidth(cand + "...") > maxW) break;
+        out = cand;
+        p += len;
+    }
+    return out + "...";
+}
 
 void MenuScreen::bg_(int i, bool sel) {
     int y = cardY(i);
@@ -28,7 +51,7 @@ void MenuScreen::title_(int i, bool sel) {
     uint16_t tc = sel ? tft.color565(0xff, 0xe6, 0xa8) : tft.color565(0xe8, 0xe8, 0xe0);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(tc, bg);
-    tft.drawString(T(m_->items[i].en, m_->items[i].ru), CARD_X + 10, y + 6);
+    tft.drawString(fit(T(m_->items[i].en, m_->items[i].ru), TEXT_MAXW), TEXT_X, y + 6);
 }
 
 void MenuScreen::desc_(int i, bool sel) {
@@ -38,7 +61,7 @@ void MenuScreen::desc_(int i, bool sel) {
     uint16_t bg = sel ? tft.color565(0x24, 0x40, 0x2c) : tft.color565(0x18, 0x24, 0x1a);
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(tft.color565(0x9a, 0xac, 0x9a), bg);
-    tft.drawString(d, CARD_X + 10, y + 30);
+    tft.drawString(fit(d, TEXT_MAXW), TEXT_X, y + 30);
 }
 
 void MenuScreen::show(const Menu* m, int sel) {

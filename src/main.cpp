@@ -228,13 +228,13 @@ enum { F_WIFI_SCAN, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_LANG_EN, F_LA
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
-    {"Wi-Fi",    "Scan & locate networks",   "Wi-Fi",     "Скан и пеленг сетей",      K_SUB, M_WIFI},
+    {"Wi-Fi",    "Scan networks",            "Wi-Fi",     "Сканирование сетей",       K_SUB, M_WIFI},
     {"BLE",      "Bluetooth devices & tags", "BLE",       "Устройства и метки",       K_SUB, M_BLE},
     {"Sub-GHz",  "315/433/868 MHz radio",    "Sub-GHz",   "Радио 315/433/868 МГц",    K_SUB, M_SUBGHZ},
     {"Settings", "Language, touch, about",   "Настройки", "Язык, тач, о девайсе",     K_SUB, M_SETTINGS},
 };
 static const MenuItem WIFI_I[] = {
-    {"Wi-Fi Scan", "Live networks: signal, channel, lock", "Скан Wi-Fi", "Сети вживую: сигнал, канал, замок", K_FEAT, F_WIFI_SCAN},
+    {"Wi-Fi Scan", "Signal, channel, lock", "Скан Wi-Fi", "Сигнал, канал, шифр", K_FEAT, F_WIFI_SCAN},
 };
 static const MenuItem BLE_I[] = {
     {"BLE Scan", "Devices & trackers nearby", "Скан BLE", "Устройства и трекеры рядом", K_FEAT, F_BLE_SCAN},
