@@ -19,6 +19,7 @@
 class HiddenRevealer {
 public:
     void begin();                                   // mutex + load saved names from NVS
+    void setTargets(uint8_t bssids[][6], int n);    // only reveal names for THESE (actually-hidden) BSSIDs
     void listen(uint8_t channel, uint32_t ms);      // promiscuous capture on one channel (scan task)
 
     bool lookup(const uint8_t bssid[6], String& out);   // revealed name for a BSSID, if known
@@ -33,11 +34,16 @@ public:
 private:
     struct Entry { uint8_t bssid[6]; char ssid[33]; };
     static const int MAX = 128;              // dense neighbourhoods have many hidden APs
+    static const int MAXT = 24;              // hidden BSSIDs targeted in one reveal pass
+    static const int SCHEMA = 2;             // bump to wipe stale NVS on semantics change
     Entry             ent_[MAX];
     int               n_ = 0;
+    uint8_t           tgt_[MAXT][6];         // only store names for these (scan-confirmed hidden) BSSIDs
+    int               tgtN_ = 0;
     volatile bool     dirty_ = false;               // new name captured, not yet persisted
     SemaphoreHandle_t mtx_ = nullptr;
 
+    bool inTargets(const uint8_t b[6]) const;       // called under lock
     void storeLocked(const uint8_t bssid[6], const char* ssid, uint8_t slen);
     void persist();                                 // write whole table to NVS
     void load();

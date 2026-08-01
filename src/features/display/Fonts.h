@@ -10,5 +10,6 @@ void fontSmall();
 void fontOff();
 
 // Localized top bar / bottom hint drawn with the smooth font (Cyrillic-capable).
-void uiHeaderRu(const char* title);
+// `right` (optional) is a small right-aligned label, e.g. a live count.
+void uiHeaderRu(const char* title, const char* right = nullptr);
 void uiFooterRu(const char* hint);

@@ -94,20 +94,23 @@ void ScanEngine::taskLoop() {
 // so this is a passive best-effort — no dwell at all when nothing is hidden.
 void ScanEngine::revealHidden() {
     if (!rev_) return;
-    uint8_t chans[6];
-    int nc = 0;
+    uint8_t tgts[24][6]; int nt = 0;                // hidden BSSIDs still needing a name
+    uint8_t chans[8];    int nc = 0;                // distinct channels to dwell on
     int n = ws_.count();
-    for (int i = 0; i < n && nc < 6; i++) {
+    for (int i = 0; i < n; i++) {
         const WifiAp& a = ws_.at(i);
         if (!a.ssid.isEmpty()) continue;            // only hidden APs
         String name;
         if (rev_->lookup(a.bssid, name)) continue;  // already revealed
+        if (nt < 24) memcpy(tgts[nt++], a.bssid, 6);
         uint8_t ch = a.channel;
         if (ch < 1 || ch > 14) continue;
         bool dup = false;
         for (int k = 0; k < nc; k++) if (chans[k] == ch) dup = true;
-        if (!dup) chans[nc++] = ch;
+        if (!dup && nc < 8) chans[nc++] = ch;
     }
+    if (nt == 0) return;                            // nothing hidden to reveal → no promiscuous dwell
+    rev_->setTargets(tgts, nt);                     // only these BSSIDs will be stored
     for (int k = 0; k < nc; k++) rev_->listen(chans[k], 220);
 }
 

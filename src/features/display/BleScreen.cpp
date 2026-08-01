@@ -1,12 +1,14 @@
 #include "BleScreen.h"
 
 #include "Display.h"
+#include "Fonts.h"
+#include "../../core/i18n.h"
 
 #include <stdio.h>
 
 void BleScreen::rows(ScanEngine& e, int offset) {
     const uint16_t bg    = uiBg();
-    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t white = tft.color565(0xff, 0xff, 0xf2);   // brighter list text
     const uint16_t amber = tft.color565(0xff, 0xcf, 0x3f);
 
     TFT_eSprite& row = uiRow();
@@ -37,9 +39,11 @@ void BleScreen::rows(ScanEngine& e, int offset) {
 
 void BleScreen::draw(ScanEngine& e, int offset) {
     int n = e.bleCount();
-    char right[16];
-    if (n > 0) sprintf(right, "%d dev", n); else sprintf(right, "scanning");
-    uiHeader("BLE", right);
+    char right[24];
+    if (n > 0) sprintf(right, "%d %s", n, i18n::tr("dev", "устр"));
+    else       sprintf(right, "%s", i18n::tr("scanning", "скан"));
+    uiHeaderRu("BLE", right);
     rows(e, offset);
-    uiFooter("LEFT: menu   UP/DN: scroll");
+    uiFooterRu(i18n::isRu() ? "Влево: меню, листать" : "LEFT: menu, scroll");
+    fontOff();
 }

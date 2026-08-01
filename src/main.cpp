@@ -242,7 +242,6 @@ static const MenuItem ROOT_I[] = {
 };
 static const MenuItem WIFI_I[] = {
     {"Wi-Fi Scan",   "Signal, channel, lock", "Скан Wi-Fi",   "Сигнал, канал, шифр", K_FEAT, F_WIFI_SCAN},
-    {"Connection",   "Status, join, exit",    "Подключение",  "Статус, вход, выход", K_FEAT, F_CONN},
     {"Hidden names", "Revealed hidden SSIDs", "Скрытые сети", "Раскрытые имена",     K_FEAT, F_HIDDEN},
 };
 static const MenuItem BLE_I[] = {
@@ -252,9 +251,10 @@ static const MenuItem SUB_I[] = {
     {"Recorder", "Record RF signals (soon)", "Запись", "Запись сигналов (скоро)", K_FEAT, F_SUBGHZ_SOON},
 };
 static const MenuItem SET_I[] = {
-    {"Language",        "Interface language",      "Язык",       "Язык интерфейса",       K_SUB,  M_LANG},
-    {"Calibrate touch", "Redo screen calibration", "Калибровка", "Перекалибровать экран", K_FEAT, F_RECAL},
-    {"About",           "About ESP32-Leshy",       "О девайсе",  "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
+    {"Connection",      "Status, join, exit",      "Подключение", "Статус, вход, выход",   K_FEAT, F_CONN},
+    {"Language",        "Interface language",      "Язык",        "Язык интерфейса",       K_SUB,  M_LANG},
+    {"Calibrate touch", "Redo screen calibration", "Калибровка",  "Перекалибровать экран", K_FEAT, F_RECAL},
+    {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
 };
 static const MenuItem LANG_I[] = {
     {"English", "", "English", "", K_FEAT, F_LANG_EN},
@@ -262,10 +262,10 @@ static const MenuItem LANG_I[] = {
 };
 static const Menu MENUS[] = {
     {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
-    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 3},
+    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 2},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
-    {"Settings",    "Настройки",   SET_I,  3},
+    {"Settings",    "Настройки",   SET_I,  4},
     {"Language",    "Язык",        LANG_I, 2},
 };
 

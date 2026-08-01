@@ -15,8 +15,22 @@ static void promiscCb(void* buf, wifi_promiscuous_pkt_type_t type) {
 
 void HiddenRevealer::begin() {
     if (!mtx_) mtx_ = xSemaphoreCreateMutex();
-    { Preferences p; p.begin("leshy_hid", false); p.end(); }   // create namespace so the read-only load won't log NOT_FOUND
+    { Preferences p; p.begin("leshy_hid", false);
+      if (p.getInt("sv", 0) != SCHEMA) { p.clear(); p.putInt("sv", SCHEMA); }  // wipe pre-fix cache (was polluted with visible-AP beacons)
+      p.end(); }
     load();
+}
+
+void HiddenRevealer::setTargets(uint8_t bssids[][6], int n) {
+    xSemaphoreTake(mtx_, portMAX_DELAY);
+    tgtN_ = n < MAXT ? n : MAXT;
+    for (int i = 0; i < tgtN_; i++) memcpy(tgt_[i], bssids[i], 6);
+    xSemaphoreGive(mtx_);
+}
+
+bool HiddenRevealer::inTargets(const uint8_t b[6]) const {
+    for (int i = 0; i < tgtN_; i++) if (memcmp(tgt_[i], b, 6) == 0) return true;
+    return false;
 }
 
 // Parse a management frame; if it carries a non-empty SSID, cache BSSID -> name.
@@ -27,10 +41,10 @@ void HiddenRevealer::onFrame(const uint8_t* f, uint16_t len) {
     if ((f[0] & 0x0C) != 0x00) return;              // type must be management
     uint8_t subtype = (f[0] & 0xF0) >> 4;
     int fixed;
-    switch (subtype) {
-        case 0x5: case 0x8: fixed = 12; break;      // Probe Response / Beacon
-        case 0x0:           fixed = 4;  break;       // Association Request
-        case 0x2:           fixed = 10; break;       // Reassociation Request
+    switch (subtype) {                              // beacons excluded: they carry only VISIBLE SSIDs, never the hidden name
+        case 0x5: fixed = 12; break;                 // Probe Response (answer to a directed probe)
+        case 0x0: fixed = 4;  break;                 // Association Request
+        case 0x2: fixed = 10; break;                 // Reassociation Request
         default: return;
     }
     const uint8_t* bssid = f + 16;                   // addr3 = BSSID (the AP)
@@ -54,6 +68,7 @@ void HiddenRevealer::onFrame(const uint8_t* f, uint16_t len) {
 }
 
 void HiddenRevealer::storeLocked(const uint8_t bssid[6], const char* ssid, uint8_t slen) {
+    if (!inTargets(bssid)) return;              // only reveal BSSIDs the scan actually sees as hidden
     bool bcast = true;
     for (int k = 0; k < 6; k++) if (bssid[k] != 0xFF) bcast = false;
     if (bcast) return;
@@ -132,6 +147,7 @@ void HiddenRevealer::persist() {
     xSemaphoreTake(mtx_, portMAX_DELAY);
     Preferences p; p.begin("leshy_hid", false);
     p.clear();
+    p.putInt("sv", SCHEMA);
     p.putInt("cnt", n_);
     char k[8];
     for (int i = 0; i < n_; i++) {
