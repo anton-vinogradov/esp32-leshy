@@ -34,7 +34,8 @@ Legal, useful, high value-per-effort. Good first "real" features.
 
 The fun stuff. Framed for demos on your own gear; disruptive TX gated + off by default.
 
-- [ ] Evil-twin AP + captive portal (Apple/Android detection handled). `effort: medium` ⭐⭐⭐⭐
+- [x] **Polite Portal** — captive portal with **no credential logging**: asks to lower Wi-Fi TX power, verifies the drop via beacon RSSI, then self-shuts-down. `effort: medium` ⭐⭐⭐⭐ *(first cut landed — `src/features/polite_portal/`)*
+- [ ] Evil-twin AP + captive portal delivery (same SSID + deauth of your own AP) — own-network/lab only. `effort: medium` ⭐⭐⭐⭐
 - [ ] BLE notification spam (proximity pop-ups). `effort: medium` ⭐⭐⭐⭐
 - [ ] Fake beacon / SSID flood. `effort: medium`
 - [ ] "Lead astray" mode — playful redirects (DNS / captive). `effort: medium`
