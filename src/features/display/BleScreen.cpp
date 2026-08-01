@@ -4,54 +4,42 @@
 
 #include <stdio.h>
 
-void BleScreen::scanCue() {
-    uiHeader("BLE", "scanning");
-}
-
-int BleScreen::scan() {
-    return ble_.scan(4);
-}
-
-void BleScreen::rows(int offset) {
+void BleScreen::rows(ScanEngine& e, int offset) {
     const uint16_t bg    = uiBg();
     const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
     const uint16_t amber = tft.color565(0xff, 0xcf, 0x3f);
 
     TFT_eSprite& row = uiRow();
-    int n = ble_.count();
+    int n = e.bleCount();
 
     for (int i = 0; i < UI_VISIBLE; i++) {
         int idx = offset + i;
         int y = UI_LIST_TOP + i * UI_ROW_H;
         row.fillSprite(bg);
-        if (idx < n) {
-            const BleDev& d = ble_.at(idx);
+        BleRow d;
+        if (idx < n && e.bleRow(idx, d)) {
             uint16_t col = uiRssiColor(d.rssi);
             uiSignalBars(row, 6, 5, d.rssi, col);
-
-            String label = d.tracker.length() ? d.tracker
-                         : d.name.length()    ? d.name
-                                              : d.mac;
-            uint16_t labelCol = d.tracker.length() ? amber : white;
+            String label = d.label;
             if (label.length() > 16) label = label.substring(0, 15) + "~";
             row.setTextDatum(ML_DATUM);
-            row.setTextColor(labelCol, bg);
+            row.setTextColor(d.tracker ? amber : white, bg);
             row.drawString(label, 34, 12, 2);
-
-            char r[8];
-            sprintf(r, "%d", d.rssi);
+            char b[8];
+            sprintf(b, "%d", d.rssi);
             row.setTextDatum(MR_DATUM);
             row.setTextColor(col, bg);
-            row.drawString(r, 232, 12, 2);
+            row.drawString(b, 232, 12, 2);
         }
         row.pushSprite(0, y);
     }
 }
 
-void BleScreen::draw(int offset) {
+void BleScreen::draw(ScanEngine& e, int offset) {
+    int n = e.bleCount();
     char right[16];
-    sprintf(right, "%d dev", ble_.count());
+    if (n > 0) sprintf(right, "%d dev", n); else sprintf(right, "scanning");
     uiHeader("BLE", right);
-    rows(offset);
+    rows(e, offset);
     uiFooter("SEL: Wi-Fi   UP/DN: scroll");
 }

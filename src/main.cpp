@@ -10,6 +10,7 @@
 #include "features/display/BootScreen.h"
 #include "features/display/WifiScreen.h"
 #include "features/display/BleScreen.h"
+#include "features/scan/ScanEngine.h"
 #include "features/input/Buttons.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
@@ -209,6 +210,7 @@ void loop() {}
 
 #elif DEMO == DEMO_DASHBOARD
 
+ScanEngine engine;
 WifiScreen wifiScreen;
 BleScreen  bleScreen;
 Buttons    buttons;
@@ -216,20 +218,11 @@ Buttons    buttons;
 enum Screen { SCR_WIFI, SCR_BLE };
 static Screen   scr = SCR_WIFI;
 static int      off = 0;
-static uint32_t lastScan = 0;
+static uint32_t seenWifiGen = 0, seenBleGen = 0;
 
-static uint32_t lastInput = 0;
-
-static int  curCount() { return scr == SCR_WIFI ? wifiScreen.count() : bleScreen.count(); }
-static void renderRows() { if (scr == SCR_WIFI) wifiScreen.rows(off); else bleScreen.rows(off); }
-
-static void rescan() {
-    if (scr == SCR_WIFI) { wifiScreen.scanCue(); wifiScreen.scan(); }
-    else                 { bleScreen.scanCue();  bleScreen.scan();  }
-    if (off >= curCount()) off = 0;
-    if (scr == SCR_WIFI) wifiScreen.draw(off); else bleScreen.draw(off);
-    lastScan = millis();
-}
+static int  curCount() { return scr == SCR_WIFI ? engine.wifiCount() : engine.bleCount(); }
+static void drawFull() { if (scr == SCR_WIFI) wifiScreen.draw(engine, off); else bleScreen.draw(engine, off); }
+static void drawRows() { if (scr == SCR_WIFI) wifiScreen.rows(engine, off); else bleScreen.rows(engine, off); }
 
 void setup() {
     Serial.begin(115200);
@@ -237,31 +230,38 @@ void setup() {
     i18n::set(UI_LANG);
     displayInit();
     BootScreen().show();
-    delay(1800);
+    delay(1500);
     if (!buttons.begin()) Serial.println("[Dashboard] buttons (PCF8574) not found.");
-    rescan();
+    engine.begin();                 // scanning runs in a background task from here
+    drawFull();
 }
 
 void loop() {
-    Buttons::Key k = buttons.poll();
-    if (k != Buttons::NONE) lastInput = millis();
-    switch (k) {
+    switch (buttons.poll()) {
         case Buttons::SELECT:
             scr = (scr == SCR_WIFI) ? SCR_BLE : SCR_WIFI;
             off = 0;
-            rescan();
+            drawFull();
             break;
         case Buttons::UP:
-            if (off > 0) { off--; renderRows(); }
+            if (off > 0) { off--; drawRows(); }
             break;
         case Buttons::DOWN:
-            if (off < curCount() - 1) { off++; renderRows(); }
+            if (off < curCount() - 1) { off++; drawRows(); }
             break;
         default:
             break;
     }
-    // auto-refresh only when idle, so a blocking scan never interrupts scrolling
-    if (millis() - lastScan > 8000 && millis() - lastInput > 3000) rescan();
+    // pick up fresh background-scan results for the current screen — never blocks
+    if (scr == SCR_WIFI && engine.wifiGen() != seenWifiGen) {
+        seenWifiGen = engine.wifiGen();
+        if (off >= engine.wifiCount()) off = 0;
+        drawFull();
+    } else if (scr == SCR_BLE && engine.bleGen() != seenBleGen) {
+        seenBleGen = engine.bleGen();
+        if (off >= engine.bleCount()) off = 0;
+        drawFull();
+    }
     delay(10);
 }
 

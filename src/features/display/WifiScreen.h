@@ -1,18 +1,12 @@
 #pragma once
 
-#include "../wifi_scanner/WifiScanner.h"
+#include "../scan/ScanEngine.h"
 
-// WifiScreen — renders a Wi-Fi scan on the TFT. draw() paints the full screen
-// (header + rows + footer) after a scan; rows() repaints just the list from
-// `offset` using an off-screen sprite, so scrolling is flicker-free.
+// WifiScreen — renders the Wi-Fi snapshot from ScanEngine on the TFT. draw()
+// paints header + rows + footer; rows() repaints just the list (via a sprite,
+// flicker-free). No scanning here — the engine does that in the background.
 class WifiScreen {
 public:
-    void scanCue();             // header "scanning" cue (shown during the scan)
-    int  scan();                // perform the scan; returns count
-    void draw(int offset);      // full screen after a scan / screen switch
-    void rows(int offset);      // list only (on scroll) — no flicker
-    int  count() const { return scanner_.count(); }
-
-private:
-    WifiScanner scanner_;
+    void draw(ScanEngine& e, int offset);
+    void rows(ScanEngine& e, int offset);
 };
