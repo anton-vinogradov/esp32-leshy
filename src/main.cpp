@@ -712,56 +712,81 @@ static void drawAboutScreen() {
 }
 
 // ---- Deauth monitor screen (passive/defensive) ----
-static void drawDeauthScreen() {
+// Repaints only what changed (rule: no full-screen redraw on refresh — it flickers).
+static const int DA_BADGE_Y = 44, DA_ROW1 = 104, DA_ROW2 = 132, DA_ROW3 = 160, DA_SRC_Y = 214;
+static int    daLastAlert = -1, daLastRecent = -1, daLastChan = -1;
+static long   daLastTotal = -1;
+static String daLastMac;
+
+static void deauthValue(int y, const String& val, uint16_t col) {
+    const uint16_t bg = uiBg();
+    tft.fillRect(120, y - 2, 108, 22, bg);          // value column only
+    fontSmall();
+    tft.setTextDatum(TR_DATUM);
+    tft.setTextColor(col, bg);
+    tft.drawString(val, 226, y);
+}
+
+static void deauthBadge(bool alert) {
+    const uint16_t bc = alert ? tft.color565(0xd1, 0x4c, 0x4c) : tft.color565(0x2f, 0x6a, 0x3e);
+    tft.fillRoundRect(12, DA_BADGE_Y, 216, 42, 9, bc);
+    fontBig(); tft.setTextDatum(MC_DATUM); tft.setTextColor(tft.color565(0xff, 0xff, 0xf2), bc);
+    tft.drawString(alert ? i18n::tr("ALERT", "ТРЕВОГА") : i18n::tr("Clear", "Чисто"), 120, DA_BADGE_Y + 22);
+}
+
+static void deauthRefresh() {                        // called on a timer; touches only changed fields
     const uint16_t bg = uiBg();
     const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
-    const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
     const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
     const uint16_t red   = tft.color565(0xd1, 0x4c, 0x4c);
-    const uint16_t green = tft.color565(0x2f, 0x6a, 0x3e);
-    bool alert = detector.alerting();
+    bool alert  = detector.alerting();
     int  recent = detector.recentCount();
-    uiHeaderRu(i18n::tr("Deauth monitor", "Детектор deauth"));
-    tft.fillRect(0, 28, 240, 320 - 28, bg);
-    uint16_t bc = alert ? red : green;
-    tft.fillRoundRect(12, 44, 216, 42, 9, bc);
-    fontBig(); tft.setTextDatum(MC_DATUM); tft.setTextColor(tft.color565(0xff, 0xff, 0xf2), bc);
-    tft.drawString(alert ? i18n::tr("ALERT", "ТРЕВОГА") : i18n::tr("Clear", "Чисто"), 120, 66);
-    fontSmall();
-    int y = 104;
-    char num[16];
-    tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
-    tft.drawString(i18n::tr("In window", "За окно"), 14, y);
-    tft.setTextDatum(TR_DATUM); tft.setTextColor(alert ? red : white, bg);
-    tft.drawString(String(recent), 226, y); y += 28;
-    tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
-    tft.drawString(i18n::tr("Total", "Всего"), 14, y);
-    tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg);
-    snprintf(num, sizeof(num), "%lu", (unsigned long)detector.total());
-    tft.drawString(num, 226, y); y += 28;
-    tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
-    tft.drawString(i18n::tr("Channel", "Канал"), 14, y);
-    tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg);
-    tft.drawString(String(detector.channel()), 226, y); y += 32;
+    long total  = (long)detector.total();
+    int  chan   = detector.channel();
+    if (alert != (bool)daLastAlert) { daLastAlert = alert; deauthBadge(alert); }
+    if (recent != daLastRecent) { daLastRecent = recent; deauthValue(DA_ROW1, String(recent), alert ? red : white); }
+    if (total  != daLastTotal)  { daLastTotal  = total;  deauthValue(DA_ROW2, String(total), white); }
+    if (chan   != daLastChan)   { daLastChan   = chan;   deauthValue(DA_ROW3, String(chan), white); }
     DeauthEvent e;
     if (detector.lastEvent(e)) {
-        tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
-        tft.drawString(i18n::tr("Last source", "Источник"), 14, y); y += 22;
         char mac[18];
         snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", e.src[0], e.src[1], e.src[2], e.src[3], e.src[4], e.src[5]);
-        fontOff(); tft.setTextColor(gold, bg); tft.drawString(mac, 20, y, 2); fontSmall();
+        if (daLastMac != mac) {
+            daLastMac = mac;
+            tft.fillRect(14, DA_SRC_Y - 2, 212, 20, bg);
+            fontOff(); tft.setTextDatum(TL_DATUM); tft.setTextColor(gold, bg);
+            tft.drawString(mac, 20, DA_SRC_Y, 2);
+        }
     }
+    fontOff();
+}
+
+static void drawDeauthScreen() {                     // full paint: static chrome + labels, then values
+    const uint16_t bg = uiBg();
+    const uint16_t dim = tft.color565(0x8f, 0xa9, 0x8f);
+    uiHeaderRu(i18n::tr("Deauth monitor", "Детектор deauth"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    daLastAlert = -1; daLastRecent = -1; daLastTotal = -1; daLastChan = -1; daLastMac = "";
+    fontSmall();
+    tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
+    tft.drawString(i18n::tr("In window", "За окно"), 14, DA_ROW1);
+    tft.drawString(i18n::tr("Total", "Всего"),      14, DA_ROW2);
+    tft.drawString(i18n::tr("Channel", "Канал"),    14, DA_ROW3);
+    tft.drawString(i18n::tr("Last source", "Источник"), 14, DA_SRC_Y - 26);
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
     fontOff();
     drawNetBadge();
+    deauthRefresh();
 }
 
-// ---- Channel airtime analyzer (passive, from the scan) ----
-static void drawChannelScreen() {
-    const uint16_t bg = uiBg();
-    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
-    const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
-    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+// ---- Channel analyzer: per-channel scrolling area graphs (cardiograph style) ----
+static const int CH_HIST = 118;                 // samples kept per channel (graph width)
+static const int CH_ROWH = 20, CH_TOP = 34, CH_GX = 26, CH_GW = CH_HIST, CH_GH = 17;
+static uint8_t chHist[14][CH_HIST];             // load history per channel (0..CH_GH)
+static int     chHead = 0;                      // ring write position
+static bool    chReady = false;
+
+static void channelSample() {                   // push one column from the latest scan
     int counts[14] = {0};
     int n = engine.wifiCount();
     WifiRow r;
@@ -769,27 +794,44 @@ static void drawChannelScreen() {
         if (engine.wifiRow(i, r) && r.channel >= 1 && r.channel <= 13) counts[r.channel]++;
     int maxc = 1;
     for (int ch = 1; ch <= 13; ch++) if (counts[ch] > maxc) maxc = counts[ch];
+    for (int ch = 1; ch <= 13; ch++) chHist[ch][chHead] = (uint8_t)(counts[ch] * CH_GH / maxc);
+    chHead = (chHead + 1) % CH_HIST;
+    chReady = true;
+}
+
+static void channelGraphs() {                   // redraw the 13 area graphs (no header/footer touch)
+    const uint16_t bg   = uiBg();
+    const uint16_t grid = tft.color565(0x1b, 0x24, 0x1b);
+    const uint16_t gold = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t dim  = tft.color565(0x8f, 0xa9, 0x8f);
+    for (int ch = 1; ch <= 13; ch++) {
+        int gy = CH_TOP + (ch - 1) * CH_ROWH;
+        bool clean = (ch == 1 || ch == 6 || ch == 11);   // non-overlapping
+        tft.fillRect(0, gy, CH_GX, CH_ROWH, bg);
+        tft.setTextDatum(MR_DATUM);
+        tft.setTextColor(clean ? gold : dim, bg);
+        tft.drawString(String(ch), 22, gy + CH_GH / 2, 2);
+        tft.fillRect(CH_GX, gy, CH_GW, CH_GH, grid);      // graph background
+        uint16_t line = clean ? tft.color565(0x4c, 0xd1, 0x64) : tft.color565(0x3a, 0x8a, 0x9a);
+        uint16_t fill = clean ? tft.color565(0x1e, 0x4a, 0x28) : tft.color565(0x1b, 0x3a, 0x42);
+        for (int x = 0; x < CH_HIST; x++) {
+            int idx = (chHead + x) % CH_HIST;             // oldest -> newest, left to right
+            int v = chHist[ch][idx];
+            int col = CH_GX + x;
+            if (v > 0) tft.drawFastVLine(col, gy + CH_GH - v, v, fill);   // filled volume
+            tft.drawPixel(col, gy + CH_GH - 1 - (v > 0 ? v - 1 : 0), line);
+        }
+    }
+}
+
+static void drawChannelScreen() {
+    const uint16_t bg = uiBg();
+    int n = engine.wifiCount();
     char right[20]; snprintf(right, sizeof(right), "%d %s", n, i18n::tr("nets", "сетей"));
     uiHeaderRu(i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"), right);
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     fontOff();
-    const int top = 36, rowh = 19, barx = 30, barmax = 168;
-    for (int ch = 1; ch <= 13; ch++) {
-        int y = top + (ch - 1) * rowh;
-        bool clean = (ch == 1 || ch == 6 || ch == 11);   // non-overlapping channels
-        tft.setTextDatum(MR_DATUM);
-        tft.setTextColor(clean ? gold : dim, bg);
-        tft.drawString(String(ch), 24, y + rowh / 2, 2);
-        int bw = counts[ch] * barmax / maxc;
-        uint16_t barcol = counts[ch] == 0 ? tft.color565(0x22, 0x2a, 0x22)
-                        : counts[ch] >= maxc && maxc > 1 ? tft.color565(0xd1, 0x6a, 0x4c)
-                        : tft.color565(0x3a, 0x7a, 0x4a);
-        tft.fillRoundRect(barx, y + 2, bw < 3 ? 3 : bw, rowh - 5, 2, barcol);
-        if (counts[ch] > 0) {
-            tft.setTextDatum(ML_DATUM); tft.setTextColor(white, bg);
-            tft.drawString(String(counts[ch]), barx + (bw < 3 ? 3 : bw) + 5, y + rowh / 2, 2);
-        }
-    }
+    channelGraphs();
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
     drawNetBadge();
 }
@@ -875,7 +917,8 @@ static void launch(int feat) {
                             if (detector.begin()) { st = ST_DEAUTH; drawDeauthScreen(); }
                             else { infoTitle = i18n::tr("Deauth monitor", "Детектор deauth"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
-        case F_CHANNELS:    engine.setMode(ScanEngine::SCAN_WIFI); engine.resume(); st = ST_CHANNELS; seenWifiGen = engine.wifiGen(); drawChannelScreen(); break;
+        case F_CHANNELS:    engine.setMode(ScanEngine::SCAN_WIFI); engine.resume(); st = ST_CHANNELS; seenWifiGen = engine.wifiGen();
+                            memset(chHist, 0, sizeof(chHist)); chHead = 0; channelSample(); drawChannelScreen(); break;
         case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); break;
         case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
         case F_ABOUT:       st = ST_INFO; drawAboutScreen(); break;
@@ -1032,7 +1075,7 @@ void loop() {
     if (st == ST_DEAUTH) {
         detector.loop();
         static uint32_t nextDeauthDraw = 0;
-        if (millis() - nextDeauthDraw > 500) { nextDeauthDraw = millis(); drawDeauthScreen(); }
+        if (millis() - nextDeauthDraw > 400) { nextDeauthDraw = millis(); deauthRefresh(); }
     }
 
     // ---- provisioning portal ----
@@ -1062,7 +1105,8 @@ void loop() {
         else otaBar();                       // % change → repaint just the slider (no bg redraw)
     } else if (st == ST_CHANNELS && engine.wifiGen() != seenWifiGen) {
         seenWifiGen = engine.wifiGen();
-        drawChannelScreen();
+        channelSample();
+        channelGraphs();            // scroll the graphs; header/footer untouched (no flicker)
     }
 
     if (millis() > 8000) ota.markHealthy();  // once the UI has clearly been up, confirm this image

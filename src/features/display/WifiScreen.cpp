@@ -32,19 +32,19 @@ void WifiScreen::rows(ScanEngine& e, int offset, int sel) {
             bool unrev = r.hidden && !named && !isMine;
             String ss = named ? r.ssid : (isMine ? mine : String("раскрываю"));
             if (isMine) ss = "*" + ss;
-            bool trunc = false;                      // name column ~ up to x=148
-            while (ss.length() > 3 && row.textWidth(ss) > 118) { ss = ss.substring(0, ss.length() - 1); trunc = true; }
+            bool trunc = false;                      // name column ~ up to x=142, gap before channel
+            while (ss.length() > 3 && row.textWidth(ss) > 112) { ss = ss.substring(0, ss.length() - 1); trunc = true; }
             if (trunc) ss += "~";
             row.setTextDatum(ML_DATUM);
             row.setTextColor(isMine ? gold : (unrev ? grey : bright), rbg);
             row.drawString(ss, 30, 12);
             if (r.channel >= 1) {                     // channel
                 row.setTextColor(dim, rbg);
-                row.drawString("c" + String(r.channel), 152, 12);
+                row.drawString("c" + String(r.channel), 160, 12);
             }
             if (r.auth != 0) {                        // encryption lock
                 row.setTextColor(dim, rbg);
-                row.drawString("#", 192, 12);
+                row.drawString("#", 196, 12);
             }
             char b[8]; sprintf(b, "%d", r.rssi);      // rssi
             row.setTextDatum(MR_DATUM);
