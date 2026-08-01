@@ -6,7 +6,7 @@
 #include "../ble_scanner/BleScanner.h"
 
 // Render-ready snapshot rows (decoupled from the scanner internals).
-struct WifiRow { String ssid; int8_t rssi; uint8_t auth; };
+struct WifiRow { String ssid; int8_t rssi; uint8_t auth; uint8_t bssid[6]; };
 struct BleRow  { String label; int rssi; bool tracker; };
 
 // ScanEngine runs Wi-Fi and BLE scans in a background FreeRTOS task (pinned to

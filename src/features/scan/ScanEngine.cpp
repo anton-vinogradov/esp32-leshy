@@ -1,5 +1,7 @@
 #include "ScanEngine.h"
 
+#include <string.h>
+
 static ScanEngine* s_engine = nullptr;
 
 static void scanTaskEntry(void*) {
@@ -38,6 +40,7 @@ void ScanEngine::taskLoop() {
                 wifi_[i].ssid = a.ssid;
                 wifi_[i].rssi = a.rssi;
                 wifi_[i].auth = a.auth;
+                memcpy(wifi_[i].bssid, a.bssid, 6);
             }
             wifiGen_ = wifiGen_ + 1;      // (avoid ++ on volatile — deprecated in C++20)
             xSemaphoreGive(mtx_);

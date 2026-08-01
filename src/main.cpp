@@ -13,6 +13,7 @@
 #include "features/display/MenuScreen.h"
 #include "features/display/Fonts.h"
 #include "features/scan/ScanEngine.h"
+#include "features/net/NetManager.h"
 #include "features/input/Buttons.h"
 #include "features/input/Touch.h"
 
@@ -221,10 +222,12 @@ WifiScreen wifiScreen;
 BleScreen  bleScreen;
 MenuScreen menuScreen;
 Buttons    buttons;
+NetManager net;
 
 // ---- menu tree ----
-enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG };
-enum { F_WIFI_SCAN, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_LANG_EN, F_LANG_RU };
+enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_CONNECT };
+enum { F_WIFI_SCAN, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_LANG_EN, F_LANG_RU,
+       F_PROVISION, F_CONNECT, F_FORGET };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -234,7 +237,13 @@ static const MenuItem ROOT_I[] = {
     {"Settings", "Language, touch, about",   "Настройки", "Язык, тач, о девайсе",     K_SUB, M_SETTINGS},
 };
 static const MenuItem WIFI_I[] = {
-    {"Wi-Fi Scan", "Signal, channel, lock", "Скан Wi-Fi", "Сигнал, канал, шифр", K_FEAT, F_WIFI_SCAN},
+    {"Wi-Fi Scan", "Signal, channel, lock", "Скан Wi-Fi",  "Сигнал, канал, шифр", K_FEAT, F_WIFI_SCAN},
+    {"Connect",    "Join your network",     "Подключение", "Войти в свою сеть",   K_SUB,  M_CONNECT},
+};
+static const MenuItem CONN_I[] = {
+    {"Setup (phone)", "Enter password via phone", "Настроить (телефон)", "Ввести пароль с телефона", K_FEAT, F_PROVISION},
+    {"Connect",       "Join saved network",       "Подключиться",        "К сохранённой сети",       K_FEAT, F_CONNECT},
+    {"Forget",        "Clear saved Wi-Fi",        "Забыть",              "Стереть сохранённое",      K_FEAT, F_FORGET},
 };
 static const MenuItem BLE_I[] = {
     {"BLE Scan", "Devices & trackers nearby", "Скан BLE", "Устройства и трекеры рядом", K_FEAT, F_BLE_SCAN},
@@ -253,15 +262,16 @@ static const MenuItem LANG_I[] = {
 };
 static const Menu MENUS[] = {
     {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
-    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 1},
+    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 2},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
     {"Settings",    "Настройки",   SET_I,  3},
     {"Language",    "Язык",        LANG_I, 2},
+    {"Connect",     "Подключение", CONN_I, 3},
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -269,9 +279,7 @@ static int      depth = 0;
 static int      off = 0;
 static uint32_t seenWifiGen = 0, seenBleGen = 0;
 static bool     touchDown = false;
-static const char* infoTitle = "";
-static const char* infoBody  = "";
-static const char* infoNote  = "";
+static String   infoTitle, infoBody, infoNote;
 
 static int  curMenu() { return menuStack[depth]; }
 static int& curSel()  { return selStack[depth]; }
@@ -288,7 +296,7 @@ static void drawList(bool full) {
 }
 
 static void drawInfo() {
-    uiHeaderRu(infoTitle);
+    uiHeaderRu(infoTitle.c_str());
     tft.fillRect(0, 28, 240, 320 - 28, uiBg());
     fontSmall();
     tft.setTextDatum(TL_DATUM);
@@ -300,7 +308,29 @@ static void drawInfo() {
     fontOff();
 }
 
+static void drawProvisionScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t gold  = tft.color565(0xe7, 0xcf, 0x8f);
+    uiHeaderRu(i18n::tr("Wi-Fi setup", "Настройка Wi-Fi"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    tft.setTextDatum(TL_DATUM);
+    fontSmall(); tft.setTextColor(white, bg);
+    tft.drawString(i18n::tr("1. Join Wi-Fi:", "1. Подключись к Wi-Fi:"), 10, 46);
+    fontBig();   tft.setTextColor(gold, bg);
+    tft.drawString(NetManager::apName(), 10, 68);
+    fontSmall(); tft.setTextColor(white, bg);
+    tft.drawString(i18n::tr("2. Open in browser:", "2. Открой в браузере:"), 10, 112);
+    fontBig();   tft.setTextColor(gold, bg);
+    tft.drawString("192.168.4.1", 10, 134);
+    fontSmall(); tft.setTextColor(white, bg);
+    tft.drawString(i18n::tr("3. Pick network + password", "3. Выбери сеть + пароль"), 10, 178);
+    uiFooterRu(i18n::tr("LEFT: cancel", "LEFT: отмена"));
+    fontOff();
+}
+
 static void back() {
+    if (st == ST_PROVISION) net.stopProvision();
     if (st != ST_MENU) { showMenu(); return; }      // leaf -> its menu (showMenu pauses scanning)
     if (depth > 0) { depth--; showMenu(); }          // submenu -> parent
 }
@@ -314,6 +344,18 @@ static void launch(int feat) {
         case F_RECAL:         touchRecalibrate(); showMenu(); break;
         case F_LANG_EN:       i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
         case F_LANG_RU:       i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
+        case F_PROVISION:     net.startProvision(); st = ST_PROVISION; drawProvisionScreen(); break;
+        case F_CONNECT: {
+            infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = "";
+            st = ST_INFO; drawInfo();
+            bool ok = net.connect();
+            infoTitle = ok ? i18n::tr("Connected", "Подключено") : i18n::tr("Failed", "Не вышло");
+            infoBody  = ok ? ("IP " + net.ip()) : String(i18n::tr("Wrong password?", "Неверный пароль?"));
+            infoNote  = ok ? net.savedSsid() : String("");
+            drawInfo();
+            break;
+        }
+        case F_FORGET:        net.forget(); infoTitle = i18n::tr("Forgotten", "Забыто"); infoBody = i18n::tr("Wi-Fi cleared", "Данные стёрты"); infoNote = ""; st = ST_INFO; drawInfo(); break;
     }
 }
 
@@ -332,6 +374,8 @@ void setup() {
     i18n::set(loadLang());
     buttons.begin();
     touchBegin();                    // loads NVS calibration, or calibrates once
+    net.begin();
+    wifiScreen.attachNet(&net);      // so the scanner can mark your own network (*)
     engine.begin();                  // background scan task
     showMenu();
 }
@@ -372,6 +416,21 @@ void loop() {
             break;
         default:
             break;
+    }
+
+    // ---- provisioning portal ----
+    if (st == ST_PROVISION) {
+        net.loopProvision();
+        if (net.pendingConnect()) {
+            net.stopProvision();     // saves creds + switches to STA (AP drops)
+            infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = "";
+            st = ST_INFO; drawInfo();
+            bool ok = net.connect();
+            infoTitle = ok ? i18n::tr("Connected", "Подключено") : i18n::tr("Failed", "Не вышло");
+            infoBody  = ok ? ("IP " + net.ip()) : String(i18n::tr("Wrong password?", "Неверный пароль?"));
+            infoNote  = ok ? net.savedSsid() : String("");
+            drawInfo();
+        }
     }
 
     // ---- live updates ----

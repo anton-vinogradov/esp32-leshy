@@ -25,10 +25,13 @@ void WifiScreen::rows(ScanEngine& e, int offset) {
                 row.setTextColor(dim, bg);
                 row.drawString("#", 24, 12, 2);
             }
-            String ss = r.ssid.length() ? r.ssid : String("<hidden>");
-            if (ss.length() > 16) ss = ss.substring(0, 15) + "~";
+            String mine;
+            bool isMine = net_ && net_->isMine(r.bssid, mine);
+            String ss = r.ssid.length() ? r.ssid : (isMine ? mine : String("<hidden>"));
+            if (ss.length() > 15) ss = ss.substring(0, 14) + "~";
+            if (isMine) ss = "*" + ss;              // your own network
             row.setTextDatum(ML_DATUM);
-            row.setTextColor(white, bg);
+            row.setTextColor(isMine ? tft.color565(0xff, 0xcf, 0x3f) : white, bg);
             row.drawString(ss, 34, 12, 2);
             char b[8];
             sprintf(b, "%d", r.rssi);
