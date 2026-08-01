@@ -45,6 +45,7 @@ private:
     void handleReduced();
     void handleResult();
     void redirectToPortal();
+    void applyLangArg();                       // honor ?lang=en|ru from the switcher
     void sendPage(const String& body, int refreshSec = -1, const char* refreshUrl = nullptr);
     int  medianWithin(uint32_t windowMs, int* countOut);
 
@@ -59,9 +60,10 @@ private:
 
     static const size_t CAP = 128;            // beacon RSSI ring buffer
     Sample  ring_[CAP]{};
-    volatile size_t head_ = 0;
+    volatile uint64_t head_ = 0;              // 64-bit so it never wraps in practice
 
     bool     running_ = false;
+    bool     baselineReady_ = false;          // baseline still being measured until true
     bool     shutdownArmed_ = false;
     uint32_t shutdownAt_ = 0;
 };

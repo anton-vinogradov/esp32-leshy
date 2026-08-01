@@ -27,6 +27,7 @@ The boring-but-critical base. Most ESP32-DIV pain comes from here.
 - [ ] On-screen keyboard with the **full** WPA character set. `effort: low` ⭐⭐⭐⭐
 - [ ] Battery gauge over I²C (IP5306-I2C, not ADC). `effort: medium`
 - [ ] SD layer with buffered writes (CSV / JSON / PCAP). `effort: low`
+- [x] **Bilingual UI (EN / RU)** — i18n core (`src/core/i18n.h`), in-app language switch; portal + demos translated. `effort: low` ⭐⭐⭐
 
 ## Phase 1 — Wi-Fi lab / Wi-Fi лаба  (priority #1)
 

@@ -1,5 +1,7 @@
 #include "PolitePortal.h"
 
+#include "../../core/i18n.h"
+
 #include <WiFi.h>
 #include <string.h>
 #include <algorithm>
@@ -12,17 +14,20 @@ static uint8_t       s_targetBssid[6] = {0};
 static portMUX_TYPE  s_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static void snifferCb(void* buf, wifi_promiscuous_pkt_type_t type) {
-    if (type != WIFI_PKT_MGMT || !s_instance) return;
+    PolitePortal* inst = s_instance;                    // snapshot: stop() may null it concurrently
+    if (type != WIFI_PKT_MGMT || !inst) return;
     auto* pkt = (wifi_promiscuous_pkt_t*)buf;
+    if (pkt->rx_ctrl.sig_len < 22) return;              // need pl[0] + addr3 (pl[16..21])
     const uint8_t* pl = pkt->payload;
     if (pl[0] != 0x80) return;                          // beacon subtype only
     if (memcmp(pl + 16, s_targetBssid, 6) != 0) return; // addr3 == target BSSID
-    s_instance->pushSample(pkt->rx_ctrl.rssi);
+    inst->pushSample(pkt->rx_ctrl.rssi);
 }
 
 void PolitePortal::pushSample(int8_t rssi) {
+    uint32_t t = millis();                              // keep the critical section tiny
     portENTER_CRITICAL(&s_mux);
-    ring_[head_ % CAP] = { millis(), rssi };
+    ring_[head_ % CAP] = { t, rssi };
     head_++;
     portEXIT_CRITICAL(&s_mux);
 }
@@ -33,7 +38,7 @@ int PolitePortal::medianWithin(uint32_t windowMs, int* countOut) {
     uint32_t now = millis();
 
     portENTER_CRITICAL(&s_mux);
-    size_t total = head_ < CAP ? head_ : CAP;
+    size_t total = head_ < CAP ? (size_t)head_ : CAP;
     for (size_t i = 0; i < total; i++) {
         if (now - ring_[i].t <= windowMs) tmp[n++] = ring_[i].rssi;
     }
@@ -44,9 +49,6 @@ int PolitePortal::medianWithin(uint32_t windowMs, int* countOut) {
     std::sort(tmp, tmp + n);
     return tmp[n / 2];
 }
-
-int PolitePortal::currentRssi() { int c; return medianWithin(cfg_.windowMs, &c); }
-int PolitePortal::sampleCount() { int c; medianWithin(cfg_.windowMs, &c); return c; }
 
 bool PolitePortal::begin(const PolitePortalConfig& cfg) {
     cfg_ = cfg;
@@ -81,21 +83,29 @@ bool PolitePortal::begin(const PolitePortalConfig& cfg) {
     esp_wifi_set_promiscuous_rx_cb(&snifferCb);
     esp_wifi_set_channel(channel_, WIFI_SECOND_CHAN_NONE);
 
-    // 4) Baseline RSSI while the AP is (presumably) at full power.
-    uint32_t t0 = millis();
-    while (millis() - t0 < cfg_.baselineMs) delay(50);
-    int c = 0, med = medianWithin(cfg_.baselineMs, &c);
-    baseline_ = (c >= cfg_.minSamples) ? med : scanRssi;   // scan RSSI is a rough fallback
-
-    // 5) Captive portal: wildcard DNS + web routes.
+    // 4) Bring the captive portal up first, so it answers even during baseline.
     dns_.start(53, "*", apIp_);
     web_.on("/", [this] { handleRoot(); });
     web_.on("/reduced", [this] { handleReduced(); });
     web_.on("/result", [this] { handleResult(); });
     web_.onNotFound([this] { redirectToPortal(); });      // pull OS captive checks to the page
     web_.begin();
-
     running_ = true;
+
+    // 5) Baseline RSSI while the AP is (presumably) at full power. Serve the
+    //    portal during the wait instead of dead-blocking the main thread.
+    uint32_t t0 = millis();
+    while ((int32_t)(millis() - (t0 + cfg_.baselineMs)) < 0) {
+        dns_.processNextRequest();
+        web_.handleClient();
+        delay(5);
+    }
+    int c = 0, med = medianWithin(cfg_.baselineMs, &c);
+    baseline_ = (c >= cfg_.minSamples) ? med : scanRssi;  // scan RSSI is a rough fallback
+    if (c < cfg_.minSamples) {
+        Serial.printf("[PolitePortal] warning: only %d baseline beacons - baseline is unreliable.\n", c);
+    }
+    baselineReady_ = true;
     return true;
 }
 
@@ -114,6 +124,7 @@ void PolitePortal::stop() {
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
     running_ = false;
+    baselineReady_ = false;
     shutdownArmed_ = false;
     s_instance = nullptr;
 }
@@ -123,6 +134,13 @@ void PolitePortal::redirectToPortal() {
     web_.send(302, "text/plain", "");
 }
 
+void PolitePortal::applyLangArg() {
+    if (!web_.hasArg("lang")) return;
+    String v = web_.arg("lang");
+    if (v == "ru") i18n::set(Lang::RU);
+    else if (v == "en") i18n::set(Lang::EN);
+}
+
 static const char* PAGE_CSS =
     "body{font-family:system-ui,-apple-system,sans-serif;background:#111;color:#eee;"
     "margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}"
@@ -130,63 +148,100 @@ static const char* PAGE_CSS =
     "h1{margin:14px 0 8px}p{color:#cfcfcf;line-height:1.5}"
     "a.btn{display:inline-block;margin-top:22px;padding:16px 26px;background:#2ecc71;color:#04240f;"
     "font-weight:700;text-decoration:none;border-radius:12px}"
-    "code{color:#8fd4ff}small{color:#888;display:block;margin-top:26px;line-height:1.5}";
+    "code{color:#8fd4ff}small{color:#888;display:block;margin-top:26px;line-height:1.5}"
+    ".lang{margin-top:22px;font-size:13px;color:#666}.lang a{color:#8fd4ff;text-decoration:none;margin:0 5px}";
 
 void PolitePortal::sendPage(const String& body, int refreshSec, const char* refreshUrl) {
-    String html = "<!doctype html><html><head><meta charset=utf-8>"
+    String html = String("<!doctype html><html lang=") + i18n::code() +
+                  "><head><meta charset=utf-8>"
                   "<meta name=viewport content=\"width=device-width,initial-scale=1\">";
     if (refreshSec >= 0 && refreshUrl) {
         html += "<meta http-equiv=refresh content=\"" + String(refreshSec) + ";url=" + refreshUrl + "\">";
     }
     html += "<title>ESP32-Leshy</title><style>";
     html += PAGE_CSS;
-    html += "</style></head><body><div class=card>" + body + "</div></body></html>";
+    html += "</style></head><body><div class=card>" + body +
+            "<div class=lang><a href=\"/?lang=en\">EN</a> &middot; <a href=\"/?lang=ru\">RU</a></div>"
+            "</div></body></html>";
     web_.send(200, "text/html; charset=utf-8", html);
 }
 
 void PolitePortal::handleRoot() {
-    sendPage(
-        "<div class=big>&#127794;&#128122;&#128246;</div>"
-        "<h1>Привет, сосед!</h1>"
-        "<p>Твой Wi-Fi добивает ко мне на полной мощности и глушит мой. Будь другом — "
-        "зайди в настройки роутера и снизь мощность передатчика (Tx Power) на пару делений.</p>"
-        "<p>Как снизишь — жми кнопку. Я проверю по уровню сигнала и сразу отстану. &#128591;</p>"
-        "<a class=btn href=\"/reduced\">Я снизил мощность</a>"
-        "<small>Демо-стенд ESP32-Leshy. Паролей тут не спрашивают и ничего не сохраняют.</small>");
+    applyLangArg();
+    String body =
+        String("<div class=big>&#127794;&#128122;&#128246;</div><h1>") +
+        i18n::tr("Hey, neighbor!", "Привет, сосед!") + "</h1><p>" +
+        i18n::tr("Your Wi-Fi reaches me at full power and drowns out mine. Please open your "
+                 "router settings and lower the transmit power (Tx Power) a notch or two.",
+                 "Твой Wi-Fi добивает ко мне на полной мощности и глушит мой. Будь другом — зайди "
+                 "в настройки роутера и снизь мощность передатчика (Tx Power) на пару делений.") +
+        "</p><p>" +
+        i18n::tr("When you have, tap the button. I'll check the signal and leave you alone.",
+                 "Как снизишь — жми кнопку. Я проверю по уровню сигнала и сразу отстану.") +
+        " &#128591;</p><a class=btn href=\"/reduced\">" +
+        i18n::tr("I lowered the power", "Я снизил мощность") + "</a><small>" +
+        i18n::tr("ESP32-Leshy demo. No passwords are asked for or stored here.",
+                 "Демо-стенд ESP32-Leshy. Паролей тут не спрашивают и ничего не сохраняют.") +
+        "</small>";
+    sendPage(body);
 }
 
 void PolitePortal::handleReduced() {
+    applyLangArg();
+    if (!baselineReady_) {
+        sendPage(String("<div class=big>&#9203;</div><h1>") +
+                     i18n::tr("Calibrating...", "Калибруюсь…") + "</h1><p>" +
+                     i18n::tr("Still taking the first reading. One moment.",
+                              "Первичный замер эфира ещё идёт. Секунду.") + "</p>",
+                 3, "/reduced");
+        return;
+    }
     int wait = (int)(cfg_.windowMs / 1000) + 1;
-    sendPage(
-        "<div class=big>&#9203;</div>"
-        "<h1>Проверяю…</h1>"
-        "<p>Слушаю эфир несколько секунд и сравниваю с исходным уровнем. "
-        "Не двигай устройства и не закрывай страницу.</p>",
-        wait, "/result");
+    sendPage(String("<div class=big>&#9203;</div><h1>") +
+                 i18n::tr("Checking...", "Проверяю…") + "</h1><p>" +
+                 i18n::tr("Listening for a few seconds and comparing to the baseline. "
+                          "Don't move the devices or close the page.",
+                          "Слушаю эфир несколько секунд и сравниваю с исходным уровнем. "
+                          "Не двигай устройства и не закрывай страницу.") + "</p>",
+             wait, "/result");
 }
 
 void PolitePortal::handleResult() {
+    applyLangArg();
+    if (!baselineReady_) { handleReduced(); return; }   // still calibrating
+
     int cnt = 0;
     int cur = medianWithin(cfg_.windowMs, &cnt);
-    int drop = baseline_ - cur;
-    bool ok = (cnt >= cfg_.minSamples) && (drop >= cfg_.rssiDropDb);
 
-    if (ok) {
+    if (cnt < cfg_.minSamples) {                         // not enough beacons to judge — no bogus drop
+        sendPage(String("<div class=big>&#128064;</div><h1>") +
+                 i18n::tr("Not enough data yet", "Пока мало данных") + "</h1><p>" +
+                 i18n::tr("Caught only ", "Поймал пока образцов: ") + String(cnt) +
+                 i18n::tr(" beacons so far. Keep the device still and try again.",
+                          " — держи устройство на месте и попробуй ещё раз.") + "</p>" +
+                 "<a class=btn href=\"/reduced\">" + i18n::tr("Check again", "Проверить снова") + "</a>");
+        return;
+    }
+
+    int drop = baseline_ - cur;
+    if (drop >= cfg_.rssiDropDb) {
         shutdownArmed_ = true;
-        shutdownAt_ = millis() + 5000;         // let the client read the message first
-        sendPage(
-            "<div class=big>&#9989;&#127794;</div>"
-            "<h1>Спасибо!</h1>"
-            "<p>Вижу, сигнал упал на <code>" + String(drop) + " dB</code> "
-            "(было " + String(baseline_) + ", стало " + String(cur) + " dBm). "
-            "Договорились — выключаюсь. Эта сеть сейчас пропадёт. &#128075;</p>");
+        shutdownAt_ = millis() + 5000;                  // let the client read the message first
+        sendPage(String("<div class=big>&#9989;&#127794;</div><h1>") +
+                 i18n::tr("Thank you!", "Спасибо!") + "</h1><p>" +
+                 i18n::tr("The signal dropped by ", "Вижу, сигнал упал на ") + "<code>" + String(drop) +
+                 i18n::tr(" dB</code> (from ", " dB</code> (было ") + String(baseline_) +
+                 i18n::tr(" to ", ", стало ") + String(cur) +
+                 i18n::tr(" dBm). Deal - shutting down. This network will disappear now. ",
+                          " dBm). Договорились — выключаюсь. Эта сеть сейчас пропадёт. ") +
+                 "&#128075;</p>");
     } else {
-        sendPage(
-            "<div class=big>&#129300;</div>"
-            "<h1>Пока не вижу снижения</h1>"
-            "<p>Замерил всего <code>" + String(drop) + " dB</code> разницы "
-            "(нужно ≥ <code>" + String(cfg_.rssiDropDb) + " dB</code>, образцов: " + String(cnt) + "). "
-            "Точно снизил мощность? Убедись и попробуй ещё раз — и не двигай роутер/устройство.</p>"
-            "<a class=btn href=\"/reduced\">Проверить снова</a>");
+        sendPage(String("<div class=big>&#129300;</div><h1>") +
+                 i18n::tr("No drop yet", "Пока не вижу снижения") + "</h1><p>" +
+                 i18n::tr("Measured only ", "Замерил всего ") + "<code>" + String(drop) +
+                 i18n::tr(" dB</code> (need &ge; ", " dB</code> (нужно ≥ ") + "<code>" + String(cfg_.rssiDropDb) +
+                 i18n::tr(" dB</code>). Did you really lower it? Make sure, and don't move the router/device.",
+                          " dB</code>). Точно снизил мощность? Убедись и не двигай роутер/устройство.") +
+                 "</p><a class=btn href=\"/reduced\">" + i18n::tr("Check again", "Проверить снова") + "</a>");
     }
 }

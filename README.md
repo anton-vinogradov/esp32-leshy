@@ -51,6 +51,7 @@ You need the ESP32-DIV board (or a compatible DIY build) to run Leshy. We don't 
 - Honest battery gauge (IP5306 over I²C), brightness control, screen sleep
 - Export to SD: CSV / JSON / PCAP with timestamps
 - Split SPI buses (touch / radio / SD) — fixes the classic "touch dies after RF" bug
+- Bilingual UI (EN / RU) with an in-app language switch
 
 **😈 Trickster toolkit (the fun bucket)**
 - Evil-twin AP + captive portal (demo/lab)
@@ -123,7 +124,7 @@ You alone are responsible for what you do with this firmware. The authors accept
 
 ## Что планируется
 
-- **🛠️ Удобство:** отзывчивый UI, нормальный дебаунс, клавиатура со всеми символами, без ребутов и утечек, честный индикатор батареи, яркость/сон экрана, экспорт CSV/JSON/PCAP, раздельные SPI-шины (лечит «залипание тача после RF»).
+- **🛠️ Удобство:** отзывчивый UI, нормальный дебаунс, клавиатура со всеми символами, без ребутов и утечек, честный индикатор батареи, яркость/сон экрана, экспорт CSV/JSON/PCAP, раздельные SPI-шины (лечит «залипание тача после RF»), **двуязычный интерфейс (EN/RU)** с переключателем.
 - **😈 Пакости:** evil-twin + captive-portal (демо/лаба), BLE-спам всплывашек, фейковые beacon/SSID, режим «увести не туда».
 - **📡 Анализ и защита:** **детектор** deauth (пассивный, легальный), водопад активности 2.4 ГГц, Wi-Fi-сниффер + PCAP, BLE-скан + детекторы трекеров/скиммеров/скрытых камер, wardriving (WiGLE CSV), ИК запись/повтор/универсальный пульт.
 
