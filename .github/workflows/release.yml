@@ -1,0 +1,38 @@
+name: release
+
+# Tag a commit v1.2.3 and push it: this builds the firmware with that version baked
+# in and attaches .pio/build/esp32-div/firmware.bin to the GitHub release, which the
+# device's in-app updater (Settings -> Update) then finds via /releases/latest.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Build firmware (version from the tag)
+        run: |
+          VER="${GITHUB_REF_NAME#v}"          # v1.2.3 -> 1.2.3
+          echo "Building ESP32-Leshy $VER"
+          PLATFORMIO_BUILD_FLAGS="-DLESHY_FW_VERSION=\"$VER\"" pio run -e esp32-div
+
+      - name: Attach firmware.bin to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: .pio/build/esp32-div/firmware.bin
+          fail_on_unmatched_files: true

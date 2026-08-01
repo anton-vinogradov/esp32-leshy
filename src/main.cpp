@@ -219,6 +219,9 @@ void loop() {}
 #include <Preferences.h>
 
 #include "features/wifi_scanner/HiddenRevealer.h"
+#include "features/ota/OtaManager.h"
+#include "features/display/img_rider.h"
+#include "core/version.h"
 
 ScanEngine     engine;
 WifiScreen     wifiScreen;
@@ -227,12 +230,13 @@ MenuScreen     menuScreen;
 Buttons        buttons;
 NetManager     net;
 HiddenRevealer revealer;
+OtaManager     ota;
 
 static void drawNetBadge();      // small "connected" mark in the header (defined below)
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -253,6 +257,7 @@ static const MenuItem SUB_I[] = {
 };
 static const MenuItem SET_I[] = {
     {"Connection",      "Status, join, exit",      "Подключение", "Статус, вход, выход",   K_FEAT, F_CONN},
+    {"Update",          "Update from GitHub",      "Обновление",  "Обновить с GitHub",     K_FEAT, F_OTA},
     {"Language",        "Interface language",      "Язык",        "Язык интерфейса",       K_SUB,  M_LANG},
     {"Calibrate touch", "Redo screen calibration", "Калибровка",  "Перекалибровать экран", K_FEAT, F_RECAL},
     {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
@@ -266,12 +271,12 @@ static const Menu MENUS[] = {
     {"Wi-Fi",       "Wi-Fi",       WIFI_I, 2},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
-    {"Settings",    "Настройки",   SET_I,  4},
+    {"Settings",    "Настройки",   SET_I,  5},
     {"Language",    "Язык",        LANG_I, 2},
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -585,8 +590,119 @@ static void optActivate() {
     }
 }
 
+// ---- OTA update screen (full-bleed rider background + progress slider) ----
+static uint32_t seenOtaGen = 0;
+static int      seenOtaPhase = -1;
+
+static const char* otaErrText(OtaManager::Err e) {
+    switch (e) {
+        case OtaManager::E_NONET:     return i18n::tr("No network",        "Нет сети");
+        case OtaManager::E_TIME:      return i18n::tr("No clock (SNTP)",   "Нет времени");
+        case OtaManager::E_API:       return i18n::tr("Server error",      "Ошибка сервера");
+        case OtaManager::E_NORELEASE: return i18n::tr("No releases yet",   "Релизов пока нет");
+        case OtaManager::E_RATELIMIT: return i18n::tr("Rate limited",      "Лимит запросов");
+        case OtaManager::E_PARSE:     return i18n::tr("Bad response",      "Плохой ответ");
+        case OtaManager::E_NOASSET:   return i18n::tr("No firmware.bin",   "Нет firmware.bin");
+        case OtaManager::E_HTTP:      return i18n::tr("Download error",    "Ошибка загрузки");
+        case OtaManager::E_BEGIN:     return i18n::tr("No OTA slot",       "Нет OTA-слота");
+        case OtaManager::E_WRITE:     return i18n::tr("Flash error",       "Ошибка записи");
+        case OtaManager::E_SHORT:     return i18n::tr("Interrupted",       "Прервано");
+        case OtaManager::E_HASH:      return i18n::tr("Checksum mismatch", "Хеш не сошёлся");
+        case OtaManager::E_END:       return i18n::tr("Bad image",         "Битый образ");
+        default:                      return "";
+    }
+}
+
+// The progress "slider" with the current step written on it (redrawn alone on % change).
+static void otaBar() {
+    const int x = 16, y = 268, w = 208, h = 26;
+    const uint16_t barbg = tft.color565(0x14, 0x1a, 0x14);
+    const char* label; int pct; uint16_t fill;
+    switch (ota.phase()) {
+        case OtaManager::CHECKING:    label = i18n::tr("Checking...", "Проверяю...");        pct = 12;  fill = tft.color565(0x7a, 0x6a, 0x2a); break;
+        case OtaManager::UPTODATE:    label = i18n::tr("Latest version", "Последняя версия"); pct = 100; fill = tft.color565(0x2e, 0x6a, 0x3e); break;
+        case OtaManager::AVAILABLE:   label = i18n::tr("OK: update", "OK: обновить");         pct = 0;   fill = tft.color565(0xff, 0xcf, 0x3f); break;
+        case OtaManager::DOWNLOADING: { static char b[28]; snprintf(b, sizeof(b), "%s %d%%", i18n::tr("Downloading", "Загрузка"), ota.progress()); label = b; pct = ota.progress(); fill = tft.color565(0x2e, 0x8a, 0x3e); break; }
+        case OtaManager::DONE:        label = i18n::tr("Done! reboot...", "Готово! рестарт..."); pct = 100; fill = tft.color565(0x2e, 0x8a, 0x3e); break;
+        case OtaManager::FAILED:      label = otaErrText(ota.err());                          pct = 100; fill = tft.color565(0x8a, 0x2a, 0x2a); break;
+        default:                      label = "";                                            pct = 0;   fill = barbg; break;
+    }
+    tft.fillRoundRect(x, y, w, h, 7, barbg);
+    int fw = (w - 4) * pct / 100;
+    if (fw > 0) tft.fillRoundRect(x + 2, y + 2, fw < 6 ? 6 : fw, h - 4, 5, fill);
+    fontSmall();
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(tft.color565(0xff, 0xff, 0xf2), barbg);
+    tft.drawString(label, x + w / 2, y + h / 2);
+    fontOff();
+}
+
+static void drawOtaScreen() {
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t dim   = tft.color565(0xbe, 0xc8, 0xb6);
+    const uint16_t amber = tft.color565(0xff, 0xa5, 0x2a);
+    const uint16_t panel = tft.color565(0x0b, 0x11, 0x0b);
+    tft.setSwapBytes(true);
+    tft.pushImage(0, 0, IMG_RIDER_W, IMG_RIDER_H, img_rider);   // rider = the whole background
+    tft.setSwapBytes(false);
+    tft.fillRoundRect(6, 196, 228, 118, 10, panel);             // dark panel for legible text
+    fontBig(); tft.setTextDatum(TL_DATUM); tft.setTextColor(gold, panel);
+    tft.drawString(i18n::tr("Update", "Обновление"), 16, 204);
+    fontSmall(); tft.setTextColor(dim, panel);
+    String line = (ota.phase() == OtaManager::AVAILABLE)
+                    ? String(i18n::tr("Available: ", "Доступно: ")) + ota.latest()
+                    : String(i18n::tr("Installed: v", "Установлено: v")) + OtaManager::current();
+    tft.drawString(line, 16, 236);
+    otaBar();
+    if (ota.phase() == OtaManager::DOWNLOADING) {
+        fontTiny(); tft.setTextDatum(MC_DATUM); tft.setTextColor(amber, panel);
+        tft.drawString(i18n::tr("Do not power off", "Не выключай питание"), 120, 302);
+    } else {
+        fontTiny(); tft.setTextDatum(ML_DATUM); tft.setTextColor(dim, panel);
+        tft.drawString(i18n::tr("◀ back", "◀ назад"), 16, 302);
+        if (ota.phase() == OtaManager::AVAILABLE) {
+            tft.setTextDatum(MR_DATUM);
+            tft.drawString(i18n::tr("update ▶", "обновить ▶"), 224, 302);
+        }
+    }
+    fontOff();
+}
+
+static void gotoOta() { ota.startCheck(); seenOtaGen = ota.gen(); seenOtaPhase = -1; st = ST_OTA; drawOtaScreen(); }
+
+static void otaActivate() {
+    if (ota.phase() == OtaManager::AVAILABLE) ota.startUpdate();
+    else if (ota.phase() == OtaManager::UPTODATE || ota.phase() == OtaManager::FAILED) ota.startCheck();
+}
+
+static void drawAboutScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
+    uiHeaderRu(i18n::tr("About", "О девайсе"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    tft.setTextDatum(TL_DATUM);
+    fontSmall();
+    int y = 46;
+    tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("Hardware", "Железо"), 14, y); y += 22;
+    tft.setTextColor(white, bg); tft.drawString("ESP32-DIV (ESP32-S3)", 22, y); y += 20;
+    tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("by CiferTech", "от CiferTech"), 22, y); y += 32;
+    tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("Firmware", "Прошивка"), 14, y); y += 22;
+    tft.setTextColor(gold, bg);  tft.drawString("ESP32-Leshy", 22, y); y += 20;
+    tft.setTextColor(white, bg); tft.drawString(String(i18n::tr("version v", "версия v")) + LESHY_FW_VERSION, 22, y); y += 32;
+    tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("Author", "Автор"), 14, y); y += 22;
+    tft.setTextColor(white, bg); tft.drawString(i18n::tr("Anton Vinogradov", "Антон Виноградов"), 22, y); y += 22;
+    fontTiny(); tft.setTextColor(dim, bg);
+    tft.drawString("github.com/anton-vinogradov/esp32-leshy", 14, y + 4);
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
+    fontOff();
+    drawNetBadge();
+}
+
 static void back() {
     switch (st) {
+        case ST_OTA:       if (ota.phase() == OtaManager::DOWNLOADING) return; showMenu(); return;
         case ST_PROVISION: net.stopProvision(); gotoConn();               return;
         case ST_CONFIRM:   cancelConfirm();                               return;
         case ST_OPTIONS:   if (optReturn == ST_HIDDEN) gotoHidden(); else showMenu(); return;
@@ -602,7 +718,8 @@ static void launch(int feat) {
         case F_HIDDEN:      hidSel = 0; hidOff = 0; gotoHidden(); break;
         case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); break;
         case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
-        case F_ABOUT:       infoTitle = i18n::tr("About", "О девайсе"); infoBody = i18n::tr("ESP32-Leshy - open firmware", "ESP32-Leshy - открытая прошивка"); infoNote = "anton-vinogradov/esp32-leshy"; st = ST_INFO; drawInfo(); break;
+        case F_ABOUT:       st = ST_INFO; drawAboutScreen(); break;
+        case F_OTA:         gotoOta(); break;
         case F_RECAL:       touchRecalibrate(); showMenu(); break;
         case F_LANG_EN:     i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
         case F_LANG_RU:     i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
@@ -637,12 +754,14 @@ static void onKey(int ev) {
             else if (st == ST_CONN) connActivate();
             else if (st == ST_OPTIONS) optActivate();
             else if (st == ST_CONFIRM) doConfirm();
+            else if (st == ST_OTA) otaActivate();
             break;
         case Buttons::RIGHT:                      // right = options / action
             if (st == ST_MENU) activate();
             else if (st == ST_CONN) connActivate();
             else if (st == ST_OPTIONS) optActivate();
             else if (st == ST_CONFIRM) doConfirm();
+            else if (st == ST_OTA) otaActivate();
             else if (st == ST_HIDDEN) openHiddenOptions();
             break;
         case Buttons::LEFT:
@@ -671,6 +790,7 @@ static void serialControl() {
             else if (!strcmp(buf, "ble"))    launch(F_BLE_SCAN);
             else if (!strcmp(buf, "hidden")) launch(F_HIDDEN);
             else if (!strcmp(buf, "conn"))   launch(F_CONN);
+            else if (!strcmp(buf, "ota"))    launch(F_OTA);
             else if (!strcmp(buf, "menu"))   { depth = 0; showMenu(); }
             else { Serial.printf("[cmd] ? '%s'\n", buf); continue; }
             Serial.printf("[cmd] %s -> st=%d\n", buf, (int)st);
@@ -694,6 +814,7 @@ void setup() {
     wifiScreen.attachNet(&net);      // so the scanner can mark your own network (*)
     engine.attachRevealer(&revealer);// passively reveal hidden SSIDs during Wi-Fi scans
     engine.begin();                  // background scan task
+    ota.begin(&engine, &net);        // OTA needs the radio (pauses scan) and the connection
     showMenu();
 }
 
@@ -718,6 +839,9 @@ void loop() {
                 if (ty < 28) back();
                 else for (int i = 0; i < optN; i++)
                     if (ty >= optY[i] && ty < optY[i] + 34) { optSel = i; optActivate(); break; }
+            } else if (st == ST_OTA) {
+                if (ota.phase() == OtaManager::AVAILABLE) ota.startUpdate();
+                else if (ota.phase() != OtaManager::DOWNLOADING && ty < 60) back();
             } else if (st == ST_CONFIRM) {
                 if (ty >= okBtnY && ty < okBtnY + 40) doConfirm();
                 else if (ty >= cancelBtnY && ty < cancelBtnY + 40) cancelConfirm();
@@ -755,7 +879,13 @@ void loop() {
         seenBleGen = engine.bleGen();
         int m = engine.bleCount() - UI_VISIBLE; if (m < 0) m = 0; if (off > m) off = m;
         drawList(true);
+    } else if (st == ST_OTA && ota.gen() != seenOtaGen) {
+        seenOtaGen = ota.gen();
+        if ((int)ota.phase() != seenOtaPhase) { seenOtaPhase = (int)ota.phase(); drawOtaScreen(); }
+        else otaBar();                       // % change → repaint just the slider (no bg redraw)
     }
+
+    if (millis() > 8000) ota.markHealthy();  // once the UI has clearly been up, confirm this image
 
     delay(10);
 }
