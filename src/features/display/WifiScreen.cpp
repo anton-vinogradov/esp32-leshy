@@ -28,7 +28,7 @@ void WifiScreen::rows(ScanEngine& e, int offset) {
             String mine;
             bool isMine = net_ && net_->isMine(r.bssid, mine);
             bool named  = r.ssid.length() > 0;       // real name (broadcast or revealed)
-            String ss = named ? r.ssid : (isMine ? mine : String("<hidden>"));
+            String ss = named ? r.ssid : (isMine ? mine : String("hidden..."));  // "..." = revealing, wait for traffic
             if (ss.length() > 14) ss = ss.substring(0, 13) + "~";
             if (isMine) ss = "*" + ss;              // your own network
             row.setTextDatum(ML_DATUM);

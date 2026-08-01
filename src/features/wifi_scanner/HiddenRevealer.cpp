@@ -59,7 +59,10 @@ void HiddenRevealer::storeLocked(const uint8_t bssid[6], const char* ssid, uint8
     if (bcast) return;
     for (int k = 0; k < n_; k++)
         if (memcmp(ent_[k].bssid, bssid, 6) == 0) return;   // already known
-    if (n_ >= MAX) return;
+    if (n_ >= MAX) {                                         // full — evict oldest, keep learning
+        for (int k = 0; k < MAX - 1; k++) ent_[k] = ent_[k + 1];
+        n_ = MAX - 1;
+    }
     memcpy(ent_[n_].bssid, bssid, 6);
     memcpy(ent_[n_].ssid, ssid, slen);
     ent_[n_].ssid[slen] = 0;
@@ -136,6 +139,7 @@ void HiddenRevealer::persist() {
         snprintf(k, sizeof(k), "s%d", i); p.putString(k, ent_[i].ssid);
     }
     p.end();
+    Serial.printf("[Hidden] persist: %d names to NVS\n", n_);
     dirty_ = false;
     xSemaphoreGive(mtx_);
 }
@@ -157,5 +161,6 @@ void HiddenRevealer::load() {
         n_++;
     }
     p.end();
+    Serial.printf("[Hidden] load: %d names from NVS (cnt=%d)\n", n_, c);
     xSemaphoreGive(mtx_);
 }

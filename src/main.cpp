@@ -270,7 +270,7 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -345,15 +345,51 @@ static void drawNetBadge() {
 static const int HID_TOP = 40, HID_ROW_H = 30, HID_VISIBLE = 8;
 static int hidSel = 0, hidOff = 0, hidRowY[HID_VISIBLE];
 
-static void drawHiddenScreen() {
+// One list row, repainted in place (fills only its own rectangle — no full-screen clear).
+static void drawHiddenRow(int slot) {
+    fontOff();                    // rows use the built-in fonts (2/1); drop any smooth font first
     const uint16_t bg = uiBg();
     const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
     const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
     const uint16_t dim   = tft.color565(0x8f, 0xa9, 0x8f);
+    int n   = revealer.count();
+    int idx = hidOff + slot;
+    int y   = HID_TOP + slot * HID_ROW_H;
+    hidRowY[slot] = (idx < n) ? y : -1;
+    tft.fillRect(0, y, 240, HID_ROW_H, bg);
+    if (idx >= n) return;
+    uint8_t b[6]; String ss;
+    revealer.get(idx, b, ss);
+    bool sel = (idx == hidSel);
+    uint16_t rowbg = sel ? tft.color565(0x22, 0x33, 0x22) : bg;
+    if (sel) tft.fillRoundRect(6, y, 228, HID_ROW_H - 4, 6, rowbg);
+    if (ss.length() > 18) ss = ss.substring(0, 17) + "~";
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(sel ? gold : white, rowbg);
+    tft.drawString(ss, 12, y + 1, 2);
+    char mac[18];
+    snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", b[0], b[1], b[2], b[3], b[4], b[5]);
+    tft.setTextColor(dim, rowbg);
+    tft.drawString(mac, 12, y + 16, 1);
+}
+
+static void clampHidden() {
+    int n = revealer.count();
+    if (hidSel > n - 1) hidSel = n - 1;
+    if (hidSel < 0) hidSel = 0;
+    if (hidSel < hidOff) hidOff = hidSel;                      // stop when the screen would start to empty
+    if (hidSel >= hidOff + HID_VISIBLE) hidOff = hidSel - HID_VISIBLE + 1;
+    if (hidOff < 0) hidOff = 0;
+}
+
+static void drawHiddenRowsOnly() { for (int s = 0; s < HID_VISIBLE; s++) drawHiddenRow(s); }
+
+static void drawHiddenScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t dim = tft.color565(0x8f, 0xa9, 0x8f);
     int n = revealer.count();
     uiHeaderRu(i18n::tr("Hidden names", "Скрытые сети"));
     tft.fillRect(0, 28, 240, 320 - 28, bg);
-    fontOff();
     if (n == 0) {
         fontSmall();
         tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
@@ -363,32 +399,13 @@ static void drawHiddenScreen() {
         uiFooterRu(i18n::isRu() ? "LEFT назад" : "LEFT back");
         fontOff(); drawNetBadge(); return;
     }
-    if (hidSel < hidOff) hidOff = hidSel;
-    if (hidSel >= hidOff + HID_VISIBLE) hidOff = hidSel - HID_VISIBLE + 1;
-    for (int i = 0; i < HID_VISIBLE; i++) {
-        int idx = hidOff + i;
-        int y = HID_TOP + i * HID_ROW_H;
-        hidRowY[i] = (idx < n) ? y : -1;
-        if (idx >= n) continue;
-        uint8_t b[6]; String ss;
-        revealer.get(idx, b, ss);
-        bool sel = (idx == hidSel);
-        uint16_t rowbg = sel ? tft.color565(0x22, 0x33, 0x22) : bg;
-        if (sel) tft.fillRoundRect(6, y, 228, HID_ROW_H - 4, 6, rowbg);
-        if (ss.length() > 18) ss = ss.substring(0, 17) + "~";
-        tft.setTextDatum(TL_DATUM);
-        tft.setTextColor(sel ? gold : white, rowbg);
-        tft.drawString(ss, 12, y + 1, 2);
-        char mac[18];
-        snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", b[0], b[1], b[2], b[3], b[4], b[5]);
-        tft.setTextColor(dim, rowbg);
-        tft.drawString(mac, 12, y + 16, 1);
-    }
-    uiFooterRu(i18n::isRu() ? "LEFT назад  вправо удалить" : "LEFT back  right delete");
+    clampHidden();
+    drawHiddenRowsOnly();
+    uiFooterRu(i18n::isRu() ? "LEFT назад  вправо опции" : "LEFT back  right options");
     drawNetBadge();
 }
 
-static void gotoHidden() { st = ST_HIDDEN; drawHiddenScreen(); }
+static void gotoHidden() { Serial.printf("[Hidden] screen opened: count=%d\n", revealer.count()); st = ST_HIDDEN; drawHiddenScreen(); }
 
 // ---- connection screen (one menu item: full status + contextual actions) ----
 enum ConnAct { CA_SETUP, CA_CONNECT, CA_DISCONNECT, CA_FORGET };
@@ -417,6 +434,19 @@ static const char* connLabel(ConnAct a) {
     return "";
 }
 
+// Reusable action button, repainted in place (fills only its own rectangle).
+static void drawActionBtn(int y, const char* label, bool sel) {
+    const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    uint16_t box = sel ? tft.color565(0x2c, 0x5a, 0x2c) : tft.color565(0x1b, 0x27, 0x1b);
+    tft.fillRoundRect(10, y, 220, 34, 8, box);
+    fontSmall();
+    tft.setTextColor(sel ? gold : white, box);
+    tft.setTextDatum(ML_DATUM);
+    tft.drawString(label, 22, y + 17);
+    fontOff();
+}
+
 static void drawConnScreen() {
     const uint16_t bg = uiBg();
     const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
@@ -441,17 +471,9 @@ static void drawConnScreen() {
         tft.setTextColor(dim, bg);   tft.drawString(i18n::tr("add via phone below", "настрой с телефона ниже"), 12, y); y += 26;
     }
     y += 6;
-    for (int i = 0; i < connActN; i++) {
-        bool sel = (i == connSel);
-        connActY[i] = y;
-        uint16_t box = sel ? tft.color565(0x2c, 0x5a, 0x2c) : tft.color565(0x1b, 0x27, 0x1b);
-        tft.fillRoundRect(10, y, 220, 34, 8, box);
-        tft.setTextColor(sel ? gold : white, box);
-        tft.setTextDatum(ML_DATUM);
-        tft.drawString(connLabel(connActs[i]), 22, y + 17);
-        y += 42;
-    }
-    uiFooterRu(i18n::isRu() ? "LEFT назад  OK/вправо выбор" : "LEFT back  OK/right select");
+    fontOff();
+    for (int i = 0; i < connActN; i++) { connActY[i] = y; drawActionBtn(y, connLabel(connActs[i]), i == connSel); y += 42; }
+    uiFooterRu(i18n::isRu() ? "LEFT назад  OK выбор" : "LEFT back  OK select");
     fontOff();
     drawNetBadge();
 }
@@ -521,17 +543,52 @@ static void connActivate() {
     }
 }
 
-static void askDeleteHidden() {
+// ---- options menu (RIGHT opens context actions for the selected item) ----
+enum OptId { OPT_DEL_HIDDEN };
+static OptId       optIds[4];
+static const char* optLabels[4];
+static int         optN = 0, optSel = 0, optY[4];
+static State       optReturn = ST_MENU;
+static String      optTitle;
+
+static void drawOptionsScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t dim = tft.color565(0x8f, 0xa9, 0x8f);
+    uiHeaderRu(i18n::tr("Options", "Опции"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    fontSmall();
+    tft.setTextDatum(TL_DATUM); tft.setTextColor(dim, bg);
+    String t = optTitle; if (t.length() > 24) t = t.substring(0, 23) + "~";
+    tft.drawString(t, 12, 46);
+    fontOff();
+    int y = 84;
+    for (int i = 0; i < optN; i++) { optY[i] = y; drawActionBtn(y, optLabels[i], i == optSel); y += 42; }
+    uiFooterRu(i18n::isRu() ? "LEFT назад  OK выбор" : "LEFT back  OK select");
+    drawNetBadge();
+}
+
+static void openHiddenOptions() {
     if (revealer.count() == 0) return;
     uint8_t b[6]; String ss;
     revealer.get(hidSel, b, ss);
-    askConfirm(PK_DEL_HIDDEN, hidSel, i18n::tr("Delete this name?", "Удалить имя?"), ss, ST_HIDDEN);
+    optTitle = ss;
+    optN = 0;
+    optLabels[optN] = i18n::tr("Delete name", "Удалить имя"); optIds[optN] = OPT_DEL_HIDDEN; optN++;
+    optSel = 0; optReturn = ST_HIDDEN;
+    st = ST_OPTIONS; drawOptionsScreen();
+}
+
+static void optActivate() {
+    switch (optIds[optSel]) {
+        case OPT_DEL_HIDDEN: revealer.remove(hidSel); gotoHidden(); break;
+    }
 }
 
 static void back() {
     switch (st) {
         case ST_PROVISION: net.stopProvision(); gotoConn();               return;
         case ST_CONFIRM:   cancelConfirm();                               return;
+        case ST_OPTIONS:   if (optReturn == ST_HIDDEN) gotoHidden(); else showMenu(); return;
         case ST_MENU:      if (depth > 0) { depth--; showMenu(); }        return;
         default:           showMenu();                                    return;  // WIFI/BLE/INFO/CONN/HIDDEN
     }
@@ -590,7 +647,11 @@ void loop() {
             } else if (st == ST_HIDDEN) {
                 if (ty < 28) back();
                 else for (int i = 0; i < HID_VISIBLE; i++)
-                    if (hidRowY[i] >= 0 && ty >= hidRowY[i] && ty < hidRowY[i] + HID_ROW_H) { hidSel = hidOff + i; askDeleteHidden(); break; }
+                    if (hidRowY[i] >= 0 && ty >= hidRowY[i] && ty < hidRowY[i] + HID_ROW_H) { hidSel = hidOff + i; openHiddenOptions(); break; }
+            } else if (st == ST_OPTIONS) {
+                if (ty < 28) back();
+                else for (int i = 0; i < optN; i++)
+                    if (ty >= optY[i] && ty < optY[i] + 34) { optSel = i; optActivate(); break; }
             } else if (st == ST_CONFIRM) {
                 if (ty >= okBtnY && ty < okBtnY + 40) doConfirm();
                 else if (ty >= cancelBtnY && ty < cancelBtnY + 40) cancelConfirm();
@@ -608,25 +669,29 @@ void loop() {
         case Buttons::UP:
             if (st == ST_MENU) { if (curSel() > 0) { int p = curSel(); curSel()--; menuScreen.repaint(p, curSel()); } }
             else if (st == ST_WIFI || st == ST_BLE) { if (off > 0) { off--; drawList(false); } }
-            else if (st == ST_CONN)   { if (connSel > 0) { connSel--; drawConnScreen(); } }
-            else if (st == ST_HIDDEN) { if (hidSel > 0)  { hidSel--;  drawHiddenScreen(); } }
+            else if (st == ST_CONN)    { if (connSel > 0) { int p = connSel; connSel--; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
+            else if (st == ST_OPTIONS) { if (optSel > 0)  { int p = optSel;  optSel--;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
+            else if (st == ST_HIDDEN)  { if (hidSel > 0)  { int p = hidSel; hidSel--; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
             break;
         case Buttons::DOWN:
             if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
-            else if (st == ST_WIFI || st == ST_BLE) { if (off < listCount() - 1) { off++; drawList(false); } }
-            else if (st == ST_CONN)   { if (connSel < connActN - 1) { connSel++; drawConnScreen(); } }
-            else if (st == ST_HIDDEN) { if (hidSel < revealer.count() - 1) { hidSel++; drawHiddenScreen(); } }
+            else if (st == ST_WIFI || st == ST_BLE) { int m = listCount() - UI_VISIBLE; if (m < 0) m = 0; if (off < m) { off++; drawList(false); } }
+            else if (st == ST_CONN)    { if (connSel < connActN - 1) { int p = connSel; connSel++; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
+            else if (st == ST_OPTIONS) { if (optSel < optN - 1)      { int p = optSel;  optSel++;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
+            else if (st == ST_HIDDEN)  { if (hidSel < revealer.count() - 1) { int p = hidSel; hidSel++; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
             break;
         case Buttons::SELECT:                    // middle = enter / confirm
             if (st == ST_MENU) activate();
             else if (st == ST_CONN) connActivate();
+            else if (st == ST_OPTIONS) optActivate();
             else if (st == ST_CONFIRM) doConfirm();
             break;
-        case Buttons::RIGHT:                      // right = action
+        case Buttons::RIGHT:                      // right = options / action
             if (st == ST_MENU) activate();
             else if (st == ST_CONN) connActivate();
+            else if (st == ST_OPTIONS) optActivate();
             else if (st == ST_CONFIRM) doConfirm();
-            else if (st == ST_HIDDEN) askDeleteHidden();
+            else if (st == ST_HIDDEN) openHiddenOptions();
             break;
         case Buttons::LEFT:
             back();
@@ -650,11 +715,11 @@ void loop() {
     // ---- live updates ----
     if (st == ST_WIFI && engine.wifiGen() != seenWifiGen) {
         seenWifiGen = engine.wifiGen();
-        if (off >= engine.wifiCount()) off = 0;
+        int m = engine.wifiCount() - UI_VISIBLE; if (m < 0) m = 0; if (off > m) off = m;
         drawList(true);
     } else if (st == ST_BLE && engine.bleGen() != seenBleGen) {
         seenBleGen = engine.bleGen();
-        if (off >= engine.bleCount()) off = 0;
+        int m = engine.bleCount() - UI_VISIBLE; if (m < 0) m = 0; if (off > m) off = m;
         drawList(true);
     }
 

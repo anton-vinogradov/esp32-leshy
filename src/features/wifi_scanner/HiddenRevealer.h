@@ -32,7 +32,7 @@ public:
 
 private:
     struct Entry { uint8_t bssid[6]; char ssid[33]; };
-    static const int MAX = 32;
+    static const int MAX = 128;              // dense neighbourhoods have many hidden APs
     Entry             ent_[MAX];
     int               n_ = 0;
     volatile bool     dirty_ = false;               // new name captured, not yet persisted
