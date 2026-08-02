@@ -253,7 +253,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE, M_PORTAL, M_GEN };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -279,6 +279,8 @@ static const MenuItem BLE_I[] = {
 };
 static const MenuItem SUB_I[] = {
     {"Spectrum", "Sub-GHz waterfall (CC1101)", "Спектр", "Водопад Sub-GHz (CC1101)", K_FEAT, F_SUBSPECTRUM},
+    {"Test TX",  "Transmit a test signal",     "Тест-передача", "Тестовый сигнал в эфир", K_FEAT, F_SUBTX},
+    {"TX power", "Sub-GHz radiation power",    "Мощность TX",   "Мощность излучения",     K_FEAT, F_SUBPOWER},
     {"Recorder", "Record RF signals (soon)",   "Запись", "Запись сигналов (скоро)",   K_FEAT, F_SUBGHZ_SOON},
 };
 static const MenuItem SET_I[] = {
@@ -316,7 +318,7 @@ static const Menu MENUS[] = {
     {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
     {"Wi-Fi",       "Wi-Fi",       WIFI_I, 5},
     {"BLE",         "BLE",         BLE_I,  1},
-    {"Sub-GHz",     "Sub-GHz",     SUB_I,  2},
+    {"Sub-GHz",     "Sub-GHz",     SUB_I,  4},
     {"Settings",    "Настройки",   SET_I,  6},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 3},
@@ -327,7 +329,7 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -1399,6 +1401,74 @@ static void subTick() {
     wfPushRow(row);
 }
 
+// ---- Sub-GHz test transmitter (CC1101) ----
+// One CC1101 → pure TX, so it can't watch its own signal — verify on an external RX.
+// RIGHT cycles the band, the middle key toggles TX; the sub-GHz antenna LED goes yellow.
+static const uint8_t CC_PA[]     = { 0xC0, 0x84, 0x60, 0x34, 0x1D };   // PATABLE presets, max→min
+static const int8_t  CC_PA_DBM[] = {   10,    5,    0,   -6,  -15 };   // approx dBm (433 MHz)
+static const int     CC_PA_N     = sizeof(CC_PA) / sizeof(CC_PA[0]);
+static int  subPwrIdx = 0;                          // 0 = max
+static bool subTxOn   = false;
+
+static void saveSubPower(int idx) { Preferences p; p.begin("leshy", false); p.putUChar("cc_pwr_i", (uint8_t)idx); p.end(); }
+static int  loadSubPower() { Preferences p; p.begin("leshy", true); int v = p.getUChar("cc_pwr_i", 0); p.end(); return (v >= 0 && v < CC_PA_N) ? v : 0; }
+
+// Valid TX frequency for the current band: the band centre, unless it lands in a
+// CC1101 tuning gap (the chip only reaches 300-348 / 387-464 / 779-928 MHz — e.g. the
+// "full 300-928" band centre is 614 MHz, unusable) — then fall back to 433.92 MHz.
+static uint32_t subTxFreqKHz() {
+    uint32_t f = Cc1101Spectrum::bandCenterKHz(cc.bandInfo());
+    bool ok = (f >= 300000 && f <= 348000) || (f >= 387000 && f <= 464000) || (f >= 779000 && f <= 928000);
+    return ok ? f : 433920;
+}
+
+static void subTxApply() {                          // (re)tune TX to a valid frequency at the set power
+    cc.setTxPower(CC_PA[subPwrIdx]);
+    cc.beginTx(subTxFreqKHz());
+}
+
+static void drawSubTxScreen() {
+    const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f), red = tft.color565(0xff, 0x5a, 0x32);
+    const Cc1101Spectrum::Band& b = cc.bandInfo();
+    uint32_t fk = subTxFreqKHz();                   // actual TX freq (band centre, or 433.92 for the "full" band)
+    uiHeaderRu(i18n::tr("Sub-GHz TX", "Тест-передача"), "CC1101");
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    tft.setTextDatum(TL_DATUM);
+    fontSmall();
+    tft.setTextColor(white, bg); tft.drawString(i18n::tr("Band:", "Диапазон:"), 10, 50);
+    tft.setTextColor(gold, bg);  tft.drawString(i18n::isRu() ? b.ru : b.en, 96, 50);
+    tft.setTextColor(white, bg); tft.drawString(i18n::tr("Freq:", "Частота:"), 10, 80);
+    char fs[24]; snprintf(fs, sizeof(fs), "%lu.%02lu MHz", (unsigned long)(fk / 1000), (unsigned long)((fk % 1000) / 10));
+    tft.setTextColor(gold, bg);  tft.drawString(fs, 96, 80);
+    tft.setTextColor(white, bg); tft.drawString(i18n::tr("Power:", "Мощность:"), 10, 110);
+    char ps[16]; snprintf(ps, sizeof(ps), "%d dBm", CC_PA_DBM[subPwrIdx]);
+    tft.setTextColor(gold, bg);  tft.drawString(ps, 96, 110);
+    fontBig();
+    if (subTxOn) { tft.setTextColor(red, bg);  tft.drawString(i18n::tr("TRANSMITTING", "ПЕРЕДАЮ"), 10, 152); }
+    else         { tft.setTextColor(gold, bg); tft.drawString(i18n::tr("Ready", "Готов"), 10, 152); }
+    fontSmall(); tft.setTextColor(white, bg);
+    tft.drawString(i18n::tr("Verify on an external RX.", "Проверяй внешним приёмником."), 10, 194);
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
+               subTxOn ? (i18n::isRu() ? "OK стоп · ▶ бэнд" : "OK stop · ▶ band")
+                       : (i18n::isRu() ? "OK старт · ▶ бэнд" : "OK start · ▶ band"));
+    fontOff();
+}
+
+static uint8_t subPowerCycle() {                    // max → … → min → wrap; persists; applied to the chip
+    subPwrIdx = (subPwrIdx + 1) % CC_PA_N;
+    cc.setTxPower(CC_PA[subPwrIdx]);
+    saveSubPower(subPwrIdx);
+    return CC_PA[subPwrIdx];
+}
+
+static void drawSubPowerInfo() {
+    infoTitle = i18n::tr("Sub-GHz TX power", "Мощность Sub-GHz");
+    infoBody  = String((int)CC_PA_DBM[subPwrIdx]) + i18n::tr(" dBm", " дБм") + (subPwrIdx == 0 ? i18n::tr(" (max)", " (макс)") : "");
+    infoNote  = i18n::tr("Approx power of the Sub-GHz test signal (CC1101, ~10 mW max). Own equipment only.",
+                         "Примерная мощность тестового сигнала Sub-GHz (CC1101, макс ~10 мВт). Только своё железо.");
+    infoAction = F_SUBPOWER; st = ST_INFO; drawInfo();
+}
+
 // ---- Wi-Fi scan selection + per-network options ----
 static void ensureWifiVisible() {
     int n = engine.wifiCount();
@@ -1561,6 +1631,7 @@ static void back() {
         case ST_CHANNELS:  airtime.stop(); showMenu();                     return;
         case ST_SPECTRUM:  spectrumStop(); showMenu();                     return;
         case ST_SUBSPECTRUM: subStop(); showMenu();                        return;
+        case ST_SUBTX:     subTxOn = false; cc.end(); showMenu();          return;
         case ST_POLITE:    portal.stop(); showMenu();                      return;
         case ST_NETINFO:   gotoWifi();                                     return;
         case ST_OTA:       if (ota.busy()) return;   // checking or downloading — stay put
@@ -1580,6 +1651,7 @@ static void launch(int feat) {
     if (st == ST_CHANNELS)  airtime.stop();        // also promiscuous
     if (st == ST_SPECTRUM)  spectrumStop();        // release NRF24
     if (st == ST_SUBSPECTRUM) subStop();           // release CC1101
+    if (st == ST_SUBTX)     { subTxOn = false; cc.end(); }   // stop TX + release CC1101
     if (st == ST_POLITE)    portal.stop();         // drop the captive-portal SoftAP
     if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
     engine.pause();                                // scanning is off unless the target feature turns it back on
@@ -1632,6 +1704,12 @@ static void launch(int feat) {
                             else { infoTitle = i18n::tr("Sub-GHz Spectrum", "Спектр Sub-GHz"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
                                    infoNote = i18n::tr("This build expects a CC1101 sub-GHz module.", "Нужен модуль CC1101."); st = ST_INFO; drawInfo(); }
                             break;
+        case F_SUBTX:       engine.pause(); subTxOn = false;
+                            if (cc.begin()) { cc.setBand(2); st = ST_SUBTX; drawSubTxScreen(); }   // default to the 433 band
+                            else { infoTitle = i18n::tr("Sub-GHz TX", "Тест-передача"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
+                                   infoNote = i18n::tr("This build expects a CC1101 sub-GHz module.", "Нужен модуль CC1101."); st = ST_INFO; drawInfo(); }
+                            break;
+        case F_SUBPOWER:    drawSubPowerInfo(); break;
         case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();
                             tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); break;
         case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
@@ -1691,10 +1769,12 @@ static void onKey(int ev) {
             else if (st == ST_OTA) otaActivate();
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_SPECTRUM && spLab) spToggleArm();   // arm/disarm the caret channel for TX noise
+            else if (st == ST_SUBTX) { subTxOn = !subTxOn; if (subTxOn) subTxApply(); else cc.endTx(); drawSubTxScreen(); }
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
             else if (st == ST_INFO && infoAction == F_TXMODE)    { txModeCycle();          drawTxModeInfo(); }
+            else if (st == ST_INFO && infoAction == F_SUBPOWER)  { subPowerCycle();        drawSubPowerInfo(); }
             break;
         case Buttons::RIGHT:                      // right = options / action
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
@@ -1710,12 +1790,14 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN) openHiddenOptions();
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_SUBSPECTRUM) { cc.setBand(cc.band() + 1); drawSubScreen(); }   // cycle the displayed band
+            else if (st == ST_SUBTX) { cc.setBand(cc.band() + 1); if (subTxOn) subTxApply(); drawSubTxScreen(); }   // cycle the TX band
             else if (st == ST_SPECTRUM && spLab) spToggleTx();    // Lab: start/stop transmitting noise into the armed channels
             else if (st == ST_SPECTRUM)          spToggleView();  // passive: flip occupancy <-> traffic view
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
             else if (st == ST_INFO && infoAction == F_TXMODE)    { txModeCycle();          drawTxModeInfo(); }
+            else if (st == ST_INFO && infoAction == F_SUBPOWER)  { subPowerCycle();        drawSubPowerInfo(); }
             break;
         case Buttons::LEFT:
             back();
@@ -1817,6 +1899,7 @@ static void serialControl() {
                 if (st == ST_CHANNELS)    airtime.stop();
                 if (st == ST_SPECTRUM)    spectrumStop();      // also stops any TX carrier
                 if (st == ST_SUBSPECTRUM) subStop();
+                if (st == ST_SUBTX)     { subTxOn = false; cc.end(); }
                 if (st == ST_POLITE)      portal.stop();
                 if (st == ST_PROVISION)   net.stopProvision();
                 engine.pause();
@@ -1827,6 +1910,7 @@ static void serialControl() {
                                                if (st == ST_CHANNELS) airtime.stop();
                                                if (st == ST_SPECTRUM) spectrumStop();
                                                if (st == ST_SUBSPECTRUM) subStop();
+                                               if (st == ST_SUBTX) { subTxOn = false; cc.end(); }
                                                if (st == ST_POLITE) portal.stop();
                                                if (st == ST_PROVISION) net.stopProvision();
                                                depth = 0; showMenu(); }
@@ -1858,6 +1942,7 @@ void setup() {
     nrf.setTxPower(loadTxPower());    // apply the saved Spectrum TX power (default max)
     nrf.setTxListenSelf(loadTxMode()); // apply the saved TX mode (Verify keeps the waterfall live)
     spTraffic = loadSpView();          // apply the saved spectrum view (occupancy / traffic)
+    subPwrIdx = loadSubPower(); cc.setTxPower(CC_PA[subPwrIdx]);   // saved Sub-GHz TX power (default max)
     if (!legalSeen()) { st = ST_LANGPICK; drawLangPick(); }   // first run: language, then the notice
     else showMenu();
 }
@@ -1930,7 +2015,10 @@ void loop() {
                                                    : StatusLeds::IDLE);
     // An antenna emitting noise (spectrum TX) lights its own LED yellow: NRF slot i sits
     // under LED i+1 (LED 0 is the sub-GHz antenna), so shift the slot mask up by one.
-    leds.setTx((st == ST_SPECTRUM && nrf.txActive()) ? (uint8_t)(nrf.txSlotMask() << 1) : 0);
+    uint8_t txLeds = (st == ST_SPECTRUM && nrf.txActive()) ? (uint8_t)(nrf.txSlotMask() << 1)
+                   : (st == ST_SUBTX && subTxOn)           ? (uint8_t)0x01     // sub-GHz antenna = LED 0
+                                                           : 0;
+    leds.setTx(txLeds);
     leds.tick();
 
     // ---- deauth monitor: hop channels + refresh stats ----
@@ -1992,6 +2080,8 @@ void loop() {
     if (st == ST_SPECTRUM) spectrumTick();
     // Sub-GHz spectrum waterfall
     if (st == ST_SUBSPECTRUM) subTick();
+    // Sub-GHz test transmitter: blast a packet each loop while armed.
+    if (st == ST_SUBTX && subTxOn) cc.txBurst();
 
     if (millis() > 8000) ota.markHealthy();  // once the UI has clearly been up, confirm this image
 

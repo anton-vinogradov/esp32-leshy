@@ -12,7 +12,7 @@ static const uint32_t FXTAL_KHZ = 26000;   // 26 MHz crystal
 // CC1101 registers / strobes
 enum { REG_FREQ2 = 0x0D, REG_FREQ1 = 0x0E, REG_FREQ0 = 0x0F,
        REG_PARTNUM = 0x30, REG_VERSION = 0x31, REG_RSSI = 0x34, REG_MARCSTATE = 0x35 };
-enum { S_RES = 0x30, S_RX = 0x34, S_IDLE = 0x36, S_FRX = 0x3A };
+enum { S_RES = 0x30, S_TX = 0x35, S_RX = 0x34, S_IDLE = 0x36, S_FTX = 0x3B, S_FRX = 0x3A };
 static const uint8_t WRITE_BURST = 0x40, READ_SINGLE = 0x80, READ_BURST = 0xC0;
 
 // The RIGHT key cycles these: whole tunable span, then aimed technical bands.
@@ -51,6 +51,15 @@ void Cc1101Spectrum::writeReg(uint8_t addr, uint8_t val) {
     ccSpi.endTransaction();
 }
 
+void Cc1101Spectrum::writeBurst(uint8_t addr, const uint8_t* data, int len) {
+    ccSpi.beginTransaction(ccSet);
+    csLow();
+    ccSpi.transfer(addr | WRITE_BURST);
+    for (int i = 0; i < len; i++) ccSpi.transfer(data[i]);
+    csHigh();
+    ccSpi.endTransaction();
+}
+
 void Cc1101Spectrum::strobe(uint8_t cmd) {
     ccSpi.beginTransaction(ccSet);
     csLow();
@@ -77,7 +86,7 @@ void Cc1101Spectrum::configBaseRX() {
     writeReg(0x0B, 0x08);   // FSCTRL1 — IF
     writeReg(0x10, 0x8C);   // MDMCFG4 — CHANBW ~203 kHz, drate exp
     writeReg(0x11, 0x22);   // MDMCFG3 — drate mantissa (irrelevant for RSSI)
-    writeReg(0x12, 0x30);   // MDMCFG2 — 2-FSK, no sync needed
+    writeReg(0x12, 0x30);   // MDMCFG2 — ASK/OOK, no sync (RSSI-only, modulation irrelevant for RX)
     writeReg(0x18, 0x18);   // MCSM0 — FS_AUTOCAL when going IDLE->RX
     writeReg(0x19, 0x16);   // FOCCFG
     writeReg(0x1B, 0x43);   // AGCCTRL2
@@ -143,6 +152,42 @@ void Cc1101Spectrum::end() {
     strobe(S_IDLE);
     ccSpi.end();
     present_ = false;
+}
+
+// Configure TX: fixed-length OOK-keyed packets on freqKHz. FS_AUTOCAL (MCSM0 from
+// configBaseRX) calibrates on the IDLE->TX hop, so a fresh frequency settles. Modest
+// power — an own-equipment test signal, not a jammer.
+void Cc1101Spectrum::beginTx(uint32_t freqKHz) {
+    if (!present_) return;
+    strobe(S_IDLE);
+    tune(freqKHz);
+    writeReg(0x12, 0x30);   // MDMCFG2 — ASK/OOK, no sync (rolling payload → ~50% duty, noise-like)
+    writeReg(0x17, 0x30);   // MCSM1 — TXOFF_MODE = IDLE (so txBurst's wait-for-IDLE is well-defined)
+    writeReg(0x08, 0x00);   // PKTCTRL0 — fixed length, no CRC/whitening, FIFO mode
+    writeReg(0x06, 60);     // PKTLEN — 60-byte packets
+    writeReg(0x3E, txPwr_); // PATABLE[0] — user-set TX power (default ~max); OOK keys hw-off <-> this
+    txByte_ = 0;
+}
+
+// Send one 60-byte packet with a rolling payload (reads as noise on a spectrum). Call
+// repeatedly for a continuous-ish stream; each packet returns the chip to IDLE.
+void Cc1101Spectrum::txBurst() {
+    if (!present_) return;
+    strobe(S_FTX);                          // flush the TX FIFO
+    uint8_t buf[60];
+    for (int i = 0; i < 60; i++) buf[i] = txByte_++;
+    writeBurst(0x3F, buf, 60);              // load the TX FIFO
+    strobe(S_TX);
+    uint32_t t = micros();                  // wait until we actually ENTER TX (start state is IDLE too)
+    while ((readReg(REG_MARCSTATE) & 0x1F) != 0x13 && micros() - t < 3000) {}
+    t = micros();                           // then wait for the packet to drain back to IDLE
+    while ((readReg(REG_MARCSTATE) & 0x1F) != 0x01 && micros() - t < 20000) {}
+    strobe(S_IDLE);
+}
+
+void Cc1101Spectrum::endTx() {
+    if (!present_) return;
+    strobe(S_IDLE);
 }
 
 void Cc1101Spectrum::diag() {

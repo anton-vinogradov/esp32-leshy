@@ -33,11 +33,22 @@ public:
     // spread a sweep over many loop iterations so buttons stay responsive.
     uint8_t sampleBin(int i, int n);
 
+    // TX test signal (own-equipment). One CC1101 → pure transmitter: it can't watch its
+    // own signal (verify with an external receiver). beginTx tunes + configures TX,
+    // txBurst sends one packet-load (call repeatedly for a stream), endTx returns to idle.
+    void beginTx(uint32_t freqKHz);
+    void txBurst();
+    void endTx();
+    void    setTxPower(uint8_t patable) { txPwr_ = patable; }   // PATABLE[0] value; default max
+    uint8_t txPower() const { return txPwr_; }
+    static uint32_t bandCenterKHz(const Band& b) { return (b.loKHz + b.hiKHz) / 2; }
+
     void diag();                          // QA: reset + print PARTNUM/VERSION
 
 private:
     uint8_t readReg(uint8_t addr);        // status/config register read
     void    writeReg(uint8_t addr, uint8_t val);
+    void    writeBurst(uint8_t addr, const uint8_t* data, int len);
     void    strobe(uint8_t cmd);
     void    reset();
     void    configBaseRX();               // one-time RX/AGC/bandwidth setup
@@ -48,4 +59,6 @@ private:
     bool    present_ = false;
     uint8_t version_ = 0;
     int     band_    = 0;
+    uint8_t txByte_  = 0;                 // rolling payload byte → noise-like modulated TX
+    uint8_t txPwr_   = 0xC0;              // PATABLE[0] — default ~max (~+10 dBm / 10 mW)
 };
