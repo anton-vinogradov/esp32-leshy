@@ -18,7 +18,7 @@
 
 ## What is this?
 
-**ESP32-Leshy** is an independent, from-scratch firmware for the excellent **ESP32-DIV** wireless multitool by [CiferTech](https://github.com/cifertech/ESP32-DIV) — the same ESP32-S3 board with its display, NRF24, CC1101, RFID/NFC, GPS and IR modules.
+<img src="docs/caps/en-e.svg" alt="E" align="left" width="60" height="60">SP32-Leshy is an independent, from-scratch firmware for the excellent **ESP32-DIV** wireless multitool by [CiferTech](https://github.com/cifertech/ESP32-DIV) — the same ESP32-S3 board with its display, NRF24, CC1101, RFID/NFC, GPS and IR modules.
 
 CiferTech's **ESP32-DIV — both the board and its firmware — is a fantastic, generous open-source project**, and it's the whole reason this one can exist. ESP32-Leshy isn't a "better" replacement; it's a **different flavor** with its own personality:
 
@@ -30,11 +30,11 @@ If you enjoy ESP32-DIV, please **star and support the original first** — Leshy
 
 ## Why "Leshy"?
 
-The **Leshy** (Ле́ший) is a shapeshifting trickster spirit of the Slavic forest. He doesn't destroy — he *misleads*: he changes shape, mimics familiar voices, and **leads wanderers off the path**. That is exactly the vibe here: shapeshifting (spoofing), leading devices astray (redirects, evil-twin, captive portals), and playful mischief rather than brute-force destruction.
+<img src="docs/caps/en-w.svg" alt="W" align="left" width="60" height="60">andering the Slavic forest, the **Leshy** (Ле́ший) is a shapeshifting trickster spirit. He doesn't destroy — he *misleads*: he changes shape, mimics familiar voices, and **leads wanderers off the path**. That is exactly the vibe here: shapeshifting (spoofing), leading devices astray (redirects, evil-twin, captive portals), and playful mischief rather than brute-force destruction.
 
 ## Hardware
 
-Targets the **ESP32-DIV v2** platform (details in [docs/hardware.md](docs/hardware.md)):
+<img src="docs/caps/en-h.svg" alt="H" align="left" width="60" height="60">ome for Leshy is the **ESP32-DIV v2** platform (details in [docs/hardware.md](docs/hardware.md)):
 
 | Part | Role |
 |------|------|
@@ -69,7 +69,7 @@ A working, menu-driven firmware — highlights, all passive / own-equipment:
 - 🌍 **Laws differ by country and change over time** — it's on **you** to check and obey your own jurisdiction's rules. Don't assume; verify. Unsure → treat it as illegal and don't.
 - ⚖️ **All responsibility is yours alone.** The authors accept **no liability**. Software is "as is", no warranty.
 
-The current build is passive/defensive only. Any future **offensive tools (incl. jamming) will live behind a lock** that requires confirming, every time, that the gear is yours and that you comply with the law.
+<img src="docs/caps/en-a.svg" alt="A" align="left" width="60" height="60">t present, the build is passive/defensive only. Any future **offensive tools (incl. jamming) will live behind a lock** that requires confirming, every time, that the gear is yours and that you comply with the law.
 
 📜 Read the full notice — the **same text the firmware shows on first boot** — in **[DISCLAIMER.md](DISCLAIMER.md)**.
 
