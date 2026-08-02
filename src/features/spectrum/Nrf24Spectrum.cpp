@@ -95,9 +95,10 @@ void Nrf24Spectrum::setTxWifiMask(uint16_t wifiMask) {
     }
     for (int ch = 0; ch < CHANNELS; ch++) if (cov[ch]) txHop_[txHopN_++] = (uint8_t)ch;
 
-    // One module always sweeps so the waterfall stays live; the rest emit. With a lone
-    // module we can't do both at once, so sweep() time-slices it (txCount_ tracked as 1).
-    txCount_ = (active_ >= 2) ? (nSel < active_ - 1 ? nSel : active_ - 1) : 1;
+    // Проверка keeps one module on RX so the waterfall stays live; Максимум throws every
+    // module into TX (waterfall freezes). A lone module is time-sliced by sweep().
+    if (active_ >= 2) txCount_ = txListenSelf_ ? (nSel < active_ - 1 ? nSel : active_ - 1) : active_;
+    else              txCount_ = 1;
 
     // Antennas that will emit → a stable LED mask (steady yellow while armed), and arm
     // the reserved carriers now. A lone module is time-sliced in sweep() but still counts.
@@ -115,11 +116,11 @@ void Nrf24Spectrum::setTxWifiMask(uint16_t wifiMask) {
 void Nrf24Spectrum::sweep(uint8_t out[CHANNELS]) {
     if (active_ <= 0) { for (int i = 0; i < CHANNELS; i++) out[i] = 0; return; }
 
-    // How many modules emit this sweep; the remainder (always >=1 when we RX) listen.
+    // How many modules emit this sweep; the remainder (>=1 in Проверка, 0 in Максимум) listen.
     int txNow = 0;
     if (txActive()) {
-        if (active_ >= 2) txNow = txCount_;
-        else { txPhase_ = !txPhase_; txNow = txPhase_ ? 1 : 0; }   // lone module: alternate RX / TX sweeps
+        if (txListenSelf_ && active_ == 1) { txPhase_ = !txPhase_; txNow = txPhase_ ? 1 : 0; }  // lone module: alternate RX/TX
+        else txNow = txCount_;
     }
     const int rxN = active_ - txNow;
 

@@ -44,6 +44,11 @@ public:
     uint8_t txPower() const { return txPwr_; }
     static int txPowerDbm(uint8_t bits) { return -18 + (int)(bits >> 1) * 6; }   // 00→-18 · 02→-12 · 04→-6 · 06→0
 
+    // "Listen to self": keep one module on RX so the waterfall stays live (Проверка), or
+    // throw every module into TX for maximum output while nothing receives (Максимум).
+    void setTxListenSelf(bool v) { txListenSelf_ = v; }
+    bool txListenSelf() const { return txListenSelf_; }
+
     static int wifiCenterNrfCh(int wifiCh) { return wifiCh == 14 ? 84 : 12 + (wifiCh - 1) * 5; }
 
 private:
@@ -61,6 +66,7 @@ private:
 
     uint16_t txWifiMask_ = 0;              // armed Wi-Fi channels (bit 1..13); 0 = TX off
     uint8_t  txPwr_      = 0x06;           // RF_PWR bits — default 0 dBm (max); user-tunable in Settings
+    bool     txListenSelf_ = true;         // true = reserve one RX module (Проверка); false = all TX (Максимум)
     int      txCount_    = 0;              // modules dedicated to TX (rest sweep RX); 1 module → time-sliced
     uint8_t  txSlotMask_ = 0;             // physical slots emitting this sweep (for LEDs)
     uint8_t  txHop_[CHANNELS];             // distinct NRF channels the carrier hops through

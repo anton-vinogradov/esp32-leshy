@@ -251,15 +251,16 @@ static void openNetOptions();    // RIGHT on a scan row -> per-network options
 static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
-enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_LANG_EN, F_LANG_RU };
+enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
-    {"Wi-Fi",    "Scan networks",            "Wi-Fi",     "Сканирование сетей",       K_SUB, M_WIFI},
-    {"BLE",      "Bluetooth devices & tags", "BLE",       "Устройства и метки",       K_SUB, M_BLE},
-    {"Sub-GHz",  "315/433/868 MHz radio",    "Sub-GHz",   "Радио 315/433/868 МГц",    K_SUB, M_SUBGHZ},
-    {"Settings", "Language, touch, about",   "Настройки", "Язык, тач, о девайсе",     K_SUB, M_SETTINGS},
+    {"Wi-Fi",       "Scan networks",            "Wi-Fi",       "Сканирование сетей",       K_SUB, M_WIFI},
+    {"BLE",         "Bluetooth devices & tags", "BLE",         "Устройства и метки",       K_SUB, M_BLE},
+    {"Sub-GHz",     "315/433/868 MHz radio",    "Sub-GHz",     "Радио 315/433/868 МГц",    K_SUB, M_SUBGHZ},
+    {"Laboratory",  "Experimental — transmits", "Лаборатория", "Эксперименты — эфир",      K_SUB, M_LAB},
+    {"Settings",    "Language, touch, about",   "Настройки",   "Язык, тач, о девайсе",     K_SUB, M_SETTINGS},
 };
 static const MenuItem WIFI_I[] = {
     {"Wi-Fi Scan",    "Signal, channel, lock", "Скан Wi-Fi",    "Сигнал, канал, шифр",   K_FEAT, F_WIFI_SCAN},
@@ -284,23 +285,29 @@ static const MenuItem SET_I[] = {
     {"Language",        "Interface language",      "Язык",        "Язык интерфейса",       K_SUB,  M_LANG},
     {"Status LEDs",     "Brightness / off",        "Светодиоды",  "Яркость / выкл",        K_FEAT, F_LEDS},
     {"Screen light",    "Screen brightness",       "Яркость экрана", "Подсветка дисплея",   K_FEAT, F_BACKLIGHT},
-    {"TX power",        "Spectrum noise strength", "Мощность TX", "Сила шума спектра",      K_FEAT, F_TXPOWER},
     {"Calibrate touch", "Redo screen calibration", "Калибровка",  "Перекалибровать экран", K_FEAT, F_RECAL},
     {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
     {"Responsible use", "Legal terms — read it",   "Ответственность", "Правила — прочти",  K_FEAT, F_LEGAL},
+};
+// Laboratory — experimental tools that TRANSMIT. Split out so the passive screens stay clean.
+static const MenuItem LAB_I[] = {
+    {"Noise gen 2.4G",  "Inject noise into channels", "Генератор шума 2.4", "Шум в выбранные каналы", K_FEAT, F_NOISEGEN},
+    {"TX mode",         "Verify / Maximum",           "Режим передачи",     "Проверка / Максимум",    K_FEAT, F_TXMODE},
+    {"TX power",        "Radiation power",            "Мощность TX",        "Мощность излучения",     K_FEAT, F_TXPOWER},
 };
 static const MenuItem LANG_I[] = {
     {"English", "", "English", "", K_FEAT, F_LANG_EN},
     {"Русский", "", "Русский", "", K_FEAT, F_LANG_RU},
 };
 static const Menu MENUS[] = {
-    {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
+    {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 5},
     {"Wi-Fi",       "Wi-Fi",       WIFI_I, 4},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  2},
-    {"Settings",    "Настройки",   SET_I,  9},
+    {"Settings",    "Настройки",   SET_I,  8},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 2},
+    {"Laboratory",  "Лаборатория", LAB_I,  3},
 };
 
 // ---- navigation state ----
@@ -388,6 +395,29 @@ static void drawTxPowerInfo() {
     infoNote  = i18n::tr("Transmit power for the Spectrum noise test. Max = loudest, but can wash out the whole waterfall — lower it for a cleaner picture.",
                          "Мощность передачи шума в тесте Спектра. Максимум — громче, но может засветить весь водопад — снизь для чистой картинки.");
     infoAction = F_TXPOWER; st = ST_INFO; drawInfo();
+}
+
+// TX mode: Проверка (keep one antenna listening → live waterfall) vs Максимум (all antennas
+// transmit → louder, waterfall goes dark). Persisted; applied to the NRF24.
+static void saveTxMode(bool listenSelf) { Preferences p; p.begin("leshy", false); p.putBool("tx_self", listenSelf); p.end(); }
+static bool loadTxMode() { Preferences p; p.begin("leshy", true); bool v = p.getBool("tx_self", true); p.end(); return v; }
+
+static bool txModeCycle() {                  // toggle Проверка <-> Максимум; persists; applied to radio
+    bool v = !nrf.txListenSelf();
+    nrf.setTxListenSelf(v);
+    saveTxMode(v);
+    return v;
+}
+
+static void drawTxModeInfo() {
+    bool self = nrf.txListenSelf();
+    infoTitle = i18n::tr("TX mode", "Режим передачи");
+    infoBody  = self ? i18n::tr("Verify", "Проверка") : i18n::tr("Maximum", "Максимум");
+    infoNote  = self ? i18n::tr("One antenna keeps listening — you see the injected noise on the waterfall. Best for checking it works.",
+                                "Одна антенна слушает — свой шум виден на водопаде. Для проверки, что всё работает.")
+                     : i18n::tr("All antennas transmit — loudest output, but the waterfall goes dark (nothing is left to receive).",
+                                "Все антенны в эфир — максимум мощности, но водопад гаснет (принимать нечем).");
+    infoAction = F_TXMODE; st = ST_INFO; drawInfo();
 }
 
 static void drawProvisionScreen() {
@@ -1062,6 +1092,7 @@ static uint8_t  spGrid[SP_W];                                   // per-column Wi
 static uint16_t spTxMask = 0;                                   // armed Wi-Fi channels (bit 1..13)
 static int      spCursor = 6;                                  // Wi-Fi channel under the caret (1..13)
 static bool     spTxOn   = false;                              // master TX on/off
+static bool     spLab    = false;                              // true = Lab noise generator (TX controls); false = passive Spectrum
 static const uint16_t SP_BG = 0x0862;                          // near-black plot background (RGB565)
 // Only the used part of the band is shown, stretched to full width: NRF ch 2..84 =
 // 2402..2484 MHz covers all Wi-Fi (1..14) and Bluetooth. The dead ISM edges
@@ -1126,8 +1157,8 @@ static void spDrawAxis() {
         if (sx < 0 || sx >= SP_W) continue;
         int x = SP_X + sx;
         bool major = (w == 1 || w == 6 || w == 11);
-        uint16_t col = (spTxMask & (1 << w)) ? armed : (major ? gold : dim);
-        if (w == spCursor) tft.fillTriangle(x - 3, SP_Y + SP_H + 1, x + 3, SP_Y + SP_H + 1, x, SP_Y + SP_H + 7, caret);
+        uint16_t col = (spLab && (spTxMask & (1 << w))) ? armed : (major ? gold : dim);
+        if (spLab && w == spCursor) tft.fillTriangle(x - 3, SP_Y + SP_H + 1, x + 3, SP_Y + SP_H + 1, x, SP_Y + SP_H + 7, caret);
         tft.drawFastVLine(x, SP_Y + SP_H + 8, 3, col);
         tft.setTextColor(col, bg);
         tft.drawString(String(w), x, SP_Y + SP_H + (w & 1 ? 16 : 26), 1);     // odd row higher, even lower
@@ -1135,8 +1166,10 @@ static void spDrawAxis() {
 }
 
 static void spDrawFooter() {
-    // Only glyphs present in the tiny VLW subset (letters, space, ◀ ▶ ▼). ▲▼ move the
+    // Passive Spectrum just shows a legend; the Lab generator shows the TX controls.
+    // Only glyphs present in the tiny VLW subset (letters, space, ◀ ▶ ▼): ▲▼ move the
     // caret, the middle key (OK) arms the channel, ▶ starts/stops the noise.
+    if (!spLab) { uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::tr("energy", "энергия")); return; }
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
                spTxOn ? (i18n::isRu() ? "▶ стоп"           : "▶ stop")
                       : (i18n::isRu() ? "OK канал  ▶ шум"  : "OK chan  ▶ noise"));
@@ -1162,8 +1195,15 @@ static void spToggleTx() {
 
 static void drawSpectrumScreen() {
     const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f);
-    char hr[16]; snprintf(hr, sizeof(hr), "NRF24 x%d", nrf.modules());
-    uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), hr);
+    char hr[20];
+    if (spLab) {
+        snprintf(hr, sizeof(hr), "x%d %s", nrf.modules(),
+                 nrf.txListenSelf() ? i18n::tr("chk", "проба") : i18n::tr("max", "макс"));
+        uiHeaderRu(i18n::tr("Noise gen 2.4", "Генератор шума"), hr);
+    } else {
+        snprintf(hr, sizeof(hr), "NRF24 x%d", nrf.modules());
+        uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), hr);
+    }
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     wfLegend(bg, dim);
     tft.fillRect(SP_X, SP_Y, SP_W, SP_H, SP_BG);
@@ -1445,11 +1485,19 @@ static void launch(int feat) {
                             else { infoTitle = i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
         case F_SPECTRUM:    engine.pause();                 // NRF24 is a separate SPI radio; free the ESP radio's CPU load anyway
-                            spTxMask = 0; spTxOn = false; spCursor = 6;   // start with no noise armed
+                            spLab = false; spTxOn = false; spTxMask = 0;   // passive viewer — never transmits
                             if (nrf.begin()) { st = ST_SPECTRUM; drawSpectrumScreen(); }
                             else { infoTitle = i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
                                    infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
                             break;
+        case F_NOISEGEN:    engine.pause();
+                            spLab = true; spTxOn = false; spCursor = 6;
+                            spTxMask = (1 << 1) | (1 << 6) | (1 << 11);    // preset the non-overlapping channels, ready to fire
+                            if (nrf.begin()) { st = ST_SPECTRUM; drawSpectrumScreen(); }
+                            else { infoTitle = i18n::tr("Noise gen 2.4", "Генератор шума"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
+                                   infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
+                            break;
+        case F_TXMODE:      drawTxModeInfo(); break;
         case F_SUBSPECTRUM: engine.pause();
                             if (cc.begin()) { cc.setBand(0); st = ST_SUBSPECTRUM; drawSubScreen(); }
                             else { infoTitle = i18n::tr("Sub-GHz Spectrum", "Спектр Sub-GHz"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
@@ -1488,7 +1536,7 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN)  { if (hidSel > 0)  { int p = hidSel; hidSel--; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
             else if (st == ST_LEGAL)   { if (legOff > 0) { legOff -= 4; if (legOff < 0) legOff = 0; drawLegalScreen(); } }
             else if (st == ST_LANGPICK){ if (langPickSel > 0) { langPickSel--; drawLangPick(); } }
-            else if (st == ST_SPECTRUM){ if (spCursor > 1)  { spCursor--; spDrawAxis(); } }   // move the TX channel caret
+            else if (st == ST_SPECTRUM && spLab){ if (spCursor > 1)  { spCursor--; spDrawAxis(); } }   // move the TX channel caret
             break;
         case Buttons::DOWN:
             if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
@@ -1499,7 +1547,7 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN)  { if (hidSel < revealer.count() - 1) { int p = hidSel; hidSel++; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
             else if (st == ST_LEGAL)   { int m = legN - LEG_LINES; if (m < 0) m = 0; if (legOff < m) { legOff += 4; if (legOff > m) legOff = m; drawLegalScreen(); } }
             else if (st == ST_LANGPICK){ if (langPickSel < 1) { langPickSel++; drawLangPick(); } }
-            else if (st == ST_SPECTRUM){ if (spCursor < 13) { spCursor++; spDrawAxis(); } }   // move the TX channel caret
+            else if (st == ST_SPECTRUM && spLab){ if (spCursor < 13) { spCursor++; spDrawAxis(); } }   // move the TX channel caret
             break;
         case Buttons::SELECT:                    // middle = enter / confirm
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
@@ -1513,10 +1561,11 @@ static void onKey(int ev) {
             else if (st == ST_CONFIRM) doConfirm();
             else if (st == ST_OTA) otaActivate();
             else if (st == ST_WIFI) openNetOptions();
-            else if (st == ST_SPECTRUM) spToggleArm();   // arm/disarm the caret channel for TX noise
+            else if (st == ST_SPECTRUM && spLab) spToggleArm();   // arm/disarm the caret channel for TX noise
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
+            else if (st == ST_INFO && infoAction == F_TXMODE)    { txModeCycle();          drawTxModeInfo(); }
             break;
         case Buttons::RIGHT:                      // right = options / action
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
@@ -1532,10 +1581,11 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN) openHiddenOptions();
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_SUBSPECTRUM) { cc.setBand(cc.band() + 1); drawSubScreen(); }   // cycle the displayed band
-            else if (st == ST_SPECTRUM) spToggleTx();    // start/stop transmitting noise into the armed channels
+            else if (st == ST_SPECTRUM && spLab) spToggleTx();    // start/stop transmitting noise into the armed channels
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
+            else if (st == ST_INFO && infoAction == F_TXMODE)    { txModeCycle();          drawTxModeInfo(); }
             break;
         case Buttons::LEFT:
             back();
@@ -1580,6 +1630,7 @@ static void serialControl() {
             else if (!strcmp(buf, "ledbr")) { Serial.printf("[leds] brightness -> %u/255\n", leds.cycleBrightness()); continue; }
             else if (!strcmp(buf, "bl"))    { Serial.printf("[bl] backlight -> %u/255\n", uiBacklightCycle()); continue; }
             else if (!strcmp(buf, "txpwr")) { Serial.printf("[txpwr] -> %d dBm\n", Nrf24Spectrum::txPowerDbm(txPowerCycle())); continue; }
+            else if (!strcmp(buf, "txmode")){ Serial.printf("[txmode] -> %s\n", txModeCycle() ? "verify (listen)" : "maximum (all TX)"); continue; }
             else if (!strcmp(buf, "air"))   { uint16_t pm[14]; airtime.read(pm); Serial.printf("[air] run=%d ch=%d busy‰:", (int)airtime.isRunning(), (int)airtime.channel());
                                               for (int ch = 1; ch <= 13; ch++) Serial.printf(" %d:%u", ch, pm[ch]); Serial.println(); continue; }
             else if (!strcmp(buf, "nrfdiag")) { engine.pauseAndWait(); nrf.diag(); continue; }
@@ -1672,6 +1723,7 @@ void setup() {
     ota.begin(&engine, &net);        // OTA needs the radio (pauses scan) and the connection
     leds.begin();                    // status LEDs under the antennas
     nrf.setTxPower(loadTxPower());    // apply the saved Spectrum TX power (default max)
+    nrf.setTxListenSelf(loadTxMode()); // apply the saved TX mode (Verify keeps the waterfall live)
     if (!legalSeen()) { st = ST_LANGPICK; drawLangPick(); }   // first run: language, then the notice
     else showMenu();
 }
