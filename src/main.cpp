@@ -1082,7 +1082,8 @@ static void spectrumStop() { nrf.end(); }
 
 static void drawSpectrumScreen() {
     const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f), gold = tft.color565(0xff, 0xcf, 0x3f);
-    uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), "NRF24");
+    char hr[16]; snprintf(hr, sizeof(hr), "NRF24 x%d", nrf.modules());
+    uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), hr);
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     wfLegend(bg, dim);
     tft.fillRect(SP_X, SP_Y, SP_W, SP_H, SP_BG);
