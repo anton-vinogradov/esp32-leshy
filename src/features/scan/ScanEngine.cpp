@@ -35,6 +35,11 @@ void ScanEngine::resume() {
     paused_ = false;
 }
 
+// Safe only once the scan task is idle (pauseAndWait returned true) — otherwise
+// we'd tear the BLE stack down from under bs_.scan(). The OTA path guarantees
+// this by pausing the engine before it calls here.
+bool ScanEngine::releaseBleForOta() { return bs_.releaseForOta(); }
+
 void ScanEngine::taskLoop() {
     for (;;) {
         if (paused_) { idle_ = true; vTaskDelay(pdMS_TO_TICKS(50)); continue; }

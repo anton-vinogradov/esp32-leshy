@@ -24,6 +24,7 @@ public:
     bool pauseAndWait(uint32_t timeoutMs = 6000);  // pause AND wait until the radio is really free
     bool isIdle() const { return idle_; }
     void resume();                       // resume background scanning
+    bool releaseBleForOta();             // free BLE RAM for the OTA download — call ONLY after pauseAndWait() (scan task idle)
     void setMode(ScanMode m) { mode_ = m; }   // WIFI = refresh Wi-Fi fast (skip BLE)
     void attachRevealer(HiddenRevealer* r) { rev_ = r; }   // passively reveal hidden SSIDs
 

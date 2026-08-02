@@ -798,7 +798,19 @@ static void drawOtaScreen() {
     fontOff();
 }
 
-static void gotoOta() { ota.startCheck(); seenOtaGen = ota.gen(); seenOtaPhase = -1; st = ST_OTA; drawOtaScreen(); }
+static void gotoOta() {
+    // Reclaim BLE RAM up-front, before the version check — not just before the download.
+    // A BLE session leaves the stack resident; freeing it hands the allocator ~70 KB more
+    // room so the check's TLS can't fragment the heap below the two ~16 KB contiguous record
+    // buffers the download then needs (measured: post-check largest block 31 KB without this,
+    // 65 KB with it). The update flow ends in a reboot, so tearing BLE down here is safe;
+    // no-op if BLE never ran. Pause the scan first so we don't free BLE mid-scan.
+    engine.pauseAndWait();
+    if (engine.releaseBleForOta())
+        Serial.printf("[OTA] BLE freed before check: free=%u largest=%u\n",
+                      (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+    ota.startCheck(); seenOtaGen = ota.gen(); seenOtaPhase = -1; st = ST_OTA; drawOtaScreen();
+}
 
 static void otaActivate() {
     if (ota.phase() == OtaManager::AVAILABLE) ota.startUpdate();
@@ -1265,9 +1277,9 @@ static void serialControl() {
             else if (!strcmp(buf, "chan"))   launch(F_CHANNELS);
             else if (!strcmp(buf, "legal"))  launch(F_LEGAL);
             else if (!strcmp(buf, "legalreset")) { Preferences p; p.begin("leshy", false); p.remove("legal_ok"); p.end(); Serial.println("[cmd] legal flag cleared — reboot to see the gate"); }
-            else if (!strcmp(buf, "stat")) { Serial.printf("[stat] st=%d wifiGen=%u bleGen=%u scanIdle=%d heap=%u\n",
+            else if (!strcmp(buf, "stat")) { Serial.printf("[stat] st=%d wifiGen=%u bleGen=%u scanIdle=%d heap=%u largest=%u\n",
                                              (int)st, (unsigned)engine.wifiGen(), (unsigned)engine.bleGen(),
-                                             (int)engine.isIdle(), (unsigned)ESP.getFreeHeap()); continue; }
+                                             (int)engine.isIdle(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap()); continue; }
             else if (!strncmp(buf, "otafail", 7)) {            // QA: render each full-screen OTA error without a real failure
                 static const struct { OtaManager::Err e; int code; const char* d; OtaManager::Phase ph; } S[] = {
                     { OtaManager::E_NONET,     0,   "wifi not connected (wl=3)",              OtaManager::CHECKING },

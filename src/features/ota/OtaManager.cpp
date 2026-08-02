@@ -22,6 +22,14 @@ extern const uint8_t rootca_crt_bundle_end[]   asm("_binary_x509_crt_bundle_end"
 static const char* API =
     "https://api.github.com/repos/anton-vinogradov/esp32-leshy/releases/latest";
 
+// The download's TLS handshake keeps a full-size mbedTLS record buffer per direction;
+// CONFIG_MBEDTLS_SSL_MAX_CONTENT_LEN is 16 KB, so each is ~16.9 KB and must be one
+// contiguous block, and both are live at once. On a heap fragmented by a BLE session
+// the largest free BLOCK — not total free heap — is what decides whether the handshake
+// can even start, so gate on that. Below this, say "reboot first" instead of failing
+// later with a cryptic TLS "connection refused".
+static const size_t OTA_MIN_DL_BLOCK = 2 * (16384 + 2048) + 8192;   // ~44 KB: two record buffers + handshake slack
+
 static void parseVer(const char* v, int o[3]) {
     o[0] = o[1] = o[2] = 0;
     if (*v == 'v' || *v == 'V') v++;
@@ -128,7 +136,26 @@ void OtaManager::doCheck() {
 
 void OtaManager::doDownload() {
     set(DOWNLOADING); pct_ = 0;
-    if (!prep()) { fail(E_NONET); return; }
+    if (!prep()) { fail(E_NONET); return; }   // prep() paused the scan → the BLE stack is now safe to tear down
+
+    // Backstop: BLE is normally freed the moment the update screen opens (gotoOta), which
+    // is what keeps the heap unfragmented enough to reach this download. Cover any other
+    // path here too — freeing it now still hands back ~70 KB of headroom, and this path
+    // always ends in a reboot so it's safe. No-op (returns false) when already released.
+    if (eng_ && eng_->releaseBleForOta())
+        Serial.printf("[OTA] BLE released at download: free=%u largest=%u\n",
+                      (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+
+    // Honest gate: if the heap is still too fragmented to fit the two ~16 KB record
+    // buffers, tell the user to reboot instead of failing on the TLS handshake.
+    unsigned largest = ESP.getMaxAllocHeap();
+    if (largest < OTA_MIN_DL_BLOCK) {
+        char d[72];
+        snprintf(d, sizeof(d), "largest block %uK < %uK needed", largest / 1024,
+                 (unsigned)(OTA_MIN_DL_BLOCK / 1024));
+        Serial.printf("[OTA] download blocked: %s (free=%u)\n", d, (unsigned)ESP.getFreeHeap());
+        diag(0, d); fail(E_NOMEM); return;
+    }
 
     WiFiClientSecure c;
     c.setCACertBundle(rootca_crt_bundle_start, rootca_crt_bundle_end - rootca_crt_bundle_start);

@@ -14,8 +14,9 @@ struct BleDev {
 
 class BleScanner {
 public:
-    bool begin();
+    bool begin();                              // false if the stack can't come up (RAM released for OTA → reboot needed)
     int  scan(uint32_t seconds = 5);           // blocks for `seconds`
+    bool releaseForOta();                      // free BLE RAM for the OTA download; one-way (reboot to use BLE again)
     int  count() const { return count_; }
     const BleDev& at(int i) const { return devs_[i]; }
 

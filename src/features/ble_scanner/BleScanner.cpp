@@ -1,7 +1,10 @@
 #include "BleScanner.h"
 
-// Built-in Bluedroid BLE (part of the Arduino-ESP32 core) — chosen over
-// NimBLE-Arduino, whose 1.4.x line boot-loops on core 3.x / IDF 5.x.
+// Core's built-in BLE library (BLEDevice.h) — chosen over the external
+// NimBLE-Arduino, whose 1.4.x line boot-loops on core 3.x / IDF 5.x. In this
+// arduino-esp32 build the library is compiled on the NimBLE host (the core ships
+// no Bluedroid variant), so all teardown goes through the backend-agnostic
+// BLEDevice::deinit() rather than raw esp_bluedroid_*/esp_bt_* calls.
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
@@ -25,14 +28,26 @@ static String detectTracker(BLEAdvertisedDevice& d) {
 
 bool BleScanner::begin() {
     if (!inited_) {
-        BLEDevice::init("");
+        if (!BLEDevice::init("")) return false;   // e.g. RAM was handed to OTA — a reboot is needed before BLE works again
         inited_ = true;
     }
     return true;
 }
 
+// Hand the BLE stack (NimBLE host + BT controller) RAM back to the system heap so
+// a memory-hungry job can get a large contiguous block. One-way: BLEDevice::deinit(true)
+// calls btMemRelease(), so BLE can't be brought back up without a reboot — which is
+// exactly the OTA download path (it always ends in ESP.restart()). Must be called
+// only when the scan task is idle (nobody inside scan()).
+bool BleScanner::releaseForOta() {
+    if (!inited_) return false;      // BLE never came up this session → nothing to free
+    BLEDevice::deinit(true);         // stop host + controller, release BT memory
+    inited_ = false;
+    return true;
+}
+
 int BleScanner::scan(uint32_t seconds) {
-    begin();
+    if (!begin()) { count_ = 0; return 0; }   // BLE unavailable (released for OTA) — no devices, no crash
     BLEScan* scan = BLEDevice::getScan();
     scan->setActiveScan(true);
     scan->setInterval(100);
