@@ -77,6 +77,25 @@
     </ol>
   </div>
 
+  <div class="card">
+    <p data-l="ru" style="margin:0 0 8px"><b>⚠️ Появилось «Installation failed» / «Failed to initialize»?</b> Плата не вошла в режим прошивки сама — введи её вручную:</p>
+    <ol class="steps" data-l="ru">
+      <li>Кабель <b>USB-C с данными</b> (не «только зарядка»).</li>
+      <li>Закрой программы, которые держат порт: <b>монитор порта в IDE</b> (в CLion — вкладка Deploy/Monitor), Arduino, PlatformIO.</li>
+      <li>Введи плату в режим прошивки: <b>зажми BOOT</b> → <b>нажми RESET</b> → <b>отпусти обе</b>, затем снова «Установить» и выбери порт. (Либо держи BOOT нажатой в момент клика «Установить».)</li>
+      <li>BOOT и RESET — две маленькие кнопки <b>у модуля ESP32-S3 / рядом с USB</b>; это <b>не</b> кнопки навигации по меню.</li>
+      <li>Если порт не появляется в списке — поставь драйвер <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers">CP2102 (Silicon Labs)</a>.</li>
+    </ol>
+    <p data-l="en" style="margin:0 0 8px"><b>⚠️ Got "Installation failed" / "Failed to initialize"?</b> The board didn't enter flash mode on its own — do it by hand:</p>
+    <ol class="steps" data-l="en">
+      <li>Use a <b>USB-C data cable</b> (not charge-only).</li>
+      <li>Close anything holding the port: an <b>IDE serial monitor</b> (in CLion, the Deploy/Monitor tab), Arduino, PlatformIO.</li>
+      <li>Put the board into flash mode: <b>hold BOOT</b> → <b>press RESET</b> → <b>release both</b>, then click Install again and pick the port. (Or keep BOOT held while clicking Install.)</li>
+      <li>BOOT and RESET are the two small buttons <b>by the ESP32-S3 module / next to USB</b> — <b>not</b> the menu-navigation buttons.</li>
+      <li>If the port never appears, install the <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers">CP2102 (Silicon Labs) driver</a>.</li>
+    </ol>
+  </div>
+
   <div class="card warn">
     <p data-l="ru" style="margin:0">⚖️ <b>Только своё оборудование.</b> ESP32-Leshy — образовательный проект по исследованию РЧ. Применяй только к своим сетям и устройствам; законы разных стран различаются — проверь свои. Полные условия: <a href="https://github.com/anton-vinogradov/esp32-leshy/blob/main/DISCLAIMER.ru.md">DISCLAIMER</a>. При первом запуске устройство само покажет этот текст и попросит принять.</p>
     <p data-l="en" style="margin:0">⚖️ <b>Your own equipment only.</b> ESP32-Leshy is an educational RF-research project. Use it only on your own networks and devices; laws differ by country — check yours. Full terms: <a href="https://github.com/anton-vinogradov/esp32-leshy/blob/main/DISCLAIMER.md">DISCLAIMER</a>. On first boot the device shows this and asks you to accept.</p>
