@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-Leshy — веб-установщик</title>
+<link rel="icon" href="leshy.svg">
+<style>
+  :root { --parch:#e9dcbb; --ink:#2a2018; --deep:#6b4f2a; --gold:#c8952b; --leaf:#3f6b3a; --berry:#a33a2a; --bg:#141a12; --panel:#1c2418; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:#e8e4d8;
+         font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+         background-image:radial-gradient(1200px 500px at 50% -10%, #1e2a1c 0%, var(--bg) 60%); }
+  .wrap { max-width:760px; margin:0 auto; padding:24px 18px 64px; }
+  header { text-align:center; padding:8px 0 4px; }
+  header img { width:100%; max-width:560px; height:auto; border-radius:10px; }
+  h1 { font-family:Georgia,'Times New Roman',serif; color:var(--gold); font-size:30px; margin:18px 0 2px; letter-spacing:.5px; }
+  .sub { color:#b9c2ac; margin:0 0 18px; }
+  .lang { text-align:center; margin:6px 0 18px; }
+  .lang button { background:none; border:1px solid #3a463200; color:#9fb08f; cursor:pointer; font:inherit; padding:4px 10px; border-radius:8px; }
+  .lang button.on { color:var(--gold); border-color:var(--deep); background:#20281a; }
+  .card { background:var(--panel); border:1px solid #33412c; border-radius:14px; padding:22px; margin:16px 0; }
+  .install { text-align:center; padding:26px 22px; }
+  esp-web-install-button { --esp-tools-button-color:#101810; --esp-tools-button-text-color:#f4ecd6; }
+  .btn-fallback, esp-web-install-button::part(button) {
+    background:linear-gradient(#d8a83a,#b9821f); color:#231a08; border:none; border-radius:10px;
+    padding:12px 22px; font-size:17px; font-weight:700; cursor:pointer; }
+  .steps { counter-reset:s; list-style:none; padding:0; margin:8px 0 0; }
+  .steps li { counter-increment:s; position:relative; padding:6px 0 6px 40px; }
+  .steps li::before { content:counter(s); position:absolute; left:0; top:6px; width:26px; height:26px;
+    background:var(--deep); color:var(--parch); border-radius:50%; text-align:center; line-height:26px; font-weight:700; font-size:14px; }
+  .note { color:#c7cdb8; font-size:14.5px; }
+  .warn { border-left:3px solid var(--berry); background:#241614; padding:12px 14px; border-radius:8px; }
+  a { color:var(--gold); }
+  code { background:#0e140c; padding:1px 6px; border-radius:5px; color:#d8c58a; font-size:14px; }
+  footer { text-align:center; color:#8a9580; font-size:13.5px; margin-top:26px; }
+  [data-l]{ display:none; }
+  html[lang="ru"] [data-l="ru"], html[lang="en"] [data-l="en"] { display:revert; }
+  h1[data-l], .sub[data-l], li[data-l], .badge[data-l]{ }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="leshy.svg" alt="ESP32-Leshy">
+    <h1>ESP32-Leshy</h1>
+    <p class="sub" data-l="ru">Веб-установщик прошивки — залей на ESP32-DIV прямо из браузера</p>
+    <p class="sub" data-l="en">Web installer — flash ESP32-DIV straight from your browser</p>
+  </header>
+
+  <div class="lang">
+    <button id="bru" class="on" onclick="setLang('ru')">Русский</button>
+    <button id="ben" onclick="setLang('en')">English</button>
+  </div>
+
+  <div class="card install">
+    <esp-web-install-button manifest="./manifest.json">
+      <button slot="activate" class="btn-fallback" data-l="ru">⚡ Установить ESP32-Leshy</button>
+      <button slot="activate" class="btn-fallback" data-l="en">⚡ Install ESP32-Leshy</button>
+      <span slot="unsupported" class="warn" data-l="ru">Нужен Chrome, Edge или Opera на компьютере (Web Serial). Safari и телефоны не поддерживаются.</span>
+      <span slot="unsupported" class="warn" data-l="en">Needs desktop Chrome, Edge or Opera (Web Serial). Safari and phones are not supported.</span>
+      <span slot="not-allowed" class="warn" data-l="ru">Открой страницу по https.</span>
+      <span slot="not-allowed" class="warn" data-l="en">Open this page over https.</span>
+    </esp-web-install-button>
+    <p class="note" data-l="ru" style="margin-top:16px">Ставит последний релиз. После первой заливки обновления прилетают <b>по воздуху</b> (Настройки → Обновление).</p>
+    <p class="note" data-l="en" style="margin-top:16px">Flashes the latest release. After the first flash, updates arrive <b>over the air</b> (Settings → Update).</p>
+  </div>
+
+  <div class="card">
+    <ol class="steps">
+      <li data-l="ru">Подключи ESP32-DIV к компьютеру кабелем <b>USB-C</b> (кабель должен быть с данными, не «только зарядка»).</li>
+      <li data-l="ru">Нажми <b>«Установить»</b> и выбери последовательный порт устройства.</li>
+      <li data-l="ru">Согласись стереть и прошить. Через минуту устройство загрузится с ESP32-Leshy.</li>
+      <li data-l="en">Connect the ESP32-DIV to your computer with a <b>USB-C</b> data cable (not charge-only).</li>
+      <li data-l="en">Click <b>Install</b> and pick the device's serial port.</li>
+      <li data-l="en">Approve erase &amp; flash. In a minute the board boots ESP32-Leshy.</li>
+    </ol>
+  </div>
+
+  <div class="card warn">
+    <p data-l="ru" style="margin:0">⚖️ <b>Только своё оборудование.</b> ESP32-Leshy — образовательный проект по исследованию РЧ. Применяй только к своим сетям и устройствам; законы разных стран различаются — проверь свои. Полные условия: <a href="https://github.com/anton-vinogradov/esp32-leshy/blob/main/DISCLAIMER.ru.md">DISCLAIMER</a>. При первом запуске устройство само покажет этот текст и попросит принять.</p>
+    <p data-l="en" style="margin:0">⚖️ <b>Your own equipment only.</b> ESP32-Leshy is an educational RF-research project. Use it only on your own networks and devices; laws differ by country — check yours. Full terms: <a href="https://github.com/anton-vinogradov/esp32-leshy/blob/main/DISCLAIMER.md">DISCLAIMER</a>. On first boot the device shows this and asks you to accept.</p>
+  </div>
+
+  <footer>
+    <span data-l="ru">Железо — <a href="https://github.com/cifertech/ESP32-DIV">ESP32-DIV от CiferTech</a>. Прошивка — независимая, MIT.</span>
+    <span data-l="en">Hardware — <a href="https://github.com/cifertech/ESP32-DIV">ESP32-DIV by CiferTech</a>. Firmware — independent, MIT.</span>
+    <br><a href="https://github.com/anton-vinogradov/esp32-leshy">github.com/anton-vinogradov/esp32-leshy</a>
+  </footer>
+</div>
+
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js"></script>
+<script>
+  function setLang(l){ document.documentElement.lang = l;
+    document.getElementById('bru').classList.toggle('on', l==='ru');
+    document.getElementById('ben').classList.toggle('on', l==='en'); }
+  // default to browser language if English
+  if ((navigator.language||'').slice(0,2) === 'en') setLang('en');
+</script>
+</body>
+</html>

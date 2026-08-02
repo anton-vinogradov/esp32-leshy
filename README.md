@@ -12,6 +12,8 @@
 
 > 🛑 **Only your own equipment.** ESP32-Leshy is an **educational security-research** project. Use it **only** on networks, devices and radios you **own** or are **explicitly authorized in writing** to test. **Never** point these tools at anything that isn't yours — not a neighbor's Wi-Fi, not someone else's phone, not a stranger's alarm or car. Full terms: **[DISCLAIMER.md](DISCLAIMER.md)**.
 
+> ⚡ **[Flash it from your browser →](https://anton-vinogradov.github.io/esp32-leshy/)** — no toolchain, just Chrome/Edge + a USB-C cable. After the first flash, updates arrive over the air.
+
 > ⚠️ **Status: actively developed.** A working, menu-driven firmware with Wi-Fi and BLE tools already runs on real hardware; more features land regularly. Watch/star to follow along.
 
 ---

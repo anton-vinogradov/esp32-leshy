@@ -1,8 +1,12 @@
 name: release
 
 # Tag a commit v1.2.3 and push it: this builds the firmware with that version baked
-# in and attaches .pio/build/esp32-div/firmware.bin to the GitHub release, which the
-# device's in-app updater (Settings -> Update) then finds via /releases/latest.
+# in and attaches two artifacts to the GitHub release:
+#   - firmware.bin          the app image, used by the in-app OTA updater (Settings -> Update)
+#   - firmware.factory.bin  the merged bootloader+partitions+app, used by the web
+#                           installer (ESP Web Tools) for first-time flashing of a blank chip
+# The web installer points at /releases/latest/download/firmware.factory.bin, so keeping
+# that exact filename lets the installer always fetch the newest release.
 on:
   push:
     tags: ['v*']
@@ -35,8 +39,10 @@ jobs:
       - name: Build firmware
         run: pio run -e esp32-div
 
-      - name: Attach firmware.bin to the release
+      - name: Attach firmware to the release
         uses: softprops/action-gh-release@v2
         with:
-          files: .pio/build/esp32-div/firmware.bin
+          files: |
+            .pio/build/esp32-div/firmware.bin
+            .pio/build/esp32-div/firmware.factory.bin
           fail_on_unmatched_files: true

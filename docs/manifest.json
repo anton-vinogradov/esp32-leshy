@@ -1,0 +1,13 @@
+{
+  "name": "ESP32-Leshy",
+  "version": "latest",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "https://github.com/anton-vinogradov/esp32-leshy/releases/latest/download/firmware.factory.bin", "offset": 0 }
+      ]
+    }
+  ]
+}
