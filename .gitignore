@@ -16,7 +16,9 @@ build/
 # Editors
 .vscode/*
 !.vscode/extensions.json
-.idea/
+.idea/*
+!.idea/runConfigurations
+!.idea/runConfigurations/*
 *.swp
 
 # OS
