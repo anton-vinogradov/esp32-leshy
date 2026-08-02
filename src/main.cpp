@@ -17,6 +17,7 @@
 #include "features/net/NetManager.h"
 #include "features/input/Buttons.h"
 #include "features/input/Touch.h"
+#include "features/leds/StatusLeds.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -234,6 +235,7 @@ NetManager     net;
 HiddenRevealer revealer;
 OtaManager     ota;
 DeauthDetector detector;
+StatusLeds     leds;             // the four WS2812s under the antennas — shows what the radio is doing
 
 static void drawNetBadge();      // small "connected" mark in the header (defined below)
 static void gotoWifi();          // (re)enter the live Wi-Fi scan
@@ -243,7 +245,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -271,6 +273,8 @@ static const MenuItem SET_I[] = {
     {"Wi-Fi connect",   "Status, join, exit",      "Wi-Fi подключение", "Статус, вход, выход",   K_FEAT, F_CONN},
     {"Update",          "Update from GitHub",      "Обновление",        "Обновить с GitHub",     K_FEAT, F_OTA},
     {"Language",        "Interface language",      "Язык",        "Язык интерфейса",       K_SUB,  M_LANG},
+    {"Status LEDs",     "Brightness / off",        "Светодиоды",  "Яркость / выкл",        K_FEAT, F_LEDS},
+    {"Screen light",    "Screen brightness",       "Яркость экрана", "Подсветка дисплея",   K_FEAT, F_BACKLIGHT},
     {"Calibrate touch", "Redo screen calibration", "Калибровка",  "Перекалибровать экран", K_FEAT, F_RECAL},
     {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
     {"Responsible use", "Legal terms — read it",   "Ответственность", "Правила — прочти",  K_FEAT, F_LEGAL},
@@ -284,7 +288,7 @@ static const Menu MENUS[] = {
     {"Wi-Fi",       "Wi-Fi",       WIFI_I, 3},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
-    {"Settings",    "Настройки",   SET_I,  6},
+    {"Settings",    "Настройки",   SET_I,  8},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 2},
 };
@@ -1176,6 +1180,18 @@ static void launch(int feat) {
         case F_ABOUT:       st = ST_INFO; drawAboutScreen(); break;
         case F_LEGAL:       gotoLegal(false); break;
         case F_OTA:         gotoOta(); break;
+        case F_LEDS: {      uint8_t b = leds.cycleBrightness();
+                            infoTitle = i18n::tr("Status LEDs", "Светодиоды");
+                            infoBody  = b ? String(i18n::tr("Brightness ", "Яркость ")) + b + "/255"
+                                          : String(i18n::tr("Off", "Выключены"));
+                            infoNote  = i18n::tr("Press again to change. LEDs under the antennas show what the radio is doing.",
+                                                 "Нажми ещё раз для смены. Светодиоды под антеннами показывают работу радио.");
+                            st = ST_INFO; drawInfo(); break; }
+        case F_BACKLIGHT: { uint8_t v = uiBacklightCycle();
+                            infoTitle = i18n::tr("Screen light", "Яркость экрана");
+                            infoBody  = String(v * 100 / 255) + "%";
+                            infoNote  = i18n::tr("Press again to change.", "Нажми ещё раз для смены.");
+                            st = ST_INFO; drawInfo(); break; }
         case F_RECAL:       touchRecalibrate(); showMenu(); break;
         case F_LANG_EN:     i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
         case F_LANG_RU:     i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
@@ -1277,6 +1293,9 @@ static void serialControl() {
             else if (!strcmp(buf, "chan"))   launch(F_CHANNELS);
             else if (!strcmp(buf, "legal"))  launch(F_LEGAL);
             else if (!strcmp(buf, "legalreset")) { Preferences p; p.begin("leshy", false); p.remove("legal_ok"); p.end(); Serial.println("[cmd] legal flag cleared — reboot to see the gate"); }
+            else if (!strcmp(buf, "leds"))  { leds.selfTest(); continue; }                       // QA: all four pixels + their order
+            else if (!strcmp(buf, "ledbr")) { Serial.printf("[leds] brightness -> %u/255\n", leds.cycleBrightness()); continue; }
+            else if (!strcmp(buf, "bl"))    { Serial.printf("[bl] backlight -> %u/255\n", uiBacklightCycle()); continue; }
             else if (!strcmp(buf, "stat")) { Serial.printf("[stat] st=%d wifiGen=%u bleGen=%u scanIdle=%d heap=%u largest=%u\n",
                                              (int)st, (unsigned)engine.wifiGen(), (unsigned)engine.bleGen(),
                                              (int)engine.isIdle(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap()); continue; }
@@ -1315,6 +1334,7 @@ void setup() {
     Serial.begin(115200);
     delay(200);
     displayInit();
+    uiBacklightBegin();              // apply saved screen brightness before anything is drawn
     BootScreen().show();
     delay(1500);
     i18n::set(loadLang());
@@ -1326,6 +1346,7 @@ void setup() {
     engine.attachRevealer(&revealer);// passively reveal hidden SSIDs during Wi-Fi scans
     engine.begin();                  // background scan task
     ota.begin(&engine, &net);        // OTA needs the radio (pauses scan) and the connection
+    leds.begin();                    // status LEDs under the antennas
     if (!legalSeen()) { st = ST_LANGPICK; drawLangPick(); }   // first run: language, then the notice
     else showMenu();
 }
@@ -1385,6 +1406,17 @@ void loop() {
     // ---- keypad + serial remote ----
     onKey(buttons.poll());
     serialControl();
+
+    // ---- status LEDs: derive "what the radio is doing" from one place, so no
+    //      screen transition can forget to update them ----
+    leds.set(ota.busy()                            ? StatusLeds::OTA
+           : st == ST_PROVISION                    ? StatusLeds::PORTAL
+           : st == ST_DEAUTH                       ? StatusLeds::PROMISC
+           : (st == ST_WIFI || st == ST_CHANNELS)  ? StatusLeds::WIFI_SCAN
+           : st == ST_BLE                          ? StatusLeds::BLE_SCAN
+           : (st == ST_OTA && ota.phase() == OtaManager::FAILED) ? StatusLeds::ERR
+                                                   : StatusLeds::IDLE);
+    leds.tick();
 
     // ---- deauth monitor: hop channels + refresh stats ----
     if (st == ST_DEAUTH) {

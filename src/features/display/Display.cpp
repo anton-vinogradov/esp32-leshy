@@ -1,12 +1,43 @@
 #include "Display.h"
 #include "font_ru_small.h"
 
+#include <Preferences.h>
+
 TFT_eSPI tft;
+
+// Backlight on GPIO7 for ESP32-DIV v2 (CiferTech BoardConfig). arduino-esp32 3.x
+// LEDC API: ledcAttach(pin, freq, res) then ledcWrite(pin, duty).
+static const uint8_t  BL_PIN      = 7;
+static const uint8_t  BL_LEVELS[] = { 255, 176, 112, 64, 24 };   // never fully off — a dark screen reads as "bricked"
+static uint8_t        s_bl        = 255;
 
 void displayInit() {
     tft.init();
     tft.setRotation(2);      // ESP32-DIV v2 panel is flipped vs rotation 0
 }
+
+void uiBacklightBegin() {
+    Preferences p;
+    p.begin("leshy", true);
+    s_bl = p.getUChar("bl", 255);   // default full = how the board looked before this was adjustable
+    p.end();
+    ledcAttach(BL_PIN, 5000, 8);
+    ledcWrite(BL_PIN, s_bl);
+}
+
+uint8_t uiBacklightCycle() {
+    uint8_t idx = 0;
+    for (uint8_t i = 0; i < sizeof(BL_LEVELS); i++) if (BL_LEVELS[i] == s_bl) { idx = i; break; }
+    s_bl = BL_LEVELS[(idx + 1) % sizeof(BL_LEVELS)];
+    ledcWrite(BL_PIN, s_bl);
+    Preferences p;
+    p.begin("leshy", false);
+    p.putUChar("bl", s_bl);
+    p.end();
+    return s_bl;
+}
+
+uint8_t uiBacklightLevel() { return s_bl; }
 
 uint16_t uiBg() { return tft.color565(0x10, 0x18, 0x12); }
 

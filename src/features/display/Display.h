@@ -17,6 +17,12 @@ uint16_t uiRssiColor(int rssi);
 void uiHeader(const char* title, const char* right);   // top bar
 void uiFooter(const char* hint);                        // bottom hint line
 
+// TFT backlight (PWM on the ESP32-DIV v2 backlight pin). Default is full — matching
+// how the board looked before this was adjustable — and the user can dim it down.
+void    uiBacklightBegin();     // attach PWM and apply the saved level
+uint8_t uiBacklightCycle();     // 100% -> 69% -> 44% -> 25% -> 9% -> wrap; persists; returns the 0..255 duty
+uint8_t uiBacklightLevel();     // current 0..255 duty
+
 // A reusable off-screen row sprite (240 x UI_ROW_H) — draw a list row into it
 // and pushSprite() it so rows update without flicker.
 TFT_eSprite& uiRow();
