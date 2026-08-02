@@ -5,7 +5,7 @@
 // Release builds overwrite this whole file from the git tag (see the release workflow);
 // local dev builds fall back to these defaults.
 #ifndef LESHY_FW_VERSION
-#define LESHY_FW_VERSION "0.2.1"
+#define LESHY_FW_VERSION "0.5.0"
 #endif
 #ifndef LESHY_FW_DATE
 #define LESHY_FW_DATE "dev"

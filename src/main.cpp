@@ -251,7 +251,7 @@ static void openNetOptions();    // RIGHT on a scan row -> per-network options
 static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
-enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB };
+enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE };
 enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
@@ -284,11 +284,15 @@ static const MenuItem SET_I[] = {
     {"Wi-Fi connect",   "Status, join, exit",      "Wi-Fi подключение", "Статус, вход, выход",   K_FEAT, F_CONN},
     {"Update",          "Update from GitHub",      "Обновление",        "Обновить с GitHub",     K_FEAT, F_OTA},
     {"Language",        "Interface language",      "Язык",        "Язык интерфейса",       K_SUB,  M_LANG},
+    {"Device",          "LEDs, screen, touch",     "Устройство",  "LED, экран, калибровка", K_SUB,  M_DEVICE},
+    {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
+    {"Responsible use", "Legal terms — read it",   "Ответственность", "Правила — прочти",  K_FEAT, F_LEGAL},
+};
+// Device settings — hardware knobs, split out of the main Settings list.
+static const MenuItem DEV_I[] = {
     {"Status LEDs",     "Brightness / off",        "Светодиоды",  "Яркость / выкл",        K_FEAT, F_LEDS},
     {"Screen light",    "Screen brightness",       "Яркость экрана", "Подсветка дисплея",   K_FEAT, F_BACKLIGHT},
     {"Calibrate touch", "Redo screen calibration", "Калибровка",  "Перекалибровать экран", K_FEAT, F_RECAL},
-    {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
-    {"Responsible use", "Legal terms — read it",   "Ответственность", "Правила — прочти",  K_FEAT, F_LEGAL},
 };
 // Laboratory — experimental tools that TRANSMIT. Under Wi-Fi (it's a 2.4 GHz lab).
 static const MenuItem LAB_I[] = {
@@ -304,10 +308,11 @@ static const Menu MENUS[] = {
     {"Wi-Fi",       "Wi-Fi",       WIFI_I, 5},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  2},
-    {"Settings",    "Настройки",   SET_I,  8},
+    {"Settings",    "Настройки",   SET_I,  6},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 3},
     {"Laboratory",  "Лаборатория", LAB_I,  2},
+    {"Device",      "Устройство",  DEV_I,  3},
 };
 
 // ---- navigation state ----
