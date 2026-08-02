@@ -6,7 +6,7 @@
     {
       "chipFamily": "ESP32-S3",
       "parts": [
-        { "path": "https://github.com/anton-vinogradov/esp32-leshy/releases/latest/download/firmware.factory.bin", "offset": 0 }
+        { "path": "firmware.factory.bin", "offset": 0 }
       ]
     }
   ]

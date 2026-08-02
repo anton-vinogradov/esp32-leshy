@@ -1,0 +1,47 @@
+name: pages
+
+# Publishes the web installer to GitHub Pages. The firmware.factory.bin is bundled
+# INTO the Pages site (same origin as manifest.json) because GitHub release-asset
+# hosting does not send CORS headers, so ESP Web Tools' browser fetch of a release
+# URL would be blocked. Runs on docs changes and whenever a firmware release is
+# published (to pick up the newest factory image).
+on:
+  push:
+    branches: [main]
+    paths: ['docs/**', '.github/workflows/pages.yml']
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble site (docs + latest firmware.factory.bin, same-origin)
+        run: |
+          mkdir -p _site
+          cp -r docs/* _site/
+          cp docs/.nojekyll _site/ 2>/dev/null || true
+          echo "Fetching latest firmware.factory.bin into the site (avoids CORS)..."
+          curl -fsSL -o _site/firmware.factory.bin \
+            https://github.com/anton-vinogradov/esp32-leshy/releases/latest/download/firmware.factory.bin
+          ls -la _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
