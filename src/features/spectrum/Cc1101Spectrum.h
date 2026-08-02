@@ -50,6 +50,9 @@ public:
     void beginCapture(uint32_t freqKHz);              // async OOK RX, GDO0 as data output
     int  captureRaw(uint16_t* durs, int maxN, uint32_t timeoutMs);   // returns pulse count (0 = nothing heard)
     void replayRaw(const uint16_t* durs, int n, uint32_t freqKHz);
+    void setCaptureThreshold(int dbm) { capThr_ = dbm; }   // carrier-sense floor (tune to reject noise)
+    void setModulation(bool fsk) { fsk_ = fsk; }           // false = OOK (remotes), true = 2-FSK (sensors)
+    void setInvert(bool inv) { inv_ = inv; }               // flip replay polarity
 
     void diag();                          // QA: reset + print PARTNUM/VERSION
 
@@ -70,4 +73,7 @@ private:
     uint8_t txByte_  = 0;                 // rolling payload byte → noise-like modulated TX
     uint8_t txPwr_   = 0xC0;              // PATABLE[0] — default ~max (~+10 dBm / 10 mW)
     int     capStartLevel_ = 1;           // GDO0 level of the captured burst's first pulse (for replay polarity)
+    int     capThr_  = -72;               // carrier-sense RSSI floor (dBm) for captureRaw
+    bool    fsk_     = false;             // TX/capture modulation: false OOK, true 2-FSK
+    bool    inv_     = false;             // invert replay polarity
 };

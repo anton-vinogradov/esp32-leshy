@@ -21,6 +21,7 @@
 #include "features/airtime/AirtimeMonitor.h"
 #include "features/spectrum/Nrf24Spectrum.h"
 #include "features/spectrum/Cc1101Spectrum.h"
+#include "features/subghz/SubCfg.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -243,6 +244,7 @@ AirtimeMonitor airtime;          // real per-channel airtime (promiscuous) for t
 Nrf24Spectrum  nrf;              // NRF24 raw 2.4GHz spectrum sniffer
 Cc1101Spectrum cc;              // CC1101 sub-GHz spectrum sniffer
 PolitePortal   portal;          // Lab captive-portal demo (own-named AP, consent button)
+SubCfg         subcfg;          // Sub-GHz settings captive portal
 
 static void drawNetBadge();      // small "connected" mark in the header (defined below)
 static void gotoWifi();          // (re)enter the live Wi-Fi scan
@@ -253,7 +255,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE, M_PORTAL, M_GEN };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_SUBCFG, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -329,7 +331,7 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -1413,13 +1415,39 @@ static bool subTxOn   = false;
 static void saveSubPower(int idx) { Preferences p; p.begin("leshy", false); p.putUChar("cc_pwr_i", (uint8_t)idx); p.end(); }
 static int  loadSubPower() { Preferences p; p.begin("leshy", true); int v = p.getUChar("cc_pwr_i", 0); p.end(); return (v >= 0 && v < CC_PA_N) ? v : 0; }
 
-// Valid TX frequency for the current band: the band centre, unless it lands in a
-// CC1101 tuning gap (the chip only reaches 300-348 / 387-464 / 779-928 MHz — e.g. the
-// "full 300-928" band centre is 614 MHz, unusable) — then fall back to 433.92 MHz.
+// Sub-GHz settings (set via the SubCfg phone portal, saved to NVS, applied by loadSubCfg).
+static uint32_t recWaitMs  = 30000;                 // recorder signal-wait timeout
+static uint32_t subFreqKHz = 0;                     // exact TX/capture freq override (0 = band centre)
+static int      recRepeats = 3;                     // replay repeat count
+static int      subCfgPhase = 0;                    // settings-portal screen phase: 0 waiting · 1 saved · 2 stopped
+
+static bool cc1101FreqOk(uint32_t f) {              // the chip only tunes these sub-bands
+    return (f >= 300000 && f <= 348000) || (f >= 387000 && f <= 464000) || (f >= 779000 && f <= 928000);
+}
+
+// TX/capture frequency: the exact override if set & tunable, else the band centre, else
+// 433.92 (the "full 300-928" centre is 614 MHz, inside a CC1101 gap).
 static uint32_t subTxFreqKHz() {
+    if (subFreqKHz && cc1101FreqOk(subFreqKHz)) return subFreqKHz;
     uint32_t f = Cc1101Spectrum::bandCenterKHz(cc.bandInfo());
-    bool ok = (f >= 300000 && f <= 348000) || (f >= 387000 && f <= 464000) || (f >= 779000 && f <= 928000);
-    return ok ? f : 433920;
+    return cc1101FreqOk(f) ? f : 433920;
+}
+
+static void loadSubCfg() {                          // read all Sub-GHz settings from NVS and apply
+    Preferences p; p.begin("leshy", true);
+    recWaitMs  = p.getUInt("rec_wait", 30000);
+    subFreqKHz = p.getUInt("sub_freq", 0);
+    recRepeats = p.getUChar("rep_n", 3);
+    int  thr   = p.getInt("cap_thr", -72);
+    bool fsk   = p.getUChar("sub_mod", 0) != 0;
+    bool inv   = p.getBool("sub_inv", false);
+    p.end();
+    if (recWaitMs < 3000 || recWaitMs > 300000) recWaitMs = 30000;   // guard corrupt/legacy NVS
+    if (recRepeats < 1 || recRepeats > 20) recRepeats = 3;
+    if (thr < -110 || thr > -30) thr = -72;
+    cc.setCaptureThreshold(thr);
+    cc.setModulation(fsk);
+    cc.setInvert(inv);
 }
 
 static void subTxApply() {                          // (re)tune TX to a valid frequency at the set power
@@ -1473,10 +1501,6 @@ static void drawSubPowerInfo() {
 static uint16_t recBuf[512];                        // captured OOK pulse durations (us)
 static int      recN = 0;                            // pulses in the last capture (0 = empty)
 static uint32_t recFreqKHz = 0;                      // frequency it was captured on (replay uses it)
-static uint32_t recWaitMs  = 30000;                  // how long to wait for a signal (settable via the portal)
-
-static void saveRecWait(uint32_t ms) { Preferences p; p.begin("leshy", false); p.putUInt("rec_wait", ms); p.end(); }
-static uint32_t loadRecWait() { Preferences p; p.begin("leshy", true); uint32_t v = p.getUInt("rec_wait", 30000); p.end(); return (v >= 3000 && v <= 300000) ? v : 30000; }
 
 static void drawSubRecScreen(const char* status = nullptr) {
     const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f), green = tft.color565(0x3f, 0xe0, 0x7a);
@@ -1496,10 +1520,11 @@ static void drawSubRecScreen(const char* status = nullptr) {
     else if (recN > 0) { char cs[28]; snprintf(cs, sizeof(cs), "%s%d", i18n::tr("Saved: ", "Записано: "), recN); tft.setTextColor(green, bg); tft.drawString(cs, 10, 118); }
     else { tft.setTextColor(white, bg); tft.drawString(i18n::tr("Empty", "Пусто"), 10, 118); }
     fontSmall(); tft.setTextColor(white, bg);
-    tft.drawString(i18n::tr("Own equipment only.", "Только своё железо."), 10, 158);
-    tft.drawString(i18n::tr("OK record", "OK запись"), 10, 182);
-    tft.drawString(i18n::tr("up replay", "вверх повтор"), 10, 204);
-    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "▶ бэнд" : "▶ band");
+    tft.drawString(i18n::tr("Own equipment only.", "Только своё железо."), 10, 152);
+    tft.drawString(i18n::tr("OK record", "OK запись"), 10, 174);
+    tft.drawString(i18n::tr("up replay", "вверх повтор"), 10, 196);
+    tft.drawString(i18n::tr("down band", "вниз бэнд"), 10, 218);
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "▶ настройки" : "▶ setup");
     fontOff();
 }
 
@@ -1516,8 +1541,29 @@ static void subReplay() {
     if (recN <= 0) return;
     drawSubRecScreen(i18n::tr("Replaying...", "Повтор…"));
     cc.setTxPower(CC_PA[subPwrIdx]);
-    cc.replayRaw(recBuf, recN, recFreqKHz);
+    for (int r = 0; r < recRepeats; r++) {          // remotes send the frame repeated — replay N times
+        cc.replayRaw(recBuf, recN, recFreqKHz);
+        delay(20);
+    }
     drawSubRecScreen();
+}
+
+static void drawSubCfgScreen() {
+    const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f);
+    uiHeaderRu(i18n::tr("Sub-GHz setup", "Настройки Sub-GHz"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    tft.setTextDatum(TL_DATUM);
+    fontSmall(); tft.setTextColor(white, bg);
+    tft.drawString(i18n::tr("1. Join this Wi-Fi:", "1. Подключись к сети:"), 10, 50);
+    tft.setTextColor(gold, bg);  tft.drawString(SubCfg::apName(), 10, 74);
+    tft.setTextColor(white, bg);
+    tft.drawString(i18n::tr("2. Set the fields, save.", "2. Задай поля, сохрани."), 10, 108);
+    fontBig();
+    if (!subcfg.isRunning()) { tft.setTextColor(tft.color565(0x3f, 0xe0, 0x7a), bg); tft.drawString(i18n::tr("Saved.", "Сохранено."), 10, 150); }
+    else if (subcfg.saved()) { tft.setTextColor(tft.color565(0x3f, 0xe0, 0x7a), bg); tft.drawString(i18n::tr("Got it!", "Принял!"), 10, 150); }
+    else { tft.setTextColor(gold, bg); tft.drawString(i18n::tr("Waiting...", "Жду…"), 10, 150); }
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
+    fontOff();
 }
 
 // ---- Wi-Fi scan selection + per-network options ----
@@ -1684,6 +1730,7 @@ static void back() {
         case ST_SUBSPECTRUM: subStop(); showMenu();                        return;
         case ST_SUBTX:     subTxOn = false; cc.end(); showMenu();          return;
         case ST_SUBREC:    cc.end(); showMenu();                           return;
+        case ST_SUBCFG:    subcfg.stop(); showMenu();                      return;
         case ST_POLITE:    portal.stop(); showMenu();                      return;
         case ST_NETINFO:   gotoWifi();                                     return;
         case ST_OTA:       if (ota.busy()) return;   // checking or downloading — stay put
@@ -1705,6 +1752,7 @@ static void launch(int feat) {
     if (st == ST_SUBSPECTRUM) subStop();           // release CC1101
     if (st == ST_SUBTX)     { subTxOn = false; cc.end(); }   // stop TX + release CC1101
     if (st == ST_SUBREC)    cc.end();              // release CC1101
+    if (st == ST_SUBCFG)    subcfg.stop();         // drop the settings SoftAP
     if (st == ST_POLITE)    portal.stop();         // drop the captive-portal SoftAP
     if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
     engine.pause();                                // scanning is off unless the target feature turns it back on
@@ -1768,6 +1816,10 @@ static void launch(int feat) {
                             else { infoTitle = i18n::tr("Sub-GHz Rec", "Запись Sub-GHz"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
                                    infoNote = i18n::tr("This build expects a CC1101 sub-GHz module.", "Нужен модуль CC1101."); st = ST_INFO; drawInfo(); }
                             break;
+        case F_SUBCFG:      engine.pauseAndWait();                 // settings portal owns the radio (SoftAP)
+                            if (subcfg.begin()) { subCfgPhase = 0; st = ST_SUBCFG; drawSubCfgScreen(); }
+                            else { infoTitle = i18n::tr("Sub-GHz setup", "Настройки Sub-GHz"); infoBody = i18n::tr("Failed to start", "Не удалось запустить"); infoNote = ""; st = ST_INFO; drawInfo(); }
+                            break;
         case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();
                             tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); break;
         case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
@@ -1814,6 +1866,7 @@ static void onKey(int ev) {
             else if (st == ST_LEGAL)   { int m = legN - LEG_LINES; if (m < 0) m = 0; if (legOff < m) { legOff += 4; if (legOff > m) legOff = m; drawLegalScreen(); } }
             else if (st == ST_LANGPICK){ if (langPickSel < 1) { langPickSel++; drawLangPick(); } }
             else if (st == ST_SPECTRUM && spLab){ if (spCursor < 13) { spCursor++; spDrawAxis(); } }   // move the TX channel caret
+            else if (st == ST_SUBREC) { cc.setBand(cc.band() + 1); recN = 0; drawSubRecScreen(); }   // down = cycle band (drops the capture)
             break;
         case Buttons::SELECT:                    // middle = enter / confirm
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
@@ -1851,7 +1904,7 @@ static void onKey(int ev) {
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_SUBSPECTRUM) { cc.setBand(cc.band() + 1); drawSubScreen(); }   // cycle the displayed band
             else if (st == ST_SUBTX) { cc.setBand(cc.band() + 1); if (subTxOn) subTxApply(); drawSubTxScreen(); }   // cycle the TX band
-            else if (st == ST_SUBREC) { cc.setBand(cc.band() + 1); recN = 0; drawSubRecScreen(); }   // cycle band (drops the capture — it was band-specific)
+            else if (st == ST_SUBREC) launch(F_SUBCFG);   // right = open the settings portal
             else if (st == ST_SPECTRUM && spLab) spToggleTx();    // Lab: start/stop transmitting noise into the armed channels
             else if (st == ST_SPECTRUM)          spToggleView();  // passive: flip occupancy <-> traffic view
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
@@ -1962,6 +2015,7 @@ static void serialControl() {
                 if (st == ST_SUBSPECTRUM) subStop();
                 if (st == ST_SUBTX)     { subTxOn = false; cc.end(); }
                 if (st == ST_SUBREC)      cc.end();
+                if (st == ST_SUBCFG)      subcfg.stop();
                 if (st == ST_POLITE)      portal.stop();
                 if (st == ST_PROVISION)   net.stopProvision();
                 engine.pause();
@@ -1974,6 +2028,7 @@ static void serialControl() {
                                                if (st == ST_SUBSPECTRUM) subStop();
                                                if (st == ST_SUBTX) { subTxOn = false; cc.end(); }
                                                if (st == ST_SUBREC) cc.end();
+                                               if (st == ST_SUBCFG) subcfg.stop();
                                                if (st == ST_POLITE) portal.stop();
                                                if (st == ST_PROVISION) net.stopProvision();
                                                depth = 0; showMenu(); }
@@ -2006,7 +2061,7 @@ void setup() {
     nrf.setTxListenSelf(loadTxMode()); // apply the saved TX mode (Verify keeps the waterfall live)
     spTraffic = loadSpView();          // apply the saved spectrum view (occupancy / traffic)
     subPwrIdx = loadSubPower(); cc.setTxPower(CC_PA[subPwrIdx]);   // saved Sub-GHz TX power (default max)
-    recWaitMs = loadRecWait();         // saved Sub-GHz recorder signal-wait timeout
+    loadSubCfg();                      // saved Sub-GHz recorder settings (wait/freq/threshold/repeats/mod/invert)
     if (!legalSeen()) { st = ST_LANGPICK; drawLangPick(); }   // first run: language, then the notice
     else showMenu();
 }
@@ -2070,7 +2125,7 @@ void loop() {
     // ---- status LEDs: derive "what the radio is doing" from one place, so no
     //      screen transition can forget to update them ----
     leds.set(ota.busy()                            ? StatusLeds::OTA
-           : (st == ST_PROVISION || (st == ST_POLITE && portal.isRunning())) ? StatusLeds::PORTAL
+           : (st == ST_PROVISION || (st == ST_POLITE && portal.isRunning()) || st == ST_SUBCFG) ? StatusLeds::PORTAL
            : st == ST_DEAUTH                       ? StatusLeds::PROMISC
            : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM) ? StatusLeds::WIFI_SCAN
            : st == ST_SUBSPECTRUM                  ? StatusLeds::PROMISC
@@ -2146,6 +2201,12 @@ void loop() {
     if (st == ST_SUBSPECTRUM) subTick();
     // Sub-GHz test transmitter: blast a packet each loop while armed.
     if (st == ST_SUBTX && subTxOn) cc.txBurst();
+    // Sub-GHz settings portal: service it; apply the saved settings on submit.
+    if (st == ST_SUBCFG) {
+        subcfg.loop();
+        int ph = !subcfg.isRunning() ? 2 : subcfg.saved() ? 1 : 0;
+        if (ph != subCfgPhase) { if (ph >= 1) loadSubCfg(); subCfgPhase = ph; drawSubCfgScreen(); }
+    }
 
     if (millis() > 8000) ota.markHealthy();  // once the UI has clearly been up, confirm this image
 

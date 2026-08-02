@@ -162,7 +162,8 @@ void Cc1101Spectrum::beginTx(uint32_t freqKHz) {
     if (!present_) return;
     strobe(S_IDLE);
     tune(freqKHz);
-    writeReg(0x12, 0x30);   // MDMCFG2 — ASK/OOK, no sync (rolling payload → ~50% duty, noise-like)
+    writeReg(0x12, fsk_ ? 0x00 : 0x30);   // MDMCFG2 — 2-FSK or ASK/OOK, no sync
+    if (fsk_) writeReg(0x15, 0x47);        // DEVIATN — FSK deviation
     writeReg(0x17, 0x30);   // MCSM1 — TXOFF_MODE = IDLE (so txBurst's wait-for-IDLE is well-defined)
     writeReg(0x08, 0x00);   // PKTCTRL0 — fixed length, no CRC/whitening, FIFO mode
     writeReg(0x06, 60);     // PKTLEN — 60-byte packets
@@ -199,7 +200,8 @@ void Cc1101Spectrum::beginCapture(uint32_t freqKHz) {
     strobe(S_IDLE);
     tune(freqKHz);
     writeReg(0x02, 0x0D);   // IOCFG0 — GDO0 = serial data (async)
-    writeReg(0x12, 0x30);   // MDMCFG2 — ASK/OOK, no sync
+    writeReg(0x12, fsk_ ? 0x00 : 0x30);   // MDMCFG2 — 2-FSK or ASK/OOK, no sync
+    if (fsk_) writeReg(0x15, 0x47);        // DEVIATN — FSK deviation
     writeReg(0x08, 0x32);   // PKTCTRL0 — asynchronous serial, infinite length
     writeReg(0x1B, 0x03);   // AGCCTRL2 — OOK: fixed-ish magnitude target (was 0x43 for RSSI sweep)
     writeReg(0x1C, 0x00);   // AGCCTRL1
@@ -221,7 +223,7 @@ int Cc1101Spectrum::captureRaw(uint16_t* durs, int maxN, uint32_t timeoutMs) {
     for (;;) {                                          // carrier sense: wait for a real signal
         uint8_t raw = readReg(REG_RSSI);
         int dbm = (raw >= 128 ? (raw - 256) : raw) / 2 - 74;
-        if (dbm > -72) break;
+        if (dbm > capThr_) break;
         if (millis() - t0 > timeoutMs) { strobe(S_IDLE); return 0; }
         yield();
     }
@@ -253,16 +255,18 @@ void Cc1101Spectrum::replayRaw(const uint16_t* durs, int n, uint32_t freqKHz) {
     strobe(S_IDLE);
     tune(freqKHz);
     writeReg(0x02, 0x0D);   // IOCFG0 — GDO0 = serial data in (async TX)
-    writeReg(0x12, 0x30);   // MDMCFG2 — ASK/OOK
+    writeReg(0x12, fsk_ ? 0x00 : 0x30);   // MDMCFG2 — 2-FSK or ASK/OOK
+    if (fsk_) writeReg(0x15, 0x47);        // DEVIATN — FSK deviation
     writeReg(0x08, 0x32);   // PKTCTRL0 — asynchronous serial, infinite length
     writeReg(0x17, 0x30);   // MCSM1 — TXOFF_MODE = IDLE
     writeReg(0x3E, txPwr_); // PATABLE[0] — TX power
+    int start = capStartLevel_ ^ (inv_ ? 1 : 0);        // captured start polarity, optionally inverted
     pinMode(PIN_GDO0, OUTPUT);
-    digitalWrite(PIN_GDO0, capStartLevel_ ? LOW : HIGH);   // hold idle before the carrier is up
+    digitalWrite(PIN_GDO0, start ? LOW : HIGH);         // hold idle before the carrier is up
     strobe(S_TX);
     uint32_t t = micros();                              // wait to actually ENTER TX — PLL cal (~800us) else the first pulse is eaten
     while ((readReg(REG_MARCSTATE) & 0x1F) != 0x13 && micros() - t < 3000) {}
-    int level = capStartLevel_;                         // reproduce the captured polarity
+    int level = start;                                  // reproduce the (optionally inverted) captured polarity
     for (int i = 0; i < n; i++) {
         digitalWrite(PIN_GDO0, level);
         uint32_t d = durs[i];
