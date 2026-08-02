@@ -259,7 +259,6 @@ static const MenuItem ROOT_I[] = {
     {"Wi-Fi",       "Scan networks",            "Wi-Fi",       "Сканирование сетей",       K_SUB, M_WIFI},
     {"BLE",         "Bluetooth devices & tags", "BLE",         "Устройства и метки",       K_SUB, M_BLE},
     {"Sub-GHz",     "315/433/868 MHz radio",    "Sub-GHz",     "Радио 315/433/868 МГц",    K_SUB, M_SUBGHZ},
-    {"Laboratory",  "Experimental — transmits", "Лаборатория", "Эксперименты — эфир",      K_SUB, M_LAB},
     {"Settings",    "Language, touch, about",   "Настройки",   "Язык, тач, о девайсе",     K_SUB, M_SETTINGS},
 };
 static const MenuItem WIFI_I[] = {
@@ -267,10 +266,12 @@ static const MenuItem WIFI_I[] = {
     {"Channels 2.4G", "Airtime per channel",   "Каналы 2.4ГГц", "Занятость по каналам",  K_FEAT, F_CHANNELS},
     {"Spectrum 2.4G", "Raw band waterfall (NRF24)", "Спектр 2.4ГГц", "Водопад по спектру (NRF24)", K_FEAT, F_SPECTRUM},
     {"Advanced",      "Deeper Wi-Fi tools",    "Продвинутое",   "Инструменты поглубже",  K_SUB,  M_WIFI_ADV},
+    {"Laboratory",    "Experimental — transmits", "Лаборатория", "Эксперименты — эфир",   K_SUB,  M_LAB},
 };
 static const MenuItem WADV_I[] = {
     {"Hidden names",   "Revealed hidden SSIDs",  "Скрытые сети",  "Раскрытые имена",       K_FEAT, F_HIDDEN},
     {"Deauth monitor", "Alarm on deauth bursts", "Детектор атак", "Тревога на отключения", K_FEAT, F_DEAUTH},
+    {"TX power",       "Noise TX radiation power", "Мощность TX", "Мощность излучения шума", K_FEAT, F_TXPOWER},
 };
 static const MenuItem BLE_I[] = {
     {"BLE Scan", "Devices & trackers nearby", "Скан BLE", "Устройства и трекеры рядом", K_FEAT, F_BLE_SCAN},
@@ -289,25 +290,24 @@ static const MenuItem SET_I[] = {
     {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
     {"Responsible use", "Legal terms — read it",   "Ответственность", "Правила — прочти",  K_FEAT, F_LEGAL},
 };
-// Laboratory — experimental tools that TRANSMIT. Split out so the passive screens stay clean.
+// Laboratory — experimental tools that TRANSMIT. Under Wi-Fi (it's a 2.4 GHz lab).
 static const MenuItem LAB_I[] = {
     {"Noise gen 2.4G",  "Inject noise into channels", "Генератор шума 2.4", "Шум в выбранные каналы", K_FEAT, F_NOISEGEN},
     {"TX mode",         "Verify / Maximum",           "Режим передачи",     "Проверка / Максимум",    K_FEAT, F_TXMODE},
-    {"TX power",        "Radiation power",            "Мощность TX",        "Мощность излучения",     K_FEAT, F_TXPOWER},
 };
 static const MenuItem LANG_I[] = {
     {"English", "", "English", "", K_FEAT, F_LANG_EN},
     {"Русский", "", "Русский", "", K_FEAT, F_LANG_RU},
 };
 static const Menu MENUS[] = {
-    {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 5},
-    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 4},
+    {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
+    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 5},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  2},
     {"Settings",    "Настройки",   SET_I,  8},
     {"Language",    "Язык",        LANG_I, 2},
-    {"Advanced",    "Продвинутое", WADV_I, 2},
-    {"Laboratory",  "Лаборатория", LAB_I,  3},
+    {"Advanced",    "Продвинутое", WADV_I, 3},
+    {"Laboratory",  "Лаборатория", LAB_I,  2},
 };
 
 // ---- navigation state ----
@@ -1096,11 +1096,17 @@ static bool     spLab    = false;                              // true = Lab noi
 // Traffic view: subtract a slow per-channel baseline so the constant floor (beacons, steady
 // BT) fades and only activity ABOVE it stands out. RPD is 1-bit, so this shows changes in
 // occupancy (bursts), not decoded traffic — a steady stream shows only when it starts.
-static int      spBaseF[Nrf24Spectrum::CHANNELS];              // slow baseline, fixed-point (value * 1024)
+// Traffic = a MEDIUM-smoothed occupancy minus the SLOW floor, noise-gated. The medium
+// EMA averages out single beacon/BT hits (1-bit RPD is jumpy: one hit = +31), so only a
+// sustained rise above the floor survives — the real bursts, not the beacon flicker.
+static int      spCurF[Nrf24Spectrum::CHANNELS];               // medium EMA, fixed-point (value * 1024)
+static int      spBaseF[Nrf24Spectrum::CHANNELS];              // slow floor,  fixed-point (value * 1024)
 static bool     spTraffic = false;                             // false = occupancy heat; true = above-baseline traffic
-static int      spBasePrime = 0;                               // >0: glue the baseline to spEma while the EMA settles (no cold-start flood)
-static const int SP_BASE_TAU = 256, SP_TRAFFIC_GAIN = 3;       // baseline smoothing (~seconds) and burst amplification
-static const int SP_PRIME_N  = 40;                             // sweeps (~1 s) to seed the baseline on screen entry
+static int      spBasePrime = 0;                               // >0: glue cur/base to spEma while the EMA settles (no cold-start flood)
+static const int SP_CUR_TAU  = 32;                             // medium smoothing (~1 s) — kills single-hit flicker
+static const int SP_BASE_TAU = 256;                            // slow floor (~9 s) — steady sources sink into it
+static const int SP_TRAFFIC_GAIN = 3, SP_TRAFFIC_FLOOR = 12;   // burst amplification and the noise gate (ignore small jitter)
+static const int SP_PRIME_N  = 40;                             // sweeps (~1.5 s) to seed the floor on screen entry
 static const uint16_t SP_BG = 0x0862;                          // near-black plot background (RGB565)
 // Only the used part of the band is shown, stretched to full width: NRF ch 2..84 =
 // 2402..2484 MHz covers all Wi-Fi (1..14) and Bluetooth. The dead ISM edges
@@ -1208,14 +1214,14 @@ static void drawSpectrumScreen() {
     if (spLab) {
         snprintf(hr, sizeof(hr), "x%d %s", nrf.modules(),
                  nrf.txListenSelf() ? i18n::tr("chk", "проба") : i18n::tr("max", "макс"));
-        uiHeaderRu(i18n::tr("Noise gen 2.4", "Генератор шума"), hr);
+        uiHeaderRu(i18n::tr("Noise 2.4", "Шум 2.4ГГц"), hr);
     } else {
         snprintf(hr, sizeof(hr), "NRF24 x%d", nrf.modules());
         uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), hr);
     }
     tft.fillRect(0, 28, 240, 320 - 28, bg);
-    wfLegend(bg, dim, spTraffic ? i18n::tr("base", "фон") : nullptr,
-                      spTraffic ? i18n::tr("spike", "всплеск") : nullptr);
+    wfLegend(bg, dim, (spTraffic && !spLab) ? i18n::tr("base", "фон") : nullptr,
+                      (spTraffic && !spLab) ? i18n::tr("spike", "всплеск") : nullptr);
     tft.fillRect(SP_X, SP_Y, SP_W, SP_H, SP_BG);
     tft.drawRect(SP_X - 1, SP_Y - 1, SP_W + 2, SP_H + 2, tft.color565(0x2a, 0x3a, 0x2a));
     // Vertical divider column for every Wi-Fi channel 1..13 (1/6/11 stand out); pre-drawn
@@ -1243,8 +1249,8 @@ static bool loadSpView() { Preferences p; p.begin("leshy", true); bool v = p.get
 static void spRepaintChrome() {
     const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f);
     tft.fillRect(0, 28, 240, SP_Y - 29, bg);     // legend band above the plot (does not touch the waterfall)
-    wfLegend(bg, dim, spTraffic ? i18n::tr("base", "фон") : nullptr,
-                      spTraffic ? i18n::tr("spike", "всплеск") : nullptr);
+    wfLegend(bg, dim, (spTraffic && !spLab) ? i18n::tr("base", "фон") : nullptr,
+                      (spTraffic && !spLab) ? i18n::tr("spike", "всплеск") : nullptr);
     spDrawFooter();
 }
 static void spToggleView() {
@@ -1257,9 +1263,13 @@ static void spectrumTick() {
     uint8_t sw[Nrf24Spectrum::CHANNELS];
     nrf.sweep(sw);                                       // ~25ms across 126 channels; RPD is 1-bit per channel
     for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) {
-        spEma[c] += ((int)sw[c] * 255 - spEma[c]) / 8;  // smooth to a 0..255 duty level → full colour gradient
-        if (spBasePrime) spBaseF[c] = (int)spEma[c] << 10;                 // seed: track the EMA while it settles
-        else spBaseF[c] += ((int)spEma[c] * 1024 - spBaseF[c]) / SP_BASE_TAU;   // then let steady sources sink into a slow floor
+        spEma[c] += ((int)sw[c] * 255 - spEma[c]) / 8;  // fast occupancy (0..255) → occupancy view
+        int e1024 = (int)spEma[c] << 10;
+        if (spBasePrime) { spCurF[c] = e1024; spBaseF[c] = e1024; }        // seed both to the settling EMA — no cold-start flood
+        else {
+            spCurF[c]  += (e1024 - spCurF[c])  / SP_CUR_TAU;               // medium: averages out single beacon/BT hits
+            spBaseF[c] += (e1024 - spBaseF[c]) / SP_BASE_TAU;              // slow floor: steady sources sink in
+        }
     }
     if (spBasePrime) spBasePrime--;
     if (millis() - spRowAt < 37) return;                // one waterfall row every ~37ms (fast scroll)
@@ -1269,9 +1279,10 @@ static void spectrumTick() {
         int c = spXToNrf(x);
         if (c < 0) c = 0; else if (c >= Nrf24Spectrum::CHANNELS) c = Nrf24Spectrum::CHANNELS - 1;
         int v = spEma[c];
-        if (spTraffic) {                                // traffic view: only what rises above the rolling baseline
-            v = (spEma[c] - (spBaseF[c] >> 10)) * SP_TRAFFIC_GAIN;
-            if (v < 0) v = 0; else if (v > 255) v = 255;
+        if (spTraffic && !spLab) {                      // traffic (passive only): medium level above the slow floor, noise-gated
+            int d = ((spCurF[c] - spBaseF[c]) >> 10) - SP_TRAFFIC_FLOOR;
+            v = d > 0 ? d * SP_TRAFFIC_GAIN : 0;
+            if (v > 255) v = 255;
         }
         if      (v > 8)            row[x] = spColor(v, 255);             // energy / burst → heat gradient
         else if (spGrid[x] == 2)   row[x] = SP_GMAJ;                      // channel divider shows through quiet air
