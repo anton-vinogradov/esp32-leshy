@@ -34,7 +34,7 @@ private:
     const Menu* m_ = nullptr;
     int         off_ = 0;                // first visible card (menus longer than the screen scroll)
     bool        canBack_ = true;
-    void redraw_(int sel);
+    void redraw_(int sel, bool full);   // full = clear the screen (entry); else seamless in-place scroll
     void bg_(int i, bool sel);
     void title_(int i, bool sel);        // big font must be loaded
     void desc_(int i, bool sel);         // small font must be loaded

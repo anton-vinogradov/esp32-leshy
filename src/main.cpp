@@ -265,13 +265,13 @@ static const MenuItem WIFI_I[] = {
     {"Wi-Fi Scan",    "Signal, channel, lock", "Скан Wi-Fi",    "Сигнал, канал, шифр",   K_FEAT, F_WIFI_SCAN},
     {"Channels 2.4G", "Airtime per channel",   "Каналы 2.4ГГц", "Занятость по каналам",  K_FEAT, F_CHANNELS},
     {"Spectrum 2.4G", "Raw band waterfall (NRF24)", "Спектр 2.4ГГц", "Водопад по спектру (NRF24)", K_FEAT, F_SPECTRUM},
-    {"Advanced",      "Deeper Wi-Fi tools",    "Продвинутое",   "Инструменты поглубже",  K_SUB,  M_WIFI_ADV},
     {"Laboratory",    "Experimental — transmits", "Лаборатория", "Эксперименты — эфир",   K_SUB,  M_LAB},
+    {"Advanced",      "Deeper Wi-Fi tools",    "Продвинутое",   "Инструменты поглубже",  K_SUB,  M_WIFI_ADV},
 };
 static const MenuItem WADV_I[] = {
     {"Hidden names",   "Revealed hidden SSIDs",  "Скрытые сети",  "Раскрытые имена",       K_FEAT, F_HIDDEN},
     {"Deauth monitor", "Alarm on deauth bursts", "Детектор атак", "Тревога на отключения", K_FEAT, F_DEAUTH},
-    {"TX power",       "Noise TX radiation power", "Мощность TX", "Мощность излучения шума", K_FEAT, F_TXPOWER},
+    {"TX power",       "TX radiation power", "Мощность TX", "Мощность излучения", K_FEAT, F_TXPOWER},
 };
 static const MenuItem BLE_I[] = {
     {"BLE Scan", "Devices & trackers nearby", "Скан BLE", "Устройства и трекеры рядом", K_FEAT, F_BLE_SCAN},
@@ -292,7 +292,7 @@ static const MenuItem SET_I[] = {
 };
 // Laboratory — experimental tools that TRANSMIT. Under Wi-Fi (it's a 2.4 GHz lab).
 static const MenuItem LAB_I[] = {
-    {"Noise gen 2.4G",  "Inject noise into channels", "Генератор шума 2.4", "Шум в выбранные каналы", K_FEAT, F_NOISEGEN},
+    {"Generator 2.4",   "Transmit into channels", "Генератор 2.4", "Передача в выбранные каналы", K_FEAT, F_NOISEGEN},
     {"TX mode",         "Verify / Maximum",           "Режим передачи",     "Проверка / Максимум",    K_FEAT, F_TXMODE},
 };
 static const MenuItem LANG_I[] = {
@@ -392,8 +392,8 @@ static void drawTxPowerInfo() {
     int dbm = Nrf24Spectrum::txPowerDbm(b);
     infoTitle = i18n::tr("TX power", "Мощность TX");
     infoBody  = String(dbm) + i18n::tr(" dBm", " дБм") + (b == 0x06 ? i18n::tr(" (max)", " (макс)") : "");
-    infoNote  = i18n::tr("Transmit power for the Spectrum noise test. Max = loudest, but can wash out the whole waterfall — lower it for a cleaner picture.",
-                         "Мощность передачи шума в тесте Спектра. Максимум — громче, но может засветить весь водопад — снизь для чистой картинки.");
+    infoNote  = i18n::tr("Transmit power for the Generator test. Max = loudest, but can wash out the whole waterfall — lower it for a cleaner picture.",
+                         "Мощность передачи в тесте Генератора. Максимум — громче, но может засветить весь водопад — снизь для чистой картинки.");
     infoAction = F_TXPOWER; st = ST_INFO; drawInfo();
 }
 
@@ -413,8 +413,8 @@ static void drawTxModeInfo() {
     bool self = nrf.txListenSelf();
     infoTitle = i18n::tr("TX mode", "Режим передачи");
     infoBody  = self ? i18n::tr("Verify", "Проверка") : i18n::tr("Maximum", "Максимум");
-    infoNote  = self ? i18n::tr("One antenna keeps listening — you see the injected noise on the waterfall. Best for checking it works.",
-                                "Одна антенна слушает — свой шум виден на водопаде. Для проверки, что всё работает.")
+    infoNote  = self ? i18n::tr("One antenna keeps listening — you see the injected signal on the waterfall. Best for checking it works.",
+                                "Одна антенна слушает — свой сигнал виден на водопаде. Для проверки, что всё работает.")
                      : i18n::tr("All antennas transmit — loudest output, but the waterfall goes dark (nothing is left to receive).",
                                 "Все антенны в эфир — максимум мощности, но водопад гаснет (принимать нечем).");
     infoAction = F_TXMODE; st = ST_INFO; drawInfo();
@@ -1186,8 +1186,8 @@ static void spDrawFooter() {
     if (!spLab) { uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
                              spTraffic ? i18n::tr("traffic ▶", "трафик ▶") : i18n::tr("occupancy ▶", "занятость ▶")); return; }
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
-               spTxOn ? (i18n::isRu() ? "▶ стоп"           : "▶ stop")
-                      : (i18n::isRu() ? "OK канал  ▶ шум"  : "OK chan  ▶ noise"));
+               spTxOn ? (i18n::isRu() ? "▶ стоп"            : "▶ stop")
+                      : (i18n::isRu() ? "OK канал  ▶ старт" : "OK chan  ▶ start"));
 }
 
 // SELECT arms/disarms the channel under the caret; live if we're already emitting.
@@ -1214,7 +1214,7 @@ static void drawSpectrumScreen() {
     if (spLab) {
         snprintf(hr, sizeof(hr), "x%d %s", nrf.modules(),
                  nrf.txListenSelf() ? i18n::tr("chk", "проба") : i18n::tr("max", "макс"));
-        uiHeaderRu(i18n::tr("Noise 2.4", "Шум 2.4ГГц"), hr);
+        uiHeaderRu(i18n::tr("Generator", "Генератор"), hr);
     } else {
         snprintf(hr, sizeof(hr), "NRF24 x%d", nrf.modules());
         uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), hr);
@@ -1543,7 +1543,7 @@ static void launch(int feat) {
                             spLab = true; spTxOn = false; spCursor = 6;
                             spTxMask = (1 << 1) | (1 << 6) | (1 << 11);    // preset the non-overlapping channels, ready to fire
                             if (nrf.begin()) { st = ST_SPECTRUM; drawSpectrumScreen(); }
-                            else { infoTitle = i18n::tr("Noise gen 2.4", "Генератор шума"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
+                            else { infoTitle = i18n::tr("Generator", "Генератор"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
                                    infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
                             break;
         case F_TXMODE:      drawTxModeInfo(); break;

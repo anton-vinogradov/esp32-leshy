@@ -66,10 +66,15 @@ void MenuScreen::desc_(int i, bool sel) {
     tft.drawString(fit(d, TEXT_MAXW), TEXT_X, y + 30);
 }
 
-void MenuScreen::redraw_(int sel) {                 // full paint of the visible window
-    uiHeaderRu(T(m_->en, m_->ru));
-    tft.fillRect(0, 28, 240, 320 - 28, uiBg());
+void MenuScreen::redraw_(int sel, bool full) {      // paint the visible window
     int last = off_ + VISIBLE; if (last > m_->n) last = m_->n;
+    if (full) {                                     // screen entry: clear everything
+        uiHeaderRu(T(m_->en, m_->ru));
+        tft.fillRect(0, 28, 240, 320 - 28, uiBg());
+    } else {                                        // scroll: opaque cards overwrite in place — no full-screen flash;
+        int usedBottom = CARD_TOP + (last - off_) * CARD_STEP;      // only clear the strip past the last card (end of list)
+        if (usedBottom < 301) tft.fillRect(0, usedBottom, 240, 301 - usedBottom, uiBg());
+    }
     for (int i = off_; i < last; i++) bg_(i, i == sel);
     fontBig();   for (int i = off_; i < last; i++) title_(i, i == sel);
     fontSmall(); for (int i = off_; i < last; i++) desc_(i, i == sel);
@@ -84,7 +89,7 @@ void MenuScreen::show(const Menu* m, int sel, bool canBack) {
     off_ = 0;
     if (sel >= VISIBLE) off_ = sel - VISIBLE + 1;   // open with the selection visible
     s_off = off_;
-    redraw_(sel);
+    redraw_(sel, true);
 }
 
 void MenuScreen::repaint(int prev, int cur) {
@@ -92,7 +97,7 @@ void MenuScreen::repaint(int prev, int cur) {
     int want = off_;                                 // scroll only when the selection leaves the window
     if (cur < off_) want = cur;
     else if (cur >= off_ + VISIBLE) want = cur - VISIBLE + 1;
-    if (want != off_) { off_ = want; s_off = off_; redraw_(cur); return; }
+    if (want != off_) { off_ = want; s_off = off_; redraw_(cur, false); return; }
 
     bool pv = (prev >= off_ && prev < off_ + VISIBLE && prev >= 0 && prev < m_->n);
     bool cv = (cur  >= off_ && cur  < off_ + VISIBLE && cur  >= 0 && cur  < m_->n);
