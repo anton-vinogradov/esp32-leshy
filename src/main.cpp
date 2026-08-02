@@ -18,6 +18,7 @@
 #include "features/input/Buttons.h"
 #include "features/input/Touch.h"
 #include "features/leds/StatusLeds.h"
+#include "features/airtime/AirtimeMonitor.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -236,6 +237,7 @@ HiddenRevealer revealer;
 OtaManager     ota;
 DeauthDetector detector;
 StatusLeds     leds;             // the four WS2812s under the antennas — shows what the radio is doing
+AirtimeMonitor airtime;          // real per-channel airtime (promiscuous) for the Channels screen
 
 static void drawNetBadge();      // small "connected" mark in the header (defined below)
 static void gotoWifi();          // (re)enter the live Wi-Fi scan
@@ -947,15 +949,20 @@ static uint8_t chHist[14][CH_HIST];             // load history per channel (0..
 static int     chHead = 0;                      // ring write position
 static bool    chReady = false;
 
-static void channelSample() {                   // push one column from the latest scan
-    int counts[14] = {0};
-    int n = engine.wifiCount();
-    WifiRow r;
-    for (int i = 0; i < n; i++)
-        if (engine.wifiRow(i, r) && r.channel >= 1 && r.channel <= 13) counts[r.channel]++;
-    int maxc = 1;
-    for (int ch = 1; ch <= 13; ch++) if (counts[ch] > maxc) maxc = counts[ch];
-    for (int ch = 1; ch <= 13; ch++) chHist[ch][chHead] = (uint8_t)(counts[ch] * CH_GH / maxc);
+// Full graph height = this much real airtime. Decoded airtime is a lower bound (we
+// miss frames and estimate the rate), and ambient air (beacons only) sits around
+// 1%, so full-scale is set low: quiet channels show a small baseline, and genuine
+// traffic (a nearby download/stream) clearly rises above it. Honest relative
+// busyness, not a calibrated percentage — the footer says "est.".
+static const int CH_FULLSCALE_PM = 80;          // permille (~8%) that fills a row
+
+static void channelSample() {                   // push one column of real per-channel airtime
+    uint16_t pm[14];
+    airtime.read(pm);
+    for (int ch = 1; ch <= 13; ch++) {
+        int v = pm[ch] * CH_GH / CH_FULLSCALE_PM;
+        chHist[ch][chHead] = (uint8_t)(v > CH_GH ? CH_GH : v);
+    }
     chHead = (chHead + 1) % CH_HIST;
     chReady = true;
 }
@@ -1002,13 +1009,11 @@ static void channelLabels() {                    // static column of channel num
 
 static void drawChannelScreen() {
     const uint16_t bg = uiBg();
-    int n = engine.wifiCount();
-    char right[20]; snprintf(right, sizeof(right), "%d %s", n, i18n::tr("nets", "сетей"));
-    uiHeaderRu(i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"), right);
+    uiHeaderRu(i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"), i18n::tr("airtime", "эфир"));
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     channelLabels();
     channelGraphs();
-    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::tr("busy, est.", "занятость ~"));
     drawNetBadge();
 }
 
@@ -1171,6 +1176,7 @@ static void back() {
         case ST_LEGAL:     if (legFirstRun) return;                        // must accept on first run
                            showMenu();                                     return;
         case ST_DEAUTH:    detector.stop(); showMenu();                    return;
+        case ST_CHANNELS:  airtime.stop(); showMenu();                     return;
         case ST_NETINFO:   gotoWifi();                                     return;
         case ST_OTA:       if (ota.busy()) return;   // checking or downloading — stay put
                            showMenu();                                     return;
@@ -1186,6 +1192,7 @@ static void launch(int feat) {
     // An OTA check/download owns the radio — never start a screen that touches it.
     if (ota.busy() && feat != F_OTA) return;
     if (st == ST_DEAUTH)    detector.stop();       // release promiscuous before anything else
+    if (st == ST_CHANNELS)  airtime.stop();        // also promiscuous
     if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
     engine.pause();                                // scanning is off unless the target feature turns it back on
     infoAction = -1;                               // most info screens aren't adjustable; the two that are set this
@@ -1197,8 +1204,10 @@ static void launch(int feat) {
                             if (detector.begin()) { st = ST_DEAUTH; drawDeauthScreen(); }
                             else { infoTitle = i18n::tr("Deauth monitor", "Детектор атак"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
-        case F_CHANNELS:    engine.setMode(ScanEngine::SCAN_WIFI); engine.resume(); st = ST_CHANNELS; seenWifiGen = engine.wifiGen();
-                            memset(chHist, 0, sizeof(chHist)); chHead = 0; channelSample(); drawChannelScreen(); break;
+        case F_CHANNELS:    engine.pauseAndWait();          // airtime needs the radio to itself (promiscuous)
+                            if (airtime.begin()) { st = ST_CHANNELS; memset(chHist, 0, sizeof(chHist)); chHead = 0; drawChannelScreen(); }
+                            else { infoTitle = i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
+                            break;
         case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();
                             tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); break;
         case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
@@ -1315,6 +1324,8 @@ static void serialControl() {
             else if (!strcmp(buf, "leds"))  { leds.selfTest(); continue; }                       // QA: all four pixels + their order
             else if (!strcmp(buf, "ledbr")) { Serial.printf("[leds] brightness -> %u/255\n", leds.cycleBrightness()); continue; }
             else if (!strcmp(buf, "bl"))    { Serial.printf("[bl] backlight -> %u/255\n", uiBacklightCycle()); continue; }
+            else if (!strcmp(buf, "air"))   { uint16_t pm[14]; airtime.read(pm); Serial.printf("[air] run=%d ch=%d busy‰:", (int)airtime.isRunning(), (int)airtime.channel());
+                                              for (int ch = 1; ch <= 13; ch++) Serial.printf(" %d:%u", ch, pm[ch]); Serial.println(); continue; }
             else if (!strcmp(buf, "stat")) { Serial.printf("[stat] st=%d wifiGen=%u bleGen=%u scanIdle=%d heap=%u largest=%u\n",
                                              (int)st, (unsigned)engine.wifiGen(), (unsigned)engine.bleGen(),
                                              (int)engine.isIdle(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap()); continue; }
@@ -1339,6 +1350,7 @@ static void serialControl() {
             }
             else if (!strcmp(buf, "menu"))   { if (ota.busy()) continue;
                                                if (st == ST_DEAUTH) detector.stop();
+                                               if (st == ST_CHANNELS) airtime.stop();
                                                if (st == ST_PROVISION) net.stopProvision();
                                                depth = 0; showMenu(); }
             else { Serial.printf("[cmd] ? '%s'\n", buf); continue; }
@@ -1472,8 +1484,9 @@ void loop() {
         else otaBar();                       // % change → repaint just the slider (no bg redraw)
     }
 
-    // Channel graphs scroll on a steady tick (cardiograph feel) using the latest scan.
+    // Channel graphs scroll on a steady tick (cardiograph feel) from real airtime.
     if (st == ST_CHANNELS) {
+        airtime.loop();             // hop channels; each is refreshed as the sweep visits it
         static uint32_t nextCh = 0;
         if (millis() - nextCh > 120) {
             nextCh = millis();

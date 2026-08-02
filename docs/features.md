@@ -11,7 +11,7 @@ ESP32-Leshy
 ├─ Wi-Fi
 │  ├─ Wi-Fi Scan        signal · channel · security · ★your net · hidden
 │  │  └─ ▶ on a network  Details (SSID · BSSID · channel · RSSI · security)
-│  ├─ Channels 2.4G     scrolling per-channel airtime graphs (1/6/11 highlighted)
+│  ├─ Channels 2.4G     scrolling real per-channel airtime graphs (promiscuous; 1/6/11)
 │  └─ Advanced
 │     ├─ Hidden names   revealed hidden SSIDs (saved to flash, deletable)
 │     └─ Deauth monitor passive alarm on deauth/disassoc bursts
@@ -35,7 +35,7 @@ Navigation: **▲▼** move, **middle** = enter/confirm, **▶** = options for t
 Live list of nearby access points. Each row shows the name, a small **sparkline of that AP's signal over recent scans** (its footprint over time), the **channel**, and the **RSSI**. Your own network is marked **★** (matched by BSSID — even when it is hidden). Select a row and press **▶** to open **per-network options** (currently *Details*: SSID, BSSID, channel, RSSI, security, hidden/own) — this is where per-network tools live, reached from the scan rather than the menu.
 
 ### Channels 2.4G
-A live, scrolling **area graph per channel (1–13)** built from the scan — a cardiograph of how busy each channel is, so you can see at a glance where it is empty and where it is crowded. The non-overlapping channels **1 / 6 / 11** are highlighted.
+A live, scrolling **area graph per channel (1–13)** — a cardiograph of how busy each channel really is. It listens in **promiscuous mode** and sums the on-air time of the frames it hears (management + data + control), sweeping the channels one at a time, so a channel with one busy access point outranks a channel crowded with idle ones. This is **actual airtime, not access-point count**. The value is a **lower bound** (only frames the radio decodes are counted, and the rate is estimated), so quiet air shows a small baseline and a genuine download or stream clearly rises above it. The non-overlapping channels **1 / 6 / 11** are highlighted. Uses the radio exclusively, so the background scan pauses while this screen is open.
 
 ### Advanced → Hidden names
 Hidden networks broadcast an empty SSID, but the name still travels in cleartext inside **Probe-Response** and **(Re)Association** frames. While scanning, the device passively recovers those names **only for the BSSIDs the scan actually sees as hidden**, saves them to flash (they survive a reboot), and lists them here with delete. It is passive — a name appears only when there is real traffic to that network (a client probing or connecting).
