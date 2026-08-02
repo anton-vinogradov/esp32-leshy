@@ -17,8 +17,9 @@
 // over the air, so it is inferred from beacon RSSI — which only tracks power if
 // the device stays put. It is a rough estimate, not proof.
 struct PolitePortalConfig {
-    String   targetSsid;                      // AP whose TX power we watch (yours)
+    String   targetSsid;                      // AP whose TX power we watch (yours); EMPTY = consent mode (stop on button, no RSSI)
     String   portalSsid = "lower-your-wifi-power";
+    uint8_t  channel     = 6;                 // SoftAP channel in consent mode (RSSI mode uses the target's channel)
     int      rssiDropDb  = 6;                  // drop vs baseline that counts as "reduced"
     uint32_t baselineMs  = 8000;              // how long to measure the baseline
     uint32_t windowMs    = 5000;              // recent window used when verifying
@@ -32,6 +33,8 @@ public:
     void stop();
 
     bool isRunning() const { return running_; }
+    bool consented() const { return consented_; }   // someone tapped "I lowered the power" (consent mode)
+    const String& ssid() const { return cfg_.portalSsid; }
     int  baselineRssi() const { return baseline_; }
     int  currentRssi();                       // median over the recent window
     int  sampleCount();                       // beacons within the recent window
@@ -41,6 +44,7 @@ public:
 private:
     struct Sample { uint32_t t; int8_t rssi; };
 
+    void registerRoutes();                     // attach web_ handlers once (idempotent across begin/stop)
     void handleRoot();
     void handleReduced();
     void handleResult();
@@ -63,7 +67,9 @@ private:
     uint64_t head_ = 0;                       // guarded by portMUX; 64-bit never wraps in practice
 
     bool     running_ = false;
+    bool     routesRegistered_ = false;       // web_ handlers registered once (stop() doesn't drop them → don't re-add)
     bool     baselineReady_ = false;          // baseline still being measured until true
+    bool     consented_ = false;              // consent-mode: the button was tapped
     bool     shutdownArmed_ = false;
     uint32_t shutdownAt_ = 0;
 };

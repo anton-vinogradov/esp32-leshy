@@ -242,6 +242,7 @@ StatusLeds     leds;             // the four WS2812s under the antennas — show
 AirtimeMonitor airtime;          // real per-channel airtime (promiscuous) for the Channels screen
 Nrf24Spectrum  nrf;              // NRF24 raw 2.4GHz spectrum sniffer
 Cc1101Spectrum cc;              // CC1101 sub-GHz spectrum sniffer
+PolitePortal   portal;          // Lab captive-portal demo (own-named AP, consent button)
 
 static void drawNetBadge();      // small "connected" mark in the header (defined below)
 static void gotoWifi();          // (re)enter the live Wi-Fi scan
@@ -252,7 +253,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_POLITE, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -298,6 +299,7 @@ static const MenuItem DEV_I[] = {
 static const MenuItem LAB_I[] = {
     {"Generator 2.4",   "Transmit into channels", "Генератор 2.4", "Передача в выбранные каналы", K_FEAT, F_NOISEGEN},
     {"TX mode",         "Verify / Maximum",           "Режим передачи",     "Проверка / Максимум",    K_FEAT, F_TXMODE},
+    {"Captive portal",  "Own AP + consent page",      "Captive-портал",     "Своя точка + согласие",  K_FEAT, F_POLITE},
 };
 static const MenuItem LANG_I[] = {
     {"English", "", "English", "", K_FEAT, F_LANG_EN},
@@ -311,12 +313,12 @@ static const Menu MENUS[] = {
     {"Settings",    "Настройки",   SET_I,  6},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 3},
-    {"Laboratory",  "Лаборатория", LAB_I,  2},
+    {"Laboratory",  "Лаборатория", LAB_I,  3},
     {"Device",      "Устройство",  DEV_I,  3},
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -443,6 +445,46 @@ static void drawProvisionScreen() {
     fontSmall(); tft.setTextColor(white, bg);
     tft.drawString(i18n::tr("3. Pick network + password", "3. Выбери сеть + пароль"), 10, 178);
     uiFooterRu(i18n::tr("◀ cancel", "◀ отмена"));
+    fontOff();
+}
+
+// Lab captive-portal demo: our own named AP asks a visitor to lower their TX power;
+// a tap on the page registers here and drops the AP. Own-equipment demo — no
+// credentials asked or stored (see PolitePortal).
+static int politePhase = 0;                        // last drawn phase: 0 waiting · 1 consented · 2 stopped
+
+static void drawPoliteScreen() {
+    const uint16_t bg = uiBg();
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
+    const uint16_t gold  = tft.color565(0xe7, 0xcf, 0x8f);
+    const uint16_t green = tft.color565(0x3f, 0xe0, 0x7a);
+    uiHeaderRu(i18n::tr("Captive portal", "Captive-портал"));
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    tft.setTextDatum(TL_DATUM);
+    fontSmall(); tft.setTextColor(white, bg);
+    tft.drawString(i18n::tr("1. Join this Wi-Fi:", "1. Подключись к сети:"), 10, 46);
+    tft.setTextColor(gold, bg);
+    tft.drawString(portal.ssid(), 10, 70);
+    tft.setTextColor(white, bg);
+    tft.drawString(i18n::tr("2. A page opens on the phone.", "2. На телефоне откроется страница."), 10, 104);
+    fontBig();
+    if (!portal.isRunning()) {                     // auto-stopped after consent (or begin failed)
+        tft.setTextColor(green, bg);
+        tft.drawString(i18n::tr("Done - AP is off.", "Готово — точка выкл."), 10, 150);
+        fontSmall(); tft.setTextColor(white, bg);
+        tft.drawString(i18n::tr("Press back.", "Нажми назад."), 10, 186);
+    } else if (portal.consented()) {
+        tft.setTextColor(green, bg);
+        tft.drawString(i18n::tr("Consent got!", "Согласие!"), 10, 150);
+        fontSmall(); tft.setTextColor(white, bg);
+        tft.drawString(i18n::tr("Shutting the AP down...", "Точка выключается…"), 10, 186);
+    } else {
+        tft.setTextColor(gold, bg);
+        tft.drawString(i18n::tr("Waiting...", "Ждём гостя…"), 10, 150);
+        fontSmall(); tft.setTextColor(white, bg);
+        tft.drawString(i18n::tr("Tap the button on the page.", "Жми кнопку на странице."), 10, 186);
+    }
+    uiFooterRu(i18n::tr("◀ back", "◀ назад"));
     fontOff();
 }
 
@@ -1505,6 +1547,7 @@ static void back() {
         case ST_CHANNELS:  airtime.stop(); showMenu();                     return;
         case ST_SPECTRUM:  spectrumStop(); showMenu();                     return;
         case ST_SUBSPECTRUM: subStop(); showMenu();                        return;
+        case ST_POLITE:    portal.stop(); showMenu();                      return;
         case ST_NETINFO:   gotoWifi();                                     return;
         case ST_OTA:       if (ota.busy()) return;   // checking or downloading — stay put
                            showMenu();                                     return;
@@ -1523,6 +1566,7 @@ static void launch(int feat) {
     if (st == ST_CHANNELS)  airtime.stop();        // also promiscuous
     if (st == ST_SPECTRUM)  spectrumStop();        // release NRF24
     if (st == ST_SUBSPECTRUM) subStop();           // release CC1101
+    if (st == ST_POLITE)    portal.stop();         // drop the captive-portal SoftAP
     if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
     engine.pause();                                // scanning is off unless the target feature turns it back on
     infoAction = -1;                               // most info screens aren't adjustable; the two that are set this
@@ -1552,6 +1596,14 @@ static void launch(int feat) {
                                    infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
                             break;
         case F_TXMODE:      drawTxModeInfo(); break;
+        case F_POLITE:    { engine.pauseAndWait();                 // the portal owns the radio (SoftAP)
+                            PolitePortalConfig cfg;
+                            cfg.targetSsid = "";                   // consent mode — our own AP, stop on the button
+                            cfg.portalSsid = net.labApName();
+                            cfg.channel    = 6;
+                            if (portal.begin(cfg)) { politePhase = 0; st = ST_POLITE; drawPoliteScreen(); }
+                            else { infoTitle = i18n::tr("Captive portal", "Captive-портал"); infoBody = i18n::tr("Failed to start", "Не удалось запустить"); infoNote = ""; st = ST_INFO; drawInfo(); }
+                            break; }
         case F_SUBSPECTRUM: engine.pause();
                             if (cc.begin()) { cc.setBand(0); st = ST_SUBSPECTRUM; drawSubScreen(); }
                             else { infoTitle = i18n::tr("Sub-GHz Spectrum", "Спектр Sub-GHz"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
@@ -1742,6 +1794,7 @@ static void serialControl() {
                 if (st == ST_CHANNELS)    airtime.stop();
                 if (st == ST_SPECTRUM)    spectrumStop();      // also stops any TX carrier
                 if (st == ST_SUBSPECTRUM) subStop();
+                if (st == ST_POLITE)      portal.stop();
                 if (st == ST_PROVISION)   net.stopProvision();
                 engine.pause();
                 st = ST_OTA; seenOtaGen = ota.gen(); seenOtaPhase = (int)ota.phase(); drawOtaScreen();
@@ -1751,6 +1804,7 @@ static void serialControl() {
                                                if (st == ST_CHANNELS) airtime.stop();
                                                if (st == ST_SPECTRUM) spectrumStop();
                                                if (st == ST_SUBSPECTRUM) subStop();
+                                               if (st == ST_POLITE) portal.stop();
                                                if (st == ST_PROVISION) net.stopProvision();
                                                depth = 0; showMenu(); }
             else { Serial.printf("[cmd] ? '%s'\n", buf); continue; }
@@ -1844,7 +1898,7 @@ void loop() {
     // ---- status LEDs: derive "what the radio is doing" from one place, so no
     //      screen transition can forget to update them ----
     leds.set(ota.busy()                            ? StatusLeds::OTA
-           : st == ST_PROVISION                    ? StatusLeds::PORTAL
+           : (st == ST_PROVISION || (st == ST_POLITE && portal.isRunning())) ? StatusLeds::PORTAL
            : st == ST_DEAUTH                       ? StatusLeds::PROMISC
            : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM) ? StatusLeds::WIFI_SCAN
            : st == ST_SUBSPECTRUM                  ? StatusLeds::PROMISC
@@ -1903,6 +1957,11 @@ void loop() {
     }
 
     // 2.4GHz spectrum waterfall
+    if (st == ST_POLITE) {
+        portal.loop();
+        int ph = !portal.isRunning() ? 2 : portal.consented() ? 1 : 0;
+        if (ph != politePhase) { politePhase = ph; drawPoliteScreen(); }
+    }
     if (st == ST_SPECTRUM) spectrumTick();
     // Sub-GHz spectrum waterfall
     if (st == ST_SUBSPECTRUM) subTick();

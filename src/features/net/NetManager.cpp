@@ -12,13 +12,29 @@ static IPAddress   s_apIp(192, 168, 4, 1);
 static bool        s_pending = false;
 static String      s_pendSsid, s_pendPass;
 static String      s_scanHtml;
+static String      s_labCur;                       // current Lab-portal AP name, for prefilling the form
 
-static String htmlEscape(const String& in) {
+static const char* LAB_SSID_DEFAULT = "lower-your-wifi-power";
+
+static String htmlEscape(const String& in) {       // for a single-quoted JS string (onclick handler)
     String o;
     for (size_t i = 0; i < in.length(); i++) {
         char c = in[i];
         if (c == '\'' || c == '\\') o += '\\';
         o += c;
+    }
+    return o;
+}
+
+static String htmlAttr(const String& in) {         // for a double-quoted HTML attribute value
+    String o;
+    for (size_t i = 0; i < in.length(); i++) {
+        char c = in[i];
+        if      (c == '&') o += "&amp;";
+        else if (c == '"') o += "&quot;";
+        else if (c == '<') o += "&lt;";
+        else if (c == '>') o += "&gt;";
+        else o += c;
     }
     return o;
 }
@@ -106,7 +122,9 @@ static void handleRoot() {
                "<form action=\"/save\" method=\"get\">"
                "<input name=\"s\" id=\"s\" placeholder=\"Имя сети (SSID)\" autocapitalize=off autocorrect=off>"
                "<input name=\"p\" type=\"password\" placeholder=\"Пароль\">"
-               "<button>Подключить</button></form>"
+               "<p style=\"color:#9a9;margin:14px 0 2px\">Лаборатория — имя точки captive-демо:</p>"
+               "<input name=\"lab\" placeholder=\"Имя точки Лаборатории\" autocapitalize=off autocorrect=off value=\"" + htmlAttr(s_labCur) + "\">"
+               "<button>Сохранить</button></form>"
                "<p>Сети рядом — нажми, чтобы подставить имя (скрытую введи вручную):</p>";
     h += s_scanHtml;
     h += "</body></html>";
@@ -116,10 +134,18 @@ static void handleRoot() {
 static void handleSave() {
     s_pendSsid = s_web.arg("s");
     s_pendPass = s_web.arg("p");
-    if (s_pendSsid.length()) s_pending = true;
+    String lab = s_web.arg("lab");
+    if (lab.length()) {                              // save the Lab AP name right away — no reconnect
+        Preferences p; p.begin("leshy", false); p.putString("lab_ssid", lab); p.end();
+        s_labCur = lab;
+    }
+    s_pending = s_pendSsid.length() > 0;             // ONLY new Wi-Fi creds trigger the connect flow
+    const char* msg = s_pendSsid.length()
+        ? "Отключаюсь от этой точки и подключаюсь к твоей сети — смотри на экран девайса."
+        : "Имя точки Лаборатории сохранено. Можешь закрыть страницу.";
     s_web.send(200, "text/html; charset=utf-8",
-               "<!doctype html><meta charset=utf-8><body style='font-family:sans-serif;background:#111;color:#eee;padding:24px'>"
-               "<h2>Сохранено ✅</h2><p>Отключаюсь от этой точки и подключаюсь к твоей сети — смотри на экран девайса.</p></body>");
+               String("<!doctype html><meta charset=utf-8><body style='font-family:sans-serif;background:#111;color:#eee;padding:24px'>"
+               "<h2>Сохранено ✅</h2><p>") + msg + "</p></body>");
 }
 
 static void handleNotFound() {
@@ -129,6 +155,7 @@ static void handleNotFound() {
 
 void NetManager::startProvision() {
     s_pending = false;
+    s_labCur = labApName();                        // prefill the Lab-name field with the saved value
     // scan nearby networks first, build the clickable list
     WiFi.mode(WIFI_STA);
     WiFi.disconnect(false);
@@ -165,7 +192,7 @@ void NetManager::stopProvision() {
     s_dns.stop();
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_STA);
-    // persist the submitted creds
+    // persist the submitted Wi-Fi creds (the Lab AP name is saved in handleSave already)
     if (s_pendSsid.length()) {
         Preferences p; p.begin("leshy", false);
         p.putString("wifi_ssid", s_pendSsid);
@@ -173,4 +200,11 @@ void NetManager::stopProvision() {
         p.end();
     }
     s_pending = false;
+}
+
+String NetManager::labApName() {
+    Preferences p; p.begin("leshy", true);
+    String v = p.getString("lab_ssid", LAB_SSID_DEFAULT);
+    p.end();
+    return v;
 }

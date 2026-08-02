@@ -53,6 +53,24 @@ int PolitePortal::medianWithin(uint32_t windowMs, int* countOut) {
 bool PolitePortal::begin(const PolitePortalConfig& cfg) {
     cfg_ = cfg;
     s_instance = this;
+    consented_ = false;
+    shutdownArmed_ = false;
+
+    // Consent mode (no target AP to watch): just raise the portal on our own named SoftAP
+    // and stop when the visitor taps the button. No scan, no beacon sniffing, no RSSI.
+    if (cfg_.targetSsid.isEmpty()) {
+        WiFi.mode(WIFI_AP);
+        WiFi.softAPConfig(apIp_, apIp_, IPAddress(255, 255, 255, 0));
+        if (!WiFi.softAP(cfg_.portalSsid.c_str(), nullptr, cfg_.channel)) {
+            WiFi.mode(WIFI_OFF); s_instance = nullptr; return false;
+        }
+        dns_.start(53, "*", apIp_);
+        registerRoutes();
+        web_.begin();
+        running_ = true;
+        baselineReady_ = true;                          // no baseline to wait for
+        return true;
+    }
 
     // 1) Locate the target AP (BSSID + channel). It must be one you own.
     WiFi.mode(WIFI_STA);
@@ -85,10 +103,7 @@ bool PolitePortal::begin(const PolitePortalConfig& cfg) {
 
     // 4) Bring the captive portal up first, so it answers even during baseline.
     dns_.start(53, "*", apIp_);
-    web_.on("/", [this] { handleRoot(); });
-    web_.on("/reduced", [this] { handleReduced(); });
-    web_.on("/result", [this] { handleResult(); });
-    web_.onNotFound([this] { redirectToPortal(); });      // pull OS captive checks to the page
+    registerRoutes();
     web_.begin();
     running_ = true;
 
@@ -116,16 +131,29 @@ void PolitePortal::loop() {
     if (shutdownArmed_ && (int32_t)(millis() - shutdownAt_) >= 0) stop();
 }
 
+// Register the HTTP routes exactly once for this object's lifetime. WebServer::stop()
+// closes the socket but does NOT drop the handler chain, so re-adding on every begin()
+// would leak a std::function per route each time — register once, reuse across restarts.
+void PolitePortal::registerRoutes() {
+    if (routesRegistered_) return;
+    web_.on("/", [this] { handleRoot(); });
+    web_.on("/reduced", [this] { handleReduced(); });
+    web_.on("/result", [this] { handleResult(); });
+    web_.onNotFound([this] { redirectToPortal(); });   // pull OS captive checks to the page
+    routesRegistered_ = true;
+}
+
 void PolitePortal::stop() {
     if (!running_) return;
     web_.stop();
     dns_.stop();
     esp_wifi_set_promiscuous(false);
+    esp_wifi_set_promiscuous_rx_cb(nullptr);            // symmetry with airtime/deauth; don't leave our cb wired
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
     running_ = false;
     baselineReady_ = false;
-    shutdownArmed_ = false;
+    shutdownArmed_ = false;                             // consented_ kept so the screen can show the final state; begin() resets it
     s_instance = nullptr;
 }
 
@@ -176,8 +204,11 @@ void PolitePortal::handleRoot() {
                  "Твой Wi-Fi добивает ко мне на полной мощности и глушит мой. Будь другом — зайди "
                  "в настройки роутера и снизь мощность передатчика (Tx Power) на пару делений.") +
         "</p><p>" +
-        i18n::tr("When you have, tap the button. I'll check the signal and leave you alone.",
-                 "Как снизишь — жми кнопку. Я проверю по уровню сигнала и сразу отстану.") +
+        (cfg_.targetSsid.isEmpty()
+            ? i18n::tr("When you have, tap the button and I'll leave you alone.",
+                       "Как снизишь — жми кнопку, и я сразу отстану.")
+            : i18n::tr("When you have, tap the button. I'll check the signal and leave you alone.",
+                       "Как снизишь — жми кнопку. Я проверю по уровню сигнала и сразу отстану.")) +
         " &#128591;</p><a class=btn href=\"/reduced\">" +
         i18n::tr("I lowered the power", "Я снизил мощность") + "</a><small>" +
         i18n::tr("ESP32-Leshy demo. No passwords are asked for or stored here.",
@@ -188,6 +219,16 @@ void PolitePortal::handleRoot() {
 
 void PolitePortal::handleReduced() {
     applyLangArg();
+    if (cfg_.targetSsid.isEmpty()) {                    // consent mode: the tap IS the result
+        consented_ = true;
+        shutdownArmed_ = true;
+        shutdownAt_ = millis() + 6000;                  // let them read the thanks, then drop the AP
+        sendPage(String("<div class=big>&#9989;&#127794;</div><h1>") +
+                 i18n::tr("Thank you!", "Спасибо!") + "</h1><p>" +
+                 i18n::tr("Deal - I'm shutting this network down now. Take care! ",
+                          "Договорились — выключаю эту сеть. Бывай! ") + "&#128075;</p>");
+        return;
+    }
     if (!baselineReady_) {
         sendPage(String("<div class=big>&#9203;</div><h1>") +
                      i18n::tr("Calibrating...", "Калибруюсь…") + "</h1><p>" +

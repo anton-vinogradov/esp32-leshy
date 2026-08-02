@@ -27,5 +27,8 @@ public:
     // scan tagging
     bool   isMine(const uint8_t bssid[6], String& ssidOut);
 
+    // Lab captive-portal AP name (set from the same phone provisioning form, saved to NVS)
+    String labApName();
+
     static const char* apName() { return "ESP32-Leshy-setup"; }
 };
