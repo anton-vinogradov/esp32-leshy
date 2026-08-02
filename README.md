@@ -75,6 +75,10 @@ A working, menu-driven firmware — highlights, all passive / own-equipment:
 
 📜 Read the full notice — the **same text the firmware shows on first boot** — in **[DISCLAIMER.md](DISCLAIMER.md)**.
 
+## Building & contributing
+
+Build, flash, run and release — see **[docs/DEVELOPING.md](docs/DEVELOPING.md)**. Flashing a fresh board from the browser: **[web installer](https://anton-vinogradov.github.io/esp32-leshy/)**.
+
 ## License
 
 [MIT](LICENSE) — same spirit as the original ESP32-DIV.
