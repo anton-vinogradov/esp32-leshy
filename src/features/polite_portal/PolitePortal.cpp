@@ -210,10 +210,7 @@ void PolitePortal::handleRoot() {
             : i18n::tr("When you have, tap the button. I'll check the signal and leave you alone.",
                        "Как снизишь — жми кнопку. Я проверю по уровню сигнала и сразу отстану.")) +
         " &#128591;</p><a class=btn href=\"/reduced\">" +
-        i18n::tr("I lowered the power", "Я снизил мощность") + "</a><small>" +
-        i18n::tr("ESP32-Leshy demo. No passwords are asked for or stored here.",
-                 "Демо-стенд ESP32-Leshy. Паролей тут не спрашивают и ничего не сохраняют.") +
-        "</small>";
+        i18n::tr("I lowered the power", "Я снизил мощность") + "</a>";
     sendPage(body);
 }
 
