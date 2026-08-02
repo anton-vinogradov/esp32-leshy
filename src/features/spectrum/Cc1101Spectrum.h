@@ -47,9 +47,10 @@ public:
     // CC1101, so record and replay are separate steps. captureRaw blocks up to a few
     // seconds waiting for a burst on GDO0, storing on/off pulse durations (us); replayRaw
     // bit-bangs them back out. Verify on your own receiver.
-    void beginCapture(uint32_t freqKHz);              // async OOK RX, GDO0 as data output
+    void beginCapture(uint32_t freqKHz);              // OOK: RSSI-envelope RX; FSK: GDO0 async demod
     int  captureRaw(uint16_t* durs, int maxN, uint32_t timeoutMs);   // returns pulse count (0 = nothing heard)
     void replayRaw(const uint16_t* durs, int n, uint32_t freqKHz);
+    void diagRssi(uint32_t freqKHz);                       // QA: print live RSSI (find the capture threshold)
     void setCaptureThreshold(int dbm) { capThr_ = dbm; }   // carrier-sense floor (tune to reject noise)
     void setModulation(bool fsk) { fsk_ = fsk; }           // false = OOK (remotes), true = 2-FSK (sensors)
     void setInvert(bool inv) { inv_ = inv; }               // flip replay polarity
@@ -58,6 +59,7 @@ public:
 
 private:
     uint8_t readReg(uint8_t addr);        // status/config register read
+    int     rssiDbm();                    // current RX RSSI in dBm (for the OOK envelope capture)
     void    writeReg(uint8_t addr, uint8_t val);
     void    writeBurst(uint8_t addr, const uint8_t* data, int len);
     void    strobe(uint8_t cmd);

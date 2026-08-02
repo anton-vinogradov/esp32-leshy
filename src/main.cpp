@@ -1975,6 +1975,13 @@ static void serialControl() {
                 cc.end();
                 continue;
             }
+            else if (!strcmp(buf, "ccrssi")) {   // QA: live RSSI on the sub-GHz capture freq → pick the threshold
+                engine.pauseAndWait();
+                if (cc.begin()) cc.diagRssi(subTxFreqKHz());
+                else Serial.println("[ccrssi] chip not present");
+                cc.end();
+                continue;
+            }
             else if (!strcmp(buf, "nrf"))   {   // QA: probe the NRF24 spectrum sniffer on real hardware
                 engine.pauseAndWait();
                 bool ok = nrf.begin();

@@ -102,6 +102,11 @@ void Cc1101Spectrum::configBaseRX() {
     writeReg(0x2E, 0x09);   // TEST0
 }
 
+int Cc1101Spectrum::rssiDbm() {
+    uint8_t raw = readReg(REG_RSSI);
+    return (raw >= 128 ? (raw - 256) : raw) / 2 - 74;   // CC1101 RSSI → dBm
+}
+
 void Cc1101Spectrum::tune(uint32_t freqKHz) {
     uint32_t f = (uint32_t)(((uint64_t)freqKHz << 16) / FXTAL_KHZ);
     writeReg(REG_FREQ2, (f >> 16) & 0xFF);
@@ -192,59 +197,98 @@ void Cc1101Spectrum::endTx() {
     strobe(S_IDLE);
 }
 
-// Async OOK RX: GDO0 outputs the demodulated envelope, which we time in captureRaw.
-// The AGC is pinned lower here (vs the RSSI-sweep config) so the demodulator stays quiet
-// on noise instead of dithering — the part most likely to need on-hardware tuning.
+// Prepare RX for a raw capture. Two very different paths:
+//  - OOK (remotes): stay in the normal RSSI-calibrated RX (proper AGC → a true noise floor),
+//    and read the on/off envelope straight from RSSI in captureRaw. The old GDO0 async
+//    demodulator dithered on noise and filled the buffer with garbage — RSSI doesn't.
+//  - 2-FSK (sensors): constant envelope, so RSSI can't see the bits — fall back to GDO0
+//    async serial demod.
 void Cc1101Spectrum::beginCapture(uint32_t freqKHz) {
     if (!present_) return;
     strobe(S_IDLE);
     tune(freqKHz);
-    writeReg(0x02, 0x0D);   // IOCFG0 — GDO0 = serial data (async)
-    writeReg(0x12, fsk_ ? 0x00 : 0x30);   // MDMCFG2 — 2-FSK or ASK/OOK, no sync
-    if (fsk_) writeReg(0x15, 0x47);        // DEVIATN — FSK deviation
-    writeReg(0x08, 0x32);   // PKTCTRL0 — asynchronous serial, infinite length
-    writeReg(0x1B, 0x03);   // AGCCTRL2 — OOK: fixed-ish magnitude target (was 0x43 for RSSI sweep)
-    writeReg(0x1C, 0x00);   // AGCCTRL1
-    writeReg(0x1D, 0x91);   // AGCCTRL0
-    pinMode(PIN_GDO0, INPUT);
+    if (fsk_) {
+        writeReg(0x02, 0x0D);   // IOCFG0 — GDO0 = serial data (async)
+        writeReg(0x12, 0x00);   // MDMCFG2 — 2-FSK, no sync
+        writeReg(0x15, 0x47);   // DEVIATN — FSK deviation
+        writeReg(0x08, 0x32);   // PKTCTRL0 — asynchronous serial, infinite length
+        writeReg(0x1B, 0x03);   // AGCCTRL2
+        writeReg(0x1C, 0x00);   // AGCCTRL1
+        writeReg(0x1D, 0x91);   // AGCCTRL0
+        pinMode(PIN_GDO0, INPUT);
+    } else {
+        writeReg(0x12, 0x30);   // MDMCFG2 — ASK/OOK, no sync
+        writeReg(0x08, 0x00);   // PKTCTRL0 — FIFO (unused); we only read RSSI
+        writeReg(0x1B, 0x43);   // AGCCTRL2 — RSSI-calibrated AGC (real noise floor)
+        writeReg(0x1C, 0x40);   // AGCCTRL1
+        writeReg(0x1D, 0x91);   // AGCCTRL0
+    }
     strobe(S_RX);
-    uint32_t t = micros();  // wait until actually in RX (like sampleBin) so GDO0 is the demodulated signal
+    uint32_t t = micros();      // wait until actually in RX so RSSI/GDO0 are valid
     while ((readReg(REG_MARCSTATE) & 0x1F) != 0x0D && micros() - t < 3000) {}
-    delayMicroseconds(500); // AGC settle
+    delay(2);                   // AGC settle to the noise floor
 }
 
-// Time the OOK pulses on GDO0 into durs[] (microseconds). Carrier-sense on RSSI first (so
-// we don't trigger on the noise floor), then record level durations from the first edge
-// until a >20 ms gap ends the burst. Blocks up to ~5 s. Returns count (0 = nothing heard).
+// Record the burst into durs[] (microseconds per on/off segment) until a >20 ms gap ends it.
+// Blocks up to the signal-wait timeout. Returns segment count (0 = nothing heard).
 int Cc1101Spectrum::captureRaw(uint16_t* durs, int maxN, uint32_t timeoutMs) {
     if (!present_ || maxN <= 0) return 0;
-    pinMode(PIN_GDO0, INPUT);
     uint32_t t0 = millis();
-    for (;;) {                                          // carrier sense: wait for a real signal
-        uint8_t raw = readReg(REG_RSSI);
-        int dbm = (raw >= 128 ? (raw - 256) : raw) / 2 - 74;
-        if (dbm > capThr_) break;
+
+    if (fsk_) {                                         // FSK: time GDO0 demod edges
+        pinMode(PIN_GDO0, INPUT);
+        int idle = digitalRead(PIN_GDO0);
+        while (digitalRead(PIN_GDO0) == idle) {         // leading edge of the burst
+            if (millis() - t0 > timeoutMs) { strobe(S_IDLE); return 0; }
+        }
+        capStartLevel_ = !idle;
+        int n = 0, level = !idle;
+        uint32_t tPrev = micros();
+        while (n < maxN && millis() - t0 < timeoutMs + 2000) {
+            uint32_t tw = micros();
+            while (digitalRead(PIN_GDO0) == level) {
+                if (micros() - tw > 20000) goto done;
+            }
+            uint32_t now = micros();
+            durs[n++] = (uint16_t)(now - tPrev);
+            tPrev = now;
+            level = !level;
+        }
+    done:
+        strobe(S_IDLE);
+        return n;
+    }
+
+    // OOK: carrier-sense on RSSI, then time the on/off envelope by thresholding RSSI. capThr_
+    // must sit between the noise floor and the signal — the "ccrssi" serial diag reveals both.
+    uint32_t tEdge = 0;
+    for (;;) {                                          // trigger on carrier, debounced against lone noise samples
+        if (rssiDbm() > capThr_) {
+            tEdge = micros();
+            bool sustained = true;
+            uint32_t ts = micros();
+            while (micros() - ts < 60) {                // 60 us: rejects a single spike, still shorter than any real pulse
+                if (rssiDbm() <= capThr_) { sustained = false; break; }
+            }
+            if (sustained) break;
+        }
         if (millis() - t0 > timeoutMs) { strobe(S_IDLE); return 0; }
         yield();
     }
-    int idle = digitalRead(PIN_GDO0);
-    while (digitalRead(PIN_GDO0) == idle) {             // wait for the leading edge of the burst
-        if (millis() - t0 > timeoutMs) { strobe(S_IDLE); return 0; }
-    }
-    capStartLevel_ = !idle;                             // first pulse level — replay reproduces it
-    int n = 0, level = !idle;
-    uint32_t tPrev = micros();
-    while (n < maxN && millis() - t0 < timeoutMs + 2000) {   // capture budget (signal wait + burst)
+    capStartLevel_ = 1;                                 // burst starts carrier-ON
+    int n = 0, on = 1;
+    uint32_t tPrev = tEdge;
+    while (n < maxN && millis() - t0 < timeoutMs + 3000) {
         uint32_t tw = micros();
-        while (digitalRead(PIN_GDO0) == level) {
-            if (micros() - tw > 20000) goto done;       // >20 ms of one level → end of burst
+        while ((rssiDbm() > capThr_ ? 1 : 0) == on) {   // stay in the current on/off state
+            if (micros() - tw > 20000) goto ookdone;    // >20 ms unchanged → end of burst
         }
         uint32_t now = micros();
-        durs[n++] = (uint16_t)(now - tPrev);            // <20 ms per pulse → fits uint16
+        durs[n++] = (uint16_t)(now - tPrev);
         tPrev = now;
-        level = !level;
+        on = !on;
     }
-done:
+ookdone:
     strobe(S_IDLE);
     return n;
 }
@@ -277,6 +321,43 @@ void Cc1101Spectrum::replayRaw(const uint16_t* durs, int n, uint32_t freqKHz) {
     digitalWrite(PIN_GDO0, LOW);
     strobe(S_IDLE);
     pinMode(PIN_GDO0, INPUT);
+}
+
+// Live RSSI watch to pick the OOK capture threshold: put the chip in normal RX and print
+// the min/max dBm each 0.5 s for 8 s. Idle first (that's the noise floor), then press your
+// remote (that's the signal) — set the threshold between the two numbers.
+void Cc1101Spectrum::diagRssi(uint32_t freqKHz) {
+    if (!present_) { Serial.println("[ccrssi] chip not present"); return; }
+    strobe(S_IDLE);
+    tune(freqKHz);
+    writeReg(0x12, 0x30);   // ASK/OOK
+    writeReg(0x08, 0x00);   // PKTCTRL0 — FIFO (unused)
+    writeReg(0x1B, 0x43);   // AGCCTRL2 — RSSI-calibrated AGC
+    writeReg(0x1C, 0x40);
+    writeReg(0x1D, 0x91);
+    strobe(S_RX);
+    uint32_t t = micros();
+    while ((readReg(REG_MARCSTATE) & 0x1F) != 0x0D && micros() - t < 3000) {}
+    delay(2);
+    Serial.printf("[ccrssi] %lu.%03lu MHz — 8 s. Stay idle, then press your remote.\n",
+                  (unsigned long)(freqKHz / 1000), (unsigned long)(freqKHz % 1000));
+    int gmin = 999, gmax = -999;
+    uint32_t start = millis();
+    while (millis() - start < 8000) {
+        int lo = 999, hi = -999;
+        uint32_t w = millis();
+        while (millis() - w < 500) {
+            int d = rssiDbm();
+            if (d < lo) lo = d;
+            if (d > hi) hi = d;
+            if (d < gmin) gmin = d;
+            if (d > gmax) gmax = d;
+        }
+        Serial.printf("[ccrssi] window  min %d  max %d dBm\n", lo, hi);
+    }
+    Serial.printf("[ccrssi] floor ~%d dBm, peak ~%d dBm  -> set threshold ~%d\n",
+                  gmin, gmax, (gmin + gmax) / 2);
+    strobe(S_IDLE);
 }
 
 void Cc1101Spectrum::diag() {
