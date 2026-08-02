@@ -91,23 +91,26 @@
         </marker>
       </defs>
 
-      <!-- board map -->
+      <!-- board map (front view: screen + 3 corner buttons) -->
       <text x="156" y="26" text-anchor="middle" fill="#9fb08f" font-size="13" font-family="inherit">ESP32-DIV</text>
       <rect x="24" y="34" width="264" height="246" rx="16" fill="#12180f" stroke="var(--gold)" stroke-width="2"/>
-      <rect x="48" y="54" width="216" height="96" rx="6" fill="#0b0f08" stroke="#33412c"/>
-      <text x="156" y="107" text-anchor="middle" fill="#556a46" font-size="15" font-family="inherit">TFT</text>
+      <rect x="66" y="82" width="180" height="150" rx="6" fill="#0b0f08" stroke="#33412c"/>
+      <text x="156" y="162" text-anchor="middle" fill="#556a46" font-size="15" font-family="inherit">TFT</text>
       <rect x="136" y="272" width="40" height="12" rx="3" fill="#3a3a3a" stroke="#7a7a7a"/>
-      <text x="156" y="264" text-anchor="middle" fill="#9fb08f" font-size="12" font-family="inherit">USB-C</text>
-      <!-- BOOT button -->
-      <rect x="58" y="190" width="78" height="46" rx="9" fill="url(#lg-gold)" stroke="var(--deep)" stroke-width="1.5"/>
-      <text x="97" y="219" text-anchor="middle" fill="#231a08" font-size="15" font-weight="700" font-family="inherit">BOOT</text>
-      <circle cx="58" cy="190" r="15" fill="var(--berry)" stroke="#12180f" stroke-width="2"/>
-      <text x="58" y="195" text-anchor="middle" fill="#fff" font-size="15" font-weight="700" font-family="inherit">1</text>
-      <!-- RST button -->
-      <rect x="176" y="190" width="78" height="46" rx="9" fill="#241c12" stroke="var(--gold)" stroke-width="1.5"/>
-      <text x="215" y="219" text-anchor="middle" fill="#e8e4d8" font-size="15" font-weight="700" font-family="inherit">RST</text>
-      <circle cx="176" cy="190" r="15" fill="var(--deep)" stroke="#12180f" stroke-width="2"/>
-      <text x="176" y="195" text-anchor="middle" fill="#fff" font-size="15" font-weight="700" font-family="inherit">2</text>
+      <text x="156" y="266" text-anchor="middle" fill="#9fb08f" font-size="11" font-family="inherit">USB-C</text>
+      <!-- BOOT: top-left -->
+      <rect x="34" y="44" width="56" height="30" rx="7" fill="url(#lg-gold)" stroke="var(--deep)" stroke-width="1.5"/>
+      <text x="62" y="64" text-anchor="middle" fill="#231a08" font-size="13" font-weight="700" font-family="inherit">BOOT</text>
+      <circle cx="34" cy="44" r="13" fill="var(--berry)" stroke="#12180f" stroke-width="2"/>
+      <text x="34" y="49" text-anchor="middle" fill="#fff" font-size="13" font-weight="700" font-family="inherit">1</text>
+      <!-- RESET: top-right -->
+      <rect x="222" y="44" width="56" height="30" rx="7" fill="#241c12" stroke="var(--gold)" stroke-width="1.5"/>
+      <text x="250" y="64" text-anchor="middle" fill="#e8e4d8" font-size="13" font-weight="700" font-family="inherit">RST</text>
+      <circle cx="278" cy="44" r="13" fill="var(--deep)" stroke="#12180f" stroke-width="2"/>
+      <text x="278" y="49" text-anchor="middle" fill="#fff" font-size="13" font-weight="700" font-family="inherit">2</text>
+      <!-- POWER: bottom-right (not used for flashing) -->
+      <rect x="222" y="240" width="56" height="30" rx="7" fill="#1a1f16" stroke="#5c6b4d" stroke-width="1.3"/>
+      <text x="250" y="260" text-anchor="middle" fill="#8a9580" font-size="12" font-weight="700" font-family="inherit">PWR</text>
 
       <!-- divider -->
       <line x1="312" y1="44" x2="312" y2="268" stroke="#2c3626" stroke-width="1" stroke-dasharray="3 5"/>
@@ -134,12 +137,12 @@
     <p class="note" data-l="en" style="text-align:center;margin:2px 0 12px">① hold <b>BOOT</b> → ② tap <b>RESET</b> → ③ release both → click Install again, pick the port</p>
 
     <ul class="note" data-l="ru" style="margin:0;padding-left:18px">
-      <li>BOOT и RESET — маленькие кнопки <b>у модуля ESP32-S3 / рядом с USB</b>; это <b>не</b> кнопки навигации по меню (расположение на схеме условное).</li>
+      <li>На плате: <b>BOOT — сверху слева</b>, <b>RESET — сверху справа</b>. Третья кнопка (снизу справа) — <b>питание</b>, для прошивки не нужна.</li>
       <li>Кабель USB-C — с данными (не «только зарядка»); закрой монитор порта в IDE (в CLion — вкладка Deploy/Monitor).</li>
       <li>Порт не появляется в списке → поставь драйвер <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers">CP2102 (Silicon Labs)</a>.</li>
     </ul>
     <ul class="note" data-l="en" style="margin:0;padding-left:18px">
-      <li>BOOT and RESET are small buttons <b>by the ESP32-S3 module / next to USB</b> — <b>not</b> the menu-navigation buttons (positions on the diagram are schematic).</li>
+      <li>On the board: <b>BOOT — top-left</b>, <b>RESET — top-right</b>. The third button (bottom-right) is <b>power</b> — not used for flashing.</li>
       <li>Use a USB-C data cable (not charge-only); close any IDE serial monitor (in CLion, the Deploy/Monitor tab).</li>
       <li>If the port never appears, install the <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers">CP2102 (Silicon Labs) driver</a>.</li>
     </ul>
