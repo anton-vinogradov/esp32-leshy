@@ -23,6 +23,7 @@ public:
 
     void begin();                        // loads the brightness level from NVS
     void set(Activity a);                // what the radio is doing now
+    void setTx(uint8_t ledMask);         // force these LEDs solid yellow (an antenna is transmitting); 0 = none
     void tick();                         // animate; call from loop()
     uint8_t cycleBrightness();           // Off -> 2 -> 3 -> 5 -> 8 -> 12 -> Off; persists; returns new value
     uint8_t brightness() const { return bright_; }   // 0 = off
@@ -34,9 +35,10 @@ private:
     void allOff_();
 
     Adafruit_NeoPixel px_{COUNT, PIN, NEO_GRB + NEO_KHZ800};
-    Activity act_    = IDLE;
-    uint8_t  bright_ = DEFAULT_BRIGHT;   // 0 = off, else WS2812 master brightness (kept tiny)
-    bool     ready_  = false;
-    uint8_t  step_   = 0;
-    uint32_t last_   = 0;
+    Activity act_     = IDLE;
+    uint8_t  txMask_  = 0;               // LEDs overridden to yellow (their antenna is on the air)
+    uint8_t  bright_  = DEFAULT_BRIGHT;   // 0 = off, else WS2812 master brightness (kept tiny)
+    bool     ready_   = false;
+    uint8_t  step_    = 0;
+    uint32_t last_    = 0;
 };

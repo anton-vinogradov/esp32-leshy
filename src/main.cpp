@@ -1034,6 +1034,11 @@ static int      spEma[Nrf24Spectrum::CHANNELS];                 // per-channel b
 static uint32_t spRowAt = 0;
 static int      spWy = 0;                                       // current write row within the plot (ring)
 static uint8_t  spGrid[SP_W];                                   // per-column WiFi-channel marker: 0 none, 1 minor, 2 major (1/6/11)
+// TX self-test state: which Wi-Fi channels are armed for noise injection, where the
+// selection caret sits, and whether we are actually emitting. Persist while on screen.
+static uint16_t spTxMask = 0;                                   // armed Wi-Fi channels (bit 1..13)
+static int      spCursor = 6;                                  // Wi-Fi channel under the caret (1..13)
+static bool     spTxOn   = false;                              // master TX on/off
 static const uint16_t SP_BG = 0x0862;                          // near-black plot background (RGB565)
 // Only the used part of the band is shown, stretched to full width: NRF ch 2..84 =
 // 2402..2484 MHz covers all Wi-Fi (1..14) and Bluetooth. The dead ISM edges
@@ -1078,34 +1083,80 @@ static void wfLegend(uint16_t bg, uint16_t dim) {
     fontOff();
 }
 
-static void spectrumStop() { nrf.end(); }
+static void spectrumStop() { spTxOn = false; nrf.end(); }
+
+// Push the armed set to the radio (empty when TX is off, so nothing is emitted).
+static void spApplyTx() { nrf.setTxWifiMask(spTxOn ? spTxMask : 0); }
+
+// The channel axis below the plot: a tick + number per Wi-Fi channel (armed ones in
+// orange-red), plus the selection caret. Redrawn on any change; touches only the strip
+// under the plot, never the live waterfall above it.
+static void spDrawAxis() {
+    const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f), gold = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t armed = tft.color565(0xff, 0x5a, 0x32);
+    const uint16_t caret = spTxOn ? armed : tft.color565(0x46, 0xd6, 0xff);   // cyan idle → red while emitting
+    tft.fillRect(0, SP_Y + SP_H + 1, 240, 34, bg);                           // clear the strip (footer starts at y=301)
+    fontOff();                                                               // channel numbers use the built-in font (arg 1); a loaded VLW would override it
+    tft.setTextDatum(MC_DATUM);
+    for (int w = 1; w <= 13; w++) {
+        int sx = spNrfToX(Nrf24Spectrum::wifiCenterNrfCh(w));
+        if (sx < 0 || sx >= SP_W) continue;
+        int x = SP_X + sx;
+        bool major = (w == 1 || w == 6 || w == 11);
+        uint16_t col = (spTxMask & (1 << w)) ? armed : (major ? gold : dim);
+        if (w == spCursor) tft.fillTriangle(x - 3, SP_Y + SP_H + 1, x + 3, SP_Y + SP_H + 1, x, SP_Y + SP_H + 7, caret);
+        tft.drawFastVLine(x, SP_Y + SP_H + 8, 3, col);
+        tft.setTextColor(col, bg);
+        tft.drawString(String(w), x, SP_Y + SP_H + (w & 1 ? 16 : 26), 1);     // odd row higher, even lower
+    }
+}
+
+static void spDrawFooter() {
+    // Only glyphs present in the tiny VLW subset (letters, space, ◀ ▶ ▼). ▲▼ move the
+    // caret, the middle key (OK) arms the channel, ▶ starts/stops the noise.
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
+               spTxOn ? (i18n::isRu() ? "▶ стоп"           : "▶ stop")
+                      : (i18n::isRu() ? "OK канал  ▶ шум"  : "OK chan  ▶ noise"));
+}
+
+// SELECT arms/disarms the channel under the caret; live if we're already emitting.
+static void spToggleArm() {
+    spTxMask ^= (uint16_t)(1 << spCursor);
+    if (spTxMask == 0) spTxOn = false;              // nothing armed → nothing to emit
+    spApplyTx();
+    spDrawAxis();
+    spDrawFooter();
+}
+
+// RIGHT starts/stops the noise. Pressing it with nothing armed arms the caret channel.
+static void spToggleTx() {
+    if (!spTxOn && spTxMask == 0) spTxMask |= (uint16_t)(1 << spCursor);
+    spTxOn = !spTxOn && spTxMask != 0;
+    spApplyTx();
+    spDrawAxis();
+    spDrawFooter();
+}
 
 static void drawSpectrumScreen() {
-    const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f), gold = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f);
     char hr[16]; snprintf(hr, sizeof(hr), "NRF24 x%d", nrf.modules());
     uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), hr);
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     wfLegend(bg, dim);
     tft.fillRect(SP_X, SP_Y, SP_W, SP_H, SP_BG);
     tft.drawRect(SP_X - 1, SP_Y - 1, SP_W + 2, SP_H + 2, tft.color565(0x2a, 0x3a, 0x2a));
-    // Explicit per-channel markers: a vertical divider column for every Wi-Fi
-    // channel 1..13, plus numbers below in two rows so the two-digit ones don't
-    // collide. 1/6/11 (non-overlapping) stand out in gold. The dividers are pre-drawn
-    // full height and get overwritten by real energy as the waterfall fills.
+    // Vertical divider column for every Wi-Fi channel 1..13 (1/6/11 stand out); pre-drawn
+    // full height and overwritten by real energy as the waterfall fills. The tick+number
+    // strip and the selection caret below the plot are drawn by spDrawAxis().
     memset(spGrid, 0, sizeof(spGrid));
-    tft.setTextDatum(MC_DATUM);
     for (int w = 1; w <= 13; w++) {
         int sx = spNrfToX(Nrf24Spectrum::wifiCenterNrfCh(w));
         if (sx < 0 || sx >= SP_W) continue;
-        bool major = (w == 1 || w == 6 || w == 11);
-        spGrid[sx] = major ? 2 : 1;
-        int x = SP_X + sx;
-        tft.drawFastVLine(x, SP_Y, SP_H, major ? SP_GMAJ : SP_GMIN);
-        tft.drawFastVLine(x, SP_Y + SP_H + 2, 3, major ? gold : dim);
-        tft.setTextColor(major ? gold : dim, bg);
-        tft.drawString(String(w), x, SP_Y + SP_H + (w & 1 ? 10 : 20), 1);   // odd row higher, even row lower
+        spGrid[sx] = (w == 1 || w == 6 || w == 11) ? 2 : 1;
+        tft.drawFastVLine(SP_X + sx, SP_Y, SP_H, spGrid[sx] == 2 ? SP_GMAJ : SP_GMIN);
     }
-    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::tr("energy", "энергия"));
+    spDrawAxis();
+    spDrawFooter();
     drawNetBadge();
     memset(spEma, 0, sizeof(spEma)); spRowAt = millis(); spWy = 0;
 }
@@ -1371,6 +1422,7 @@ static void launch(int feat) {
                             else { infoTitle = i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
         case F_SPECTRUM:    engine.pause();                 // NRF24 is a separate SPI radio; free the ESP radio's CPU load anyway
+                            spTxMask = 0; spTxOn = false; spCursor = 6;   // start with no noise armed
                             if (nrf.begin()) { st = ST_SPECTRUM; drawSpectrumScreen(); }
                             else { infoTitle = i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
                                    infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
@@ -1412,6 +1464,7 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN)  { if (hidSel > 0)  { int p = hidSel; hidSel--; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
             else if (st == ST_LEGAL)   { if (legOff > 0) { legOff -= 4; if (legOff < 0) legOff = 0; drawLegalScreen(); } }
             else if (st == ST_LANGPICK){ if (langPickSel > 0) { langPickSel--; drawLangPick(); } }
+            else if (st == ST_SPECTRUM){ if (spCursor > 1)  { spCursor--; spDrawAxis(); } }   // move the TX channel caret
             break;
         case Buttons::DOWN:
             if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
@@ -1422,6 +1475,7 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN)  { if (hidSel < revealer.count() - 1) { int p = hidSel; hidSel++; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
             else if (st == ST_LEGAL)   { int m = legN - LEG_LINES; if (m < 0) m = 0; if (legOff < m) { legOff += 4; if (legOff > m) legOff = m; drawLegalScreen(); } }
             else if (st == ST_LANGPICK){ if (langPickSel < 1) { langPickSel++; drawLangPick(); } }
+            else if (st == ST_SPECTRUM){ if (spCursor < 13) { spCursor++; spDrawAxis(); } }   // move the TX channel caret
             break;
         case Buttons::SELECT:                    // middle = enter / confirm
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
@@ -1435,6 +1489,7 @@ static void onKey(int ev) {
             else if (st == ST_CONFIRM) doConfirm();
             else if (st == ST_OTA) otaActivate();
             else if (st == ST_WIFI) openNetOptions();
+            else if (st == ST_SPECTRUM) spToggleArm();   // arm/disarm the caret channel for TX noise
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             break;
@@ -1452,6 +1507,7 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN) openHiddenOptions();
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_SUBSPECTRUM) { cc.setBand(cc.band() + 1); drawSubScreen(); }   // cycle the displayed band
+            else if (st == ST_SPECTRUM) spToggleTx();    // start/stop transmitting noise into the armed channels
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             break;
@@ -1548,8 +1604,11 @@ static void serialControl() {
                 int n = (buf[7] == ' ') ? atoi(buf + 8) : 0;
                 if (n < 0 || n >= (int)(sizeof(S) / sizeof(S[0]))) n = 0;
                 if (!ota.simulateFail(S[n].e, S[n].code, S[n].d, S[n].ph)) { Serial.println("[cmd] otafail ignored — OTA busy"); continue; }
-                if (st == ST_DEAUTH)    detector.stop();       // same teardown launch() does — don't strand the radio
-                if (st == ST_PROVISION) net.stopProvision();
+                if (st == ST_DEAUTH)      detector.stop();     // same teardown launch() does — don't strand the radio
+                if (st == ST_CHANNELS)    airtime.stop();
+                if (st == ST_SPECTRUM)    spectrumStop();      // also stops any TX carrier
+                if (st == ST_SUBSPECTRUM) subStop();
+                if (st == ST_PROVISION)   net.stopProvision();
                 engine.pause();
                 st = ST_OTA; seenOtaGen = ota.gen(); seenOtaPhase = (int)ota.phase(); drawOtaScreen();
             }
@@ -1655,6 +1714,9 @@ void loop() {
            : st == ST_BLE                          ? StatusLeds::BLE_SCAN
            : (st == ST_OTA && ota.phase() == OtaManager::FAILED) ? StatusLeds::ERR
                                                    : StatusLeds::IDLE);
+    // An antenna emitting noise (spectrum TX) lights its own LED yellow: NRF slot i sits
+    // under LED i+1 (LED 0 is the sub-GHz antenna), so shift the slot mask up by one.
+    leds.setTx((st == ST_SPECTRUM && nrf.txActive()) ? (uint8_t)(nrf.txSlotMask() << 1) : 0);
     leds.tick();
 
     // ---- deauth monitor: hop channels + refresh stats ----

@@ -49,8 +49,17 @@ void StatusLeds::set(Activity a) {
     paint_();                     // show the first frame immediately
 }
 
+// Which antennas are transmitting — drawn as solid yellow on top of the activity
+// frame (see paint_). The UI syncs this every loop; only a change repaints.
+void StatusLeds::setTx(uint8_t ledMask) {
+    if (ledMask == txMask_) return;
+    txMask_ = ledMask;
+    if (!ready_ || !bright_) return;
+    paint_();
+}
+
 void StatusLeds::tick() {
-    if (!ready_ || !bright_ || act_ == IDLE) return;
+    if (!ready_ || !bright_ || (act_ == IDLE && txMask_ == 0)) return;
     uint32_t now = millis();
     if (now - last_ < 90) return;
     step_++;
@@ -89,6 +98,8 @@ void StatusLeds::paint_() {
             break;
         default: break;
     }
+    for (uint8_t i = 0; i < COUNT; i++)          // an antenna on the air wins its pixel: solid yellow
+        if (txMask_ & (1 << i)) show_(i, 255, 255, 0);
     px_.show();
 }
 
