@@ -223,7 +223,8 @@ void PolitePortal::handleRoot() {
             "</p><form action=\"/savename\" method=get style=\"margin-top:18px\">"
             "<input name=\"name\" value=\"" + attrEsc(cfg_.setupCurrent) + "\" autocapitalize=off autocorrect=off "
             "style=\"width:100%;box-sizing:border-box;padding:14px;font-size:16px;border-radius:10px;border:1px solid #444;background:#1c1c1c;color:#eee\">"
-            "<button class=btn style=\"width:100%;margin-top:14px;border:0;cursor:pointer\">" +
+            "<button style=\"width:100%;margin-top:16px;padding:16px;font-size:16px;font-weight:700;"
+            "border:0;border-radius:12px;background:#2ecc71;color:#04240f;cursor:pointer\">" +
             i18n::tr("Save", "Сохранить") + "</button></form>";
         sendPage(body);
         return;
