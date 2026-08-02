@@ -54,6 +54,10 @@ public:
     void setCaptureThreshold(int dbm) { capThr_ = dbm; }   // carrier-sense floor (tune to reject noise)
     void setModulation(bool fsk) { fsk_ = fsk; }           // false = OOK (remotes), true = 2-FSK (sensors)
     void setInvert(bool inv) { inv_ = inv; }               // flip replay polarity
+    bool modulation() const { return fsk_; }               // current capture/replay modulation (for persisting a slot)
+    bool inverted() const { return inv_; }
+    int  startLevel() const { return capStartLevel_; }     // captured start polarity — persist it per recording
+    void setStartLevel(int lvl) { capStartLevel_ = lvl; }  // restore it before replaying a saved slot
 
     void diag();                          // QA: reset + print PARTNUM/VERSION
 

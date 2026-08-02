@@ -22,6 +22,7 @@
 #include "features/spectrum/Nrf24Spectrum.h"
 #include "features/spectrum/Cc1101Spectrum.h"
 #include "features/subghz/SubCfg.h"
+#include "features/subghz/RecStore.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -254,8 +255,8 @@ static void openNetOptions();    // RIGHT on a scan row -> per-network options
 static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
-enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE, M_PORTAL, M_GEN };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_SUBCFG, F_LANG_EN, F_LANG_RU };
+enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE, M_PORTAL, M_GEN, M_REC };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_SUBCFG, F_REC_PLAY, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -282,7 +283,7 @@ static const MenuItem BLE_I[] = {
 static const MenuItem SUB_I[] = {
     {"Spectrum", "Sub-GHz waterfall (CC1101)", "Спектр", "Водопад Sub-GHz (CC1101)", K_FEAT, F_SUBSPECTRUM},
     {"Test TX",  "Transmit a test signal",     "Тест-передача", "Тестовый сигнал в эфир", K_FEAT, F_SUBTX},
-    {"Rec + replay", "Record + replay your own", "Запись-повтор", "Запись/повтор своего", K_FEAT, F_SUBREC},
+    {"Rec + replay", "Record + replay your own", "Запись-повтор", "Запись/повтор своего", K_SUB, M_REC},
     {"TX power", "Sub-GHz radiation power",    "Мощность TX",   "Мощность излучения",     K_FEAT, F_SUBPOWER},
 };
 static const MenuItem SET_I[] = {
@@ -312,6 +313,12 @@ static const MenuItem PORTAL_I[] = {
     {"Setup",           "Name the portal AP",         "Настроить",          "Задать имя точки",       K_FEAT, F_PORTAL_CFG},
     {"Raise",           "Raise it + consent page",    "Поднять",            "Поднять точку + согласие", K_FEAT, F_POLITE},
 };
+// Rec/Replay umbrella (Sub-GHz): capture-and-name, the saved library, and the tuning portal.
+static const MenuItem REC_I[] = {
+    {"Record",          "Capture, name, save",        "Запись",             "Захват, имя, сохранить", K_FEAT, F_SUBREC},
+    {"Playback",        "Saved captures",             "Воспроизведение",    "Сохранённые записи",     K_FEAT, F_REC_PLAY},
+    {"Settings",        "Wait, freq, threshold",      "Настройки",          "Ожидание, частота, порог", K_FEAT, F_SUBCFG},
+};
 static const MenuItem LANG_I[] = {
     {"English", "", "English", "", K_FEAT, F_LANG_EN},
     {"Русский", "", "Русский", "", K_FEAT, F_LANG_RU},
@@ -328,10 +335,11 @@ static const Menu MENUS[] = {
     {"Device",      "Устройство",  DEV_I,  3},
     {"Portal",      "Портал",      PORTAL_I, 2},
     {"Generator",   "Генератор",   GEN_I,  2},
+    {"Rec/Replay",  "Запись-повтор", REC_I, 3},
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -1524,11 +1532,13 @@ static void drawSubRecScreen(const char* status = nullptr) {
     tft.drawString(i18n::tr("OK record", "OK запись"), 10, 174);
     tft.drawString(i18n::tr("up replay", "вверх повтор"), 10, 196);
     tft.drawString(i18n::tr("down band", "вниз бэнд"), 10, 218);
-    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "▶ настройки" : "▶ setup");
+    if (recN > 0) tft.drawString(i18n::tr("right save", "вправо сохранить"), 10, 240);   // only when there's a capture to save
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", recN > 0 ? (i18n::isRu() ? "▶ сохранить" : "▶ save") : nullptr);
     fontOff();
 }
 
 static void subRecord() {
+    loadSubCfg();                                       // apply current settings — playback may have changed cc's modulation
     char msg[24]; snprintf(msg, sizeof(msg), "%s%lus", i18n::tr("Listening ", "Слушаю "), (unsigned long)(recWaitMs / 1000));
     drawSubRecScreen(msg);
     recFreqKHz = subTxFreqKHz();
@@ -1546,6 +1556,158 @@ static void subReplay() {
         delay(20);
     }
     drawSubRecScreen();
+}
+
+// ---- on-screen keyboard: name a capture before saving it to flash ----
+// The VLW fonts carry the full printable ASCII, so a plain alphanumeric grid renders fine.
+static const char* KB_ROWS[] = { "ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789-_.," };
+static const char* KB_SPEC[] = { "SPC", "DEL", "OK", "ESC" };
+static const int KB_NROW = 4, KB_NCOL = 10, KB_NSPEC = 4;
+static const int KB_X0 = 6, KB_CW = 23, KB_CH = 30, KB_Y0 = 80, KB_RSTEP = 34;
+static const int KB_SY = KB_Y0 + KB_NROW * KB_RSTEP, KB_SX = 6, KB_SW = 56, KB_SSTEP = 58;
+
+static char  kbBuf[RecStore::NAME_LEN + 1] = {0};
+static int   kbLen = 0, kbRow = 0, kbCol = 0;
+
+static int kbRowCols(int row) { return row < KB_NROW ? KB_NCOL : KB_NSPEC; }
+
+static void kbCellRect(int row, int col, int& x, int& y, int& w, int& h) {
+    if (row < KB_NROW) { x = KB_X0 + col * KB_CW;   y = KB_Y0 + row * KB_RSTEP; w = KB_CW - 2; h = KB_CH; }
+    else               { x = KB_SX + col * KB_SSTEP; y = KB_SY;                 w = KB_SW;     h = KB_CH; }
+}
+
+// Assumes a smooth font is already loaded (caller manages fontSmall/fontOff).
+static void drawKbCell(int row, int col, bool sel) {
+    const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f);
+    int x, y, w, h; kbCellRect(row, col, x, y, w, h);
+    uint16_t box = sel ? tft.color565(0x2c, 0x5a, 0x2c) : tft.color565(0x1b, 0x27, 0x1b);
+    tft.fillRoundRect(x, y, w, h, 5, box);
+    char lbl[4];
+    if (row < KB_NROW) { lbl[0] = KB_ROWS[row][col]; lbl[1] = 0; }
+    else               { strncpy(lbl, KB_SPEC[col], sizeof(lbl) - 1); lbl[sizeof(lbl) - 1] = 0; }
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(sel ? gold : white, box);
+    tft.drawString(lbl, x + w / 2, y + h / 2);
+}
+
+static void drawKbName() {
+    const uint16_t bg = uiBg(), gold = tft.color565(0xe7, 0xcf, 0x8f);
+    tft.fillRect(0, 44, 240, 30, bg);
+    fontBig();
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(gold, bg);
+    char shown[RecStore::NAME_LEN + 2];
+    snprintf(shown, sizeof(shown), "%s_", kbBuf);       // trailing caret
+    tft.drawString(shown, 10, 48);
+    fontOff();
+}
+
+static void drawKeyboard(bool full) {
+    if (full) { uiHeaderRu(i18n::tr("Name", "Имя записи")); tft.fillRect(0, 28, 240, 320 - 28, uiBg()); }
+    drawKbName();
+    fontSmall();
+    for (int r = 0; r <= KB_NROW; r++)
+        for (int c = 0; c < kbRowCols(r); c++) drawKbCell(r, c, r == kbRow && c == kbCol);
+    fontOff();
+    uiFooterRu(i18n::isRu() ? "◀▶▼▲ выбор" : "◀▶▼▲ move", i18n::isRu() ? "OK ввод" : "OK pick");
+}
+
+static void kbRepaintCursor(int pr, int pc) {
+    if (pr == kbRow && pc == kbCol) return;
+    fontSmall(); drawKbCell(pr, pc, false); drawKbCell(kbRow, kbCol, true); fontOff();
+}
+
+static void kbCommit() {
+    if (kbLen == 0) return;                             // a name is required
+    if (!RecStore::exists(kbBuf) && RecStore::count() >= RecStore::MAX_RECS) {
+        st = ST_SUBREC; drawSubRecScreen(i18n::tr("Full (64 max)", "Заполнено (64)")); return;
+    }
+    bool ok = RecStore::save(kbBuf, recBuf, recN, recFreqKHz, cc.modulation(), cc.inverted(), cc.startLevel());
+    st = ST_SUBREC;
+    if (ok) { char m[RecStore::NAME_LEN + 24]; snprintf(m, sizeof(m), "%s%s", i18n::tr("Saved: ", "Сохранено: "), kbBuf); drawSubRecScreen(m); }
+    else    drawSubRecScreen(i18n::tr("Save error", "Ошибка ФС"));
+}
+
+static void kbSelect() {
+    if (kbRow < KB_NROW) {                              // a character key
+        if (kbLen < RecStore::NAME_LEN) { kbBuf[kbLen++] = KB_ROWS[kbRow][kbCol]; kbBuf[kbLen] = 0; drawKbName(); }
+        return;
+    }
+    switch (kbCol) {                                    // special row
+        case 0: if (kbLen < RecStore::NAME_LEN) { kbBuf[kbLen++] = ' '; kbBuf[kbLen] = 0; drawKbName(); } break;  // SPC
+        case 1: if (kbLen > 0) { kbBuf[--kbLen] = 0; drawKbName(); } break;                                       // DEL
+        case 2: kbCommit(); break;                                                                                // OK
+        case 3: st = ST_SUBREC; drawSubRecScreen(); break;                                                        // ESC (discard)
+    }
+}
+
+// ---- playback: browse + replay + delete the saved library ----
+static const int RP_TOP = 42, RP_ROW_H = 30, RP_VISIBLE = 8;
+static String recNames[RecStore::MAX_RECS];
+static int    recCount = 0, recSel = 0, recOff = 0;
+static bool   recDelArm = false;                        // delete confirmation armed
+
+static void clampRecList() {
+    if (recSel < recOff) recOff = recSel;
+    if (recSel >= recOff + RP_VISIBLE) recOff = recSel - RP_VISIBLE + 1;
+    if (recOff > recCount - RP_VISIBLE) recOff = recCount - RP_VISIBLE;   // pull the window up when the list shrank
+    if (recOff < 0) recOff = 0;
+}
+
+static void drawRecPlayRow(int slot) {
+    const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f);
+    int idx = recOff + slot, y = RP_TOP + slot * RP_ROW_H;
+    tft.fillRect(0, y, 240, RP_ROW_H, bg);
+    if (idx >= recCount) return;
+    bool sel = (idx == recSel);
+    uint16_t rowbg = sel ? tft.color565(0x22, 0x33, 0x22) : bg;
+    if (sel) tft.fillRoundRect(6, y, 228, RP_ROW_H - 4, 6, rowbg);
+    fontSmall();
+    tft.setTextDatum(TL_DATUM);
+    tft.setTextColor(sel ? gold : white, rowbg);
+    tft.drawString(recNames[idx], 14, y + 8);
+    fontOff();
+}
+
+static void drawRecList() { for (int s = 0; s < RP_VISIBLE; s++) drawRecPlayRow(s); }
+
+static void drawRecPlayScreen(const char* status = nullptr) {
+    const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f);
+    uiHeaderRu(i18n::tr("Playback", "Воспроизведение"), "CC1101");
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    if (recCount == 0) {
+        fontBig(); tft.setTextDatum(TL_DATUM); tft.setTextColor(white, bg);
+        tft.drawString(i18n::tr("Empty", "Пусто"), 10, 60);
+        fontSmall(); tft.drawString(i18n::tr("Record a signal first", "Сначала запиши сигнал"), 10, 100);
+        fontOff();
+    } else {
+        drawRecList();
+    }
+    if (status) { fontSmall(); tft.setTextDatum(TL_DATUM); tft.setTextColor(gold, bg); tft.drawString(status, 10, 286); fontOff(); }
+    if (recDelArm) uiFooterRu(i18n::isRu() ? "◀ отмена"  : "◀ cancel", i18n::isRu() ? "OK удалить" : "OK delete");
+    else           uiFooterRu(i18n::isRu() ? "◀ назад"   : "◀ back",   i18n::isRu() ? "OK повтор ▶ уд" : "OK play ▶ del");
+}
+
+static void recPlaySelected() {
+    if (recSel < 0 || recSel >= recCount) return;
+    int n, sl; uint32_t fk; bool fsk, inv;
+    if (!RecStore::load(recNames[recSel].c_str(), recBuf, 512, n, fk, fsk, inv, sl)) { drawRecPlayScreen(i18n::tr("Load error", "Ошибка чтения")); return; }
+    recN = n; recFreqKHz = fk;
+    cc.setModulation(fsk); cc.setInvert(inv); cc.setStartLevel(sl);   // reproduce this slot's exact settings
+    cc.setTxPower(CC_PA[subPwrIdx]);
+    drawRecPlayScreen(i18n::tr("Replaying...", "Повтор…"));
+    for (int r = 0; r < recRepeats; r++) { cc.replayRaw(recBuf, recN, recFreqKHz); delay(20); }
+    loadSubCfg();                                       // restore the user's live settings for the next capture
+    drawRecPlayScreen(i18n::tr("Done", "Готово"));
+}
+
+static void recDeleteSelected() {
+    recDelArm = false;
+    if (recSel >= 0 && recSel < recCount) RecStore::remove(recNames[recSel].c_str());
+    recCount = RecStore::list(recNames, RecStore::MAX_RECS);
+    if (recSel >= recCount) recSel = recCount > 0 ? recCount - 1 : 0;
+    clampRecList();
+    drawRecPlayScreen(i18n::tr("Deleted", "Удалено"));
 }
 
 static void drawSubCfgScreen() {
@@ -1730,6 +1892,8 @@ static void back() {
         case ST_SUBSPECTRUM: subStop(); showMenu();                        return;
         case ST_SUBTX:     subTxOn = false; cc.end(); showMenu();          return;
         case ST_SUBREC:    cc.end(); showMenu();                           return;
+        case ST_KEYBOARD:  st = ST_SUBREC; drawSubRecScreen();             return;   // naming is part of the record flow — keep CC1101 (touch-on-header path)
+        case ST_REC_PLAY:  cc.end(); showMenu();                           return;
         case ST_SUBCFG:    subcfg.stop(); showMenu();                      return;
         case ST_POLITE:    portal.stop(); showMenu();                      return;
         case ST_NETINFO:   gotoWifi();                                     return;
@@ -1752,6 +1916,8 @@ static void launch(int feat) {
     if (st == ST_SUBSPECTRUM) subStop();           // release CC1101
     if (st == ST_SUBTX)     { subTxOn = false; cc.end(); }   // stop TX + release CC1101
     if (st == ST_SUBREC)    cc.end();              // release CC1101
+    if (st == ST_KEYBOARD)  cc.end();              // naming screen was reached with CC1101 up
+    if (st == ST_REC_PLAY)  cc.end();              // release CC1101
     if (st == ST_SUBCFG)    subcfg.stop();         // drop the settings SoftAP
     if (st == ST_POLITE)    portal.stop();         // drop the captive-portal SoftAP
     if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
@@ -1820,6 +1986,11 @@ static void launch(int feat) {
                             if (subcfg.begin()) { subCfgPhase = 0; st = ST_SUBCFG; drawSubCfgScreen(); }
                             else { infoTitle = i18n::tr("Sub-GHz setup", "Настройки Sub-GHz"); infoBody = i18n::tr("Failed to start", "Не удалось запустить"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
+        case F_REC_PLAY:    engine.pause();                        // browse + replay the saved library (CC1101 for TX)
+                            if (cc.begin()) { recCount = RecStore::list(recNames, RecStore::MAX_RECS); recSel = 0; recOff = 0; recDelArm = false; st = ST_REC_PLAY; drawRecPlayScreen(); }
+                            else { infoTitle = i18n::tr("Playback", "Воспроизведение"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
+                                   infoNote = i18n::tr("This build expects a CC1101 sub-GHz module.", "Нужен модуль CC1101."); st = ST_INFO; drawInfo(); }
+                            break;
         case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();
                             tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); break;
         case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
@@ -1855,6 +2026,8 @@ static void onKey(int ev) {
             else if (st == ST_LANGPICK){ if (langPickSel > 0) { langPickSel--; drawLangPick(); } }
             else if (st == ST_SPECTRUM && spLab){ if (spCursor > 1)  { spCursor--; spDrawAxis(); } }   // move the TX channel caret
             else if (st == ST_SUBREC) subReplay();   // up = replay the captured signal
+            else if (st == ST_KEYBOARD) { int pr = kbRow, pc = kbCol; if (kbRow > 0) kbRow--; if (kbCol >= kbRowCols(kbRow)) kbCol = kbRowCols(kbRow) - 1; kbRepaintCursor(pr, pc); }
+            else if (st == ST_REC_PLAY) { if (recDelArm) { recDelArm = false; drawRecPlayScreen(); } else if (recSel > 0) { int p = recSel; recSel--; tft.fillRect(0, 283, 240, 18, uiBg()); int oo = recOff; clampRecList(); if (recOff != oo) drawRecList(); else { drawRecPlayRow(p - recOff); drawRecPlayRow(recSel - recOff); } } }
             break;
         case Buttons::DOWN:
             if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
@@ -1867,6 +2040,8 @@ static void onKey(int ev) {
             else if (st == ST_LANGPICK){ if (langPickSel < 1) { langPickSel++; drawLangPick(); } }
             else if (st == ST_SPECTRUM && spLab){ if (spCursor < 13) { spCursor++; spDrawAxis(); } }   // move the TX channel caret
             else if (st == ST_SUBREC) { cc.setBand(cc.band() + 1); recN = 0; drawSubRecScreen(); }   // down = cycle band (drops the capture)
+            else if (st == ST_KEYBOARD) { int pr = kbRow, pc = kbCol; if (kbRow < KB_NROW) kbRow++; if (kbCol >= kbRowCols(kbRow)) kbCol = kbRowCols(kbRow) - 1; kbRepaintCursor(pr, pc); }
+            else if (st == ST_REC_PLAY) { if (recDelArm) { recDelArm = false; drawRecPlayScreen(); } else if (recSel < recCount - 1) { int p = recSel; recSel++; tft.fillRect(0, 283, 240, 18, uiBg()); int oo = recOff; clampRecList(); if (recOff != oo) drawRecList(); else { drawRecPlayRow(p - recOff); drawRecPlayRow(recSel - recOff); } } }
             break;
         case Buttons::SELECT:                    // middle = enter / confirm
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
@@ -1883,6 +2058,8 @@ static void onKey(int ev) {
             else if (st == ST_SPECTRUM && spLab) spToggleArm();   // arm/disarm the caret channel for TX noise
             else if (st == ST_SUBTX) { subTxOn = !subTxOn; if (subTxOn) subTxApply(); else cc.endTx(); drawSubTxScreen(); }
             else if (st == ST_SUBREC) subRecord();       // OK = capture the next signal
+            else if (st == ST_KEYBOARD) kbSelect();
+            else if (st == ST_REC_PLAY) { if (recDelArm) recDeleteSelected(); else recPlaySelected(); }
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
@@ -1904,7 +2081,9 @@ static void onKey(int ev) {
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_SUBSPECTRUM) { cc.setBand(cc.band() + 1); drawSubScreen(); }   // cycle the displayed band
             else if (st == ST_SUBTX) { cc.setBand(cc.band() + 1); if (subTxOn) subTxApply(); drawSubTxScreen(); }   // cycle the TX band
-            else if (st == ST_SUBREC) launch(F_SUBCFG);   // right = open the settings portal
+            else if (st == ST_SUBREC) { if (recN > 0) { kbBuf[0] = 0; kbLen = 0; kbRow = 0; kbCol = 0; st = ST_KEYBOARD; drawKeyboard(true); } }   // right = name + save the capture
+            else if (st == ST_KEYBOARD) { int pc = kbCol; if (kbCol < kbRowCols(kbRow) - 1) kbCol++; kbRepaintCursor(kbRow, pc); }
+            else if (st == ST_REC_PLAY) { if (recCount > 0 && !recDelArm) { recDelArm = true; drawRecPlayScreen(); } }   // right = arm delete
             else if (st == ST_SPECTRUM && spLab) spToggleTx();    // Lab: start/stop transmitting noise into the armed channels
             else if (st == ST_SPECTRUM)          spToggleView();  // passive: flip occupancy <-> traffic view
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
@@ -1914,7 +2093,9 @@ static void onKey(int ev) {
             else if (st == ST_INFO && infoAction == F_SUBPOWER)  { subPowerCycle();        drawSubPowerInfo(); }
             break;
         case Buttons::LEFT:
-            back();
+            if (st == ST_KEYBOARD) { int pc = kbCol; if (kbCol > 0) kbCol--; kbRepaintCursor(kbRow, pc); }   // cursor left — never falls through to back()
+            else if (st == ST_REC_PLAY && recDelArm) { recDelArm = false; drawRecPlayScreen(); }              // cancel the delete confirm
+            else back();
             break;
         default:
             break;
@@ -2021,7 +2202,7 @@ static void serialControl() {
                 if (st == ST_SPECTRUM)    spectrumStop();      // also stops any TX carrier
                 if (st == ST_SUBSPECTRUM) subStop();
                 if (st == ST_SUBTX)     { subTxOn = false; cc.end(); }
-                if (st == ST_SUBREC)      cc.end();
+                if (st == ST_SUBREC || st == ST_KEYBOARD || st == ST_REC_PLAY) cc.end();
                 if (st == ST_SUBCFG)      subcfg.stop();
                 if (st == ST_POLITE)      portal.stop();
                 if (st == ST_PROVISION)   net.stopProvision();
@@ -2034,7 +2215,7 @@ static void serialControl() {
                                                if (st == ST_SPECTRUM) spectrumStop();
                                                if (st == ST_SUBSPECTRUM) subStop();
                                                if (st == ST_SUBTX) { subTxOn = false; cc.end(); }
-                                               if (st == ST_SUBREC) cc.end();
+                                               if (st == ST_SUBREC || st == ST_KEYBOARD || st == ST_REC_PLAY) cc.end();
                                                if (st == ST_SUBCFG) subcfg.stop();
                                                if (st == ST_POLITE) portal.stop();
                                                if (st == ST_PROVISION) net.stopProvision();
@@ -2069,6 +2250,7 @@ void setup() {
     spTraffic = loadSpView();          // apply the saved spectrum view (occupancy / traffic)
     subPwrIdx = loadSubPower(); cc.setTxPower(CC_PA[subPwrIdx]);   // saved Sub-GHz TX power (default max)
     loadSubCfg();                      // saved Sub-GHz recorder settings (wait/freq/threshold/repeats/mod/invert)
+    if (!RecStore::begin()) Serial.println("[rec] LittleFS mount failed — saved captures unavailable");
     if (!legalSeen()) { st = ST_LANGPICK; drawLangPick(); }   // first run: language, then the notice
     else showMenu();
 }
