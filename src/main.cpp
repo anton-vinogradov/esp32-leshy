@@ -252,7 +252,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -284,6 +284,7 @@ static const MenuItem SET_I[] = {
     {"Language",        "Interface language",      "Язык",        "Язык интерфейса",       K_SUB,  M_LANG},
     {"Status LEDs",     "Brightness / off",        "Светодиоды",  "Яркость / выкл",        K_FEAT, F_LEDS},
     {"Screen light",    "Screen brightness",       "Яркость экрана", "Подсветка дисплея",   K_FEAT, F_BACKLIGHT},
+    {"TX power",        "Spectrum noise strength", "Мощность TX", "Сила шума спектра",      K_FEAT, F_TXPOWER},
     {"Calibrate touch", "Redo screen calibration", "Калибровка",  "Перекалибровать экран", K_FEAT, F_RECAL},
     {"About",           "About ESP32-Leshy",       "О девайсе",   "Об ESP32-Leshy",        K_FEAT, F_ABOUT},
     {"Responsible use", "Legal terms — read it",   "Ответственность", "Правила — прочти",  K_FEAT, F_LEGAL},
@@ -297,7 +298,7 @@ static const Menu MENUS[] = {
     {"Wi-Fi",       "Wi-Fi",       WIFI_I, 4},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  2},
-    {"Settings",    "Настройки",   SET_I,  8},
+    {"Settings",    "Настройки",   SET_I,  9},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 2},
 };
@@ -365,6 +366,28 @@ static void drawBacklightInfo() {
     infoNote  = i18n::tr("Press ▶ to change the screen brightness.",
                          "Жми ▶ для смены яркости экрана.");
     infoAction = F_BACKLIGHT; st = ST_INFO; drawInfo();
+}
+
+// TX radiation power for the Spectrum noise self-test — persisted; applied to the NRF24.
+static void saveTxPower(uint8_t bits) { Preferences p; p.begin("leshy", false); p.putUChar("tx_pwr", bits); p.end(); }
+static uint8_t loadTxPower() { Preferences p; p.begin("leshy", true); uint8_t v = p.getUChar("tx_pwr", 0x06); p.end(); return v & 0x06; }
+
+static uint8_t txPowerCycle() {              // 0 dBm (max) -> -6 -> -12 -> -18 -> wrap; persists; applied to radio
+    uint8_t b = nrf.txPower();
+    b = (b == 0) ? 0x06 : (uint8_t)(b - 2);
+    nrf.setTxPower(b);
+    saveTxPower(b);
+    return b;
+}
+
+static void drawTxPowerInfo() {
+    uint8_t b = nrf.txPower();
+    int dbm = Nrf24Spectrum::txPowerDbm(b);
+    infoTitle = i18n::tr("TX power", "Мощность TX");
+    infoBody  = String(dbm) + i18n::tr(" dBm", " дБм") + (b == 0x06 ? i18n::tr(" (max)", " (макс)") : "");
+    infoNote  = i18n::tr("Transmit power for the Spectrum noise test. Max = loudest, but can wash out the whole waterfall — lower it for a cleaner picture.",
+                         "Мощность передачи шума в тесте Спектра. Максимум — громче, но может засветить весь водопад — снизь для чистой картинки.");
+    infoAction = F_TXPOWER; st = ST_INFO; drawInfo();
 }
 
 static void drawProvisionScreen() {
@@ -1440,6 +1463,7 @@ static void launch(int feat) {
         case F_OTA:         gotoOta(); break;
         case F_LEDS:        drawLedsInfo(); break;         // shows current; SELECT/RIGHT cycles in place
         case F_BACKLIGHT:   drawBacklightInfo(); break;
+        case F_TXPOWER:     drawTxPowerInfo(); break;
         case F_RECAL:       touchRecalibrate(); showMenu(); break;
         case F_LANG_EN:     i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
         case F_LANG_RU:     i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
@@ -1492,6 +1516,7 @@ static void onKey(int ev) {
             else if (st == ST_SPECTRUM) spToggleArm();   // arm/disarm the caret channel for TX noise
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
+            else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
             break;
         case Buttons::RIGHT:                      // right = options / action
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
@@ -1510,6 +1535,7 @@ static void onKey(int ev) {
             else if (st == ST_SPECTRUM) spToggleTx();    // start/stop transmitting noise into the armed channels
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
+            else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
             break;
         case Buttons::LEFT:
             back();
@@ -1553,6 +1579,7 @@ static void serialControl() {
             else if (!strcmp(buf, "leds"))  { leds.selfTest(); continue; }                       // QA: all four pixels + their order
             else if (!strcmp(buf, "ledbr")) { Serial.printf("[leds] brightness -> %u/255\n", leds.cycleBrightness()); continue; }
             else if (!strcmp(buf, "bl"))    { Serial.printf("[bl] backlight -> %u/255\n", uiBacklightCycle()); continue; }
+            else if (!strcmp(buf, "txpwr")) { Serial.printf("[txpwr] -> %d dBm\n", Nrf24Spectrum::txPowerDbm(txPowerCycle())); continue; }
             else if (!strcmp(buf, "air"))   { uint16_t pm[14]; airtime.read(pm); Serial.printf("[air] run=%d ch=%d busy‰:", (int)airtime.isRunning(), (int)airtime.channel());
                                               for (int ch = 1; ch <= 13; ch++) Serial.printf(" %d:%u", ch, pm[ch]); Serial.println(); continue; }
             else if (!strcmp(buf, "nrfdiag")) { engine.pauseAndWait(); nrf.diag(); continue; }
@@ -1644,6 +1671,7 @@ void setup() {
     engine.begin();                  // background scan task
     ota.begin(&engine, &net);        // OTA needs the radio (pauses scan) and the connection
     leds.begin();                    // status LEDs under the antennas
+    nrf.setTxPower(loadTxPower());    // apply the saved Spectrum TX power (default max)
     if (!legalSeen()) { st = ST_LANGPICK; drawLangPick(); }   // first run: language, then the notice
     else showMenu();
 }

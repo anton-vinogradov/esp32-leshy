@@ -64,14 +64,14 @@ bool Nrf24Spectrum::begin() {
     return active_ > 0;
 }
 
-// Constant-carrier (unmodulated) TX on one channel: RF_SETUP CONT_WAVE|PLL_LOCK,
-// CONFIG PWR_UP with PRIM_RX cleared (transmitter). Caller raises CE to emit. Lowest
-// power (RF_PWR=00, -18 dBm): the RX module is centimetres away, so this is still far
-// above its RPD floor while limiting the overload that would smear energy onto
-// neighbouring channels. CONT_WAVE is an nRF24L01+ feature (same '+' the RPD sweep needs).
+// Constant-carrier (unmodulated) TX on one channel: RF_SETUP CONT_WAVE|PLL_LOCK at the
+// user-set power (txPwr_, default 0 dBm max), CONFIG PWR_UP with PRIM_RX cleared. Caller
+// raises CE to emit. CONT_WAVE is an nRF24L01+ feature (same '+' the RPD sweep needs).
+// Note: at max power the RX module (centimetres away) can overload and smear energy onto
+// neighbours — lower the power in Settings for a cleaner selective picture.
 void Nrf24Spectrum::configTx(int csn, int ch) {
     writeReg(csn, R_EN_AA,     0x00);
-    writeReg(csn, R_RF_SETUP,  0x80 | 0x10 | 0x00);     // CONT_WAVE | PLL_LOCK | 1 Mbps | -18 dBm
+    writeReg(csn, R_RF_SETUP,  0x80 | 0x10 | txPwr_);   // CONT_WAVE | PLL_LOCK | 1 Mbps | RF_PWR
     writeReg(csn, R_RF_CH,     ch);
     writeReg(csn, R_CONFIG,    0x02);                   // PWR_UP, PRIM_RX = 0 → TX
 }

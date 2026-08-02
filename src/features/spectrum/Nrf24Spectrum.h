@@ -38,6 +38,12 @@ public:
     bool    txActive() const { return txWifiMask_ != 0 && txHopN_ > 0 && active_ > 0; }
     uint8_t txSlotMask() const { return txSlotMask_; }   // physical NRF slots (bit 0..2) armed for TX → antenna LEDs
 
+    // TX radiation power = the RF_PWR field of RF_SETUP: 0x06 = 0 dBm (max), then -6, -12,
+    // 0x00 = -18 dBm. Set before arming; takes effect on the next setTxWifiMask().
+    void    setTxPower(uint8_t rfPwrBits) { txPwr_ = rfPwrBits & 0x06; }
+    uint8_t txPower() const { return txPwr_; }
+    static int txPowerDbm(uint8_t bits) { return -18 + (int)(bits >> 1) * 6; }   // 00→-18 · 02→-12 · 04→-6 · 06→0
+
     static int wifiCenterNrfCh(int wifiCh) { return wifiCh == 14 ? 84 : 12 + (wifiCh - 1) * 5; }
 
 private:
@@ -54,6 +60,7 @@ private:
     int slot_[SLOTS] = {0};                // physical slot index (0..2) of each active module — for the per-antenna LED
 
     uint16_t txWifiMask_ = 0;              // armed Wi-Fi channels (bit 1..13); 0 = TX off
+    uint8_t  txPwr_      = 0x06;           // RF_PWR bits — default 0 dBm (max); user-tunable in Settings
     int      txCount_    = 0;              // modules dedicated to TX (rest sweep RX); 1 module → time-sliced
     uint8_t  txSlotMask_ = 0;             // physical slots emitting this sweep (for LEDs)
     uint8_t  txHop_[CHANNELS];             // distinct NRF channels the carrier hops through
