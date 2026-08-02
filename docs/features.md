@@ -12,12 +12,14 @@ ESP32-Leshy
 │  ├─ Wi-Fi Scan        signal · channel · security · ★your net · hidden
 │  │  └─ ▶ on a network  Details (SSID · BSSID · channel · RSSI · security)
 │  ├─ Channels 2.4G     scrolling real per-channel airtime graphs (promiscuous; 1/6/11)
+│  ├─ Spectrum 2.4G     raw band waterfall over 2400-2525 MHz (NRF24 carrier detect)
 │  └─ Advanced
 │     ├─ Hidden names   revealed hidden SSIDs (saved to flash, deletable)
 │     └─ Deauth monitor passive alarm on deauth/disassoc bursts
 ├─ BLE
 │  └─ BLE Scan          nearby devices + tracker detector
 ├─ Sub-GHz
+│  ├─ Spectrum          sub-GHz waterfall, RIGHT cycles bands (CC1101 RSSI)
 │  └─ Recorder          315/433/868 MHz (coming, needs CC1101)
 └─ Settings
    ├─ Wi-Fi connect     set up from your phone (captive portal) · status
@@ -37,6 +39,9 @@ Live list of nearby access points. Each row shows the name, a small **sparkline 
 ### Channels 2.4G
 A live, scrolling **area graph per channel (1–13)** — a cardiograph of how busy each channel really is. It listens in **promiscuous mode** and sums the on-air time of the frames it hears (management + data + control), sweeping the channels one at a time, so a channel with one busy access point outranks a channel crowded with idle ones. This is **actual airtime, not access-point count**. The value is a **lower bound** (only frames the radio decodes are counted, and the rate is estimated), so quiet air shows a small baseline and a genuine download or stream clearly rises above it. The non-overlapping channels **1 / 6 / 11** are highlighted. Uses the radio exclusively, so the background scan pauses while this screen is open.
 
+### Spectrum 2.4G
+A live **waterfall of the whole 2.4 GHz band** (2400–2525 MHz), painted with a separate **NRF24** radio while the ESP32's own Wi-Fi stays free. The NRF24 has no spectrum analyzer, but its carrier detector (RPD) latches on any signal above ~-64 dBm; sweeping all 126 one-MHz channels and colouring each by how often it fires builds a heat map — newest scan on top, flowing down. It sees **more than Wi-Fi**: Bluetooth, wireless video, drones, microwaves — anything radiating in the band shows up. Wi-Fi channels **1 / 6 / 11** are marked on the frequency axis. Needs an NRF24 module fitted (slot 2 on the ESP32-DIV v2).
+
 ### Advanced → Hidden names
 Hidden networks broadcast an empty SSID, but the name still travels in cleartext inside **Probe-Response** and **(Re)Association** frames. While scanning, the device passively recovers those names **only for the BSSIDs the scan actually sees as hidden**, saves them to flash (they survive a reboot), and lists them here with delete. It is passive — a name appears only when there is real traffic to that network (a client probing or connecting).
 
@@ -49,6 +54,9 @@ A passive, receive-only alarm: it watches the air (hopping channels) and flags b
 Lists nearby Bluetooth-LE devices and flags known **trackers** (Apple Find My / Tile / Samsung SmartTag).
 
 ## Sub-GHz
+
+### Spectrum
+A live waterfall of the sub-GHz band on the **CC1101**, which reports a real RSSI per frequency (true signal strength, not just presence). **RIGHT cycles the display window**: the whole 300–928 MHz span, then aimed technical bands — **315** (car fobs / garage remotes / TPMS), **433** (alarms, remotes, sensors), **868** (EU LoRa / Meshtastic), **915** (US LoRa / Meshtastic), and a tight **433 zoom**. Same flicker-free rendering as the 2.4 GHz screen, with the quiet→busy colour legend. Receive-only. Needs a CC1101 module fitted.
 
 ### Recorder
 Record / replay 315–868 MHz — **coming**, needs the CC1101 module.

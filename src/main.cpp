@@ -19,6 +19,8 @@
 #include "features/input/Touch.h"
 #include "features/leds/StatusLeds.h"
 #include "features/airtime/AirtimeMonitor.h"
+#include "features/spectrum/Nrf24Spectrum.h"
+#include "features/spectrum/Cc1101Spectrum.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -238,6 +240,8 @@ OtaManager     ota;
 DeauthDetector detector;
 StatusLeds     leds;             // the four WS2812s under the antennas — shows what the radio is doing
 AirtimeMonitor airtime;          // real per-channel airtime (promiscuous) for the Channels screen
+Nrf24Spectrum  nrf;              // NRF24 raw 2.4GHz spectrum sniffer
+Cc1101Spectrum cc;              // CC1101 sub-GHz spectrum sniffer
 
 static void drawNetBadge();      // small "connected" mark in the header (defined below)
 static void gotoWifi();          // (re)enter the live Wi-Fi scan
@@ -248,7 +252,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_BLE_SCAN, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -259,7 +263,8 @@ static const MenuItem ROOT_I[] = {
 };
 static const MenuItem WIFI_I[] = {
     {"Wi-Fi Scan",    "Signal, channel, lock", "Скан Wi-Fi",    "Сигнал, канал, шифр",   K_FEAT, F_WIFI_SCAN},
-    {"Channels 2.4G", "Load by channel",       "Каналы 2.4ГГц", "Загрузка по каналам",   K_FEAT, F_CHANNELS},
+    {"Channels 2.4G", "Airtime per channel",   "Каналы 2.4ГГц", "Занятость по каналам",  K_FEAT, F_CHANNELS},
+    {"Spectrum 2.4G", "Raw band waterfall (NRF24)", "Спектр 2.4ГГц", "Водопад по спектру (NRF24)", K_FEAT, F_SPECTRUM},
     {"Advanced",      "Deeper Wi-Fi tools",    "Продвинутое",   "Инструменты поглубже",  K_SUB,  M_WIFI_ADV},
 };
 static const MenuItem WADV_I[] = {
@@ -270,7 +275,8 @@ static const MenuItem BLE_I[] = {
     {"BLE Scan", "Devices & trackers nearby", "Скан BLE", "Устройства и трекеры рядом", K_FEAT, F_BLE_SCAN},
 };
 static const MenuItem SUB_I[] = {
-    {"Recorder", "Record RF signals (soon)", "Запись", "Запись сигналов (скоро)", K_FEAT, F_SUBGHZ_SOON},
+    {"Spectrum", "Sub-GHz waterfall (CC1101)", "Спектр", "Водопад Sub-GHz (CC1101)", K_FEAT, F_SUBSPECTRUM},
+    {"Recorder", "Record RF signals (soon)",   "Запись", "Запись сигналов (скоро)",   K_FEAT, F_SUBGHZ_SOON},
 };
 static const MenuItem SET_I[] = {
     {"Wi-Fi connect",   "Status, join, exit",      "Wi-Fi подключение", "Статус, вход, выход",   K_FEAT, F_CONN},
@@ -288,16 +294,16 @@ static const MenuItem LANG_I[] = {
 };
 static const Menu MENUS[] = {
     {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
-    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 3},
+    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 4},
     {"BLE",         "BLE",         BLE_I,  1},
-    {"Sub-GHz",     "Sub-GHz",     SUB_I,  1},
+    {"Sub-GHz",     "Sub-GHz",     SUB_I,  2},
     {"Settings",    "Настройки",   SET_I,  8},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 2},
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_NETINFO, ST_LEGAL, ST_LANGPICK };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -1017,6 +1023,157 @@ static void drawChannelScreen() {
     drawNetBadge();
 }
 
+// ---- 2.4GHz spectrum waterfall (NRF24) ----
+// Flicker-free by construction: instead of scrolling a full-screen sprite (a ~31ms
+// blit per frame → visible tearing), we write ONE new row directly to the panel at
+// a moving cursor and never move the existing pixels — a ring-buffer waterfall with
+// a bright sweep line marking "now". Each update is a 228x1 push (~0.1ms). No big
+// sprite either, so ~106 KB of heap stays free.
+static const int SP_X = 6, SP_Y = 46, SP_W = 228, SP_H = 220;   // plot area (legend row above, 2 label rows below)
+static int      spEma[Nrf24Spectrum::CHANNELS];                 // per-channel busy level 0..255 (smoothed) — gives a full colour gradient
+static uint32_t spRowAt = 0;
+static int      spWy = 0;                                       // current write row within the plot (ring)
+static uint8_t  spGrid[SP_W];                                   // per-column WiFi-channel marker: 0 none, 1 minor, 2 major (1/6/11)
+static const uint16_t SP_BG = 0x0862;                          // near-black plot background (RGB565)
+// Only the used part of the band is shown, stretched to full width: NRF ch 2..84 =
+// 2402..2484 MHz covers all Wi-Fi (1..14) and Bluetooth. The dead ISM edges
+// (2400..2402, 2484..2525) are dropped so channels 1..13 spread across the screen.
+static const int SP_CH_LO = 2, SP_CH_HI = 84;
+static inline int spNrfToX(int nc) { return (nc - SP_CH_LO) * SP_W / (SP_CH_HI - SP_CH_LO); }
+static inline int spXToNrf(int x)  { return SP_CH_LO + x * (SP_CH_HI - SP_CH_LO) / SP_W; }
+
+// Energy → heat colour: blue → cyan → green → yellow → red.
+static uint16_t spColor(int e, int maxN) {
+    if (e <= 0 || maxN <= 0) return SP_BG;
+    float f = (float)e / maxN; if (f > 1) f = 1;
+    uint8_t r, g, b;
+    if      (f < 0.25f) { r = 0;                                g = (uint8_t)(f / 0.25f * 160);         b = 210; }
+    else if (f < 0.50f) { r = 0;                                g = 160 + (uint8_t)((f - 0.25f) / 0.25f * 95); b = (uint8_t)(210 - (f - 0.25f) / 0.25f * 210); }
+    else if (f < 0.75f) { r = (uint8_t)((f - 0.50f) / 0.25f * 255); g = 255;                            b = 0; }
+    else                { r = 255;                              g = (uint8_t)(255 - (f - 0.75f) / 0.25f * 255); b = 0; }
+    return tft.color565(r, g, b);
+}
+static const uint16_t SP_GMAJ = 0x6AA2, SP_GMIN = 0x2164;       // channel dividers: dim gold (1/6/11), faint grey-green (others)
+
+// Push one waterfall row at the ring cursor and advance it, leaving a bright sweep
+// line just ahead of the newest data. Shared by the 2.4GHz (NRF) and Sub-GHz (CC1101)
+// spectrum screens — one 228x1 blit, no pixels moved, so it never flickers.
+static void wfPushRow(const uint16_t* row) {
+    tft.setSwapBytes(false);
+    tft.pushImage(SP_X, SP_Y + spWy, SP_W, 1, (uint16_t*)row);
+    spWy = (spWy + 1) % SP_H;
+    tft.drawFastHLine(SP_X, SP_Y + spWy, SP_W, tft.color565(0x6a, 0x80, 0x6a));
+}
+
+// The quiet→busy colour legend, shared by both spectrum screens. Cyrillic labels
+// need the smooth VLW font (font1 is ASCII-only).
+static void wfLegend(uint16_t bg, uint16_t dim) {
+    const int by = 32, bh = 8, bw = 118, bx = SP_X + 46;
+    for (int i = 0; i < bw; i++) tft.drawFastVLine(bx + i, by, bh, spColor(i * 255 / (bw - 1), 255));
+    tft.drawRect(bx - 1, by - 1, bw + 2, bh + 2, tft.color565(0x2a, 0x3a, 0x2a));
+    fontTiny();
+    tft.setTextColor(dim, bg);
+    tft.setTextDatum(MR_DATUM); tft.drawString(i18n::tr("quiet", "тихо"), bx - 5, by + bh / 2);
+    tft.setTextDatum(ML_DATUM); tft.drawString(i18n::tr("busy", "занято"), bx + bw + 5, by + bh / 2);
+    fontOff();
+}
+
+static void spectrumStop() { nrf.end(); }
+
+static void drawSpectrumScreen() {
+    const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f), gold = tft.color565(0xff, 0xcf, 0x3f);
+    uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), "NRF24");
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    wfLegend(bg, dim);
+    tft.fillRect(SP_X, SP_Y, SP_W, SP_H, SP_BG);
+    tft.drawRect(SP_X - 1, SP_Y - 1, SP_W + 2, SP_H + 2, tft.color565(0x2a, 0x3a, 0x2a));
+    // Explicit per-channel markers: a vertical divider column for every Wi-Fi
+    // channel 1..13, plus numbers below in two rows so the two-digit ones don't
+    // collide. 1/6/11 (non-overlapping) stand out in gold. The dividers are pre-drawn
+    // full height and get overwritten by real energy as the waterfall fills.
+    memset(spGrid, 0, sizeof(spGrid));
+    tft.setTextDatum(MC_DATUM);
+    for (int w = 1; w <= 13; w++) {
+        int sx = spNrfToX(Nrf24Spectrum::wifiCenterNrfCh(w));
+        if (sx < 0 || sx >= SP_W) continue;
+        bool major = (w == 1 || w == 6 || w == 11);
+        spGrid[sx] = major ? 2 : 1;
+        int x = SP_X + sx;
+        tft.drawFastVLine(x, SP_Y, SP_H, major ? SP_GMAJ : SP_GMIN);
+        tft.drawFastVLine(x, SP_Y + SP_H + 2, 3, major ? gold : dim);
+        tft.setTextColor(major ? gold : dim, bg);
+        tft.drawString(String(w), x, SP_Y + SP_H + (w & 1 ? 10 : 20), 1);   // odd row higher, even row lower
+    }
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::tr("energy", "энергия"));
+    drawNetBadge();
+    memset(spEma, 0, sizeof(spEma)); spRowAt = millis(); spWy = 0;
+}
+
+static void spectrumTick() {
+    uint8_t sw[Nrf24Spectrum::CHANNELS];
+    nrf.sweep(sw);                                       // ~25ms across 126 channels; RPD is 1-bit per channel
+    for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++)
+        spEma[c] += ((int)sw[c] * 255 - spEma[c]) / 8;  // smooth to a 0..255 duty level → full colour gradient
+    if (millis() - spRowAt < 37) return;                // one waterfall row every ~37ms (fast scroll)
+    spRowAt = millis();
+    static uint16_t row[SP_W];
+    for (int x = 0; x < SP_W; x++) {
+        int c = spXToNrf(x);
+        if (c < 0) c = 0; else if (c >= Nrf24Spectrum::CHANNELS) c = Nrf24Spectrum::CHANNELS - 1;
+        if      (spEma[c] > 8)     row[x] = spColor(spEma[c], 255);       // real energy → heat gradient
+        else if (spGrid[x] == 2)   row[x] = SP_GMAJ;                      // channel divider shows through quiet air
+        else if (spGrid[x] == 1)   row[x] = SP_GMIN;
+        else                       row[x] = SP_BG;
+    }
+    wfPushRow(row);                                     // one row, direct — no pixels moved, no flicker
+}
+
+// ---- Sub-GHz spectrum waterfall (CC1101) ----
+// Same flicker-free ring waterfall, but the CC1101 gives a real RSSI per frequency,
+// so the heat is true signal strength. RIGHT cycles the display window: whole span,
+// then aimed technical bands (315/433 remotes & alarms, 868/915 mesh & LoRa).
+static const int SUB_NB = 40;                           // frequencies swept per row (fewer = ~3x faster scroll; mapped across the width)
+static uint8_t   subE[SUB_NB];
+static int       subBin = 0;                            // sweep progress (spread across loop iterations for button responsiveness)
+
+static void subStop() { cc.end(); }
+
+static void drawSubScreen() {
+    const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f), gold = tft.color565(0xff, 0xcf, 0x3f);
+    const Cc1101Spectrum::Band& b = cc.bandInfo();
+    uiHeaderRu(i18n::tr("Sub-GHz Spectrum", "Спектр Sub-GHz"), "CC1101");
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    wfLegend(bg, dim);
+    tft.fillRect(SP_X, SP_Y, SP_W, SP_H, SP_BG);
+    tft.drawRect(SP_X - 1, SP_Y - 1, SP_W + 2, SP_H + 2, tft.color565(0x2a, 0x3a, 0x2a));
+    // axis: localized band name (centre) on the VLW font + the MHz range at the ends
+    fontTiny();
+    tft.setTextColor(gold, bg); tft.setTextDatum(MC_DATUM);
+    tft.drawString(i18n::isRu() ? b.ru : b.en, SP_X + SP_W / 2, SP_Y + SP_H + 13);
+    tft.setTextColor(dim, bg);
+    tft.setTextDatum(ML_DATUM); tft.drawString(String(b.loKHz / 1000), SP_X, SP_Y + SP_H + 13);
+    tft.setTextDatum(MR_DATUM); tft.drawString(String(b.hiKHz / 1000) + (i18n::isRu() ? " МГц" : " MHz"), SP_X + SP_W, SP_Y + SP_H + 13);
+    fontOff();
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::tr("band ▶", "диапазон ▶"));
+    drawNetBadge();
+    spWy = 0; subBin = 0;
+}
+
+static void subTick() {
+    // Sweep only a few bins per loop iteration so buttons (band switch) stay snappy —
+    // a full CC1101 sweep is ~150-250ms, too long to block the input poll.
+    for (int k = 0; k < 10 && subBin < SUB_NB; k++, subBin++) subE[subBin] = cc.sampleBin(subBin, SUB_NB);
+    if (subBin < SUB_NB) return;                        // sweep still in progress
+    subBin = 0;
+    static uint16_t row[SP_W];
+    for (int x = 0; x < SP_W; x++) {
+        int bin = x * SUB_NB / SP_W; if (bin >= SUB_NB) bin = SUB_NB - 1;
+        int e = subE[bin];
+        row[x] = (e > 12) ? spColor(e, 255) : SP_BG;    // above the noise floor → heat
+    }
+    wfPushRow(row);
+}
+
 // ---- Wi-Fi scan selection + per-network options ----
 static void ensureWifiVisible() {
     int n = engine.wifiCount();
@@ -1177,6 +1334,8 @@ static void back() {
                            showMenu();                                     return;
         case ST_DEAUTH:    detector.stop(); showMenu();                    return;
         case ST_CHANNELS:  airtime.stop(); showMenu();                     return;
+        case ST_SPECTRUM:  spectrumStop(); showMenu();                     return;
+        case ST_SUBSPECTRUM: subStop(); showMenu();                        return;
         case ST_NETINFO:   gotoWifi();                                     return;
         case ST_OTA:       if (ota.busy()) return;   // checking or downloading — stay put
                            showMenu();                                     return;
@@ -1193,6 +1352,8 @@ static void launch(int feat) {
     if (ota.busy() && feat != F_OTA) return;
     if (st == ST_DEAUTH)    detector.stop();       // release promiscuous before anything else
     if (st == ST_CHANNELS)  airtime.stop();        // also promiscuous
+    if (st == ST_SPECTRUM)  spectrumStop();        // release NRF24
+    if (st == ST_SUBSPECTRUM) subStop();           // release CC1101
     if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
     engine.pause();                                // scanning is off unless the target feature turns it back on
     infoAction = -1;                               // most info screens aren't adjustable; the two that are set this
@@ -1207,6 +1368,16 @@ static void launch(int feat) {
         case F_CHANNELS:    engine.pauseAndWait();          // airtime needs the radio to itself (promiscuous)
                             if (airtime.begin()) { st = ST_CHANNELS; memset(chHist, 0, sizeof(chHist)); chHead = 0; drawChannelScreen(); }
                             else { infoTitle = i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
+                            break;
+        case F_SPECTRUM:    engine.pause();                 // NRF24 is a separate SPI radio; free the ESP radio's CPU load anyway
+                            if (nrf.begin()) { st = ST_SPECTRUM; drawSpectrumScreen(); }
+                            else { infoTitle = i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
+                                   infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
+                            break;
+        case F_SUBSPECTRUM: engine.pause();
+                            if (cc.begin()) { cc.setBand(0); st = ST_SUBSPECTRUM; drawSubScreen(); }
+                            else { infoTitle = i18n::tr("Sub-GHz Spectrum", "Спектр Sub-GHz"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
+                                   infoNote = i18n::tr("This build expects a CC1101 sub-GHz module.", "Нужен модуль CC1101."); st = ST_INFO; drawInfo(); }
                             break;
         case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();
                             tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); break;
@@ -1279,6 +1450,7 @@ static void onKey(int ev) {
             else if (st == ST_OTA) otaActivate();
             else if (st == ST_HIDDEN) openHiddenOptions();
             else if (st == ST_WIFI) openNetOptions();
+            else if (st == ST_SUBSPECTRUM) { cc.setBand(cc.band() + 1); drawSubScreen(); }   // cycle the displayed band
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             break;
@@ -1326,6 +1498,38 @@ static void serialControl() {
             else if (!strcmp(buf, "bl"))    { Serial.printf("[bl] backlight -> %u/255\n", uiBacklightCycle()); continue; }
             else if (!strcmp(buf, "air"))   { uint16_t pm[14]; airtime.read(pm); Serial.printf("[air] run=%d ch=%d busy‰:", (int)airtime.isRunning(), (int)airtime.channel());
                                               for (int ch = 1; ch <= 13; ch++) Serial.printf(" %d:%u", ch, pm[ch]); Serial.println(); continue; }
+            else if (!strcmp(buf, "nrfdiag")) { engine.pauseAndWait(); nrf.diag(); continue; }
+            else if (!strcmp(buf, "cc")) {   // QA: probe CC1101 + a quick RSSI sweep of the current band
+                engine.pauseAndWait();
+                bool ok = cc.begin();
+                Serial.printf("[cc] present=%d version=0x%02X\n", (int)ok, cc.version());
+                if (ok) {
+                    static uint8_t e[64];
+                    cc.sweep(e, 64);
+                    Serial.printf("[cc] %s RSSI64:", cc.bandInfo().en);
+                    for (int i = 0; i < 64; i++) Serial.printf(" %d", e[i]);
+                    Serial.println();
+                }
+                cc.end();
+                continue;
+            }
+            else if (!strcmp(buf, "nrf"))   {   // QA: probe the NRF24 spectrum sniffer on real hardware
+                engine.pauseAndWait();
+                bool ok = nrf.begin();
+                Serial.printf("[nrf] present=%d\n", (int)ok);
+                if (ok) {
+                    static uint16_t acc[Nrf24Spectrum::CHANNELS];
+                    memset(acc, 0, sizeof(acc));
+                    uint8_t sw[Nrf24Spectrum::CHANNELS];
+                    for (int p = 0; p < 300; p++) { nrf.sweep(sw); for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) acc[c] += sw[c]; }
+                    Serial.print("[nrf] hits/300:");
+                    for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) if (acc[c]) Serial.printf(" %d:%d", c, acc[c]);
+                    Serial.println();
+                    for (int w = 1; w <= 13; w++) { int nc = Nrf24Spectrum::wifiCenterNrfCh(w); Serial.printf("  wifi%d (nrf%d): %d\n", w, nc, acc[nc]); }
+                }
+                nrf.end();
+                continue;
+            }
             else if (!strcmp(buf, "stat")) { Serial.printf("[stat] st=%d wifiGen=%u bleGen=%u scanIdle=%d heap=%u largest=%u\n",
                                              (int)st, (unsigned)engine.wifiGen(), (unsigned)engine.bleGen(),
                                              (int)engine.isIdle(), (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap()); continue; }
@@ -1351,6 +1555,8 @@ static void serialControl() {
             else if (!strcmp(buf, "menu"))   { if (ota.busy()) continue;
                                                if (st == ST_DEAUTH) detector.stop();
                                                if (st == ST_CHANNELS) airtime.stop();
+                                               if (st == ST_SPECTRUM) spectrumStop();
+                                               if (st == ST_SUBSPECTRUM) subStop();
                                                if (st == ST_PROVISION) net.stopProvision();
                                                depth = 0; showMenu(); }
             else { Serial.printf("[cmd] ? '%s'\n", buf); continue; }
@@ -1443,7 +1649,8 @@ void loop() {
     leds.set(ota.busy()                            ? StatusLeds::OTA
            : st == ST_PROVISION                    ? StatusLeds::PORTAL
            : st == ST_DEAUTH                       ? StatusLeds::PROMISC
-           : (st == ST_WIFI || st == ST_CHANNELS)  ? StatusLeds::WIFI_SCAN
+           : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM) ? StatusLeds::WIFI_SCAN
+           : st == ST_SUBSPECTRUM                  ? StatusLeds::PROMISC
            : st == ST_BLE                          ? StatusLeds::BLE_SCAN
            : (st == ST_OTA && ota.phase() == OtaManager::FAILED) ? StatusLeds::ERR
                                                    : StatusLeds::IDLE);
@@ -1494,6 +1701,11 @@ void loop() {
             channelGraphs();        // header/footer untouched — no flicker
         }
     }
+
+    // 2.4GHz spectrum waterfall
+    if (st == ST_SPECTRUM) spectrumTick();
+    // Sub-GHz spectrum waterfall
+    if (st == ST_SUBSPECTRUM) subTick();
 
     if (millis() > 8000) ota.markHealthy();  // once the UI has clearly been up, confirm this image
 
