@@ -1517,7 +1517,7 @@ static void serialControl() {
             else if (!strcmp(buf, "nrf"))   {   // QA: probe the NRF24 spectrum sniffer on real hardware
                 engine.pauseAndWait();
                 bool ok = nrf.begin();
-                Serial.printf("[nrf] present=%d\n", (int)ok);
+                Serial.printf("[nrf] present=%d modules=%d\n", (int)ok, nrf.modules());
                 if (ok) {
                     static uint16_t acc[Nrf24Spectrum::CHANNELS];
                     memset(acc, 0, sizeof(acc));

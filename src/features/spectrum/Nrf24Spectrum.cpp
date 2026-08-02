@@ -93,9 +93,10 @@ void Nrf24Spectrum::diag() {
     // wrote (0x4C) — that readback is the reliable "it's an NRF" test (CC1101/SD on
     // the same bus won't echo it), so we can safely probe extra candidate CS pins.
     // Datasheet slots first (CSN 4/48/21), then other unused GPIOs; both bus orders.
-    static const int CSN_CAND[] = { 4, 48, 21, 2, 8, 9, 38, 39, 40, 41, 42, 45, 46 };
+    static const int CSN_CAND[] = { 4, 48, 21 };            // the three NRF24 CSN lines per the V2 schematic (U1/U2/U3)
     static const int ORD[][2]   = { {13, 11}, {11, 13} };   // {miso, mosi}
     SPISettings slow(2000000, MSBFIRST, SPI_MODE0);
+    for (int i : CSN_CAND) { pinMode(i, OUTPUT); digitalWrite(i, HIGH); }   // deselect ALL first, so a probe reads only its own module
     int found = 0;
     for (int ci = 0; ci < (int)(sizeof(CSN_CAND) / sizeof(int)); ci++) {
         int csn = CSN_CAND[ci];
