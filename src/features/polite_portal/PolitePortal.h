@@ -19,6 +19,8 @@
 struct PolitePortalConfig {
     String   targetSsid;                      // AP whose TX power we watch (yours); EMPTY = consent mode (stop on button, no RSSI)
     String   portalSsid = "lower-your-wifi-power";
+    bool     setup       = false;             // setup mode: raise a config AP and serve a "name" form instead of the consent page
+    String   setupCurrent;                    // setup mode: current saved name, to prefill the form
     uint8_t  channel     = 6;                 // SoftAP channel in consent mode (RSSI mode uses the target's channel)
     int      rssiDropDb  = 6;                  // drop vs baseline that counts as "reduced"
     uint32_t baselineMs  = 8000;              // how long to measure the baseline
@@ -34,6 +36,8 @@ public:
 
     bool isRunning() const { return running_; }
     bool consented() const { return consented_; }   // someone tapped "I lowered the power" (consent mode)
+    bool nameSubmitted() const { return nameSubmitted_; }        // setup mode: a name was submitted from the form
+    const String& submittedName() const { return submittedName_; }
     const String& ssid() const { return cfg_.portalSsid; }
     int  baselineRssi() const { return baseline_; }
     int  currentRssi();                       // median over the recent window
@@ -48,6 +52,7 @@ private:
     void handleRoot();
     void handleReduced();
     void handleResult();
+    void handleSaveName();                     // setup mode: store the AP name submitted from the form
     void redirectToPortal();
     void applyLangArg();                       // honor ?lang=en|ru from the switcher
     void sendPage(const String& body, int refreshSec = -1, const char* refreshUrl = nullptr);
@@ -68,6 +73,9 @@ private:
 
     bool     running_ = false;
     bool     routesRegistered_ = false;       // web_ handlers registered once (stop() doesn't drop them → don't re-add)
+    bool     setup_ = false;                  // setup mode: serve the name form
+    bool     nameSubmitted_ = false;          // setup mode: form submitted
+    String   submittedName_;                  // setup mode: the submitted AP name
     bool     baselineReady_ = false;          // baseline still being measured until true
     bool     consented_ = false;              // consent-mode: the button was tapped
     bool     shutdownArmed_ = false;

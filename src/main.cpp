@@ -253,7 +253,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_POLITE, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -299,7 +299,8 @@ static const MenuItem DEV_I[] = {
 static const MenuItem LAB_I[] = {
     {"Generator 2.4",   "Transmit into channels", "Генератор 2.4", "Передача в выбранные каналы", K_FEAT, F_NOISEGEN},
     {"TX mode",         "Verify / Maximum",           "Режим передачи",     "Проверка / Максимум",    K_FEAT, F_TXMODE},
-    {"Captive portal",  "Own AP + consent page",      "Captive-портал",     "Своя точка + согласие",  K_FEAT, F_POLITE},
+    {"Portal: setup",   "Name the portal AP",         "Портал: настроить",  "Задать имя точки",       K_FEAT, F_PORTAL_CFG},
+    {"Portal: raise",   "Raise it + consent page",    "Портал: поднять",    "Поднять точку + согласие", K_FEAT, F_POLITE},
 };
 static const MenuItem LANG_I[] = {
     {"English", "", "English", "", K_FEAT, F_LANG_EN},
@@ -313,7 +314,7 @@ static const Menu MENUS[] = {
     {"Settings",    "Настройки",   SET_I,  6},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 3},
-    {"Laboratory",  "Лаборатория", LAB_I,  3},
+    {"Laboratory",  "Лаборатория", LAB_I,  4},
     {"Device",      "Устройство",  DEV_I,  3},
 };
 
@@ -451,14 +452,17 @@ static void drawProvisionScreen() {
 // Lab captive-portal demo: our own named AP asks a visitor to lower their TX power;
 // a tap on the page registers here and drops the AP. Own-equipment demo — no
 // credentials asked or stored (see PolitePortal).
-static int politePhase = 0;                        // last drawn phase: 0 waiting · 1 consented · 2 stopped
+static int  politePhase = 0;                       // last drawn phase: 0 waiting · 1 done · 2 stopped
+static bool portalSetup = false;                   // true = setup (name form) screen; false = raise (consent) screen
+static bool portalSaved = false;                   // setup: the name was saved
 
 static void drawPoliteScreen() {
     const uint16_t bg = uiBg();
     const uint16_t white = tft.color565(0xe8, 0xe8, 0xe0);
     const uint16_t gold  = tft.color565(0xe7, 0xcf, 0x8f);
     const uint16_t green = tft.color565(0x3f, 0xe0, 0x7a);
-    uiHeaderRu(i18n::tr("Captive portal", "Captive-портал"));
+    uiHeaderRu(portalSetup ? i18n::tr("Portal setup", "Настройка портала")
+                           : i18n::tr("Captive portal", "Captive-портал"));
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     tft.setTextDatum(TL_DATUM);
     fontSmall(); tft.setTextColor(white, bg);
@@ -466,23 +470,25 @@ static void drawPoliteScreen() {
     tft.setTextColor(gold, bg);
     tft.drawString(portal.ssid(), 10, 70);
     tft.setTextColor(white, bg);
-    tft.drawString(i18n::tr("2. A page opens on the phone.", "2. На телефоне откроется страница."), 10, 104);
+    tft.drawString(portalSetup ? i18n::tr("2. Type the name, save.", "2. Впиши имя точки, сохрани.")
+                               : i18n::tr("2. A page opens on the phone.", "2. На телефоне откроется страница."), 10, 104);
     fontBig();
-    if (!portal.isRunning()) {                     // auto-stopped after consent (or begin failed)
+    if (!portal.isRunning()) {                     // auto-stopped after the action (or begin failed)
         tft.setTextColor(green, bg);
         tft.drawString(i18n::tr("Done - AP is off.", "Готово — точка выкл."), 10, 150);
         fontSmall(); tft.setTextColor(white, bg);
         tft.drawString(i18n::tr("Press back.", "Нажми назад."), 10, 186);
-    } else if (portal.consented()) {
+    } else if (portalSetup ? portalSaved : portal.consented()) {
         tft.setTextColor(green, bg);
-        tft.drawString(i18n::tr("Consent got!", "Согласие!"), 10, 150);
+        tft.drawString(portalSetup ? i18n::tr("Name saved!", "Имя сохранено!") : i18n::tr("Consent got!", "Согласие!"), 10, 150);
         fontSmall(); tft.setTextColor(white, bg);
-        tft.drawString(i18n::tr("Shutting the AP down...", "Точка выключается…"), 10, 186);
+        tft.drawString(i18n::tr("Shutting down...", "Закрываюсь…"), 10, 186);
     } else {
         tft.setTextColor(gold, bg);
-        tft.drawString(i18n::tr("Waiting...", "Ждём гостя…"), 10, 150);
+        tft.drawString(portalSetup ? i18n::tr("Awaiting name...", "Жду имя…") : i18n::tr("Waiting...", "Ждём гостя…"), 10, 150);
         fontSmall(); tft.setTextColor(white, bg);
-        tft.drawString(i18n::tr("Tap the button on the page.", "Жми кнопку на странице."), 10, 186);
+        tft.drawString(portalSetup ? i18n::tr("Fill the form on the phone.", "Заполни форму на телефоне.")
+                                   : i18n::tr("Tap the button on the page.", "Жми кнопку на странице."), 10, 186);
     }
     uiFooterRu(i18n::tr("◀ back", "◀ назад"));
     fontOff();
@@ -1596,12 +1602,21 @@ static void launch(int feat) {
                                    infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
                             break;
         case F_TXMODE:      drawTxModeInfo(); break;
-        case F_POLITE:    { engine.pauseAndWait();                 // the portal owns the radio (SoftAP)
+        case F_PORTAL_CFG:{ engine.pauseAndWait();                 // setup network to name the portal AP
                             PolitePortalConfig cfg;
-                            cfg.targetSsid = "";                   // consent mode — our own AP, stop on the button
+                            cfg.setup        = true;
+                            cfg.portalSsid   = "Leshy-portal-setup";   // the setup network's own name
+                            cfg.setupCurrent = net.labApName();        // prefill the form with the saved name
+                            cfg.channel      = 6;
+                            if (portal.begin(cfg)) { portalSetup = true; portalSaved = false; politePhase = 0; st = ST_POLITE; drawPoliteScreen(); }
+                            else { infoTitle = i18n::tr("Portal setup", "Настройка портала"); infoBody = i18n::tr("Failed to start", "Не удалось запустить"); infoNote = ""; st = ST_INFO; drawInfo(); }
+                            break; }
+        case F_POLITE:    { engine.pauseAndWait();                 // raise our own named AP with the consent page
+                            PolitePortalConfig cfg;
+                            cfg.targetSsid = "";                   // consent mode — stop on the button
                             cfg.portalSsid = net.labApName();
                             cfg.channel    = 6;
-                            if (portal.begin(cfg)) { politePhase = 0; st = ST_POLITE; drawPoliteScreen(); }
+                            if (portal.begin(cfg)) { portalSetup = false; politePhase = 0; st = ST_POLITE; drawPoliteScreen(); }
                             else { infoTitle = i18n::tr("Captive portal", "Captive-портал"); infoBody = i18n::tr("Failed to start", "Не удалось запустить"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break; }
         case F_SUBSPECTRUM: engine.pause();
@@ -1959,7 +1974,11 @@ void loop() {
     // 2.4GHz spectrum waterfall
     if (st == ST_POLITE) {
         portal.loop();
-        int ph = !portal.isRunning() ? 2 : portal.consented() ? 1 : 0;
+        if (portalSetup && portal.nameSubmitted() && !portalSaved) {
+            net.saveLabApName(portal.submittedName());   // persist the name typed in the setup form
+            portalSaved = true;
+        }
+        int ph = !portal.isRunning() ? 2 : (portalSetup ? portalSaved : portal.consented()) ? 1 : 0;
         if (ph != politePhase) { politePhase = ph; drawPoliteScreen(); }
     }
     if (st == ST_SPECTRUM) spectrumTick();

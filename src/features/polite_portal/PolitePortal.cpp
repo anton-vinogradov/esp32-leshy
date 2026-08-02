@@ -55,6 +55,9 @@ bool PolitePortal::begin(const PolitePortalConfig& cfg) {
     s_instance = this;
     consented_ = false;
     shutdownArmed_ = false;
+    setup_ = cfg_.setup;
+    nameSubmitted_ = false;
+    submittedName_ = "";
 
     // Consent mode (no target AP to watch): just raise the portal on our own named SoftAP
     // and stop when the visitor taps the button. No scan, no beacon sniffing, no RSSI.
@@ -139,6 +142,7 @@ void PolitePortal::registerRoutes() {
     web_.on("/", [this] { handleRoot(); });
     web_.on("/reduced", [this] { handleReduced(); });
     web_.on("/result", [this] { handleResult(); });
+    web_.on("/savename", [this] { handleSaveName(); });   // setup mode form target
     web_.onNotFound([this] { redirectToPortal(); });   // pull OS captive checks to the page
     routesRegistered_ = true;
 }
@@ -194,8 +198,36 @@ void PolitePortal::sendPage(const String& body, int refreshSec, const char* refr
     web_.send(200, "text/html; charset=utf-8", html);
 }
 
+// Escape for a double-quoted HTML attribute value (the prefilled name).
+static String attrEsc(const String& in) {
+    String o;
+    for (size_t i = 0; i < in.length(); i++) {
+        char c = in[i];
+        if      (c == '&') o += "&amp;";
+        else if (c == '"') o += "&quot;";
+        else if (c == '<') o += "&lt;";
+        else if (c == '>') o += "&gt;";
+        else o += c;
+    }
+    return o;
+}
+
 void PolitePortal::handleRoot() {
     applyLangArg();
+    if (setup_) {                                   // setup mode: a form to name the portal AP
+        String body =
+            String("<div class=big>&#128295;</div><h1>") +
+            i18n::tr("Portal AP name", "Имя точки портала") + "</h1><p>" +
+            i18n::tr("Type the Wi-Fi name the Lab portal will broadcast, then save.",
+                     "Впиши имя Wi-Fi, которое будет вещать портал Лаборатории, и сохрани.") +
+            "</p><form action=\"/savename\" method=get style=\"margin-top:18px\">"
+            "<input name=\"name\" value=\"" + attrEsc(cfg_.setupCurrent) + "\" autocapitalize=off autocorrect=off "
+            "style=\"width:100%;box-sizing:border-box;padding:14px;font-size:16px;border-radius:10px;border:1px solid #444;background:#1c1c1c;color:#eee\">"
+            "<button class=btn style=\"width:100%;margin-top:14px;border:0;cursor:pointer\">" +
+            i18n::tr("Save", "Сохранить") + "</button></form>";
+        sendPage(body);
+        return;
+    }
     String body =
         String("<div class=big>&#127794;&#128122;&#128246;</div><h1>") +
         i18n::tr("Hey, neighbor!", "Привет, сосед!") + "</h1><p>" +
@@ -212,6 +244,27 @@ void PolitePortal::handleRoot() {
         " &#128591;</p><a class=btn href=\"/reduced\">" +
         i18n::tr("I lowered the power", "Я снизил мощность") + "</a>";
     sendPage(body);
+}
+
+void PolitePortal::handleSaveName() {
+    applyLangArg();
+    String name = web_.arg("name");
+    name.trim();
+    if (!name.length()) {
+        sendPage(String("<div class=big>&#9998;</div><h1>") +
+                 i18n::tr("Empty name", "Пустое имя") + "</h1><p>" +
+                 i18n::tr("Type a name, then save.", "Впиши имя и сохрани.") +
+                 "</p><a class=btn href=\"/\">" + i18n::tr("Back", "Назад") + "</a>");
+        return;
+    }
+    submittedName_ = name;
+    nameSubmitted_ = true;
+    shutdownArmed_ = true;
+    shutdownAt_ = millis() + 4000;                      // show the confirmation, then drop the setup AP
+    sendPage(String("<div class=big>&#9989;</div><h1>") +
+             i18n::tr("Saved!", "Сохранено!") + "</h1><p>" +
+             i18n::tr("The portal will broadcast this name. Setup network is closing now.",
+                      "Портал будет вещать это имя. Настроечная сеть закрывается.") + "</p>");
 }
 
 void PolitePortal::handleReduced() {
