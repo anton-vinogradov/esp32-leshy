@@ -1093,6 +1093,14 @@ static uint16_t spTxMask = 0;                                   // armed Wi-Fi c
 static int      spCursor = 6;                                  // Wi-Fi channel under the caret (1..13)
 static bool     spTxOn   = false;                              // master TX on/off
 static bool     spLab    = false;                              // true = Lab noise generator (TX controls); false = passive Spectrum
+// Traffic view: subtract a slow per-channel baseline so the constant floor (beacons, steady
+// BT) fades and only activity ABOVE it stands out. RPD is 1-bit, so this shows changes in
+// occupancy (bursts), not decoded traffic — a steady stream shows only when it starts.
+static int      spBaseF[Nrf24Spectrum::CHANNELS];              // slow baseline, fixed-point (value * 1024)
+static bool     spTraffic = false;                             // false = occupancy heat; true = above-baseline traffic
+static int      spBasePrime = 0;                               // >0: glue the baseline to spEma while the EMA settles (no cold-start flood)
+static const int SP_BASE_TAU = 256, SP_TRAFFIC_GAIN = 3;       // baseline smoothing (~seconds) and burst amplification
+static const int SP_PRIME_N  = 40;                             // sweeps (~1 s) to seed the baseline on screen entry
 static const uint16_t SP_BG = 0x0862;                          // near-black plot background (RGB565)
 // Only the used part of the band is shown, stretched to full width: NRF ch 2..84 =
 // 2402..2484 MHz covers all Wi-Fi (1..14) and Bluetooth. The dead ISM edges
@@ -1126,14 +1134,14 @@ static void wfPushRow(const uint16_t* row) {
 
 // The quiet→busy colour legend, shared by both spectrum screens. Cyrillic labels
 // need the smooth VLW font (font1 is ASCII-only).
-static void wfLegend(uint16_t bg, uint16_t dim) {
+static void wfLegend(uint16_t bg, uint16_t dim, const char* lo = nullptr, const char* hi = nullptr) {
     const int by = 32, bh = 8, bw = 118, bx = SP_X + 46;
     for (int i = 0; i < bw; i++) tft.drawFastVLine(bx + i, by, bh, spColor(i * 255 / (bw - 1), 255));
     tft.drawRect(bx - 1, by - 1, bw + 2, bh + 2, tft.color565(0x2a, 0x3a, 0x2a));
     fontTiny();
     tft.setTextColor(dim, bg);
-    tft.setTextDatum(MR_DATUM); tft.drawString(i18n::tr("quiet", "тихо"), bx - 5, by + bh / 2);
-    tft.setTextDatum(ML_DATUM); tft.drawString(i18n::tr("busy", "занято"), bx + bw + 5, by + bh / 2);
+    tft.setTextDatum(MR_DATUM); tft.drawString(lo ? lo : i18n::tr("quiet", "тихо"), bx - 5, by + bh / 2);
+    tft.setTextDatum(ML_DATUM); tft.drawString(hi ? hi : i18n::tr("busy", "занято"), bx + bw + 5, by + bh / 2);
     fontOff();
 }
 
@@ -1169,7 +1177,8 @@ static void spDrawFooter() {
     // Passive Spectrum just shows a legend; the Lab generator shows the TX controls.
     // Only glyphs present in the tiny VLW subset (letters, space, ◀ ▶ ▼): ▲▼ move the
     // caret, the middle key (OK) arms the channel, ▶ starts/stops the noise.
-    if (!spLab) { uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::tr("energy", "энергия")); return; }
+    if (!spLab) { uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
+                             spTraffic ? i18n::tr("traffic ▶", "трафик ▶") : i18n::tr("occupancy ▶", "занятость ▶")); return; }
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
                spTxOn ? (i18n::isRu() ? "▶ стоп"           : "▶ stop")
                       : (i18n::isRu() ? "OK канал  ▶ шум"  : "OK chan  ▶ noise"));
@@ -1205,7 +1214,8 @@ static void drawSpectrumScreen() {
         uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), hr);
     }
     tft.fillRect(0, 28, 240, 320 - 28, bg);
-    wfLegend(bg, dim);
+    wfLegend(bg, dim, spTraffic ? i18n::tr("base", "фон") : nullptr,
+                      spTraffic ? i18n::tr("spike", "всплеск") : nullptr);
     tft.fillRect(SP_X, SP_Y, SP_W, SP_H, SP_BG);
     tft.drawRect(SP_X - 1, SP_Y - 1, SP_W + 2, SP_H + 2, tft.color565(0x2a, 0x3a, 0x2a));
     // Vertical divider column for every Wi-Fi channel 1..13 (1/6/11 stand out); pre-drawn
@@ -1221,21 +1231,49 @@ static void drawSpectrumScreen() {
     spDrawAxis();
     spDrawFooter();
     drawNetBadge();
-    memset(spEma, 0, sizeof(spEma)); spRowAt = millis(); spWy = 0;
+    memset(spEma, 0, sizeof(spEma)); spBasePrime = SP_PRIME_N; spRowAt = millis(); spWy = 0;   // baseline seeds from spEma over the first ~1 s (no cold-start flood)
+}
+
+// Spectrum view: occupancy heat vs traffic (above-baseline). Persisted; shared by the
+// passive Spectrum and the Lab generator (the passive screen's ▶ flips it live).
+static void saveSpView(bool traffic) { Preferences p; p.begin("leshy", false); p.putBool("sp_view", traffic); p.end(); }
+static bool loadSpView() { Preferences p; p.begin("leshy", true); bool v = p.getBool("sp_view", false); p.end(); return v; }
+// Repaint only the mode chrome (legend + footer) above/below the plot — keeps the
+// waterfall and the learned baseline, so occupancy <-> traffic flips instantly.
+static void spRepaintChrome() {
+    const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f);
+    tft.fillRect(0, 28, 240, SP_Y - 29, bg);     // legend band above the plot (does not touch the waterfall)
+    wfLegend(bg, dim, spTraffic ? i18n::tr("base", "фон") : nullptr,
+                      spTraffic ? i18n::tr("spike", "всплеск") : nullptr);
+    spDrawFooter();
+}
+static void spToggleView() {
+    spTraffic = !spTraffic;
+    saveSpView(spTraffic);
+    spRepaintChrome();
 }
 
 static void spectrumTick() {
     uint8_t sw[Nrf24Spectrum::CHANNELS];
     nrf.sweep(sw);                                       // ~25ms across 126 channels; RPD is 1-bit per channel
-    for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++)
+    for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) {
         spEma[c] += ((int)sw[c] * 255 - spEma[c]) / 8;  // smooth to a 0..255 duty level → full colour gradient
+        if (spBasePrime) spBaseF[c] = (int)spEma[c] << 10;                 // seed: track the EMA while it settles
+        else spBaseF[c] += ((int)spEma[c] * 1024 - spBaseF[c]) / SP_BASE_TAU;   // then let steady sources sink into a slow floor
+    }
+    if (spBasePrime) spBasePrime--;
     if (millis() - spRowAt < 37) return;                // one waterfall row every ~37ms (fast scroll)
     spRowAt = millis();
     static uint16_t row[SP_W];
     for (int x = 0; x < SP_W; x++) {
         int c = spXToNrf(x);
         if (c < 0) c = 0; else if (c >= Nrf24Spectrum::CHANNELS) c = Nrf24Spectrum::CHANNELS - 1;
-        if      (spEma[c] > 8)     row[x] = spColor(spEma[c], 255);       // real energy → heat gradient
+        int v = spEma[c];
+        if (spTraffic) {                                // traffic view: only what rises above the rolling baseline
+            v = (spEma[c] - (spBaseF[c] >> 10)) * SP_TRAFFIC_GAIN;
+            if (v < 0) v = 0; else if (v > 255) v = 255;
+        }
+        if      (v > 8)            row[x] = spColor(v, 255);             // energy / burst → heat gradient
         else if (spGrid[x] == 2)   row[x] = SP_GMAJ;                      // channel divider shows through quiet air
         else if (spGrid[x] == 1)   row[x] = SP_GMIN;
         else                       row[x] = SP_BG;
@@ -1581,7 +1619,8 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN) openHiddenOptions();
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_SUBSPECTRUM) { cc.setBand(cc.band() + 1); drawSubScreen(); }   // cycle the displayed band
-            else if (st == ST_SPECTRUM && spLab) spToggleTx();    // start/stop transmitting noise into the armed channels
+            else if (st == ST_SPECTRUM && spLab) spToggleTx();    // Lab: start/stop transmitting noise into the armed channels
+            else if (st == ST_SPECTRUM)          spToggleView();  // passive: flip occupancy <-> traffic view
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
@@ -1631,6 +1670,7 @@ static void serialControl() {
             else if (!strcmp(buf, "bl"))    { Serial.printf("[bl] backlight -> %u/255\n", uiBacklightCycle()); continue; }
             else if (!strcmp(buf, "txpwr")) { Serial.printf("[txpwr] -> %d dBm\n", Nrf24Spectrum::txPowerDbm(txPowerCycle())); continue; }
             else if (!strcmp(buf, "txmode")){ Serial.printf("[txmode] -> %s\n", txModeCycle() ? "verify (listen)" : "maximum (all TX)"); continue; }
+            else if (!strcmp(buf, "view"))  { spTraffic = !spTraffic; saveSpView(spTraffic); if (st == ST_SPECTRUM) spRepaintChrome(); Serial.printf("[view] -> %s\n", spTraffic ? "traffic" : "occupancy"); continue; }
             else if (!strcmp(buf, "air"))   { uint16_t pm[14]; airtime.read(pm); Serial.printf("[air] run=%d ch=%d busy‰:", (int)airtime.isRunning(), (int)airtime.channel());
                                               for (int ch = 1; ch <= 13; ch++) Serial.printf(" %d:%u", ch, pm[ch]); Serial.println(); continue; }
             else if (!strcmp(buf, "nrfdiag")) { engine.pauseAndWait(); nrf.diag(); continue; }
@@ -1724,6 +1764,7 @@ void setup() {
     leds.begin();                    // status LEDs under the antennas
     nrf.setTxPower(loadTxPower());    // apply the saved Spectrum TX power (default max)
     nrf.setTxListenSelf(loadTxMode()); // apply the saved TX mode (Verify keeps the waterfall live)
+    spTraffic = loadSpView();          // apply the saved spectrum view (occupancy / traffic)
     if (!legalSeen()) { st = ST_LANGPICK; drawLangPick(); }   // first run: language, then the notice
     else showMenu();
 }
