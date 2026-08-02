@@ -167,7 +167,8 @@ void NetManager::stopProvision() {
     s_dns.stop();
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_STA);
-    // persist the submitted Wi-Fi creds (the Lab AP name is saved in handleSave already)
+    // persist the submitted Wi-Fi creds (the Lab AP name is set separately via the portal's
+    // own setup network -> saveLabApName(), not here)
     if (s_pendSsid.length()) {
         Preferences p; p.begin("leshy", false);
         p.putString("wifi_ssid", s_pendSsid);

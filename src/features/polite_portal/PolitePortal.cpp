@@ -248,6 +248,7 @@ void PolitePortal::handleRoot() {
 
 void PolitePortal::handleSaveName() {
     applyLangArg();
+    if (!setup_) { redirectToPortal(); return; }        // only meaningful in setup mode
     String name = web_.arg("name");
     name.trim();
     if (!name.length()) {
@@ -269,6 +270,7 @@ void PolitePortal::handleSaveName() {
 
 void PolitePortal::handleReduced() {
     applyLangArg();
+    if (setup_) { redirectToPortal(); return; }         // /reduced has no meaning in setup mode
     if (cfg_.targetSsid.isEmpty()) {                    // consent mode: the tap IS the result
         consented_ = true;
         shutdownArmed_ = true;

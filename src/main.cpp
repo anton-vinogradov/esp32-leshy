@@ -252,7 +252,7 @@ static void openNetOptions();    // RIGHT on a scan row -> per-network options
 static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
-enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE };
+enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE, M_PORTAL, M_GEN };
 enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
@@ -297,10 +297,16 @@ static const MenuItem DEV_I[] = {
 };
 // Laboratory — experimental tools that TRANSMIT. Under Wi-Fi (it's a 2.4 GHz lab).
 static const MenuItem LAB_I[] = {
-    {"Generator 2.4",   "Transmit into channels", "Генератор 2.4", "Передача в выбранные каналы", K_FEAT, F_NOISEGEN},
+    {"Generator",       "Run + TX mode",              "Генератор",          "Запуск и режим",         K_SUB,  M_GEN},
+    {"Portal",          "Setup + raise",              "Портал",             "Настроить и поднять",    K_SUB,  M_PORTAL},
+};
+static const MenuItem GEN_I[] = {
+    {"Run",             "Transmit into channels",     "Запуск",             "Передача в каналы",      K_FEAT, F_NOISEGEN},
     {"TX mode",         "Verify / Maximum",           "Режим передачи",     "Проверка / Максимум",    K_FEAT, F_TXMODE},
-    {"Portal: setup",   "Name the portal AP",         "Портал: настроить",  "Задать имя точки",       K_FEAT, F_PORTAL_CFG},
-    {"Portal: raise",   "Raise it + consent page",    "Портал: поднять",    "Поднять точку + согласие", K_FEAT, F_POLITE},
+};
+static const MenuItem PORTAL_I[] = {
+    {"Setup",           "Name the portal AP",         "Настроить",          "Задать имя точки",       K_FEAT, F_PORTAL_CFG},
+    {"Raise",           "Raise it + consent page",    "Поднять",            "Поднять точку + согласие", K_FEAT, F_POLITE},
 };
 static const MenuItem LANG_I[] = {
     {"English", "", "English", "", K_FEAT, F_LANG_EN},
@@ -314,8 +320,10 @@ static const Menu MENUS[] = {
     {"Settings",    "Настройки",   SET_I,  6},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 3},
-    {"Laboratory",  "Лаборатория", LAB_I,  4},
+    {"Laboratory",  "Лаборатория", LAB_I,  2},
     {"Device",      "Устройство",  DEV_I,  3},
+    {"Portal",      "Портал",      PORTAL_I, 2},
+    {"Generator",   "Генератор",   GEN_I,  2},
 };
 
 // ---- navigation state ----
@@ -1616,7 +1624,7 @@ static void launch(int feat) {
                             cfg.targetSsid = "";                   // consent mode — stop on the button
                             cfg.portalSsid = net.labApName();
                             cfg.channel    = 6;
-                            if (portal.begin(cfg)) { portalSetup = false; politePhase = 0; st = ST_POLITE; drawPoliteScreen(); }
+                            if (portal.begin(cfg)) { portalSetup = false; portalSaved = false; politePhase = 0; st = ST_POLITE; drawPoliteScreen(); }
                             else { infoTitle = i18n::tr("Captive portal", "Captive-портал"); infoBody = i18n::tr("Failed to start", "Не удалось запустить"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break; }
         case F_SUBSPECTRUM: engine.pause();
