@@ -43,6 +43,14 @@ public:
     uint8_t txPower() const { return txPwr_; }
     static uint32_t bandCenterKHz(const Band& b) { return (b.loKHz + b.hiKHz) / 2; }
 
+    // RAW OOK record / replay (own-equipment: your own remotes/sensors on a bench). One
+    // CC1101, so record and replay are separate steps. captureRaw blocks up to a few
+    // seconds waiting for a burst on GDO0, storing on/off pulse durations (us); replayRaw
+    // bit-bangs them back out. Verify on your own receiver.
+    void beginCapture(uint32_t freqKHz);              // async OOK RX, GDO0 as data output
+    int  captureRaw(uint16_t* durs, int maxN, uint32_t timeoutMs);   // returns pulse count (0 = nothing heard)
+    void replayRaw(const uint16_t* durs, int n, uint32_t freqKHz);
+
     void diag();                          // QA: reset + print PARTNUM/VERSION
 
 private:
@@ -61,4 +69,5 @@ private:
     int     band_    = 0;
     uint8_t txByte_  = 0;                 // rolling payload byte → noise-like modulated TX
     uint8_t txPwr_   = 0xC0;              // PATABLE[0] — default ~max (~+10 dBm / 10 mW)
+    int     capStartLevel_ = 1;           // GDO0 level of the captured burst's first pulse (for replay polarity)
 };

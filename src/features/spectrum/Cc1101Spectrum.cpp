@@ -4,6 +4,7 @@
 
 // ESP32-DIV v2 radio SPI bus + CC1101 chip-select (CiferTech BoardConfig).
 static const int PIN_SCK = 12, PIN_MISO = 13, PIN_MOSI = 11, PIN_CS = 5;
+static const int PIN_GDO0 = 6;   // CC1101 GDO0 — async serial data (RAW OOK record/replay)
 static SPIClass    ccSpi(FSPI);
 static SPISettings ccSet(4000000, MSBFIRST, SPI_MODE0);   // CC1101 SPI, conservative
 
@@ -188,6 +189,90 @@ void Cc1101Spectrum::txBurst() {
 void Cc1101Spectrum::endTx() {
     if (!present_) return;
     strobe(S_IDLE);
+}
+
+// Async OOK RX: GDO0 outputs the demodulated envelope, which we time in captureRaw.
+// The AGC is pinned lower here (vs the RSSI-sweep config) so the demodulator stays quiet
+// on noise instead of dithering — the part most likely to need on-hardware tuning.
+void Cc1101Spectrum::beginCapture(uint32_t freqKHz) {
+    if (!present_) return;
+    strobe(S_IDLE);
+    tune(freqKHz);
+    writeReg(0x02, 0x0D);   // IOCFG0 — GDO0 = serial data (async)
+    writeReg(0x12, 0x30);   // MDMCFG2 — ASK/OOK, no sync
+    writeReg(0x08, 0x32);   // PKTCTRL0 — asynchronous serial, infinite length
+    writeReg(0x1B, 0x03);   // AGCCTRL2 — OOK: fixed-ish magnitude target (was 0x43 for RSSI sweep)
+    writeReg(0x1C, 0x00);   // AGCCTRL1
+    writeReg(0x1D, 0x91);   // AGCCTRL0
+    pinMode(PIN_GDO0, INPUT);
+    strobe(S_RX);
+    uint32_t t = micros();  // wait until actually in RX (like sampleBin) so GDO0 is the demodulated signal
+    while ((readReg(REG_MARCSTATE) & 0x1F) != 0x0D && micros() - t < 3000) {}
+    delayMicroseconds(500); // AGC settle
+}
+
+// Time the OOK pulses on GDO0 into durs[] (microseconds). Carrier-sense on RSSI first (so
+// we don't trigger on the noise floor), then record level durations from the first edge
+// until a >20 ms gap ends the burst. Blocks up to ~5 s. Returns count (0 = nothing heard).
+int Cc1101Spectrum::captureRaw(uint16_t* durs, int maxN, uint32_t timeoutMs) {
+    if (!present_ || maxN <= 0) return 0;
+    pinMode(PIN_GDO0, INPUT);
+    uint32_t t0 = millis();
+    for (;;) {                                          // carrier sense: wait for a real signal
+        uint8_t raw = readReg(REG_RSSI);
+        int dbm = (raw >= 128 ? (raw - 256) : raw) / 2 - 74;
+        if (dbm > -72) break;
+        if (millis() - t0 > timeoutMs) { strobe(S_IDLE); return 0; }
+        yield();
+    }
+    int idle = digitalRead(PIN_GDO0);
+    while (digitalRead(PIN_GDO0) == idle) {             // wait for the leading edge of the burst
+        if (millis() - t0 > timeoutMs) { strobe(S_IDLE); return 0; }
+    }
+    capStartLevel_ = !idle;                             // first pulse level — replay reproduces it
+    int n = 0, level = !idle;
+    uint32_t tPrev = micros();
+    while (n < maxN && millis() - t0 < timeoutMs + 2000) {   // capture budget (signal wait + burst)
+        uint32_t tw = micros();
+        while (digitalRead(PIN_GDO0) == level) {
+            if (micros() - tw > 20000) goto done;       // >20 ms of one level → end of burst
+        }
+        uint32_t now = micros();
+        durs[n++] = (uint16_t)(now - tPrev);            // <20 ms per pulse → fits uint16
+        tPrev = now;
+        level = !level;
+    }
+done:
+    strobe(S_IDLE);
+    return n;
+}
+
+// Bit-bang the recorded pulse train back out via async OOK TX on GDO0.
+void Cc1101Spectrum::replayRaw(const uint16_t* durs, int n, uint32_t freqKHz) {
+    if (!present_ || n <= 0) return;
+    strobe(S_IDLE);
+    tune(freqKHz);
+    writeReg(0x02, 0x0D);   // IOCFG0 — GDO0 = serial data in (async TX)
+    writeReg(0x12, 0x30);   // MDMCFG2 — ASK/OOK
+    writeReg(0x08, 0x32);   // PKTCTRL0 — asynchronous serial, infinite length
+    writeReg(0x17, 0x30);   // MCSM1 — TXOFF_MODE = IDLE
+    writeReg(0x3E, txPwr_); // PATABLE[0] — TX power
+    pinMode(PIN_GDO0, OUTPUT);
+    digitalWrite(PIN_GDO0, capStartLevel_ ? LOW : HIGH);   // hold idle before the carrier is up
+    strobe(S_TX);
+    uint32_t t = micros();                              // wait to actually ENTER TX — PLL cal (~800us) else the first pulse is eaten
+    while ((readReg(REG_MARCSTATE) & 0x1F) != 0x13 && micros() - t < 3000) {}
+    int level = capStartLevel_;                         // reproduce the captured polarity
+    for (int i = 0; i < n; i++) {
+        digitalWrite(PIN_GDO0, level);
+        uint32_t d = durs[i];
+        while (d > 16000) { delayMicroseconds(16000); d -= 16000; }   // delayMicroseconds is only exact below ~16 ms
+        delayMicroseconds(d);
+        level = !level;
+    }
+    digitalWrite(PIN_GDO0, LOW);
+    strobe(S_IDLE);
+    pinMode(PIN_GDO0, INPUT);
 }
 
 void Cc1101Spectrum::diag() {
