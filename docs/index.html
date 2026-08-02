@@ -83,7 +83,7 @@
     <p data-l="ru" style="margin:0 0 4px"><b>⚠️ Появилось «Installation failed» / «Failed to initialize»?</b> Плата не вошла в режим прошивки сама — введи её вручную по схеме:</p>
     <p data-l="en" style="margin:0 0 4px"><b>⚠️ Got "Installation failed" / "Failed to initialize"?</b> The board didn't enter flash mode on its own — do it by hand, as shown:</p>
 
-    <svg viewBox="0 0 680 300" width="100%" style="max-width:640px;display:block;margin:8px auto 2px" role="img" aria-label="BOOT + RESET flash-mode sequence">
+    <svg viewBox="0 0 680 300" width="100%" style="max-width:640px;display:block;margin:8px auto 2px" role="img" aria-label="Flash mode: hold BOOT through the whole install">
       <defs>
         <linearGradient id="lg-gold" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="#d8a83a"/><stop offset="1" stop-color="#b9821f"/>
@@ -105,11 +105,9 @@
       <text x="62" y="64" text-anchor="middle" fill="#231a08" font-size="13" font-weight="700" font-family="inherit">BOOT</text>
       <circle cx="34" cy="44" r="13" fill="var(--berry)" stroke="#12180f" stroke-width="2"/>
       <text x="34" y="49" text-anchor="middle" fill="#fff" font-size="13" font-weight="700" font-family="inherit">1</text>
-      <!-- RESET: top-right -->
+      <!-- RESET: top-right (fallback entry only) -->
       <rect x="222" y="44" width="56" height="30" rx="7" fill="#241c12" stroke="var(--gold)" stroke-width="1.5"/>
       <text x="250" y="64" text-anchor="middle" fill="#e8e4d8" font-size="13" font-weight="700" font-family="inherit">RST</text>
-      <circle cx="278" cy="44" r="13" fill="var(--deep)" stroke="#12180f" stroke-width="2"/>
-      <text x="278" y="49" text-anchor="middle" fill="#fff" font-size="13" font-weight="700" font-family="inherit">2</text>
       <!-- POWER: bottom-right (not used for flashing) -->
       <rect x="222" y="240" width="56" height="30" rx="7" fill="#1a1f16" stroke="#5c6b4d" stroke-width="1.3"/>
       <text x="250" y="260" text-anchor="middle" fill="#8a9580" font-size="12" font-weight="700" font-family="inherit">PWR</text>
@@ -117,26 +115,25 @@
       <!-- divider -->
       <line x1="312" y1="44" x2="312" y2="268" stroke="#2c3626" stroke-width="1" stroke-dasharray="3 5"/>
 
-      <!-- sequence timeline -->
-      <text x="340" y="112" fill="#cfd6c2" font-size="13" font-weight="700" font-family="inherit">BOOT</text>
-      <text x="340" y="188" fill="#cfd6c2" font-size="13" font-weight="700" font-family="inherit">RST</text>
-      <!-- press / release cues -->
-      <path d="M400 72 L416 72 L408 86 z" fill="var(--berry)"/>
-      <path d="M612 86 L628 86 L620 72 z" fill="var(--deep)"/>
-      <!-- BOOT held (long bar) -->
-      <rect x="408" y="92" width="212" height="30" rx="7" fill="url(#lg-gold)"/>
-      <circle cx="408" cy="107" r="14" fill="var(--berry)"/><text x="408" y="112" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="inherit">1</text>
-      <circle cx="620" cy="107" r="14" fill="var(--deep)"/><text x="620" y="112" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="inherit">3</text>
-      <!-- RST tap (short pulse) during hold -->
-      <line x1="516" y1="122" x2="516" y2="166" stroke="#7a6a3a" stroke-width="1" stroke-dasharray="2 3"/>
-      <rect x="496" y="168" width="40" height="28" rx="6" fill="var(--berry)"/>
-      <circle cx="516" cy="150" r="13" fill="var(--deep)"/><text x="516" y="155" text-anchor="middle" fill="#fff" font-size="13" font-weight="700" font-family="inherit">2</text>
+      <!-- sequence timeline: BOOT held across the whole browser connect -->
+      <text x="344" y="140" fill="#cfd6c2" font-size="13" font-weight="700" font-family="inherit">BOOT</text>
+      <!-- press (down) / release (up) cues -->
+      <path d="M392 100 L408 100 L400 114 z" fill="var(--berry)"/>
+      <path d="M620 116 L636 116 L628 100 z" fill="#3f6b3a"/>
+      <!-- BOOT held (long bar); release only when flashing starts -->
+      <rect x="400" y="120" width="228" height="30" rx="8" fill="url(#lg-gold)"/>
+      <circle cx="400" cy="135" r="14" fill="var(--berry)"/><text x="400" y="140" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="inherit">1</text>
+      <circle cx="514" cy="135" r="14" fill="var(--deep)"/><text x="514" y="140" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="inherit">2</text>
+      <circle cx="628" cy="135" r="14" fill="#3f6b3a"/><text x="628" y="140" text-anchor="middle" fill="#fff" font-size="14" font-weight="700" font-family="inherit">3</text>
+      <!-- flash-started play glyph, next to release -->
+      <path d="M646 128 L646 142 L658 135 z" fill="#3f6b3a"/>
       <!-- time axis -->
-      <line x1="360" y1="228" x2="648" y2="228" stroke="#5c6b4d" stroke-width="1.4" marker-end="url(#ah)"/>
+      <line x1="360" y1="188" x2="648" y2="188" stroke="#5c6b4d" stroke-width="1.4" marker-end="url(#ah)"/>
+      <text x="648" y="206" text-anchor="end" fill="#5c6b4d" font-size="12" font-family="inherit">t</text>
     </svg>
 
-    <p class="note" data-l="ru" style="text-align:center;margin:2px 0 12px">Держи <b>BOOT</b> (сверху-слева) <b>всё время</b>: жми «Установить» → выбери порт → отпусти BOOT, <b>только когда пошла полоса заливки</b>. Не заходит — сначала BOOT+RESET, но BOOT не отпускай.</p>
-    <p class="note" data-l="en" style="text-align:center;margin:2px 0 12px">Hold <b>BOOT</b> (top-left) <b>the whole time</b>: click Install → pick the port → release BOOT <b>only once the progress bar moves</b>. Still stuck — do BOOT+RESET first, keeping BOOT held.</p>
+    <p class="note" data-l="ru" style="text-align:center;margin:2px 0 12px">① зажми <b>BOOT</b> (сверху-слева) и держи → ② нажми «Установить», выбери порт → ③ отпусти BOOT, когда ▶ пошла полоса заливки. Не заходит — добавь BOOT+RESET, но BOOT <b>не отпускай</b>.</p>
+    <p class="note" data-l="en" style="text-align:center;margin:2px 0 12px">① hold <b>BOOT</b> (top-left) → ② click Install, pick the port → ③ release BOOT when ▶ the progress bar moves. Stuck? add BOOT+RESET, keeping BOOT held.</p>
 
     <ul class="note" data-l="ru" style="margin:0;padding-left:18px">
       <li>На плате: <b>BOOT — сверху слева</b>, <b>RESET — сверху справа</b>. Третья кнопка (снизу справа) — <b>питание</b>, для прошивки не нужна.</li>
