@@ -59,31 +59,44 @@ bool OtaManager::syncTime() {
 bool OtaManager::prep() {
     if (eng_ && !eng_->pauseAndWait()) {  // radio must be free before TLS — don't race the scan task
         Serial.println("[OTA] scan engine did not go idle");
+        diag(0, "radio busy (scan)");
         return false;
     }
     esp_wifi_set_promiscuous(false);      // reveal may have left it on
     WiFi.mode(WIFI_STA);
     if (net_ && !net_->connected()) net_->connect();
-    return net_ && net_->connected();
+    if (!(net_ && net_->connected())) {
+        char d[48]; snprintf(d, sizeof(d), "wifi not connected (wl=%d)", (int)WiFi.status());
+        diag(0, d); return false;      // wl_status is not an HTTP code — keep it in detail
+    }
+    return true;
 }
 
 void OtaManager::doCheck() {
     set(CHECKING);
-    if (!prep())     { fail(E_NONET); return; }
-    if (!syncTime()) { fail(E_TIME);  return; }
+    Serial.printf("[OTA] check start: free heap=%u largest block=%u\n",
+                  (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+    if (!prep())     { fail(E_NONET); return; }                 // prep() already set the detail
+    if (!syncTime()) { char d[48]; snprintf(d, sizeof(d), "no NTP time (epoch=%ld)", (long)time(nullptr));
+                       diag(0, d); fail(E_TIME); return; }
 
     WiFiClientSecure c;
     c.setCACertBundle(rootca_crt_bundle_start, rootca_crt_bundle_end - rootca_crt_bundle_start);
     c.setTimeout(15000);
     HTTPClient http;
-    if (!http.begin(c, API)) { fail(E_API); return; }
+    if (!http.begin(c, API)) { diag(0, "TLS begin failed"); fail(E_API); return; }
     http.addHeader("User-Agent", "ESP32-Leshy");           // GitHub requires a User-Agent
     http.addHeader("Accept", "application/vnd.github+json");
     http.addHeader("X-GitHub-Api-Version", "2022-11-28");
     int code = http.GET();
-    if (code == 404)                 { http.end(); fail(E_NORELEASE); return; }
-    if (code == 403 || code == 429)  { http.end(); fail(E_RATELIMIT); return; }
-    if (code != 200)                 { http.end(); fail(E_API); return; }
+    if (code == 404)                 { http.end(); diag(404, "");  fail(E_NORELEASE); return; }  // title/hint already say it
+    if (code == 403 || code == 429)  { http.end(); diag(code, ""); fail(E_RATELIMIT); return; }
+    if (code != 200) {
+        char d[56];
+        if (code < 0) snprintf(d, sizeof(d), "conn: %s", http.errorToString(code).c_str());
+        else          snprintf(d, sizeof(d), "unexpected HTTP %d", code);
+        http.end(); diag(code, d); fail(E_API); return;
+    }
 
     JsonDocument filter;                                    // parse only what we need, from the stream
     filter["tag_name"] = true;
@@ -94,7 +107,7 @@ void OtaManager::doCheck() {
     JsonDocument doc;
     DeserializationError e = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
     http.end();
-    if (e) { fail(E_PARSE); return; }
+    if (e) { diag(200, e.c_str()); fail(E_PARSE); return; }
 
     strlcpy(latest_, doc["tag_name"] | "", sizeof(latest_));
     url_[0] = digest_[0] = 0; size_ = 0;
@@ -106,7 +119,7 @@ void OtaManager::doCheck() {
             break;
         }
     }
-    if (!url_[0]) { fail(E_NOASSET); return; }
+    if (!url_[0]) { diag(200, ""); fail(E_NOASSET); return; }   // title/hint already say "no firmware.bin"
     busy_ = false;
     set(semverNewer(latest_, LESHY_FW_VERSION) ? AVAILABLE : UPTODATE);
     Serial.printf("[OTA] latest=%s current=%s -> %s\n", latest_, LESHY_FW_VERSION,
@@ -121,16 +134,21 @@ void OtaManager::doDownload() {
     c.setCACertBundle(rootca_crt_bundle_start, rootca_crt_bundle_end - rootca_crt_bundle_start);
     c.setTimeout(20000);
     HTTPClient http;
-    if (!http.begin(c, url_)) { fail(E_HTTP); return; }
+    if (!http.begin(c, url_)) { diag(0, "TLS begin failed"); fail(E_HTTP); return; }
     http.addHeader("User-Agent", "ESP32-Leshy");
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); // github.com -> *.githubusercontent.com
     int code = http.GET();
-    if (code != 200) { http.end(); fail(E_HTTP); return; }
+    if (code != 200) {
+        char d[56];
+        if (code < 0) snprintf(d, sizeof(d), "conn: %s", http.errorToString(code).c_str());
+        else          snprintf(d, sizeof(d), "download HTTP %d", code);
+        http.end(); diag(code, d); fail(E_HTTP); return;
+    }
 
     int total = http.getSize();
     if (total <= 0) total = (int)size_;
-    if (total <= 0) { http.end(); fail(E_SHORT); return; }
-    if (!Update.begin(total)) { http.end(); fail(E_BEGIN); return; }
+    if (total <= 0) { http.end(); diag(0, "asset size unknown"); fail(E_SHORT); return; }
+    if (!Update.begin(total)) { http.end(); diagUpd("begin"); fail(E_BEGIN); return; }
 
     bool useSha = strncmp(digest_, "sha256:", 7) == 0;
     if (!useSha) Serial.println("[OTA] WARNING: release asset has no sha256 digest — image not checksum-verified");
@@ -146,7 +164,7 @@ void OtaManager::doDownload() {
         if (avail) {
             int n = st->readBytes(buf, avail > sizeof(buf) ? sizeof(buf) : avail);
             if (n > 0) {
-                if (Update.write(buf, n) != (size_t)n) { Update.abort(); http.end(); if (useSha) mbedtls_sha256_free(&sha); fail(E_WRITE); return; }
+                if (Update.write(buf, n) != (size_t)n) { char d[72]; snprintf(d, sizeof(d), "flash write @%d: %s", written, Update.errorString()); diag(0, d); Update.abort(); http.end(); if (useSha) mbedtls_sha256_free(&sha); fail(E_WRITE); return; }
                 if (useSha) mbedtls_sha256_update(&sha, buf, n);
                 written += n; lastRx = millis();
                 int p = (int)((int64_t)written * 100 / total);
@@ -154,20 +172,20 @@ void OtaManager::doDownload() {
             }
         } else {
             if (!st->connected() && st->available() == 0) break;   // FIN with buffer drained
-            if (millis() - lastRx > 20000) { Update.abort(); http.end(); if (useSha) mbedtls_sha256_free(&sha); fail(E_SHORT); return; }
+            if (millis() - lastRx > 20000) { char d[48]; snprintf(d, sizeof(d), "stream stalled 20s @%d bytes", written); diag(0, d); Update.abort(); http.end(); if (useSha) mbedtls_sha256_free(&sha); fail(E_SHORT); return; }
             vTaskDelay(pdMS_TO_TICKS(5));
         }
         if (written - lastYield >= 16384) { lastYield = written; vTaskDelay(1); }  // feed the watchdog
     }
     http.end();
-    if (written != total) { Update.abort(); if (useSha) mbedtls_sha256_free(&sha); fail(E_SHORT); return; }
+    if (written != total) { char d[40]; snprintf(d, sizeof(d), "got %d/%d bytes", written, total); diag(0, d); Update.abort(); if (useSha) mbedtls_sha256_free(&sha); fail(E_SHORT); return; }
 
     if (useSha) {
         uint8_t out[32]; mbedtls_sha256_finish(&sha, out); mbedtls_sha256_free(&sha);
         char hex[65]; for (int i = 0; i < 32; i++) sprintf(hex + i * 2, "%02x", out[i]);
-        if (strcasecmp(hex, digest_ + 7) != 0) { Update.abort(); fail(E_HASH); return; }
+        if (strcasecmp(hex, digest_ + 7) != 0) { diag(0, ""); Update.abort(); fail(E_HASH); return; }  // title/hint already say it
     }
-    if (!Update.end(true)) { fail(E_END); return; }
+    if (!Update.end(true)) { diagUpd("end"); fail(E_END); return; }
 
     Serial.println("[OTA] update written & verified — rebooting");
     set(DONE);
@@ -175,16 +193,34 @@ void OtaManager::doDownload() {
     ESP.restart();
 }
 
+// Update.begin()/write()/end() can return false WITHOUT setting an error code (e.g. the
+// 4 KB scratch buffer failed to allocate) — errorString() would then say "No Error" and
+// hide the real cause. Fall back to the heap state, which is what actually matters here.
+void OtaManager::diagUpd(const char* stage) {
+    uint8_t ue = Update.getError();
+    if (ue) { diag(0, Update.errorString()); return; }
+    char d[72];
+    snprintf(d, sizeof(d), "%s: no err, heap free=%u max=%u", stage,
+             (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+    diag(0, d);
+}
+
 void OtaManager::checkTask(void* p) { ((OtaManager*)p)->doCheck();    vTaskDelete(nullptr); }
 void OtaManager::updTask(void* p)   { ((OtaManager*)p)->doDownload(); vTaskDelete(nullptr); }
 
 void OtaManager::startCheck() {
     if (busy_) return;
-    busy_ = true; err_ = E_NONE;
-    xTaskCreatePinnedToCore(checkTask, "otachk", 16384, this, 2, nullptr, 1);
+    busy_ = true; err_ = E_NONE; httpCode_ = 0; detail_[0] = 0;
+    set(CHECKING);                         // publish CHECKING before the task exists, so a create failure can't strand a stale phase
+    if (xTaskCreatePinnedToCore(checkTask, "otachk", 16384, this, 2, nullptr, 1) != pdPASS) {
+        diag(0, "no RAM for OTA task"); fail(E_NOMEM);   // fail() clears busy_ and bumps gen_ → screen repaints
+    }
 }
 void OtaManager::startUpdate() {
     if (busy_ || phase_ != AVAILABLE) return;
-    busy_ = true; err_ = E_NONE;
-    xTaskCreatePinnedToCore(updTask, "otaupd", 16384, this, 2, nullptr, 1);
+    busy_ = true; err_ = E_NONE; httpCode_ = 0; detail_[0] = 0;
+    set(DOWNLOADING);                       // so failPhase() is correct if the task can't be created
+    if (xTaskCreatePinnedToCore(updTask, "otaupd", 16384, this, 2, nullptr, 1) != pdPASS) {
+        diag(0, "no RAM for OTA task"); fail(E_NOMEM);
+    }
 }

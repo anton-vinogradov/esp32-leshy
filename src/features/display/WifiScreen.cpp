@@ -29,7 +29,7 @@ void WifiScreen::rows(ScanEngine& e, int offset, int sel) {
             bool isMine = net_ && net_->isMine(r.bssid, mine);
             bool named = r.ssid.length() > 0;
             bool unrev = r.hidden && !named && !isMine;
-            String ss = named ? r.ssid : (isMine ? mine : String("раскрываю"));
+            String ss = named ? r.ssid : (isMine ? mine : String(i18n::tr("revealing", "раскрываю")));
             if (isMine) ss = "*" + ss;
             bool trunc = false;                       // name column: left edge .. ~x=86 (clear gap to graph)
             while (ss.length() > 3 && row.textWidth(ss) > 80) { ss = ss.substring(0, ss.length() - 1); trunc = true; }

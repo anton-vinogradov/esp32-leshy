@@ -299,6 +299,7 @@ static int      off = 0;
 static int      wifiSel = 0;     // selected row in the Wi-Fi scan
 static WifiRow  netSel;          // network the per-network options act on
 static uint32_t seenWifiGen = 0, seenBleGen = 0;
+static uint32_t scanPausedAt = 0;   // when the scan was paused (net options) — long gaps invalidate the RSSI graph
 static bool     touchDown = false;
 static String   infoTitle, infoBody, infoNote;
 
@@ -636,8 +637,105 @@ static const char* otaErrText(OtaManager::Err e) {
         case OtaManager::E_SHORT:     return i18n::tr("Interrupted",       "Прервано");
         case OtaManager::E_HASH:      return i18n::tr("Checksum mismatch", "Хеш не сошёлся");
         case OtaManager::E_END:       return i18n::tr("Bad image",         "Битый образ");
+        case OtaManager::E_NOMEM:     return i18n::tr("Low memory",        "Мало памяти");
         default:                      return "";
     }
+}
+
+// A short "what to do" hint per error — the actionable half of a full-screen error.
+static const char* otaHintText(OtaManager::Err e) {
+    switch (e) {
+        case OtaManager::E_NONET:     return i18n::tr("Join your Wi-Fi in Connection, then retry.", "Подключись к своему Wi-Fi в «Подключении» и повтори.");
+        case OtaManager::E_TIME:      return i18n::tr("The clock needs internet. Wait a bit and retry.", "Часам нужен интернет. Подожди немного и повтори.");
+        case OtaManager::E_API:       return i18n::tr("No answer from GitHub. Retry; if it persists, check the net.", "Нет ответа от GitHub. Повтори; если не поможет — проверь сеть.");
+        case OtaManager::E_NORELEASE: return i18n::tr("No release has been published yet.", "Релиз ещё не опубликован.");
+        case OtaManager::E_RATELIMIT: return i18n::tr("GitHub rate limit. Wait about an hour.", "Лимит запросов GitHub. Подожди примерно час.");
+        case OtaManager::E_PARSE:     return i18n::tr("GitHub sent an unreadable reply. Retry.", "GitHub прислал нечитаемый ответ. Повтори.");
+        case OtaManager::E_NOASSET:   return i18n::tr("The release has no firmware.bin file.", "В релизе нет файла firmware.bin.");
+        case OtaManager::E_HTTP:      return i18n::tr("Download failed. Check the net and retry.", "Загрузка не удалась. Проверь сеть и повтори.");
+        case OtaManager::E_BEGIN:     return i18n::tr("No room for the update image.", "Нет места под образ обновления.");
+        case OtaManager::E_WRITE:     return i18n::tr("Flash write failed. Retry.", "Сбой записи во флеш-память. Повтори.");
+        case OtaManager::E_SHORT:     return i18n::tr("The download was cut off. Retry.", "Загрузка оборвалась. Повтори.");
+        case OtaManager::E_HASH:      return i18n::tr("Checksum mismatch — the file is corrupt. Retry.", "Хеш не сошёлся — файл повреждён. Повтори.");
+        case OtaManager::E_END:       return i18n::tr("The image was rejected. Retry.", "Образ отвергнут системой. Повтори.");
+        case OtaManager::E_NOMEM:     return i18n::tr("Not enough RAM. Reboot the device and retry.", "Не хватило памяти. Перезагрузи устройство и повтори.");
+        default:                      return "";
+    }
+}
+
+// Word-wrap a string at maxw px (font must already be loaded, datum TL, color set). Returns next y.
+static int drawWrapped(const char* s, int x, int y, int maxw, int lh, int maxlines) {
+    char line[160] = {0}; char word[80]; char trial[200];
+    int lines = 0;
+    const char* w = s;
+    while (*w && lines < maxlines) {
+        while (*w == ' ') w++;
+        int wi = 0;
+        while (*w && *w != ' ' && wi < (int)sizeof(word) - 1) word[wi++] = *w++;
+        word[wi] = 0;
+        if (!wi) break;
+        if (line[0]) snprintf(trial, sizeof(trial), "%s %s", line, word);
+        else         snprintf(trial, sizeof(trial), "%s", word);
+        if (tft.textWidth(trial) <= maxw) {
+            strncpy(line, trial, sizeof(line) - 1);
+        } else {
+            if (line[0]) { tft.drawString(line, x, y); y += lh; lines++; strncpy(line, word, sizeof(line) - 1); }
+            else         { tft.drawString(word, x, y); y += lh; lines++; line[0] = 0; }
+        }
+    }
+    if (line[0] && lines < maxlines) { tft.drawString(line, x, y); y += lh; }
+    return y;
+}
+
+// Full-screen, photographable error — big reason, plain-language hint, and the exact
+// technical facts (stage / HTTP code / detail) so a photo is enough to diagnose it.
+static void drawOtaError() {
+    const uint16_t bg    = tft.color565(0x1c, 0x0c, 0x0c);
+    const uint16_t hdrbg = tft.color565(0x86, 0x22, 0x22);
+    const uint16_t panel = tft.color565(0x2a, 0x16, 0x16);
+    const uint16_t white = tft.color565(0xf4, 0xea, 0xea);
+    const uint16_t dim   = tft.color565(0xcf, 0xa2, 0xa2);
+    const uint16_t label = tft.color565(0x9a, 0x78, 0x78);
+    const uint16_t gold  = tft.color565(0xff, 0xd0, 0x55);
+    tft.fillScreen(bg);
+    tft.fillRect(0, 0, 240, 28, hdrbg);
+    fontBig(); tft.setTextDatum(ML_DATUM); tft.setTextColor(white, hdrbg);
+    tft.drawString(i18n::tr("Update error", "Ошибка обновления"), 8, 15);
+
+    fontBig(); tft.setTextDatum(TL_DATUM); tft.setTextColor(gold, bg);
+    tft.drawString(otaErrText(ota.err()), 12, 40);
+
+    fontSmall(); tft.setTextColor(white, bg);
+    int y = drawWrapped(otaHintText(ota.err()), 12, 72, 216, 20, 3) + 8;
+
+    tft.fillRoundRect(6, y, 228, 300 - y, 8, panel);
+    int ty = y + 10, tx = 14;
+    char buf[80];
+    fontSmall();
+    tft.setTextColor(label, panel); tft.drawString(i18n::tr("stage", "этап"), tx, ty);
+    tft.setTextColor(white, panel);
+    tft.drawString(ota.failPhase() == OtaManager::DOWNLOADING ? i18n::tr("download", "загрузка")
+                                                              : i18n::tr("check", "проверка"), tx + 66, ty);
+    ty += 22;
+    if (ota.httpCode() != 0) {
+        tft.setTextColor(label, panel); tft.drawString(i18n::tr("code", "код"), tx, ty);
+        snprintf(buf, sizeof(buf), "%d", ota.httpCode());
+        tft.setTextColor(white, panel); tft.drawString(buf, tx + 66, ty);
+        ty += 22;
+    }
+    if (ota.detail()[0]) {
+        tft.setTextColor(label, panel); tft.drawString(i18n::tr("detail", "детали"), tx, ty); ty += 18;
+        fontTiny(); tft.setTextColor(dim, panel);
+        ty = drawWrapped(ota.detail(), tx, ty, 208, 15, 3) + 4;
+        fontSmall();
+    }
+    snprintf(buf, sizeof(buf), "%s%s", i18n::tr("installed v", "стоит v"), OtaManager::current());
+    tft.setTextColor(label, panel); tft.drawString(buf, tx, ty);
+
+    fontTiny(); tft.setTextColor(dim, bg);
+    tft.setTextDatum(ML_DATUM); tft.drawString(i18n::tr("◀ back", "◀ назад"), 8, 309);
+    tft.setTextDatum(MR_DATUM); tft.drawString(i18n::tr("retry ▶", "повтор ▶"), 232, 309);
+    fontOff();
 }
 
 // The progress "slider" with the current step written on it (redrawn alone on % change).
@@ -669,6 +767,7 @@ static void otaBar() {
 }
 
 static void drawOtaScreen() {
+    if (ota.phase() == OtaManager::FAILED) { drawOtaError(); return; }
     const uint16_t gold  = tft.color565(0xff, 0xcf, 0x3f);
     const uint16_t dim   = tft.color565(0xbe, 0xc8, 0xb6);
     const uint16_t amber = tft.color565(0xff, 0xa5, 0x2a);
@@ -884,15 +983,19 @@ static void ensureWifiVisible() {
 }
 
 static void gotoWifi() {
+    if (scanPausedAt && millis() - scanPausedAt > 5000) engine.clearSparks();  // long gap → the graph would splice two sessions into one line
+    scanPausedAt = 0;
     engine.setMode(ScanEngine::SCAN_WIFI); engine.resume();
     st = ST_WIFI; seenWifiGen = engine.wifiGen();
     ensureWifiVisible();
+    tft.fillRect(0, 28, 240, 320 - 28, uiBg());   // clear the canvas once on entry; ticks repaint rows only
     drawList(true);
 }
 
 static void openNetOptions() {
     if (!engine.wifiRow(wifiSel, netSel)) return;
     engine.pause();                          // freeze the scan while the menu is open
+    scanPausedAt = millis();                 // remember when, so a long detour resets the RSSI graph on return
     String mine; bool isMine = net.isMine(netSel.bssid, mine);
     optTitle = netSel.ssid.length() ? netSel.ssid : (isMine ? mine : String(i18n::tr("<hidden>", "<скрытая>")));
     optN = 0;
@@ -1044,8 +1147,9 @@ static void launch(int feat) {
     if (ota.busy() && feat != F_OTA) return;
     if (st == ST_DEAUTH)    detector.stop();       // release promiscuous before anything else
     if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
+    engine.pause();                                // scanning is off unless the target feature turns it back on
     switch (feat) {
-        case F_WIFI_SCAN:   wifiSel = 0; off = 0; gotoWifi(); break;
+        case F_WIFI_SCAN:   wifiSel = 0; off = 0; engine.clearSparks(); gotoWifi(); break;
         case F_CONN:        connSel = 0; gotoConn(); break;
         case F_HIDDEN:      hidSel = 0; hidOff = 0; gotoHidden(); break;
         case F_DEAUTH:      engine.pauseAndWait();     // promiscuous needs the radio to itself
@@ -1054,7 +1158,8 @@ static void launch(int feat) {
                             break;
         case F_CHANNELS:    engine.setMode(ScanEngine::SCAN_WIFI); engine.resume(); st = ST_CHANNELS; seenWifiGen = engine.wifiGen();
                             memset(chHist, 0, sizeof(chHist)); chHead = 0; channelSample(); drawChannelScreen(); break;
-        case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();  drawList(true); break;
+        case F_BLE_SCAN:    engine.setMode(ScanEngine::SCAN_BLE);  engine.resume(); st = ST_BLE;  off = 0; seenBleGen  = engine.bleGen();
+                            tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); break;
         case F_SUBGHZ_SOON: infoTitle = i18n::tr("Sub-GHz Recorder", "Запись Sub-GHz"); infoBody = i18n::tr("Record / replay 315-868 MHz", "Запись/повтор 315-868 МГц"); infoNote = i18n::tr("Coming soon (needs CC1101)", "Скоро (нужен CC1101)"); st = ST_INFO; drawInfo(); break;
         case F_ABOUT:       st = ST_INFO; drawAboutScreen(); break;
         case F_LEGAL:       gotoLegal(false); break;
@@ -1160,6 +1265,28 @@ static void serialControl() {
             else if (!strcmp(buf, "chan"))   launch(F_CHANNELS);
             else if (!strcmp(buf, "legal"))  launch(F_LEGAL);
             else if (!strcmp(buf, "legalreset")) { Preferences p; p.begin("leshy", false); p.remove("legal_ok"); p.end(); Serial.println("[cmd] legal flag cleared — reboot to see the gate"); }
+            else if (!strcmp(buf, "stat")) { Serial.printf("[stat] st=%d wifiGen=%u bleGen=%u scanIdle=%d heap=%u\n",
+                                             (int)st, (unsigned)engine.wifiGen(), (unsigned)engine.bleGen(),
+                                             (int)engine.isIdle(), (unsigned)ESP.getFreeHeap()); continue; }
+            else if (!strncmp(buf, "otafail", 7)) {            // QA: render each full-screen OTA error without a real failure
+                static const struct { OtaManager::Err e; int code; const char* d; OtaManager::Phase ph; } S[] = {
+                    { OtaManager::E_NONET,     0,   "wifi not connected (wl=3)",              OtaManager::CHECKING },
+                    { OtaManager::E_TIME,      0,   "no NTP time (epoch=42)",                 OtaManager::CHECKING },
+                    { OtaManager::E_API,       -1,  "conn: connection refused",              OtaManager::CHECKING },
+                    { OtaManager::E_PARSE,     200, "IncompleteInput: stream ended mid-object", OtaManager::CHECKING },
+                    { OtaManager::E_RATELIMIT, 403, "",                                       OtaManager::CHECKING },
+                    { OtaManager::E_HASH,      0,   "",                                       OtaManager::DOWNLOADING },
+                    { OtaManager::E_HTTP,      404, "download HTTP 404",                      OtaManager::DOWNLOADING },
+                    { OtaManager::E_NOMEM,     0,   "no RAM for OTA task",                    OtaManager::CHECKING },
+                };
+                int n = (buf[7] == ' ') ? atoi(buf + 8) : 0;
+                if (n < 0 || n >= (int)(sizeof(S) / sizeof(S[0]))) n = 0;
+                if (!ota.simulateFail(S[n].e, S[n].code, S[n].d, S[n].ph)) { Serial.println("[cmd] otafail ignored — OTA busy"); continue; }
+                if (st == ST_DEAUTH)    detector.stop();       // same teardown launch() does — don't strand the radio
+                if (st == ST_PROVISION) net.stopProvision();
+                engine.pause();
+                st = ST_OTA; seenOtaGen = ota.gen(); seenOtaPhase = (int)ota.phase(); drawOtaScreen();
+            }
             else if (!strcmp(buf, "menu"))   { if (ota.busy()) continue;
                                                if (st == ST_DEAUTH) detector.stop();
                                                if (st == ST_PROVISION) net.stopProvision();

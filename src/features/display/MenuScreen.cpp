@@ -68,7 +68,7 @@ void MenuScreen::desc_(int i, bool sel) {
 
 void MenuScreen::redraw_(int sel) {                 // full paint of the visible window
     uiHeaderRu(T(m_->en, m_->ru));
-    tft.fillRect(0, 28, 240, 300 - 28, uiBg());
+    tft.fillRect(0, 28, 240, 320 - 28, uiBg());
     int last = off_ + VISIBLE; if (last > m_->n) last = m_->n;
     for (int i = off_; i < last; i++) bg_(i, i == sel);
     fontBig();   for (int i = off_; i < last; i++) title_(i, i == sel);

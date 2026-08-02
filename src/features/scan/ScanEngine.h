@@ -31,6 +31,7 @@ public:
     int  wifiCount();
     bool wifiRow(int i, WifiRow& out);
     int  sparkOf(const uint8_t bssid[6], int8_t* out);   // fills out[0..n-1] oldest->newest, returns n
+    void clearSparks();                  // drop per-AP RSSI history — a fresh scan session builds a live graph, not a stale one
     int  bleCount();
     bool bleRow(int i, BleRow& out);
 

@@ -123,6 +123,12 @@ void ScanEngine::pushSpark(const uint8_t b[6], int8_t rssi) {
     if (sparkN_ < MAX) { Spark& s = spark_[sparkN_++]; memcpy(s.bssid, b, 6); s.v[0] = rssi; s.n = 1; }
 }
 
+void ScanEngine::clearSparks() {
+    xSemaphoreTake(mtx_, portMAX_DELAY);
+    sparkN_ = 0;
+    xSemaphoreGive(mtx_);
+}
+
 int ScanEngine::sparkOf(const uint8_t b[6], int8_t* out) {
     int r = 0;
     xSemaphoreTake(mtx_, portMAX_DELAY);
