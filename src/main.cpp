@@ -240,6 +240,7 @@ StatusLeds     leds;             // the four WS2812s under the antennas — show
 static void drawNetBadge();      // small "connected" mark in the header (defined below)
 static void gotoWifi();          // (re)enter the live Wi-Fi scan
 static void ensureWifiVisible(); // keep the selected scan row on screen
+static int  drawWrapped(const char* s, int x, int y, int maxw, int lh, int maxlines);  // word-wrap (defined below)
 static void openNetOptions();    // RIGHT on a scan row -> per-network options
 static void drawNetDetails();    // details screen for the selected network
 
@@ -306,6 +307,7 @@ static uint32_t seenWifiGen = 0, seenBleGen = 0;
 static uint32_t scanPausedAt = 0;   // when the scan was paused (net options) — long gaps invalidate the RSSI graph
 static bool     touchDown = false;
 static String   infoTitle, infoBody, infoNote;
+static int      infoAction = -1;   // F_LEDS / F_BACKLIGHT when the info screen is an adjustable setting (SELECT cycles it in place), else -1
 
 static int  curMenu() { return menuStack[depth]; }
 static int& curSel()  { return selStack[depth]; }
@@ -327,12 +329,34 @@ static void drawInfo() {
     fontSmall();
     tft.setTextDatum(TL_DATUM);
     tft.setTextColor(tft.color565(0xe8, 0xe8, 0xe0), uiBg());
-    tft.drawString(infoBody, 10, 50);
-    tft.setTextColor(tft.color565(0xff, 0xcf, 0x3f), uiBg());
-    tft.drawString(infoNote, 10, 80);
-    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
+    int y = drawWrapped(infoBody.c_str(), 10, 50, 220, 24, 3);   // word-wrap, no mid-word breaks
+    if (infoNote.length()) {
+        tft.setTextColor(tft.color565(0xff, 0xcf, 0x3f), uiBg());
+        drawWrapped(infoNote.c_str(), 10, y + 14, 220, 24, 7);
+    }
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
+               infoAction >= 0 ? (i18n::isRu() ? "менять ▶" : "change ▶") : nullptr);
     fontOff();
     drawNetBadge();
+}
+
+// Adjustable-setting info screens: show the CURRENT value; SELECT/RIGHT cycles in place.
+static void drawLedsInfo() {
+    uint8_t b = leds.brightness();
+    infoTitle = i18n::tr("Status LEDs", "Светодиоды");
+    infoBody  = b ? String(i18n::tr("Brightness ", "Яркость ")) + b + "/255"
+                  : String(i18n::tr("Off", "Выключены"));
+    infoNote  = i18n::tr("Press ▶ to change. LEDs under the antennas show what the radio is doing.",
+                         "Жми ▶ для смены. Светодиоды под антеннами показывают работу радио.");
+    infoAction = F_LEDS; st = ST_INFO; drawInfo();
+}
+static void drawBacklightInfo() {
+    uint8_t v = uiBacklightLevel();
+    infoTitle = i18n::tr("Screen light", "Яркость экрана");
+    infoBody  = String(v * 100 / 255) + "%";
+    infoNote  = i18n::tr("Press ▶ to change the screen brightness.",
+                         "Жми ▶ для смены яркости экрана.");
+    infoAction = F_BACKLIGHT; st = ST_INFO; drawInfo();
 }
 
 static void drawProvisionScreen() {
@@ -569,7 +593,7 @@ static void connActivate() {
     switch (connActs[connSel]) {
         case CA_SETUP: net.startProvision(); st = ST_PROVISION; drawProvisionScreen(); break;
         case CA_CONNECT:
-            infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = "";
+            infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = ""; infoAction = -1;
             st = ST_INFO; drawInfo();
             net.connect();
             if (net.connected()) ota.startCheck();   // auto-check for updates on connect
@@ -1164,6 +1188,7 @@ static void launch(int feat) {
     if (st == ST_DEAUTH)    detector.stop();       // release promiscuous before anything else
     if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
     engine.pause();                                // scanning is off unless the target feature turns it back on
+    infoAction = -1;                               // most info screens aren't adjustable; the two that are set this
     switch (feat) {
         case F_WIFI_SCAN:   wifiSel = 0; off = 0; engine.clearSparks(); gotoWifi(); break;
         case F_CONN:        connSel = 0; gotoConn(); break;
@@ -1180,18 +1205,8 @@ static void launch(int feat) {
         case F_ABOUT:       st = ST_INFO; drawAboutScreen(); break;
         case F_LEGAL:       gotoLegal(false); break;
         case F_OTA:         gotoOta(); break;
-        case F_LEDS: {      uint8_t b = leds.cycleBrightness();
-                            infoTitle = i18n::tr("Status LEDs", "Светодиоды");
-                            infoBody  = b ? String(i18n::tr("Brightness ", "Яркость ")) + b + "/255"
-                                          : String(i18n::tr("Off", "Выключены"));
-                            infoNote  = i18n::tr("Press again to change. LEDs under the antennas show what the radio is doing.",
-                                                 "Нажми ещё раз для смены. Светодиоды под антеннами показывают работу радио.");
-                            st = ST_INFO; drawInfo(); break; }
-        case F_BACKLIGHT: { uint8_t v = uiBacklightCycle();
-                            infoTitle = i18n::tr("Screen light", "Яркость экрана");
-                            infoBody  = String(v * 100 / 255) + "%";
-                            infoNote  = i18n::tr("Press again to change.", "Нажми ещё раз для смены.");
-                            st = ST_INFO; drawInfo(); break; }
+        case F_LEDS:        drawLedsInfo(); break;         // shows current; SELECT/RIGHT cycles in place
+        case F_BACKLIGHT:   drawBacklightInfo(); break;
         case F_RECAL:       touchRecalibrate(); showMenu(); break;
         case F_LANG_EN:     i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
         case F_LANG_RU:     i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
@@ -1239,6 +1254,8 @@ static void onKey(int ev) {
             else if (st == ST_CONFIRM) doConfirm();
             else if (st == ST_OTA) otaActivate();
             else if (st == ST_WIFI) openNetOptions();
+            else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
+            else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             break;
         case Buttons::RIGHT:                      // right = options / action
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
@@ -1253,6 +1270,8 @@ static void onKey(int ev) {
             else if (st == ST_OTA) otaActivate();
             else if (st == ST_HIDDEN) openHiddenOptions();
             else if (st == ST_WIFI) openNetOptions();
+            else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
+            else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             break;
         case Buttons::LEFT:
             back();
@@ -1430,7 +1449,7 @@ void loop() {
         net.loopProvision();
         if (net.pendingConnect()) {
             net.stopProvision();     // saves creds + switches to STA (AP drops)
-            infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = "";
+            infoTitle = i18n::tr("Connecting...", "Подключение..."); infoBody = net.savedSsid(); infoNote = ""; infoAction = -1;
             st = ST_INFO; drawInfo();
             net.connect();
             if (net.connected()) ota.startCheck();   // auto-check for updates on connect
