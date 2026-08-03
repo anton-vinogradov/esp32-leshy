@@ -256,7 +256,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE, M_PORTAL, M_GEN, M_REC };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_SUBCFG, F_REC_PLAY, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_SUBCFG, F_REC_PLAY, F_SUBHUNT, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -284,6 +284,7 @@ static const MenuItem SUB_I[] = {
     {"Spectrum", "Sub-GHz waterfall (CC1101)", "Спектр", "Водопад Sub-GHz (CC1101)", K_FEAT, F_SUBSPECTRUM},
     {"Test TX",  "Transmit a test signal",     "Тест-передача", "Тестовый сигнал в эфир", K_FEAT, F_SUBTX},
     {"Rec + replay", "Record + replay your own", "Запись-повтор", "Запись/повтор своего", K_SUB, M_REC},
+    {"Freq finder", "Find your signal's freq", "Частотомер", "Найти частоту сигнала", K_FEAT, F_SUBHUNT},
     {"TX power", "Sub-GHz radiation power",    "Мощность TX",   "Мощность излучения",     K_FEAT, F_SUBPOWER},
 };
 static const MenuItem SET_I[] = {
@@ -327,7 +328,7 @@ static const Menu MENUS[] = {
     {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
     {"Wi-Fi",       "Wi-Fi",       WIFI_I, 5},
     {"BLE",         "BLE",         BLE_I,  1},
-    {"Sub-GHz",     "Sub-GHz",     SUB_I,  4},
+    {"Sub-GHz",     "Sub-GHz",     SUB_I,  5},
     {"Settings",    "Настройки",   SET_I,  6},
     {"Language",    "Язык",        LANG_I, 2},
     {"Advanced",    "Продвинутое", WADV_I, 3},
@@ -339,7 +340,7 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -1710,6 +1711,124 @@ static void recDeleteSelected() {
     drawRecPlayScreen(i18n::tr("Deleted", "Удалено"));
 }
 
+// ---- Sub-GHz frequency hunter: find the frequency of your own tag/remote (pure RX) ----
+struct HuntWin { uint32_t lo, hi; };
+static const HuntWin HUNT_WINS[] = { {300000, 348000}, {387000, 464000}, {779000, 928000} };   // CC1101 tunable windows
+static const int      HUNT_NWIN = sizeof(HUNT_WINS) / sizeof(HUNT_WINS[0]);
+static const uint32_t HUNT_STEP = 250;              // kHz coarse grid (RX bandwidth ~200 kHz)
+static const int      HUNT_SNR  = 15;               // dB above the band mean to call it a real signal
+
+enum HuntPhase { HP_COARSE, HP_REFINE };
+static HuntPhase huntPhase = HP_COARSE;
+static int      huntWin = 0;
+static uint32_t huntFreq = 300000;                  // coarse sweep cursor (kHz)
+static long     huntAcc = 0; static int huntAccN = 0;     // current pass: mean-energy accumulator
+static int      huntPassPeakDbm = -128;                   // current pass: strongest bin
+static uint32_t huntPassPeakKHz = 0;
+static int      huntFloor = -100;                   // last COMPLETED pass mean (noise reference)
+static bool     huntFloorValid = false;             // a full pass has measured the floor at least once
+static bool     huntLocked = false;                 // a signal is currently held (set only after refine)
+static uint32_t huntShowKHz = 0;                    // refined frequency shown
+static int      huntShowDbm = -128;                 // its RSSI
+static int      huntMiss = 0;                        // consecutive passes with no signal
+static uint32_t huntRefF = 0, huntRefHi = 0, huntRefBestK = 0;   // refine sub-sweep state
+static int      huntRefBestDbm = -128;
+static uint32_t huntLastDraw = 0;
+
+static const char* huntGuess(uint32_t k) {          // nearest common alarm/remote ISM point
+    struct Pt { uint32_t f; const char* n; };
+    static const Pt T[] = { {315000, "315"}, {390000, "390"}, {418000, "418"}, {433920, "433.92 ISM"},
+                            {434420, "434.42"}, {868350, "868.35 ISM"}, {915000, "915 ISM"} };
+    for (const Pt& t : T) { uint32_t d = k > t.f ? k - t.f : t.f - k; if (d <= 350) return t.n; }
+    return "";
+}
+
+static void huntReset() {
+    huntPhase = HP_COARSE; huntWin = 0; huntFreq = HUNT_WINS[0].lo;
+    huntAcc = 0; huntAccN = 0; huntPassPeakDbm = -128; huntPassPeakKHz = 0;
+    huntFloor = -100; huntFloorValid = false; huntLocked = false;
+    huntShowKHz = 0; huntShowDbm = -128; huntMiss = 0;
+}
+
+static void drawHuntChrome() {
+    const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0);
+    uiHeaderRu(i18n::tr("Freq finder", "Частотомер"), "CC1101");
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    fontSmall(); tft.setTextDatum(TL_DATUM); tft.setTextColor(white, bg);
+    tft.drawString(i18n::tr("Hold the tag by the antenna", "Держи метку у антенны"), 10, 210);
+    tft.drawString(i18n::tr("and press its button.", "и жми её кнопку."), 10, 232);
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "▶ сброс" : "▶ reset");
+    fontOff();
+}
+
+static void drawHuntValues() {
+    const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f),
+                   green = tft.color565(0x3f, 0xe0, 0x7a), grayc = tft.color565(0x80, 0x88, 0x80);
+    tft.fillRect(0, 56, 240, 150, bg);
+    tft.setTextDatum(TL_DATUM);
+    fontBig();
+    if (huntLocked && huntShowKHz) {
+        char fs[16]; snprintf(fs, sizeof(fs), "%lu.%02lu", (unsigned long)(huntShowKHz / 1000), (unsigned long)((huntShowKHz % 1000) / 10));
+        tft.setTextColor(green, bg); tft.drawString(fs, 10, 66);
+        fontSmall(); tft.setTextColor(white, bg); tft.drawString(i18n::tr("MHz", "МГц"), 150, 84);
+        const char* g = huntGuess(huntShowKHz);
+        if (*g) { tft.setTextColor(gold, bg); tft.drawString(g, 10, 118); }
+    } else {
+        tft.setTextColor(grayc, bg); tft.drawString(i18n::tr("searching...", "поиск…"), 10, 66);
+    }
+    fontSmall(); tft.setTextColor(white, bg);
+    char l1[44];
+    if (!huntFloorValid)     snprintf(l1, sizeof(l1), "%s", i18n::tr("measuring floor...", "меряю фон…"));
+    else if (huntLocked)     snprintf(l1, sizeof(l1), "%s%d  SNR %d dB", i18n::tr("peak ", "пик "), huntShowDbm, huntShowDbm - huntFloor);
+    else                     snprintf(l1, sizeof(l1), "%s%d dBm", i18n::tr("floor ", "фон "), huntFloor);
+    tft.drawString(l1, 10, 156);
+    fontOff();
+}
+
+static void huntTick() {
+    const int BATCH = 16;                               // bounded work per loop() so buttons stay responsive
+    if (huntPhase == HP_COARSE) {
+        for (int i = 0; i < BATCH; i++) {
+            int dbm = cc.rssiAt(huntFreq);
+            huntAcc += dbm; huntAccN++;
+            if (dbm > huntPassPeakDbm) { huntPassPeakDbm = dbm; huntPassPeakKHz = huntFreq; }
+            huntFreq += HUNT_STEP;
+            if (huntFreq > HUNT_WINS[huntWin].hi) {
+                if (++huntWin >= HUNT_NWIN) {                        // one full pass over all windows completed
+                    huntFloor = huntAccN ? (int)(huntAcc / huntAccN) : -100;   // band mean = noise reference
+                    huntFloorValid = true;
+                    if (huntPassPeakKHz && (huntPassPeakDbm - huntFloor) >= HUNT_SNR) {   // signal → refine around it
+                        huntRefF = huntPassPeakKHz > 1200 ? huntPassPeakKHz - 1200 : 1;
+                        huntRefHi = huntPassPeakKHz + 1200;
+                        huntRefBestDbm = huntPassPeakDbm; huntRefBestK = huntPassPeakKHz;   // fall back to the coarse peak
+                        huntPhase = HP_REFINE;
+                    } else if (++huntMiss >= 2) {                    // two empty passes → drop a stale lock (fast re-aim)
+                        huntLocked = false; huntShowKHz = 0;
+                    }
+                    huntWin = 0; huntFreq = HUNT_WINS[0].lo;         // restart the next coarse pass
+                    huntAcc = 0; huntAccN = 0; huntPassPeakDbm = -128; huntPassPeakKHz = 0;
+                    break;                                          // don't compound refine / next-pass work into this tick
+                }
+                huntFreq = HUNT_WINS[huntWin].lo;
+            }
+        }
+    } else {                                            // HP_REFINE — fine ±1.2 MHz sweep, also spread across ticks
+        for (int i = 0; i < BATCH && huntRefF <= huntRefHi; i++) {
+            if (cc1101FreqOk(huntRefF)) {
+                int d = cc.rssiAt(huntRefF);
+                if (d > huntRefBestDbm) { huntRefBestDbm = d; huntRefBestK = huntRefF; }
+            }
+            huntRefF += 50;
+        }
+        if (huntRefF > huntRefHi) {                     // refine complete → publish the result
+            huntShowKHz = huntRefBestK; huntShowDbm = huntRefBestDbm;
+            huntLocked = true; huntMiss = 0;
+            huntPhase = HP_COARSE;
+        }
+    }
+    if (millis() - huntLastDraw > 250) { huntLastDraw = millis(); drawHuntValues(); }
+}
+
 static void drawSubCfgScreen() {
     const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f);
     uiHeaderRu(i18n::tr("Sub-GHz setup", "Настройки Sub-GHz"));
@@ -1894,6 +2013,7 @@ static void back() {
         case ST_SUBREC:    cc.end(); showMenu();                           return;
         case ST_KEYBOARD:  st = ST_SUBREC; drawSubRecScreen();             return;   // naming is part of the record flow — keep CC1101 (touch-on-header path)
         case ST_REC_PLAY:  cc.end(); showMenu();                           return;
+        case ST_SUBHUNT:   cc.end(); showMenu();                           return;
         case ST_SUBCFG:    subcfg.stop(); showMenu();                      return;
         case ST_POLITE:    portal.stop(); showMenu();                      return;
         case ST_NETINFO:   gotoWifi();                                     return;
@@ -1918,6 +2038,7 @@ static void launch(int feat) {
     if (st == ST_SUBREC)    cc.end();              // release CC1101
     if (st == ST_KEYBOARD)  cc.end();              // naming screen was reached with CC1101 up
     if (st == ST_REC_PLAY)  cc.end();              // release CC1101
+    if (st == ST_SUBHUNT)   cc.end();              // release CC1101
     if (st == ST_SUBCFG)    subcfg.stop();         // drop the settings SoftAP
     if (st == ST_POLITE)    portal.stop();         // drop the captive-portal SoftAP
     if (st == ST_PROVISION) net.stopProvision();   // drop the SoftAP + portal
@@ -1985,6 +2106,11 @@ static void launch(int feat) {
         case F_SUBCFG:      engine.pauseAndWait();                 // settings portal owns the radio (SoftAP)
                             if (subcfg.begin()) { subCfgPhase = 0; st = ST_SUBCFG; drawSubCfgScreen(); }
                             else { infoTitle = i18n::tr("Sub-GHz setup", "Настройки Sub-GHz"); infoBody = i18n::tr("Failed to start", "Не удалось запустить"); infoNote = ""; st = ST_INFO; drawInfo(); }
+                            break;
+        case F_SUBHUNT:     engine.pause();                        // frequency hunter — pure RX sweep
+                            if (cc.begin()) { huntReset(); st = ST_SUBHUNT; drawHuntChrome(); drawHuntValues(); }
+                            else { infoTitle = i18n::tr("Freq finder", "Частотомер"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
+                                   infoNote = i18n::tr("This build expects a CC1101 sub-GHz module.", "Нужен модуль CC1101."); st = ST_INFO; drawInfo(); }
                             break;
         case F_REC_PLAY:    engine.pause();                        // browse + replay the saved library (CC1101 for TX)
                             if (cc.begin()) { recCount = RecStore::list(recNames, RecStore::MAX_RECS); recSel = 0; recOff = 0; recDelArm = false; st = ST_REC_PLAY; drawRecPlayScreen(); }
@@ -2060,6 +2186,7 @@ static void onKey(int ev) {
             else if (st == ST_SUBREC) subRecord();       // OK = capture the next signal
             else if (st == ST_KEYBOARD) kbSelect();
             else if (st == ST_REC_PLAY) { if (recDelArm) recDeleteSelected(); else recPlaySelected(); }
+            else if (st == ST_SUBHUNT) { huntReset(); drawHuntValues(); }   // OK = restart the hunt
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
@@ -2084,6 +2211,7 @@ static void onKey(int ev) {
             else if (st == ST_SUBREC) { if (recN > 0) { kbBuf[0] = 0; kbLen = 0; kbRow = 0; kbCol = 0; st = ST_KEYBOARD; drawKeyboard(true); } }   // right = name + save the capture
             else if (st == ST_KEYBOARD) { int pc = kbCol; if (kbCol < kbRowCols(kbRow) - 1) kbCol++; kbRepaintCursor(kbRow, pc); }
             else if (st == ST_REC_PLAY) { if (recCount > 0 && !recDelArm) { recDelArm = true; drawRecPlayScreen(); } }   // right = arm delete
+            else if (st == ST_SUBHUNT) { huntReset(); drawHuntValues(); }   // right = reset the peak hold
             else if (st == ST_SPECTRUM && spLab) spToggleTx();    // Lab: start/stop transmitting noise into the armed channels
             else if (st == ST_SPECTRUM)          spToggleView();  // passive: flip occupancy <-> traffic view
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
@@ -2202,7 +2330,7 @@ static void serialControl() {
                 if (st == ST_SPECTRUM)    spectrumStop();      // also stops any TX carrier
                 if (st == ST_SUBSPECTRUM) subStop();
                 if (st == ST_SUBTX)     { subTxOn = false; cc.end(); }
-                if (st == ST_SUBREC || st == ST_KEYBOARD || st == ST_REC_PLAY) cc.end();
+                if (st == ST_SUBREC || st == ST_KEYBOARD || st == ST_REC_PLAY || st == ST_SUBHUNT) cc.end();
                 if (st == ST_SUBCFG)      subcfg.stop();
                 if (st == ST_POLITE)      portal.stop();
                 if (st == ST_PROVISION)   net.stopProvision();
@@ -2215,7 +2343,7 @@ static void serialControl() {
                                                if (st == ST_SPECTRUM) spectrumStop();
                                                if (st == ST_SUBSPECTRUM) subStop();
                                                if (st == ST_SUBTX) { subTxOn = false; cc.end(); }
-                                               if (st == ST_SUBREC || st == ST_KEYBOARD || st == ST_REC_PLAY) cc.end();
+                                               if (st == ST_SUBREC || st == ST_KEYBOARD || st == ST_REC_PLAY || st == ST_SUBHUNT) cc.end();
                                                if (st == ST_SUBCFG) subcfg.stop();
                                                if (st == ST_POLITE) portal.stop();
                                                if (st == ST_PROVISION) net.stopProvision();
@@ -2388,6 +2516,8 @@ void loop() {
     if (st == ST_SPECTRUM) spectrumTick();
     // Sub-GHz spectrum waterfall
     if (st == ST_SUBSPECTRUM) subTick();
+    // Sub-GHz frequency hunter: keep sweeping + peak-holding while shown.
+    if (st == ST_SUBHUNT) huntTick();
     // Sub-GHz test transmitter: blast a packet each loop while armed.
     if (st == ST_SUBTX && subTxOn) cc.txBurst();
     // Sub-GHz settings portal: service it; apply the saved settings on submit.

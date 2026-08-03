@@ -27,6 +27,9 @@ public:
     int  band() const { return band_; }
     const Band& bandInfo() const { return BANDS[band_]; }
 
+    // Tune to one frequency and read its RSSI in dBm (for the frequency hunter). Pure RX.
+    int rssiAt(uint32_t freqKHz);
+
     // One pass over the current window: out[i] = 0..255 relative energy for bin i of n.
     void sweep(uint8_t* out, int n);
     // Sample a single bin i of n across the current band (0..255). Lets the caller

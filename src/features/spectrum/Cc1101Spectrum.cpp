@@ -149,6 +149,18 @@ uint8_t Cc1101Spectrum::sampleBin(int i, int n) {
     return e < 0 ? 0 : (e > 255 ? 255 : e);
 }
 
+// Tune one frequency, wait until RX is live (FS_AUTOCAL runs on IDLE->RX), read RSSI.
+int Cc1101Spectrum::rssiAt(uint32_t freqKHz) {
+    if (!present_) return -128;
+    strobe(S_IDLE);
+    tune(freqKHz);
+    strobe(S_RX);
+    uint32_t t = micros();
+    while ((readReg(REG_MARCSTATE) & 0x1F) != 0x0D && micros() - t < 3000) {}
+    delayMicroseconds(500);                 // AGC / RSSI settle in RX
+    return rssiDbm();
+}
+
 void Cc1101Spectrum::sweep(uint8_t* out, int n) {
     for (int i = 0; i < n; i++) out[i] = sampleBin(i, n);
     strobe(S_IDLE);
