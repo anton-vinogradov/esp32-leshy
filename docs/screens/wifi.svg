@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 320" width="240" height="320" role="img" aria-label="Wi-Fi scan list">
+  <title>ESP32-Leshy — Wi-Fi scan</title>
+  <defs>
+    <style>text{font-family:Verdana,Geneva,'DejaVu Sans',sans-serif}.b{font-weight:700}.s{font-size:12px}.c{font-size:11px;fill:#8fa98f}</style>
+    <path id="spk" d="M0,0 L0,-5 L10,-8 L20,-4 L30,-10 L40,-6 L50,-11 L60,-8 L70,-10 L70,0 Z" fill="#2a5348"/>
+  </defs>
+  <rect width="240" height="320" rx="8" fill="#101812"/>
+  <rect width="240" height="28" fill="#1e3a28"/>
+  <text x="8" y="20" class="b" font-size="16" fill="#e7cf8f">Wi-Fi</text>
+  <text x="232" y="20" font-size="12" fill="#8fa98f" text-anchor="end">8 сетей</text>
+
+  <!-- selected row highlight -->
+  <rect x="0" y="30" width="240" height="26" fill="#22331e"/>
+
+  <!-- rows: name(col) | cN | sparkline | rssi(col) -->
+  <g>
+    <text x="6"   y="47" class="b s" fill="#e7cf8f">*MyHomeNet</text>
+    <text x="118" y="47" class="c" text-anchor="end">c6</text>  <use href="#spk" transform="translate(126,51)"/>
+    <text x="234" y="47" class="s" fill="#4cd164" text-anchor="end">-47</text>
+  </g>
+  <g>
+    <text x="6"   y="73" class="s" fill="#e8e8e0">Rostelecom5G</text>
+    <text x="118" y="73" class="c" text-anchor="end">c1</text>  <use href="#spk" transform="translate(126,77)"/>
+    <text x="234" y="73" class="s" fill="#f0c43a" text-anchor="end">-68</text>
+  </g>
+  <g>
+    <text x="6"   y="99" class="s" fill="#667066">HiddenNet~</text>
+    <text x="118" y="99" class="c" text-anchor="end">c11</text> <use href="#spk" transform="translate(126,103)"/>
+    <text x="234" y="99" class="s" fill="#4cd164" text-anchor="end">-55</text>
+  </g>
+  <g>
+    <text x="6"   y="125" class="s" fill="#e8e8e0">TP-LINK_2G</text>
+    <text x="118" y="125" class="c" text-anchor="end">c6</text>  <use href="#spk" transform="translate(126,129)"/>
+    <text x="234" y="125" class="s" fill="#d14c4c" text-anchor="end">-79</text>
+  </g>
+  <g>
+    <text x="6"   y="151" class="s" fill="#667066">раскрываю</text>
+    <text x="118" y="151" class="c" text-anchor="end">c3</text>  <use href="#spk" transform="translate(126,155)"/>
+    <text x="234" y="151" class="s" fill="#f0c43a" text-anchor="end">-63</text>
+  </g>
+  <g>
+    <text x="6"   y="177" class="s" fill="#e8e8e0">Keenetic-88</text>
+    <text x="118" y="177" class="c" text-anchor="end">c11</text> <use href="#spk" transform="translate(126,181)"/>
+    <text x="234" y="177" class="s" fill="#f0c43a" text-anchor="end">-71</text>
+  </g>
+  <g>
+    <text x="6"   y="203" class="s" fill="#e8e8e0">IoT_Camera</text>
+    <text x="118" y="203" class="c" text-anchor="end">c1</text>  <use href="#spk" transform="translate(126,207)"/>
+    <text x="234" y="203" class="s" fill="#d14c4c" text-anchor="end">-84</text>
+  </g>
+  <g>
+    <text x="6"   y="229" class="s" fill="#e8e8e0">MikroTik_5G</text>
+    <text x="118" y="229" class="c" text-anchor="end">c6</text>  <use href="#spk" transform="translate(126,233)"/>
+    <text x="234" y="229" class="s" fill="#4cd164" text-anchor="end">-58</text>
+  </g>
+
+  <line x1="0" y1="300" x2="240" y2="300" stroke="#1e3a28"/>
+  <text x="6"   y="314" class="c">◀ меню</text>
+  <text x="234" y="314" class="c" text-anchor="end">опции ▶</text>
+</svg>
