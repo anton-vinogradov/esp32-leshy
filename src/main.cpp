@@ -1322,15 +1322,11 @@ static void spSweepToggle() {
 
 static void drawSpectrumScreen() {
     const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f);
-    char hr[20];
-    if (spLab) {
-        snprintf(hr, sizeof(hr), "x%d %s", nrf.modules(),
-                 nrf.txListenSelf() ? i18n::tr("chk", "проба") : i18n::tr("max", "макс"));
-        uiHeaderRu(i18n::tr("Generator", "Генератор"), hr);
-    } else {
-        snprintf(hr, sizeof(hr), "NRF24 x%d", nrf.modules());
-        uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), hr);
-    }
+    if (spLab)   // Generator: show only the TX mode (Проба = one module stays RX so the waterfall lives; Макс = all TX)
+        uiHeaderRu(i18n::tr("Generator", "Генератор"),
+                   nrf.txListenSelf() ? i18n::tr("chk", "проба") : i18n::tr("max", "макс"));
+    else         // passive Spectrum: title only — the module count was cryptic and collided with the title
+        uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), nullptr);
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     wfLegend(bg, dim, (spTraffic && !spLab) ? i18n::tr("base", "фон") : nullptr,
                       (spTraffic && !spLab) ? i18n::tr("spike", "всплеск") : nullptr);
