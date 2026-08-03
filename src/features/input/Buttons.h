@@ -12,6 +12,7 @@ public:
 
     bool begin();               // Wire.begin + scan for the PCF8574
     Key  poll();                // returns a key on the press edge (debounced)
+    bool held(Key k);           // is key k currently pressed right now (for long-press timing)
     uint8_t readRaw();          // raw PCF byte (bit low = pressed)
 
     bool    found() const { return found_; }

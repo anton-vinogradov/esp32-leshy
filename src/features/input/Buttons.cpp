@@ -22,6 +22,14 @@ uint8_t Buttons::readRaw() {
     return 0xFF;
 }
 
+bool Buttons::held(Key k) {
+    if (!found_) return false;
+    uint8_t bit = k == UP ? bitUp_ : k == DOWN ? bitDown_ : k == LEFT ? bitLeft_
+                : k == RIGHT ? bitRight_ : k == SELECT ? bitSelect_ : 0xFF;
+    if (bit == 0xFF) return false;
+    return !(readRaw() & (1 << bit));          // active low: pressed = bit 0
+}
+
 Buttons::Key Buttons::poll() {
     if (!found_) return NONE;
     uint32_t now = millis();

@@ -1168,6 +1168,14 @@ static uint16_t spTxMask = 0;                                   // armed Wi-Fi c
 static int      spCursor = 6;                                  // Wi-Fi channel under the caret (1..13)
 static bool     spTxOn   = false;                              // master TX on/off
 static bool     spLab    = false;                              // true = Lab noise generator (TX controls); false = passive Spectrum
+// Beacon TX modes: short RIGHT = static (fixed channels) / follow-caret live; long RIGHT = auto-sweep.
+static bool     spSweep   = false;                             // auto-sweep: one carrier marches across the channels
+static int      spSweepCh = 1;                                 // current sweep Wi-Fi channel (1..13)
+static uint32_t spSweepAt = 0;                                 // sweep step timer
+static const int SP_SWEEP_MS = 350;                            // dwell per channel while sweeping
+static bool     spRightPending = false, spRightLong = false;   // RIGHT long-press tracking (Lab screen)
+static uint32_t spRightAt = 0;
+static int      spRightRel = 0;                                // consecutive "released" reads (debounce I2C 0xFF glitches)
 // Traffic view: subtract a slow per-channel baseline so the constant floor (beacons, steady
 // BT) fades and only activity ABOVE it stands out. RPD is 1-bit, so this shows changes in
 // occupancy (bursts), not decoded traffic — a steady stream shows only when it starts.
@@ -1226,10 +1234,17 @@ static void wfLegend(uint16_t bg, uint16_t dim, const char* lo = nullptr, const 
     fontOff();
 }
 
-static void spectrumStop() { spTxOn = false; nrf.end(); }
+static void spectrumStop() { spTxOn = false; spSweep = false; spRightPending = false; spRightRel = 0; nrf.end(); }
 
-// Push the armed set to the radio (empty when TX is off, so nothing is emitted).
-static void spApplyTx() { nrf.setTxWifiMask(spTxOn ? spTxMask : 0); }
+// Effective TX target: nothing when off; the sweep channel while sweeping; the fixed set
+// if any is armed; else the caret channel live (follow-cursor "real-time" mode).
+static uint16_t spEffMask() {
+    if (!spTxOn) return 0;
+    if (spSweep)  return (uint16_t)(1 << spSweepCh);
+    if (spTxMask) return spTxMask;
+    return (uint16_t)(1 << spCursor);
+}
+static void spApplyTx() { nrf.setTxWifiMask(spEffMask()); }
 
 // The channel axis below the plot: a tick + number per Wi-Fi channel (armed ones in
 // orange-red), plus the selection caret. Redrawn on any change; touches only the strip
@@ -1260,24 +1275,36 @@ static void spDrawFooter() {
     // caret, the middle key (OK) arms the channel, ▶ starts/stops the noise.
     if (!spLab) { uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
                              spTraffic ? i18n::tr("traffic ▶", "трафик ▶") : i18n::tr("occupancy ▶", "занятость ▶")); return; }
-    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
-               spTxOn ? (i18n::isRu() ? "▶ стоп"            : "▶ stop")
-                      : (i18n::isRu() ? "OK канал  ▶ старт" : "OK chan  ▶ start"));
+    const char* right = spSweep ? (i18n::isRu() ? "СВИП  ▶ стоп"      : "SWEEP  ▶ stop")
+                      : spTxOn   ? (i18n::isRu() ? "стоп ▶  держ=свип" : "stop ▶  hold=sweep")
+                                 : (i18n::isRu() ? "OK канал  ▶ старт" : "OK chan  ▶ start");
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", right);
 }
 
-// SELECT arms/disarms the channel under the caret; live if we're already emitting.
+// SELECT fixes/unfixes the caret channel (a static beacon target). Leaves sweep mode.
 static void spToggleArm() {
+    spSweep = false;
     spTxMask ^= (uint16_t)(1 << spCursor);
-    if (spTxMask == 0) spTxOn = false;              // nothing armed → nothing to emit
     spApplyTx();
     spDrawAxis();
     spDrawFooter();
 }
 
-// RIGHT starts/stops the noise. Pressing it with nothing armed arms the caret channel.
+// Short RIGHT: start/stop the static/follow beacon. With channels fixed it hits those; with
+// none fixed the carrier follows the caret live (move ▲▼ and it tracks you — real-time).
 static void spToggleTx() {
-    if (!spTxOn && spTxMask == 0) spTxMask |= (uint16_t)(1 << spCursor);
-    spTxOn = !spTxOn && spTxMask != 0;
+    spSweep = false;
+    spTxOn = !spTxOn;
+    spApplyTx();
+    spDrawAxis();
+    spDrawFooter();
+}
+
+// Long RIGHT: start/stop the auto-sweep — one carrier marching across every channel.
+static void spSweepToggle() {
+    spSweep = !spSweep;
+    spTxOn = spSweep;
+    if (spSweep) { spSweepCh = 1; spCursor = 1; spSweepAt = millis(); }
     spApplyTx();
     spDrawAxis();
     spDrawFooter();
@@ -1335,6 +1362,13 @@ static void spToggleView() {
 }
 
 static void spectrumTick() {
+    if (spSweep && spTxOn && millis() - spSweepAt >= SP_SWEEP_MS) {   // auto-sweep: march the carrier one channel on
+        spSweepAt = millis();
+        spSweepCh = spSweepCh >= 13 ? 1 : spSweepCh + 1;
+        spCursor = spSweepCh;
+        spApplyTx();
+        spDrawAxis();
+    }
     uint8_t sw[Nrf24Spectrum::CHANNELS];
     nrf.sweep(sw);                                       // ~25ms across 126 channels; RPD is 1-bit per channel
     for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) {
@@ -2226,7 +2260,7 @@ static void launch(int feat) {
                             else { infoTitle = i18n::tr("Channels 2.4G", "Каналы 2.4ГГц"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
         case F_SPECTRUM:    engine.pause();                 // NRF24 is a separate SPI radio; free the ESP radio's CPU load anyway
-                            spLab = false; spTxOn = false; spTxMask = 0;   // passive viewer — never transmits
+                            spLab = false; spTxOn = false; spTxMask = 0; spSweep = false; spRightPending = false;   // passive viewer — never transmits
                             if (nrf.begin()) { st = ST_SPECTRUM; drawSpectrumScreen(); }
                             else { infoTitle = i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
                                    infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
@@ -2237,7 +2271,7 @@ static void launch(int feat) {
                                    infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
                             break;
         case F_NOISEGEN:    engine.pause();
-                            spLab = true; spTxOn = false; spCursor = 6;
+                            spLab = true; spTxOn = false; spCursor = 6; spSweep = false; spRightPending = false;
                             spTxMask = (1 << 1) | (1 << 6) | (1 << 11);    // preset the non-overlapping channels, ready to fire
                             if (nrf.begin()) { st = ST_SPECTRUM; drawSpectrumScreen(); }
                             else { infoTitle = i18n::tr("Generator", "Генератор"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
@@ -2324,7 +2358,7 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN)  { if (hidSel > 0)  { int p = hidSel; hidSel--; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
             else if (st == ST_LEGAL)   { if (legOff > 0) { legOff -= 4; if (legOff < 0) legOff = 0; drawLegalScreen(); } }
             else if (st == ST_LANGPICK){ if (langPickSel > 0) { langPickSel--; drawLangPick(); } }
-            else if (st == ST_SPECTRUM && spLab){ if (spCursor > 1)  { spCursor--; spDrawAxis(); } }   // move the TX channel caret
+            else if (st == ST_SPECTRUM && spLab){ if (!spSweep && spCursor > 1)  { spCursor--; if (spTxOn && !spTxMask) spApplyTx(); spDrawAxis(); } }   // move caret (carrier follows it live only in follow mode; sweep owns the caret)
             else if (st == ST_SUBREC) subReplay();   // up = replay the captured signal
             else if (st == ST_KEYBOARD) { int pr = kbRow, pc = kbCol; if (kbRow > 0) kbRow--; if (kbCol >= kbRowCols(kbRow)) kbCol = kbRowCols(kbRow) - 1; kbRepaintCursor(pr, pc); }
             else if (st == ST_REC_PLAY) { if (recDelArm) { recDelArm = false; drawRecPlayScreen(); } else if (recSel > 0) { int p = recSel; recSel--; tft.fillRect(0, 283, 240, 18, uiBg()); int oo = recOff; clampRecList(); if (recOff != oo) drawRecList(); else { drawRecPlayRow(p - recOff); drawRecPlayRow(recSel - recOff); } } }
@@ -2338,7 +2372,7 @@ static void onKey(int ev) {
             else if (st == ST_HIDDEN)  { if (hidSel < revealer.count() - 1) { int p = hidSel; hidSel++; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
             else if (st == ST_LEGAL)   { int m = legN - LEG_LINES; if (m < 0) m = 0; if (legOff < m) { legOff += 4; if (legOff > m) legOff = m; drawLegalScreen(); } }
             else if (st == ST_LANGPICK){ if (langPickSel < 1) { langPickSel++; drawLangPick(); } }
-            else if (st == ST_SPECTRUM && spLab){ if (spCursor < 13) { spCursor++; spDrawAxis(); } }   // move the TX channel caret
+            else if (st == ST_SPECTRUM && spLab){ if (!spSweep && spCursor < 13) { spCursor++; if (spTxOn && !spTxMask) spApplyTx(); spDrawAxis(); } }   // move caret (carrier follows it live only in follow mode; sweep owns the caret)
             else if (st == ST_SUBREC) { cc.setBand(cc.band() + 1); recN = 0; drawSubRecScreen(); }   // down = cycle band (drops the capture)
             else if (st == ST_KEYBOARD) { int pr = kbRow, pc = kbCol; if (kbRow < KB_NROW) kbRow++; if (kbCol >= kbRowCols(kbRow)) kbCol = kbRowCols(kbRow) - 1; kbRepaintCursor(pr, pc); }
             else if (st == ST_REC_PLAY) { if (recDelArm) { recDelArm = false; drawRecPlayScreen(); } else if (recSel < recCount - 1) { int p = recSel; recSel++; tft.fillRect(0, 283, 240, 18, uiBg()); int oo = recOff; clampRecList(); if (recOff != oo) drawRecList(); else { drawRecPlayRow(p - recOff); drawRecPlayRow(recSel - recOff); } } }
@@ -2388,7 +2422,7 @@ static void onKey(int ev) {
             else if (st == ST_REC_PLAY) { if (recCount > 0 && !recDelArm) { recDelArm = true; drawRecPlayScreen(); } }   // right = arm delete
             else if (st == ST_SUBHUNT) { huntReset(); drawHuntGraph(); }   // right = reset the peak hold
             else if (st == ST_HUNT24) { hunt24Reset(); drawHunt24Graph(); }   // right = recalibrate
-            else if (st == ST_SPECTRUM && spLab) spToggleTx();    // Lab: start/stop transmitting noise into the armed channels
+            else if (st == ST_SPECTRUM && spLab) { spRightPending = true; spRightLong = false; spRightAt = millis(); spRightRel = 0; }   // short=static/follow, long=sweep (timed in loop)
             else if (st == ST_SPECTRUM)          spToggleView();  // passive: flip occupancy <-> traffic view
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
@@ -2721,6 +2755,15 @@ void loop() {
         }
         int ph = !portal.isRunning() ? 2 : (portalSetup ? portalSaved : portal.consented()) ? 1 : 0;
         if (ph != politePhase) { politePhase = ph; drawPoliteScreen(); }
+    }
+    if (st == ST_SPECTRUM && spLab && spRightPending) {          // RIGHT: short = static/follow, hold ≥500 ms = auto-sweep
+        if (buttons.held(Buttons::RIGHT)) {                     // still down — a lone I2C 0xFF read must not count as release
+            spRightRel = 0;
+            if (!spRightLong && millis() - spRightAt >= 500) { spRightLong = true; spSweepToggle(); }
+        } else if (++spRightRel >= 3) {                         // 3 consecutive "up" reads = a real release (glitch-proof)
+            if (!spRightLong) spToggleTx();
+            spRightPending = false; spRightLong = false; spRightRel = 0;
+        }
     }
     if (st == ST_SPECTRUM) spectrumTick();
     if (st == ST_HUNT24) hunt24Tick();
