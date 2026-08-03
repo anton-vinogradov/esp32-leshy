@@ -29,6 +29,9 @@ public:
 
     // Tune to one frequency and read its RSSI in dBm (for the frequency hunter). Pure RX.
     int rssiAt(uint32_t freqKHz);
+    // Near-field mode: FIFOTHR.CLOSE_IN_RX adds ~18 dB input attenuation so a signal held right
+    // at the antenna can't overload the front-end (which otherwise spawns image/spur ghosts).
+    void setRxGain(bool low);
 
     // One pass over the current window: out[i] = 0..255 relative energy for bin i of n.
     void sweep(uint8_t* out, int n);

@@ -1734,6 +1734,7 @@ static int      huntN = 0;                          // active bin count
 static int      huntBin = 0;                        // sweep cursor (flat bin index)
 static int      huntCalibPass = 0;                  // which baseline pass we're on
 static bool     huntCalibrated = false;
+static bool     huntLowGain = false;                // -18 dB input attenuation (near-field, anti-overload)
 static uint32_t huntLastDraw = 0;
 
 static int huntBinCount() {
@@ -1822,6 +1823,7 @@ static void drawHuntGraph() {
     else if (peakRise >= HUNT_RISE) snprintf(l1, sizeof(l1), "%s+%d dB", i18n::tr("peak rise ", "подъём пика "), peakRise);
     else                            snprintf(l1, sizeof(l1), "%s", i18n::tr("hold near antenna, press", "держи у антенны, жми"));
     tft.drawString(l1, 10, 96);
+    if (huntLowGain) { tft.setTextColor(gold, bg); tft.drawString("-18 dB", 150, 46); }   // near-field attenuation on (OK toggles)
     fontOff();
 
     // ---- graph ----
@@ -2162,7 +2164,7 @@ static void launch(int feat) {
                             else { infoTitle = i18n::tr("Sub-GHz setup", "Настройки Sub-GHz"); infoBody = i18n::tr("Failed to start", "Не удалось запустить"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
         case F_SUBHUNT:     engine.pause();                        // frequency hunter — pure RX sweep
-                            if (cc.begin()) { huntReset(); st = ST_SUBHUNT; drawHuntChrome(); drawHuntGraph(); }
+                            if (cc.begin()) { cc.setRxGain(huntLowGain); huntReset(); st = ST_SUBHUNT; drawHuntChrome(); drawHuntGraph(); }
                             else { infoTitle = i18n::tr("Freq finder", "Частотомер"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
                                    infoNote = i18n::tr("This build expects a CC1101 sub-GHz module.", "Нужен модуль CC1101."); st = ST_INFO; drawInfo(); }
                             break;
@@ -2240,7 +2242,7 @@ static void onKey(int ev) {
             else if (st == ST_SUBREC) subRecord();       // OK = capture the next signal
             else if (st == ST_KEYBOARD) kbSelect();
             else if (st == ST_REC_PLAY) { if (recDelArm) recDeleteSelected(); else recPlaySelected(); }
-            else if (st == ST_SUBHUNT) { huntReset(); drawHuntGraph(); }   // OK = restart the hunt
+            else if (st == ST_SUBHUNT) { huntLowGain = !huntLowGain; cc.setRxGain(huntLowGain); huntReset(); drawHuntGraph(); }   // OK = toggle -18 dB near-field gain
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }

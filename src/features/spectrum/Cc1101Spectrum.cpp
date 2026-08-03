@@ -161,6 +161,11 @@ int Cc1101Spectrum::rssiAt(uint32_t freqKHz) {
     return rssiDbm();
 }
 
+void Cc1101Spectrum::setRxGain(bool low) {
+    if (!present_) return;
+    writeReg(0x03, low ? 0x37 : 0x07);      // FIFOTHR: CLOSE_IN_RX = 18 dB attenuation (near-field) vs 0 dB
+}
+
 void Cc1101Spectrum::sweep(uint8_t* out, int n) {
     for (int i = 0; i < n; i++) out[i] = sampleBin(i, n);
     strobe(S_IDLE);

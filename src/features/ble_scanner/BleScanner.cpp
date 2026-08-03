@@ -66,5 +66,11 @@ int BleScanner::scan(uint32_t seconds) {
         count_++;
     }
     scan->clearResults();
+    for (int i = 1; i < count_; i++) {          // strongest RSSI first (nearest device on top)
+        BleDev key = devs_[i];
+        int j = i - 1;
+        while (j >= 0 && devs_[j].rssi < key.rssi) { devs_[j + 1] = devs_[j]; j--; }
+        devs_[j + 1] = key;
+    }
     return count_;
 }
