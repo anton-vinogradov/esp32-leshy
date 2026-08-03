@@ -1247,6 +1247,34 @@ static uint16_t spEffMask() {
 }
 static void spApplyTx() { nrf.setTxWifiMask(spEffMask()); }
 
+// Generator header badge (right side): what channel the noise is actually going into
+// right now — the follow caret, the fixed set, or the marching sweep. Amber while
+// emitting, grey when off. Redrawn from spDrawAxis(), so it tracks every change.
+static void spDrawTxBadge() {
+    if (!spLab) return;
+    const uint16_t hdr = tft.color565(0x1e, 0x3a, 0x28);
+    const uint16_t col = spTxOn ? tft.color565(0xff, 0x9a, 0x3a) : tft.color565(0x8f, 0xa9, 0x8f);
+    char b[24];
+    if (!spTxOn)        snprintf(b, sizeof(b), "%s", i18n::tr("off", "выкл"));
+    else if (spSweep)   snprintf(b, sizeof(b), "%s%d", i18n::tr("sweep ch", "свип к"), spSweepCh);
+    else if (spTxMask) {
+        int n = 0;
+        for (int w = 1; w <= 13; w++) if (spTxMask & (1 << w)) n++;
+        if (n <= 4) {
+            int p = snprintf(b, sizeof(b), "%s", i18n::tr("ch", "к"));
+            bool comma = false;
+            for (int w = 1; w <= 13; w++) if (spTxMask & (1 << w)) { p += snprintf(b + p, sizeof(b) - p, "%s%d", comma ? "," : "", w); comma = true; }
+        } else snprintf(b, sizeof(b), "%s x%d", i18n::tr("ch", "к"), n);
+    }
+    else                snprintf(b, sizeof(b), "%s%d", i18n::tr("ch", "к"), spCursor);
+    tft.fillRect(150, 2, 88, 24, hdr);          // clear only the badge area, right of the "Генератор" title
+    fontSmall();
+    tft.setTextDatum(MR_DATUM);
+    tft.setTextColor(col, hdr);
+    tft.drawString(b, 234, 14);
+    fontOff();
+}
+
 // The channel axis below the plot: a tick + number per Wi-Fi channel (armed ones in
 // orange-red), plus the selection caret. Redrawn on any change; touches only the strip
 // under the plot, never the live waterfall above it.
@@ -1277,6 +1305,7 @@ static void spDrawAxis() {
             tft.fillTriangle(x - 3, B + 34, x + 3, B + 34, x, B + 29, armed);   // armed: arrow points UP at the channel from below
         }
     }
+    spDrawTxBadge();               // keep the header's TX-channel badge in sync with the caret/armed/sweep state
 }
 
 static void spDrawFooter() {
@@ -1322,9 +1351,8 @@ static void spSweepToggle() {
 
 static void drawSpectrumScreen() {
     const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f);
-    if (spLab)   // Generator: show only the TX mode (Проба = one module stays RX so the waterfall lives; Макс = all TX)
-        uiHeaderRu(i18n::tr("Generator", "Генератор"),
-                   nrf.txListenSelf() ? i18n::tr("chk", "проба") : i18n::tr("max", "макс"));
+    if (spLab)   // Generator: title only here — spDrawAxis()→spDrawTxBadge() fills the right slot with the live TX channel
+        uiHeaderRu(i18n::tr("Generator", "Генератор"), nullptr);
     else         // passive Spectrum: title only — the module count was cryptic and collided with the title
         uiHeaderRu(i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"), nullptr);
     tft.fillRect(0, 28, 240, 320 - 28, bg);
