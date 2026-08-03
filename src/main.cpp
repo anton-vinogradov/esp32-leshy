@@ -256,7 +256,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE, M_PORTAL, M_GEN, M_REC };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_SUBCFG, F_REC_PLAY, F_SUBHUNT, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_SUBCFG, F_REC_PLAY, F_SUBHUNT, F_HUNT24, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -269,6 +269,7 @@ static const MenuItem WIFI_I[] = {
     {"Wi-Fi Scan",    "Signal, channel, lock", "Скан Wi-Fi",    "Сигнал, канал, шифр",   K_FEAT, F_WIFI_SCAN},
     {"Channels 2.4G", "Airtime per channel",   "Каналы 2.4ГГц", "Занятость по каналам",  K_FEAT, F_CHANNELS},
     {"Spectrum 2.4G", "Raw band waterfall (NRF24)", "Спектр 2.4ГГц", "Водопад по спектру (NRF24)", K_FEAT, F_SPECTRUM},
+    {"Freq finder 2.4", "Which 2.4 channel a signal is on", "Частотомер 2.4", "Канал 2.4-сигнала", K_FEAT, F_HUNT24},
     {"Laboratory",    "Experimental — transmits", "Лаборатория", "Эксперименты — эфир",   K_SUB,  M_LAB},
     {"Advanced",      "Deeper Wi-Fi tools",    "Продвинутое",   "Инструменты поглубже",  K_SUB,  M_WIFI_ADV},
 };
@@ -326,7 +327,7 @@ static const MenuItem LANG_I[] = {
 };
 static const Menu MENUS[] = {
     {"ESP32-Leshy", "ESP32-Leshy", ROOT_I, 4},
-    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 5},
+    {"Wi-Fi",       "Wi-Fi",       WIFI_I, 6},
     {"BLE",         "BLE",         BLE_I,  1},
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  5},
     {"Settings",    "Настройки",   SET_I,  6},
@@ -340,7 +341,7 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24 };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -1885,6 +1886,116 @@ static void huntTick() {
     if (millis() - huntLastDraw > 250) { huntLastDraw = millis(); drawHuntGraph(); }
 }
 
+// ---- 2.4 GHz frequency finder — same idea on the NRF24 (which channel lights up) ----
+// The NRF24 gives only a 1-bit RPD per channel, so the "level" is a HIT-RATE: accumulate
+// the RPD over H24_K sweeps → 0..K per channel. Baseline (min over 2 passes) captures the
+// constant Wi-Fi/BT floor; a pressed tag/remote raises its channel's hit-rate above it.
+static const int H24_N    = Nrf24Spectrum::CHANNELS;   // 126 channels, 2400 + ch MHz
+static const int H24_K    = 48;                        // sweeps accumulated per pass
+static const int H24_RISE = 8;                         // hit-rate rise above baseline to count as a signal
+static const int H24_FS   = 36;                        // graph full-scale
+enum Hunt24Phase { H24_CALIB, H24_HUNT };
+static Hunt24Phase h24Phase = H24_CALIB;
+static int8_t   h24Base[H24_N], h24Raw[H24_N], h24Hold[H24_N];
+static int      h24Acc[H24_N];                         // this pass's per-channel hit accumulator
+static int      h24Sweeps = 0, h24CalibPass = 0;
+static bool     h24Calibrated = false;
+static uint32_t h24LastDraw = 0;
+
+static const char* hunt24Guess(int ch) {               // nearest Wi-Fi channel a peak overlaps
+    static char buf[12];
+    int w = (ch - 12 + 2) / 5 + 1;                     // Wi-Fi centres at nRF 12,17,22,... = 12+(w-1)*5
+    if (w >= 1 && w <= 13 && abs(ch - (12 + (w - 1) * 5)) <= 6) { snprintf(buf, sizeof(buf), "Wi-Fi %d", w); return buf; }
+    return "";
+}
+
+static void hunt24Reset() {
+    h24Phase = H24_CALIB; h24CalibPass = 0; h24Calibrated = false; h24Sweeps = 0;
+    for (int c = 0; c < H24_N; c++) { h24Acc[c] = 0; h24Hold[c] = 0; }
+}
+
+static void drawHunt24Chrome() {
+    uiHeaderRu(i18n::tr("2.4 finder", "Частотомер 2.4"), "nRF24");
+    tft.fillRect(0, 28, 240, 320 - 28, uiBg());
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "▶ калибровать" : "▶ recal");
+}
+
+static void drawHunt24Graph() {
+    const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f),
+                   green = tft.color565(0x3f, 0xe0, 0x7a), grayc = tft.color565(0x80, 0x88, 0x80),
+                   dim = tft.color565(0x2c, 0x40, 0x30), axis = tft.color565(0x40, 0x50, 0x44);
+    int peakCh = -1, peakRise = 0;
+    for (int c = 0; c < H24_N; c++) if (h24Hold[c] > peakRise) { peakRise = h24Hold[c]; peakCh = c; }
+
+    tft.fillRect(0, 40, 240, HG_TOP - 44, bg);          // reuse the sub-GHz graph box geometry (HG_TOP/HG_BOT)
+    tft.setTextDatum(TL_DATUM);
+    fontBig();
+    if (!h24Calibrated) {
+        tft.setTextColor(grayc, bg); tft.drawString(i18n::tr("calibrating...", "калибровка…"), 10, 46);
+    } else if (peakRise >= H24_RISE && peakCh >= 0) {
+        char fs[16]; snprintf(fs, sizeof(fs), "%d", 2400 + peakCh);
+        tft.setTextColor(green, bg); tft.drawString(fs, 10, 46);
+        fontSmall(); tft.setTextColor(white, bg); tft.drawString(i18n::tr("MHz", "МГц"), 120, 62);
+        const char* g = hunt24Guess(peakCh);
+        if (*g) { tft.setTextColor(gold, bg); tft.drawString(g, 160, 62); }
+    } else {
+        tft.setTextColor(grayc, bg); tft.drawString(i18n::tr("press the tag", "жми метку"), 10, 46);
+    }
+    fontSmall(); tft.setTextColor(white, bg);
+    char l1[48];
+    if (!h24Calibrated)            snprintf(l1, sizeof(l1), "%s", i18n::tr("don't press - measuring floor", "не жми — меряю фон"));
+    else if (peakRise >= H24_RISE) snprintf(l1, sizeof(l1), "%s+%d", i18n::tr("peak rise ", "подъём пика "), peakRise);
+    else                           snprintf(l1, sizeof(l1), "%s", i18n::tr("hold near antennas, press", "держи у антенн, жми"));
+    tft.drawString(l1, 10, 96);
+    fontOff();
+
+    tft.fillRect(0, HG_TOP, 240, HG_BOT - HG_TOP + 14, bg);
+    tft.drawFastHLine(0, HG_BOT, 240, axis);
+    fontTiny(); tft.setTextDatum(TC_DATUM); tft.setTextColor(grayc, bg);   // Wi-Fi 1/6/11 landmarks
+    const int WCH[] = { 1, 6, 11 };
+    for (int wi = 0; wi < 3; wi++) {
+        int ch = 12 + (WCH[wi] - 1) * 5, x = ch * 240 / H24_N;
+        tft.drawFastVLine(x, HG_BOT + 1, 3, axis);
+        char b[4]; snprintf(b, sizeof(b), "%d", WCH[wi]); tft.drawString(b, x, HG_BOT + 4);
+    }
+    fontOff();
+    for (int c = 0; c < H24_N; c++) {                   // one bar per channel
+        int x0 = c * 240 / H24_N, x1 = (c + 1) * 240 / H24_N; if (x1 <= x0) x1 = x0 + 1;
+        int px = h24Hold[c] * (HG_BOT - HG_TOP) / H24_FS; if (px > HG_BOT - HG_TOP) px = HG_BOT - HG_TOP;
+        if (px > 0) tft.fillRect(x0, HG_BOT - px, x1 - x0, px, c == peakCh ? gold : (h24Hold[c] >= H24_RISE ? green : dim));
+    }
+}
+
+static void hunt24Tick() {
+    uint8_t sw[H24_N];
+    for (int s = 0; s < 2 && h24Sweeps < H24_K; s++) {  // accumulate a couple of RPD sweeps per loop
+        nrf.sweep(sw);
+        for (int c = 0; c < H24_N; c++) h24Acc[c] += (sw[c] & 1);
+        h24Sweeps++;
+    }
+    if (h24Sweeps >= H24_K) {                           // pass complete → h24Acc[c] = hit-rate 0..K
+        if (h24Phase == H24_CALIB) {
+            for (int c = 0; c < H24_N; c++) {
+                int8_t v = (int8_t)h24Acc[c];
+                h24Base[c] = (h24CalibPass == 0 || v < h24Base[c]) ? v : h24Base[c];   // per-channel MIN
+            }
+            if (++h24CalibPass >= HUNT_CALIB_PASSES) { h24Calibrated = true; h24Phase = H24_HUNT; }
+        } else {
+            long sum = 0;
+            for (int c = 0; c < H24_N; c++) { h24Raw[c] = (int8_t)(h24Acc[c] - h24Base[c]); sum += h24Raw[c]; }
+            int mean = (int)(sum / H24_N);              // subtract the pass mean (drift/overall-busy) → local peaks survive
+            for (int c = 0; c < H24_N; c++) {
+                int adj = h24Raw[c] - mean; if (adj < 0) adj = 0;
+                int dec = h24Hold[c] - 2; if (dec < 0) dec = 0;
+                h24Hold[c] = (int8_t)(adj > dec ? adj : dec);
+            }
+        }
+        for (int c = 0; c < H24_N; c++) h24Acc[c] = 0;
+        h24Sweeps = 0;
+    }
+    if (millis() - h24LastDraw > 250) { h24LastDraw = millis(); drawHunt24Graph(); }
+}
+
 static void drawSubCfgScreen() {
     const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f);
     uiHeaderRu(i18n::tr("Sub-GHz setup", "Настройки Sub-GHz"));
@@ -2064,6 +2175,7 @@ static void back() {
         case ST_DEAUTH:    detector.stop(); showMenu();                    return;
         case ST_CHANNELS:  airtime.stop(); showMenu();                     return;
         case ST_SPECTRUM:  spectrumStop(); showMenu();                     return;
+        case ST_HUNT24:    nrf.end(); showMenu();                          return;
         case ST_SUBSPECTRUM: subStop(); showMenu();                        return;
         case ST_SUBTX:     subTxOn = false; cc.end(); showMenu();          return;
         case ST_SUBREC:    cc.end(); showMenu();                           return;
@@ -2089,6 +2201,7 @@ static void launch(int feat) {
     if (st == ST_DEAUTH)    detector.stop();       // release promiscuous before anything else
     if (st == ST_CHANNELS)  airtime.stop();        // also promiscuous
     if (st == ST_SPECTRUM)  spectrumStop();        // release NRF24
+    if (st == ST_HUNT24)    nrf.end();             // release NRF24
     if (st == ST_SUBSPECTRUM) subStop();           // release CC1101
     if (st == ST_SUBTX)     { subTxOn = false; cc.end(); }   // stop TX + release CC1101
     if (st == ST_SUBREC)    cc.end();              // release CC1101
@@ -2116,6 +2229,11 @@ static void launch(int feat) {
                             spLab = false; spTxOn = false; spTxMask = 0;   // passive viewer — never transmits
                             if (nrf.begin()) { st = ST_SPECTRUM; drawSpectrumScreen(); }
                             else { infoTitle = i18n::tr("2.4GHz Spectrum", "Спектр 2.4ГГц"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
+                                   infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
+                            break;
+        case F_HUNT24:      engine.pause();                 // 2.4 GHz frequency finder — pure RX (RPD hit-rate)
+                            if (nrf.begin()) { nrf.setTxWifiMask(0); hunt24Reset(); st = ST_HUNT24; drawHunt24Chrome(); drawHunt24Graph(); }
+                            else { infoTitle = i18n::tr("2.4 finder", "Частотомер 2.4"); infoBody = i18n::tr("NRF24 not found", "NRF24 не найден");
                                    infoNote = i18n::tr("This build expects an NRF24 module in slot 2.", "Нужен модуль NRF24 в слоте 2."); st = ST_INFO; drawInfo(); }
                             break;
         case F_NOISEGEN:    engine.pause();
@@ -2243,6 +2361,7 @@ static void onKey(int ev) {
             else if (st == ST_KEYBOARD) kbSelect();
             else if (st == ST_REC_PLAY) { if (recDelArm) recDeleteSelected(); else recPlaySelected(); }
             else if (st == ST_SUBHUNT) { huntLowGain = !huntLowGain; cc.setRxGain(huntLowGain); huntReset(); drawHuntGraph(); }   // OK = toggle -18 dB near-field gain
+            else if (st == ST_HUNT24) { hunt24Reset(); drawHunt24Graph(); }   // OK = recalibrate
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
@@ -2268,6 +2387,7 @@ static void onKey(int ev) {
             else if (st == ST_KEYBOARD) { int pc = kbCol; if (kbCol < kbRowCols(kbRow) - 1) kbCol++; kbRepaintCursor(kbRow, pc); }
             else if (st == ST_REC_PLAY) { if (recCount > 0 && !recDelArm) { recDelArm = true; drawRecPlayScreen(); } }   // right = arm delete
             else if (st == ST_SUBHUNT) { huntReset(); drawHuntGraph(); }   // right = reset the peak hold
+            else if (st == ST_HUNT24) { hunt24Reset(); drawHunt24Graph(); }   // right = recalibrate
             else if (st == ST_SPECTRUM && spLab) spToggleTx();    // Lab: start/stop transmitting noise into the armed channels
             else if (st == ST_SPECTRUM)          spToggleView();  // passive: flip occupancy <-> traffic view
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
@@ -2384,6 +2504,7 @@ static void serialControl() {
                 if (st == ST_DEAUTH)      detector.stop();     // same teardown launch() does — don't strand the radio
                 if (st == ST_CHANNELS)    airtime.stop();
                 if (st == ST_SPECTRUM)    spectrumStop();      // also stops any TX carrier
+                if (st == ST_HUNT24)      nrf.end();
                 if (st == ST_SUBSPECTRUM) subStop();
                 if (st == ST_SUBTX)     { subTxOn = false; cc.end(); }
                 if (st == ST_SUBREC || st == ST_KEYBOARD || st == ST_REC_PLAY || st == ST_SUBHUNT) cc.end();
@@ -2397,6 +2518,7 @@ static void serialControl() {
                                                if (st == ST_DEAUTH) detector.stop();
                                                if (st == ST_CHANNELS) airtime.stop();
                                                if (st == ST_SPECTRUM) spectrumStop();
+                                               if (st == ST_HUNT24) nrf.end();
                                                if (st == ST_SUBSPECTRUM) subStop();
                                                if (st == ST_SUBTX) { subTxOn = false; cc.end(); }
                                                if (st == ST_SUBREC || st == ST_KEYBOARD || st == ST_REC_PLAY || st == ST_SUBHUNT) cc.end();
@@ -2500,7 +2622,7 @@ void loop() {
     leds.set(ota.busy()                            ? StatusLeds::OTA
            : (st == ST_PROVISION || (st == ST_POLITE && portal.isRunning()) || st == ST_SUBCFG) ? StatusLeds::PORTAL
            : st == ST_DEAUTH                       ? StatusLeds::PROMISC
-           : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM) ? StatusLeds::WIFI_SCAN
+           : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM || st == ST_HUNT24) ? StatusLeds::WIFI_SCAN
            : st == ST_SUBSPECTRUM                  ? StatusLeds::PROMISC
            : st == ST_BLE                          ? StatusLeds::BLE_SCAN
            : (st == ST_OTA && ota.phase() == OtaManager::FAILED) ? StatusLeds::ERR
@@ -2570,6 +2692,7 @@ void loop() {
         if (ph != politePhase) { politePhase = ph; drawPoliteScreen(); }
     }
     if (st == ST_SPECTRUM) spectrumTick();
+    if (st == ST_HUNT24) hunt24Tick();
     // Sub-GHz spectrum waterfall
     if (st == ST_SUBSPECTRUM) subTick();
     // Sub-GHz frequency hunter: keep sweeping + peak-holding while shown.
