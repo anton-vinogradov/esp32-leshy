@@ -2536,6 +2536,7 @@ static void serialControl() {
 
 void setup() {
     Serial.begin(115200);
+    pinMode(2, OUTPUT); digitalWrite(2, LOW);   // hold the on-board buzzer (IO2) silent — it's the stock low-battery alarm, we don't use it
     delay(200);
     displayInit();
     uiBacklightBegin();              // apply saved screen brightness before anything is drawn

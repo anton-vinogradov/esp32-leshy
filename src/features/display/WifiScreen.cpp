@@ -10,7 +10,7 @@ void WifiScreen::rows(ScanEngine& e, int offset, int sel) {
     const uint16_t bg     = uiBg();
     const uint16_t selbg  = tft.color565(0x22, 0x33, 0x22);   // selected row highlight
     const uint16_t bright = tft.color565(0xff, 0xff, 0xf2);
-    const uint16_t grey   = tft.color565(0x66, 0x70, 0x66);   // hidden, not yet revealed
+    const uint16_t grey   = tft.color565(0x66, 0x70, 0x66);   // hidden network (revealed name or not)
     const uint16_t dim    = tft.color565(0x8f, 0xa9, 0x8f);
     const uint16_t gold   = tft.color565(0xff, 0xcf, 0x3f);
 
@@ -28,14 +28,14 @@ void WifiScreen::rows(ScanEngine& e, int offset, int sel) {
             String mine;
             bool isMine = net_ && net_->isMine(r.bssid, mine);
             bool named = r.ssid.length() > 0;
-            bool unrev = r.hidden && !named && !isMine;
+            bool hiddenNet = r.hidden && !isMine;     // hidden AP (revealed name or not) → grey, so it stands out
             String ss = named ? r.ssid : (isMine ? mine : String(i18n::tr("revealing", "раскрываю")));
             if (isMine) ss = "*" + ss;
             bool trunc = false;                       // name column: left edge .. ~x=86 (clear gap to graph)
             while (ss.length() > 3 && row.textWidth(ss) > 80) { ss = ss.substring(0, ss.length() - 1); trunc = true; }
             if (trunc) ss += "~";
             row.setTextDatum(ML_DATUM);
-            row.setTextColor(isMine ? gold : (unrev ? grey : bright), rbg);
+            row.setTextColor(isMine ? gold : (hiddenNet ? grey : bright), rbg);
             row.drawString(ss, 6, 12);
             if (r.channel >= 1) {                     // channel — right after the name
                 row.setTextDatum(MR_DATUM);
