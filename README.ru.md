@@ -18,6 +18,11 @@
 
 ---
 
+<p align="center">
+  <img src="docs/walkthrough-ru.gif" alt="Интерфейс ESP32-Leshy — проход по живому устройству" width="260"><br>
+  <sub><i>Интерфейс, снятый вживую с устройства.</i></sub>
+</p>
+
 ## Что это?
 
 <img src="docs/caps/ru-p.svg" alt="П" align="left" width="60" height="60">еред тобой независимая прошивка, написанная с нуля под отличный беспроводной мультитул **ESP32-DIV** от [CiferTech](https://github.com/cifertech/ESP32-DIV): та же плата на ESP32-S3 с дисплеем, NRF24, CC1101, RFID/NFC, GPS и ИК.

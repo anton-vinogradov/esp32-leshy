@@ -18,6 +18,11 @@
 
 ---
 
+<p align="center">
+  <img src="docs/walkthrough-en.gif" alt="ESP32-Leshy interface — live device walkthrough" width="260"><br>
+  <sub><i>The interface, captured live on the device.</i></sub>
+</p>
+
 ## What is this?
 
 <img src="docs/caps/en-e.svg" alt="E" align="left" width="60" height="60">SP32-Leshy is an independent, from-scratch firmware for the excellent **ESP32-DIV** wireless multitool by [CiferTech](https://github.com/cifertech/ESP32-DIV) — the same ESP32-S3 board with its display, NRF24, CC1101, RFID/NFC, GPS and IR modules.
