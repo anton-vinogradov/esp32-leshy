@@ -46,6 +46,8 @@ void ScanEngine::taskLoop() {
         idle_ = false;
         ScanMode m = mode_;
 
+        if (m == SCAN_BLE_RADAR) { bs_.radarScan(1); continue; }   // lock one MAC, live RSSI; no snapshot/list
+
         if (m != SCAN_BLE) {
             int n = ws_.scan();
             xSemaphoreTake(mtx_, portMAX_DELAY);
@@ -85,6 +87,8 @@ void ScanEngine::taskLoop() {
                 ble_[i].tracker = d.tracker.length() > 0;
                 ble_[i].kind    = (uint8_t)d.kind;
                 ble_[i].vendor  = d.vendor;
+                ble_[i].mac     = d.mac;
+                ble_[i].pub     = d.pub;
             }
             bleGen_ = bleGen_ + 1;
             xSemaphoreGive(mtx_);

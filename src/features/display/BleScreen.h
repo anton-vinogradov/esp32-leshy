@@ -6,6 +6,6 @@
 // marker in amber). Same flicker-free draw()/rows() split as WifiScreen.
 class BleScreen {
 public:
-    void draw(ScanEngine& e, int offset);
-    void rows(ScanEngine& e, int offset);
+    void draw(ScanEngine& e, int offset, int sel);
+    void rows(ScanEngine& e, int offset, int sel);
 };

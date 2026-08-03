@@ -21,7 +21,10 @@ struct BleDev {
     String  tracker;     // "" if not a recognized tracker
     BleKind kind;        // guessed device category (BK_NONE if unknown)
     String  vendor;      // brand from the manufacturer company-ID ("Apple"/"Samsung"/…), "" if unknown — shown when kind is unknown
+    bool    pub;         // true = public (fixed, trackable) MAC; false = random (privacy-rotating)
 };
+
+class BLEAdvertisedDevice;   // fwd — radar callback needs it without pulling the BLE headers into every includer
 
 class BleScanner {
 public:
@@ -31,9 +34,21 @@ public:
     int  count() const { return count_; }
     const BleDev& at(int i) const { return devs_[i]; }
 
+    // Radar (find-one-device) mode: lock onto a MAC and get its RSSI live, updated on
+    // every advertisement rather than once per full scan.
+    void     radarSetTarget(const String& mac) { radarMac_ = mac; radarSeenMs_ = 0; radarRssi_ = 0; }
+    void     radarScan(uint32_t seconds);      // one live window; the callback keeps radarRssi()/radarLastSeen() fresh
+    int      radarRssi() const { return radarRssi_; }
+    uint32_t radarLastSeen() const { return radarSeenMs_; }
+    void     radarOnAd(BLEAdvertisedDevice& d);   // called by the scan callback for each ad (public so the callback can reach it)
+
 private:
     static const int MAX = 48;
     BleDev devs_[MAX];
     int    count_ = 0;
     bool   inited_ = false;
+
+    String            radarMac_;
+    volatile int      radarRssi_   = 0;
+    volatile uint32_t radarSeenMs_ = 0;
 };

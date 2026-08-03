@@ -10,14 +10,14 @@
 // hidden = the AP broadcast an empty SSID; ssid may still be filled from a
 // revealed name (HiddenRevealer) or the user's own saved name.
 struct WifiRow { String ssid; int8_t rssi; uint8_t auth; uint8_t channel; uint8_t bssid[6]; bool hidden; };
-struct BleRow  { String label; int rssi; bool tracker; uint8_t kind; String vendor; };   // kind = BleKind category; vendor = brand fallback
+struct BleRow  { String label; int rssi; bool tracker; uint8_t kind; String vendor; String mac; bool pub; };   // kind = BleKind; vendor = brand; mac = radar target; pub = fixed/trackable address
 
 // ScanEngine runs Wi-Fi and BLE scans in a background FreeRTOS task (pinned to
 // the other core) and publishes results under a mutex. The UI thread reads
 // snapshots and never blocks on a scan — so navigation stays smooth.
 class ScanEngine {
 public:
-    enum ScanMode { SCAN_BOTH, SCAN_WIFI, SCAN_BLE };
+    enum ScanMode { SCAN_BOTH, SCAN_WIFI, SCAN_BLE, SCAN_BLE_RADAR };
 
     void begin();                        // start the background scan task
     void pause();                        // ask the task to stop scanning (returns immediately)
@@ -35,6 +35,11 @@ public:
     void clearSparks();                  // drop per-AP RSSI history — a fresh scan session builds a live graph, not a stale one
     int  bleCount();
     bool bleRow(int i, BleRow& out);
+
+    // Radar (find-one-device): set SCAN_BLE_RADAR mode + target, then poll the live RSSI.
+    void     setRadarTarget(const String& mac) { bs_.radarSetTarget(mac); }
+    int      radarRssi()     { return bs_.radarRssi(); }
+    uint32_t radarLastSeen() { return bs_.radarLastSeen(); }
 
     uint32_t wifiGen() const { return wifiGen_; }   // bumped on each new Wi-Fi snapshot
     uint32_t bleGen()  const { return bleGen_; }

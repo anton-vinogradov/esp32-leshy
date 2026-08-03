@@ -132,6 +132,7 @@ bool BleScanner::releaseForOta() {
 int BleScanner::scan(uint32_t seconds) {
     if (!begin()) { count_ = 0; return 0; }   // BLE unavailable (released for OTA) — no devices, no crash
     BLEScan* scan = BLEDevice::getScan();
+    scan->setAdvertisedDeviceCallbacks(nullptr);   // drop any radar callback so a normal list scan isn't affected
     scan->setActiveScan(true);
     scan->setInterval(100);
     scan->setWindow(99);
@@ -148,6 +149,7 @@ int BleScanner::scan(uint32_t seconds) {
         b.tracker = detectTracker(d);
         b.kind    = classifyKind(d);
         b.vendor  = classifyVendor(d);
+        b.pub     = (d.getAddressType() == BLE_ADDR_PUBLIC);
         count_++;
     }
     scan->clearResults();
@@ -158,4 +160,32 @@ int BleScanner::scan(uint32_t seconds) {
         devs_[j + 1] = key;
     }
     return count_;
+}
+
+void BleScanner::radarOnAd(BLEAdvertisedDevice& d) {
+    if (radarMac_.length() && d.getAddress().toString() == radarMac_) {
+        radarRssi_   = d.getRSSI();
+        radarSeenMs_ = millis();
+    }
+}
+
+// Live single-target window: duplicates ON so the target's RSSI updates on every ad,
+// not just once. The callback runs during scan->start() and pokes radarOnAd().
+class RadarCB : public BLEAdvertisedDeviceCallbacks {
+    BleScanner* s_;
+public:
+    explicit RadarCB(BleScanner* s) : s_(s) {}
+    void onResult(BLEAdvertisedDevice d) override { s_->radarOnAd(d); }
+};
+
+void BleScanner::radarScan(uint32_t seconds) {
+    if (!begin()) return;
+    static RadarCB cb(this);
+    BLEScan* scan = BLEDevice::getScan();
+    scan->setActiveScan(true);
+    scan->setInterval(60);
+    scan->setWindow(50);
+    scan->setAdvertisedDeviceCallbacks(&cb, true);   // wantDuplicates = live RSSI
+    scan->start(seconds, false);
+    scan->clearResults();
 }
