@@ -1768,10 +1768,14 @@ static const char* huntGuess(uint32_t k) {          // ISM/SRD band a real remot
     return "";
 }
 
-static bool huntIsSpur(uint32_t f) {                // within 0.5 MHz of a 26 MHz crystal harmonic (the chip's own birdies)
-    uint32_t n = (f + 13000) / 26000;
-    uint32_t d = f > n * 26000 ? f - n * 26000 : n * 26000 - f;
-    return d <= 500;
+static bool huntIsSpur(uint32_t f) {                // near a crystal harmonic: 26 MHz (CC1101) or 40 MHz (ESP32)
+    const uint32_t FX[] = { 26000, 40000 };
+    for (uint32_t fx : FX) {
+        uint32_t n = (f + fx / 2) / fx;
+        uint32_t d = f > n * fx ? f - n * fx : n * fx - f;
+        if (d <= 500) return true;
+    }
+    return false;
 }
 
 static void huntReset() {                           // (re)start with a fresh baseline calibration
