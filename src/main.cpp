@@ -1716,24 +1716,55 @@ struct HuntWin { uint32_t lo, hi; };
 static const HuntWin HUNT_WINS[] = { {300000, 348000}, {387000, 464000}, {779000, 928000} };   // CC1101 tunable windows
 static const int      HUNT_NWIN = sizeof(HUNT_WINS) / sizeof(HUNT_WINS[0]);
 static const uint32_t HUNT_STEP = 250;              // kHz coarse grid (RX bandwidth ~200 kHz)
-static const int      HUNT_SNR  = 15;               // dB above the band mean to call it a real signal
+static const int      HUNT_RISE = 12;               // dB a bin must rise above its calibrated baseline to count
+static const int      HUNT_MAXBINS = 1200;          // baseline array cap (actual ~1099)
+static const int      HUNT_CALIB_PASSES = 2;        // baseline = per-bin MIN over N passes → a stray press can't poison it
 
-enum HuntPhase { HP_COARSE, HP_REFINE };
-static HuntPhase huntPhase = HP_COARSE;
-static int      huntWin = 0;
-static uint32_t huntFreq = 300000;                  // coarse sweep cursor (kHz)
-static long     huntAcc = 0; static int huntAccN = 0;     // current pass: mean-energy accumulator
-static int      huntPassPeakDbm = -128;                   // current pass: strongest bin
-static uint32_t huntPassPeakKHz = 0;
-static int      huntFloor = -100;                   // last COMPLETED pass mean (noise reference)
-static bool     huntFloorValid = false;             // a full pass has measured the floor at least once
-static bool     huntLocked = false;                 // a signal is currently held (set only after refine)
-static uint32_t huntShowKHz = 0;                    // refined frequency shown
-static int      huntShowDbm = -128;                 // its RSSI
-static int      huntMiss = 0;                        // consecutive passes with no signal
-static uint32_t huntRefF = 0, huntRefHi = 0, huntRefBestK = 0;   // refine sub-sweep state
-static int      huntRefBestDbm = -128;
+// Phases: CALIB measures a per-bin baseline (ambient + the chip's own crystal-harmonic birdies, e.g.
+// 26 MHz*12 = 312 MHz), HUNT looks for a bin that RISES above its baseline when you press the tag,
+// REFINE narrows that bin to ~50 kHz. Rise detection is what lets a real button-press beat the
+// always-present internal spurs — plain argmax(RSSI) just locks onto the 312 MHz birdie.
+enum HuntPhase { HP_CALIB, HP_HUNT, HP_REFINE };
+static HuntPhase huntPhase = HP_CALIB;
+static int8_t   huntBase[HUNT_MAXBINS];             // per-bin baseline RSSI (dBm)
+static int      huntN = 0;                          // active bin count
+static int      huntBin = 0;                        // sweep cursor (flat bin index)
+static int      huntCalibPass = 0;                  // which baseline pass we're on
+static bool     huntCalibrated = false;
+static bool     huntLocked = false;
+static int      huntBestRise = -999; static uint32_t huntBestKHz = 0; static int huntBestDbm = -128;   // current pass
+static uint32_t huntShowKHz = 0; static int huntShowRise = 0, huntShowDbm = -128;                      // shown result
+static int      huntMiss = 0;
+static uint32_t huntRefF = 0, huntRefHi = 0, huntRefBestK = 0; static int huntRefBestRise = -999, huntRefBestDbm = -128;
 static uint32_t huntLastDraw = 0;
+
+static int huntBinCount() {
+    int n = 0;
+    for (int w = 0; w < HUNT_NWIN; w++) n += (int)((HUNT_WINS[w].hi - HUNT_WINS[w].lo) / HUNT_STEP) + 1;
+    return n;
+}
+static uint32_t huntBinFreq(int idx) {
+    for (int w = 0; w < HUNT_NWIN; w++) {
+        int n = (int)((HUNT_WINS[w].hi - HUNT_WINS[w].lo) / HUNT_STEP) + 1;
+        if (idx < n) return HUNT_WINS[w].lo + (uint32_t)idx * HUNT_STEP;
+        idx -= n;
+    }
+    return HUNT_WINS[HUNT_NWIN - 1].hi;
+}
+static int huntBaseAt(uint32_t f) {                 // nearest coarse bin's baseline (for the fine refine sweep)
+    int base = 0;
+    for (int w = 0; w < HUNT_NWIN; w++) {
+        int n = (int)((HUNT_WINS[w].hi - HUNT_WINS[w].lo) / HUNT_STEP) + 1;
+        if (f >= HUNT_WINS[w].lo && f <= HUNT_WINS[w].hi) {
+            int off = (int)((f - HUNT_WINS[w].lo + HUNT_STEP / 2) / HUNT_STEP);
+            int idx = base + off;
+            if (idx >= huntN) idx = huntN - 1;
+            return huntBase[idx];
+        }
+        base += n;
+    }
+    return -100;
+}
 
 static const char* huntGuess(uint32_t k) {          // nearest common alarm/remote ISM point
     struct Pt { uint32_t f; const char* n; };
@@ -1743,11 +1774,12 @@ static const char* huntGuess(uint32_t k) {          // nearest common alarm/remo
     return "";
 }
 
-static void huntReset() {
-    huntPhase = HP_COARSE; huntWin = 0; huntFreq = HUNT_WINS[0].lo;
-    huntAcc = 0; huntAccN = 0; huntPassPeakDbm = -128; huntPassPeakKHz = 0;
-    huntFloor = -100; huntFloorValid = false; huntLocked = false;
-    huntShowKHz = 0; huntShowDbm = -128; huntMiss = 0;
+static void huntReset() {                           // (re)start with a fresh baseline calibration
+    huntN = huntBinCount(); if (huntN > HUNT_MAXBINS) huntN = HUNT_MAXBINS;
+    huntPhase = HP_CALIB; huntBin = 0; huntCalibPass = 0;
+    huntCalibrated = false; huntLocked = false;
+    huntShowKHz = 0; huntShowRise = 0; huntShowDbm = -128; huntMiss = 0;
+    huntBestRise = -999; huntBestKHz = 0; huntBestDbm = -128;
 }
 
 static void drawHuntChrome() {
@@ -1755,9 +1787,8 @@ static void drawHuntChrome() {
     uiHeaderRu(i18n::tr("Freq finder", "Частотомер"), "CC1101");
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     fontSmall(); tft.setTextDatum(TL_DATUM); tft.setTextColor(white, bg);
-    tft.drawString(i18n::tr("Hold the tag by the antenna", "Держи метку у антенны"), 10, 210);
-    tft.drawString(i18n::tr("and press its button.", "и жми её кнопку."), 10, 232);
-    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "▶ сброс" : "▶ reset");
+    tft.drawString(i18n::tr("Hold the tag by the antenna.", "Держи метку у антенны."), 10, 210);
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "▶ калибровать" : "▶ recal");
     fontOff();
 }
 
@@ -1774,56 +1805,67 @@ static void drawHuntValues() {
         const char* g = huntGuess(huntShowKHz);
         if (*g) { tft.setTextColor(gold, bg); tft.drawString(g, 10, 118); }
     } else {
-        tft.setTextColor(grayc, bg); tft.drawString(i18n::tr("searching...", "поиск…"), 10, 66);
+        tft.setTextColor(grayc, bg);
+        tft.drawString(huntCalibrated ? i18n::tr("searching...", "поиск…") : i18n::tr("calibrating...", "калибровка…"), 10, 66);
     }
     fontSmall(); tft.setTextColor(white, bg);
-    char l1[44];
-    if (!huntFloorValid)     snprintf(l1, sizeof(l1), "%s", i18n::tr("measuring floor...", "меряю фон…"));
-    else if (huntLocked)     snprintf(l1, sizeof(l1), "%s%d  SNR %d dB", i18n::tr("peak ", "пик "), huntShowDbm, huntShowDbm - huntFloor);
-    else                     snprintf(l1, sizeof(l1), "%s%d dBm", i18n::tr("floor ", "фон "), huntFloor);
+    char l1[64];
+    if (!huntCalibrated)     snprintf(l1, sizeof(l1), "%s", i18n::tr("measuring floor - don't press", "меряю фон — не жми метку"));
+    else if (huntLocked)     snprintf(l1, sizeof(l1), "%s+%d dB  %d dBm", i18n::tr("rise ", "подъём "), huntShowRise, huntShowDbm);
+    else if (huntMiss >= 6)  snprintf(l1, sizeof(l1), "%s", i18n::tr("no rise - press tag or > recal", "нет подъёма, жми метку или ▶"));
+    else                     snprintf(l1, sizeof(l1), "%s", i18n::tr("press the tag button", "жми кнопку метки"));
     tft.drawString(l1, 10, 156);
     fontOff();
 }
 
 static void huntTick() {
     const int BATCH = 16;                               // bounded work per loop() so buttons stay responsive
-    if (huntPhase == HP_COARSE) {
-        for (int i = 0; i < BATCH; i++) {
-            int dbm = cc.rssiAt(huntFreq);
-            huntAcc += dbm; huntAccN++;
-            if (dbm > huntPassPeakDbm) { huntPassPeakDbm = dbm; huntPassPeakKHz = huntFreq; }
-            huntFreq += HUNT_STEP;
-            if (huntFreq > HUNT_WINS[huntWin].hi) {
-                if (++huntWin >= HUNT_NWIN) {                        // one full pass over all windows completed
-                    huntFloor = huntAccN ? (int)(huntAcc / huntAccN) : -100;   // band mean = noise reference
-                    huntFloorValid = true;
-                    if (huntPassPeakKHz && (huntPassPeakDbm - huntFloor) >= HUNT_SNR) {   // signal → refine around it
-                        huntRefF = huntPassPeakKHz > 1200 ? huntPassPeakKHz - 1200 : 1;
-                        huntRefHi = huntPassPeakKHz + 1200;
-                        huntRefBestDbm = huntPassPeakDbm; huntRefBestK = huntPassPeakKHz;   // fall back to the coarse peak
-                        huntPhase = HP_REFINE;
-                    } else if (++huntMiss >= 2) {                    // two empty passes → drop a stale lock (fast re-aim)
-                        huntLocked = false; huntShowKHz = 0;
-                    }
-                    huntWin = 0; huntFreq = HUNT_WINS[0].lo;         // restart the next coarse pass
-                    huntAcc = 0; huntAccN = 0; huntPassPeakDbm = -128; huntPassPeakKHz = 0;
-                    break;                                          // don't compound refine / next-pass work into this tick
-                }
-                huntFreq = HUNT_WINS[huntWin].lo;
+    if (huntPhase == HP_CALIB) {
+        for (int i = 0; i < BATCH && huntBin < huntN; i++) {
+            int dbm = cc.rssiAt(huntBinFreq(huntBin));
+            int8_t v = (int8_t)(dbm < -128 ? -128 : (dbm > 0 ? 0 : dbm));
+            huntBase[huntBin] = (huntCalibPass == 0 || v < huntBase[huntBin]) ? v : huntBase[huntBin];   // per-bin MIN across passes
+            huntBin++;
+        }
+        if (huntBin >= huntN) {
+            if (++huntCalibPass < HUNT_CALIB_PASSES) { huntBin = 0; }   // one more baseline pass (min rejects a stray press)
+            else {                                                     // baseline done → start hunting for a rise
+                huntCalibrated = true; huntPhase = HP_HUNT; huntBin = 0;
+                huntBestRise = -999; huntBestKHz = 0; huntBestDbm = -128;
             }
         }
-    } else {                                            // HP_REFINE — fine ±1.2 MHz sweep, also spread across ticks
+    } else if (huntPhase == HP_HUNT) {
+        for (int i = 0; i < BATCH && huntBin < huntN; i++) {
+            uint32_t f = huntBinFreq(huntBin);
+            int dbm = cc.rssiAt(f);
+            int rise = dbm - huntBase[huntBin];         // how far this bin rose above its own baseline
+            if (rise > huntBestRise) { huntBestRise = rise; huntBestKHz = f; huntBestDbm = dbm; }
+            huntBin++;
+        }
+        if (huntBin >= huntN) {                         // pass complete
+            if (huntBestRise >= HUNT_RISE) {            // a bin rose → real signal (not a constant spur)
+                huntRefF = huntBestKHz > 1200 ? huntBestKHz - 1200 : 1;
+                huntRefHi = huntBestKHz + 1200;
+                huntRefBestRise = huntBestRise; huntRefBestK = huntBestKHz; huntRefBestDbm = huntBestDbm;
+                huntPhase = HP_REFINE;
+            } else if (++huntMiss >= 2) {               // two empty passes → drop a stale lock (fast re-aim)
+                huntLocked = false; huntShowKHz = 0;
+            }
+            huntBin = 0; huntBestRise = -999; huntBestKHz = 0; huntBestDbm = -128;
+        }
+    } else {                                            // HP_REFINE — fine ±1.2 MHz sweep by rise, spread across ticks
         for (int i = 0; i < BATCH && huntRefF <= huntRefHi; i++) {
             if (cc1101FreqOk(huntRefF)) {
                 int d = cc.rssiAt(huntRefF);
-                if (d > huntRefBestDbm) { huntRefBestDbm = d; huntRefBestK = huntRefF; }
+                int rise = d - huntBaseAt(huntRefF);
+                if (rise > huntRefBestRise) { huntRefBestRise = rise; huntRefBestK = huntRefF; huntRefBestDbm = d; }
             }
             huntRefF += 50;
         }
-        if (huntRefF > huntRefHi) {                     // refine complete → publish the result
-            huntShowKHz = huntRefBestK; huntShowDbm = huntRefBestDbm;
+        if (huntRefF > huntRefHi) {                     // refine complete → publish
+            huntShowKHz = huntRefBestK; huntShowDbm = huntRefBestDbm; huntShowRise = huntRefBestRise;
             huntLocked = true; huntMiss = 0;
-            huntPhase = HP_COARSE;
+            huntPhase = HP_HUNT; huntBin = 0; huntBestRise = -999; huntBestKHz = 0; huntBestDbm = -128;
         }
     }
     if (millis() - huntLastDraw > 250) { huntLastDraw = millis(); drawHuntValues(); }
