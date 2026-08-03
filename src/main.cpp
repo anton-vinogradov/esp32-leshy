@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <string.h>
+#include <WiFi.h>
 
 #include "core/i18n.h"
 #include "features/wifi_scanner/WifiScanner.h"
@@ -2509,6 +2510,12 @@ static void serialControl() {
             else if (!strcmp(buf, "legal"))  launch(F_LEGAL);
             else if (!strcmp(buf, "legalreset")) { Preferences p; p.begin("leshy", false); p.remove("legal_ok"); p.end(); Serial.println("[cmd] legal flag cleared — reboot to see the gate"); }
             else if (!strcmp(buf, "shot"))  { screenshotDump(); continue; }                      // QA: framebuffer -> serial (host makes a PNG)
+            else if (!strcmp(buf, "wifi"))  {                                                    // QA: is the board's own ESP32 radio associated, and on which channel?
+                Serial.printf("[wifi] status=%d mode=%d ch=%d rssi=%d ssid=\"%s\" ip=%s\n",
+                    (int)WiFi.status(), (int)WiFi.getMode(), WiFi.channel(), (int)WiFi.RSSI(),
+                    WiFi.SSID().c_str(), WiFi.localIP().toString().c_str());
+                continue;
+            }
             else if (!strcmp(buf, "occ"))   {                                                    // QA: live all-module occupancy (0..255 per NRF ch, 2400+ch MHz)
                 Serial.print("[occ]");
                 for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) Serial.printf(" %d", spEma[c]);
