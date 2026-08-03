@@ -1728,7 +1728,8 @@ static const int      HUNT_CALIB_PASSES = 2;        // baseline = per-bin MIN ov
 enum HuntPhase { HP_CALIB, HP_HUNT };
 static HuntPhase huntPhase = HP_CALIB;
 static int8_t   huntBase[HUNT_MAXBINS];             // per-bin baseline RSSI (dBm)
-static int8_t   huntHold[HUNT_MAXBINS];             // per-bin max-held rise above baseline (dB), slow decay
+static int8_t   huntRaw[HUNT_MAXBINS];              // this pass's raw rise above baseline (dB)
+static int8_t   huntHold[HUNT_MAXBINS];             // per-bin max-held DRIFT-CORRECTED rise (dB), slow decay
 static int      huntN = 0;                          // active bin count
 static int      huntBin = 0;                        // sweep cursor (flat bin index)
 static int      huntCalibPass = 0;                  // which baseline pass we're on
@@ -1859,16 +1860,23 @@ static void huntTick() {
             if (++huntCalibPass < HUNT_CALIB_PASSES) huntBin = 0;       // one more baseline pass (min rejects a stray press)
             else { huntCalibrated = true; huntPhase = HP_HUNT; huntBin = 0; }
         }
-    } else {                                            // HP_HUNT — sweep, max-hold the rise per bin for the graph
+    } else {                                            // HP_HUNT — sweep raw rise, then drift-correct + max-hold
         for (int i = 0; i < BATCH && huntBin < huntN; i++) {
             uint32_t f = huntBinFreq(huntBin);
-            if (huntIsSpur(f)) { huntBin++; continue; }  // never plot the chip's own crystal harmonics
+            if (huntIsSpur(f)) { huntRaw[huntBin] = 0; huntBin++; continue; }   // skip the chip's own crystal harmonics
             int rise = cc.rssiAt(f) - huntBase[huntBin];
-            if (rise > huntHold[huntBin]) huntHold[huntBin] = (int8_t)(rise > 120 ? 120 : rise);
+            huntRaw[huntBin] = (int8_t)(rise < -120 ? -120 : (rise > 120 ? 120 : rise));
             huntBin++;
         }
-        if (huntBin >= huntN) {                         // pass complete → decay the hold so old spikes fade
-            for (int b = 0; b < huntN; b++) if (huntHold[b] > 0) huntHold[b] -= (huntHold[b] > 3 ? 3 : huntHold[b]);
+        if (huntBin >= huntN) {                         // pass complete
+            long sum = 0;                               // pass mean = global AGC/thermal drift; subtract it so only LOCAL peaks survive
+            for (int b = 0; b < huntN; b++) sum += huntRaw[b];
+            int mean = huntN ? (int)(sum / huntN) : 0;
+            for (int b = 0; b < huntN; b++) {
+                int adj = huntRaw[b] - mean; if (adj < 0) adj = 0;               // this bin's excess over the typical bin
+                int dec = huntHold[b] - 3; if (dec < 0) dec = 0;                 // decay old spikes
+                huntHold[b] = (int8_t)(adj > dec ? (adj > 120 ? 120 : adj) : dec);
+            }
             huntBin = 0;
         }
     }
