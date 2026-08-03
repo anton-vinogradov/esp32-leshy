@@ -343,7 +343,7 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24, ST_BLE_RADAR };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24, ST_BLE_RADAR, ST_BLE_INFO };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -2393,8 +2393,9 @@ static void activate() {
 
 // One place that handles a navigation event, whether it came from the keypad or the serial remote.
 // ---- BLE radar: lock one device and track its RSSI live to walk it down ----
-static String   radarMac, radarLabel, radarVendor;
+static String   radarMac, radarLabel, radarVendor, radarSub;
 static uint8_t  radarKind = 0;
+static BleRow   bleInfo;   // frozen snapshot of the device shown on the details screen
 static bool     radarPub = false, radarBeepOn = false;
 static int      radarEma = -100, radarSlow = -100;
 static uint32_t radarDrawAt = 0, radarBeepAt = 0, radarBeepOff = 0;
@@ -2413,7 +2414,7 @@ static void drawRadarChrome() {
     fontSmall();
     tft.setTextDatum(MC_DATUM);
     const char* kl = bleKindLabel((BleKind)radarKind, i18n::isRu());
-    const char* tag = kl[0] ? kl : radarVendor.c_str();       // category, else brand
+    const char* tag = radarSub.length() ? radarSub.c_str() : kl[0] ? kl : radarVendor.c_str();   // subtype > category > brand
     String t = tag[0] ? String(tag) + "  " + radarLabel : radarLabel;
     while (t.length() > 4 && tft.textWidth(t) > 232) t = t.substring(0, t.length() - 1);
     tft.setTextColor(tft.color565(0x5a, 0xd0, 0xff), bg);
@@ -2461,7 +2462,8 @@ static void drawRadarGauge(bool lost) {
 }
 
 static void radarStart(const BleRow& d) {
-    radarMac = d.mac; radarLabel = d.label; radarVendor = d.vendor; radarKind = d.kind; radarPub = d.pub;
+    radarMac = d.mac; radarVendor = d.vendor; radarSub = d.subtype; radarKind = d.kind; radarPub = d.pub;
+    radarLabel = (d.tracker && d.label == "Find My") ? i18n::tr("Find My", "Локатор") : d.label;
     radarEma = d.rssi ? d.rssi : -100; radarSlow = radarEma;
     radarBeepOn = false; radarBeepOff = 0; radarDrawAt = 0;
     engine.setRadarTarget(radarMac);
@@ -2490,6 +2492,43 @@ static void radarTick() {
         if (radarBeepOff && t >= radarBeepOff) { digitalWrite(2, LOW); radarBeepOff = 0; }
     } else if (radarBeepOff) { digitalWrite(2, LOW); radarBeepOff = 0; }
     if (t - radarDrawAt >= 120) { radarDrawAt = t; drawRadarGauge(lost); }
+}
+
+// ---- BLE device details: everything extractable from the advertisement ----
+static void infoLine(int& y, const char* k, const String& v, uint16_t vcol) {
+    const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f);
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(dim, bg);  tft.drawString(k, 8, y);
+    tft.setTextColor(vcol, bg); tft.drawString(v, 96, y);
+    y += 26;
+}
+
+static void drawBleInfo() {
+    const uint16_t bg = uiBg(), white = tft.color565(0xf0, 0xf0, 0xe6), cyan = tft.color565(0x5a, 0xd0, 0xff);
+    tft.fillRect(0, 28, 240, 320 - 28, bg);
+    uiHeaderRu(i18n::tr("Details", "Детали"), bleInfo.pub ? i18n::tr("fixed", "фикс") : nullptr);
+    fontSmall();
+    int y = 46;
+    const char* kl = bleKindLabel((BleKind)bleInfo.kind, i18n::isRu());
+    String typ = bleInfo.subtype.length() ? bleInfo.subtype
+               : kl[0]                    ? String(kl)
+               : bleInfo.tracker          ? String(i18n::tr("Find My", "Локатор"))
+               : bleInfo.vendor.length()  ? bleInfo.vendor : String("—");
+    infoLine(y, i18n::tr("Type", "Тип"), typ, cyan);
+    if (!bleInfo.tracker && bleInfo.label.length() && bleInfo.label != bleInfo.mac)
+        infoLine(y, i18n::tr("Name", "Имя"), bleInfo.label, white);
+    infoLine(y, i18n::tr("Addr", "Адрес"), bleInfo.mac, white);
+    infoLine(y, i18n::tr("Addr type", "Тип адр"), bleInfo.pub ? i18n::tr("public", "публичн") : i18n::tr("random", "случайн"), white);
+    { float dist = powf(10.0f, (-59 - bleInfo.rssi) / 20.0f);
+      char b[36]; snprintf(b, sizeof(b), "%d dBm  ~%.1f %s", bleInfo.rssi, dist, i18n::tr("m", "м"));
+      infoLine(y, i18n::tr("Signal", "Сигнал"), b, white); }
+    if (bleInfo.txpwr != 127)   { char b[16]; snprintf(b, sizeof(b), "%d dBm", bleInfo.txpwr);      infoLine(y, "TX", b, white); }
+    if (bleInfo.appearance)     { char b[16]; snprintf(b, sizeof(b), "0x%04X", bleInfo.appearance); infoLine(y, "Appearance", b, white); }
+    if (bleInfo.svc.length())   infoLine(y, i18n::tr("Service", "Сервис"), bleInfo.svc, white);
+    if (bleInfo.vendor.length())      infoLine(y, i18n::tr("Vendor", "Вендор"), bleInfo.vendor, white);
+    else if (bleInfo.company)   { char b[16]; snprintf(b, sizeof(b), "0x%04X", bleInfo.company);    infoLine(y, i18n::tr("Vendor", "Вендор"), b, white); }
+    fontOff();
+    uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::tr("OK radar", "OK радар"));
 }
 
 static void onKey(int ev) {
@@ -2536,6 +2575,7 @@ static void onKey(int ev) {
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_BLE) { BleRow r; if (engine.bleRow(bleSel, r) && r.mac.length()) radarStart(r); }   // lock the device → radar finder
             else if (st == ST_BLE_RADAR) { radarBeepOn = !radarBeepOn; if (!radarBeepOn) digitalWrite(2, LOW); radarFooter(); }   // toggle the proximity beep
+            else if (st == ST_BLE_INFO) radarStart(bleInfo);   // OK from details → radar finder
             else if (st == ST_SPECTRUM && spLab) spToggleArm();   // arm/disarm the caret channel for TX noise
             else if (st == ST_SUBTX) { subTxOn = !subTxOn; if (subTxOn) subTxApply(); else cc.endTx(); drawSubTxScreen(); }
             else if (st == ST_SUBREC) subRecord();       // OK = capture the next signal
@@ -2562,6 +2602,7 @@ static void onKey(int ev) {
             else if (st == ST_OTA) otaActivate();
             else if (st == ST_HIDDEN) openHiddenOptions();
             else if (st == ST_WIFI) openNetOptions();
+            else if (st == ST_BLE) { if (engine.bleRow(bleSel, bleInfo)) { st = ST_BLE_INFO; drawBleInfo(); } }   // right = full advertisement details
             else if (st == ST_SUBSPECTRUM) { cc.setBand(cc.band() + 1); drawSubScreen(); }   // cycle the displayed band
             else if (st == ST_SUBTX) { cc.setBand(cc.band() + 1); if (subTxOn) subTxApply(); drawSubTxScreen(); }   // cycle the TX band
             else if (st == ST_SUBREC) { if (recN > 0) { kbBuf[0] = 0; kbLen = 0; kbRow = 0; kbCol = 0; st = ST_KEYBOARD; drawKeyboard(true); } }   // right = name + save the capture
@@ -2581,6 +2622,7 @@ static void onKey(int ev) {
             if (st == ST_KEYBOARD) { int pc = kbCol; if (kbCol > 0) kbCol--; kbRepaintCursor(kbRow, pc); }   // cursor left — never falls through to back()
             else if (st == ST_REC_PLAY && recDelArm) { recDelArm = false; drawRecPlayScreen(); }              // cancel the delete confirm
             else if (st == ST_BLE_RADAR) { radarStop(); st = ST_BLE; seenBleGen = engine.bleGen(); tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); }   // back to the device list
+            else if (st == ST_BLE_INFO)  { st = ST_BLE; seenBleGen = engine.bleGen(); tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); }   // details → back to the list
             else back();
             break;
         default:
@@ -2857,7 +2899,7 @@ void loop() {
            : st == ST_DEAUTH                       ? StatusLeds::PROMISC
            : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM || st == ST_HUNT24) ? StatusLeds::WIFI_SCAN
            : st == ST_SUBSPECTRUM                  ? StatusLeds::PROMISC
-           : (st == ST_BLE || st == ST_BLE_RADAR)  ? StatusLeds::BLE_SCAN
+           : (st == ST_BLE || st == ST_BLE_RADAR || st == ST_BLE_INFO) ? StatusLeds::BLE_SCAN
            : (st == ST_OTA && ota.phase() == OtaManager::FAILED) ? StatusLeds::ERR
                                                    : StatusLeds::IDLE);
     // An antenna emitting noise (spectrum TX) lights its own LED yellow: NRF slot i sits

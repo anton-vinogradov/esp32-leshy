@@ -27,8 +27,11 @@ void BleScreen::rows(ScanEngine& e, int offset, int sel) {
         if (idx < n && e.bleRow(idx, d)) {
             uint16_t col = uiRssiColor(d.rssi);
             int x = 6;                                       // signal bars removed — the RSSI number on the right already shows strength
-            const char* tag = bleKindLabel((BleKind)d.kind, i18n::isRu());
-            if (!tag[0] && !d.tracker && d.vendor.length()) tag = d.vendor.c_str();   // no category → fall back to the brand
+            const char* tag = "";                            // subtype (AirPods/iBeacon…) → category → brand; trackers use the amber label instead
+            if (!d.tracker) {
+                if (d.subtype.length()) tag = d.subtype.c_str();
+                else { tag = bleKindLabel((BleKind)d.kind, i18n::isRu()); if (!tag[0] && d.vendor.length()) tag = d.vendor.c_str(); }
+            }
             if (tag[0]) {                                    // guessed device type/brand, in cyan, using the freed-up left slot
                 row.setTextDatum(ML_DATUM);
                 row.setTextColor(cyan, rbg);
@@ -42,9 +45,9 @@ void BleScreen::rows(ScanEngine& e, int offset, int sel) {
                 row.drawString(i18n::tr("fixed", "фикс"), 204, 12);
                 rssiX = 204;                                 // (kept for clarity; RSSI stays at 232)
             }
-            String label = d.label;
+            String label = (d.tracker && d.label == "Find My") ? i18n::tr("Find My", "Локатор") : d.label;
             bool trunc = false;
-            int maxw = (d.pub ? 178 : 206) - x;              // keep clear of the "pub" flag / RSSI at the right
+            int maxw = (d.pub ? 178 : 206) - x;              // keep clear of the "фикс" flag / RSSI at the right
             while (label.length() > 3 && row.textWidth(label) > maxw) { label = label.substring(0, label.length() - 1); trunc = true; }
             if (trunc) label += "~";
             row.setTextDatum(ML_DATUM);

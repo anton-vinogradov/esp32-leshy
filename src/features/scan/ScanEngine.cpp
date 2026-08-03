@@ -89,6 +89,11 @@ void ScanEngine::taskLoop() {
                 ble_[i].vendor  = d.vendor;
                 ble_[i].mac     = d.mac;
                 ble_[i].pub     = d.pub;
+                ble_[i].subtype    = d.subtype;
+                ble_[i].appearance = d.appearance;
+                ble_[i].txpwr      = d.txpwr;
+                ble_[i].company    = d.company;
+                ble_[i].svc        = d.svc;
             }
             bleGen_ = bleGen_ + 1;
             xSemaphoreGive(mtx_);

@@ -16,7 +16,7 @@ static String detectTracker(BLEAdvertisedDevice& d) {
         String m = d.getManufacturerData();
         if (m.length() >= 3) {
             uint16_t company = (uint8_t)m[0] | ((uint16_t)(uint8_t)m[1] << 8);
-            if (company == 0x004C && (uint8_t)m[2] == 0x12) return "Apple Find My";
+            if (company == 0x004C && (uint8_t)m[2] == 0x12) return "Find My";   // AirTag / offline Apple device (localized "Локатор" at display)
             // Samsung SmartTag is matched by its 0xFD5A service below; a bare
             // company-id 0x0075 match would flag every Galaxy phone/buds/watch.
         }
@@ -91,6 +91,41 @@ static String classifyVendor(BLEAdvertisedDevice& d) {
     return "";
 }
 
+// A more specific decode than the vendor: Apple Continuity message type tells AirPods
+// from an AirTag from an iBeacon; Eddystone is a service-data beacon. Proper nouns, not
+// localized.
+static String classifySubtype(BLEAdvertisedDevice& d) {
+    if (d.haveManufacturerData()) {
+        String m = d.getManufacturerData();
+        if (m.length() >= 3 && (uint8_t)m[0] == 0x4C && (uint8_t)m[1] == 0x00) {
+            switch ((uint8_t)m[2]) {                 // Apple Continuity message type
+                case 0x02: return "iBeacon";
+                case 0x05: return "AirDrop";
+                case 0x07: return "AirPods";
+                case 0x09: case 0x0A: return "AirPlay";
+                case 0x0C: return "Handoff";
+                case 0x0D: case 0x0E: return "Hotspot";
+                case 0x12: return "Find My";
+            }
+        }
+    }
+    if (d.isAdvertisingService(BLEUUID((uint16_t)0xFEAA))) return "Eddystone";
+    return "";
+}
+
+// First advertised service, decoded to a friendly name (else its raw 0xUUID).
+static String svcName(BLEAdvertisedDevice& d) {
+    if (!d.haveServiceUUID()) return "";
+    static const struct { uint16_t id; const char* n; } known[] = {
+        {0x1812, "HID"}, {0x180F, "Battery"}, {0x180D, "Heart Rate"}, {0x1809, "Thermometer"},
+        {0x1826, "Fitness"}, {0xFEAA, "Eddystone"}, {0xFE95, "Xiaomi"}, {0xFD5A, "SmartTag"},
+        {0xFEED, "Tile"}, {0xFE9F, "Fast Pair"}, {0xFD6F, "Exposure Ntf"},
+    };
+    for (auto& k : known) if (d.isAdvertisingService(BLEUUID(k.id))) return k.n;
+    String s = d.getServiceUUID().toString();
+    return s.length() > 10 ? String("0x") + s.substring(4, 8) : s;   // 128-bit → the 16-bit slice
+}
+
 const char* bleKindLabel(BleKind k, bool ru) {
     switch (k) {
         case BK_PHONE:   return ru ? "телефон" : "phone";
@@ -150,6 +185,12 @@ int BleScanner::scan(uint32_t seconds) {
         b.kind    = classifyKind(d);
         b.vendor  = classifyVendor(d);
         b.pub     = (d.getAddressType() == BLE_ADDR_PUBLIC);
+        b.subtype = classifySubtype(d);
+        b.appearance = d.haveAppearance() ? d.getAppearance() : 0;
+        b.txpwr   = d.haveTXPower() ? (int)(int8_t)d.getTXPower() : 127;
+        b.svc     = svcName(d);
+        { String mm = d.haveManufacturerData() ? d.getManufacturerData() : String();
+          b.company = mm.length() >= 2 ? ((uint8_t)mm[0] | ((uint16_t)(uint8_t)mm[1] << 8)) : 0; }
         count_++;
     }
     scan->clearResults();

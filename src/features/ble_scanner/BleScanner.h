@@ -15,13 +15,18 @@ const char* bleKindLabel(BleKind k, bool ru);   // short localized tag; "" for B
 // nearby devices and flags known trackers (Apple Find My, Tile, Samsung
 // SmartTag) so you can spot an unwanted tracker or find your own. Receive-only.
 struct BleDev {
-    String  mac;
-    String  name;
-    int     rssi;
-    String  tracker;     // "" if not a recognized tracker
-    BleKind kind;        // guessed device category (BK_NONE if unknown)
-    String  vendor;      // brand from the manufacturer company-ID ("Apple"/"Samsung"/…), "" if unknown — shown when kind is unknown
-    bool    pub;         // true = public (fixed, trackable) MAC; false = random (privacy-rotating)
+    String   mac;
+    String   name;
+    int      rssi;
+    String   tracker;    // "" if not a recognized tracker
+    BleKind  kind;       // guessed device category (BK_NONE if unknown)
+    String   vendor;     // brand from the manufacturer company-ID ("Apple"/"Samsung"/…), "" if unknown — shown when kind is unknown
+    bool     pub;        // true = public (fixed, trackable) MAC; false = random (privacy-rotating)
+    String   subtype;    // specific decode ("AirPods"/"iBeacon"/"Eddystone"/…) — refines the tag
+    uint16_t appearance; // GAP Appearance code (0 = not advertised)
+    int      txpwr;      // advertised TX power in dBm (127 = not advertised)
+    uint16_t company;    // manufacturer company-ID (0 = none)
+    String   svc;        // first advertised service, decoded to a name or 0xUUID
 };
 
 class BLEAdvertisedDevice;   // fwd — radar callback needs it without pulling the BLE headers into every includer
