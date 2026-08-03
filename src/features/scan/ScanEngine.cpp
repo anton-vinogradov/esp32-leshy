@@ -169,6 +169,14 @@ bool ScanEngine::wifiRow(int i, WifiRow& out) {
     return ok;
 }
 
+int ScanEngine::wifiRssiOf(const uint8_t bssid[6]) {
+    int r = -128;
+    xSemaphoreTake(mtx_, portMAX_DELAY);
+    for (int i = 0; i < wifiN_; i++) if (memcmp(wifi_[i].bssid, bssid, 6) == 0) { r = wifi_[i].rssi; break; }
+    xSemaphoreGive(mtx_);
+    return r;
+}
+
 int ScanEngine::bleCount() {
     xSemaphoreTake(mtx_, portMAX_DELAY);
     int n = bleN_;

@@ -32,6 +32,7 @@ public:
     static const int SPARK_N = 20;       // per-AP RSSI history length (sparkline)
     int  wifiCount();
     bool wifiRow(int i, WifiRow& out);
+    int  wifiRssiOf(const uint8_t bssid[6]);   // latest RSSI of a specific AP (-128 if not in the current scan) — for the WiFi radar
     int  sparkOf(const uint8_t bssid[6], int8_t* out);   // fills out[0..n-1] oldest->newest, returns n
     void clearSparks();                  // drop per-AP RSSI history — a fresh scan session builds a live graph, not a stale one
     int  bleCount();

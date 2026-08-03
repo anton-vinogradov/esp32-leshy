@@ -254,6 +254,7 @@ static void gotoWifi();          // (re)enter the live Wi-Fi scan
 static void ensureWifiVisible(); // keep the selected scan row on screen
 static int  drawWrapped(const char* s, int x, int y, int maxw, int lh, int maxlines);  // word-wrap (defined below)
 static void openNetOptions();    // RIGHT on a scan row -> per-network options
+static void radarStartWifi(const WifiRow& w);   // lock an AP by BSSID → radar finder
 static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
@@ -343,7 +344,7 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24, ST_BLE_RADAR, ST_BLE_INFO };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24, ST_BLE_RADAR, ST_BLE_INFO, ST_WIFI_RADAR };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -744,7 +745,7 @@ static void connActivate() {
 }
 
 // ---- options menu (RIGHT opens context actions for the selected item) ----
-enum OptId { OPT_DEL_HIDDEN, OPT_NET_DETAILS };
+enum OptId { OPT_DEL_HIDDEN, OPT_NET_DETAILS, OPT_NET_RADAR };
 static OptId       optIds[4];
 static const char* optLabels[4];
 static int         optN = 0, optSel = 0, optY[4];
@@ -782,6 +783,7 @@ static void optActivate() {
     switch (optIds[optSel]) {
         case OPT_DEL_HIDDEN:  revealer.remove(hidSel); gotoHidden(); break;
         case OPT_NET_DETAILS: drawNetDetails(); st = ST_NETINFO; break;
+        case OPT_NET_RADAR:   radarStartWifi(netSel); break;
     }
 }
 
@@ -2121,6 +2123,7 @@ static void openNetOptions() {
     optTitle = netSel.ssid.length() ? netSel.ssid : (isMine ? mine : String(i18n::tr("<hidden>", "<скрытая>")));
     optN = 0;
     optLabels[optN] = i18n::tr("Details", "Подробнее"); optIds[optN] = OPT_NET_DETAILS; optN++;
+    optLabels[optN] = i18n::tr("Radar", "Радар");       optIds[optN] = OPT_NET_RADAR;   optN++;
     optSel = 0; optReturn = ST_WIFI;
     st = ST_OPTIONS; drawOptionsScreen();
 }
@@ -2396,6 +2399,10 @@ static void activate() {
 static String   radarMac, radarLabel, radarVendor, radarSub;
 static uint8_t  radarKind = 0;
 static BleRow   bleInfo;   // frozen snapshot of the device shown on the details screen
+static bool     radarWifi = false;          // false = BLE target, true = WiFi AP target
+static uint8_t  radarBssid[6];
+static int      radarChan = 0, radarWifiRssi = -100;
+static uint32_t radarWifiSeen = 0;
 static bool     radarPub = false, radarBeepOn = false;
 static int      radarEma = -100, radarSlow = -100;
 static uint32_t radarDrawAt = 0, radarBeepAt = 0, radarBeepOff = 0;
@@ -2408,7 +2415,10 @@ static void radarFooter() {
 
 static void drawRadarChrome() {
     const uint16_t bg = uiBg();
-    const char* rt = radarPub ? i18n::tr("fixed", "фикс") : nullptr;   // fixed/trackable address flag
+    char chbuf[12];
+    const char* rt;
+    if (radarWifi) { snprintf(chbuf, sizeof(chbuf), "ch %d", radarChan); rt = chbuf; }   // WiFi: show the channel
+    else           { rt = radarPub ? i18n::tr("fixed", "фикс") : nullptr; }               // BLE: fixed-address flag
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     uiHeaderRu(i18n::tr("Radar", "Радар"), rt);
     fontSmall();
@@ -2462,6 +2472,7 @@ static void drawRadarGauge(bool lost) {
 }
 
 static void radarStart(const BleRow& d) {
+    radarWifi = false;
     radarMac = d.mac; radarVendor = d.vendor; radarSub = d.subtype; radarKind = d.kind; radarPub = d.pub;
     radarLabel = (d.tracker && d.label == "Find My") ? i18n::tr("Find My", "Локатор") : d.label;
     radarEma = d.rssi ? d.rssi : -100; radarSlow = radarEma;
@@ -2474,16 +2485,34 @@ static void radarStart(const BleRow& d) {
     drawRadarGauge(true);
 }
 
+static void radarStartWifi(const WifiRow& w) {
+    radarWifi = true; memcpy(radarBssid, w.bssid, 6); radarChan = w.channel;
+    radarLabel = w.ssid.length() ? w.ssid : String(i18n::tr("<hidden>", "<скрытая>"));
+    radarVendor = ""; radarSub = ""; radarKind = 0; radarPub = false;
+    radarWifiRssi = w.rssi; radarWifiSeen = millis();
+    radarEma = w.rssi; radarSlow = w.rssi;
+    radarBeepOn = false; radarBeepOff = 0; radarDrawAt = 0;
+    engine.setMode(ScanEngine::SCAN_WIFI);      // fast WiFi-only loop for responsive RSSI
+    engine.resume();
+    st = ST_WIFI_RADAR;
+    drawRadarChrome();
+    drawRadarGauge(false);
+}
+
 static void radarStop() {
     digitalWrite(2, LOW);                       // buzzer silent
-    engine.setMode(ScanEngine::SCAN_BLE);       // back to normal list scanning
+    if (!radarWifi) engine.setMode(ScanEngine::SCAN_BLE);   // BLE: back to list scanning (WiFi list already SCAN_WIFI)
 }
 
 static void radarTick() {
-    int rssi = engine.radarRssi();
-    uint32_t seen = engine.radarLastSeen();
     uint32_t t = millis();
-    bool lost = (seen == 0) || (t - seen > 3000);
+    int rssi; uint32_t seen;
+    if (radarWifi) {
+        int r = engine.wifiRssiOf(radarBssid);
+        if (r > -128) { radarWifiRssi = r; radarWifiSeen = t; }
+        rssi = radarWifiRssi; seen = radarWifiSeen;
+    } else { rssi = engine.radarRssi(); seen = engine.radarLastSeen(); }
+    bool lost = (seen == 0) || (t - seen > (radarWifi ? 5000u : 3000u));   // WiFi sweeps slower
     if (!lost && rssi != 0) { radarEma += (rssi - radarEma) / 4; radarSlow += (radarEma - radarSlow) / 12; }
     if (radarBeepOn && !lost) {                 // Geiger-style: faster clicks as you close in
         float p = (radarEma + 95) / 55.0f; if (p < 0) p = 0; if (p > 1) p = 1;
@@ -2623,6 +2652,7 @@ static void onKey(int ev) {
             else if (st == ST_REC_PLAY && recDelArm) { recDelArm = false; drawRecPlayScreen(); }              // cancel the delete confirm
             else if (st == ST_BLE_RADAR) { radarStop(); st = ST_BLE; seenBleGen = engine.bleGen(); tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); }   // back to the device list
             else if (st == ST_BLE_INFO)  { st = ST_BLE; seenBleGen = engine.bleGen(); tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); }   // details → back to the list
+            else if (st == ST_WIFI_RADAR) { radarStop(); gotoWifi(); }   // WiFi radar → back to the network list
             else back();
             break;
         default:
@@ -2897,7 +2927,7 @@ void loop() {
     leds.set(ota.busy()                            ? StatusLeds::OTA
            : (st == ST_PROVISION || (st == ST_POLITE && portal.isRunning()) || st == ST_SUBCFG) ? StatusLeds::PORTAL
            : st == ST_DEAUTH                       ? StatusLeds::PROMISC
-           : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM || st == ST_HUNT24) ? StatusLeds::WIFI_SCAN
+           : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM || st == ST_HUNT24 || st == ST_WIFI_RADAR) ? StatusLeds::WIFI_SCAN
            : st == ST_SUBSPECTRUM                  ? StatusLeds::PROMISC
            : (st == ST_BLE || st == ST_BLE_RADAR || st == ST_BLE_INFO) ? StatusLeds::BLE_SCAN
            : (st == ST_OTA && ota.phase() == OtaManager::FAILED) ? StatusLeds::ERR
@@ -2977,7 +3007,7 @@ void loop() {
     }
     if (st == ST_SPECTRUM) spectrumTick();
     if (st == ST_HUNT24) hunt24Tick();
-    if (st == ST_BLE_RADAR) radarTick();
+    if (st == ST_BLE_RADAR || st == ST_WIFI_RADAR) radarTick();
     // Sub-GHz spectrum waterfall
     if (st == ST_SUBSPECTRUM) subTick();
     // Sub-GHz frequency hunter: keep sweeping + peak-holding while shown.
