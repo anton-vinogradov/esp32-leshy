@@ -1716,26 +1716,23 @@ struct HuntWin { uint32_t lo, hi; };
 static const HuntWin HUNT_WINS[] = { {300000, 348000}, {387000, 464000}, {779000, 928000} };   // CC1101 tunable windows
 static const int      HUNT_NWIN = sizeof(HUNT_WINS) / sizeof(HUNT_WINS[0]);
 static const uint32_t HUNT_STEP = 250;              // kHz coarse grid (RX bandwidth ~200 kHz)
-static const int      HUNT_RISE = 12;               // dB a bin must rise above its calibrated baseline to count
+static const int      HUNT_RISE = 18;               // dB a bin must rise above its calibrated baseline to count
 static const int      HUNT_MAXBINS = 1200;          // baseline array cap (actual ~1099)
 static const int      HUNT_CALIB_PASSES = 2;        // baseline = per-bin MIN over N passes → a stray press can't poison it
 
-// Phases: CALIB measures a per-bin baseline (ambient + the chip's own crystal-harmonic birdies, e.g.
-// 26 MHz*12 = 312 MHz), HUNT looks for a bin that RISES above its baseline when you press the tag,
-// REFINE narrows that bin to ~50 kHz. Rise detection is what lets a real button-press beat the
-// always-present internal spurs — plain argmax(RSSI) just locks onto the 312 MHz birdie.
-enum HuntPhase { HP_CALIB, HP_HUNT, HP_REFINE };
+// The hunter draws a live bar graph of how far each frequency RISES above a calibrated baseline.
+// CALIB records the baseline (ambient + the chip's own crystal-harmonic birdies, e.g. 26 MHz*12 =
+// 312 MHz) as the per-bin MIN over two passes; HUNT then max-holds the rise per bin, so a pressed
+// tag builds a visible spike while constant spurs stay flat. You read the frequency off the peak —
+// far more honest than an auto-pick that flip-flops on overload spurs and receiver harmonics.
+enum HuntPhase { HP_CALIB, HP_HUNT };
 static HuntPhase huntPhase = HP_CALIB;
 static int8_t   huntBase[HUNT_MAXBINS];             // per-bin baseline RSSI (dBm)
+static int8_t   huntHold[HUNT_MAXBINS];             // per-bin max-held rise above baseline (dB), slow decay
 static int      huntN = 0;                          // active bin count
 static int      huntBin = 0;                        // sweep cursor (flat bin index)
 static int      huntCalibPass = 0;                  // which baseline pass we're on
 static bool     huntCalibrated = false;
-static bool     huntLocked = false;
-static int      huntBestRise = -999; static uint32_t huntBestKHz = 0; static int huntBestDbm = -128;   // current pass
-static uint32_t huntShowKHz = 0; static int huntShowRise = 0, huntShowDbm = -128;                      // shown result
-static int      huntMiss = 0;
-static uint32_t huntRefF = 0, huntRefHi = 0, huntRefBestK = 0; static int huntRefBestRise = -999, huntRefBestDbm = -128;
 static uint32_t huntLastDraw = 0;
 
 static int huntBinCount() {
@@ -1751,71 +1748,98 @@ static uint32_t huntBinFreq(int idx) {
     }
     return HUNT_WINS[HUNT_NWIN - 1].hi;
 }
-static int huntBaseAt(uint32_t f) {                 // nearest coarse bin's baseline (for the fine refine sweep)
+static int huntFreqBin(uint32_t f) {                // flat bin index nearest a frequency (-1 if in a gap)
     int base = 0;
     for (int w = 0; w < HUNT_NWIN; w++) {
         int n = (int)((HUNT_WINS[w].hi - HUNT_WINS[w].lo) / HUNT_STEP) + 1;
-        if (f >= HUNT_WINS[w].lo && f <= HUNT_WINS[w].hi) {
-            int off = (int)((f - HUNT_WINS[w].lo + HUNT_STEP / 2) / HUNT_STEP);
-            int idx = base + off;
-            if (idx >= huntN) idx = huntN - 1;
-            return huntBase[idx];
-        }
+        if (f >= HUNT_WINS[w].lo && f <= HUNT_WINS[w].hi) return base + (int)((f - HUNT_WINS[w].lo + HUNT_STEP / 2) / HUNT_STEP);
         base += n;
     }
-    return -100;
+    return -1;
 }
 
-static const char* huntGuess(uint32_t k) {          // nearest common alarm/remote ISM point
-    struct Pt { uint32_t f; const char* n; };
-    static const Pt T[] = { {315000, "315"}, {390000, "390"}, {418000, "418"}, {433920, "433.92 ISM"},
-                            {434420, "434.42"}, {868350, "868.35 ISM"}, {915000, "915 ISM"} };
-    for (const Pt& t : T) { uint32_t d = k > t.f ? k - t.f : t.f - k; if (d <= 350) return t.n; }
+static const char* huntGuess(uint32_t k) {          // ISM/SRD band a real remote/tag would use (range-based)
+    if (k >= 314000 && k <= 316000) return "315";
+    if (k >= 386000 && k <= 392000) return "390";
+    if (k >= 417000 && k <= 419000) return "418";
+    if (k >= 433050 && k <= 434790) return "433 ISM";
+    if (k >= 863000 && k <= 870000) return "868 ISM";
+    if (k >= 902000 && k <= 928000) return "915 ISM";
     return "";
+}
+
+static bool huntIsSpur(uint32_t f) {                // within 0.5 MHz of a 26 MHz crystal harmonic (the chip's own birdies)
+    uint32_t n = (f + 13000) / 26000;
+    uint32_t d = f > n * 26000 ? f - n * 26000 : n * 26000 - f;
+    return d <= 500;
 }
 
 static void huntReset() {                           // (re)start with a fresh baseline calibration
     huntN = huntBinCount(); if (huntN > HUNT_MAXBINS) huntN = HUNT_MAXBINS;
-    huntPhase = HP_CALIB; huntBin = 0; huntCalibPass = 0;
-    huntCalibrated = false; huntLocked = false;
-    huntShowKHz = 0; huntShowRise = 0; huntShowDbm = -128; huntMiss = 0;
-    huntBestRise = -999; huntBestKHz = 0; huntBestDbm = -128;
+    huntPhase = HP_CALIB; huntBin = 0; huntCalibPass = 0; huntCalibrated = false;
+    for (int b = 0; b < huntN; b++) huntHold[b] = 0;
 }
 
 static void drawHuntChrome() {
-    const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0);
     uiHeaderRu(i18n::tr("Freq finder", "Частотомер"), "CC1101");
-    tft.fillRect(0, 28, 240, 320 - 28, bg);
-    fontSmall(); tft.setTextDatum(TL_DATUM); tft.setTextColor(white, bg);
-    tft.drawString(i18n::tr("Hold the tag by the antenna.", "Держи метку у антенны."), 10, 210);
+    tft.fillRect(0, 28, 240, 320 - 28, uiBg());
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::isRu() ? "▶ калибровать" : "▶ recal");
-    fontOff();
 }
 
-static void drawHuntValues() {
+// Live readout (peak) + a rise-vs-frequency bar graph. You read the answer off the tall clean spike.
+static const int HG_TOP = 120, HG_BOT = 250, HG_FS = 45;   // graph box (px) + full-scale dB
+static void drawHuntGraph() {
     const uint16_t bg = uiBg(), white = tft.color565(0xe8, 0xe8, 0xe0), gold = tft.color565(0xe7, 0xcf, 0x8f),
-                   green = tft.color565(0x3f, 0xe0, 0x7a), grayc = tft.color565(0x80, 0x88, 0x80);
-    tft.fillRect(0, 56, 240, 150, bg);
+                   green = tft.color565(0x3f, 0xe0, 0x7a), grayc = tft.color565(0x80, 0x88, 0x80),
+                   dim = tft.color565(0x2c, 0x40, 0x30), axis = tft.color565(0x40, 0x50, 0x44);
+    int peakBin = -1, peakRise = 0;                 // tallest held bin
+    for (int b = 0; b < huntN; b++) if (huntHold[b] > peakRise) { peakRise = huntHold[b]; peakBin = b; }
+    uint32_t peakKHz = peakBin >= 0 ? huntBinFreq(peakBin) : 0;
+
+    // ---- readout ----
+    tft.fillRect(0, 40, 240, HG_TOP - 44, bg);
     tft.setTextDatum(TL_DATUM);
     fontBig();
-    if (huntLocked && huntShowKHz) {
-        char fs[16]; snprintf(fs, sizeof(fs), "%lu.%02lu", (unsigned long)(huntShowKHz / 1000), (unsigned long)((huntShowKHz % 1000) / 10));
-        tft.setTextColor(green, bg); tft.drawString(fs, 10, 66);
-        fontSmall(); tft.setTextColor(white, bg); tft.drawString(i18n::tr("MHz", "МГц"), 150, 84);
-        const char* g = huntGuess(huntShowKHz);
-        if (*g) { tft.setTextColor(gold, bg); tft.drawString(g, 10, 118); }
+    if (!huntCalibrated) {
+        tft.setTextColor(grayc, bg); tft.drawString(i18n::tr("calibrating...", "калибровка…"), 10, 46);
+    } else if (peakRise >= HUNT_RISE && peakKHz) {
+        char fs[16]; snprintf(fs, sizeof(fs), "%lu.%02lu", (unsigned long)(peakKHz / 1000), (unsigned long)((peakKHz % 1000) / 10));
+        tft.setTextColor(green, bg); tft.drawString(fs, 10, 46);
+        fontSmall(); tft.setTextColor(white, bg); tft.drawString(i18n::tr("MHz", "МГц"), 150, 62);
+        const char* g = huntGuess(peakKHz);
+        if (*g) { tft.setTextColor(gold, bg); tft.drawString(g, 182, 62); }
     } else {
-        tft.setTextColor(grayc, bg);
-        tft.drawString(huntCalibrated ? i18n::tr("searching...", "поиск…") : i18n::tr("calibrating...", "калибровка…"), 10, 66);
+        tft.setTextColor(grayc, bg); tft.drawString(i18n::tr("press the tag", "жми метку"), 10, 46);
     }
     fontSmall(); tft.setTextColor(white, bg);
-    char l1[64];
-    if (!huntCalibrated)     snprintf(l1, sizeof(l1), "%s", i18n::tr("measuring floor - don't press", "меряю фон — не жми метку"));
-    else if (huntLocked)     snprintf(l1, sizeof(l1), "%s+%d dB  %d dBm", i18n::tr("rise ", "подъём "), huntShowRise, huntShowDbm);
-    else if (huntMiss >= 6)  snprintf(l1, sizeof(l1), "%s", i18n::tr("no rise - press tag or > recal", "нет подъёма, жми метку или ▶"));
-    else                     snprintf(l1, sizeof(l1), "%s", i18n::tr("press the tag button", "жми кнопку метки"));
-    tft.drawString(l1, 10, 156);
+    char l1[48];
+    if (!huntCalibrated)            snprintf(l1, sizeof(l1), "%s", i18n::tr("don't press - measuring floor", "не жми — меряю фон"));
+    else if (peakRise >= HUNT_RISE) snprintf(l1, sizeof(l1), "%s+%d dB", i18n::tr("peak rise ", "подъём пика "), peakRise);
+    else                            snprintf(l1, sizeof(l1), "%s", i18n::tr("hold near antenna, press", "держи у антенны, жми"));
+    tft.drawString(l1, 10, 96);
     fontOff();
+
+    // ---- graph ----
+    tft.fillRect(0, HG_TOP, 240, HG_BOT - HG_TOP + 14, bg);
+    tft.drawFastHLine(0, HG_BOT, 240, axis);
+    fontTiny(); tft.setTextDatum(TC_DATUM); tft.setTextColor(grayc, bg);   // ISM band ticks
+    struct Tk { uint32_t f; const char* n; };
+    static const Tk TKS[] = { {315000, "315"}, {433920, "433"}, {868350, "868"}, {915000, "915"} };
+    for (const Tk& t : TKS) {
+        int b = huntFreqBin(t.f); if (b < 0 || b >= huntN) continue;
+        int x = b * 240 / huntN;
+        tft.drawFastVLine(x, HG_BOT + 1, 3, axis);
+        tft.drawString(t.n, x, HG_BOT + 4);
+    }
+    fontOff();
+    for (int x = 0; x < 240; x++) {                 // bars: one column per screen x, max over its bins
+        int b0 = x * huntN / 240, b1 = (x + 1) * huntN / 240; if (b1 <= b0) b1 = b0 + 1;
+        int h = 0;
+        for (int b = b0; b < b1 && b < huntN; b++) if (huntHold[b] > h) h = huntHold[b];
+        int px = h * (HG_BOT - HG_TOP) / HG_FS; if (px > HG_BOT - HG_TOP) px = HG_BOT - HG_TOP;
+        if (px > 0) tft.drawFastVLine(x, HG_BOT - px, px,
+                        (peakBin >= b0 && peakBin < b1) ? gold : (h >= HUNT_RISE ? green : dim));
+    }
 }
 
 static void huntTick() {
@@ -1828,47 +1852,23 @@ static void huntTick() {
             huntBin++;
         }
         if (huntBin >= huntN) {
-            if (++huntCalibPass < HUNT_CALIB_PASSES) { huntBin = 0; }   // one more baseline pass (min rejects a stray press)
-            else {                                                     // baseline done → start hunting for a rise
-                huntCalibrated = true; huntPhase = HP_HUNT; huntBin = 0;
-                huntBestRise = -999; huntBestKHz = 0; huntBestDbm = -128;
-            }
+            if (++huntCalibPass < HUNT_CALIB_PASSES) huntBin = 0;       // one more baseline pass (min rejects a stray press)
+            else { huntCalibrated = true; huntPhase = HP_HUNT; huntBin = 0; }
         }
-    } else if (huntPhase == HP_HUNT) {
+    } else {                                            // HP_HUNT — sweep, max-hold the rise per bin for the graph
         for (int i = 0; i < BATCH && huntBin < huntN; i++) {
             uint32_t f = huntBinFreq(huntBin);
-            int dbm = cc.rssiAt(f);
-            int rise = dbm - huntBase[huntBin];         // how far this bin rose above its own baseline
-            if (rise > huntBestRise) { huntBestRise = rise; huntBestKHz = f; huntBestDbm = dbm; }
+            if (huntIsSpur(f)) { huntBin++; continue; }  // never plot the chip's own crystal harmonics
+            int rise = cc.rssiAt(f) - huntBase[huntBin];
+            if (rise > huntHold[huntBin]) huntHold[huntBin] = (int8_t)(rise > 120 ? 120 : rise);
             huntBin++;
         }
-        if (huntBin >= huntN) {                         // pass complete
-            if (huntBestRise >= HUNT_RISE) {            // a bin rose → real signal (not a constant spur)
-                huntRefF = huntBestKHz > 1200 ? huntBestKHz - 1200 : 1;
-                huntRefHi = huntBestKHz + 1200;
-                huntRefBestRise = huntBestRise; huntRefBestK = huntBestKHz; huntRefBestDbm = huntBestDbm;
-                huntPhase = HP_REFINE;
-            } else if (++huntMiss >= 2) {               // two empty passes → drop a stale lock (fast re-aim)
-                huntLocked = false; huntShowKHz = 0;
-            }
-            huntBin = 0; huntBestRise = -999; huntBestKHz = 0; huntBestDbm = -128;
-        }
-    } else {                                            // HP_REFINE — fine ±1.2 MHz sweep by rise, spread across ticks
-        for (int i = 0; i < BATCH && huntRefF <= huntRefHi; i++) {
-            if (cc1101FreqOk(huntRefF)) {
-                int d = cc.rssiAt(huntRefF);
-                int rise = d - huntBaseAt(huntRefF);
-                if (rise > huntRefBestRise) { huntRefBestRise = rise; huntRefBestK = huntRefF; huntRefBestDbm = d; }
-            }
-            huntRefF += 50;
-        }
-        if (huntRefF > huntRefHi) {                     // refine complete → publish
-            huntShowKHz = huntRefBestK; huntShowDbm = huntRefBestDbm; huntShowRise = huntRefBestRise;
-            huntLocked = true; huntMiss = 0;
-            huntPhase = HP_HUNT; huntBin = 0; huntBestRise = -999; huntBestKHz = 0; huntBestDbm = -128;
+        if (huntBin >= huntN) {                         // pass complete → decay the hold so old spikes fade
+            for (int b = 0; b < huntN; b++) if (huntHold[b] > 0) huntHold[b] -= (huntHold[b] > 3 ? 3 : huntHold[b]);
+            huntBin = 0;
         }
     }
-    if (millis() - huntLastDraw > 250) { huntLastDraw = millis(); drawHuntValues(); }
+    if (millis() - huntLastDraw > 250) { huntLastDraw = millis(); drawHuntGraph(); }
 }
 
 static void drawSubCfgScreen() {
@@ -2150,7 +2150,7 @@ static void launch(int feat) {
                             else { infoTitle = i18n::tr("Sub-GHz setup", "Настройки Sub-GHz"); infoBody = i18n::tr("Failed to start", "Не удалось запустить"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
         case F_SUBHUNT:     engine.pause();                        // frequency hunter — pure RX sweep
-                            if (cc.begin()) { huntReset(); st = ST_SUBHUNT; drawHuntChrome(); drawHuntValues(); }
+                            if (cc.begin()) { huntReset(); st = ST_SUBHUNT; drawHuntChrome(); drawHuntGraph(); }
                             else { infoTitle = i18n::tr("Freq finder", "Частотомер"); infoBody = i18n::tr("CC1101 not found", "CC1101 не найден");
                                    infoNote = i18n::tr("This build expects a CC1101 sub-GHz module.", "Нужен модуль CC1101."); st = ST_INFO; drawInfo(); }
                             break;
@@ -2228,7 +2228,7 @@ static void onKey(int ev) {
             else if (st == ST_SUBREC) subRecord();       // OK = capture the next signal
             else if (st == ST_KEYBOARD) kbSelect();
             else if (st == ST_REC_PLAY) { if (recDelArm) recDeleteSelected(); else recPlaySelected(); }
-            else if (st == ST_SUBHUNT) { huntReset(); drawHuntValues(); }   // OK = restart the hunt
+            else if (st == ST_SUBHUNT) { huntReset(); drawHuntGraph(); }   // OK = restart the hunt
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
             else if (st == ST_INFO && infoAction == F_BACKLIGHT) { uiBacklightCycle();     drawBacklightInfo(); }
             else if (st == ST_INFO && infoAction == F_TXPOWER)   { txPowerCycle();         drawTxPowerInfo(); }
@@ -2253,7 +2253,7 @@ static void onKey(int ev) {
             else if (st == ST_SUBREC) { if (recN > 0) { kbBuf[0] = 0; kbLen = 0; kbRow = 0; kbCol = 0; st = ST_KEYBOARD; drawKeyboard(true); } }   // right = name + save the capture
             else if (st == ST_KEYBOARD) { int pc = kbCol; if (kbCol < kbRowCols(kbRow) - 1) kbCol++; kbRepaintCursor(kbRow, pc); }
             else if (st == ST_REC_PLAY) { if (recCount > 0 && !recDelArm) { recDelArm = true; drawRecPlayScreen(); } }   // right = arm delete
-            else if (st == ST_SUBHUNT) { huntReset(); drawHuntValues(); }   // right = reset the peak hold
+            else if (st == ST_SUBHUNT) { huntReset(); drawHuntGraph(); }   // right = reset the peak hold
             else if (st == ST_SPECTRUM && spLab) spToggleTx();    // Lab: start/stop transmitting noise into the armed channels
             else if (st == ST_SPECTRUM)          spToggleView();  // passive: flip occupancy <-> traffic view
             else if (st == ST_INFO && infoAction == F_LEDS)      { leds.cycleBrightness(); drawLedsInfo(); }
