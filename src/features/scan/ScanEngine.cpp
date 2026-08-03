@@ -83,6 +83,8 @@ void ScanEngine::taskLoop() {
                                                      : d.mac;
                 ble_[i].rssi    = d.rssi;
                 ble_[i].tracker = d.tracker.length() > 0;
+                ble_[i].kind    = (uint8_t)d.kind;
+                ble_[i].vendor  = d.vendor;
             }
             bleGen_ = bleGen_ + 1;
             xSemaphoreGive(mtx_);

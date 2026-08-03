@@ -3,6 +3,7 @@
 #include "Display.h"
 #include "Fonts.h"
 #include "../../core/i18n.h"
+#include "../ble_scanner/BleScanner.h"
 
 #include <stdio.h>
 
@@ -10,6 +11,7 @@ void BleScreen::rows(ScanEngine& e, int offset) {
     const uint16_t bg    = uiBg();
     const uint16_t white = tft.color565(0xff, 0xff, 0xf2);   // brighter list text
     const uint16_t amber = tft.color565(0xff, 0xcf, 0x3f);
+    const uint16_t cyan  = tft.color565(0x5a, 0xd0, 0xff);   // device-type tag
 
     TFT_eSprite& row = uiRow();
     int n = e.bleCount();
@@ -21,14 +23,23 @@ void BleScreen::rows(ScanEngine& e, int offset) {
         BleRow d;
         if (idx < n && e.bleRow(idx, d)) {
             uint16_t col = uiRssiColor(d.rssi);
-            uiSignalBars(row, 6, 5, d.rssi, col);
+            int x = 6;                                       // signal bars removed — the RSSI number on the right already shows strength
+            const char* tag = bleKindLabel((BleKind)d.kind, i18n::isRu());
+            if (!tag[0] && !d.tracker && d.vendor.length()) tag = d.vendor.c_str();   // no category → fall back to the brand
+            if (tag[0]) {                                    // guessed device type/brand, in cyan, using the freed-up left slot
+                row.setTextDatum(ML_DATUM);
+                row.setTextColor(cyan, bg);
+                row.drawString(tag, x, 12);
+                x += row.textWidth(tag) + 8;
+            }
             String label = d.label;
             bool trunc = false;
-            while (label.length() > 3 && row.textWidth(label) > 160) { label = label.substring(0, label.length() - 1); trunc = true; }
+            int maxw = 206 - x;                              // keep clear of the RSSI number at the right edge
+            while (label.length() > 3 && row.textWidth(label) > maxw) { label = label.substring(0, label.length() - 1); trunc = true; }
             if (trunc) label += "~";
             row.setTextDatum(ML_DATUM);
             row.setTextColor(d.tracker ? amber : white, bg);
-            row.drawString(label, 34, 12);
+            row.drawString(label, x, 12);
             char b[8];
             sprintf(b, "%d", d.rssi);
             row.setTextDatum(MR_DATUM);
