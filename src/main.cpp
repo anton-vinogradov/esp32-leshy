@@ -2407,6 +2407,27 @@ static void onKey(int ev) {
 }
 
 // Serial remote (headless testing over USB): u/d/l/r/o = keys; scan/ble/hidden/conn/menu = jump.
+// QA: dump the framebuffer over serial as hex rows (ILI9341 supports read; TFT_MISO=37).
+// Host decodes to PNG. "shot" captures whatever screen is currently shown.
+static void screenshotDump() {
+    static uint16_t row[240];
+    static char line[240 * 4 + 2];
+    const char* H = "0123456789ABCDEF";
+    Serial.println();
+    Serial.println("SHOT 240 320");
+    for (int y = 0; y < 320; y++) {
+        tft.readRect(0, y, 240, 1, row);
+        char* p = line;
+        for (int x = 0; x < 240; x++) {
+            uint16_t v = row[x];
+            *p++ = H[(v >> 12) & 0xF]; *p++ = H[(v >> 8) & 0xF]; *p++ = H[(v >> 4) & 0xF]; *p++ = H[v & 0xF];
+        }
+        *p = 0;
+        Serial.println(line);
+    }
+    Serial.println("SHOT END");
+}
+
 static void serialControl() {
     static char buf[24];
     static uint8_t len = 0;
@@ -2435,8 +2456,17 @@ static void serialControl() {
             else if (!strcmp(buf, "ota"))    launch(F_OTA);
             else if (!strcmp(buf, "deauth")) launch(F_DEAUTH);
             else if (!strcmp(buf, "chan"))   launch(F_CHANNELS);
+            else if (!strcmp(buf, "spec"))    launch(F_SPECTRUM);      // QA jumps for screenshots
+            else if (!strcmp(buf, "subspec")) launch(F_SUBSPECTRUM);
+            else if (!strcmp(buf, "hunt"))    launch(F_SUBHUNT);
+            else if (!strcmp(buf, "hunt24"))  launch(F_HUNT24);
+            else if (!strcmp(buf, "subtx"))   launch(F_SUBTX);
+            else if (!strcmp(buf, "rec"))     launch(F_SUBREC);
             else if (!strcmp(buf, "legal"))  launch(F_LEGAL);
             else if (!strcmp(buf, "legalreset")) { Preferences p; p.begin("leshy", false); p.remove("legal_ok"); p.end(); Serial.println("[cmd] legal flag cleared — reboot to see the gate"); }
+            else if (!strcmp(buf, "shot"))  { screenshotDump(); continue; }                      // QA: framebuffer -> serial (host makes a PNG)
+            else if (!strcmp(buf, "en"))    { i18n::set(Lang::EN); saveLang(Lang::EN); depth = 0; showMenu(); continue; }   // QA: language for screenshots
+            else if (!strcmp(buf, "ru"))    { i18n::set(Lang::RU); saveLang(Lang::RU); depth = 0; showMenu(); continue; }
             else if (!strcmp(buf, "leds"))  { leds.selfTest(); continue; }                       // QA: all four pixels + their order
             else if (!strcmp(buf, "ledbr")) { Serial.printf("[leds] brightness -> %u/255\n", leds.cycleBrightness()); continue; }
             else if (!strcmp(buf, "bl"))    { Serial.printf("[bl] backlight -> %u/255\n", uiBacklightCycle()); continue; }
