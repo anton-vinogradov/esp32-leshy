@@ -1253,19 +1253,28 @@ static void spDrawAxis() {
     const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f), gold = tft.color565(0xff, 0xcf, 0x3f);
     const uint16_t armed = tft.color565(0xff, 0x5a, 0x32);
     const uint16_t caret = spTxOn ? armed : tft.color565(0x46, 0xd6, 0xff);   // cyan idle → red while emitting
-    tft.fillRect(0, SP_Y + SP_H + 1, 240, 34, bg);                           // clear the strip (footer starts at y=301)
+    const int B = SP_Y + SP_H;                                               // strip top = plot bottom (y=266); footer at y=301
+    tft.fillRect(0, B + 1, 240, 34, bg);                                     // clear the whole label strip
     fontOff();                                                               // channel numbers use the built-in font (arg 1); a loaded VLW would override it
     tft.setTextDatum(MC_DATUM);
     for (int w = 1; w <= 13; w++) {
         int sx = spNrfToX(Nrf24Spectrum::wifiCenterNrfCh(w));
         if (sx < 0 || sx >= SP_W) continue;
         int x = SP_X + sx;
-        bool major = (w == 1 || w == 6 || w == 11);
-        uint16_t col = (spLab && (spTxMask & (1 << w))) ? armed : (major ? gold : dim);
-        if (spLab && w == spCursor) tft.fillTriangle(x - 3, SP_Y + SP_H + 1, x + 3, SP_Y + SP_H + 1, x, SP_Y + SP_H + 7, caret);
-        tft.drawFastVLine(x, SP_Y + SP_H + 8, 3, col);
+        bool major   = (w == 1 || w == 6 || w == 11);
+        bool isArmed = spLab && !spSweep && (spTxMask & (1 << w));            // armed set is meaningless during a sweep — hide it there
+        uint16_t col = isArmed ? armed : (major ? gold : dim);
+        if (spLab && w == spCursor) tft.fillTriangle(x - 3, B + 1, x + 3, B + 1, x, B + 7, caret);   // cursor: caret drops from the plot
+        tft.drawFastVLine(x, B + 8, 3, col);
+        String s = String(w);
+        int ny = B + (w & 1 ? 15 : 24);                                      // odd row higher, even lower
         tft.setTextColor(col, bg);
-        tft.drawString(String(w), x, SP_Y + SP_H + (w & 1 ? 16 : 26), 1);     // odd row higher, even lower
+        tft.drawString(s, x, ny, 1);
+        if (isArmed) {
+            tft.setTextColor(col);                                          // transparent overstrike, +1px = fake-bold
+            tft.drawString(s, x + 1, ny, 1);
+            tft.fillTriangle(x - 3, B + 34, x + 3, B + 34, x, B + 29, armed);   // armed: arrow points UP at the channel from below
+        }
     }
 }
 
@@ -2495,10 +2504,24 @@ static void serialControl() {
             else if (!strcmp(buf, "hunt"))    launch(F_SUBHUNT);
             else if (!strcmp(buf, "hunt24"))  launch(F_HUNT24);
             else if (!strcmp(buf, "subtx"))   launch(F_SUBTX);
+            else if (!strcmp(buf, "gen"))     launch(F_NOISEGEN);
             else if (!strcmp(buf, "rec"))     launch(F_SUBREC);
             else if (!strcmp(buf, "legal"))  launch(F_LEGAL);
             else if (!strcmp(buf, "legalreset")) { Preferences p; p.begin("leshy", false); p.remove("legal_ok"); p.end(); Serial.println("[cmd] legal flag cleared — reboot to see the gate"); }
             else if (!strcmp(buf, "shot"))  { screenshotDump(); continue; }                      // QA: framebuffer -> serial (host makes a PNG)
+            else if (!strcmp(buf, "occ"))   {                                                    // QA: live all-module occupancy (0..255 per NRF ch, 2400+ch MHz)
+                Serial.print("[occ]");
+                for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) Serial.printf(" %d", spEma[c]);
+                Serial.println(); continue;
+            }
+            else if (!strcmp(buf, "occ1"))  {                                                    // QA: same, but ONE module with siblings powered down — isolates external air from inter-module crosstalk
+                static uint8_t pass[Nrf24Spectrum::CHANNELS]; uint16_t sum[Nrf24Spectrum::CHANNELS] = {0};
+                const int N = 16;
+                for (int p = 0; p < N; p++) { nrf.sweepSolo(pass); for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) sum[c] += pass[c]; }
+                Serial.print("[occ1]");
+                for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) Serial.printf(" %d", sum[c] * 255 / N);
+                Serial.println(); continue;
+            }
             else if (!strcmp(buf, "en"))    { i18n::set(Lang::EN); saveLang(Lang::EN); depth = 0; showMenu(); continue; }   // QA: language for screenshots
             else if (!strcmp(buf, "ru"))    { i18n::set(Lang::RU); saveLang(Lang::RU); depth = 0; showMenu(); continue; }
             else if (!strcmp(buf, "leds"))  { leds.selfTest(); continue; }                       // QA: all four pixels + their order

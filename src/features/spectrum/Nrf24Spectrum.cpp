@@ -160,6 +160,25 @@ void Nrf24Spectrum::sweep(uint8_t out[CHANNELS]) {
     if (txNow > 0) txHopI_ = (txHopI_ + 1) % txHopN_;
 }
 
+// "Ambient or self-noise?" probe. Listen on module 0 alone with every sibling powered
+// down (CONFIG=0), so no other module's LO can couple into the RPD. One channel at a
+// time — no two modules tuned at once — removes the adjacent-channel crosstalk the normal
+// concurrent sweep has. A bin still reading busy here is genuine outside-world energy.
+void Nrf24Spectrum::sweepSolo(uint8_t out[CHANNELS]) {
+    if (active_ <= 0) { for (int i = 0; i < CHANNELS; i++) out[i] = 0; return; }
+    for (int k = 1; k < active_; k++) { digitalWrite(ce_[k], LOW); writeReg(csn_[k], R_CONFIG, 0x00); }  // power down siblings
+    writeReg(csn_[0], R_RF_SETUP, 0x06);                 // 1 Mbps, clear any CONT_WAVE left over
+    writeReg(csn_[0], R_CONFIG, 0x03);                   // PWR_UP | PRIM_RX
+    for (int ch = 0; ch < CHANNELS; ch++) {
+        writeReg(csn_[0], R_RF_CH, ch);
+        digitalWrite(ce_[0], HIGH);
+        delayMicroseconds(200);
+        digitalWrite(ce_[0], LOW);
+        out[ch] = readReg(csn_[0], R_RPD) & 0x01;
+    }
+    for (int k = 1; k < active_; k++) writeReg(csn_[k], R_CONFIG, 0x03);   // restore siblings to RX
+}
+
 void Nrf24Spectrum::end() {
     for (int k = 0; k < active_; k++) { digitalWrite(ce_[k], LOW); writeReg(csn_[k], R_CONFIG, 0x00); }
     nrfSpi.end();

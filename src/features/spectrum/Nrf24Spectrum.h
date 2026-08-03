@@ -25,6 +25,7 @@ public:
     bool present() const { return active_ > 0; }
     int  modules() const { return active_; }   // how many NRF24s are in use (1..3)
     void sweep(uint8_t out[CHANNELS]);    // one pass: RX carrier map (out[ch] = detected?); also drives TX if armed
+    void sweepSolo(uint8_t out[CHANNELS]);// diagnostic: module 0 listens ALONE, siblings powered down — no inter-module LO crosstalk, so a busy bin here is genuine external air
     void end();
     void diag();                          // QA: probe every slot/orientation, print STATUS
 
