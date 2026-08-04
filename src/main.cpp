@@ -27,6 +27,7 @@
 #include "features/subghz/SubCfg.h"
 #include "features/subghz/RecStore.h"
 #include "features/devicedb/DeviceDb.h"
+#include "features/wps_probe/WpsProbe.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -2162,10 +2163,25 @@ static void drawNetDetails() {
         String vv = netSel.vendor; while (vv.length() > 4 && tft.textWidth(vv) > 150) vv = vv.substring(0, vv.length() - 1);
         tft.setTextDatum(TR_DATUM); tft.setTextColor(tft.color565(0x5a, 0xd0, 0xff), bg); tft.drawString(vv, 226, y); tft.setTextDatum(TL_DATUM); y += 24;
     }
+    int modelY = y; y += 24;                                          // reserve a row for the WPS model (probed below)
     if (netSel.hidden) { tft.setTextColor(tft.color565(0xff, 0xa5, 0x2a), bg); tft.drawString(i18n::tr("hidden network", "скрытая сеть"), 14, y); }
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
     fontOff();
     drawNetBadge();
+    // WPS Model — the AP self-reports maker/model in its beacon when WPS is on. A brief
+    // blocking beacon probe on its channel; the scan is paused in the options flow.
+    engine.pauseAndWait();
+    fontSmall();
+    tft.setTextColor(dim, bg); tft.drawString(i18n::tr("Model", "Модель"), 14, modelY);
+    tft.setTextDatum(TR_DATUM); tft.setTextColor(dim, bg); tft.drawString("...", 226, modelY); tft.setTextDatum(TL_DATUM);
+    String wm, wmod;
+    bool wok = WpsProbe::probe(netSel.bssid, netSel.channel, 1500, wm, wmod);
+    String show = wmod.length() ? (wm.length() ? wm + " " + wmod : wmod)
+                : wm.length()   ? wm : String(i18n::tr("no WPS", "нет WPS"));
+    while (show.length() > 3 && tft.textWidth(show) > 150) show = show.substring(0, show.length() - 1);
+    tft.fillRect(96, modelY - 2, 138, 18, bg);                        // clear the "..." placeholder
+    tft.setTextDatum(TR_DATUM); tft.setTextColor(wok ? tft.color565(0x5a, 0xd0, 0xff) : dim, bg); tft.drawString(show, 226, modelY); tft.setTextDatum(TL_DATUM);
+    fontOff();
 }
 
 // ---- Responsible-use notice: full text, scrollable, must be read to the end ----
