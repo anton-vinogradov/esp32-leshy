@@ -349,7 +349,7 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24, ST_BLE_RADAR, ST_BLE_INFO, ST_WIFI_RADAR, ST_STATIONS };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24, ST_BLE_RADAR, ST_BLE_INFO, ST_WIFI_RADAR, ST_STATIONS, ST_STA_RADAR };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -357,6 +357,7 @@ static int      depth = 0;
 static int      off = 0;
 static int      wifiSel = 0;     // selected row in the Wi-Fi scan
 static int      bleSel = 0;      // selected row in the BLE scan (SELECT → radar)
+static int      staSel = 0;      // selected row in the Wi-Fi client list (SELECT → radar)
 static WifiRow  netSel;          // network the per-network options act on
 static uint32_t seenWifiGen = 0, seenBleGen = 0;
 static uint32_t scanPausedAt = 0;   // when the scan was paused (net options) — long gaps invalidate the RSSI graph
@@ -2277,8 +2278,9 @@ static void drawLangPick() {
 // ---- Wi-Fi client (station) list — promiscuous sniff ----
 static uint32_t seenStaAt = 0;
 
-static void drawStationRow(int y, const StaRow& r) {
-    const uint16_t bg = uiBg(), white = tft.color565(0xf0, 0xf0, 0xe6), cyan = tft.color565(0x5a, 0xd0, 0xff), dim = tft.color565(0x8f, 0xa9, 0x8f);
+static void drawStationRow(int y, const StaRow& r, bool sel) {
+    const uint16_t bg = sel ? tft.color565(0x22, 0x33, 0x22) : uiBg();
+    const uint16_t white = tft.color565(0xf0, 0xf0, 0xe6), cyan = tft.color565(0x5a, 0xd0, 0xff), dim = tft.color565(0x8f, 0xa9, 0x8f);
     tft.fillRect(0, y, 240, 22, bg);
     fontSmall();
     char mac[20];
@@ -2297,11 +2299,13 @@ static void drawStationsScreen(bool full) {
     char right[24]; snprintf(right, sizeof(right), "%d  ch%d", n, sniffer.channel());
     uiHeaderRu(i18n::tr("Clients", "Клиенты"), right);
     int y = 34; const int RH = 22, VIS = 12;
+    int vis = n < VIS ? n : VIS;
+    if (staSel >= vis) staSel = vis > 0 ? vis - 1 : 0;
     StaRow r;
-    for (int i = 0; i < VIS && i < n; i++) if (sniffer.row(i, r)) { drawStationRow(y, r); y += RH; }
+    for (int i = 0; i < vis; i++) if (sniffer.row(i, r)) { drawStationRow(y, r, i == staSel); y += RH; }
     tft.fillRect(0, y, 240, 301 - y, bg);          // clear the tail
     if (n == 0) { fontSmall(); tft.setTextDatum(MC_DATUM); tft.setTextColor(tft.color565(0x8f, 0xa9, 0x8f), bg); tft.drawString(i18n::tr("listening...", "слушаю..."), 120, 160); fontOff(); }
-    if (full) uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
+    if (full) uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", n ? i18n::tr("OK radar", "OK радар") : nullptr);
 }
 
 static void back() {
@@ -2337,7 +2341,7 @@ static void launch(int feat) {
     // An OTA check/download owns the radio — never start a screen that touches it.
     if (ota.busy() && feat != F_OTA) return;
     if (st == ST_DEAUTH)    detector.stop();       // release promiscuous before anything else
-    if (st == ST_STATIONS)  sniffer.stop();        // also promiscuous
+    if (st == ST_STATIONS || st == ST_STA_RADAR) sniffer.stop();   // also promiscuous
     if (st == ST_CHANNELS)  airtime.stop();        // also promiscuous
     if (st == ST_SPECTRUM)  spectrumStop();        // release NRF24
     if (st == ST_HUNT24)    nrf.end();             // release NRF24
@@ -2361,7 +2365,7 @@ static void launch(int feat) {
                             else { infoTitle = i18n::tr("Deauth monitor", "Детектор атак"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
         case F_STATIONS:    engine.pauseAndWait();     // promiscuous needs the radio to itself
-                            if (sniffer.begin()) { st = ST_STATIONS; drawStationsScreen(true); seenStaAt = millis(); }
+                            if (sniffer.begin()) { st = ST_STATIONS; staSel = 0; drawStationsScreen(true); seenStaAt = millis(); }
                             else { infoTitle = i18n::tr("Clients", "Клиенты"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
         case F_CHANNELS:    engine.pauseAndWait();          // airtime needs the radio to itself (promiscuous)
@@ -2460,7 +2464,8 @@ static void activate() {
 static String   radarMac, radarLabel, radarVendor, radarSub;
 static uint8_t  radarKind = 0;
 static BleRow   bleInfo;   // frozen snapshot of the device shown on the details screen
-static bool     radarWifi = false;          // false = BLE target, true = WiFi AP target
+static bool     radarWifi = false;          // WiFi AP target
+static bool     radarSta  = false;          // WiFi client (station) target
 static uint8_t  radarBssid[6];
 static int      radarChan = 0, radarWifiRssi = -100;
 static uint32_t radarWifiSeen = 0;
@@ -2478,8 +2483,8 @@ static void drawRadarChrome() {
     const uint16_t bg = uiBg();
     char chbuf[12];
     const char* rt;
-    if (radarWifi) { snprintf(chbuf, sizeof(chbuf), "ch %d", radarChan); rt = chbuf; }   // WiFi: show the channel
-    else           { rt = radarPub ? i18n::tr("fixed", "фикс") : nullptr; }               // BLE: fixed-address flag
+    if (radarWifi || radarSta) { snprintf(chbuf, sizeof(chbuf), "ch %d", radarChan); rt = chbuf; }   // WiFi AP/client: show the channel
+    else                       { rt = radarPub ? i18n::tr("fixed", "фикс") : nullptr; }               // BLE: fixed-address flag
     tft.fillRect(0, 28, 240, 320 - 28, bg);
     uiHeaderRu(i18n::tr("Radar", "Радар"), rt);
     fontSmall();
@@ -2535,7 +2540,7 @@ static void drawRadarGauge(bool lost) {
 }
 
 static void radarStart(const BleRow& d) {
-    radarWifi = false;
+    radarWifi = false; radarSta = false;
     radarMac = d.mac; radarVendor = d.vendor; radarSub = d.subtype; radarKind = d.kind; radarPub = d.pub;
     radarLabel = (d.tracker && d.label == "Find My") ? i18n::tr("Apple Find My", "Apple Локатор") : d.label;
     radarEma = d.rssi ? d.rssi : -100; radarSlow = radarEma;
@@ -2549,7 +2554,7 @@ static void radarStart(const BleRow& d) {
 }
 
 static void radarStartWifi(const WifiRow& w) {
-    radarWifi = true; memcpy(radarBssid, w.bssid, 6); radarChan = w.channel;
+    radarWifi = true; radarSta = false; memcpy(radarBssid, w.bssid, 6); radarChan = w.channel;
     radarLabel = w.ssid.length() ? w.ssid : String(i18n::tr("<hidden>", "<скрытая>"));
     radarVendor = ""; radarSub = ""; radarKind = 0; radarPub = false;
     radarWifiRssi = w.rssi; radarWifiSeen = millis();
@@ -2562,21 +2567,37 @@ static void radarStartWifi(const WifiRow& w) {
     drawRadarGauge(false);
 }
 
+static void radarStartSta(const StaRow& s) {
+    radarWifi = false; radarSta = true;
+    char m[18]; snprintf(m, sizeof(m), "%02X:%02X:%02X:%02X:%02X:%02X", s.mac[0], s.mac[1], s.mac[2], s.mac[3], s.mac[4], s.mac[5]);
+    radarMac = ""; radarLabel = String(m);              // radarMac empty → named → chrome shows vendor + MAC
+    radarVendor = DeviceDb::ouiName(s.mac);             // maker from the station OUI (random MAC → "")
+    radarSub = ""; radarKind = 0; radarPub = false; radarChan = s.channel;
+    radarEma = s.rssi; radarSlow = s.rssi;
+    radarBeepOn = false; radarBeepOff = 0; radarDrawAt = 0; radarStartAt = millis();
+    sniffer.radarLock(s.mac, s.channel);                // pin the target's channel, feed live RSSI
+    st = ST_STA_RADAR;
+    drawRadarChrome();
+    drawRadarGauge(false);
+}
+
 static void radarStop() {
     digitalWrite(2, LOW);                       // buzzer silent
-    if (!radarWifi) engine.setMode(ScanEngine::SCAN_BLE);   // BLE: back to list scanning (WiFi list already SCAN_WIFI)
+    if (radarSta) sniffer.radarUnlock();                    // station: resume channel hopping
+    else if (!radarWifi) engine.setMode(ScanEngine::SCAN_BLE);   // BLE: back to list scanning (WiFi list already SCAN_WIFI)
 }
 
 static void radarTick() {
     uint32_t t = millis();
     int rssi; uint32_t seen;
-    if (radarWifi) {
+    if (radarSta) { rssi = sniffer.radarRssi(); seen = sniffer.radarSeen(); }   // WiFi client: only heard while it transmits
+    else if (radarWifi) {
         int r = engine.wifiRssiOf(radarBssid);
         if (r > -128) { radarWifiRssi = r; radarWifiSeen = t; }
         rssi = radarWifiRssi; seen = radarWifiSeen;
     } else { rssi = engine.radarRssi(); seen = engine.radarLastSeen(); }
-    bool lost = seen ? (t - seen > (radarWifi ? 5000u : 3000u))            // WiFi sweeps slower
-                     : (t - radarStartAt > 4000);                          // never seen yet → searching, not "lost", for the first 4 s
+    bool lost = seen ? (t - seen > (radarSta ? 6000u : radarWifi ? 5000u : 3000u))   // clients are bursty → longer patience
+                     : (t - radarStartAt > (radarSta ? 6000u : 4000u));              // never seen yet → searching, not "lost"
     if (!lost && rssi != 0) { radarEma += (rssi - radarEma) / 4; radarSlow += (radarEma - radarSlow) / 12; }
     if (radarBeepOn && !lost) {                 // Geiger-style: faster clicks as you close in
         float p = (radarEma + 95) / 55.0f; if (p < 0) p = 0; if (p > 1) p = 1;
@@ -2631,6 +2652,7 @@ static void onKey(int ev) {
             if (st == ST_MENU) { if (curSel() > 0) { int p = curSel(); curSel()--; menuScreen.repaint(p, curSel()); } }
             else if (st == ST_WIFI)    { if (wifiSel > 0) { wifiSel--; ensureWifiVisible(); drawList(false); } }
             else if (st == ST_BLE)     { if (bleSel > 0) { bleSel--; ensureBleVisible(); drawList(false); } }
+            else if (st == ST_STATIONS){ if (staSel > 0) { staSel--; drawStationsScreen(false); } }
             else if (st == ST_CONN)    { if (connSel > 0) { int p = connSel; connSel--; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
             else if (st == ST_OPTIONS) { if (optSel > 0)  { int p = optSel;  optSel--;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
             else if (st == ST_HIDDEN)  { if (hidSel > 0)  { int p = hidSel; hidSel--; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
@@ -2645,6 +2667,7 @@ static void onKey(int ev) {
             if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
             else if (st == ST_WIFI)    { if (wifiSel < engine.wifiCount() - 1) { wifiSel++; ensureWifiVisible(); drawList(false); } }
             else if (st == ST_BLE)     { if (bleSel < engine.bleCount() - 1) { bleSel++; ensureBleVisible(); drawList(false); } }
+            else if (st == ST_STATIONS){ int c = sniffer.count(); int v = c < 12 ? c : 12; if (staSel < v - 1) { staSel++; drawStationsScreen(false); } }
             else if (st == ST_CONN)    { if (connSel < connActN - 1) { int p = connSel; connSel++; drawActionBtn(connActY[p], connLabel(connActs[p]), false); drawActionBtn(connActY[connSel], connLabel(connActs[connSel]), true); } }
             else if (st == ST_OPTIONS) { if (optSel < optN - 1)      { int p = optSel;  optSel++;  drawActionBtn(optY[p], optLabels[p], false); drawActionBtn(optY[optSel], optLabels[optSel], true); } }
             else if (st == ST_HIDDEN)  { if (hidSel < revealer.count() - 1) { int p = hidSel; hidSel++; int oo = hidOff; clampHidden(); if (hidOff != oo) drawHiddenRowsOnly(); else { drawHiddenRow(p - hidOff); drawHiddenRow(hidSel - hidOff); } } }
@@ -2668,6 +2691,7 @@ static void onKey(int ev) {
             else if (st == ST_OTA) otaActivate();
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_BLE) { BleRow r; if (engine.bleRow(bleSel, r) && r.mac.length()) radarStart(r); }   // lock the device → radar finder
+            else if (st == ST_STATIONS) { StaRow r; if (sniffer.row(staSel, r)) radarStartSta(r); }   // lock the client → radar finder
             else if (st == ST_BLE_RADAR) { radarBeepOn = !radarBeepOn; if (!radarBeepOn) digitalWrite(2, LOW); radarFooter(); }   // toggle the proximity beep
             else if (st == ST_BLE_INFO) radarStart(bleInfo);   // OK from details → radar finder
             else if (st == ST_SPECTRUM && spLab) spToggleArm();   // arm/disarm the caret channel for TX noise
@@ -2718,6 +2742,7 @@ static void onKey(int ev) {
             else if (st == ST_BLE_RADAR) { radarStop(); st = ST_BLE; seenBleGen = engine.bleGen(); tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); }   // back to the device list
             else if (st == ST_BLE_INFO)  { st = ST_BLE; seenBleGen = engine.bleGen(); tft.fillRect(0, 28, 240, 320 - 28, uiBg()); drawList(true); }   // details → back to the list
             else if (st == ST_WIFI_RADAR) { radarStop(); gotoWifi(); }   // WiFi radar → back to the network list
+            else if (st == ST_STA_RADAR)  { radarStop(); st = ST_STATIONS; seenStaAt = millis(); drawStationsScreen(true); }   // client radar → back to the client list
             else back();
             break;
         default:
@@ -2993,7 +3018,7 @@ void loop() {
     //      screen transition can forget to update them ----
     leds.set(ota.busy()                            ? StatusLeds::OTA
            : (st == ST_PROVISION || (st == ST_POLITE && portal.isRunning()) || st == ST_SUBCFG) ? StatusLeds::PORTAL
-           : (st == ST_DEAUTH || st == ST_STATIONS) ? StatusLeds::PROMISC
+           : (st == ST_DEAUTH || st == ST_STATIONS || st == ST_STA_RADAR) ? StatusLeds::PROMISC
            : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM || st == ST_HUNT24 || st == ST_WIFI_RADAR) ? StatusLeds::WIFI_SCAN
            : st == ST_SUBSPECTRUM                  ? StatusLeds::PROMISC
            : (st == ST_BLE || st == ST_BLE_RADAR || st == ST_BLE_INFO) ? StatusLeds::BLE_SCAN
@@ -3080,7 +3105,7 @@ void loop() {
     }
     if (st == ST_SPECTRUM) spectrumTick();
     if (st == ST_HUNT24) hunt24Tick();
-    if (st == ST_BLE_RADAR || st == ST_WIFI_RADAR) radarTick();
+    if (st == ST_BLE_RADAR || st == ST_WIFI_RADAR || st == ST_STA_RADAR) radarTick();
     // Sub-GHz spectrum waterfall
     if (st == ST_SUBSPECTRUM) subTick();
     // Sub-GHz frequency hunter: keep sweeping + peak-holding while shown.

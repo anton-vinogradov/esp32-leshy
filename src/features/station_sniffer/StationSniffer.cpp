@@ -26,14 +26,15 @@ static void staCb(void* buf, wifi_promiscuous_pkt_type_t type) {
     }
     if (!have || (sta[0] & 0x01)) return;               // need a station, skip multicast/broadcast
     portENTER_CRITICAL(&s_mux);
-    if (s_inst) s_inst->seen(sta, bssid, assoc, pkt->rx_ctrl.rssi);
+    if (s_inst) s_inst->seen(sta, bssid, assoc, pkt->rx_ctrl.rssi, pkt->rx_ctrl.channel);
     portEXIT_CRITICAL(&s_mux);
 }
 
-void StationSniffer::seen(const uint8_t sta[6], const uint8_t bssid[6], bool assoc, int8_t rssi) {
+void StationSniffer::seen(const uint8_t sta[6], const uint8_t bssid[6], bool assoc, int8_t rssi, uint8_t ch) {
+    if (radarOn_ && memcmp(sta, radarMac_, 6) == 0) { radarRssi_ = rssi; radarSeen_ = millis(); }   // live feed for the locked target
     for (int i = 0; i < n_; i++) {
         if (memcmp(tbl_[i].mac, sta, 6) == 0) {
-            tbl_[i].rssi = rssi; tbl_[i].last = millis(); tbl_[i].pkts++;
+            tbl_[i].rssi = rssi; tbl_[i].last = millis(); tbl_[i].pkts++; tbl_[i].channel = ch;
             if (assoc) { memcpy(tbl_[i].bssid, bssid, 6); tbl_[i].assoc = true; }
             return;
         }
@@ -41,8 +42,14 @@ void StationSniffer::seen(const uint8_t sta[6], const uint8_t bssid[6], bool ass
     if (n_ < CAP) {
         StaRow& r = tbl_[n_++];
         memcpy(r.mac, sta, 6); memcpy(r.bssid, bssid, 6);
-        r.rssi = rssi; r.last = millis(); r.pkts = 1; r.assoc = assoc;
+        r.rssi = rssi; r.last = millis(); r.pkts = 1; r.assoc = assoc; r.channel = ch;
     }
+}
+
+void StationSniffer::radarLock(const uint8_t mac[6], uint8_t ch) {
+    memcpy(radarMac_, mac, 6);
+    radarRssi_ = -100; radarSeen_ = 0; radarOn_ = true;
+    if (ch >= 1 && ch <= 14) { curChannel_ = ch; esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE); }   // pin the target's channel, stop hopping
 }
 
 int StationSniffer::count() {
@@ -87,7 +94,7 @@ bool StationSniffer::begin() {
 }
 
 void StationSniffer::loop() {
-    if (!running_) return;
+    if (!running_ || radarOn_) return;                  // radar mode pins one channel — no hopping
     if (millis() >= nextHop_) {
         nextHop_ = millis() + 300;
         curChannel_ = curChannel_ >= 13 ? 1 : curChannel_ + 1;
