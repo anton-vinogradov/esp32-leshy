@@ -2450,7 +2450,7 @@ static int      radarChan = 0, radarWifiRssi = -100;
 static uint32_t radarWifiSeen = 0;
 static bool     radarPub = false, radarBeepOn = false;
 static int      radarEma = -100, radarSlow = -100;
-static uint32_t radarDrawAt = 0, radarBeepAt = 0, radarBeepOff = 0;
+static uint32_t radarDrawAt = 0, radarBeepAt = 0, radarBeepOff = 0, radarStartAt = 0;
 
 static void radarFooter() {
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back",
@@ -2470,8 +2470,10 @@ static void drawRadarChrome() {
     tft.setTextDatum(MC_DATUM);
     const char* kl = bleKindLabel((BleKind)radarKind, i18n::isRu());
     const char* tag = radarSub.length() ? radarSub.c_str() : kl[0] ? kl : radarVendor.c_str();   // subtype > category > brand
-    String t = tag[0] ? String(tag) + "  " + radarLabel : radarLabel;
-    while (t.length() > 4 && tft.textWidth(t) > 232) t = t.substring(0, t.length() - 1);
+    bool named = radarLabel != radarMac;                     // label is the raw MAC when there's no name/tracker
+    String t = named ? (tag[0] ? String(tag) + "  " + radarLabel : radarLabel)   // real name (+ type)
+                     : (tag[0] ? String(tag) : radarLabel);                       // maker/type alone — the MAC is redundant on the finder
+    while (t.length() > 3 && tft.textWidth(t) > 210) t = t.substring(0, t.length() - 1);
     tft.setTextColor(tft.color565(0x5a, 0xd0, 0xff), bg);
     tft.drawString(t, 120, 44);
     fontOff();
@@ -2521,7 +2523,7 @@ static void radarStart(const BleRow& d) {
     radarMac = d.mac; radarVendor = d.vendor; radarSub = d.subtype; radarKind = d.kind; radarPub = d.pub;
     radarLabel = (d.tracker && d.label == "Find My") ? i18n::tr("Apple Find My", "Apple Локатор") : d.label;
     radarEma = d.rssi ? d.rssi : -100; radarSlow = radarEma;
-    radarBeepOn = false; radarBeepOff = 0; radarDrawAt = 0;
+    radarBeepOn = false; radarBeepOff = 0; radarDrawAt = 0; radarStartAt = millis();
     engine.setRadarTarget(radarMac);
     engine.setMode(ScanEngine::SCAN_BLE_RADAR);
     engine.resume();
@@ -2536,7 +2538,7 @@ static void radarStartWifi(const WifiRow& w) {
     radarVendor = ""; radarSub = ""; radarKind = 0; radarPub = false;
     radarWifiRssi = w.rssi; radarWifiSeen = millis();
     radarEma = w.rssi; radarSlow = w.rssi;
-    radarBeepOn = false; radarBeepOff = 0; radarDrawAt = 0;
+    radarBeepOn = false; radarBeepOff = 0; radarDrawAt = 0; radarStartAt = millis();
     engine.setMode(ScanEngine::SCAN_WIFI);      // fast WiFi-only loop for responsive RSSI
     engine.resume();
     st = ST_WIFI_RADAR;
@@ -2557,7 +2559,8 @@ static void radarTick() {
         if (r > -128) { radarWifiRssi = r; radarWifiSeen = t; }
         rssi = radarWifiRssi; seen = radarWifiSeen;
     } else { rssi = engine.radarRssi(); seen = engine.radarLastSeen(); }
-    bool lost = (seen == 0) || (t - seen > (radarWifi ? 5000u : 3000u));   // WiFi sweeps slower
+    bool lost = seen ? (t - seen > (radarWifi ? 5000u : 3000u))            // WiFi sweeps slower
+                     : (t - radarStartAt > 4000);                          // never seen yet → searching, not "lost", for the first 4 s
     if (!lost && rssi != 0) { radarEma += (rssi - radarEma) / 4; radarSlow += (radarEma - radarSlow) / 12; }
     if (radarBeepOn && !lost) {                 // Geiger-style: faster clicks as you close in
         float p = (radarEma + 95) / 55.0f; if (p < 0) p = 0; if (p > 1) p = 1;
@@ -2573,7 +2576,8 @@ static void infoLine(int& y, const char* k, const String& v, uint16_t vcol) {
     const uint16_t bg = uiBg(), dim = tft.color565(0x8f, 0xa9, 0x8f);
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(dim, bg);  tft.drawString(k, 8, y);
-    tft.setTextColor(vcol, bg); tft.drawString(v, 96, y);
+    String vv = v; while (vv.length() > 3 && tft.textWidth(vv) > 134) vv = vv.substring(0, vv.length() - 1);   // keep clear of the right edge
+    tft.setTextColor(vcol, bg); tft.drawString(vv, 96, y);
     y += 26;
 }
 

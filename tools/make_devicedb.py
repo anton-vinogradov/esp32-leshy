@@ -18,8 +18,26 @@ def fetch(url, path):
     urllib.request.urlretrieve(url, path)
     return path
 
+# Strip trailing legal cruft so names fit the small screen ("Samsung Electronics
+# Co.,ltd" -> "Samsung Electronics", "Apple, Inc." -> "Apple"). Suffixes carry a
+# leading space/comma so short brands ("Cisco") are never truncated.
+_SUFFIXES = [", inc.", ", inc", " inc.", " inc", ", ltd.", ", ltd", " ltd.", " ltd",
+             " co.,ltd.", " co.,ltd", " co., ltd.", " co., ltd", " co.", " co", " corporation",
+             " corp.", " corp", " technologies", " technology", " gmbh", " llc",
+             " limited", " a/s", " ab", " ag", " b.v.", " s.a."]
+def clean_name(s):
+    s = " ".join(s.split())
+    changed = True
+    while changed:
+        changed = False
+        low = s.lower()
+        for suf in _SUFFIXES:
+            if low.endswith(suf) and len(s) - len(suf) >= 3:
+                s = s[:len(s) - len(suf)].rstrip(" ,."); changed = True; break
+    return s
+
 def rec_name(s, width):
-    b = s.strip().encode("ascii", "ignore")[:width]
+    b = clean_name(s).encode("ascii", "ignore")[:width]
     return b + b"\x00" * (width - len(b))
 
 def build_companies():
