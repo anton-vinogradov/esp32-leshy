@@ -14,24 +14,29 @@ ESP32-Leshy
 │  ├─ Channels 2.4G     scrolling real per-channel airtime graphs (promiscuous; 1/6/11)
 │  ├─ Spectrum 2.4G     raw band waterfall over 2400-2525 MHz (NRF24 carrier detect)
 │  ├─ Freq finder 2.4   which channel a 2.4 GHz signal is on (NRF24 hit-rate vs baseline)
-│  ├─ Laboratory
-│  │  └─ Generator       2.4 GHz carrier/noise generator + sweep beacon (transmits — own gear)
+│  ├─ Laboratory        (transmits — own gear)
+│  │  ├─ Generator      Run (carrier/noise into channels + sweep beacon) · TX mode (Verify / Maximum)
+│  │  └─ Portal         own-named AP with a "lower your power" consent page (Setup · Raise)
 │  └─ Advanced
 │     ├─ Hidden names   revealed hidden SSIDs (saved to flash, deletable)
 │     ├─ Deauth monitor passive alarm on deauth/disassoc bursts
-│     └─ Clients        client devices (stations) on the air · OK = radar
+│     ├─ Clients        client devices (stations) on the air · OK = radar
+│     └─ TX power       2.4 GHz radiation power (0 … -18 dBm)
 ├─ BLE
 │  └─ BLE Scan          nearby devices · type/brand tags · trackers · OK = radar · ▶ = details
 ├─ Sub-GHz
 │  ├─ Spectrum          sub-GHz waterfall, RIGHT cycles bands (CC1101 RSSI)
+│  ├─ Test TX           transmit a test signal (own gear)
+│  ├─ Rec + replay      Record (→ name → save) · Playback library · Settings
 │  ├─ Freq finder       find your own remote's frequency (rise-vs-freq graph)
-│  └─ Rec / Replay      record → name (on-screen keyboard) → save · playback library
+│  └─ TX power          sub-GHz radiation power
 └─ Settings
    ├─ Wi-Fi connect     set up from your phone (captive portal) · status
    ├─ Update            OTA from GitHub releases
-   ├─ Language          EN / RU
-   ├─ Calibrate touch
-   └─ About
+   ├─ Language          English / Русский
+   ├─ Device            Status LEDs · Screen light · Calibrate touch
+   ├─ About
+   └─ Responsible use   the legal notice (read to accept)
 ```
 
 Navigation: **▲▼** move, **middle** = enter/confirm, **▶** = options for the selected item, **◀** = back. Touch works too.
@@ -51,7 +56,10 @@ A live **waterfall of the whole 2.4 GHz band** (2400–2525 MHz), painted with a
 Point it at a 2.4 GHz gadget of **your own** — a remote, a tag, a drone controller — and it tells you **which channel** the signal is on. It sweeps all 126 NRF24 channels measuring a per-channel **hit-rate**, then subtracts a calibrated **baseline** (the constant Wi-Fi/Bluetooth floor) so only a channel that *rises* when your device transmits survives — drawn as a live bar graph with Wi-Fi **1 / 6 / 11** marked and the peak read out as `2400 + channel` MHz. Calibrate first (a couple of seconds, don't transmit), then press your device's button. Receive-only.
 
 ### Laboratory → Generator
-An **own-equipment** 2.4 GHz test transmitter on the NRF24 modules. Pick a Wi-Fi channel with **▲▼** (the carrier follows the caret live), arm one or more channels with **OK**, and start/stop a static carrier with a short **▶**. A long **▶** starts an **auto-sweep** — one carrier marching across channels 1–13 — a low-power test beacon to prove reception on your own second device. Armed channels get an up-arrow and the header shows the live TX channel. Low power (a −18 dBm carrier), own-equipment bench use — **not a jammer** (no max-power all-channel blast).
+An **own-equipment** 2.4 GHz test transmitter on the NRF24 modules. Pick a Wi-Fi channel with **▲▼** (the carrier follows the caret live), arm one or more channels with **OK**, and start/stop a static carrier with a short **▶**. A long **▶** starts an **auto-sweep** — one carrier marching across channels 1–13 — a low-power test beacon to prove reception on your own second device. Armed channels get an up-arrow and the header shows the live TX channel. Low power (a −18 dBm carrier), own-equipment bench use — **not a jammer** (no max-power all-channel blast). Under Generator, **Run** is that screen and **TX mode** picks *Verify* (one NRF24 keeps receiving so the waterfall stays live) or *Maximum* (all radios transmit); the radiated level is set by **Advanced → TX power** (0 … -18 dBm).
+
+### Laboratory → Portal
+A **polite** captive portal: an access point you name yourself, serving a single consent page that asks people to turn their Wi-Fi power down — **no password fields, no cloning of anyone else's SSID**. **Setup** names the point from your phone, **Raise** brings it up with the consent page. Own-named point only, one AP/portal at a time.
 
 ### Advanced → Clients
 Lists Wi-Fi **client devices (stations)** — the phones, laptops and gadgets talking to access points — which a normal scan never shows. It sniffs raw 802.11 in **promiscuous mode**, pulls the station address out of data frames and probe requests, hops channels 1–13, and lists each station's MAC, the access point it's on (or *searching* for an unassociated one), its **maker** (from the OUI), and RSSI, strongest first. Press **OK** on a station for the **radar**. Receive-only, passive observation.
@@ -81,6 +89,9 @@ The full advertisement, laid out: address + address type (public / random), sign
 ### Spectrum
 A live waterfall of the sub-GHz band on the **CC1101**, which reports a real RSSI per frequency (true signal strength, not just presence). **RIGHT cycles the display window**: the whole 300–928 MHz span, then aimed technical bands — **315** (car fobs / garage remotes / TPMS), **433** (alarms, remotes, sensors), **868** (EU LoRa / Meshtastic), **915** (US LoRa / Meshtastic), and a tight **433 zoom**. Same flicker-free rendering as the 2.4 GHz screen, with the quiet→busy colour legend. Receive-only. Needs a CC1101 module fitted.
 
+### Test TX
+Transmit a **test signal** on the CC1101 to prove your own receiver / spectrum end-to-end. Own-equipment only; the radiated level is set by **Sub-GHz → TX power**.
+
 ### Freq finder
 Find the frequency of **your own** sub-GHz remote or sensor. Hold it by the antenna and press its button; the CC1101 sweeps its tunable windows (300–348 / 387–464 / 779–928 MHz) and — after a two-pass **baseline calibration** that captures the ambient floor and the chip's own crystal spurs — shows the frequency of whatever *rises* above that baseline, refined to ~50 kHz with an `868 ISM`-style band hint. It's a live **rise-vs-frequency bar graph** (drift-corrected, crystal harmonics skipped), so a real button-press is a clean spike while spurs stay flat. **OK** toggles an 18 dB near-field attenuation so a tag held right at the antenna can't overload the front-end. Receive-only.
 
@@ -99,5 +110,5 @@ Join **your own** Wi-Fi without a keyboard: the device raises an `ESP32-Leshy-se
 ### Update (OTA)
 In-app firmware update straight from **GitHub releases**: it checks the latest release, and if newer, downloads the firmware over TLS into the spare OTA slot, verifies its **SHA-256**, and reboots into it. Time is synced by SNTP first (TLS needs a valid clock), the certificate chain is validated against the built-in Mozilla CA bundle, and the bootloader's anti-rollback reverts automatically if a bad image fails to boot. The device also **auto-checks for updates when it connects to Wi-Fi** and shows an amber arrow in the header when one is available.
 
-### Language / Calibrate touch / About
-Interface language (EN / RU), touch-screen re-calibration, and device info (hardware, firmware version, author).
+### Language / Device / About / Responsible use
+**Language** — interface language (English / Русский). **Device** — the hardware knobs: Status-LED brightness, screen backlight, and touch re-calibration. **About** — hardware, firmware version, author. **Responsible use** — the legal notice accepted on first boot (readable again any time).
