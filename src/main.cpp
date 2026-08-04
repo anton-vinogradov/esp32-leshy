@@ -5,6 +5,7 @@
 #include "core/i18n.h"
 #include "features/wifi_scanner/WifiScanner.h"
 #include "features/deauth_detector/DeauthDetector.h"
+#include "features/station_sniffer/StationSniffer.h"
 #include "features/ble_scanner/BleScanner.h"
 #include "features/polite_portal/PolitePortal.h"
 #include "features/signal_finder/SignalFinder.h"
@@ -244,6 +245,7 @@ OtaManager     ota;
 DeauthDetector detector;
 StatusLeds     leds;             // the four WS2812s under the antennas — shows what the radio is doing
 AirtimeMonitor airtime;          // real per-channel airtime (promiscuous) for the Channels screen
+StationSniffer sniffer;          // passive Wi-Fi client (station) list — promiscuous
 Nrf24Spectrum  nrf;              // NRF24 raw 2.4GHz spectrum sniffer
 Cc1101Spectrum cc;              // CC1101 sub-GHz spectrum sniffer
 PolitePortal   portal;          // Lab captive-portal demo (own-named AP, consent button)
@@ -259,7 +261,7 @@ static void drawNetDetails();    // details screen for the selected network
 
 // ---- menu tree ----
 enum { M_ROOT, M_WIFI, M_BLE, M_SUBGHZ, M_SETTINGS, M_LANG, M_WIFI_ADV, M_LAB, M_DEVICE, M_PORTAL, M_GEN, M_REC };
-enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_SUBCFG, F_REC_PLAY, F_SUBHUNT, F_HUNT24, F_LANG_EN, F_LANG_RU };
+enum { F_WIFI_SCAN, F_CONN, F_HIDDEN, F_DEAUTH, F_CHANNELS, F_SPECTRUM, F_BLE_SCAN, F_SUBSPECTRUM, F_SUBGHZ_SOON, F_RECAL, F_ABOUT, F_OTA, F_LEGAL, F_LEDS, F_BACKLIGHT, F_TXPOWER, F_NOISEGEN, F_TXMODE, F_PORTAL_CFG, F_POLITE, F_SUBTX, F_SUBPOWER, F_SUBREC, F_SUBCFG, F_REC_PLAY, F_SUBHUNT, F_HUNT24, F_STATIONS, F_LANG_EN, F_LANG_RU };
 static const uint8_t K_SUB = 0, K_FEAT = 1;
 
 static const MenuItem ROOT_I[] = {
@@ -279,6 +281,7 @@ static const MenuItem WIFI_I[] = {
 static const MenuItem WADV_I[] = {
     {"Hidden names",   "Revealed hidden SSIDs",  "Скрытые сети",  "Раскрытые имена",       K_FEAT, F_HIDDEN},
     {"Deauth monitor", "Alarm on deauth bursts", "Детектор атак", "Тревога на отключения", K_FEAT, F_DEAUTH},
+    {"Clients",        "Stations on the air",   "Клиенты",       "Устройства-клиенты в эфире", K_FEAT, F_STATIONS},
     {"TX power",       "TX radiation power", "Мощность TX", "Мощность излучения", K_FEAT, F_TXPOWER},
 };
 static const MenuItem BLE_I[] = {
@@ -335,7 +338,7 @@ static const Menu MENUS[] = {
     {"Sub-GHz",     "Sub-GHz",     SUB_I,  5},
     {"Settings",    "Настройки",   SET_I,  6},
     {"Language",    "Язык",        LANG_I, 2},
-    {"Advanced",    "Продвинутое", WADV_I, 3},
+    {"Advanced",    "Продвинутое", WADV_I, 4},
     {"Laboratory",  "Лаборатория", LAB_I,  2},
     {"Device",      "Устройство",  DEV_I,  3},
     {"Portal",      "Портал",      PORTAL_I, 2},
@@ -344,7 +347,7 @@ static const Menu MENUS[] = {
 };
 
 // ---- navigation state ----
-enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24, ST_BLE_RADAR, ST_BLE_INFO, ST_WIFI_RADAR };
+enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24, ST_BLE_RADAR, ST_BLE_INFO, ST_WIFI_RADAR, ST_STATIONS };
 static State    st = ST_MENU;
 static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
 static int      selStack[6]  = { 0 };        // selection per level
@@ -2249,12 +2252,43 @@ static void drawLangPick() {
     uiFooterRu("", "OK ▶");
 }
 
+// ---- Wi-Fi client (station) list — promiscuous sniff ----
+static uint32_t seenStaAt = 0;
+
+static void drawStationRow(int y, const StaRow& r) {
+    const uint16_t bg = uiBg(), white = tft.color565(0xf0, 0xf0, 0xe6), cyan = tft.color565(0x5a, 0xd0, 0xff), dim = tft.color565(0x8f, 0xa9, 0x8f);
+    tft.fillRect(0, y, 240, 22, bg);
+    fontSmall();
+    char mac[20];
+    snprintf(mac, sizeof(mac), "%02X:%02X:%02X:%02X:%02X:%02X", r.mac[0], r.mac[1], r.mac[2], r.mac[3], r.mac[4], r.mac[5]);
+    tft.setTextDatum(ML_DATUM); tft.setTextColor(white, bg); tft.drawString(mac, 6, y + 11);
+    tft.setTextDatum(MR_DATUM);
+    if (r.assoc) { char ap[8]; snprintf(ap, sizeof(ap), "%02X:%02X", r.bssid[4], r.bssid[5]); tft.setTextColor(cyan, bg); tft.drawString(ap, 205, y + 11); }
+    else         { tft.setTextColor(dim, bg); tft.drawString(i18n::tr("probe", "ищет"), 205, y + 11); }
+    tft.setTextColor(uiRssiColor(r.rssi), bg); tft.drawString(String(r.rssi), 234, y + 11);
+    fontOff();
+}
+
+static void drawStationsScreen(bool full) {
+    const uint16_t bg = uiBg();
+    int n = sniffer.count();
+    char right[24]; snprintf(right, sizeof(right), "%d  ch%d", n, sniffer.channel());
+    uiHeaderRu(i18n::tr("Clients", "Клиенты"), right);
+    int y = 34; const int RH = 22, VIS = 12;
+    StaRow r;
+    for (int i = 0; i < VIS && i < n; i++) if (sniffer.row(i, r)) { drawStationRow(y, r); y += RH; }
+    tft.fillRect(0, y, 240, 301 - y, bg);          // clear the tail
+    if (n == 0) { fontSmall(); tft.setTextDatum(MC_DATUM); tft.setTextColor(tft.color565(0x8f, 0xa9, 0x8f), bg); tft.drawString(i18n::tr("listening...", "слушаю..."), 120, 160); fontOff(); }
+    if (full) uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
+}
+
 static void back() {
     switch (st) {
         case ST_LANGPICK:  return;                                         // no way out before choosing
         case ST_LEGAL:     if (legFirstRun) return;                        // must accept on first run
                            showMenu();                                     return;
         case ST_DEAUTH:    detector.stop(); showMenu();                    return;
+        case ST_STATIONS:  sniffer.stop(); showMenu();                     return;
         case ST_CHANNELS:  airtime.stop(); showMenu();                     return;
         case ST_SPECTRUM:  spectrumStop(); showMenu();                     return;
         case ST_HUNT24:    nrf.end(); showMenu();                          return;
@@ -2281,6 +2315,7 @@ static void launch(int feat) {
     // An OTA check/download owns the radio — never start a screen that touches it.
     if (ota.busy() && feat != F_OTA) return;
     if (st == ST_DEAUTH)    detector.stop();       // release promiscuous before anything else
+    if (st == ST_STATIONS)  sniffer.stop();        // also promiscuous
     if (st == ST_CHANNELS)  airtime.stop();        // also promiscuous
     if (st == ST_SPECTRUM)  spectrumStop();        // release NRF24
     if (st == ST_HUNT24)    nrf.end();             // release NRF24
@@ -2302,6 +2337,10 @@ static void launch(int feat) {
         case F_DEAUTH:      engine.pauseAndWait();     // promiscuous needs the radio to itself
                             if (detector.begin()) { st = ST_DEAUTH; drawDeauthScreen(); }
                             else { infoTitle = i18n::tr("Deauth monitor", "Детектор атак"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
+                            break;
+        case F_STATIONS:    engine.pauseAndWait();     // promiscuous needs the radio to itself
+                            if (sniffer.begin()) { st = ST_STATIONS; drawStationsScreen(true); seenStaAt = millis(); }
+                            else { infoTitle = i18n::tr("Clients", "Клиенты"); infoBody = i18n::tr("Radio busy", "Радио занято"); infoNote = ""; st = ST_INFO; drawInfo(); }
                             break;
         case F_CHANNELS:    engine.pauseAndWait();          // airtime needs the radio to itself (promiscuous)
                             if (airtime.begin()) { st = ST_CHANNELS; memset(chHist, 0, sizeof(chHist)); chHead = 0; drawChannelScreen(); }
@@ -2709,6 +2748,7 @@ static void serialControl() {
             else if (!strcmp(buf, "conn"))   launch(F_CONN);
             else if (!strcmp(buf, "ota"))    launch(F_OTA);
             else if (!strcmp(buf, "deauth")) launch(F_DEAUTH);
+            else if (!strcmp(buf, "sta"))    launch(F_STATIONS);
             else if (!strcmp(buf, "chan"))   launch(F_CHANNELS);
             else if (!strcmp(buf, "spec"))    launch(F_SPECTRUM);      // QA jumps for screenshots
             else if (!strcmp(buf, "subspec")) launch(F_SUBSPECTRUM);
@@ -2926,7 +2966,7 @@ void loop() {
     //      screen transition can forget to update them ----
     leds.set(ota.busy()                            ? StatusLeds::OTA
            : (st == ST_PROVISION || (st == ST_POLITE && portal.isRunning()) || st == ST_SUBCFG) ? StatusLeds::PORTAL
-           : st == ST_DEAUTH                       ? StatusLeds::PROMISC
+           : (st == ST_DEAUTH || st == ST_STATIONS) ? StatusLeds::PROMISC
            : (st == ST_WIFI || st == ST_CHANNELS || st == ST_SPECTRUM || st == ST_HUNT24 || st == ST_WIFI_RADAR) ? StatusLeds::WIFI_SCAN
            : st == ST_SUBSPECTRUM                  ? StatusLeds::PROMISC
            : (st == ST_BLE || st == ST_BLE_RADAR || st == ST_BLE_INFO) ? StatusLeds::BLE_SCAN
@@ -2945,6 +2985,12 @@ void loop() {
         detector.loop();
         static uint32_t nextDeauthDraw = 0;
         if (millis() - nextDeauthDraw > 400) { nextDeauthDraw = millis(); deauthRefresh(); }
+    }
+
+    // ---- client (station) sniffer: hop channels + refresh the list ----
+    if (st == ST_STATIONS) {
+        sniffer.loop();
+        if (millis() - seenStaAt > 500) { seenStaAt = millis(); drawStationsScreen(false); }
     }
 
     // ---- provisioning portal ----
