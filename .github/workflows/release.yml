@@ -39,10 +39,16 @@ jobs:
       - name: Build firmware
         run: pio run -e esp32-div
 
+      - name: Build device-DB filesystem image
+        run: |
+          python tools/make_devicedb.py          # fetch SIG company IDs + IEEE OUI, emit data/*.bin
+          pio run -e esp32-div -t buildfs         # -> .pio/build/esp32-div/littlefs.bin
+
       - name: Attach firmware to the release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             .pio/build/esp32-div/firmware.bin
             .pio/build/esp32-div/firmware.factory.bin
+            .pio/build/esp32-div/littlefs.bin
           fail_on_unmatched_files: true

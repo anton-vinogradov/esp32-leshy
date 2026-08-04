@@ -35,9 +35,11 @@ jobs:
           mkdir -p _site
           cp -r docs/* _site/
           cp docs/.nojekyll _site/ 2>/dev/null || true
-          echo "Fetching latest firmware.factory.bin into the site (avoids CORS)..."
+          echo "Fetching latest firmware.factory.bin + littlefs.bin into the site (avoids CORS)..."
           curl -fsSL -o _site/firmware.factory.bin \
             https://github.com/anton-vinogradov/esp32-leshy/releases/latest/download/firmware.factory.bin
+          curl -fsSL -o _site/littlefs.bin \
+            https://github.com/anton-vinogradov/esp32-leshy/releases/latest/download/littlefs.bin
           ls -la _site
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
