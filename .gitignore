@@ -24,3 +24,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated maker-lookup blobs (regenerate: tools/make_devicedb.py)
+data/*.bin

@@ -190,7 +190,7 @@ int BleScanner::scan(uint32_t seconds) {
         b.txpwr   = d.haveTXPower() ? (int)(int8_t)d.getTXPower() : 127;
         b.svc     = svcName(d);
         { String mm = d.haveManufacturerData() ? d.getManufacturerData() : String();
-          b.company = mm.length() >= 2 ? ((uint8_t)mm[0] | ((uint16_t)(uint8_t)mm[1] << 8)) : 0; }
+          b.company = mm.length() >= 2 ? ((uint8_t)mm[0] | ((uint16_t)(uint8_t)mm[1] << 8)) : 0xFFFF; }   // 0xFFFF = no manufacturer data (0x0000 is a real company)
         count_++;
     }
     scan->clearResults();

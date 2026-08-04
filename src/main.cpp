@@ -26,6 +26,7 @@
 #include "features/spectrum/Cc1101Spectrum.h"
 #include "features/subghz/SubCfg.h"
 #include "features/subghz/RecStore.h"
+#include "features/devicedb/DeviceDb.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -2155,7 +2156,12 @@ static void drawNetDetails() {
     tft.setTextColor(dim, bg); tft.drawString("RSSI", 14, y);
     tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg); tft.drawString(String(netSel.rssi) + " dBm", 226, y); tft.setTextDatum(TL_DATUM); y += 24;
     tft.setTextColor(dim, bg); tft.drawString(i18n::tr("Security", "Шифр"), 14, y);
-    tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg); tft.drawString(WifiScanner::authName(netSel.auth), 226, y); tft.setTextDatum(TL_DATUM); y += 26;
+    tft.setTextDatum(TR_DATUM); tft.setTextColor(white, bg); tft.drawString(WifiScanner::authName(netSel.auth), 226, y); tft.setTextDatum(TL_DATUM); y += 24;
+    if (netSel.vendor.length()) {                                     // maker from the BSSID OUI (DeviceDb blob)
+        tft.setTextColor(dim, bg); tft.drawString(i18n::tr("Vendor", "Вендор"), 14, y);
+        String vv = netSel.vendor; while (vv.length() > 4 && tft.textWidth(vv) > 150) vv = vv.substring(0, vv.length() - 1);
+        tft.setTextDatum(TR_DATUM); tft.setTextColor(tft.color565(0x5a, 0xd0, 0xff), bg); tft.drawString(vv, 226, y); tft.setTextDatum(TL_DATUM); y += 24;
+    }
     if (netSel.hidden) { tft.setTextColor(tft.color565(0xff, 0xa5, 0x2a), bg); tft.drawString(i18n::tr("hidden network", "скрытая сеть"), 14, y); }
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back");
     fontOff();
@@ -2593,8 +2599,8 @@ static void drawBleInfo() {
     if (bleInfo.txpwr != 127)   { char b[16]; snprintf(b, sizeof(b), "%d dBm", bleInfo.txpwr);      infoLine(y, "TX", b, white); }
     if (bleInfo.appearance)     { char b[16]; snprintf(b, sizeof(b), "0x%04X", bleInfo.appearance); infoLine(y, "Appearance", b, white); }
     if (bleInfo.svc.length())   infoLine(y, i18n::tr("Service", "Сервис"), bleInfo.svc, white);
-    if (bleInfo.vendor.length())      infoLine(y, i18n::tr("Vendor", "Вендор"), bleInfo.vendor, white);
-    else if (bleInfo.company)   { char b[16]; snprintf(b, sizeof(b), "0x%04X", bleInfo.company);    infoLine(y, i18n::tr("Vendor", "Вендор"), b, white); }
+    if (bleInfo.vendor.length())         infoLine(y, i18n::tr("Vendor", "Вендор"), bleInfo.vendor, white);
+    else if (bleInfo.company != 0xFFFF) { char b[16]; snprintf(b, sizeof(b), "0x%04X", bleInfo.company); infoLine(y, i18n::tr("Vendor", "Вендор"), b, white); }
     fontOff();
     uiFooterRu(i18n::isRu() ? "◀ назад" : "◀ back", i18n::tr("OK radar", "OK радар"));
 }
@@ -2902,6 +2908,7 @@ void setup() {
     subPwrIdx = loadSubPower(); cc.setTxPower(CC_PA[subPwrIdx]);   // saved Sub-GHz TX power (default max)
     loadSubCfg();                      // saved Sub-GHz recorder settings (wait/freq/threshold/repeats/mod/invert)
     if (!RecStore::begin()) Serial.println("[rec] LittleFS mount failed — saved captures unavailable");
+    DeviceDb::begin();                  // optional maker-lookup blobs on LittleFS (works fine if absent)
     if (!legalSeen()) { st = ST_LANGPICK; drawLangPick(); }   // first run: language, then the notice
     else showMenu();
 }

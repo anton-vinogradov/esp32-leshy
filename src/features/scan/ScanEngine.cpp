@@ -2,6 +2,8 @@
 
 #include <string.h>
 
+#include "../devicedb/DeviceDb.h"
+
 static ScanEngine* s_engine = nullptr;
 
 static void scanTaskEntry(void*) {
@@ -60,6 +62,7 @@ void ScanEngine::taskLoop() {
                 wifi_[i].auth    = a.auth;
                 wifi_[i].channel = a.channel;
                 memcpy(wifi_[i].bssid, a.bssid, 6);
+                wifi_[i].vendor  = DeviceDb::ouiName(a.bssid);  // maker from the BSSID OUI ("" if no blob)
                 String name;                                   // fill hidden names we already know
                 if (wifi_[i].hidden && rev_ && rev_->lookup(a.bssid, name)) wifi_[i].ssid = name;
                 pushSpark(a.bssid, a.rssi);                     // per-AP RSSI history (mtx held)
@@ -86,7 +89,8 @@ void ScanEngine::taskLoop() {
                 ble_[i].rssi    = d.rssi;
                 ble_[i].tracker = d.tracker.length() > 0;
                 ble_[i].kind    = (uint8_t)d.kind;
-                ble_[i].vendor  = d.vendor;
+                ble_[i].vendor  = d.vendor;                    // built-in short list (fallback)
+                if (d.company != 0xFFFF) { String full = DeviceDb::companyName(d.company); if (full.length()) ble_[i].vendor = full; }   // full SIG name when the blob is present
                 ble_[i].mac     = d.mac;
                 ble_[i].pub     = d.pub;
                 ble_[i].subtype    = d.subtype;
