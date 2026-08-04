@@ -60,12 +60,14 @@ You need the ESP32-DIV board (or a compatible DIY build) to run Leshy. We don't 
 
 A working, menu-driven firmware — highlights, all passive / own-equipment:
 
-- **Wi-Fi** — scan (signal, channel, security, ★your net, per-AP sparkline; **▶** = per-network options), live 2.4 GHz channel graphs, hidden-SSID reveal, deauth monitor.
-- **BLE** — devices + tracker detector.
+- **Wi-Fi** — scan (signal, channel, security, **vendor**, ★your net, per-AP sparkline), per-network **Details** (incl. the AP's **WPS model**) and **Radar**, live 2.4 GHz airtime graphs, raw 2.4 GHz spectrum (NRF24), a 2.4 GHz freq finder, hidden-SSID reveal, deauth monitor, and a **client (station) list** with its own radar.
+- **BLE** — device list with **type/brand tags**, a tracker detector (**Apple Локатор** / Tile / SmartTag), full **Details**, and a **radar** to walk a device down by signal.
+- **Sub-GHz** (CC1101) — spectrum waterfall, a your-remote **frequency finder**, and **record / replay** of your own OOK/FSK devices.
+- **Offline maker database** — names Wi-Fi & BLE makers (Bluetooth SIG company IDs + IEEE OUIs) with no phone or internet.
 - **Connectivity** — join your Wi-Fi from your phone (no keyboard); **OTA update from GitHub releases** (SHA-256 + auto-rollback, auto-check on connect).
 - Bilingual **EN / RU**, multi-level menu, keypad **and** touch.
 
-📖 **Full feature list and menu map: [docs/features.md](docs/features.md).**  Coming: Sub-GHz recorder (CC1101), raw 2.4 GHz spectrum (NRF24).
+📖 **Full feature list and menu map: [docs/features.md](docs/features.md).**
 
 ## ⚖️ Legal & responsible use
 
