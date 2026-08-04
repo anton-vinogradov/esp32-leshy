@@ -2513,7 +2513,7 @@ static void drawRadarGauge(bool lost) {
 static void radarStart(const BleRow& d) {
     radarWifi = false;
     radarMac = d.mac; radarVendor = d.vendor; radarSub = d.subtype; radarKind = d.kind; radarPub = d.pub;
-    radarLabel = (d.tracker && d.label == "Find My") ? i18n::tr("Find My", "Локатор") : d.label;
+    radarLabel = (d.tracker && d.label == "Find My") ? i18n::tr("Apple Find My", "Apple Локатор") : d.label;
     radarEma = d.rssi ? d.rssi : -100; radarSlow = radarEma;
     radarBeepOn = false; radarBeepOff = 0; radarDrawAt = 0;
     engine.setRadarTarget(radarMac);
@@ -2580,7 +2580,7 @@ static void drawBleInfo() {
     const char* kl = bleKindLabel((BleKind)bleInfo.kind, i18n::isRu());
     String typ = bleInfo.subtype.length() ? bleInfo.subtype
                : kl[0]                    ? String(kl)
-               : bleInfo.tracker          ? String(i18n::tr("Find My", "Локатор"))
+               : bleInfo.tracker          ? String(i18n::tr("Apple Find My", "Apple Локатор"))
                : bleInfo.vendor.length()  ? bleInfo.vendor : String("—");
     infoLine(y, i18n::tr("Type", "Тип"), typ, cyan);
     if (!bleInfo.tracker && bleInfo.label.length() && bleInfo.label != bleInfo.mac)

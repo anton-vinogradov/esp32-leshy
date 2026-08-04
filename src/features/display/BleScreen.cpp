@@ -45,7 +45,7 @@ void BleScreen::rows(ScanEngine& e, int offset, int sel) {
                 row.drawString(i18n::tr("fixed", "фикс"), 204, 12);
                 rssiX = 204;                                 // (kept for clarity; RSSI stays at 232)
             }
-            String label = (d.tracker && d.label == "Find My") ? i18n::tr("Find My", "Локатор") : d.label;
+            String label = (d.tracker && d.label == "Find My") ? i18n::tr("Apple Find My", "Apple Локатор") : d.label;
             bool trunc = false;
             int maxw = (d.pub ? 178 : 206) - x;              // keep clear of the "фикс" flag / RSSI at the right
             while (label.length() > 3 && row.textWidth(label) > maxw) { label = label.substring(0, label.length() - 1); trunc = true; }
