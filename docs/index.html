@@ -31,6 +31,10 @@
     background:var(--deep); color:var(--parch); border-radius:50%; text-align:center; line-height:26px; font-weight:700; font-size:14px; }
   .note { color:#c7cdb8; font-size:14.5px; }
   .warn { border-left:3px solid var(--berry); background:#241614; padding:12px 14px; border-radius:8px; }
+  #errbar { position:relative; }
+  .errclose { position:absolute; top:6px; right:10px; background:none; border:none; color:#e8e4d8;
+    font-size:24px; line-height:1; cursor:pointer; padding:0 4px; }
+  .errclose:hover { color:var(--gold); }
   a { color:var(--gold); }
   code { background:#0e140c; padding:1px 6px; border-radius:5px; color:#d8c58a; font-size:14px; }
   footer { text-align:center; color:#8a9580; font-size:13.5px; margin-top:26px; }
@@ -66,6 +70,12 @@
     <p class="note" data-l="en" style="margin-top:16px">Flashes the latest release. After the first flash, updates arrive <b>over the air</b> (Settings → Update).</p>
     <p class="note" data-l="ru" style="margin-top:8px">Ошибка <b>«Installation failed»</b>? → <a href="#fix">как исправить: BOOT + RESET ↓</a></p>
     <p class="note" data-l="en" style="margin-top:8px">Got <b>"Installation failed"</b>? → <a href="#fix">how to fix: BOOT + RESET ↓</a></p>
+  </div>
+
+  <div class="card warn" id="errbar" style="display:none">
+    <button class="errclose" onclick="document.getElementById('errbar').style.display='none'" aria-label="close">×</button>
+    <p data-l="ru" style="margin:0;padding-right:26px">⚠️ <b>Установка не удалась.</b> Как починить — инструкция прямо на этой странице: <a href="#fix">открыть ↓</a></p>
+    <p data-l="en" style="margin:0;padding-right:26px">⚠️ <b>Installation failed.</b> How to fix it — the guide is right on this page: <a href="#fix">open ↓</a></p>
   </div>
 
   <div class="card">
@@ -166,6 +176,16 @@
     document.getElementById('ben').classList.toggle('on', l==='en'); }
   // default to browser language if English
   if ((navigator.language||'').slice(0,2) === 'en') setLang('en');
+
+  // On a real install failure, surface a dismissable banner pointing at the on-page fix.
+  const ib = document.querySelector('esp-web-install-button');
+  if (ib) ib.addEventListener('state-changed', function (e) {
+    if (e.detail && String(e.detail.state).toLowerCase() === 'error') {
+      const bar = document.getElementById('errbar');
+      bar.style.display = 'block';
+      bar.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
 </script>
 </body>
 </html>
