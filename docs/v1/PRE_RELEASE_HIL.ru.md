@@ -212,12 +212,15 @@ Signing secrets, PEM files и public-key provisioning не нужны. Serial pa
 
 Команда проверяет зашитую версию и serial port, dispatches uniquely named workflow,
 ждёт успешную cloud-сборку, поднимает одноразовый runner, прошивает exact candidate,
-выполняет device-smoke и ждёт promotion-proof. При успехе она печатает
-`RELEASE READY` и точную следующую команду:
+выполняет device-smoke и ждёт promotion-proof. Для stable `1.x.y` при успехе она
+печатает `RELEASE READY` и точную следующую команду:
 
 ```sh
 ./tools/release_1x.py publish <successful-run-id>
 ```
+
+Prerelease/measurement version может проверить весь контур, но получает только
+`VALIDATION PASSED — NON-PUBLISHABLE VERSION`; `publish` её отвергает.
 
 `publish` принимает только успешный manual run на `main` со stable version `1.x.y`,
 повторно скачивает candidate/evidence, проверяет GitHub attestations каждого файла,
@@ -234,7 +237,7 @@ evidence. Локальная квитанция `release-checks/<run-id>.json` g
 ## Текущее implementation evidence
 
 Version v0.5 реализует первые пять пунктов, on-demand lifecycle и exact-byte
-promotion; первый реальный GitHub workflow run ещё нужен:
+promotion; реальный GitHub workflow run прошёл:
 
 - `tools/run_1x_prerelease_hil.py` загружает declarative suite, по явному `--flash`
   прошивает exact candidate через esptool с verify, делает cold reset, держит один
@@ -264,12 +267,27 @@ promotion; первый реальный GitHub workflow run ещё нужен:
   его, запускает physical HIL в `hil-production`, attests evidence archive и в
   отдельном promotion job повторно проверяет оба provenance records и same bytes;
 - ad-hoc Ed25519 signing удалён из production design: ни runner, ни verifier не
-  принимают локальную подпись за release trust.
+  принимают локальную подпись за release trust;
 - `tools/release_1x.py check` автоматически выполняет preflight→dispatch→cloud
   build→ephemeral one-job runner→physical HIL→promotion-proof и сохраняет только
   disposable локальную квитанцию; `publish` повторно доказывает provenance/same bytes
   и создаёт 1.x Release без rebuild. Host tests покрывают SemVer/run identity, exact
   artifact set, serial selection и unsafe archive rejection.
+
+Первый bootstrap run `31975374875` fail-closed остановился до runner registration и
+flash на безопасной внутренней symlink official archive; workflow был отменён,
+registered runners осталось 0. После разрешения только archive-internal links и
+negative escape test повторный run
+[`31975573475`](https://github.com/anton-vinogradov/esp32-leshy/actions/runs/31975573475)
+на commit `97e7145` прошёл полностью: cloud build/attestation 2:26, physical HIL 59 с,
+promotion-proof 31 с. Exact app `ef08797c…9d63a`, factory
+`87457cc7…280af`, ELF `e2d5b32c…edb94` и evidence archive
+`d395d913…162d` GitHub-attested. Board ready 502,053 ms; Actions 85,164/95,840 ms;
+Home/Diagnostics/Back дали 0 mismatched pixels; final owner none/lease 0, heap
+238 728/233 332 B free/min, GPIO2 LOW. Session ID
+`abbcd74e55aa5c05cfbb4f11a6492902` совпал во всех boundaries. Ephemeral runner
+удалил credentials/registration и завершился; repository runners после run — 0.
+Measurement version намеренно non-publishable.
 
 Board-01 дважды получила app candidate SHA-256
 `e95d7ede560943744f9b981bf2063b6f31077b600198bc8fa6a528c77e04441b`.
@@ -303,8 +321,9 @@ comparisons дали zero mismatch. `run.json` `8466fe45…d76948`, artifact ind
 Историческая копия этого real bundle была подписана временным Ed25519 key и получила
 `release_eligible=true`, после чего temp key и copy уничтожены. Эксперимент
 `E-AUTO-003` доказал механику, но product decision от 2026-08-17 отверг постоянный
-station key; соответствующий production code path удалён. Открыты deployment-branch
-rule environment, первый GitHub workflow run и queue/quarantine.
+station key; соответствующий production code path удалён. `hil-production` ограничен
+ровно branch `main`, а первый GitHub workflow run закрыт evidence выше. Открыты
+queue/quarantine и расширение release-candidate suite.
 
 Низкоуровневая GitHub-native проверка для диагностики:
 

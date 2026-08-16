@@ -20,11 +20,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.x'
 
@@ -47,7 +48,7 @@ jobs:
           pio run -e esp32-div -t buildfs         # -> .pio/build/esp32-div/littlefs.bin
 
       - name: Attach firmware to the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@c12583777ecdfd3be55c69cf75464299dc01057e # v3
         with:
           files: |
             .pio/build/esp32-div/firmware.bin

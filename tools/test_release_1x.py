@@ -36,11 +36,13 @@ class ReleaseOneContracts(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(RELEASE.ReleaseError):
                 RELEASE.parse_semver(invalid)
         RELEASE.require_stable_release_version("1.2.3")
+        self.assertTrue(RELEASE.is_publishable_version("1.2.3"))
         for non_release in ("0.9.9", "1.2.3-rc.1", "1.2.3+rebuilt"):
             with self.subTest(non_release=non_release), self.assertRaises(
                 RELEASE.ReleaseError
             ):
                 RELEASE.require_stable_release_version(non_release)
+            self.assertFalse(RELEASE.is_publishable_version(non_release))
 
     def test_run_title_binds_version_and_unique_invocation(self) -> None:
         self.assertEqual(

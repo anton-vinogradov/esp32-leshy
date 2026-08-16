@@ -212,12 +212,15 @@ that matches `origin/main`:
 
 The command checks the embedded version and serial port, dispatches a uniquely named
 workflow, waits for the cloud build, starts the one-job runner, flashes the exact
-candidate, executes device-smoke, and waits for promotion-proof. On success it prints
-`RELEASE READY` and the exact next command:
+candidate, executes device-smoke, and waits for promotion-proof. For a stable `1.x.y`,
+success prints `RELEASE READY` and the exact next command:
 
 ```sh
 ./tools/release_1x.py publish <successful-run-id>
 ```
+
+A prerelease/measurement version may validate the complete path but receives only
+`VALIDATION PASSED — NON-PUBLISHABLE VERSION`; `publish` rejects it.
 
 `publish` accepts only a successful manual `main` run with a stable `1.x.y` version,
 downloads candidate/evidence again, verifies every file's GitHub attestation, the
@@ -234,7 +237,7 @@ runner process/registration are cleaned up, and `RELEASE READY` is never printed
 ## Current implementation evidence
 
 Version v0.5 implements the first five items, on-demand lifecycle, and exact-byte
-promotion; the first real GitHub workflow run is still required:
+promotion; a real GitHub workflow run now passes:
 
 - `tools/run_1x_prerelease_hil.py` loads a declarative suite, flashes the exact
   candidate through verified esptool only with explicit `--flash`, performs a cold
@@ -265,12 +268,27 @@ promotion; the first real GitHub workflow run is still required:
   runs physical HIL in `hil-production`, attests the evidence archive, and rechecks
   both provenance records and exact bytes in a separate promotion job;
 - ad-hoc Ed25519 signing has been removed from the production design: neither runner
-  nor verifier accepts a local signature as release trust.
+  nor verifier accepts a local signature as release trust;
 - `tools/release_1x.py check` automatically performs preflight→dispatch→cloud
   build→ephemeral one-job runner→physical HIL→promotion-proof and retains only a
   disposable local receipt; `publish` re-proves provenance/same bytes and creates a
   1.x Release without rebuilding. Host tests cover SemVer/run identity, the exact
   artifact set, serial selection, and unsafe archive rejection.
+
+Bootstrap run `31975374875` stopped fail-closed before runner registration or flash
+on a safe internal symlink in the official archive; the workflow was cancelled and
+zero runners remained registered. After allowing archive-internal links only and
+adding a negative escape test, rerun
+[`31975573475`](https://github.com/anton-vinogradov/esp32-leshy/actions/runs/31975573475)
+on commit `97e7145` passed end to end: cloud build/attestation 2:26, physical HIL 59 s,
+and promotion-proof 31 s. Exact app `ef08797c…9d63a`, factory
+`87457cc7…280af`, ELF `e2d5b32c…edb94`, and evidence archive
+`d395d913…162d` are GitHub-attested. The board was ready in 502.053 ms; Actions took
+85.164/95.840 ms; Home/Diagnostics/Back had zero mismatched pixels; final owner was
+none/lease 0, free/min heap 238,728/233,332 B, and GPIO2 LOW. Session ID
+`abbcd74e55aa5c05cfbb4f11a6492902` matched every boundary. The ephemeral runner
+removed credentials/registration and exited; repository runners after the run: 0.
+The measurement version is intentionally non-publishable.
 
 Board-01 was flashed twice with app candidate SHA-256
 `e95d7ede560943744f9b981bf2063b6f31077b600198bc8fa6a528c77e04441b`.
@@ -305,9 +323,10 @@ mismatch. `run.json` is `8466fe45…d76948`, the artifact index is
 A historical copy of this real bundle was signed with a temporary Ed25519 key and
 returned `release_eligible=true`; the temporary key and copy were then destroyed.
 Experiment `E-AUTO-003` proved the mechanics, but the 2026-08-17 product decision
-rejected a persistent station key and the production code path has been removed. The
-environment deployment-branch rule, first GitHub run, and queue/quarantine remain
-open.
+rejected a persistent station key and the production code path has been removed.
+`hil-production` is restricted to exactly branch `main`, and the first GitHub run is
+closed by the evidence above. Queue/quarantine and expansion of the release-candidate
+suite remain open.
 
 Low-level GitHub-native verification for diagnostics:
 

@@ -116,6 +116,14 @@ def require_stable_release_version(value: str) -> None:
         raise ReleaseError("publish accepts only a stable 1.x-or-newer X.Y.Z version")
 
 
+def is_publishable_version(value: str) -> bool:
+    try:
+        require_stable_release_version(value)
+    except ReleaseError:
+        return False
+    return True
+
+
 def parse_run_title(title: str) -> tuple[str, str]:
     prefix = f"{WORKFLOW_NAME} / "
     if not title.startswith(prefix):
@@ -523,6 +531,7 @@ def check_candidate(version: str, port_arg: str | None) -> int:
                 ["gh", "run", "cancel", str(run_id), "--repo", repo], check=False
             )
 
+    publishable = is_publishable_version(version)
     receipt = write_receipt(
         {
             "checked_at": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -531,14 +540,21 @@ def check_candidate(version: str, port_arg: str | None) -> int:
             "repository": repo,
             "request_id": invocation,
             "run_id": run_id,
-            "status": "release-ready",
+            "status": "release-ready" if publishable else "validation-passed",
             "url": selected["url"],
             "version": version,
         }
     )
-    print("\nRELEASE READY", flush=True)
     print(f"Receipt: {receipt}", flush=True)
-    print(f"Publish exact tested bytes: ./tools/release_1x.py publish {run_id}", flush=True)
+    if publishable:
+        print("\nRELEASE READY", flush=True)
+        print(
+            f"Publish exact tested bytes: ./tools/release_1x.py publish {run_id}",
+            flush=True,
+        )
+    else:
+        print("\nVALIDATION PASSED — NON-PUBLISHABLE VERSION", flush=True)
+        print("Stable 1.x.y is required before RELEASE READY and publish.", flush=True)
     return 0
 
 
