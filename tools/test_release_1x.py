@@ -92,19 +92,32 @@ class ReleaseOneContracts(unittest.TestCase):
                 RELEASE.safe_extract_tar(archive, destination)
             self.assertFalse((root / "escaped").exists())
 
-    def test_tar_extraction_rejects_links(self) -> None:
+    def test_tar_extraction_accepts_internal_link_and_rejects_escape(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             archive = root / "link.tar.gz"
             with tarfile.open(archive, "w:gz") as output:
-                member = tarfile.TarInfo("link")
-                member.type = tarfile.SYMTYPE
-                member.linkname = "/tmp/outside"
-                output.addfile(member)
+                payload = b"inside"
+                target = tarfile.TarInfo("lib/target")
+                target.size = len(payload)
+                output.addfile(target, io.BytesIO(payload))
+                internal = tarfile.TarInfo("bin/internal")
+                internal.type = tarfile.SYMTYPE
+                internal.linkname = "../lib/target"
+                output.addfile(internal)
             destination = root / "extract"
             destination.mkdir()
-            with self.assertRaisesRegex(RELEASE.ReleaseError, "unsupported archive"):
-                RELEASE.safe_extract_tar(archive, destination)
+            RELEASE.safe_extract_tar(archive, destination)
+            self.assertEqual((destination / "bin/internal").read_bytes(), b"inside")
+
+            escaping = root / "escaping-link.tar.gz"
+            with tarfile.open(escaping, "w:gz") as output:
+                external = tarfile.TarInfo("bin/external")
+                external.type = tarfile.SYMTYPE
+                external.linkname = "../../outside"
+                output.addfile(external)
+            with self.assertRaisesRegex(RELEASE.ReleaseError, "unsafe archive link"):
+                RELEASE.safe_extract_tar(escaping, destination)
 
     def test_workflow_and_legacy_release_ownership_are_explicit(self) -> None:
         workflow = (RELEASE.ROOT / ".github/workflows/prerelease-hil.yml").read_text(

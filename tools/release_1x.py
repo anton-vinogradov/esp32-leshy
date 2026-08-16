@@ -239,7 +239,21 @@ def safe_extract_tar(archive: Path, destination: Path) -> None:
             target = (destination / member.name).resolve()
             if target != root and root not in target.parents:
                 raise ReleaseError(f"unsafe archive member: {member.name}")
-            if not (member.isfile() or member.isdir()):
+            if member.issym():
+                link = Path(member.linkname)
+                link_target = (target.parent / link).resolve()
+                if link.is_absolute() or (
+                    link_target != root and root not in link_target.parents
+                ):
+                    raise ReleaseError(f"unsafe archive link: {member.name}")
+            elif member.islnk():
+                link = Path(member.linkname)
+                link_target = (destination / link).resolve()
+                if link.is_absolute() or (
+                    link_target != root and root not in link_target.parents
+                ):
+                    raise ReleaseError(f"unsafe archive link: {member.name}")
+            elif not (member.isfile() or member.isdir()):
                 raise ReleaseError(f"unsupported archive member: {member.name}")
         try:
             source.extractall(destination, filter="data")
