@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESP32-Leshy — веб-установщик</title>
+<title>ESP32-Leshy 0.x — веб-установщик архивной PoC-линейки</title>
 <link rel="icon" href="leshy.svg">
 <style>
   :root { --parch:#e9dcbb; --ink:#2a2018; --deep:#6b4f2a; --gold:#c8952b; --leaf:#3f6b3a; --berry:#a33a2a; --bg:#141a12; --panel:#1c2418; }
@@ -47,9 +47,9 @@
 <div class="wrap">
   <header>
     <img src="leshy.svg" alt="ESP32-Leshy">
-    <h1>ESP32-Leshy</h1>
-    <p class="sub" data-l="ru">Веб-установщик прошивки — залей на ESP32-DIV прямо из браузера</p>
-    <p class="sub" data-l="en">Web installer — flash ESP32-DIV straight from your browser</p>
+    <h1>ESP32-Leshy 0.x</h1>
+    <p class="sub" data-l="ru">Веб-установщик замороженной PoC-линейки для ESP32-DIV</p>
+    <p class="sub" data-l="en">Web installer for the frozen ESP32-DIV proof-of-concept line</p>
   </header>
 
   <div class="lang">
@@ -59,15 +59,15 @@
 
   <div class="card install">
     <esp-web-install-button manifest="./manifest.json">
-      <button slot="activate" class="btn-fallback" data-l="ru">⚡ Установить ESP32-Leshy</button>
-      <button slot="activate" class="btn-fallback" data-l="en">⚡ Install ESP32-Leshy</button>
+      <button slot="activate" class="btn-fallback" data-l="ru">⚡ Установить ESP32-Leshy 0.x</button>
+      <button slot="activate" class="btn-fallback" data-l="en">⚡ Install ESP32-Leshy 0.x</button>
       <span slot="unsupported" class="warn" data-l="ru">Нужен Chrome, Edge или Opera на компьютере (Web Serial). Safari и телефоны не поддерживаются.</span>
       <span slot="unsupported" class="warn" data-l="en">Needs desktop Chrome, Edge or Opera (Web Serial). Safari and phones are not supported.</span>
       <span slot="not-allowed" class="warn" data-l="ru">Открой страницу по https.</span>
       <span slot="not-allowed" class="warn" data-l="en">Open this page over https.</span>
     </esp-web-install-button>
-    <p class="note" data-l="ru" style="margin-top:16px">Ставит последний релиз. После первой заливки обновления прилетают <b>по воздуху</b> (Настройки → Обновление).</p>
-    <p class="note" data-l="en" style="margin-top:16px">Flashes the latest release. After the first flash, updates arrive <b>over the air</b> (Settings → Update).</p>
+    <p class="note" data-l="ru" style="margin-top:16px">Ставит последний релиз 0.x. Новая переработанная линия <a href="https://github.com/anton-vinogradov/esp32-leshy/tree/main/docs/v1">1.x пока проектируется</a> и этим установщиком не прошивается.</p>
+    <p class="note" data-l="en" style="margin-top:16px">Flashes the latest 0.x release. The redesigned <a href="https://github.com/anton-vinogradov/esp32-leshy/tree/main/docs/v1">1.x line is still being designed</a> and is not installed by this page.</p>
     <p class="note" data-l="ru" style="margin-top:8px">Ошибка <b>«Installation failed»</b>? → <a href="#fix">как исправить: BOOT + RESET ↓</a></p>
     <p class="note" data-l="en" style="margin-top:8px">Got <b>"Installation failed"</b>? → <a href="#fix">how to fix: BOOT + RESET ↓</a></p>
   </div>
@@ -163,8 +163,8 @@
   </div>
 
   <footer>
-    <span data-l="ru">Железо — <a href="https://github.com/cifertech/ESP32-DIV">ESP32-DIV от CiferTech</a>. Прошивка — независимая, MIT.</span>
-    <span data-l="en">Hardware — <a href="https://github.com/cifertech/ESP32-DIV">ESP32-DIV by CiferTech</a>. Firmware — independent, MIT.</span>
+    <span data-l="ru">Архивная прошивка 0.x. Железо — <a href="https://github.com/cifertech/ESP32-DIV">ESP32-DIV от CiferTech</a>. Прошивка — независимая, MIT.</span>
+    <span data-l="en">Archived 0.x firmware. Hardware — <a href="https://github.com/cifertech/ESP32-DIV">ESP32-DIV by CiferTech</a>. Firmware — independent, MIT.</span>
     <br><a href="https://github.com/anton-vinogradov/esp32-leshy">github.com/anton-vinogradov/esp32-leshy</a>
   </footer>
 </div>

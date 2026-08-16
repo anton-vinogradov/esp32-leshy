@@ -1,0 +1,53 @@
+#include "AppCatalog.h"
+
+namespace leshy1::domain::apps {
+namespace {
+
+bool available(const hardware::HardwareInventory& inventory, const char* key) {
+    const hardware::CapabilityRecord* record = inventory.find(key);
+    return record != nullptr && record->state == hardware::CapabilityState::Available;
+}
+
+}  // namespace
+
+void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
+    size_ = 0;
+    const bool diagnostics = available(inventory, "board.profile");
+    items_[size_++] = {"diagnostics", "DIAGNOSTICS",
+                       diagnostics ? "ready" : "board profile unavailable", 1, diagnostics,
+                       false,
+                       kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
+
+    const bool wifiSurvey = available(inventory, "radio.wifi");
+    const bool simulatedSurvey = available(inventory, "survey.simulated");
+    const bool survey = wifiSurvey || simulatedSurvey;
+    items_[size_++] = {"survey", "SURVEY",
+                       simulatedSurvey ? "simulated / rf off"
+                                       : (wifiSurvey ? "ready" : "passive source unavailable"),
+                       2, survey, simulatedSurvey,
+                       simulatedSurvey
+                           ? kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)
+                           : kernel::runtime::Resource::UiForeground |
+                                 kernel::runtime::Resource::EspRf};
+
+    const bool persistentLibrary = available(inventory, "storage.sd") ||
+                                   available(inventory, "library.persistent_session");
+    const bool simulatedLibrary =
+        !persistentLibrary && available(inventory, "library.simulated");
+    const bool library = persistentLibrary || simulatedLibrary;
+    items_[size_++] = {"library", "LIBRARY",
+                       simulatedLibrary ? "simulated / ram only"
+                                        : (persistentLibrary ? "ready"
+                                                             : "storage unavailable"),
+                       3, library, simulatedLibrary,
+                       simulatedLibrary
+                           ? kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)
+                           : kernel::runtime::Resource::UiForeground |
+                                 kernel::runtime::Resource::Storage};
+}
+
+const AppMenuItem* AppCatalog::get(std::size_t index) const {
+    return index < size_ ? &items_[index] : nullptr;
+}
+
+}  // namespace leshy1::domain::apps

@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 
+#include "../../boards/esp32_div_v2/BoardProfile.h"
+
 // The four WS2812 status LEDs in a row under the antenna connectors (verified on
 // real ESP32-DIV v2 hardware: a single chain on GPIO1). They answer what the
 // screen can't: "is this on the air right now, and with which radio?" — colour by
@@ -17,7 +19,7 @@ class StatusLeds {
 public:
     enum Activity { IDLE, WIFI_SCAN, BLE_SCAN, PROMISC, OTA, PORTAL, ERR };
 
-    static const uint8_t PIN   = 1;
+    static const uint8_t PIN   = leshy::board::esp32_div_v2::pins::kStatusLed;
     static const uint8_t COUNT = 4;
     static const uint8_t DEFAULT_BRIGHT = 2;
 

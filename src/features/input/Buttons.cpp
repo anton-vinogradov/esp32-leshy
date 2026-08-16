@@ -2,8 +2,11 @@
 
 #include <Wire.h>
 
+#include "../../boards/esp32_div_v2/BoardProfile.h"
+
 bool Buttons::begin() {
-    Wire.begin();                               // default I2C pins (ESP32-S3: SDA 8 / SCL 9)
+    Wire.begin(leshy::board::esp32_div_v2::pins::kI2cSda,
+               leshy::board::esp32_div_v2::pins::kI2cScl);
     for (uint8_t a = 0x20; a <= 0x27; a++) {
         Wire.beginTransmission(a);
         if (Wire.endTransmission() == 0) {

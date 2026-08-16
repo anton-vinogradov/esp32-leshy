@@ -1,0 +1,47 @@
+name: quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate documentation source of truth
+        run: python3 tools/check_docs.py
+
+  native-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test hardware-independent core
+        run: tools/test.sh
+
+  firmware-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.x'
+      - name: Install PlatformIO
+        run: python3 -m pip install platformio==6.1.19
+      - name: Build firmware
+        run: pio run -e esp32-div
+      - name: Build isolated S1 HIL probe
+        run: pio run -d diagnostics/hil_probe
+      - name: Build independent 1.x measurement target
+        run: pio run -d firmware/leshy1

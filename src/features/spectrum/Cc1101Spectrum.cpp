@@ -2,9 +2,13 @@
 
 #include <SPI.h>
 
-// ESP32-DIV v2 radio SPI bus + CC1101 chip-select (CiferTech BoardConfig).
-static const int PIN_SCK = 12, PIN_MISO = 13, PIN_MOSI = 11, PIN_CS = 5;
-static const int PIN_GDO0 = 6;   // CC1101 GDO0 — async serial data (RAW OOK record/replay)
+#include "../../boards/esp32_div_v2/BoardProfile.h"
+
+// ESP32-DIV v2 radio SPI bus + CC1101 chip-select.
+namespace boardPins = leshy::board::esp32_div_v2::pins;
+static const int PIN_SCK = boardPins::kRadioSck, PIN_MISO = boardPins::kRadioMiso,
+                 PIN_MOSI = boardPins::kRadioMosi, PIN_CS = boardPins::kCc1101Cs;
+static const int PIN_GDO0 = boardPins::kCc1101Gdo0;   // async serial data (RAW OOK record/replay)
 static SPIClass    ccSpi(FSPI);
 static SPISettings ccSet(4000000, MSBFIRST, SPI_MODE0);   // CC1101 SPI, conservative
 

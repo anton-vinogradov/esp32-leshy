@@ -3,11 +3,13 @@
 
 #include <Preferences.h>
 
+#include "../../boards/esp32_div_v2/BoardProfile.h"
+
 TFT_eSPI tft;
 
 // Backlight on GPIO7 for ESP32-DIV v2 (CiferTech BoardConfig). arduino-esp32 3.x
 // LEDC API: ledcAttach(pin, freq, res) then ledcWrite(pin, duty).
-static const uint8_t  BL_PIN      = 7;
+static const uint8_t  BL_PIN      = leshy::board::esp32_div_v2::pins::kBacklight;
 static const uint8_t  BL_LEVELS[] = { 255, 176, 112, 64, 24 };   // never fully off — a dark screen reads as "bricked"
 static uint8_t        s_bl        = 255;
 

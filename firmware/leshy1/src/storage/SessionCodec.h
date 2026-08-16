@@ -1,0 +1,56 @@
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+
+#include "services/survey/SurveySession.h"
+
+namespace leshy1::storage {
+
+constexpr std::uint16_t kSessionSchemaVersion = 1;
+constexpr std::uint16_t kSegmentSchemaVersion = 1;
+constexpr std::size_t kSessionManifestMaxBytes = 256;
+constexpr std::size_t kObservationRecordMaxBytes = 128;
+constexpr std::size_t kSessionSegmentMaxBytes = 12288;
+constexpr std::size_t kSegmentFooterBytes = 24;
+
+struct SessionManifest final {
+    std::array<char, services::survey::SurveySession::kSessionIdCapacity + 1> sessionId{};
+    std::uint64_t startedUs = 0;
+    std::uint64_t stoppedUs = 0;
+    std::uint32_t observationCount = 0;
+    std::uint32_t segmentLength = 0;
+    std::uint32_t segmentCrc32c = 0;
+};
+
+enum class SessionCodecStatus : std::uint8_t {
+    Valid,
+    InvalidArgument,
+    BufferTooSmall,
+    Malformed,
+    UnsupportedSchema,
+    BoundsExceeded,
+    ChecksumMismatch,
+    TimelineInvalid,
+    TrailingData,
+};
+
+const char* sessionCodecStatusName(SessionCodecStatus status);
+
+SessionCodecStatus encodeObservationSegment(const services::survey::SurveySession& session,
+                                            std::uint8_t* output, std::size_t capacity,
+                                            std::size_t* outputSize);
+SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& session,
+                                         const std::uint8_t* segment, std::size_t segmentSize,
+                                         std::uint8_t* output, std::size_t capacity,
+                                         std::size_t* outputSize);
+SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t size,
+                                         SessionManifest* output);
+SessionCodecStatus reopenSession(const std::uint8_t* manifest, std::size_t manifestSize,
+                                 const std::uint8_t* segment, std::size_t segmentSize,
+                                 services::survey::SurveySession* output);
+bool formatSessionJsonSummary(const services::survey::SurveySession& session, char* output,
+                              std::size_t capacity);
+
+}  // namespace leshy1::storage

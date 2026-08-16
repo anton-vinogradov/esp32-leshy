@@ -7,6 +7,9 @@
 
 # Build artifacts
 build/
+release-checks/
+__pycache__/
+*.py[cod]
 *.bin
 *.elf
 *.map

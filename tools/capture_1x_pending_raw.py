@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+"""Passively capture raw serial bytes without sending commands or toggling reset."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import time
+from pathlib import Path
+
+from capture_1x_ui import PassiveSerial
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", required=True)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--duration", type=float, default=5.0)
+    args = parser.parse_args()
+
+    device = PassiveSerial()
+    device.port = args.port
+    device.baudrate = 115200
+    device.timeout = 0.25
+    device.open()
+    captured = bytearray()
+    with device:
+        deadline = time.monotonic() + args.duration
+        while time.monotonic() < deadline:
+            captured.extend(device.read(4096))
+
+    raw = bytes(captured)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_bytes(raw)
+    print(json.dumps({"bytes": len(raw), "output": str(args.output),
+                      "sha256": hashlib.sha256(raw).hexdigest()}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -9,7 +9,9 @@ name: release
 # that exact filename lets the installer always fetch the newest release.
 on:
   push:
-    tags: ['v*']
+    # The historical pipeline owns 0.x only. Version 1.x is promoted from the
+    # exact candidate accepted by prerelease-hil.yml via tools/release_1x.py.
+    tags: ['v0.*']
 
 permissions:
   contents: write

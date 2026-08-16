@@ -1,0 +1,361 @@
+# ESP32-Leshy 1.x — HIL атомарности storage
+
+*Читать на: [English](STORAGE_HIL.md) · **Русский***
+
+Статус документа: **обязательный safety/verification protocol; host logic, real-file
+fixture, guarded physical FAT commit/remount, per-generation и batched 32-sample SD
+throughput, real-source queue/persistence и host/static six-boundary software-reset
+matrix реализованы; product UI, power-cut и LittleFS parity остаются открыты**.
+
+Протокол проверяет ADR-003 без риска для неизвестной SD card или сохранённых данных
+во flash. Обычная diagnostic image никогда не форматирует и не записывает storage
+при boot или capability detection.
+
+## Реализованный логический контракт
+
+Allocation-free `storage/AtomicHead` задаёт 24-байтную big-endian head record:
+
+| Поле | Байт | Правило |
+|---|---:|---|
+| magic | 4 | `LSHH` |
+| schema | 2 | version 1; неподдерживаемая версия fail closed |
+| flags | 2 | zero в v1 |
+| generation | 4 | serial-number comparison с rollover |
+| manifest length | 4 | совпадает с referenced manifest |
+| manifest CRC32C | 4 | совпадает с manifest evidence |
+| head CRC32C | 4 | покрывает предыдущие 20 байт |
+
+Recovery проверяет оба head и их manifests, затем выбирает наибольшее валидное
+generation. Одинаковое generation с разной manifest identity и разница ровно в
+половину диапазона дают `conflict`, а не угаданного победителя. Отсутствие валидного
+head даёт `none`; оба результата требуют явного recovery UI.
+
+Порядок commit фиксирован: write payloads → sync payloads → write manifest → sync
+manifest → write older head slot → sync head. Только последний успешный sync публикует
+новое generation.
+
+Host tests внедряют отказ на каждой границе. Все шесть incomplete commits выбирают
+предыдущее generation; complete path выбирает новое. Также проверяются bounds,
+стандартный CRC32C vector, каждое one-bit повреждение head, missing/mismatched
+manifest, split-brain и rollover generation.
+
+`storage/SessionCodec` теперь задаёт bounded payload contract за этим head. Schema 1
+использует canonical CBOR manifest и canonical CBOR observations, framed big-endian
+length и CRC32C. Footer segment `LSHS` на 24 bytes аутентифицирует schema, flags,
+record count, body length, body/footer CRC32C. Fixed limits: manifest 256 bytes,
+record 128 bytes, segment 12 288 bytes и 64 observations. Decoder отклоняет future
+schemas, non-canonical/malformed/trailing data, invalid timeline, bounds violation и
+checksum mismatch. Host tests изменяют каждый bit manifest, обрывают segment на
+каждом byte и изменяют один bit в каждом segment byte. Exact golden Session
+открывается и выдаёт deterministic bounded JSON.
+
+Board-01 `0.10.0-session-codec-measure` повторяет encode → head selection → reopen →
+JSON после explicit Stop и сообщает `storage_written=false` и
+`radio_touched=false`. Это подтверждает тот же allocation-free codec на target, но
+не является evidence filesystem, reset или power-cut.
+
+Guarded host filesystem fixture затем выполняет commit в actual files внутри
+isolated каталога `mkdtemp`. Она требует тот же exact-fingerprint,
+explicit-disposable, bounded permit `StorageGuard`; sync и files, и parent directory;
+открывает выбранное generation; проверяет prior bytes и удаляет fixture. Шесть
+injected write/sync failures восстанавливают generation 1, complete commit —
+generation 2. Это real file/`fsync` evidence, но failures моделируются return/crash
+images, а не ESP reset или power cut.
+
+Общий `SessionStore` теперь владеет layout и orchestration с fixed buffers: automatic
+generation/older-slot selection, uint32 rollover, commit, полной manifest/segment
+validation, reopen и corrupt-new fallback. Он отличает действительно empty store от
+corrupt/ambiguous heads; только empty может инициализироваться, ambiguity ничего не
+записывает. POSIX fixture делает recovery через тот же contract.
+
+Вторая matrix убивает writer process через `SIGKILL` после каждой реальной operation.
+Recovery в surviving process выбирает generation 1 до публикации head и generation 2
+после полного write head. Последнее валидно даже до `fsync` head: payload и manifest
+уже durable, а полный head может пережить crash. Все шесть результатов открывают три
+observations и сохраняют prior bytes.
+
+Board-01 `0.11.0-session-store-measure` запускает тот же common `SessionStore` через
+bounded, явно non-persistent two-generation RAM adapter. Он автоматически публикует
+generation 1/A, затем 2/B, открывает generation 2, меняет один byte её segment,
+классифицирует `invalid_payload` и делает fallback на generation 1. Обе открывают три
+observations. Adapter моделирует шесть file и шесть directory sync calls, сообщая
+`physical_storage_written=false` и `radio_touched=false`. Это закрывает evidence target
+orchestration/fallback, но не persistence.
+
+Board-01 `0.12.0-library-offline-measure` добавляет bounded Library List/Detail
+controller над этой reopened metadata. Первый image отклонён: stack canary обнаружил
+полную временную `SurveySession` в `reopenSession`; теперь decode сбрасывает и заполняет
+caller-owned bounded storage напрямую. Исправленный image показывает generation,
+integrity и явный volatile/RF-off provenance, удерживая только UI lease.
+
+Board-01 `0.13.0-library-export-measure` добавляет explicit action
+Detail→Export Ready. Только этот state выдаёт bounded deterministic serial artifact
+`leshy.library.export.v1`; Home возвращает `not_requested`. Artifact сохраняет
+generation, integrity, simulated/persistent state, storage backend, transport, RF
+state и Session summary. Это transport evidence, не persisted file.
+
+Board-01 `0.14.0-storage-discovery-measure` вводит typed boundary
+`ReadOnlyMediaAdapter`. Board implementation читает GPIO38 без перенастройки и
+получает level 0, но по HW-U06 этот level non-authoritative. Поэтому status остаётся
+`unknown`: claims mount, filesystem, fingerprint, capacity и free space отсутствуют,
+writes disabled, `StorageGuard` обязателен. Host validation запрещает claims
+present/absent по non-authoritative detect и требует полную read-only metadata до
+перехода result в `detected`.
+
+Board-01 `0.15.0-mount-policy-measure` добавляет gate до driver execution. Mount
+attempt требует explicit selection, proven read-only driver, format disabled и
+exclusive ownership Storage+RadioSpi. У установленного Arduino `SDFS::begin` нет
+read-only option, а class предоставляет raw writes, поэтому board сообщает actual
+`explicit_target_required` и hypothetical `driver_not_read_only`. SPI/mount operation
+не выполняется.
+
+Board-01 `0.16.0-sd-ro-protocol-measure` добавляет dedicated identification-only plan
+вне SDFS: CMD0, CMD8, CMD55/ACMD41, CMD58, CMD10 и CMD9 с bounded init. Host tests
+явно отклоняют write/program/erase/lock/general commands и любое plan drift. Board
+сообщает valid plan при execution disabled; SD commands не выполняются.
+
+Board-01 `0.17.0-sd-parser-measure` добавляет bounded response parser. Он проверяет
+R1 state, CMD8 echo, initialization count, OCR, CID/CSD CRC16, identity sanity, CSD
+v2 structure и capacity. Host tests отклоняют каждую one-bit mutation в 16-byte CID
+и CSD. Board разбирает synthetic transcript, сообщая zero commands и отсутствие
+physical SPI, write или radio activity.
+
+Board-01 `0.18.0-sd-transport-measure` добавляет executable state machine над strict
+deterministic fake. Golden case завершает eleven exchanges за three init attempts.
+Host injection отклоняет failure на каждом exchange, останавливает never-ready card
+после 100 attempts/202 exchanges и отказывает physical transports до первого call.
+Physical adapter в этом slice не существует и не запускается.
+
+Board-01 `0.19.0-sd-wire-measure` добавляет allocation-free wire framing без bus
+adapter. CMD0/CMD8 совпадают с known CRC7 packets; R1 и data-token polling bounded,
+R3/R7 trailing values exact, а wire CRC16 для CID/CSD обязателен. Host fixtures
+отклоняют invalid arguments, mutating commands, timeout, unexpected token,
+truncation и checksum mismatch. Board сообщает zero commands и execution disabled.
+
+Board-01 `0.20.0-sd-physical-id-measure` добавляет guarded physical adapter 400 kHz.
+Exact confirmation command получает Storage+RadioSpi, держит NRF CE LOW и остальные
+known chip selects HIGH, требует GPIO21 HIGH, затем выполняет только identification.
+Три runs возвращают одинаковые CID/CSD и capacity 62 534 975 488 B; cold/warm init
+занимает 8/2/2 attempts. Каждый run завершает cleanup и освобождает mask 12→0.
+Discovery остаётся unmounted/unknown; data block, filesystem, write, format и radio
+commands не выполняются.
+
+Board-01 `0.21.0-sd-sector0-measure` добавляет один отдельно guarded CMD17 после
+valid physical identity. Authorization разрешает только LBA0/count 1 для selected
+high-capacity read-only target при ownership Storage+RadioSpi без conflict. Physical
+run читает ровно один block, проверяет wire CRC16 `5391` и сообщает valid MBR с
+partition type `0x0C`, LBA 2 048, length 122 136 512 sectors и LBA0 CRC32C
+`1784529910`. Raw block не сохраняется, cleanup снова возвращает 12→0.
+
+Board-01 `0.22.0-sd-boot-inspect-measure` добавляет ещё один metadata permit, LBA
+которого обязан совпадать с first partition LBA из valid MBR. Ровно два total blocks
+(LBA0 и boot) подтверждают FAT32 geometry: 512 B/sector, 64 sectors/cluster, 14 906
+sectors/FAT, root cluster 2 и 122 136 512 total sectors. Boot CRC32C/wire CRC16 равны
+`3945425518`/`9849`. Raw sectors не сохраняются; mount/filesystem APIs,
+directory/file reads, write, format и radio TX остаются disabled. Следующий sector
+содержит directory entries и поэтому пересекает границу между geometry и возможным
+user-data evidence.
+
+Для этой границы operator одобрил `counts_hash_only`. Board-01
+`0.23.0-sd-root-metadata-measure` выводит root LBA 32 768 из validated FAT32 geometry
+и разрешает ровно один block. First-sector report содержит только CRC32C и aggregate
+classes slots: 16 active, включая 8 LFN, 2 directory, 5 file и 1 volume-label.
+Host privacy fixtures помещают identifiable short/LFN names в raw bytes и доказывают,
+что formatted evidence их не содержит. Board сразу после aggregation обнуляет
+reused directory buffer 512 B.
+
+Board-01 `0.24.0-sd-root-cluster-measure` расширяет ту же policy на sequential
+sectors, bounded declared cluster из 64 sectors. End marker найден во втором sector,
+после чего scan останавливается: 29 examined slots, 26 active, 2 deleted, 12 LFN,
+6 directory, 7 file, 1 volume-label и zero invalid. Aggregate CRC32C равен
+`1849301523`. Четыре total blocks включают LBA0, boot и два directory sectors;
+FAT chain не затрагивается. Каждый raw directory buffer обнуляется, names и file data
+не retained.
+
+Board-01 `0.25.0-sd-fsinfo-measure` затем читает только FAT32 FSInfo sector,
+declared по reserved-sector offset 1 (absolute LBA 2 049). Lead/structure/trailing
+signatures и bounds валидны. Technical hints: 1 907 095 free clusters из 1 907 903
+data clusters и next-free cluster 888; CRC32C `1661032487`, wire CRC16 `49708`.
+Это hints, не full FAT allocation proof. Buffer обнуляется; names, directory entries,
+FAT entries и file data не читаются. Перенос mutually exclusive probes в один shared
+workspace уменьшает static RAM с 95 620 B в 0.24 до 90 004 B без изменения safety
+boundary.
+
+Семантика reserved entries следует
+[Microsoft FAT32 Specification 1.03 (`fatgen103.doc`)](https://www.microsoft.com/en-au/download/details.aspx?id=53426).
+Board-01 `0.27.0-sd-fat-reserved-measure` добавляет ровно один first-FAT sector
+к fresh LBA0/boot/FSInfo evidence и разбирает только FAT[0], FAT[1], FAT[2]. First
+FAT LBA 2 956 выведен из reserved offset 908. FAT[0] `0x0FFFFFF8` совпадает с boot
+media `0xF8`; FAT[1] `0x0FFFFFFF` означает clean shutdown/no hard error; FAT[2]
+`0x0FFFFFFF` завершает root cluster 2. FSInfo free 1 907 095/1 907 903 и next-free
+888 совместимы с этим минимальным allocation evidence. Это не full recount: parser
+не follow chain после FAT[2], даже если entry указывает на следующий cluster. FSInfo
+и FAT buffers обнуляются; names, directory/file data, VFS, mount и writes отсутствуют.
+
+`StorageGuard` теперь реализует authorization boundary physical fixture. Bounded
+permit выдаётся только после exact fingerprint match, explicit disposable selection,
+безопасного нового run ID/namespace, consistent capacity, non-zero byte limit и
+free-space reserve. Negative host tests покрывают все причины отказа.
+
+Board-01 `0.28.0-sd-session-store-measure` — первый guarded writable physical slice.
+Explicit command содержит exact CID и fresh run ID, получает Storage+RadioSpi,
+mount SDFS с disabled format и ограничивает общий `SessionStore` каталогом
+`/leshy-hil/s1-session-store-20260816-d`. Generations 1/A и 2/B commit с шестью file
+и шестью directory sync; настоящий unmount/remount с последующим read-only reopen
+возвращает generation 2 и три synthetic observations. Записано 440 logical bytes
+внутри permit 65 536 B. Повтор той же команды отказывает существующий scratch path и
+пишет zero bytes. Existing paths не удаляются, user names/file payload не читаются,
+radio TX command не выполняется.
+
+FatFs `f_sync` за Arduino `File::flush` — durability boundary adapter для files и
+directory entries. Успешный normal remount не является evidence reset на каждой
+commit boundary или потери питания. До успешной Session write run также выявил и
+исправил oversized recovery temporary на loop stack и неверную проверку nested directory.
+
+## Безопасность physical fixture
+
+Physical run разрешён только на явно выбранной цели:
+
+- disposable SD card, capacity/CID fingerprint которой сохранён для этого run; или
+- dedicated disposable LittleFS image/partition для HIL, не текущий раздел данных
+  product/legacy.
+
+Сначала выполняется read-only discovery. Target с неожиданным fingerprint,
+существующим scratch namespace, mount error, недостатком места или filesystem
+inconsistency отклоняется. Все записи bounded каталогом `/leshy-hil/<run-id>/`;
+format, изменение partition table и запись вне namespace запрещены. Cleanup идёт
+только после сохранения evidence hashes; здесь cleanup означает unmount и recovery
+resources/GPIO, а не удаление evidence namespace.
+
+Logical reset injection (`esp_restart`) проверяет reopen/recovery, но не заменяет
+реальный power cut. Для закрытия PR-005/RB-06 нужен управляемый источник или power
+switch, независимо обрывающий питание на каждой persisted boundary.
+
+## Реализованный и физически проверенный software-reset harness
+
+Version `0.30.0-sd-session-reset-measure` добавляет diagnostic wrapper
+`SessionStoreBoundaryIo` вокруг неизменённого common commit path. Он считает
+только успешно завершённую logical operation. Write boundary срабатывает
+после успеха underlying `writeFile`; sync boundary — только после успеха
+`syncFile` и directory barrier adapter. Host tests останавливаются после
+каждой из шести boundaries, восстанавливают allowed generation и сохраняют bytes
+generation 1.
+
+| Номер | Boundary | Allowed recovery после software reset |
+|---:|---|---|
+| 1 | payload write | generation 1 |
+| 2 | payload file + directory sync | generation 1 |
+| 3 | manifest write | generation 1 |
+| 4 | manifest file + directory sync | generation 1 |
+| 5 | older-head write | generation 1 или 2; complete unsynced head может выжить |
+| 6 | head file + directory sync | generation 2 |
+
+Write-side command требует exact CID, уникальный run ID, новый scratch namespace,
+bound 64 KiB и ownership Storage+RadioSpi. Он полностью commits generation 1,
+сохраняет sizes и CRC32C manifest/segment, затем вызывает `esp_restart`
+сразу после выбранной boundary generation 2:
+
+```text
+storage.sd.session-store reset disposable-write <CID32> <run-id> <1..6>
+```
+
+После boot отдельная command заново доказывает exact CID и existing namespace,
+открывает `SessionStoreIo` read-only, пишет/синхронизирует zero bytes, проверяет
+software-reset reason, allowed recovered generation и три observations, сравнивает bytes
+prior manifest/segment с deterministic CRC32C, затем unmount и release resources:
+
+```text
+storage.sd.session-store recover disposable-read-only <CID32> <run-id> <1..6>
+```
+
+`tools/run_1x_sd_reset_matrix.py` последовательно использует шесть уникальных
+namespaces, сохраняет checkpoint после каждой completed boundary и отказывается без
+`--execute-reset-matrix`. Recovery делает не более трёх попыток с exponential
+backoff. Повтор разрешён только для наблюдавшегося fail-closed readiness signature:
+fingerprint не совпал, `missing_media`, zero writes/syncs и complete cleanup. Ошибка
+integrity, CID, namespace или recovery oracle останавливает run немедленно.
+
+Board-01 с exact SD CID `FE343253440000002000000055019CB7` прошла все шесть
+physical boundaries `esp_restart`. Восстановлены generations `1/1/1/1/1/2`; каждый
+reopen вернул три observations, сохранил CRC32C 155-byte segment и 41-byte manifest
+generation 1, записал/синхронизировал zero bytes, вернул `FR_OK` и освободил resources
+12→0. На boundary 4 первая immediate попытка дала transient `missing_media`;
+zero-write read-only retry восстановил generation 1, а final read-only audit всех
+шести namespaces прошёл. Это закрывает ST-HIL-A04/A06 для одной комбинации
+board/card/software-reset, но не physical power-cut или endurance.
+
+Version `0.31.0-sd-session-ram-review` затем удалила redundant physical-recovery
+`SurveySession` 4 672 B и переиспользовала
+`SessionStoreWorkspace::validationSession`, которым common recovery path уже владеет
+и пользуется последовательно. Static RAM снизилась с 99 932 до 95 260 B. Новый
+exact-CID boundary-6 run достиг `sync_head`, восстановил required generation 2 с
+unchanged prior hashes и zero recovery writes/syncs, завершив cleanup с первой
+попытки. Это regression evidence E-BUILD-033/E-HIL-036 для shared workspace, а не
+повтор full six-boundary matrix.
+
+Version `0.33.0-sd-session-batch-throughput-measure` добавила fixed FIFO 64
+observations и policy публикации: 2 048 encoded B, 5 s maximum latency, capacity,
+explicit Stop или safe shutdown. Host tests покрывают FIFO wrap-around, drop/high-water
+и scrub counters, все triggers/precedence и overflow-safe расчёт. По измеренным Wi-Fi
+p99 546 B/s, safety factor 4 и прежнему commit p99 591 651 µs minimum batch равен
+1 293 B; выбранный target 2 048 B выше этого bound.
+
+Physical exact-CID run в новом namespace
+`/leshy-hil/s1-batch-throughput-20260816-a` committed 32 поколения по 64 observations
+и 4 609 B encoded segment. Все 32 commits и 96+96 barriers завершены, generation 32
+с 64 observations открыто до и после remount. Encoded payload service rate 9 068 B/s
+против RB-06 required 2 184 B/s: pass с margin 4,15×. Форматирование, deletion,
+existing-path overwrite и radio TX отсутствовали; resources вернулись 12→0. Это
+закрывает performance части batching design, но synthetic fixture ещё не доказывает
+real passive Wi-Fi→queue→SessionStore path.
+
+Version `0.34.0-wifi-passive-persist-measure` затем получила единый atomic lease
+EspRf+Storage+RadioSpi и соединила physical passive scanner с этим FIFO/policy и
+guarded FAT SessionStore. Exact-CID run сделал четыре scans, принял 29 observations
+при FIFO high-water 9/64 и zero drops, после 5 s latency trigger committed generation
+1 с segment 1 334 B за 192 729 µs. Recovery до unmount и после real remount/read-only
+reopen вернул все 29 observations. Effective encoded payload rate 6 921 B/s проходит
+RB-06 в 3,17×; cleanup вернул combined resource mask 14→0. Identifiers не emitted в
+evidence, но намеренно retained только внутри нового isolated scratch Session. Это
+technical end-to-end path; product Start/Running/Stop, reboot Library и export ещё
+не используют его.
+
+Version `0.35.0-persistent-library-admission-measure` перестаёт восстанавливать
+simulated RAM Library после успешного path. Новый exact-CID namespace
+`/leshy-hil/s3-wifi-library-20260816-a` принял 52 observations из четырёх scans,
+FIFO high-water 18/64 и zero drops; size trigger committed generation 1 с segment
+2 499 B за 192 867 µs. Recovery после real remount вернул все 52, effective rate
+12 957 B/s проходит RB-06 в 5,93×. Проверенная Session copied в caller-owned Library
+workspace и получает runtime capability `library.persistent_session`, не объявляя
+всю SD generic-available. Actual TFT path Home→List→Detail→Export показывает
+READY, `PERSISTENT SESSION | REAL`, generation 1/valid и `PERSISTED YES`; serial
+artifact имеет `persistent=true`, `simulated=false`, Wi-Fi 52. Back освобождает
+Storage+UI lease 5→0. Это current-boot admission после explicit command: безопасный
+boot mount/catalog/recovery пока не реализован и после reboot стартует simulated
+Library.
+
+## Приёмка
+
+| ID | Обязательный результат |
+|---|---|
+| ST-HIL-A01 | Read-only discovery сохраняет media kind, capacity, filesystem, stable fingerprint и free space |
+| ST-HIL-A02 | Run отклоняет media без явно выбранных disposable fingerprint и scratch namespace |
+| ST-HIL-A03 | Все операции confined новым bounded `/leshy-hil/<run-id>/` namespace |
+| ST-HIL-A04 | Reset injection на всех шести boundaries всегда восстанавливает prior valid generation или полностью synced new one |
+| ST-HIL-A05 | Torn head, bad CRC, missing manifest и manifest mismatch никогда не становятся current |
+| ST-HIL-A06 | Хэши ранее committed payload не меняются после каждого recovery |
+| ST-HIL-A07 | SD и LittleFS измеряются отдельно; throughput report содержит sample size, p50/p95/p99, sync latency и free-space delta |
+| ST-HIL-A08 | Physical power-cut повторяет boundary matrix до verification PR-005/RB-06 |
+
+Offline Library/reopen, bounded export, non-mounting discovery, mount policy, SD
+identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit плюс
+remount/reopen, 32-commit p50/p95/p99 throughput distribution и host/static reset harness
+плюс physical six-boundary matrix реализованы. Fixed queue и batched publish cadence
+теперь host-tested, а E-HIL-038 даёт 9 068 encoded B/s при цели RB-06 2 184 B/s.
+Следующая безопасная работа — подключить доказанный path к product
+Setup/Running/Stop & Commit и boot-time persistent Library catalog/recovery. Export
+этой recovered Session в текущем boot уже подтверждён E-HIL-040. Readiness
+retry также ждёт natural transient.
+Physical power-cut всё ещё требует controller. LittleFS не затрагивается,
+пока не доказан отдельный disposable partition/image; текущий flash filesystem может
+содержать legacy/product data.

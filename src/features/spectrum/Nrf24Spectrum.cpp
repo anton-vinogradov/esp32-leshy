@@ -4,10 +4,18 @@
 #include <WiFi.h>
 #include <string.h>
 
-// ESP32-DIV v2 radio SPI bus + the three NRF24 slots (CiferTech BoardConfig).
-static const int PIN_SCK = 12, PIN_MISO = 13, PIN_MOSI = 11;
-static const int SLOT_CE[3]  = { 15, 47, 14 };   // slot #1, #2, #3
-static const int SLOT_CSN[3] = {  4, 48, 21 };
+#include "../../boards/esp32_div_v2/BoardProfile.h"
+
+// ESP32-DIV v2 radio SPI bus + the three NRF24 slots.
+namespace boardPins = leshy::board::esp32_div_v2::pins;
+static const int PIN_SCK = boardPins::kRadioSck, PIN_MISO = boardPins::kRadioMiso,
+                 PIN_MOSI = boardPins::kRadioMosi;
+static const int SLOT_CE[3] = {
+    boardPins::kNrfCe[0], boardPins::kNrfCe[1], boardPins::kNrfCe[2]
+};
+static const int SLOT_CSN[3] = {
+    boardPins::kNrfCsn[0], boardPins::kNrfCsn[1], boardPins::kNrfCsn[2]
+};
 
 static SPIClass    nrfSpi(FSPI);
 static SPISettings nrfSet(8000000, MSBFIRST, SPI_MODE0);
@@ -193,8 +201,8 @@ void Nrf24Spectrum::diag() {
     // wrote (0x4C) — that readback is the reliable "it's an NRF" test (CC1101/SD on
     // the same bus won't echo it), so we can safely probe extra candidate CS pins.
     // Datasheet slots first (CSN 4/48/21), then other unused GPIOs; both bus orders.
-    static const int CSN_CAND[] = { 4, 48, 21 };            // the three NRF24 CSN lines per the V2 schematic (U1/U2/U3)
-    static const int ORD[][2]   = { {13, 11}, {11, 13} };   // {miso, mosi}
+    static const int CSN_CAND[] = { SLOT_CSN[0], SLOT_CSN[1], SLOT_CSN[2] };
+    static const int ORD[][2]   = { {PIN_MISO, PIN_MOSI}, {PIN_MOSI, PIN_MISO} };   // {miso, mosi}
     SPISettings slow(2000000, MSBFIRST, SPI_MODE0);
     for (int i : CSN_CAND) { pinMode(i, OUTPUT); digitalWrite(i, HIGH); }   // deselect ALL first, so a probe reads only its own module
     int found = 0;

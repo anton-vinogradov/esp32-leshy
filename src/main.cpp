@@ -28,6 +28,8 @@
 #include "features/subghz/RecStore.h"
 #include "features/devicedb/DeviceDb.h"
 #include "features/wps_probe/WpsProbe.h"
+#include "boards/esp32_div_v2/BoardProfile.h"
+#include "core/navigation/Navigator.h"
 
 // Headless demo selector until the real menu (Phase 0) lands. Edit DEMO to switch.
 #define DEMO_WIFI_SCANNER    1
@@ -45,6 +47,7 @@
 
 // The app is bilingual (EN/RU). Startup default; menu/portal switch at runtime.
 static constexpr Lang UI_LANG = Lang::RU;
+static constexpr int BUZZER_PIN = leshy::board::esp32_div_v2::pins::kBuzzer;
 
 // Point this at YOUR OWN access point (Signal Finder / Polite Portal only).
 // Educational / own-equipment use only — see DISCLAIMER.md.
@@ -351,9 +354,7 @@ static const Menu MENUS[] = {
 // ---- navigation state ----
 enum State { ST_MENU, ST_WIFI, ST_BLE, ST_INFO, ST_PROVISION, ST_CONN, ST_HIDDEN, ST_CONFIRM, ST_OPTIONS, ST_OTA, ST_DEAUTH, ST_CHANNELS, ST_SPECTRUM, ST_SUBSPECTRUM, ST_NETINFO, ST_LEGAL, ST_LANGPICK, ST_POLITE, ST_SUBTX, ST_SUBREC, ST_SUBCFG, ST_KEYBOARD, ST_REC_PLAY, ST_SUBHUNT, ST_HUNT24, ST_BLE_RADAR, ST_BLE_INFO, ST_WIFI_RADAR, ST_STATIONS, ST_STA_RADAR };
 static State    st = ST_MENU;
-static int      menuStack[6] = { M_ROOT };   // path of open menus (for back)
-static int      selStack[6]  = { 0 };        // selection per level
-static int      depth = 0;
+static leshy::navigation::Navigator navigator(M_ROOT);
 static int      off = 0;
 static int      wifiSel = 0;     // selected row in the Wi-Fi scan
 static int      bleSel = 0;      // selected row in the BLE scan (SELECT → radar)
@@ -365,10 +366,10 @@ static bool     touchDown = false;
 static String   infoTitle, infoBody, infoNote;
 static int      infoAction = -1;   // F_LEDS / F_BACKLIGHT when the info screen is an adjustable setting (SELECT cycles it in place), else -1
 
-static int  curMenu() { return menuStack[depth]; }
-static int& curSel()  { return selStack[depth]; }
+static int curMenu() { return navigator.menu(); }
+static int curSel()  { return navigator.selection(); }
 // In a menu the radios are idle — scanning only runs on a scan screen.
-static void showMenu() { engine.pause(); st = ST_MENU; menuScreen.show(&MENUS[curMenu()], curSel(), depth > 0); drawNetBadge(); }
+static void showMenu() { engine.pause(); st = ST_MENU; menuScreen.show(&MENUS[curMenu()], curSel(), navigator.canGoBack()); drawNetBadge(); }
 
 static void saveLang(Lang l) { Preferences p; p.begin("leshy", false); p.putUChar("lang", (uint8_t)l); p.end(); }
 static Lang loadLang() { Preferences p; p.begin("leshy", true); uint8_t v = p.getUChar("lang", (uint8_t)UI_LANG); p.end(); return (Lang)v; }
@@ -2332,7 +2333,7 @@ static void back() {
         case ST_PROVISION: net.stopProvision(); gotoConn();               return;
         case ST_CONFIRM:   cancelConfirm();                               return;
         case ST_OPTIONS:   if (optReturn == ST_HIDDEN) gotoHidden(); else if (optReturn == ST_WIFI) gotoWifi(); else showMenu(); return;
-        case ST_MENU:      if (depth > 0) { depth--; showMenu(); }        return;
+        case ST_MENU:      if (navigator.pop()) showMenu();               return;
         default:           showMenu();                                    return;  // WIFI/BLE/INFO/CONN/HIDDEN
     }
 }
@@ -2448,14 +2449,14 @@ static void launch(int feat) {
         case F_BACKLIGHT:   drawBacklightInfo(); break;
         case F_TXPOWER:     drawTxPowerInfo(); break;
         case F_RECAL:       touchRecalibrate(); showMenu(); break;
-        case F_LANG_EN:     i18n::set(Lang::EN); saveLang(Lang::EN); if (depth > 0) depth--; showMenu(); break;
-        case F_LANG_RU:     i18n::set(Lang::RU); saveLang(Lang::RU); if (depth > 0) depth--; showMenu(); break;
+        case F_LANG_EN:     i18n::set(Lang::EN); saveLang(Lang::EN); navigator.pop(); showMenu(); break;
+        case F_LANG_RU:     i18n::set(Lang::RU); saveLang(Lang::RU); navigator.pop(); showMenu(); break;
     }
 }
 
 static void activate() {
     const MenuItem& it = MENUS[curMenu()].items[curSel()];
-    if (it.kind == K_SUB) { depth++; menuStack[depth] = it.target; selStack[depth] = 0; showMenu(); }
+    if (it.kind == K_SUB) { if (navigator.push(it.target)) showMenu(); }
     else launch(it.target);
 }
 
@@ -2582,7 +2583,7 @@ static void radarStartSta(const StaRow& s) {
 }
 
 static void radarStop() {
-    digitalWrite(2, LOW);                       // buzzer silent
+    digitalWrite(BUZZER_PIN, LOW);              // buzzer silent
     if (radarSta) sniffer.radarUnlock();                    // station: resume channel hopping
     else if (!radarWifi) engine.setMode(ScanEngine::SCAN_BLE);   // BLE: back to list scanning (WiFi list already SCAN_WIFI)
 }
@@ -2602,9 +2603,9 @@ static void radarTick() {
     if (radarBeepOn && !lost) {                 // Geiger-style: faster clicks as you close in
         float p = (radarEma + 95) / 55.0f; if (p < 0) p = 0; if (p > 1) p = 1;
         uint32_t iv = 90 + (uint32_t)((1 - p) * 520);
-        if (t - radarBeepAt >= iv) { radarBeepAt = t; digitalWrite(2, HIGH); radarBeepOff = t + 18; }
-        if (radarBeepOff && t >= radarBeepOff) { digitalWrite(2, LOW); radarBeepOff = 0; }
-    } else if (radarBeepOff) { digitalWrite(2, LOW); radarBeepOff = 0; }
+        if (t - radarBeepAt >= iv) { radarBeepAt = t; digitalWrite(BUZZER_PIN, HIGH); radarBeepOff = t + 18; }
+        if (radarBeepOff && t >= radarBeepOff) { digitalWrite(BUZZER_PIN, LOW); radarBeepOff = 0; }
+    } else if (radarBeepOff) { digitalWrite(BUZZER_PIN, LOW); radarBeepOff = 0; }
     if (t - radarDrawAt >= 120) { radarDrawAt = t; drawRadarGauge(lost); }
 }
 
@@ -2649,7 +2650,7 @@ static void drawBleInfo() {
 static void onKey(int ev) {
     switch (ev) {
         case Buttons::UP:
-            if (st == ST_MENU) { if (curSel() > 0) { int p = curSel(); curSel()--; menuScreen.repaint(p, curSel()); } }
+            if (st == ST_MENU) { uint8_t p; if (navigator.moveSelection(-1, MENUS[curMenu()].n, &p)) menuScreen.repaint(p, curSel()); }
             else if (st == ST_WIFI)    { if (wifiSel > 0) { wifiSel--; ensureWifiVisible(); drawList(false); } }
             else if (st == ST_BLE)     { if (bleSel > 0) { bleSel--; ensureBleVisible(); drawList(false); } }
             else if (st == ST_STATIONS){ if (staSel > 0) { staSel--; drawStationsScreen(false); } }
@@ -2664,7 +2665,7 @@ static void onKey(int ev) {
             else if (st == ST_REC_PLAY) { if (recDelArm) { recDelArm = false; drawRecPlayScreen(); } else if (recSel > 0) { int p = recSel; recSel--; tft.fillRect(0, 283, 240, 18, uiBg()); int oo = recOff; clampRecList(); if (recOff != oo) drawRecList(); else { drawRecPlayRow(p - recOff); drawRecPlayRow(recSel - recOff); } } }
             break;
         case Buttons::DOWN:
-            if (st == ST_MENU) { if (curSel() < MENUS[curMenu()].n - 1) { int p = curSel(); curSel()++; menuScreen.repaint(p, curSel()); } }
+            if (st == ST_MENU) { uint8_t p; if (navigator.moveSelection(1, MENUS[curMenu()].n, &p)) menuScreen.repaint(p, curSel()); }
             else if (st == ST_WIFI)    { if (wifiSel < engine.wifiCount() - 1) { wifiSel++; ensureWifiVisible(); drawList(false); } }
             else if (st == ST_BLE)     { if (bleSel < engine.bleCount() - 1) { bleSel++; ensureBleVisible(); drawList(false); } }
             else if (st == ST_STATIONS){ int c = sniffer.count(); int v = c < 12 ? c : 12; if (staSel < v - 1) { staSel++; drawStationsScreen(false); } }
@@ -2682,7 +2683,7 @@ static void onKey(int ev) {
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
             else if (st == ST_LEGAL) {
                 if (!legFirstRun) { showMenu(); }
-                else if (legAccepted) { legalMarkSeen(); legFirstRun = false; depth = 0; showMenu(); }
+                else if (legAccepted) { legalMarkSeen(); legFirstRun = false; navigator.reset(M_ROOT); showMenu(); }
             }
             else if (st == ST_MENU) activate();
             else if (st == ST_CONN) connActivate();
@@ -2692,7 +2693,7 @@ static void onKey(int ev) {
             else if (st == ST_WIFI) openNetOptions();
             else if (st == ST_BLE) { BleRow r; if (engine.bleRow(bleSel, r) && r.mac.length()) radarStart(r); }   // lock the device → radar finder
             else if (st == ST_STATIONS) { StaRow r; if (sniffer.row(staSel, r)) radarStartSta(r); }   // lock the client → radar finder
-            else if (st == ST_BLE_RADAR) { radarBeepOn = !radarBeepOn; if (!radarBeepOn) digitalWrite(2, LOW); radarFooter(); }   // toggle the proximity beep
+            else if (st == ST_BLE_RADAR) { radarBeepOn = !radarBeepOn; if (!radarBeepOn) digitalWrite(BUZZER_PIN, LOW); radarFooter(); }   // toggle the proximity beep
             else if (st == ST_BLE_INFO) radarStart(bleInfo);   // OK from details → radar finder
             else if (st == ST_SPECTRUM && spLab) spToggleArm();   // arm/disarm the caret channel for TX noise
             else if (st == ST_SUBTX) { subTxOn = !subTxOn; if (subTxOn) subTxApply(); else cc.endTx(); drawSubTxScreen(); }
@@ -2711,7 +2712,7 @@ static void onKey(int ev) {
             if (st == ST_LANGPICK) { Lang l = langPickSel ? Lang::RU : Lang::EN; i18n::set(l); saveLang(l); gotoLegal(true); }
             else if (st == ST_LEGAL) {
                 if (!legFirstRun) { showMenu(); }
-                else if (legAccepted) { legalMarkSeen(); legFirstRun = false; depth = 0; showMenu(); }
+                else if (legAccepted) { legalMarkSeen(); legFirstRun = false; navigator.reset(M_ROOT); showMenu(); }
             }
             else if (st == ST_MENU) activate();
             else if (st == ST_CONN) connActivate();
@@ -2830,8 +2831,8 @@ static void serialControl() {
                 for (int c = 0; c < Nrf24Spectrum::CHANNELS; c++) Serial.printf(" %d", sum[c] * 255 / N);
                 Serial.println(); continue;
             }
-            else if (!strcmp(buf, "en"))    { i18n::set(Lang::EN); saveLang(Lang::EN); depth = 0; showMenu(); continue; }   // QA: language for screenshots
-            else if (!strcmp(buf, "ru"))    { i18n::set(Lang::RU); saveLang(Lang::RU); depth = 0; showMenu(); continue; }
+            else if (!strcmp(buf, "en"))    { i18n::set(Lang::EN); saveLang(Lang::EN); navigator.reset(M_ROOT); showMenu(); continue; }   // QA: language for screenshots
+            else if (!strcmp(buf, "ru"))    { i18n::set(Lang::RU); saveLang(Lang::RU); navigator.reset(M_ROOT); showMenu(); continue; }
             else if (!strcmp(buf, "leds"))  { leds.selfTest(); continue; }                       // QA: all four pixels + their order
             else if (!strcmp(buf, "ledbr")) { Serial.printf("[leds] brightness -> %u/255\n", leds.cycleBrightness()); continue; }
             else if (!strcmp(buf, "bl"))    { Serial.printf("[bl] backlight -> %u/255\n", uiBacklightCycle()); continue; }
@@ -2920,7 +2921,7 @@ static void serialControl() {
                                                if (st == ST_SUBCFG) subcfg.stop();
                                                if (st == ST_POLITE) portal.stop();
                                                if (st == ST_PROVISION) net.stopProvision();
-                                               depth = 0; showMenu(); }
+                                               navigator.reset(M_ROOT); showMenu(); }
             else { Serial.printf("[cmd] ? '%s'\n", buf); continue; }
             Serial.printf("[cmd] %s -> st=%d\n", buf, (int)st);
         } else if (len < sizeof(buf) - 1) {
@@ -2931,7 +2932,7 @@ static void serialControl() {
 
 void setup() {
     Serial.begin(115200);
-    pinMode(2, OUTPUT); digitalWrite(2, LOW);   // hold the on-board buzzer (IO2) silent — it's the stock low-battery alarm, we don't use it
+    pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, LOW);   // hold the stock low-battery buzzer silent
     delay(200);
     displayInit();
     uiBacklightBegin();              // apply saved screen brightness before anything is drawn
@@ -2973,12 +2974,12 @@ void loop() {
             } else if (st == ST_LEGAL) {
                 if (ty > 260) { int m = legN - LEG_LINES; if (m < 0) m = 0;   // tap low = scroll on
                                 if (legOff < m) { legOff += 4; if (legOff > m) legOff = m; drawLegalScreen(); }
-                                else if (legFirstRun && legAccepted) { legalMarkSeen(); legFirstRun = false; depth = 0; showMenu(); }
+                                else if (legFirstRun && legAccepted) { legalMarkSeen(); legFirstRun = false; navigator.reset(M_ROOT); showMenu(); }
                                 else if (!legFirstRun) showMenu(); }
                 else if (ty < 60 && legOff > 0) { legOff -= 4; if (legOff < 0) legOff = 0; drawLegalScreen(); }
             } else if (st == ST_MENU) {
                 int hit = menuScreen.hitTest(tx, ty);
-                if (hit >= 0) { int p = curSel(); curSel() = hit; menuScreen.repaint(p, hit); activate(); }
+                if (hit >= 0) { int p = curSel(); navigator.setSelection(hit, MENUS[curMenu()].n); menuScreen.repaint(p, hit); activate(); }
             } else if (st == ST_CONN) {
                 if (ty < 28) back();
                 else for (int i = 0; i < connActN; i++)
