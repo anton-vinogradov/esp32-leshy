@@ -242,7 +242,7 @@ promotion; a real GitHub workflow run now passes:
 - `tools/run_1x_prerelease_hil.py` loads a declarative suite, flashes the exact
   candidate through verified esptool only with explicit `--flash`, performs a cold
   reset, keeps one passive USB session for Actions/captures, and creates a bundle;
-- `tests/hil/device-smoke.v1.json` revision 2 defines Home→Diagnostics→Back and
+- `tests/hil/device-smoke.v1.json` revision 3 defines Home→Diagnostics→Back and
   product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
   boot ≤2 s, board/profile, heap ≥128 KiB, owner/lease cleanup, and GPIO2 LOW;
 - bounded query steps verify a typed serial artifact inside the same HIL session;
@@ -347,6 +347,17 @@ serial export retained generation 2, three observations, zero drops, and
 lease `0`, heap total/free/min was 281,360/238,696/233,300 B, and GPIO2 was LOW;
 `run.json` is `af5d493f…c2a7` and the artifact index is `c73f08d1…6376d`. This is
 local development evidence; a GitHub-native revision-2 attestation has not run yet.
+
+Candidate `0.39.0-product-survey-pipeline-measure` adds a real bounded software FIFO
+between the simulated source and Survey in that same scenario. Suite revision 3
+requires pipeline ready→drained→committed, counters received/forwarded 3/3, depth 0,
+high-water 3, drop 0, and batch trigger none→stop. Full run
+`dc64d3b8d0438567a737f9a97d1cf078` flashed exact app `3f3b487b…d3fb19`, reached
+ready in 502.915 ms, and executed 17 Actions in at most 98.594 ms; all ten TFT frames
+matched reviewed goldens with zero pixel differences. Final owner/lease was
+`none`/`0`, heap total/free/min was 281,272/238,608/233,212 B, and GPIO2 was LOW;
+`run.json` is `9716a080…074a8f`, index `27da0a1c…cd2b6`. This is local development
+evidence; a GitHub-native revision-3 attestation has not run yet.
 
 A historical copy of this real bundle was signed with a temporary Ed25519 key and
 returned `release_eligible=true`; the temporary key and copy were then destroyed.

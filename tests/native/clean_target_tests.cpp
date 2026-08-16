@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "apps/survey/SurveyController.h"
+#include "apps/survey/SurveyPipeline.h"
 #include "apps/survey/SurveyWorkflow.h"
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
@@ -1142,6 +1143,92 @@ void testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure() {
                       "store_rejected") == 0);
 }
 
+void testSurveyPipelineQueuesDrainsDropsAndCommitsWithStopPolicy() {
+    leshy1::platform::arduino::RamSessionStoreIo io;
+    io.reset();
+    SessionStoreWorkspace workspace;
+    SurveySession active;
+    SurveySession reopened;
+    SurveyController controller(active);
+    LibraryController library;
+    SurveyWorkflow workflow(controller, io, workspace, reopened, library,
+                            false, true);
+    ObservationQueue queue;
+    SurveyPipeline pipeline(workflow, queue);
+
+    CHECK(pipeline.resetToSetup() == SurveyPipelineStatus::Ready);
+    CHECK(pipeline.start("pipeline-first", 1000) ==
+          SurveyPipelineStatus::Started);
+    const SurveySession golden = goldenStoppedSession();
+    for (std::size_t index = 0; index < golden.size(); ++index) {
+        const Observation* source = golden.get(index);
+        CHECK(source != nullptr);
+        if (source != nullptr) {
+            CHECK(pipeline.enqueue(*source) == SurveyPipelineStatus::Queued);
+        }
+    }
+    SurveyPipelineProgress progress = pipeline.progress();
+    CHECK(progress.received == 3);
+    CHECK(progress.queued == 3);
+    CHECK(progress.forwarded == 0);
+    CHECK(progress.dropped == 0);
+    CHECK(progress.queueDepth == 3);
+    CHECK(progress.queueHighWater == 3);
+    CHECK(progress.trigger == SessionBatchTrigger::None);
+    CHECK(pipeline.drain(2) == SurveyPipelineStatus::Drained);
+    progress = pipeline.progress();
+    CHECK(progress.forwarded == 2);
+    CHECK(progress.queueDepth == 1);
+    CHECK(pipeline.drain(0) == SurveyPipelineStatus::InvalidState);
+    CHECK(pipeline.drain(ObservationQueue::kCapacity) ==
+          SurveyPipelineStatus::Drained);
+    CHECK(pipeline.stopAndCommit(4000) == SurveyPipelineStatus::Committed);
+    progress = pipeline.progress();
+    CHECK(progress.forwarded == 3);
+    CHECK(progress.queueDepth == 0);
+    CHECK(progress.trigger == SessionBatchTrigger::Stop);
+    CHECK(workflow.generation() == 1);
+    CHECK(library.size() == 1);
+    const std::size_t fileSyncs = io.fileSyncs();
+    const std::size_t directorySyncs = io.directorySyncs();
+    CHECK(pipeline.stopAndCommit(4001) ==
+          SurveyPipelineStatus::AlreadyCommitted);
+    CHECK(io.fileSyncs() == fileSyncs);
+    CHECK(io.directorySyncs() == directorySyncs);
+
+    CHECK(pipeline.resetToSetup() == SurveyPipelineStatus::Ready);
+    CHECK(pipeline.start("pipeline-capacity", 5000) ==
+          SurveyPipelineStatus::Started);
+    Observation observation = *golden.get(0);
+    for (std::size_t index = 0;
+         index < SurveySession::kObservationCapacity + 1U; ++index) {
+        observation.monotonicUs = 6000 + index;
+        const SurveyPipelineStatus status = pipeline.enqueue(observation);
+        CHECK(status == (index < SurveySession::kObservationCapacity
+                             ? SurveyPipelineStatus::Queued
+                             : SurveyPipelineStatus::Dropped));
+    }
+    progress = pipeline.progress();
+    CHECK(progress.received == SurveySession::kObservationCapacity + 1U);
+    CHECK(progress.queued == SurveySession::kObservationCapacity);
+    CHECK(progress.dropped == 1);
+    CHECK(progress.queueDepth == SurveySession::kObservationCapacity);
+    CHECK(progress.queueHighWater == SurveySession::kObservationCapacity);
+    CHECK(pipeline.stopAndCommit(8000) == SurveyPipelineStatus::Committed);
+    progress = pipeline.progress();
+    CHECK(progress.forwarded == SurveySession::kObservationCapacity);
+    CHECK(progress.dropped == 1);
+    CHECK(progress.rejected == 0);
+    CHECK(progress.trigger == SessionBatchTrigger::Stop);
+    CHECK(workflow.generation() == 2);
+    CHECK(library.selected() != nullptr &&
+          library.selected()->session != nullptr &&
+          library.selected()->session->size() ==
+              SurveySession::kObservationCapacity);
+    CHECK(std::strcmp(surveyPipelineStatusName(pipeline.lastStatus()),
+                      "committed") == 0);
+}
+
 HeadCandidate candidate(const std::uint8_t* wire, const HeadRecord& record,
                         bool present = true, bool matching = true) {
     return {wire,
@@ -2237,6 +2324,7 @@ int main() {
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
     testGoldenSurveyTraceUsesListDetailBackAndExplicitStop();
     testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure();
+    testSurveyPipelineQueuesDrainsDropsAndCommitsWithStopPolicy();
     testSessionCodecCommitsCanonicalDataAndReopensOffline();
     testOfflineLibraryControllerIsBoundedAndPreservesProvenance();
     testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity();

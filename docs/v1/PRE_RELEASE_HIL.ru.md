@@ -242,7 +242,7 @@ promotion; реальный GitHub workflow run прошёл:
 - `tools/run_1x_prerelease_hil.py` загружает declarative suite, по явному `--flash`
   прошивает exact candidate через esptool с verify, делает cold reset, держит один
   passive USB session для Actions/captures и формирует bundle;
-- `tests/hil/device-smoke.v1.json` revision 2 задаёт Home→Diagnostics→Back и
+- `tests/hil/device-smoke.v1.json` revision 3 задаёт Home→Diagnostics→Back и
   product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
   boot ≤2 s, board/profile, heap ≥128 KiB, owner/lease cleanup и GPIO2 LOW;
 - bounded query steps позволяют проверить typed serial artifact внутри того же HIL
@@ -344,6 +344,17 @@ mismatch; serial export сохранил generation 2, три observations, zero
 `0`, heap total/free/min 281 360/238 696/233 300 B, GPIO2 LOW; `run.json`
 `af5d493f…c2a7`, artifact index `c73f08d1…6376d`. Это local development evidence;
 GitHub-native attestation revision 2 ещё не запускалась.
+
+Candidate `0.39.0-product-survey-pipeline-measure` добавил в тот же сценарий
+реальный bounded software FIFO между simulated source и Survey. Suite revision 3
+требует переход pipeline ready→drained→committed, counters received/forwarded 3/3,
+depth 0, high-water 3, drop 0 и batch trigger none→stop. Full run
+`dc64d3b8d0438567a737f9a97d1cf078` прошил exact app `3f3b487b…d3fb19`, достиг
+ready за 502,915 ms и выполнил 17 Actions максимум за 98,594 ms; десять TFT frames
+совпали с reviewed goldens без единого pixel mismatch. Final owner/lease `none`/`0`,
+heap total/free/min 281 272/238 608/233 212 B, GPIO2 LOW; `run.json`
+`9716a080…074a8f`, index `27da0a1c…cd2b6`. Это local development evidence;
+GitHub-native revision-3 attestation ещё не запускалась.
 
 Историческая копия этого real bundle была подписана временным Ed25519 key и получила
 `release_eligible=true`, после чего temp key и copy уничтожены. Эксперимент

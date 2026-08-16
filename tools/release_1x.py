@@ -673,7 +673,7 @@ def publish_run(run_id: int) -> int:
                 "--suite-id",
                 "device-smoke",
                 "--suite-revision",
-                "2",
+                "3",
                 "--expected-version",
                 version,
                 "--allow-unsigned-local-result",

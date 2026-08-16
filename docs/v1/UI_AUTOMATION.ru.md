@@ -105,3 +105,9 @@ query проверил export generation 2/3 observations/0 drops, а финал
 owner `none`/lease `0` (`E-HIL-046`). Теперь автоматизация проверяет первый
 продуктовый вертикальный срез, хотя источник и store в этом UI-run остаются
 simulated/RAM/RF-off.
+
+Candidate 0.39 сделал состояние pipeline частью screen/state contract: Running
+показывает FIFO depth/high-water/drop, Result сохраняет high-water/drop, а HIL
+assertions требуют received/forwarded 3/3 и trigger none→stop. Семь прежних 0.38
+goldens сохранены с version suffix; семь кадров 0.39 заново сняты с TFT, просмотрены
+и затем дали zero mismatch в полном revision-3 run (`E-HIL-047`).

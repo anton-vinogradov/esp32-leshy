@@ -109,3 +109,10 @@ differences; a bounded serial query verifies export generation 2/3 observations/
 drops, and final Back restores owner `none`/lease `0` (`E-HIL-046`). Automation now
 covers the first product vertical slice, although this UI run still uses a
 simulated/RAM/RF-off source and store.
+
+Candidate 0.39 makes pipeline state part of the screen/state contract: Running shows
+FIFO depth/high-water/drop, Result retains high-water/drop, and HIL assertions
+require received/forwarded 3/3 plus trigger none→stop. The seven prior 0.38 goldens
+are retained with a version suffix; seven 0.39 frames were recaptured from the TFT,
+reviewed, and then matched with zero differences in the full revision-3 run
+(`E-HIL-047`).

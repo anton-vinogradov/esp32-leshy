@@ -1,7 +1,7 @@
 {
   "schema": "leshy.prerelease.suite.v1",
   "id": "device-smoke",
-  "revision": 2,
+  "revision": 3,
   "maximum_ready_marker_ms": 2000,
   "boot_assert": {
     "target": "clean_1x_measure",
@@ -100,7 +100,14 @@
             "survey_workflow_state": "setup",
             "survey_workflow_status": "ready",
             "survey_observations": 0,
-            "survey_generation": 0
+            "survey_generation": 0,
+            "survey_pipeline_status": "ready",
+            "survey_received": 0,
+            "survey_forwarded": 0,
+            "survey_dropped": 0,
+            "survey_queue_depth": 0,
+            "survey_queue_high_water": 0,
+            "survey_batch_trigger": "none"
           },
           "capture": {
             "name": "survey-setup",
@@ -120,7 +127,14 @@
             "survey_workflow_status": "appended",
             "survey_running": true,
             "survey_observations": 3,
-            "survey_generation": 0
+            "survey_generation": 0,
+            "survey_pipeline_status": "drained",
+            "survey_received": 3,
+            "survey_forwarded": 3,
+            "survey_dropped": 0,
+            "survey_queue_depth": 0,
+            "survey_queue_high_water": 3,
+            "survey_batch_trigger": "none"
           },
           "capture": {
             "name": "survey-running",
@@ -167,6 +181,13 @@
             "survey_observations": 3,
             "survey_generation": 2,
             "survey_persistent": false,
+            "survey_pipeline_status": "committed",
+            "survey_received": 3,
+            "survey_forwarded": 3,
+            "survey_dropped": 0,
+            "survey_queue_depth": 0,
+            "survey_queue_high_water": 3,
+            "survey_batch_trigger": "stop",
             "library_entries": 1,
             "library_generation": 2,
             "library_persistent": false
@@ -185,7 +206,9 @@
             "survey_workflow_state": "result",
             "survey_workflow_status": "committed",
             "survey_generation": 2,
-            "library_generation": 2
+            "library_generation": 2,
+            "survey_pipeline_status": "committed",
+            "survey_batch_trigger": "stop"
           }
         },
         {

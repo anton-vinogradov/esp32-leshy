@@ -25,6 +25,7 @@ def main() -> int:
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
     survey_workflow_path = TARGET / "src" / "apps" / "survey" / "SurveyWorkflow.cpp"
+    survey_pipeline_path = TARGET / "src" / "apps" / "survey" / "SurveyPipeline.cpp"
     session_catalog_path = TARGET / "src" / "apps" / "library" / "SessionCatalog.cpp"
     sector_inspection = TARGET / "src" / "storage" / "SdSectorInspection.cpp"
     reset_runner_path = ROOT / "tools" / "run_1x_sd_reset_matrix.py"
@@ -120,6 +121,20 @@ def main() -> int:
         ):
             if marker not in session_catalog:
                 errors.append(f"read-only Session catalog is missing: {marker}")
+
+    if not survey_pipeline_path.is_file():
+        errors.append("product Survey pipeline is missing")
+    else:
+        survey_pipeline = survey_pipeline_path.read_text(encoding="utf-8")
+        for marker in (
+            "queue_.push",
+            "queue_.pop",
+            "capacityDropped_",
+            "services::survey::sessionBatchTrigger",
+            "SurveyPipelineStatus::AlreadyCommitted",
+        ):
+            if marker not in survey_pipeline:
+                errors.append(f"product Survey pipeline is missing: {marker}")
 
     if not physical_sd_adapter.is_file():
         errors.append("explicit physical SD adapter is missing")

@@ -12,7 +12,7 @@
 
 - **Активный этап:** `S1 — Evidence baseline`.
 - **Последний закрытый этап:** `S0 — Governance и граница поколений`.
-- **Рабочая база репозитория:** `60aa931` плюс не выпущенные
+- **Рабочая база репозитория:** `c1c1d52` плюс не выпущенные
   документы/технический прототип в worktree.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
@@ -24,9 +24,9 @@
 | Этап | Статус | Подтверждённый результат | Что отделяет от gate |
 |---|---|---|---|
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
-| S1 | `active` | vision, конкурентный срез, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 и Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register и пять ADR; automatic device-smoke v2 проверяет первый product Survey→commit→Library→export vertical slice | остальные physical/storage evidence и review baseline PRD |
+| S1 | `active` | vision, конкурентный срез, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 и Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register и пять ADR; automatic device-smoke v3 проверяет product source→FIFO→Survey→commit→Library→export vertical slice и visible queue/drop/storage state | остальные physical/storage evidence и review baseline PRD |
 | S2 | `planned` | существуют capability-built home, unified input/TFT capture, atomic-head/media-guard contracts, guarded FAT evidence backend и lease path AppRuntime/ResourceBroker | нет production mount policy и complete product workflow |
-| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и real passive Wi-Fi→FIFO→persistent SessionStore/remount path работают на board-01 с RB-06 margin; product Setup→Running→Stop & Commit→Library→export orchestration проверена на bounded RAM backend, а validated-root catalog bridge используется общим admission path | product UI ещё не подключён к real FIFO/persistent backend и safe boot mount policy; открыты progress/drop states, power-cut, endurance и LittleFS parity; требуется gate S2 |
+| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и real passive Wi-Fi→FIFO→persistent SessionStore/remount path работают на board-01 с RB-06 margin; product Setup→Running→bounded FIFO→Stop & Commit→Library→export orchestration и visible progress/drop/storage state проверены на RAM backend, validated-root catalog bridge используется общим admission path | product UI ещё не подключён к real passive adapter/persistent backend и safe boot mount policy; открыты power-cut, endurance и LittleFS parity; требуется gate S2 |
 | S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
@@ -221,6 +221,11 @@
   и выдаёт bounded JSON export. `device-smoke` revision 2 автоматически проверяет
   idempotent Stop, десять real-TFT goldens, export record, resource cleanup и GPIO2
   LOW; RF и physical storage намеренно не задействованы.
+- `SurveyPipeline` теперь отделяет source callback от Session через существующий
+  fixed FIFO 64, считает received/forwarded/drop/depth/high-water, применяет Stop
+  batch trigger и не допускает более 64 in-flight+forwarded observations. UI и
+  diagnostic state показывают эти значения; host capacity case фиксирует 65-й
+  record как drop, а board golden case показывает 3→3, high-water 3 и zero drop.
 - принят ADR-005 и реализован первый manifest-driven prerelease device-smoke:
   runner дважды прошил exact app candidate, после отдельного golden bootstrap
   прошёл cold boot→Home→Diagnostics→Back с real TFT RGB565 comparisons, zero pixel
@@ -256,9 +261,9 @@
 2. Выполнить manual `HW-T02/T03/T05/T08/T09/T10`; `HW-T06` запускать только после
    подтверждения отсутствия GPS/PN532 и с RF detector/logic analyzer.
 3. Продолжить productization доказанного source→queue→store→Library/export path:
-   UI/RAM vertical slice Setup/Running/Stop & Commit уже автоматизирован; теперь
-   подключить к нему real passive source→FIFO и guarded persistent backend, добавить
-   видимые progress/drop/storage states и safe boot mount/catalog/recovery той же
+   UI/RAM slice с bounded FIFO и visible progress/drop/storage state автоматизирован;
+   теперь подключить к нему real passive adapter и guarded persistent backend,
+   добавить safe boot mount/catalog/recovery той же
    persistent Session. Проверить reset-readiness retry при следующем natural
    transient. LittleFS требует отдельно доказанный disposable image, physical
    power-cut — controller.
@@ -402,8 +407,12 @@
 | E-SURVEY-004 | `SurveyWorkflow` product orchestration host tests | pass: cancel пишет/sync 0; Start принимает три observations; Detail/Back сохраняет Running; Stop публикует и восстанавливает generation ровно один раз; повторный Stop не пишет; failed third commit сохраняет прежнюю Library generation 2 | текущий product source simulated, backend bounded RAM; real FIFO/persistent adapter и progress/drop UI остаются следующей частью slice |
 | E-LIBRARY-003 | `SessionCatalog` validated-root admission tests | pass: empty, valid latest, corrupt-new fallback, idempotent rebuild и direct duplicate-admission rejection; recovery staged в caller-owned workspace, result заменяется только после полной validation; physical diagnostic admission использует тот же bridge | это каталог latest Session одного уже validated root, не boot media discovery/mount или multi-root policy |
 | E-BUILD-040 | `0.38.0-product-survey-workflow-measure` | pass: RAM 120 400 B, flash 1 033 560 B; app/factory 1 033 968/1 099 504 B, app SHA-256 `9240cccc…c3e370`, factory `71b2d168…5216a3`, ELF `de5598e1…df9aa` | +32 B static RAM и +2 876 B linked flash относительно 0.37; product vertical slice использует simulated source и bounded RAM store |
-| E-AUTO-006 | `device-smoke` revision 2 + bounded query step | pass: suite добавляет Survey→commit→Library→export, host validation запрещает action/query ambiguity, newline/non-ASCII/oversized command и capture-after-query; single-scenario golden bootstrap никогда не gate-eligible; workflow/release verifier требуют revision 2 | GitHub-native run revision 2 ещё не выполнен; stable publish/camera/power/destructive lanes остаются S8 |
+| E-AUTO-006 | `device-smoke` revision 2 + bounded query step | pass: suite добавила Survey→commit→Library→export, host validation запрещает action/query ambiguity, newline/non-ASCII/oversized command и capture-after-query; single-scenario golden bootstrap никогда не gate-eligible | historical revision-2 evidence superseded текущей revision 3; GitHub-native run revision 2 не выполнялся |
 | E-HIL-046 | board-01 product-workflow `device-smoke` revision 2 | pass/gate-eligible local evidence: exact app `9240cccc…c3e370`, ELF `de5598e1…df9aa`, run ID `ddf0203694d3011788f1762cec64ff11`; ready 502,731 ms; 17 Actions, idempotent Stop `changed=false`; десять TFT comparisons zero mismatch; export generation 2/3 observations/0 dropped, simulated/RAM/RF-off; final owner none/lease 0, heap total/free/min 281 360/238 696/233 300 B, GPIO2 LOW; `run.json` `af5d493f…c2a7`, index `c73f08d1…6376d` | local development evidence без GitHub attestation; real RF/FIFO/SD, boot mount/catalog, camera/power и endurance не проверялись |
+| E-SURVEY-005 | allocation-free `SurveyPipeline` host tests | pass: source→FIFO enqueue/drain сохраняет order; progress 3 received/queued/forwarded, partial drain и zero-depth; Stop выбирает batch trigger `stop` и commits once; 65-й record bounded case даёт exactly one drop, high-water 64, forwards/commits 64 без reject | simulated source/RAM store; background cadence, real driver callback и persistent errors ещё не product-connected |
+| E-BUILD-041 | `0.39.0-product-survey-pipeline-measure` | pass: RAM 120 488 B, flash 1 035 232 B; app/factory 1 035 632/1 101 168 B, app SHA-256 `3f3b487b…d3fb19`, factory `6e406e8b…8ded77`, ELF `c442c637…ed6d8b` | +88 B static RAM и +1 672 B linked flash относительно 0.38; переиспользован существующий FIFO 64, без второго 4 672 B ring |
+| E-AUTO-007 | `device-smoke` revision 3 pipeline assertions/goldens | pass: suite требует ready→drained→committed, received/forwarded 3/3, depth 0, high-water 3, drop 0 и trigger none→stop; семь goldens 0.38 сохранены с suffix, семь 0.39 сняты заново и visual-reviewed | GitHub-native revision-3 run ещё не выполнен; external camera/power и destructive lanes остаются S8 |
+| E-HIL-047 | board-01 product-pipeline `device-smoke` revision 3 | pass/gate-eligible local evidence: exact app `3f3b487b…d3fb19`, ELF `c442c637…ed6d8b`, run ID `dc64d3b8d0438567a737f9a97d1cf078`; ready 502,915 ms, 17 Actions max 98,594 ms; pipeline running 3 received/3 forwarded/depth 0/high-water 3/drop 0, commit trigger Stop; десять TFT comparisons zero mismatch; final owner none/lease 0, heap total/free/min 281 272/238 608/233 212 B, GPIO2 LOW; `run.json` `9716a080…074a8f`, index `27da0a1c…cd2b6` | local development evidence без GitHub attestation; source remains simulated, store RAM-only, RF/SD/boot recovery/endurance не выполнялись |
 
 ## Известные неопределённости и риски
 
