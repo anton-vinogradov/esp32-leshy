@@ -341,6 +341,14 @@ generation 1/valid, and `PERSISTED YES`; the serial artifact carries
 mount/catalog/recovery is not implemented, so reboot still starts with simulated
 Library.
 
+Version 0.40 adds product-level authorization above the proven technical path. Boot
+catalog access permits only the exact enrolled fingerprint, an existing
+`/leshy/sessions/v1`, a guaranteed read-only non-writable driver, and lease 12.
+Initialize/commit require explicit selection, a writable driver, byte budget, and
+the same resources; format is forbidden. The combined Survey gate requires a
+passive plan and lease 14 and never falls back to simulated/RAM. This is host plus
+non-I/O board policy evidence, not a mount or write to the product namespace.
+
 ## Acceptance
 
 | ID | Required result |
@@ -359,8 +367,9 @@ identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit pl
 remount/reopen, a 32-commit p50/p95/p99 throughput distribution, and the host/static
 reset harness plus physical six-boundary matrix are implemented. The fixed queue and
 batched publication cadence are now host-tested, and E-HIL-038 delivers 9,068 encoded
-B/s against the 2,184 B/s RB-06 target. The next safe work is to connect the proven
-path to product Setup/Running/Stop & Commit and boot-time persistent Library
+B/s against the 2,184 B/s RB-06 target. The next safe work is to implement a board
+adapter lifecycle satisfying read-only boot recovery and explicit bounded commit
+policy, then connect the proven path to product Setup/Running/Stop & Commit and persistent Library
 catalog/recovery. Export of this recovered Session in the current boot is already
 confirmed by E-HIL-040. The readiness retry also awaits a natural transient. Physical power-cut
 still needs a controller.

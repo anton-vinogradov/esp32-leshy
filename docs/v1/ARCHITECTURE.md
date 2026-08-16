@@ -109,6 +109,17 @@ diagnostic command; it proves service rate, data path, and current-boot admissio
 not the product worker invariant that receiver ingress never waits on a durability
 barrier or boot-time catalog/recovery.
 
+Product activation is a separate fail-closed boundary. `ProductStorePolicy` fixes
+the only current product root at `/leshy/sessions/v1`: automatic catalog recovery
+requires an already enrolled exact media fingerprint, an existing root, a guaranteed
+read-only non-writable driver, and Storage+RadioSpi ownership. Initialization and
+commit additionally require an explicit user selection, writable driver, and bounded
+size/reserve. `ProductSurveyAdmission` then requires explicit Start, a validated
+passive plan, a writable commit permit, and combined EspRf+Storage+RadioSpi ownership.
+It never silently replaces a requested real/persistent Session with simulated/RAM.
+These policies authorize no I/O themselves; the board adapter lifecycle remains the
+next implementation boundary.
+
 ## Data model
 
 Raw observation is separate from interpretation:

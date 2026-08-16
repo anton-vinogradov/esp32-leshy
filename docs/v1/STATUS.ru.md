@@ -12,8 +12,8 @@
 
 - **Активный этап:** `S1 — Evidence baseline`.
 - **Последний закрытый этап:** `S0 — Governance и граница поколений`.
-- **Рабочая база репозитория:** `c1c1d52` плюс не выпущенные
-  документы/технический прототип в worktree.
+- **Рабочая база репозитория:** `5efc6ed` плюс текущие не выпущенные
+  документы/технический прототип 0.40.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
 - **Главная цель текущего этапа:** подтвердить ограничения ESP32-DIV и перевести PRD
@@ -24,9 +24,9 @@
 | Этап | Статус | Подтверждённый результат | Что отделяет от gate |
 |---|---|---|---|
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
-| S1 | `active` | vision, конкурентный срез, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 и Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register и пять ADR; automatic device-smoke v3 проверяет product source→FIFO→Survey→commit→Library→export vertical slice и visible queue/drop/storage state | остальные physical/storage evidence и review baseline PRD |
+| S1 | `active` | vision, конкурентный срез, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 и Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register и пять ADR; automatic device-smoke v4 проверяет product source→FIFO→Survey→commit→Library→export vertical slice, visible queue/drop/storage state и fail-closed real/persistent admission до hardware I/O | остальные physical/storage evidence и review baseline PRD |
 | S2 | `planned` | существуют capability-built home, unified input/TFT capture, atomic-head/media-guard contracts, guarded FAT evidence backend и lease path AppRuntime/ResourceBroker | нет production mount policy и complete product workflow |
-| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и real passive Wi-Fi→FIFO→persistent SessionStore/remount path работают на board-01 с RB-06 margin; product Setup→Running→bounded FIFO→Stop & Commit→Library→export orchestration и visible progress/drop/storage state проверены на RAM backend, validated-root catalog bridge используется общим admission path | product UI ещё не подключён к real passive adapter/persistent backend и safe boot mount policy; открыты power-cut, endurance и LittleFS parity; требуется gate S2 |
+| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и real passive Wi-Fi→FIFO→persistent SessionStore/remount path работают на board-01 с RB-06 margin; product RAM workflow и validated-root catalog bridge дополнены fail-closed admission: real Survey не может молча откатиться в simulated/RAM, boot recovery требует enrolled exact media + read-only driver, commit — explicit selection + bounded `/leshy/sessions/v1` + полный lease | product UI ещё не подключён к real passive adapter/persistent backend; Arduino SD adapter пока не удовлетворяет read-only boot policy; открыты power-cut, endurance и LittleFS parity; требуется gate S2 |
 | S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
@@ -226,6 +226,12 @@
   batch trigger и не допускает более 64 in-flight+forwarded observations. UI и
   diagnostic state показывают эти значения; host capacity case фиксирует 65-й
   record как drop, а board golden case показывает 3→3, high-water 3 и zero drop.
+- добавлены `ProductStorePolicy` и `ProductSurveyAdmission`: boot catalog допускается
+  только с exact enrolled fingerprint, существующим `/leshy/sessions/v1`, read-only
+  driver и lease Storage+RadioSpi; initialize/commit дополнительно требуют explicit
+  selection, writable driver и byte budget. Real Survey требует valid passive plan,
+  writable commit permit и combined EspRf+Storage+RadioSpi lease; simulated/RAM
+  fallback всегда false. Device-smoke проверяет отказ до hardware/radio/storage I/O.
 - принят ADR-005 и реализован первый manifest-driven prerelease device-smoke:
   runner дважды прошил exact app candidate, после отдельного golden bootstrap
   прошёл cold boot→Home→Diagnostics→Back с real TFT RGB565 comparisons, zero pixel
@@ -262,9 +268,10 @@
    подтверждения отсутствия GPS/PN532 и с RF detector/logic analyzer.
 3. Продолжить productization доказанного source→queue→store→Library/export path:
    UI/RAM slice с bounded FIFO и visible progress/drop/storage state автоматизирован;
-   теперь подключить к нему real passive adapter и guarded persistent backend,
-   добавить safe boot mount/catalog/recovery той же
-   persistent Session. Проверить reset-readiness retry при следующем natural
+   fail-closed real/persistent admission и точный product namespace уже закреплены;
+   теперь реализовать adapter lifecycle, который удовлетворяет read-only boot
+   recovery и explicit bounded commit, затем подключить к нему real passive source,
+   общий pipeline и catalog той же persistent Session. Проверить reset-readiness retry при следующем natural
    transient. LittleFS требует отдельно доказанный disposable image, physical
    power-cut — controller.
 4. Измерить power/shared-bus/no-TX stability при появлении приборов.
@@ -413,6 +420,11 @@
 | E-BUILD-041 | `0.39.0-product-survey-pipeline-measure` | pass: RAM 120 488 B, flash 1 035 232 B; app/factory 1 035 632/1 101 168 B, app SHA-256 `3f3b487b…d3fb19`, factory `6e406e8b…8ded77`, ELF `c442c637…ed6d8b` | +88 B static RAM и +1 672 B linked flash относительно 0.38; переиспользован существующий FIFO 64, без второго 4 672 B ring |
 | E-AUTO-007 | `device-smoke` revision 3 pipeline assertions/goldens | pass: suite требует ready→drained→committed, received/forwarded 3/3, depth 0, high-water 3, drop 0 и trigger none→stop; семь goldens 0.38 сохранены с suffix, семь 0.39 сняты заново и visual-reviewed | GitHub-native revision-3 run ещё не выполнен; external camera/power и destructive lanes остаются S8 |
 | E-HIL-047 | board-01 product-pipeline `device-smoke` revision 3 | pass/gate-eligible local evidence: exact app `3f3b487b…d3fb19`, ELF `c442c637…ed6d8b`, run ID `dc64d3b8d0438567a737f9a97d1cf078`; ready 502,915 ms, 17 Actions max 98,594 ms; pipeline running 3 received/3 forwarded/depth 0/high-water 3/drop 0, commit trigger Stop; десять TFT comparisons zero mismatch; final owner none/lease 0, heap total/free/min 281 272/238 608/233 212 B, GPIO2 LOW; `run.json` `9716a080…074a8f`, index `27da0a1c…cd2b6` | local development evidence без GitHub attestation; source remains simulated, store RAM-only, RF/SD/boot recovery/endurance не выполнялись |
+| E-STORAGE-023 | `ProductStorePolicy` negative host matrix | pass: recovery разрешён без повторного prompt только для exact enrolled fingerprint, exact `/leshy/sessions/v1`, existing root, read-only non-writable driver и lease 12; initialize/commit требуют explicit selection, writable driver, правильную root existence семантику, bounded size/reserve и тот же lease; mismatch/root/format/mode/space/resource/conflict fail closed | policy не mount и не filesystem adapter; enrollment/config persistence и реальный read-only driver ещё не реализованы |
+| E-SURVEY-006 | `ProductSurveyAdmission` host matrix + board policy query | pass: real start требует explicit Start, available source, valid passive-only plan, writable product commit permit и combined lease 14; permit всегда `persistent=true`, `simulated=false`; device query без authority отвечает `explicit_start_required`/`missing_media` и подтверждает hardware/radio/mount/write false | admission не запускает workers; product UI пока продолжает явный simulated/RAM workflow |
+| E-BUILD-042 | `0.40.0-product-admission-policy-measure` | pass: RAM 120 488 B, flash 1 037 472 B; app/factory 1 037 872/1 103 408 B, app SHA-256 `83cac871…4d25844`, factory `6f7cc93e…9a9e29a`, ELF `dadad5b7…503713` | zero static-RAM delta и +2 240 B linked flash относительно 0.39; только contract/query, реальные source/store не стартуют |
+| E-AUTO-008 | `device-smoke` revision 4 product admission assertion | pass: bounded query требует exact root, resources 14, persistent/passive true, simulated fallback false и zero hardware/radio/storage effects; прежние workflow/pipeline/visual assertions сохранены | GitHub-native revision-4 attestation ещё не выполнялась; destructive lane остаётся S8 |
+| E-HIL-048 | board-01 product-admission `device-smoke` revision 4 | pass/gate-eligible local evidence: exact app `83cac871…4d25844`, ELF `dadad5b7…503713`, run ID `51a294577b902dd2bd1ed53908e86597`; fail-closed query прошла до I/O; ready 507,234 ms, 17 Actions max 99,066 ms; десять TFT comparisons zero mismatch; final owner none/lease 0, heap total/free/min 281 272/238 608/233 212 B, GPIO2 LOW; `run.json` `6361d40e…deafaa`, index `e3796ec3…9608f1` | local unsigned development evidence; реальный product RF/SD lifecycle и boot recovery не выполнялись |
 
 ## Известные неопределённости и риски
 

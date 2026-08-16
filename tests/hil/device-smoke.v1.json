@@ -1,7 +1,7 @@
 {
   "schema": "leshy.prerelease.suite.v1",
   "id": "device-smoke",
-  "revision": 3,
+  "revision": 4,
   "maximum_ready_marker_ms": 2000,
   "boot_assert": {
     "target": "clean_1x_measure",
@@ -34,6 +34,33 @@
             "name": "home",
             "golden": "goldens/esp32-div-v2-n16/home.rgb565.zlib",
             "mode": "exact"
+          }
+        },
+        {
+          "id": "product-admission-fails-closed",
+          "query": {
+            "command": "survey.product.admission",
+            "schema": "leshy.survey.product_admission.v1",
+            "kind": "policy_state"
+          },
+          "assert": {
+            "status": "explicit_start_required",
+            "store_status": "missing_media",
+            "store_operation": "recover_catalog",
+            "store_root": "/leshy/sessions/v1",
+            "required_resources": 14,
+            "explicit_start": false,
+            "passive_only": true,
+            "persistent_required": true,
+            "simulated_fallback": false,
+            "hardware_touched": false,
+            "radio_started": false,
+            "storage_mounted": false,
+            "storage_written": false,
+            "format_allowed": false,
+            "application_connect_calls": 0,
+            "application_raw_tx_calls": 0,
+            "physical_no_tx_instrumented": false
           }
         },
         {

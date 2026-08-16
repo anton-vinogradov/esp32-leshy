@@ -242,7 +242,8 @@ promotion; a real GitHub workflow run now passes:
 - `tools/run_1x_prerelease_hil.py` loads a declarative suite, flashes the exact
   candidate through verified esptool only with explicit `--flash`, performs a cold
   reset, keeps one passive USB session for Actions/captures, and creates a bundle;
-- `tests/hil/device-smoke.v1.json` revision 3 defines Home→Diagnostics→Back and
+- `tests/hil/device-smoke.v1.json` revision 4 defines fail-closed product admission,
+  Home→Diagnostics→Back, and
   product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
   boot ≤2 s, board/profile, heap ≥128 KiB, owner/lease cleanup, and GPIO2 LOW;
 - bounded query steps verify a typed serial artifact inside the same HIL session;
@@ -358,6 +359,19 @@ matched reviewed goldens with zero pixel differences. Final owner/lease was
 `none`/`0`, heap total/free/min was 281,272/238,608/233,212 B, and GPIO2 was LOW;
 `run.json` is `9716a080…074a8f`, index `27da0a1c…cd2b6`. This is local development
 evidence; a GitHub-native revision-3 attestation has not run yet.
+
+Candidate `0.40.0-product-admission-policy-measure` advances the suite to revision 4
+without changing screens or goldens. A new bounded query before any hardware I/O
+requires `explicit_start_required`, store `missing_media`, exact
+`/leshy/sessions/v1`, combined resources 14, passive/persistent true, simulated
+fallback false, and hardware/radio/mount/write false. Full run
+`51a294577b902dd2bd1ed53908e86597` flashed exact app
+`83cac871…4d25844`/ELF `dadad5b7…503713`, reached ready in 507.234 ms, retained 17
+Actions at no more than 99.066 ms, ten zero-mismatch TFT comparisons, final
+owner/lease `none`/`0`, heap total/free/min 281,272/238,608/233,212 B, and GPIO2
+LOW. `run.json` is `6361d40e…deafaa`, index `e3796ec3…9608f1`; the verifier accepts
+it as unsigned local development evidence but not release-eligible evidence. This
+run intentionally did not start the real product RF/SD lifecycle.
 
 A historical copy of this real bundle was signed with a temporary Ed25519 key and
 returned `release_eligible=true`; the temporary key and copy were then destroyed.

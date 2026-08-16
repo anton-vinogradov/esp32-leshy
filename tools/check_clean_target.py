@@ -26,6 +26,8 @@ def main() -> int:
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
     survey_workflow_path = TARGET / "src" / "apps" / "survey" / "SurveyWorkflow.cpp"
     survey_pipeline_path = TARGET / "src" / "apps" / "survey" / "SurveyPipeline.cpp"
+    product_survey_policy_path = TARGET / "src" / "apps" / "survey" / "ProductSurveyAdmission.cpp"
+    product_store_policy_path = TARGET / "src" / "storage" / "ProductStorePolicy.cpp"
     session_catalog_path = TARGET / "src" / "apps" / "library" / "SessionCatalog.cpp"
     sector_inspection = TARGET / "src" / "storage" / "SdSectorInspection.cpp"
     reset_runner_path = ROOT / "tools" / "run_1x_sd_reset_matrix.py"
@@ -212,6 +214,52 @@ def main() -> int:
         ):
             if re.search(pattern, session_adapter):
                 errors.append(f"guarded SessionStore adapter can mutate existing paths: {pattern}")
+
+    for policy_path, markers in (
+        (
+            product_store_policy_path,
+            (
+                'kProductSessionStoreRoot',
+                'ExplicitSelectionRequired',
+                'ReadOnlyDriverRequired',
+                'WritableDriverRequired',
+                'FormatForbidden',
+                'ResourcesMissing',
+            ),
+        ),
+        (
+            product_survey_policy_path,
+            (
+                'validatePassivePlan',
+                'ExplicitStartRequired',
+                'WritableStoreRequired',
+                'ResourcesMissing',
+                'simulated',
+            ),
+        ),
+    ):
+        if not policy_path.is_file():
+            errors.append(f"product fail-closed policy is missing: {policy_path.name}")
+            continue
+        policy = policy_path.read_text(encoding="utf-8")
+        policy_header = policy_path.with_suffix(".h")
+        if policy_header.is_file():
+            policy += "\n" + policy_header.read_text(encoding="utf-8")
+        for marker in markers:
+            if marker not in policy:
+                errors.append(
+                    f"product fail-closed policy {policy_path.name} is missing: {marker}"
+                )
+
+    for marker in (
+        "survey.product.admission",
+        '\\"simulated_fallback\\":false',
+        '\\"hardware_touched\\":false',
+        '\\"storage_mounted\\":false',
+        '\\"storage_written\\":false',
+    ):
+        if marker not in entry:
+            errors.append(f"product admission diagnostic is missing: {marker}")
 
     for marker in (
         "storage.sd.session-store disposable-write ",

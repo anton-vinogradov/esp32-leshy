@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "apps/survey/SurveyController.h"
+#include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyPipeline.h"
 #include "apps/survey/SurveyWorkflow.h"
 #include "apps/library/LibraryController.h"
@@ -27,6 +28,7 @@
 #include "storage/AtomicHead.h"
 #include "storage/MediaDiscovery.h"
 #include "storage/MountPolicy.h"
+#include "storage/ProductStorePolicy.h"
 #include "storage/SdReadOnlyProtocol.h"
 #include "storage/SdIdentification.h"
 #include "storage/SdIdentificationTransport.h"
@@ -1229,6 +1231,198 @@ void testSurveyPipelineQueuesDrainsDropsAndCommitsWithStopPolicy() {
                       "committed") == 0);
 }
 
+void testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites() {
+    constexpr ResourceMask storeResources =
+        resourceMask(Resource::Storage) | resourceMask(Resource::RadioSpi);
+    MediaIdentity media{true, MediaKind::Sd, "0123456789ABCDEF", 1024U * 1024U,
+                        768U * 1024U};
+    ProductStoreRequest recovery;
+    recovery.operation = ProductStoreOperation::RecoverCatalog;
+    recovery.expectedFingerprint = "0123456789ABCDEF";
+    recovery.rootPath = kProductSessionStoreRoot;
+    recovery.rootExists = true;
+    recovery.driverReadOnlyGuaranteed = true;
+    recovery.ownedResources = storeResources;
+
+    ProductStorePermit permit = authorizeProductStore(media, recovery);
+    CHECK(permit.allowed());
+    CHECK(!permit.writable);
+    CHECK(permit.byteLimit == 0);
+    CHECK(permit.operation == ProductStoreOperation::RecoverCatalog);
+    CHECK(permit.requiredResources == storeResources);
+    CHECK(std::strcmp(permit.rootPath, "/leshy/sessions/v1") == 0);
+    CHECK(std::strcmp(productStoreOperationName(permit.operation),
+                      "recover_catalog") == 0);
+
+    ProductStoreRequest rejected = recovery;
+    MediaIdentity missing = media;
+    missing.present = false;
+    CHECK(authorizeProductStore(missing, rejected).status ==
+          ProductStoreAccessStatus::MissingMedia);
+    MediaIdentity invalidGeometry = media;
+    invalidGeometry.capacityBytes = 0;
+    CHECK(authorizeProductStore(invalidGeometry, rejected).status ==
+          ProductStoreAccessStatus::InvalidMediaGeometry);
+    rejected.expectedFingerprint = "FEDCBA9876543210";
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::FingerprintMismatch);
+    rejected = recovery;
+    rejected.rootPath = "/leshy/sessions/v10";
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::InvalidRoot);
+    rejected = recovery;
+    rejected.rootExists = false;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::RootMissing);
+    rejected = recovery;
+    rejected.driverReadOnlyGuaranteed = false;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::ReadOnlyDriverRequired);
+    rejected = recovery;
+    rejected.driverWriteEnabled = true;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::ReadOnlyDriverRequired);
+    rejected = recovery;
+    rejected.formatRequested = true;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::FormatForbidden);
+    rejected = recovery;
+    rejected.ownedResources = resourceMask(Resource::Storage);
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::ResourcesMissing);
+    rejected = recovery;
+    rejected.conflictingOwner = true;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::ResourceConflict);
+
+    ProductStoreRequest initialize;
+    initialize.operation = ProductStoreOperation::InitializeStore;
+    initialize.explicitlySelected = true;
+    initialize.expectedFingerprint = recovery.expectedFingerprint;
+    initialize.rootPath = kProductSessionStoreRoot;
+    initialize.rootExists = false;
+    initialize.driverWriteEnabled = true;
+    initialize.requiredBytes = 65536;
+    initialize.reserveBytes = 65536;
+    initialize.ownedResources = storeResources;
+    permit = authorizeProductStore(media, initialize);
+    CHECK(permit.allowed());
+    CHECK(permit.writable);
+    CHECK(permit.byteLimit == 65536);
+    CHECK(permit.operation == ProductStoreOperation::InitializeStore);
+
+    rejected = initialize;
+    rejected.explicitlySelected = false;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::ExplicitSelectionRequired);
+    rejected = initialize;
+    rejected.rootExists = true;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::RootAlreadyExists);
+    rejected = initialize;
+    rejected.driverWriteEnabled = false;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::WritableDriverRequired);
+    rejected = initialize;
+    rejected.requiredBytes = 0;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::InvalidSize);
+    rejected = initialize;
+    rejected.requiredBytes = media.freeBytes;
+    rejected.reserveBytes = 1;
+    CHECK(authorizeProductStore(media, rejected).status ==
+          ProductStoreAccessStatus::InsufficientSpace);
+
+    ProductStoreRequest commit = initialize;
+    commit.operation = ProductStoreOperation::CommitSession;
+    commit.rootExists = true;
+    permit = authorizeProductStore(media, commit);
+    CHECK(permit.allowed());
+    CHECK(permit.writable);
+    CHECK(permit.operation == ProductStoreOperation::CommitSession);
+    CHECK(std::strcmp(productStoreAccessStatusName(permit.status),
+                      "permitted") == 0);
+}
+
+void testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam() {
+    constexpr ResourceMask storeResources =
+        resourceMask(Resource::Storage) | resourceMask(Resource::RadioSpi);
+    constexpr ResourceMask surveyResources =
+        storeResources | resourceMask(Resource::EspRf);
+    MediaIdentity media{true, MediaKind::Sd, "0123456789ABCDEF", 1024U * 1024U,
+                        768U * 1024U};
+    ProductStoreRequest storeRequest;
+    storeRequest.operation = ProductStoreOperation::CommitSession;
+    storeRequest.explicitlySelected = true;
+    storeRequest.expectedFingerprint = "0123456789ABCDEF";
+    storeRequest.rootPath = kProductSessionStoreRoot;
+    storeRequest.rootExists = true;
+    storeRequest.driverWriteEnabled = true;
+    storeRequest.requiredBytes = 65536;
+    storeRequest.reserveBytes = 65536;
+    storeRequest.ownedResources = storeResources;
+    const ProductStorePermit store = authorizeProductStore(media, storeRequest);
+    CHECK(store.allowed());
+
+    ProductSurveyRequest request;
+    request.explicitStart = true;
+    request.sourceAvailable = true;
+    request.scanPlan = defaultPassivePlan();
+    request.storePermit = store;
+    request.ownedResources = surveyResources;
+    ProductSurveyPermit permit = authorizeProductSurvey(request);
+    CHECK(permit.allowed());
+    CHECK(permit.passive);
+    CHECK(permit.persistent);
+    CHECK(!permit.simulated);
+    CHECK(permit.requiredResources == surveyResources);
+
+    ProductSurveyRequest rejected = request;
+    rejected.explicitStart = false;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::ExplicitStartRequired);
+    rejected = request;
+    rejected.sourceAvailable = false;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::SourceUnavailable);
+    rejected = request;
+    rejected.scanPlan.passive = false;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::PassivePlanRejected);
+    rejected = request;
+    rejected.storePermit.status = ProductStoreAccessStatus::MissingMedia;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::StoreRejected);
+    rejected = request;
+    rejected.storePermit.rootPath = "/leshy/sessions/v10";
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::StoreRejected);
+    rejected = request;
+    rejected.storePermit.requiredResources = resourceMask(Resource::Storage);
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::StoreRejected);
+    rejected = request;
+    rejected.storePermit.byteLimit = 0;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::StoreRejected);
+    rejected = request;
+    rejected.storePermit.operation = ProductStoreOperation::RecoverCatalog;
+    rejected.storePermit.writable = false;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::WritableStoreRequired);
+    rejected = request;
+    rejected.ownedResources = storeResources;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::ResourcesMissing);
+    rejected = request;
+    rejected.conflictingOwner = true;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::ResourceConflict);
+    CHECK(std::strcmp(productSurveyAdmissionStatusName(
+                          ProductSurveyAdmissionStatus::StoreRejected),
+                      "store_rejected") == 0);
+}
+
 HeadCandidate candidate(const std::uint8_t* wire, const HeadRecord& record,
                         bool present = true, bool matching = true) {
     return {wire,
@@ -2325,6 +2519,8 @@ int main() {
     testGoldenSurveyTraceUsesListDetailBackAndExplicitStop();
     testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure();
     testSurveyPipelineQueuesDrainsDropsAndCommitsWithStopPolicy();
+    testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites();
+    testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam();
     testSessionCodecCommitsCanonicalDataAndReopensOffline();
     testOfflineLibraryControllerIsBoundedAndPreservesProvenance();
     testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity();

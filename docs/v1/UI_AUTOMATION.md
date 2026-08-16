@@ -116,3 +116,9 @@ require received/forwarded 3/3 plus trigger none→stop. The seven prior 0.38 go
 are retained with a version suffix; seven 0.39 frames were recaptured from the TFT,
 reviewed, and then matched with zero differences in the full revision-3 run
 (`E-HIL-047`).
+
+Candidate 0.40 leaves the visual contract unchanged: revision 4 adds a bounded
+product-admission query before navigation and reuses the same ten reviewed TFT
+comparisons with zero mismatch. The query proves that without explicit Start and a
+trusted persistent store there is no hidden hardware/radio/storage action or
+simulated fallback (`E-HIL-048`).

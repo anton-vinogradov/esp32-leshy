@@ -25,6 +25,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/tests/native/clean_target_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/LibraryController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/SessionCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/survey/ProductSurveyAdmission.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyPipeline.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyWorkflow.cpp" \
@@ -43,6 +44,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/storage/AtomicHead.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/MediaDiscovery.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/MountPolicy.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/ProductStorePolicy.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SdIdentification.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SdIdentificationTransport.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SdReadOnlyProtocol.cpp" \

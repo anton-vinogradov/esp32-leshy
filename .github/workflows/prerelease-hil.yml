@@ -152,7 +152,7 @@ jobs:
             --bundle "$RUNNER_TEMP/hil-bundle" \
             --candidate candidate/firmware.bin \
             --suite-id device-smoke \
-            --suite-revision 3 \
+            --suite-revision 4 \
             --expected-version "${{ needs.candidate.outputs.version }}" \
             --allow-unsigned-local-result
 
@@ -229,7 +229,7 @@ jobs:
             --bundle hil-bundle \
             --candidate candidate/firmware.bin \
             --suite-id device-smoke \
-            --suite-revision 3 \
+            --suite-revision 4 \
             --expected-version "${{ needs.candidate.outputs.version }}" \
             --allow-unsigned-local-result
 

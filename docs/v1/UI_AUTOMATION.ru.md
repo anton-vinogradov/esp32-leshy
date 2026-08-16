@@ -111,3 +111,9 @@ Candidate 0.39 сделал состояние pipeline частью screen/stat
 assertions требуют received/forwarded 3/3 и trigger none→stop. Семь прежних 0.38
 goldens сохранены с version suffix; семь кадров 0.39 заново сняты с TFT, просмотрены
 и затем дали zero mismatch в полном revision-3 run (`E-HIL-047`).
+
+Candidate 0.40 не меняет визуальный contract: revision-4 добавляет перед
+навигацией bounded product-admission query и повторно использует те же десять
+reviewed TFT comparisons с zero mismatch. Query доказывает, что без explicit Start
+и trusted persistent store нет скрытого hardware/radio/storage действия или
+simulated fallback (`E-HIL-048`).

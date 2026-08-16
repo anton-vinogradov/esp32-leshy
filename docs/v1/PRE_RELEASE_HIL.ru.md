@@ -242,7 +242,8 @@ promotion; реальный GitHub workflow run прошёл:
 - `tools/run_1x_prerelease_hil.py` загружает declarative suite, по явному `--flash`
   прошивает exact candidate через esptool с verify, делает cold reset, держит один
   passive USB session для Actions/captures и формирует bundle;
-- `tests/hil/device-smoke.v1.json` revision 3 задаёт Home→Diagnostics→Back и
+- `tests/hil/device-smoke.v1.json` revision 4 задаёт fail-closed product admission,
+  Home→Diagnostics→Back и
   product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
   boot ≤2 s, board/profile, heap ≥128 KiB, owner/lease cleanup и GPIO2 LOW;
 - bounded query steps позволяют проверить typed serial artifact внутри того же HIL
@@ -355,6 +356,19 @@ ready за 502,915 ms и выполнил 17 Actions максимум за 98,59
 heap total/free/min 281 272/238 608/233 212 B, GPIO2 LOW; `run.json`
 `9716a080…074a8f`, index `27da0a1c…cd2b6`. Это local development evidence;
 GitHub-native revision-3 attestation ещё не запускалась.
+
+Candidate `0.40.0-product-admission-policy-measure` поднял suite до revision 4 без
+изменения экранов/goldens. Новый bounded query до любого hardware I/O требует
+`explicit_start_required`, store `missing_media`, точный `/leshy/sessions/v1`,
+combined resources 14, passive/persistent true, simulated fallback false и
+hardware/radio/mount/write false. Full run `51a294577b902dd2bd1ed53908e86597`
+прошил exact app `83cac871…4d25844`/ELF `dadad5b7…503713`, достиг ready за
+507,234 ms и сохранил 17 Actions максимум 99,066 ms, десять zero-mismatch TFT
+comparisons, final owner/lease `none`/`0`, heap total/free/min
+281 272/238 608/233 212 B и GPIO2 LOW. `run.json` `6361d40e…deafaa`, index
+`e3796ec3…9608f1`; verifier подтверждает unsigned local development evidence, но
+не release eligibility. Реальный product RF/SD lifecycle этот run намеренно не
+запускал.
 
 Историческая копия этого real bundle была подписана временным Ed25519 key и получила
 `release_eligible=true`, после чего temp key и copy уничтожены. Эксперимент

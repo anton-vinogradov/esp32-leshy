@@ -334,6 +334,14 @@ Storage+UI lease 5→0. Это current-boot admission после explicit comman
 boot mount/catalog/recovery пока не реализован и после reboot стартует simulated
 Library.
 
+Version 0.40 добавляет product-level authorization поверх доказанного технического
+path. Для boot catalog разрешён только exact enrolled fingerprint, existing
+`/leshy/sessions/v1`, гарантированно read-only non-writable driver и lease 12.
+Initialize/commit требуют explicit selection, writable driver, byte budget и те же
+ресурсы; format запрещён. Combined Survey gate требует passive plan и lease 14 и
+никогда не делает simulated/RAM fallback. Это host + non-I/O board policy evidence,
+не mount или запись на product namespace.
+
 ## Приёмка
 
 | ID | Обязательный результат |
@@ -352,8 +360,9 @@ identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit п
 remount/reopen, 32-commit p50/p95/p99 throughput distribution и host/static reset harness
 плюс physical six-boundary matrix реализованы. Fixed queue и batched publish cadence
 теперь host-tested, а E-HIL-038 даёт 9 068 encoded B/s при цели RB-06 2 184 B/s.
-Следующая безопасная работа — подключить доказанный path к product
-Setup/Running/Stop & Commit и boot-time persistent Library catalog/recovery. Export
+Следующая безопасная работа — реализовать board adapter lifecycle, удовлетворяющий
+read-only boot recovery и explicit bounded commit policy, затем подключить доказанный
+path к product Setup/Running/Stop & Commit и persistent Library catalog/recovery. Export
 этой recovered Session в текущем boot уже подтверждён E-HIL-040. Readiness
 retry также ждёт natural transient.
 Physical power-cut всё ещё требует controller. LittleFS не затрагивается,

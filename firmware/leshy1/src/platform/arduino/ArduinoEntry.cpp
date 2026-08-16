@@ -14,6 +14,7 @@
 
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
+#include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/SurveyPipeline.h"
 #include "apps/survey/SurveyWorkflow.h"
@@ -40,6 +41,7 @@
 #include "storage/AtomicHead.h"
 #include "storage/MediaDiscovery.h"
 #include "storage/MountPolicy.h"
+#include "storage/ProductStorePolicy.h"
 #include "storage/SdReadOnlyProtocol.h"
 #include "storage/SdIdentification.h"
 #include "storage/SdIdentificationTransport.h"
@@ -981,6 +983,49 @@ void emitStorageMountPolicy(Stream& reply) {
         leshy1::storage::readOnlyMountStatusName(selectedPermit.status),
         static_cast<unsigned long>(actualPermit.requiredResources),
         storageDiscovery.mountAttempted ? "true" : "false");
+    reply.println(line);
+}
+
+void emitProductSurveyAdmission(Stream& reply) {
+    leshy1::storage::MediaIdentity media;
+    leshy1::storage::ProductStoreRequest storeRequest;
+    storeRequest.operation =
+        leshy1::storage::ProductStoreOperation::RecoverCatalog;
+    storeRequest.rootPath = leshy1::storage::kProductSessionStoreRoot;
+    storeRequest.driverReadOnlyGuaranteed =
+        BoardStorageAdapter::kDriverReadOnlyGuaranteed;
+    const leshy1::storage::ProductStorePermit storePermit =
+        leshy1::storage::authorizeProductStore(media, storeRequest);
+
+    leshy1::apps::survey::ProductSurveyRequest surveyRequest;
+    surveyRequest.explicitStart = false;
+    surveyRequest.sourceAvailable = false;
+    surveyRequest.scanPlan = leshy1::drivers::wifi::defaultPassivePlan();
+    surveyRequest.storePermit = storePermit;
+    const leshy1::apps::survey::ProductSurveyPermit surveyPermit =
+        leshy1::apps::survey::authorizeProductSurvey(surveyRequest);
+
+    char line[768] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.survey.product_admission.v1\","
+        "\"kind\":\"policy_state\",\"status\":\"%s\","
+        "\"store_status\":\"%s\",\"store_operation\":\"%s\","
+        "\"store_root\":\"%s\",\"required_resources\":%lu,"
+        "\"explicit_start\":false,\"passive_only\":true,"
+        "\"persistent_required\":true,\"simulated_fallback\":false,"
+        "\"hardware_touched\":false,\"radio_started\":false,"
+        "\"storage_mounted\":false,\"storage_written\":false,"
+        "\"format_allowed\":false,"
+        "\"application_connect_calls\":0,"
+        "\"application_raw_tx_calls\":0,"
+        "\"physical_no_tx_instrumented\":false}",
+        leshy1::apps::survey::productSurveyAdmissionStatusName(
+            surveyPermit.status),
+        leshy1::storage::productStoreAccessStatusName(storePermit.status),
+        leshy1::storage::productStoreOperationName(storePermit.operation),
+        leshy1::storage::kProductSessionStoreRoot,
+        static_cast<unsigned long>(surveyPermit.requiredResources));
     reply.println(line);
 }
 
@@ -3822,6 +3867,8 @@ void handleCommand(Stream& reply, const char* command) {
         emitStorageDiscovery(reply);
     } else if (std::strcmp(command, "storage.mount.policy") == 0) {
         emitStorageMountPolicy(reply);
+    } else if (std::strcmp(command, "survey.product.admission") == 0) {
+        emitProductSurveyAdmission(reply);
     } else if (std::strcmp(command, "storage.sd.protocol") == 0) {
         emitSdReadOnlyProtocol(reply);
     } else if (std::strcmp(command, "storage.sd.identification.fixture") == 0) {
@@ -4087,6 +4134,7 @@ void setup() {
               "\"ui.state\",\"ui.key <action>\","
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
               "\"storage.discovery\",\"storage.mount.policy\","
+              "\"survey.product.admission\","
               "\"storage.sd.protocol\",\"storage.sd.identification.fixture\","
               "\"storage.sd.transport.fixture\","
               "\"storage.sd.wire\","

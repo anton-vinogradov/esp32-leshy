@@ -168,6 +168,16 @@ command: он доказывает service rate, data path и current-boot admis
 product worker invariant, что receiver ingress никогда не ждёт durability barrier,
 и не boot-time catalog/recovery.
 
+Product activation выделена в отдельную fail-closed boundary. `ProductStorePolicy`
+фиксирует единственный текущий product root `/leshy/sessions/v1`: automatic catalog
+recovery требует уже enrolled exact media fingerprint, existing root, гарантированно
+read-only non-writable driver и ownership Storage+RadioSpi. Initialize/commit
+дополнительно требуют explicit user selection, writable driver и bounded size/reserve.
+Затем `ProductSurveyAdmission` требует explicit Start, validated passive plan,
+writable commit permit и combined ownership EspRf+Storage+RadioSpi. Запрошенная
+real/persistent Session никогда молча не заменяется simulated/RAM. Сами политики не
+выполняют I/O; board adapter lifecycle остаётся следующей implementation boundary.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:
