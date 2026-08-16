@@ -289,6 +289,19 @@ Home/Diagnostics/Back дали 0 mismatched pixels; final owner none/lease 0, he
 удалил credentials/registration и завершился; repository runners после run — 0.
 Measurement version намеренно non-publishable.
 
+Финальный hardened run
+[`31976152593`](https://github.com/anton-vinogradov/esp32-leshy/actions/runs/31976152593)
+на commit `714ac83` повторил весь контур с exact pinned Node.js 24 Actions без
+compatibility fallback: cloud build/attestation 2:30, physical HIL 56 с,
+promotion-proof 28 с. Exact app `16ab071a…7799a`, factory `05013e92…f3f9`, ELF
+`70ee2b5d…da1`, map `e2761e95…56f1` и evidence archive `1799719f…5bd` прошли
+attestation/same-byte verification. Run ID
+`1585357a5c3b4f5bf70dec0e3b5fe317`; ready 501,840 ms, Actions 85,126/95,192 ms,
+три TFT comparison дали zero mismatch, final owner `none`/lease `0`, heap
+total/free/min 281 392/238 728/233 332 B, GPIO2 LOW. Runner удалил credentials и
+registration, repository runners осталось 0; команда корректно завершилась
+`VALIDATION PASSED — NON-PUBLISHABLE VERSION`, release не создавался.
+
 Board-01 дважды получила app candidate SHA-256
 `e95d7ede560943744f9b981bf2063b6f31077b600198bc8fa6a528c77e04441b`.
 Первый run создал отсутствующие golden после визуального review; второй заново
@@ -322,7 +335,7 @@ comparisons дали zero mismatch. `run.json` `8466fe45…d76948`, artifact ind
 `release_eligible=true`, после чего temp key и copy уничтожены. Эксперимент
 `E-AUTO-003` доказал механику, но product decision от 2026-08-17 отверг постоянный
 station key; соответствующий production code path удалён. `hil-production` ограничен
-ровно branch `main`, а первый GitHub workflow run закрыт evidence выше. Открыты
+ровно branch `main`, а GitHub workflow path закрыт evidence выше. Открыты
 queue/quarantine и расширение release-candidate suite.
 
 Низкоуровневая GitHub-native проверка для диагностики:

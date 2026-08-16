@@ -290,6 +290,20 @@ none/lease 0, free/min heap 238,728/233,332 B, and GPIO2 LOW. Session ID
 removed credentials/registration and exited; repository runners after the run: 0.
 The measurement version is intentionally non-publishable.
 
+Final hardened run
+[`31976152593`](https://github.com/anton-vinogradov/esp32-leshy/actions/runs/31976152593)
+on commit `714ac83` repeated the complete path with exactly pinned Node.js 24 Actions
+and no compatibility fallback: cloud build/attestation 2:30, physical HIL 56 s, and
+promotion-proof 28 s. Exact app `16ab071a…7799a`, factory `05013e92…f3f9`, ELF
+`70ee2b5d…da1`, map `e2761e95…56f1`, and evidence archive `1799719f…5bd` passed
+attestation and same-byte verification. Run ID is
+`1585357a5c3b4f5bf70dec0e3b5fe317`; ready took 501.840 ms, Actions
+85.126/95.192 ms, all three TFT comparisons had zero mismatch, final owner was
+`none`/lease `0`, heap total/free/min was 281,392/238,728/233,332 B, and GPIO2 was
+LOW. The runner removed credentials and registration, repository runners remained
+at 0, and the command correctly ended with
+`VALIDATION PASSED — NON-PUBLISHABLE VERSION`; no Release was created.
+
 Board-01 was flashed twice with app candidate SHA-256
 `e95d7ede560943744f9b981bf2063b6f31077b600198bc8fa6a528c77e04441b`.
 The first run created missing goldens after visual review; the second reflashed the
@@ -324,8 +338,8 @@ A historical copy of this real bundle was signed with a temporary Ed25519 key an
 returned `release_eligible=true`; the temporary key and copy were then destroyed.
 Experiment `E-AUTO-003` proved the mechanics, but the 2026-08-17 product decision
 rejected a persistent station key and the production code path has been removed.
-`hil-production` is restricted to exactly branch `main`, and the first GitHub run is
-closed by the evidence above. Queue/quarantine and expansion of the release-candidate
+`hil-production` is restricted to exactly branch `main`, and the GitHub workflow path
+is closed by the evidence above. Queue/quarantine and expansion of the release-candidate
 suite remain open.
 
 Low-level GitHub-native verification for diagnostics:
