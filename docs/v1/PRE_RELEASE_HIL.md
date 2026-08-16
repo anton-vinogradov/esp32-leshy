@@ -192,8 +192,10 @@ No runner is preinstalled. `tools/release_1x.py` downloads the pinned official m
 arm64 archive into `~/Library/Caches/esp32-leshy/actions-runner`, verifies its SHA-256,
 and creates credentials/config/work directory from scratch in a temporary directory.
 After the cloud build it registers an `--ephemeral` runner with the `leshy-hil` and
-`esp32-div-v2` labels. The runner accepts exactly one job, deregisters, and exits.
-There is no permanent listener, macOS service, or `launchd` unit.
+`esp32-div-v2` labels plus a unique `leshy-request-<id>` for that workflow run. It
+cannot accidentally accept another queued job, executes exactly its one job,
+deregisters, and exits. There is no permanent listener, macOS service, or `launchd`
+unit.
 
 No signing secret, PEM file, or public-key provisioning is needed. The serial path is
 detected locally when exactly one board is connected, or supplied with `--port`, and

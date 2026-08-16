@@ -252,7 +252,9 @@ def request_id() -> str:
     return f"{stamp}-{secrets.token_hex(4)}"
 
 
-def dispatch_workflow(repo: str, version: str, invocation: str, port: str) -> None:
+def dispatch_workflow(
+    repo: str, version: str, invocation: str, port: str, runner_label: str
+) -> None:
     run_command(
         [
             "gh",
@@ -269,6 +271,8 @@ def dispatch_workflow(repo: str, version: str, invocation: str, port: str) -> No
             f"request_id={invocation}",
             "--field",
             f"hil_port={port}",
+            "--field",
+            f"runner_label={runner_label}",
         ]
     )
 
@@ -361,7 +365,7 @@ def registration_token(repo: str) -> str:
     return token
 
 
-def configure_runner(runner_dir: Path, repo: str, name: str) -> None:
+def configure_runner(runner_dir: Path, repo: str, name: str, unique_label: str) -> None:
     token = registration_token(repo)
     run_command(
         [
@@ -373,7 +377,7 @@ def configure_runner(runner_dir: Path, repo: str, name: str) -> None:
             "--name",
             name,
             "--labels",
-            RUNNER_LABELS,
+            f"{RUNNER_LABELS},{unique_label}",
             "--work",
             "_work",
             "--ephemeral",
@@ -443,13 +447,14 @@ def check_candidate(version: str, port_arg: str | None) -> int:
     port = discover_serial_port(port_arg)
     archive = obtain_runner_archive()
     invocation = request_id()
+    unique_label = f"leshy-request-{invocation}"
     title = f"{WORKFLOW_NAME} / {version} / {invocation}"
     run_id: int | None = None
     completed = False
 
     print(f"Board: {port}", flush=True)
     print(f"Candidate: {version} @ {head_sha}", flush=True)
-    dispatch_workflow(repo, version, invocation, port)
+    dispatch_workflow(repo, version, invocation, port, unique_label)
     selected = find_dispatched_run(repo, title, head_sha)
     run_id = int(selected["databaseId"])
     print(f"GitHub run: {selected['url']}", flush=True)
@@ -461,7 +466,7 @@ def check_candidate(version: str, port_arg: str | None) -> int:
         with tempfile.TemporaryDirectory(prefix="leshy-ephemeral-runner-") as temporary:
             runner_dir = Path(temporary)
             safe_extract_tar(archive, runner_dir)
-            configure_runner(runner_dir, repo, runner_name)
+            configure_runner(runner_dir, repo, runner_name, unique_label)
             print("Ephemeral runner registered for one physical job.", flush=True)
             runner_process = subprocess.Popen(
                 ["./run.sh"],

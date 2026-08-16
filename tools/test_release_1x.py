@@ -117,6 +117,8 @@ class ReleaseOneContracts(unittest.TestCase):
         self.assertIn("run-name: prerelease-hil / ${{ inputs.version }}", workflow)
         self.assertIn("request_id:", workflow)
         self.assertIn("hil_port:", workflow)
+        self.assertIn("runner_label:", workflow)
+        self.assertIn("leshy-request-", workflow)
         self.assertIn("firmware.factory.bin", workflow)
         self.assertIn("tags: ['v0.*']", legacy)
         self.assertIn("git tag -l 'v0.*'", legacy_script)

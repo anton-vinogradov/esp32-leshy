@@ -193,8 +193,9 @@ Runner заранее не устанавливается. `tools/release_1x.py`
 macOS arm64 archive в `~/Library/Caches/esp32-leshy/actions-runner`, проверяет его
 SHA-256, а credentials/config/work directory создаёт заново во временной директории.
 После cloud build script регистрирует runner с `--ephemeral`, labels
-`leshy-hil`,`esp32-div-v2`: он принимает ровно один job, deregisters и завершается.
-Постоянного listener, macOS service или `launchd` unit нет.
+`leshy-hil`,`esp32-div-v2` и уникальной `leshy-request-<id>` только этого workflow
+run: он не может случайно забрать другой queued job, принимает ровно один свой job,
+deregisters и завершается. Постоянного listener, macOS service или `launchd` unit нет.
 
 Signing secrets, PEM files и public-key provisioning не нужны. Serial path
 определяется локально при единственном подключённом устройстве либо задаётся через

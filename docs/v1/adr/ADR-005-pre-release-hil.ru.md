@@ -63,7 +63,8 @@ versioned suite.
 - Ни HIL station, ни repository не хранят долгоживущий signing private key; identity
   выводится из GitHub workflow, commit/ref и protected environment.
 - Runner archive может кэшироваться после SHA-256 verification, но config, token и
-  work directory одноразовые; persistent listener/`launchd` запрещены.
+  work directory одноразовые; unique per-run label запрещает runner принять другой
+  queued job; persistent listener/`launchd` запрещены.
 - Безопасный evidence plane остаётся в production binary; опасная instrumentation —
   нет.
 - Release может ожидать свободную станцию; очередь и quarantine становятся частью

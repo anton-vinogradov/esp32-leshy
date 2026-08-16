@@ -62,7 +62,8 @@ Each remains useful as an auxiliary layer but does not replace the recommended f
 - Neither HIL station nor repository stores a long-lived signing private key;
   identity derives from the GitHub workflow, commit/ref, and protected environment.
 - The runner archive may be cached after SHA-256 verification, but config, token, and
-  work directory are single-use; a persistent listener/`launchd` is forbidden.
+  work directory are single-use; a unique per-run label prevents it from accepting a
+  different queued job; a persistent listener/`launchd` is forbidden.
 - A safe evidence plane remains in production bytes; dangerous instrumentation does
   not.
 - Release may wait for an available station; queueing and quarantine become part of
