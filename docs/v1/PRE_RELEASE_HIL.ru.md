@@ -127,7 +127,7 @@ protected environment. Постоянного private key, PEM-файла или
 
 | Gate | Когда | Минимум |
 |---|---|---|
-| `device-smoke` | каждый merge/доступная станция | flash, cold boot, Home, Diagnostics, Back, TFT, resources, safe outputs |
+| `device-smoke` | каждый merge/доступная станция | flash, cold boot, Home/Diagnostics/Back, product Survey→commit→Library→export, TFT, resources, safe outputs |
 | `device-regression` | nightly/изменение firmware | все доступные non-destructive workflows, EN/RU golden matrix, repeated navigation, storage read/reopen |
 | `release-candidate` | перед публикацией | полный применимый Stage Demo, install/update/rollback, reboot paths, destructive HIL attestations, budgets и обязательный camera subset |
 
@@ -242,8 +242,12 @@ promotion; реальный GitHub workflow run прошёл:
 - `tools/run_1x_prerelease_hil.py` загружает declarative suite, по явному `--flash`
   прошивает exact candidate через esptool с verify, делает cold reset, держит один
   passive USB session для Actions/captures и формирует bundle;
-- `tests/hil/device-smoke.v1.json` задаёт Home→Diagnostics→Back, boot ≤2 s,
-  board/profile, heap ≥128 KiB, owner/lease cleanup и GPIO2 LOW;
+- `tests/hil/device-smoke.v1.json` revision 2 задаёт Home→Diagnostics→Back и
+  product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
+  boot ≤2 s, board/profile, heap ≥128 KiB, owner/lease cleanup и GPIO2 LOW;
+- bounded query steps позволяют проверить typed serial artifact внутри того же HIL
+  session; action/query ambiguity и небезопасные commands fail closed, а частичный
+  `--scenario` run никогда не становится gate-eligible;
 - golden bootstrap создаёт только отсутствующие compressed RGB565 и отказывается
   перезаписывать существующие; обычный run требует exact Home/Back и masked-exact
   Diagnostics с одной явной dynamic region;
@@ -330,6 +334,16 @@ SHA-256 `0c5277bb…ef7ed8`. ID `803dd8cfbd28657240fd64af50019588`
 UI revision 0→2. Ready занял 502,245 ms, Actions 84,116/95,379 ms, три TFT
 comparisons дали zero mismatch. `run.json` `8466fe45…d76948`, artifact index
 `2f3cb367…4be3e7`; verifier прошёл без внешнего candidate argument.
+
+Candidate `0.38.0-product-survey-workflow-measure` расширил `device-smoke` до
+revision 2. Локальный full-suite run `ddf0203694d3011788f1762cec64ff11`
+прошил exact app `9240cccc…c3e370`, достиг ready за 502,731 ms, выполнил 17 Actions
+и проверил idempotent Stop (`changed=false`). Десять real-TFT comparisons дали zero
+mismatch; serial export сохранил generation 2, три observations, zero drops и
+`simulated=true`/`persistent=false`/`radio_touched=false`. Final owner `none`, lease
+`0`, heap total/free/min 281 360/238 696/233 300 B, GPIO2 LOW; `run.json`
+`af5d493f…c2a7`, artifact index `c73f08d1…6376d`. Это local development evidence;
+GitHub-native attestation revision 2 ещё не запускалась.
 
 Историческая копия этого real bundle была подписана временным Ed25519 key и получила
 `release_eligible=true`, после чего temp key и copy уничтожены. Эксперимент

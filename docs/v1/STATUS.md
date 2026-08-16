@@ -12,7 +12,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S1 — Evidence baseline`.
 - **Last completed stage:** `S0 — Governance and generation boundary`.
-- **Repository baseline:** `c31565c` (`v0.9.1-3-gc31565c`) plus unreleased
+- **Repository baseline:** `60aa931` plus unreleased
   documentation and feasibility prototypes in the worktree.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
 - **Current objective:** confirm ESP32-DIV constraints and promote the 1.0.0 PRD from
@@ -23,9 +23,9 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | Stage | Status | Confirmed result | Remaining gate work |
 |---|---|---|---|
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
-| S1 | `active` | vision, competitive snapshot, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 and Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register, five ADRs, and a first automatic device-smoke with firmware-reported build identity | remaining physical/storage evidence and PRD baseline review |
+| S1 | `active` | vision, competitive snapshot, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 and Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register, five ADRs, and automatic device-smoke v2 covering the first product Survey→commit→Library→export vertical slice | remaining physical/storage evidence and PRD baseline review |
 | S2 | `planned` | capability-built home, unified input/TFT capture, atomic-head/media-guard contracts, guarded FAT evidence backend, and AppRuntime/ResourceBroker lease path exist | no production mount policy or complete product workflow |
-| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and a real passive Wi-Fi→FIFO→persistent SessionStore/remount path run on board-01 with RB-06 margin; the recovered Session is admitted to ordinary Library and exported as persistent/real in the current boot | diagnostic path is not yet connected to product Start/Running/Stop or boot-time catalog/recovery; power-cut, endurance, and LittleFS parity remain; requires S2 gate |
+| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and a real passive Wi-Fi→FIFO→persistent SessionStore/remount path run on board-01 with RB-06 margin; product Setup→Running→Stop & Commit→Library→export orchestration passes on a bounded RAM backend and a validated-root catalog bridge serves the common admission path | product UI is not yet connected to the real FIFO/persistent backend or safe boot mount policy; progress/drop states, power-cut, endurance, and LittleFS parity remain; requires S2 gate |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
@@ -210,6 +210,16 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   drops, and 12,957 encoded B/s; Home/List/Detail/Export show READY,
   PERSISTENT/REAL, generation 1/valid, and PERSISTED YES, while the serial artifact
   carries `persistent=true`, `simulated=false`; Back returns lease mask 5→0.
+- added allocation-free `SurveyWorkflow` and `SessionCatalog`: the former defines
+  Setup/Running/Committing/Result/Error, performs Stop & Commit once, recovers the
+  published generation before replacing Library, and preserves the prior Library on
+  every failure; the latter admits the latest valid generation from one validated
+  store root fail closed and labels fallback explicitly.
+- the first product Survey slice now runs on board-01 from Setup through a simulated
+  three-observation source to Stop & Commit, opens that same generation 2 in Library,
+  and emits bounded JSON export. `device-smoke` revision 2 automatically checks
+  idempotent Stop, ten real-TFT goldens, the export record, resource cleanup, and
+  GPIO2 LOW; RF and physical storage are deliberately untouched.
 - ADR-005 is accepted and the first manifest-driven pre-release device smoke is
   implemented: the runner flashed the exact app candidate twice and, after a
   separate golden bootstrap, passed cold boot→Home→Diagnostics→Back with actual TFT
@@ -245,9 +255,11 @@ safe documentation/prototype item.
    power-manager marking, and separate GPS/PN532 assemblies only when available.
 2. Run manual `HW-T02/T03/T05/T08/T09/T10`; run `HW-T06` only after GPS/PN532 absence
    is confirmed and an RF detector/logic analyzer is attached.
-3. Productize the proven source→queue→store→Library/export path: Survey
-   Setup/Running/Stop & Commit, visible progress/drop/storage states, and boot-time
-   catalog/recovery of the same persistent Session. Exercise reset-readiness retry on the next
+3. Continue productizing the proven source→queue→store→Library/export path: the
+   UI/RAM Setup/Running/Stop & Commit vertical slice is automated; next connect the
+   real passive source→FIFO and guarded persistent backend, add visible
+   progress/drop/storage states, and provide safe boot mount/catalog/recovery of the
+   same persistent Session. Exercise reset-readiness retry on the next
    natural transient. LittleFS still needs a separately proven disposable image;
    physical power-cut needs a controller.
 4. Measure power/shared-bus/no-TX stability when instruments are available.
@@ -386,6 +398,12 @@ safe documentation/prototype item.
 | E-HIL-043 | board-01 session-bound self-contained `device-smoke` | pass: bundled exact app SHA-256 `25f1bacb…cd83c6` flashed with verify; ELF SHA-256 `0c5277bb…ef7ed8`; run ID `803dd8cfbd28657240fd64af50019588` agrees across manifest/begin/end/run/legacy attestation, UI revision 0→2 and session active true→false; ready 502.245 ms, Actions 84.116/95.379 ms, all three visual mismatches 0, final owner none/lease 0, heap total/free/min 281,392/238,728/233,332 B, GPIO2 LOW; self-contained verifier passes; `run.json` `8466fe45…d76948`, index `2f3cb367…4be3e7` | retained run is local and predates GitHub-native E-AUTO-005; CI promotion proof is closed by E-HIL-044, while camera/power remain open |
 | E-HIL-044 | board-01 GitHub-native `device-smoke` | pass: Actions run `31975573475`, commit `97e7145`; exact app `ef08797c…9d63a`, factory `87457cc7…280af`, ELF `e2d5b32c…edb94`, evidence archive `d395d913…162d`; build/physical/promotion 2:26/0:59/0:31; run ID `abbcd74e55aa5c05cfbb4f11a6492902`; ready 502.053 ms, Actions 85.164/95.840 ms, three TFT comparisons have zero mismatch, final owner none/lease 0, heap total/free/min 281,392/238,728/233,332 B, GPIO2 LOW; candidate/evidence attestations and inner same-byte verifier pass | measurement version is non-publishable; stable release, camera/power, extended suite, and queue/quarantine remain open |
 | E-HIL-045 | board-01 hardened GitHub-native `device-smoke` | pass: Actions run `31976152593`, commit `714ac83`; exact app `16ab071a…7799a`, factory `05013e92…f3f9`, ELF `70ee2b5d…da1`, map `e2761e95…56f1`, evidence archive `1799719f…5bd`; build/physical/promotion 2:30/0:56/0:28; run ID `1585357a5c3b4f5bf70dec0e3b5fe317`; ready 501.840 ms, Actions 85.126/95.192 ms, three TFT comparisons have zero mismatch, final owner none/lease 0, heap total/free/min 281,392/238,728/233,332 B, GPIO2 LOW; pinned Node.js 24 Actions, candidate/evidence attestations, and inner same-byte verifier pass; runner credentials/registration removed, repository runners 0 | measurement version receives `VALIDATION PASSED — NON-PUBLISHABLE VERSION` and no stable release is created; stable publish, camera/power, extended suite, and queue/quarantine remain open |
+
+| E-SURVEY-004 | `SurveyWorkflow` product-orchestration host tests | pass: cancel writes/syncs zero; Start admits three observations; Detail/Back preserves Running; Stop publishes and recovers one generation exactly once; repeated Stop does not write; a failed third commit preserves prior Library generation 2 | current product source is simulated and backend is bounded RAM; real FIFO/persistent adapter and progress/drop UI are the next slice |
+| E-LIBRARY-003 | `SessionCatalog` validated-root admission tests | pass: empty, valid latest, corrupt-new fallback, idempotent rebuild, and direct duplicate-admission rejection; recovery is staged in caller-owned workspace and the result changes only after full validation; physical diagnostic admission uses the same bridge | this catalogs the latest Session of one already validated root, not boot media discovery/mount or multi-root policy |
+| E-BUILD-040 | `0.38.0-product-survey-workflow-measure` | pass: RAM 120,400 B, flash 1,033,560 B; app/factory 1,033,968/1,099,504 B, app SHA-256 `9240cccc…c3e370`, factory `71b2d168…5216a3`, ELF `de5598e1…df9aa` | +32 B static RAM and +2,876 B linked flash vs 0.37; product vertical slice uses a simulated source and bounded RAM store |
+| E-AUTO-006 | `device-smoke` revision 2 plus bounded query step | pass: suite adds Survey→commit→Library→export; host validation rejects action/query ambiguity, newline/non-ASCII/oversized commands, and capture-after-query; single-scenario golden bootstrap is never gate-eligible; workflow/release verifier require revision 2 | no GitHub-native revision-2 run yet; stable publish/camera/power/destructive lanes remain S8 |
+| E-HIL-046 | board-01 product-workflow `device-smoke` revision 2 | pass/gate-eligible local evidence: exact app `9240cccc…c3e370`, ELF `de5598e1…df9aa`, run ID `ddf0203694d3011788f1762cec64ff11`; ready 502.731 ms; 17 Actions with idempotent Stop `changed=false`; ten TFT comparisons have zero mismatch; export has generation 2/3 observations/0 dropped and simulated/RAM/RF-off provenance; final owner none/lease 0, heap total/free/min 281,360/238,696/233,300 B, GPIO2 LOW; `run.json` `af5d493f…c2a7`, index `c73f08d1…6376d` | local development evidence without GitHub attestation; real RF/FIFO/SD, boot mount/catalog, camera/power, and endurance were not exercised |
 
 ## Known uncertainties and risks
 

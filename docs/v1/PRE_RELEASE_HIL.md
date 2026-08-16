@@ -124,7 +124,7 @@ rechecks all inner hashes, session identities, and candidate bindings.
 
 | Gate | Frequency | Minimum scope |
 |---|---|---|
-| `device-smoke` | each merge/available station | flash, cold boot, Home, Diagnostics, Back, TFT, resources, safe outputs |
+| `device-smoke` | each merge/available station | flash, cold boot, Home/Diagnostics/Back, product Survey→commit→Library→export, TFT, resources, safe outputs |
 | `device-regression` | nightly/firmware change | all available non-destructive workflows, EN/RU golden matrix, repeated navigation, storage read/reopen |
 | `release-candidate` | before publishing | full applicable Stage Demo, install/update/rollback, reboot paths, destructive HIL attestations, budgets, mandatory camera subset |
 
@@ -242,8 +242,12 @@ promotion; a real GitHub workflow run now passes:
 - `tools/run_1x_prerelease_hil.py` loads a declarative suite, flashes the exact
   candidate through verified esptool only with explicit `--flash`, performs a cold
   reset, keeps one passive USB session for Actions/captures, and creates a bundle;
-- `tests/hil/device-smoke.v1.json` defines Home→Diagnostics→Back, boot ≤2 s,
-  board/profile, heap ≥128 KiB, owner/lease cleanup, and GPIO2 LOW;
+- `tests/hil/device-smoke.v1.json` revision 2 defines Home→Diagnostics→Back and
+  product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
+  boot ≤2 s, board/profile, heap ≥128 KiB, owner/lease cleanup, and GPIO2 LOW;
+- bounded query steps verify a typed serial artifact inside the same HIL session;
+  action/query ambiguity and unsafe commands fail closed, while a partial
+  `--scenario` run is never gate-eligible;
 - golden bootstrap creates missing compressed RGB565 only and refuses to overwrite
   existing files; a normal run requires exact Home/Back and masked-exact Diagnostics
   with one explicit dynamic region;
@@ -333,6 +337,16 @@ and attestation; session state moves active true→false and UI revision 0→2. 
 took 502.245 ms, Actions 84.116/95.379 ms, and all three TFT comparisons had zero
 mismatch. `run.json` is `8466fe45…d76948`, the artifact index is
 `2f3cb367…4be3e7`, and verification passes without an external candidate argument.
+
+Candidate `0.38.0-product-survey-workflow-measure` expands `device-smoke` to
+revision 2. Local full-suite run `ddf0203694d3011788f1762cec64ff11` flashed exact
+app `9240cccc…c3e370`, reached ready in 502.731 ms, executed 17 Actions, and verified
+idempotent Stop (`changed=false`). Ten real-TFT comparisons had zero mismatch; the
+serial export retained generation 2, three observations, zero drops, and
+`simulated=true`/`persistent=false`/`radio_touched=false`. Final owner was `none`,
+lease `0`, heap total/free/min was 281,360/238,696/233,300 B, and GPIO2 was LOW;
+`run.json` is `af5d493f…c2a7` and the artifact index is `c73f08d1…6376d`. This is
+local development evidence; a GitHub-native revision-2 attestation has not run yet.
 
 A historical copy of this real bundle was signed with a temporary Ed25519 key and
 returned `release_eligible=true`; the temporary key and copy were then destroyed.

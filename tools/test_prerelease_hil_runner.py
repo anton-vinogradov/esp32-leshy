@@ -60,6 +60,60 @@ class PrereleaseRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "duplicate scenario"):
                 RUNNER.load_suite(path)
 
+    def test_manifest_accepts_bounded_diagnostic_query(self) -> None:
+        suite = {
+            "schema": RUNNER.SUITE_SCHEMA,
+            "id": "product", "revision": 1, "boot_assert": {},
+            "scenarios": [{
+                "id": "export",
+                "steps": [{
+                    "id": "artifact",
+                    "query": {
+                        "command": "library.export",
+                        "schema": "leshy.library.export.v1",
+                        "kind": "artifact",
+                    },
+                    "assert": {"generation": 2},
+                }],
+            }],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "suite.json"
+            path.write_text(json.dumps(suite), encoding="utf-8")
+            self.assertEqual(suite, RUNNER.load_suite(path))
+
+    def test_manifest_rejects_unsafe_or_ambiguous_query(self) -> None:
+        base = {
+            "schema": RUNNER.SUITE_SCHEMA,
+            "id": "product", "revision": 1, "boot_assert": {},
+            "scenarios": [{"id": "export", "steps": []}],
+        }
+        invalid_steps = [
+            {
+                "id": "ambiguous", "action": "select",
+                "query": {"command": "library.export", "schema": "x", "kind": "y"},
+                "assert": {},
+            },
+            {
+                "id": "newline",
+                "query": {"command": "library.export\nmetrics", "schema": "x", "kind": "y"},
+                "assert": {},
+            },
+            {
+                "id": "capture-query",
+                "query": {"command": "library.export", "schema": "x", "kind": "y"},
+                "assert": {},
+                "capture": {"golden": "frame.zlib"},
+            },
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "suite.json"
+            for step in invalid_steps:
+                base["scenarios"][0]["steps"] = [step]
+                path.write_text(json.dumps(base), encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    RUNNER.load_suite(path)
+
     def test_subset_and_numeric_assertions(self) -> None:
         actual = {"page": "home", "lease": 0, "heap": 200000,
                   "nested": {"owner": "none"}}

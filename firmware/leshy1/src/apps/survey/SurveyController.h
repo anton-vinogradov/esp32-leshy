@@ -17,6 +17,7 @@ class SurveyController final {
 public:
     explicit SurveyController(services::survey::SurveySession& session) : session_(session) {}
 
+    void reset();
     services::survey::SessionStatus start(const char* sessionId, std::uint64_t monotonicUs);
     services::survey::SessionStatus publish(
         const domain::observations::Observation& observation);

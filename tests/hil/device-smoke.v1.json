@@ -1,7 +1,7 @@
 {
   "schema": "leshy.prerelease.suite.v1",
   "id": "device-smoke",
-  "revision": 1,
+  "revision": 2,
   "maximum_ready_marker_ms": 2000,
   "boot_assert": {
     "target": "clean_1x_measure",
@@ -70,6 +70,261 @@
             "name": "home-after-back",
             "golden": "goldens/esp32-div-v2-n16/home-after-back.rgb565.zlib",
             "mode": "exact"
+          }
+        }
+      ]
+    },
+    {
+      "id": "survey-commit-library-export",
+      "steps": [
+        {
+          "id": "select-survey",
+          "action": "down",
+          "assert": {
+            "changed": true,
+            "page": "home",
+            "selection": 1,
+            "selected_id": "survey",
+            "runtime_owner": "none",
+            "lease_mask": 0
+          }
+        },
+        {
+          "id": "open-survey-setup",
+          "action": "select",
+          "assert": {
+            "changed": true,
+            "page": "survey",
+            "runtime_owner": "survey",
+            "lease_mask": 1,
+            "survey_workflow_state": "setup",
+            "survey_workflow_status": "ready",
+            "survey_observations": 0,
+            "survey_generation": 0
+          },
+          "capture": {
+            "name": "survey-setup",
+            "golden": "goldens/esp32-div-v2-n16/survey-setup.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "start-survey",
+          "action": "select",
+          "assert": {
+            "changed": true,
+            "page": "survey",
+            "runtime_owner": "survey",
+            "lease_mask": 1,
+            "survey_workflow_state": "running",
+            "survey_workflow_status": "appended",
+            "survey_running": true,
+            "survey_observations": 3,
+            "survey_generation": 0
+          },
+          "capture": {
+            "name": "survey-running",
+            "golden": "goldens/esp32-div-v2-n16/survey-running.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "open-survey-detail",
+          "action": "select",
+          "assert": {
+            "changed": true,
+            "page": "survey",
+            "survey_view": "detail",
+            "survey_running": true,
+            "survey_observations": 3
+          },
+          "capture": {
+            "name": "survey-detail",
+            "golden": "goldens/esp32-div-v2-n16/survey-detail.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "back-survey-list",
+          "action": "back",
+          "assert": {
+            "changed": true,
+            "page": "survey",
+            "survey_view": "list",
+            "survey_workflow_state": "running",
+            "survey_running": true
+          }
+        },
+        {
+          "id": "stop-and-commit",
+          "action": "right",
+          "assert": {
+            "changed": true,
+            "page": "survey",
+            "survey_workflow_state": "result",
+            "survey_workflow_status": "committed",
+            "survey_running": false,
+            "survey_observations": 3,
+            "survey_generation": 2,
+            "survey_persistent": false,
+            "library_entries": 1,
+            "library_generation": 2,
+            "library_persistent": false
+          },
+          "capture": {
+            "name": "survey-committed",
+            "golden": "goldens/esp32-div-v2-n16/survey-committed.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "stop-is-idempotent",
+          "action": "right",
+          "assert": {
+            "changed": false,
+            "survey_workflow_state": "result",
+            "survey_workflow_status": "committed",
+            "survey_generation": 2,
+            "library_generation": 2
+          }
+        },
+        {
+          "id": "back-home-from-survey",
+          "action": "back",
+          "assert": {
+            "changed": true,
+            "page": "home",
+            "selection": 1,
+            "selected_id": "survey",
+            "runtime_owner": "none",
+            "lease_mask": 0,
+            "survey_generation": 2,
+            "library_generation": 2
+          }
+        },
+        {
+          "id": "select-library",
+          "action": "down",
+          "assert": {
+            "changed": true,
+            "page": "home",
+            "selection": 2,
+            "selected_id": "library",
+            "runtime_owner": "none",
+            "lease_mask": 0
+          }
+        },
+        {
+          "id": "open-library",
+          "action": "select",
+          "assert": {
+            "changed": true,
+            "page": "library",
+            "library_view": "list",
+            "runtime_owner": "library",
+            "lease_mask": 1,
+            "library_entries": 1,
+            "library_generation": 2,
+            "library_simulated": true,
+            "library_persistent": false
+          },
+          "capture": {
+            "name": "survey-library",
+            "golden": "goldens/esp32-div-v2-n16/survey-library.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "open-library-detail",
+          "action": "select",
+          "assert": {
+            "changed": true,
+            "page": "library",
+            "library_view": "detail",
+            "library_generation": 2
+          },
+          "capture": {
+            "name": "survey-library-detail",
+            "golden": "goldens/esp32-div-v2-n16/survey-library-detail.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "prepare-export",
+          "action": "right",
+          "assert": {
+            "changed": true,
+            "page": "library",
+            "library_view": "export_ready",
+            "library_generation": 2,
+            "library_persistent": false
+          },
+          "capture": {
+            "name": "survey-library-export",
+            "golden": "goldens/esp32-div-v2-n16/survey-library-export.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "verify-export",
+          "query": {
+            "command": "library.export",
+            "schema": "leshy.library.export.v1",
+            "kind": "artifact"
+          },
+          "assert": {
+            "status": "valid",
+            "generation": 2,
+            "integrity": "valid",
+            "storage_backend": "bounded_ram",
+            "persistent": false,
+            "simulated": true,
+            "radio_touched": false,
+            "session": {
+              "schema": "leshy.session.summary.v1",
+              "id": "product-wifi-preview",
+              "observations": 3,
+              "dropped": 0,
+              "sources": {
+                "wifi": 3
+              }
+            }
+          }
+        },
+        {
+          "id": "back-library-detail",
+          "action": "back",
+          "assert": {
+            "changed": true,
+            "page": "library",
+            "library_view": "detail",
+            "runtime_owner": "library",
+            "lease_mask": 1
+          }
+        },
+        {
+          "id": "back-library-list",
+          "action": "back",
+          "assert": {
+            "changed": true,
+            "page": "library",
+            "library_view": "list",
+            "runtime_owner": "library",
+            "lease_mask": 1
+          }
+        },
+        {
+          "id": "back-home-from-library",
+          "action": "back",
+          "assert": {
+            "changed": true,
+            "page": "home",
+            "selection": 2,
+            "selected_id": "library",
+            "runtime_owner": "none",
+            "lease_mask": 0,
+            "survey_generation": 2,
+            "library_generation": 2
           }
         }
       ]

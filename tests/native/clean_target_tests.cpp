@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "apps/survey/SurveyController.h"
+#include "apps/survey/SurveyWorkflow.h"
 #include "apps/library/LibraryController.h"
+#include "apps/library/SessionCatalog.h"
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
 #include "drivers/wifi/WifiPassiveContract.h"
@@ -585,6 +587,58 @@ void testOfflineLibraryControllerIsBoundedAndPreservesProvenance() {
     CHECK(std::strcmp(libraryExportStatusName(LibraryExportStatus::Valid), "valid") == 0);
 }
 
+void testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity() {
+    leshy1::platform::arduino::RamSessionStoreIo io;
+    SessionStoreWorkspace workspace;
+    SessionCatalog catalog;
+    LibraryController library;
+    SurveySession recovered;
+
+    io.reset();
+    SessionCatalogResult result = catalog.recoverLatest(
+        io, workspace, recovered, library, true, false);
+    CHECK(result.status == SessionCatalogStatus::Empty);
+    CHECK(result.storeStatus == SessionStoreStatus::Empty);
+    CHECK(library.size() == 0);
+
+    const SurveySession first = stoppedSessionWithId("catalog-first", 3000);
+    const SurveySession second = stoppedSessionWithId("catalog-second", 4000);
+    CHECK(commitNextSession(io, workspace, first).complete());
+    CHECK(commitNextSession(io, workspace, second).complete());
+    const std::size_t fileSyncs = io.fileSyncs();
+    const std::size_t directorySyncs = io.directorySyncs();
+    CHECK(io.flipSegmentByte(2, 0));
+    result = catalog.recoverLatest(io, workspace, recovered, library, true,
+                                   false);
+    CHECK(result.admitted());
+    CHECK(result.generation == 1);
+    CHECK(result.observations == 3);
+    CHECK(result.integrity == SessionIntegrity::RecoveredFallback);
+    CHECK(library.size() == 1);
+    CHECK(library.selected() != nullptr && library.selected()->persistent);
+    CHECK(library.selected() != nullptr && !library.selected()->simulated);
+    CHECK(library.selected() != nullptr && library.selected()->integrity ==
+                                              SessionIntegrity::RecoveredFallback);
+    CHECK(library.selected() != nullptr && library.selected()->session != nullptr &&
+          std::strcmp(library.selected()->session->id(), "catalog-first") == 0);
+    CHECK(io.fileSyncs() == fileSyncs);
+    CHECK(io.directorySyncs() == directorySyncs);
+    CHECK(std::strcmp(sessionCatalogStatusName(result.status), "admitted") == 0);
+
+    result = catalog.recoverLatest(io, workspace, recovered, library, true,
+                                   false);
+    CHECK(result.status == SessionCatalogStatus::Admitted);
+    CHECK(library.size() == 1);
+
+    const SessionStoreRecoveryResult duplicateRecovery =
+        recoverSession(io, workspace, &workspace.validationSession);
+    CHECK(duplicateRecovery.valid());
+    result = catalog.admitRecovered(workspace.validationSession,
+                                    duplicateRecovery, library, true, false);
+    CHECK(result.status == SessionCatalogStatus::AdmissionRejected);
+    CHECK(library.size() == 1);
+}
+
 void testSessionCodecCommitsCanonicalDataAndReopensOffline() {
     const SurveySession original = goldenStoppedSession();
     std::array<std::uint8_t, kSessionSegmentMaxBytes> segment{};
@@ -1001,6 +1055,91 @@ void testGoldenSurveyTraceUsesListDetailBackAndExplicitStop() {
     CHECK(controller.stop(3000) == SessionStatus::Stopped);
     CHECK(controller.stop(3001) == SessionStatus::AlreadyStopped);
     CHECK(controller.session().size() == 3);
+}
+
+void testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure() {
+    leshy1::platform::arduino::RamSessionStoreIo io;
+    io.reset();
+    SessionStoreWorkspace workspace;
+    SurveySession active;
+    SurveySession reopened;
+    SurveyController controller(active);
+    LibraryController library;
+    SurveyWorkflow workflow(controller, io, workspace, reopened, library,
+                            false, true);
+
+    CHECK(workflow.state() == SurveyWorkflowState::Setup);
+    CHECK(workflow.lastStatus() == SurveyWorkflowStatus::Ready);
+    CHECK(std::strcmp(surveyWorkflowStateName(workflow.state()), "setup") == 0);
+    CHECK(workflow.cancel() == SurveyWorkflowStatus::Cancelled);
+    CHECK(io.fileSyncs() == 0);
+    CHECK(io.directorySyncs() == 0);
+    CHECK(workflow.start("product-wifi-001", 1000) ==
+          SurveyWorkflowStatus::Started);
+    CHECK(workflow.state() == SurveyWorkflowState::Running);
+    CHECK(workflow.start("duplicate", 1001) ==
+          SurveyWorkflowStatus::InvalidState);
+
+    const SurveySession golden = goldenStoppedSession();
+    for (std::size_t index = 0; index < golden.size(); ++index) {
+        const Observation* source = golden.get(index);
+        CHECK(source != nullptr);
+        if (source != nullptr) {
+            CHECK(workflow.publish(*source) == SurveyWorkflowStatus::Appended);
+        }
+    }
+    CHECK(controller.openSelected());
+    CHECK(controller.back());
+    CHECK(workflow.state() == SurveyWorkflowState::Running);
+    CHECK(workflow.stopAndCommit(3000) == SurveyWorkflowStatus::Committed);
+    CHECK(workflow.state() == SurveyWorkflowState::Result);
+    CHECK(workflow.generation() == 1);
+    CHECK(workflow.lastStoreStatus() == SessionStoreStatus::Valid);
+    CHECK(!workflow.persistent());
+    CHECK(workflow.simulated());
+    CHECK(library.size() == 1);
+    CHECK(library.selected() != nullptr);
+    CHECK(library.selected() != nullptr && library.selected()->generation == 1);
+    CHECK(library.selected() != nullptr && library.selected()->simulated);
+    CHECK(library.selected() != nullptr && !library.selected()->persistent);
+    CHECK(library.selected() != nullptr && library.selected()->session != nullptr &&
+          std::strcmp(library.selected()->session->id(), "product-wifi-001") == 0);
+    const std::size_t firstFileSyncs = io.fileSyncs();
+    const std::size_t firstDirectorySyncs = io.directorySyncs();
+    CHECK(workflow.stopAndCommit(3001) ==
+          SurveyWorkflowStatus::AlreadyCommitted);
+    CHECK(io.fileSyncs() == firstFileSyncs);
+    CHECK(io.directorySyncs() == firstDirectorySyncs);
+
+    CHECK(workflow.resetToSetup() == SurveyWorkflowStatus::Ready);
+    CHECK(library.size() == 1);
+    CHECK(workflow.start("product-wifi-002", 5000) ==
+          SurveyWorkflowStatus::Started);
+    Observation next = *golden.get(0);
+    next.monotonicUs = 6000;
+    CHECK(workflow.publish(next) == SurveyWorkflowStatus::Appended);
+    CHECK(workflow.stopAndCommit(7000) == SurveyWorkflowStatus::Committed);
+    CHECK(workflow.generation() == 2);
+    CHECK(library.size() == 1);
+    CHECK(library.selected() != nullptr && library.selected()->generation == 2);
+    CHECK(library.selected() != nullptr && library.selected()->session != nullptr &&
+          std::strcmp(library.selected()->session->id(), "product-wifi-002") == 0);
+
+    CHECK(workflow.resetToSetup() == SurveyWorkflowStatus::Ready);
+    CHECK(workflow.start("product-wifi-003", 8000) ==
+          SurveyWorkflowStatus::Started);
+    next.monotonicUs = 9000;
+    CHECK(workflow.publish(next) == SurveyWorkflowStatus::Appended);
+    CHECK(workflow.stopAndCommit(10000) ==
+          SurveyWorkflowStatus::StoreRejected);
+    CHECK(workflow.state() == SurveyWorkflowState::Error);
+    CHECK(workflow.lastStoreStatus() == SessionStoreStatus::IoError);
+    CHECK(library.size() == 1);
+    CHECK(library.selected() != nullptr && library.selected()->generation == 2);
+    CHECK(library.selected() != nullptr && library.selected()->session != nullptr &&
+          std::strcmp(library.selected()->session->id(), "product-wifi-002") == 0);
+    CHECK(std::strcmp(surveyWorkflowStatusName(workflow.lastStatus()),
+                      "store_rejected") == 0);
 }
 
 HeadCandidate candidate(const std::uint8_t* wire, const HeadRecord& record,
@@ -2097,8 +2236,10 @@ int main() {
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
     testGoldenSurveyTraceUsesListDetailBackAndExplicitStop();
+    testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure();
     testSessionCodecCommitsCanonicalDataAndReopensOffline();
     testOfflineLibraryControllerIsBoundedAndPreservesProvenance();
+    testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity();
     testBoundedSessionStoreCommitsRecoversAndFallsBack();
     testSessionStoreBoundaryWrapperStopsAfterEachSuccessfulBoundary();
     testRamSessionStoreAdapterMatchesBoardFixtureContract();

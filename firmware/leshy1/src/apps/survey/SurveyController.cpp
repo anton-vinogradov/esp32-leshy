@@ -2,6 +2,12 @@
 
 namespace leshy1::apps::survey {
 
+void SurveyController::reset() {
+    session_.reset();
+    selection_ = 0;
+    view_ = SurveyView::List;
+}
+
 services::survey::SessionStatus SurveyController::start(const char* sessionId,
                                                         std::uint64_t monotonicUs) {
     selection_ = 0;

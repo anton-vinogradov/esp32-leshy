@@ -49,6 +49,23 @@ bool LibraryController::add(const services::survey::SurveySession& session,
     return true;
 }
 
+bool LibraryController::replaceWithOwnedCopy(
+    const services::survey::SurveySession& staged,
+    services::survey::SurveySession& owned, std::uint32_t generation,
+    SessionIntegrity integrity, bool persistent, bool simulated) {
+    if (staged.state() != services::survey::SessionState::Stopped ||
+        staged.id() == nullptr || staged.id()[0] == '\0') {
+        return false;
+    }
+    owned = staged;
+    entries_.fill({});
+    entries_[0] = {&owned, generation, integrity, persistent, simulated};
+    size_ = 1;
+    selection_ = 0;
+    view_ = LibraryView::SessionList;
+    return true;
+}
+
 bool LibraryController::next() {
     if (view_ != LibraryView::SessionList || selection_ + 1 >= size_) return false;
     ++selection_;

@@ -24,6 +24,8 @@ def main() -> int:
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
+    survey_workflow_path = TARGET / "src" / "apps" / "survey" / "SurveyWorkflow.cpp"
+    session_catalog_path = TARGET / "src" / "apps" / "library" / "SessionCatalog.cpp"
     sector_inspection = TARGET / "src" / "storage" / "SdSectorInspection.cpp"
     reset_runner_path = ROOT / "tools" / "run_1x_sd_reset_matrix.py"
     sources = "\n".join(path.read_text(encoding="utf-8") for path in source_paths)
@@ -89,6 +91,35 @@ def main() -> int:
     serial_boot = "Serial.begin(kConsoleBaud);"
     if buzzer_boot not in entry or serial_boot not in entry or entry.find(buzzer_boot) > entry.find(serial_boot):
         errors.append("buzzer inactive invariant must be established before console startup")
+
+    if not survey_workflow_path.is_file():
+        errors.append("product Survey workflow is missing")
+    else:
+        survey_workflow = survey_workflow_path.read_text(encoding="utf-8")
+        for marker in (
+            "SurveyWorkflowStatus::AlreadyCommitted",
+            "storage::commitNextSession",
+            "storage::recoverSession",
+            "apps::library::LibraryController replacement",
+            "replacement.replaceWithOwnedCopy",
+            "library_ = replacement",
+        ):
+            if marker not in survey_workflow:
+                errors.append(f"product Survey workflow is missing: {marker}")
+
+    if not session_catalog_path.is_file():
+        errors.append("read-only Session catalog is missing")
+    else:
+        session_catalog = session_catalog_path.read_text(encoding="utf-8")
+        for marker in (
+            "storage::recoverSession",
+            "replacement.replaceWithOwnedCopy",
+            "library = replacement",
+            "SessionIntegrity::RecoveredFallback",
+            "library.add",
+        ):
+            if marker not in session_catalog:
+                errors.append(f"read-only Session catalog is missing: {marker}")
 
     if not physical_sd_adapter.is_file():
         errors.append("explicit physical SD adapter is missing")

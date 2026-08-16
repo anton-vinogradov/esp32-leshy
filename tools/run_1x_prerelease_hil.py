@@ -61,14 +61,32 @@ def load_suite(path: Path) -> dict[str, Any]:
             if not isinstance(step, dict) or not isinstance(step.get("id"), str):
                 raise ValueError(f"scenario {scenario['id']} has a step without id")
             action = step.get("action")
+            query_spec = step.get("query")
+            if action is not None and query_spec is not None:
+                raise ValueError(f"step {step['id']} cannot combine action and query")
             if action is not None and action not in {
                 "up", "down", "left", "right", "select", "back"
             }:
                 raise ValueError(f"unsupported action in {step['id']}: {action}")
+            if query_spec is not None:
+                if not isinstance(query_spec, dict):
+                    raise ValueError(f"step {step['id']} query must be an object")
+                for field in ("command", "schema", "kind"):
+                    field_value = query_spec.get(field)
+                    if not isinstance(field_value, str) or not field_value:
+                        raise ValueError(
+                            f"step {step['id']} query needs non-empty {field}"
+                        )
+                command = query_spec["command"]
+                if (len(command) > 96 or "\n" in command or "\r" in command or
+                        not command.isascii() or not command.isprintable()):
+                    raise ValueError(f"step {step['id']} has unsafe query command")
             if not isinstance(step.get("assert"), dict):
                 raise ValueError(f"step {step['id']} needs assertions")
             capture = step.get("capture")
             if capture is not None:
+                if query_spec is not None:
+                    raise ValueError(f"step {step['id']} cannot capture after query")
                 if not isinstance(capture, dict) or not isinstance(
                     capture.get("golden"), str
                 ):
@@ -284,6 +302,7 @@ def run_device(args: argparse.Namespace, suite: dict[str, Any]) -> tuple[dict[st
         "flashed_by_runner": args.flash,
         "suite_id": suite["id"],
         "suite_revision": suite["revision"],
+        "scenario_filter": args.scenario,
     }
     write_json(output / "candidate-manifest.json", candidate)
 
@@ -321,7 +340,7 @@ def run_device(args: argparse.Namespace, suite: dict[str, Any]) -> tuple[dict[st
         failures.append(f"boot.ready_marker_ms: {ready_marker_ms:.3f} > {max_ready_ms}")
 
     trace: list[dict[str, Any]] = []
-    gate_eligible = bool(args.flash) and not args.record_goldens
+    gate_eligible = bool(args.flash) and not args.record_goldens and args.scenario is None
     device = PassiveSerial()
     device.port = args.port
     device.baudrate = 115200
@@ -339,23 +358,41 @@ def run_device(args: argparse.Namespace, suite: dict[str, Any]) -> tuple[dict[st
             "app_elf_sha256": firmware_app_elf_sha,
             "firmware_version": args.expected_version,
         }, session_begin, "hil_session.begin"))
-        for scenario in suite["scenarios"]:
+        selected_scenarios = [
+            scenario for scenario in suite["scenarios"]
+            if args.scenario is None or scenario["id"] == args.scenario
+        ]
+        for scenario in selected_scenarios:
             scenario_trace: list[dict[str, Any]] = []
             for step in scenario["steps"]:
-                if step.get("action") is None:
-                    state = query(device, b"ui.state", "leshy.ui.v1", "state")
+                query_spec = step.get("query")
+                if query_spec is not None:
+                    record = query(
+                        device,
+                        query_spec["command"].encode("ascii"),
+                        query_spec["schema"],
+                        query_spec["kind"],
+                    )
+                    acknowledgement_ms = None
+                elif step.get("action") is None:
+                    record = query(device, b"ui.state", "leshy.ui.v1", "state")
                     acknowledgement_ms = None
                 else:
-                    state, acknowledgement_ms = action(device, step["action"])
+                    record, acknowledgement_ms = action(device, step["action"])
                 step_failures = assertion_failures(
-                    step["assert"], state, f"{scenario['id']}.{step['id']}"
+                    step["assert"], record, f"{scenario['id']}.{step['id']}"
                 )
                 failures.extend(step_failures)
                 result: dict[str, Any] = {
                     "id": step["id"], "action": step.get("action"),
                     "acknowledgement_ms": acknowledgement_ms,
-                    "state": state, "assertion_failures": step_failures,
+                    "assertion_failures": step_failures,
                 }
+                if query_spec is None:
+                    result["state"] = record
+                else:
+                    result["query"] = query_spec
+                    result["record"] = record
                 capture = step.get("capture")
                 if capture is not None:
                     begin, frame, end, post_state = capture_frame(device)
@@ -435,6 +472,7 @@ def run_device(args: argparse.Namespace, suite: dict[str, Any]) -> tuple[dict[st
         "run_id": run_id,
         "candidate_flashed": args.flash,
         "expected_version": args.expected_version,
+        "scenario_filter": args.scenario,
         "boot": {"first_byte_ms": first_byte_ms, "ready_marker_ms": ready_marker_ms,
                  "ready": ready},
         "metrics": metrics, "safe_outputs": safe_outputs,
@@ -504,6 +542,8 @@ def main() -> int:
     parser.add_argument("--boot-seconds", type=float, default=5.0)
     parser.add_argument("--record-goldens", action="store_true",
                         help="create missing goldens; refuses to overwrite existing ones")
+    parser.add_argument("--scenario",
+                        help="run one named scenario; partial runs are never gate-eligible")
     args = parser.parse_args()
     if not args.firmware.is_file():
         parser.error(f"firmware not found: {args.firmware}")
@@ -513,6 +553,9 @@ def main() -> int:
         parser.error("--record-goldens requires --flash")
 
     suite = load_suite(args.suite)
+    if args.scenario is not None and args.scenario not in {
+            scenario["id"] for scenario in suite["scenarios"]}:
+        parser.error(f"unknown scenario: {args.scenario}")
     try:
         result, failures = run_device(args, suite)
     except Exception as error:  # Preserve a machine-readable failed bundle.

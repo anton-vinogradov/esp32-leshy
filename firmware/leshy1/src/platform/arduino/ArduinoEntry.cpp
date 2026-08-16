@@ -13,7 +13,9 @@
 #include <esp_app_desc.h>
 
 #include "apps/library/LibraryController.h"
+#include "apps/library/SessionCatalog.h"
 #include "apps/survey/SurveyController.h"
+#include "apps/survey/SurveyWorkflow.h"
 #include "boards/esp32_div_v2/BoardProfile.h"
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
@@ -55,9 +57,13 @@ using leshy1::boards::esp32_div_v2::BoardProfile;
 using leshy1::apps::library::LibraryController;
 using leshy1::apps::library::LibraryEntry;
 using leshy1::apps::library::LibraryView;
+using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
 using leshy1::apps::survey::SurveyController;
 using leshy1::apps::survey::SurveyView;
+using leshy1::apps::survey::SurveyWorkflow;
+using leshy1::apps::survey::SurveyWorkflowState;
+using leshy1::apps::survey::SurveyWorkflowStatus;
 using leshy1::domain::apps::AppCatalog;
 using leshy1::domain::apps::AppMenuItem;
 using leshy1::domain::hardware::CapabilityRecord;
@@ -121,10 +127,14 @@ SurveySession surveySession;
 SurveyController surveyController(surveySession);
 SurveySession librarySession;
 LibraryController libraryController;
+SessionCatalog sessionCatalog;
 leshy1::services::survey::ObservationQueue surveyIngressQueue;
 leshy1::storage::SessionStoreWorkspace sessionStoreWorkspace;
 ArduinoFsSessionStoreWorkspace sdSessionStoreIoWorkspace;
 RamSessionStoreIo ramSessionStore;
+SurveyWorkflow surveyWorkflow(surveyController, ramSessionStore,
+                              sessionStoreWorkspace, librarySession,
+                              libraryController, false, true);
 BoardStorageAdapter boardStorageAdapter;
 leshy1::storage::MediaDiscovery storageDiscovery;
 bool storageDiscoveryReady = false;
@@ -211,10 +221,36 @@ bool appendGoldenObservations(SurveySession& session) {
     return true;
 }
 
+bool publishGoldenObservations(SurveyWorkflow& workflow) {
+    static constexpr std::uint8_t kBssids[3][6] = {
+        {0x02, 0x00, 0x00, 0x00, 0x00, 0x01},
+        {0x02, 0x00, 0x00, 0x00, 0x00, 0x02},
+        {0x02, 0x00, 0x00, 0x00, 0x00, 0x03},
+    };
+    static constexpr std::uint8_t kChannels[3] = {1, 6, 11};
+    static constexpr std::int16_t kRssi[3] = {-71, -55, -83};
+    static constexpr const char* kSsids[3] = {"alpha", "bravo", "charlie"};
+    for (std::size_t index = 0; index < 3; ++index) {
+        WifiScanRecord record;
+        std::memcpy(record.bssid.data(), kBssids[index], record.bssid.size());
+        record.channel = kChannels[index];
+        record.rssiDbm = kRssi[index];
+        record.ssid = kSsids[index];
+        record.ssidLength = std::strlen(kSsids[index]);
+        Observation observation;
+        if (!leshy1::drivers::wifi::normalizePassiveRecord(
+                record, surveySession.startedUs() + 1000U +
+                            static_cast<std::uint64_t>(index),
+                &observation) ||
+            workflow.publish(observation) != SurveyWorkflowStatus::Appended) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool prepareSurveyDemo() {
-    surveySession.reset();
-    if (surveyController.start("golden-wifi-ui", 1000) != SessionStatus::Started) return false;
-    return appendGoldenObservations(surveySession);
+    return surveyWorkflow.resetToSetup() == SurveyWorkflowStatus::Ready;
 }
 
 bool prepareLibraryDemo() {
@@ -229,13 +265,13 @@ bool prepareLibraryDemo() {
         leshy1::storage::commitNextSession(ramSessionStore, sessionStoreWorkspace,
                                            librarySession);
     if (!committed.complete()) return false;
-    const leshy1::storage::SessionStoreRecoveryResult recovered =
-        leshy1::storage::recoverSession(ramSessionStore, sessionStoreWorkspace,
-                                        &librarySession);
     libraryController.clear();
-    return recovered.valid() && recovered.generation == 1 && recovered.observations == 3 &&
-           libraryController.add(librarySession, recovered.generation,
-                                 SessionIntegrity::Valid, false, true);
+    const leshy1::apps::library::SessionCatalogResult cataloged =
+        sessionCatalog.recoverLatest(ramSessionStore, sessionStoreWorkspace,
+                                     librarySession, libraryController, false,
+                                     true);
+    return cataloged.admitted() && cataloged.generation == 1 &&
+           cataloged.observations == 3;
 }
 
 bool prepareBatchThroughputSession(std::size_t* encodedBytes) {
@@ -397,6 +433,64 @@ void renderOverview() {
 
 void renderInventoryPage() {
     char line[64] = {};
+    if (surveyWorkflow.state() == SurveyWorkflowState::Setup) {
+        renderHeader("SURVEY / SETUP");
+        display.setTextFont(2);
+        display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        display.setCursor(14, 88);
+        display.print("SOURCE      WIFI PASSIVE");
+        display.setCursor(14, 116);
+        display.print("STORAGE     RAM PREVIEW");
+        display.setCursor(14, 144);
+        display.print("MODE        SIMULATED");
+        display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display.setCursor(14, 190);
+        display.print("SELECT      START");
+        display.setTextFont(1);
+        display.setTextColor(TFT_GREEN, TFT_BLACK);
+        display.setCursor(14, 218);
+        display.print("NO WORKER / NO RF / NO COMMIT YET");
+        return;
+    }
+    if (surveyWorkflow.state() == SurveyWorkflowState::Result) {
+        renderHeader("SURVEY / COMMITTED");
+        display.setTextFont(2);
+        display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display.setCursor(14, 86);
+        display.print(surveySession.id());
+        display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        std::snprintf(line, sizeof(line), "OBSERVATIONS %u",
+                      static_cast<unsigned>(surveySession.size()));
+        display.setCursor(14, 126);
+        display.print(line);
+        std::snprintf(line, sizeof(line), "GENERATION   %lu",
+                      static_cast<unsigned long>(surveyWorkflow.generation()));
+        display.setCursor(14, 154);
+        display.print(line);
+        display.setCursor(14, 182);
+        display.print("STORAGE      RAM ONLY");
+        display.setTextFont(1);
+        display.setTextColor(TFT_GREEN, TFT_BLACK);
+        display.setCursor(14, 218);
+        display.print("ONE COMMIT | OPEN FROM LIBRARY");
+        return;
+    }
+    if (surveyWorkflow.state() == SurveyWorkflowState::Error) {
+        renderHeader("SURVEY / ERROR");
+        display.setTextFont(2);
+        display.setTextColor(TFT_RED, TFT_BLACK);
+        display.setCursor(14, 92);
+        display.print(leshy1::apps::survey::surveyWorkflowStatusName(
+            surveyWorkflow.lastStatus()));
+        display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        display.setCursor(14, 132);
+        display.print("PRIOR LIBRARY PRESERVED");
+        display.setTextFont(1);
+        display.setTextColor(TFT_GREEN, TFT_BLACK);
+        display.setCursor(14, 218);
+        display.print("BACK HOME | NO HIDDEN RETRY");
+        return;
+    }
     if (surveyController.view() == SurveyView::Detail) {
         renderHeader("SURVEY / DETAIL");
         const Observation* observation = surveyController.selected();
@@ -426,13 +520,11 @@ void renderInventoryPage() {
         return;
     }
 
-    renderHeader("SURVEY / SIMULATED");
+    renderHeader("SURVEY / RUNNING");
     display.setTextFont(1);
     display.setTextColor(TFT_GREEN, TFT_BLACK);
     display.setCursor(14, 76);
-    display.print(surveySession.state() == SessionState::Running
-                      ? "RUNNING | GOLDEN DATA | RF OFF"
-                      : "STOPPED | GOLDEN DATA | RF OFF");
+    display.print("RUNNING | SIMULATED | RF OFF");
     for (std::size_t index = 0; index < surveySession.size(); ++index) {
         const Observation* observation = surveySession.get(index);
         if (observation == nullptr) continue;
@@ -554,12 +646,16 @@ void renderInteractiveScreen() {
     display.setCursor(20, 302);
     if (uiController.isRoot()) {
         display.print("up/down | blocked item has reason");
+    } else if (uiController.page() == 2 &&
+               surveyWorkflow.state() == SurveyWorkflowState::Setup) {
+        display.print("select start | back cancel | RF off");
     } else if (uiController.page() == 2 && surveyController.view() == SurveyView::Detail) {
         display.print("back: list | simulated data | RF off");
-    } else if (uiController.page() == 2 && surveySession.state() == SessionState::Running) {
+    } else if (uiController.page() == 2 &&
+               surveyWorkflow.state() == SurveyWorkflowState::Running) {
         display.print("select detail | right stop | RF off");
     } else if (uiController.page() == 2) {
-        display.print("stopped | back: home | RF off");
+        display.print("committed once | back home | RF off");
     } else if (uiController.page() == 3 &&
                libraryController.view() == LibraryView::ExportReady) {
         display.print("USB export | back detail | RF off");
@@ -577,7 +673,7 @@ void renderInteractiveScreen() {
 }
 
 void emitUiState(Stream& reply, UiAction action, bool changed) {
-    char line[768] = {};
+    char line[1024] = {};
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const LibraryEntry* selectedLibrary = libraryController.selected();
     std::snprintf(line, sizeof(line),
@@ -593,13 +689,15 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   selected == nullptr ? "missing selection" : selected->reason,
                   static_cast<unsigned long>(uiController.revision()));
     const std::size_t length = std::strlen(line);
-    if (length > 0 && length + 384 < sizeof(line)) {
+    if (length > 0 && length + 512 < sizeof(line)) {
         line[length - 1] = '\0';
         std::snprintf(line + length - 1, sizeof(line) - length + 1,
                       ",\"runtime_event\":\"%s\",\"runtime_owner\":\"%s\","
                       "\"lease_mask\":%lu,\"survey_simulated\":%s,"
-                      "\"survey_view\":\"%s\",\"survey_running\":%s,"
+                      "\"survey_view\":\"%s\",\"survey_workflow_state\":\"%s\","
+                      "\"survey_workflow_status\":\"%s\",\"survey_running\":%s,"
                       "\"survey_observations\":%u,\"survey_selection\":%u,"
+                      "\"survey_generation\":%lu,\"survey_persistent\":%s,"
                       "\"library_simulated\":%s,\"library_view\":\"%s\","
                       "\"library_entries\":%u,\"library_generation\":%lu,"
                       "\"library_persistent\":%s}",
@@ -607,9 +705,15 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned long>(appRuntime.activeResources()),
                       surveyDemoReady ? "true" : "false",
                       surveyController.view() == SurveyView::Detail ? "detail" : "list",
+                      leshy1::apps::survey::surveyWorkflowStateName(
+                          surveyWorkflow.state()),
+                      leshy1::apps::survey::surveyWorkflowStatusName(
+                          surveyWorkflow.lastStatus()),
                       surveySession.state() == SessionState::Running ? "true" : "false",
                       static_cast<unsigned>(surveySession.size()),
                       static_cast<unsigned>(surveyController.selection()),
+                      static_cast<unsigned long>(surveyWorkflow.generation()),
+                      surveyWorkflow.persistent() ? "true" : "false",
                       selectedLibrary != nullptr && selectedLibrary->simulated
                           ? "true" : "false",
                       libraryController.view() == LibraryView::ExportReady
@@ -633,11 +737,32 @@ bool applyUiAction(UiAction action) {
     if (!wasRoot && uiController.page() == 2) {
         bool handled = false;
         bool changed = false;
-        if (surveyController.view() == SurveyView::Detail &&
+        if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
+            (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            std::uint64_t startedUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+            if (startedUs == 0) startedUs = 1;
+            const SurveyWorkflowStatus started =
+                surveyWorkflow.start("product-wifi-preview", startedUs);
+            changed = started == SurveyWorkflowStatus::Started &&
+                      publishGoldenObservations(surveyWorkflow);
+            lastRuntimeEvent =
+                leshy1::apps::survey::surveyWorkflowStatusName(
+                    changed ? surveyWorkflow.lastStatus() : started);
+        } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
+                   (action == UiAction::Back || action == UiAction::Left)) {
+            surveyWorkflow.cancel();
+            lastRuntimeEvent =
+                leshy1::apps::survey::surveyWorkflowStatusName(
+                    surveyWorkflow.lastStatus());
+        } else if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
+                   surveyController.view() == SurveyView::Detail &&
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
             changed = surveyController.back();
-        } else if (surveyController.view() == SurveyView::List) {
+        } else if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
+                   surveyController.view() == SurveyView::List) {
             if (action == UiAction::Up) {
                 handled = true;
                 changed = surveyController.previous();
@@ -649,12 +774,13 @@ bool applyUiAction(UiAction action) {
                 changed = surveyController.openSelected();
             } else if (action == UiAction::Right) {
                 handled = true;
-                const SessionStatus status = surveyController.stop(
+                const SurveyWorkflowStatus status = surveyWorkflow.stopAndCommit(
                     static_cast<std::uint64_t>(esp_timer_get_time()));
-                changed = status == SessionStatus::Stopped;
-                lastRuntimeEvent = leshy1::services::survey::sessionStatusName(status);
+                changed = status == SurveyWorkflowStatus::Committed;
+                lastRuntimeEvent =
+                    leshy1::apps::survey::surveyWorkflowStatusName(status);
             } else if ((action == UiAction::Back || action == UiAction::Left) &&
-                       surveySession.state() == SessionState::Running) {
+                       surveyWorkflow.state() == SurveyWorkflowState::Running) {
                 handled = true;
             }
         }
@@ -706,6 +832,11 @@ bool applyUiAction(UiAction action) {
                            : appRuntime.launch(selected->id, selected->enabled, selected->resources);
         lastRuntimeEvent = leshy1::kernel::runtime::launchStatusName(launchStatus);
         openable = launchStatus == LaunchStatus::Started;
+        if (openable && selected != nullptr &&
+            std::strcmp(selected->id, "survey") == 0 &&
+            surveyWorkflow.state() != SurveyWorkflowState::Setup) {
+            surveyWorkflow.resetToSetup();
+        }
     }
     const bool changed = uiController.apply(
         action, static_cast<std::uint8_t>(appCatalog.size()), openable);
@@ -2915,9 +3046,11 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
             recoveryAfterRemount.valid()) {
             librarySession = sessionStoreWorkspace.validationSession;
             libraryController.clear();
-            libraryDemoReady = libraryController.add(
-                librarySession, recoveryAfterRemount.generation,
-                SessionIntegrity::Valid, true, false);
+            const leshy1::apps::library::SessionCatalogResult cataloged =
+                sessionCatalog.admitRecovered(
+                    librarySession, recoveryAfterRemount, libraryController,
+                    true, false);
+            libraryDemoReady = cataloged.admitted();
             const CapabilityRecord* persistentCapability =
                 inventory.find("library.persistent_session");
             const bool persistentCapabilityReady =

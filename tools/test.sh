@@ -24,7 +24,9 @@ trap 'rm -rf "$test_tmp"' EXIT
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/clean_target_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/LibraryController.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/library/SessionCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyController.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/survey/SurveyWorkflow.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/apps/AppCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/hardware/HardwareInventory.cpp" \
     "$repo_dir/firmware/leshy1/src/drivers/wifi/WifiPassiveContract.cpp" \

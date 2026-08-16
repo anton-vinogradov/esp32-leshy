@@ -52,6 +52,10 @@ public:
     void clear();
     bool add(const services::survey::SurveySession& session, std::uint32_t generation,
              SessionIntegrity integrity, bool persistent, bool simulated);
+    bool replaceWithOwnedCopy(
+        const services::survey::SurveySession& staged,
+        services::survey::SurveySession& owned, std::uint32_t generation,
+        SessionIntegrity integrity, bool persistent, bool simulated);
     bool next();
     bool previous();
     bool openSelected();

@@ -98,3 +98,10 @@ firmware-reported ELF SHA-256 запущенного образа (`E-HIL-042`).
 
 Candidate 0.37 повторил zero mismatch и дополнительно ограничил все Actions/captures
 одним device-acknowledged run ID от UI revision 0 до 2 (`E-HIL-043`).
+
+Candidate 0.38 расширил suite до product Survey→commit→Library→export: семь новых
+real-TFT goldens и три прежних кадра совпали без единого пикселя; bounded serial
+query проверил export generation 2/3 observations/0 drops, а финальный Back вернул
+owner `none`/lease `0` (`E-HIL-046`). Теперь автоматизация проверяет первый
+продуктовый вертикальный срез, хотя источник и store в этом UI-run остаются
+simulated/RAM/RF-off.

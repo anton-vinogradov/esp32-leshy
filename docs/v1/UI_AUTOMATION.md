@@ -102,3 +102,10 @@ the full firmware-reported ELF SHA-256 of the running image (`E-HIL-042`).
 Candidate 0.37 again produced zero mismatch and additionally bounded every
 Action/capture by one device-acknowledged run ID from UI revision 0 through 2
 (`E-HIL-043`).
+
+Candidate 0.38 expands the suite through product Survey→commit→Library→export:
+seven new real-TFT goldens and the three existing frames match with zero pixel
+differences; a bounded serial query verifies export generation 2/3 observations/0
+drops, and final Back restores owner `none`/lease `0` (`E-HIL-046`). Automation now
+covers the first product vertical slice, although this UI run still uses a
+simulated/RAM/RF-off source and store.
