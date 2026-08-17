@@ -115,27 +115,28 @@ owner/lease в `none`/`0`. Тогда это приняло component system; UX
 ## UX-05 — размещение EN/RU
 
 `ui/UiStrings.def` — единый allocation-free каталог всех текущих строк S2 renderer,
-кроме неизменяемого бренда `LESHY 1.x`. Сейчас он задаёт 124 стабильных ID, варианты
-EN и RU (всего 248 строк) и пиксельный budget каждого места использования. Exact
-accepted candidate 0.55 содержал 111 ID/222 строки; 13 последующих ID — EN/RU-тексты
-guided states, принятые вместе с UX-07.
+кроме неизменяемого бренда `LESHY 1.x`. Сейчас он задаёт 127 стабильных ID, варианты
+EN и RU (всего 254 строки) и пиксельный budget каждого места использования. Exact
+accepted candidate 0.55 содержал 111 ID/222 строки; 16 последующих ID добавляют
+тексты guided states и product cancellation/progress.
 `tools/generate_ui_gfx_font.py` воспроизводимо генерирует faces, а
 `tools/check_ui_language_contract.py` измеряет их metrics, отклоняет отсутствующий
 перевод или переполнение и проверяет, что renderers не возвращают локальные
 user-facing literals.
 
-Оба языка используют vendored PT Sans Narrow с лицензией OFL. Сгенерированные GFX
-headers дают body 16 px и metadata 12 px для нужного ASCII/Cyrillic range без
+Оба языка теперь используют официальный vendored variable source Roboto Condensed с
+лицензией OFL и pinned SHA-256. Генератор выбирает named instance Medium (weight 500)
+и создаёт body 16 px и metadata 12 px для нужного ASCII/Cyrillic range без
 runtime-загрузки шрифта или heap allocation. `Язык` — предпоследний пункт Home,
 выбор EN/RU применяется сразу и сохраняется в NVS namespace `leshy1-ui`, key
 `lang.v1`; команда `ui.language en|ru` проходит через ту же controller boundary,
-что и экран.
+что и экран. Прежний source PT Sans Narrow и exact evidence 0.55 остаются historical
+provenance, а не текущим face.
 
-UX-05 принимает encoding coverage, persistence и geometric fit, но не утверждает,
-что каждый rasterized glyph оптимально читаем. Более поздний physical-user review
-нашёл несколько неоднозначных Cyrillic shapes в PT Sans Narrow 16/12 px. Альтернативы
-сравниваются, а текущий face остаётся baseline, пока не выбран replacement и не
-повторены те же catalog-source, overflow, actual-TFT, Quick, input и cleanup checks.
+UX-05 принимает encoding coverage, persistence, geometric fit и выбранный face для
+малого raster; physical-panel optics и особенности зрения остаются частью usability
+walkthrough. Замена на Roboto потребовала восьми безопасных сокращений. После них
+все 254 варианта помещаются в declared pixel budgets generated glyphs без overflow.
 
 Exact candidate `0.55.0-ui-language-measure` принимает UX-05 через
 `E-BUILD-057`/`E-HIL-079`/`E-UX-005`. Actual TFT captures 240×320 охватывают Home,
@@ -146,6 +147,17 @@ Quick остаётся 8/8 с zero RF/storage/buzzer side effects, input errors 
 независимый checker связывают frames, каталог, source шрифта, hashes candidate,
 state trace и final cleanup. На тот момент UX-06/UX-07 и `DEMO-S2` оставались
 открыты.
+
+Exact candidate `0.63.0-roboto-condensed-ui-measure` заменяет только typography layer
+через `E-BUILD-064`/`E-AUTO-027`/`E-HIL-087`/`E-UX-008`; Stage gate не переоткрывается
+и не продвигается. Идемпотентный device runner снимает 18 actual frames 240×320:
+русские Home/Diagnostics/Survey/Library detail/Language/Self-Test, Full preflight,
+все пять common states и оба result, английские Home/Language и pixel-identical
+финальный русский Home. Quick проходит 8/8, Full остаётся честно 9/10 с одним blocked
+capability-coverage check, radio/storage/buzzer side effects и input errors/drops
+равны нулю, heap до и после остаётся 272 688/208 912/188 720 B, buzzer LOW, final
+owner/lease `none`/`0`. Retained checker пересчитывает официальный TTF, OFL,
+generated face, exact candidate, runner, каждый frame/trace и final cleanup.
 
 ## UX-06 — кнопки и доступность без цвета
 

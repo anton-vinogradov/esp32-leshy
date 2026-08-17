@@ -1,0 +1,82 @@
+{
+  "app_elf_sha256": "3171e472c40c49484922c9c1b0ca82b60f2a3b71deedeaf8008604d8751eb01a",
+  "blocked": 1,
+  "board_profile": "esp32-div-v2-n16",
+  "cancelled": false,
+  "checks": [
+    {
+      "id": "quick.build.identity",
+      "status": "pass"
+    },
+    {
+      "id": "quick.board.profile",
+      "status": "pass"
+    },
+    {
+      "id": "quick.runtime.heap",
+      "status": "pass"
+    },
+    {
+      "id": "quick.display.ready",
+      "status": "pass"
+    },
+    {
+      "id": "quick.input.frontend",
+      "status": "pass"
+    },
+    {
+      "id": "quick.input.queue",
+      "status": "pass"
+    },
+    {
+      "id": "quick.output.buzzer",
+      "status": "pass"
+    },
+    {
+      "id": "quick.resource.scope",
+      "status": "pass"
+    },
+    {
+      "id": "full.ui.common_states",
+      "status": "pass"
+    },
+    {
+      "id": "full.capability.coverage",
+      "status": "blocked"
+    }
+  ],
+  "current_lease_mask": 1,
+  "current_owner": "self-test",
+  "duration_us": 3573055,
+  "facts": {
+    "build_identity_present": true,
+    "buzzer_inactive": true,
+    "display_ready": true,
+    "heap_floor": 131072,
+    "heap_free": 208912,
+    "heap_minimum": 188720,
+    "input_frontend_ready": true,
+    "input_queue_drops": 0,
+    "input_queue_healthy": true,
+    "profile_matched": true,
+    "resource_scope_clean": true,
+    "run_resource_mask": 1
+  },
+  "failed": 0,
+  "firmware_version": "0.63.0-roboto-condensed-ui-measure",
+  "kind": "report",
+  "mode": "full_guided",
+  "passed": 9,
+  "plan_version": 2,
+  "read_only": true,
+  "schema": "leshy.self_test.report.v1",
+  "schema_version": 1,
+  "sequence": 6,
+  "side_effects": {
+    "buzzer_activations": 0,
+    "radio_tx_commands": 0,
+    "storage_write_commands": 0
+  },
+  "started_us": 361751724,
+  "status": "blocked"
+}

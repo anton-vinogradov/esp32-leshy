@@ -114,28 +114,29 @@ input has zero errors/drops, buzzer remains LOW, and Back returns owner/lease to
 ## UX-05 EN/RU content fit
 
 `ui/UiStrings.def` is the single allocation-free catalog for every current S2
-renderer string except the invariant `LESHY 1.x` brand. It currently defines 124
-stable IDs, both EN and RU variants (248 strings total), and the pixel budget of
-every use. The exact accepted 0.55 candidate contained 111 IDs/222 strings; the 13
-later IDs are the EN/RU guided-state copy accepted with UX-07.
+renderer string except the invariant `LESHY 1.x` brand. It currently defines 127
+stable IDs, both EN and RU variants (254 strings total), and the pixel budget of
+every use. The exact accepted 0.55 candidate contained 111 IDs/222 strings; the 16
+later IDs add the guided-state and product cancellation/progress copy.
 `tools/generate_ui_gfx_font.py` reproducibly generates the faces, while
 `tools/check_ui_language_contract.py` measures their metrics, rejects a
 missing translation or overflowing string, and verifies that renderers do not
 reintroduce local user-facing literals.
 
-Both languages use the vendored OFL-licensed PT Sans Narrow source. The generated
-GFX headers provide 16 px body and 12 px metadata faces over the required ASCII and
-Cyrillic range without runtime font loading or heap allocation. `Language` is the
-next-to-last Home item, applies EN/RU immediately, and persists the selection in NVS
-namespace `leshy1-ui`, key `lang.v1`; `ui.language en|ru` exercises the same
-controller boundary used by the screen.
+Both languages now use the official vendored OFL-licensed Roboto Condensed variable
+source pinned by SHA-256. Generation selects its Medium named instance (weight 500)
+and emits 16 px body plus 12 px metadata faces over the required ASCII and Cyrillic
+range without runtime font loading or heap allocation. `Language` is the next-to-last
+Home item, applies EN/RU immediately, and persists the selection in NVS namespace
+`leshy1-ui`, key `lang.v1`; `ui.language en|ru` exercises the same controller boundary
+used by the screen. The earlier PT Sans Narrow source and exact 0.55 evidence remain
+historical provenance, not the current face.
 
-UX-05 accepts encoding coverage, persistence, and geometric fit; it does not claim
-that every rasterized glyph is optimally legible. A later physical-user review found
-several Cyrillic shapes ambiguous in PT Sans Narrow at 16/12 px. Font alternatives
-are under review, and the current face remains the baseline until one replacement is
-selected and reruns the same catalog-source, overflow, actual-TFT, Quick, input, and
-cleanup checks.
+UX-05 accepts encoding coverage, persistence, geometric fit, and the selected
+small-raster face; physical-panel optics and personal vision still belong to the
+usability walkthrough. The Roboto replacement required eight safe copy shortenings.
+All 254 variants then fit their declared generated-glyph pixel budgets with zero
+overflow.
 
 Exact candidate `0.55.0-ui-language-measure` accepts UX-05 through
 `E-BUILD-057`/`E-HIL-079`/`E-UX-005`. Actual 240×320 TFT captures cover Home,
@@ -146,6 +147,18 @@ remain zero, the buzzer is LOW, and final owner/lease is `none`/`0`. The retaine
 artifact and independent checker bind the frames, catalog, font source, candidate
 hashes, state trace, and final cleanup. At that point UX-06/UX-07 and `DEMO-S2`
 remained open.
+
+Exact candidate `0.63.0-roboto-condensed-ui-measure` supersedes only the typography
+layer through `E-BUILD-064`/`E-AUTO-027`/`E-HIL-087`/`E-UX-008`; it does not reopen
+or promote a Stage gate. The idempotent device runner captures 18 actual 240×320
+frames: Russian Home/Diagnostics/Survey/Library detail/Language/Self-Test, Full
+preflight, all five common states and both results, plus English Home/Language and a
+pixel-identical final Russian Home. Quick passes 8/8, Full remains honestly 9/10 with
+one blocked capability-coverage check, radio/storage/buzzer side effects and input
+errors/drops stay zero, heap remains 272,688/208,912/188,720 B before and after, the
+buzzer is LOW, and final owner/lease is `none`/`0`. The retained checker rehashes the
+official TTF, OFL, generated face, exact candidate, runner, every frame/trace and the
+final cleanup.
 
 ## UX-06 button and non-color accessibility
 

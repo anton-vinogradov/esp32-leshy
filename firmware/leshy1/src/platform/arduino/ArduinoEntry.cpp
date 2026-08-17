@@ -69,7 +69,7 @@
 #include "ui/UiController.h"
 #include "ui/UiStrings.h"
 #include "ui/VisualTheme.h"
-#include "ui/fonts/PTSansNarrowGfx.h"
+#include "ui/fonts/RobotoCondensedGfx.h"
 
 namespace {
 
@@ -1812,16 +1812,16 @@ void selectUiFont(UiTextRole role) {
         ? ActiveDisplayFont::Body : ActiveDisplayFont::Meta;
     if (activeDisplayFont == requested) return;
     if (role == UiTextRole::Body) {
-        display.setFreeFont(&PTSansNarrowBody);
+        display.setFreeFont(&RobotoCondensedBody);
     } else {
-        display.setFreeFont(&PTSansNarrowMeta);
+        display.setFreeFont(&RobotoCondensedMeta);
     }
     activeDisplayFont = requested;
 }
 
 std::int16_t uiFontAscent(UiTextRole role) {
-    return role == UiTextRole::Body ? kPTSansNarrowBodyAscent
-                                    : kPTSansNarrowMetaAscent;
+    return role == UiTextRole::Body ? kRobotoCondensedBodyAscent
+                                    : kRobotoCondensedMetaAscent;
 }
 
 void setUiCursor(UiTextRole role, std::int16_t x, std::int16_t top) {

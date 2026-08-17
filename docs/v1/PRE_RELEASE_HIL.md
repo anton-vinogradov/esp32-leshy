@@ -333,6 +333,16 @@ the current combined GitHub workflows have passed end to end:
   0. `check_product_survey_active_cancel_acceptance.py` rehashes the retained failed
   0.61 input-probe incident and the exact passing 0.62 bundle; 0.62 also emits bounded
   PCF8574 boot-probe attempts/retries;
+- `tools/run_1x_ui_typography_hil.py` is the service-free exact-TFT typography lane.
+  It requires an already flashed candidate, validates the running app identity and
+  candidate artifact hashes, normalizes Home/language/persisted Self-Test mode, and
+  captures 18 EN/RU framebuffers through public Actions/queries. It includes
+  persistent Library detail, Quick result, Full preflight, all five guided common
+  states and the honest blocked result, then restores a pixel-identical Russian Home.
+  It requires Quick 8/8, Full 9/10 with one declared blocker, zero side effects/input
+  errors/drops, LOW buzzer, invariant heap, and final lease 0. Exact 0.63 and the
+  runner's own final bytes are independently checked by
+  `check_ui_typography_acceptance.py` (`E-AUTO-027`/`E-HIL-087`/`E-UX-008`);
 - `tools/run_1x_release_hil.py` is the release-facing foreground orchestrator. It
   runs product first, derives the admitted exact CID, safely removes only its NVS
   enrollment, flashes and runs generic `device-smoke` revision 6, performs exact-CID
@@ -376,6 +386,20 @@ python tools/run_1x_product_survey_cancel_hil.py \
   --expected-cid FE343253440000002000000055019CB7 \
   --output /tmp/leshy-product-survey-cancel-hil --flash
 ```
+
+The exact typography regression, after building and flashing the same candidate, is:
+
+```bash
+python tools/run_1x_ui_typography_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --expected-version 0.63.0-roboto-condensed-ui-measure \
+  --expected-app-elf-sha256 3171e472c40c49484922c9c1b0ca82b60f2a3b71deedeaf8008604d8751eb01a \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --factory firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.factory.bin \
+  --map firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.map \
+  --output /tmp/leshy-ui-typography-hil
+```
+
 - omitted `--expected-cid` is discovered only from an admitted enrollment whose
   expected and observed 32-byte fingerprints match; an explicit value remains
   available for dedicated-media jobs;

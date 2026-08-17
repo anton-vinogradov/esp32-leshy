@@ -12,7 +12,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S3 — First persistent Survey Session`.
 - **Last completed stage:** `S2 — Clean 1.x platform`.
-- **Repository baseline:** `main` with retained exact-candidate 0.62 S3 progress evidence.
+- **Repository baseline:** `main` with retained exact-candidate 0.63 typography and S3 progress evidence.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
 - **Current objective:** close the missing-source real-TFT path, physical power-cut
   evidence, LittleFS parity, and independent-golden
@@ -24,7 +24,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 |---|---|---|---|
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
-| S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
+| S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; exact 0.60 retains the persistent Core-0 worker and makes terminal `Idle` a UI acknowledgement after cleanup/commit, while exact 0.62 physically cancels during an active scan without commit or resource leak and adds a bounded PCF8574 boot probe after a retained 0.61 transient failure | missing-source real-TFT evidence, physical power-cut, LittleFS parity, independent demo goldens, and reproducible `DEMO-S3` remain |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
@@ -537,13 +537,16 @@ not a hidden S3 completion criterion.
 | E-BUILD-063 | exact `0.62.0-input-probe-resilience-measure` rebuild | pass: RAM 128,816 B, linked flash 1,111,564 B; app/factory 1,111,712/1,177,248 B; app `9fd32690…e0b1`, factory `d6db0c4d…ec4d`, ELF `469d9026…e4f5`, map `8ce4dd29…2b01`; RTC no-init 20 B | +132 B linked flash, +16 B static RAM, and +128 B images vs failed 0.61; bounded input-probe and active-cancel evidence candidate, not a stage/release build |
 | E-AUTO-026 | active-scan cancellation runner, bounded input boot-probe contract, and retained verifier | pass: the runner waits for an observable physical `scan_active`, requests Back, requires the request to record that active state, proves cancellation before commit, cold-reboots, and checks exact unchanged Library/CID/read-only/zero-write/zero-lease facts; the verifier rehashes both the fail-closed 0.61 incident and exact passing 0.62 bundles | 0.61 is retained as failed on a one-shot PCF8574 boot read; 0.62 bounds the probe to 8 attempts/35 ms extra and reports attempts/retries, but deliberate first-read fault injection remains additional hardening evidence |
 | E-HIL-086 | board-01 exact 0.62 physical active-scan cancel | pass/progress only: exact flashed candidate exposes a live physical scan, acknowledges Back in 86.762 ms with a 9 us stop callback, records `cancel_requested_during_scan=true`, closes source/backend, returns Home owner/lease none/0, and cold-reopens the prior generation 68/25 unchanged with zero SD writes and zero heap drift; both cold boots report input detected with exact probe accounting in the [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-active-cancel-0.62.json) | closes physical cancel-during-scan without promoting S3; missing-source TFT, physical power-cut, LittleFS parity, and independent goldens remain; stage/release gate false |
+| E-BUILD-064 | exact `0.63.0-roboto-condensed-ui-measure` rebuild | pass: RAM 128,816 B, linked flash 1,111,932 B; app/factory 1,112,336/1,177,872 B; app `e72aa955…5abc`, factory `b698b7f6…dbde`, ELF `3171e472…b01a`, map `a9f32ceb…4d50`; RTC no-init 20 B | +368 B linked flash, zero static-RAM growth, and +624 B images vs 0.62; exact typography replacement candidate, not a stage/release build |
+| E-AUTO-027 | idempotent EN/RU typography runner and retained verifier | pass: runner normalizes Home, language, and persisted Self-Test mode, captures 18 exact TFT states through public Actions/queries, runs Quick plus Full/Guided, restores Russian Home, and rejects identity, fit, heap, input, buzzer, side-effect, frame, or cleanup drift; verifier rehashes official TTF/OFL, generated header, exact runner/candidate, every PNG/trace and record | first two development invocations exposed runner-only duplicate-frame and persisted-mode assumptions; both were retained outside release evidence, fixed, and the exact final runner passed twice |
+| E-HIL-087 / E-UX-008 | board-01 exact 0.63 Roboto Condensed Medium 16/12 regression | pass: all 127 IDs/254 EN/RU variants fit after eight safe shortenings; 18 actual 240×320 frames cover RU Home/Diagnostics/Survey/Library detail/Language/Self-Test/preflight/five common states/results and EN Home/Language; Quick is 8/8, Full is honestly 9/10 with one blocker, side effects/input errors/drops are zero, heap remains 272,688/208,912/188,720 B, buzzer LOW, and final Russian Home owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-typography-0.63.json) | replaces the ambiguous PT Sans Narrow raster without promoting S3 or release; physical-panel/user optics continue under UX-08 walkthrough |
 
 ## Known uncertainties and risks
 
-- UX-05 proves EN/RU coverage, persistence, and geometric fit, but a physical-user
-  review reports ambiguous Cyrillic glyphs in the current 16/12 px PT Sans Narrow
-  raster. Alternative fonts are being compared; typography quality remains open
-  until a selected face passes the same source, fit, TFT, and input regressions.
+- UX-05 typography replacement is closed for the current raster by exact 0.63:
+  Roboto Condensed Medium 16/12 passes source/license, 254/254 fit, 18-state TFT,
+  Quick/Full, input, buzzer, heap and cleanup regressions. Physical-panel/user optics
+  continue in UX-08 rather than remaining an unbounded font-selection risk.
 - Board-01 provides partial evidence for `HW-T01/T04/T07/T11`; other physical tests
   have not run, and no composite HW-T test is fully closed yet.
 - BOM says ESP32-S3-WROOM-1U-N16 (16 MB, no PSRAM), while the original build guide

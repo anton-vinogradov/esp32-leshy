@@ -12,15 +12,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFINITIONS = ROOT / "firmware/leshy1/src/ui/UiStrings.def"
-FONT = ROOT / "firmware/leshy1/src/ui/fonts/PTSansNarrowGfx.h"
-TTF = ROOT / "firmware/leshy1/assets/fonts/pt-sans-narrow/PTSansNarrow-Regular.ttf"
-LICENSE = ROOT / "firmware/leshy1/assets/fonts/pt-sans-narrow/OFL.txt"
+FONT = ROOT / "firmware/leshy1/src/ui/fonts/RobotoCondensedGfx.h"
+TTF = ROOT / "firmware/leshy1/assets/fonts/roboto-condensed/RobotoCondensed-wght.ttf"
+LICENSE = ROOT / "firmware/leshy1/assets/fonts/roboto-condensed/OFL.txt"
 RENDERER = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 CATALOG = ROOT / "firmware/leshy1/src/domain/apps/AppCatalog.cpp"
 CATALOG_HEADER = ROOT / "firmware/leshy1/src/domain/apps/AppCatalog.h"
 CONTROLLER = ROOT / "firmware/leshy1/src/ui/UiController.cpp"
 PLATFORMIO = ROOT / "firmware/leshy1/platformio.ini"
-EXPECTED_TTF_SHA256 = "4102edda03059163771869d258df54ac8563c408fa6e9ef75b2ddc85eabea6f4"
+EXPECTED_TTF_SHA256 = "dace262afcee68a5276f200d8026c57221735c0118ab5fda8c2c0d3dc409a8d0"
 FIRST = 0x20
 LAST = 0x451
 
@@ -97,7 +97,7 @@ def main() -> int:
         return 1
 
     require(failures, digest(TTF) == EXPECTED_TTF_SHA256,
-            "vendored PT Sans Narrow TTF hash mismatch")
+            "vendored Roboto Condensed TTF hash mismatch")
     license_text = LICENSE.read_text(encoding="utf-8")
     require(failures, "SIL OPEN FONT LICENSE Version 1.1" in license_text,
             "SIL OFL license text missing")
@@ -105,8 +105,8 @@ def main() -> int:
     try:
         entries = parse_catalog()
         font_source = FONT.read_text(encoding="utf-8")
-        body = parse_glyphs(font_source, "PTSansNarrowBody")
-        meta = parse_glyphs(font_source, "PTSansNarrowMeta")
+        body = parse_glyphs(font_source, "RobotoCondensedBody")
+        meta = parse_glyphs(font_source, "RobotoCondensedMeta")
     except ValueError as error:
         failures.append(str(error))
         entries = []
@@ -140,8 +140,8 @@ def main() -> int:
     literal_prints = re.findall(r'display\.print\("([^"]*)"\)', renderer)
     require(failures, literal_prints == ["LESHY 1.x"],
             f"uncatalogued display literals: {literal_prints}")
-    for token in ("setFreeFont(&PTSansNarrowBody)",
-                  "setFreeFont(&PTSansNarrowMeta)",
+    for token in ("setFreeFont(&RobotoCondensedBody)",
+                  "setFreeFont(&RobotoCondensedMeta)",
                   "languageController.restore(loadUiLanguage())",
                   "saveUiLanguage(requested)",
                   '"ui.language "',

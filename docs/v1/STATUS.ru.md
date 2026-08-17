@@ -12,7 +12,7 @@
 
 - **Активный этап:** `S3 — Первая сохраняемая Survey Session`.
 - **Последний закрытый этап:** `S2 — Чистая платформа 1.x`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.62 S3 progress evidence.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.63 typography и S3 progress evidence.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
 - **Главная цель текущего этапа:** закрыть missing-source real-TFT path, physical
@@ -25,7 +25,7 @@
 |---|---|---|---|
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
-| S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
+| S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; exact 0.60 сохраняет persistent Core-0 worker и делает terminal `Idle` UI-acknowledgement после cleanup/commit, а exact 0.62 физически отменяет active scan без commit/resource leak и добавляет bounded PCF8574 boot probe после retained transient failure 0.61 | открыты missing-source real-TFT evidence, physical power-cut, LittleFS parity, independent demo goldens и воспроизводимый `DEMO-S3` |
 | S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
@@ -536,13 +536,16 @@
 | E-BUILD-063 | exact rebuild `0.62.0-input-probe-resilience-measure` | pass: RAM 128 816 B, linked flash 1 111 564 B; app/factory 1 111 712/1 177 248 B; app `9fd32690…e0b1`, factory `d6db0c4d…ec4d`, ELF `469d9026…e4f5`, map `8ce4dd29…2b01`; RTC no-init 20 B | +132 B linked flash, +16 B static RAM и +128 B images vs failed 0.61; candidate bounded input-probe и active-cancel evidence, не stage/release build |
 | E-AUTO-026 | runner active-scan cancellation, contract bounded input boot probe и retained verifier | pass: runner ждёт observable physical `scan_active`, запрашивает Back, требует фиксации active state в request, доказывает cancellation до commit, делает cold reboot и проверяет exact unchanged Library/CID/read-only/zero-write/zero-lease facts; verifier пересчитывает fail-closed incident 0.61 и exact passing bundle 0.62 | 0.61 сохранён как failed из-за one-shot PCF8574 boot read; 0.62 ограничивает probe восемью попытками/35 ms extra и публикует attempts/retries, но deliberate first-read fault injection остаётся дополнительным hardening evidence |
 | E-HIL-086 | board-01 exact 0.62 physical active-scan cancel | pass/progress only: exact flashed candidate exposes live physical scan, подтверждает Back за 86,762 ms при stop callback 9 us, фиксирует `cancel_requested_during_scan=true`, закрывает source/backend, возвращает Home owner/lease none/0 и cold-reopens прежнюю generation 68/25 без изменений, с zero SD writes и zero heap drift; оба cold boot сообщают input detected с exact probe accounting в [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-active-cancel-0.62.json) | закрывает physical cancel-during-scan без promotion S3; открыты missing-source TFT, physical power-cut, LittleFS parity и independent goldens; stage/release gate false |
+| E-BUILD-064 | exact rebuild `0.63.0-roboto-condensed-ui-measure` | pass: RAM 128 816 B, linked flash 1 111 932 B; app/factory 1 112 336/1 177 872 B; app `e72aa955…5abc`, factory `b698b7f6…dbde`, ELF `3171e472…b01a`, map `a9f32ceb…4d50`; RTC no-init 20 B | +368 B linked flash, zero static-RAM growth и +624 B images vs 0.62; exact candidate замены typography, не stage/release build |
+| E-AUTO-027 | идемпотентный runner typography EN/RU и retained verifier | pass: runner нормализует Home, язык и persisted Self-Test mode, снимает 18 exact TFT states через public Actions/queries, выполняет Quick и Full/Guided, возвращает русский Home и отклоняет drift identity, fit, heap, input, buzzer, side effects, frames или cleanup; verifier пересчитывает official TTF/OFL, generated header, exact runner/candidate, каждый PNG/trace и record | первые два development invocation обнаружили только в runner assumptions о duplicate final Home и persisted mode; они сохранены вне release evidence, исправлены, exact final runner прошёл дважды |
+| E-HIL-087 / E-UX-008 | board-01 exact 0.63 regression Roboto Condensed Medium 16/12 | pass: все 127 ID/254 варианта EN/RU помещаются после восьми безопасных сокращений; 18 actual frames 240×320 охватывают RU Home/Diagnostics/Survey/Library detail/Language/Self-Test/preflight/five common states/results и EN Home/Language; Quick 8/8, Full честно 9/10 с одним blocker, side effects/input errors/drops равны нулю, heap остаётся 272 688/208 912/188 720 B, buzzer LOW, final русский Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-ui-typography-0.63.json) | заменяет неоднозначный raster PT Sans Narrow без promotion S3/release; physical-panel/user optics продолжаются в UX-08 walkthrough |
 
 ## Известные неопределённости и риски
 
-- UX-05 подтверждает coverage EN/RU, persistence и geometric fit, но physical-user
-  review сообщает о неоднозначно читаемых Cyrillic glyphs текущего PT Sans Narrow
-  16/12 px. Альтернативные шрифты сравниваются; typography quality остаётся открытым
-  до прохождения выбранным face тех же source, fit, TFT и input regressions.
+- Замена typography UX-05 закрыта для текущего raster exact candidate 0.63: Roboto
+  Condensed Medium 16/12 проходит source/license, fit 254/254, TFT 18 states,
+  Quick/Full, input, buzzer, heap и cleanup regressions. Physical-panel/user optics
+  продолжаются в UX-08, а не остаются неограниченным риском выбора шрифта.
 - Board-01 дала partial evidence для `HW-T01/T04/T07/T11`; остальные physical tests
   не выполнены, и ни один составной HW-T test ещё не закрыт целиком.
 - BOM указывает ESP32-S3-WROOM-1U-N16 (16 MB, без PSRAM), а original build guide —

@@ -335,6 +335,16 @@ workflow прошли end to end:
   writes и lease 0. `check_product_survey_active_cancel_acceptance.py` пересчитывает
   retained failed input-probe incident 0.61 и exact passing bundle 0.62; 0.62 также
   публикует bounded attempts/retries boot probe PCF8574;
+- `tools/run_1x_ui_typography_hil.py` — service-free exact-TFT lane typography. Он
+  требует уже flashed candidate, проверяет identity запущенного app и hashes candidate
+  artifacts, нормализует Home/language/persisted Self-Test mode и снимает 18 EN/RU
+  framebuffers через public Actions/queries. Набор включает persistent Library detail,
+  Quick result, Full preflight, все пять guided common states и честный blocked result,
+  затем возвращает pixel-identical русский Home. Обязательны Quick 8/8, Full 9/10 с
+  одним declared blocker, zero side effects/input errors/drops, LOW buzzer, invariant
+  heap и final lease 0. Exact 0.63 и собственные final bytes runner независимо
+  проверяет `check_ui_typography_acceptance.py`
+  (`E-AUTO-027`/`E-HIL-087`/`E-UX-008`);
 - `tools/run_1x_release_hil.py` — release-facing foreground orchestrator. Он сначала
   запускает product, получает exact CID только из admitted enrollment, безопасно
   удаляет лишь enrollment в NVS, прошивает и запускает generic `device-smoke`
@@ -377,6 +387,20 @@ python tools/run_1x_product_survey_cancel_hil.py \
   --expected-cid FE343253440000002000000055019CB7 \
   --output /tmp/leshy-product-survey-cancel-hil --flash
 ```
+
+Exact regression typography после build и flash того же candidate:
+
+```bash
+python tools/run_1x_ui_typography_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --expected-version 0.63.0-roboto-condensed-ui-measure \
+  --expected-app-elf-sha256 3171e472c40c49484922c9c1b0ca82b60f2a3b71deedeaf8008604d8751eb01a \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --factory firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.factory.bin \
+  --map firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.map \
+  --output /tmp/leshy-ui-typography-hil
+```
+
 - без `--expected-cid` CID определяется только из admitted enrollment с совпадающими
   expected/observed 32-byte fingerprints; явное значение остаётся для jobs с
   выделенной media;
