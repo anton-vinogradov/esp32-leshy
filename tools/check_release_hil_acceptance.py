@@ -106,13 +106,77 @@ def main() -> int:
     ):
         errors.append("product visual digest set is incomplete")
 
+    github = value.get("github_native", {})
+    for field, wanted in {
+        "workflow_run": 31987498533,
+        "commit": "b878b956cb0d2a7b17e86ef0354a5ad0d77d2ee4",
+        "status": "pass", "candidate_attestation_verified": True,
+        "evidence_attestation_verified": True,
+        "promotion_proof_verified": True, "build_seconds": 152,
+        "physical_hil_seconds": 99, "promotion_proof_seconds": 30,
+        "ephemeral_runners_after": 0, "release_created": False,
+        "operator_result": "VALIDATION PASSED — NON-PUBLISHABLE VERSION",
+    }.items():
+        if github.get(field) != wanted:
+            errors.append(f"GitHub-native mismatch: {field}")
+    if github.get("workflow_url") != (
+        "https://github.com/anton-vinogradov/esp32-leshy/actions/runs/31987498533"
+    ):
+        errors.append("GitHub-native workflow URL changed")
+    for section_name, fields in {
+        "candidate": ("firmware_sha256", "factory_sha256", "elf_sha256", "map_sha256"),
+        "evidence": ("archive_sha256", "run_sha256", "artifact_index_sha256"),
+        "product": ("run_sha256", "artifact_index_sha256"),
+        "generic": ("run_sha256", "artifact_index_sha256"),
+    }.items():
+        section = github.get(section_name, {})
+        for field in fields:
+            if not re.fullmatch(r"[0-9a-f]{64}", str(section.get(field, ""))):
+                errors.append(f"invalid GitHub-native digest: {section_name}.{field}")
+    github_product = github.get("product", {})
+    for field, wanted in {
+        "generation_before": 5, "generation_after": 6,
+        "observations": 16, "scan_reported": 16, "scan_read": 16,
+        "scan_accepted": 16, "scan_forwarded": 16,
+        "scan_rejected": 0, "scan_dropped": 0, "pipeline_dropped": 0,
+        "cleanup_complete": True, "final_lease_mask": 0,
+    }.items():
+        if github_product.get(field) != wanted:
+            errors.append(f"GitHub-native product mismatch: {field}")
+    github_generic = github.get("generic", {})
+    for field, wanted in {
+        "suite": suite.get("id"), "revision": suite.get("revision"),
+        "captures": 10, "visual_mismatch_pixels": 0,
+        "final_lease_mask": 0,
+    }.items():
+        if github_generic.get(field) != wanted:
+            errors.append(f"GitHub-native generic mismatch: {field}")
+    for section_name in ("product", "generic"):
+        if not re.fullmatch(
+            r"[0-9a-f]{32}", str(github.get(section_name, {}).get("run_id", ""))
+        ):
+            errors.append(f"invalid GitHub-native run ID: {section_name}")
+    restored = github.get("restored_state", {})
+    for field, wanted in {
+        "unenroll_sd_accessed": False, "unenroll_physical_write_calls": 0,
+        "reenroll_read_only_guaranteed": True,
+        "reenroll_physical_write_calls": 0,
+        "final_boot_status": "admitted", "generation": 6,
+        "observations": 16, "runtime_owner": "none", "lease_mask": 0,
+        "library_persistent": True, "library_simulated": False,
+    }.items():
+        if restored.get(field) != wanted:
+            errors.append(f"GitHub-native restored state mismatch: {field}")
+    if github.get("evidence", {}).get("independent_verifier_passed") is not True:
+        errors.append("GitHub-native independent verifier did not pass")
+
     if errors:
         for error in errors:
             print(f"release HIL acceptance failed: {error}")
         return 1
     print(
-        "release HIL acceptance passed: product 4->5/20, generic v6, "
-        "read-only enrollment restored"
+        "release HIL acceptance passed: local + GitHub-native combined HIL, "
+        "generic v6, read-only enrollment restored"
     )
     return 0
 

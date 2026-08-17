@@ -237,9 +237,8 @@ evidence. Локальная квитанция `release-checks/<run-id>.json` g
 ## Текущее implementation evidence
 
 Version v0.6 реализует первые пять пунктов, on-demand lifecycle, exact-byte promotion
-и combined product/generic lane. Прежний generic-only GitHub workflow прошёл;
-обновлённый combined workflow реализован и доказан локально, но ещё требует первого
-GitHub OIDC-attested run:
+и combined product/generic lane. И прежний generic-only, и текущий combined GitHub
+workflow прошли end to end:
 
 - `tools/run_1x_prerelease_hil.py` загружает declarative suite, по явному `--flash`
   прошивает exact candidate через esptool с verify, делает cold reset, держит один
@@ -323,8 +322,19 @@ Local combined run `E-HIL-055` прошёл на exact candidate 0.45: product r
 observations, generic run `9c81c9f3d0f9cb0bdb69ebc8d002e8ce` прошёл все десять
 goldens revision 6, а read-only re-enrollment и финальный cold boot восстановили
 generation 5/20 с zero SD writes и lease 0. Independent verifier принял все 64 файла;
-deterministic archive — `760fad19…6abad`. Результат не release-eligible, пока
-обновлённый workflow не добавит GitHub Artifact Attestations.
+deterministic archive — `760fad19…6abad`. Этот standalone archive остаётся local
+evidence; каноническое release trust даёт следующий GitHub-native run.
+
+GitHub-native combined run
+[`31987498533`](https://github.com/anton-vinogradov/esp32-leshy/actions/runs/31987498533)
+на commit `b878b95` прошёл build/physical/promotion за 2:32/1:39/0:30. GitHub-attested
+app `05865dc1…18d1a9` и evidence archive `fcc1e5fe…5992` прошли provenance и inner
+same-byte verification. Product run `7476ff6b2c0d96a5332e01079302662d` committed
+generation 5→6 с 16/16 passive observations; generic run
+`a15e136702f65bb29cb811e74d29c330` прошёл десять goldens; финальный read-only
+re-enrollment восстановил 6/16 с zero SD writes и lease 0. Ephemeral runner удалил
+credentials и registration, число repository runners вернулось к нулю, а measurement
+version корректно получила `VALIDATION PASSED — NON-PUBLISHABLE VERSION` без Release.
 
 Первый bootstrap run `31975374875` fail-closed остановился до runner registration и
 flash на безопасной внутренней symlink official archive; workflow был отменён,

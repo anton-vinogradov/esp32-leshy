@@ -237,9 +237,8 @@ runner process/registration are cleaned up, and `RELEASE READY` is never printed
 ## Current implementation evidence
 
 Version v0.6 implements the first five items, on-demand lifecycle, exact-byte
-promotion, and the combined product/generic lane. The earlier generic-only GitHub
-workflow passed; the updated combined workflow is implemented and locally proven but
-still needs its first GitHub OIDC-attested run:
+promotion, and the combined product/generic lane. Both the earlier generic-only and
+the current combined GitHub workflows have passed end to end:
 
 - `tools/run_1x_prerelease_hil.py` loads a declarative suite, flashes the exact
   candidate through verified esptool only with explicit `--flash`, performs a cold
@@ -323,8 +322,20 @@ Local combined run `E-HIL-055` passed on the exact 0.45 candidate: product run
 observations, generic run `9c81c9f3d0f9cb0bdb69ebc8d002e8ce` passed all ten
 revision-6 goldens, and read-only re-enrollment/final cold boot recovered generation
 5/20 with zero SD writes and lease 0. The independent verifier accepted all 64 files;
-the deterministic archive is `760fad19…6abad`. This remains non-release-eligible
-until the updated workflow supplies GitHub Artifact Attestations.
+the deterministic archive is `760fad19…6abad`. That standalone archive remains local
+evidence; the following GitHub-native run supplies canonical release trust.
+
+GitHub-native combined run
+[`31987498533`](https://github.com/anton-vinogradov/esp32-leshy/actions/runs/31987498533)
+on commit `b878b95` passed build/physical/promotion in 2:32/1:39/0:30. GitHub-attested
+app `05865dc1…18d1a9` and evidence archive `fcc1e5fe…5992` passed provenance and inner
+same-byte verification. Product run `7476ff6b2c0d96a5332e01079302662d` committed
+generation 5→6 with 16/16 passive observations; generic run
+`a15e136702f65bb29cb811e74d29c330` passed ten goldens; final read-only re-enrollment
+recovered 6/16 with zero SD writes and lease 0. The ephemeral runner removed its
+credentials and registration, repository runner count returned to zero, and the
+measurement version correctly produced `VALIDATION PASSED — NON-PUBLISHABLE VERSION`
+without a Release.
 
 Bootstrap run `31975374875` stopped fail-closed before runner registration or flash
 on a safe internal symlink in the official archive; the workflow was cancelled and
