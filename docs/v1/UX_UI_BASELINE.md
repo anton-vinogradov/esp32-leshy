@@ -3,7 +3,7 @@
 *Read in: **English** · [Русский](UX_UI_BASELINE.ru.md)*
 
 Status: **S1 product UX direction accepted; S2 visual gate active**. Low-fidelity
-UX-01/UX-02 are fixed; UX-03…UX-07 are the current S2 work.
+UX-01/UX-02 are fixed; UX-03/UX-04 are accepted; UX-05…UX-07 are the current S2 work.
 
 This document defines when user experience is reviewed and when visual appearance
 becomes an implementation constraint. It does not replace the
@@ -85,6 +85,28 @@ checks the complete brand/divider/input geometry and empty bottom guard rows. Th
 audit found a wrapped Library footer outside its region; the copy was shortened,
 rebuilt, flashed, and re-captured. UX-07 remains partial because dialog and
 unavailable/degraded/error states plus the EN/RU matrix are still open.
+
+## UX-04 shared component sheet
+
+The allocation-free contract in `ui/UiComponents.h` is the 240×320 component
+sheet used by product screens. It owns component rectangles and tones; screens own
+content and state. Bounds and non-overlap are compile-time assertions and native
+tests, so a screen cannot silently move its content into the fixed footer.
+
+| Component | Geometry/role | Current reuse |
+|---|---|---|
+| Header + title | 240×42 brand anchor; 216 px title region | Home and every Self-Test view |
+| Home row | 216×32; final utility gap is explicit | capability Home and final Self-Test item |
+| Choice row | 216×48 with primary and metadata text | Quick / Full-Guided mode selection |
+| Metric row | five 216×28 result slots | Full preflight and Quick/Full result |
+| Footer divider | fixed at y=236 | every interactive screen |
+| Input status + hint | separate non-overlapping regions | every interactive screen and HIL |
+
+Exact candidate `0.54.0-ui-components-measure` accepts UX-04 through
+`E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home and Self-Test consume the same renderer
+primitives; four actual TFT frames pass the pixel/trace checker; Quick passes 8/8;
+input has zero errors/drops, buzzer remains LOW, and Back returns owner/lease to
+`none`/`0`. This accepts the component system, not UX-05…07 or `DEMO-S2`.
 
 ## Gate
 

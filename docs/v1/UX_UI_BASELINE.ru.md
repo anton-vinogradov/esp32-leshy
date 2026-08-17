@@ -3,7 +3,7 @@
 *Read in: [English](UX_UI_BASELINE.md) · **Русский***
 
 Статус: **S1 product UX direction принят; S2 visual gate активен**. Low-fidelity
-UX-01/UX-02 зафиксированы, visual baseline UX-03…UX-07 — текущая работа S2.
+UX-01/UX-02 зафиксированы, UX-03/UX-04 приняты; UX-05…UX-07 — текущая работа S2.
 
 Документ определяет, когда обсуждается опыт пользователя и когда внешний вид
 становится ограничением реализации. Он не подменяет
@@ -85,6 +85,29 @@ TFT frames 240×320 связаны с candidate, а standard-library pixel audit
 wrapped Library footer за пределами его region; текст сокращён, image пересобран,
 прошит и снят заново. UX-07 остаётся partial: ещё открыты dialog и
 unavailable/degraded/error states, а также EN/RU matrix.
+
+## UX-04 — общий component sheet
+
+Allocation-free контракт `ui/UiComponents.h` — component sheet 240×320, который
+используют product screens. Он владеет rectangles и tones компонентов; экраны —
+content и state. Bounds и отсутствие overlap проверяются compile-time assertions и
+native tests, поэтому экран не может незаметно залезть content в фиксированный footer.
+
+| Компонент | Геометрия/роль | Текущее переиспользование |
+|---|---|---|
+| Header + title | brand anchor 240×42; title region 216 px | Home и все Self-Test views |
+| Home row | 216×32; gap последнего utility задан явно | capability Home и последний Self-Test item |
+| Choice row | 216×48 с primary и metadata text | выбор Quick / Full-Guided |
+| Metric row | пять result slots 216×28 | Full preflight и Quick/Full result |
+| Footer divider | фиксирован на y=236 | каждый interactive screen |
+| Input status + hint | отдельные непересекающиеся regions | каждый interactive screen и HIL |
+
+Exact candidate `0.54.0-ui-components-measure` принимает UX-04 через
+`E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home и Self-Test используют одинаковые
+renderer primitives; четыре actual TFT frame проходят pixel/trace checker; Quick
+проходит 8/8; input имеет zero errors/drops, buzzer остаётся LOW, Back возвращает
+owner/lease в `none`/`0`. Это принимает component system, но не UX-05…07 или
+`DEMO-S2`.
 
 ## Gate
 

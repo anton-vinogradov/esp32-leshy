@@ -12,7 +12,7 @@
 
 - **Активный этап:** `S2 — Чистая платформа 1.x`.
 - **Последний закрытый этап:** `S1 — Evidence baseline`.
-- **Рабочая база репозитория:** `1c05f32` плюс текущий S1 gate/S2 kickoff slice.
+- **Рабочая база репозитория:** `d75e11e` плюс текущий UX-04 acceptance slice.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
 - **Главная цель текущего этапа:** завершить UX-03…UX-07 и воспроизводимый
@@ -269,12 +269,13 @@
 Недоступные платы или приборы остаются tracked evidence gaps, но больше не удерживают
 платформенный и визуальный этап.
 
-1. Semantic design tokens UX-03 реализованы и подтверждены на exact candidate 0.52;
-   завершить common component sheet UX-04 для 240×320.
+1. Semantic design tokens UX-03 и common component sheet UX-04 реализованы и
+   физически подтверждены на exact candidates 0.52/0.54.
 2. Shell Self-Test последним пунктом Home, read-only Quick plan из восьми checks,
    Full preflight/blocker и report skeleton проходят на exact 0.53; Full coverage
    остаётся blocked, пока capabilities S3…S7 не зарегистрируют свои checks.
-3. Проверить UX-05 EN/RU content fit и UX-06 кнопочный/accessibility mapping.
+3. **Активно:** проверить UX-05 EN/RU content fit и UX-06
+   кнопочный/accessibility mapping.
 4. Завершить UX-07 автоматически: retained Home/List/Detail/running/result/export
    frames проходят; остаются dialog и unavailable/degraded/error states.
 5. Пройти `DEMO-S2`: boot → Home → Self-Test Quick → Diagnostics → disabled reason
@@ -484,11 +485,13 @@
 | E-GATE-001 | S1 formal gate review | pass: PRD 1.0 принят; J/PR/NFR/CAP/WF/UX-01/02 полностью связаны; hardware/resource unknowns имеют safe defaults, explicit conditional scope и named later-stage evidence; первый real persistent Survey slice помещается в budgets | не верифицирует весь PRD и не объявляет S2/S3 завершёнными; unavailable second board/instruments остаются рисками S4/S5/S8 |
 | E-BUILD-054 | exact rebuild `0.52.0-visual-system-measure` | pass: RAM 125 464 B, linked flash 1 063 092 B; app/factory 1 063 248/1 128 784 B; app `39fc2c92…43ace`, factory `56f90026…569a`, ELF `d240d6aa…ada8`; RTC no-init 20 B | +192 B linked flash, zero static-RAM growth и app/factory images на 64 B меньше vs 0.51; measurement image, не release |
 | E-HIL-076 | board-01 exact visual/product run 0.52 | pass: exact candidate продвигает generation 64→65 с 9/9 accepted/forwarded, zero drops, heap 276 040/227 588/192 128 B, exact CID и final owner/lease none/0; шесть retained TFT frames 240×320 и все artifacts SHA-256 bound в [machine-checked artifact](../../tests/hil/evidence/board-01-visual-system-0.52.json) | покрыты Home/List/Detail/running/result/export; dialog и unavailable/degraded/error states, EN/RU fit, physical-panel optics и полный S2 demo открыты |
-| E-UX-003 | semantic visual system и pixel audit | pass: renderer использует palette/layout roles из `VisualTheme`, не содержит raw TFT color constants, retained frames подтверждают полные brand/divider/input geometry и чистые bottom guard rows; обнаруженный audit wrapped Library footer сокращён и проверен заново | принимает UX-03 для текущего candidate; UX-04…UX-07 активны, shared component sheet ещё не завершён |
+| E-UX-003 | semantic visual system и pixel audit | pass: renderer использует palette/layout roles из `VisualTheme`, не содержит raw TFT color constants, retained frames подтверждают полные brand/divider/input geometry и чистые bottom guard rows; обнаруженный audit wrapped Library footer сокращён и проверен заново | принимает UX-03; UX-04 теперь закрыт E-UX-004, UX-05…UX-07 остаются активны |
 | E-DOC-004 | product contract встроенного Self-Test | accepted: последний пункт Home открывает явные read-only Quick и Full/Guided modes; user и release HIL разделяют versioned check IDs, а host независимо проверяет bytes, screenshots, side effects и cleanup | shell/Quick/report S2 теперь реализованы E-HIL-077; capability coverage остаётся blocked до S3…S7, полная release verification закрывается в S8 |
 | E-BUILD-055 | exact rebuild `0.53.0-self-test-quick-measure` | pass: RAM 128 720 B, linked flash 1 067 800 B; app/factory 1 068 208/1 133 744 B; app `25d1f620…010bb`, factory `e42c30c7…6ff1f`, ELF `06a5e9d4…01e38`; RTC no-init 20 B | +3 256 B static RAM, +4 708 B linked flash и +4 960 B images vs 0.52; включает один shared diagnostic JSON workspace 3 KiB и Self-Test slice S2, не release |
 | E-HIL-077 | board-01 exact regression Self-Test Quick/Full 0.53 | pass для реализованного scope: последний пункт Home открывает mode UI; Quick выполняет восемь стабильных read-only checks за 60 µs с 8/8 pass, zero TX/storage/buzzer side effects, minimum heap 188 872 B, zero input errors/drops, buzzer LOW и final owner/lease none/0. Full/Guided переиспользует восемь checks и честно возвращает blocked на `full.capability.coverage`; пять TFT states и reports сохранены в [machine-checked artifact](../../tests/hil/evidence/board-01-self-test-0.53.json) | первый candidate fail-closed оставил retained loop-task stack panic после capture; shared static JSON workspace исправил его. Full capability coverage, user-prompted physical checks, EN/RU и полный S2 demo открыты; release gate false |
 | E-AUTO-021 | verifier retained evidence Self-Test | pass: связывает exact candidate/ELF, стабильные Quick IDs и порядок, Full blocker, side effects, heap/input/buzzer/cleanup facts, пять PNG 240×320, retained panic marker, final scope flags и source prohibition прямых driver actions | local evidence одной board; independent GitHub attestation и полный plan S8 остаются открыты |
+| E-BUILD-056 | exact rebuild `0.54.0-ui-components-measure` | pass: RAM 128 720 B, linked flash 1 068 048 B; app/factory 1 068 192/1 133 728 B; app `479935d5…7f77`, factory `5e54832d…e650`, ELF `d9366104…787f`; RTC no-init 20 B | +248 B linked flash, zero static-RAM growth и images на 16 B меньше vs 0.53; только component contract, не stage/release build |
+| E-HIL-078 / E-UX-004 | board-01 exact 0.54 regression общих components | pass: Home и Self-Test используют общие header/menu/metric/footer primitives; четыре retained TFT frame 240×320 проходят source, trace, identity, geometry и pixel checks; Quick остаётся 8/8 за 64 µs; heap 272 784/224 332/188 872 B, input имеет zero errors/drops, buzzer LOW, Back возвращает owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-ui-components-0.54.json) | принимает только UX-04; EN/RU fit, accessibility matrix, недостающие UX-07 states и `DEMO-S2` остаются открыты |
 
 ## Известные неопределённости и риски
 

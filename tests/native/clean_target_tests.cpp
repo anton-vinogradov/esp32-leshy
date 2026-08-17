@@ -46,6 +46,7 @@
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/UiController.h"
 #include "ui/VisualTheme.h"
+#include "ui/UiComponents.h"
 
 using namespace leshy1::domain::apps;
 using namespace leshy1::domain::hardware;
@@ -91,6 +92,29 @@ void testVisualThemeContract() {
     CHECK(Palette::TextPrimary != Palette::TextSecondary);
     CHECK(Palette::Focus != Palette::Positive);
     CHECK(Palette::Warning != Palette::Danger);
+}
+
+void testUiComponentGeometryContract() {
+    using leshy1::ui::visual::Components;
+    using leshy1::ui::visual::Rect;
+    using leshy1::ui::visual::beforeFooter;
+    using leshy1::ui::visual::insideScreen;
+    using leshy1::ui::visual::overlaps;
+
+    CHECK(insideScreen(Components::header()));
+    CHECK(insideScreen(Components::title()));
+    for (std::uint8_t index = 0; index < 4; ++index) {
+        const Rect row = Components::homeRow(index, index == 3);
+        CHECK(beforeFooter(row));
+        if (index != 0) {
+            CHECK(!overlaps(Components::homeRow(index - 1, false), row));
+        }
+    }
+    CHECK(!overlaps(Components::choiceRow(0), Components::choiceRow(1)));
+    CHECK(beforeFooter(Components::choiceRow(1)));
+    CHECK(beforeFooter(Components::metricRow(4)));
+    CHECK(!overlaps(Components::footerDivider(), Components::inputStatus()));
+    CHECK(!overlaps(Components::inputStatus(), Components::footerHint()));
 }
 
 void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
@@ -2864,6 +2888,7 @@ void testSdSector0ReadIsSingleBoundedAndParseOnly() {
 
 int main() {
     testVisualThemeContract();
+    testUiComponentGeometryContract();
     testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
     testProductBootRetryIsNarrowAndBounded();
     testProductStartIdentityRetryStopsBeforeFilesystem();

@@ -64,6 +64,7 @@
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
+#include "ui/UiComponents.h"
 #include "ui/UiController.h"
 #include "ui/VisualTheme.h"
 
@@ -121,6 +122,9 @@ using leshy1::ui::UiController;
 using leshy1::ui::Pcf8574ButtonInput;
 using leshy1::ui::visual::Layout;
 using leshy1::ui::visual::Palette;
+using leshy1::ui::visual::Components;
+using leshy1::ui::visual::Rect;
+using leshy1::ui::visual::Tone;
 
 constexpr std::uint32_t kConsoleBaud = 115200;
 constexpr std::uint32_t kI2cHz = 100000;
@@ -1300,25 +1304,75 @@ void pollPhysicalInput(void*) {
 void renderInput(std::uint8_t value) {
     char line[32] = {};
     std::snprintf(line, sizeof(line), "INPUT RAW  0x%02X", value);
-    display.fillRect(Layout::Edge, Layout::InputY, Layout::ContentWidth,
-                     Layout::InputHeight, Palette::Canvas);
+    const Rect bounds = Components::inputStatus();
+    display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                     Palette::Canvas);
     display.setTextColor(Palette::Focus, Palette::Canvas);
     display.setTextFont(2);
-    display.setCursor(16, 250);
+    display.setCursor(bounds.x + 4, bounds.y + 6);
     display.print(line);
+}
+
+std::uint16_t toneColor(Tone tone) {
+    switch (tone) {
+        case Tone::Focus:
+            return Palette::Focus;
+        case Tone::Positive:
+            return Palette::Positive;
+        case Tone::Warning:
+            return Palette::Warning;
+        case Tone::Danger:
+            return Palette::Danger;
+        case Tone::Muted:
+            return Palette::TextMuted;
+        case Tone::Neutral:
+        default:
+            return Palette::TextSecondary;
+    }
 }
 
 void renderHeader(const char* title) {
     display.fillScreen(Palette::Canvas);
-    display.fillRect(0, 0, kScreenWidth, Layout::HeaderHeight, Palette::Header);
+    const Rect header = Components::header();
+    display.fillRect(header.x, header.y, header.width, header.height,
+                     Palette::Header);
     display.setTextColor(Palette::TextPrimary, Palette::Header);
     display.setTextFont(4);
     display.setCursor(10, 9);
     display.print("LESHY 1.x");
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
     display.setTextFont(2);
-    display.setCursor(14, Layout::TitleY);
+    const Rect titleBounds = Components::title();
+    display.setCursor(titleBounds.x + 2, titleBounds.y + 6);
     display.print(title);
+}
+
+void renderMenuRow(Rect bounds, const char* label, const char* note,
+                   bool selected, bool enabled, Tone noteTone) {
+    const std::uint16_t background = selected
+        ? (enabled ? Palette::SurfaceFocus : Palette::SurfaceFocusDisabled)
+        : Palette::Surface;
+    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, background);
+    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
+                         background);
+    display.setTextFont(2);
+    display.setCursor(bounds.x + 10, bounds.y + 2);
+    display.print(label);
+    display.setTextFont(1);
+    display.setTextColor(enabled ? toneColor(noteTone) : Palette::TextMuted,
+                         background);
+    display.setCursor(bounds.x + 10, bounds.y + bounds.height - 11);
+    display.print(note);
+}
+
+void renderMetric(std::uint8_t index, const char* text,
+                  Tone tone = Tone::Neutral) {
+    const Rect bounds = Components::metricRow(index);
+    display.setTextFont(2);
+    display.setTextColor(toneColor(tone), Palette::Canvas);
+    display.setCursor(bounds.x + 2, bounds.y);
+    display.print(text);
 }
 
 void renderHome() {
@@ -1326,29 +1380,15 @@ void renderHome() {
     for (std::uint8_t i = 0; i < appCatalog.size(); ++i) {
         const AppMenuItem* item = appCatalog.get(i);
         if (item == nullptr) continue;
-        const std::int32_t y = Layout::ContentTop +
-            static_cast<std::int32_t>(i) *
-                (Layout::HomeRowHeight + Layout::HomeRowGap) +
-            (std::strcmp(item->id, "self-test") == 0
-                 ? Layout::HomeUtilityGap
-                 : 0);
+        const bool utility = std::strcmp(item->id, "self-test") == 0;
+        const Rect bounds = Components::homeRow(i, utility);
         const bool selected = uiController.selection() == i;
-        const std::uint16_t background = selected
-            ? (item->enabled ? Palette::SurfaceFocus : Palette::SurfaceFocusDisabled)
-            : Palette::Surface;
-        display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth,
-                              Layout::HomeRowHeight, Layout::Radius, background);
-        display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
-                             background);
-        display.setTextFont(2);
-        display.setCursor(22, y + 2);
-        display.print(item->label);
-        display.setTextFont(1);
-        display.setTextColor(item->enabled ? Palette::Positive : Palette::TextMuted,
-                             background);
-        display.setCursor(22, y + 21);
-        display.print(item->simulated ? item->reason
-                                      : (item->enabled ? "READY" : item->reason));
+        renderMenuRow(bounds, item->label,
+                      item->simulated
+                          ? item->reason
+                          : (item->enabled ? "READY" : item->reason),
+                      selected, item->enabled,
+                      item->enabled ? Tone::Positive : Tone::Muted);
     }
 }
 
@@ -1387,24 +1427,10 @@ void renderSelfTestPage() {
         constexpr const char* notes[2] = {"READ ONLY / AUTOMATIC",
                                           "ALL APPLICABLE CHECKS"};
         for (std::uint8_t index = 0; index < 2; ++index) {
-            const std::int32_t y = 94 + static_cast<std::int32_t>(index) * 58;
             const bool selected = selfTestController.selection() == index;
-            const std::uint16_t background = selected ? Palette::SurfaceFocus
-                                                       : Palette::Surface;
-            display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth, 48,
-                                  Layout::Radius, background);
-            display.setTextFont(2);
-            display.setTextColor(selected ? Palette::Focus
-                                          : Palette::TextSecondary,
-                                 background);
-            display.setCursor(20, y + 5);
-            display.print(labels[index]);
-            display.setTextFont(1);
-            display.setTextColor(index == 0 ? Palette::Positive
-                                            : Palette::Warning,
-                                 background);
-            display.setCursor(20, y + 29);
-            display.print(notes[index]);
+            renderMenuRow(Components::choiceRow(index), labels[index], notes[index],
+                          selected, true,
+                          index == 0 ? Tone::Positive : Tone::Warning);
         }
         display.setTextFont(1);
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
@@ -1415,17 +1441,10 @@ void renderSelfTestPage() {
 
     if (selfTestController.view() == SelfTestView::Preflight) {
         renderHeader("FULL / PREFLIGHT");
-        display.setTextFont(2);
-        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        display.setCursor(14, 88);
-        display.print("QUICK CHECKS       8");
-        display.setCursor(14, 116);
-        display.print("CAPABILITY PLAN  STAGED");
-        display.setCursor(14, 144);
-        display.print("SIDE EFFECTS      NONE");
-        display.setTextColor(Palette::Warning, Palette::Canvas);
-        display.setCursor(14, 178);
-        display.print("RESULT          BLOCKED");
+        renderMetric(0, "QUICK CHECKS       8");
+        renderMetric(1, "CAPABILITY PLAN  STAGED");
+        renderMetric(2, "SIDE EFFECTS      NONE");
+        renderMetric(3, "RESULT          BLOCKED", Tone::Warning);
         display.setTextFont(1);
         display.setCursor(14, 214);
         display.print("S3-S8 ADDS GUIDED DEVICE CHECKS");
@@ -1438,35 +1457,28 @@ void renderSelfTestPage() {
                      : (report.status == SelfTestResultStatus::Fail
                             ? "SELF-TEST / FAIL"
                             : "SELF-TEST / BLOCKED"));
-    display.setTextFont(2);
-    display.setTextColor(report.status == SelfTestResultStatus::Pass
-                             ? Palette::Positive
-                             : (report.status == SelfTestResultStatus::Fail
-                                    ? Palette::Danger
-                                    : Palette::Warning),
-                         Palette::Canvas);
-    display.setCursor(14, 84);
-    display.print(report.mode == SelfTestMode::Quick ? "MODE          QUICK"
-                                                     : "MODE    FULL / GUIDED");
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    renderMetric(0,
+                 report.mode == SelfTestMode::Quick ? "MODE          QUICK"
+                                                    : "MODE    FULL / GUIDED",
+                 report.status == SelfTestResultStatus::Pass
+                     ? Tone::Positive
+                     : (report.status == SelfTestResultStatus::Fail
+                            ? Tone::Danger
+                            : Tone::Warning));
     std::snprintf(line, sizeof(line), "CHECKS       %u / %u",
                   static_cast<unsigned>(report.passed),
                   static_cast<unsigned>(report.checkCount));
-    display.setCursor(14, 118);
-    display.print(line);
+    renderMetric(1, line);
     std::snprintf(line, sizeof(line), "FAIL %u   BLOCKED %u",
                   static_cast<unsigned>(report.failed),
                   static_cast<unsigned>(report.blocked));
-    display.setCursor(14, 146);
-    display.print(line);
+    renderMetric(2, line);
     std::snprintf(line, sizeof(line), "HEAP MIN     %lu KiB",
                   static_cast<unsigned long>(report.facts.heapMinimum / 1024U));
-    display.setCursor(14, 174);
-    display.print(line);
+    renderMetric(3, line);
     std::snprintf(line, sizeof(line), "INPUT DROPS  %lu",
                   static_cast<unsigned long>(report.facts.inputQueueDrops));
-    display.setCursor(14, 202);
-    display.print(line);
+    renderMetric(4, line);
     display.setTextFont(1);
     display.setTextColor(Palette::Positive, Palette::Canvas);
     display.setCursor(14, 222);
@@ -1756,12 +1768,14 @@ void renderInteractiveScreen() {
     } else {
         renderSelfTestPage();
     }
-    display.drawFastHLine(Layout::Edge, Layout::FooterDividerY,
-                          Layout::ContentWidth, Palette::Divider);
+    const Rect divider = Components::footerDivider();
+    display.drawFastHLine(divider.x, divider.y, divider.width,
+                          Palette::Divider);
     renderInput(lastInputRaw);
     display.setTextColor(Palette::TextMuted, Palette::Canvas);
     display.setTextFont(1);
-    display.setCursor(20, Layout::HintY);
+    const Rect hint = Components::footerHint();
+    display.setCursor(hint.x + 8, hint.y);
     if (uiController.isRoot()) {
         display.print("up/down | blocked item has reason");
     } else if (uiController.page() == 2 &&

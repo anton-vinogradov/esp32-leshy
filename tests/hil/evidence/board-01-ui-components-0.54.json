@@ -1,0 +1,114 @@
+{
+  "schema": "leshy.ui_components_acceptance.v1",
+  "status": "pass_s2_candidate_not_stage_gate",
+  "trust_status": "unsigned_local_result",
+  "gate_eligible": false,
+  "evidence_ids": ["E-BUILD-056", "E-HIL-078", "E-UX-004"],
+  "captured_at": "2026-08-17",
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "candidate": {
+    "version": "0.54.0-ui-components-measure",
+    "firmware_sha256": "479935d596da0a772dc69988a56e1bf96d7d4c3c78813afb99d3454636ea7f77",
+    "factory_sha256": "5e54832d143d54caf8c33a10edbc81027db9669456c2a56df46650ccc9b3e650",
+    "app_elf_sha256": "d9366104fb6ce8da3b7324ea8b4771fe2a019bcbeac0e6ce0a8f7e18d08d787f",
+    "map_sha256": "b6909f447c383f789c320776bd29b7c3ffc301f27ea24770e8fcbde92524b069",
+    "linked_flash_bytes": 1068048,
+    "static_ram_bytes": 128720,
+    "app_image_bytes": 1068192,
+    "factory_image_bytes": 1133728,
+    "rtc_noinit_bytes": 20,
+    "host_tests_passed": true,
+    "firmware_build_passed": true
+  },
+  "component_contract": {
+    "source": "firmware/leshy1/src/ui/UiComponents.h",
+    "screen_width": 240,
+    "screen_height": 320,
+    "components": [
+      "header",
+      "title",
+      "home_row",
+      "choice_row",
+      "metric_row",
+      "footer_divider",
+      "input_status",
+      "footer_hint"
+    ],
+    "tones": ["neutral", "focus", "positive", "warning", "danger", "muted"],
+    "compile_time_bounds": true,
+    "compile_time_overlap_guards": true,
+    "shared_renderer_primitives": ["renderHeader", "renderMenuRow", "renderMetric", "renderInput"],
+    "reused_by": ["Home", "Self-Test mode menu", "Self-Test result", "global footer"]
+  },
+  "screens": {
+    "home": {
+      "path": "tests/hil/evidence/board-01-ui-components-0.54/home.png",
+      "png_sha256": "0d24a06d54151af0d20854d4c099c4dbcc31e774f9fc711f1bf0ae12c9675f9e",
+      "rgb565_sha256": "6d2823c28f29200443edee92cc5623b1a8e1dcce0f71dacdaa8ae6235dd6fe19",
+      "trace_path": "tests/hil/evidence/board-01-ui-components-0.54/home.png.json",
+      "trace_sha256": "873669c22b3f0f18e4f569ce164e21b22da3d7bb8f232ce302469cffc226e042"
+    },
+    "self_test_modes": {
+      "path": "tests/hil/evidence/board-01-ui-components-0.54/self-test-modes.png",
+      "png_sha256": "cc52a4d23cf8c993fb70d1a8405af34110c915a32604e2f40f91a192d3dce888",
+      "rgb565_sha256": "14a4c557b6ffea3b142cdf0b004cd29a9247a45c1c9de54afe1893a57f06ba02",
+      "trace_path": "tests/hil/evidence/board-01-ui-components-0.54/self-test-modes.png.json",
+      "trace_sha256": "93d4cafa98945176fdfc93229587117e629560cadec21f7dbb133253de1cf0eb"
+    },
+    "quick_result": {
+      "path": "tests/hil/evidence/board-01-ui-components-0.54/quick-result.png",
+      "png_sha256": "8fac7d95d72f09c9f916a009aa229548d7d897495a01c5ba3b0022248c8d36da",
+      "rgb565_sha256": "83cacb2e4c6e1d1baec1a3a57c33ca8eeb7017a726db4f49844b5da3262d984a",
+      "trace_path": "tests/hil/evidence/board-01-ui-components-0.54/quick-result.png.json",
+      "trace_sha256": "251b46c373c541a885c5cd5e1e50f7ac46f88e1983f7d1ab95653fa6a15622b7"
+    },
+    "home_cleanup": {
+      "path": "tests/hil/evidence/board-01-ui-components-0.54/home-cleanup.png",
+      "png_sha256": "22ea9b75feacb22c2aa9a2bc5fb4264519e0106a918a76a8fdc59c26b8efe503",
+      "rgb565_sha256": "d810b103b68a70a6effd498a7143b581e30d06f58930220d227fdbd6173f5a40",
+      "trace_path": "tests/hil/evidence/board-01-ui-components-0.54/home-cleanup.png.json",
+      "trace_sha256": "f61a2fb28b7e9126b2ca2f88c8d646f3d7800475a161124abccbaff29112befb"
+    }
+  },
+  "runtime": {
+    "quick_report_path": "tests/hil/evidence/board-01-ui-components-0.54/quick-report.json",
+    "quick_report_sha256": "11b433ca1d90a233b995dea401273700c5bcdc81ee47907b0b5c53dad4a4d612",
+    "metrics_path": "tests/hil/evidence/board-01-ui-components-0.54/metrics.json",
+    "metrics_sha256": "0c708a699236a9201ff69b2399aee1a659bdb4eb5b421be6b516a4d4b20f53ff",
+    "input_path": "tests/hil/evidence/board-01-ui-components-0.54/input.json",
+    "input_sha256": "9f0ae9424ca83d30a8f72e2a1211a62cf2b07bc8cf1654946d67799799cad785",
+    "safe_outputs_path": "tests/hil/evidence/board-01-ui-components-0.54/safe-outputs.json",
+    "safe_outputs_sha256": "edf7741d3c47061d1f5a31b9726534e2a0a299b78c779c652b4abeecb6656fc9",
+    "quick_passed": 8,
+    "quick_failed": 0,
+    "quick_blocked": 0,
+    "quick_duration_us": 64,
+    "heap_total_bytes": 272784,
+    "heap_free_bytes": 224332,
+    "heap_min_free_bytes": 188872,
+    "input_read_errors": 0,
+    "input_queue_drops": 0,
+    "buzzer_inactive": true,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "pixel_audit": {
+    "dimensions_match": true,
+    "shared_brand_header_identical": true,
+    "shared_focus_surface_identical": true,
+    "footer_divider_present": true,
+    "input_status_present": true,
+    "screens_distinct": true,
+    "manual_visual_review": "pass"
+  },
+  "scope": {
+    "ux_03": "accepted",
+    "ux_04": "implemented_and_physically_evidenced",
+    "ux_05": "open",
+    "ux_06": "open",
+    "ux_07": "partial",
+    "demo_s2": "open",
+    "release_gate_eligible": false
+  }
+}

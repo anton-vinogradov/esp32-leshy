@@ -21,7 +21,6 @@ CATALOG = ROOT / "firmware/leshy1/src/domain/apps/AppCatalog.cpp"
 CATALOG_HEADER = ROOT / "firmware/leshy1/src/domain/apps/AppCatalog.h"
 UI = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 UI_CONTROLLER = ROOT / "firmware/leshy1/src/ui/UiController.cpp"
-PLATFORMIO = ROOT / "firmware/leshy1/platformio.ini"
 SHA256 = re.compile(r"[0-9a-f]{64}")
 QUICK_IDS = [
     "quick.build.identity",
@@ -212,8 +211,8 @@ def main() -> int:
     require(failures, "char diagnosticJson[3072]" in ui and
             "char line[3072]" not in ui,
             "diagnostic JSON must reuse static bounded workspace")
-    require(failures, 'LESHY1_VERSION=\\"0.53.0-self-test-quick-measure\\"' in
-            PLATFORMIO.read_text(encoding="utf-8"), "current version mismatch")
+    # The exact candidate block binds the historical 0.53 evidence. Current
+    # source may advance while this accepted Self-Test evidence stays replayable.
     require(failures, evidence.get("scope") == {
         "quick_s2_slice_accepted": True,
         "full_guided_complete": False,

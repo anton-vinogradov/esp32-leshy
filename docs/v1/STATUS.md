@@ -12,7 +12,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S2 — Clean 1.x platform`.
 - **Last completed stage:** `S1 — Evidence baseline`.
-- **Repository baseline:** `1c05f32` plus the current S1-gate/S2-kickoff slice.
+- **Repository baseline:** `d75e11e` plus the current UX-04 acceptance slice.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
 - **Current objective:** complete UX-03…UX-07 and a reproducible `DEMO-S2` on the
   independent 1.x target.
@@ -270,12 +270,12 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 Unavailable boards and instruments remain tracked evidence gaps, but no longer hold
 the platform and visual stage.
 
-1. UX-03 semantic design tokens are implemented and evidenced on the exact 0.52
-   candidate; finish the UX-04 common component sheet for 240×320.
+1. UX-03 semantic design tokens and the UX-04 common component sheet are implemented
+   and physically evidenced on exact 0.52/0.54 candidates.
 2. The bottom-of-Home Self-Test shell, eight-check read-only Quick plan, Full
    preflight/blocker, and report skeleton pass on exact 0.53; keep Full coverage
    blocked until S3…S7 capabilities register their checks.
-3. Verify UX-05 EN/RU content fit and UX-06 button/accessibility mapping.
+3. **Active:** verify UX-05 EN/RU content fit and UX-06 button/accessibility mapping.
 4. Complete UX-07 automatically: the retained Home/List/Detail/running/result/export
    frames pass; dialog and unavailable/degraded/error states remain to capture.
 5. Run `DEMO-S2`: boot → Home → Self-Test Quick → Diagnostics → disabled reason →
@@ -485,11 +485,13 @@ the platform and visual stage.
 | E-GATE-001 | formal S1 gate review | pass: PRD 1.0 accepted; J/PR/NFR/CAP/WF/UX-01/02 are fully bound; hardware/resource unknowns have safe defaults, explicit conditional scope, and named later-stage evidence; the first real persistent Survey slice fits budgets | does not verify the full PRD or declare S2/S3 complete; unavailable second board/instruments remain S4/S5/S8 risks |
 | E-BUILD-054 | `0.52.0-visual-system-measure` exact rebuild | pass: RAM 125,464 B, linked flash 1,063,092 B; app/factory 1,063,248/1,128,784 B; app `39fc2c92…43ace`, factory `56f90026…569a`, ELF `d240d6aa…ada8`; RTC no-init 20 B | +192 B linked flash, zero static-RAM growth, and 64 B smaller app/factory images vs 0.51; measurement image, not a release |
 | E-HIL-076 | board-01 exact 0.52 visual/product run | pass: exact candidate advances generation 64→65 with 9/9 accepted/forwarded, zero drops, heap 276,040/227,588/192,128 B, exact CID, and final owner/lease none/0; six retained 240×320 TFT frames and all artifacts are SHA-256 bound in the [machine-checked artifact](../../tests/hil/evidence/board-01-visual-system-0.52.json) | Home/List/Detail/running/result/export are covered; dialog and unavailable/degraded/error states, EN/RU fit, physical-panel optics, and full S2 demo remain open |
-| E-UX-003 | semantic visual system and pixel audit | pass: renderer consumes `VisualTheme` palette/layout roles, contains no raw TFT color constants, retained frames prove full brand/divider/input geometry and clear bottom guard rows, and a wrapped Library footer found by the audit was shortened and reverified | accepts UX-03 for the current candidate; UX-04…UX-07 remain active and a shared component sheet is not yet complete |
+| E-UX-003 | semantic visual system and pixel audit | pass: renderer consumes `VisualTheme` palette/layout roles, contains no raw TFT color constants, retained frames prove full brand/divider/input geometry and clear bottom guard rows, and a wrapped Library footer found by the audit was shortened and reverified | accepts UX-03; UX-04 is now closed by E-UX-004, while UX-05…UX-07 remain active |
 | E-DOC-004 | on-device Self-Test product contract | accepted: the last Home item exposes explicit read-only Quick and Full/Guided modes; user and release HIL share versioned check IDs while the host independently validates bytes, screenshots, side effects, and cleanup | S2 shell/Quick/report are now implemented by E-HIL-077; capability coverage remains blocked until S3…S7 and complete release verification closes in S8 |
 | E-BUILD-055 | `0.53.0-self-test-quick-measure` exact rebuild | pass: RAM 128,720 B, linked flash 1,067,800 B; app/factory 1,068,208/1,133,744 B; app `25d1f620…010bb`, factory `e42c30c7…6ff1f`, ELF `06a5e9d4…01e38`; RTC no-init 20 B | +3,256 B static RAM, +4,708 B linked flash, and +4,960 B images vs 0.52; includes one shared 3 KiB diagnostic JSON workspace and the S2 Self-Test slice, not a release |
 | E-HIL-077 | board-01 exact 0.53 Self-Test Quick/Full regression | pass for the implemented scope: final Home item opens mode UI; Quick runs eight stable read-only checks in 60 µs with 8/8 pass, zero TX/storage/buzzer side effects, minimum heap 188,872 B, zero input errors/drops, buzzer LOW, and final owner/lease none/0. Full/Guided reuses the eight checks and honestly returns blocked on `full.capability.coverage`; five TFT states and reports are retained in the [machine-checked artifact](../../tests/hil/evidence/board-01-self-test-0.53.json) | first candidate failed closed with a retained loop-task stack panic after capture; a shared static JSON workspace fixed it. Full capability coverage, user-prompted physical checks, EN/RU, and complete S2 demo remain open; release gate is false |
 | E-AUTO-021 | Self-Test retained-evidence verifier | pass: binds exact candidate/ELF, stable Quick IDs and ordering, Full blocker, side effects, heap/input/buzzer/cleanup facts, five 240×320 PNGs, retained panic marker, final scope flags, and source prohibition of direct driver actions | local one-board evidence; independent GitHub attestation and complete S8 plan remain open |
+| E-BUILD-056 | `0.54.0-ui-components-measure` exact rebuild | pass: RAM 128,720 B, linked flash 1,068,048 B; app/factory 1,068,192/1,133,728 B; app `479935d5…7f77`, factory `5e54832d…e650`, ELF `d9366104…787f`; RTC no-init 20 B | +248 B linked flash, zero static-RAM growth, and 16 B smaller images vs 0.53; component contract only, not a stage/release build |
+| E-HIL-078 / E-UX-004 | board-01 exact 0.54 shared-component regression | pass: Home and Self-Test share header/menu/metric/footer primitives; four retained 240×320 TFT frames pass source, trace, identity, geometry and pixel checks; Quick remains 8/8 in 64 µs; heap is 272,784/224,332/188,872 B, input has zero errors/drops, buzzer is LOW, and Back returns owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-components-0.54.json) | accepts UX-04 only; EN/RU fit, accessibility matrix, missing UX-07 states, and `DEMO-S2` remain open |
 
 ## Known uncertainties and risks
 
