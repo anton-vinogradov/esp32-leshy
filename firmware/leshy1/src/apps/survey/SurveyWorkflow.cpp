@@ -50,8 +50,19 @@ SurveyWorkflowStatus SurveyWorkflow::resetToSetup() {
     return finish(SurveyWorkflowStatus::Ready, SurveyWorkflowState::Setup);
 }
 
+SurveyWorkflowStatus SurveyWorkflow::configure(bool persistent,
+                                               bool simulated) {
+    if (state_ != SurveyWorkflowState::Setup || (persistent && simulated)) {
+        return finish(SurveyWorkflowStatus::InvalidState, state_);
+    }
+    persistent_ = persistent;
+    simulated_ = simulated;
+    return finish(SurveyWorkflowStatus::Ready, state_);
+}
+
 SurveyWorkflowStatus SurveyWorkflow::cancel() {
-    if (state_ != SurveyWorkflowState::Setup) {
+    if (state_ != SurveyWorkflowState::Setup &&
+        state_ != SurveyWorkflowState::Running) {
         return finish(SurveyWorkflowStatus::InvalidState, state_);
     }
     survey_.reset();

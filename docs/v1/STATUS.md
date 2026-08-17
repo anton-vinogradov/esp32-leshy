@@ -12,7 +12,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S1 — Evidence baseline`.
 - **Last completed stage:** `S0 — Governance and generation boundary`.
-- **Repository baseline:** `5efc6ed` plus current unreleased 0.44 documentation
+- **Repository baseline:** `acf6a0a` plus current unreleased 0.45 documentation
   and feasibility prototypes.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
 - **Current objective:** confirm ESP32-DIV constraints and promote the 1.0.0 PRD from
@@ -23,9 +23,9 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | Stage | Status | Confirmed result | Remaining gate work |
 |---|---|---|---|
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
-| S1 | `active` | vision, competitive snapshot, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 and Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register, five ADRs, automatic device-smoke v6 plus physical UI-HIL-A8, and exact-CID read-only product catalog recovery into persistent Library on board-01 | remaining physical evidence, product Survey worker integration, and PRD baseline review |
-| S2 | `planned` | capability-built home, unified input/TFT capture, atomic-head/media-guard contracts, guarded FAT evidence backend, and AppRuntime/ResourceBroker lease path exist | no production mount policy or complete product workflow |
-| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and a real passive Wi-Fi→FIFO→persistent SessionStore/remount path run on board-01 with RB-06 margin; enrolled exact media now mounts through a write-blocking diskio driver at boot, recovers `/leshy/sessions/v1` without a full FAT free-space scan, and feeds persistent Library/export with zero SD writes | product Survey UI still uses the simulated/RAM worker instead of the real passive/persistent worker; physical power-cut, endurance, and LittleFS parity remain; requires S2 gate |
+| S1 | `active` | vision, competitive snapshot, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 and Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register, five ADRs, automatic device-smoke v6 plus physical UI-HIL-A8, and an exact-CID real passive Survey→persistent SD→cold-boot Library/export path on board-01 | remaining physical evidence and PRD baseline review |
+| S2 | `planned` | capability-built home, unified input/TFT capture, atomic-head/media-guard contracts, guarded product FAT lifecycle, complete first product Survey workflow, and AppRuntime/ResourceBroker lease path exist | formal S1/S2 gate and production-policy review |
+| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; bounded FSInfo avoids a full FAT scan and abort preserves the prior generation | physical power-cut, endurance, and LittleFS parity remain; requires S2 gate |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
@@ -220,6 +220,14 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   and emits bounded JSON export. `device-smoke` revision 2 automatically checks
   idempotent Stop, ten real-TFT goldens, the export record, resource cleanup, and
   GPIO2 LOW; RF and physical storage are deliberately untouched.
+- version 0.45 replaces that fixture only when boot admitted the enrolled exact card:
+  AppCatalog requests lease 15, explicit Select validates cached FSInfo capacity and
+  the fixed product root, runs one credential-free passive scan, drains FIFO 64, and
+  Right atomically publishes the next generation. The automatic board run accepted
+  15/15 records with zero reject/drop, committed generation 2→3, cold-boot recovered
+  the same 3/15 Session read-only, exported it as persistent/non-simulated, and ended
+  at lease 0. Back from Running was separately proven to write nothing and retain
+  generation 2; four TFT readbacks exposed and then closed the real-list overflow.
 - `SurveyPipeline` now separates source callbacks from Session through the existing
   fixed FIFO 64, counts received/forwarded/drop/depth/high-water, applies the Stop
   batch trigger, and admits no more than 64 in-flight+forwarded observations. UI and
@@ -438,6 +446,9 @@ safe documentation/prototype item.
 | E-BUILD-046 | `0.44.0-sd-readonly-driver-measure` | pass: RAM 120,696 B, linked flash 1,053,188 B; app image 1,053,600 B SHA-256 `b997a1ff…a4451`, ELF `24615f86…c6d97` | +13,684 B linked flash/+112 B static RAM vs 0.43 for ESP-IDF FAT mount/diskio write blocker, product-root IO, NVS enrollment, boot recovery, and diagnostics |
 | E-AUTO-011 | bounded product boot guard + retained acceptance checker | pass: static checks require read-only diskio status/write rejection and inspect the boot recovery body for forbidden `freeBytes()`/`filesystemCapacityBytes()` calls; `check_product_boot_acceptance.py` binds exact candidate/media, generic device-smoke v6, read-only enrollment/cold boot, persistent export, zero SD writes, and lease cleanup | local physical evidence is not a GitHub attestation; power-cut/endurance remain separate destructive lanes |
 | E-HIL-053 | board-01 0.44 isolated generic HIL + product SD boot | pass: exact candidate un-enrolled `device-smoke` run `47a59b27d36589fdf9c88273fb2a57af` ready 506.198 ms with ten zero-mismatch captures and final lease 0; read-only re-enrollment admits CID `FE343253…019CB7`, generation 1/17 observations, then cold boot reaches ready 680.261 ms (firmware interactive 564,144 µs), heap total/free/min 281,064/232,628/199,708 B, write blocker 0 hits, SD physical writes 0, lease 12→0; persistent Library export is valid/non-simulated/RF-off and Back releases 5→0; retained [artifact](../../tests/hil/evidence/board-01-product-boot-0.44.json) | one board/card and local unsigned run; seed bootstrap made one explicit 895-byte product write, while re-enrollment and every accepted boot were read-only; real product Survey worker, physical power-cut, and endurance remain open |
+| E-BUILD-047 | `0.45.0-product-survey-measure` | pass: RAM 125,448 B, linked flash 1,059,264 B; app image 1,059,664 B SHA-256 `b0925272…70fe2`, ELF `dd33383b…7b904` | +6,076 B linked flash/+4,752 B static RAM vs 0.44 for dynamic SessionStore routing, product runtime state, second FatFs workspace, Wi-Fi event loop, and extended telemetry |
+| E-AUTO-012 | exact-candidate product-Survey runner + retained checker | pass: `run_1x_product_survey_hil.py` flashes the candidate, performs two cold boots, queries exact-CID recovery, fails before commit on inconsistent scan/space accounting, captures four TFT frames, verifies generation+Library export+lease cleanup; host tests and `check_product_survey_acceptance.py` pass | local run is unsigned; integration into the GitHub release orchestrator and dynamic visual golden comparison remain open |
+| E-HIL-054 | board-01 0.45 real product Survey | pass/gate-eligible local run `b7c534132b8157c617ae2c07f4b9b8a6`: exact CID, lease 15, bounded cached free 62,483,857,408 B, passive 15/15 accepted/forwarded with zero reject/drop/event errors, generation 2→3, cleanup true, then read-only reboot admits 3/15 with zero SD writes and Library export valid/persistent/non-simulated; four inspected TFT captures have no viewport overflow; isolated exact-candidate generic run `fe10902e25066e58f9e188afc991ee3f` also passes all ten goldens, then read-only re-enrollment returns the device to 3/15 and lease 0; retained [artifact](../../tests/hil/evidence/board-01-product-survey-0.45.json) | one board/card and local unsigned runs; no RF detector, physical power-cut, endurance, or dense >64-network acceptance yet |
 
 ## Known uncertainties and risks
 

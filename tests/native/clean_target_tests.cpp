@@ -37,6 +37,7 @@
 #include "storage/SessionCodec.h"
 #include "storage/SessionStore.h"
 #include "storage/SessionStoreBoundary.h"
+#include "storage/SessionStoreIoRouter.h"
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
@@ -425,6 +426,27 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(catalog.get(1)->simulated);
     CHECK(std::strcmp(catalog.get(1)->reason, "simulated / rf off") == 0);
     CHECK(catalog.get(1)->resources == resourceMask(Resource::UiForeground));
+
+    HardwareInventory persistentSurveyInventory;
+    CHECK(persistentSurveyInventory.add(
+        {"board.profile", CapabilityState::Available, "runtime", "match"}));
+    CHECK(persistentSurveyInventory.add(
+        {"radio.wifi", CapabilityState::Declared, "builtin", "not_started"}));
+    CHECK(persistentSurveyInventory.add(
+        {"survey.simulated", CapabilityState::Available, "golden", "rf_off"}));
+    CHECK(persistentSurveyInventory.add(
+        {"survey.persistent_passive", CapabilityState::Available,
+         "product_catalog", "exact_media"}));
+    catalog.rebuild(persistentSurveyInventory);
+    CHECK(catalog.get(1)->enabled);
+    CHECK(!catalog.get(1)->simulated);
+    CHECK(std::strcmp(catalog.get(1)->reason,
+                      "passive / persistent") == 0);
+    CHECK(catalog.get(1)->resources ==
+          (resourceMask(Resource::UiForeground) |
+           resourceMask(Resource::EspRf) |
+           resourceMask(Resource::Storage) |
+           resourceMask(Resource::RadioSpi)));
 
     HardwareInventory simulatedLibraryInventory;
     CHECK(simulatedLibraryInventory.add(
@@ -1142,6 +1164,9 @@ void testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure() {
 
     CHECK(workflow.state() == SurveyWorkflowState::Setup);
     CHECK(workflow.lastStatus() == SurveyWorkflowStatus::Ready);
+    CHECK(workflow.configure(true, true) ==
+          SurveyWorkflowStatus::InvalidState);
+    CHECK(workflow.configure(false, true) == SurveyWorkflowStatus::Ready);
     CHECK(std::strcmp(surveyWorkflowStateName(workflow.state()), "setup") == 0);
     CHECK(workflow.cancel() == SurveyWorkflowStatus::Cancelled);
     CHECK(io.fileSyncs() == 0);
@@ -1198,6 +1223,17 @@ void testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure() {
           std::strcmp(library.selected()->session->id(), "product-wifi-002") == 0);
 
     CHECK(workflow.resetToSetup() == SurveyWorkflowStatus::Ready);
+    CHECK(workflow.configure(true, false) == SurveyWorkflowStatus::Ready);
+    CHECK(workflow.start("product-wifi-aborted", 7500) ==
+          SurveyWorkflowStatus::Started);
+    CHECK(workflow.configure(false, true) ==
+          SurveyWorkflowStatus::InvalidState);
+    CHECK(workflow.cancel() == SurveyWorkflowStatus::Cancelled);
+    CHECK(workflow.state() == SurveyWorkflowState::Setup);
+    CHECK(library.size() == 1);
+    CHECK(library.selected() != nullptr && library.selected()->generation == 2);
+
+    CHECK(workflow.configure(false, true) == SurveyWorkflowStatus::Ready);
     CHECK(workflow.start("product-wifi-003", 8000) ==
           SurveyWorkflowStatus::Started);
     next.monotonicUs = 9000;
@@ -1212,6 +1248,27 @@ void testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure() {
           std::strcmp(library.selected()->session->id(), "product-wifi-002") == 0);
     CHECK(std::strcmp(surveyWorkflowStatusName(workflow.lastStatus()),
                       "store_rejected") == 0);
+}
+
+void testSessionStoreIoRouterSwitchesOnlyTheSelectedBackend() {
+    leshy1::platform::arduino::RamSessionStoreIo first;
+    leshy1::platform::arduino::RamSessionStoreIo second;
+    first.reset();
+    second.reset();
+    leshy1::storage::SessionStoreIoRouter router(first);
+    CHECK(router.boundTo(first));
+
+    SessionStoreWorkspace workspace;
+    const SurveySession source = goldenStoppedSession();
+    CHECK(leshy1::storage::commitNextSession(router, workspace, source).complete());
+    CHECK(first.fileSyncs() == 3);
+    CHECK(second.fileSyncs() == 0);
+
+    CHECK(router.bind(second));
+    CHECK(router.boundTo(second));
+    CHECK(leshy1::storage::commitNextSession(router, workspace, source).complete());
+    CHECK(first.fileSyncs() == 3);
+    CHECK(second.fileSyncs() == 3);
 }
 
 void testSurveyPipelineQueuesDrainsDropsAndCommitsWithStopPolicy() {
@@ -2589,6 +2646,7 @@ int main() {
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
     testGoldenSurveyTraceUsesListDetailBackAndExplicitStop();
     testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure();
+    testSessionStoreIoRouterSwitchesOnlyTheSelectedBackend();
     testSurveyPipelineQueuesDrainsDropsAndCommitsWithStopPolicy();
     testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites();
     testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam();

@@ -12,8 +12,8 @@
 
 - **Активный этап:** `S1 — Evidence baseline`.
 - **Последний закрытый этап:** `S0 — Governance и граница поколений`.
-- **Рабочая база репозитория:** `5efc6ed` плюс текущие не выпущенные
-  документы/технический прототип 0.44.
+- **Рабочая база репозитория:** `acf6a0a` плюс текущие не выпущенные
+  документы/технический прототип 0.45.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
 - **Главная цель текущего этапа:** подтвердить ограничения ESP32-DIV и перевести PRD
@@ -24,9 +24,9 @@
 | Этап | Статус | Подтверждённый результат | Что отделяет от gate |
 |---|---|---|---|
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
-| S1 | `active` | vision, конкурентный срез, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 и Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register и пять ADR; automatic device-smoke v6 плюс physical UI-HIL-A8 проверяют bounded lossless keypad path, а board-01 восстанавливает exact-CID product catalog read-only в persistent Library | остальные physical evidence, интеграция product Survey worker и review baseline PRD |
-| S2 | `planned` | существуют capability-built home, unified input/TFT capture, atomic-head/media-guard contracts, guarded FAT evidence backend и lease path AppRuntime/ResourceBroker | нет production mount policy и complete product workflow |
-| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и real passive Wi-Fi→FIFO→persistent SessionStore/remount path работают на board-01 с RB-06 margin; enrolled exact media теперь монтируется на boot через write-blocking diskio, восстанавливает `/leshy/sessions/v1` без полного FAT free-space scan и передаёт Session в persistent Library/export с zero SD writes | product Survey UI всё ещё использует simulated/RAM worker вместо real passive/persistent worker; открыты physical power-cut, endurance и LittleFS parity; требуется gate S2 |
+| S1 | `active` | vision, конкурентный срез, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 и Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register и пять ADR; automatic device-smoke v6 плюс physical UI-HIL-A8 проверяют keypad path, а board-01 проходит exact-CID real passive Survey→persistent SD→cold-boot Library/export | остальные physical evidence и review baseline PRD |
+| S2 | `planned` | существуют capability-built home, unified input/TFT capture, atomic-head/media-guard contracts, guarded product FAT lifecycle, первый complete product Survey workflow и lease path AppRuntime/ResourceBroker | formal S1/S2 gate и review production policy |
+| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; bounded FSInfo не делает full FAT scan, abort сохраняет prior generation | открыты physical power-cut, endurance и LittleFS parity; требуется gate S2 |
 | S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
@@ -221,6 +221,14 @@
   и выдаёт bounded JSON export. `device-smoke` revision 2 автоматически проверяет
   idempotent Stop, десять real-TFT goldens, export record, resource cleanup и GPIO2
   LOW; RF и physical storage намеренно не задействованы.
+- version 0.45 заменяет fixture только после boot admission enrolled exact card:
+  AppCatalog запрашивает lease 15, explicit Select проверяет cached FSInfo capacity и
+  fixed product root, выполняет credential-free passive scan, drain FIFO 64, а Right
+  атомарно публикует следующую generation. Automatic board run принял 15/15 records
+  с zero reject/drop, committed generation 2→3, cold boot read-only восстановил ту же
+  Session 3/15, export persistent/non-simulated, final lease 0. Back из Running отдельно
+  доказан без записи с retention generation 2; четыре TFT readback нашли и закрыли
+  overflow реального списка.
 - `SurveyPipeline` теперь отделяет source callback от Session через существующий
   fixed FIFO 64, считает received/forwarded/drop/depth/high-water, применяет Stop
   batch trigger и не допускает более 64 in-flight+forwarded observations. UI и
@@ -437,6 +445,9 @@
 | E-BUILD-046 | `0.44.0-sd-readonly-driver-measure` | pass: RAM 120 696 B, linked flash 1 053 188 B; app image 1 053 600 B SHA-256 `b997a1ff…a4451`, ELF `24615f86…c6d97` | +13 684 B linked flash/+112 B static RAM относительно 0.43 за ESP-IDF FAT mount/diskio write blocker, product-root IO, NVS enrollment, boot recovery и diagnostics |
 | E-AUTO-011 | bounded product boot guard + retained acceptance checker | pass: static checks требуют read-only diskio status/write rejection и проверяют boot recovery body на запрещённые `freeBytes()`/`filesystemCapacityBytes()`; `check_product_boot_acceptance.py` связывает exact candidate/media, generic device-smoke v6, read-only enrollment/cold boot, persistent export, zero SD writes и lease cleanup | local physical evidence не является GitHub attestation; power-cut/endurance остаются отдельными destructive lanes |
 | E-HIL-053 | board-01 0.44 isolated generic HIL + product SD boot | pass: exact candidate в un-enrolled состоянии прошёл `device-smoke`, run `47a59b27d36589fdf9c88273fb2a57af`, ready 506,198 ms, десять zero-mismatch captures, final lease 0; read-only re-enrollment допускает CID `FE343253…019CB7`, generation 1/17 observations, затем cold boot ready 680,261 ms (firmware interactive 564 144 µs), heap total/free/min 281 064/232 628/199 708 B, write blocker 0 hits, SD physical writes 0, lease 12→0; persistent Library export valid/non-simulated/RF-off, Back освобождает 5→0; сохранён [artifact](../../tests/hil/evidence/board-01-product-boot-0.44.json) | одна board/card и local unsigned run; seed bootstrap сделал одну explicit product write 895 B, re-enrollment и каждый accepted boot были read-only; real product Survey worker, physical power-cut и endurance открыты |
+| E-BUILD-047 | `0.45.0-product-survey-measure` | pass: RAM 125 448 B, linked flash 1 059 264 B; app image 1 059 664 B SHA-256 `b0925272…70fe2`, ELF `dd33383b…7b904` | +6 076 B linked flash/+4 752 B static RAM vs 0.44 за dynamic SessionStore routing, product runtime state, второй FatFs workspace, Wi-Fi event loop и extended telemetry |
+| E-AUTO-012 | exact-candidate product-Survey runner + retained checker | pass: `run_1x_product_survey_hil.py` прошивает candidate, делает два cold boot, query exact-CID recovery, fail-before-commit при inconsistent scan/space accounting, снимает четыре TFT frame, проверяет generation+Library export+lease cleanup; host tests и `check_product_survey_acceptance.py` проходят | local run unsigned; integration в GitHub release orchestrator и dynamic visual golden comparison открыты |
+| E-HIL-054 | board-01 0.45 real product Survey | локальный прогон `b7c534132b8157c617ae2c07f4b9b8a6` прошёл и пригоден для gate: точный CID, lease 15, ограниченная по времени проверка свободного места 62 483 857 408 B, пассивный scan 15/15 accepted/forwarded без reject/drop/event errors, generation 2→3 и полный cleanup; read-only перезагрузка допускает 3/15 без записей на SD, Library export валиден, постоянен и не симулирован; четыре проверенных TFT-кадра без переполнения viewport; изолированный generic-прогон точного кандидата `fe10902e25066e58f9e188afc991ee3f` также проходит десять эталонных кадров, после чего read-only re-enrollment возвращает устройство в 3/15 и lease 0; сохранён [артефакт](../../tests/hil/evidence/board-01-product-survey-0.45.json) | одна плата/карта и локальные неподписанные прогоны; нет RF detector, физического power-cut, endurance и проверки плотного окружения >64 сетей |
 
 ## Известные неопределённости и риски
 

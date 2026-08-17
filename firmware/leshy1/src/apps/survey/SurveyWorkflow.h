@@ -50,6 +50,7 @@ public:
           simulated_(simulated) {}
 
     SurveyWorkflowStatus resetToSetup();
+    SurveyWorkflowStatus configure(bool persistent, bool simulated);
     SurveyWorkflowStatus cancel();
     SurveyWorkflowStatus start(const char* sessionId, std::uint64_t monotonicUs);
     SurveyWorkflowStatus publish(

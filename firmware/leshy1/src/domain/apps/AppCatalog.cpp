@@ -18,14 +18,31 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
                        false,
                        kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
 
+    const bool persistentSurvey =
+        available(inventory, "survey.persistent_passive");
     const bool wifiSurvey = available(inventory, "radio.wifi");
     const bool simulatedSurvey = available(inventory, "survey.simulated");
-    const bool survey = wifiSurvey || simulatedSurvey;
+    const bool realSurvey = persistentSurvey || wifiSurvey;
+    const bool survey = realSurvey || simulatedSurvey;
     items_[size_++] = {"survey", "SURVEY",
-                       simulatedSurvey ? "simulated / rf off"
-                                       : (wifiSurvey ? "ready" : "passive source unavailable"),
-                       2, survey, simulatedSurvey,
-                       simulatedSurvey
+                       persistentSurvey
+                           ? "passive / persistent"
+                           : (realSurvey
+                                  ? "ready"
+                                  : (simulatedSurvey
+                                         ? "simulated / rf off"
+                                         : "passive source unavailable")),
+                       2, survey, !realSurvey && simulatedSurvey,
+                       persistentSurvey
+                           ? kernel::runtime::resourceMask(
+                                 kernel::runtime::Resource::UiForeground) |
+                                 kernel::runtime::resourceMask(
+                                     kernel::runtime::Resource::EspRf) |
+                                 kernel::runtime::resourceMask(
+                                     kernel::runtime::Resource::Storage) |
+                                 kernel::runtime::resourceMask(
+                                     kernel::runtime::Resource::RadioSpi)
+                           : (simulatedSurvey && !realSurvey)
                            ? kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)
                            : kernel::runtime::Resource::UiForeground |
                                  kernel::runtime::Resource::EspRf};

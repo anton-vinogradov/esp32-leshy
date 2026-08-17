@@ -185,8 +185,19 @@ Recovery намеренно проверяет raw card capacity без `f_getfr
 query: boot не требует free space, а scan большой FAT сделал бы latency зависимой от
 размера media. Enrollment сохраняется только после такого же read-only recovery;
 unenrollment удаляет только CID из NVS и вообще не обращается к SD. Initialize/commit
-остаются explicit writable operations. Следующая product boundary — real
-passive/persistent Survey worker, а не storage boot admission.
+остаются explicit writable operations.
+
+Version 0.45 соединяет admission с interactive product Survey, не меняя un-enrolled
+simulated fixture. AppCatalog предпочитает `survey.persistent_passive` только после
+boot recovery exact media и атомарно запрашивает UI+EspRf+Storage+RadioSpi (lease 15).
+Explicit Start заново идентифицирует CID, монтирует writable с disabled format,
+использует только cached FAT/FSInfo free-cluster hint, допускает commit 64 KiB с reserve
+1 MiB и направляет allocation-free workflow в product store. Credential-free Wi-Fi
+adapter владеет временной event loop, делает только passive scan, drain FIFO 64 и
+deinitializes до просмотра списка. Stop публикует и reopens ровно следующую generation
+до замены Library; каждый exit закрывает store/mount и возвращает workflow на RAM.
+Back из Running aborts без commit и сохраняет prior Library. Следующие storage
+boundaries — physical power-cut, endurance и LittleFS parity, а не интеграция worker.
 
 ## 7. Модель данных
 

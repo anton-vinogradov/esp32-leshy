@@ -24,6 +24,10 @@ public:
     std::uint64_t cardCapacityBytes() const;
     std::uint64_t filesystemCapacityBytes() const;
     std::uint64_t freeBytes() const;
+    // Returns the FATFS/FSInfo cached free-cluster hint without walking the FAT.
+    // Zero means either full media or unavailable evidence; product admission
+    // treats both cases fail-closed as insufficient space.
+    std::uint64_t cachedFreeBytes() const;
     bool exists(const char* path) const;
     bool gpio21StableHigh() const { return gpio21StableHigh_; }
     bool cleanupComplete() const { return cleanupComplete_; }

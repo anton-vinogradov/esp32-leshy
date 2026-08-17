@@ -54,6 +54,7 @@
 #include "storage/SessionCodec.h"
 #include "storage/SessionStore.h"
 #include "storage/SessionStoreBoundary.h"
+#include "storage/SessionStoreIoRouter.h"
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
@@ -117,6 +118,8 @@ constexpr std::uint64_t kWifiIngressP99EncodedBytesPerSecond = 546;
 constexpr std::uint32_t kStorageRateSafetyMultiplier = 4;
 constexpr std::uint64_t kStorageRequiredEncodedBytesPerSecond =
     kWifiIngressP99EncodedBytesPerSecond * kStorageRateSafetyMultiplier;
+constexpr std::uint64_t kProductSurveyCommitBytes = 64U * 1024U;
+constexpr std::uint64_t kProductSurveyReserveBytes = 1024U * 1024U;
 constexpr unsigned kWifiPersistMaxScans = 8;
 constexpr const char* kSdSessionStorePrefix =
     "storage.sd.session-store disposable-write ";
@@ -152,8 +155,12 @@ SessionCatalog sessionCatalog;
 leshy1::services::survey::ObservationQueue surveyIngressQueue;
 leshy1::storage::SessionStoreWorkspace sessionStoreWorkspace;
 ArduinoFsSessionStoreWorkspace sdSessionStoreIoWorkspace;
+ArduinoFsSessionStoreWorkspace productSurveyIoWorkspace;
 RamSessionStoreIo ramSessionStore;
-SurveyWorkflow surveyWorkflow(surveyController, ramSessionStore,
+leshy1::storage::SessionStoreIoRouter surveyStoreRouter(ramSessionStore);
+ArduinoFsSessionStoreIo productSurveyStore(productSurveyIoWorkspace);
+BoardSdFilesystem productSurveyFilesystem;
+SurveyWorkflow surveyWorkflow(surveyController, surveyStoreRouter,
                               sessionStoreWorkspace, librarySession,
                               libraryController, false, true);
 SurveyPipeline surveyPipeline(surveyWorkflow, surveyIngressQueue);
@@ -217,6 +224,27 @@ struct ProductBootRecoveryState final {
 };
 
 ProductBootRecoveryState productBootRecovery;
+
+struct ProductSurveyRuntimeState final {
+    const char* status = "idle";
+    bool selected = false;
+    bool backendOpen = false;
+    bool identityCleanupComplete = true;
+    bool filesystemAttempted = false;
+    bool scannerCleanupComplete = true;
+    bool cleanupComplete = true;
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    std::uint64_t cardCapacityBytes = 0;
+    std::uint64_t cachedFreeBytes = 0;
+    leshy1::storage::ProductStoreAccessStatus storeStatus =
+        leshy1::storage::ProductStoreAccessStatus::MissingMedia;
+    leshy1::apps::survey::ProductSurveyAdmissionStatus admissionStatus =
+        leshy1::apps::survey::ProductSurveyAdmissionStatus::ExplicitStartRequired;
+    BoardWifiPassiveScanResult scan{};
+};
+
+ProductSurveyRuntimeState productSurveyRuntime;
 
 void renderInteractiveScreen();
 
@@ -396,6 +424,203 @@ bool clearProductFingerprint() {
     preferences.end();
     char verified[33] = {};
     return removed && !loadProductFingerprint(verified, sizeof(verified));
+}
+
+bool closeProductSurveyBackend() {
+    productSurveyStore.end();
+    const bool filesystemWasMounted = productSurveyFilesystem.mounted();
+    if (filesystemWasMounted) productSurveyFilesystem.end();
+    surveyStoreRouter.bind(ramSessionStore);
+    productSurveyRuntime.backendOpen = false;
+    const bool filesystemCleanup =
+        !productSurveyRuntime.filesystemAttempted ||
+        productSurveyFilesystem.cleanupComplete();
+    productSurveyRuntime.cleanupComplete =
+        productSurveyRuntime.identityCleanupComplete &&
+        productSurveyRuntime.scannerCleanupComplete && filesystemCleanup &&
+        !productSurveyFilesystem.mounted() &&
+        surveyStoreRouter.boundTo(ramSessionStore);
+    return productSurveyRuntime.cleanupComplete;
+}
+
+WifiRecordDisposition enqueueProductSurveyRecord(
+    const WifiScanRecord& record, std::uint64_t monotonicUs, void*) {
+    Observation observation;
+    if (!leshy1::drivers::wifi::normalizePassiveRecord(
+            record, monotonicUs, &observation)) {
+        return WifiRecordDisposition::Rejected;
+    }
+    const SurveyPipelineStatus status = surveyPipeline.enqueue(observation);
+    if (status == SurveyPipelineStatus::Queued) {
+        return WifiRecordDisposition::Accepted;
+    }
+    return status == SurveyPipelineStatus::Dropped
+               ? WifiRecordDisposition::Dropped
+               : WifiRecordDisposition::Rejected;
+}
+
+bool failProductSurveyStart(const char* status) {
+    if (surveyWorkflow.state() == SurveyWorkflowState::Running) {
+        surveyPipeline.cancel();
+    }
+    closeProductSurveyBackend();
+    productSurveyRuntime.status = productSurveyRuntime.cleanupComplete
+                                      ? status
+                                      : "cleanup_failed";
+    lastRuntimeEvent = productSurveyRuntime.status;
+    return false;
+}
+
+bool startProductSurvey() {
+    productSurveyRuntime = {};
+    productSurveyRuntime.status = "preparing";
+    productSurveyRuntime.selected = true;
+    productSurveyRuntime.cleanupComplete = false;
+    const auto required =
+        leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
+        leshy1::kernel::runtime::resourceMask(Resource::EspRf) |
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    if ((appRuntime.activeResources() & required) != required) {
+        return failProductSurveyStart("resources_missing");
+    }
+    if (!loadProductFingerprint(productSurveyRuntime.expectedFingerprint,
+                                sizeof(productSurveyRuntime.expectedFingerprint))) {
+        return failProductSurveyStart("enrollment_missing");
+    }
+
+    BoardSdSpiTransport identityTransport;
+    const bool identityBegun = identityTransport.begin();
+    leshy1::storage::SdTransportRunResult identity;
+    if (identityBegun) {
+        leshy1::storage::SdTransportRunPolicy policy;
+        policy.allowPhysical = true;
+        policy.explicitlySelected = true;
+        policy.identificationOnly = true;
+        policy.ownedResources = appRuntime.activeResources();
+        identity = leshy1::storage::runSdIdentificationStateMachine(
+            leshy1::storage::defaultSdIdentificationPlan(), identityTransport,
+            policy);
+        identityTransport.end();
+    }
+    productSurveyRuntime.identityCleanupComplete =
+        identityTransport.cleanupComplete();
+    formatCidFingerprint(identity.identity,
+                         productSurveyRuntime.observedFingerprint,
+                         sizeof(productSurveyRuntime.observedFingerprint));
+    if (!productSurveyRuntime.identityCleanupComplete ||
+        identity.status != leshy1::storage::SdTransportRunStatus::Valid) {
+        return failProductSurveyStart("identity_failed");
+    }
+    if (std::strcmp(productSurveyRuntime.expectedFingerprint,
+                    productSurveyRuntime.observedFingerprint) != 0) {
+        return failProductSurveyStart("fingerprint_mismatch");
+    }
+
+    productSurveyRuntime.filesystemAttempted = true;
+    if (!productSurveyFilesystem.begin()) {
+        return failProductSurveyStart("mount_failed");
+    }
+    productSurveyRuntime.cardCapacityBytes =
+        productSurveyFilesystem.cardCapacityBytes();
+    productSurveyRuntime.cachedFreeBytes =
+        productSurveyFilesystem.cachedFreeBytes();
+    const bool capacityMatched =
+        productSurveyRuntime.cardCapacityBytes != 0 &&
+        productSurveyRuntime.cardCapacityBytes ==
+            identity.identity.capacityBytes;
+    const bool rootExists = productSurveyFilesystem.exists(
+        leshy1::storage::kProductSessionStoreRoot);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = capacityMatched;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint = productSurveyRuntime.observedFingerprint;
+    media.capacityBytes = productSurveyRuntime.cardCapacityBytes;
+    media.freeBytes = productSurveyRuntime.cachedFreeBytes;
+    leshy1::storage::ProductStoreRequest storeRequest;
+    storeRequest.operation =
+        leshy1::storage::ProductStoreOperation::CommitSession;
+    storeRequest.explicitlySelected = true;
+    storeRequest.expectedFingerprint =
+        productSurveyRuntime.expectedFingerprint;
+    storeRequest.rootPath = leshy1::storage::kProductSessionStoreRoot;
+    storeRequest.rootExists = rootExists;
+    storeRequest.driverWriteEnabled = true;
+    storeRequest.requiredBytes = kProductSurveyCommitBytes;
+    storeRequest.reserveBytes = kProductSurveyReserveBytes;
+    storeRequest.ownedResources = appRuntime.activeResources();
+    const leshy1::storage::ProductStorePermit storePermit =
+        leshy1::storage::authorizeProductStore(media, storeRequest);
+    productSurveyRuntime.storeStatus = storePermit.status;
+    if (!storePermit.allowed()) {
+        return failProductSurveyStart(
+            leshy1::storage::productStoreAccessStatusName(storePermit.status));
+    }
+
+    BoardWifiPassiveScanner scanner;
+    const bool scannerBegun = scanner.begin();
+    leshy1::apps::survey::ProductSurveyRequest surveyRequest;
+    surveyRequest.explicitStart = true;
+    surveyRequest.sourceAvailable = scannerBegun;
+    surveyRequest.scanPlan = leshy1::drivers::wifi::defaultPassivePlan();
+    surveyRequest.storePermit = storePermit;
+    surveyRequest.ownedResources = appRuntime.activeResources();
+    const leshy1::apps::survey::ProductSurveyPermit surveyPermit =
+        leshy1::apps::survey::authorizeProductSurvey(surveyRequest);
+    productSurveyRuntime.admissionStatus = surveyPermit.status;
+    if (!surveyPermit.allowed()) {
+        productSurveyRuntime.scannerCleanupComplete = scanner.end();
+        return failProductSurveyStart(
+            leshy1::apps::survey::productSurveyAdmissionStatusName(
+                surveyPermit.status));
+    }
+    if (!productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
+        !productSurveyStore.openExistingWritable(storePermit)) {
+        productSurveyRuntime.scannerCleanupComplete = scanner.end();
+        return failProductSurveyStart("store_open_failed");
+    }
+    surveyStoreRouter.bind(productSurveyStore);
+    if (surveyWorkflow.configure(true, false) != SurveyWorkflowStatus::Ready) {
+        productSurveyRuntime.scannerCleanupComplete = scanner.end();
+        return failProductSurveyStart("workflow_config_failed");
+    }
+
+    std::uint64_t startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0) startedUs = 1;
+    if (surveyPipeline.start("product-wifi-live", startedUs) !=
+        SurveyPipelineStatus::Started) {
+        productSurveyRuntime.scannerCleanupComplete = scanner.end();
+        return failProductSurveyStart("workflow_start_failed");
+    }
+    productSurveyRuntime.scan = scanner.scan(
+        surveyRequest.scanPlan, enqueueProductSurveyRecord, nullptr);
+    productSurveyRuntime.scannerCleanupComplete = scanner.end();
+    if (!productSurveyRuntime.scan.valid() ||
+        !productSurveyRuntime.scannerCleanupComplete) {
+        return failProductSurveyStart("scan_failed");
+    }
+    if (surveyPipeline.drain(
+            leshy1::services::survey::ObservationQueue::kCapacity) !=
+        SurveyPipelineStatus::Drained) {
+        return failProductSurveyStart("pipeline_drain_failed");
+    }
+    productSurveyRuntime.backendOpen = true;
+    productSurveyRuntime.status = "running";
+    lastRuntimeEvent = "product_survey_running";
+    return true;
+}
+
+SurveyPipelineStatus stopProductSurvey() {
+    const SurveyPipelineStatus status = surveyPipeline.stopAndCommit(
+        static_cast<std::uint64_t>(esp_timer_get_time()));
+    const bool cleanup = closeProductSurveyBackend();
+    productSurveyRuntime.status =
+        status == SurveyPipelineStatus::Committed
+            ? (cleanup ? "committed" : "cleanup_failed")
+            : (cleanup ? "commit_failed" : "cleanup_failed");
+    lastRuntimeEvent = productSurveyRuntime.status;
+    return status;
 }
 
 void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
@@ -847,16 +1072,22 @@ void renderInventoryPage() {
         display.setCursor(14, 88);
         display.print("SOURCE      WIFI PASSIVE");
         display.setCursor(14, 116);
-        display.print("STORAGE     RAM PREVIEW");
+        display.print(surveyWorkflow.persistent()
+                          ? "STORAGE     PRODUCT SD"
+                          : "STORAGE     RAM PREVIEW");
         display.setCursor(14, 144);
-        display.print("MODE        SIMULATED");
+        display.print(surveyWorkflow.simulated()
+                          ? "MODE        SIMULATED"
+                          : "MODE        REAL PASSIVE");
         display.setTextColor(TFT_YELLOW, TFT_BLACK);
         display.setCursor(14, 190);
         display.print("SELECT      START");
         display.setTextFont(1);
         display.setTextColor(TFT_GREEN, TFT_BLACK);
         display.setCursor(14, 218);
-        display.print("FIFO 64 | NO RF | NO COMMIT YET");
+        display.print(surveyWorkflow.simulated()
+                          ? "FIFO 64 | NO RF | NO COMMIT YET"
+                          : "FIFO 64 | RX ONLY | EXPLICIT WRITE");
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Result) {
@@ -875,7 +1106,9 @@ void renderInventoryPage() {
         display.setCursor(14, 154);
         display.print(line);
         display.setCursor(14, 182);
-        display.print("STORAGE      RAM ONLY");
+        display.print(surveyWorkflow.persistent()
+                          ? "STORAGE      PRODUCT SD"
+                          : "STORAGE      RAM ONLY");
         const SurveyPipelineProgress progress = surveyPipeline.progress();
         std::snprintf(line, sizeof(line), "PIPELINE H%u DROP %llu",
                       static_cast<unsigned>(progress.queueHighWater),
@@ -930,7 +1163,9 @@ void renderInventoryPage() {
         display.setTextFont(1);
         display.setTextColor(TFT_GREEN, TFT_BLACK);
         display.setCursor(14, 214);
-        display.print("SIMULATED DATA | RF OFF");
+        display.print(surveyWorkflow.simulated()
+                          ? "SIMULATED DATA | RF OFF"
+                          : "REAL PASSIVE | RX ONLY");
         return;
     }
 
@@ -938,7 +1173,9 @@ void renderInventoryPage() {
     display.setTextFont(1);
     display.setTextColor(TFT_GREEN, TFT_BLACK);
     display.setCursor(14, 76);
-    display.print("RUNNING | SIMULATED | RF OFF");
+    display.print(surveyWorkflow.simulated()
+                      ? "RUNNING | SIMULATED | RF OFF"
+                      : "RUNNING | REAL PASSIVE | RX ONLY");
     const SurveyPipelineProgress progress = surveyPipeline.progress();
     std::snprintf(line, sizeof(line), "FIFO %u/64 | HIGH %u | DROP %llu",
                   static_cast<unsigned>(progress.queueDepth),
@@ -946,10 +1183,19 @@ void renderInventoryPage() {
                   static_cast<unsigned long long>(progress.dropped));
     display.setCursor(14, 86);
     display.print(line);
-    for (std::size_t index = 0; index < surveySession.size(); ++index) {
+    constexpr std::size_t kVisibleSurveyRows = 3;
+    const std::size_t selection = surveyController.selection();
+    const std::size_t firstVisible =
+        selection < kVisibleSurveyRows ? 0 : selection - kVisibleSurveyRows + 1;
+    const std::size_t endVisible =
+        surveySession.size() < firstVisible + kVisibleSurveyRows
+            ? surveySession.size()
+            : firstVisible + kVisibleSurveyRows;
+    for (std::size_t index = firstVisible; index < endVisible; ++index) {
         const Observation* observation = surveySession.get(index);
         if (observation == nullptr) continue;
-        const std::int32_t y = 100 + static_cast<std::int32_t>(index) * 40;
+        const std::int32_t y = 100 +
+            static_cast<std::int32_t>(index - firstVisible) * 40;
         const bool selected = surveyController.selection() == index;
         const std::uint16_t background = selected ? display.color565(26, 78, 52)
                                                    : display.color565(13, 22, 17);
@@ -957,7 +1203,18 @@ void renderInventoryPage() {
         display.setTextFont(2);
         display.setTextColor(selected ? TFT_YELLOW : TFT_LIGHTGREY, background);
         display.setCursor(20, y + 3);
-        display.print(observation->label.data());
+        char visibleLabel[16] = {};
+        const std::size_t visibleLength = observation->labelLength < 15U
+            ? observation->labelLength : 15U;
+        if (visibleLength == 0) {
+            std::strcpy(visibleLabel, "<hidden>");
+        } else {
+            std::memcpy(visibleLabel, observation->label.data(), visibleLength);
+            if (observation->labelLength > visibleLength) {
+                visibleLabel[visibleLength - 1U] = '~';
+            }
+        }
+        display.print(visibleLabel);
         display.setTextFont(1);
         display.setTextColor(TFT_GREEN, background);
         std::snprintf(line, sizeof(line), "CH %u  %d dBm",
@@ -1069,14 +1326,22 @@ void renderInteractiveScreen() {
         display.print("up/down | blocked item has reason");
     } else if (uiController.page() == 2 &&
                surveyWorkflow.state() == SurveyWorkflowState::Setup) {
-        display.print("select start | back cancel | RF off");
+        display.print(surveyWorkflow.simulated()
+                          ? "select start | back cancel | RF off"
+                          : "select scan | back cancel | RX only");
     } else if (uiController.page() == 2 && surveyController.view() == SurveyView::Detail) {
-        display.print("back: list | simulated data | RF off");
+        display.print(surveyWorkflow.simulated()
+                          ? "back: list | simulated data | RF off"
+                          : "back: list | real passive | RX only");
     } else if (uiController.page() == 2 &&
                surveyWorkflow.state() == SurveyWorkflowState::Running) {
-        display.print("select detail | right stop | RF off");
+        display.print(surveyWorkflow.simulated()
+                          ? "select detail | right stop | RF off"
+                          : "select detail | right save | RX only");
     } else if (uiController.page() == 2) {
-        display.print("committed once | back home | RF off");
+        display.print(surveyWorkflow.simulated()
+                          ? "committed once | back home | RF off"
+                          : "saved once | back home | RX only");
     } else if (uiController.page() == 3 &&
                libraryController.view() == LibraryView::ExportReady) {
         display.print("USB export | back detail | RF off");
@@ -1094,7 +1359,7 @@ void renderInteractiveScreen() {
 }
 
 void emitUiState(Stream& reply, UiAction action, bool changed) {
-    char line[1280] = {};
+    char line[2048] = {};
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const LibraryEntry* selectedLibrary = libraryController.selected();
     std::snprintf(line, sizeof(line),
@@ -1110,7 +1375,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   selected == nullptr ? "missing selection" : selected->reason,
                   static_cast<unsigned long>(uiController.revision()));
     const std::size_t length = std::strlen(line);
-    if (length > 0 && length + 768 < sizeof(line)) {
+    if (length > 0 && length + 1500 < sizeof(line)) {
         const SurveyPipelineProgress pipelineProgress = surveyPipeline.progress();
         line[length - 1] = '\0';
         std::snprintf(line + length - 1, sizeof(line) - length + 1,
@@ -1125,12 +1390,28 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_dropped\":%llu,\"survey_queue_depth\":%u,"
                       "\"survey_queue_high_water\":%u,"
                       "\"survey_batch_trigger\":\"%s\","
+                      "\"survey_product_selected\":%s,"
+                      "\"survey_product_status\":\"%s\","
+                      "\"survey_product_backend_open\":%s,"
+                      "\"survey_product_store_status\":\"%s\","
+                      "\"survey_product_admission_status\":\"%s\","
+                      "\"survey_product_expected_cid\":\"%s\","
+                      "\"survey_product_observed_cid\":\"%s\","
+                      "\"survey_product_capacity_bytes\":%llu,"
+                      "\"survey_product_cached_free_bytes\":%llu,"
+                      "\"survey_scan_status\":\"%s\","
+                      "\"survey_scan_reported\":%u,"
+                      "\"survey_scan_read\":%u,"
+                      "\"survey_scan_accepted\":%u,"
+                      "\"survey_scan_rejected\":%u,"
+                      "\"survey_scan_dropped\":%u,"
+                      "\"survey_product_cleanup_complete\":%s,"
                       "\"library_simulated\":%s,\"library_view\":\"%s\","
                       "\"library_entries\":%u,\"library_generation\":%lu,"
                       "\"library_persistent\":%s}",
                       lastRuntimeEvent, appRuntime.activeApp(),
                       static_cast<unsigned long>(appRuntime.activeResources()),
-                      surveyDemoReady ? "true" : "false",
+                      surveyWorkflow.simulated() ? "true" : "false",
                       surveyController.view() == SurveyView::Detail ? "detail" : "list",
                       leshy1::apps::survey::surveyWorkflowStateName(
                           surveyWorkflow.state()),
@@ -1150,6 +1431,29 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(pipelineProgress.queueHighWater),
                       leshy1::services::survey::sessionBatchTriggerName(
                           pipelineProgress.trigger),
+                      productSurveyRuntime.selected ? "true" : "false",
+                      productSurveyRuntime.status,
+                      productSurveyRuntime.backendOpen ? "true" : "false",
+                      leshy1::storage::productStoreAccessStatusName(
+                          productSurveyRuntime.storeStatus),
+                      leshy1::apps::survey::productSurveyAdmissionStatusName(
+                          productSurveyRuntime.admissionStatus),
+                      productSurveyRuntime.expectedFingerprint,
+                      productSurveyRuntime.observedFingerprint,
+                      static_cast<unsigned long long>(
+                          productSurveyRuntime.cardCapacityBytes),
+                      static_cast<unsigned long long>(
+                          productSurveyRuntime.cachedFreeBytes),
+                      leshy1::platform::arduino::boardWifiScanStatusName(
+                          productSurveyRuntime.scan.status),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.scan.recordsReported),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.scan.recordsRead),
+                      static_cast<unsigned>(productSurveyRuntime.scan.accepted),
+                      static_cast<unsigned>(productSurveyRuntime.scan.rejected),
+                      static_cast<unsigned>(productSurveyRuntime.scan.dropped),
+                      productSurveyRuntime.cleanupComplete ? "true" : "false",
                       selectedLibrary != nullptr && selectedLibrary->simulated
                           ? "true" : "false",
                       libraryController.view() == LibraryView::ExportReady
@@ -1176,19 +1480,28 @@ bool applyUiAction(UiAction action, bool render = true) {
         if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
             (action == UiAction::Select || action == UiAction::Right)) {
             handled = true;
-            std::uint64_t startedUs =
-                static_cast<std::uint64_t>(esp_timer_get_time());
-            if (startedUs == 0) startedUs = 1;
-            const SurveyPipelineStatus started =
-                surveyPipeline.start("product-wifi-preview", startedUs);
-            changed = started == SurveyPipelineStatus::Started &&
-                      publishGoldenObservations(surveyPipeline);
-            lastRuntimeEvent =
-                leshy1::apps::survey::surveyPipelineStatusName(
-                    changed ? surveyPipeline.lastStatus() : started);
+            if (productSurveyRuntime.selected) {
+                changed = startProductSurvey();
+            } else {
+                std::uint64_t startedUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                if (startedUs == 0) startedUs = 1;
+                const SurveyPipelineStatus started =
+                    surveyPipeline.start("product-wifi-preview", startedUs);
+                changed = started == SurveyPipelineStatus::Started &&
+                          publishGoldenObservations(surveyPipeline);
+                lastRuntimeEvent =
+                    leshy1::apps::survey::surveyPipelineStatusName(
+                        changed ? surveyPipeline.lastStatus() : started);
+            }
         } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
                    (action == UiAction::Back || action == UiAction::Left)) {
             surveyPipeline.cancel();
+            if (productSurveyRuntime.selected) {
+                const bool cleanup = closeProductSurveyBackend();
+                productSurveyRuntime.status = cleanup ? "cancelled"
+                                                       : "cleanup_failed";
+            }
             lastRuntimeEvent =
                 leshy1::apps::survey::surveyPipelineStatusName(
                     surveyPipeline.lastStatus());
@@ -1210,14 +1523,25 @@ bool applyUiAction(UiAction action, bool render = true) {
                 changed = surveyController.openSelected();
             } else if (action == UiAction::Right) {
                 handled = true;
-                const SurveyPipelineStatus status = surveyPipeline.stopAndCommit(
-                    static_cast<std::uint64_t>(esp_timer_get_time()));
+                const SurveyPipelineStatus status =
+                    productSurveyRuntime.selected
+                        ? stopProductSurvey()
+                        : surveyPipeline.stopAndCommit(
+                              static_cast<std::uint64_t>(esp_timer_get_time()));
                 changed = status == SurveyPipelineStatus::Committed;
-                lastRuntimeEvent =
-                    leshy1::apps::survey::surveyPipelineStatusName(status);
+                if (!productSurveyRuntime.selected) {
+                    lastRuntimeEvent =
+                        leshy1::apps::survey::surveyPipelineStatusName(status);
+                }
             } else if ((action == UiAction::Back || action == UiAction::Left) &&
                        surveyWorkflow.state() == SurveyWorkflowState::Running) {
-                handled = true;
+                surveyPipeline.cancel();
+                if (productSurveyRuntime.selected) {
+                    const bool cleanup = closeProductSurveyBackend();
+                    productSurveyRuntime.status = cleanup ? "cancelled"
+                                                           : "cleanup_failed";
+                }
+                lastRuntimeEvent = "survey_cancelled";
             }
         }
         if (handled) {
@@ -1269,9 +1593,19 @@ bool applyUiAction(UiAction action, bool render = true) {
         lastRuntimeEvent = leshy1::kernel::runtime::launchStatusName(launchStatus);
         openable = launchStatus == LaunchStatus::Started;
         if (openable && selected != nullptr &&
-            std::strcmp(selected->id, "survey") == 0 &&
-            surveyWorkflow.state() != SurveyWorkflowState::Setup) {
-            surveyPipeline.resetToSetup();
+            std::strcmp(selected->id, "survey") == 0) {
+            if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
+                surveyPipeline.resetToSetup();
+            }
+            closeProductSurveyBackend();
+            productSurveyRuntime = {};
+            productSurveyRuntime.selected = !selected->simulated;
+            const SurveyWorkflowStatus configured = surveyWorkflow.configure(
+                productSurveyRuntime.selected, selected->simulated);
+            if (configured != SurveyWorkflowStatus::Ready) {
+                openable = false;
+                lastRuntimeEvent = "survey_config_rejected";
+            }
         }
     }
     const bool changed = uiController.apply(
@@ -4956,6 +5290,9 @@ void setup() {
         inventory.add({"library.persistent_session", CapabilityState::Available,
                        "boot_readonly_product_catalog",
                        "validated_session_open"});
+        inventory.add({"survey.persistent_passive", CapabilityState::Available,
+                       "boot_readonly_product_catalog",
+                       "exact_media_ready_for_explicit_commit"});
     }
     inventory.add({"storage.sd", CapabilityState::Unknown,
                    "E-STORAGE-006_gpio38_non_authoritative",

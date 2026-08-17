@@ -257,6 +257,14 @@ promotion; реальный GitHub workflow run прошёл:
   только после exact-CID read-only catalog admission с zero SD writes. Version 0.44
   прошла обе половины на board-01 и сохраняет machine-checked product-boot artifact;
   включение этого перехода states в release orchestrator остаётся pre-release work;
+- `tools/run_1x_product_survey_hil.py` — service-free lane для enrolled media. Когда
+  device и exact product card подключены, одна команда при необходимости прошивает
+  exact candidate, делает pre/post cold boot, требует exact-CID read-only recovery,
+  допускает запись только после bounded cached-FSInfo и непротиворечивого passive-scan
+  accounting, commits ровно следующую generation, снимает TFT
+  Setup/Running/Committed/Export, проверяет persistent Library export и заканчивает
+  lease 0. Retained board run 0.45 machine-checked через
+  `check_product_survey_acceptance.py`; для release gate ещё нужна GitHub attestation/orchestration;
 - golden bootstrap создаёт только отсутствующие compressed RGB565 и отказывается
   перезаписывать существующие; обычный run требует exact Home/Back и masked-exact
   Diagnostics с одной явной dynamic region;
@@ -272,6 +280,17 @@ promotion; реальный GitHub workflow run прошёл:
 - runner создаёт random 128-bit run ID; firmware принимает `hil.begin` только при
   exact running app identity, запрещает nested session и завершает только тот же ID.
   Manifest, begin/end, run и local result обязаны совпасть;
+
+Текущая прямая команда product lane:
+
+```bash
+python tools/run_1x_product_survey_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.45.0-product-survey-measure \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output /tmp/leshy-product-survey-hil --flash
+```
 - candidate сначала копируется в `candidate/firmware.bin` внутри нового bundle,
   повторно хешируется и только затем прошивается; verifier по умолчанию использует
   эту indexed copy, поэтому evidence не зависит от mutable build path;

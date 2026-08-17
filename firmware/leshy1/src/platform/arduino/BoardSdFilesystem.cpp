@@ -268,6 +268,23 @@ std::uint64_t BoardSdFilesystem::freeBytes() const {
            fatSectorSize(filesystem);
 }
 
+std::uint64_t BoardSdFilesystem::cachedFreeBytes() const {
+    if (!mounted_ || driveNumber_ >= FF_VOLUMES) return 0;
+    char root[4] = {static_cast<char>('0' + driveNumber_), ':', '/', '\0'};
+    FF_DIR directory{};
+    if (f_opendir(&directory, root) != FR_OK) return 0;
+    const FATFS* filesystem = directory.obj.fs;
+    std::uint64_t result = 0;
+    if (filesystem != nullptr && filesystem->n_fatent >= 2U &&
+        filesystem->free_clst <= filesystem->n_fatent - 2U) {
+        result = static_cast<std::uint64_t>(filesystem->csize) *
+                 static_cast<std::uint64_t>(filesystem->free_clst) *
+                 fatSectorSize(filesystem);
+    }
+    f_closedir(&directory);
+    return result;
+}
+
 bool BoardSdFilesystem::exists(const char* path) const {
     if (!mounted_ || driveNumber_ >= FF_VOLUMES || path == nullptr ||
         path[0] != '/') {

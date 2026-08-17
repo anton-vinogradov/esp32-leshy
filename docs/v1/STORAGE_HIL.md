@@ -369,6 +369,16 @@ generation 1/17 persistent Library; export was valid/non-simulated/RF-off and Ba
 released lease 5→0. The machine-checked retained artifact is
 [`board-01-product-boot-0.44.json`](../../tests/hil/evidence/board-01-product-boot-0.44.json).
 
+Version 0.45 closes the interactive worker boundary on the same enrolled card.
+Explicit product Start uses the cached FAT/FSInfo free-cluster hint rather than
+`f_getfree`, authorizes a bounded 64 KiB commit plus 1 MiB reserve, runs passive
+Wi-Fi under lease 15, and keeps the mount open only through Stop/abort. The automatic
+exact-candidate lane accepted/forwarded 15/15 observations without reject/drop,
+published generation 2→3, unmounted cleanly, then cold-boot recovered exactly 3/15
+through the write-blocked driver and exported it from persistent Library. A separate
+Back-from-Running probe retained generation 2 with no commit and lease 0. Retained
+evidence: [`board-01-product-survey-0.45.json`](../../tests/hil/evidence/board-01-product-survey-0.45.json).
+
 ## Acceptance
 
 | ID | Required result |
@@ -382,17 +392,16 @@ released lease 5→0. The machine-checked retained artifact is
 | ST-HIL-A07 | SD and LittleFS are measured separately; throughput reports sample size, p50/p95/p99, sync latency, and free-space delta |
 | ST-HIL-A08 | Physical power-cut repeats the boundary matrix before PR-005/RB-06 can be verified |
 | ST-HIL-A09 | Enrolled exact-CID cold boot admits the latest valid product Session through a write-blocking driver with zero SD writes and complete lease/mount cleanup |
+| ST-HIL-A10 | Explicit product Survey accepts real passive observations, publishes exactly one next bounded generation, survives read-only reboot/export, and aborts without a commit or leaked lease |
 
 The offline Library/reopen, bounded export, non-mounting discovery, mount policy, SD
 identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit plus
 remount/reopen, a 32-commit p50/p95/p99 throughput distribution, and the host/static
 reset harness plus physical six-boundary matrix are implemented. The fixed queue and
 batched publication cadence are now host-tested, and E-HIL-038 delivers 9,068 encoded
-B/s against the 2,184 B/s RB-06 target. E-HIL-053 now closes ST-HIL-A09 on one
-board/card and keeps the generic fixture isolated from product enrollment. The next
-safe work is to connect the proven passive/persistent path to product
-Setup/Running/Stop & Commit without overwriting the boot-recovered Library with the
-simulated/RAM workflow. The readiness retry also awaits a natural transient. Physical power-cut
-still needs a controller.
+B/s against the 2,184 B/s RB-06 target. E-HIL-053 closes ST-HIL-A09 and E-HIL-054
+closes ST-HIL-A10 on one board/card while keeping the generic fixture isolated from
+product enrollment. The readiness retry still awaits a natural transient. Physical
+power-cut still needs a controller.
 LittleFS is not touched until a dedicated disposable partition/image is proven; the
 current flash filesystem may contain legacy/product data.

@@ -53,6 +53,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/storage/SessionCodec.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SessionStore.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SessionStoreBoundary.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/SessionStoreIoRouter.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/StorageGuard.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/StorageTiming.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/Pcf8574ButtonInput.cpp" \
@@ -88,8 +89,10 @@ python3 "$repo_dir/tools/check_hil_probe.py"
 python3 "$repo_dir/tools/check_clean_target.py"
 python3 "$repo_dir/tools/check_keypad_acceptance.py"
 python3 "$repo_dir/tools/check_product_boot_acceptance.py"
+python3 "$repo_dir/tools/check_product_survey_acceptance.py"
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
+python3 "$repo_dir/tools/test_product_survey_hil_runner.py"
 python3 "$repo_dir/tools/test_prerelease_bundle_verifier.py"
 python3 "$repo_dir/tools/test_prerelease_bundle_package.py"
 python3 "$repo_dir/tools/test_release_1x.py"

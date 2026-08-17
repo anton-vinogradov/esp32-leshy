@@ -257,6 +257,14 @@ promotion; a real GitHub workflow run now passes:
   after exact-CID read-only catalog admission with zero SD writes. Version 0.44 passed
   both halves on board-01 and retains a machine-checked product-boot artifact; folding
   this state transition into the release orchestrator remains pre-release work;
+- `tools/run_1x_product_survey_hil.py` is the service-free enrolled-media lane. With
+  the device and exact product card connected, one invocation optionally flashes the
+  exact candidate, performs pre/post cold boots, requires exact-CID read-only recovery,
+  admits a write only after bounded cached-FSInfo and passive-scan accounting pass,
+  commits exactly one next generation, captures Setup/Running/Committed/Export TFT
+  frames, validates persistent Library export, and finishes at lease 0. Its retained
+  0.45 board run is machine-checked by `check_product_survey_acceptance.py`; GitHub
+  attestation/orchestration is still required before this local result can gate a release;
 - golden bootstrap creates missing compressed RGB565 only and refuses to overwrite
   existing files; a normal run requires exact Home/Back and masked-exact Diagnostics
   with one explicit dynamic region;
@@ -273,6 +281,17 @@ promotion; a real GitHub workflow run now passes:
 - the runner creates a random 128-bit run ID; firmware accepts `hil.begin` only for
   the exact running app identity, rejects a nested session, and ends only that same
   ID. Manifest, begin/end, run, and local result must agree;
+
+The current direct product-lane command is:
+
+```bash
+python tools/run_1x_product_survey_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.45.0-product-survey-measure \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output /tmp/leshy-product-survey-hil --flash
+```
 - the candidate is first copied to `candidate/firmware.bin` inside the new bundle,
   rehashed, and only then flashed; the verifier defaults to that indexed copy, so
   evidence no longer depends on a mutable build path;

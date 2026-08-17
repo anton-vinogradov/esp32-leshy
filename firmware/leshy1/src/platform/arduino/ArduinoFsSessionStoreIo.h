@@ -21,6 +21,8 @@ struct ArduinoFsSessionStoreWorkspace final {
 // observable; Arduino FS::File hides the result of its flush barrier.
 class ArduinoFsSessionStoreIo final : public storage::SessionStoreIo {
 public:
+    explicit ArduinoFsSessionStoreIo(ArduinoFsSessionStoreWorkspace& workspace)
+        : workspace_(workspace) {}
     ArduinoFsSessionStoreIo(std::uint8_t driveNumber,
                             ArduinoFsSessionStoreWorkspace& workspace)
         : workspace_(workspace), driveNumber_(driveNumber) {}
@@ -32,6 +34,7 @@ public:
     bool openExistingReadOnly(const storage::WritePermit& permit);
     bool openExistingReadOnly(const storage::ReadPermit& permit);
     bool openExistingReadOnly(const storage::ProductStorePermit& permit);
+    bool selectDrive(std::uint8_t driveNumber);
     void end();
 
     bool writeFile(const char* path, const std::uint8_t* data,

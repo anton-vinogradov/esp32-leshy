@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include <esp_event.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
 
@@ -23,9 +24,20 @@ bool BoardWifiPassiveScanner::begin() {
     if (initialized_ || started_) return false;
     cleanupComplete_ = false;
     lastError_ = 0;
+    esp_err_t error = esp_event_loop_create_default();
+    if (error == ESP_OK) {
+        eventLoopOwned_ = true;
+        eventLoopReady_ = true;
+    } else if (error == ESP_ERR_INVALID_STATE) {
+        eventLoopReady_ = true;
+    } else {
+        lastError_ = error;
+        cleanupComplete_ = true;
+        return false;
+    }
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
     init.nvs_enable = 0;
-    esp_err_t error = esp_wifi_init(&init);
+    error = esp_wifi_init(&init);
     if (error != ESP_OK) {
         lastError_ = error;
         cleanupComplete_ = true;
@@ -145,6 +157,15 @@ bool BoardWifiPassiveScanner::end() {
     initialized_ = false;
     nvsDisabled_ = false;
     volatileStorageOnly_ = false;
+    if (eventLoopOwned_) {
+        const esp_err_t error = esp_event_loop_delete_default();
+        if (error != ESP_OK) {
+            lastError_ = error;
+            complete = false;
+        }
+    }
+    eventLoopOwned_ = false;
+    eventLoopReady_ = false;
     cleanupComplete_ = complete;
     return complete;
 }

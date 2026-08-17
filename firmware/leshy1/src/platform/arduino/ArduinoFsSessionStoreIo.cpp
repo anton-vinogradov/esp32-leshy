@@ -198,6 +198,12 @@ bool ArduinoFsSessionStoreIo::openExistingReadOnly(
            openExistingPath(permit.rootPath, 0, false, true);
 }
 
+bool ArduinoFsSessionStoreIo::selectDrive(std::uint8_t driveNumber) {
+    if (ready_ || pendingOpen_ || driveNumber >= FF_VOLUMES) return false;
+    driveNumber_ = driveNumber;
+    return true;
+}
+
 bool ArduinoFsSessionStoreIo::openExistingPath(
     const char* path, std::uint64_t byteLimit, bool writable,
     bool productRoot) {

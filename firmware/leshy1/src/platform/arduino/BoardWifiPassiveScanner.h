@@ -57,6 +57,7 @@ public:
     bool started() const { return started_; }
     bool nvsDisabled() const { return nvsDisabled_; }
     bool volatileStorageOnly() const { return volatileStorageOnly_; }
+    bool eventLoopReady() const { return eventLoopReady_; }
     bool cleanupComplete() const { return cleanupComplete_; }
     int lastError() const { return lastError_; }
 
@@ -65,6 +66,8 @@ private:
     bool started_ = false;
     bool nvsDisabled_ = false;
     bool volatileStorageOnly_ = false;
+    bool eventLoopReady_ = false;
+    bool eventLoopOwned_ = false;
     bool cleanupComplete_ = true;
     int lastError_ = 0;
 };

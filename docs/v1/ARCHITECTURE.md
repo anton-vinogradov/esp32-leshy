@@ -126,8 +126,20 @@ Recovery deliberately validates raw card capacity and does not call `f_getfree` 
 filesystem-capacity queries: boot does not need free space, and scanning a large FAT
 would make latency depend on media size. Enrollment is saved only after the same
 read-only recovery succeeds; unenrollment removes only the NVS CID and never accesses
-the SD. Initialization/commit remain explicit writable operations. The next product
-boundary is the real passive/persistent Survey worker, not storage boot admission.
+the SD. Initialization/commit remain explicit writable operations.
+
+Version 0.45 connects that admission to the interactive product Survey without changing
+the un-enrolled simulated fixture. AppCatalog prefers `survey.persistent_passive` only
+after exact-media boot recovery and atomically requests UI+EspRf+Storage+RadioSpi
+(lease 15). Explicit Start re-identifies the CID, mounts writable with formatting
+disabled, uses only the cached FAT/FSInfo free-cluster hint, authorizes a 64 KiB commit
+with a 1 MiB reserve, and routes the allocation-free workflow to the product store.
+The credential-free Wi-Fi adapter owns a temporary event loop, performs passive scan
+only, drains FIFO 64, and deinitializes before the user reviews the list. Stop publishes
+and reopens exactly the next generation before replacing Library; every exit closes the
+store/mount and routes the workflow back to RAM. Back from Running aborts without a
+commit and preserves the prior Library. Remaining storage boundaries are physical
+power-cut, endurance, and LittleFS parity rather than product-worker integration.
 
 ## Data model
 

@@ -361,6 +361,16 @@ Library generation 1/17; export valid/non-simulated/RF-off, Back освобод�
 Machine-checked retained artifact:
 [`board-01-product-boot-0.44.json`](../../tests/hil/evidence/board-01-product-boot-0.44.json).
 
+Version 0.45 закрывает interactive worker boundary на той же enrolled card. Explicit
+product Start использует cached FAT/FSInfo free-cluster hint вместо `f_getfree`,
+допускает bounded commit 64 KiB плюс reserve 1 MiB, запускает passive Wi-Fi под lease
+15 и держит mount только до Stop/abort. Automatic exact-candidate lane принял и
+forwarded 15/15 observations без reject/drop, опубликовал generation 2→3, cleanly
+unmounted, затем cold boot восстановил ровно 3/15 через write-blocked driver и
+экспортировал из persistent Library. Отдельный Back-from-Running probe сохранил
+generation 2 без commit и с lease 0. Retained evidence:
+[`board-01-product-survey-0.45.json`](../../tests/hil/evidence/board-01-product-survey-0.45.json).
+
 ## Приёмка
 
 | ID | Обязательный результат |
@@ -374,17 +384,16 @@ Machine-checked retained artifact:
 | ST-HIL-A07 | SD и LittleFS измеряются отдельно; throughput report содержит sample size, p50/p95/p99, sync latency и free-space delta |
 | ST-HIL-A08 | Physical power-cut повторяет boundary matrix до verification PR-005/RB-06 |
 | ST-HIL-A09 | Enrolled exact-CID cold boot допускает latest valid product Session через write-blocking driver с zero SD writes и complete lease/mount cleanup |
+| ST-HIL-A10 | Explicit product Survey принимает real passive observations, публикует ровно одну следующую bounded generation, переживает read-only reboot/export и aborts без commit или leaked lease |
 
 Offline Library/reopen, bounded export, non-mounting discovery, mount policy, SD
 identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit плюс
 remount/reopen, 32-commit p50/p95/p99 throughput distribution и host/static reset harness
 плюс physical six-boundary matrix реализованы. Fixed queue и batched publish cadence
 теперь host-tested, а E-HIL-038 даёт 9 068 encoded B/s при цели RB-06 2 184 B/s.
-E-HIL-053 закрывает ST-HIL-A09 на одной board/card и отделяет generic fixture от
-product enrollment. Следующая безопасная работа — подключить доказанный
-passive/persistent path к product Setup/Running/Stop & Commit, не перезаписывая
-boot-recovered Library simulated/RAM workflow. Readiness
-retry также ждёт natural transient.
+E-HIL-053 закрывает ST-HIL-A09, а E-HIL-054 — ST-HIL-A10 на одной board/card,
+сохраняя изоляцию generic fixture от product enrollment. Readiness retry также ждёт
+natural transient.
 Physical power-cut всё ещё требует controller. LittleFS не затрагивается,
 пока не доказан отдельный disposable partition/image; текущий flash filesystem может
 содержать legacy/product data.

@@ -21,6 +21,7 @@ def main() -> int:
     physical_sd_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSdSpiTransport.cpp"
     physical_sd_filesystem = TARGET / "src" / "platform" / "arduino" / "BoardSdFilesystem.cpp"
     session_store_filesystem = TARGET / "src" / "platform" / "arduino" / "ArduinoFsSessionStoreIo.cpp"
+    session_store_router = TARGET / "src" / "storage" / "SessionStoreIoRouter.cpp"
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
@@ -200,6 +201,20 @@ def main() -> int:
             if re.search(pattern, adapter):
                 errors.append(f"physical SD adapter contains forbidden storage API: {pattern}")
 
+    if not passive_wifi_adapter.is_file():
+        errors.append("explicit passive Wi-Fi adapter is missing")
+    else:
+        passive_adapter = passive_wifi_adapter.read_text(encoding="utf-8")
+        for marker in (
+            "esp_event_loop_create_default",
+            "esp_event_loop_delete_default",
+            "init.nvs_enable = 0",
+            "WIFI_STORAGE_RAM",
+            "WIFI_SCAN_TYPE_PASSIVE",
+        ):
+            if marker not in passive_adapter:
+                errors.append(f"passive Wi-Fi adapter is missing: {marker}")
+
     if not physical_sd_filesystem.is_file():
         errors.append("explicit guarded SD filesystem adapter is missing")
     else:
@@ -219,6 +234,9 @@ def main() -> int:
             "mount.format_if_mount_failed = false",
             "ff_diskio_get_pdrv_card",
             "guardSharedChipSelect",
+            "cachedFreeBytes",
+            "filesystem->free_clst",
+            "f_opendir",
         ):
             combined = filesystem_adapter + "\n" + (
                 physical_sd_filesystem.with_suffix(".h").read_text(encoding="utf-8")
@@ -284,6 +302,47 @@ def main() -> int:
     ):
         if marker not in entry:
             errors.append(f"Arduino entry is missing product boot recovery: {marker}")
+
+    for marker in (
+        '"survey.persistent_passive"',
+        "startProductSurvey()",
+        "closeProductSurveyBackend()",
+        "productSurveyFilesystem.cachedFreeBytes()",
+        "productSurveyStore.openExistingWritable(storePermit)",
+        "authorizeProductSurvey(surveyRequest)",
+        "scanner.scan(",
+        "enqueueProductSurveyRecord",
+        "stopProductSurvey()",
+        '\\"survey_product_cleanup_complete\\"',
+    ):
+        if marker not in entry:
+            errors.append(f"Arduino entry is missing product Survey lifecycle: {marker}")
+
+    product_start = entry.find("bool startProductSurvey()")
+    product_stop = entry.find("SurveyPipelineStatus stopProductSurvey()", product_start)
+    if product_start < 0 or product_stop <= product_start:
+        errors.append("bounded product Survey start function could not be inspected")
+    else:
+        product_start_body = entry[product_start:product_stop]
+        for forbidden_call in (".freeBytes(", ".filesystemCapacityBytes("):
+            if forbidden_call in product_start_body:
+                errors.append(
+                    "product Survey start contains unbounded FAT geometry scan: "
+                    f"{forbidden_call}"
+                )
+
+    if not session_store_router.is_file():
+        errors.append("allocation-free SessionStore backend router is missing")
+    else:
+        router = session_store_router.read_text(encoding="utf-8")
+        for marker in (
+            "backend_->writeFile",
+            "backend_->readFile",
+            "backend_->syncFile",
+            "backend_->syncDirectory",
+        ):
+            if marker not in router:
+                errors.append(f"SessionStore backend router is missing: {marker}")
 
     recovery_start = entry.find("void recoverProductCatalogForFingerprint(")
     recovery_end = entry.find("void recoverProductCatalogAtBoot()", recovery_start)
