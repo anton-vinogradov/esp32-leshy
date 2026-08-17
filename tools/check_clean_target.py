@@ -119,7 +119,11 @@ def main() -> int:
             "xTaskCreatePinnedToCore",
             "xQueueSend",
             "xQueueReceive",
-            "kPhysicalInputQueueCapacity = 16",
+            "kPhysicalInputQueueCapacity = 64",
+            "dispatchedThisBatch < kPhysicalInputQueueCapacity",
+            "applyUiAction(inputEvent.action, false)",
+            "physicalInputQueueHighWater",
+            '\\"kind\\\":\\\"batch',
             '"input.state"',
         ):
             if marker not in entry:

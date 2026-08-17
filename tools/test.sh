@@ -86,6 +86,7 @@ trap 'rm -rf "$test_tmp"' EXIT
 "$test_tmp/hil_probe_logic_tests"
 python3 "$repo_dir/tools/check_hil_probe.py"
 python3 "$repo_dir/tools/check_clean_target.py"
+python3 "$repo_dir/tools/check_keypad_acceptance.py"
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_prerelease_bundle_verifier.py"

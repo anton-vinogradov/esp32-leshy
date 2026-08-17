@@ -242,7 +242,7 @@ promotion; a real GitHub workflow run now passes:
 - `tools/run_1x_prerelease_hil.py` loads a declarative suite, flashes the exact
   candidate through verified esptool only with explicit `--flash`, performs a cold
   reset, keeps one passive USB session for Actions/captures, and creates a bundle;
-- `tests/hil/device-smoke.v1.json` revision 5 defines the dedicated bounded physical
+- `tests/hil/device-smoke.v1.json` revision 6 defines the dedicated bounded physical
   keypad frontend, fail-closed product admission,
   Home→Diagnostics→Back, and
   product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
@@ -386,6 +386,25 @@ drops, and retained ten zero-mismatch TFT comparisons. Final owner/lease was
 `run.json` is `ab29096a…b97ee`, index `3b3a3ccb…a0f8ce`. This automatic run proves
 the deployed frontend/task/queue contract but intentionally cannot generate
 physical switch edges; UI-HIL-A8 is a separate guided pre-release artifact.
+
+The guided edge test then caught two defects that the serial-only suite could not.
+On 0.41, a chaotic run captured 43 presses/43 releases with no I2C error but dropped
+46 queued press/release transitions. On 0.42, press-only queueing plus state batching
+still delivered only 27 of 48 captured presses and dropped 21 because per-action
+diagnostic output and a 16-entry queue remained on the consumer path. Both automatic
+runs were green, so these are explicit negative evidence `E-HIL-050/051`.
+
+Candidate `0.43.0-keypad-burst-buffer-measure` advances the suite to revision 6,
+uses a 64-entry press-only ordered queue, drains the accumulated actions before one
+TFT redraw, and emits one diagnostic record per batch. Automatic run
+`d28fac6bd45fc9713d7e5e1f114af86c` flashed exact app
+`cf0adf5a…befbab0`/ELF `8114a78b…eec75e`, reached ready in 503.657 ms, retained ten
+zero-mismatch frames, final owner/lease `none`/`0`, heap total/free/min
+281,176/233,140/227,744 B, and GPIO2 LOW. `run.json` is `1990446e…9e1e46`, index
+`742ee472…2d557`. The bound physical UI-HIL-A8 artifact then records exactly ten of
+each key, 50 presses, 50 releases, 50 public UI dispatches/revisions, 5 ms maximum
+sample gap, high-water 6/64, and zero I2C errors, ambiguity, residual depth, or drops.
+The retained physical artifact SHA-256 is `c7b8af2e…7523dbdc`.
 
 A historical copy of this real bundle was signed with a temporary Ed25519 key and
 returned `release_eligible=true`; the temporary key and copy were then destroyed.

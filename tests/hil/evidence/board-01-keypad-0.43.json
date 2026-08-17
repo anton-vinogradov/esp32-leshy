@@ -1,0 +1,59 @@
+{
+  "schema": "leshy.input.physical_acceptance.v1",
+  "status": "pass",
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "firmware_version": "0.43.0-keypad-burst-buffer-measure",
+  "firmware_sha256": "cf0adf5aedd10ed4b37e05cbd12496b0d7b2e340bbe6a6f6f9dcfc8b6befbab0",
+  "app_elf_sha256": "8114a78bd7a231024cfd00f266020c6fa0ac92c879d8a6afe3bdb6e377eec75e",
+  "automatic_hil": {
+    "suite": "device-smoke",
+    "revision": 6,
+    "run_id": "d28fac6bd45fc9713d7e5e1f114af86c",
+    "run_sha256": "1990446ecf449e3b7d3081f9a60c860cae92a2c42d7d167ff4fc26ce3c9e1e46",
+    "artifact_index_sha256": "742ee4728664d7fb1677f7d8fd29f261012e9f10924ea9c3ac00f8afc782d557"
+  },
+  "procedure": {
+    "operator_actions": "ten ordinary physical presses of each mapped key in any order",
+    "expected_per_key": 10,
+    "expected_total": 50
+  },
+  "before": {
+    "press_events": 0,
+    "release_events": 0,
+    "dispatched_press_events": 0,
+    "read_errors": 0,
+    "ambiguous_presses": 0,
+    "queue_capacity": 64,
+    "queue_depth": 0,
+    "queue_high_water": 0,
+    "queue_drops": 0,
+    "maximum_sample_gap_ms": 5,
+    "stable_raw": 255,
+    "ui_revision": 17
+  },
+  "after": {
+    "press_events": 50,
+    "release_events": 50,
+    "dispatched_press_events": 50,
+    "presses": {
+      "select": 10,
+      "up": 10,
+      "down": 10,
+      "left": 10,
+      "right": 10
+    },
+    "raw_transitions": 100,
+    "stable_transitions": 100,
+    "read_errors": 0,
+    "ambiguous_presses": 0,
+    "queue_capacity": 64,
+    "queue_depth": 0,
+    "queue_high_water": 6,
+    "queue_drops": 0,
+    "maximum_sample_gap_ms": 5,
+    "latest_raw": 255,
+    "stable_raw": 255,
+    "ui_revision": 67
+  }
+}

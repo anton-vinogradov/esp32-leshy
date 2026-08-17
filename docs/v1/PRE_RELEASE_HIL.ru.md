@@ -242,7 +242,7 @@ promotion; реальный GitHub workflow run прошёл:
 - `tools/run_1x_prerelease_hil.py` загружает declarative suite, по явному `--flash`
   прошивает exact candidate через esptool с verify, делает cold reset, держит один
   passive USB session для Actions/captures и формирует bundle;
-- `tests/hil/device-smoke.v1.json` revision 5 задаёт отдельный bounded frontend
+- `tests/hil/device-smoke.v1.json` revision 6 задаёт отдельный bounded frontend
   physical keypad, fail-closed product admission,
   Home→Diagnostics→Back и
   product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
@@ -383,6 +383,25 @@ total/free/min 281 184/233 556/228 160 B, GPIO2 LOW. `run.json`
 `ab29096a…b97ee`, index `3b3a3ccb…a0f8ce`. Этот automatic run подтверждает
 deployed frontend/task/queue contract, но намеренно не может создать physical switch
 edges; UI-HIL-A8 остаётся отдельным guided pre-release artifact.
+
+Guided edge test затем поймал два дефекта, недоступных serial-only suite. На 0.41
+хаотичный run поймал 43 presses/43 releases без I2C error, но потерял 46 queued
+press/release transitions. На 0.42 press-only queueing и state batching всё ещё
+доставили лишь 27 из 48 пойманных presses и потеряли 21: per-action diagnostic output
+и очередь 16 оставались в consumer path. Оба automatic runs были зелёными, поэтому
+это явное negative evidence `E-HIL-050/051`.
+
+Candidate `0.43.0-keypad-burst-buffer-measure` поднял suite до revision 6, использует
+ordered press-only queue 64, применяет накопившиеся actions до одной TFT redraw и
+публикует одну diagnostic record на batch. Automatic run
+`d28fac6bd45fc9713d7e5e1f114af86c` прошил exact app
+`cf0adf5a…befbab0`/ELF `8114a78b…eec75e`, достиг ready за 503,657 ms, сохранил
+десять zero-mismatch frames, final owner/lease `none`/`0`, heap total/free/min
+281 176/233 140/227 744 B, GPIO2 LOW. `run.json` `1990446e…9e1e46`, index
+`742ee472…2d557`. Bound physical artifact UI-HIL-A8 затем зафиксировал ровно десять
+каждой кнопки, 50 presses, 50 releases, 50 public UI dispatches/revisions, maximum
+sample gap 5 ms, high-water 6/64 и нули I2C errors, ambiguity, residual depth/drops.
+SHA-256 сохранённого physical artifact: `c7b8af2e…7523dbdc`.
 
 Историческая копия этого real bundle была подписана временным Ed25519 key и получила
 `release_eligible=true`, после чего temp key и copy уничтожены. Эксперимент

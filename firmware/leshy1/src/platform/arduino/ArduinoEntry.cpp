@@ -177,11 +177,13 @@ struct PhysicalInputEvent final {
     std::uint32_t atMs = 0;
 };
 
-constexpr UBaseType_t kPhysicalInputQueueCapacity = 16;
+constexpr UBaseType_t kPhysicalInputQueueCapacity = 64;
 QueueHandle_t physicalInputEvents = nullptr;
 TaskHandle_t physicalInputTaskHandle = nullptr;
 portMUX_TYPE physicalInputMux = portMUX_INITIALIZER_UNLOCKED;
 std::uint32_t physicalInputQueueDrops = 0;
+std::uint32_t physicalInputQueueHighWater = 0;
+std::uint32_t physicalInputDispatchedPresses = 0;
 bool physicalInputTaskStarted = false;
 
 struct SdPhysicalEvidenceWorkspace final {
@@ -396,19 +398,25 @@ void pollPhysicalInput(void*) {
         const bool valid = readInputRaw(&current);
         const std::uint32_t now = millis();
         PhysicalInputEvent event;
-        bool stableChanged = false;
         portENTER_CRITICAL(&physicalInputMux);
-        const std::uint8_t previousStable = physicalButtonInput.stableRaw();
         event.action = physicalButtonInput.sample(valid, current, now);
         event.raw = physicalButtonInput.stableRaw();
         event.atMs = now;
-        stableChanged = event.raw != previousStable;
         portEXIT_CRITICAL(&physicalInputMux);
-        if (stableChanged &&
-            xQueueSend(physicalInputEvents, &event, 0) != pdTRUE) {
-            portENTER_CRITICAL(&physicalInputMux);
-            ++physicalInputQueueDrops;
-            portEXIT_CRITICAL(&physicalInputMux);
+        if (event.action != UiAction::Unknown) {
+            if (xQueueSend(physicalInputEvents, &event, 0) != pdTRUE) {
+                portENTER_CRITICAL(&physicalInputMux);
+                ++physicalInputQueueDrops;
+                portEXIT_CRITICAL(&physicalInputMux);
+            } else {
+                const std::uint32_t depth = static_cast<std::uint32_t>(
+                    uxQueueMessagesWaiting(physicalInputEvents));
+                portENTER_CRITICAL(&physicalInputMux);
+                if (depth > physicalInputQueueHighWater) {
+                    physicalInputQueueHighWater = depth;
+                }
+                portEXIT_CRITICAL(&physicalInputMux);
+            }
         }
         vTaskDelayUntil(&lastWake,
                         pdMS_TO_TICKS(Pcf8574ButtonInput::kPollPeriodMs));
@@ -813,7 +821,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     reply.println(line);
 }
 
-bool applyUiAction(UiAction action) {
+bool applyUiAction(UiAction action, bool render = true) {
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const bool wasRoot = uiController.isRoot();
     if (!wasRoot && uiController.page() == 2) {
@@ -868,7 +876,7 @@ bool applyUiAction(UiAction action) {
         }
         if (handled) {
             uiController.recordHandledAction(action);
-            if (changed) renderInteractiveScreen();
+            if (changed && render) renderInteractiveScreen();
             return changed;
         }
     }
@@ -901,7 +909,7 @@ bool applyUiAction(UiAction action) {
         }
         if (handled) {
             uiController.recordHandledAction(action);
-            if (changed) renderInteractiveScreen();
+            if (changed && render) renderInteractiveScreen();
             return changed;
         }
     }
@@ -929,7 +937,7 @@ bool applyUiAction(UiAction action) {
         appRuntime.stop();
         lastRuntimeEvent = "stopped";
     }
-    if (changed) renderInteractiveScreen();
+    if (changed && render) renderInteractiveScreen();
     return changed;
 }
 
@@ -3881,9 +3889,11 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
 void emitInputState(Stream& reply) {
     leshy1::ui::Pcf8574ButtonInputMetrics metrics;
     std::uint32_t queueDrops = 0;
+    std::uint32_t queueHighWater = 0;
     portENTER_CRITICAL(&physicalInputMux);
     metrics = physicalButtonInput.metrics();
     queueDrops = physicalInputQueueDrops;
+    queueHighWater = physicalInputQueueHighWater;
     portEXIT_CRITICAL(&physicalInputMux);
     const unsigned queueDepth = physicalInputEvents == nullptr
                                     ? 0U
@@ -3903,7 +3913,9 @@ void emitInputState(Stream& reply) {
         "\"select\":%lu,\"up\":%lu,\"down\":%lu,"
         "\"left\":%lu,\"right\":%lu},"
         "\"maximum_sample_gap_ms\":%lu,\"queue_capacity\":%u,"
-        "\"queue_depth\":%u,\"queue_drops\":%lu}",
+        "\"queue_depth\":%u,\"queue_high_water\":%lu,"
+        "\"queue_drops\":%lu,"
+        "\"dispatched_press_events\":%lu}",
         physicalInputTaskStarted && bootMetrics.inputDetected ? "ready" : "unavailable",
         physicalInputTaskStarted ? "true" : "false",
         static_cast<unsigned long>(Pcf8574ButtonInput::kPollPeriodMs),
@@ -3925,7 +3937,9 @@ void emitInputState(Stream& reply) {
         static_cast<unsigned long>(metrics.rightPresses),
         static_cast<unsigned long>(metrics.maximumSampleGapMs),
         static_cast<unsigned>(kPhysicalInputQueueCapacity), queueDepth,
-        static_cast<unsigned long>(queueDrops));
+        static_cast<unsigned long>(queueHighWater),
+        static_cast<unsigned long>(queueDrops),
+        static_cast<unsigned long>(physicalInputDispatchedPresses));
     reply.println(line);
 }
 
@@ -4264,31 +4278,37 @@ void loop() {
     poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
     poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
     PhysicalInputEvent inputEvent;
-    if (physicalInputEvents != nullptr &&
-        xQueueReceive(physicalInputEvents, &inputEvent, 0) == pdTRUE) {
+    unsigned dispatchedThisBatch = 0;
+    bool batchChanged = false;
+    UiAction lastBatchAction = UiAction::Unknown;
+    while (physicalInputEvents != nullptr &&
+           dispatchedThisBatch < kPhysicalInputQueueCapacity &&
+           xQueueReceive(physicalInputEvents, &inputEvent, 0) == pdTRUE) {
         lastInputRaw = inputEvent.raw;
         bootMetrics.inputRaw = inputEvent.raw;
-        const bool changed = inputEvent.action == UiAction::Unknown
-                                 ? false
-                                 : applyUiAction(inputEvent.action);
-        if (!changed) renderInput(inputEvent.raw);
-        leshy1::ui::Pcf8574ButtonInputMetrics metrics;
+        const bool changed = applyUiAction(inputEvent.action, false);
+        batchChanged = changed || batchChanged;
+        lastBatchAction = inputEvent.action;
+        ++physicalInputDispatchedPresses;
+        ++dispatchedThisBatch;
+    }
+    if (dispatchedThisBatch != 0) {
         portENTER_CRITICAL(&physicalInputMux);
-        metrics = physicalButtonInput.metrics();
+        lastInputRaw = physicalButtonInput.stableRaw();
         portEXIT_CRITICAL(&physicalInputMux);
+        bootMetrics.inputRaw = lastInputRaw;
+        if (batchChanged) renderInteractiveScreen();
+        else renderInput(lastInputRaw);
         char line[320] = {};
         std::snprintf(line, sizeof(line),
                       "{\"schema\":\"leshy.input.frontend.v1\","
-                      "\"kind\":\"event\",\"raw\":%u,"
-                      "\"action\":\"%s\",\"changed\":%s,"
-                      "\"press_events\":%lu,\"release_events\":%lu,"
-                      "\"at_ms\":%lu}",
-                      static_cast<unsigned>(inputEvent.raw),
-                      leshy1::ui::uiActionName(inputEvent.action),
-                      changed ? "true" : "false",
-                      static_cast<unsigned long>(metrics.pressEvents),
-                      static_cast<unsigned long>(metrics.releaseEvents),
-                      static_cast<unsigned long>(inputEvent.atMs));
+                      "\"kind\":\"batch\",\"actions\":%u,"
+                      "\"last_action\":\"%s\",\"changed\":%s,"
+                      "\"dispatched_press_events\":%lu}",
+                      dispatchedThisBatch,
+                      leshy1::ui::uiActionName(lastBatchAction),
+                      batchChanged ? "true" : "false",
+                      static_cast<unsigned long>(physicalInputDispatchedPresses));
         broadcast(line);
     }
     delay(2);

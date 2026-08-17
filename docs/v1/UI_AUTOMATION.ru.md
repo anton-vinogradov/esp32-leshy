@@ -16,7 +16,7 @@
 
 Нормализованные actions: `up`, `down`, `left`, `right`, `select` и `back`. Frontend
 PCF8574 каждые 5 ms читает active-low inputs в отдельной задаче, требует 12 ms
-стабильного состояния и помещает нормализованные события в bounded-очередь из 16
+стабильного состояния и помещает нормализованные события в bounded-очередь из 64
 элементов. UI loop и локальная serial-команда `ui.key <action>` вызывают один
 allocation-free controller, поэтому перерисовка TFT больше не блокирует physical
 sampling. Ответ содержит принятое action, признак изменения, текущую
@@ -76,7 +76,7 @@ TFT, проверяет доступность той же revision после c
 | UI-HIL-A5 | После capture state доступен и имеет captured revision | JSON evidence sidecar |
 | UI-HIL-A6 | Golden/snapshot comparison не игнорирует критичный текст или selection | host visual test каждого screen/state |
 | UI-HIL-A7 | Connect, capture и disconnect UI client не перезагружают плату | reset counter/revision continuity trace |
-| UI-HIL-A8 | 10 обычных нажатий каждой physical кнопки дают ровно 50 presses и 50 releases, по 10 каждого normalized action, без ambiguity, I2C error, duplicate и queue drop | guided physical burst + artifact `input.state` до/после |
+| UI-HIL-A8 | 10 обычных нажатий каждой physical кнопки дают ровно 50 presses и 50 releases, по 10 каждого normalized action, 50 dispatched public UI actions, без ambiguity, I2C error, duplicate и queue drop | guided physical burst + machine-checked [artifact до/после](../../tests/hil/evidence/board-01-keypad-0.43.json) |
 
 Каждый reference workflow получает автоматизированный UI scenario по мере появления
 его экранов. Участие оператора остаётся только для evidence, которое не может дать
@@ -127,11 +127,21 @@ reviewed TFT comparisons с zero mismatch. Query доказывает, что б
 и trusted persistent store нет скрытого hardware/radio/storage действия или
 simulated fallback (`E-HIL-048`).
 
-Candidate 0.41 заменяет унаследованный 35 ms single-sample edge detector после
-наблюдения оператора примерно одного принятого нажатия из десяти. Host tests
-покрывают bounce, неверные чтения, held key, стабильный release, все пять mappings,
-ambiguous chord и wrap `millis()`. В полном `device-smoke` revision 5 отдельная
-input-задача сохранила measured maximum gap 5 ms; initial state дал 930 valid reads,
-zero read/queue errors и пустую bounded-очередь 16. Exact candidate затем без
-изменений прошёл прежний workflow и десять TFT comparisons (`E-HIL-049`). Для
-UI-HIL-A8 всё ещё нужны physical edges оператора: serial Actions их не заменяют.
+Candidate 0.41 заменил унаследованный 35 ms single-sample edge detector после
+наблюдения оператора примерно одного принятого нажатия из десяти. Host tests покрыли
+bounce, неверные чтения, held key, стабильный release, все пять mappings, ambiguous
+chord и wrap `millis()`. Automatic run revision 5 прошёл, но первый physical stress
+опроверг достаточность transition-очереди 16: frontend поймал 43 presses и 43
+releases с maximum gap 5 ms, а очередь потеряла 46 transitions. Candidate 0.42
+оставил в очереди только presses и batch-применял state до redraw; automatic run
+прошёл, но structured physical attempt поймал 48 presses, доставил только 27 и
+потерял 21 press. Эти failures сохранены как `E-HIL-050/051`, а не скрыты
+serial-only тестом.
+
+Candidate 0.43 рассчитывает ordered press queue на весь acceptance burst 50,
+применяет накопившийся state до одной redraw и публикует одну diagnostic record на
+batch. `device-smoke` revision 6 сохранил полный workflow и десять zero-mismatch TFT
+frames. Затем UI-HIL-A8 прошёл на том же exact app: каждая кнопка дала 10,
+presses/releases/dispatched — 50/50/50, UI revision выросла на 50, maximum sample
+gap 5 ms, queue high-water всего 6/64, errors, ambiguity, queue depth и drops — нули
+(`E-HIL-052`).

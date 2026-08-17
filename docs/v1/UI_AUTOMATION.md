@@ -16,7 +16,7 @@ directly.
 
 The normalized actions are `up`, `down`, `left`, `right`, `select`, and `back`.
 The PCF8574 frontend samples active-low inputs every 5 ms in a dedicated task,
-requires 12 ms of stable state, and places bounded normalized events in a 16-entry
+requires 12 ms of stable state, and places bounded normalized events in a 64-entry
 queue. The UI loop and the local serial command `ui.key <action>` both call the same
 allocation-free controller. TFT redraws therefore cannot block physical sampling.
 A response reports the accepted action, whether state changed, current
@@ -78,7 +78,7 @@ evidence client must not reset the board.
 | UI-HIL-A5 | Post-capture state is reachable and has the captured revision | JSON evidence sidecar |
 | UI-HIL-A6 | Golden/snapshot comparison ignores no critical text or selection state | host visual test per screen/state |
 | UI-HIL-A7 | UI client connect, capture, and disconnect do not reset the board | reset counter/revision continuity trace |
-| UI-HIL-A8 | 10 ordinary presses of each physical key produce exactly 50 presses and 50 releases, 10 per normalized action, with no ambiguity, I2C error, duplicate, or queue drop | guided physical burst + before/after `input.state` artifact |
+| UI-HIL-A8 | 10 ordinary presses of each physical key produce exactly 50 presses and 50 releases, 10 per normalized action, 50 dispatched public UI actions, and no ambiguity, I2C error, duplicate, or queue drop | guided physical burst + machine-checked [before/after artifact](../../tests/hil/evidence/board-01-keypad-0.43.json) |
 
 Each reference workflow receives an automated UI scenario as its screen states are
 implemented. Operator involvement is reserved for evidence the display controller
@@ -135,9 +135,18 @@ simulated fallback (`E-HIL-048`).
 Candidate 0.41 replaces the inherited 35 ms single-sample edge detector after the
 operator observed roughly one accepted press in ten. Host tests cover bounce,
 invalid reads, held keys, stable release, all five mappings, ambiguous chords, and
-`millis()` wrap. The dedicated input task remains at a measured 5 ms maximum gap
-during full `device-smoke` revision 5; its initial state reports 930 valid reads,
-zero read/queue errors, and an empty 16-entry queue. The exact candidate then passed
-the prior workflow and all ten TFT comparisons unchanged (`E-HIL-049`). UI-HIL-A8
-still requires the operator-generated physical edges; serial Actions are not a
-substitute for that evidence.
+`millis()` wrap. Its automatic revision-5 run passed, but the first physical stress
+falsified the 16-entry transition queue: the frontend captured 43 presses and 43
+releases at a 5 ms maximum gap while 46 queued transitions were dropped. Candidate
+0.42 queued presses only and batch-applied state before redraw; its automatic run
+passed, but a structured physical attempt captured 48 presses and delivered only 27,
+with 21 press drops. These failures are retained as `E-HIL-050/051` rather than
+being hidden by the serial-only test.
+
+Candidate 0.43 sizes the ordered press queue for the entire 50-action acceptance
+burst, drains accumulated state before one redraw, and emits one diagnostic record
+per batch. `device-smoke` revision 6 retained the complete workflow and ten
+zero-mismatch TFT frames. UI-HIL-A8 then passed on the exact same app: every key was
+10, presses/releases/dispatched were 50/50/50, UI revision advanced by 50, maximum
+sample gap was 5 ms, queue high-water was only 6/64, and errors, ambiguity, queue
+depth, and drops were all zero (`E-HIL-052`).

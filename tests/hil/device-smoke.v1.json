@@ -1,7 +1,7 @@
 {
   "schema": "leshy.prerelease.suite.v1",
   "id": "device-smoke",
-  "revision": 5,
+  "revision": 6,
   "maximum_ready_marker_ms": 2000,
   "boot_assert": {
     "target": "clean_1x_measure",
@@ -47,9 +47,11 @@
               "left": 0,
               "right": 0
             },
-            "queue_capacity": 16,
+            "queue_capacity": 64,
             "queue_depth": 0,
-            "queue_drops": 0
+            "queue_high_water": 0,
+            "queue_drops": 0,
+            "dispatched_press_events": 0
           }
         },
         {
