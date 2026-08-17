@@ -14,10 +14,18 @@
 
 ### Единый путь actions
 
-Нормализованные actions: `up`, `down`, `left`, `right`, `select` и `back`. Front
-edge кнопки PCF8574 и локальная serial-команда `ui.key <action>` вызывают один
-allocation-free controller. Ответ содержит принятое action, признак изменения,
-текущую страницу/selection и монотонно растущую revision UI.
+Нормализованные actions: `up`, `down`, `left`, `right`, `select` и `back`. Frontend
+PCF8574 каждые 5 ms читает active-low inputs в отдельной задаче, требует 12 ms
+стабильного состояния и помещает нормализованные события в bounded-очередь из 16
+элементов. UI loop и локальная serial-команда `ui.key <action>` вызывают один
+allocation-free controller, поэтому перерисовка TFT больше не блокирует physical
+sampling. Ответ содержит принятое action, признак изменения, текущую
+страницу/selection и монотонно растущую revision UI.
+
+`input.state` публикует valid/error samples, raw/stable transitions, счётчики каждой
+кнопки, maximum sample gap, ambiguity, queue depth и queue drops. Неверное чтение
+I2C не меняет debounced state; для следующего action той же кнопки обязателен
+стабильный release. Одновременный front нескольких кнопок fail closed как ambiguous.
 
 `ui.state` наблюдает то же публичное состояние UI, не меняя его. Автоматизация не
 вызывает setter конкретного экрана, не обходит cleanup по Back и не создаёт отдельное
@@ -68,6 +76,7 @@ TFT, проверяет доступность той же revision после c
 | UI-HIL-A5 | После capture state доступен и имеет captured revision | JSON evidence sidecar |
 | UI-HIL-A6 | Golden/snapshot comparison не игнорирует критичный текст или selection | host visual test каждого screen/state |
 | UI-HIL-A7 | Connect, capture и disconnect UI client не перезагружают плату | reset counter/revision continuity trace |
+| UI-HIL-A8 | 10 обычных нажатий каждой physical кнопки дают ровно 50 presses и 50 releases, по 10 каждого normalized action, без ambiguity, I2C error, duplicate и queue drop | guided physical burst + artifact `input.state` до/после |
 
 Каждый reference workflow получает автоматизированный UI scenario по мере появления
 его экранов. Участие оператора остаётся только для evidence, которое не может дать
@@ -117,3 +126,12 @@ Candidate 0.40 не меняет визуальный contract: revision-4 до�
 reviewed TFT comparisons с zero mismatch. Query доказывает, что без explicit Start
 и trusted persistent store нет скрытого hardware/radio/storage действия или
 simulated fallback (`E-HIL-048`).
+
+Candidate 0.41 заменяет унаследованный 35 ms single-sample edge detector после
+наблюдения оператора примерно одного принятого нажатия из десяти. Host tests
+покрывают bounce, неверные чтения, held key, стабильный release, все пять mappings,
+ambiguous chord и wrap `millis()`. В полном `device-smoke` revision 5 отдельная
+input-задача сохранила measured maximum gap 5 ms; initial state дал 930 valid reads,
+zero read/queue errors и пустую bounded-очередь 16. Exact candidate затем без
+изменений прошёл прежний workflow и десять TFT comparisons (`E-HIL-049`). Для
+UI-HIL-A8 всё ещё нужны physical edges оператора: serial Actions их не заменяют.

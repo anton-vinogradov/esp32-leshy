@@ -55,6 +55,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/storage/SessionStoreBoundary.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/StorageGuard.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/StorageTiming.cpp" \
+    "$repo_dir/firmware/leshy1/src/ui/Pcf8574ButtonInput.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/UiController.cpp" \
     -o "$test_tmp/clean_target_tests"
 

@@ -1,7 +1,7 @@
 {
   "schema": "leshy.prerelease.suite.v1",
   "id": "device-smoke",
-  "revision": 4,
+  "revision": 5,
   "maximum_ready_marker_ms": 2000,
   "boot_assert": {
     "target": "clean_1x_measure",
@@ -20,6 +20,38 @@
     {
       "id": "home-diagnostics-back",
       "steps": [
+        {
+          "id": "keypad-frontend-ready",
+          "query": {
+            "command": "input.state",
+            "schema": "leshy.input.frontend.v1",
+            "kind": "state"
+          },
+          "assert": {
+            "status": "ready",
+            "task_started": true,
+            "poll_period_ms": 5,
+            "debounce_ms": 12,
+            "button_mask": 248,
+            "stable_raw": 255,
+            "valid_samples": {
+              "$gte": 1
+            },
+            "press_events": 0,
+            "release_events": 0,
+            "ambiguous_presses": 0,
+            "presses": {
+              "select": 0,
+              "up": 0,
+              "down": 0,
+              "left": 0,
+              "right": 0
+            },
+            "queue_capacity": 16,
+            "queue_depth": 0,
+            "queue_drops": 0
+          }
+        },
         {
           "id": "home",
           "assert": {

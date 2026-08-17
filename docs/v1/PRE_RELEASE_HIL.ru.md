@@ -242,7 +242,8 @@ promotion; реальный GitHub workflow run прошёл:
 - `tools/run_1x_prerelease_hil.py` загружает declarative suite, по явному `--flash`
   прошивает exact candidate через esptool с verify, делает cold reset, держит один
   passive USB session для Actions/captures и формирует bundle;
-- `tests/hil/device-smoke.v1.json` revision 4 задаёт fail-closed product admission,
+- `tests/hil/device-smoke.v1.json` revision 5 задаёт отдельный bounded frontend
+  physical keypad, fail-closed product admission,
   Home→Diagnostics→Back и
   product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
   boot ≤2 s, board/profile, heap ≥128 KiB, owner/lease cleanup и GPIO2 LOW;
@@ -369,6 +370,19 @@ comparisons, final owner/lease `none`/`0`, heap total/free/min
 `e3796ec3…9608f1`; verifier подтверждает unsigned local development evidence, но
 не release eligibility. Реальный product RF/SD lifecycle этот run намеренно не
 запускал.
+
+Candidate `0.41.0-keypad-frontend-measure` поднял suite до revision 5 после physical
+регрессии responsiveness, которая показала, что serial Actions не проверяют frontend
+PCF8574. Candidate делает sampling/debounce в отдельной задаче и ставит stable
+transitions в очередь независимо от синхронной TFT redraw. Run
+`490608019ef55ae5c230ed1254a82fad` прошил exact app
+`03dc165c…70c05c5`/ELF `21f31ab2…ae8958`, достиг ready за 503,916 ms, измерил
+maximum keypad sample gap 5 ms при 930 valid/0 erroneous reads и zero queue drops,
+сохранил десять zero-mismatch TFT comparisons. Final owner/lease `none`/`0`, heap
+total/free/min 281 184/233 556/228 160 B, GPIO2 LOW. `run.json`
+`ab29096a…b97ee`, index `3b3a3ccb…a0f8ce`. Этот automatic run подтверждает
+deployed frontend/task/queue contract, но намеренно не может создать physical switch
+edges; UI-HIL-A8 остаётся отдельным guided pre-release artifact.
 
 Историческая копия этого real bundle была подписана временным Ed25519 key и получила
 `release_eligible=true`, после чего temp key и copy уничтожены. Эксперимент

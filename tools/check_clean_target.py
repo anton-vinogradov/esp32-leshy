@@ -23,6 +23,7 @@ def main() -> int:
     session_store_filesystem = TARGET / "src" / "platform" / "arduino" / "ArduinoFsSessionStoreIo.cpp"
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
+    keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
     survey_workflow_path = TARGET / "src" / "apps" / "survey" / "SurveyWorkflow.cpp"
     survey_pipeline_path = TARGET / "src" / "apps" / "survey" / "SurveyPipeline.cpp"
@@ -94,6 +95,35 @@ def main() -> int:
     serial_boot = "Serial.begin(kConsoleBaud);"
     if buzzer_boot not in entry or serial_boot not in entry or entry.find(buzzer_boot) > entry.find(serial_boot):
         errors.append("buzzer inactive invariant must be established before console startup")
+
+    if not keypad_frontend_path.is_file():
+        errors.append("testable physical keypad frontend is missing")
+    else:
+        keypad_frontend = keypad_frontend_path.read_text(encoding="utf-8")
+        keypad_header = keypad_frontend_path.with_suffix(".h").read_text(encoding="utf-8")
+        for marker in (
+            "kPollPeriodMs = 5",
+            "kDebounceMs = 12",
+            "kButtonMask",
+            "candidateSinceMs_",
+            "ambiguousPresses",
+            "maximumSampleGapMs",
+        ):
+            if marker not in keypad_frontend + "\n" + keypad_header:
+                errors.append(f"physical keypad frontend is missing: {marker}")
+        if "lastInputRaw & ~current" in entry:
+            errors.append("Arduino entry bypasses the debounced physical keypad frontend")
+        for marker in (
+            "physicalButtonInput.sample",
+            "Pcf8574ButtonInput::kPollPeriodMs",
+            "xTaskCreatePinnedToCore",
+            "xQueueSend",
+            "xQueueReceive",
+            "kPhysicalInputQueueCapacity = 16",
+            '"input.state"',
+        ):
+            if marker not in entry:
+                errors.append(f"Arduino entry is missing keypad integration: {marker}")
 
     if not survey_workflow_path.is_file():
         errors.append("product Survey workflow is missing")

@@ -15,9 +15,17 @@ directly.
 ### One action path
 
 The normalized actions are `up`, `down`, `left`, `right`, `select`, and `back`.
-PCF8574 press edges and the local serial command `ui.key <action>` both call the same
-allocation-free controller. A response reports the accepted action, whether state
-changed, current page/selection, and monotonically increasing UI revision.
+The PCF8574 frontend samples active-low inputs every 5 ms in a dedicated task,
+requires 12 ms of stable state, and places bounded normalized events in a 16-entry
+queue. The UI loop and the local serial command `ui.key <action>` both call the same
+allocation-free controller. TFT redraws therefore cannot block physical sampling.
+A response reports the accepted action, whether state changed, current
+page/selection, and monotonically increasing UI revision.
+
+`input.state` exposes valid/error samples, raw/stable transitions, per-key press
+counters, maximum sample gap, ambiguity, queue depth, and queue drops. An invalid
+I2C read never changes debounced state; a stable release is required before the same
+key can emit another action. Multi-key press edges fail closed as ambiguous.
 
 `ui.state` observes the same public UI state without changing it. Automation never
 calls a screen-specific setter, bypasses Back cleanup, or invents a test-only menu.
@@ -70,6 +78,7 @@ evidence client must not reset the board.
 | UI-HIL-A5 | Post-capture state is reachable and has the captured revision | JSON evidence sidecar |
 | UI-HIL-A6 | Golden/snapshot comparison ignores no critical text or selection state | host visual test per screen/state |
 | UI-HIL-A7 | UI client connect, capture, and disconnect do not reset the board | reset counter/revision continuity trace |
+| UI-HIL-A8 | 10 ordinary presses of each physical key produce exactly 50 presses and 50 releases, 10 per normalized action, with no ambiguity, I2C error, duplicate, or queue drop | guided physical burst + before/after `input.state` artifact |
 
 Each reference workflow receives an automated UI scenario as its screen states are
 implemented. Operator involvement is reserved for evidence the display controller
@@ -122,3 +131,13 @@ product-admission query before navigation and reuses the same ten reviewed TFT
 comparisons with zero mismatch. The query proves that without explicit Start and a
 trusted persistent store there is no hidden hardware/radio/storage action or
 simulated fallback (`E-HIL-048`).
+
+Candidate 0.41 replaces the inherited 35 ms single-sample edge detector after the
+operator observed roughly one accepted press in ten. Host tests cover bounce,
+invalid reads, held keys, stable release, all five mappings, ambiguous chords, and
+`millis()` wrap. The dedicated input task remains at a measured 5 ms maximum gap
+during full `device-smoke` revision 5; its initial state reports 930 valid reads,
+zero read/queue errors, and an empty 16-entry queue. The exact candidate then passed
+the prior workflow and all ten TFT comparisons unchanged (`E-HIL-049`). UI-HIL-A8
+still requires the operator-generated physical edges; serial Actions are not a
+substitute for that evidence.

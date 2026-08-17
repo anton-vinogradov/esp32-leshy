@@ -11,6 +11,9 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_app_desc.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
 
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
@@ -52,6 +55,7 @@
 #include "storage/SessionStoreBoundary.h"
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
+#include "ui/Pcf8574ButtonInput.h"
 #include "ui/UiController.h"
 
 namespace {
@@ -99,6 +103,7 @@ using leshy1::services::survey::SessionStatus;
 using leshy1::services::survey::SurveySession;
 using leshy1::ui::UiAction;
 using leshy1::ui::UiController;
+using leshy1::ui::Pcf8574ButtonInput;
 
 constexpr std::uint32_t kConsoleBaud = 115200;
 constexpr std::uint32_t kI2cHz = 100000;
@@ -164,7 +169,20 @@ char uartCommand[kConsoleCommandCapacity] = {};
 std::size_t usbLength = 0;
 std::size_t uartLength = 0;
 std::uint8_t lastInputRaw = 0xFF;
-std::uint32_t lastInputPollMs = 0;
+Pcf8574ButtonInput physicalButtonInput;
+
+struct PhysicalInputEvent final {
+    UiAction action = UiAction::Unknown;
+    std::uint8_t raw = 0xFF;
+    std::uint32_t atMs = 0;
+};
+
+constexpr UBaseType_t kPhysicalInputQueueCapacity = 16;
+QueueHandle_t physicalInputEvents = nullptr;
+TaskHandle_t physicalInputTaskHandle = nullptr;
+portMUX_TYPE physicalInputMux = portMUX_INITIALIZER_UNLOCKED;
+std::uint32_t physicalInputQueueDrops = 0;
+bool physicalInputTaskStarted = false;
 
 struct SdPhysicalEvidenceWorkspace final {
     char line[4608] = {};
@@ -369,6 +387,32 @@ bool readInputRaw(std::uint8_t* value) {
     if (received != 1 || Wire.available() == 0) return false;
     *value = static_cast<std::uint8_t>(Wire.read());
     return true;
+}
+
+void pollPhysicalInput(void*) {
+    TickType_t lastWake = xTaskGetTickCount();
+    for (;;) {
+        std::uint8_t current = 0xFF;
+        const bool valid = readInputRaw(&current);
+        const std::uint32_t now = millis();
+        PhysicalInputEvent event;
+        bool stableChanged = false;
+        portENTER_CRITICAL(&physicalInputMux);
+        const std::uint8_t previousStable = physicalButtonInput.stableRaw();
+        event.action = physicalButtonInput.sample(valid, current, now);
+        event.raw = physicalButtonInput.stableRaw();
+        event.atMs = now;
+        stableChanged = event.raw != previousStable;
+        portEXIT_CRITICAL(&physicalInputMux);
+        if (stableChanged &&
+            xQueueSend(physicalInputEvents, &event, 0) != pdTRUE) {
+            portENTER_CRITICAL(&physicalInputMux);
+            ++physicalInputQueueDrops;
+            portEXIT_CRITICAL(&physicalInputMux);
+        }
+        vTaskDelayUntil(&lastWake,
+                        pdMS_TO_TICKS(Pcf8574ButtonInput::kPollPeriodMs));
+    }
 }
 
 void renderInput(std::uint8_t value) {
@@ -3834,6 +3878,57 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
     reply.println(line);
 }
 
+void emitInputState(Stream& reply) {
+    leshy1::ui::Pcf8574ButtonInputMetrics metrics;
+    std::uint32_t queueDrops = 0;
+    portENTER_CRITICAL(&physicalInputMux);
+    metrics = physicalButtonInput.metrics();
+    queueDrops = physicalInputQueueDrops;
+    portEXIT_CRITICAL(&physicalInputMux);
+    const unsigned queueDepth = physicalInputEvents == nullptr
+                                    ? 0U
+                                    : static_cast<unsigned>(
+                                          uxQueueMessagesWaiting(physicalInputEvents));
+    char line[768] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.input.frontend.v1\",\"kind\":\"state\","
+        "\"status\":\"%s\",\"task_started\":%s,"
+        "\"poll_period_ms\":%lu,\"debounce_ms\":%lu,"
+        "\"button_mask\":%u,\"latest_raw\":%u,\"stable_raw\":%u,"
+        "\"valid_samples\":%lu,\"read_errors\":%lu,"
+        "\"raw_transitions\":%lu,\"stable_transitions\":%lu,"
+        "\"press_events\":%lu,\"release_events\":%lu,"
+        "\"ambiguous_presses\":%lu,\"presses\":{"
+        "\"select\":%lu,\"up\":%lu,\"down\":%lu,"
+        "\"left\":%lu,\"right\":%lu},"
+        "\"maximum_sample_gap_ms\":%lu,\"queue_capacity\":%u,"
+        "\"queue_depth\":%u,\"queue_drops\":%lu}",
+        physicalInputTaskStarted && bootMetrics.inputDetected ? "ready" : "unavailable",
+        physicalInputTaskStarted ? "true" : "false",
+        static_cast<unsigned long>(Pcf8574ButtonInput::kPollPeriodMs),
+        static_cast<unsigned long>(Pcf8574ButtonInput::kDebounceMs),
+        static_cast<unsigned>(Pcf8574ButtonInput::kButtonMask),
+        static_cast<unsigned>(metrics.latestRaw),
+        static_cast<unsigned>(metrics.stableRaw),
+        static_cast<unsigned long>(metrics.validSamples),
+        static_cast<unsigned long>(metrics.readErrors),
+        static_cast<unsigned long>(metrics.rawTransitions),
+        static_cast<unsigned long>(metrics.stableTransitions),
+        static_cast<unsigned long>(metrics.pressEvents),
+        static_cast<unsigned long>(metrics.releaseEvents),
+        static_cast<unsigned long>(metrics.ambiguousPresses),
+        static_cast<unsigned long>(metrics.selectPresses),
+        static_cast<unsigned long>(metrics.upPresses),
+        static_cast<unsigned long>(metrics.downPresses),
+        static_cast<unsigned long>(metrics.leftPresses),
+        static_cast<unsigned long>(metrics.rightPresses),
+        static_cast<unsigned long>(metrics.maximumSampleGapMs),
+        static_cast<unsigned>(kPhysicalInputQueueCapacity), queueDepth,
+        static_cast<unsigned long>(queueDrops));
+    reply.println(line);
+}
+
 void handleCommand(Stream& reply, const char* command) {
     if (std::strncmp(command, "hil.begin ", 10) == 0) {
         emitHilSessionBegin(reply, command);
@@ -3849,6 +3944,8 @@ void handleCommand(Stream& reply, const char* command) {
         broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"pong\"}");
     } else if (std::strcmp(command, "ui.state") == 0) {
         emitUiState(reply, UiAction::Unknown, false);
+    } else if (std::strcmp(command, "input.state") == 0) {
+        emitInputState(reply);
     } else if (std::strncmp(command, "ui.key ", 7) == 0) {
         const UiAction action = leshy1::ui::uiActionFromName(command + 7);
         if (action == UiAction::Unknown) {
@@ -4073,6 +4170,16 @@ void setup() {
     Wire.begin(BoardProfile::kI2cSdaPin, BoardProfile::kI2cSclPin, kI2cHz);
     bootMetrics.inputDetected = readInputRaw(&lastInputRaw);
     bootMetrics.inputRaw = lastInputRaw;
+    physicalButtonInput.reset(lastInputRaw, millis());
+    physicalInputEvents = xQueueCreate(kPhysicalInputQueueCapacity,
+                                       sizeof(PhysicalInputEvent));
+    if (physicalInputEvents != nullptr) {
+        physicalInputTaskStarted =
+            xTaskCreatePinnedToCore(pollPhysicalInput, "leshy-input", 4096,
+                                    nullptr, 2, &physicalInputTaskHandle, 0) == pdPASS;
+    }
+    bootMetrics.inputDetected =
+        bootMetrics.inputDetected && physicalInputTaskStarted;
     bootMetrics.inputReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
     surveyDemoReady = prepareSurveyDemo();
     libraryDemoReady = prepareLibraryDemo();
@@ -4131,7 +4238,7 @@ void setup() {
               "\"hil.begin <session-id> <app-elf-sha256>\","
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
-              "\"ui.state\",\"ui.key <action>\","
+              "\"ui.state\",\"ui.key <action>\",\"input.state\","
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
               "\"storage.discovery\",\"storage.mount.policy\","
               "\"survey.product.admission\","
@@ -4156,30 +4263,33 @@ void setup() {
 void loop() {
     poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
     poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
-    const std::uint32_t now = millis();
-    if (now - lastInputPollMs >= 35U) {
-        lastInputPollMs = now;
-        std::uint8_t current = 0xFF;
-        if (readInputRaw(&current) && current != lastInputRaw) {
-            const std::uint8_t pressed = static_cast<std::uint8_t>(lastInputRaw & ~current);
-            lastInputRaw = current;
-            bootMetrics.inputRaw = current;
-            UiAction action = UiAction::Unknown;
-            if ((pressed & (1U << 6U)) != 0) action = UiAction::Select;
-            else if ((pressed & (1U << 7U)) != 0) action = UiAction::Up;
-            else if ((pressed & (1U << 5U)) != 0) action = UiAction::Down;
-            else if ((pressed & (1U << 3U)) != 0) action = UiAction::Left;
-            else if ((pressed & (1U << 4U)) != 0) action = UiAction::Right;
-            const bool changed = action == UiAction::Unknown ? false : applyUiAction(action);
-            if (!changed) renderInput(current);
-            char line[192] = {};
-            std::snprintf(line, sizeof(line),
-                          "{\"schema\":\"leshy.boot.v1\",\"kind\":\"input\","
-                          "\"raw\":%u,\"action\":\"%s\",\"at_ms\":%lu}",
-                          static_cast<unsigned>(current), leshy1::ui::uiActionName(action),
-                          static_cast<unsigned long>(now));
-            broadcast(line);
-        }
+    PhysicalInputEvent inputEvent;
+    if (physicalInputEvents != nullptr &&
+        xQueueReceive(physicalInputEvents, &inputEvent, 0) == pdTRUE) {
+        lastInputRaw = inputEvent.raw;
+        bootMetrics.inputRaw = inputEvent.raw;
+        const bool changed = inputEvent.action == UiAction::Unknown
+                                 ? false
+                                 : applyUiAction(inputEvent.action);
+        if (!changed) renderInput(inputEvent.raw);
+        leshy1::ui::Pcf8574ButtonInputMetrics metrics;
+        portENTER_CRITICAL(&physicalInputMux);
+        metrics = physicalButtonInput.metrics();
+        portEXIT_CRITICAL(&physicalInputMux);
+        char line[320] = {};
+        std::snprintf(line, sizeof(line),
+                      "{\"schema\":\"leshy.input.frontend.v1\","
+                      "\"kind\":\"event\",\"raw\":%u,"
+                      "\"action\":\"%s\",\"changed\":%s,"
+                      "\"press_events\":%lu,\"release_events\":%lu,"
+                      "\"at_ms\":%lu}",
+                      static_cast<unsigned>(inputEvent.raw),
+                      leshy1::ui::uiActionName(inputEvent.action),
+                      changed ? "true" : "false",
+                      static_cast<unsigned long>(metrics.pressEvents),
+                      static_cast<unsigned long>(metrics.releaseEvents),
+                      static_cast<unsigned long>(inputEvent.atMs));
+        broadcast(line);
     }
     delay(2);
 }

@@ -242,7 +242,8 @@ promotion; a real GitHub workflow run now passes:
 - `tools/run_1x_prerelease_hil.py` loads a declarative suite, flashes the exact
   candidate through verified esptool only with explicit `--flash`, performs a cold
   reset, keeps one passive USB session for Actions/captures, and creates a bundle;
-- `tests/hil/device-smoke.v1.json` revision 4 defines fail-closed product admission,
+- `tests/hil/device-smoke.v1.json` revision 5 defines the dedicated bounded physical
+  keypad frontend, fail-closed product admission,
   Home→Diagnostics→Back, and
   product Survey Setup→Running→Detail→Stop & Commit→Library→Detail→Export→Home,
   boot ≤2 s, board/profile, heap ≥128 KiB, owner/lease cleanup, and GPIO2 LOW;
@@ -372,6 +373,19 @@ owner/lease `none`/`0`, heap total/free/min 281,272/238,608/233,212 B, and GPIO2
 LOW. `run.json` is `6361d40e…deafaa`, index `e3796ec3…9608f1`; the verifier accepts
 it as unsigned local development evidence but not release-eligible evidence. This
 run intentionally did not start the real product RF/SD lifecycle.
+
+Candidate `0.41.0-keypad-frontend-measure` advances the suite to revision 5 after a
+physical responsiveness regression exposed that serial Actions did not test the
+PCF8574 frontend. The candidate samples/debounces in a dedicated task and queues
+stable transitions independently of synchronous TFT redraw. Run
+`490608019ef55ae5c230ed1254a82fad` flashed exact app
+`03dc165c…70c05c5`/ELF `21f31ab2…ae8958`, reached ready in 503.916 ms, observed a
+5 ms maximum keypad sample gap with 930 valid/0 erroneous reads and zero queue
+drops, and retained ten zero-mismatch TFT comparisons. Final owner/lease was
+`none`/`0`, heap total/free/min was 281,184/233,556/228,160 B, and GPIO2 was LOW.
+`run.json` is `ab29096a…b97ee`, index `3b3a3ccb…a0f8ce`. This automatic run proves
+the deployed frontend/task/queue contract but intentionally cannot generate
+physical switch edges; UI-HIL-A8 is a separate guided pre-release artifact.
 
 A historical copy of this real bundle was signed with a temporary Ed25519 key and
 returned `release_eligible=true`; the temporary key and copy were then destroyed.

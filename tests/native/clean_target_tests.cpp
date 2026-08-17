@@ -39,6 +39,7 @@
 #include "storage/SessionStoreBoundary.h"
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
+#include "ui/Pcf8574ButtonInput.h"
 #include "ui/UiController.h"
 
 using namespace leshy1::domain::apps;
@@ -312,6 +313,74 @@ void testPhysicalAndDiagnosticActionsShareNavigation() {
     CHECK(controller.revision() == 5);
     controller.recordHandledAction(UiAction::Unknown);
     CHECK(controller.revision() == 5);
+}
+
+void testPhysicalButtonFrontendDebouncesAndMapsEveryKey() {
+    Pcf8574ButtonInput input;
+    input.reset(0xFF, 100);
+    CHECK(Pcf8574ButtonInput::kPollPeriodMs == 5);
+    CHECK(Pcf8574ButtonInput::kDebounceMs == 12);
+    CHECK(Pcf8574ButtonInput::kButtonMask == 0xF8);
+
+    // A short pulse and an invalid I2C sample cannot create an action.
+    CHECK(input.sample(true, 0xBF, 105) == UiAction::Unknown);
+    CHECK(input.sample(false, 0x00, 110) == UiAction::Unknown);
+    CHECK(input.sample(true, 0xFF, 115) == UiAction::Unknown);
+    CHECK(input.sample(true, 0xFF, 130) == UiAction::Unknown);
+    CHECK(input.metrics().pressEvents == 0);
+    CHECK(input.metrics().readErrors == 1);
+
+    struct Mapping final {
+        std::uint8_t raw;
+        UiAction action;
+    };
+    constexpr Mapping mappings[] = {
+        {0xBF, UiAction::Select}, {0x7F, UiAction::Up},
+        {0xDF, UiAction::Down},   {0xF7, UiAction::Left},
+        {0xEF, UiAction::Right},
+    };
+    std::uint32_t now = 140;
+    for (const Mapping& mapping : mappings) {
+        CHECK(input.sample(true, mapping.raw, now) == UiAction::Unknown);
+        CHECK(input.sample(true, mapping.raw, now + 5) == UiAction::Unknown);
+        CHECK(input.sample(true, mapping.raw, now + 15) == mapping.action);
+        CHECK(input.stableRaw() == mapping.raw);
+
+        // A held key emits exactly once, including across an invalid read.
+        CHECK(input.sample(false, 0xFF, now + 20) == UiAction::Unknown);
+        CHECK(input.sample(true, mapping.raw, now + 25) == UiAction::Unknown);
+        CHECK(input.sample(true, 0xFF, now + 30) == UiAction::Unknown);
+        CHECK(input.sample(true, 0xFF, now + 35) == UiAction::Unknown);
+        CHECK(input.sample(true, 0xFF, now + 45) == UiAction::Unknown);
+        CHECK(input.stableRaw() == 0xFF);
+        now += 60;
+    }
+    CHECK(input.metrics().pressEvents == 5);
+    CHECK(input.metrics().selectPresses == 1);
+    CHECK(input.metrics().upPresses == 1);
+    CHECK(input.metrics().downPresses == 1);
+    CHECK(input.metrics().leftPresses == 1);
+    CHECK(input.metrics().rightPresses == 1);
+    CHECK(input.metrics().releaseEvents == 5);
+    CHECK(input.metrics().stableTransitions == 10);
+    CHECK(input.metrics().readErrors == 6);
+    CHECK(input.metrics().maximumSampleGapMs >= 10);
+}
+
+void testPhysicalButtonFrontendRejectsAmbiguousPressesAndRecovers() {
+    Pcf8574ButtonInput input;
+    input.reset(0xFF, 0xFFFFFFF0U);
+    const std::uint8_t selectAndUp = 0x3F;
+    CHECK(input.sample(true, selectAndUp, 0xFFFFFFF5U) == UiAction::Unknown);
+    CHECK(input.sample(true, selectAndUp, 0x00000005U) == UiAction::Unknown);
+    CHECK(input.metrics().ambiguousPresses == 1);
+    CHECK(input.metrics().pressEvents == 0);
+
+    CHECK(input.sample(true, 0xFF, 20) == UiAction::Unknown);
+    CHECK(input.sample(true, 0xFF, 35) == UiAction::Unknown);
+    CHECK(input.sample(true, 0xBF, 40) == UiAction::Unknown);
+    CHECK(input.sample(true, 0xBF, 55) == UiAction::Select);
+    CHECK(input.metrics().pressEvents == 1);
 }
 
 void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
@@ -2512,6 +2581,8 @@ int main() {
     testBootReportIsBoundedAndMachineReadable();
     testHilSessionBindsOneRunToTheRunningAppIdentity();
     testPhysicalAndDiagnosticActionsShareNavigation();
+    testPhysicalButtonFrontendDebouncesAndMapsEveryKey();
+    testPhysicalButtonFrontendRejectsAmbiguousPressesAndRecovers();
     testAppCatalogProjectsCapabilityStatesBeforeLaunch();
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
