@@ -12,10 +12,11 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S3 — First persistent Survey Session`.
 - **Last completed stage:** `S2 — Clean 1.x platform`.
-- **Repository baseline:** `d696c9b` plus retained DEMO-S2 acceptance and status closure.
+- **Repository baseline:** `d31e08f` plus retained exact-candidate S3 progress evidence.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
-- **Current objective:** close the remaining persistence/power-cut/endurance work and
-  pass `DEMO-S3` on the existing real passive Survey → reboot → Library/export path.
+- **Current objective:** close the missing-source real-TFT path, physical power-cut,
+  LittleFS parity, and independent-golden `DEMO-S3` on the existing real passive
+  Survey → reboot → Library/export path.
 
 ## Stage state
 
@@ -24,7 +25,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
-| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; bounded FSInfo avoids a full FAT scan and abort preserves the prior generation | physical power-cut, stage endurance, LittleFS parity, and reproducible `DEMO-S3` remain |
+| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; exact 0.58 adds live List→Detail→Back at 102.636 ms | missing-source real-TFT evidence, physical power-cut, LittleFS parity, independent demo goldens, and reproducible `DEMO-S3` remain |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
@@ -283,8 +284,30 @@ the platform and visual stage.
    Diagnostics → disabled reason → Back retained 29 Action/query steps, nine
    zero-mismatch real-TFT frames, exact build identity, Quick 8/8, heap, safe buzzer,
    and zero final leases.
-5. **Active:** finish the S3 persistence/power-cut/endurance gaps and run the existing
-   real passive Survey → reboot → Library/export path as reproducible `DEMO-S3`.
+5. **Active:** close the explicit S3 matrix below and promote the existing real
+   passive Survey → reboot → Library/export path only through reproducible `DEMO-S3`.
+
+## S3 acceptance matrix
+
+The nine PRD slice criteria remain the binding checklist. `pass` below means current
+exact-candidate evidence exists; it does not make the stage gate pass while any row
+or the physical storage exit condition remains partial.
+
+| PRD slice criterion | Current state | Evidence / remaining work |
+|---|---|---|
+| 1. Clean boot + HardwareProbe | `pass` | DEMO-S2 exact boot/profile plus 0.58 S3 pre/post boot identity |
+| 2. User opens and starts Survey | `pass` | public five-key Actions open real persistent Setup and Start |
+| 3. Passive source emits normalized Observations | `pass` | 10/10 accepted/forwarded, zero drops in E-HIL-083 |
+| 4. List → Detail → Back preserves running Survey | `pass` | exact 0.58 keeps 10 observations/backend/lease 15 and acknowledges Back in 102.636 ms |
+| 5. Stop atomically persists once | `partial` | generation 65→66, cleanup and software-reset boundary matrix pass; physical power-cut remains |
+| 6. Reboot reopens with radios inactive | `pass` | read-only exact-CID generation 66/10; Library export reports `radio_touched=false` |
+| 7. JSON summary export | `pass` | schema `leshy.library.export.v1`, persistent/non-simulated generation 66 |
+| 8. Host + HIL coverage | `pass` | domain/storage/navigation tests plus exact board run and retained verifier |
+| 9. Missing source explains itself and leaks nothing | `partial` | AppCatalog/admission host contract passes; real-TFT state and physical zero-lease trace remain |
+
+Additional S3 exit work: dedicated disposable LittleFS parity and separately recorded
+TFT goldens for the final demo. Eight-hour cross-radio endurance remains `DEMO-S4`,
+not a hidden S3 completion criterion.
 
 ## Evidence on the current baseline
 
@@ -503,6 +526,8 @@ the platform and visual stage.
 | E-BUILD-060 | exact committed `0.58.0-stage-demo-s2-measure` | pass: RAM 128,744 B, linked flash 1,107,612 B; app/factory 1,107,760/1,173,296 B; app `b4d854f4…dc50a`, factory `fd5ec12e…b553`, ELF `ec12011c…5d4f`, map `91d2e6cc…945a`; RTC no-init 20 B | +164 B linked flash, zero static-RAM growth, and +160 B images vs 0.57; stage candidate, not a release |
 | E-AUTO-022 | reproducible DEMO-S2 suite and independent verifier | pass: revision-1 suite drives only public Actions/queries, separately recorded and manually reviewed goldens are never gate-eligible, and the verifier independently checks exact candidate bytes/app identity, 29-step trace, nine masked framebuffer comparisons, Quick report, heap/input/buzzer facts, and cleanup | local unsigned evidence; GitHub keyless attestation and complete release plan remain S8 work |
 | E-HIL-082 / E-GATE-002 | board-01 exact DEMO-S2 0.58 | pass/stage-gate eligible: committed candidate cold-boots in 989.817 ms, reaches the final Home Self-Test without a boot detour, runs Quick plan 2 at 8/8 in 63 µs, traverses Diagnostics and Full/Guided dialog/unavailable states, matches nine real 240×320 TFT frames with zero mismatches, keeps radio/storage/buzzer side effects and input errors/drops at zero, and finishes on Home with GPIO2 LOW and owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-stage-demo-s2-0.58.json) | closes S2 only; Full capability coverage remains blocked through S3…S7 and release eligibility is false |
+| E-AUTO-023 | live Survey List/Detail/Back product-runner contract | pass: exact real-product runner now enters Detail while the source/backend and lease remain active, returns to List within the 150 ms budget, then continues the unchanged Stop/reboot/Library/export path; five host tests reject stopped/detail drift and latency overflow | runner contract and one exact board run; missing-source UI, independent goldens, LittleFS and power-cut remain separate S3 work |
+| E-HIL-083 | board-01 exact 0.58 S3 product progress | pass/progress only: exact flashed candidate advances generation 65→66 with 10/10 accepted/forwarded and zero drops, keeps Survey running through List→Detail→Back with 102.636 ms acknowledgement, commits/cleans up, cold-reopens exact CID generation 66/10 read-only, exports valid persistent/non-simulated JSON with radio inactive, visually reviewed five TFT states, and finishes Home owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-s3-product-regression-0.58.json) | not `DEMO-S3`: criterion 9 is host-only; physical power-cut, LittleFS parity, and independent goldens remain open; stage/release gate false |
 
 ## Known uncertainties and risks
 

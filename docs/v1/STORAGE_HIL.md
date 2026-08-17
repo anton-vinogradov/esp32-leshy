@@ -5,7 +5,8 @@
 Document status: **binding safety/verification protocol; host logic, real-file
 fixture, guarded physical FAT commit/remount, per-generation and batched 32-sample
 SD throughput, real-source queue/persistence, and the six-boundary software-reset
-matrix are implemented; product UI, power-cut, and LittleFS parity remain open**.
+matrix are implemented; exact product UI/reboot/export is exercised, while physical
+power-cut and LittleFS parity remain open**.
 
 This protocol verifies ADR-003 without risking an unknown SD card or retained flash
 data. The ordinary diagnostic image never formats or writes storage during boot or
@@ -235,6 +236,13 @@ not deletion of the evidence namespace.
 Logical reset injection (`esp_restart`) can exercise reopen/recovery but does not
 replace real power-cut evidence. Closing PR-005/RB-06 requires a controlled supply or
 power switch that cuts power independently at every persisted boundary.
+
+Exact 0.58 S3 progress (`E-AUTO-023`/`E-HIL-083`) reuses the same production path:
+10/10 passive observations remain live through List→Detail→Back, Back is acknowledged
+in 102.636 ms, Stop advances generation 65→66, and cold read-only reopen exports the
+same persistent/non-simulated generation with radios inactive and final lease zero.
+This closes the normal product-navigation gap only; it does not substitute for the
+controlled physical cuts or dedicated LittleFS target above.
 
 ## Implemented and physically exercised software-reset harness
 

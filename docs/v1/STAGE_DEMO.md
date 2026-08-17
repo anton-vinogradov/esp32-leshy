@@ -44,6 +44,13 @@ outputs stayed inactive, and the final resource lease was zero. This is an S2 st
 gate, not a release: Full capability coverage remains blocked until S3…S7 register
 their checks.
 
+S3 progress `E-AUTO-023`/`E-HIL-083` reuses that exact 0.58 candidate and proves the
+real passive product path through live List→Detail→Back, generation 65→66 commit,
+cold read-only reopen, Library, and JSON export. Five TFT states are visually
+reviewed and final ownership is zero. It is deliberately not `DEMO-S3`: the
+missing-source real-TFT path, physical power-cut, LittleFS parity, and independently
+recorded demo goldens remain open.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

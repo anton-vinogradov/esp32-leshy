@@ -44,6 +44,13 @@ safe outputs оставались неактивны, final resource lease ра�
 S2, а не release: полный capability coverage остаётся blocked, пока S3…S7 не
 зарегистрируют свои checks.
 
+S3 progress `E-AUTO-023`/`E-HIL-083` переиспользует тот же exact candidate 0.58 и
+подтверждает real passive product path через live List→Detail→Back, commit generation
+65→66, cold read-only reopen, Library и JSON export. Пять TFT states визуально
+проверены, final ownership равен нулю. Это намеренно не `DEMO-S3`: открыты
+missing-source real-TFT path, physical power-cut, LittleFS parity и независимо
+записанные demo goldens.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases.

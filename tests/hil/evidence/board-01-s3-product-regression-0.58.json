@@ -1,0 +1,60 @@
+{
+  "schema": "leshy.s3_product_progress.v1",
+  "status": "pass_progress_not_stage_gate",
+  "trust_status": "unsigned_local_result",
+  "runner_gate_eligible": true,
+  "stage_gate_eligible": false,
+  "release_gate_eligible": false,
+  "evidence_ids": ["E-AUTO-023", "E-HIL-083"],
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "runner_source_commit": "d31e08f05c6679a13b6555078d58e8afdeb24bef",
+  "candidate": {
+    "version": "0.58.0-stage-demo-s2-measure",
+    "firmware_sha256": "b4d854f4735e2fb83f202169951107a7a8c9a7f97beb07d0af7c1cf3e45dc50a",
+    "app_elf_sha256": "ec12011c7134e08aa857e6209e846b29d41428a1dcad98840c69c09d80e85d4f",
+    "flashed_and_verified": true
+  },
+  "retained": {
+    "bundle_path": "tests/hil/evidence/board-01-s3-product-regression-0.58",
+    "run_sha256": "a3f99af4e3154a3306940226ba2ae77791a1c7c960d5d9b3dc17cd565ab9d0b3",
+    "artifact_index_sha256": "8efead45db89eeeaa4a0200762c92bd4267e8c656daa77bbe095ab79266d9df1"
+  },
+  "run": {
+    "run_id": "49d9aef69e99fcf0b29902eab69f0816",
+    "exact_cid": "FE343253440000002000000055019CB7",
+    "generation_before": 65,
+    "generation_after": 66,
+    "observations": 10,
+    "accepted": 10,
+    "forwarded": 10,
+    "drops": 0,
+    "detail_back_ack_ms": 102.63620922341943,
+    "captures": 5,
+    "final_page": "home",
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "visual_review": {
+    "manual_review": "pass",
+    "independent_goldens": false,
+    "states": ["setup", "running", "detail", "committed", "export"]
+  },
+  "s3_criteria": {
+    "1_clean_boot_probe": "pass",
+    "2_user_start": "pass",
+    "3_passive_normalized_observations": "pass",
+    "4_list_detail_back": "pass",
+    "5_atomic_stop_commit": "pass_software_reset_only",
+    "6_reboot_offline_reopen": "pass",
+    "7_json_summary_export": "pass",
+    "8_host_and_hil_coverage": "pass",
+    "9_missing_source_visible_zero_lease": "partial_host_contract_only"
+  },
+  "open_gate_work": [
+    "missing_source_real_tft",
+    "physical_power_cut",
+    "littlefs_parity",
+    "independent_demo_goldens"
+  ]
+}
