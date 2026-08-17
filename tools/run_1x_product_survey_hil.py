@@ -177,6 +177,40 @@ def running_failures(state: dict[str, Any], expected_cid: str) -> list[str]:
     return failures
 
 
+def detail_failures(state: dict[str, Any], observations: int) -> list[str]:
+    return expect(state, {
+        "page": "survey",
+        "runtime_owner": "survey",
+        "lease_mask": 15,
+        "survey_view": "detail",
+        "survey_workflow_state": "running",
+        "survey_running": True,
+        "survey_observations": observations,
+        "survey_product_backend_open": True,
+        "survey_product_cleanup_complete": False,
+    }, "running_detail")
+
+
+def list_after_detail_failures(state: dict[str, Any], observations: int,
+                               back_ack_ms: float) -> list[str]:
+    failures = expect(state, {
+        "page": "survey",
+        "runtime_owner": "survey",
+        "lease_mask": 15,
+        "survey_view": "list",
+        "survey_workflow_state": "running",
+        "survey_running": True,
+        "survey_observations": observations,
+        "survey_product_backend_open": True,
+        "survey_product_cleanup_complete": False,
+    }, "running_list_after_detail")
+    if back_ack_ms <= 0 or back_ack_ms > 150:
+        failures.append(
+            f"running_list_after_detail.back_ack_ms: {back_ack_ms:.3f} not in (0, 150]"
+        )
+    return failures
+
+
 def committed_failures(state: dict[str, Any], before_generation: int) -> list[str]:
     failures = expect(state, {
         "page": "survey",
@@ -371,6 +405,9 @@ def main() -> int:
     trace: list[dict[str, Any]] = []
     captures: dict[str, Any] = {}
     running: dict[str, Any] = {}
+    running_detail: dict[str, Any] = {}
+    running_list_after_detail: dict[str, Any] = {}
+    detail_back_ack_ms = 0.0
     committed: dict[str, Any] = {}
     post_ready: dict[str, Any] = {}
     post_recovery: dict[str, Any] = {}
@@ -409,6 +446,22 @@ def main() -> int:
             captures["running"] = capture(device, frames, "running")
             if precommit:
                 trace.append(action(device, "back"))
+        if not failures:
+            observations = int(running["survey_observations"])
+            running_detail = action(device, "select")
+            trace.append(running_detail)
+            failures.extend(detail_failures(running_detail, observations))
+            captures["detail"] = capture(device, frames, "detail")
+        if not failures:
+            back_started = time.monotonic()
+            running_list_after_detail = action(device, "back")
+            detail_back_ack_ms = (time.monotonic() - back_started) * 1000.0
+            trace.append(running_list_after_detail)
+            failures.extend(list_after_detail_failures(
+                running_list_after_detail,
+                int(running["survey_observations"]),
+                detail_back_ack_ms,
+            ))
         if not failures:
             committed = action(device, "right")
             trace.append(committed)
@@ -485,6 +538,9 @@ def main() -> int:
         "boot_before": {"ready": before_ready, "recovery": before_recovery,
                         "timing": before_timing},
         "running": running,
+        "running_detail": running_detail,
+        "running_list_after_detail": running_list_after_detail,
+        "detail_back_ack_ms": detail_back_ack_ms,
         "committed": committed,
         "boot_after": {"ready": post_ready, "recovery": post_recovery,
                        "timing": post_timing},

@@ -62,6 +62,32 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         committed["survey_generation"] = 9
         self.assertTrue(RUNNER.committed_failures(committed, 7))
 
+    def test_running_detail_back_preserves_session_and_meets_budget(self) -> None:
+        detail = {
+            "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
+            "survey_view": "detail", "survey_workflow_state": "running",
+            "survey_running": True, "survey_observations": 17,
+            "survey_product_backend_open": True,
+            "survey_product_cleanup_complete": False,
+        }
+        self.assertEqual([], RUNNER.detail_failures(detail, 17))
+        detail["survey_running"] = False
+        self.assertTrue(RUNNER.detail_failures(detail, 17))
+
+        list_state = {
+            "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
+            "survey_view": "list", "survey_workflow_state": "running",
+            "survey_running": True, "survey_observations": 17,
+            "survey_product_backend_open": True,
+            "survey_product_cleanup_complete": False,
+        }
+        self.assertEqual(
+            [], RUNNER.list_after_detail_failures(list_state, 17, 99.5)
+        )
+        self.assertTrue(
+            RUNNER.list_after_detail_failures(list_state, 17, 150.1)
+        )
+
     def test_boot_parser_ignores_noise_and_keeps_product_record(self) -> None:
         raw = (
             b"noise\n"
