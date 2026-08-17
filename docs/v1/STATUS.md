@@ -10,12 +10,12 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 ## Now
 
-- **Active stage:** `S2 — Clean 1.x platform`.
-- **Last completed stage:** `S1 — Evidence baseline`.
-- **Repository baseline:** `bcba2be` plus the current UX-07 acceptance slice.
+- **Active stage:** `S3 — First persistent Survey Session`.
+- **Last completed stage:** `S2 — Clean 1.x platform`.
+- **Repository baseline:** `d696c9b` plus retained DEMO-S2 acceptance and status closure.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
-- **Current objective:** pass a reproducible `DEMO-S2` on the independent 1.x
-  target; UX-03…UX-07 are accepted.
+- **Current objective:** close the remaining persistence/power-cut/endurance work and
+  pass `DEMO-S3` on the existing real passive Survey → reboot → Library/export path.
 
 ## Stage state
 
@@ -23,8 +23,8 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 |---|---|---|---|
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
-| S2 | `active` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU, UX-03…UX-07, and automated HIL already run on board-01 | pass `DEMO-S2` on the real TFT |
-| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; bounded FSInfo avoids a full FAT scan and abort preserves the prior generation | physical power-cut, endurance, and LittleFS parity remain; requires S2 gate |
+| S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
+| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; bounded FSInfo avoids a full FAT scan and abort preserves the prior generation | physical power-cut, stage endurance, LittleFS parity, and reproducible `DEMO-S3` remain |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
@@ -265,7 +265,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   dedicated BoardSafeOutputs adapter, forbids direct app/driver control, and emits
   boot/runtime diagnostic state.
 
-## S2 priority queue
+## S2 closure and S3 handoff
 
 Unavailable boards and instruments remain tracked evidence gaps, but no longer hold
 the platform and visual stage.
@@ -279,11 +279,12 @@ the platform and visual stage.
 3. UX-07 is accepted: Full/Guided plan 2 retains preflight, dialog/confirm,
    unavailable, degraded, error, running, blocked result, and cleanup; 9/10 checks
    pass and incomplete capability coverage remains honestly blocked.
-4. **Active:** run `DEMO-S2`: boot → Home → Self-Test Quick → Diagnostics → disabled reason →
-   Back, retaining exact build identity, TFT frames, action/report trace, heap, and
-   zero leases.
-5. Activate S3 after the S2 gate. The existing persistent Survey path is valuable
-   implementation evidence, but cannot close S2 without the reproducible demo.
+4. `DEMO-S2` passed on exact candidate 0.58: cold boot → Home → Self-Test Quick →
+   Diagnostics → disabled reason → Back retained 29 Action/query steps, nine
+   zero-mismatch real-TFT frames, exact build identity, Quick 8/8, heap, safe buzzer,
+   and zero final leases.
+5. **Active:** finish the S3 persistence/power-cut/endurance gaps and run the existing
+   real passive Survey → reboot → Library/export path as reproducible `DEMO-S3`.
 
 ## Evidence on the current baseline
 
@@ -498,7 +499,10 @@ the platform and visual stage.
 | E-BUILD-058 | `0.56.0-ui-accessibility-measure` exact rebuild | pass: RAM 128,744 B, linked flash 1,105,748 B; app/factory 1,105,904/1,171,440 B; app `38d9ac9c…3d81`, factory `cdb5b3f8…c7d4`, ELF `65c47317…7c2a`; RTC no-init 20 B | +1,300 B linked flash, zero static-RAM growth, and +1,312 B images vs 0.55; geometric focus and audit contract only, not a stage/release build |
 | E-HIL-080 / E-UX-006 | board-01 exact 0.56 five-key/non-color accessibility regression | pass: retained physical run binds ten presses of each of five keys with 50/50/50 press/release/dispatched events and zero errors/ambiguity/drops; exact current public Actions move focus across five Home rows, Survey, Library, Language, and both Self-Test choices. Twelve actual 240×320 TFT states have a 210 px outline and at least 67 chevron pixels per focused row; Quick passes 8/8 in 66 µs, current input has zero errors/drops with 5 ms maximum gap, buzzer is LOW, and final owner/lease is none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-accessibility-0.56.json) | accepts UX-06; at that evidence point UX-07 and `DEMO-S2` remained open |
 | E-BUILD-059 | `0.57.0-ui-state-evidence-measure` exact rebuild | pass: RAM 128,744 B, linked flash 1,107,448 B; app/factory 1,107,600/1,173,136 B; app `93852441…0d86`, factory `3ff89d10…3ad`, ELF `e8c7515d…051a`; RTC no-init 20 B | +1,700 B linked flash, zero static-RAM growth, and +1,696 B images vs 0.56; guided common-state evidence only, not a stage/release build |
-| E-HIL-081 / E-UX-007 | board-01 exact 0.57 Full/Guided common-state regression | pass: the last Home item opens Self-Test without a boot detour; public Actions retain nine actual 240×320 TFT frames for modes, preflight, dialog/confirm, unavailable, degraded, error, running, blocked result, and cleanup. Plan 2 passes eight Quick checks plus `full.ui.common_states`, honestly blocks `full.capability.coverage` (9/10, 0 failed), has zero TX/storage/buzzer side effects, heap 272,760/224,280/188,792 B, zero input errors/drops, GPIO2 LOW, and final owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-states-0.57.json) | accepts UX-07; full S3…S7 capability coverage and `DEMO-S2` remain open, release gate is false |
+| E-HIL-081 / E-UX-007 | board-01 exact 0.57 Full/Guided common-state regression | pass: the last Home item opens Self-Test without a boot detour; public Actions retain nine actual 240×320 TFT frames for modes, preflight, dialog/confirm, unavailable, degraded, error, running, blocked result, and cleanup. Plan 2 passes eight Quick checks plus `full.ui.common_states`, honestly blocks `full.capability.coverage` (9/10, 0 failed), has zero TX/storage/buzzer side effects, heap 272,760/224,280/188,792 B, zero input errors/drops, GPIO2 LOW, and final owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-states-0.57.json) | accepts UX-07; at that evidence point full S3…S7 capability coverage and `DEMO-S2` remained open, and release gate was false |
+| E-BUILD-060 | exact committed `0.58.0-stage-demo-s2-measure` | pass: RAM 128,744 B, linked flash 1,107,612 B; app/factory 1,107,760/1,173,296 B; app `b4d854f4…dc50a`, factory `fd5ec12e…b553`, ELF `ec12011c…5d4f`, map `91d2e6cc…945a`; RTC no-init 20 B | +164 B linked flash, zero static-RAM growth, and +160 B images vs 0.57; stage candidate, not a release |
+| E-AUTO-022 | reproducible DEMO-S2 suite and independent verifier | pass: revision-1 suite drives only public Actions/queries, separately recorded and manually reviewed goldens are never gate-eligible, and the verifier independently checks exact candidate bytes/app identity, 29-step trace, nine masked framebuffer comparisons, Quick report, heap/input/buzzer facts, and cleanup | local unsigned evidence; GitHub keyless attestation and complete release plan remain S8 work |
+| E-HIL-082 / E-GATE-002 | board-01 exact DEMO-S2 0.58 | pass/stage-gate eligible: committed candidate cold-boots in 989.817 ms, reaches the final Home Self-Test without a boot detour, runs Quick plan 2 at 8/8 in 63 µs, traverses Diagnostics and Full/Guided dialog/unavailable states, matches nine real 240×320 TFT frames with zero mismatches, keeps radio/storage/buzzer side effects and input errors/drops at zero, and finishes on Home with GPIO2 LOW and owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-stage-demo-s2-0.58.json) | closes S2 only; Full capability coverage remains blocked through S3…S7 and release eligibility is false |
 
 ## Known uncertainties and risks
 
@@ -508,8 +512,8 @@ the platform and visual stage.
   says OPI PSRAM; `HW-U01` remains physically open but is constrained to N16/no-PSRAM.
 - Schematic TFT RESET and legacy `TFT_RST=0` conflict; GPIO0 is forbidden as display
   reset until `HW-T02`.
-- The clean target contains platform and product prototypes; until `DEMO-S2` they are
-  implementation evidence rather than a closed platform gate.
+- The clean platform gate is closed by `DEMO-S2`; product prototypes remain
+  implementation evidence until their own `DEMO-S3…S8` gates.
 - The PRD is accepted as baseline 1.0, but `accepted` is not `verified`: each P0 is
   verified only by its applicable S2…S8 gate.
 - One board is available, but `HW-T01` requires a second v2 unit; continuity,
@@ -519,7 +523,7 @@ the platform and visual stage.
 
 ## Blockers
 
-S2 is not blocked. A second board, multimeter, logic/RF detector, and power fixture
+S3 is not blocked. A second board, multimeter, logic/RF detector, and power fixture
 are required by named S4/S5/S8 evidence; until available, affected capabilities stay
 conditional/unavailable rather than being enabled by assumption.
 

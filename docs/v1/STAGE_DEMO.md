@@ -37,6 +37,13 @@ UI automation.
 | DEMO-S7 | Safe Lab and SDK | saved Capture → Lab confirm → bounded TX → timeout/panic; sample extension | feature-complete 1.0, physical stop, and extensibility without policy bypass |
 | DEMO-S8 | Release candidate | exact candidate → complete Self-Test plan → mixed field workflow → interrupted update/write → rollback/recovery | same on-device/release checks, independent oracle, release-complete binary, provenance, endurance, and recovery |
 
+`DEMO-S2` is accepted by `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
+Exact committed candidate 0.58 completed 29 public Action/query steps and matched nine
+separately recorded real-TFT goldens with zero mismatches; Quick passed 8/8, safe
+outputs stayed inactive, and the final resource lease was zero. This is an S2 stage
+gate, not a release: Full capability coverage remains blocked until S3…S7 register
+their checks.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

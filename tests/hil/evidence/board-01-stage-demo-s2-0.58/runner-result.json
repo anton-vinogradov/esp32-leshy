@@ -1,0 +1,13 @@
+{
+  "app_elf_sha256": "ec12011c7134e08aa857e6209e846b29d41428a1dcad98840c69c09d80e85d4f",
+  "bundle_sha256": "5e6f702e616e98e246dce316cf2f9cd4cdea2691437cd24d74226e3a6f8c47e3",
+  "candidate_sha256": "b4d854f4735e2fb83f202169951107a7a8c9a7f97beb07d0af7c1cf3e45dc50a",
+  "gate_eligible": false,
+  "passed": true,
+  "reason": "release trust is established by GitHub Artifact Attestations over the packaged evidence bundle",
+  "run_id": "16ae35fe85c4f949db5dae191c70cd04",
+  "schema": "leshy.prerelease.runner_result.v1",
+  "suite_id": "stage-demo-s2",
+  "suite_revision": 1,
+  "trust_status": "unsigned_local_result"
+}

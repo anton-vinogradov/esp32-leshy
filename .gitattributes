@@ -1,0 +1,1 @@
+tests/hil/evidence/**/serial.ndjson -text -diff

@@ -2,9 +2,9 @@
 
 *Read in: **English** · [Русский](UX_UI_BASELINE.ru.md)*
 
-Status: **S1 product UX direction accepted; S2 visual gate active**. Low-fidelity
-UX-01/UX-02 are fixed and UX-03…UX-07 are accepted; the reproducible `DEMO-S2`
-is the remaining S2 gate work.
+Status: **S1 product UX direction and S2 visual gate accepted**. Low-fidelity
+UX-01/UX-02 are fixed, UX-03…UX-07 are evidenced, and reproducible `DEMO-S2`
+passes on the exact 0.58 candidate. UX-08 repeats at each later Stage Demo.
 
 This document defines when user experience is reviewed and when visual appearance
 becomes an implementation constraint. It does not replace the
@@ -172,7 +172,8 @@ The same run executes plan version 2. Its eight Quick platform checks and
 blocked: 9 passed, 0 failed, 1 blocked. Radio TX, storage writes, and buzzer
 activations remain zero; heap is 272,760/224,280/188,792 B, input errors/drops are
 zero, GPIO2 is LOW, and final owner/lease is `none`/`0`. This closes the real-TFT
-artifact, not the full capability plan or release gate; `DEMO-S2` remains open.
+common-state artifact, not the full capability plan or release gate. The combined
+platform gate is closed by the subsequent exact 0.58 `DEMO-S2` evidence.
 
 ## Gate
 
@@ -181,4 +182,6 @@ section has an IA location, and open product choices are recorded before code.
 
 **S2 UX/UI baseline accepted:** UX-01…UX-07 are evidenced on the real TFT; WF-01 and
 the platform portion of WF-02 use the same Actions through buttons and diagnostic
-automation; no state depends on the 0.x UI. UX-08 repeats at every later Stage Demo.
+automation; no state depends on the 0.x UI. Exact candidate 0.58 completes 29 steps,
+nine zero-mismatch TFT comparisons, Quick 8/8, and zero final leases in `DEMO-S2`
+(`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`). UX-08 repeats at every later Stage Demo.

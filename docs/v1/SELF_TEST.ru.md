@@ -84,7 +84,7 @@ Back отменяет прогон на ближайшей safe boundary, сна
   promotion. Endurance и внешние power/RF fixtures остаются отдельными plan steps,
   но индексируются тем же report.
 
-## Текущая реализация S2
+## Принятая реализация S2
 
 Candidate `0.53.0-self-test-quick-measure` заложил последний пункт Home, menu
 режимов, Full preflight, result screens, восемь стабильных Quick check IDs и
@@ -103,6 +103,14 @@ Quick checks плюс `full.ui.common_states`, затем намеренно в�
 radio/storage/buzzer side effects и final owner/lease `none`/`0`
 (`E-HIL-081`/`E-UX-007`). Это правильный текущий результат: незавершённые capability
 checks S3…S7 не могут быть promoted ни device, ни host.
+
+Exact committed candidate `0.58.0-stage-demo-s2-measure` принимает этот platform
+slice через `E-AUTO-022`/`E-HIL-082`/`E-GATE-002`. Self-Test по-прежнему не
+запускается при boot: он остаётся последним пунктом Home. Device открывает Quick и
+Full/Guided через штатный five-key Action path, а `ui.state` публикует текущий
+`self_test_visual_state`, чтобы release driver проверял то же semantic state, которое
+видит пользователь. DEMO-S2 проходит 29 steps, девять TFT comparisons, Quick 8/8 и
+zero final leases; полный capability coverage честно остаётся blocked до S3…S7.
 
 ## Приёмка
 

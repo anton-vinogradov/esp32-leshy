@@ -2,9 +2,10 @@
 
 *Read in: [English](UX_UI_BASELINE.md) · **Русский***
 
-Статус: **S1 product UX direction принят; S2 visual gate активен**. Low-fidelity
-UX-01/UX-02 зафиксированы, UX-03…UX-07 приняты; оставшаяся работа gate S2 —
-воспроизводимый `DEMO-S2`.
+Статус: **S1 product UX direction и S2 visual gate приняты**. Low-fidelity
+UX-01/UX-02 зафиксированы, UX-03…UX-07 подтверждены evidence, а воспроизводимый
+`DEMO-S2` проходит на exact candidate 0.58. UX-08 повторяется в каждом следующем
+Stage Demo.
 
 Документ определяет, когда обсуждается опыт пользователя и когда внешний вид
 становится ограничением реализации. Он не подменяет
@@ -171,8 +172,9 @@ hashes, точные Action/state revisions и geometry карточки.
 `full.ui.common_states` проходят, а `full.capability.coverage` честно остаётся
 blocked: 9 passed, 0 failed, 1 blocked. Radio TX, storage writes и buzzer activations
 равны нулю; heap — 272 760/224 280/188 792 B, input errors/drops равны нулю, GPIO2
-LOW, final owner/lease — `none`/`0`. Это закрывает real-TFT artifact, но не полный
-capability plan или release gate; `DEMO-S2` остаётся открытым.
+LOW, final owner/lease — `none`/`0`. Это закрывает real-TFT common-state artifact,
+но не полный capability plan или release gate. Combined platform gate закрывает
+последующее exact 0.58 evidence `DEMO-S2`.
 
 ## Gate
 
@@ -181,4 +183,7 @@ capability plan или release gate; `DEMO-S2` остаётся открытым
 
 **S2 UX/UI baseline accepted:** UX-01…UX-07 подтверждены на реальном TFT; WF-01 и
 platform-путь WF-02 проходят через те же Actions кнопками и diagnostic automation;
-состояния не зависят от 0.x UI. UX-08 повторяется на каждом следующем Stage Demo.
+состояния не зависят от 0.x UI. Exact candidate 0.58 выполняет 29 steps, девять
+zero-mismatch TFT comparisons, Quick 8/8 и zero final leases в `DEMO-S2`
+(`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`). UX-08 повторяется на каждом следующем
+Stage Demo.

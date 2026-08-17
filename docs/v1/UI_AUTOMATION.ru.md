@@ -190,4 +190,11 @@ result и финальный Home. Checker связывает все девят�
 revisions и identity candidate, доказывает geometric square cue каждой state card и
 проверяет plan 2 как 9 pass/0 fail/1 blocked с zero side effects и final owner/lease
 `none`/`0` (`E-HIL-081`/`E-UX-007`). Это принимает UX-07; combined `DEMO-S2`
-остаётся stage gate.
+затем проходит на exact committed candidate 0.58 (`E-AUTO-022`/`E-HIL-082`/
+`E-GATE-002`). Suite revision 1 выполняет 29 public Action/query steps, совпадает с
+девятью отдельно записанными и вручную проверенными goldens 240×320 без расхождений,
+проверяет semantic identities `self_test_visual_state` для dialog/unavailable,
+выполняет Quick 8/8 и независимо подтверждает final Home, safe outputs, heap/input
+health и zero leases. Retained verifier позволяет переиспользовать тот же путь в
+следующих Stage Demo и S8 release promotion, не превращая local unsigned S2 run в
+release.

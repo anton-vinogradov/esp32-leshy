@@ -1,0 +1,13 @@
+{
+  "app_elf_sha256": "ec12011c7134e08aa857e6209e846b29d41428a1dcad98840c69c09d80e85d4f",
+  "firmware": "candidate/firmware.bin",
+  "firmware_bytes": 1107760,
+  "firmware_sha256": "b4d854f4735e2fb83f202169951107a7a8c9a7f97beb07d0af7c1cf3e45dc50a",
+  "flash_offset": 65536,
+  "flashed_by_runner": true,
+  "run_id": "16ae35fe85c4f949db5dae191c70cd04",
+  "scenario_filter": null,
+  "schema": "leshy.prerelease.candidate.v2",
+  "suite_id": "stage-demo-s2",
+  "suite_revision": 1
+}

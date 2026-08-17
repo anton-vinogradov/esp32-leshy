@@ -196,4 +196,10 @@ blocked result, and final Home. The checker binds all nine 240×320 frames to ex
 revisions and candidate identity, proves the geometric square cue on every state
 card, and verifies plan 2 as 9 pass/0 fail/1 blocked with zero side effects and final
 owner/lease `none`/`0` (`E-HIL-081`/`E-UX-007`). This accepts UX-07; the combined
-`DEMO-S2` remains the stage gate.
+`DEMO-S2` then passes on exact committed candidate 0.58 (`E-AUTO-022`/`E-HIL-082`/
+`E-GATE-002`). Its revision-1 suite performs 29 public Action/query steps, matches
+nine separately recorded and manually reviewed 240×320 goldens with zero mismatch,
+checks semantic `self_test_visual_state` identities for dialog/unavailable, runs
+Quick 8/8, and independently verifies final Home, safe outputs, heap/input health,
+and zero leases. The retained verifier makes the same path reusable by later Stage
+Demos and S8 release promotion without making this local unsigned S2 run a release.

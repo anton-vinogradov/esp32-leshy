@@ -84,7 +84,7 @@ side effect occurs, and final ownership is zero.
   promotion. Endurance and external power/RF fixtures remain separate plan steps but
   are indexed by the same report.
 
-## Current S2 implementation
+## Accepted S2 implementation
 
 Candidate `0.53.0-self-test-quick-measure` established the final Home entry, mode
 menu, Full preflight, result screens, eight stable Quick check IDs, and
@@ -103,6 +103,14 @@ blocked on `full.capability.coverage`: 9/10 pass, 0 fail, 1 blocked, with zero
 radio/storage/buzzer side effects and final owner/lease `none`/`0`
 (`E-HIL-081`/`E-UX-007`). This is the correct current result: incomplete S3…S7
 capability checks cannot be promoted by the device or host.
+
+Exact committed candidate `0.58.0-stage-demo-s2-measure` accepts this platform slice
+through `E-AUTO-022`/`E-HIL-082`/`E-GATE-002`. Self-Test still does not run at boot:
+it remains the final Home item. The device exposes Quick and Full/Guided through the
+normal five-key Action path, and `ui.state` publishes the current
+`self_test_visual_state` so a release driver can verify the same semantic state that
+the user sees. DEMO-S2 passes 29 steps, nine TFT comparisons, Quick 8/8, and zero
+final leases; Full capability coverage remains honestly blocked until S3…S7.
 
 ## Acceptance
 

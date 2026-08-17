@@ -10,13 +10,14 @@
 
 ## Сейчас
 
-- **Активный этап:** `S2 — Чистая платформа 1.x`.
-- **Последний закрытый этап:** `S1 — Evidence baseline`.
-- **Рабочая база репозитория:** `bcba2be` плюс текущий UX-07 acceptance slice.
+- **Активный этап:** `S3 — Первая сохраняемая Survey Session`.
+- **Последний закрытый этап:** `S2 — Чистая платформа 1.x`.
+- **Рабочая база репозитория:** `d696c9b` плюс retained DEMO-S2 acceptance и status closure.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
-- **Главная цель текущего этапа:** пройти воспроизводимый `DEMO-S2` на независимой
-  target 1.x; UX-03…UX-07 приняты.
+- **Главная цель текущего этапа:** закрыть оставшиеся persistence/power-cut/endurance
+  задачи и пройти `DEMO-S3` на существующем пути real passive Survey → reboot →
+  Library/export.
 
 ## Состояние этапов
 
@@ -24,8 +25,8 @@
 |---|---|---|---|
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
-| S2 | `active` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU, UX-03…UX-07 и автоматический HIL уже работают на board-01 | пройти `DEMO-S2` на реальном TFT |
-| S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; bounded FSInfo не делает full FAT scan, abort сохраняет prior generation | открыты physical power-cut, endurance и LittleFS parity; требуется gate S2 |
+| S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
+| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; bounded FSInfo не делает full FAT scan, abort сохраняет prior generation | открыты physical power-cut, stage endurance, LittleFS parity и воспроизводимый `DEMO-S3` |
 | S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
@@ -264,7 +265,7 @@
   отдельный BoardSafeOutputs, запрещает прямое управление из apps/drivers и публикует
   boot/runtime diagnostic state.
 
-## S2 — приоритетная очередь
+## Закрытие S2 и переход в S3
 
 Недоступные платы или приборы остаются tracked evidence gaps, но больше не удерживают
 платформенный и визуальный этап.
@@ -278,11 +279,13 @@
 3. UX-07 принят: Full/Guided plan 2 сохраняет preflight, dialog/confirm, unavailable,
    degraded, error, running, blocked result и cleanup; 9/10 checks проходят, а
    incomplete capability coverage честно остаётся blocked.
-4. **Активно:** пройти `DEMO-S2`: boot → Home → Self-Test Quick → Diagnostics → disabled reason
-   → Back, сохранив exact build identity, TFT frames, action/report trace, heap и
-   zero leases.
-5. После S2 gate активировать S3. Уже существующий persistent Survey path считается
-   implementation evidence, но не закрывает S2 без воспроизводимого demo.
+4. `DEMO-S2` прошёл на exact candidate 0.58: cold boot → Home → Self-Test Quick →
+   Diagnostics → disabled reason → Back сохранил 29 Action/query steps, девять
+   zero-mismatch real-TFT frames, exact build identity, Quick 8/8, heap, safe buzzer
+   и zero final leases.
+5. **Активно:** закрыть gaps S3 по persistence/power-cut/endurance и выполнить
+   существующий real passive Survey → reboot → Library/export как воспроизводимый
+   `DEMO-S3`.
 
 ## Evidence на текущей базе
 
@@ -497,7 +500,10 @@
 | E-BUILD-058 | exact rebuild `0.56.0-ui-accessibility-measure` | pass: RAM 128 744 B, linked flash 1 105 748 B; app/factory 1 105 904/1 171 440 B; app `38d9ac9c…3d81`, factory `cdb5b3f8…c7d4`, ELF `65c47317…7c2a`; RTC no-init 20 B | +1 300 B linked flash, zero static-RAM growth и +1 312 B images vs 0.55; только geometric focus и audit contract, не stage/release build |
 | E-HIL-080 / E-UX-006 | board-01 exact 0.56 regression five-key/non-color accessibility | pass: retained physical run связывает по десять нажатий пяти кнопок с 50/50/50 press/release/dispatched events и zero errors/ambiguity/drops; exact current public Actions перемещают focus по пяти Home rows, Survey, Library, Language и обоим choices Self-Test. Двенадцать actual TFT states 240×320 имеют outline 210 px и не менее 67 пикселей chevron в каждой focused row; Quick проходит 8/8 за 66 µs, current input имеет zero errors/drops и maximum gap 5 ms, buzzer LOW, final owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-ui-accessibility-0.56.json) | принимает UX-06; на той точке evidence UX-07 и `DEMO-S2` оставались открыты |
 | E-BUILD-059 | exact rebuild `0.57.0-ui-state-evidence-measure` | pass: RAM 128 744 B, linked flash 1 107 448 B; app/factory 1 107 600/1 173 136 B; app `93852441…0d86`, factory `3ff89d10…3ad`, ELF `e8c7515d…051a`; RTC no-init 20 B | +1 700 B linked flash, zero static-RAM growth и +1 696 B images vs 0.56; только evidence guided common states, не stage/release build |
-| E-HIL-081 / E-UX-007 | board-01 exact 0.57 regression common states Full/Guided | pass: последний пункт Home открывает Self-Test без boot detour; public Actions сохраняют девять actual TFT frames 240×320 для modes, preflight, dialog/confirm, unavailable, degraded, error, running, blocked result и cleanup. Plan 2 проходит восемь Quick checks плюс `full.ui.common_states`, честно блокирует `full.capability.coverage` (9/10, 0 failed), имеет zero TX/storage/buzzer side effects, heap 272 760/224 280/188 792 B, zero input errors/drops, GPIO2 LOW и final owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-ui-states-0.57.json) | принимает UX-07; полный capability coverage S3…S7 и `DEMO-S2` остаются открыты, release gate false |
+| E-HIL-081 / E-UX-007 | board-01 exact 0.57 regression common states Full/Guided | pass: последний пункт Home открывает Self-Test без boot detour; public Actions сохраняют девять actual TFT frames 240×320 для modes, preflight, dialog/confirm, unavailable, degraded, error, running, blocked result и cleanup. Plan 2 проходит восемь Quick checks плюс `full.ui.common_states`, честно блокирует `full.capability.coverage` (9/10, 0 failed), имеет zero TX/storage/buzzer side effects, heap 272 760/224 280/188 792 B, zero input errors/drops, GPIO2 LOW и final owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-ui-states-0.57.json) | принимает UX-07; на той точке evidence полный capability coverage S3…S7 и `DEMO-S2` оставались открыты, release gate был false |
+| E-BUILD-060 | exact committed `0.58.0-stage-demo-s2-measure` | pass: RAM 128 744 B, linked flash 1 107 612 B; app/factory 1 107 760/1 173 296 B; app `b4d854f4…dc50a`, factory `fd5ec12e…b553`, ELF `ec12011c…5d4f`, map `91d2e6cc…945a`; RTC no-init 20 B | +164 B linked flash, zero static-RAM growth и +160 B images vs 0.57; stage candidate, не release |
+| E-AUTO-022 | воспроизводимый suite DEMO-S2 и независимый verifier | pass: suite revision 1 использует только public Actions/queries, отдельно записанные и вручную проверенные goldens никогда не gate-eligible, а verifier независимо проверяет exact candidate bytes/app identity, trace 29 steps, девять masked framebuffer comparisons, Quick report, heap/input/buzzer и cleanup | local unsigned evidence; GitHub keyless attestation и полный release plan остаются работой S8 |
+| E-HIL-082 / E-GATE-002 | board-01 exact DEMO-S2 0.58 | pass/stage-gate eligible: committed candidate cold-boots за 989,817 ms, открывает последний пункт Home Self-Test без boot detour, выполняет Quick plan 2 8/8 за 63 µs, проходит Diagnostics и Full/Guided dialog/unavailable states, совпадает с девятью real TFT frames 240×320 без расхождений, сохраняет zero radio/storage/buzzer side effects и input errors/drops, завершается на Home с GPIO2 LOW и owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-stage-demo-s2-0.58.json) | закрывает только S2; полный capability coverage остаётся blocked на S3…S7, release eligibility false |
 
 ## Известные неопределённости и риски
 
@@ -507,8 +513,8 @@
   OPI PSRAM; `HW-U01` физически открыт, но constrained до N16/no-PSRAM.
 - TFT RESET на schematic и `TFT_RST=0` в legacy flags противоречат друг другу;
   GPIO0 запрещён как display reset до `HW-T02`.
-- Clean target содержит platform и product prototypes; до `DEMO-S2` они являются
-  implementation evidence, а не закрытым platform gate.
+- Clean platform gate закрыт `DEMO-S2`; product prototypes остаются implementation
+  evidence до собственных gates `DEMO-S3…S8`.
 - PRD принят как baseline 1.0, но `accepted` не означает `verified`: verification
   каждого P0 остаётся за соответствующими S2…S8 gates.
 - Один экземпляр доступен, но `HW-T01` требует второй v2 board; continuity, logic/RF,
@@ -518,7 +524,7 @@
 
 ## Blockers
 
-S2 не заблокирован. Второй экземпляр, мультиметр, logic/RF detector и power fixture
+S3 не заблокирован. Второй экземпляр, мультиметр, logic/RF detector и power fixture
 понадобятся для named S4/S5/S8 evidence; до их появления соответствующие capabilities
 остаются conditional/unavailable и не включаются предположением.
 
