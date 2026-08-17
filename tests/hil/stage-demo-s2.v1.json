@@ -1,0 +1,290 @@
+{
+  "schema": "leshy.prerelease.suite.v1",
+  "id": "stage-demo-s2",
+  "revision": 1,
+  "maximum_ready_marker_ms": 2000,
+  "boot_assert": {
+    "target": "clean_1x_measure",
+    "profile": "esp32-div-v2-n16",
+    "profile_revision": "S1-2026-08-16",
+    "flash_bytes": 16777216,
+    "psram_found": false,
+    "buzzer_safety_configured": true,
+    "buzzer_inactive": true,
+    "input_detected": true,
+    "interactive_ready_us": {"$lte": 2000000}
+  },
+  "scenarios": [
+    {
+      "id": "boot-quick-diagnostics-unavailable-back",
+      "steps": [
+        {
+          "id": "input-ready",
+          "query": {
+            "command": "input.state",
+            "schema": "leshy.input.frontend.v1",
+            "kind": "state"
+          },
+          "assert": {
+            "status": "ready",
+            "task_started": true,
+            "poll_period_ms": 5,
+            "debounce_ms": 12,
+            "button_mask": 248,
+            "stable_raw": 255,
+            "valid_samples": {"$gte": 1},
+            "read_errors": 0,
+            "ambiguous_presses": 0,
+            "queue_capacity": 64,
+            "queue_depth": 0,
+            "queue_drops": 0,
+            "maximum_sample_gap_ms": {"$lte": 5}
+          }
+        },
+        {
+          "id": "home-after-boot",
+          "assert": {
+            "page": "home",
+            "selection": 0,
+            "selected_id": "diagnostics",
+            "language": "ru",
+            "runtime_owner": "none",
+            "lease_mask": 0
+          },
+          "capture": {
+            "name": "home-after-boot",
+            "golden": "goldens/esp32-div-v2-n16/stage-s2-0.58-home-after-boot.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {"id": "home-survey", "action": "down", "assert": {"page": "home", "selection": 1, "selected_id": "survey"}},
+        {"id": "home-library", "action": "down", "assert": {"page": "home", "selection": 2, "selected_id": "library"}},
+        {"id": "home-language", "action": "down", "assert": {"page": "home", "selection": 3, "selected_id": "language"}},
+        {"id": "home-self-test", "action": "down", "assert": {"page": "home", "selection": 4, "selected_id": "self-test", "selected_enabled": true}},
+        {
+          "id": "open-self-test-modes",
+          "action": "select",
+          "assert": {
+            "page": "self_test",
+            "self_test_view": "mode_menu",
+            "self_test_mode": "quick",
+            "runtime_owner": "self-test",
+            "lease_mask": 1
+          },
+          "capture": {
+            "name": "self-test-modes",
+            "golden": "goldens/esp32-div-v2-n16/stage-s2-0.58-self-test-modes.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "run-quick",
+          "action": "select",
+          "assert": {
+            "page": "self_test",
+            "self_test_view": "result",
+            "self_test_mode": "quick",
+            "self_test_status": "pass",
+            "self_test_checks": 8,
+            "self_test_passed": 8,
+            "self_test_failed": 0,
+            "self_test_blocked": 0,
+            "runtime_owner": "self-test",
+            "lease_mask": 1
+          },
+          "capture": {
+            "name": "self-test-quick-result",
+            "golden": "goldens/esp32-div-v2-n16/stage-s2-0.58-self-test-quick-result.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "quick-report",
+          "query": {
+            "command": "self-test.report",
+            "schema": "leshy.self_test.report.v1",
+            "kind": "report"
+          },
+          "assert": {
+            "schema_version": 1,
+            "plan_version": 2,
+            "mode": "quick",
+            "status": "pass",
+            "read_only": true,
+            "cancelled": false,
+            "passed": 8,
+            "failed": 0,
+            "blocked": 0,
+            "duration_us": {"$gte": 1, "$lte": 10000},
+            "side_effects": {
+              "radio_tx_commands": 0,
+              "storage_write_commands": 0,
+              "buzzer_activations": 0
+            },
+            "facts": {
+              "build_identity_present": true,
+              "profile_matched": true,
+              "display_ready": true,
+              "input_frontend_ready": true,
+              "input_queue_healthy": true,
+              "buzzer_inactive": true,
+              "resource_scope_clean": true,
+              "input_queue_drops": 0,
+              "run_resource_mask": 1
+            },
+            "checks": [
+              {"id": "quick.build.identity", "status": "pass"},
+              {"id": "quick.board.profile", "status": "pass"},
+              {"id": "quick.runtime.heap", "status": "pass"},
+              {"id": "quick.display.ready", "status": "pass"},
+              {"id": "quick.input.frontend", "status": "pass"},
+              {"id": "quick.input.queue", "status": "pass"},
+              {"id": "quick.output.buzzer", "status": "pass"},
+              {"id": "quick.resource.scope", "status": "pass"}
+            ],
+            "current_owner": "self-test",
+            "current_lease_mask": 1
+          }
+        },
+        {"id": "back-to-modes", "action": "back", "assert": {"page": "self_test", "self_test_view": "mode_menu", "runtime_owner": "self-test", "lease_mask": 1}},
+        {"id": "back-home-after-quick", "action": "back", "assert": {"page": "home", "selection": 4, "selected_id": "self-test", "runtime_owner": "none", "lease_mask": 0}},
+        {"id": "home-language-up", "action": "up", "assert": {"page": "home", "selection": 3, "selected_id": "language"}},
+        {"id": "home-library-up", "action": "up", "assert": {"page": "home", "selection": 2, "selected_id": "library"}},
+        {"id": "home-survey-up", "action": "up", "assert": {"page": "home", "selection": 1, "selected_id": "survey"}},
+        {"id": "home-diagnostics-up", "action": "up", "assert": {"page": "home", "selection": 0, "selected_id": "diagnostics"}},
+        {
+          "id": "open-diagnostics",
+          "action": "select",
+          "assert": {
+            "page": "diagnostics",
+            "runtime_owner": "diagnostics",
+            "lease_mask": 1
+          },
+          "capture": {
+            "name": "diagnostics",
+            "golden": "goldens/esp32-div-v2-n16/stage-s2-0.58-diagnostics.rgb565.zlib",
+            "mode": "masked_exact",
+            "masks": [[0, 145, 240, 55]]
+          }
+        },
+        {
+          "id": "back-home-after-diagnostics",
+          "action": "back",
+          "assert": {
+            "page": "home",
+            "selection": 0,
+            "selected_id": "diagnostics",
+            "runtime_owner": "none",
+            "lease_mask": 0
+          },
+          "capture": {
+            "name": "home-after-diagnostics",
+            "golden": "goldens/esp32-div-v2-n16/stage-s2-0.58-home-after-diagnostics.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {"id": "return-survey", "action": "down", "assert": {"page": "home", "selection": 1}},
+        {"id": "return-library", "action": "down", "assert": {"page": "home", "selection": 2}},
+        {"id": "return-language", "action": "down", "assert": {"page": "home", "selection": 3}},
+        {"id": "return-self-test", "action": "down", "assert": {"page": "home", "selection": 4, "selected_id": "self-test"}},
+        {"id": "open-self-test-again", "action": "select", "assert": {"page": "self_test", "self_test_view": "mode_menu", "self_test_mode": "quick"}},
+        {"id": "select-full", "action": "down", "assert": {"page": "self_test", "self_test_view": "mode_menu", "self_test_mode": "full_guided"}},
+        {
+          "id": "full-preflight",
+          "action": "select",
+          "assert": {"page": "self_test", "self_test_view": "preflight", "self_test_mode": "full_guided"},
+          "capture": {
+            "name": "full-preflight",
+            "golden": "goldens/esp32-div-v2-n16/stage-s2-0.58-full-preflight.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "full-dialog-confirm",
+          "action": "select",
+          "assert": {
+            "page": "self_test",
+            "self_test_view": "visual_check",
+            "self_test_visual_state": "dialog_confirm",
+            "self_test_mode": "full_guided",
+            "self_test_checks": 8,
+            "self_test_passed": 8,
+            "self_test_failed": 0,
+            "self_test_blocked": 0
+          },
+          "capture": {
+            "name": "full-dialog-confirm",
+            "golden": "goldens/esp32-div-v2-n16/stage-s2-0.58-full-dialog-confirm.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {
+          "id": "full-unavailable-reason",
+          "action": "select",
+          "assert": {
+            "page": "self_test",
+            "self_test_view": "visual_check",
+            "self_test_visual_state": "unavailable",
+            "self_test_mode": "full_guided",
+            "runtime_owner": "self-test",
+            "lease_mask": 1
+          },
+          "capture": {
+            "name": "full-unavailable-reason",
+            "golden": "goldens/esp32-div-v2-n16/stage-s2-0.58-full-unavailable-reason.rgb565.zlib",
+            "mode": "exact"
+          }
+        },
+        {"id": "cancel-full", "action": "back", "assert": {"page": "self_test", "self_test_view": "preflight", "runtime_owner": "self-test", "lease_mask": 1}},
+        {"id": "back-full-modes", "action": "back", "assert": {"page": "self_test", "self_test_view": "mode_menu", "runtime_owner": "self-test", "lease_mask": 1}},
+        {
+          "id": "final-back-home",
+          "action": "back",
+          "assert": {
+            "page": "home",
+            "selection": 4,
+            "selected_id": "self-test",
+            "runtime_owner": "none",
+            "lease_mask": 0
+          },
+          "capture": {
+            "name": "final-home",
+            "golden": "goldens/esp32-div-v2-n16/stage-s2-0.58-final-home.rgb565.zlib",
+            "mode": "exact"
+          }
+        }
+      ]
+    }
+  ],
+  "metrics_assert": {
+    "target": "clean_1x_measure",
+    "version": "0.58.0-stage-demo-s2-measure",
+    "profile": "esp32-div-v2-n16",
+    "profile_revision": "S1-2026-08-16",
+    "legacy_sources": false,
+    "heap_total": 272760,
+    "heap_free": 224280,
+    "heap_min_free": 188792,
+    "buzzer_safety_configured": true,
+    "buzzer_inactive": true,
+    "input_detected": true
+  },
+  "safe_outputs_assert": {
+    "buzzer_pin": 2,
+    "buzzer_active_level": "high",
+    "buzzer_mode": "output",
+    "buzzer_level": "low",
+    "buzzer_inactive": true
+  },
+  "final_state_assert": {
+    "page": "home",
+    "selection": 4,
+    "selected_id": "self-test",
+    "language": "ru",
+    "runtime_owner": "none",
+    "lease_mask": 0,
+    "survey_dropped": 0,
+    "survey_queue_depth": 0,
+    "survey_queue_high_water": 0
+  }
+}

@@ -29,6 +29,7 @@ enum class SelfTestResultStatus : std::uint8_t {
 
 const char* selfTestModeName(SelfTestMode mode);
 const char* selfTestViewName(SelfTestView view);
+const char* selfTestVisualStateName(std::uint8_t state);
 const char* selfTestResultStatusName(SelfTestResultStatus status);
 
 struct SelfTestFacts final {

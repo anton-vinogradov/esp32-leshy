@@ -2040,6 +2040,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"library_entries\":%u,\"library_generation\":%lu,"
                       "\"library_persistent\":%s,"
                       "\"self_test_view\":\"%s\","
+                      "\"self_test_visual_state\":\"%s\","
                       "\"self_test_mode\":\"%s\","
                       "\"self_test_status\":\"%s\","
                       "\"self_test_checks\":%u,\"self_test_passed\":%u,"
@@ -2111,6 +2112,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           ? "true" : "false",
                       leshy1::apps::self_test::selfTestViewName(
                           selfTestController.view()),
+                      selfTestController.view() == SelfTestView::VisualCheck
+                          ? leshy1::apps::self_test::selfTestVisualStateName(
+                                selfTestController.visualState())
+                          : "none",
                       leshy1::apps::self_test::selfTestModeName(
                           visibleSelfTestMode),
                       leshy1::apps::self_test::selfTestResultStatusName(

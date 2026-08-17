@@ -204,6 +204,8 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(controller.view() == SelfTestView::VisualCheck);
     CHECK(controller.runAwaitingFinish());
     CHECK(controller.visualState() == 0);
+    CHECK(std::strcmp(selfTestVisualStateName(controller.visualState()),
+                      "dialog_confirm") == 0);
     for (std::uint8_t state = 1; state < SelfTestController::kVisualStateCount;
          ++state) {
         CHECK(controller.activate(healthy, 220 + state));
@@ -212,6 +214,11 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     }
     CHECK(controller.activate(healthy, 230));
     CHECK(controller.view() == SelfTestView::Result);
+    CHECK(std::strcmp(selfTestVisualStateName(1), "unavailable") == 0);
+    CHECK(std::strcmp(selfTestVisualStateName(2), "degraded") == 0);
+    CHECK(std::strcmp(selfTestVisualStateName(3), "error") == 0);
+    CHECK(std::strcmp(selfTestVisualStateName(4), "running") == 0);
+    CHECK(std::strcmp(selfTestVisualStateName(5), "none") == 0);
     controller.finishRun(240);
     const SelfTestReport& full = controller.report();
     CHECK(full.mode == SelfTestMode::FullGuided);

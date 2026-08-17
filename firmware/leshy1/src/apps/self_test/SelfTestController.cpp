@@ -20,6 +20,17 @@ const char* selfTestViewName(SelfTestView view) {
     return "unknown";
 }
 
+const char* selfTestVisualStateName(std::uint8_t state) {
+    switch (state) {
+        case 0: return "dialog_confirm";
+        case 1: return "unavailable";
+        case 2: return "degraded";
+        case 3: return "error";
+        case 4: return "running";
+    }
+    return "none";
+}
+
 const char* selfTestResultStatusName(SelfTestResultStatus status) {
     switch (status) {
         case SelfTestResultStatus::NotRun: return "not_run";
