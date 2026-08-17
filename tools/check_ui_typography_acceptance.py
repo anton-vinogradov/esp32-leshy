@@ -139,10 +139,6 @@ def main() -> int:
         'u8"САМОТЕСТ / НЕДОСТУПЕН"',
         '"READ ONLY | REPORT OVER USB"',
         'u8"SD | ВОССТАНОВЛЕНО | RF ВЫКЛ"',
-        'u8"старт | назад: отмена | RF выкл"',
-        'u8"скан | назад: отмена | только RX"',
-        'u8"детали | вправо: стоп | RF выкл"',
-        'u8"сохранено | назад | только RX"',
     )
     for marker in expected_shortened:
         require(failures, marker in ui_strings, f"shortened fit copy missing: {marker}")

@@ -135,7 +135,7 @@ def main() -> int:
                         f"{identifier}/{language}: {width}px exceeds {maximum}px")
 
     renderer = RENDERER.read_text(encoding="utf-8")
-    require(failures, renderer.count("tr(UiTextId::") >= 90,
+    require(failures, renderer.count("tr(UiTextId::") >= 80,
             "renderer bypasses the single UI string catalog")
     literal_prints = re.findall(r'display\.print\("([^"]*)"\)', renderer)
     require(failures, literal_prints == ["LESHY 1.x"],

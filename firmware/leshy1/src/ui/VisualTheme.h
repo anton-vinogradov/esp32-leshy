@@ -50,7 +50,8 @@ struct Layout final {
     static constexpr std::int16_t FooterDividerY = 236;
     static constexpr std::int16_t InputY = 244;
     static constexpr std::int16_t InputHeight = 28;
-    static constexpr std::int16_t HintY = 302;
+    static constexpr std::int16_t HintY = 280;
+    static constexpr std::int16_t HintHeight = 40;
 };
 
 static_assert(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth,
@@ -63,5 +64,7 @@ static_assert(Layout::ContentTop + 5 * Layout::HomeRowHeight +
               "five Home rows and the final utility must fit above the footer");
 static_assert(Layout::HintY < Layout::ScreenHeight,
               "button hint must remain visible");
+static_assert(Layout::HintY + Layout::HintHeight == Layout::ScreenHeight,
+              "button hint must terminate at the screen edge");
 
 }  // namespace leshy1::ui::visual

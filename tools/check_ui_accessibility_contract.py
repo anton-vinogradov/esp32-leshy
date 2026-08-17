@@ -70,12 +70,16 @@ def main() -> int:
         "NoteSurveyUnavailable", "NoteLibraryUnavailable", "SurveyRunning",
         "SurveyCommitted", "SurveyError", "PriorLibraryPreserved",
         "PersistedYes", "PersistedNo", "SelfTestPass", "SelfTestFail",
-        "SelfTestBlocked", "ResultBlocked", "FooterRoot", "FooterLanguage",
-        "FooterSelfModes", "FooterSelfResult",
+        "SelfTestBlocked", "ResultBlocked", "NavBack", "NavSelect",
+        "NavEnter", "NavCancel", "NavDetails", "NavApply",
     )
     for identifier in explicit_state_ids:
         require(failures, f"LESHY_UI_TEXT({identifier}," in strings,
                 f"explicit non-color state label missing: {identifier}")
+    for marker in ("NavigationKey::Left", "NavigationKey::UpDown",
+                   "NavigationKey::RightAndSelect", "renderNavigationFooter"):
+        require(failures, marker in renderer,
+                f"spatial navigation footer contract missing: {marker}")
     require(failures, "item->enabled ? Tone::Positive : Tone::Muted" in renderer and
             "tr(homeNote(*item))" in renderer,
             "disabled Home item must retain a textual reason")

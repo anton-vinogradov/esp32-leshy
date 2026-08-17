@@ -2,7 +2,7 @@
 
 *Read in: **English** · [Русский](UX_ACCESSIBILITY.ru.md)*
 
-Status: **UX-06 accepted on exact 0.56 source, physical-key, and TFT evidence**.
+Status: **UX-06 accepted and spatial navigation refined on exact 0.64 TFT evidence**.
 
 UX-06 requires every current primary operation to remain reachable with the five
 physical buttons and every state/focus distinction to remain understandable without
@@ -16,8 +16,8 @@ a substitute for a physical control.
 | Up | P7, active low | `Up` | previous enabled or visible choice |
 | Down | P5, active low | `Down` | next enabled or visible choice |
 | Left | P3, active low | `Left` | Back/Cancel; safety-first Stop during TX |
-| Right | P4, active low | `Right` | Open/context action shown in the footer |
-| Select | P6, active low | `Select` | activate the explicitly focused action |
+| Right | P4, active low | `Right` | enter/open; same inward direction as Select |
+| Select | P6, active low | `Select` | enter/open the selected item; context action at a terminal destination |
 | diagnostic only | — | `Back` | same return boundary as physical Left |
 
 The input task samples every 5 ms, debounces for 12 ms, emits one action per stable
@@ -35,15 +35,19 @@ maximum sample gap.
 | Self-Test modes | choose Quick/Full | run/open preflight | run/open preflight | Home |
 | Self-Test preflight/result | — | run applicable checks | run applicable checks | modes |
 | Survey setup | — | Start | Start | cancel/Home |
-| Survey running list | move observation focus | Detail | Stop/commit | cancel without commit |
-| Survey detail/result/error | — | — | — | list/Home without hidden retry |
+| Survey running list | move observation focus | Detail | Detail | cancel without commit |
+| Survey detail while running | — | Stop/save | Stop/save | list |
+| Survey result/error | — | — | — | Home without hidden retry |
 | Library list | move Session focus | Detail | Detail | Home |
-| Library detail | — | — | Export | list |
+| Library detail | — | Export | Export | list |
 | Export ready | — | — | — | detail |
 | Diagnostics | — | — | — | Home |
 
-The footer names the available controls for each context. An unavailable Home item
-does not open and displays its reason rather than relying on a muted color.
+The footer is a spatial control map rather than prose: Left is the left cell,
+Up/Down the center cell, and Right+OK the right cell. Each active cell has a drawn
+direction icon/key legend and one localized 16 px action label. Technical state such
+as RF/storage provenance remains in the screen body. An unavailable Home item does
+not open and displays its reason rather than relying on a muted color.
 
 ## Non-color state contract
 
@@ -63,3 +67,12 @@ actual TFT. The pixel audit finds a 210 px outline plus at least 67 chevron pixe
 on every focused row; Quick remains 8/8 and final owner/lease is `none`/`0`.
 `E-BUILD-058`/`E-HIL-080`/`E-UX-006` therefore accept UX-06, not UX-07,
 `DEMO-S2`, or a release gate.
+
+Exact candidate `0.64.0-spatial-navigation-measure` restores the proven 0.x spatial
+model and removes the prose footer. `E-AUTO-028` drives Right and Select through the
+same inward paths, Left and diagnostic Back through the same return paths, and
+Up/Down through bounded selection. Nine exact EN/RU TFT frames verify the 40 px,
+three-cell component on Home, Diagnostics, Survey setup, Library list/detail,
+Language, and Self-Test. Survey Stop/save now lives inside Detail so Right no longer
+contradicts its stable inward meaning. `E-BUILD-065`/`E-HIL-088`/`E-UX-009` refine
+the accepted UX-06 contract without promoting S3 or a release.

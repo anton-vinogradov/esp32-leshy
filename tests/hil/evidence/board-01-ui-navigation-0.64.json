@@ -1,0 +1,75 @@
+{
+  "schema": "leshy.ui_navigation_acceptance.v1",
+  "status": "pass",
+  "gate_eligible": false,
+  "evidence_ids": [
+    "E-BUILD-065",
+    "E-AUTO-028",
+    "E-HIL-088",
+    "E-UX-009"
+  ],
+  "candidate": {
+    "version": "0.64.0-spatial-navigation-measure",
+    "firmware_sha256": "c4d824e0e345f14e043ec80c25ba2990eef6d46cc6794aa6e7859544d9c140a0",
+    "factory_sha256": "724afdbd701a2da177937c5dacd5169bb5d8a545c2a8446fa1bb96ea5384a4eb",
+    "app_elf_sha256": "b2e92f3f5e76a4c89aa1c0a0b2020bf77d02bf23bd5232a0d99424497e8536ed",
+    "map_sha256": "535fa2dc2dde11d18265ce73a36751fa2e13b1c4b7e0e6837aac18a69f436b04",
+    "linked_flash_bytes": 1111100,
+    "static_ram_bytes": 128816,
+    "app_image_bytes": 1111504,
+    "factory_image_bytes": 1177040,
+    "rtc_noinit_bytes": 20,
+    "host_tests_passed": true,
+    "firmware_build_passed": true
+  },
+  "navigation": {
+    "left": "back",
+    "right_or_ok": "enter",
+    "up_down": "select",
+    "footer_height_px": 40,
+    "spatial_cells": 3,
+    "label_font": "Roboto Condensed Medium 16",
+    "key_legend_font": "Roboto Condensed Medium 12",
+    "programmatic_direction_icons": true,
+    "technical_status_removed_from_footer": true,
+    "survey_right_enters_detail": true,
+    "survey_stop_or_save_inside_detail": true,
+    "library_right_or_ok_enters_detail": true
+  },
+  "physical": {
+    "run_path": "tests/hil/evidence/board-01-ui-navigation-0.64/run.json",
+    "run_sha256": "bba563a8b5d4e588e0d560d79b58f93253570788875a93175407fd8d94327fe3",
+    "screen_count": 9,
+    "transition_count": 15,
+    "languages": [
+      "ru",
+      "en"
+    ],
+    "right_and_select_entry_proven": true,
+    "left_and_back_return_proven": true,
+    "nested_library_entry_proven": true,
+    "heap_total": 272688,
+    "heap_free_before": 208912,
+    "heap_free_after": 208912,
+    "heap_min_before": 188720,
+    "heap_min_after": 188720,
+    "input_read_errors": 0,
+    "input_ambiguous_presses": 0,
+    "input_queue_drops": 0,
+    "maximum_sample_gap_ms": 5,
+    "buzzer_inactive": true,
+    "final_language": "ru",
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "scope": {
+    "ux_03": "accepted",
+    "ux_04": "accepted",
+    "ux_05": "accepted",
+    "ux_06": "accepted_and_refined",
+    "ux_07": "accepted",
+    "demo_s2": "accepted",
+    "s3": "in_progress",
+    "release_gate_eligible": false
+  }
+}

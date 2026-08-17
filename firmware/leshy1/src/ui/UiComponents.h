@@ -31,6 +31,8 @@ struct Components final {
     static constexpr std::int16_t MetricTop = 84;
     static constexpr std::int16_t MetricHeight = 28;
     static constexpr std::int16_t MetricGap = 0;
+    static constexpr std::int16_t NavigationGap = 3;
+    static constexpr std::int16_t NavigationWidth = 70;
 
     static constexpr Rect header() {
         return {0, 0, Layout::ScreenWidth, Layout::HeaderHeight};
@@ -90,7 +92,18 @@ struct Components final {
 
     static constexpr Rect footerHint() {
         return {Layout::Edge, Layout::HintY, Layout::ContentWidth,
-                static_cast<std::int16_t>(Layout::ScreenHeight - Layout::HintY)};
+                Layout::HintHeight};
+    }
+
+    static constexpr Rect navigationCell(std::uint8_t index) {
+        return {
+            static_cast<std::int16_t>(
+                Layout::Edge + static_cast<std::int16_t>(index) *
+                    (NavigationWidth + NavigationGap)),
+            Layout::HintY,
+            NavigationWidth,
+            Layout::HintHeight,
+        };
     }
 
     // A selected row has a geometric cue in addition to palette changes. The
@@ -139,6 +152,19 @@ static_assert(!overlaps(Components::footerDivider(), Components::inputStatus()),
               "footer divider and input status must not overlap");
 static_assert(!overlaps(Components::inputStatus(), Components::footerHint()),
               "input status and button hint must not overlap");
+static_assert(insideScreen(Components::navigationCell(0)) &&
+                  insideScreen(Components::navigationCell(1)) &&
+                  insideScreen(Components::navigationCell(2)),
+              "navigation cells must fit the TFT");
+static_assert(!overlaps(Components::navigationCell(0),
+                        Components::navigationCell(1)) &&
+                  !overlaps(Components::navigationCell(1),
+                            Components::navigationCell(2)),
+              "navigation cells must remain spatially distinct");
+static_assert(Components::navigationCell(2).x +
+                      Components::navigationCell(2).width ==
+                  Layout::Edge + Layout::ContentWidth,
+              "navigation cells must span the content width");
 static_assert(contains(Components::homeRow(0, false),
                        Components::focusMarker(Components::homeRow(0, false))),
               "non-color focus marker must fit its row");

@@ -502,6 +502,8 @@ def main() -> int:
     running_detail: dict[str, Any] = {}
     running_list_after_detail: dict[str, Any] = {}
     detail_back_ack_ms = 0.0
+    right_detail_ack: dict[str, Any] = {}
+    right_detail_ack_ms = 0.0
     stop_ack: dict[str, Any] = {}
     stop_ack_ms = 0.0
     committed: dict[str, Any] = {}
@@ -612,8 +614,25 @@ def main() -> int:
                         detail_back_ack_ms,
                     ))
                 if not failures:
+                    right_detail_started = time.monotonic()
+                    right_detail_ack = action(device, "right")
+                    right_detail_ack_ms = (
+                        time.monotonic() - right_detail_started
+                    ) * 1000.0
+                    trace.append(right_detail_ack)
+                    failures.extend(detail_failures(
+                        right_detail_ack,
+                        int(running_list_after_detail["survey_observations"]),
+                        int(running_list_after_detail["survey_product_scan_cycles"]),
+                    ))
+                    if right_detail_ack_ms <= 0 or right_detail_ack_ms > 150:
+                        failures.append(
+                            "right_detail_ack_ms: "
+                            f"{right_detail_ack_ms:.3f} not in (0, 150]"
+                        )
+                if not failures:
                     stop_started = time.monotonic()
-                    stop_ack = action(device, "right")
+                    stop_ack = action(device, "select")
                     stop_ack_ms = (time.monotonic() - stop_started) * 1000.0
                     trace.append(stop_ack)
                     failures.extend(expect(stop_ack, {
@@ -737,6 +756,8 @@ def main() -> int:
         "running_detail": running_detail,
         "running_list_after_detail": running_list_after_detail,
         "detail_back_ack_ms": detail_back_ack_ms,
+        "right_detail_ack": right_detail_ack,
+        "right_detail_ack_ms": right_detail_ack_ms,
         "stop_ack": stop_ack,
         "stop_ack_ms": stop_ack_ms,
         "committed": committed,

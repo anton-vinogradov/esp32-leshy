@@ -103,7 +103,7 @@ native tests, поэтому экран не может незаметно за�
 | Choice row | 216×48 с primary и metadata text | выбор Quick / Full-Guided |
 | Metric row | пять result slots 216×28 | Full preflight и Quick/Full result |
 | Footer divider | фиксирован на y=236 | каждый interactive screen |
-| Input status + hint | отдельные непересекающиеся regions | каждый interactive screen и HIL |
+| Input status + пространственная навигация | input 216×28 плюс три action cell 70×40 | каждый interactive screen и HIL |
 
 Exact candidate `0.54.0-ui-components-measure` принимает UX-04 через
 `E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home и Self-Test используют одинаковые
@@ -115,10 +115,10 @@ owner/lease в `none`/`0`. Тогда это приняло component system; UX
 ## UX-05 — размещение EN/RU
 
 `ui/UiStrings.def` — единый allocation-free каталог всех текущих строк S2 renderer,
-кроме неизменяемого бренда `LESHY 1.x`. Сейчас он задаёт 127 стабильных ID, варианты
-EN и RU (всего 254 строки) и пиксельный budget каждого места использования. Exact
-accepted candidate 0.55 содержал 111 ID/222 строки; 16 последующих ID добавляют
-тексты guided states и product cancellation/progress.
+кроме неизменяемого бренда `LESHY 1.x`. Сейчас он задаёт 123 стабильных ID, варианты
+EN и RU (всего 246 строк) и пиксельный budget каждого места использования. Exact
+0.63 измерил прежний каталог prose-footer из 127 ID; 0.64 заменяет его 19 context
+sentences на 15 компактных labels пространственных actions.
 `tools/generate_ui_gfx_font.py` воспроизводимо генерирует faces, а
 `tools/check_ui_language_contract.py` измеряет их metrics, отклоняет отсутствующий
 перевод или переполнение и проверяет, что renderers не возвращают локальные
@@ -136,7 +136,8 @@ provenance, а не текущим face.
 UX-05 принимает encoding coverage, persistence, geometric fit и выбранный face для
 малого raster; physical-panel optics и особенности зрения остаются частью usability
 walkthrough. Замена на Roboto потребовала восьми безопасных сокращений. После них
-все 254 варианта помещаются в declared pixel budgets generated glyphs без overflow.
+все текущие 246 вариантов помещаются в declared pixel budgets generated glyphs без
+overflow; retained typography run 0.63 остаётся historical proof 254/254.
 
 Exact candidate `0.55.0-ui-language-measure` принимает UX-05 через
 `E-BUILD-057`/`E-HIL-079`/`E-UX-005`. Actual TFT captures 240×320 охватывают Home,
@@ -175,6 +176,17 @@ ambiguity или drops. Exact TFT run через public Actions перемеща
 доказывает outline/chevron независимо от цвета. Quick остаётся 8/8, input healthy,
 buzzer LOW, final owner/lease — `none`/`0`. На той точке evidence UX-07 и
 `DEMO-S2` оставались открыты.
+
+Exact candidate `0.64.0-spatial-navigation-measure` уточняет UX-06 через
+`E-BUILD-065`/`E-AUTO-028`/`E-HIL-088`/`E-UX-009`. Footer 40 px теперь содержит
+три пространственные ячейки: Left/Back, Up+Down/Select и Right+OK/Enter. Direction
+icons рисуются геометрически, action labels используют Roboto Condensed Medium 16,
+а техническое RF/storage state остаётся в body и не конкурирует с controls. Right
+и Select открывают одинаковые destinations Home и вложенной Library; Survey
+Stop/save перенесён внутрь Detail, поэтому у стабильной navigation model больше нет
+исключения на уровне списка. Девять exact TFT frames, 15 public transitions,
+неизменный heap, healthy input, buzzer LOW и финальный русский Home с lease 0
+проверяются независимо.
 
 ## UX-07 — evidence common states на реальном TFT
 

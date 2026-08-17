@@ -203,3 +203,13 @@ checks semantic `self_test_visual_state` identities for dialog/unavailable, runs
 Quick 8/8, and independently verifies final Home, safe outputs, heap/input health,
 and zero leases. The retained verifier makes the same path reusable by later Stage
 Demos and S8 release promotion without making this local unsigned S2 run a release.
+
+Candidate 0.63 adds the idempotent 18-state typography lane: it normalizes persisted
+Home/language/Self-Test state, captures both languages and every guided common
+state, runs Quick/Full, and returns Russian Home without heap/input/output drift
+(`E-AUTO-027`/`E-HIL-087`). Candidate 0.64 adds a narrower spatial-navigation lane.
+It proves Right and Select as equivalent inward Actions, Left and diagnostic Back as
+equivalent return Actions, nested Library entry by both keys, and Up/Down selection;
+nine exact TFT frames independently verify the three 70×40 footer cells and final
+lease 0 (`E-AUTO-028`/`E-HIL-088`/`E-UX-009`). No camera or manual menu traversal is
+required for this regression.

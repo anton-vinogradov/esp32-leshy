@@ -120,6 +120,15 @@ void testUiComponentGeometryContract() {
     CHECK(beforeFooter(Components::stateCard()));
     CHECK(!overlaps(Components::footerDivider(), Components::inputStatus()));
     CHECK(!overlaps(Components::inputStatus(), Components::footerHint()));
+    for (std::uint8_t index = 0; index < 3; ++index) {
+        CHECK(insideScreen(Components::navigationCell(index)));
+        CHECK(contains(Components::footerHint(),
+                       Components::navigationCell(index)));
+        if (index != 0) {
+            CHECK(!overlaps(Components::navigationCell(index - 1),
+                            Components::navigationCell(index)));
+        }
+    }
 }
 
 void testLanguageCatalogAndControllerAreBounded() {
@@ -134,6 +143,12 @@ void testLanguageCatalogAndControllerAreBounded() {
                       "SELF-TEST") == 0);
     CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::AppSelfTest),
                       u8"САМОПРОВЕРКА") == 0);
+    CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::NavBack),
+                      u8"НАЗАД") == 0);
+    CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::NavSelect),
+                      u8"ВЫБОР") == 0);
+    CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::NavEnter),
+                      u8"ВХОД") == 0);
 
     UiLanguage parsed = UiLanguage::English;
     CHECK(uiLanguageFromName("ru", &parsed));

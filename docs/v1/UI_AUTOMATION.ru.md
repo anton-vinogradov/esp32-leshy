@@ -198,3 +198,13 @@ revisions и identity candidate, доказывает geometric square cue ка�
 health и zero leases. Retained verifier позволяет переиспользовать тот же путь в
 следующих Stage Demo и S8 release promotion, не превращая local unsigned S2 run в
 release.
+
+Candidate 0.63 добавляет идемпотентный typography lane 18 states: он нормализует
+persisted Home/language/Self-Test state, снимает оба языка и все guided common
+states, выполняет Quick/Full и возвращает русский Home без drift heap/input/output
+(`E-AUTO-027`/`E-HIL-087`). Candidate 0.64 добавляет более узкий lane
+пространственной навигации. Он доказывает Right и Select как равнозначные inward
+Actions, Left и diagnostic Back как равнозначные return Actions, nested Library
+entry обеими клавишами и выбор Up/Down; девять exact TFT frames независимо проверяют
+три footer cell 70×40 и final lease 0 (`E-AUTO-028`/`E-HIL-088`/`E-UX-009`). Для
+этого regression не нужны camera или ручной проход меню.

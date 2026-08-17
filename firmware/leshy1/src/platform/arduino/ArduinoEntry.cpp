@@ -1840,6 +1840,137 @@ void renderInput(std::uint8_t value) {
     display.print(line);
 }
 
+enum class NavigationKey : std::uint8_t {
+    None,
+    Left,
+    UpDown,
+    RightAndSelect,
+};
+
+struct NavigationCell final {
+    NavigationKey key = NavigationKey::None;
+    UiTextId label = UiTextId::Count;
+};
+
+struct NavigationFooter final {
+    NavigationCell left{};
+    NavigationCell middle{};
+    NavigationCell right{};
+};
+
+NavigationFooter navigationFooterForCurrentState() {
+    const NavigationCell back = {NavigationKey::Left, UiTextId::NavBack};
+    const NavigationCell choose = {NavigationKey::UpDown, UiTextId::NavSelect};
+    const NavigationCell enter = {NavigationKey::RightAndSelect,
+                                  UiTextId::NavEnter};
+    if (uiController.isRoot()) return {{}, choose, enter};
+    if (uiController.page() == 1) return {back, {}, {}};
+
+    if (uiController.page() == 2) {
+        if (surveyWorkflow.state() == SurveyWorkflowState::Setup) {
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavStart}};
+        }
+        if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
+            surveyController.view() == SurveyView::Detail) {
+            return {{NavigationKey::Left, UiTextId::NavList}, {},
+                    {NavigationKey::RightAndSelect,
+                     surveyWorkflow.simulated() ? UiTextId::NavStop
+                                                : UiTextId::NavSave}};
+        }
+        if (surveyWorkflow.state() == SurveyWorkflowState::Running) {
+            return {{NavigationKey::Left, UiTextId::NavCancel}, choose,
+                    {NavigationKey::RightAndSelect, UiTextId::NavDetails}};
+        }
+        return {{NavigationKey::Left, UiTextId::NavHome}, {}, {}};
+    }
+
+    if (uiController.page() == 3) {
+        if (libraryController.view() == LibraryView::ExportReady) {
+            return {{NavigationKey::Left, UiTextId::NavDetails}, {}, {}};
+        }
+        if (libraryController.view() == LibraryView::SessionDetail) {
+            return {{NavigationKey::Left, UiTextId::NavList}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavExport}};
+        }
+        return {back, choose,
+                {NavigationKey::RightAndSelect, UiTextId::NavDetails}};
+    }
+
+    if (uiController.page() == 4) {
+        return {back, choose,
+                {NavigationKey::RightAndSelect, UiTextId::NavApply}};
+    }
+
+    if (uiController.page() == 5) {
+        if (selfTestController.view() == SelfTestView::ModeMenu) {
+            return {back, choose, enter};
+        }
+        if (selfTestController.view() == SelfTestView::Preflight) {
+            return {{NavigationKey::Left, UiTextId::NavModes}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavStart}};
+        }
+        if (selfTestController.view() == SelfTestView::VisualCheck) {
+            return {{NavigationKey::Left, UiTextId::NavCancel}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavNext}};
+        }
+        return {{NavigationKey::Left, UiTextId::NavModes}, {}, {}};
+    }
+    return {back, {}, {}};
+}
+
+void renderNavigationKey(NavigationKey key, Rect bounds) {
+    const std::int16_t centerX = bounds.x + bounds.width / 2;
+    constexpr std::int16_t centerY = Layout::HintY + 8;
+    if (key == NavigationKey::Left) {
+        display.fillTriangle(centerX - 5, centerY, centerX + 3, centerY - 5,
+                             centerX + 3, centerY + 5, Palette::Focus);
+    } else if (key == NavigationKey::UpDown) {
+        display.fillTriangle(centerX - 9, centerY + 1, centerX - 4,
+                             centerY - 5, centerX + 1, centerY + 1,
+                             Palette::Focus);
+        display.fillTriangle(centerX + 3, centerY - 1, centerX + 8,
+                             centerY + 5, centerX + 13, centerY - 1,
+                             Palette::Focus);
+    } else if (key == NavigationKey::RightAndSelect) {
+        display.setTextColor(Palette::Focus, Palette::Surface);
+        selectUiFont(UiTextRole::Meta);
+        const char* ok = tr(UiTextId::NavOk);
+        const std::int16_t okWidth = display.textWidth(ok);
+        setUiCursor(UiTextRole::Meta, centerX - okWidth - 3,
+                    Layout::HintY + 1);
+        display.print(ok);
+        display.fillTriangle(centerX + 5, centerY - 5, centerX + 5,
+                             centerY + 5, centerX + 13, centerY,
+                             Palette::Focus);
+    }
+}
+
+void renderNavigationCell(std::uint8_t index, NavigationCell cell) {
+    if (cell.key == NavigationKey::None || cell.label == UiTextId::Count) return;
+    const Rect bounds = Components::navigationCell(index);
+    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, Palette::Surface);
+    renderNavigationKey(cell.key, bounds);
+    const char* label = tr(cell.label);
+    selectUiFont(UiTextRole::Body);
+    const std::int16_t labelWidth = display.textWidth(label);
+    display.setTextColor(Palette::TextSecondary, Palette::Surface);
+    setUiCursor(UiTextRole::Body,
+                bounds.x + (bounds.width - labelWidth) / 2,
+                bounds.y + 18);
+    display.print(label);
+}
+
+void renderNavigationFooter() {
+    const Rect hint = Components::footerHint();
+    display.fillRect(hint.x, hint.y, hint.width, hint.height, Palette::Canvas);
+    const NavigationFooter footer = navigationFooterForCurrentState();
+    renderNavigationCell(0, footer.left);
+    renderNavigationCell(1, footer.middle);
+    renderNavigationCell(2, footer.right);
+}
+
 std::uint16_t toneColor(Tone tone) {
     switch (tone) {
         case Tone::Focus:
@@ -2397,57 +2528,7 @@ void renderInteractiveScreen() {
     display.drawFastHLine(divider.x, divider.y, divider.width,
                           Palette::Divider);
     renderInput(lastInputRaw);
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    const Rect hint = Components::footerHint();
-    setUiCursor(UiTextRole::Meta, hint.x + 8, hint.y);
-    if (uiController.isRoot()) {
-        display.print(tr(UiTextId::FooterRoot));
-    } else if (uiController.page() == 2 &&
-               surveyWorkflow.state() == SurveyWorkflowState::Setup) {
-        display.print(surveyWorkflow.simulated()
-                          ? tr(UiTextId::FooterSurveySetupSim)
-                          : tr(UiTextId::FooterSurveySetupReal));
-    } else if (uiController.page() == 2 && surveyController.view() == SurveyView::Detail) {
-        display.print(surveyWorkflow.simulated()
-                          ? tr(UiTextId::FooterSurveyDetailSim)
-                          : tr(UiTextId::FooterSurveyDetailReal));
-    } else if (uiController.page() == 2 &&
-               surveyWorkflow.state() == SurveyWorkflowState::Running) {
-        display.print(surveyWorkflow.simulated()
-                          ? tr(UiTextId::FooterSurveyRunSim)
-                          : tr(UiTextId::FooterSurveyRunReal));
-    } else if (uiController.page() == 2) {
-        display.print(surveyWorkflow.simulated()
-                          ? tr(UiTextId::FooterSurveyDoneSim)
-                          : tr(UiTextId::FooterSurveyDoneReal));
-    } else if (uiController.page() == 3 &&
-               libraryController.view() == LibraryView::ExportReady) {
-        display.print(tr(UiTextId::FooterLibraryExport));
-    } else if (uiController.page() == 3 &&
-               libraryController.view() == LibraryView::SessionDetail) {
-        display.print(tr(UiTextId::FooterLibraryDetail));
-    } else if (uiController.page() == 3) {
-        const LibraryEntry* selected = libraryController.selected();
-        display.print(selected != nullptr && selected->persistent
-                          ? tr(UiTextId::FooterLibrarySd)
-                          : tr(UiTextId::FooterLibraryRam));
-    } else if (uiController.page() == 4 &&
-               languageController.selection() <= 1) {
-        display.print(tr(UiTextId::FooterLanguage));
-    } else if (uiController.page() == 5 &&
-               selfTestController.view() == SelfTestView::ModeMenu) {
-        display.print(tr(UiTextId::FooterSelfModes));
-    } else if (uiController.page() == 5 &&
-               selfTestController.view() == SelfTestView::Preflight) {
-        display.print(tr(UiTextId::FooterSelfPreflight));
-    } else if (uiController.page() == 5 &&
-               selfTestController.view() == SelfTestView::VisualCheck) {
-        display.print(tr(UiTextId::FooterSelfVisual));
-    } else if (uiController.page() == 5) {
-        display.print(tr(UiTextId::FooterSelfResult));
-    } else {
-        display.print(tr(UiTextId::FooterGeneric));
-    }
+    renderNavigationFooter();
 }
 
 void emitUiState(Stream& reply, UiAction action, bool changed) {
@@ -2666,22 +2747,12 @@ bool applyUiAction(UiAction action, bool render = true) {
                         surveyPipeline.lastStatus());
             }
         } else if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
-                   surveyController.view() == SurveyView::Detail &&
-            (action == UiAction::Back || action == UiAction::Left)) {
-            handled = true;
-            changed = surveyController.back();
-        } else if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
-                   surveyController.view() == SurveyView::List) {
-            if (action == UiAction::Up) {
+                   surveyController.view() == SurveyView::Detail) {
+            if (action == UiAction::Back || action == UiAction::Left) {
                 handled = true;
-                changed = surveyController.previous();
-            } else if (action == UiAction::Down) {
-                handled = true;
-                changed = surveyController.next();
-            } else if (action == UiAction::Select) {
-                handled = true;
-                changed = surveyController.openSelected();
-            } else if (action == UiAction::Right) {
+                changed = surveyController.back();
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
                 handled = true;
                 if (productSurveyRuntime.selected) {
                     changed = requestProductSurveyWorkerStop(false);
@@ -2693,6 +2764,19 @@ bool applyUiAction(UiAction action, bool render = true) {
                     lastRuntimeEvent =
                         leshy1::apps::survey::surveyPipelineStatusName(status);
                 }
+            }
+        } else if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
+                   surveyController.view() == SurveyView::List) {
+            if (action == UiAction::Up) {
+                handled = true;
+                changed = surveyController.previous();
+            } else if (action == UiAction::Down) {
+                handled = true;
+                changed = surveyController.next();
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                handled = true;
+                changed = surveyController.openSelected();
             } else if ((action == UiAction::Back || action == UiAction::Left) &&
                        surveyWorkflow.state() == SurveyWorkflowState::Running) {
                 if (productSurveyRuntime.selected) {
@@ -2722,7 +2806,8 @@ bool applyUiAction(UiAction action, bool render = true) {
             handled = true;
             changed = libraryController.back();
         } else if (libraryController.view() == LibraryView::SessionDetail &&
-                   action == UiAction::Right) {
+                   (action == UiAction::Select ||
+                    action == UiAction::Right)) {
             handled = true;
             changed = libraryController.requestExport();
         } else if (libraryController.view() == LibraryView::SessionList) {

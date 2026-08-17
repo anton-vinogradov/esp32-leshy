@@ -102,7 +102,7 @@ tests, so a screen cannot silently move its content into the fixed footer.
 | Choice row | 216×48 with primary and metadata text | Quick / Full-Guided mode selection |
 | Metric row | five 216×28 result slots | Full preflight and Quick/Full result |
 | Footer divider | fixed at y=236 | every interactive screen |
-| Input status + hint | separate non-overlapping regions | every interactive screen and HIL |
+| Input status + spatial navigation | 216×28 input plus three 70×40 action cells | every interactive screen and HIL |
 
 Exact candidate `0.54.0-ui-components-measure` accepts UX-04 through
 `E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home and Self-Test consume the same renderer
@@ -114,10 +114,10 @@ input has zero errors/drops, buzzer remains LOW, and Back returns owner/lease to
 ## UX-05 EN/RU content fit
 
 `ui/UiStrings.def` is the single allocation-free catalog for every current S2
-renderer string except the invariant `LESHY 1.x` brand. It currently defines 127
-stable IDs, both EN and RU variants (254 strings total), and the pixel budget of
-every use. The exact accepted 0.55 candidate contained 111 IDs/222 strings; the 16
-later IDs add the guided-state and product cancellation/progress copy.
+renderer string except the invariant `LESHY 1.x` brand. It currently defines 123
+stable IDs, both EN and RU variants (246 strings total), and the pixel budget of
+every use. Exact 0.63 measured the former 127-ID prose-footer catalog; 0.64 replaces
+its 19 context sentences with 15 compact spatial-action labels.
 `tools/generate_ui_gfx_font.py` reproducibly generates the faces, while
 `tools/check_ui_language_contract.py` measures their metrics, rejects a
 missing translation or overflowing string, and verifies that renderers do not
@@ -135,8 +135,8 @@ historical provenance, not the current face.
 UX-05 accepts encoding coverage, persistence, geometric fit, and the selected
 small-raster face; physical-panel optics and personal vision still belong to the
 usability walkthrough. The Roboto replacement required eight safe copy shortenings.
-All 254 variants then fit their declared generated-glyph pixel budgets with zero
-overflow.
+All current 246 variants fit their declared generated-glyph pixel budgets with zero
+overflow; the retained 0.63 typography run remains the historical 254/254 proof.
 
 Exact candidate `0.55.0-ui-language-measure` accepts UX-05 through
 `E-BUILD-057`/`E-HIL-079`/`E-UX-005`. Actual 240×320 TFT captures cover Home,
@@ -176,6 +176,16 @@ Language, and both Self-Test choices through public Actions; the pixel checker
 proves the outline/chevron independent of color. Quick remains 8/8, input remains
 healthy, the buzzer remains LOW, and final owner/lease is `none`/`0`. At that
 evidence point UX-07 and `DEMO-S2` remained open.
+
+Exact candidate `0.64.0-spatial-navigation-measure` refines UX-06 through
+`E-BUILD-065`/`E-AUTO-028`/`E-HIL-088`/`E-UX-009`. A 40 px footer now contains
+three spatial cells: Left/Back, Up+Down/Select, and Right+OK/Enter. Direction icons
+are drawn geometrically, action labels use Roboto Condensed Medium 16, and technical
+RF/storage state remains in the body instead of competing with controls. Right and
+Select open the same Home and nested Library destinations; Survey Stop/save moves
+inside Detail so the stable navigation model has no list-level exception. Nine
+exact TFT frames, 15 public transitions, invariant heap, healthy input, buzzer LOW,
+and final Russian Home with lease 0 are independently checked.
 
 ## UX-07 real-TFT common-state evidence
 
