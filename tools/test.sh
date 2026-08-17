@@ -60,7 +60,9 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/storage/StorageGuard.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/StorageTiming.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/Pcf8574ButtonInput.cpp" \
+    "$repo_dir/firmware/leshy1/src/ui/LanguageController.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/UiController.cpp" \
+    "$repo_dir/firmware/leshy1/src/ui/UiStrings.cpp" \
     -o "$test_tmp/clean_target_tests"
 
 "$test_tmp/clean_target_tests"
@@ -102,6 +104,8 @@ python3 "$repo_dir/tools/check_product_hardware_watchdog_acceptance.py"
 python3 "$repo_dir/tools/check_visual_system_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_ui_components_acceptance.py"
+python3 "$repo_dir/tools/check_ui_language_contract.py"
+python3 "$repo_dir/tools/check_ui_language_acceptance.py"
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"

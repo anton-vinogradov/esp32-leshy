@@ -32,6 +32,11 @@ calls a screen-specific setter, bypasses Back cleanup, or invents a test-only me
 As the product Navigator replaces the probe controller, this transport stays at the
 normalized Action boundary.
 
+`ui.language en|ru` selects through the same persistent `LanguageController` used
+by the public Language screen. It is an automation entry into a product operation,
+not a separate renderer override; `ui.state` reports both active language and
+Language-screen selection.
+
 ### Actual display capture
 
 `ui.capture` reads the ILI9341 display GRAM in four-row tiles and returns:
@@ -170,3 +175,10 @@ regression exposed and retained a loop-task stack panic in the enlarged state
 record; moving both large records to one static bounded workspace fixed it. The
 exact rerun passes Quick 8/8 and returns owner/lease `none`/`0`; Full remains
 visibly and machine-readably blocked on incomplete capability coverage (`E-HIL-077`).
+
+Candidate 0.55 adds one EN/RU catalog and persistent Language screen without
+changing the Action/capture boundary. The exact run retains Russian Home,
+Diagnostics, Survey, Library, Language, Self-Test, and Quick result plus English
+Home/Language, proves Russian persistence across flash/reset, and finishes Quick
+8/8 with zero input errors/drops, buzzer LOW, and owner/lease `none`/`0`
+(`E-HIL-079`/`E-UX-005`).

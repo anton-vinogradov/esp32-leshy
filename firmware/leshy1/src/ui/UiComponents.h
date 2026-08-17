@@ -107,14 +107,14 @@ constexpr bool overlaps(Rect left, Rect right) {
 
 static_assert(insideScreen(Components::header()), "header must fit the TFT");
 static_assert(insideScreen(Components::title()), "title must fit the TFT");
-static_assert(beforeFooter(Components::homeRow(3, true)),
+static_assert(beforeFooter(Components::homeRow(4, true)),
               "final Home utility must fit above the footer");
 static_assert(beforeFooter(Components::choiceRow(1)),
               "two mode choices must fit above the footer");
 static_assert(beforeFooter(Components::metricRow(4)),
               "five result metrics must fit above the footer");
-static_assert(!overlaps(Components::homeRow(2, false),
-                        Components::homeRow(3, true)),
+static_assert(!overlaps(Components::homeRow(3, false),
+                        Components::homeRow(4, true)),
               "Home utility must be visually separated");
 static_assert(!overlaps(Components::footerDivider(), Components::inputStatus()),
               "footer divider and input status must not overlap");

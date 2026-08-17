@@ -3,7 +3,7 @@
 *Read in: **English** · [Русский](UX_UI_BASELINE.ru.md)*
 
 Status: **S1 product UX direction accepted; S2 visual gate active**. Low-fidelity
-UX-01/UX-02 are fixed; UX-03/UX-04 are accepted; UX-05…UX-07 are the current S2 work.
+UX-01/UX-02 are fixed; UX-03…UX-05 are accepted; UX-06/UX-07 are the current S2 work.
 
 This document defines when user experience is reviewed and when visual appearance
 becomes an implementation constraint. It does not replace the
@@ -16,7 +16,8 @@ becomes an implementation constraint. It does not replace the
 Before S1 closes, the project agrees:
 
 - the `Survey / Targets / Capture / Lab / Library / Device` information
-  architecture plus a persistent bottom-of-Home `Self-Test` utility entry;
+  architecture plus direct `Language` access and a persistent bottom-of-Home
+  `Self-Test` utility entry;
 - primary J-01…J-06 paths and the home of every `CAP-*`;
 - common Start/Stop, Select, Back, confirm, cancel, and panic semantics;
 - mandatory path states: unavailable, empty, loading, running, partial/degraded,
@@ -96,7 +97,7 @@ tests, so a screen cannot silently move its content into the fixed footer.
 | Component | Geometry/role | Current reuse |
 |---|---|---|
 | Header + title | 240×42 brand anchor; 216 px title region | Home and every Self-Test view |
-| Home row | 216×32; final utility gap is explicit | capability Home and final Self-Test item |
+| Home row | 216×28; five rows fit above the footer and the utility gap is explicit | capability Home, Language, and final Self-Test item |
 | Choice row | 216×48 with primary and metadata text | Quick / Full-Guided mode selection |
 | Metric row | five 216×28 result slots | Full preflight and Quick/Full result |
 | Footer divider | fixed at y=236 | every interactive screen |
@@ -106,7 +107,34 @@ Exact candidate `0.54.0-ui-components-measure` accepts UX-04 through
 `E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home and Self-Test consume the same renderer
 primitives; four actual TFT frames pass the pixel/trace checker; Quick passes 8/8;
 input has zero errors/drops, buzzer remains LOW, and Back returns owner/lease to
-`none`/`0`. This accepts the component system, not UX-05…07 or `DEMO-S2`.
+`none`/`0`. This accepted the component system; at that point UX-05…07 and
+`DEMO-S2` were still open.
+
+## UX-05 EN/RU content fit
+
+`ui/UiStrings.def` is the single allocation-free catalog for every current S2
+renderer string except the invariant `LESHY 1.x` brand. It defines 111 stable IDs,
+both EN and RU variants (222 strings total), and the pixel budget of every use.
+`tools/generate_ui_gfx_font.py` reproducibly generates the faces, while
+`tools/check_ui_language_contract.py` measures their metrics, rejects a
+missing translation or overflowing string, and verifies that renderers do not
+reintroduce local user-facing literals.
+
+Both languages use the vendored OFL-licensed PT Sans Narrow source. The generated
+GFX headers provide 16 px body and 12 px metadata faces over the required ASCII and
+Cyrillic range without runtime font loading or heap allocation. `Language` is the
+next-to-last Home item, applies EN/RU immediately, and persists the selection in NVS
+namespace `leshy1-ui`, key `lang.v1`; `ui.language en|ru` exercises the same
+controller boundary used by the screen.
+
+Exact candidate `0.55.0-ui-language-measure` accepts UX-05 through
+`E-BUILD-057`/`E-HIL-079`/`E-UX-005`. Actual 240×320 TFT captures cover Home,
+Diagnostics, Survey, Library, Language, Self-Test, and Quick result in Russian plus
+Home and Language in English. Russian survives an exact-candidate flash/reset;
+Quick remains 8/8 with zero RF/storage/buzzer side effects, input errors and drops
+remain zero, the buzzer is LOW, and final owner/lease is `none`/`0`. The retained
+artifact and independent checker bind the frames, catalog, font source, candidate
+hashes, state trace, and final cleanup. UX-06/UX-07 and `DEMO-S2` remain open.
 
 ## Gate
 

@@ -44,7 +44,9 @@
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
+#include "ui/LanguageController.h"
 #include "ui/UiController.h"
+#include "ui/UiStrings.h"
 #include "ui/VisualTheme.h"
 #include "ui/UiComponents.h"
 
@@ -83,8 +85,8 @@ void testVisualThemeContract() {
     CHECK(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth);
     CHECK(Layout::ContentTop + 3 * (Layout::RowHeight + Layout::RowGap) <
           Layout::FooterDividerY);
-    CHECK(Layout::ContentTop + 4 * Layout::HomeRowHeight +
-              3 * Layout::HomeRowGap + Layout::HomeUtilityGap <
+    CHECK(Layout::ContentTop + 5 * Layout::HomeRowHeight +
+              4 * Layout::HomeRowGap + Layout::HomeUtilityGap <
           Layout::FooterDividerY);
     CHECK(Palette::Canvas == rgb565(7, 16, 12));
     CHECK(Palette::Header != Palette::Canvas);
@@ -103,8 +105,8 @@ void testUiComponentGeometryContract() {
 
     CHECK(insideScreen(Components::header()));
     CHECK(insideScreen(Components::title()));
-    for (std::uint8_t index = 0; index < 4; ++index) {
-        const Rect row = Components::homeRow(index, index == 3);
+    for (std::uint8_t index = 0; index < 5; ++index) {
+        const Rect row = Components::homeRow(index, index == 4);
         CHECK(beforeFooter(row));
         if (index != 0) {
             CHECK(!overlaps(Components::homeRow(index - 1, false), row));
@@ -115,6 +117,41 @@ void testUiComponentGeometryContract() {
     CHECK(beforeFooter(Components::metricRow(4)));
     CHECK(!overlaps(Components::footerDivider(), Components::inputStatus()));
     CHECK(!overlaps(Components::inputStatus(), Components::footerHint()));
+}
+
+void testLanguageCatalogAndControllerAreBounded() {
+    CHECK(kUiTextCount > 80);
+    for (std::size_t index = 0; index < kUiTextCount; ++index) {
+        const UiTextSpec& spec = uiTextSpec(static_cast<UiTextId>(index));
+        CHECK(spec.english != nullptr && spec.english[0] != '\0');
+        CHECK(spec.russian != nullptr && spec.russian[0] != '\0');
+        CHECK(spec.maximumPixels > 0 && spec.maximumPixels <= 212);
+    }
+    CHECK(std::strcmp(uiText(UiLanguage::English, UiTextId::AppSelfTest),
+                      "SELF-TEST") == 0);
+    CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::AppSelfTest),
+                      u8"САМОПРОВЕРКА") == 0);
+
+    UiLanguage parsed = UiLanguage::English;
+    CHECK(uiLanguageFromName("ru", &parsed));
+    CHECK(parsed == UiLanguage::Russian);
+    CHECK(!uiLanguageFromName("de", &parsed));
+
+    LanguageController controller;
+    CHECK(controller.active() == UiLanguage::English);
+    CHECK(controller.selection() == 0);
+    CHECK(controller.next());
+    CHECK(controller.selected() == UiLanguage::Russian);
+    CHECK(controller.apply());
+    CHECK(controller.active() == UiLanguage::Russian);
+    controller.enter();
+    CHECK(controller.selection() == 1);
+    CHECK(controller.previous());
+    CHECK(controller.apply());
+    CHECK(controller.active() == UiLanguage::English);
+    controller.restore(UiLanguage::Russian);
+    CHECK(controller.active() == UiLanguage::Russian);
+    CHECK(controller.selection() == 1);
 }
 
 void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
@@ -642,7 +679,7 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(constrained.add({"storage.sd", CapabilityState::Unknown, "probe", "not_mounted"}));
     AppCatalog catalog;
     catalog.rebuild(constrained);
-    CHECK(catalog.size() == 4);
+    CHECK(catalog.size() == 5);
     CHECK(catalog.get(0) != nullptr && catalog.get(0)->enabled);
     CHECK(std::strcmp(catalog.get(0)->id, "diagnostics") == 0);
     CHECK(catalog.get(1) != nullptr && !catalog.get(1)->enabled);
@@ -654,10 +691,13 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK((catalog.get(1)->resources & resourceMask(Resource::EspRf)) != 0);
     CHECK((catalog.get(2)->resources & resourceMask(Resource::Storage)) != 0);
     CHECK(catalog.get(3) != nullptr && catalog.get(3)->enabled);
-    CHECK(std::strcmp(catalog.get(3)->id, "self-test") == 0);
-    CHECK(std::strcmp(catalog.get(3)->label, "SELF-TEST") == 0);
+    CHECK(std::strcmp(catalog.get(3)->id, "language") == 0);
     CHECK(catalog.get(3)->page == 4);
-    CHECK(catalog.get(3)->resources == resourceMask(Resource::UiForeground));
+    CHECK(catalog.get(4) != nullptr && catalog.get(4)->enabled);
+    CHECK(std::strcmp(catalog.get(4)->id, "self-test") == 0);
+    CHECK(std::strcmp(catalog.get(4)->label, "SELF-TEST") == 0);
+    CHECK(catalog.get(4)->page == 5);
+    CHECK(catalog.get(4)->resources == resourceMask(Resource::UiForeground));
 
     HardwareInventory availableInventory;
     CHECK(availableInventory.add(
@@ -2889,6 +2929,7 @@ void testSdSector0ReadIsSingleBoundedAndParseOnly() {
 int main() {
     testVisualThemeContract();
     testUiComponentGeometryContract();
+    testLanguageCatalogAndControllerAreBounded();
     testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
     testProductBootRetryIsNarrowAndBounded();
     testProductStartIdentityRetryStopsBeforeFilesystem();

@@ -3,7 +3,7 @@
 *Read in: [English](UX_UI_BASELINE.md) · **Русский***
 
 Статус: **S1 product UX direction принят; S2 visual gate активен**. Low-fidelity
-UX-01/UX-02 зафиксированы, UX-03/UX-04 приняты; UX-05…UX-07 — текущая работа S2.
+UX-01/UX-02 зафиксированы, UX-03…UX-05 приняты; UX-06/UX-07 — текущая работа S2.
 
 Документ определяет, когда обсуждается опыт пользователя и когда внешний вид
 становится ограничением реализации. Он не подменяет
@@ -16,7 +16,8 @@ UX-01/UX-02 зафиксированы, UX-03/UX-04 приняты; UX-05…UX-0
 До закрытия S1 согласуются:
 
 - информационная архитектура `Обзор / Цели / Захват / Лаборатория / Библиотека /
-  Устройство` и постоянный utility-пункт `Self-Test` в самом низу Home;
+  Устройство`, прямой доступ к `Язык` и постоянный utility-пункт `Self-Test` в
+  самом низу Home;
 - основные пути J-01…J-06 и место каждого `CAP-*`;
 - единая семантика Start/Stop, Select, Back, confirm, cancel и panic;
 - обязательные состояния каждого пути: unavailable, empty, loading, running,
@@ -96,7 +97,7 @@ native tests, поэтому экран не может незаметно за�
 | Компонент | Геометрия/роль | Текущее переиспользование |
 |---|---|---|
 | Header + title | brand anchor 240×42; title region 216 px | Home и все Self-Test views |
-| Home row | 216×32; gap последнего utility задан явно | capability Home и последний Self-Test item |
+| Home row | 216×28; пять строк помещаются над footer, utility gap задан явно | capability Home, Язык и последний Self-Test item |
 | Choice row | 216×48 с primary и metadata text | выбор Quick / Full-Guided |
 | Metric row | пять result slots 216×28 | Full preflight и Quick/Full result |
 | Footer divider | фиксирован на y=236 | каждый interactive screen |
@@ -106,8 +107,34 @@ Exact candidate `0.54.0-ui-components-measure` принимает UX-04 чере
 `E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home и Self-Test используют одинаковые
 renderer primitives; четыре actual TFT frame проходят pixel/trace checker; Quick
 проходит 8/8; input имеет zero errors/drops, buzzer остаётся LOW, Back возвращает
-owner/lease в `none`/`0`. Это принимает component system, но не UX-05…07 или
-`DEMO-S2`.
+owner/lease в `none`/`0`. Тогда это приняло component system; UX-05…07 и `DEMO-S2`
+ещё оставались открыты.
+
+## UX-05 — размещение EN/RU
+
+`ui/UiStrings.def` — единый allocation-free каталог всех текущих строк S2 renderer,
+кроме неизменяемого бренда `LESHY 1.x`. Он задаёт 111 стабильных ID, варианты EN и
+RU (всего 222 строки) и пиксельный budget каждого места использования.
+`tools/generate_ui_gfx_font.py` воспроизводимо генерирует faces, а
+`tools/check_ui_language_contract.py` измеряет их metrics, отклоняет отсутствующий
+перевод или переполнение и проверяет, что renderers не возвращают локальные
+user-facing literals.
+
+Оба языка используют vendored PT Sans Narrow с лицензией OFL. Сгенерированные GFX
+headers дают body 16 px и metadata 12 px для нужного ASCII/Cyrillic range без
+runtime-загрузки шрифта или heap allocation. `Язык` — предпоследний пункт Home,
+выбор EN/RU применяется сразу и сохраняется в NVS namespace `leshy1-ui`, key
+`lang.v1`; команда `ui.language en|ru` проходит через ту же controller boundary,
+что и экран.
+
+Exact candidate `0.55.0-ui-language-measure` принимает UX-05 через
+`E-BUILD-057`/`E-HIL-079`/`E-UX-005`. Actual TFT captures 240×320 охватывают Home,
+Diagnostics, Survey, Library, Language, Self-Test и Quick result на русском, а также
+Home и Language на английском. Русский сохраняется после exact-candidate flash/reset;
+Quick остаётся 8/8 с zero RF/storage/buzzer side effects, input errors и drops равны
+нулю, buzzer остаётся LOW, final owner/lease — `none`/`0`. Retained artifact и
+независимый checker связывают frames, каталог, source шрифта, hashes candidate,
+state trace и final cleanup. UX-06/UX-07 и `DEMO-S2` остаются открыты.
 
 ## Gate
 

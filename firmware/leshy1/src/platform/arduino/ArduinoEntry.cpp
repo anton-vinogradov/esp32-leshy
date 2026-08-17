@@ -64,9 +64,12 @@
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
+#include "ui/LanguageController.h"
 #include "ui/UiComponents.h"
 #include "ui/UiController.h"
+#include "ui/UiStrings.h"
 #include "ui/VisualTheme.h"
+#include "ui/fonts/PTSansNarrowGfx.h"
 
 namespace {
 
@@ -119,6 +122,10 @@ using leshy1::services::survey::SessionStatus;
 using leshy1::services::survey::SurveySession;
 using leshy1::ui::UiAction;
 using leshy1::ui::UiController;
+using leshy1::ui::UiLanguage;
+using leshy1::ui::UiTextId;
+using leshy1::ui::UiTextRole;
+using leshy1::ui::LanguageController;
 using leshy1::ui::Pcf8574ButtonInput;
 using leshy1::ui::visual::Layout;
 using leshy1::ui::visual::Palette;
@@ -162,6 +169,8 @@ constexpr const char* kProductEnrollPrefix =
     "storage.product.enroll disposable-read-only ";
 constexpr const char* kProductEnrollmentNamespace = "leshy1";
 constexpr const char* kProductEnrollmentKey = "sd.cid.v1";
+constexpr const char* kUiPreferencesNamespace = "leshy1-ui";
+constexpr const char* kUiLanguageKey = "lang.v1";
 HardwareInventory inventory;
 AppCatalog appCatalog;
 ResourceBroker resourceBroker;
@@ -194,6 +203,7 @@ char runningAppElfSha256[65] = {};
 HilSession hilSession;
 TFT_eSPI display;
 UiController uiController;
+LanguageController languageController;
 SelfTestController selfTestController;
 constexpr std::size_t kConsoleCommandCapacity = 128;
 constexpr char kLongestConsoleCommand[] =
@@ -471,6 +481,27 @@ bool clearProductFingerprint() {
     preferences.end();
     char verified[33] = {};
     return removed && !loadProductFingerprint(verified, sizeof(verified));
+}
+
+UiLanguage loadUiLanguage() {
+    Preferences preferences;
+    if (!preferences.begin(kUiPreferencesNamespace, true)) {
+        return UiLanguage::English;
+    }
+    const std::uint8_t stored = preferences.getUChar(kUiLanguageKey, 0);
+    preferences.end();
+    return stored == static_cast<std::uint8_t>(UiLanguage::Russian)
+               ? UiLanguage::Russian
+               : UiLanguage::English;
+}
+
+bool saveUiLanguage(UiLanguage language) {
+    Preferences preferences;
+    if (!preferences.begin(kUiPreferencesNamespace, false)) return false;
+    const std::size_t written = preferences.putUChar(
+        kUiLanguageKey, static_cast<std::uint8_t>(language));
+    preferences.end();
+    return written == sizeof(std::uint8_t);
 }
 
 bool closeProductSurveyBackend() {
@@ -1301,15 +1332,48 @@ void pollPhysicalInput(void*) {
     }
 }
 
+const char* tr(UiTextId id) {
+    return leshy1::ui::uiText(languageController.active(), id);
+}
+
+enum class ActiveDisplayFont : std::uint8_t {
+    None,
+    Body,
+    Meta,
+};
+
+ActiveDisplayFont activeDisplayFont = ActiveDisplayFont::None;
+
+void selectUiFont(UiTextRole role) {
+    const ActiveDisplayFont requested = role == UiTextRole::Body
+        ? ActiveDisplayFont::Body : ActiveDisplayFont::Meta;
+    if (activeDisplayFont == requested) return;
+    if (role == UiTextRole::Body) {
+        display.setFreeFont(&PTSansNarrowBody);
+    } else {
+        display.setFreeFont(&PTSansNarrowMeta);
+    }
+    activeDisplayFont = requested;
+}
+
+std::int16_t uiFontAscent(UiTextRole role) {
+    return role == UiTextRole::Body ? kPTSansNarrowBodyAscent
+                                    : kPTSansNarrowMetaAscent;
+}
+
+void setUiCursor(UiTextRole role, std::int16_t x, std::int16_t top) {
+    selectUiFont(role);
+    display.setCursor(x, top + uiFontAscent(role));
+}
+
 void renderInput(std::uint8_t value) {
-    char line[32] = {};
-    std::snprintf(line, sizeof(line), "INPUT RAW  0x%02X", value);
+    char line[48] = {};
+    std::snprintf(line, sizeof(line), tr(UiTextId::InputRawFormat), value);
     const Rect bounds = Components::inputStatus();
     display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
                      Palette::Canvas);
     display.setTextColor(Palette::Focus, Palette::Canvas);
-    display.setTextFont(2);
-    display.setCursor(bounds.x + 4, bounds.y + 6);
+    setUiCursor(UiTextRole::Body, bounds.x + 4, bounds.y + 1);
     display.print(line);
 }
 
@@ -1338,12 +1402,12 @@ void renderHeader(const char* title) {
                      Palette::Header);
     display.setTextColor(Palette::TextPrimary, Palette::Header);
     display.setTextFont(4);
+    activeDisplayFont = ActiveDisplayFont::None;
     display.setCursor(10, 9);
     display.print("LESHY 1.x");
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    display.setTextFont(2);
     const Rect titleBounds = Components::title();
-    display.setCursor(titleBounds.x + 2, titleBounds.y + 6);
+    setUiCursor(UiTextRole::Body, titleBounds.x + 2, titleBounds.y);
     display.print(title);
 }
 
@@ -1356,37 +1420,56 @@ void renderMenuRow(Rect bounds, const char* label, const char* note,
                           Layout::Radius, background);
     display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                          background);
-    display.setTextFont(2);
-    display.setCursor(bounds.x + 10, bounds.y + 2);
+    setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y - 3);
     display.print(label);
-    display.setTextFont(1);
     display.setTextColor(enabled ? toneColor(noteTone) : Palette::TextMuted,
                          background);
-    display.setCursor(bounds.x + 10, bounds.y + bounds.height - 11);
+    setUiCursor(UiTextRole::Meta, bounds.x + 10, bounds.y + 11);
     display.print(note);
 }
 
 void renderMetric(std::uint8_t index, const char* text,
                   Tone tone = Tone::Neutral) {
     const Rect bounds = Components::metricRow(index);
-    display.setTextFont(2);
     display.setTextColor(toneColor(tone), Palette::Canvas);
-    display.setCursor(bounds.x + 2, bounds.y);
+    setUiCursor(UiTextRole::Body, bounds.x + 2, bounds.y - 2);
     display.print(text);
 }
 
+UiTextId homeLabel(const AppMenuItem& item) {
+    if (std::strcmp(item.id, "diagnostics") == 0) return UiTextId::AppDiagnostics;
+    if (std::strcmp(item.id, "survey") == 0) return UiTextId::AppSurvey;
+    if (std::strcmp(item.id, "library") == 0) return UiTextId::AppLibrary;
+    if (std::strcmp(item.id, "language") == 0) return UiTextId::AppLanguage;
+    return UiTextId::AppSelfTest;
+}
+
+UiTextId homeNote(const AppMenuItem& item) {
+    if (std::strcmp(item.id, "survey") == 0) {
+        if (item.simulated) return UiTextId::NoteSurveySimulated;
+        if (!item.enabled) return UiTextId::NoteSurveyUnavailable;
+        if (std::strcmp(item.reason, "passive / persistent") == 0) {
+            return UiTextId::NoteSurveyPersistent;
+        }
+    }
+    if (std::strcmp(item.id, "library") == 0) {
+        if (item.simulated) return UiTextId::NoteLibrarySimulated;
+        if (!item.enabled) return UiTextId::NoteLibraryUnavailable;
+    }
+    if (std::strcmp(item.id, "language") == 0) return UiTextId::NoteLanguage;
+    if (std::strcmp(item.id, "self-test") == 0) return UiTextId::NoteSelfTest;
+    return UiTextId::Ready;
+}
+
 void renderHome() {
-    renderHeader("CAPABILITY HOME");
+    renderHeader(tr(UiTextId::HomeTitle));
     for (std::uint8_t i = 0; i < appCatalog.size(); ++i) {
         const AppMenuItem* item = appCatalog.get(i);
         if (item == nullptr) continue;
         const bool utility = std::strcmp(item->id, "self-test") == 0;
         const Rect bounds = Components::homeRow(i, utility);
         const bool selected = uiController.selection() == i;
-        renderMenuRow(bounds, item->label,
-                      item->simulated
-                          ? item->reason
-                          : (item->enabled ? "READY" : item->reason),
+        renderMenuRow(bounds, tr(homeLabel(*item)), tr(homeNote(*item)),
                       selected, item->enabled,
                       item->enabled ? Tone::Positive : Tone::Muted);
     }
@@ -1419,214 +1502,224 @@ SelfTestFacts snapshotSelfTestFacts() {
     return facts;
 }
 
+void renderLanguagePage() {
+    renderHeader(tr(UiTextId::LanguageTitle));
+    const UiTextId labels[2] = {UiTextId::LanguageEnglish,
+                                UiTextId::LanguageRussian};
+    const UiTextId notes[2] = {UiTextId::LanguageEnglishNote,
+                               UiTextId::LanguageRussianNote};
+    for (std::uint8_t index = 0; index < 2; ++index) {
+        renderMenuRow(Components::choiceRow(index), tr(labels[index]),
+                      tr(notes[index]),
+                      languageController.selection() == index, true,
+                      languageController.active() ==
+                              (index == 0 ? UiLanguage::English
+                                          : UiLanguage::Russian)
+                          ? Tone::Positive
+                          : Tone::Neutral);
+    }
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 207);
+    display.print(tr(UiTextId::LanguagePersisted));
+}
+
 void renderSelfTestPage() {
-    char line[64] = {};
+    char line[96] = {};
     if (selfTestController.view() == SelfTestView::ModeMenu) {
-        renderHeader("SELF-TEST");
-        constexpr const char* labels[2] = {"QUICK", "FULL / GUIDED"};
-        constexpr const char* notes[2] = {"READ ONLY / AUTOMATIC",
-                                          "ALL APPLICABLE CHECKS"};
+        renderHeader(tr(UiTextId::SelfTestTitle));
+        const UiTextId labels[2] = {UiTextId::Quick, UiTextId::FullGuided};
+        const UiTextId notes[2] = {UiTextId::QuickNote, UiTextId::FullNote};
         for (std::uint8_t index = 0; index < 2; ++index) {
             const bool selected = selfTestController.selection() == index;
-            renderMenuRow(Components::choiceRow(index), labels[index], notes[index],
+            renderMenuRow(Components::choiceRow(index), tr(labels[index]),
+                          tr(notes[index]),
                           selected, true,
                           index == 0 ? Tone::Positive : Tone::Warning);
         }
-        display.setTextFont(1);
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
-        display.setCursor(14, 218);
-        display.print("NO AUTOMATIC TEST DURING BOOT");
+        setUiCursor(UiTextRole::Meta, 14, 207);
+        display.print(tr(UiTextId::SelfTestNoBoot));
         return;
     }
 
     if (selfTestController.view() == SelfTestView::Preflight) {
-        renderHeader("FULL / PREFLIGHT");
-        renderMetric(0, "QUICK CHECKS       8");
-        renderMetric(1, "CAPABILITY PLAN  STAGED");
-        renderMetric(2, "SIDE EFFECTS      NONE");
-        renderMetric(3, "RESULT          BLOCKED", Tone::Warning);
-        display.setTextFont(1);
-        display.setCursor(14, 214);
-        display.print("S3-S8 ADDS GUIDED DEVICE CHECKS");
+        renderHeader(tr(UiTextId::FullPreflight));
+        renderMetric(0, tr(UiTextId::QuickChecks8));
+        renderMetric(1, tr(UiTextId::CapabilityPlanStaged));
+        renderMetric(2, tr(UiTextId::SideEffectsNone));
+        renderMetric(3, tr(UiTextId::ResultBlocked), Tone::Warning);
+        display.setTextColor(Palette::TextMuted, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 203);
+        display.print(tr(UiTextId::GuidedLater));
         return;
     }
 
     const SelfTestReport& report = selfTestController.report();
     renderHeader(report.status == SelfTestResultStatus::Pass
-                     ? "SELF-TEST / PASS"
+                     ? tr(UiTextId::SelfTestPass)
                      : (report.status == SelfTestResultStatus::Fail
-                            ? "SELF-TEST / FAIL"
-                            : "SELF-TEST / BLOCKED"));
+                            ? tr(UiTextId::SelfTestFail)
+                            : tr(UiTextId::SelfTestBlocked)));
     renderMetric(0,
-                 report.mode == SelfTestMode::Quick ? "MODE          QUICK"
-                                                    : "MODE    FULL / GUIDED",
+                 report.mode == SelfTestMode::Quick ? tr(UiTextId::ModeQuick)
+                                                    : tr(UiTextId::ModeFull),
                  report.status == SelfTestResultStatus::Pass
                      ? Tone::Positive
                      : (report.status == SelfTestResultStatus::Fail
                             ? Tone::Danger
                             : Tone::Warning));
-    std::snprintf(line, sizeof(line), "CHECKS       %u / %u",
+    std::snprintf(line, sizeof(line), tr(UiTextId::ChecksFormat),
                   static_cast<unsigned>(report.passed),
                   static_cast<unsigned>(report.checkCount));
     renderMetric(1, line);
-    std::snprintf(line, sizeof(line), "FAIL %u   BLOCKED %u",
+    std::snprintf(line, sizeof(line), tr(UiTextId::FailBlockedFormat),
                   static_cast<unsigned>(report.failed),
                   static_cast<unsigned>(report.blocked));
     renderMetric(2, line);
-    std::snprintf(line, sizeof(line), "HEAP MIN     %lu KiB",
+    std::snprintf(line, sizeof(line), tr(UiTextId::HeapMinFormat),
                   static_cast<unsigned long>(report.facts.heapMinimum / 1024U));
     renderMetric(3, line);
-    std::snprintf(line, sizeof(line), "INPUT DROPS  %lu",
+    std::snprintf(line, sizeof(line), tr(UiTextId::InputDropsFormat),
                   static_cast<unsigned long>(report.facts.inputQueueDrops));
     renderMetric(4, line);
-    display.setTextFont(1);
     display.setTextColor(Palette::Positive, Palette::Canvas);
-    display.setCursor(14, 222);
-    display.print("READ ONLY | REPORT AVAILABLE OVER USB");
+    setUiCursor(UiTextRole::Meta, 14, 218);
+    display.print(tr(UiTextId::SelfTestReportUsb));
 }
 
 void renderOverview() {
-    char line[48] = {};
-    renderHeader("DIAGNOSTICS");
+    char line[80] = {};
+    renderHeader(tr(UiTextId::DiagnosticsTitle));
     display.setTextColor(Palette::Positive, Palette::Canvas);
-    display.setCursor(14, 92);
-    display.print("PROFILE: N16 / NO PSRAM");
+    setUiCursor(UiTextRole::Body, 14, 82);
+    display.print(tr(UiTextId::ProfileN16));
 
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    std::snprintf(line, sizeof(line), "FLASH   %lu KiB",
+    std::snprintf(line, sizeof(line), tr(UiTextId::FlashFormat),
                   static_cast<unsigned long>(bootMetrics.flashBytes / 1024U));
-    display.setCursor(14, 130);
+    setUiCursor(UiTextRole::Body, 14, 120);
     display.print(line);
-    std::snprintf(line, sizeof(line), "HEAP    %lu KiB FREE",
+    std::snprintf(line, sizeof(line), tr(UiTextId::HeapFreeFormat),
                   static_cast<unsigned long>(ESP.getFreeHeap() / 1024U));
-    display.setCursor(14, 154);
+    setUiCursor(UiTextRole::Body, 14, 144);
     display.print(line);
-    std::snprintf(line, sizeof(line), "UI READY %llu us",
+    std::snprintf(line, sizeof(line), tr(UiTextId::UiReadyFormat),
                   static_cast<unsigned long long>(bootMetrics.interactiveReadyUs));
-    display.setCursor(14, 178);
+    setUiCursor(UiTextRole::Body, 14, 168);
     display.print(line);
 
 }
 
 void renderInventoryPage() {
-    char line[64] = {};
+    char line[96] = {};
     if (surveyWorkflow.state() == SurveyWorkflowState::Setup) {
-        renderHeader("SURVEY / SETUP");
-        display.setTextFont(2);
+        renderHeader(tr(UiTextId::SurveySetup));
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        display.setCursor(14, 88);
-        display.print("SOURCE      WIFI PASSIVE");
-        display.setCursor(14, 116);
+        setUiCursor(UiTextRole::Body, 14, 82);
+        display.print(tr(UiTextId::SourceWifi));
+        setUiCursor(UiTextRole::Body, 14, 110);
         display.print(surveyWorkflow.persistent()
-                          ? "STORAGE     PRODUCT SD"
-                          : "STORAGE     RAM PREVIEW");
-        display.setCursor(14, 144);
+                          ? tr(UiTextId::StorageProduct)
+                          : tr(UiTextId::StorageRamPreview));
+        setUiCursor(UiTextRole::Body, 14, 138);
         display.print(surveyWorkflow.simulated()
-                          ? "MODE        SIMULATED"
-                          : "MODE        REAL PASSIVE");
+                          ? tr(UiTextId::ModeSimulated)
+                          : tr(UiTextId::ModeRealPassive));
         display.setTextColor(Palette::Focus, Palette::Canvas);
-        display.setCursor(14, 190);
-        display.print("SELECT      START");
-        display.setTextFont(1);
+        setUiCursor(UiTextRole::Body, 14, 181);
+        display.print(tr(UiTextId::SelectStart));
         display.setTextColor(Palette::Positive, Palette::Canvas);
-        display.setCursor(14, 218);
+        setUiCursor(UiTextRole::Meta, 14, 207);
         display.print(surveyWorkflow.simulated()
-                          ? "FIFO 64 | NO RF | NO COMMIT YET"
-                          : "FIFO 64 | RX ONLY | EXPLICIT WRITE");
+                          ? tr(UiTextId::FifoNoRf)
+                          : tr(UiTextId::FifoRxOnly));
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Result) {
-        renderHeader("SURVEY / COMMITTED");
-        display.setTextFont(2);
+        renderHeader(tr(UiTextId::SurveyCommitted));
         display.setTextColor(Palette::Focus, Palette::Canvas);
-        display.setCursor(14, 86);
+        setUiCursor(UiTextRole::Body, 14, 80);
         display.print(surveySession.id());
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        std::snprintf(line, sizeof(line), "OBSERVATIONS %u",
+        std::snprintf(line, sizeof(line), tr(UiTextId::ObservationsFormat),
                       static_cast<unsigned>(surveySession.size()));
-        display.setCursor(14, 126);
+        setUiCursor(UiTextRole::Body, 14, 120);
         display.print(line);
-        std::snprintf(line, sizeof(line), "GENERATION   %lu",
+        std::snprintf(line, sizeof(line), tr(UiTextId::GenerationFormat),
                       static_cast<unsigned long>(surveyWorkflow.generation()));
-        display.setCursor(14, 154);
+        setUiCursor(UiTextRole::Body, 14, 148);
         display.print(line);
-        display.setCursor(14, 182);
+        setUiCursor(UiTextRole::Body, 14, 176);
         display.print(surveyWorkflow.persistent()
-                          ? "STORAGE      PRODUCT SD"
-                          : "STORAGE      RAM ONLY");
+                          ? tr(UiTextId::StorageProduct)
+                          : tr(UiTextId::StorageRamOnly));
         const SurveyPipelineProgress progress = surveyPipeline.progress();
-        std::snprintf(line, sizeof(line), "PIPELINE H%u DROP %llu",
+        std::snprintf(line, sizeof(line), tr(UiTextId::PipelineFormat),
                       static_cast<unsigned>(progress.queueHighWater),
                       static_cast<unsigned long long>(progress.dropped));
-        display.setTextFont(1);
-        display.setCursor(14, 206);
+        setUiCursor(UiTextRole::Meta, 14, 196);
         display.print(line);
-        display.setTextFont(1);
         display.setTextColor(Palette::Positive, Palette::Canvas);
-        display.setCursor(14, 222);
-        display.print("ONE COMMIT | OPEN FROM LIBRARY");
+        setUiCursor(UiTextRole::Meta, 14, 211);
+        display.print(tr(UiTextId::OneCommit));
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Error) {
-        renderHeader("SURVEY / ERROR");
-        display.setTextFont(2);
+        renderHeader(tr(UiTextId::SurveyError));
         display.setTextColor(Palette::Danger, Palette::Canvas);
-        display.setCursor(14, 92);
+        setUiCursor(UiTextRole::Body, 14, 82);
         display.print(leshy1::apps::survey::surveyWorkflowStatusName(
             surveyWorkflow.lastStatus()));
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        display.setCursor(14, 132);
-        display.print("PRIOR LIBRARY PRESERVED");
-        display.setTextFont(1);
+        setUiCursor(UiTextRole::Body, 14, 122);
+        display.print(tr(UiTextId::PriorLibraryPreserved));
         display.setTextColor(Palette::Positive, Palette::Canvas);
-        display.setCursor(14, 218);
-        display.print("BACK HOME | NO HIDDEN RETRY");
+        setUiCursor(UiTextRole::Meta, 14, 207);
+        display.print(tr(UiTextId::BackNoRetry));
         return;
     }
     if (surveyController.view() == SurveyView::Detail) {
-        renderHeader("SURVEY / DETAIL");
+        renderHeader(tr(UiTextId::SurveyDetail));
         const Observation* observation = surveyController.selected();
         if (observation == nullptr) return;
         display.setTextFont(4);
+        activeDisplayFont = ActiveDisplayFont::None;
         display.setTextColor(Palette::Focus, Palette::Canvas);
         display.setCursor(14, 88);
         display.print(observation->label.data());
-        display.setTextFont(2);
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        std::snprintf(line, sizeof(line), "CHANNEL      %u",
+        std::snprintf(line, sizeof(line), tr(UiTextId::ChannelFormat),
                       static_cast<unsigned>(observation->channel));
-        display.setCursor(14, 132);
+        setUiCursor(UiTextRole::Body, 14, 122);
         display.print(line);
-        std::snprintf(line, sizeof(line), "FREQUENCY %lu kHz",
+        std::snprintf(line, sizeof(line), tr(UiTextId::FrequencyFormat),
                       static_cast<unsigned long>(observation->frequencyKhz));
-        display.setCursor(14, 158);
+        setUiCursor(UiTextRole::Body, 14, 148);
         display.print(line);
-        std::snprintf(line, sizeof(line), "RSSI       %d dBm",
+        std::snprintf(line, sizeof(line), tr(UiTextId::RssiFormat),
                       static_cast<int>(observation->rssiDbm));
-        display.setCursor(14, 184);
+        setUiCursor(UiTextRole::Body, 14, 174);
         display.print(line);
-        display.setTextFont(1);
         display.setTextColor(Palette::Positive, Palette::Canvas);
-        display.setCursor(14, 214);
+        setUiCursor(UiTextRole::Meta, 14, 203);
         display.print(surveyWorkflow.simulated()
-                          ? "SIMULATED DATA | RF OFF"
-                          : "REAL PASSIVE | RX ONLY");
+                          ? tr(UiTextId::SimulatedData)
+                          : tr(UiTextId::RealPassive));
         return;
     }
 
-    renderHeader("SURVEY / RUNNING");
-    display.setTextFont(1);
+    renderHeader(tr(UiTextId::SurveyRunning));
     display.setTextColor(Palette::Positive, Palette::Canvas);
-    display.setCursor(14, 76);
+    setUiCursor(UiTextRole::Meta, 14, 70);
     display.print(surveyWorkflow.simulated()
-                      ? "RUNNING | SIMULATED | RF OFF"
-                      : "RUNNING | REAL PASSIVE | RX ONLY");
+                      ? tr(UiTextId::RunningSimulated)
+                      : tr(UiTextId::RunningPassive));
     const SurveyPipelineProgress progress = surveyPipeline.progress();
-    std::snprintf(line, sizeof(line), "FIFO %u/64 | HIGH %u | DROP %llu",
+    std::snprintf(line, sizeof(line), tr(UiTextId::FifoFormat),
                   static_cast<unsigned>(progress.queueDepth),
                   static_cast<unsigned>(progress.queueHighWater),
                   static_cast<unsigned long long>(progress.dropped));
-    display.setCursor(14, 86);
+    setUiCursor(UiTextRole::Meta, 14, 82);
     display.print(line);
     constexpr std::size_t kVisibleSurveyRows = 3;
     const std::size_t selection = surveyController.selection();
@@ -1646,15 +1739,14 @@ void renderInventoryPage() {
                                                    : Palette::Surface;
         display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth, 36,
                               Layout::Radius, background);
-        display.setTextFont(2);
         display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                              background);
-        display.setCursor(20, y + 3);
-        char visibleLabel[16] = {};
+        setUiCursor(UiTextRole::Body, 20, y - 2);
+        char visibleLabel[24] = {};
         const std::size_t visibleLength = observation->labelLength < 15U
             ? observation->labelLength : 15U;
         if (visibleLength == 0) {
-            std::strcpy(visibleLabel, "<hidden>");
+            std::strcpy(visibleLabel, tr(UiTextId::Hidden));
         } else {
             std::memcpy(visibleLabel, observation->label.data(), visibleLength);
             if (observation->labelLength > visibleLength) {
@@ -1662,75 +1754,70 @@ void renderInventoryPage() {
             }
         }
         display.print(visibleLabel);
-        display.setTextFont(1);
         display.setTextColor(Palette::Positive, background);
-        std::snprintf(line, sizeof(line), "CH %u  %d dBm",
+        std::snprintf(line, sizeof(line), tr(UiTextId::ChannelRssiFormat),
                       static_cast<unsigned>(observation->channel),
                       static_cast<int>(observation->rssiDbm));
-        display.setCursor(150, y + 13);
+        setUiCursor(UiTextRole::Meta, 146, y + 13);
         display.print(line);
     }
 }
 
 void renderLibraryPage() {
-    char line[64] = {};
+    char line[96] = {};
     const LibraryEntry* selected = libraryController.selected();
     const bool persistent = selected != nullptr && selected->persistent;
     if (libraryController.view() == LibraryView::ExportReady) {
-        renderHeader("EXPORT / READY");
+        renderHeader(tr(UiTextId::ExportReady));
         if (selected == nullptr || selected->session == nullptr) return;
-        display.setTextFont(2);
         display.setTextColor(Palette::Focus, Palette::Canvas);
-        display.setCursor(14, 86);
+        setUiCursor(UiTextRole::Body, 14, 80);
         display.print(selected->session->id());
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        display.setCursor(14, 126);
-        display.print("FORMAT      JSON V1");
-        display.setCursor(14, 152);
-        display.print("TRANSPORT   SERIAL");
-        display.setCursor(14, 178);
-        display.print(persistent ? "PERSISTED   YES" : "PERSISTED   NO");
-        display.setTextFont(1);
+        setUiCursor(UiTextRole::Body, 14, 120);
+        display.print(tr(UiTextId::FormatJson));
+        setUiCursor(UiTextRole::Body, 14, 146);
+        display.print(tr(UiTextId::TransportSerial));
+        setUiCursor(UiTextRole::Body, 14, 172);
+        display.print(persistent ? tr(UiTextId::PersistedYes)
+                                 : tr(UiTextId::PersistedNo));
         display.setTextColor(Palette::Positive, Palette::Canvas);
-        display.setCursor(14, 214);
-        display.print(persistent ? "PERSISTENT MEDIA | RF OFF"
-                                 : "BOUNDED RAM SOURCE | RF OFF");
+        setUiCursor(UiTextRole::Meta, 14, 203);
+        display.print(persistent ? tr(UiTextId::PersistentMedia)
+                                 : tr(UiTextId::BoundedRamSource));
         return;
     }
     if (libraryController.view() == LibraryView::SessionDetail) {
-        renderHeader("SESSION / DETAIL");
+        renderHeader(tr(UiTextId::SessionDetail));
         if (selected == nullptr || selected->session == nullptr) return;
-        display.setTextFont(2);
         display.setTextColor(Palette::Focus, Palette::Canvas);
-        display.setCursor(14, 86);
+        setUiCursor(UiTextRole::Body, 14, 80);
         display.print(selected->session->id());
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        std::snprintf(line, sizeof(line), "GENERATION   %lu",
+        std::snprintf(line, sizeof(line), tr(UiTextId::GenerationFormat),
                       static_cast<unsigned long>(selected->generation));
-        display.setCursor(14, 122);
+        setUiCursor(UiTextRole::Body, 14, 116);
         display.print(line);
-        std::snprintf(line, sizeof(line), "OBSERVATIONS %u",
+        std::snprintf(line, sizeof(line), tr(UiTextId::ObservationsFormat),
                       static_cast<unsigned>(selected->session->size()));
-        display.setCursor(14, 148);
+        setUiCursor(UiTextRole::Body, 14, 142);
         display.print(line);
-        std::snprintf(line, sizeof(line), "INTEGRITY    %s",
+        std::snprintf(line, sizeof(line), tr(UiTextId::IntegrityFormat),
                       leshy1::apps::library::sessionIntegrityName(selected->integrity));
-        display.setCursor(14, 174);
+        setUiCursor(UiTextRole::Body, 14, 168);
         display.print(line);
-        display.setTextFont(1);
         display.setTextColor(Palette::Positive, Palette::Canvas);
-        display.setCursor(14, 210);
-        display.print(persistent ? "PERSISTENT | RECOVERED | RF OFF"
-                                 : "RAM ONLY | VOLATILE | RF OFF");
+        setUiCursor(UiTextRole::Meta, 14, 199);
+        display.print(persistent ? tr(UiTextId::PersistentRecovered)
+                                 : tr(UiTextId::RamVolatile));
         return;
     }
 
-    renderHeader("LIBRARY / OFFLINE");
-    display.setTextFont(1);
+    renderHeader(tr(UiTextId::LibraryOffline));
     display.setTextColor(Palette::Positive, Palette::Canvas);
-    display.setCursor(14, 76);
-    display.print(persistent ? "PERSISTENT SESSION | REAL | RF OFF"
-                             : "SIMULATED RAM | VOLATILE | RF OFF");
+    setUiCursor(UiTextRole::Meta, 14, 70);
+    display.print(persistent ? tr(UiTextId::PersistentSession)
+                             : tr(UiTextId::SimulatedRam));
     for (std::size_t index = 0; index < libraryController.size(); ++index) {
         const LibraryEntry* entry = libraryController.get(index);
         if (entry == nullptr || entry->session == nullptr) continue;
@@ -1740,18 +1827,16 @@ void renderLibraryPage() {
                                                     : Palette::Surface;
         display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth,
                               Layout::RowHeight, Layout::Radius, background);
-        display.setTextFont(2);
         display.setTextColor(isSelected ? Palette::Focus : Palette::TextSecondary,
                              background);
-        display.setCursor(20, y + 4);
+        setUiCursor(UiTextRole::Body, 20, y - 1);
         display.print(entry->session->id());
-        display.setTextFont(1);
         display.setTextColor(Palette::Positive, background);
-        std::snprintf(line, sizeof(line), "%u OBS | GEN %lu | %s",
+        std::snprintf(line, sizeof(line), tr(UiTextId::LibraryRowFormat),
                       static_cast<unsigned>(entry->session->size()),
                       static_cast<unsigned long>(entry->generation),
                       leshy1::apps::library::sessionIntegrityName(entry->integrity));
-        display.setCursor(20, y + 26);
+        setUiCursor(UiTextRole::Meta, 20, y + 23);
         display.print(line);
     }
 }
@@ -1765,6 +1850,8 @@ void renderInteractiveScreen() {
         renderInventoryPage();
     } else if (uiController.page() == 3) {
         renderLibraryPage();
+    } else if (uiController.page() == 4) {
+        renderLanguagePage();
     } else {
         renderSelfTestPage();
     }
@@ -1773,50 +1860,52 @@ void renderInteractiveScreen() {
                           Palette::Divider);
     renderInput(lastInputRaw);
     display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    display.setTextFont(1);
     const Rect hint = Components::footerHint();
-    display.setCursor(hint.x + 8, hint.y);
+    setUiCursor(UiTextRole::Meta, hint.x + 8, hint.y);
     if (uiController.isRoot()) {
-        display.print("up/down | blocked item has reason");
+        display.print(tr(UiTextId::FooterRoot));
     } else if (uiController.page() == 2 &&
                surveyWorkflow.state() == SurveyWorkflowState::Setup) {
         display.print(surveyWorkflow.simulated()
-                          ? "select start | back cancel | RF off"
-                          : "select scan | back cancel | RX only");
+                          ? tr(UiTextId::FooterSurveySetupSim)
+                          : tr(UiTextId::FooterSurveySetupReal));
     } else if (uiController.page() == 2 && surveyController.view() == SurveyView::Detail) {
         display.print(surveyWorkflow.simulated()
-                          ? "back: list | simulated data | RF off"
-                          : "back: list | real passive | RX only");
+                          ? tr(UiTextId::FooterSurveyDetailSim)
+                          : tr(UiTextId::FooterSurveyDetailReal));
     } else if (uiController.page() == 2 &&
                surveyWorkflow.state() == SurveyWorkflowState::Running) {
         display.print(surveyWorkflow.simulated()
-                          ? "select detail | right stop | RF off"
-                          : "select detail | right save | RX only");
+                          ? tr(UiTextId::FooterSurveyRunSim)
+                          : tr(UiTextId::FooterSurveyRunReal));
     } else if (uiController.page() == 2) {
         display.print(surveyWorkflow.simulated()
-                          ? "committed once | back home | RF off"
-                          : "saved once | back home | RX only");
+                          ? tr(UiTextId::FooterSurveyDoneSim)
+                          : tr(UiTextId::FooterSurveyDoneReal));
     } else if (uiController.page() == 3 &&
                libraryController.view() == LibraryView::ExportReady) {
-        display.print("USB export | back detail | RF off");
+        display.print(tr(UiTextId::FooterLibraryExport));
     } else if (uiController.page() == 3 &&
                libraryController.view() == LibraryView::SessionDetail) {
-        display.print("right export | back list | RF off");
+        display.print(tr(UiTextId::FooterLibraryDetail));
     } else if (uiController.page() == 3) {
         const LibraryEntry* selected = libraryController.selected();
         display.print(selected != nullptr && selected->persistent
-                          ? "select detail | back home | SD"
-                          : "select detail | back home | RAM only");
+                          ? tr(UiTextId::FooterLibrarySd)
+                          : tr(UiTextId::FooterLibraryRam));
     } else if (uiController.page() == 4 &&
+               languageController.selection() <= 1) {
+        display.print(tr(UiTextId::FooterLanguage));
+    } else if (uiController.page() == 5 &&
                selfTestController.view() == SelfTestView::ModeMenu) {
-        display.print("up/down | select mode | back home");
-    } else if (uiController.page() == 4 &&
+        display.print(tr(UiTextId::FooterSelfModes));
+    } else if (uiController.page() == 5 &&
                selfTestController.view() == SelfTestView::Preflight) {
-        display.print("select run available | back modes");
-    } else if (uiController.page() == 4) {
-        display.print("back modes | USB: self-test.report");
+        display.print(tr(UiTextId::FooterSelfPreflight));
+    } else if (uiController.page() == 5) {
+        display.print(tr(UiTextId::FooterSelfResult));
     } else {
-        display.print("left/back returns | ui.capture ready");
+        display.print(tr(UiTextId::FooterGeneric));
     }
 }
 
@@ -1829,13 +1918,17 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "{\"schema\":\"leshy.ui.v1\",\"kind\":\"state\","
                   "\"action\":\"%s\",\"changed\":%s,\"page\":\"%s\","
                   "\"selection\":%u,\"selected_id\":\"%s\","
-                  "\"selected_enabled\":%s,\"reason\":\"%s\",\"revision\":%lu}",
+                  "\"selected_enabled\":%s,\"reason\":\"%s\","
+                  "\"language\":\"%s\",\"language_selection\":%u,"
+                  "\"revision\":%lu}",
                   leshy1::ui::uiActionName(action), changed ? "true" : "false",
                   leshy1::ui::probePageName(uiController.page()),
                   static_cast<unsigned>(uiController.selection()),
                   selected == nullptr ? "none" : selected->id,
                   selected != nullptr && selected->enabled ? "true" : "false",
                   selected == nullptr ? "missing selection" : selected->reason,
+                  leshy1::ui::uiLanguageName(languageController.active()),
+                  static_cast<unsigned>(languageController.selection()),
                   static_cast<unsigned long>(uiController.revision()));
     const std::size_t length = std::strlen(line);
     if (length > 0 && length + 2300 < sizeof(line)) {
@@ -2080,6 +2173,33 @@ bool applyUiAction(UiAction action, bool render = true) {
     if (!wasRoot && uiController.page() == 4) {
         bool handled = false;
         bool changed = false;
+        if (action == UiAction::Up) {
+            handled = true;
+            changed = languageController.previous();
+        } else if (action == UiAction::Down) {
+            handled = true;
+            changed = languageController.next();
+        } else if (action == UiAction::Select || action == UiAction::Right) {
+            handled = true;
+            const UiLanguage requested = languageController.selected();
+            const bool persisted = saveUiLanguage(requested);
+            changed = persisted && languageController.apply();
+            lastRuntimeEvent = persisted ? "language_persisted"
+                                         : "language_persist_failed";
+            if (persisted && render) renderInteractiveScreen();
+        }
+        if (handled) {
+            uiController.recordHandledAction(action);
+            if (changed && render && action != UiAction::Select &&
+                action != UiAction::Right) {
+                renderInteractiveScreen();
+            }
+            return changed;
+        }
+    }
+    if (!wasRoot && uiController.page() == 5) {
+        bool handled = false;
+        bool changed = false;
         if (selfTestController.view() == SelfTestView::ModeMenu &&
             action == UiAction::Up) {
             handled = true;
@@ -2122,6 +2242,10 @@ bool applyUiAction(UiAction action, bool render = true) {
                            : appRuntime.launch(selected->id, selected->enabled, selected->resources);
         lastRuntimeEvent = leshy1::kernel::runtime::launchStatusName(launchStatus);
         openable = launchStatus == LaunchStatus::Started;
+        if (openable && selected != nullptr &&
+            std::strcmp(selected->id, "language") == 0) {
+            languageController.enter();
+        }
         if (openable && selected != nullptr &&
             std::strcmp(selected->id, "survey") == 0) {
             if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
@@ -5587,6 +5711,21 @@ void handleCommand(Stream& reply, const char* command) {
         emitInputState(reply);
     } else if (std::strcmp(command, "self-test.report") == 0) {
         emitSelfTestReport(reply);
+    } else if (std::strncmp(command, "ui.language ", 12) == 0) {
+        UiLanguage requested = UiLanguage::English;
+        if (!leshy1::ui::uiLanguageFromName(command + 12, &requested)) {
+            reply.println("{\"schema\":\"leshy.ui.language.v1\","
+                          "\"kind\":\"error\",\"reason\":\"invalid_language\"}");
+        } else if (!saveUiLanguage(requested)) {
+            reply.println("{\"schema\":\"leshy.ui.language.v1\","
+                          "\"kind\":\"error\",\"reason\":\"persist_failed\"}");
+        } else {
+            const bool changed = languageController.active() != requested;
+            languageController.restore(requested);
+            lastRuntimeEvent = "language_persisted";
+            renderInteractiveScreen();
+            emitUiState(reply, UiAction::Unknown, changed);
+        }
     } else if (std::strncmp(command, "ui.key ", 7) == 0) {
         const UiAction action = leshy1::ui::uiActionFromName(command + 7);
         if (action == UiAction::Unknown) {
@@ -5851,6 +5990,7 @@ void setup() {
     ledcWrite(BoardProfile::kBacklightPin, 255);
     display.init();
     display.setRotation(2);
+    languageController.restore(loadUiLanguage());
     bootMetrics.displayReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
 
     Wire.begin(BoardProfile::kI2cSdaPin, BoardProfile::kI2cSclPin, kI2cHz);

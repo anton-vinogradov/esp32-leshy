@@ -7,12 +7,13 @@ S2 on the real TFT; this map already binds task structure and Back/Stop behavior
 
 ## Global shell
 
-`UX-S01 Home` exposes six jobs rather than a radio-module list, followed by the
-always-addressable Self-Test utility as the final item:
+`UX-S01 Home` exposes six jobs rather than a radio-module list, followed by direct
+Language access and the always-addressable Self-Test utility as the final item:
 
 ```text
 Survey      Targets     Capture
 Lab         Library     Device
+LANGUAGE
 SELF-TEST   (QUICK / FULL-GUIDED)
 ```
 
@@ -57,6 +58,7 @@ UX-S01 Home
    ├─ UX-S25 Language / Display / Input / Feedback / Connectivity
    ├─ UX-S26 Storage / Backup-Restore / Factory Reset
    └─ UX-S27 Install / Update / Rollback / Recovery / About
+├─ Language → UX-S25 language context
 └─ Self-Test → UX-S24 test context
    ├─ Quick: bounded read-only automatic plan
    └─ Full / Guided: scoped preflight → applicable checks → report
@@ -98,6 +100,7 @@ ordinary Back traverses the stack.
 | Lab | CAP-032…CAP-037 | accepts only a saved immutable Capture; Result links back to source |
 | Library | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import never bypasses parsers |
 | Device | CAP-001…CAP-008, CAP-045…CAP-047 | Diagnostics explains unavailability before task entry |
+| Language | PR-011, NFR-010 | direct EN/RU switch; immediate application and persistent selection |
 | Self-Test | CAP-001…CAP-047 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
 
 ## UX-01 acceptance

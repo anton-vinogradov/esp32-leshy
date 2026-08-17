@@ -1,0 +1,179 @@
+{
+  "schema": "leshy.ui_language_acceptance.v1",
+  "evidence_ids": [
+    "E-BUILD-057",
+    "E-HIL-079",
+    "E-UX-005"
+  ],
+  "board": "board-01",
+  "port": "/dev/cu.usbmodem2101",
+  "candidate": {
+    "version": "0.55.0-ui-language-measure",
+    "firmware_sha256": "c9709ae952c210c277bbd820c80a32dfcb308dd6b813c9c8ca4398d3b814fd1f",
+    "factory_sha256": "3e79f7d37c6c1e753c5e2ee0ac2a4df2fc25972237111092f1fe6c8bb0883f8b",
+    "app_elf_sha256": "16e247eecb4f499039d7eb2e710b2921fb9a3de3af08478ff307178f6442e515",
+    "map_sha256": "bc5df588aa45616fbf7072aca888382a032fb756966755284ac817d8eccc9c16",
+    "linked_flash_bytes": 1104448,
+    "static_ram_bytes": 128744,
+    "app_image_bytes": 1104592,
+    "factory_image_bytes": 1170128,
+    "rtc_noinit_bytes": 20,
+    "host_tests_passed": true,
+    "firmware_build_passed": true
+  },
+  "font": {
+    "family": "PT Sans Narrow Regular",
+    "license": "SIL Open Font License 1.1",
+    "ttf_sha256": "4102edda03059163771869d258df54ac8563c408fa6e9ef75b2ddc85eabea6f4",
+    "source_ranges": ["U+0020-U+007E", "U+0400-U+0451"],
+    "body_pixels": 16,
+    "meta_pixels": 12,
+    "generated": true,
+    "runtime_heap_allocations": 0
+  },
+  "catalog": {
+    "source": "firmware/leshy1/src/ui/UiStrings.def",
+    "languages": ["en", "ru"],
+    "entries": 111,
+    "measured_variants": 222,
+    "all_fit_declared_pixel_budget": true,
+    "uncatalogued_display_literals": ["LESHY 1.x"]
+  },
+  "navigation": {
+    "home_items": 5,
+    "language_page": 4,
+    "self_test_page": 5,
+    "self_test_is_final": true,
+    "language_applies_immediately": true,
+    "language_persisted_in_nvs": true,
+    "russian_restored_after_exact_candidate_flash_reset": true
+  },
+  "screens": {
+    "home_ru_persisted": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/home-ru-persisted.png",
+      "png_sha256": "a80120234add676692a8554eeb95f5b06f005a865d74587d966e59f70cc51727",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/home-ru-persisted.png.json",
+      "trace_sha256": "d36918fdc2fe3617b8b3c9aa3692c7982bec7d5cd8372ce54cd738c287dd22eb",
+      "rgb565_sha256": "73fd64b1b0804d926e6ba39e0c7bddb900766ce2d28214e32800fe5da8cee535",
+      "page": "home",
+      "language": "ru"
+    },
+    "diagnostics_ru": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/diagnostics-ru.png",
+      "png_sha256": "0eb84b637761743ebae8fb017f51f429f57f05893413ee301fbf3c476a8ffcfc",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/diagnostics-ru.png.json",
+      "trace_sha256": "9bb18f85a99d9b76d5d1db324682e0f826bf6053b16d09fd0ce37e9d67460f08",
+      "rgb565_sha256": "c1e067ee1438e6e1bd37382196eca84001634d0e9648a97c494b8ae383cbd43d",
+      "page": "diagnostics",
+      "language": "ru"
+    },
+    "survey_setup_ru": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/survey-setup-ru.png",
+      "png_sha256": "dd8930f0a183041b72f22f7eabfc6ad6215d79c5d5654f15ae87cf5f14520831",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/survey-setup-ru.png.json",
+      "trace_sha256": "a5c376b3e3dca34a8031cca4aff55801652653b67e64592b382426c3de737269",
+      "rgb565_sha256": "58bb420dd593453ccfc69aa9f66688a0ccaa5a1d58eb8c3535f2dc0e1e5105ac",
+      "page": "survey",
+      "language": "ru"
+    },
+    "library_ru": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/library-ru.png",
+      "png_sha256": "f52836ad8bb5a6c5f42093101794d49b34b4adb2529f0a091516cd0bb4cceeff",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/library-ru.png.json",
+      "trace_sha256": "3c34bf19beac9b66fe431f0f3f9264f386b6d2a0bd66c016dd32245a425c0f82",
+      "rgb565_sha256": "cf2fb881be53b51c9046fcb0e5d947b1a0d43c44e22545d753ac5382943adf87",
+      "page": "library",
+      "language": "ru"
+    },
+    "language_ru": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/language-ru.png",
+      "png_sha256": "2010443dfc232381cefc50a6bb68e5b9d0422f6799aa0ee565e58488219bd899",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/language-ru.png.json",
+      "trace_sha256": "8831de0b92c12f1342a727ca1909929a18506844274b0abb41051802f44282bb",
+      "rgb565_sha256": "6f17c299b2133249b812ff01692b8e82447ab1d347563626fc7fad19441f740d",
+      "page": "language",
+      "language": "ru"
+    },
+    "self_test_ru": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/self-test-ru.png",
+      "png_sha256": "0ef31ac7285a9310d3d821caaf3f92cea7b8ef42c8ccdaee77c6a8386530d076",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/self-test-ru.png.json",
+      "trace_sha256": "8ccffa8ca123c5f068ff75d13c927fadcb39f1b00ebfef306be0f834c8fd0fed",
+      "rgb565_sha256": "19a98d5cde9f9785f80cd0e107b214876c1e1c7217f17c441daae467a7f74d96",
+      "page": "self_test",
+      "language": "ru"
+    },
+    "quick_result_ru": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/quick-result-ru.png",
+      "png_sha256": "944780289ae772c87a958477b18cd41065788880082229b2ab2d658bdd2e14d8",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/quick-result-ru.png.json",
+      "trace_sha256": "39264ff41b8efbcf1c005a73c389ab86ca04cf7683be066049a890460225863c",
+      "rgb565_sha256": "4de65835fb5ff25f76b81aad3b788faee534a80629ddbc380b1e74c4a362246b",
+      "page": "self_test",
+      "language": "ru"
+    },
+    "home_en": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/home-en.png",
+      "png_sha256": "3c07ccadd17f9a99f877fa77b0ada6e218c26a6ce8a8d9357e9be518e673076b",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/home-en.png.json",
+      "trace_sha256": "efe8a3373114a35671a5d12a04ecad29b59b1f0f18646b63efdda12808811217",
+      "rgb565_sha256": "351a977a4bc9d1325189dae24ddf80b1d03eebb43b23c9048910185d60958a47",
+      "page": "home",
+      "language": "en"
+    },
+    "language_en": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/language-en.png",
+      "png_sha256": "022f5f6069e5c7602459b2c3c669219a086d411cf168d664495e30bc8ade1c5a",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/language-en.png.json",
+      "trace_sha256": "8e27ab85bf55294c34195e14218c8175ec637482c10bd207c7da1849b7fc8aa1",
+      "rgb565_sha256": "eb3bf361ba573fd2ceb71512475750de9c29c20cccceaa4e781d58faae1cabcb",
+      "page": "language",
+      "language": "en"
+    },
+    "home_final_ru": {
+      "path": "tests/hil/evidence/board-01-ui-language-0.55/home-final-ru.png",
+      "png_sha256": "54d0f7c823b142a97fb46cd0b270c73b376dc8340778910babd69db270b7e84a",
+      "trace_path": "tests/hil/evidence/board-01-ui-language-0.55/home-final-ru.png.json",
+      "trace_sha256": "d3915375ea27ef6d88ff117f8b02ea7c2c1fd9fb9e53fbf52601541a8252e661",
+      "rgb565_sha256": "25cf30de8f4ed0ce137b3f908963e2fbf132eb63a3d9a5ef63313e7c88c8b937",
+      "page": "home",
+      "language": "ru"
+    }
+  },
+  "runtime": {
+    "metrics_path": "tests/hil/evidence/board-01-ui-language-0.55/metrics.json",
+    "metrics_sha256": "2394d7042b7cdf444de60870fa91092901e12b1084b098225dfaf6150d495919",
+    "quick_report_path": "tests/hil/evidence/board-01-ui-language-0.55/quick-report.json",
+    "quick_report_sha256": "aa4efc69f11315c6c15d26b101fee4b3a8a5946510e08b6de16a4cbb5683ca73",
+    "input_path": "tests/hil/evidence/board-01-ui-language-0.55/input.json",
+    "input_sha256": "3f058c04bffd9807c190a6174660b85555e433e1bef303423fb321f90a7f933b",
+    "safe_outputs_path": "tests/hil/evidence/board-01-ui-language-0.55/safe-outputs.json",
+    "safe_outputs_sha256": "edf7741d3c47061d1f5a31b9726534e2a0a299b78c779c652b4abeecb6656fc9",
+    "switch_en_path": "tests/hil/evidence/board-01-ui-language-0.55/switch-en.json",
+    "switch_en_sha256": "e38525cb4c93daf29092f9311523737be7841eef16090c628b372a4c98830bb0",
+    "switch_ru_path": "tests/hil/evidence/board-01-ui-language-0.55/switch-ru.json",
+    "switch_ru_sha256": "90197b552636fc8fefdaff202d80533112785561d6f903edec6da4b924a961f4",
+    "heap_total": 272760,
+    "heap_free": 224280,
+    "heap_min_free": 188792,
+    "quick_passed": 8,
+    "quick_failed": 0,
+    "quick_blocked": 0,
+    "input_read_errors": 0,
+    "input_queue_drops": 0,
+    "maximum_sample_gap_ms": 5,
+    "buzzer_inactive": true,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "scope": {
+    "ux_03": "accepted",
+    "ux_04": "accepted",
+    "ux_05": "implemented_and_physically_evidenced",
+    "ux_06": "open",
+    "ux_07": "partial",
+    "demo_s2": "open",
+    "release_gate_eligible": false
+  },
+  "gate_eligible": false
+}

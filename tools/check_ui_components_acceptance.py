@@ -75,8 +75,8 @@ def main() -> int:
         "firmware_build_passed": True,
     }
     require(failures, candidate == expected_candidate, "candidate block mismatch")
-    require(failures, 'LESHY1_VERSION=\\"0.54.0-ui-components-measure\\"' in
-            PLATFORMIO.read_text(encoding="utf-8"), "current version mismatch")
+    # Candidate identity above binds the historical 0.54 evidence. The shared
+    # component contract stays replayable as later UX slices add rows.
 
     contract = evidence.get("component_contract", {})
     expected_components = ["header", "title", "home_row", "choice_row",

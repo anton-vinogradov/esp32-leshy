@@ -32,6 +32,11 @@ I2C не меняет debounced state; для следующего action той
 тестовое меню. Когда продуктовый Navigator заменит probe controller, transport
 останется на границе нормализованных Actions.
 
+`ui.language en|ru` выбирает язык через тот же persistent `LanguageController`,
+который использует публичный экран Язык. Это automation-вход в product operation,
+а не отдельный renderer override; `ui.state` сообщает active language и selection
+экрана Язык.
+
 ### Захват реального дисплея
 
 `ui.capture` читает GRAM ILI9341 тайлами по четыре строки и возвращает:
@@ -165,3 +170,10 @@ regression обнаружил и сохранил loop-task stack panic в ра�
 перенос обоих больших records в один static bounded workspace исправил его. Exact
 rerun проходит Quick 8/8 и возвращает owner/lease `none`/`0`; Full остаётся визуально
 и machine-readably blocked на incomplete capability coverage (`E-HIL-077`).
+
+Candidate 0.55 добавляет единый каталог EN/RU и persistent экран Язык, не меняя
+Action/capture boundary. Exact run сохраняет русские Home, Diagnostics, Survey,
+Library, Language, Self-Test и Quick result, а также английские Home/Language,
+подтверждает сохранение русского после flash/reset и завершает Quick 8/8 с zero
+input errors/drops, buzzer LOW и owner/lease `none`/`0`
+(`E-HIL-079`/`E-UX-005`).

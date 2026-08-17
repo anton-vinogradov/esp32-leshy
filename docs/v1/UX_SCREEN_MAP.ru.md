@@ -7,12 +7,13 @@ S2 на реальном TFT; эта карта уже задаёт структ
 
 ## Глобальная оболочка
 
-`UX-S01 Home` содержит шесть задач, а не список радиомодулей, а последним пунктом —
-всегда доступный utility Self-Test:
+`UX-S01 Home` содержит шесть задач, а не список радиомодулей, затем прямой доступ к
+языку и всегда доступный utility Self-Test последним пунктом:
 
 ```text
 Обзор       Цели        Захват
 Лаборатория Библиотека  Устройство
+ЯЗЫК
 SELF-TEST   (QUICK / FULL-GUIDED)
 ```
 
@@ -57,6 +58,7 @@ UX-S01 Home
    ├─ UX-S25 Language / Display / Input / Feedback / Connectivity
    ├─ UX-S26 Storage / Backup-Restore / Factory Reset
    └─ UX-S27 Install / Update / Rollback / Recovery / About
+├─ Язык → language context UX-S25
 └─ Self-Test → test context UX-S24
    ├─ Quick: bounded read-only automatic plan
    └─ Full / Guided: scoped preflight → applicable checks → report
@@ -98,6 +100,7 @@ action. В активном TX `Back` никогда не открывает con
 | Лаборатория | CAP-032…CAP-037 | принимает только saved immutable Capture; Result возвращает source link |
 | Библиотека | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import никогда не обходит parser |
 | Устройство | CAP-001…CAP-008, CAP-045…CAP-047 | Diagnostics объясняет недоступность до входа в task |
+| Язык | PR-011, NFR-010 | прямое переключение EN/RU; немедленное применение и persistent selection |
 | Self-Test | применимые CAP-001…CAP-047, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
 
 ## Acceptance UX-01

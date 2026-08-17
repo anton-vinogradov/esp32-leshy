@@ -12,9 +12,9 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S2 — Clean 1.x platform`.
 - **Last completed stage:** `S1 — Evidence baseline`.
-- **Repository baseline:** `d75e11e` plus the current UX-04 acceptance slice.
+- **Repository baseline:** `a294dba` plus the current UX-05 acceptance slice.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
-- **Current objective:** complete UX-03…UX-07 and a reproducible `DEMO-S2` on the
+- **Current objective:** complete UX-06/UX-07 and a reproducible `DEMO-S2` on the
   independent 1.x target.
 
 ## Stage state
@@ -23,7 +23,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 |---|---|---|---|
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
-| S2 | `active` | independent target, capability Home, unified input/TFT capture, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, and automated HIL already run on board-01 | freeze UX-03…UX-07 and pass `DEMO-S2` with EN/RU/common states on the real TFT |
+| S2 | `active` | independent target, capability Home, unified input/TFT capture, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU, and automated HIL already run on board-01 | freeze UX-06/UX-07 and pass `DEMO-S2` with common states on the real TFT |
 | S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; bounded FSInfo avoids a full FAT scan and abort preserves the prior generation | physical power-cut, endurance, and LittleFS parity remain; requires S2 gate |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
@@ -270,12 +270,12 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 Unavailable boards and instruments remain tracked evidence gaps, but no longer hold
 the platform and visual stage.
 
-1. UX-03 semantic design tokens and the UX-04 common component sheet are implemented
-   and physically evidenced on exact 0.52/0.54 candidates.
+1. UX-03 semantic design tokens, UX-04 common components, and UX-05 EN/RU content
+   fit are implemented and physically evidenced on exact 0.52/0.54/0.55 candidates.
 2. The bottom-of-Home Self-Test shell, eight-check read-only Quick plan, Full
    preflight/blocker, and report skeleton pass on exact 0.53; keep Full coverage
    blocked until S3…S7 capabilities register their checks.
-3. **Active:** verify UX-05 EN/RU content fit and UX-06 button/accessibility mapping.
+3. **Active:** verify UX-06 button/accessibility mapping.
 4. Complete UX-07 automatically: the retained Home/List/Detail/running/result/export
    frames pass; dialog and unavailable/degraded/error states remain to capture.
 5. Run `DEMO-S2`: boot → Home → Self-Test Quick → Diagnostics → disabled reason →
@@ -485,13 +485,15 @@ the platform and visual stage.
 | E-GATE-001 | formal S1 gate review | pass: PRD 1.0 accepted; J/PR/NFR/CAP/WF/UX-01/02 are fully bound; hardware/resource unknowns have safe defaults, explicit conditional scope, and named later-stage evidence; the first real persistent Survey slice fits budgets | does not verify the full PRD or declare S2/S3 complete; unavailable second board/instruments remain S4/S5/S8 risks |
 | E-BUILD-054 | `0.52.0-visual-system-measure` exact rebuild | pass: RAM 125,464 B, linked flash 1,063,092 B; app/factory 1,063,248/1,128,784 B; app `39fc2c92…43ace`, factory `56f90026…569a`, ELF `d240d6aa…ada8`; RTC no-init 20 B | +192 B linked flash, zero static-RAM growth, and 64 B smaller app/factory images vs 0.51; measurement image, not a release |
 | E-HIL-076 | board-01 exact 0.52 visual/product run | pass: exact candidate advances generation 64→65 with 9/9 accepted/forwarded, zero drops, heap 276,040/227,588/192,128 B, exact CID, and final owner/lease none/0; six retained 240×320 TFT frames and all artifacts are SHA-256 bound in the [machine-checked artifact](../../tests/hil/evidence/board-01-visual-system-0.52.json) | Home/List/Detail/running/result/export are covered; dialog and unavailable/degraded/error states, EN/RU fit, physical-panel optics, and full S2 demo remain open |
-| E-UX-003 | semantic visual system and pixel audit | pass: renderer consumes `VisualTheme` palette/layout roles, contains no raw TFT color constants, retained frames prove full brand/divider/input geometry and clear bottom guard rows, and a wrapped Library footer found by the audit was shortened and reverified | accepts UX-03; UX-04 is now closed by E-UX-004, while UX-05…UX-07 remain active |
+| E-UX-003 | semantic visual system and pixel audit | pass: renderer consumes `VisualTheme` palette/layout roles, contains no raw TFT color constants, retained frames prove full brand/divider/input geometry and clear bottom guard rows, and a wrapped Library footer found by the audit was shortened and reverified | accepts UX-03; UX-04 and UX-05 are now closed by E-UX-004/E-UX-005, while UX-06/UX-07 remain active |
 | E-DOC-004 | on-device Self-Test product contract | accepted: the last Home item exposes explicit read-only Quick and Full/Guided modes; user and release HIL share versioned check IDs while the host independently validates bytes, screenshots, side effects, and cleanup | S2 shell/Quick/report are now implemented by E-HIL-077; capability coverage remains blocked until S3…S7 and complete release verification closes in S8 |
 | E-BUILD-055 | `0.53.0-self-test-quick-measure` exact rebuild | pass: RAM 128,720 B, linked flash 1,067,800 B; app/factory 1,068,208/1,133,744 B; app `25d1f620…010bb`, factory `e42c30c7…6ff1f`, ELF `06a5e9d4…01e38`; RTC no-init 20 B | +3,256 B static RAM, +4,708 B linked flash, and +4,960 B images vs 0.52; includes one shared 3 KiB diagnostic JSON workspace and the S2 Self-Test slice, not a release |
 | E-HIL-077 | board-01 exact 0.53 Self-Test Quick/Full regression | pass for the implemented scope: final Home item opens mode UI; Quick runs eight stable read-only checks in 60 µs with 8/8 pass, zero TX/storage/buzzer side effects, minimum heap 188,872 B, zero input errors/drops, buzzer LOW, and final owner/lease none/0. Full/Guided reuses the eight checks and honestly returns blocked on `full.capability.coverage`; five TFT states and reports are retained in the [machine-checked artifact](../../tests/hil/evidence/board-01-self-test-0.53.json) | first candidate failed closed with a retained loop-task stack panic after capture; a shared static JSON workspace fixed it. Full capability coverage, user-prompted physical checks, EN/RU, and complete S2 demo remain open; release gate is false |
 | E-AUTO-021 | Self-Test retained-evidence verifier | pass: binds exact candidate/ELF, stable Quick IDs and ordering, Full blocker, side effects, heap/input/buzzer/cleanup facts, five 240×320 PNGs, retained panic marker, final scope flags, and source prohibition of direct driver actions | local one-board evidence; independent GitHub attestation and complete S8 plan remain open |
 | E-BUILD-056 | `0.54.0-ui-components-measure` exact rebuild | pass: RAM 128,720 B, linked flash 1,068,048 B; app/factory 1,068,192/1,133,728 B; app `479935d5…7f77`, factory `5e54832d…e650`, ELF `d9366104…787f`; RTC no-init 20 B | +248 B linked flash, zero static-RAM growth, and 16 B smaller images vs 0.53; component contract only, not a stage/release build |
-| E-HIL-078 / E-UX-004 | board-01 exact 0.54 shared-component regression | pass: Home and Self-Test share header/menu/metric/footer primitives; four retained 240×320 TFT frames pass source, trace, identity, geometry and pixel checks; Quick remains 8/8 in 64 µs; heap is 272,784/224,332/188,872 B, input has zero errors/drops, buzzer is LOW, and Back returns owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-components-0.54.json) | accepts UX-04 only; EN/RU fit, accessibility matrix, missing UX-07 states, and `DEMO-S2` remain open |
+| E-HIL-078 / E-UX-004 | board-01 exact 0.54 shared-component regression | pass: Home and Self-Test share header/menu/metric/footer primitives; four retained 240×320 TFT frames pass source, trace, identity, geometry and pixel checks; Quick remains 8/8 in 64 µs; heap is 272,784/224,332/188,872 B, input has zero errors/drops, buzzer is LOW, and Back returns owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-components-0.54.json) | accepts UX-04 only; EN/RU fit is now closed by E-UX-005, while accessibility, missing UX-07 states, and `DEMO-S2` remain open |
+| E-BUILD-057 | `0.55.0-ui-language-measure` exact rebuild | pass: RAM 128,744 B, linked flash 1,104,448 B; app/factory 1,104,592/1,170,128 B; app `c9709ae9…fd1f`, factory `3e79f7d3…3f8b`, ELF `16e247ee…515`; RTC no-init 20 B | +36,400 B linked flash, +24 B static RAM, and +36,400 B images vs 0.54; contains the complete 111-ID/222-string catalog and generated PT Sans Narrow 16/12 px GFX fonts, not a stage/release build |
+| E-HIL-079 / E-UX-005 | board-01 exact 0.55 EN/RU content-fit regression | pass: Russian persists across exact-candidate flash/reset; nine actual 240×320 TFT states cover Russian Home/Diagnostics/Survey/Library/Language/Self-Test/Quick result and English Home/Language without overflow; Quick passes 8/8 in 62 µs with zero RF/storage/buzzer side effects; heap is 272,760/224,280/188,792 B, input has zero errors/drops with 5 ms maximum gap, buzzer is LOW, and final owner/lease is none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-language-0.55.json) | accepts UX-05; UX-06, missing UX-07 common states, and `DEMO-S2` remain open |
 
 ## Known uncertainties and risks
 
