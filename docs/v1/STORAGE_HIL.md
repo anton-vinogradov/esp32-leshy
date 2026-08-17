@@ -379,6 +379,14 @@ through the write-blocked driver and exported it from persistent Library. A sepa
 Back-from-Running probe retained generation 2 with no commit and lease 0. Retained
 evidence: [`board-01-product-survey-0.45.json`](../../tests/hil/evidence/board-01-product-survey-0.45.json).
 
+A short repeatability probe then ran the exact local 0.45 product path twice. One
+verified flash followed by a no-flash cycle advanced generation continuously
+6→7→8, accepted and forwarded 44/44 observations without drops, performed four
+read-only cold-boot recoveries, and retained identical heap total/free/min at every
+point. This is early evidence against an accumulating fault, but two cycles do not
+replace eight-hour endurance. Retained summary:
+[`board-01-product-repeatability-0.45.json`](../../tests/hil/evidence/board-01-product-repeatability-0.45.json).
+
 ## Acceptance
 
 | ID | Required result |

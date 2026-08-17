@@ -371,6 +371,14 @@ unmounted, затем cold boot восстановил ровно 3/15 чере�
 generation 2 без commit и с lease 0. Retained evidence:
 [`board-01-product-survey-0.45.json`](../../tests/hil/evidence/board-01-product-survey-0.45.json).
 
+Короткий repeatability probe затем повторил exact local 0.45 product path дважды:
+одна verified flash и следующий цикл без flash непрерывно продвинули generation
+6→7→8, приняли и передали 44/44 observations без drop, выполнили четыре read-only
+cold-boot recovery и сохранили одинаковые heap total/free/min во всех точках. Это
+раннее evidence отсутствия накопительного сбоя, но два цикла не заменяют 8-hour
+endurance. Retained summary:
+[`board-01-product-repeatability-0.45.json`](../../tests/hil/evidence/board-01-product-repeatability-0.45.json).
+
 ## Приёмка
 
 | ID | Обязательный результат |
