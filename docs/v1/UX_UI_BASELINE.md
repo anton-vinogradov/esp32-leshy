@@ -130,6 +130,13 @@ next-to-last Home item, applies EN/RU immediately, and persists the selection in
 namespace `leshy1-ui`, key `lang.v1`; `ui.language en|ru` exercises the same
 controller boundary used by the screen.
 
+UX-05 accepts encoding coverage, persistence, and geometric fit; it does not claim
+that every rasterized glyph is optimally legible. A later physical-user review found
+several Cyrillic shapes ambiguous in PT Sans Narrow at 16/12 px. Font alternatives
+are under review, and the current face remains the baseline until one replacement is
+selected and reruns the same catalog-source, overflow, actual-TFT, Quick, input, and
+cleanup checks.
+
 Exact candidate `0.55.0-ui-language-measure` accepts UX-05 through
 `E-BUILD-057`/`E-HIL-079`/`E-UX-005`. Actual 240×320 TFT captures cover Home,
 Diagnostics, Survey, Library, Language, Self-Test, and Quick result in Russian plus

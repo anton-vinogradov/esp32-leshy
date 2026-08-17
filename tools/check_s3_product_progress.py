@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -43,10 +44,24 @@ def main() -> int:
             "progress/stage/release eligibility mismatch")
     require(failures, evidence.get("evidence_ids") == ["E-AUTO-023", "E-HIL-083"],
             "evidence IDs mismatch")
-    require(failures,
-            evidence.get("runner_source_commit") ==
-            "d31e08f05c6679a13b6555078d58e8afdeb24bef",
+    runner_commit = "d31e08f05c6679a13b6555078d58e8afdeb24bef"
+    require(failures, evidence.get("runner_source_commit") == runner_commit,
             "runner source commit mismatch")
+    try:
+        runner_source = subprocess.run(
+            ["git", "show", f"{runner_commit}:tools/run_1x_product_survey_hil.py"],
+            cwd=ROOT, check=True, capture_output=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as error:
+        failures.append(f"runner source Git object unavailable: {error}")
+        runner_source = b""
+    require(failures,
+            hashlib.sha256(runner_source).hexdigest() ==
+            evidence.get("runner_source_sha256") ==
+            "fdef8ee63dc71d0c2fe034a59a24c86896d83e0b81abf15c5f11b36d035efa4d" and
+            evidence.get("runner_source_binding") ==
+            "retrospective_git_object_not_runtime_emitted",
+            "runner source object/hash/trust binding mismatch")
 
     candidate = evidence.get("candidate", {})
     firmware = BUNDLE / "firmware.bin"
@@ -171,12 +186,35 @@ def main() -> int:
                 record.get("state", {}).get("revision"),
                 f"{state}: retained TFT capture mismatch")
 
+    summary = evidence.get("run", {})
+    require(failures, summary == {
+        "run_id": run.get("run_id"),
+        "exact_cid": run.get("expected_cid"),
+        "generation_before": before.get("generation"),
+        "generation_after": after.get("generation"),
+        "observations": committed.get("survey_observations"),
+        "accepted": running.get("survey_scan_accepted"),
+        "forwarded": running.get("survey_forwarded"),
+        "drops": running.get("survey_dropped"),
+        "detail_back_ack_ms": run.get("detail_back_ack_ms"),
+        "captures": len(captures),
+        "final_page": final.get("page"),
+        "final_owner": final.get("runtime_owner"),
+        "final_lease_mask": final.get("lease_mask"),
+    }, "evidence run summary is not exactly derived from retained run")
+
     criteria = evidence.get("s3_criteria", {})
-    require(failures, len(criteria) == 9 and
-            criteria.get("4_list_detail_back") == "pass" and
-            criteria.get("5_atomic_stop_commit") == "pass_software_reset_only" and
-            criteria.get("9_missing_source_visible_zero_lease") ==
-            "partial_host_contract_only",
+    require(failures, criteria == {
+        "1_clean_boot_probe": "pass",
+        "2_user_start": "pass",
+        "3_passive_normalized_observations": "pass",
+        "4_list_detail_back": "pass",
+        "5_atomic_stop_commit": "pass_software_reset_only",
+        "6_reboot_offline_reopen": "pass",
+        "7_json_summary_export": "pass",
+        "8_host_and_hil_coverage": "pass",
+        "9_missing_source_visible_zero_lease": "partial_host_contract_only",
+    },
             "S3 criteria state mismatch")
     require(failures, evidence.get("open_gate_work") == [
         "missing_source_real_tft", "physical_power_cut", "littlefs_parity",

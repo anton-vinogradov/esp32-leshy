@@ -2,7 +2,7 @@
 
 *Читать на: [English](STATUS.md) · **Русский***
 
-Последнее обновление: **17 августа 2026 года**.
+Последнее обновление: **18 августа 2026 года**.
 
 Это единственный документ с живым состоянием проекта. Границы этапов находятся в
 [DELIVERY_PLAN.ru.md](DELIVERY_PLAN.ru.md), а правила обновления — в
@@ -12,12 +12,12 @@
 
 - **Активный этап:** `S3 — Первая сохраняемая Survey Session`.
 - **Последний закрытый этап:** `S2 — Чистая платформа 1.x`.
-- **Рабочая база репозитория:** `d31e08f` плюс retained exact-candidate S3 progress evidence.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.60 S3 progress evidence.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
 - **Главная цель текущего этапа:** закрыть missing-source real-TFT path, physical
-  power-cut, LittleFS parity и independent-golden `DEMO-S3` на существующем пути
-  real passive Survey → reboot → Library/export.
+  cancel-during-scan и power-cut evidence, LittleFS parity и independent-golden
+  `DEMO-S3` на существующем пути real passive Survey → reboot → Library/export.
 
 ## Состояние этапов
 
@@ -26,7 +26,7 @@
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
-| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; exact 0.58 добавляет live List→Detail→Back за 102,636 ms | открыты missing-source real-TFT evidence, physical power-cut, LittleFS parity, independent demo goldens и воспроизводимый `DEMO-S3` |
+| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; exact 0.60 сохраняет persistent Core-0 worker и делает terminal `Idle` UI-acknowledgement после cleanup/commit, закрывая найденную саморевью гонку repeated Start | открыты missing-source real-TFT evidence, physical cancel-during-scan, physical power-cut, LittleFS parity, independent demo goldens и воспроизводимый `DEMO-S3` |
 | S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
@@ -294,14 +294,14 @@
 
 | Критерий среза PRD | Текущее состояние | Evidence / оставшаяся работа |
 |---|---|---|
-| 1. Clean boot + HardwareProbe | `pass` | exact boot/profile DEMO-S2 плюс pre/post boot identity S3 на 0.58 |
-| 2. Пользователь открывает и запускает Survey | `pass` | public five-key Actions открывают real persistent Setup и Start |
-| 3. Passive source выдаёт normalized Observations | `pass` | 10/10 accepted/forwarded, zero drops в E-HIL-083 |
-| 4. List → Detail → Back сохраняет работающую Survey | `pass` | exact 0.58 сохраняет 10 observations/backend/lease 15 и подтверждает Back за 102,636 ms |
-| 5. Stop атомарно сохраняет один раз | `partial` | generation 65→66, cleanup и software-reset boundary matrix проходят; physical power-cut открыт |
-| 6. Reboot открывает Session при выключенном radio | `pass` | read-only exact-CID generation 66/10; Library export сообщает `radio_touched=false` |
-| 7. JSON summary export | `pass` | schema `leshy.library.export.v1`, persistent/non-simulated generation 66 |
-| 8. Host + HIL coverage | `pass` | domain/storage/navigation tests плюс exact board run и retained verifier |
+| 1. Clean boot + HardwareProbe | `pass` | exact boot/profile DEMO-S2 плюс pre/post boot identity S3 на 0.60 |
+| 2. Пользователь открывает и запускает Survey | `pass` | public five-key Actions открывают real persistent Setup; Start возвращается за 12 us до identity/scan/mount work, затем worker переводит UI в Running |
+| 3. Passive source выдаёт normalized Observations | `pass` | 25/25 accepted/forwarded за два continuous scan cycles при zero drops в E-HIL-085 |
+| 4. List → Detail → Back сохраняет работающую Survey | `pass` | exact 0.60 при открытом Detail продвигается с 12 observations/одного scan до 25/двух scans и подтверждает Back за 105,396 ms |
+| 5. Stop атомарно сохраняет один раз | `partial` | Stop callback возвращается за 8 us, source останавливается, UI подтверждает terminal только после single commit/cleanup generation 67→68; software-reset matrix проходит, physical cancel-during-scan и power-cut открыты |
+| 6. Reboot открывает Session при выключенном radio | `pass` | read-only exact-CID generation 68/25; Library export сообщает `radio_touched=false` |
+| 7. JSON summary export | `pass` | schema `leshy.library.export.v1`, persistent/non-simulated generation 68 |
+| 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, семь runner contract tests, static terminal-ownership guard, exact board runs и retained independent verifiers |
 | 9. Missing source объясняет себя и не оставляет leases | `partial` | host contract AppCatalog/admission проходит; нужны real-TFT state и physical zero-lease trace |
 
 Дополнительная exit-работа S3: parity на dedicated disposable LittleFS и отдельно
@@ -527,9 +527,19 @@
 | E-HIL-082 / E-GATE-002 | board-01 exact DEMO-S2 0.58 | pass/stage-gate eligible: committed candidate cold-boots за 989,817 ms, открывает последний пункт Home Self-Test без boot detour, выполняет Quick plan 2 8/8 за 63 µs, проходит Diagnostics и Full/Guided dialog/unavailable states, совпадает с девятью real TFT frames 240×320 без расхождений, сохраняет zero radio/storage/buzzer side effects и input errors/drops, завершается на Home с GPIO2 LOW и owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-stage-demo-s2-0.58.json) | закрывает только S2; полный capability coverage остаётся blocked на S3…S7, release eligibility false |
 | E-AUTO-023 | product-runner contract live Survey List/Detail/Back | pass: exact real-product runner входит в Detail при активных source/backend и lease, возвращается в List внутри budget 150 ms, затем продолжает неизменный путь Stop/reboot/Library/export; пять host tests отклоняют stopped/detail drift и latency overflow | runner contract и один exact board run; missing-source UI, independent goldens, LittleFS и power-cut остаются отдельной работой S3 |
 | E-HIL-083 | board-01 exact 0.58 S3 product progress | pass/progress only: exact flashed candidate продвигает generation 65→66 с 10/10 accepted/forwarded и zero drops, сохраняет работающую Survey через List→Detail→Back с acknowledgement 102,636 ms, commits/cleanup, cold-reopens exact CID generation 66/10 read-only, экспортирует valid persistent/non-simulated JSON при неактивном radio, имеет пять визуально проверенных TFT states и заканчивает Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-s3-product-regression-0.58.json) | не `DEMO-S3`: criterion 9 пока host-only; physical power-cut, LittleFS parity и independent goldens открыты; stage/release gate false |
+| E-BUILD-061 | exact rebuild `0.59.0-product-survey-worker-measure` | pass: RAM 128 800 B, linked flash 1 111 148 B; app/factory 1 111 296/1 176 832 B; app `bc817b95…2764`, factory `78f16551…30f`, ELF `fc4f371e…b662`, map `48f08485…b16`; RTC no-init 20 B | +3 536 B linked flash, +56 B static RAM и +3 536 B images vs 0.58; S3 progress candidate, не stage/release build |
+| E-AUTO-024 | asynchronous Product Survey worker runner и retained verifier | pass: семь host tests покрывают async Start/polling, live Detail progress, action budgets, cleanup-on-error и source-hash binding; independent verifier пересчитывает exact candidate/ELF/map, retained runner и 20 indexed artifacts, затем независимо выводит каждый worker/run/boot/export/cleanup claim | unsigned local result одной board; physical cancel-during-scan, missing-source TFT, power-cut, LittleFS и independent golden не закрыты |
+| E-HIL-084 | board-01 exact 0.59 progress Product Survey worker | pass/progress only: exact flashed candidate продвигает generation 66→67 с 27/27 accepted/forwarded, high-water очереди 10/64 и zero drops; callbacks Start/Stop занимают 13/10 us, worker продолжает progress 14/1→27/2 observations/scans при открытом Detail, Back подтверждён за 104,385 ms, cold read-only reopen/export восстанавливает persistent/non-simulated generation 67/27 при zero heap drift и final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-worker-0.59.json) | не `DEMO-S3`: criterion 9 пока host-only и оставшиеся S3 boundaries выше открыты; stage/release gate false |
+| E-BUILD-062 | exact rebuild `0.60.0-product-survey-terminal-ack-measure` | pass: RAM 128 800 B, linked flash 1 111 128 B; app/factory 1 111 280/1 176 816 B; app `eadf8aea…5840`, factory `b9ec7c22…7cfd`, ELF `bb57fc84…52b5`, map `2f4708d7…e1c1c`; RTC no-init 20 B | linked flash меньше на 20 B, zero static-RAM delta и images меньше на 16 B vs 0.59; exact race-fix candidate, не stage/release build |
+| E-AUTO-025 | invariant ownership terminal event и retained verifier | pass: саморевью запрещает worker-side transition в `Idle`, требует UI acknowledgement после terminal cleanup и successful commit, machine-checks exact candidate/source/index/run/boot/live Detail/commit/export/cleanup facts | normal physical regression плюс static invariant; deliberately timed repeated-Start fault injection и physical active-scan cancel остаются дополнительным negative evidence |
+| E-HIL-085 | board-01 exact 0.60 regression terminal-ack | pass/progress only: exact flashed candidate продвигает generation 67→68 с 25/25 accepted/forwarded, high-water 9/64 и zero drops; callbacks Start/Stop занимают 12/8 us, worker продвигается 12/1→25/2 observations/scans при открытом Detail, Back подтверждён за 105,396 ms, cold read-only reopen/export восстанавливает persistent/non-simulated generation 68/25 при zero heap drift и final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-terminal-ack-0.60.json) | закрывает self-review race без promotion S3: criterion 9 и оставшиеся physical/storage/golden boundaries открыты; stage/release gate false |
 
 ## Известные неопределённости и риски
 
+- UX-05 подтверждает coverage EN/RU, persistence и geometric fit, но physical-user
+  review сообщает о неоднозначно читаемых Cyrillic glyphs текущего PT Sans Narrow
+  16/12 px. Альтернативные шрифты сравниваются; typography quality остаётся открытым
+  до прохождения выбранным face тех же source, fit, TFT и input regressions.
 - Board-01 дала partial evidence для `HW-T01/T04/T07/T11`; остальные physical tests
   не выполнены, и ни один составной HW-T test ещё не закрыт целиком.
 - BOM указывает ESP32-S3-WROOM-1U-N16 (16 MB, без PSRAM), а original build guide —

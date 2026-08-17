@@ -241,8 +241,28 @@ Exact 0.58 S3 progress (`E-AUTO-023`/`E-HIL-083`) reuses the same production pat
 10/10 passive observations remain live through List→Detail→Back, Back is acknowledged
 in 102.636 ms, Stop advances generation 65→66, and cold read-only reopen exports the
 same persistent/non-simulated generation with radios inactive and final lease zero.
-This closes the normal product-navigation gap only; it does not substitute for the
-controlled physical cuts or dedicated LittleFS target above.
+This closed the normal product-navigation UI gap, but the source was still a one-shot
+operation on the UI loop.
+
+Exact 0.59 worker progress (`E-BUILD-061`/`E-AUTO-024`/`E-HIL-084`) moves identity,
+mount, source and commit work behind a persistent Core-0 task with bounded event and
+observation queues (8/64). Start/Stop callbacks return in 13/10 us; the active source
+progresses from 14 observations/one scan to 27/two scans while Detail is open, reaches
+queue high-water 10/64 with zero drops, then stops before the single 66→67 commit.
+Cold read-only recovery/export returns exact generation 67/27 with zero heap drift,
+zero writes, and final lease zero. The runner retains its exact runtime-emitted source
+hash and fail-closed terminal/cleanup evidence. This accepts the normal asynchronous
+worker path only; physical cancel during an active scan remains a separate negative
+test and neither result substitutes for controlled physical cuts or LittleFS parity.
+
+Self-review of that worker found that its control state became `Idle` after enqueueing
+a terminal event rather than after the UI consumed it. Version 0.60 keeps the worker
+non-idle until Core 1 finishes cancellation cleanup or the single commit/cleanup and
+adds a static rejection rule for worker-side `Idle`. Exact E-HIL-085 then advances
+generation 67→68 with 25/25 forwarded, two live scan cycles, zero drops/heap drift,
+12/8 us Start/Stop callbacks, read-only recovery/export, and final lease zero. This
+normal-path regression validates the fix without claiming deliberately timed repeated-
+Start injection, physical active-scan cancellation, or any power-cut boundary.
 
 ## Implemented and physically exercised software-reset harness
 

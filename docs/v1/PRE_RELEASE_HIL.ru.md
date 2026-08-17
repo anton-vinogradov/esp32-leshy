@@ -314,11 +314,19 @@ workflow прошли end to end:
 - `tools/run_1x_product_survey_hil.py` — service-free lane для enrolled media. Когда
   device и exact product card подключены, одна команда при необходимости прошивает
   exact candidate, делает pre/post cold boot, требует exact-CID read-only recovery,
-  допускает запись только после bounded cached-FSInfo и непротиворечивого passive-scan
-  accounting, commits ровно следующую generation, снимает TFT
-  Setup/Running/Committed/Export, проверяет persistent Library export и заканчивает
-  lease 0. Retained board run 0.45 machine-checked через
-  `check_product_survey_acceptance.py`;
+  подтверждает Start до identity/scan/mount work, затем polling переводит persistent
+  worker в Running. Lane требует live source/lease/backend state, доказывает рост scan
+  и observation counters при открытом Detail, применяет budgets callbacks Start/Stop
+  и Detail/Back, допускает запись только после bounded cached-FSInfo и
+  непротиворечивого passive accounting, останавливает source до commit ровно следующей
+  generation, снимает TFT Setup/Running/Detail/Committed/Export, проверяет persistent
+  Library export и заканчивает lease 0. При exception всё равно создаётся terminal
+  evidence и выполняется best-effort cleanup owned state. Runner публикует собственный
+  source SHA-256 во время выполнения; retained worker run 0.59 и exact bytes runner
+  независимо machine-checked через `check_product_survey_worker_acceptance.py`, а
+  retained regression 0.60 добавляет source invariant, что terminal `Idle` выставляется
+  только после UI cleanup/commit, и проверяется
+  `check_product_survey_terminal_ack_acceptance.py`;
 - `tools/run_1x_release_hil.py` — release-facing foreground orchestrator. Он сначала
   запускает product, получает exact CID только из admitted enrollment, безопасно
   удаляет лишь enrollment в NVS, прошивает и запускает generic `device-smoke`
@@ -347,7 +355,7 @@ workflow прошли end to end:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.51.0-hardware-boot-watchdog-measure \
+  --expected-version 0.60.0-product-survey-terminal-ack-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - без `--expected-cid` CID определяется только из admitted enrollment с совпадающими

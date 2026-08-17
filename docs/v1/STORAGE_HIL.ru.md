@@ -236,8 +236,30 @@ Exact 0.58 S3 progress (`E-AUTO-023`/`E-HIL-083`) переиспользует �
 path: 10/10 passive observations остаются live через List→Detail→Back, Back
 подтверждён за 102,636 ms, Stop продвигает generation 65→66, а cold read-only reopen
 экспортирует ту же persistent/non-simulated generation при неактивных radios и final
-lease zero. Это закрывает только gap normal product navigation и не заменяет
-controlled physical cuts или dedicated LittleFS target выше.
+lease zero. Это закрыло gap normal product navigation UI, но source всё ещё был
+one-shot operation в UI loop.
+
+Exact worker progress 0.59 (`E-BUILD-061`/`E-AUTO-024`/`E-HIL-084`) переносит
+identity, mount, source и commit work за persistent Core-0 task с bounded очередями
+events/observations (8/64). Callbacks Start/Stop возвращаются за 13/10 us; активный
+source продвигается с 14 observations/одного scan до 27/двух scans при открытом
+Detail, достигает high-water 10/64 при zero drops, затем останавливается до
+единственного commit 66→67. Cold read-only recovery/export возвращает exact
+generation 67/27 с zero heap drift, zero writes и final lease zero. Runner сохраняет
+собственный exact runtime-emitted source hash и fail-closed terminal/cleanup evidence.
+Это принимает только нормальный asynchronous worker path; physical cancel во время
+active scan остаётся отдельным negative test, и ни один результат не заменяет
+controlled physical cuts или LittleFS parity.
+
+Саморевью worker обнаружило, что его control state становился `Idle` после enqueue
+terminal event, а не после обработки события UI. Version 0.60 сохраняет worker
+non-idle до завершения cancellation cleanup или single commit/cleanup на Core 1 и
+добавляет static rejection rule для worker-side `Idle`. Exact E-HIL-085 затем
+продвигает generation 67→68 с 25/25 forwarded, двумя live scan cycles, zero
+drops/heap drift, callbacks Start/Stop 12/8 us, read-only recovery/export и final
+lease zero. Этот normal-path regression подтверждает fix, но не заявляет deliberately
+timed repeated-Start injection, physical active-scan cancellation или power-cut
+boundary.
 
 ## Реализованный и физически проверенный software-reset harness
 

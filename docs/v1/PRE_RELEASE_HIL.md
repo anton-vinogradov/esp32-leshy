@@ -313,10 +313,18 @@ the current combined GitHub workflows have passed end to end:
 - `tools/run_1x_product_survey_hil.py` is the service-free enrolled-media lane. With
   the device and exact product card connected, one invocation optionally flashes the
   exact candidate, performs pre/post cold boots, requires exact-CID read-only recovery,
-  admits a write only after bounded cached-FSInfo and passive-scan accounting pass,
-  commits exactly one next generation, captures Setup/Running/Committed/Export TFT
-  frames, validates persistent Library export, and finishes at lease 0. Its retained
-  0.45 board run is machine-checked by `check_product_survey_acceptance.py`;
+  acknowledges Start before identity/scan/mount work, then polls the persistent worker
+  into Running. It requires live source/lease/backend state, proves scan and observation
+  counters advance while Detail is open, enforces Start/Stop callback and Detail/Back
+  budgets, admits a write only after bounded cached-FSInfo and passive accounting pass,
+  stops the source before committing exactly one next generation, captures
+  Setup/Running/Detail/Committed/Export TFT frames, validates persistent Library
+  export, and finishes at lease 0. Exceptions still emit terminal evidence and perform
+  best-effort owned-state cleanup. The runner records its own source SHA-256 at runtime;
+  the retained 0.59 worker run and exact runner bytes are independently machine-checked
+  by `check_product_survey_worker_acceptance.py`; the retained 0.60 regression adds a
+  source invariant that terminal `Idle` is exposed only after UI cleanup/commit and is
+  checked by `check_product_survey_terminal_ack_acceptance.py`;
 - `tools/run_1x_release_hil.py` is the release-facing foreground orchestrator. It
   runs product first, derives the admitted exact CID, safely removes only its NVS
   enrollment, flashes and runs generic `device-smoke` revision 6, performs exact-CID
@@ -346,7 +354,7 @@ The current direct product-lane command is:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.51.0-hardware-boot-watchdog-measure \
+  --expected-version 0.60.0-product-survey-terminal-ack-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - omitted `--expected-cid` is discovered only from an admitted enrollment whose

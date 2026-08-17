@@ -163,11 +163,23 @@ request. Queue depth, high-water mark и drops входят в Session evidence.
 Wi-Fi→FIFO→SessionStore path E-HIL-039 — 6 921 B/s при high-water 9/64 и zero drops.
 E-HIL-040 повторяет этот path до обычной Library/export: 12 957 B/s, high-water
 18/64, zero drops, recovered generation 1/52 observations и persistent/real
-provenance в List/Detail/Export. Последний пока является sequential diagnostic
-command: он доказывает service rate, data path и current-boot admission, но не
-product worker invariant, что receiver ingress никогда не ждёт durability barrier.
-Boot-time catalog recovery теперь является отдельным измеренным path; simulated
-Survey UI он пока не превращает в real persistent worker.
+provenance в List/Detail/Export. Этот результат был sequential diagnostic command.
+Version 0.59 закрывает gap product-worker integration: одна persistent task на Core 0
+владеет source/storage work за bounded очередями events/observations (8/64), а Core 1
+владеет и drain `SurveyPipeline`. UI callbacks Start и Stop только ставят intent в
+очередь и возвращаются; измеренные callbacks занимают 13/10 us. Source остаётся
+активным в List и Detail, а E-HIL-084 фиксирует progress с 14 observations/одного scan
+до 27/двух scans при открытом Detail, high-water 10/64 и zero drops. Durability work
+начинается только после остановки source; boot-time catalog recovery остаётся
+отдельным read-only path.
+
+Саморевью затем нашло одну race terminal state: worker выставлял `Idle` сразу после
+enqueue Failed/Cancelled/Stopped, до обработки terminal event на Core 1. Version 0.60
+делает UI единственным terminal acknowledger. Worker сохраняет non-idle control state,
+пока Core 1 не завершит cancellation cleanup или commit cleanup; только после этого
+разрешён следующий Start. Static contract отклоняет worker-side transition в `Idle`,
+а E-HIL-085 повторяет exact physical normal path через generation 67→68 с 25/25
+forwarded, zero drops, read-only reboot/export и final lease zero.
 
 Product activation выделена в отдельную fail-closed boundary. `ProductStorePolicy`
 фиксирует единственный текущий product root `/leshy/sessions/v1`: automatic catalog
@@ -187,17 +199,25 @@ query: boot не требует free space, а scan большой FAT сдел�
 unenrollment удаляет только CID из NVS и вообще не обращается к SD. Initialize/commit
 остаются explicit writable operations.
 
-Version 0.45 соединяет admission с interactive product Survey, не меняя un-enrolled
-simulated fixture. AppCatalog предпочитает `survey.persistent_passive` только после
+Version 0.45 впервые соединила admission с interactive product Survey, не меняя
+un-enrolled simulated fixture. AppCatalog предпочитает
+`survey.persistent_passive` только после
 boot recovery exact media и атомарно запрашивает UI+EspRf+Storage+RadioSpi (lease 15).
 Explicit Start заново идентифицирует CID, монтирует writable с disabled format,
 использует только cached FAT/FSInfo free-cluster hint, допускает commit 64 KiB с reserve
 1 MiB и направляет allocation-free workflow в product store. Credential-free Wi-Fi
-adapter владеет временной event loop, делает только passive scan, drain FIFO 64 и
-deinitializes до просмотра списка. Stop публикует и reopens ровно следующую generation
-до замены Library; каждый exit закрывает store/mount и возвращает workflow на RAM.
-Back из Running aborts без commit и сохраняет prior Library. Следующие storage
-boundaries — physical power-cut, endurance и LittleFS parity, а не интеграция worker.
+adapter в 0.59 выполняет только passive scans в persistent bounded worker, умеет
+останавливать активный scan и не вызывает connect/configuration/raw-TX API. Stop
+сначала запрашивает остановку worker/source, затем публикует и reopens ровно следующую
+generation до замены Library; каждый exit закрывает store/mount и возвращает workflow
+на RAM. Back из Running cancels без commit и сохраняет prior Library. Нормальный path
+Start→live List/Detail→Stop→commit→read-only reboot/export и финальный zero-lease
+cleanup физически принят в E-HIL-084. Physical cancel во время активного scan ещё
+требует отдельного negative HIL; physical power-cut, endurance, LittleFS parity,
+missing-source TFT evidence и independent demo goldens также остаются открыты.
+Version 0.60 дополнительно удерживает ownership control worker до UI terminal
+acknowledgement, не позволяя новому Start обогнать старый terminal event; E-HIL-085
+подтверждает неизменный normal hardware path.
 
 ## 7. Модель данных
 

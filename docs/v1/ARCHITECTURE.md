@@ -104,11 +104,23 @@ at 2,184 B/s. E-HIL-038's fixed batch delivers 9,068 B/s and E-HIL-039's real
 Wi-Fi→FIFO→SessionStore path delivers 6,921 B/s with high-water 9/64 and zero drops.
 E-HIL-040 repeats that path through ordinary Library/export at 12,957 B/s,
 high-water 18/64, zero drops, recovered generation 1/52 observations, and
-persistent/real provenance in List/Detail/Export. The latter remains a sequential
-diagnostic command; it proves service rate, data path, and current-boot admission,
-not the product worker invariant that receiver ingress never waits on a durability
-barrier. Boot-time catalog recovery is now a separate measured path; it does not yet
-turn the simulated Survey UI into the real persistent worker.
+persistent/real provenance in List/Detail/Export. That result was a sequential
+diagnostic command. Version 0.59 closes the product-worker integration gap: one
+persistent Core-0 task owns source and storage work behind bounded event/observation
+queues (8/64), while Core 1 owns and drains the `SurveyPipeline`. Start and Stop UI
+callbacks only enqueue intent and return; the measured callbacks take 13/10 us.
+The source remains active through List and Detail, and E-HIL-084 observes progress
+from 14 observations/one scan to 27/two scans while Detail is open, with queue
+high-water 10/64 and zero drops. Durability work starts only after the source has
+stopped; boot-time catalog recovery remains a separate read-only path.
+
+Self-review then found one terminal-state race: the worker exposed `Idle` immediately
+after enqueueing Failed/Cancelled/Stopped, before Core 1 had consumed that terminal
+event. Version 0.60 makes the UI the sole terminal acknowledger. The worker keeps its
+non-idle control state until Core 1 completes cancellation cleanup or commit cleanup;
+only then may a later Start be admitted. A static contract rejects worker-side `Idle`
+transitions, and E-HIL-085 repeats the exact physical normal path through generation
+67→68 with 25/25 forwarded, zero drops, read-only reboot/export, and final lease zero.
 
 Product activation is a separate fail-closed boundary. `ProductStorePolicy` fixes
 the only current product root at `/leshy/sessions/v1`: automatic catalog recovery
@@ -128,18 +140,26 @@ would make latency depend on media size. Enrollment is saved only after the same
 read-only recovery succeeds; unenrollment removes only the NVS CID and never accesses
 the SD. Initialization/commit remain explicit writable operations.
 
-Version 0.45 connects that admission to the interactive product Survey without changing
-the un-enrolled simulated fixture. AppCatalog prefers `survey.persistent_passive` only
+Version 0.45 first connected that admission to the interactive product Survey without
+changing the un-enrolled simulated fixture. AppCatalog prefers
+`survey.persistent_passive` only
 after exact-media boot recovery and atomically requests UI+EspRf+Storage+RadioSpi
 (lease 15). Explicit Start re-identifies the CID, mounts writable with formatting
 disabled, uses only the cached FAT/FSInfo free-cluster hint, authorizes a 64 KiB commit
 with a 1 MiB reserve, and routes the allocation-free workflow to the product store.
-The credential-free Wi-Fi adapter owns a temporary event loop, performs passive scan
-only, drains FIFO 64, and deinitializes before the user reviews the list. Stop publishes
-and reopens exactly the next generation before replacing Library; every exit closes the
-store/mount and routes the workflow back to RAM. Back from Running aborts without a
-commit and preserves the prior Library. Remaining storage boundaries are physical
-power-cut, endurance, and LittleFS parity rather than product-worker integration.
+Version 0.59 replaces the original one-shot UI-loop scan with the persistent bounded
+worker above. The credential-free Wi-Fi adapter performs passive scans only, supports
+stopping an active scan, and never calls connect/configuration/raw-TX APIs. Stop first
+requests worker/source shutdown and then publishes and reopens exactly the next
+generation before replacing Library; every exit closes the store/mount and routes the
+workflow back to RAM. Back from Running cancels without a commit and preserves the
+prior Library. The normal Start→live List/Detail→Stop→commit→read-only reboot/export
+path and final zero-lease cleanup are physically accepted in E-HIL-084. A physical
+cancel during an active scan still needs separate negative HIL; physical power-cut,
+endurance, LittleFS parity, missing-source TFT evidence, and independent demo goldens
+also remain open. Version 0.60 additionally holds worker control ownership until UI
+terminal acknowledgement, preventing a new Start from overtaking an older terminal
+event; E-HIL-085 confirms the unchanged normal hardware path.
 
 ## Data model
 

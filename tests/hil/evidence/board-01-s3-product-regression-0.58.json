@@ -9,6 +9,8 @@
   "board": "board-01",
   "profile": "esp32-div-v2-n16",
   "runner_source_commit": "d31e08f05c6679a13b6555078d58e8afdeb24bef",
+  "runner_source_sha256": "fdef8ee63dc71d0c2fe034a59a24c86896d83e0b81abf15c5f11b36d035efa4d",
+  "runner_source_binding": "retrospective_git_object_not_runtime_emitted",
   "candidate": {
     "version": "0.58.0-stage-demo-s2-measure",
     "firmware_sha256": "b4d854f4735e2fb83f202169951107a7a8c9a7f97beb07d0af7c1cf3e45dc50a",

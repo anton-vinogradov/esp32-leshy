@@ -131,6 +131,12 @@ runtime-загрузки шрифта или heap allocation. `Язык` — п�
 `lang.v1`; команда `ui.language en|ru` проходит через ту же controller boundary,
 что и экран.
 
+UX-05 принимает encoding coverage, persistence и geometric fit, но не утверждает,
+что каждый rasterized glyph оптимально читаем. Более поздний physical-user review
+нашёл несколько неоднозначных Cyrillic shapes в PT Sans Narrow 16/12 px. Альтернативы
+сравниваются, а текущий face остаётся baseline, пока не выбран replacement и не
+повторены те же catalog-source, overflow, actual-TFT, Quick, input и cleanup checks.
+
 Exact candidate `0.55.0-ui-language-measure` принимает UX-05 через
 `E-BUILD-057`/`E-HIL-079`/`E-UX-005`. Actual TFT captures 240×320 охватывают Home,
 Diagnostics, Survey, Library, Language, Self-Test и Quick result на русском, а также

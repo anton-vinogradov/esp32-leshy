@@ -6,6 +6,7 @@ import importlib.util
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 
 def load_runner() -> Any:
@@ -42,6 +43,10 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             "survey_observations": 17, "survey_scan_accepted": 17,
             "survey_forwarded": 17, "survey_product_cached_free_bytes": 2_000_000,
             "survey_product_capacity_bytes": 4_000_000,
+            "survey_product_worker_ready": True,
+            "survey_product_source_active": True,
+            "survey_product_scan_cycles": 1,
+            "survey_product_start_action_us": 250,
         }
         self.assertEqual([], RUNNER.running_failures(state, CID))
         state["survey_product_observed_cid"] = "0" * 32
@@ -55,6 +60,8 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             "survey_pipeline_status": "committed", "survey_product_status": "committed",
             "survey_product_backend_open": False,
             "survey_product_cleanup_complete": True,
+            "survey_product_source_active": False,
+            "survey_product_stop_action_us": 300,
             "library_persistent": True, "library_simulated": False,
             "survey_generation": 8, "library_generation": 8,
         }
@@ -69,10 +76,12 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             "survey_running": True, "survey_observations": 17,
             "survey_product_backend_open": True,
             "survey_product_cleanup_complete": False,
+            "survey_product_source_active": True,
+            "survey_product_scan_cycles": 2,
         }
-        self.assertEqual([], RUNNER.detail_failures(detail, 17))
+        self.assertEqual([], RUNNER.detail_failures(detail, 17, 2))
         detail["survey_running"] = False
-        self.assertTrue(RUNNER.detail_failures(detail, 17))
+        self.assertTrue(RUNNER.detail_failures(detail, 17, 2))
 
         list_state = {
             "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
@@ -80,6 +89,7 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             "survey_running": True, "survey_observations": 17,
             "survey_product_backend_open": True,
             "survey_product_cleanup_complete": False,
+            "survey_product_source_active": True,
         }
         self.assertEqual(
             [], RUNNER.list_after_detail_failures(list_state, 17, 99.5)
@@ -109,6 +119,53 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         recovery["observed_fingerprint"] = "0" * 32
         with self.assertRaisesRegex(ValueError, "admitted exact-card"):
             RUNNER.resolve_expected_cid(None, recovery)
+
+    def test_best_effort_cleanup_backs_out_of_live_detail(self) -> None:
+        states = [
+            {
+                "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
+                "survey_view": "detail", "survey_product_status": "running",
+                "survey_product_backend_open": True,
+                "survey_product_source_active": True,
+            },
+            {
+                "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
+                "survey_view": "list", "survey_product_status": "running",
+                "survey_product_backend_open": True,
+                "survey_product_source_active": True,
+            },
+            {
+                "page": "home", "runtime_owner": "none", "lease_mask": 0,
+                "survey_product_backend_open": False,
+                "survey_product_source_active": False,
+            },
+        ]
+        current = {"value": states[0]}
+
+        def fake_query(*_: Any, **__: Any) -> dict[str, Any]:
+            return current["value"]
+
+        def fake_action(_: Any, name: str) -> dict[str, Any]:
+            self.assertEqual("back", name)
+            current["value"] = (
+                states[1] if current["value"] is states[0] else states[2]
+            )
+            return current["value"]
+
+        with patch.object(RUNNER, "query", side_effect=fake_query), patch.object(
+                RUNNER, "action", side_effect=fake_action):
+            cleanup = RUNNER.best_effort_cleanup(object(), timeout=0.5)
+        self.assertTrue(cleanup["complete"])
+        self.assertEqual(2, len(cleanup["actions"]))
+
+    def test_wait_ui_state_times_out_with_last_state(self) -> None:
+        with patch.object(RUNNER, "query", return_value={"page": "survey"}), \
+                patch.object(RUNNER.time, "sleep", return_value=None):
+            with self.assertRaisesRegex(TimeoutError, "last state"):
+                RUNNER.wait_ui_state(
+                    object(), lambda state: state.get("page") == "home",
+                    0.001, "not home"
+                )
 
 
 if __name__ == "__main__":

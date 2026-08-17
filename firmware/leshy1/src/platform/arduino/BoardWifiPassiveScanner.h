@@ -51,6 +51,9 @@ public:
     BoardWifiPassiveScanResult scan(
         const drivers::wifi::WifiScanPlan& plan,
         WifiRecordVisitor visitor, void* context);
+    // Thread-safe cancellation hook for a blocking ESP-IDF scan owned by a
+    // worker task. The worker still owns end() and all lifecycle cleanup.
+    static bool cancelActiveScan();
     bool end();
 
     bool initialized() const { return initialized_; }

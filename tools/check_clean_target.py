@@ -312,19 +312,21 @@ def main() -> int:
         "productSurveyStore.openExistingWritable(storePermit)",
         "authorizeProductSurvey(surveyRequest)",
         "scanner.scan(",
-        "enqueueProductSurveyRecord",
+        "enqueueProductSurveyWorkerRecord",
+        "requestProductSurveyWorkerStop",
+        "serviceProductSurveyWorker",
         "stopProductSurvey()",
         '\\"survey_product_cleanup_complete\\"',
     ):
         if marker not in entry:
             errors.append(f"Arduino entry is missing product Survey lifecycle: {marker}")
 
-    product_start = entry.find("bool startProductSurvey()")
-    product_stop = entry.find("SurveyPipelineStatus stopProductSurvey()", product_start)
-    if product_start < 0 or product_stop <= product_start:
-        errors.append("bounded product Survey start function could not be inspected")
+    product_prepare = entry.find("ProductSurveyWorkerReport prepareProductSurveyWorker(")
+    product_worker = entry.find("void runProductSurveyWorker(", product_prepare)
+    if product_prepare < 0 or product_worker <= product_prepare:
+        errors.append("bounded product Survey worker preparation could not be inspected")
     else:
-        product_start_body = entry[product_start:product_stop]
+        product_start_body = entry[product_prepare:product_worker]
         for forbidden_call in (".freeBytes(", ".filesystemCapacityBytes("):
             if forbidden_call in product_start_body:
                 errors.append(
@@ -335,10 +337,51 @@ def main() -> int:
             "kProductStartMaximumIdentityAttempts",
             "shouldRetryProductStartIdentity",
             "productStartIdentityRetryDelayMs",
-            "productSurveyRuntime.filesystemAttempted",
+            "report.filesystemAttempted",
         ):
             if marker not in product_start_body:
                 errors.append(f"product Survey start is missing bounded identity retry: {marker}")
+
+    worker_end = entry.find("bool initializeProductSurveyWorker()", product_worker)
+    if product_worker < 0 or worker_end <= product_worker:
+        errors.append("product Survey terminal ownership could not be inspected")
+    else:
+        worker_body = entry[product_worker:worker_end]
+        if "setProductSurveyControl(ProductSurveyWorkerControl::Idle)" in worker_body:
+            errors.append(
+                "product Survey worker exposes Idle before UI consumes terminal event"
+            )
+        release_start = entry.find("void releaseProductSurveyAfterTerminal(")
+        service_start = entry.find("void serviceProductSurveyWorker()", release_start)
+        service_end = entry.find("void recoverProductCatalogForFingerprint(", service_start)
+        terminal_ui = entry[release_start:service_end]
+        if terminal_ui.count(
+                "setProductSurveyControl(ProductSurveyWorkerControl::Idle)") < 2:
+            errors.append(
+                "product Survey UI does not acknowledge both cleanup and commit terminals"
+            )
+
+    product_start = entry.find("bool startProductSurvey()")
+    product_stop = entry.find("SurveyPipelineStatus stopProductSurvey()", product_start)
+    if product_start < 0 or product_stop <= product_start:
+        errors.append("non-blocking product Survey action could not be inspected")
+    else:
+        product_start_action = entry[product_start:product_stop]
+        for forbidden_call in ("scanner.scan(", "productSurveyFilesystem.begin("):
+            if forbidden_call in product_start_action:
+                errors.append(
+                    "product Survey UI action contains blocking hardware work: "
+                    f"{forbidden_call}"
+                )
+        for marker in (
+            "ProductSurveyWorkerControl::Starting",
+            "xTaskNotifyGive(productSurveyWorkerTaskHandle)",
+            "productSurveyRuntime.startActionUs",
+        ):
+            if marker not in product_start_action:
+                errors.append(
+                    f"product Survey UI action is missing worker handoff: {marker}"
+                )
 
     if not product_start_retry_path.is_file():
         errors.append("Product Start identity retry policy is missing")

@@ -137,6 +137,12 @@ BoardWifiPassiveScanResult BoardWifiPassiveScanner::scan(
     return result;
 }
 
+bool BoardWifiPassiveScanner::cancelActiveScan() {
+    const esp_err_t error = esp_wifi_scan_stop();
+    return error == ESP_OK || error == ESP_ERR_WIFI_NOT_STARTED ||
+           error == ESP_ERR_WIFI_STATE;
+}
+
 bool BoardWifiPassiveScanner::end() {
     bool complete = true;
     if (started_) {
