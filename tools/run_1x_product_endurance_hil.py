@@ -21,7 +21,7 @@ RUN_SCHEMA = "leshy.product_endurance_hil.run.v1"
 RELEASE_MINIMUM_SECONDS = 8 * 60 * 60
 RELEASE_MINIMUM_CYCLES = 32
 NORMAL_MAXIMUM_READY_MS = 1500.0
-RETRY_MAXIMUM_READY_MS = 3500.0
+RETRY_MAXIMUM_READY_MS = 18000.0
 
 
 def execute(command: Sequence[str], log_prefix: Path) -> int:
@@ -93,11 +93,13 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
 
     before = run.get("boot_before")
     after = run.get("boot_after")
+    running = run.get("running")
     committed = run.get("committed")
     export = run.get("library_export")
     final = run.get("final_state")
     if not isinstance(before, dict): before = {}
     if not isinstance(after, dict): after = {}
+    if not isinstance(running, dict): running = {}
     if not isinstance(committed, dict): committed = {}
     if not isinstance(export, dict): export = {}
     if not isinstance(final, dict): final = {}
@@ -143,6 +145,12 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
     for field in ("survey_scan_rejected", "survey_scan_dropped", "survey_dropped"):
         if committed.get(field) != 0:
             failures.append(f"{prefix}.{field}: expected zero")
+    start_attempts = running.get("survey_product_identity_attempts")
+    start_retries = running.get("survey_product_identity_transient_retries")
+    if (not isinstance(start_attempts, int) or isinstance(start_attempts, bool)
+            or start_attempts < 1 or start_attempts > 3
+            or start_retries != start_attempts - 1):
+        failures.append(f"{prefix}.product_start.retry_metrics: invalid")
     for field, expected in {
         "generation": generation_after,
         "observations": observations_after,
@@ -158,11 +166,16 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
                            ("after", after_recovery)):
         attempts = recovery.get("attempts")
         retries = recovery.get("transient_retries")
+        timeouts = recovery.get("timeout_restarts", 0)
         attempt_metrics[f"{name}_attempts"] = attempts
         attempt_metrics[f"{name}_transient_retries"] = retries
+        attempt_metrics[f"{name}_timeout_restarts"] = timeouts
         if (not isinstance(attempts, int) or isinstance(attempts, bool)
                 or attempts < 1 or attempts > 3 or retries != attempts - 1):
             failures.append(f"{prefix}.boot_{name}.retry_metrics: invalid")
+        if (not isinstance(timeouts, int) or isinstance(timeouts, bool)
+                or timeouts < 0 or timeouts > retries):
+            failures.append(f"{prefix}.boot_{name}.timeout_metrics: invalid")
     for field, expected in {
         "generation": generation_after,
         "persistent": True,
@@ -228,10 +241,18 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
         "boot_before_transient_retries": attempt_metrics[
             "before_transient_retries"
         ],
+        "boot_before_timeout_restarts": attempt_metrics[
+            "before_timeout_restarts"
+        ],
         "boot_after_attempts": attempt_metrics["after_attempts"],
         "boot_after_transient_retries": attempt_metrics[
             "after_transient_retries"
         ],
+        "boot_after_timeout_restarts": attempt_metrics[
+            "after_timeout_restarts"
+        ],
+        "product_start_identity_attempts": start_attempts,
+        "product_start_identity_transient_retries": start_retries,
         "final_owner": final.get("runtime_owner"),
         "final_lease_mask": final.get("lease_mask"),
         "failures": failures,
@@ -295,7 +316,7 @@ def main() -> int:
     parser.add_argument("--release-endurance", action="store_true")
     parser.add_argument("--flash-offset", default="0x10000")
     parser.add_argument("--flash-baud", default="460800")
-    parser.add_argument("--boot-seconds", default="5.0")
+    parser.add_argument("--boot-seconds", default="20.0")
     args = parser.parse_args()
     if not args.firmware.is_file():
         parser.error(f"firmware not found: {args.firmware}")

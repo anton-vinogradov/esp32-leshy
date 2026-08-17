@@ -137,6 +137,7 @@ def running_failures(state: dict[str, Any], expected_cid: str) -> list[str]:
         "survey_product_admission_status": "permitted",
         "survey_product_expected_cid": expected_cid,
         "survey_product_observed_cid": expected_cid,
+        "survey_product_identity_status": "valid",
         "survey_scan_status": "valid",
         "survey_scan_rejected": 0,
         "survey_scan_dropped": 0,
@@ -152,6 +153,20 @@ def running_failures(state: dict[str, Any], expected_cid: str) -> list[str]:
     if accepted != observations or forwarded != observations:
         failures.append(
             "running.observation_accounting: accepted/forwarded/observations differ"
+        )
+    identity_attempts = state.get("survey_product_identity_attempts")
+    identity_retries = state.get("survey_product_identity_transient_retries")
+    if (not isinstance(identity_attempts, int)
+            or isinstance(identity_attempts, bool)
+            or identity_attempts < 1 or identity_attempts > 3):
+        failures.append("running.survey_product_identity_attempts: expected 1..3")
+    if (not isinstance(identity_retries, int)
+            or isinstance(identity_retries, bool)
+            or not isinstance(identity_attempts, int)
+            or identity_retries != identity_attempts - 1):
+        failures.append(
+            "running.survey_product_identity_transient_retries: "
+            "expected attempts - 1"
         )
     free_bytes = state.get("survey_product_cached_free_bytes")
     capacity = state.get("survey_product_capacity_bytes")
@@ -319,7 +334,7 @@ def main() -> int:
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0), default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
-    parser.add_argument("--boot-seconds", type=float, default=5.0)
+    parser.add_argument("--boot-seconds", type=float, default=20.0)
     parser.add_argument(
         "--post-flash-settle", type=float, default=1.0,
         help="seconds allowed for the esptool-triggered boot to finish before cold reset",
@@ -355,6 +370,7 @@ def main() -> int:
     before_generation = 0
     trace: list[dict[str, Any]] = []
     captures: dict[str, Any] = {}
+    running: dict[str, Any] = {}
     committed: dict[str, Any] = {}
     post_ready: dict[str, Any] = {}
     post_recovery: dict[str, Any] = {}
@@ -468,6 +484,7 @@ def main() -> int:
         "expected_cid": expected_cid,
         "boot_before": {"ready": before_ready, "recovery": before_recovery,
                         "timing": before_timing},
+        "running": running,
         "committed": committed,
         "boot_after": {"ready": post_ready, "recovery": post_recovery,
                        "timing": post_timing},

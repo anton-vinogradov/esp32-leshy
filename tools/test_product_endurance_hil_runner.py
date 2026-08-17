@@ -23,7 +23,7 @@ RUNNER = load_runner()
 CID = "FE343253440000002000000055019CB7"
 FIRMWARE = "a" * 64
 APP = "b" * 64
-VERSION = "0.46.0-product-boot-retry-measure"
+VERSION = "0.48.0-product-boot-timeout-measure"
 HEAP = (276312, 227876, 194956)
 
 
@@ -67,6 +67,10 @@ def cycle(before: int, after: int, observations_before: int,
         "boot_before": {
             "ready": ready(), "recovery": recovery_before,
             "timing": {"ready_marker_ms": 720.0},
+        },
+        "running": {
+            "survey_product_identity_attempts": 1,
+            "survey_product_identity_transient_retries": 0,
         },
         "committed": committed,
         "boot_after": {

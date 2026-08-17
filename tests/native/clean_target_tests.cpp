@@ -30,6 +30,7 @@
 #include "storage/MountPolicy.h"
 #include "storage/ProductStorePolicy.h"
 #include "storage/ProductBootRetry.h"
+#include "storage/ProductStartRetry.h"
 #include "storage/SdReadOnlyProtocol.h"
 #include "storage/SdIdentification.h"
 #include "storage/SdIdentificationTransport.h"
@@ -69,6 +70,13 @@ int failures = 0;
     } while (false)
 
 void testProductBootRetryIsNarrowAndBounded() {
+    CHECK(!shouldResetProductBootRetryState(true, true, true, true));
+    CHECK(shouldResetProductBootRetryState(false, true, true, true));
+    CHECK(shouldResetProductBootRetryState(true, false, true, true));
+    CHECK(shouldResetProductBootRetryState(true, true, false, true));
+    CHECK(shouldResetProductBootRetryState(true, true, true, false));
+    CHECK(kProductBootRecoveryWatchdogMs == 4000);
+
     ProductBootRetryEvidence evidence;
     evidence.identityFailed = true;
     evidence.enrolled = true;
@@ -124,6 +132,56 @@ void testProductBootRetryIsNarrowAndBounded() {
     mutated = evidence;
     mutated.cleanupComplete = false;
     CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+}
+
+void testProductStartIdentityRetryStopsBeforeFilesystem() {
+    ProductStartIdentityRetryEvidence evidence;
+    evidence.explicitStart = true;
+    evidence.enrolled = true;
+    evidence.expectedFingerprintValid = true;
+    evidence.requiredResourcesHeld = true;
+    evidence.physicalSpiStarted = true;
+    evidence.identityStatus = SdTransportRunStatus::ExchangeFailed;
+    evidence.observedFingerprintEmpty = true;
+    evidence.identityCleanupComplete = true;
+    CHECK(shouldRetryProductStartIdentity(evidence, 1));
+    CHECK(shouldRetryProductStartIdentity(evidence, 2));
+    CHECK(!shouldRetryProductStartIdentity(evidence, 0));
+    CHECK(!shouldRetryProductStartIdentity(evidence, 3));
+    CHECK(productStartIdentityRetryDelayMs(0) == 0);
+    CHECK(productStartIdentityRetryDelayMs(1) == 250);
+    CHECK(productStartIdentityRetryDelayMs(2) == 500);
+    CHECK(productStartIdentityRetryDelayMs(3) == 0);
+    evidence.identityStatus = SdTransportRunStatus::InitTimeout;
+    CHECK(shouldRetryProductStartIdentity(evidence, 1));
+
+    ProductStartIdentityRetryEvidence mutated = evidence;
+    mutated.explicitStart = false;
+    CHECK(!shouldRetryProductStartIdentity(mutated, 1));
+    mutated = evidence;
+    mutated.enrolled = false;
+    CHECK(!shouldRetryProductStartIdentity(mutated, 1));
+    mutated = evidence;
+    mutated.expectedFingerprintValid = false;
+    CHECK(!shouldRetryProductStartIdentity(mutated, 1));
+    mutated = evidence;
+    mutated.requiredResourcesHeld = false;
+    CHECK(!shouldRetryProductStartIdentity(mutated, 1));
+    mutated = evidence;
+    mutated.physicalSpiStarted = false;
+    CHECK(!shouldRetryProductStartIdentity(mutated, 1));
+    mutated = evidence;
+    mutated.identityStatus = SdTransportRunStatus::ParseRejected;
+    CHECK(!shouldRetryProductStartIdentity(mutated, 1));
+    mutated = evidence;
+    mutated.observedFingerprintEmpty = false;
+    CHECK(!shouldRetryProductStartIdentity(mutated, 1));
+    mutated = evidence;
+    mutated.identityCleanupComplete = false;
+    CHECK(!shouldRetryProductStartIdentity(mutated, 1));
+    mutated = evidence;
+    mutated.filesystemAttempted = true;
+    CHECK(!shouldRetryProductStartIdentity(mutated, 1));
 }
 
 void testStorageTimingSummaryUsesNearestRank() {
@@ -2690,6 +2748,7 @@ void testSdSector0ReadIsSingleBoundedAndParseOnly() {
 
 int main() {
     testProductBootRetryIsNarrowAndBounded();
+    testProductStartIdentityRetryStopsBeforeFilesystem();
     testStorageTimingSummaryUsesNearestRank();
     testIngressRateSummaryUsesNearestRankAndRejectsZero();
     testObservationQueueIsBoundedFifoAndScrubbable();

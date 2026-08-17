@@ -22,6 +22,14 @@ struct ProductBootRetryEvidence final {
 
 constexpr std::uint8_t kProductBootMaximumAttempts = 3;
 constexpr std::uint32_t kProductBootRetryBaseDelayMs = 250;
+constexpr std::uint32_t kProductBootRecoveryWatchdogMs = 4000;
+
+// A retry budget is valid only for software restarts of the exact same app.
+// Flashing a different candidate must never inherit an exhausted RTC budget.
+bool shouldResetProductBootRetryState(bool softwareReset,
+                                      bool rtcMagicValid,
+                                      bool currentAppIdentityValid,
+                                      bool appIdentityMatches);
 
 // The caller must restart the MCU before the next attempt. Re-entering the raw
 // identification + ESP-IDF mount stack in one boot is intentionally forbidden.

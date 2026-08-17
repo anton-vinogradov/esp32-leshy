@@ -13,6 +13,7 @@
 #include <esp_timer.h>
 #include <esp_app_desc.h>
 #include <esp_attr.h>
+#include <esp_private/system_internal.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -48,6 +49,7 @@
 #include "storage/MountPolicy.h"
 #include "storage/ProductStorePolicy.h"
 #include "storage/ProductBootRetry.h"
+#include "storage/ProductStartRetry.h"
 #include "storage/SdReadOnlyProtocol.h"
 #include "storage/SdIdentification.h"
 #include "storage/SdIdentificationTransport.h"
@@ -225,12 +227,19 @@ struct ProductBootRecoveryState final {
     std::uint32_t blockedWriteAttempts = 0;
     std::uint8_t attempts = 0;
     std::uint8_t transientRetries = 0;
+    std::uint8_t timeoutRestarts = 0;
 };
 
 ProductBootRecoveryState productBootRecovery;
 constexpr std::uint32_t kProductBootRetryRtcMagic = 0x4C425231U;
+constexpr std::uint32_t kProductBootWatchdogTestRtcMagic = 0x4C425754U;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryRtcMagic;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryRestarts;
+RTC_NOINIT_ATTR std::uint32_t productBootRetryAppIdentity;
+RTC_NOINIT_ATTR std::uint32_t productBootRetryTimeouts;
+RTC_NOINIT_ATTR std::uint32_t productBootWatchdogTestRtcState;
+TaskHandle_t productBootRecoveryWatchdogTask = nullptr;
+volatile bool productBootRecoveryWatchdogArmed = false;
 
 struct ProductSurveyRuntimeState final {
     const char* status = "idle";
@@ -240,6 +249,10 @@ struct ProductSurveyRuntimeState final {
     bool filesystemAttempted = false;
     bool scannerCleanupComplete = true;
     bool cleanupComplete = true;
+    std::uint8_t identityAttempts = 0;
+    std::uint8_t identityTransientRetries = 0;
+    leshy1::storage::SdTransportRunStatus identityStatus =
+        leshy1::storage::SdTransportRunStatus::InvalidPlan;
     char expectedFingerprint[33] = {};
     char observedFingerprint[33] = {};
     std::uint64_t cardCapacityBytes = 0;
@@ -497,25 +510,56 @@ bool startProductSurvey() {
         return failProductSurveyStart("enrollment_missing");
     }
 
-    BoardSdSpiTransport identityTransport;
-    const bool identityBegun = identityTransport.begin();
     leshy1::storage::SdTransportRunResult identity;
-    if (identityBegun) {
-        leshy1::storage::SdTransportRunPolicy policy;
-        policy.allowPhysical = true;
-        policy.explicitlySelected = true;
-        policy.identificationOnly = true;
-        policy.ownedResources = appRuntime.activeResources();
-        identity = leshy1::storage::runSdIdentificationStateMachine(
-            leshy1::storage::defaultSdIdentificationPlan(), identityTransport,
-            policy);
-        identityTransport.end();
+    for (std::uint8_t attempt = 1;
+         attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
+         ++attempt) {
+        BoardSdSpiTransport identityTransport;
+        const bool identityBegun = identityTransport.begin();
+        identity = {};
+        if (identityBegun) {
+            leshy1::storage::SdTransportRunPolicy policy;
+            policy.allowPhysical = true;
+            policy.explicitlySelected = true;
+            policy.identificationOnly = true;
+            policy.ownedResources = appRuntime.activeResources();
+            identity = leshy1::storage::runSdIdentificationStateMachine(
+                leshy1::storage::defaultSdIdentificationPlan(),
+                identityTransport, policy);
+            identityTransport.end();
+        }
+        productSurveyRuntime.identityAttempts = attempt;
+        productSurveyRuntime.identityTransientRetries =
+            static_cast<std::uint8_t>(attempt - 1U);
+        productSurveyRuntime.identityStatus = identity.status;
+        productSurveyRuntime.identityCleanupComplete =
+            identityTransport.cleanupComplete();
+        formatCidFingerprint(identity.identity,
+                             productSurveyRuntime.observedFingerprint,
+                             sizeof(productSurveyRuntime.observedFingerprint));
+        if (productSurveyRuntime.identityCleanupComplete &&
+            identity.status == leshy1::storage::SdTransportRunStatus::Valid) {
+            break;
+        }
+        const leshy1::storage::ProductStartIdentityRetryEvidence retryEvidence{
+            true,
+            true,
+            exactCidFingerprint(productSurveyRuntime.expectedFingerprint),
+            (appRuntime.activeResources() & required) == required,
+            identityTransport.physicalSpiStarted(),
+            identity.status,
+            std::strcmp(
+                productSurveyRuntime.observedFingerprint,
+                "00000000000000000000000000000000") == 0,
+            productSurveyRuntime.identityCleanupComplete,
+            productSurveyRuntime.filesystemAttempted,
+        };
+        if (!leshy1::storage::shouldRetryProductStartIdentity(
+                retryEvidence, attempt)) {
+            break;
+        }
+        delay(leshy1::storage::productStartIdentityRetryDelayMs(attempt));
     }
-    productSurveyRuntime.identityCleanupComplete =
-        identityTransport.cleanupComplete();
-    formatCidFingerprint(identity.identity,
-                         productSurveyRuntime.observedFingerprint,
-                         sizeof(productSurveyRuntime.observedFingerprint));
     if (!productSurveyRuntime.identityCleanupComplete ||
         identity.status != leshy1::storage::SdTransportRunStatus::Valid) {
         return failProductSurveyStart("identity_failed");
@@ -756,13 +800,63 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
     }
 }
 
+void watchProductBootRecovery(void*) {
+    delay(leshy1::storage::kProductBootRecoveryWatchdogMs);
+    if (productBootRecoveryWatchdogArmed) {
+        if (productBootRetryRtcMagic == kProductBootRetryRtcMagic &&
+            productBootRetryRestarts <
+                leshy1::storage::kProductBootMaximumAttempts) {
+            ++productBootRetryRestarts;
+            ++productBootRetryTimeouts;
+        }
+        // Recovery may hold filesystem or console locks. Do not log, flush,
+        // or run shutdown handlers here; retain the reason in RTC and force a
+        // digital restart from this independent task.
+        esp_restart_noos();
+    }
+    vTaskDelete(nullptr);
+}
+
+bool armProductBootRecoveryWatchdog() {
+    productBootRecoveryWatchdogArmed = true;
+    productBootRecoveryWatchdogTask = nullptr;
+    if (xTaskCreatePinnedToCore(
+            watchProductBootRecovery, "leshy-sd-boot-watch", 2048, nullptr, 3,
+            &productBootRecoveryWatchdogTask, 0) != pdPASS) {
+        productBootRecoveryWatchdogArmed = false;
+        productBootRecoveryWatchdogTask = nullptr;
+        return false;
+    }
+    return true;
+}
+
+void disarmProductBootRecoveryWatchdog() {
+    productBootRecoveryWatchdogArmed = false;
+    TaskHandle_t task = productBootRecoveryWatchdogTask;
+    productBootRecoveryWatchdogTask = nullptr;
+    if (task != nullptr) vTaskDelete(task);
+}
+
 void recoverProductCatalogAtBoot() {
-    if (bootMetrics.resetReason != static_cast<std::uint32_t>(ESP_RST_SW) ||
-        productBootRetryRtcMagic != kProductBootRetryRtcMagic ||
-        productBootRetryRestarts >=
-            leshy1::storage::kProductBootMaximumAttempts) {
+    const bool softwareReset =
+        bootMetrics.resetReason == static_cast<std::uint32_t>(ESP_RST_SW);
+    std::uint32_t currentAppIdentity = 0;
+    const esp_app_desc_t* appDescription = esp_app_get_description();
+    if (appDescription != nullptr &&
+        appDescription->magic_word == ESP_APP_DESC_MAGIC_WORD) {
+        std::memcpy(&currentAppIdentity, appDescription->app_elf_sha256,
+                    sizeof(currentAppIdentity));
+    }
+    if (leshy1::storage::shouldResetProductBootRetryState(
+            softwareReset,
+            productBootRetryRtcMagic == kProductBootRetryRtcMagic,
+            currentAppIdentity != 0,
+            productBootRetryAppIdentity == currentAppIdentity)) {
         productBootRetryRtcMagic = kProductBootRetryRtcMagic;
         productBootRetryRestarts = 0;
+        productBootRetryAppIdentity = currentAppIdentity;
+        productBootRetryTimeouts = 0;
+        productBootWatchdogTestRtcState = 0;
     }
     char expectedFingerprint[33] = {};
     if (!loadProductFingerprint(expectedFingerprint,
@@ -771,14 +865,60 @@ void recoverProductCatalogAtBoot() {
         productBootRecovery.status = "unenrolled";
         productBootRecovery.cleanupComplete = true;
         productBootRetryRestarts = 0;
+        productBootRetryTimeouts = 0;
         return;
     }
+    if (productBootRetryRestarts >=
+        leshy1::storage::kProductBootMaximumAttempts) {
+        productBootRecovery = {};
+        productBootRecovery.status = "recovery_timeout_exhausted";
+        productBootRecovery.enrolled = true;
+        std::snprintf(productBootRecovery.expectedFingerprint,
+                      sizeof(productBootRecovery.expectedFingerprint), "%s",
+                      expectedFingerprint);
+        productBootRecovery.attempts =
+            leshy1::storage::kProductBootMaximumAttempts;
+        productBootRecovery.transientRetries = static_cast<std::uint8_t>(
+            leshy1::storage::kProductBootMaximumAttempts - 1U);
+        productBootRecovery.timeoutRestarts = static_cast<std::uint8_t>(
+            productBootRetryTimeouts);
+        productBootRecovery.cleanupComplete = false;
+        productBootRetryRestarts = 0;
+        productBootRetryTimeouts = 0;
+        return;
+    }
+    if (!armProductBootRecoveryWatchdog()) {
+        productBootRecovery = {};
+        productBootRecovery.status = "recovery_watchdog_unavailable";
+        productBootRecovery.enrolled = true;
+        std::snprintf(productBootRecovery.expectedFingerprint,
+                      sizeof(productBootRecovery.expectedFingerprint), "%s",
+                      expectedFingerprint);
+        productBootRecovery.attempts = static_cast<std::uint8_t>(
+            productBootRetryRestarts + 1U);
+        productBootRecovery.transientRetries = static_cast<std::uint8_t>(
+            productBootRetryRestarts);
+        productBootRecovery.timeoutRestarts = static_cast<std::uint8_t>(
+            productBootRetryTimeouts);
+        productBootRecovery.cleanupComplete = true;
+        productBootRetryRestarts = 0;
+        productBootRetryTimeouts = 0;
+        return;
+    }
+    if (productBootWatchdogTestRtcState ==
+        kProductBootWatchdogTestRtcMagic) {
+        productBootWatchdogTestRtcState = 0;
+        for (;;) delay(1000);
+    }
     recoverProductCatalogForFingerprint(expectedFingerprint, true);
+    disarmProductBootRecoveryWatchdog();
     const std::uint8_t completedAttempts = static_cast<std::uint8_t>(
         productBootRetryRestarts + 1U);
     productBootRecovery.attempts = completedAttempts;
     productBootRecovery.transientRetries = static_cast<std::uint8_t>(
         productBootRetryRestarts);
+    productBootRecovery.timeoutRestarts = static_cast<std::uint8_t>(
+        productBootRetryTimeouts);
     const leshy1::storage::ProductBootRetryEvidence retryEvidence{
         std::strcmp(productBootRecovery.status, "identity_failed") == 0,
         productBootRecovery.enrolled,
@@ -820,6 +960,7 @@ void recoverProductCatalogAtBoot() {
         return;
     }
     productBootRetryRestarts = 0;
+    productBootRetryTimeouts = 0;
 }
 
 void emitProductBootRecovery(Stream& reply) {
@@ -836,6 +977,7 @@ void emitProductBootRecovery(Stream& reply) {
         "\"catalog_status\":\"%s\",\"catalog_admitted\":%s,"
         "\"generation\":%lu,\"observations\":%u,"
         "\"integrity\":\"%s\",\"attempts\":%u,\"transient_retries\":%u,"
+        "\"timeout_restarts\":%u,"
         "\"owned_during\":%lu,\"owned_after\":%lu,"
         "\"cleanup_complete\":%s,\"physical_write_calls\":0}",
         productBootRecovery.status,
@@ -860,10 +1002,31 @@ void emitProductBootRecovery(Stream& reply) {
             productBootRecovery.catalog.integrity),
         static_cast<unsigned>(productBootRecovery.attempts),
         static_cast<unsigned>(productBootRecovery.transientRetries),
+        static_cast<unsigned>(productBootRecovery.timeoutRestarts),
         static_cast<unsigned long>(productBootRecovery.ownedDuring),
         static_cast<unsigned long>(productBootRecovery.ownedAfter),
         productBootRecovery.cleanupComplete ? "true" : "false");
     reply.println(line);
+}
+
+void triggerProductBootWatchdogTest(Stream& reply) {
+    if (!productBootRecovery.catalogAdmitted ||
+        appRuntime.activeResources() != 0 ||
+        productBootRecovery.ownedAfter != 0) {
+        reply.println(
+            "{\"schema\":\"leshy.storage.product_boot_watchdog_test.v1\","
+            "\"kind\":\"result\",\"status\":\"not_ready\"}");
+        return;
+    }
+    productBootWatchdogTestRtcState = kProductBootWatchdogTestRtcMagic;
+    reply.println(
+        "{\"schema\":\"leshy.storage.product_boot_watchdog_test.v1\","
+        "\"kind\":\"armed\",\"status\":\"ready\","
+        "\"filesystem_write_attempted\":false,"
+        "\"physical_write_calls\":0}");
+    reply.flush();
+    delay(50);
+    esp_restart();
 }
 
 void admitPersistentLibraryCapability(const char* evidence) {
@@ -1462,6 +1625,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_admission_status\":\"%s\","
                       "\"survey_product_expected_cid\":\"%s\","
                       "\"survey_product_observed_cid\":\"%s\","
+                      "\"survey_product_identity_status\":\"%s\","
+                      "\"survey_product_identity_attempts\":%u,"
+                      "\"survey_product_identity_transient_retries\":%u,"
                       "\"survey_product_capacity_bytes\":%llu,"
                       "\"survey_product_cached_free_bytes\":%llu,"
                       "\"survey_scan_status\":\"%s\","
@@ -1505,6 +1671,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.admissionStatus),
                       productSurveyRuntime.expectedFingerprint,
                       productSurveyRuntime.observedFingerprint,
+                      leshy1::storage::sdTransportRunStatusName(
+                          productSurveyRuntime.identityStatus),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.identityAttempts),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.identityTransientRetries),
                       static_cast<unsigned long long>(
                           productSurveyRuntime.cardCapacityBytes),
                       static_cast<unsigned long long>(
@@ -5060,6 +5232,10 @@ void handleCommand(Stream& reply, const char* command) {
         emitStorageMountPolicy(reply);
     } else if (std::strcmp(command, "storage.product.boot-recovery") == 0) {
         emitProductBootRecovery(reply);
+    } else if (std::strcmp(
+                   command,
+                   "storage.product.boot-watchdog-test confirm") == 0) {
+        triggerProductBootWatchdogTest(reply);
     } else if (std::strcmp(command, "storage.product.unenroll confirm") == 0) {
         emitProductUnenrollment(reply);
     } else if (std::strcmp(command, "survey.product.admission") == 0) {
@@ -5386,6 +5562,7 @@ void setup() {
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
               "\"storage.discovery\",\"storage.mount.policy\","
               "\"storage.product.boot-recovery\","
+              "\"storage.product.boot-watchdog-test confirm\","
               "\"storage.product.unenroll confirm\","
               "\"survey.product.admission\","
               "\"storage.sd.protocol\",\"storage.sd.identification.fixture\","

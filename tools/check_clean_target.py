@@ -30,6 +30,7 @@ def main() -> int:
     survey_pipeline_path = TARGET / "src" / "apps" / "survey" / "SurveyPipeline.cpp"
     product_survey_policy_path = TARGET / "src" / "apps" / "survey" / "ProductSurveyAdmission.cpp"
     product_store_policy_path = TARGET / "src" / "storage" / "ProductStorePolicy.cpp"
+    product_start_retry_path = TARGET / "src" / "storage" / "ProductStartRetry.cpp"
     session_catalog_path = TARGET / "src" / "apps" / "library" / "SessionCatalog.cpp"
     sector_inspection = TARGET / "src" / "storage" / "SdSectorInspection.cpp"
     reset_runner_path = ROOT / "tools" / "run_1x_sd_reset_matrix.py"
@@ -330,6 +331,31 @@ def main() -> int:
                     "product Survey start contains unbounded FAT geometry scan: "
                     f"{forbidden_call}"
                 )
+        for marker in (
+            "kProductStartMaximumIdentityAttempts",
+            "shouldRetryProductStartIdentity",
+            "productStartIdentityRetryDelayMs",
+            "productSurveyRuntime.filesystemAttempted",
+        ):
+            if marker not in product_start_body:
+                errors.append(f"product Survey start is missing bounded identity retry: {marker}")
+
+    if not product_start_retry_path.is_file():
+        errors.append("Product Start identity retry policy is missing")
+    else:
+        product_start_retry = product_start_retry_path.read_text(encoding="utf-8")
+        product_start_retry += "\n" + product_start_retry_path.with_suffix(".h").read_text(
+            encoding="utf-8"
+        )
+        for marker in (
+            "kProductStartMaximumIdentityAttempts = 3",
+            "SdTransportRunStatus::ExchangeFailed",
+            "SdTransportRunStatus::InitTimeout",
+            "identityCleanupComplete",
+            "!evidence.filesystemAttempted",
+        ):
+            if marker not in product_start_retry:
+                errors.append(f"Product Start identity retry policy is missing: {marker}")
 
     if not session_store_router.is_file():
         errors.append("allocation-free SessionStore backend router is missing")
@@ -356,6 +382,35 @@ def main() -> int:
                     "boot product recovery contains unbounded FAT geometry scan: "
                     f"{forbidden_call}"
                 )
+
+    watchdog_start = entry.find("void watchProductBootRecovery(")
+    watchdog_end = entry.find("bool armProductBootRecoveryWatchdog()", watchdog_start)
+    if watchdog_start < 0 or watchdog_end <= watchdog_start:
+        errors.append("boot recovery watchdog function could not be inspected")
+    else:
+        watchdog_body = entry[watchdog_start:watchdog_end]
+        for marker in ("++productBootRetryRestarts", "++productBootRetryTimeouts",
+                       "esp_restart_noos();"):
+            if marker not in watchdog_body:
+                errors.append(f"boot recovery watchdog is missing: {marker}")
+        for forbidden in ("broadcast(", "Serial", ".flush(", "BoardSd",
+                          "recoverProduct", "resourceBroker"):
+            if forbidden in watchdog_body:
+                errors.append(
+                    "boot recovery watchdog contains blocking work before restart: "
+                    f"{forbidden}"
+                )
+
+    for marker in (
+        "shouldResetProductBootRetryState",
+        "productBootRetryAppIdentity",
+        "kProductBootRecoveryWatchdogMs",
+        "recovery_timeout_exhausted",
+        "storage.product.boot-watchdog-test confirm",
+        '\\"timeout_restarts\\"',
+    ):
+        if marker not in entry:
+            errors.append(f"Arduino entry is missing bounded boot recovery: {marker}")
 
     for policy_path, markers in (
         (

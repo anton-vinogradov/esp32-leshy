@@ -2,6 +2,14 @@
 
 namespace leshy1::storage {
 
+bool shouldResetProductBootRetryState(bool softwareReset,
+                                      bool rtcMagicValid,
+                                      bool currentAppIdentityValid,
+                                      bool appIdentityMatches) {
+    return !softwareReset || !rtcMagicValid || !currentAppIdentityValid ||
+           !appIdentityMatches;
+}
+
 bool shouldRetryProductBootRecovery(const ProductBootRetryEvidence& evidence,
                                     std::uint8_t completedAttempts) {
     return completedAttempts > 0 &&

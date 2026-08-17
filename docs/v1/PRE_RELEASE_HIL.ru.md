@@ -340,7 +340,7 @@ workflow прошли end to end:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.46.0-product-boot-retry-measure \
+  --expected-version 0.48.0-product-boot-timeout-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - без `--expected-cid` CID определяется только из admitted enrollment с совпадающими
@@ -369,7 +369,7 @@ resident agent или macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.46.0-product-boot-retry-measure \
+  --expected-version 0.48.0-product-boot-timeout-measure \
   --output /tmp/leshy-product-endurance-hil \
   --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
   --interval-seconds 900 --flash --release-endurance
@@ -389,6 +389,20 @@ generation 12→15, 51/51 observations, zero drops/heap drift и final lease 0. 
 намеренно не считается endurance evidence. Обязательный lane 8 h/32 cycles —
 отдельный run; physical power-cut и external-camera subset также остаются отдельными
 gates.
+
+Первая попытка release-endurance 0.46 сохранена как `E-HIL-060`, а не отброшена:
+она положительно выполнила reset-separated boot retry, а затем fail-closed поймала
+отдельный raw-identity transient на Product Start. Узкий retry 0.47 исправил этот
+вход, но `E-HIL-061` обнаружил lower boot-recovery call, который не вернулся.
+Поэтому final 0.48 связывает RTC retry state с exact app, повторяет Product Start
+только до filesystem access и окружает enrolled boot recovery independent-core
+watchdog 4 s. Watchdog не пишет log и не запускает shutdown handlers: он сохраняет
+только RTC state и вызывает `esp_restart_noos`. `E-HIL-063` детерминированно
+инъецирует timeout и read-only восстанавливает generation 27 с zero SD writes;
+`E-HIL-064` затем продвигает 27→30 с 45/45 observations, zero drops и invariant
+heap. Retained incident/regression artifact проверяет
+`check_product_recovery_acceptance.py`; это всё ещё короткий local result, а не
+release gate 8 h.
 
 Local combined run `E-HIL-055` прошёл на exact candidate 0.45: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 с 20 passive Wi-Fi

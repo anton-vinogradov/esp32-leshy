@@ -339,7 +339,7 @@ The current direct product-lane command is:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.46.0-product-boot-retry-measure \
+  --expected-version 0.48.0-product-boot-timeout-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - omitted `--expected-cid` is discovered only from an admitted enrollment whose
@@ -368,7 +368,7 @@ creating a resident agent or macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.46.0-product-boot-retry-measure \
+  --expected-version 0.48.0-product-boot-timeout-measure \
   --output /tmp/leshy-product-endurance-hil \
   --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
   --interval-seconds 900 --flash --release-endurance
@@ -387,6 +387,20 @@ development runs remain `gate_eligible=false` even when they pass.
 generation 12→15, 51/51 observations, zero drops/heap drift, and final lease 0. It is
 deliberately not endurance evidence. The required 8 h/32-cycle lane is a separate
 run, while physical power-cut and the external-camera subset remain separate gates.
+
+The first 0.46 release-endurance attempt is retained as `E-HIL-060`, not discarded:
+it positively exercised reset-separated boot retry and then failed closed on a
+separate Product Start raw-identity transient. The 0.47 retry fixed that narrow
+entry but `E-HIL-061` exposed a lower boot-recovery call that did not return.
+Final 0.48 therefore binds RTC retry state to the exact app, retries Product Start
+only before filesystem access, and surrounds enrolled boot recovery with a 4 s
+independent-core watchdog. The watchdog writes no log and runs no shutdown handler;
+it records only RTC state and calls `esp_restart_noos`. `E-HIL-063` deterministically
+injects that timeout and recovers generation 27 read-only with zero SD writes;
+`E-HIL-064` then advances 27→30 with 45/45 observations, zero drops, and invariant
+heap. The retained incident/regression artifact is checked by
+`check_product_recovery_acceptance.py`; it is still a short local result, not the
+8 h release gate.
 
 Local combined run `E-HIL-055` passed on the exact 0.45 candidate: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 with 20 passive Wi-Fi
