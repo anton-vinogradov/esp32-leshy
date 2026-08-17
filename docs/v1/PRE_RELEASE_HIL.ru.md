@@ -236,8 +236,10 @@ evidence. Локальная квитанция `release-checks/<run-id>.json` g
 
 ## Текущее implementation evidence
 
-Version v0.5 реализует первые пять пунктов, on-demand lifecycle и exact-byte
-promotion; реальный GitHub workflow run прошёл:
+Version v0.6 реализует первые пять пунктов, on-demand lifecycle, exact-byte promotion
+и combined product/generic lane. Прежний generic-only GitHub workflow прошёл;
+обновлённый combined workflow реализован и доказан локально, но ещё требует первого
+GitHub OIDC-attested run:
 
 - `tools/run_1x_prerelease_hil.py` загружает declarative suite, по явному `--flash`
   прошивает exact candidate через esptool с verify, делает cold reset, держит один
@@ -256,7 +258,8 @@ promotion; реальный GitHub workflow run прошёл:
   `storage.product.enroll disposable-read-only <CID32>` может вернуть enrollment
   только после exact-CID read-only catalog admission с zero SD writes. Version 0.44
   прошла обе половины на board-01 и сохраняет machine-checked product-boot artifact;
-  включение этого перехода states в release orchestrator остаётся pre-release work;
+  теперь этим переходом владеет `run_1x_release_hil.py`, который восстанавливает
+  enrollment даже после ошибки generic lane;
 - `tools/run_1x_product_survey_hil.py` — service-free lane для enrolled media. Когда
   device и exact product card подключены, одна команда при необходимости прошивает
   exact candidate, делает pre/post cold boot, требует exact-CID read-only recovery,
@@ -264,7 +267,13 @@ promotion; реальный GitHub workflow run прошёл:
   accounting, commits ровно следующую generation, снимает TFT
   Setup/Running/Committed/Export, проверяет persistent Library export и заканчивает
   lease 0. Retained board run 0.45 machine-checked через
-  `check_product_survey_acceptance.py`; для release gate ещё нужна GitHub attestation/orchestration;
+  `check_product_survey_acceptance.py`;
+- `tools/run_1x_release_hil.py` — release-facing foreground orchestrator. Он сначала
+  запускает product, получает exact CID только из admitted enrollment, безопасно
+  удаляет лишь enrollment в NVS, прошивает и запускает generic `device-smoke`
+  revision 6, выполняет exact-CID read-only re-enrollment и доказывает финальный
+  enrolled boot в Home с owner none/lease 0; `verify_1x_release_hil_bundle.py`
+  независимо проверяет оба дочерних bundle и каждый state boundary до GitHub attestation;
 - golden bootstrap создаёт только отсутствующие compressed RGB565 и отказывается
   перезаписывать существующие; обычный run требует exact Home/Back и masked-exact
   Diagnostics с одной явной dynamic region;
@@ -288,16 +297,19 @@ python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
   --expected-version 0.45.0-product-survey-measure \
-  --expected-cid FE343253440000002000000055019CB7 \
   --output /tmp/leshy-product-survey-hil --flash
 ```
+- без `--expected-cid` CID определяется только из admitted enrollment с совпадающими
+  expected/observed 32-byte fingerprints; явное значение остаётся для jobs с
+  выделенной media;
 - candidate сначала копируется в `candidate/firmware.bin` внутри нового bundle,
   повторно хешируется и только затем прошивается; verifier по умолчанию использует
   эту indexed copy, поэтому evidence не зависит от mutable build path;
 - `tools/package_1x_prerelease_bundle.py` создаёт deterministic `tar.gz`, а
   `.github/workflows/prerelease-hil.yml` собирает candidate один раз, GitHub-attests
-  его, запускает physical HIL в `hil-production`, attests evidence archive и в
-  отдельном promotion job повторно проверяет оба provenance records и same bytes;
+  его, запускает combined physical HIL в `hil-production`, attests evidence archive и
+  в отдельном promotion job повторно проверяет оба provenance records, обе HIL lane,
+  восстановление state и same bytes;
 - ad-hoc Ed25519 signing удалён из production design: ни runner, ни verifier не
   принимают локальную подпись за release trust;
 - `tools/release_1x.py check` автоматически выполняет preflight→dispatch→cloud
@@ -305,6 +317,14 @@ python tools/run_1x_product_survey_hil.py \
   disposable локальную квитанцию; `publish` повторно доказывает provenance/same bytes
   и создаёт 1.x Release без rebuild. Host tests покрывают SemVer/run identity, exact
   artifact set, serial selection и unsafe archive rejection.
+
+Local combined run `E-HIL-055` прошёл на exact candidate 0.45: product run
+`408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 с 20 passive Wi-Fi
+observations, generic run `9c81c9f3d0f9cb0bdb69ebc8d002e8ce` прошёл все десять
+goldens revision 6, а read-only re-enrollment и финальный cold boot восстановили
+generation 5/20 с zero SD writes и lease 0. Independent verifier принял все 64 файла;
+deterministic archive — `760fad19…6abad`. Результат не release-eligible, пока
+обновлённый workflow не добавит GitHub Artifact Attestations.
 
 Первый bootstrap run `31975374875` fail-closed остановился до runner registration и
 flash на безопасной внутренней symlink official archive; workflow был отменён,

@@ -70,6 +70,17 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         self.assertEqual("x", ready["version"])
         self.assertEqual(3, recovery["generation"])
 
+    def test_cid_autodiscovery_requires_exact_admitted_enrollment(self) -> None:
+        recovery = {
+            "status": "admitted", "enrolled": True,
+            "expected_fingerprint": CID, "observed_fingerprint": CID,
+            "fingerprint_matched": True,
+        }
+        self.assertEqual(CID, RUNNER.resolve_expected_cid(None, recovery))
+        recovery["observed_fingerprint"] = "0" * 32
+        with self.assertRaisesRegex(ValueError, "admitted exact-card"):
+            RUNNER.resolve_expected_cid(None, recovery)
+
 
 if __name__ == "__main__":
     unittest.main()

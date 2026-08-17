@@ -665,7 +665,7 @@ def publish_run(run_id: int) -> int:
         run_command(
             [
                 sys.executable,
-                "tools/verify_1x_prerelease_bundle.py",
+                "tools/verify_1x_release_hil_bundle.py",
                 "--bundle",
                 str(extracted / "hil-bundle"),
                 "--candidate",
@@ -673,17 +673,17 @@ def publish_run(run_id: int) -> int:
                 "--suite-id",
                 "device-smoke",
                 "--suite-revision",
-                "4",
+                "6",
                 "--expected-version",
                 version,
-                "--allow-unsigned-local-result",
             ]
         )
 
         notes = (
             f"Promoted from successful physical HIL run {run_id}: {details['url']}\n\n"
-            f"Tested commit: `{head_sha}`. The attached firmware and evidence are "
-            "GitHub-attested outputs of that exact run."
+            f"Tested commit: `{head_sha}`. The attached firmware and combined "
+            "product + isolated generic evidence are GitHub-attested outputs of "
+            "that exact run."
         )
         run_command(
             [

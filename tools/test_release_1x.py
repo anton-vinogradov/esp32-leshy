@@ -135,6 +135,14 @@ class ReleaseOneContracts(unittest.TestCase):
         self.assertIn("runner_label:", workflow)
         self.assertIn("leshy-request-", workflow)
         self.assertIn("firmware.factory.bin", workflow)
+        self.assertIn("tools/run_1x_release_hil.py", workflow)
+        self.assertIn("tools/verify_1x_release_hil_bundle.py", workflow)
+        self.assertIn("--suite-revision 6", workflow)
+        self.assertNotIn("tools/run_1x_prerelease_hil.py", workflow)
+        release_script = (RELEASE.ROOT / "tools/release_1x.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("tools/verify_1x_release_hil_bundle.py", release_script)
         self.assertIn("tags: ['v0.*']", legacy)
         self.assertIn("git tag -l 'v0.*'", legacy_script)
         self.assertIn("tools/release_1x.py for 1.x", legacy_script)

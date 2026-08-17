@@ -134,34 +134,33 @@ jobs:
           "$RUNNER_TEMP/hil-venv/bin/python" -m pip install \
             --requirement tools/requirements-hil.txt
 
-      - name: Run physical device-smoke
+      - name: Run combined product and isolated generic HIL
         id: hil
         run: |
-          "$RUNNER_TEMP/hil-venv/bin/python" tools/run_1x_prerelease_hil.py \
+          "$RUNNER_TEMP/hil-venv/bin/python" tools/run_1x_release_hil.py \
             --port "$HIL_PORT" \
             --suite tests/hil/device-smoke.v1.json \
             --firmware candidate/firmware.bin \
             --expected-version "${{ needs.candidate.outputs.version }}" \
-            --output "$RUNNER_TEMP/hil-bundle" \
+            --output "$RUNNER_TEMP/release-hil" \
             --flash
 
       - name: Verify local evidence contracts
         id: local_verify
         run: |
-          "$RUNNER_TEMP/hil-venv/bin/python" tools/verify_1x_prerelease_bundle.py \
-            --bundle "$RUNNER_TEMP/hil-bundle" \
+          "$RUNNER_TEMP/hil-venv/bin/python" tools/verify_1x_release_hil_bundle.py \
+            --bundle "$RUNNER_TEMP/release-hil" \
             --candidate candidate/firmware.bin \
             --suite-id device-smoke \
-            --suite-revision 4 \
-            --expected-version "${{ needs.candidate.outputs.version }}" \
-            --allow-unsigned-local-result
+            --suite-revision 6 \
+            --expected-version "${{ needs.candidate.outputs.version }}"
 
       - name: Package self-contained evidence
         id: package
         if: always() && steps.hil.outcome != 'skipped'
         run: |
           python3 tools/package_1x_prerelease_bundle.py \
-            --bundle "$RUNNER_TEMP/hil-bundle" \
+            --bundle "$RUNNER_TEMP/release-hil" \
             --output "$RUNNER_TEMP/hil-evidence.tar.gz"
 
       - name: GitHub-attest passed physical evidence
@@ -225,13 +224,12 @@ jobs:
       - name: Re-verify bundle and exact candidate binding
         run: |
           tar -xzf evidence/hil-evidence.tar.gz
-          python3 tools/verify_1x_prerelease_bundle.py \
+          python3 tools/verify_1x_release_hil_bundle.py \
             --bundle hil-bundle \
             --candidate candidate/firmware.bin \
             --suite-id device-smoke \
-            --suite-revision 4 \
-            --expected-version "${{ needs.candidate.outputs.version }}" \
-            --allow-unsigned-local-result
+            --suite-revision 6 \
+            --expected-version "${{ needs.candidate.outputs.version }}"
 
       - name: Mark exact candidate as promotion-ready
         run: sha256sum candidate/firmware.bin

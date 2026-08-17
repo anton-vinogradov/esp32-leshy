@@ -19,6 +19,31 @@ from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 RUN_SCHEMA = "leshy.product_survey_hil.run.v1"
 
 
+def valid_cid(value: object) -> bool:
+    return (
+        isinstance(value, str) and len(value) == 32 and value.upper() == value and
+        all(character in "0123456789ABCDEF" for character in value)
+    )
+
+
+def resolve_expected_cid(argument: str | None,
+                         recovery: dict[str, Any]) -> str:
+    if argument is not None:
+        if not valid_cid(argument):
+            raise ValueError("expected CID must be 32 uppercase hexadecimal characters")
+        return argument
+    expected = recovery.get("expected_fingerprint")
+    observed = recovery.get("observed_fingerprint")
+    if (not valid_cid(expected) or expected != observed or
+            recovery.get("status") != "admitted" or
+            recovery.get("enrolled") is not True or
+            recovery.get("fingerprint_matched") is not True):
+        raise ValueError(
+            "automatic CID discovery requires an admitted exact-card enrollment"
+        )
+    return expected
+
+
 def parse_boot_records(raw: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
     ready: dict[str, Any] = {}
     recovery: dict[str, Any] = {}
@@ -273,20 +298,31 @@ def main() -> int:
     parser.add_argument("--port", required=True)
     parser.add_argument("--firmware", required=True, type=Path)
     parser.add_argument("--expected-version", required=True)
-    parser.add_argument("--expected-cid", required=True)
+    parser.add_argument(
+        "--expected-cid",
+        help=(
+            "exact enrolled card CID; when omitted it is discovered fail-closed "
+            "from admitted boot recovery"
+        ),
+    )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0), default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
     parser.add_argument("--boot-seconds", type=float, default=5.0)
+    parser.add_argument(
+        "--post-flash-settle", type=float, default=1.0,
+        help="seconds allowed for the esptool-triggered boot to finish before cold reset",
+    )
     args = parser.parse_args()
     if not args.firmware.is_file():
         parser.error(f"firmware not found: {args.firmware}")
     if args.output.exists():
         parser.error(f"output must not exist: {args.output}")
-    if (len(args.expected_cid) != 32 or args.expected_cid.upper() != args.expected_cid or
-            any(value not in "0123456789ABCDEF" for value in args.expected_cid)):
+    if args.expected_cid is not None and not valid_cid(args.expected_cid):
         parser.error("--expected-cid must be exactly 32 uppercase hexadecimal characters")
+    if args.post_flash_settle < 0 or args.post_flash_settle > 10:
+        parser.error("--post-flash-settle must be between 0 and 10 seconds")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -297,6 +333,9 @@ def main() -> int:
     app_identity = app_elf_sha256(candidate)
     if args.flash:
         flash_candidate(args.port, candidate, args.flash_offset, args.flash_baud)
+        # esptool already hard-resets the board. Let that boot finish its SD
+        # identification/cleanup before issuing the separately measured reset.
+        time.sleep(args.post_flash_settle)
 
     failures: list[str] = []
     run_id = secrets.token_hex(16)
@@ -312,6 +351,8 @@ def main() -> int:
     export: dict[str, Any] = {}
     final: dict[str, Any] = {}
 
+    expected_cid = args.expected_cid or ""
+
     device = PassiveSerial(args.port, 115200, timeout=0.25)
     with device:
         synchronize_console(device)
@@ -319,9 +360,13 @@ def main() -> int:
             device, b"storage.product.boot-recovery",
             "leshy.storage.product_boot_recovery.v1", "state"
         )
+        try:
+            expected_cid = resolve_expected_cid(args.expected_cid, before_recovery)
+        except ValueError as error:
+            failures.append(f"product_identity: {error}")
         failures.extend(boot_failures(
             before_ready, before_recovery, args.expected_version,
-            app_identity, args.expected_cid
+            app_identity, expected_cid
         ))
         before_generation = int(before_recovery.get("generation", 0))
         if not failures:
@@ -333,7 +378,7 @@ def main() -> int:
         if not failures:
             running = action(device, "select")
             trace.append(running)
-            precommit = running_failures(running, args.expected_cid)
+            precommit = running_failures(running, expected_cid)
             failures.extend(precommit)
             captures["running"] = capture(device, frames, "running")
             if precommit:
@@ -366,10 +411,10 @@ def main() -> int:
             )
             failures.extend(boot_failures(
                 post_ready, post_recovery, args.expected_version,
-                app_identity, args.expected_cid
+                app_identity, expected_cid
             ))
             failures.extend(recovered_failures(
-                post_recovery, generation, observations, args.expected_cid
+                post_recovery, generation, observations, expected_cid
             ))
             trace.append(action(device, "down"))
             trace.append(action(device, "down"))
@@ -410,7 +455,7 @@ def main() -> int:
             "version": args.expected_version,
             "flashed": args.flash,
         },
-        "expected_cid": args.expected_cid,
+        "expected_cid": expected_cid,
         "boot_before": {"ready": before_ready, "recovery": before_recovery,
                         "timing": before_timing},
         "committed": committed,

@@ -236,8 +236,10 @@ runner process/registration are cleaned up, and `RELEASE READY` is never printed
 
 ## Current implementation evidence
 
-Version v0.5 implements the first five items, on-demand lifecycle, and exact-byte
-promotion; a real GitHub workflow run now passes:
+Version v0.6 implements the first five items, on-demand lifecycle, exact-byte
+promotion, and the combined product/generic lane. The earlier generic-only GitHub
+workflow passed; the updated combined workflow is implemented and locally proven but
+still needs its first GitHub OIDC-attested run:
 
 - `tools/run_1x_prerelease_hil.py` loads a declarative suite, flashes the exact
   candidate through verified esptool only with explicit `--flash`, performs a cold
@@ -255,16 +257,22 @@ promotion; a real GitHub workflow run now passes:
   not access the SD before deterministic `device-smoke`; afterwards
   `storage.product.enroll disposable-read-only <CID32>` may restore enrollment only
   after exact-CID read-only catalog admission with zero SD writes. Version 0.44 passed
-  both halves on board-01 and retains a machine-checked product-boot artifact; folding
-  this state transition into the release orchestrator remains pre-release work;
+  both halves on board-01 and retains a machine-checked product-boot artifact;
+  `run_1x_release_hil.py` now owns this transition and restores enrollment even after
+  a generic-lane failure;
 - `tools/run_1x_product_survey_hil.py` is the service-free enrolled-media lane. With
   the device and exact product card connected, one invocation optionally flashes the
   exact candidate, performs pre/post cold boots, requires exact-CID read-only recovery,
   admits a write only after bounded cached-FSInfo and passive-scan accounting pass,
   commits exactly one next generation, captures Setup/Running/Committed/Export TFT
   frames, validates persistent Library export, and finishes at lease 0. Its retained
-  0.45 board run is machine-checked by `check_product_survey_acceptance.py`; GitHub
-  attestation/orchestration is still required before this local result can gate a release;
+  0.45 board run is machine-checked by `check_product_survey_acceptance.py`;
+- `tools/run_1x_release_hil.py` is the release-facing foreground orchestrator. It
+  runs product first, derives the admitted exact CID, safely removes only its NVS
+  enrollment, flashes and runs generic `device-smoke` revision 6, performs exact-CID
+  read-only re-enrollment, and proves a final enrolled Home/owner-none/lease-0 boot;
+  `verify_1x_release_hil_bundle.py` independently validates both child bundles and
+  every state boundary before GitHub can attest the combined archive;
 - golden bootstrap creates missing compressed RGB565 only and refuses to overwrite
   existing files; a normal run requires exact Home/Back and masked-exact Diagnostics
   with one explicit dynamic region;
@@ -289,16 +297,19 @@ python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
   --expected-version 0.45.0-product-survey-measure \
-  --expected-cid FE343253440000002000000055019CB7 \
   --output /tmp/leshy-product-survey-hil --flash
 ```
+- omitted `--expected-cid` is discovered only from an admitted enrollment whose
+  expected and observed 32-byte fingerprints match; an explicit value remains
+  available for dedicated-media jobs;
 - the candidate is first copied to `candidate/firmware.bin` inside the new bundle,
   rehashed, and only then flashed; the verifier defaults to that indexed copy, so
   evidence no longer depends on a mutable build path;
 - `tools/package_1x_prerelease_bundle.py` creates a deterministic `tar.gz`, while
   `.github/workflows/prerelease-hil.yml` builds once, GitHub-attests the candidate,
-  runs physical HIL in `hil-production`, attests the evidence archive, and rechecks
-  both provenance records and exact bytes in a separate promotion job;
+  runs the combined physical HIL in `hil-production`, attests the evidence archive,
+  and rechecks both provenance records, both HIL lanes, state restoration, and exact
+  bytes in a separate promotion job;
 - ad-hoc Ed25519 signing has been removed from the production design: neither runner
   nor verifier accepts a local signature as release trust;
 - `tools/release_1x.py check` automatically performs preflight→dispatch→cloud
@@ -306,6 +317,14 @@ python tools/run_1x_product_survey_hil.py \
   disposable local receipt; `publish` re-proves provenance/same bytes and creates a
   1.x Release without rebuilding. Host tests cover SemVer/run identity, the exact
   artifact set, serial selection, and unsafe archive rejection.
+
+Local combined run `E-HIL-055` passed on the exact 0.45 candidate: product run
+`408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 with 20 passive Wi-Fi
+observations, generic run `9c81c9f3d0f9cb0bdb69ebc8d002e8ce` passed all ten
+revision-6 goldens, and read-only re-enrollment/final cold boot recovered generation
+5/20 with zero SD writes and lease 0. The independent verifier accepted all 64 files;
+the deterministic archive is `760fad19…6abad`. This remains non-release-eligible
+until the updated workflow supplies GitHub Artifact Attestations.
 
 Bootstrap run `31975374875` stopped fail-closed before runner registration or flash
 on a safe internal symlink in the official archive; the workflow was cancelled and
