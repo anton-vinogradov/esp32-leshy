@@ -339,7 +339,7 @@ The current direct product-lane command is:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.50.0-product-boot-resilience-measure \
+  --expected-version 0.51.0-hardware-boot-watchdog-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - omitted `--expected-cid` is discovered only from an admitted enrollment whose
@@ -368,7 +368,7 @@ creating a resident agent or macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.50.0-product-boot-resilience-measure \
+  --expected-version 0.51.0-hardware-boot-watchdog-measure \
   --output /tmp/leshy-product-endurance-hil \
   --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
   --interval-seconds 900 --flash --release-endurance
@@ -431,6 +431,20 @@ three-cycle regression `E-HIL-071` advances 44→47 with 39/39 forwarded, two
 natural boot retries, zero drops/heap drift, and lease 0. The retained artifact is
 checked by `check_product_boot_resilience_acceptance.py`; a fresh 8 h/32-cycle run
 is still required.
+
+That fresh 0.50 lane failed as retained `E-HIL-072`: cycle 1 advanced 47→48 with
+16/16 forwarded and a clean final lease, but cycle 2 produced two clean boot retry
+records and then hung after the third ROM app entry. The scheduler-based 4 s
+watchdog never reset it; safe DTR/RTS and loader probes received no serial data.
+The final cleanup/lease/write state is unknown and therefore fails closed. Candidate
+0.51 adds a panic-enabled hardware Task WDT tier whose IRAM hook records only the
+armed exact-app timeout. After physical power recovery, `E-HIL-073` flashes/verifies
+the exact candidate, observes Task WDT on `loopTask`, reset reason 6, and read-only
+attempt-2 recovery with `timeout_restarts=1`, zero writes, complete cleanup, and
+lease 0. `E-HIL-074` then advances 48→51 with 37/37 forwarded, six cold boots,
+zero drops/heap drift, and final lease 0. The retained failure and successful fix
+are checked by `check_product_hardware_watchdog_acceptance.py`; only a new complete
+8 h/32-cycle result remains before promotion.
 
 Local combined run `E-HIL-055` passed on the exact 0.45 candidate: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 with 20 passive Wi-Fi

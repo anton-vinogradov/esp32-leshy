@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include <esp_system.h>
+#include <esp_task_wdt.h>
 #include <esp_timer.h>
 #include <esp_app_desc.h>
 #include <esp_attr.h>
@@ -234,12 +235,21 @@ ProductBootRecoveryState productBootRecovery;
 constexpr std::uint32_t kProductBootRetryRtcMagic = 0x4C425231U;
 constexpr std::uint32_t kProductBootWatchdogTestRtcMagic = 0x4C425754U;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryRtcMagic;
-RTC_NOINIT_ATTR std::uint32_t productBootRetryRestarts;
+RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryRestarts;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryAppIdentity;
-RTC_NOINIT_ATTR std::uint32_t productBootRetryTimeouts;
+RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryTimeouts;
 RTC_NOINIT_ATTR std::uint32_t productBootWatchdogTestRtcState;
 TaskHandle_t productBootRecoveryWatchdogTask = nullptr;
-volatile bool productBootRecoveryWatchdogArmed = false;
+bool productBootRecoveryTaskWatchdogAdded = false;
+volatile std::uint32_t productBootRecoveryWatchdogArmed = 0;
+
+static_assert(CONFIG_ESP_TASK_WDT_EN && CONFIG_ESP_TASK_WDT_INIT &&
+                  CONFIG_ESP_TASK_WDT_PANIC,
+              "boot recovery requires the panic-enabled Task WDT");
+static_assert(
+    leshy1::storage::kProductBootRecoveryHardwareWatchdogMs ==
+        CONFIG_ESP_TASK_WDT_TIMEOUT_S * 1000U,
+    "boot recovery hardware watchdog policy must match the SDK configuration");
 
 struct ProductSurveyRuntimeState final {
     const char* status = "idle";
@@ -800,15 +810,30 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
     }
 }
 
+bool IRAM_ATTR recordProductBootRecoveryTimeout() {
+    if (__atomic_exchange_n(&productBootRecoveryWatchdogArmed, 0,
+                            __ATOMIC_ACQ_REL) == 0) {
+        return false;
+    }
+    if (productBootRetryRtcMagic == kProductBootRetryRtcMagic &&
+        productBootRetryRestarts <
+            leshy1::storage::kProductBootMaximumAttempts) {
+        ++productBootRetryRestarts;
+        ++productBootRetryTimeouts;
+    }
+    return true;
+}
+
+extern "C" void IRAM_ATTR esp_task_wdt_isr_user_handler() {
+    // The Task WDT ISR is the last-resort path when the scheduler-based
+    // watchdog cannot run. Only claim the already armed recovery attempt and
+    // retain its reason; the configured panic path performs the reset.
+    recordProductBootRecoveryTimeout();
+}
+
 void watchProductBootRecovery(void*) {
     delay(leshy1::storage::kProductBootRecoveryWatchdogMs);
-    if (productBootRecoveryWatchdogArmed) {
-        if (productBootRetryRtcMagic == kProductBootRetryRtcMagic &&
-            productBootRetryRestarts <
-                leshy1::storage::kProductBootMaximumAttempts) {
-            ++productBootRetryRestarts;
-            ++productBootRetryTimeouts;
-        }
+    if (recordProductBootRecoveryTimeout()) {
         // Recovery may hold filesystem or console locks. Do not log, flush,
         // or run shutdown handlers here; retain the reason in RTC and force a
         // digital restart from this independent task.
@@ -818,28 +843,60 @@ void watchProductBootRecovery(void*) {
 }
 
 bool armProductBootRecoveryWatchdog() {
-    productBootRecoveryWatchdogArmed = true;
+    productBootRecoveryTaskWatchdogAdded = false;
+    const esp_err_t taskWatchdogStatus = esp_task_wdt_status(nullptr);
+    if (taskWatchdogStatus == ESP_ERR_NOT_FOUND) {
+        if (esp_task_wdt_add(nullptr) != ESP_OK) return false;
+        productBootRecoveryTaskWatchdogAdded = true;
+    } else if (taskWatchdogStatus != ESP_OK) {
+        return false;
+    }
+    if (esp_task_wdt_reset() != ESP_OK) {
+        if (productBootRecoveryTaskWatchdogAdded) {
+            esp_task_wdt_delete(nullptr);
+            productBootRecoveryTaskWatchdogAdded = false;
+        }
+        return false;
+    }
+    __atomic_store_n(&productBootRecoveryWatchdogArmed, 1,
+                     __ATOMIC_RELEASE);
     productBootRecoveryWatchdogTask = nullptr;
     if (xTaskCreatePinnedToCore(
             watchProductBootRecovery, "leshy-sd-boot-watch", 2048, nullptr, 3,
             &productBootRecoveryWatchdogTask, 0) != pdPASS) {
-        productBootRecoveryWatchdogArmed = false;
+        __atomic_store_n(&productBootRecoveryWatchdogArmed, 0,
+                         __ATOMIC_RELEASE);
         productBootRecoveryWatchdogTask = nullptr;
+        if (productBootRecoveryTaskWatchdogAdded) {
+            esp_task_wdt_delete(nullptr);
+            productBootRecoveryTaskWatchdogAdded = false;
+        }
         return false;
     }
     return true;
 }
 
-void disarmProductBootRecoveryWatchdog() {
-    productBootRecoveryWatchdogArmed = false;
+bool disarmProductBootRecoveryWatchdog() {
+    __atomic_store_n(&productBootRecoveryWatchdogArmed, 0,
+                     __ATOMIC_RELEASE);
     TaskHandle_t task = productBootRecoveryWatchdogTask;
     productBootRecoveryWatchdogTask = nullptr;
     if (task != nullptr) vTaskDelete(task);
+    if (!productBootRecoveryTaskWatchdogAdded) return true;
+    productBootRecoveryTaskWatchdogAdded = false;
+    return esp_task_wdt_delete(nullptr) == ESP_OK;
 }
 
 void recoverProductCatalogAtBoot() {
     const bool softwareReset =
         bootMetrics.resetReason == static_cast<std::uint32_t>(ESP_RST_SW);
+    const bool watchdogReset =
+        bootMetrics.resetReason == static_cast<std::uint32_t>(ESP_RST_PANIC) ||
+        bootMetrics.resetReason == static_cast<std::uint32_t>(ESP_RST_INT_WDT) ||
+        bootMetrics.resetReason == static_cast<std::uint32_t>(ESP_RST_TASK_WDT) ||
+        bootMetrics.resetReason == static_cast<std::uint32_t>(ESP_RST_WDT);
+    const bool retryReset = leshy1::storage::isProductBootRetryReset(
+        softwareReset, watchdogReset, productBootRetryTimeouts > 0);
     std::uint32_t currentAppIdentity = 0;
     const esp_app_desc_t* appDescription = esp_app_get_description();
     if (appDescription != nullptr &&
@@ -848,7 +905,7 @@ void recoverProductCatalogAtBoot() {
                     sizeof(currentAppIdentity));
     }
     if (leshy1::storage::shouldResetProductBootRetryState(
-            softwareReset,
+            retryReset,
             productBootRetryRtcMagic == kProductBootRetryRtcMagic,
             currentAppIdentity != 0,
             productBootRetryAppIdentity == currentAppIdentity)) {
@@ -908,10 +965,16 @@ void recoverProductCatalogAtBoot() {
     if (productBootWatchdogTestRtcState ==
         kProductBootWatchdogTestRtcMagic) {
         productBootWatchdogTestRtcState = 0;
+        TaskHandle_t softwareWatchdog = productBootRecoveryWatchdogTask;
+        productBootRecoveryWatchdogTask = nullptr;
+        if (softwareWatchdog != nullptr) vTaskDelete(softwareWatchdog);
         for (;;) delay(1000);
     }
     recoverProductCatalogForFingerprint(expectedFingerprint, true);
-    disarmProductBootRecoveryWatchdog();
+    if (!disarmProductBootRecoveryWatchdog()) {
+        productBootRecovery.status = "recovery_watchdog_cleanup_failed";
+        productBootRecovery.cleanupComplete = false;
+    }
     const std::uint8_t completedAttempts = static_cast<std::uint8_t>(
         productBootRetryRestarts + 1U);
     productBootRecovery.attempts = completedAttempts;

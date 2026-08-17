@@ -384,13 +384,15 @@ def main() -> int:
                     f"{forbidden_call}"
                 )
 
-    watchdog_start = entry.find("void watchProductBootRecovery(")
+    watchdog_start = entry.find("bool IRAM_ATTR recordProductBootRecoveryTimeout(")
     watchdog_end = entry.find("bool armProductBootRecoveryWatchdog()", watchdog_start)
     if watchdog_start < 0 or watchdog_end <= watchdog_start:
         errors.append("boot recovery watchdog function could not be inspected")
     else:
         watchdog_body = entry[watchdog_start:watchdog_end]
-        for marker in ("++productBootRetryRestarts", "++productBootRetryTimeouts",
+        for marker in ("__atomic_exchange_n", "++productBootRetryRestarts",
+                       "++productBootRetryTimeouts",
+                       "esp_task_wdt_isr_user_handler",
                        "esp_restart_noos();"):
             if marker not in watchdog_body:
                 errors.append(f"boot recovery watchdog is missing: {marker}")
@@ -402,10 +404,27 @@ def main() -> int:
                     f"{forbidden}"
                 )
 
+    watchdog_arm_start = entry.find("bool armProductBootRecoveryWatchdog()")
+    watchdog_arm_end = entry.find("void recoverProductCatalogAtBoot()",
+                                  watchdog_arm_start)
+    if watchdog_arm_start < 0 or watchdog_arm_end <= watchdog_arm_start:
+        errors.append("hardware boot recovery watchdog could not be inspected")
+    else:
+        watchdog_arm_body = entry[watchdog_arm_start:watchdog_arm_end]
+        for marker in ("esp_task_wdt_status(nullptr)",
+                       "esp_task_wdt_add(nullptr)",
+                       "esp_task_wdt_reset()", "esp_task_wdt_delete(nullptr)"):
+            if marker not in watchdog_arm_body:
+                errors.append(
+                    f"hardware boot recovery watchdog is missing: {marker}"
+                )
+
     for marker in (
         "shouldResetProductBootRetryState",
+        "isProductBootRetryReset",
         "productBootRetryAppIdentity",
         "kProductBootRecoveryWatchdogMs",
+        "kProductBootRecoveryHardwareWatchdogMs",
         "recovery_timeout_exhausted",
         "storage.product.boot-watchdog-test confirm",
         '\\"timeout_restarts\\"',

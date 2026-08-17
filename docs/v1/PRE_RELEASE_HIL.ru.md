@@ -340,7 +340,7 @@ workflow прошли end to end:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.50.0-product-boot-resilience-measure \
+  --expected-version 0.51.0-hardware-boot-watchdog-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - без `--expected-cid` CID определяется только из admitted enrollment с совпадающими
@@ -369,7 +369,7 @@ resident agent или macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.50.0-product-boot-resilience-measure \
+  --expected-version 0.51.0-hardware-boot-watchdog-measure \
   --output /tmp/leshy-product-endurance-hil \
   --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
   --interval-seconds 900 --flash --release-endurance
@@ -433,6 +433,20 @@ Candidate 0.50 вместо этого выравнивает narrow reset-separ
 drops/heap drift и lease 0. Retained artifact проверяет
 `check_product_boot_resilience_acceptance.py`; свежий run 8 h/32 cycles всё ещё
 обязателен.
+
+Этот свежий lane 0.50 сохранён как failed `E-HIL-072`: cycle 1 продвинул 47→48 с
+16/16 forwarded и clean final lease, но cycle 2 после двух clean boot retry records
+завис за третьим ROM app entry. Scheduler-based watchdog 4 s не выполнил reset;
+безопасные DTR/RTS и loader probes не получили serial data. Final cleanup/lease/write
+state неизвестен и поэтому fail closed. Candidate 0.51 добавляет panic-enabled
+hardware Task WDT tier, IRAM hook которого сохраняет только armed exact-app timeout.
+После physical power recovery `E-HIL-073` прошивает/verifies exact candidate,
+наблюдает Task WDT на `loopTask`, reset reason 6 и read-only recovery attempt 2 с
+`timeout_restarts=1`, zero writes, complete cleanup и lease 0. Затем `E-HIL-074`
+продвигает 48→51 с 37/37 forwarded, шестью cold boots, zero drops/heap drift и final
+lease 0. Retained failure и успешный fix проверяет
+`check_product_hardware_watchdog_acceptance.py`; до promotion остаётся только новый
+полный результат 8 h/32 cycles.
 
 Local combined run `E-HIL-055` прошёл на exact candidate 0.45: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 с 20 passive Wi-Fi

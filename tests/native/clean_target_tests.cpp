@@ -70,12 +70,18 @@ int failures = 0;
     } while (false)
 
 void testProductBootRetryIsNarrowAndBounded() {
+    CHECK(isProductBootRetryReset(true, false, false));
+    CHECK(isProductBootRetryReset(true, true, false));
+    CHECK(isProductBootRetryReset(false, true, true));
+    CHECK(!isProductBootRetryReset(false, true, false));
+    CHECK(!isProductBootRetryReset(false, false, true));
     CHECK(!shouldResetProductBootRetryState(true, true, true, true));
     CHECK(shouldResetProductBootRetryState(false, true, true, true));
     CHECK(shouldResetProductBootRetryState(true, false, true, true));
     CHECK(shouldResetProductBootRetryState(true, true, false, true));
     CHECK(shouldResetProductBootRetryState(true, true, true, false));
     CHECK(kProductBootRecoveryWatchdogMs == 4000);
+    CHECK(kProductBootRecoveryHardwareWatchdogMs == 5000);
     CHECK(kProductBootMaximumAttempts == 8);
     CHECK(kSdMaxR1PollBytes == 16);
 

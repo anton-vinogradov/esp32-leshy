@@ -434,6 +434,21 @@ Exact three-cycle regression продвигает 44→47 с 39/39 forwarded, д
 retries, zero drops/heap drift и final lease 0 (`E-HIL-071`). Retained summary:
 [`board-01-product-boot-resilience-0.50.json`](../../tests/hil/evidence/board-01-product-boot-resilience-0.50.json).
 
+Следующий release lane 0.50 завершился fail после одного complete cycle
+(`E-HIL-072`). Cycle 2 выдал две clean reset-separated retry records, но третий
+attempt дошёл до ROM app entry и затем не выдал ни firmware output, ни reset от
+software watchdog 4 s. Serial endpoint остался виден, но не отвечал на безопасные
+external reset и loader probes. Final cleanup, lease и write state нельзя наблюдать,
+поэтому все три сохраняются как unknown, а gate fail closed. Candidate 0.51 сохраняет
+software tier и дополнительно подписывает recovery task на panic-enabled ESP-IDF
+Task WDT 5 s; его IRAM ISR сохраняет RTC timeout marker без console, filesystem или
+shutdown work. После physical power recovery E-HIL-073 наблюдает Task WDT на
+`loopTask`, reset reason 6 и exact-CID read-only recovery attempt 2 с одним timeout
+restart, zero writes, complete cleanup и lease 0. Затем E-HIL-074 продвигает
+generation 48→51 с 37/37 forwarded, шестью cold boots, zero drops/heap drift и
+final lease 0. Retained summary:
+[`board-01-product-hardware-watchdog-0.51.json`](../../tests/hil/evidence/board-01-product-hardware-watchdog-0.51.json).
+
 ## Приёмка
 
 | ID | Обязательный результат |
@@ -457,8 +472,11 @@ remount/reopen, 32-commit p50/p95/p99 throughput distribution и host/static res
 E-HIL-053 закрывает ST-HIL-A09, а E-HIL-054 — ST-HIL-A10 на одной board/card,
 сохраняя изоляцию generic fixture от product enrollment. E-HIL-058 отклоняет
 same-boot re-entry; E-HIL-059 подтверждает три normal reset-separated cycles и
-инварианты endurance runner. E-HIL-069 сохраняет failed gate 0.49, а E-HIL-071
-подтверждает policy восемь attempts через два natural physical reset retries.
-Passing complete 8 h lane ещё открыт. Physical power-cut всё ещё требует controller. LittleFS не затрагивается,
+инварианты endurance runner. E-HIL-069 сохраняет failed gate 0.49, E-HIL-071
+подтверждает policy восемь attempts через два natural physical reset retries, а
+E-HIL-072 отклоняет software-watchdog-only recovery после app-entry hang, а
+E-HIL-073/074 подтверждают hardware fallback 0.51 и three-cycle product regression.
+Passing complete 8 h lane ещё открыт. Physical power-cut всё
+ещё требует controller. LittleFS не затрагивается,
 пока не доказан отдельный disposable partition/image; текущий flash filesystem может
 содержать legacy/product data.

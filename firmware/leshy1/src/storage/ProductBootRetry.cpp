@@ -2,11 +2,17 @@
 
 namespace leshy1::storage {
 
-bool shouldResetProductBootRetryState(bool softwareReset,
+bool isProductBootRetryReset(bool softwareReset,
+                             bool watchdogReset,
+                             bool timeoutRecorded) {
+    return softwareReset || (watchdogReset && timeoutRecorded);
+}
+
+bool shouldResetProductBootRetryState(bool retryReset,
                                       bool rtcMagicValid,
                                       bool currentAppIdentityValid,
                                       bool appIdentityMatches) {
-    return !softwareReset || !rtcMagicValid || !currentAppIdentityValid ||
+    return !retryReset || !rtcMagicValid || !currentAppIdentityValid ||
            !appIdentityMatches;
 }
 

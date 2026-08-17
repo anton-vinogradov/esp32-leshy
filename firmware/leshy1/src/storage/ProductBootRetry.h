@@ -23,10 +23,17 @@ struct ProductBootRetryEvidence final {
 constexpr std::uint8_t kProductBootMaximumAttempts = 8;
 constexpr std::uint32_t kProductBootRetryBaseDelayMs = 250;
 constexpr std::uint32_t kProductBootRecoveryWatchdogMs = 4000;
+constexpr std::uint32_t kProductBootRecoveryHardwareWatchdogMs = 5000;
 
-// A retry budget is valid only for software restarts of the exact same app.
-// Flashing a different candidate must never inherit an exhausted RTC budget.
-bool shouldResetProductBootRetryState(bool softwareReset,
+// A retained timeout marker distinguishes an intentional boot-recovery
+// watchdog reset from an unrelated watchdog or panic reset.
+bool isProductBootRetryReset(bool softwareReset,
+                             bool watchdogReset,
+                             bool timeoutRecorded);
+
+// A retry budget is valid only for an intentional retry reset of the exact
+// same app. Flashing a different candidate must never inherit RTC state.
+bool shouldResetProductBootRetryState(bool retryReset,
                                       bool rtcMagicValid,
                                       bool currentAppIdentityValid,
                                       bool appIdentityMatches);

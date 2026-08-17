@@ -444,6 +444,21 @@ three-cycle regression advances 44→47 with 39/39 forwarded, two natural retrie
 zero drops/heap drift, and final lease 0 (`E-HIL-071`). Retained summary:
 [`board-01-product-boot-resilience-0.50.json`](../../tests/hil/evidence/board-01-product-boot-resilience-0.50.json).
 
+The subsequent 0.50 release lane failed after one complete cycle (`E-HIL-072`).
+Cycle 2 emitted two clean reset-separated retry records, but its third attempt
+reached the ROM app entry and then produced neither firmware output nor the 4 s
+software-watchdog reset. The serial endpoint remained present but unresponsive to
+safe external reset and loader probes. Because final cleanup, lease, and write state
+cannot be observed, all three are retained as unknown and the gate fails closed.
+Candidate 0.51 keeps the software tier and additionally subscribes the recovery task
+to the panic-enabled 5 s ESP-IDF Task WDT; its IRAM ISR stores the RTC timeout marker
+without console, filesystem, or shutdown work. After physical power recovery,
+E-HIL-073 observes Task WDT on `loopTask`, reset reason 6, and exact-CID attempt-2
+read-only recovery with one timeout restart, zero writes, complete cleanup, and
+lease 0. E-HIL-074 then advances generation 48→51 with 37/37 forwarded, six cold
+boots, zero drops/heap drift, and final lease 0. Retained summary:
+[`board-01-product-hardware-watchdog-0.51.json`](../../tests/hil/evidence/board-01-product-hardware-watchdog-0.51.json).
+
 ## Acceptance
 
 | ID | Required result |
@@ -468,8 +483,10 @@ B/s against the 2,184 B/s RB-06 target. E-HIL-053 closes ST-HIL-A09 and E-HIL-05
 closes ST-HIL-A10 on one board/card while keeping the generic fixture isolated from
 product enrollment. E-HIL-058 rejects same-boot re-entry; E-HIL-059 confirms three
 normal reset-separated cycles and the endurance-runner invariants. E-HIL-069 retains
-the failed 0.49 gate, while E-HIL-071 confirms the eight-attempt policy through two
-natural physical reset retries. A passing complete 8 h lane still remains open. Physical
+the failed 0.49 gate, E-HIL-071 confirms the eight-attempt policy through two
+natural physical reset retries, and E-HIL-072 rejects software-watchdog-only
+recovery after an app-entry hang. E-HIL-073/074 prove the 0.51 hardware fallback
+and three-cycle product regression. A passing complete 8 h lane still remains open. Physical
 power-cut still needs a controller.
 LittleFS is not touched until a dedicated disposable partition/image is proven; the
 current flash filesystem may contain legacy/product data.
