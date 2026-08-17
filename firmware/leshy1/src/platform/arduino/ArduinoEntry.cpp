@@ -1449,6 +1449,28 @@ void renderMetric(std::uint8_t index, const char* text,
     display.print(text);
 }
 
+void renderStateCard(const char* state, const char* detail, Tone tone,
+                     std::uint8_t step) {
+    const Rect bounds = Components::stateCard();
+    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, Palette::Surface);
+    display.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, toneColor(tone));
+    display.drawRect(bounds.x + 12, bounds.y + 15, 18, 18, toneColor(tone));
+    display.setTextColor(toneColor(tone), Palette::Surface);
+    setUiCursor(UiTextRole::Body, bounds.x + 40, bounds.y + 10);
+    display.print(state);
+    display.setTextColor(Palette::TextSecondary, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, bounds.x + 16, bounds.y + 50);
+    display.print(detail);
+    char line[40] = {};
+    std::snprintf(line, sizeof(line), tr(UiTextId::VisualStepFormat),
+                  static_cast<unsigned>(step + 1U));
+    display.setTextColor(Palette::TextMuted, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, bounds.x + 16, bounds.y + 78);
+    display.print(line);
+}
+
 UiTextId homeLabel(const AppMenuItem& item) {
     if (std::strcmp(item.id, "diagnostics") == 0) return UiTextId::AppDiagnostics;
     if (std::strcmp(item.id, "survey") == 0) return UiTextId::AppSurvey;
@@ -1564,6 +1586,30 @@ void renderSelfTestPage() {
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 203);
         display.print(tr(UiTextId::GuidedLater));
+        return;
+    }
+
+    if (selfTestController.view() == SelfTestView::VisualCheck) {
+        renderHeader(tr(UiTextId::VisualCheckTitle));
+        constexpr UiTextId states[SelfTestController::kVisualStateCount] = {
+            UiTextId::VisualDialog,
+            UiTextId::VisualUnavailable,
+            UiTextId::VisualDegraded,
+            UiTextId::VisualError,
+            UiTextId::VisualRunning,
+        };
+        constexpr UiTextId details[SelfTestController::kVisualStateCount] = {
+            UiTextId::VisualDialogDetail,
+            UiTextId::VisualUnavailableDetail,
+            UiTextId::VisualDegradedDetail,
+            UiTextId::VisualErrorDetail,
+            UiTextId::VisualRunningDetail,
+        };
+        constexpr Tone tones[SelfTestController::kVisualStateCount] = {
+            Tone::Focus, Tone::Muted, Tone::Warning, Tone::Danger, Tone::Positive,
+        };
+        const std::uint8_t state = selfTestController.visualState();
+        renderStateCard(tr(states[state]), tr(details[state]), tones[state], state);
         return;
     }
 
@@ -1919,6 +1965,9 @@ void renderInteractiveScreen() {
     } else if (uiController.page() == 5 &&
                selfTestController.view() == SelfTestView::Preflight) {
         display.print(tr(UiTextId::FooterSelfPreflight));
+    } else if (uiController.page() == 5 &&
+               selfTestController.view() == SelfTestView::VisualCheck) {
+        display.print(tr(UiTextId::FooterSelfVisual));
     } else if (uiController.page() == 5) {
         display.print(tr(UiTextId::FooterSelfResult));
     } else {
@@ -2231,11 +2280,14 @@ bool applyUiAction(UiAction action, bool render = true) {
                 static_cast<std::uint64_t>(esp_timer_get_time());
             changed = selfTestController.activate(snapshotSelfTestFacts(),
                                                    startedUs);
-            if (selfTestController.runAwaitingFinish()) {
+            if (selfTestController.runAwaitingFinish() &&
+                selfTestController.view() == SelfTestView::Result) {
                 selfTestController.finishRun(
                     static_cast<std::uint64_t>(esp_timer_get_time()));
                 lastRuntimeEvent = leshy1::apps::self_test::
                     selfTestResultStatusName(selfTestController.report().status);
+            } else if (selfTestController.view() == SelfTestView::VisualCheck) {
+                lastRuntimeEvent = "self_test_visual_check";
             } else if (changed) {
                 lastRuntimeEvent = "self_test_preflight";
             }

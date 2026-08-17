@@ -117,6 +117,7 @@ void testUiComponentGeometryContract() {
     CHECK(!overlaps(Components::choiceRow(0), Components::choiceRow(1)));
     CHECK(beforeFooter(Components::choiceRow(1)));
     CHECK(beforeFooter(Components::metricRow(4)));
+    CHECK(beforeFooter(Components::stateCard()));
     CHECK(!overlaps(Components::footerDivider(), Components::inputStatus()));
     CHECK(!overlaps(Components::inputStatus(), Components::footerHint()));
 }
@@ -200,16 +201,29 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(controller.view() == SelfTestView::Preflight);
     CHECK(!controller.runAwaitingFinish());
     CHECK(controller.activate(healthy, 210));
+    CHECK(controller.view() == SelfTestView::VisualCheck);
+    CHECK(controller.runAwaitingFinish());
+    CHECK(controller.visualState() == 0);
+    for (std::uint8_t state = 1; state < SelfTestController::kVisualStateCount;
+         ++state) {
+        CHECK(controller.activate(healthy, 220 + state));
+        CHECK(controller.view() == SelfTestView::VisualCheck);
+        CHECK(controller.visualState() == state);
+    }
+    CHECK(controller.activate(healthy, 230));
+    CHECK(controller.view() == SelfTestView::Result);
     controller.finishRun(240);
     const SelfTestReport& full = controller.report();
     CHECK(full.mode == SelfTestMode::FullGuided);
     CHECK(full.status == SelfTestResultStatus::Blocked);
     CHECK(full.sequence == 2);
-    CHECK(full.checkCount == 9);
-    CHECK(full.passed == 8);
+    CHECK(full.checkCount == 10);
+    CHECK(full.passed == 9);
     CHECK(full.failed == 0);
     CHECK(full.blocked == 1);
-    CHECK(std::strcmp(full.checks[8].id, "full.capability.coverage") == 0);
+    CHECK(std::strcmp(full.checks[8].id, "full.ui.common_states") == 0);
+    CHECK(std::strcmp(full.checks[9].id, "full.capability.coverage") == 0);
+    CHECK(SelfTestReport::kPlanVersion == 2);
 
     CHECK(controller.back());
     CHECK(controller.previousMode());

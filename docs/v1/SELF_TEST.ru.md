@@ -2,8 +2,8 @@
 
 *Читать на: [English](SELF_TEST.md) · **Русский***
 
-Статус: **принят product/UX contract; Quick slice S2 физически принят;
-coverage Full/Guided развивается через S3…S8**.
+Статус: **принят product/UX contract; Quick и guided UI-state slices S2 физически
+приняты; capability coverage Full/Guided развивается через S3…S8**.
 
 Self-Test — отдельное приложение в самом низу Home. Оно никогда не перехватывает
 обычную загрузку. Один test engine используется владельцем устройства, полным
@@ -86,18 +86,23 @@ Back отменяет прогон на ближайшей safe boundary, сна
 
 ## Текущая реализация S2
 
-Candidate `0.53.0-self-test-quick-measure` реализует последний пункт Home, menu
+Candidate `0.53.0-self-test-quick-measure` заложил последний пункт Home, menu
 режимов, Full preflight, result screens, восемь стабильных Quick check IDs и
-`leshy.self_test.report.v1`. На board-01 exact candidate прошёл все восемь Quick
-checks read-only за 60 µs, с zero radio/storage/buzzer side effects, zero input
-drops, minimum heap 188 872 B и final owner/lease `none`/`0` (`E-HIL-077`).
+`leshy.self_test.report.v1`. На board-01 он прошёл все восемь Quick checks read-only
+за 60 µs с zero radio/storage/buzzer side effects и final owner/lease `none`/`0`
+(`E-HIL-077`). Первый physical attempt также обнаружил loop-task stack panic из-за
+локального diagnostic buffer 3 KiB; failure сохранён, а исправленный shared bounded
+workspace прошёл regression.
 
-Full/Guided намеренно возвращает восемь pass и blocked
-`full.capability.coverage`. Для S2 это правильный результат: незавершённые checks
-S3…S7 не могут быть promoted ни device, ни host. Первый physical attempt также
-обнаружил loop-task stack panic из-за локального diagnostic buffer 3 KiB; failure
-сохранён, buffer перенесён в один bounded static workspace, а exact fixed candidate
-прошёл полный regression.
+Candidate `0.57.0-ui-state-evidence-measure` переводит общий plan на version 2.
+После preflight Full/Guided проводит пользователя или release driver через явные
+карточки dialog/confirm, unavailable, degraded, error и running. Девять actual TFT
+frames и их Action/state traces сохранены и machine-checked. Run проходит восемь
+Quick checks плюс `full.ui.common_states`, затем намеренно возвращает blocked на
+`full.capability.coverage`: 9/10 pass, 0 fail, 1 blocked, с zero
+radio/storage/buzzer side effects и final owner/lease `none`/`0`
+(`E-HIL-081`/`E-UX-007`). Это правильный текущий результат: незавершённые capability
+checks S3…S7 не могут быть promoted ни device, ни host.
 
 ## Приёмка
 

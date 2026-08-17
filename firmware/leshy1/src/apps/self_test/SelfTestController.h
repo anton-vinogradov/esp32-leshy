@@ -16,6 +16,7 @@ enum class SelfTestMode : std::uint8_t {
 enum class SelfTestView : std::uint8_t {
     ModeMenu,
     Preflight,
+    VisualCheck,
     Result,
 };
 
@@ -52,8 +53,8 @@ struct SelfTestCheckResult final {
 
 struct SelfTestReport final {
     static constexpr std::uint16_t kSchemaVersion = 1;
-    static constexpr std::uint16_t kPlanVersion = 1;
-    static constexpr std::size_t kCapacity = 9;
+    static constexpr std::uint16_t kPlanVersion = 2;
+    static constexpr std::size_t kCapacity = 10;
 
     SelfTestMode mode = SelfTestMode::Quick;
     SelfTestResultStatus status = SelfTestResultStatus::NotRun;
@@ -77,6 +78,7 @@ struct SelfTestReport final {
 class SelfTestController final {
 public:
     static constexpr std::uint8_t kModeCount = 2;
+    static constexpr std::uint8_t kVisualStateCount = 5;
 
     bool previousMode();
     bool nextMode();
@@ -92,6 +94,7 @@ public:
         return report_.status != SelfTestResultStatus::NotRun;
     }
     bool runAwaitingFinish() const { return runAwaitingFinish_; }
+    std::uint8_t visualState() const { return visualState_; }
 
 private:
     void beginReport(SelfTestMode mode, const SelfTestFacts& facts,
@@ -104,6 +107,7 @@ private:
     std::uint8_t selection_ = 0;
     SelfTestReport report_{};
     bool runAwaitingFinish_ = false;
+    std::uint8_t visualState_ = 0;
 };
 
 }  // namespace leshy1::apps::self_test

@@ -189,3 +189,11 @@ both Self-Test choices, Quick result, and final cleanup only through normalized
 Actions. A standard-library pixel audit verifies the cue independently of color and
 combines it with the retained 50-event physical-key acceptance (`E-HIL-052/080`,
 `E-UX-006`).
+
+Candidate 0.57 uses that same path to select the final Home item and Full/Guided,
+then captures preflight, dialog/confirm, unavailable, degraded, error, running,
+blocked result, and final Home. The checker binds all nine 240×320 frames to exact
+revisions and candidate identity, proves the geometric square cue on every state
+card, and verifies plan 2 as 9 pass/0 fail/1 blocked with zero side effects and final
+owner/lease `none`/`0` (`E-HIL-081`/`E-UX-007`). This accepts UX-07; the combined
+`DEMO-S2` remains the stage gate.

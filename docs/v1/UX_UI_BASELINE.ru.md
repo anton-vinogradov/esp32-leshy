@@ -3,7 +3,8 @@
 *Read in: [English](UX_UI_BASELINE.md) · **Русский***
 
 Статус: **S1 product UX direction принят; S2 visual gate активен**. Low-fidelity
-UX-01/UX-02 зафиксированы, UX-03…UX-06 приняты; UX-07 — текущая работа S2.
+UX-01/UX-02 зафиксированы, UX-03…UX-07 приняты; оставшаяся работа gate S2 —
+воспроизводимый `DEMO-S2`.
 
 Документ определяет, когда обсуждается опыт пользователя и когда внешний вид
 становится ограничением реализации. Он не подменяет
@@ -113,8 +114,10 @@ owner/lease в `none`/`0`. Тогда это приняло component system; UX
 ## UX-05 — размещение EN/RU
 
 `ui/UiStrings.def` — единый allocation-free каталог всех текущих строк S2 renderer,
-кроме неизменяемого бренда `LESHY 1.x`. Он задаёт 111 стабильных ID, варианты EN и
-RU (всего 222 строки) и пиксельный budget каждого места использования.
+кроме неизменяемого бренда `LESHY 1.x`. Сейчас он задаёт 124 стабильных ID, варианты
+EN и RU (всего 248 строк) и пиксельный budget каждого места использования. Exact
+accepted candidate 0.55 содержал 111 ID/222 строки; 13 последующих ID — EN/RU-тексты
+guided states, принятые вместе с UX-07.
 `tools/generate_ui_gfx_font.py` воспроизводимо генерирует faces, а
 `tools/check_ui_language_contract.py` измеряет их metrics, отклоняет отсутствующий
 перевод или переполнение и проверяет, что renderers не возвращают локальные
@@ -151,7 +154,25 @@ Exact candidate `0.56.0-ui-accessibility-measure` принимает UX-06 че�
 ambiguity или drops. Exact TFT run через public Actions перемещает focus по всем
 пяти Home rows, Survey, Library, Language и обоим choices Self-Test; pixel checker
 доказывает outline/chevron независимо от цвета. Quick остаётся 8/8, input healthy,
-buzzer LOW, final owner/lease — `none`/`0`. UX-07 и `DEMO-S2` остаются открыты.
+buzzer LOW, final owner/lease — `none`/`0`. На той точке evidence UX-07 и
+`DEMO-S2` оставались открыты.
+
+## UX-07 — evidence common states на реальном TFT
+
+Exact candidate `0.57.0-ui-state-evidence-measure` принимает UX-07 через
+`E-BUILD-059`/`E-HIL-081`/`E-UX-007`. Последний пункт Home открывает Self-Test без
+boot detour, выбирает Full/Guided через обычные Actions и показывает preflight, а
+затем явные карточки dialog/confirm, unavailable, degraded, error и running. Каждая
+карточка сочетает текст, фиксированный квадратный outline и semantic tone;
+machine-checker связывает девять actual TFT captures 240×320, разные framebuffer
+hashes, точные Action/state revisions и geometry карточки.
+
+Тот же run выполняет plan version 2. Восемь Quick platform checks и
+`full.ui.common_states` проходят, а `full.capability.coverage` честно остаётся
+blocked: 9 passed, 0 failed, 1 blocked. Radio TX, storage writes и buzzer activations
+равны нулю; heap — 272 760/224 280/188 792 B, input errors/drops равны нулю, GPIO2
+LOW, final owner/lease — `none`/`0`. Это закрывает real-TFT artifact, но не полный
+capability plan или release gate; `DEMO-S2` остаётся открытым.
 
 ## Gate
 

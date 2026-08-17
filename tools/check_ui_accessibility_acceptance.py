@@ -16,7 +16,6 @@ from check_visual_system_acceptance import decode_png
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / "tests/hil/evidence/board-01-ui-accessibility-0.56.json"
 BUNDLE = ROOT / "tests/hil/evidence/board-01-ui-accessibility-0.56"
-PLATFORMIO = ROOT / "firmware/leshy1/platformio.ini"
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
 FILES = {
@@ -89,9 +88,6 @@ def main() -> int:
         "host_tests_passed": True,
         "firmware_build_passed": True,
     }, "candidate block mismatch")
-    require(failures, 'LESHY1_VERSION=\\"0.56.0-ui-accessibility-measure\\"' in
-            PLATFORMIO.read_text(encoding="utf-8"), "current version mismatch")
-
     physical = evidence.get("physical_input", {})
     physical_path = ROOT / str(physical.get("retained_path", "missing"))
     require(failures, physical_path.is_file() and

@@ -2,8 +2,8 @@
 
 *Read in: **English** · [Русский](SELF_TEST.ru.md)*
 
-Status: **accepted product/UX contract; S2 Quick slice physically accepted;
-Full/Guided coverage grows through S3…S8**.
+Status: **accepted product/UX contract; S2 Quick and guided UI-state slices
+physically accepted; Full/Guided capability coverage grows through S3…S8**.
 
 Self-Test is an explicit application at the bottom of Home. It is never an automatic
 boot detour. The same test engine serves a device owner, a guided field check, and
@@ -86,18 +86,23 @@ side effect occurs, and final ownership is zero.
 
 ## Current S2 implementation
 
-Candidate `0.53.0-self-test-quick-measure` implements the final Home entry, mode
+Candidate `0.53.0-self-test-quick-measure` established the final Home entry, mode
 menu, Full preflight, result screens, eight stable Quick check IDs, and
-`leshy.self_test.report.v1`. On board-01 the exact candidate passed all eight Quick
-checks read-only in 60 µs, with zero radio/storage/buzzer side effects, zero input
-drops, minimum heap 188,872 B, and final owner/lease `none`/`0` (`E-HIL-077`).
+`leshy.self_test.report.v1`. On board-01 it passed all eight Quick checks read-only
+in 60 µs with zero radio/storage/buzzer side effects and final owner/lease
+`none`/`0` (`E-HIL-077`). Its first physical attempt also exposed a loop-task stack
+panic from a 3 KiB local diagnostic buffer; that failure is retained and the fixed
+shared bounded workspace passed regression.
 
-Full/Guided deliberately returns eight passes plus blocked
-`full.capability.coverage`. This is the correct S2 result: incomplete S3…S7 checks
-cannot be promoted by the device or host. The first physical attempt also exposed a
-loop-task stack panic from a 3 KiB local diagnostic buffer; the failure is retained,
-the buffer now uses one bounded static workspace, and the exact fixed candidate
-passed the full regression.
+Candidate `0.57.0-ui-state-evidence-measure` advances the shared plan to version 2.
+Full/Guided now walks the user or release driver through explicit dialog/confirm,
+unavailable, degraded, error, and running cards after preflight. Nine actual TFT
+frames and their Action/state traces are retained and machine-checked. The run passes
+the eight Quick checks plus `full.ui.common_states`, then deliberately returns
+blocked on `full.capability.coverage`: 9/10 pass, 0 fail, 1 blocked, with zero
+radio/storage/buzzer side effects and final owner/lease `none`/`0`
+(`E-HIL-081`/`E-UX-007`). This is the correct current result: incomplete S3…S7
+capability checks cannot be promoted by the device or host.
 
 ## Acceptance
 

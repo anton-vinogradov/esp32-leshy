@@ -14,6 +14,7 @@ const char* selfTestViewName(SelfTestView view) {
     switch (view) {
         case SelfTestView::ModeMenu: return "mode_menu";
         case SelfTestView::Preflight: return "preflight";
+        case SelfTestView::VisualCheck: return "visual_check";
         case SelfTestView::Result: return "result";
     }
     return "unknown";
@@ -57,6 +58,7 @@ void SelfTestController::beginReport(SelfTestMode mode,
     report_.startedUs = startedUs;
     report_.facts = facts;
     runAwaitingFinish_ = true;
+    visualState_ = 0;
 }
 
 void SelfTestController::append(const char* id, SelfTestResultStatus status) {
@@ -119,13 +121,25 @@ bool SelfTestController::activate(const SelfTestFacts& facts,
         return true;
     }
 
+    if (view_ == SelfTestView::VisualCheck) {
+        if (visualState_ + 1U < kVisualStateCount) {
+            ++visualState_;
+            return true;
+        }
+        append("full.ui.common_states", SelfTestResultStatus::Pass);
+        append("full.capability.coverage", SelfTestResultStatus::Blocked);
+        finishResult();
+        return true;
+    }
+
     const SelfTestMode mode = view_ == SelfTestView::Preflight
                                   ? SelfTestMode::FullGuided
                                   : SelfTestMode::Quick;
     beginReport(mode, facts, startedUs);
     evaluateQuick(facts);
     if (mode == SelfTestMode::FullGuided) {
-        append("full.capability.coverage", SelfTestResultStatus::Blocked);
+        view_ = SelfTestView::VisualCheck;
+        return true;
     }
     finishResult();
     return true;
@@ -141,6 +155,12 @@ void SelfTestController::finishRun(std::uint64_t finishedUs) {
 
 bool SelfTestController::back() {
     if (view_ == SelfTestView::ModeMenu) return false;
+    if (view_ == SelfTestView::VisualCheck) {
+        report_.cancelled = true;
+        runAwaitingFinish_ = false;
+        view_ = SelfTestView::Preflight;
+        return true;
+    }
     view_ = SelfTestView::ModeMenu;
     return true;
 }

@@ -15,7 +15,6 @@ COMPONENTS = ROOT / "firmware/leshy1/src/ui/UiComponents.h"
 RENDERER = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 STRINGS = ROOT / "firmware/leshy1/src/ui/UiStrings.def"
 TESTS = ROOT / "tests/native/clean_target_tests.cpp"
-PLATFORMIO = ROOT / "firmware/leshy1/platformio.ini"
 KEYPAD = ROOT / "tests/hil/evidence/board-01-keypad-0.43.json"
 
 
@@ -27,7 +26,7 @@ def require(failures: list[str], condition: bool, message: str) -> None:
 def main() -> int:
     failures: list[str] = []
     for path in (INPUT, CONTROLLER, COMPONENTS, RENDERER, STRINGS, TESTS,
-                 PLATFORMIO, KEYPAD):
+                 KEYPAD):
         require(failures, path.is_file(), f"missing UX-06 contract input: {path}")
     if failures:
         for failure in failures:
@@ -84,11 +83,6 @@ def main() -> int:
     tests = TESTS.read_text(encoding="utf-8")
     require(failures, "contains(row, Components::focusMarker(row))" in tests,
             "native focus-marker geometry test missing")
-    platformio = PLATFORMIO.read_text(encoding="utf-8")
-    require(failures,
-            'LESHY1_VERSION=\\"0.56.0-ui-accessibility-measure\\"' in platformio,
-            "0.56 accessibility candidate flag missing")
-
     keypad = json.loads(KEYPAD.read_text(encoding="utf-8"))
     after = keypad.get("after", {})
     require(failures, keypad.get("status") == "pass" and

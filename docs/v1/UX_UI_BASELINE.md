@@ -3,7 +3,8 @@
 *Read in: **English** · [Русский](UX_UI_BASELINE.ru.md)*
 
 Status: **S1 product UX direction accepted; S2 visual gate active**. Low-fidelity
-UX-01/UX-02 are fixed; UX-03…UX-06 are accepted; UX-07 is the current S2 work.
+UX-01/UX-02 are fixed and UX-03…UX-07 are accepted; the reproducible `DEMO-S2`
+is the remaining S2 gate work.
 
 This document defines when user experience is reviewed and when visual appearance
 becomes an implementation constraint. It does not replace the
@@ -113,8 +114,10 @@ input has zero errors/drops, buzzer remains LOW, and Back returns owner/lease to
 ## UX-05 EN/RU content fit
 
 `ui/UiStrings.def` is the single allocation-free catalog for every current S2
-renderer string except the invariant `LESHY 1.x` brand. It defines 111 stable IDs,
-both EN and RU variants (222 strings total), and the pixel budget of every use.
+renderer string except the invariant `LESHY 1.x` brand. It currently defines 124
+stable IDs, both EN and RU variants (248 strings total), and the pixel budget of
+every use. The exact accepted 0.55 candidate contained 111 IDs/222 strings; the 13
+later IDs are the EN/RU guided-state copy accepted with UX-07.
 `tools/generate_ui_gfx_font.py` reproducibly generates the faces, while
 `tools/check_ui_language_contract.py` measures their metrics, rejects a
 missing translation or overflowing string, and verifies that renderers do not
@@ -151,8 +154,25 @@ of each key with 50/50/50 presses/releases/dispatched and zero errors, ambiguity
 or drops. The exact TFT run moves focus across all five Home rows, Survey, Library,
 Language, and both Self-Test choices through public Actions; the pixel checker
 proves the outline/chevron independent of color. Quick remains 8/8, input remains
-healthy, the buzzer remains LOW, and final owner/lease is `none`/`0`. UX-07 and
-`DEMO-S2` remain open.
+healthy, the buzzer remains LOW, and final owner/lease is `none`/`0`. At that
+evidence point UX-07 and `DEMO-S2` remained open.
+
+## UX-07 real-TFT common-state evidence
+
+Exact candidate `0.57.0-ui-state-evidence-measure` accepts UX-07 through
+`E-BUILD-059`/`E-HIL-081`/`E-UX-007`. The final Home item opens Self-Test without
+any boot detour, selects Full/Guided through ordinary Actions, and renders a
+preflight plus explicit dialog/confirm, unavailable, degraded, error, and running
+cards. Each card combines text, a fixed square outline, and a semantic tone; the
+machine checker binds nine actual 240×320 TFT captures, distinct framebuffer hashes,
+exact Action/state revisions, and the card geometry.
+
+The same run executes plan version 2. Its eight Quick platform checks and
+`full.ui.common_states` pass, while `full.capability.coverage` remains honestly
+blocked: 9 passed, 0 failed, 1 blocked. Radio TX, storage writes, and buzzer
+activations remain zero; heap is 272,760/224,280/188,792 B, input errors/drops are
+zero, GPIO2 is LOW, and final owner/lease is `none`/`0`. This closes the real-TFT
+artifact, not the full capability plan or release gate; `DEMO-S2` remains open.
 
 ## Gate
 

@@ -1,0 +1,80 @@
+{
+  "schema": "leshy.ui_states_acceptance.v1",
+  "status": "pass_ux_07_not_stage_or_release_gate",
+  "trust_status": "unsigned_local_result",
+  "gate_eligible": false,
+  "evidence_ids": ["E-BUILD-059", "E-HIL-081", "E-UX-007"],
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "candidate": {
+    "version": "0.57.0-ui-state-evidence-measure",
+    "firmware_sha256": "9385244167e5234bd21e2872567d6dbb99ce94a45092f052ce001f969d8a0d86",
+    "factory_sha256": "3ff89d1002c61bab98854b0c2164a64ac0ec81eca1e7961221043dc04e7e83ad",
+    "app_elf_sha256": "e8c7515dc4c5b66f7913639bb3d19d6fdd54e49cf28cf532ea0dfb69e817051a",
+    "map_sha256": "3c9cd118c1f2d499a10b9f6d0e0555719d629388fcd5d6ec3132b6e0ba2cd891",
+    "linked_flash_bytes": 1107448,
+    "static_ram_bytes": 128744,
+    "app_image_bytes": 1107600,
+    "factory_image_bytes": 1173136,
+    "rtc_noinit_bytes": 20,
+    "host_tests_passed": true,
+    "firmware_build_passed": true
+  },
+  "screens": {
+    "mode_menu": ["74c664e3db191bcead4000a7fcfdee64b8ee8291e8912a99ceb0223e3b9dc5e5", "918e96cb0ec0452bdebfb7aef6c9a1c30dae3b24bbea2ae39e3c712ad53f9578", "fc45d0c4a135ed9fbae38d7375130037587f64d15ad52e68c86e337ea314bf34"],
+    "preflight": ["0bc0fc8c49411e463330dc0860e0a3cb279eea626ef9dcc6939e4e3eeb11ca4e", "b6c1d61d34d472ba5b5e6f561f68f87d0a0368c7dfa9e265350d0b62c5190c02", "d30b3cafca8f5a6d812cb1b69ac2497e94f53813bc2872e7128108bd73858b71"],
+    "dialog": ["1d091d8338862017f17b757632bf530562720b4be101e8f2812fe2140f49bf0f", "4a62497e0a2b337991081eac58f0e48b23f0edd4203fe934830bb27b6b6cd201", "7b168dca0265dfe0c23a7ede238b28ce11d21ea5510b26dcb0c8b721da1a7701"],
+    "unavailable": ["fa342d14d75b4555d28dffa5f5de1597e3b213ab7bf37f6b75b76b4156689d4f", "e9a99b83151c0bd63b902c9151a0ed8beda62247c192e0bec3af1e32c0fcaa0a", "27dbe7af5653c048304821b3911b14ad7ecdf12a3f44885e7b867aea109fd891"],
+    "degraded": ["77c3aa6b771774a896877468a92668ce82f9c8367cc5f82517b50ccce554c5cb", "8c774256231e131c8fe90f66d3a2929985282911d837d0069b150464ab7f8d70", "102049fa8e314e6c205d2a02efee406a78879d47e21b28d176cfff00ba0e7054"],
+    "error": ["3bc29b717fbefcdd0a2d67dd16248a172e1b014efa72b8bd476403965199c08d", "030e6db233ea8103c2e1b48e44c4d709ed423725beebed0172a1446ee51f693d", "34a2ee7054056ca9bd266dbbeb45c5271f8f1ebc741c23d28e41bde110acf8fb"],
+    "running": ["6102809625d7849e507e279d6180d78c52da4c9d79c502c0a834c97c8ff64a1c", "9dee6c56792f2649abd2f64b5ad4ce93c1768e34582dce8e6388870d1e75ff82", "478ff497412a62225297667e3b166deeeae99ede44f4023b99d18f451c88eebe"],
+    "result": ["1a7726082bc8032d8db1c3e65be6a737703db400c15b702a736b2a043aaa85e1", "a608b6aad4953ce707fef4f33eb4f1aeabf8214b6ac55cef45e69b6e837efd9a", "ef078b6f3c7bc1f7517cc2a81056fc5ceb58f6dbb144c230b0469480b5ea4fc9"],
+    "home_cleanup": ["7e23ce43fcbf68e740d5e8bb5c68d82b32383751249403c2fc3ca752bc1172b6", "9f24a121e72e8a52361026b1ad002513eecd611e9bcfc6991d2bbd81fbe8b2c2", "ccaa7b8855917937abf346026cad06fd54f226807a90cb6b84d7f88eaf622651"]
+  },
+  "runtime": {
+    "metrics_sha256": "576a04a978e2375155255721550c21382c890c1f7923eece4810f7bfcc9f39ee",
+    "input_sha256": "784035aeb1ceb708989589f86563e623e8106138c3d967de3cadb83fc2ce6d5f",
+    "safe_outputs_sha256": "a1aebdf7c4c60f55ddbd9af450b97126af2abc77ea23af7732b27efe1a2a77f2",
+    "active_report_sha256": "19554eda4b233aee12c7d1dfc9b06527c1cadb64a73dfc6ac08b965f27bf3bf3",
+    "final_ui_state_sha256": "7f25efb3dfc7ea5723309ce2b3410c208a451ac0beb4b70591fc2558eb3ac685",
+    "final_report_sha256": "77d18339988325e0d8269cc67d0b3fb03278a84bf73679d0d544e97c3e673811",
+    "final_input_sha256": "22f9cdaa8240752c1fb5d93537cd084b8ee9fd236e32e7e87b04c305f121ea8c",
+    "final_safe_outputs_sha256": "a1aebdf7c4c60f55ddbd9af450b97126af2abc77ea23af7732b27efe1a2a77f2",
+    "heap_total_bytes": 272760,
+    "heap_free_bytes": 224280,
+    "heap_minimum_bytes": 188792,
+    "plan_version": 2,
+    "checks": 10,
+    "passed": 9,
+    "failed": 0,
+    "blocked": 1,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "visual_audit": {
+    "card_geometry": [12, 92, 216, 112],
+    "explicit_states": ["dialog", "unavailable", "degraded", "error", "running"],
+    "non_color_square_outline_pixels": 68,
+    "all_state_frames_distinct": true,
+    "manual_visual_review": "pass"
+  },
+  "self_test_contract": {
+    "home_position": "last",
+    "automatic_at_boot": false,
+    "modes": ["quick", "full_guided"],
+    "user_and_release_share_engine": true,
+    "full_current_status": "blocked_until_capability_coverage",
+    "radio_tx_commands": 0,
+    "storage_write_commands": 0,
+    "buzzer_activations": 0
+  },
+  "scope": {
+    "ux_03": "accepted",
+    "ux_04": "accepted",
+    "ux_05": "accepted",
+    "ux_06": "accepted",
+    "ux_07": "implemented_and_physically_evidenced",
+    "demo_s2": "open",
+    "release_gate_eligible": false
+  }
+}

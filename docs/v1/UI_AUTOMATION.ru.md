@@ -183,3 +183,11 @@ row. Двенадцать exact current TFT captures проходят Home, Surv
 оба choices Self-Test, Quick result и final cleanup только через normalized Actions.
 Standard-library pixel audit проверяет cue независимо от цвета и объединяет его с
 retained physical-key acceptance 50 events (`E-HIL-052/080`, `E-UX-006`).
+
+Candidate 0.57 тем же путём выбирает последний пункт Home и Full/Guided, затем
+снимает preflight, dialog/confirm, unavailable, degraded, error, running, blocked
+result и финальный Home. Checker связывает все девять frames 240×320 с точными
+revisions и identity candidate, доказывает geometric square cue каждой state card и
+проверяет plan 2 как 9 pass/0 fail/1 blocked с zero side effects и final owner/lease
+`none`/`0` (`E-HIL-081`/`E-UX-007`). Это принимает UX-07; combined `DEMO-S2`
+остаётся stage gate.

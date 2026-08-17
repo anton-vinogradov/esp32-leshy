@@ -75,6 +75,10 @@ struct Components final {
         };
     }
 
+    static constexpr Rect stateCard() {
+        return {Layout::Edge, 92, Layout::ContentWidth, 112};
+    }
+
     static constexpr Rect footerDivider() {
         return {Layout::Edge, Layout::FooterDividerY, Layout::ContentWidth, 1};
     }
@@ -126,6 +130,8 @@ static_assert(beforeFooter(Components::choiceRow(1)),
               "two mode choices must fit above the footer");
 static_assert(beforeFooter(Components::metricRow(4)),
               "five result metrics must fit above the footer");
+static_assert(beforeFooter(Components::stateCard()),
+              "guided common-state card must fit above the footer");
 static_assert(!overlaps(Components::homeRow(3, false),
                         Components::homeRow(4, true)),
               "Home utility must be visually separated");
