@@ -348,9 +348,10 @@ def main() -> int:
             encoding="utf-8"
         )
         for marker in (
-            "kProductStartMaximumIdentityAttempts = 3",
+            "kProductStartMaximumIdentityAttempts = 8",
             "SdTransportRunStatus::ExchangeFailed",
             "SdTransportRunStatus::InitTimeout",
+            "SdTransportRunStatus::ParseRejected",
             "identityCleanupComplete",
             "!evidence.filesystemAttempted",
         ):

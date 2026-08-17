@@ -35,7 +35,7 @@ struct BoardProfile final {
     static constexpr int kNrfCePins[3] = {15, 47, 14};
     static constexpr int kNrfCsPins[3] = {4, 48, 21};
     static constexpr int kCc1101CsPin = 5;
-    static constexpr std::uint32_t kSdIdentificationSpiHz = 400000;
+    static constexpr std::uint32_t kSdIdentificationSpiHz = 100000;
 
     // HW-U05/U09: external assemblies and IR are never autodetected.
     static constexpr bool kGpsDeclared = false;

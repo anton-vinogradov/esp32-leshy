@@ -7,7 +7,8 @@ bool shouldRetryProductStartIdentity(
     std::uint8_t completedAttempts) {
     const bool transientWireFailure =
         evidence.identityStatus == SdTransportRunStatus::ExchangeFailed ||
-        evidence.identityStatus == SdTransportRunStatus::InitTimeout;
+        evidence.identityStatus == SdTransportRunStatus::InitTimeout ||
+        evidence.identityStatus == SdTransportRunStatus::ParseRejected;
     return completedAttempts > 0 &&
            completedAttempts < kProductStartMaximumIdentityAttempts &&
            evidence.explicitStart && evidence.enrolled &&

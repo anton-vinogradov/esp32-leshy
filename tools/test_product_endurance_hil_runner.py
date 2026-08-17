@@ -141,6 +141,17 @@ class EnduranceRunnerTests(unittest.TestCase):
         self.assertIn("final_state.lease_mask", combined)
         self.assertIn("ready_after_ms", combined)
 
+    def test_missing_recovery_metrics_fail_closed_without_exception(self) -> None:
+        value = cycle(8, 9, 21, 20, False)
+        value["boot_after"]["recovery"].pop("attempts")
+        value["boot_after"]["recovery"].pop("transient_retries")
+        _summary, failures, _, _ = self.summarize(
+            value, 3, CID, 8, 21, HEAP, False
+        )
+        combined = "\n".join(failures)
+        self.assertIn("boot_after.retry_metrics", combined)
+        self.assertIn("boot_after.timeout_metrics", combined)
+
     def test_release_policy_has_non_weakenable_floor(self) -> None:
         valid, failures = RUNNER.release_policy(True, True, 28800, 32)
         self.assertTrue(valid)

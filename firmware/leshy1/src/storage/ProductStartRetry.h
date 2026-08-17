@@ -18,7 +18,7 @@ struct ProductStartIdentityRetryEvidence final {
     bool filesystemAttempted = false;
 };
 
-constexpr std::uint8_t kProductStartMaximumIdentityAttempts = 3;
+constexpr std::uint8_t kProductStartMaximumIdentityAttempts = 8;
 constexpr std::uint32_t kProductStartIdentityRetryBaseDelayMs = 250;
 
 // Only raw, read-only identification may be repeated here. The caller must not

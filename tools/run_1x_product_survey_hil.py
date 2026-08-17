@@ -158,8 +158,8 @@ def running_failures(state: dict[str, Any], expected_cid: str) -> list[str]:
     identity_retries = state.get("survey_product_identity_transient_retries")
     if (not isinstance(identity_attempts, int)
             or isinstance(identity_attempts, bool)
-            or identity_attempts < 1 or identity_attempts > 3):
-        failures.append("running.survey_product_identity_attempts: expected 1..3")
+            or identity_attempts < 1 or identity_attempts > 8):
+        failures.append("running.survey_product_identity_attempts: expected 1..8")
     if (not isinstance(identity_retries, int)
             or isinstance(identity_retries, bool)
             or not isinstance(identity_attempts, int)

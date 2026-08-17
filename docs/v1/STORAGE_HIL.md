@@ -411,6 +411,19 @@ All six boots completed on attempt 1, so this validates the normal path and boun
 orchestrator but does not yet positively exercise the reset retry. Retained summary:
 [`board-01-product-endurance-smoke-0.46.json`](../../tests/hil/evidence/board-01-product-endurance-smoke-0.46.json).
 
+The first 0.48 release restart later failed closed at explicit Product Start after
+three empty-CID exchanges (`E-HIL-065`). A same-board 32+32 read-only comparison
+then measured 13 valid identifications and a maximum failure streak of seven at
+400 kHz, versus 24 valid and a maximum streak of two at 100 kHz (`E-HIL-066`).
+Every attempt cleaned the bus, returned ownership to zero, and issued no write
+command. Product identification now runs at 100 kHz. Explicit Product Start may
+repeat at most eight fully cleaned raw-only attempts for exchange/init failures or
+an empty-CID parse rejection, and still cannot mount or write before exact CID.
+Boot recovery remains a separate maximum-three, reset-separated policy. Exact 0.49
+then passed one full product run and a three-cycle 35→38 regression (`E-HIL-067/068`).
+Retained summary:
+[`board-01-product-start-resilience-0.49.json`](../../tests/hil/evidence/board-01-product-start-resilience-0.49.json).
+
 ## Acceptance
 
 | ID | Required result |

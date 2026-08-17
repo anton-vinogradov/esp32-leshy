@@ -340,7 +340,7 @@ workflow прошли end to end:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.48.0-product-boot-timeout-measure \
+  --expected-version 0.49.0-product-start-resilience-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - без `--expected-cid` CID определяется только из admitted enrollment с совпадающими
@@ -369,7 +369,7 @@ resident agent или macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.48.0-product-boot-timeout-measure \
+  --expected-version 0.49.0-product-start-resilience-measure \
   --output /tmp/leshy-product-endurance-hil \
   --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
   --interval-seconds 900 --flash --release-endurance
@@ -403,6 +403,23 @@ watchdog 4 s. Watchdog не пишет log и не запускает shutdown h
 heap. Retained incident/regression artifact проверяет
 `check_product_recovery_acceptance.py`; это всё ещё короткий local result, а не
 release gate 8 h.
+
+Следующая release-попытка 0.48 сохранена как `E-HIL-065`: cycle 1 исчерпал все три
+Product Start identity attempts с пустым CID, затем проявил host `TypeError`
+summarizer на намеренно неполной записи failed child. Aggregate checkpoint
+восстановлен как failed. Runner теперь проверяет отсутствующие retry/timeout metrics
+без exception и сохраняет любой неожиданный orchestration exception в terminal
+checkpoint.
+
+`E-HIL-066` сравнивает по 32 isolated identification-only runs на каждой частоте. На
+той же board/card 400 kHz дали 13/32 valid и серию из семи failures, а 100 kHz —
+24/32 и maximum streak два. Все attempts были read-only, очищали bus и возвращали
+ownership в zero. Поэтому candidate 0.49 использует 100 kHz и допускает максимум
+восемь cleaned raw-only Product Start attempts, включая parse rejection с пустым
+CID, до любого filesystem call. Затем `E-HIL-067/068` проходят exact product cycle
+и three-cycle regression 35→38 с 46/46 forwarded, zero drops, invariant heap и final
+lease 0. Retained artifact проверяется
+`check_product_start_resilience_acceptance.py`; gate 8 h/32 cycles остаётся открыт.
 
 Local combined run `E-HIL-055` прошёл на exact candidate 0.45: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 с 20 passive Wi-Fi

@@ -148,7 +148,7 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
     start_attempts = running.get("survey_product_identity_attempts")
     start_retries = running.get("survey_product_identity_transient_retries")
     if (not isinstance(start_attempts, int) or isinstance(start_attempts, bool)
-            or start_attempts < 1 or start_attempts > 3
+            or start_attempts < 1 or start_attempts > 8
             or start_retries != start_attempts - 1):
         failures.append(f"{prefix}.product_start.retry_metrics: invalid")
     for field, expected in {
@@ -174,7 +174,9 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
                 or attempts < 1 or attempts > 3 or retries != attempts - 1):
             failures.append(f"{prefix}.boot_{name}.retry_metrics: invalid")
         if (not isinstance(timeouts, int) or isinstance(timeouts, bool)
-                or timeouts < 0 or timeouts > retries):
+                or timeouts < 0
+                or not isinstance(retries, int) or isinstance(retries, bool)
+                or timeouts > retries):
             failures.append(f"{prefix}.boot_{name}.timeout_metrics: invalid")
     for field, expected in {
         "generation": generation_after,
@@ -447,6 +449,11 @@ def main() -> int:
     except KeyboardInterrupt:
         failures.append("operator interrupted endurance run")
         result["status"] = "interrupted"
+    except Exception as error:
+        failures.append(
+            f"orchestrator exception: {type(error).__name__}: {error}"
+        )
+        result["status"] = "failed"
 
     elapsed = time.monotonic() - started_monotonic
     requirements_met = (

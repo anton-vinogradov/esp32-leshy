@@ -339,7 +339,7 @@ The current direct product-lane command is:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.48.0-product-boot-timeout-measure \
+  --expected-version 0.49.0-product-start-resilience-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - omitted `--expected-cid` is discovered only from an admitted enrollment whose
@@ -368,7 +368,7 @@ creating a resident agent or macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.48.0-product-boot-timeout-measure \
+  --expected-version 0.49.0-product-start-resilience-measure \
   --output /tmp/leshy-product-endurance-hil \
   --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
   --interval-seconds 900 --flash --release-endurance
@@ -401,6 +401,23 @@ injects that timeout and recovers generation 27 read-only with zero SD writes;
 heap. The retained incident/regression artifact is checked by
 `check_product_recovery_acceptance.py`; it is still a short local result, not the
 8 h release gate.
+
+The next 0.48 release attempt is retained as `E-HIL-065`: cycle 1 exhausted all
+three Product Start identity attempts with an empty CID, then exposed a host
+summarizer `TypeError` on the intentionally incomplete failed-child record. The
+aggregate checkpoint is recovered as failed. The runner now validates missing retry
+and timeout metrics without throwing and retains any unexpected orchestration
+exception in the terminal checkpoint.
+
+`E-HIL-066` compares 32 isolated identification-only runs at each clock. On the same
+board/card, 400 kHz produced 13/32 valid results and a seven-failure streak, while
+100 kHz produced 24/32 and a maximum streak of two. All attempts were read-only,
+cleaned the bus, and returned ownership to zero. Candidate 0.49 therefore uses
+100 kHz and permits at most eight cleaned raw-only Product Start attempts, including
+an empty-CID parse rejection, before any filesystem call. `E-HIL-067/068` then pass
+an exact product cycle and a 35→38 three-cycle regression with 46/46 forwarded,
+zero drops, invariant heap, and final lease 0. The retained artifact is checked by
+`check_product_start_resilience_acceptance.py`; the 8 h/32-cycle gate remains open.
 
 Local combined run `E-HIL-055` passed on the exact 0.45 candidate: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 with 20 passive Wi-Fi

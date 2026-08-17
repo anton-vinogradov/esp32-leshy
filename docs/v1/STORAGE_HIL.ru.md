@@ -403,6 +403,19 @@ read-only boots, двенадцать captures, zero drops, invariant heap и fi
 bounded orchestrator, но ещё не даёт positive evidence reset retry. Retained summary:
 [`board-01-product-endurance-smoke-0.46.json`](../../tests/hil/evidence/board-01-product-endurance-smoke-0.46.json).
 
+Первый restart release 0.48 позже fail-closed завершился на explicit Product Start
+после трёх exchanges с пустым CID (`E-HIL-065`). Same-board comparison 32+32
+read-only затем измерил 13 valid identifications и maximum failure streak семь на
+400 kHz против 24 valid и maximum streak два на 100 kHz (`E-HIL-066`). Каждый
+attempt очищал bus, возвращал ownership в zero и не отправлял write command.
+Product identification теперь работает на 100 kHz. Explicit Product Start может
+повторить максимум восемь полностью cleaned raw-only attempts для exchange/init
+failure или parse rejection с пустым CID и по-прежнему не может mount/write до
+exact CID. Boot recovery остаётся отдельной reset-separated policy максимум на три
+attempts. Exact 0.49 затем прошёл один полный product run и three-cycle regression
+35→38 (`E-HIL-067/068`). Retained summary:
+[`board-01-product-start-resilience-0.49.json`](../../tests/hil/evidence/board-01-product-start-resilience-0.49.json).
+
 ## Приёмка
 
 | ID | Обязательный результат |

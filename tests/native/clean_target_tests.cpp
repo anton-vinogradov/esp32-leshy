@@ -144,15 +144,21 @@ void testProductStartIdentityRetryStopsBeforeFilesystem() {
     evidence.identityStatus = SdTransportRunStatus::ExchangeFailed;
     evidence.observedFingerprintEmpty = true;
     evidence.identityCleanupComplete = true;
-    CHECK(shouldRetryProductStartIdentity(evidence, 1));
-    CHECK(shouldRetryProductStartIdentity(evidence, 2));
+    for (std::uint8_t attempt = 1;
+         attempt < kProductStartMaximumIdentityAttempts; ++attempt) {
+        CHECK(shouldRetryProductStartIdentity(evidence, attempt));
+    }
     CHECK(!shouldRetryProductStartIdentity(evidence, 0));
-    CHECK(!shouldRetryProductStartIdentity(evidence, 3));
+    CHECK(!shouldRetryProductStartIdentity(
+        evidence, kProductStartMaximumIdentityAttempts));
     CHECK(productStartIdentityRetryDelayMs(0) == 0);
     CHECK(productStartIdentityRetryDelayMs(1) == 250);
     CHECK(productStartIdentityRetryDelayMs(2) == 500);
-    CHECK(productStartIdentityRetryDelayMs(3) == 0);
+    CHECK(productStartIdentityRetryDelayMs(7) == 1750);
+    CHECK(productStartIdentityRetryDelayMs(8) == 0);
     evidence.identityStatus = SdTransportRunStatus::InitTimeout;
+    CHECK(shouldRetryProductStartIdentity(evidence, 1));
+    evidence.identityStatus = SdTransportRunStatus::ParseRejected;
     CHECK(shouldRetryProductStartIdentity(evidence, 1));
 
     ProductStartIdentityRetryEvidence mutated = evidence;
@@ -171,7 +177,7 @@ void testProductStartIdentityRetryStopsBeforeFilesystem() {
     mutated.physicalSpiStarted = false;
     CHECK(!shouldRetryProductStartIdentity(mutated, 1));
     mutated = evidence;
-    mutated.identityStatus = SdTransportRunStatus::ParseRejected;
+    mutated.identityStatus = SdTransportRunStatus::InvalidPlan;
     CHECK(!shouldRetryProductStartIdentity(mutated, 1));
     mutated = evidence;
     mutated.observedFingerprintEmpty = false;
