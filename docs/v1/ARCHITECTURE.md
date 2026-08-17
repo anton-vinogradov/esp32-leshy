@@ -121,6 +121,13 @@ non-idle control state until Core 1 completes cancellation cleanup or commit cle
 only then may a later Start be admitted. A static contract rejects worker-side `Idle`
 transitions, and E-HIL-085 repeats the exact physical normal path through generation
 67→68 with 25/25 forwarded, zero drops, read-only reboot/export, and final lease zero.
+Version 0.62 makes the worker's blocking-scan interval observable and snapshots that
+state when Back requests cancellation. E-HIL-086 waits for a real active passive scan,
+then proves that the request reaches `cancelling`, closes source/backend, publishes no
+generation, and cold-reopens the unchanged 68/25 Library with zero writes and leases.
+The preceding 0.61 run is retained as failed because its second cold boot lost the
+single PCF8574 read; boot now performs at most eight reads with 5 ms spacing and emits
+attempt/retry accounting. Deliberate first-read injection is still additional evidence.
 
 Product activation is a separate fail-closed boundary. `ProductStorePolicy` fixes
 the only current product root at `/leshy/sessions/v1`: automatic catalog recovery
@@ -154,12 +161,12 @@ requests worker/source shutdown and then publishes and reopens exactly the next
 generation before replacing Library; every exit closes the store/mount and routes the
 workflow back to RAM. Back from Running cancels without a commit and preserves the
 prior Library. The normal Start→live List/Detail→Stop→commit→read-only reboot/export
-path and final zero-lease cleanup are physically accepted in E-HIL-084. A physical
-cancel during an active scan still needs separate negative HIL; physical power-cut,
-endurance, LittleFS parity, missing-source TFT evidence, and independent demo goldens
-also remain open. Version 0.60 additionally holds worker control ownership until UI
-terminal acknowledgement, preventing a new Start from overtaking an older terminal
-event; E-HIL-085 confirms the unchanged normal hardware path.
+path and final zero-lease cleanup are physically accepted in E-HIL-084. Version 0.60
+additionally holds worker control ownership until UI terminal acknowledgement,
+preventing a new Start from overtaking an older terminal event; E-HIL-085 confirms the
+unchanged normal hardware path. E-HIL-086 now closes physical cancellation during an
+active scan without commit or leak. Physical power-cut, endurance, LittleFS parity,
+missing-source TFT evidence, and independent demo goldens remain open.
 
 ## Data model
 

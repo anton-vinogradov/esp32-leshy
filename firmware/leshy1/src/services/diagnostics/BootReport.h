@@ -28,6 +28,8 @@ struct BootMetrics {
     bool buzzerInactive = false;
     bool inputDetected = false;
     std::uint8_t inputRaw = 0xFF;
+    std::uint8_t inputProbeAttempts = 0;
+    std::uint8_t inputProbeTransientRetries = 0;
 };
 
 bool formatBootMetrics(const BootMetrics& metrics, char* output, std::size_t capacity);

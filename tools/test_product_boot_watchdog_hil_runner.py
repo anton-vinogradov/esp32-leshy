@@ -28,6 +28,8 @@ class ProductBootWatchdogHilRunnerTests(unittest.TestCase):
         ready = {
             "version": "test", "app_elf_sha256": APP,
             "buzzer_inactive": True, "input_detected": True,
+            "input_probe_attempts": 2,
+            "input_probe_transient_retries": 1,
             "reset_reason_code": 6,
         }
         recovery = {

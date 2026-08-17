@@ -24,6 +24,30 @@ CID = "FE343253440000002000000055019CB7"
 
 
 class ProductSurveyHilRunnerTests(unittest.TestCase):
+    def test_boot_acceptance_requires_bounded_input_probe_accounting(self) -> None:
+        ready = {
+            "version": "test", "app_elf_sha256": "a" * 64,
+            "buzzer_inactive": True, "input_detected": True,
+            "input_probe_attempts": 2,
+            "input_probe_transient_retries": 1,
+        }
+        recovery = {
+            "status": "admitted", "enrolled": True,
+            "expected_fingerprint": CID, "observed_fingerprint": CID,
+            "fingerprint_matched": True, "mounted_read_only": True,
+            "read_only_guaranteed": True, "blocked_write_attempts": 0,
+            "catalog_admitted": True, "cleanup_complete": True,
+            "physical_write_calls": 0, "generation": 1,
+            "attempts": 1, "transient_retries": 0,
+        }
+        self.assertEqual(
+            [], RUNNER.boot_failures(ready, recovery, "test", "a" * 64, CID)
+        )
+        ready["input_probe_transient_retries"] = 0
+        self.assertTrue(
+            RUNNER.boot_failures(ready, recovery, "test", "a" * 64, CID)
+        )
+
     def test_running_acceptance_requires_exact_real_bounded_accounting(self) -> None:
         state = {
             "page": "survey", "runtime_owner": "survey", "lease_mask": 15,

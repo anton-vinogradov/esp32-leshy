@@ -247,9 +247,8 @@ Detail, достигает high-water 10/64 при zero drops, затем ост
 единственного commit 66→67. Cold read-only recovery/export возвращает exact
 generation 67/27 с zero heap drift, zero writes и final lease zero. Runner сохраняет
 собственный exact runtime-emitted source hash и fail-closed terminal/cleanup evidence.
-Это принимает только нормальный asynchronous worker path; physical cancel во время
-active scan остаётся отдельным negative test, и ни один результат не заменяет
-controlled physical cuts или LittleFS parity.
+Это принимает только нормальный asynchronous worker path; ни один результат не
+заменяет controlled physical cuts или LittleFS parity.
 
 Саморевью worker обнаружило, что его control state становился `Idle` после enqueue
 terminal event, а не после обработки события UI. Version 0.60 сохраняет worker
@@ -258,8 +257,16 @@ non-idle до завершения cancellation cleanup или single commit/cle
 продвигает generation 67→68 с 25/25 forwarded, двумя live scan cycles, zero
 drops/heap drift, callbacks Start/Stop 12/8 us, read-only recovery/export и final
 lease zero. Этот normal-path regression подтверждает fix, но не заявляет deliberately
-timed repeated-Start injection, physical active-scan cancellation или power-cut
-boundary.
+timed repeated-Start injection или power-cut boundary.
+
+Exact evidence active cancel 0.62 (`E-BUILD-063`/`E-AUTO-026`/`E-HIL-086`) ждёт,
+пока physical passive scanner сообщит active blocking scan, затем отправляет Back.
+Callback 9 us фиксирует, что cancellation запрошен во время этого scan; terminal
+cleanup закрывает source/backend и освобождает lease 15→0 до cold read-only reboot.
+Generation/observations остаются ровно 68/25 при zero physical/logical SD writes и
+zero heap drift. Первая попытка 0.61 сохранена failed: post-cancel boot потерял
+one-shot read PCF8574. 0.62 добавляет bounded telemetry 1…8 попыток input probe, оба
+regression boot проходят. Physical power-cut и LittleFS parity остаются открыты.
 
 ## Реализованный и физически проверенный software-reset harness
 

@@ -12,11 +12,11 @@
 
 - **Активный этап:** `S3 — Первая сохраняемая Survey Session`.
 - **Последний закрытый этап:** `S2 — Чистая платформа 1.x`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.60 S3 progress evidence.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.62 S3 progress evidence.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
 - **Главная цель текущего этапа:** закрыть missing-source real-TFT path, physical
-  cancel-during-scan и power-cut evidence, LittleFS parity и independent-golden
+  power-cut evidence, LittleFS parity и independent-golden
   `DEMO-S3` на существующем пути real passive Survey → reboot → Library/export.
 
 ## Состояние этапов
@@ -26,7 +26,7 @@
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
-| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; exact 0.60 сохраняет persistent Core-0 worker и делает terminal `Idle` UI-acknowledgement после cleanup/commit, закрывая найденную саморевью гонку repeated Start | открыты missing-source real-TFT evidence, physical cancel-during-scan, physical power-cut, LittleFS parity, independent demo goldens и воспроизводимый `DEMO-S3` |
+| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; exact 0.60 сохраняет persistent Core-0 worker и делает terminal `Idle` UI-acknowledgement после cleanup/commit, а exact 0.62 физически отменяет active scan без commit/resource leak и добавляет bounded PCF8574 boot probe после retained transient failure 0.61 | открыты missing-source real-TFT evidence, physical power-cut, LittleFS parity, independent demo goldens и воспроизводимый `DEMO-S3` |
 | S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
@@ -294,11 +294,11 @@
 
 | Критерий среза PRD | Текущее состояние | Evidence / оставшаяся работа |
 |---|---|---|
-| 1. Clean boot + HardwareProbe | `pass` | exact boot/profile DEMO-S2 плюс pre/post boot identity S3 на 0.60 |
+| 1. Clean boot + HardwareProbe | `pass` | exact boot/profile DEMO-S2 плюс pre/post boot identity 0.62 и bounded accounting 1…8 попыток PCF8574 |
 | 2. Пользователь открывает и запускает Survey | `pass` | public five-key Actions открывают real persistent Setup; Start возвращается за 12 us до identity/scan/mount work, затем worker переводит UI в Running |
 | 3. Passive source выдаёт normalized Observations | `pass` | 25/25 accepted/forwarded за два continuous scan cycles при zero drops в E-HIL-085 |
 | 4. List → Detail → Back сохраняет работающую Survey | `pass` | exact 0.60 при открытом Detail продвигается с 12 observations/одного scan до 25/двух scans и подтверждает Back за 105,396 ms |
-| 5. Stop атомарно сохраняет один раз | `partial` | Stop callback возвращается за 8 us, source останавливается, UI подтверждает terminal только после single commit/cleanup generation 67→68; software-reset matrix проходит, physical cancel-during-scan и power-cut открыты |
+| 5. Stop атомарно сохраняет один раз | `partial` | normal Stop публикует ровно generation 67→68 после остановки source; E-HIL-086 отдельно отменяет active physical scan за 86,762 ms при неизменных generation/observations 68/25, zero SD writes и final lease 0; software-reset matrix проходит, остаётся physical power-cut |
 | 6. Reboot открывает Session при выключенном radio | `pass` | read-only exact-CID generation 68/25; Library export сообщает `radio_touched=false` |
 | 7. JSON summary export | `pass` | schema `leshy.library.export.v1`, persistent/non-simulated generation 68 |
 | 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, семь runner contract tests, static terminal-ownership guard, exact board runs и retained independent verifiers |
@@ -533,6 +533,9 @@
 | E-BUILD-062 | exact rebuild `0.60.0-product-survey-terminal-ack-measure` | pass: RAM 128 800 B, linked flash 1 111 128 B; app/factory 1 111 280/1 176 816 B; app `eadf8aea…5840`, factory `b9ec7c22…7cfd`, ELF `bb57fc84…52b5`, map `2f4708d7…e1c1c`; RTC no-init 20 B | linked flash меньше на 20 B, zero static-RAM delta и images меньше на 16 B vs 0.59; exact race-fix candidate, не stage/release build |
 | E-AUTO-025 | invariant ownership terminal event и retained verifier | pass: саморевью запрещает worker-side transition в `Idle`, требует UI acknowledgement после terminal cleanup и successful commit, machine-checks exact candidate/source/index/run/boot/live Detail/commit/export/cleanup facts | normal physical regression плюс static invariant; deliberately timed repeated-Start fault injection и physical active-scan cancel остаются дополнительным negative evidence |
 | E-HIL-085 | board-01 exact 0.60 regression terminal-ack | pass/progress only: exact flashed candidate продвигает generation 67→68 с 25/25 accepted/forwarded, high-water 9/64 и zero drops; callbacks Start/Stop занимают 12/8 us, worker продвигается 12/1→25/2 observations/scans при открытом Detail, Back подтверждён за 105,396 ms, cold read-only reopen/export восстанавливает persistent/non-simulated generation 68/25 при zero heap drift и final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-terminal-ack-0.60.json) | закрывает self-review race без promotion S3: criterion 9 и оставшиеся physical/storage/golden boundaries открыты; stage/release gate false |
+| E-BUILD-063 | exact rebuild `0.62.0-input-probe-resilience-measure` | pass: RAM 128 816 B, linked flash 1 111 564 B; app/factory 1 111 712/1 177 248 B; app `9fd32690…e0b1`, factory `d6db0c4d…ec4d`, ELF `469d9026…e4f5`, map `8ce4dd29…2b01`; RTC no-init 20 B | +132 B linked flash, +16 B static RAM и +128 B images vs failed 0.61; candidate bounded input-probe и active-cancel evidence, не stage/release build |
+| E-AUTO-026 | runner active-scan cancellation, contract bounded input boot probe и retained verifier | pass: runner ждёт observable physical `scan_active`, запрашивает Back, требует фиксации active state в request, доказывает cancellation до commit, делает cold reboot и проверяет exact unchanged Library/CID/read-only/zero-write/zero-lease facts; verifier пересчитывает fail-closed incident 0.61 и exact passing bundle 0.62 | 0.61 сохранён как failed из-за one-shot PCF8574 boot read; 0.62 ограничивает probe восемью попытками/35 ms extra и публикует attempts/retries, но deliberate first-read fault injection остаётся дополнительным hardening evidence |
+| E-HIL-086 | board-01 exact 0.62 physical active-scan cancel | pass/progress only: exact flashed candidate exposes live physical scan, подтверждает Back за 86,762 ms при stop callback 9 us, фиксирует `cancel_requested_during_scan=true`, закрывает source/backend, возвращает Home owner/lease none/0 и cold-reopens прежнюю generation 68/25 без изменений, с zero SD writes и zero heap drift; оба cold boot сообщают input detected с exact probe accounting в [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-active-cancel-0.62.json) | закрывает physical cancel-during-scan без promotion S3; открыты missing-source TFT, physical power-cut, LittleFS parity и independent goldens; stage/release gate false |
 
 ## Известные неопределённости и риски
 

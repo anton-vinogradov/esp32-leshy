@@ -1,0 +1,154 @@
+{
+  "schema": "leshy.product_survey_active_cancel_acceptance.v1",
+  "status": "pass_progress_not_stage_gate",
+  "trust_status": "unsigned_local_result",
+  "runner_gate_eligible": true,
+  "stage_gate_eligible": false,
+  "release_gate_eligible": false,
+  "evidence_ids": [
+    "E-BUILD-063",
+    "E-AUTO-026",
+    "E-HIL-086"
+  ],
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "media": {
+    "cid": "FE343253440000002000000055019CB7",
+    "product_root": "/leshy/sessions/v1",
+    "disposable_test_card": true
+  },
+  "candidate": {
+    "version": "0.62.0-input-probe-resilience-measure",
+    "firmware_sha256": "9fd32690880be8a056a0f720b15061d1f96d6eb84876dd2382e4026c222ee0b1",
+    "factory_sha256": "d6db0c4d104ee4521652755bccac1d638b37e930f66ac0b047d063ff7a55ec4d",
+    "app_elf_sha256": "469d90263a0fb6dd4d0509577d0209c5db250353e4d4c50b93069c5d8e9ae4f5",
+    "map_sha256": "8ce4dd29cf41daa60795ddf85c3bcf84bf397800ea593d172c5c1ec53e662b01",
+    "linked_flash_bytes": 1111564,
+    "static_ram_bytes": 128816,
+    "app_image_bytes": 1111712,
+    "factory_image_bytes": 1177248,
+    "rtc_noinit_bytes": 20,
+    "flashed_and_verified": true,
+    "host_tests_passed": true,
+    "firmware_build_passed": true
+  },
+  "retained": {
+    "bundle_path": "tests/hil/evidence/board-01-product-survey-active-cancel-0.62",
+    "run_sha256": "e46e656a4543c52e578788762dd6de4e20e8f5906f1f8dd1d92551d9dce156f5",
+    "artifact_index_sha256": "a19c8416fda67eb6c9bda09c68004d8cfaa73c97c43af1c38c6e175520af8fa4",
+    "runner_source_sha256": "b436e4f33f0d78ff93753b4179bd478a71a89d7c23d559f61c0742485da9ae97",
+    "runner_dependency_sha256": "e44c3e9ec5ae69466450d93b523ddea192004fde6bf9c3fb8360f30e4f8c345b",
+    "runner_source_binding": "entrypoint_runtime_emitted_and_retained_with_exact_product_dependency"
+  },
+  "retained_failed_run": {
+    "bundle_path": "tests/hil/evidence/board-01-product-survey-active-cancel-0.61-failed",
+    "candidate_version": "0.61.0-product-survey-active-cancel-measure",
+    "candidate_firmware_sha256": "58ed4ba26be93e3daa0a8e86eb21fac9a4851610a99ace53c0223236d9dee002",
+    "candidate_app_elf_sha256": "36f943611fe4bc0fdcd46fa931286048324fff5dcb3404c2203bf37c1d6367f4",
+    "run_sha256": "b88ea56f1465cbbf38ef0871d4b76a398e0987cfd67de4a98ebe5cc8e92b840f",
+    "artifact_index_sha256": "2e34c595875f662301e8adcf0234ca63d57d1d25c2b682f2717af5d95b3cea2c",
+    "runner_source_sha256": "b436e4f33f0d78ff93753b4179bd478a71a89d7c23d559f61c0742485da9ae97",
+    "passed": false,
+    "gate_eligible": false,
+    "failure": "boot.input_detected: False != True",
+    "survey_cancel_path_itself_completed": true,
+    "input_probe_implementation": "single_attempt"
+  },
+  "input_boot_resilience": {
+    "maximum_attempts": 8,
+    "retry_delay_ms": 5,
+    "maximum_additional_delay_ms": 35,
+    "attempts_and_retries_emitted": true,
+    "boot_before_attempts": 1,
+    "boot_before_transient_retries": 0,
+    "boot_after_attempts": 1,
+    "boot_after_transient_retries": 0,
+    "boot_before_detected": true,
+    "boot_after_detected": true,
+    "physical_fault_injection": false
+  },
+  "worker_contract": {
+    "persistent_task": true,
+    "task_core": 0,
+    "event_queue_capacity": 8,
+    "observation_queue_capacity": 64,
+    "ui_owns_pipeline": true,
+    "active_scan_state_observable": true,
+    "cancel_request_snapshots_active_scan": true,
+    "worker_terminal_state_held_until_ui_acknowledgement": true,
+    "start_action_budget_us": 10000,
+    "stop_action_budget_us": 10000,
+    "cancel_ack_budget_ms": 150,
+    "fail_closed_cleanup": true
+  },
+  "run": {
+    "run_id": "1486d67e43d1315db1688a8287612beb",
+    "exact_cid": "FE343253440000002000000055019CB7",
+    "generation_before": 68,
+    "generation_after": 68,
+    "observations_before": 25,
+    "observations_after": 25,
+    "start_action_us": 12,
+    "stop_action_us": 9,
+    "cancel_ack_ms": 86.76170837134123,
+    "boot_before_attempts": 1,
+    "boot_after_attempts": 1,
+    "boot_transient_retries": 0,
+    "boot_timeout_restarts": 0,
+    "heap_total_bytes": 272688,
+    "heap_free_bytes": 208912,
+    "heap_min_free_bytes": 188720,
+    "heap_drift_bytes": 0,
+    "scan_drops": 0,
+    "pipeline_drops": 0,
+    "captures": 2,
+    "final_page": "home",
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "acceptance": {
+    "active_physical_scan_observed": true,
+    "cancel_requested_during_active_scan": true,
+    "cancel_acknowledged_before_terminal_cleanup": true,
+    "cancelled_without_commit": true,
+    "generation_and_observations_unchanged": true,
+    "source_and_backend_closed": true,
+    "cleanup_complete_before_reboot": true,
+    "reboot_recovered_prior_library_read_only": true,
+    "zero_sd_writes": true,
+    "zero_heap_drift": true,
+    "zero_final_resources": true
+  },
+  "visual_review": {
+    "manual_review": "pass",
+    "independent_goldens": false,
+    "states": [
+      "setup",
+      "cancelled"
+    ]
+  },
+  "s3_criteria": {
+    "1_clean_boot_probe": "pass_with_bounded_input_probe",
+    "2_user_start": "pass_async_worker",
+    "3_passive_normalized_observations": "pass_prior_exact_regression",
+    "4_list_detail_back": "pass_prior_exact_regression",
+    "5_atomic_stop_commit": "pass_cancel_during_active_scan_software_reset_only",
+    "6_reboot_offline_reopen": "pass_prior_library_unchanged",
+    "7_json_summary_export": "pass_prior_exact_regression",
+    "8_host_and_hil_coverage": "pass",
+    "9_missing_source_visible_zero_lease": "partial_host_contract_only"
+  },
+  "open_gate_work": [
+    "missing_source_real_tft",
+    "physical_power_cut",
+    "littlefs_parity",
+    "independent_demo_goldens"
+  ],
+  "limitations": [
+    "local unsigned evidence on one board and one enrolled disposable SD card",
+    "the exact active-scan cancel path is physical, but PCF8574 first-read fault injection remains additional hardening evidence",
+    "controlled physical power cut, missing-source real-TFT behavior, LittleFS parity, and independent demo goldens remain open",
+    "no RF detector, external camera, second board, or second dense RF environment",
+    "runner eligibility is not S3 stage or release eligibility"
+  ]
+}

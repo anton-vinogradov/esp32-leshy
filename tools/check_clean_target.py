@@ -98,6 +98,14 @@ def main() -> int:
     if buzzer_boot not in entry or serial_boot not in entry or entry.find(buzzer_boot) > entry.find(serial_boot):
         errors.append("buzzer inactive invariant must be established before console startup")
 
+    for marker in (
+        "kInputProbeMaxAttempts = 8",
+        "probeInputAtBoot(&lastInputRaw, &bootMetrics.inputProbeAttempts)",
+        "bootMetrics.inputProbeTransientRetries",
+    ):
+        if marker not in entry:
+            errors.append(f"bounded input boot probe is missing: {marker}")
+
     if not keypad_frontend_path.is_file():
         errors.append("testable physical keypad frontend is missing")
     else:
@@ -382,6 +390,19 @@ def main() -> int:
                 errors.append(
                     f"product Survey UI action is missing worker handoff: {marker}"
                 )
+
+    for marker in (
+        "setProductSurveyScanActive(true);",
+        "setProductSurveyScanActive(false);",
+        '\\"survey_product_scan_active\\"',
+        "productSurveyRuntime.cancelRequestedDuringScan = scanWasActive;",
+        '\\"survey_product_cancel_requested_during_scan\\"',
+        "BoardWifiPassiveScanner::cancelActiveScan();",
+    ):
+        if marker not in entry:
+            errors.append(
+                f"product Survey active-scan cancellation evidence is missing: {marker}"
+            )
 
     if not product_start_retry_path.is_file():
         errors.append("Product Start identity retry policy is missing")

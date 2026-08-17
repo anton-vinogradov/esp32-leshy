@@ -553,6 +553,8 @@ void testBootReportIsBoundedAndMachineReadable() {
     metrics.buzzerInactive = true;
     metrics.inputDetected = true;
     metrics.inputRaw = 255;
+    metrics.inputProbeAttempts = 2;
+    metrics.inputProbeTransientRetries = 1;
     char output[768] = {};
     CHECK(formatBootMetrics(metrics, output, sizeof(output)));
     CHECK(std::strstr(output, "\"legacy_sources\":false") != nullptr);
@@ -564,6 +566,8 @@ void testBootReportIsBoundedAndMachineReadable() {
     CHECK(std::strstr(output, "\"buzzer_safety_configured\":true") != nullptr);
     CHECK(std::strstr(output, "\"buzzer_inactive\":true") != nullptr);
     CHECK(std::strstr(output, "\"input_detected\":true") != nullptr);
+    CHECK(std::strstr(output, "\"input_probe_attempts\":2") != nullptr);
+    CHECK(std::strstr(output, "\"input_probe_transient_retries\":1") != nullptr);
 
     char tooSmall[8] = {};
     CHECK(!formatBootMetrics(metrics, tooSmall, sizeof(tooSmall)));

@@ -135,6 +135,8 @@ using leshy1::ui::visual::Tone;
 
 constexpr std::uint32_t kConsoleBaud = 115200;
 constexpr std::uint32_t kI2cHz = 100000;
+constexpr std::uint8_t kInputProbeMaxAttempts = 8;
+constexpr std::uint32_t kInputProbeRetryDelayMs = 5;
 constexpr leshy1::kernel::runtime::ResourceOwner kSdIdentificationOwner = 2;
 constexpr leshy1::kernel::runtime::ResourceOwner kWifiIngressOwner = 3;
 constexpr leshy1::kernel::runtime::ResourceOwner kBootCatalogOwner = 4;
@@ -300,6 +302,7 @@ struct ProductSurveyRuntimeState final {
     BoardWifiPassiveScanResult scan{};
     bool workerReady = false;
     bool sourceActive = false;
+    bool cancelRequestedDuringScan = false;
     std::uint32_t scanCycles = 0;
     std::uint64_t startActionUs = 0;
     std::uint64_t stopActionUs = 0;
@@ -364,6 +367,7 @@ ProductSurveyWorkerControl productSurveyWorkerControl =
     ProductSurveyWorkerControl::Idle;
 std::uint32_t productSurveyWorkerOwnedResources = 0;
 bool productSurveyWorkerReady = false;
+bool productSurveyWorkerScanActive = false;
 
 void renderInteractiveScreen();
 void broadcast(const char* line);
@@ -618,6 +622,19 @@ bool productSurveyStopRequested() {
 bool productSurveyCancelRequested() {
     return productSurveyControl() ==
            ProductSurveyWorkerControl::CancelRequested;
+}
+
+bool productSurveyScanActive() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool active = productSurveyWorkerScanActive;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return active;
+}
+
+void setProductSurveyScanActive(bool active) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    productSurveyWorkerScanActive = active;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
 }
 
 void applyProductSurveyWorkerReport(
@@ -886,6 +903,7 @@ void runProductSurveyWorker(void*) {
         if (productSurveyObservations != nullptr) {
             xQueueReset(productSurveyObservations);
         }
+        setProductSurveyScanActive(false);
         BoardWifiPassiveScanner scanner;
         ProductSurveyWorkerReport report =
             prepareProductSurveyWorker(&scanner);
@@ -919,9 +937,11 @@ void runProductSurveyWorker(void*) {
         std::uint32_t scanCycles = 0;
         bool scanFailed = false;
         while (!productSurveyStopRequested()) {
+            setProductSurveyScanActive(true);
             const BoardWifiPassiveScanResult scan = scanner.scan(
                 leshy1::drivers::wifi::defaultPassivePlan(),
                 enqueueProductSurveyWorkerRecord, nullptr);
+            setProductSurveyScanActive(false);
             if (productSurveyStopRequested()) break;
             if (!scan.valid()) {
                 report.status = "scan_failed";
@@ -939,6 +959,7 @@ void runProductSurveyWorker(void*) {
 
         const ProductSurveyWorkerControl terminalControl =
             productSurveyControl();
+        setProductSurveyScanActive(false);
         report.scannerCleanupComplete = scanner.end();
         report.sourceActive = false;
         if (scanFailed ||
@@ -1023,6 +1044,7 @@ bool startProductSurvey() {
     productSurveyRuntime.workerReady = true;
     portENTER_CRITICAL(&productSurveyWorkerMux);
     productSurveyWorkerOwnedResources = appRuntime.activeResources();
+    productSurveyWorkerScanActive = false;
     productSurveyWorkerControl = ProductSurveyWorkerControl::Starting;
     portEXIT_CRITICAL(&productSurveyWorkerMux);
     xTaskNotifyGive(productSurveyWorkerTaskHandle);
@@ -1052,9 +1074,13 @@ bool requestProductSurveyWorkerStop(bool cancel) {
         control != ProductSurveyWorkerControl::Running) {
         return false;
     }
+    const bool scanWasActive = productSurveyScanActive();
     setProductSurveyControl(
         cancel ? ProductSurveyWorkerControl::CancelRequested
                : ProductSurveyWorkerControl::StopRequested);
+    if (cancel) {
+        productSurveyRuntime.cancelRequestedDuringScan = scanWasActive;
+    }
     productSurveyRuntime.status = cancel ? "cancelling" : "stopping";
     productSurveyRuntime.stopActionUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - actionStartedUs;
@@ -1724,6 +1750,17 @@ bool readInputRaw(std::uint8_t* value) {
     if (received != 1 || Wire.available() == 0) return false;
     *value = static_cast<std::uint8_t>(Wire.read());
     return true;
+}
+
+bool probeInputAtBoot(std::uint8_t* value, std::uint8_t* attempts) {
+    if (value == nullptr || attempts == nullptr) return false;
+    *attempts = 0;
+    for (std::uint8_t attempt = 1; attempt <= kInputProbeMaxAttempts; ++attempt) {
+        *attempts = attempt;
+        if (readInputRaw(value)) return true;
+        if (attempt < kInputProbeMaxAttempts) delay(kInputProbeRetryDelayMs);
+    }
+    return false;
 }
 
 void pollPhysicalInput(void*) {
@@ -2476,6 +2513,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_cleanup_complete\":%s,"
                       "\"survey_product_worker_ready\":%s,"
                       "\"survey_product_source_active\":%s,"
+                      "\"survey_product_scan_active\":%s,"
+                      "\"survey_product_cancel_requested_during_scan\":%s,"
                       "\"survey_product_scan_cycles\":%lu,"
                       "\"survey_product_start_action_us\":%llu,"
                       "\"survey_product_stop_action_us\":%llu,"
@@ -2542,6 +2581,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       productSurveyRuntime.cleanupComplete ? "true" : "false",
                       productSurveyRuntime.workerReady ? "true" : "false",
                       productSurveyRuntime.sourceActive ? "true" : "false",
+                      productSurveyScanActive() ? "true" : "false",
+                      productSurveyRuntime.cancelRequestedDuringScan
+                          ? "true" : "false",
                       static_cast<unsigned long>(
                           productSurveyRuntime.scanCycles),
                       static_cast<unsigned long long>(
@@ -6529,7 +6571,12 @@ void setup() {
     bootMetrics.displayReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
 
     Wire.begin(BoardProfile::kI2cSdaPin, BoardProfile::kI2cSclPin, kI2cHz);
-    bootMetrics.inputDetected = readInputRaw(&lastInputRaw);
+    bootMetrics.inputDetected =
+        probeInputAtBoot(&lastInputRaw, &bootMetrics.inputProbeAttempts);
+    bootMetrics.inputProbeTransientRetries =
+        bootMetrics.inputProbeAttempts == 0
+            ? 0
+            : static_cast<std::uint8_t>(bootMetrics.inputProbeAttempts - 1U);
     bootMetrics.inputRaw = lastInputRaw;
     physicalButtonInput.reset(lastInputRaw, millis());
     physicalInputEvents = xQueueCreate(kPhysicalInputQueueCapacity,

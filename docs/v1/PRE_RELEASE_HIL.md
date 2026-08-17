@@ -325,6 +325,14 @@ the current combined GitHub workflows have passed end to end:
   by `check_product_survey_worker_acceptance.py`; the retained 0.60 regression adds a
   source invariant that terminal `Idle` is exposed only after UI cleanup/commit and is
   checked by `check_product_survey_terminal_ack_acceptance.py`;
+- `tools/run_1x_product_survey_cancel_hil.py` is the dedicated active-scan negative
+  lane. It waits for firmware to expose a physically active passive scan, sends Back,
+  requires the cancellation request to snapshot that active state, enforces a 150 ms
+  acknowledgement budget and 10 ms callback budget, proves no generation/observation
+  change after cold reboot, and ends with closed source/backend, zero writes, and lease
+  0. `check_product_survey_active_cancel_acceptance.py` rehashes the retained failed
+  0.61 input-probe incident and the exact passing 0.62 bundle; 0.62 also emits bounded
+  PCF8574 boot-probe attempts/retries;
 - `tools/run_1x_release_hil.py` is the release-facing foreground orchestrator. It
   runs product first, derives the admitted exact CID, safely removes only its NVS
   enrollment, flashes and runs generic `device-smoke` revision 6, performs exact-CID
@@ -354,8 +362,19 @@ The current direct product-lane command is:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.60.0-product-survey-terminal-ack-measure \
+  --expected-version 0.62.0-input-probe-resilience-measure \
   --output /tmp/leshy-product-survey-hil --flash
+```
+
+The dedicated active-scan cancellation regression is:
+
+```bash
+python tools/run_1x_product_survey_cancel_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.62.0-input-probe-resilience-measure \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output /tmp/leshy-product-survey-cancel-hil --flash
 ```
 - omitted `--expected-cid` is discovered only from an admitted enrollment whose
   expected and observed 32-byte fingerprints match; an explicit value remains

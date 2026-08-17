@@ -327,6 +327,14 @@ workflow прошли end to end:
   retained regression 0.60 добавляет source invariant, что terminal `Idle` выставляется
   только после UI cleanup/commit, и проверяется
   `check_product_survey_terminal_ack_acceptance.py`;
+- `tools/run_1x_product_survey_cancel_hil.py` — dedicated negative lane active scan.
+  Он ждёт, пока firmware покажет physically active passive scan, отправляет Back,
+  требует snapshot этого active state в cancellation request, применяет budgets
+  acknowledgement 150 ms и callback 10 ms, после cold reboot доказывает отсутствие
+  изменений generation/observations и заканчивает с закрытыми source/backend, zero
+  writes и lease 0. `check_product_survey_active_cancel_acceptance.py` пересчитывает
+  retained failed input-probe incident 0.61 и exact passing bundle 0.62; 0.62 также
+  публикует bounded attempts/retries boot probe PCF8574;
 - `tools/run_1x_release_hil.py` — release-facing foreground orchestrator. Он сначала
   запускает product, получает exact CID только из admitted enrollment, безопасно
   удаляет лишь enrollment в NVS, прошивает и запускает generic `device-smoke`
@@ -355,8 +363,19 @@ workflow прошли end to end:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.60.0-product-survey-terminal-ack-measure \
+  --expected-version 0.62.0-input-probe-resilience-measure \
   --output /tmp/leshy-product-survey-hil --flash
+```
+
+Dedicated regression отмены active scan:
+
+```bash
+python tools/run_1x_product_survey_cancel_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.62.0-input-probe-resilience-measure \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output /tmp/leshy-product-survey-cancel-hil --flash
 ```
 - без `--expected-cid` CID определяется только из admitted enrollment с совпадающими
   expected/observed 32-byte fingerprints; явное значение остаётся для jobs с

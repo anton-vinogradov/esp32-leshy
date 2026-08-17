@@ -180,6 +180,13 @@ enqueue Failed/Cancelled/Stopped, до обработки terminal event на Co
 разрешён следующий Start. Static contract отклоняет worker-side transition в `Idle`,
 а E-HIL-085 повторяет exact physical normal path через generation 67→68 с 25/25
 forwarded, zero drops, read-only reboot/export и final lease zero.
+Version 0.62 делает интервал blocking scan worker наблюдаемым и snapshot этого state
+при запросе Back/cancel. E-HIL-086 ждёт реальный active passive scan, затем доказывает
+переход request в `cancelling`, закрытие source/backend, отсутствие новой generation и
+cold reopen неизменной Library 68/25 с zero writes/leases. Предыдущий run 0.61 сохранён
+как failed: второй cold boot потерял единственный read PCF8574. Boot теперь делает не
+более восьми reads с интервалом 5 ms и публикует attempts/retries; deliberate injection
+первого failed read остаётся дополнительным evidence.
 
 Product activation выделена в отдельную fail-closed boundary. `ProductStorePolicy`
 фиксирует единственный текущий product root `/leshy/sessions/v1`: automatic catalog
@@ -212,12 +219,12 @@ adapter в 0.59 выполняет только passive scans в persistent boun
 generation до замены Library; каждый exit закрывает store/mount и возвращает workflow
 на RAM. Back из Running cancels без commit и сохраняет prior Library. Нормальный path
 Start→live List/Detail→Stop→commit→read-only reboot/export и финальный zero-lease
-cleanup физически принят в E-HIL-084. Physical cancel во время активного scan ещё
-требует отдельного negative HIL; physical power-cut, endurance, LittleFS parity,
-missing-source TFT evidence и independent demo goldens также остаются открыты.
-Version 0.60 дополнительно удерживает ownership control worker до UI terminal
-acknowledgement, не позволяя новому Start обогнать старый terminal event; E-HIL-085
-подтверждает неизменный normal hardware path.
+cleanup физически принят в E-HIL-084. Version 0.60 дополнительно удерживает ownership
+control worker до UI terminal acknowledgement, не позволяя новому Start обогнать
+старый terminal event; E-HIL-085 подтверждает неизменный normal hardware path.
+E-HIL-086 теперь закрывает physical cancel во время active scan без commit/leak.
+Physical power-cut, endurance, LittleFS parity, missing-source TFT evidence и
+independent demo goldens остаются открыты.
 
 ## 7. Модель данных
 

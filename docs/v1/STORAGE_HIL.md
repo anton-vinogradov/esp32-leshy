@@ -252,8 +252,8 @@ queue high-water 10/64 with zero drops, then stops before the single 66→67 com
 Cold read-only recovery/export returns exact generation 67/27 with zero heap drift,
 zero writes, and final lease zero. The runner retains its exact runtime-emitted source
 hash and fail-closed terminal/cleanup evidence. This accepts the normal asynchronous
-worker path only; physical cancel during an active scan remains a separate negative
-test and neither result substitutes for controlled physical cuts or LittleFS parity.
+worker path only; neither result substitutes for controlled physical cuts or
+LittleFS parity.
 
 Self-review of that worker found that its control state became `Idle` after enqueueing
 a terminal event rather than after the UI consumed it. Version 0.60 keeps the worker
@@ -262,7 +262,16 @@ adds a static rejection rule for worker-side `Idle`. Exact E-HIL-085 then advanc
 generation 67→68 with 25/25 forwarded, two live scan cycles, zero drops/heap drift,
 12/8 us Start/Stop callbacks, read-only recovery/export, and final lease zero. This
 normal-path regression validates the fix without claiming deliberately timed repeated-
-Start injection, physical active-scan cancellation, or any power-cut boundary.
+Start injection or any power-cut boundary.
+
+Exact 0.62 active-cancel evidence (`E-BUILD-063`/`E-AUTO-026`/`E-HIL-086`) waits
+until the physical passive scanner reports an active blocking scan, then issues Back.
+The 9 us callback records that cancellation was requested during that scan; terminal
+cleanup closes source/backend and releases lease 15→0 before a cold read-only reboot.
+Generation/observations remain exactly 68/25 with zero physical/logical SD writes and
+zero heap drift. The first 0.61 attempt is retained failed because its post-cancel boot
+lost a one-shot PCF8574 read; 0.62 adds bounded 1…8-attempt input-probe telemetry and
+both regression boots pass. Physical power-cut and LittleFS parity remain open.
 
 ## Implemented and physically exercised software-reset harness
 

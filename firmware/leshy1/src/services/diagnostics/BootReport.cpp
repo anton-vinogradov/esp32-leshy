@@ -28,7 +28,9 @@ bool formatBootMetrics(const BootMetrics& metrics, char* output, std::size_t cap
         "\"flash_bytes\":%lu,\"psram_found\":%s,\"psram_bytes\":%lu,"
         "\"heap_total\":%lu,\"heap_free\":%lu,\"heap_min_free\":%lu,"
         "\"buzzer_safety_configured\":%s,\"buzzer_inactive\":%s,"
-        "\"input_detected\":%s,\"input_raw\":%u}",
+        "\"input_detected\":%s,\"input_raw\":%u,"
+        "\"input_probe_attempts\":%u,"
+        "\"input_probe_transient_retries\":%u}",
         safe(metrics.version), safe(metrics.profile), safe(metrics.profileRevision),
         safe(metrics.appElfSha256),
         static_cast<unsigned long long>(metrics.setupEnterUs),
@@ -46,7 +48,9 @@ bool formatBootMetrics(const BootMetrics& metrics, char* output, std::size_t cap
         metrics.buzzerSafetyConfigured ? "true" : "false",
         metrics.buzzerInactive ? "true" : "false",
         metrics.inputDetected ? "true" : "false",
-        static_cast<unsigned>(metrics.inputRaw));
+        static_cast<unsigned>(metrics.inputRaw),
+        static_cast<unsigned>(metrics.inputProbeAttempts),
+        static_cast<unsigned>(metrics.inputProbeTransientRetries));
     return fits(written, capacity);
 }
 

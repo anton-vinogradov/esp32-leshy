@@ -12,10 +12,10 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S3 — First persistent Survey Session`.
 - **Last completed stage:** `S2 — Clean 1.x platform`.
-- **Repository baseline:** `main` with retained exact-candidate 0.60 S3 progress evidence.
+- **Repository baseline:** `main` with retained exact-candidate 0.62 S3 progress evidence.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
-- **Current objective:** close the missing-source real-TFT path, physical
-  cancel-during-scan and power-cut evidence, LittleFS parity, and independent-golden
+- **Current objective:** close the missing-source real-TFT path, physical power-cut
+  evidence, LittleFS parity, and independent-golden
   `DEMO-S3` on the existing real passive Survey → reboot → Library/export path.
 
 ## Stage state
@@ -25,7 +25,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
-| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; exact 0.60 retains the persistent Core-0 worker and makes terminal `Idle` a UI acknowledgement after cleanup/commit, closing a repeated-Start race found by self-review | missing-source real-TFT evidence, physical cancel-during-scan, physical power-cut, LittleFS parity, independent demo goldens, and reproducible `DEMO-S3` remain |
+| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; exact 0.60 retains the persistent Core-0 worker and makes terminal `Idle` a UI acknowledgement after cleanup/commit, while exact 0.62 physically cancels during an active scan without commit or resource leak and adds a bounded PCF8574 boot probe after a retained 0.61 transient failure | missing-source real-TFT evidence, physical power-cut, LittleFS parity, independent demo goldens, and reproducible `DEMO-S3` remain |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
@@ -295,11 +295,11 @@ or the physical storage exit condition remains partial.
 
 | PRD slice criterion | Current state | Evidence / remaining work |
 |---|---|---|
-| 1. Clean boot + HardwareProbe | `pass` | DEMO-S2 exact boot/profile plus 0.60 S3 pre/post boot identity |
+| 1. Clean boot + HardwareProbe | `pass` | DEMO-S2 exact boot/profile plus 0.62 pre/post boot identity and bounded 1…8-attempt PCF8574 accounting |
 | 2. User opens and starts Survey | `pass` | public five-key Actions open real persistent Setup; Start returns in 12 us before identity/scan/mount work, then reaches Running through the worker |
 | 3. Passive source emits normalized Observations | `pass` | 25/25 accepted/forwarded over two continuous scan cycles with zero drops in E-HIL-085 |
 | 4. List → Detail → Back preserves running Survey | `pass` | exact 0.60 progresses from 12 observations/one scan to 25/two scans while Detail is open and acknowledges Back in 105.396 ms |
-| 5. Stop atomically persists once | `partial` | Stop callback returns in 8 us, source stops, UI acknowledges terminal only after the single generation 67→68 commit/cleanup; software-reset matrix passes, while physical cancel-during-scan and power-cut remain |
+| 5. Stop atomically persists once | `partial` | normal Stop publishes exactly generation 67→68 after source stop; E-HIL-086 separately cancels an active physical scan in 86.762 ms with generation/observations unchanged at 68/25, zero SD writes and final lease 0; software-reset matrix passes, while physical power-cut remains |
 | 6. Reboot reopens with radios inactive | `pass` | read-only exact-CID generation 68/25; Library export reports `radio_touched=false` |
 | 7. JSON summary export | `pass` | schema `leshy.library.export.v1`, persistent/non-simulated generation 68 |
 | 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, seven runner contract tests, static terminal-ownership guard, exact board runs, and retained independent verifiers |
@@ -534,6 +534,9 @@ not a hidden S3 completion criterion.
 | E-BUILD-062 | exact `0.60.0-product-survey-terminal-ack-measure` rebuild | pass: RAM 128,800 B, linked flash 1,111,128 B; app/factory 1,111,280/1,176,816 B; app `eadf8aea…5840`, factory `b9ec7c22…7cfd`, ELF `bb57fc84…52b5`, map `2f4708d7…e1c1c`; RTC no-init 20 B | 20 B less linked flash, zero static-RAM delta, and 16 B smaller images vs 0.59; exact race-fix candidate, not a stage/release build |
 | E-AUTO-025 | terminal-event ownership invariant and retained verifier | pass: self-review forbids worker-side transition to `Idle`, requires UI acknowledgement after both cleanup and successful commit terminals, and machine-checks exact candidate/source/index/run/boot/live Detail/commit/export/cleanup facts | normal physical regression plus static invariant; deliberately timed repeated-Start fault injection and physical active-scan cancel remain additional negative evidence |
 | E-HIL-085 | board-01 exact 0.60 terminal-ack regression | pass/progress only: exact flashed candidate advances generation 67→68 with 25/25 accepted/forwarded, queue high-water 9/64 and zero drops; Start/Stop callbacks take 12/8 us, worker progresses 12/1→25/2 observations/scans while Detail is open, Back is acknowledged in 105.396 ms, and cold read-only reopen/export recovers persistent/non-simulated generation 68/25 with zero heap drift and final Home owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-terminal-ack-0.60.json) | closes the self-review race without promoting S3: criterion 9 and remaining physical/storage/golden boundaries stay open; stage/release gate false |
+| E-BUILD-063 | exact `0.62.0-input-probe-resilience-measure` rebuild | pass: RAM 128,816 B, linked flash 1,111,564 B; app/factory 1,111,712/1,177,248 B; app `9fd32690…e0b1`, factory `d6db0c4d…ec4d`, ELF `469d9026…e4f5`, map `8ce4dd29…2b01`; RTC no-init 20 B | +132 B linked flash, +16 B static RAM, and +128 B images vs failed 0.61; bounded input-probe and active-cancel evidence candidate, not a stage/release build |
+| E-AUTO-026 | active-scan cancellation runner, bounded input boot-probe contract, and retained verifier | pass: the runner waits for an observable physical `scan_active`, requests Back, requires the request to record that active state, proves cancellation before commit, cold-reboots, and checks exact unchanged Library/CID/read-only/zero-write/zero-lease facts; the verifier rehashes both the fail-closed 0.61 incident and exact passing 0.62 bundles | 0.61 is retained as failed on a one-shot PCF8574 boot read; 0.62 bounds the probe to 8 attempts/35 ms extra and reports attempts/retries, but deliberate first-read fault injection remains additional hardening evidence |
+| E-HIL-086 | board-01 exact 0.62 physical active-scan cancel | pass/progress only: exact flashed candidate exposes a live physical scan, acknowledges Back in 86.762 ms with a 9 us stop callback, records `cancel_requested_during_scan=true`, closes source/backend, returns Home owner/lease none/0, and cold-reopens the prior generation 68/25 unchanged with zero SD writes and zero heap drift; both cold boots report input detected with exact probe accounting in the [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-active-cancel-0.62.json) | closes physical cancel-during-scan without promoting S3; missing-source TFT, physical power-cut, LittleFS parity, and independent goldens remain; stage/release gate false |
 
 ## Known uncertainties and risks
 
