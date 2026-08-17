@@ -339,7 +339,7 @@ The current direct product-lane command is:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.45.0-product-survey-measure \
+  --expected-version 0.46.0-product-boot-retry-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - omitted `--expected-cid` is discovered only from an admitted enrollment whose
@@ -360,6 +360,33 @@ python tools/run_1x_product_survey_hil.py \
   disposable local receipt; `publish` re-proves provenance/same bytes and creates a
   1.x Release without rebuilding. Host tests cover SemVer/run identity, the exact
   artifact set, serial selection, and unsafe archive rejection.
+
+The foreground endurance lane composes that exact product command rather than
+creating a resident agent or macOS service:
+
+```bash
+python tools/run_1x_product_endurance_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.46.0-product-boot-retry-measure \
+  --output /tmp/leshy-product-endurance-hil \
+  --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
+  --interval-seconds 900 --flash --release-endurance
+```
+
+It flashes only cycle 1, verifies candidate/app/CID continuity on every later cycle,
+and checkpoints the aggregate run plus SHA-256 index after each child. Each cycle
+must advance exactly one generation, keep scan/pipeline drops at zero, perform two
+read-only recovery boots, retain four GRAM captures, preserve the first heap tuple,
+and finish at Home with no owner or lease. A 30-second heartbeat keeps the one-shot
+foreground process observable. `--release-endurance` is rejected unless verified
+flashing, at least 28,800 seconds, and at least 32 cycles are all configured; short
+development runs remain `gate_eligible=false` even when they pass.
+
+`E-HIL-059` is the first retained runner smoke: three cycles, six cold boots,
+generation 12→15, 51/51 observations, zero drops/heap drift, and final lease 0. It is
+deliberately not endurance evidence. The required 8 h/32-cycle lane is a separate
+run, while physical power-cut and the external-camera subset remain separate gates.
 
 Local combined run `E-HIL-055` passed on the exact 0.45 candidate: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 with 20 passive Wi-Fi

@@ -340,7 +340,7 @@ workflow прошли end to end:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.45.0-product-survey-measure \
+  --expected-version 0.46.0-product-boot-retry-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - без `--expected-cid` CID определяется только из admitted enrollment с совпадающими
@@ -361,6 +361,34 @@ python tools/run_1x_product_survey_hil.py \
   disposable локальную квитанцию; `publish` повторно доказывает provenance/same bytes
   и создаёт 1.x Release без rebuild. Host tests покрывают SemVer/run identity, exact
   artifact set, serial selection и unsafe archive rejection.
+
+Foreground endurance lane компонует ту же exact product command и не создаёт
+resident agent или macOS service:
+
+```bash
+python tools/run_1x_product_endurance_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.46.0-product-boot-retry-measure \
+  --output /tmp/leshy-product-endurance-hil \
+  --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
+  --interval-seconds 900 --flash --release-endurance
+```
+
+Он прошивает только cycle 1, а в следующих проверяет continuity candidate/app/CID.
+После каждого child сохраняются aggregate run и SHA-256 index. Каждый цикл обязан
+продвинуть ровно одну generation, сохранить scan/pipeline drops равными нулю,
+выполнить два read-only recovery boots, удержать четыре GRAM captures, не изменить
+первый heap tuple и закончить на Home без owner/lease. Heartbeat каждые 30 секунд
+делает одноразовый foreground process наблюдаемым. `--release-endurance` отклоняется,
+если не заданы verified flash, минимум 28 800 секунд и 32 cycles; короткий development
+run даже при pass остаётся `gate_eligible=false`.
+
+`E-HIL-059` — первый сохранённый smoke runner: три цикла, шесть cold boots,
+generation 12→15, 51/51 observations, zero drops/heap drift и final lease 0. Он
+намеренно не считается endurance evidence. Обязательный lane 8 h/32 cycles —
+отдельный run; physical power-cut и external-camera subset также остаются отдельными
+gates.
 
 Local combined run `E-HIL-055` прошёл на exact candidate 0.45: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 с 20 passive Wi-Fi

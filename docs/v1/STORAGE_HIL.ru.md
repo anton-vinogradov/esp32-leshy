@@ -379,6 +379,30 @@ cold-boot recovery и сохранили одинаковые heap total/free/mi
 endurance. Retained summary:
 [`board-01-product-repeatability-0.45.json`](../../tests/hil/evidence/board-01-product-repeatability-0.45.json).
 
+Этот probe также обнаружил intermittent cold-boot identity failure: enrolled CID
+валиден, observed CID равен всем нулям, mount/root/catalog ещё не начинались, permit
+сообщает `missing_media`, cleanup complete, ownership возвращён в zero, записей не
+было. Промежуточный эксперимент 0.46 повторял весь raw identity + mount path внутри
+одного boot. Он завершил два цикла 9→10→11, но следующий post-commit boot остановился
+после ROM loader и потерял USB endpoint до полного снятия питания. Поэтому
+`E-HIL-058` отклоняет same-boot re-entry.
+
+Сохранённый design 0.46 разрешает retry только для этой точной fail-closed signature.
+В одном boot выполняется одна попытка; RTC no-init state хранит максимум два software
+restart с задержками 250/500 ms, то есть максимум три attempts. Non-software reset,
+unenrolled device, success, любая более широкая ошибка, leaked ownership, incomplete
+cleanup или write-blocker hit сбрасывают/запрещают retry. Final recovery evidence
+публикует `attempts` и `transient_retries`; product и endurance runners проверяют
+`1..3` и `retries = attempts - 1`, а расширенный ready budget разрешают только после
+фактического retry.
+
+После полного снятия питания exact candidate 0.46 прошёл three-cycle smoke
+endurance runner `E-HIL-059`: generation 12→15, 51/51 observations forwarded, шесть
+read-only boots, двенадцать captures, zero drops, invariant heap и final lease 0.
+Все шесть boots завершились на attempt 1, поэтому результат проверяет normal path и
+bounded orchestrator, но ещё не даёт positive evidence reset retry. Retained summary:
+[`board-01-product-endurance-smoke-0.46.json`](../../tests/hil/evidence/board-01-product-endurance-smoke-0.46.json).
+
 ## Приёмка
 
 | ID | Обязательный результат |
@@ -400,8 +424,9 @@ remount/reopen, 32-commit p50/p95/p99 throughput distribution и host/static res
 плюс physical six-boundary matrix реализованы. Fixed queue и batched publish cadence
 теперь host-tested, а E-HIL-038 даёт 9 068 encoded B/s при цели RB-06 2 184 B/s.
 E-HIL-053 закрывает ST-HIL-A09, а E-HIL-054 — ST-HIL-A10 на одной board/card,
-сохраняя изоляцию generic fixture от product enrollment. Readiness retry также ждёт
-natural transient.
-Physical power-cut всё ещё требует controller. LittleFS не затрагивается,
+сохраняя изоляцию generic fixture от product enrollment. E-HIL-058 отклоняет
+same-boot re-entry; E-HIL-059 подтверждает три normal reset-separated cycles и
+инварианты endurance runner. Positive physical reset-retry event и полный 8 h lane
+ещё открыты. Physical power-cut всё ещё требует controller. LittleFS не затрагивается,
 пока не доказан отдельный disposable partition/image; текущий flash filesystem может
 содержать legacy/product data.

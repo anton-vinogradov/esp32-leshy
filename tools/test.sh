@@ -45,6 +45,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/storage/MediaDiscovery.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/MountPolicy.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/ProductStorePolicy.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/ProductBootRetry.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SdIdentification.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SdIdentificationTransport.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/SdReadOnlyProtocol.cpp" \
@@ -91,10 +92,12 @@ python3 "$repo_dir/tools/check_keypad_acceptance.py"
 python3 "$repo_dir/tools/check_product_boot_acceptance.py"
 python3 "$repo_dir/tools/check_product_survey_acceptance.py"
 python3 "$repo_dir/tools/check_product_repeatability_acceptance.py"
+python3 "$repo_dir/tools/check_product_endurance_acceptance.py"
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"
+python3 "$repo_dir/tools/test_product_endurance_hil_runner.py"
 python3 "$repo_dir/tools/test_release_hil_runner.py"
 python3 "$repo_dir/tools/test_camera_subset.py"
 python3 "$repo_dir/tools/test_prerelease_bundle_verifier.py"

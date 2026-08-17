@@ -12,6 +12,7 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_app_desc.h>
+#include <esp_attr.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -46,6 +47,7 @@
 #include "storage/MediaDiscovery.h"
 #include "storage/MountPolicy.h"
 #include "storage/ProductStorePolicy.h"
+#include "storage/ProductBootRetry.h"
 #include "storage/SdReadOnlyProtocol.h"
 #include "storage/SdIdentification.h"
 #include "storage/SdIdentificationTransport.h"
@@ -221,9 +223,14 @@ struct ProductBootRecoveryState final {
     std::uint32_t ownedDuring = 0;
     std::uint32_t ownedAfter = 0;
     std::uint32_t blockedWriteAttempts = 0;
+    std::uint8_t attempts = 0;
+    std::uint8_t transientRetries = 0;
 };
 
 ProductBootRecoveryState productBootRecovery;
+constexpr std::uint32_t kProductBootRetryRtcMagic = 0x4C425231U;
+RTC_NOINIT_ATTR std::uint32_t productBootRetryRtcMagic;
+RTC_NOINIT_ATTR std::uint32_t productBootRetryRestarts;
 
 struct ProductSurveyRuntimeState final {
     const char* status = "idle";
@@ -247,6 +254,7 @@ struct ProductSurveyRuntimeState final {
 ProductSurveyRuntimeState productSurveyRuntime;
 
 void renderInteractiveScreen();
+void broadcast(const char* line);
 
 struct SdPhysicalEvidenceWorkspace final {
     char line[4608] = {};
@@ -749,15 +757,69 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
 }
 
 void recoverProductCatalogAtBoot() {
+    if (bootMetrics.resetReason != static_cast<std::uint32_t>(ESP_RST_SW) ||
+        productBootRetryRtcMagic != kProductBootRetryRtcMagic ||
+        productBootRetryRestarts >=
+            leshy1::storage::kProductBootMaximumAttempts) {
+        productBootRetryRtcMagic = kProductBootRetryRtcMagic;
+        productBootRetryRestarts = 0;
+    }
     char expectedFingerprint[33] = {};
     if (!loadProductFingerprint(expectedFingerprint,
                                 sizeof(expectedFingerprint))) {
         productBootRecovery = {};
         productBootRecovery.status = "unenrolled";
         productBootRecovery.cleanupComplete = true;
+        productBootRetryRestarts = 0;
         return;
     }
     recoverProductCatalogForFingerprint(expectedFingerprint, true);
+    const std::uint8_t completedAttempts = static_cast<std::uint8_t>(
+        productBootRetryRestarts + 1U);
+    productBootRecovery.attempts = completedAttempts;
+    productBootRecovery.transientRetries = static_cast<std::uint8_t>(
+        productBootRetryRestarts);
+    const leshy1::storage::ProductBootRetryEvidence retryEvidence{
+        std::strcmp(productBootRecovery.status, "identity_failed") == 0,
+        productBootRecovery.enrolled,
+        exactCidFingerprint(productBootRecovery.expectedFingerprint),
+        std::strcmp(
+            productBootRecovery.observedFingerprint,
+            "00000000000000000000000000000000") == 0,
+        productBootRecovery.fingerprintMatched,
+        productBootRecovery.mountedReadOnly,
+        productBootRecovery.rootExists,
+        productBootRecovery.opened,
+        productBootRecovery.catalogAdmitted,
+        productBootRecovery.permitStatus ==
+            leshy1::storage::ProductStoreAccessStatus::MissingMedia,
+        productBootRecovery.cleanupComplete,
+        productBootRecovery.blockedWriteAttempts,
+        productBootRecovery.ownedAfter,
+    };
+    if (leshy1::storage::shouldRetryProductBootRecovery(
+            retryEvidence, completedAttempts)) {
+        ++productBootRetryRestarts;
+        char line[320] = {};
+        std::snprintf(
+            line, sizeof(line),
+            "{\"schema\":\"leshy.storage.product_boot_retry.v1\","
+            "\"kind\":\"restart\",\"reason\":\"transient_missing_media\","
+            "\"completed_attempts\":%u,\"next_attempt\":%u,"
+            "\"delay_ms\":%lu,\"blocked_write_attempts\":0,"
+            "\"owned_after\":0,\"cleanup_complete\":true}",
+            static_cast<unsigned>(completedAttempts),
+            static_cast<unsigned>(completedAttempts + 1U),
+            static_cast<unsigned long>(
+                leshy1::storage::productBootRetryDelayMs(completedAttempts)));
+        broadcast(line);
+        Serial.flush();
+        Serial0.flush();
+        delay(leshy1::storage::productBootRetryDelayMs(completedAttempts));
+        esp_restart();
+        return;
+    }
+    productBootRetryRestarts = 0;
 }
 
 void emitProductBootRecovery(Stream& reply) {
@@ -773,7 +835,8 @@ void emitProductBootRecovery(Stream& reply) {
         "\"root_exists\":%s,\"permit_status\":\"%s\",\"opened\":%s,"
         "\"catalog_status\":\"%s\",\"catalog_admitted\":%s,"
         "\"generation\":%lu,\"observations\":%u,"
-        "\"integrity\":\"%s\",\"owned_during\":%lu,\"owned_after\":%lu,"
+        "\"integrity\":\"%s\",\"attempts\":%u,\"transient_retries\":%u,"
+        "\"owned_during\":%lu,\"owned_after\":%lu,"
         "\"cleanup_complete\":%s,\"physical_write_calls\":0}",
         productBootRecovery.status,
         productBootRecovery.enrolled ? "true" : "false",
@@ -795,6 +858,8 @@ void emitProductBootRecovery(Stream& reply) {
         static_cast<unsigned>(productBootRecovery.catalog.observations),
         leshy1::apps::library::sessionIntegrityName(
             productBootRecovery.catalog.integrity),
+        static_cast<unsigned>(productBootRecovery.attempts),
+        static_cast<unsigned>(productBootRecovery.transientRetries),
         static_cast<unsigned long>(productBootRecovery.ownedDuring),
         static_cast<unsigned long>(productBootRecovery.ownedAfter),
         productBootRecovery.cleanupComplete ? "true" : "false");

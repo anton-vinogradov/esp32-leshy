@@ -95,6 +95,16 @@ def boot_failures(ready: dict[str, Any], recovery: dict[str, Any],
     }, "boot_recovery"))
     if not isinstance(recovery.get("generation"), int) or recovery["generation"] < 1:
         failures.append("boot_recovery.generation: expected >= 1")
+    attempts = recovery.get("attempts")
+    retries = recovery.get("transient_retries")
+    if (not isinstance(attempts, int) or isinstance(attempts, bool)
+            or attempts < 1 or attempts > 3):
+        failures.append("boot_recovery.attempts: expected 1..3")
+    if (not isinstance(retries, int) or isinstance(retries, bool)
+            or not isinstance(attempts, int) or retries != attempts - 1):
+        failures.append(
+            "boot_recovery.transient_retries: expected attempts - 1"
+        )
     return failures
 
 

@@ -387,6 +387,30 @@ point. This is early evidence against an accumulating fault, but two cycles do n
 replace eight-hour endurance. Retained summary:
 [`board-01-product-repeatability-0.45.json`](../../tests/hil/evidence/board-01-product-repeatability-0.45.json).
 
+That probe also exposed an intermittent cold-boot identity failure: the enrolled CID
+was valid, the observed CID was all zero, no mount/root/catalog step had begun, the
+permit reported `missing_media`, cleanup was complete, ownership returned to zero,
+and no write had occurred. An intermediate 0.46 experiment retried the entire raw
+identity + mount path in the same boot. Although it completed two cycles 9→10→11,
+the next post-commit boot stopped after the ROM loader and lost its USB endpoint
+until physical power removal. `E-HIL-058` therefore rejects same-boot re-entry.
+
+The retained 0.46 design permits a retry only for that exact fail-closed signature.
+One attempt runs per boot; RTC no-init state records at most two software restarts,
+with 250/500 ms delay, producing at most three attempts. A non-software reset, an
+unenrolled device, success, any broader failure, leaked ownership, incomplete
+cleanup, or a write-blocker hit clears/refuses retry. Final recovery evidence reports
+`attempts` and `transient_retries`; the product and endurance runners validate
+`1..3` and `retries = attempts - 1` and allow the wider ready budget only after an
+actual retry.
+
+After a full power cycle, exact candidate 0.46 passed the three-cycle
+endurance-runner smoke `E-HIL-059`: generation 12→15, 51/51 observations forwarded,
+six read-only boots, twelve captures, zero drops, invariant heap, and final lease 0.
+All six boots completed on attempt 1, so this validates the normal path and bounded
+orchestrator but does not yet positively exercise the reset retry. Retained summary:
+[`board-01-product-endurance-smoke-0.46.json`](../../tests/hil/evidence/board-01-product-endurance-smoke-0.46.json).
+
 ## Acceptance
 
 | ID | Required result |
@@ -409,7 +433,9 @@ reset harness plus physical six-boundary matrix are implemented. The fixed queue
 batched publication cadence are now host-tested, and E-HIL-038 delivers 9,068 encoded
 B/s against the 2,184 B/s RB-06 target. E-HIL-053 closes ST-HIL-A09 and E-HIL-054
 closes ST-HIL-A10 on one board/card while keeping the generic fixture isolated from
-product enrollment. The readiness retry still awaits a natural transient. Physical
+product enrollment. E-HIL-058 rejects same-boot re-entry; E-HIL-059 confirms three
+normal reset-separated cycles and the endurance-runner invariants. A positive
+physical reset-retry event and the complete 8 h lane still remain open. Physical
 power-cut still needs a controller.
 LittleFS is not touched until a dedicated disposable partition/image is proven; the
 current flash filesystem may contain legacy/product data.

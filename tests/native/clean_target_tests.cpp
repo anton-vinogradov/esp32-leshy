@@ -29,6 +29,7 @@
 #include "storage/MediaDiscovery.h"
 #include "storage/MountPolicy.h"
 #include "storage/ProductStorePolicy.h"
+#include "storage/ProductBootRetry.h"
 #include "storage/SdReadOnlyProtocol.h"
 #include "storage/SdIdentification.h"
 #include "storage/SdIdentificationTransport.h"
@@ -66,6 +67,64 @@ int failures = 0;
             ++failures;                                                                         \
         }                                                                                       \
     } while (false)
+
+void testProductBootRetryIsNarrowAndBounded() {
+    ProductBootRetryEvidence evidence;
+    evidence.identityFailed = true;
+    evidence.enrolled = true;
+    evidence.expectedFingerprintValid = true;
+    evidence.observedFingerprintEmpty = true;
+    evidence.missingMedia = true;
+    evidence.cleanupComplete = true;
+    CHECK(shouldRetryProductBootRecovery(evidence, 1));
+    CHECK(shouldRetryProductBootRecovery(evidence, 2));
+    CHECK(!shouldRetryProductBootRecovery(evidence, 0));
+    CHECK(!shouldRetryProductBootRecovery(evidence, 3));
+    CHECK(productBootRetryDelayMs(0) == 0);
+    CHECK(productBootRetryDelayMs(1) == 250);
+    CHECK(productBootRetryDelayMs(2) == 500);
+    CHECK(productBootRetryDelayMs(3) == 0);
+
+    ProductBootRetryEvidence mutated = evidence;
+    mutated.identityFailed = false;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.enrolled = false;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.expectedFingerprintValid = false;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.observedFingerprintEmpty = false;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.fingerprintMatched = true;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.mountedReadOnly = true;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.rootExists = true;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.opened = true;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.catalogAdmitted = true;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.missingMedia = false;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.blockedWriteAttempts = 1;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.ownedAfter = 12;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+    mutated = evidence;
+    mutated.cleanupComplete = false;
+    CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+}
 
 void testStorageTimingSummaryUsesNearestRank() {
     std::array<std::uint64_t, 20> timings{};
@@ -2630,6 +2689,7 @@ void testSdSector0ReadIsSingleBoundedAndParseOnly() {
 }  // namespace
 
 int main() {
+    testProductBootRetryIsNarrowAndBounded();
     testStorageTimingSummaryUsesNearestRank();
     testIngressRateSummaryUsesNearestRankAndRejectsZero();
     testObservationQueueIsBoundedFifoAndScrubbable();
