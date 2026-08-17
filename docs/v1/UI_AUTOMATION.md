@@ -213,3 +213,11 @@ equivalent return Actions, nested Library entry by both keys, and Up/Down select
 nine exact TFT frames independently verify the three 70×40 footer cells and final
 lease 0 (`E-AUTO-028`/`E-HIL-088`/`E-UX-009`). No camera or manual menu traversal is
 required for this regression.
+
+Candidate 0.65 extends the same lane with machine-visible render telemetry. It checks
+the compact 70×26 cells, records `full` versus `incremental` mode, and fails closed if
+any changed-row-only Home/Language/Self-Test selection exceeds 40 ms. The retained
+board run covers nine frames and 21 transitions; all eight incremental transitions
+measure 19.901–28.981 ms, with invariant heap and final lease 0
+(`E-AUTO-029`/`E-HIL-089`/`E-UX-010`). Source checks also reject a reintroduced
+interactive `fillScreen` or removal of the old/new-row render path.

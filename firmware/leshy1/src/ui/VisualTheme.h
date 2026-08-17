@@ -50,8 +50,8 @@ struct Layout final {
     static constexpr std::int16_t FooterDividerY = 236;
     static constexpr std::int16_t InputY = 244;
     static constexpr std::int16_t InputHeight = 28;
-    static constexpr std::int16_t HintY = 280;
-    static constexpr std::int16_t HintHeight = 40;
+    static constexpr std::int16_t HintY = 294;
+    static constexpr std::int16_t HintHeight = 26;
 };
 
 static_assert(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth,

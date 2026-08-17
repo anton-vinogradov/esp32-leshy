@@ -103,7 +103,7 @@ native tests, поэтому экран не может незаметно за�
 | Choice row | 216×48 с primary и metadata text | выбор Quick / Full-Guided |
 | Metric row | пять result slots 216×28 | Full preflight и Quick/Full result |
 | Footer divider | фиксирован на y=236 | каждый interactive screen |
-| Input status + пространственная навигация | input 216×28 плюс три action cell 70×40 | каждый interactive screen и HIL |
+| Input status + пространственная навигация | input 216×28 плюс три action cell 70×26 | каждый interactive screen и HIL |
 
 Exact candidate `0.54.0-ui-components-measure` принимает UX-04 через
 `E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home и Self-Test используют одинаковые
@@ -187,6 +187,14 @@ Stop/save перенесён внутрь Detail, поэтому у стабил
 исключения на уровне списка. Девять exact TFT frames, 15 public transitions,
 неизменный heap, healthy input, buzzer LOW и финальный русский Home с lease 0
 проверяются независимо.
+
+Exact candidate `0.65.0-compact-incremental-ui-measure` сохраняет ту же mapping трёх
+ячеек, но использует labels 12 px в footer 26 px. Изменение selection теперь
+перерисовывает только старую/новую rows, никогда не очищает весь экран и публикует
+измеримые diagnostics `render_mode`/`render_us`. Exact TFT lane доказывает восемь
+инкрементальных transitions за 19,901–28,981 ms, девять финальных frames, 21 public
+transition и zero drift heap/input/resources (`E-BUILD-066`/`E-AUTO-029`/
+`E-HIL-089`/`E-UX-010`).
 
 ## UX-07 — evidence common states на реальном TFT
 

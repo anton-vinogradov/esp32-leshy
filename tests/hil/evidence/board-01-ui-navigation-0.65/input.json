@@ -1,0 +1,31 @@
+{
+  "ambiguous_presses": 0,
+  "button_mask": 248,
+  "debounce_ms": 12,
+  "dispatched_press_events": 5,
+  "kind": "state",
+  "latest_raw": 255,
+  "maximum_sample_gap_ms": 5,
+  "poll_period_ms": 5,
+  "press_events": 5,
+  "presses": {
+    "down": 2,
+    "left": 1,
+    "right": 0,
+    "select": 1,
+    "up": 1
+  },
+  "queue_capacity": 64,
+  "queue_depth": 0,
+  "queue_drops": 0,
+  "queue_high_water": 2,
+  "raw_transitions": 10,
+  "read_errors": 0,
+  "release_events": 5,
+  "schema": "leshy.input.frontend.v1",
+  "stable_raw": 255,
+  "stable_transitions": 10,
+  "status": "ready",
+  "task_started": true,
+  "valid_samples": 22919
+}

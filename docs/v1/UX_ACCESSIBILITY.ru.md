@@ -2,7 +2,7 @@
 
 *Читать на: [English](UX_ACCESSIBILITY.md) · **Русский***
 
-Статус: **UX-06 принят; пространственная навигация уточнена exact TFT evidence 0.64**.
+Статус: **UX-06 принят; компактная инкрементальная навигация измерена exact TFT evidence 0.65**.
 
 UX-06 требует, чтобы каждая текущая primary operation была доступна пятью
 физическими кнопками, а любое состояние и focus различались без цвета. Diagnostic
@@ -45,7 +45,8 @@ sample gap 5 ms.
 
 Footer — пространственная карта controls, а не предложение: Left занимает левую
 ячейку, Up/Down — среднюю, Right+OK — правую. У каждой активной ячейки есть
-нарисованный direction icon/key legend и одна локализованная action label 16 px.
+нарисованный direction icon/key legend и одна локализованная action label 12 px в
+footer высотой 26 px.
 Техническое состояние RF/storage остаётся в body экрана. Недоступный Home item не
 открывается и показывает причину, а не полагается на muted color.
 
@@ -77,3 +78,12 @@ list/detail, Language и Self-Test. Survey Stop/save теперь находит
 поэтому Right больше не противоречит своему стабильному значению «внутрь».
 `E-BUILD-065`/`E-HIL-088`/`E-UX-009` уточняют принятый UX-06 без promotion S3 или
 release.
+
+Exact candidate `0.65.0-compact-incremental-ui-measure` сохраняет эту mapping и
+уменьшает footer с 40 до 26 px. Одновременно возвращено правило repaint из 0.x:
+Up/Down перерисовывает только старую и новую непрозрачные строки; полный переход
+очищает лишь content ниже уже нарисованного header, а interactive path больше не
+вызывает `fillScreen`. Восемь selection transitions Home/Language/Self-Test занимают
+19,901–28,981 ms на реальной панели при fail-closed ceiling 40 ms вместо замеченных
+63,615 ms whole-page redraw. Девять exact frames, 21 transition, неизменный heap и
+чистые input/buzzer/lease связаны `E-BUILD-066`/`E-AUTO-029`/`E-HIL-089`/`E-UX-010`.

@@ -208,3 +208,11 @@ Actions, Left и diagnostic Back как равнозначные return Actions,
 entry обеими клавишами и выбор Up/Down; девять exact TFT frames независимо проверяют
 три footer cell 70×40 и final lease 0 (`E-AUTO-028`/`E-HIL-088`/`E-UX-009`). Для
 этого regression не нужны camera или ручной проход меню.
+
+Candidate 0.65 расширяет тот же lane machine-visible telemetry отрисовки. Он
+проверяет компактные cells 70×26, записывает mode `full` или `incremental` и fail
+closed, если changed-row-only selection Home/Language/Self-Test превышает 40 ms.
+Retained board run охватывает девять frames и 21 transition; все восемь
+инкрементальных transitions занимают 19,901–28,981 ms при неизменном heap и final
+lease 0 (`E-AUTO-029`/`E-HIL-089`/`E-UX-010`). Source checks также отклоняют
+возвращение interactive `fillScreen` или удаление render path старой/новой строки.

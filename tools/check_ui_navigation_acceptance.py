@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless the 0.64 spatial-navigation evidence remains complete."""
+"""Fail closed unless the 0.65 compact incremental-UI evidence is complete."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from check_visual_system_acceptance import decode_png
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "tests/hil/evidence/board-01-ui-navigation-0.64.json"
+EVIDENCE = ROOT / "tests/hil/evidence/board-01-ui-navigation-0.65.json"
 RUNNER = ROOT / "tools/run_1x_ui_navigation_hil.py"
 RENDERER = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 COMPONENTS = ROOT / "firmware/leshy1/src/ui/UiComponents.h"
@@ -71,34 +71,34 @@ def main() -> int:
             evidence.get("status") == "pass",
             "navigation evidence schema/status mismatch")
     require(failures, evidence.get("evidence_ids") ==
-            ["E-BUILD-065", "E-AUTO-028", "E-HIL-088", "E-UX-009"],
+            ["E-BUILD-066", "E-AUTO-029", "E-HIL-089", "E-UX-010"],
             "navigation evidence ID set mismatch")
     require(failures, evidence.get("gate_eligible") is False,
             "navigation evidence must not promote a stage/release gate")
 
     candidate = evidence.get("candidate", {})
     require(failures, candidate == {
-        "version": "0.64.0-spatial-navigation-measure",
+        "version": "0.65.0-compact-incremental-ui-measure",
         "firmware_sha256":
-            "c4d824e0e345f14e043ec80c25ba2990eef6d46cc6794aa6e7859544d9c140a0",
+            "3f133d6a1f848818dcd1a246533f5f99d17385b370c2c95193f7ac223aec1443",
         "factory_sha256":
-            "724afdbd701a2da177937c5dacd5169bb5d8a545c2a8446fa1bb96ea5384a4eb",
+            "733fd5eacba7bbc457156802c1d7d5fd85f917a182efe28a33d14efcb8e61031",
         "app_elf_sha256":
-            "b2e92f3f5e76a4c89aa1c0a0b2020bf77d02bf23bd5232a0d99424497e8536ed",
+            "796d4a49b56afbd0376854f16901ecb5fb29909050370b2506677057333b3db4",
         "map_sha256":
-            "535fa2dc2dde11d18265ce73a36751fa2e13b1c4b7e0e6837aac18a69f436b04",
-        "linked_flash_bytes": 1111100,
-        "static_ram_bytes": 128816,
-        "app_image_bytes": 1111504,
-        "factory_image_bytes": 1177040,
+            "678673b9d18dfa7d209f1ac64b4bb15e36d6118303f340076a570e0fcc354e23",
+        "linked_flash_bytes": 1112256,
+        "static_ram_bytes": 128856,
+        "app_image_bytes": 1112656,
+        "factory_image_bytes": 1178192,
         "rtc_noinit_bytes": 20,
         "host_tests_passed": True,
         "firmware_build_passed": True,
     }, "candidate block mismatch")
     require(failures, evidence.get("navigation") == {
         "left": "back", "right_or_ok": "enter", "up_down": "select",
-        "footer_height_px": 40, "spatial_cells": 3,
-        "label_font": "Roboto Condensed Medium 16",
+        "footer_height_px": 26, "spatial_cells": 3,
+        "label_font": "Roboto Condensed Medium 12",
         "key_legend_font": "Roboto Condensed Medium 12",
         "programmatic_direction_icons": True,
         "technical_status_removed_from_footer": True,
@@ -106,6 +106,21 @@ def main() -> int:
         "survey_stop_or_save_inside_detail": True,
         "library_right_or_ok_enters_detail": True,
     }, "navigation contract mismatch")
+    require(failures, evidence.get("rendering") == {
+        "full_screen_fill_removed": True,
+        "full_transition_clears_content_below_header": True,
+        "selection_repaints_only_changed_rows": True,
+        "incremental_transition_count": 8,
+        "full_transition_count": 12,
+        "incremental_render_us": [21466, 21244, 19901, 28866, 28753,
+                                  21381, 28981, 28862],
+        "maximum_incremental_render_us": 28981,
+        "maximum_allowed_incremental_render_us": 40000,
+        "pre_fix_home_render_us": 63615,
+        "pre_fix_home_host_ack_ms": 74.752,
+        "post_fix_home_render_us": 21654,
+        "post_fix_home_host_ack_ms": 33.633,
+    }, "incremental rendering summary mismatch")
 
     physical = evidence.get("physical", {})
     run_path = retained(failures, physical.get("run_path"),
@@ -130,6 +145,9 @@ def main() -> int:
         "left": "back", "right_or_ok": "enter", "up_down": "select",
         "context_actions_live_inside_destination": True,
         "technical_status_removed_from_footer": True,
+        "footer_height_px": 26,
+        "selection_repaints_only_changed_rows": True,
+        "full_screen_clear_on_selection": False,
     }, "physical navigation contract mismatch")
 
     expected_screens = {
@@ -170,11 +188,11 @@ def main() -> int:
                 for index, x in enumerate((12, 85, 158)):
                     count = sum(
                         pixels[y][column] == surface
-                        for y in range(280, 320)
+                        for y in range(294, 320)
                         for column in range(x, x + 70)
                     )
                     if index in active_cells[name]:
-                        require(failures, count > 1800,
+                        require(failures, count > 1400,
                                 f"{name}: navigation cell {index} missing")
                     else:
                         require(failures, count == 0,
@@ -205,12 +223,18 @@ def main() -> int:
         "right_enters_library_detail": ("right", "library", 2, True),
         "left_returns_library_list": ("left", "library", 2, True),
         "select_enters_library_detail": ("select", "library", 2, True),
+        "down_selects_language": ("down", "home", 3, True),
         "right_enters_language": ("right", "language", 3, True),
+        "language_up_incremental": ("up", "language", 3, True),
+        "language_down_incremental": ("down", "language", 3, True),
+        "down_selects_self_test": ("down", "home", 4, True),
         "right_enters_self_test": ("right", "self_test", 4, True),
+        "self_test_down_incremental": ("down", "self_test", 4, True),
+        "self_test_up_incremental": ("up", "self_test", 4, True),
     }
     transitions = run.get("transitions", {})
     require(failures, set(transitions) == set(expected_transitions) and
-            run.get("transition_count") == 15,
+            run.get("transition_count") == 21,
             "exact transition set mismatch")
     for name, expected in expected_transitions.items():
         state = transitions.get(name, {})
@@ -223,6 +247,28 @@ def main() -> int:
     require(failures,
             transitions.get("left_returns_library_list", {}).get("library_view") ==
             "list", "nested Left did not return to Library list")
+    incremental_names = (
+        "down_selects_survey", "down_selects_library",
+        "down_selects_language", "language_up_incremental",
+        "language_down_incremental", "down_selects_self_test",
+        "self_test_down_incremental", "self_test_up_incremental",
+    )
+    incremental_us = []
+    for name in incremental_names:
+        state = transitions.get(name, {})
+        render_us = state.get("render_us")
+        require(failures, state.get("render_mode") == "incremental" and
+                isinstance(render_us, int) and 0 < render_us <= 40000,
+                f"{name}: bounded incremental render missing")
+        if isinstance(render_us, int):
+            incremental_us.append(render_us)
+    rendering = run.get("rendering", {})
+    require(failures, rendering.get("incremental_transition_count") == 8 and
+            rendering.get("full_transition_count") == 12 and
+            rendering.get("incremental_render_us") == incremental_us and
+            rendering.get("maximum_incremental_render_us") == 28981 and
+            rendering.get("maximum_allowed_incremental_render_us") == 40000,
+            "measured rendering block mismatch")
 
     loaded: dict[str, dict[str, Any]] = {}
     for name, record in run.get("records", {}).items():
@@ -234,9 +280,9 @@ def main() -> int:
     after = loaded.get("metrics_after", {})
     require(failures, (before.get("heap_total"), before.get("heap_free"),
                        before.get("heap_min_free")) ==
-            (272688, 208912, 188720) and
+            (272648, 208872, 188680) and
             (after.get("heap_total"), after.get("heap_free"),
-             after.get("heap_min_free")) == (272688, 208912, 188720),
+             after.get("heap_min_free")) == (272648, 208872, 188680),
             "heap invariance mismatch")
     input_state = loaded.get("input", {})
     safe = loaded.get("safe_outputs", {})
@@ -269,8 +315,17 @@ def main() -> int:
                    "navigationCell(std::uint8_t index)"):
         require(failures, marker in components,
                 f"navigation geometry marker missing: {marker}")
-    require(failures, "HintY = 280" in theme and "HintHeight = 40" in theme,
-            "40 px footer theme contract missing")
+    require(failures, "HintY = 294" in theme and "HintHeight = 26" in theme,
+            "26 px compact footer theme contract missing")
+    for marker in ("renderSelectionDelta()", "renderHomeRow(",
+                   "renderLanguageRow(", "renderSelfTestModeRow(",
+                   "renderSurveyListRow(", "renderLibraryListRow(",
+                   "renderInteractiveScreen(!lastUiActionUsedIncrementalRender)",
+                   "renderInteractiveScreen(!batchIncrementalOnly)"):
+        require(failures, marker in renderer,
+                f"incremental renderer marker missing: {marker}")
+    require(failures, "fillScreen(" not in renderer,
+            "interactive renderer reintroduced full-screen fill")
     for identifier in ("NavOk", "NavBack", "NavCancel", "NavSelect",
                        "NavEnter", "NavStart", "NavDetails", "NavStop",
                        "NavSave", "NavExport", "NavApply", "NavNext",
@@ -295,12 +350,14 @@ def main() -> int:
         failures.append(f"navigation runner syntax error: {error}")
 
     expected_physical = {
-        "screen_count": 9, "transition_count": 15,
+        "screen_count": 9, "transition_count": 21,
         "languages": ["ru", "en"], "right_and_select_entry_proven": True,
         "left_and_back_return_proven": True,
-        "nested_library_entry_proven": True, "heap_total": 272688,
-        "heap_free_before": 208912, "heap_free_after": 208912,
-        "heap_min_before": 188720, "heap_min_after": 188720,
+        "nested_library_entry_proven": True,
+        "nested_incremental_selection_proven": True,
+        "heap_total": 272648,
+        "heap_free_before": 208872, "heap_free_after": 208872,
+        "heap_min_before": 188680, "heap_min_after": 188680,
         "input_read_errors": 0, "input_ambiguous_presses": 0,
         "input_queue_drops": 0, "maximum_sample_gap_ms": 5,
         "buzzer_inactive": True, "final_language": "ru",
@@ -318,8 +375,8 @@ def main() -> int:
         "docs/v1/RESOURCE_BUDGETS.md", "docs/v1/RESOURCE_BUDGETS.ru.md",
         "docs/v1/TRACEABILITY.md", "docs/v1/TRACEABILITY.ru.md",
     ))
-    for marker in ("0.64", "spatial navigation", "пространственная навигация",
-                   "E-BUILD-065", "E-AUTO-028", "E-HIL-088", "E-UX-009"):
+    for marker in ("0.65", "incremental", "инкремент",
+                   "E-BUILD-066", "E-AUTO-029", "E-HIL-089", "E-UX-010"):
         require(failures, marker in docs,
                 f"source-of-truth docs marker missing: {marker}")
 
@@ -327,8 +384,8 @@ def main() -> int:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
-    print("UI navigation acceptance passed: Left Back, Right/OK Enter, "
-          "Up/Down Select, nine exact TFT states, zero heap drift")
+    print("UI navigation acceptance passed: 26 px footer, changed-row-only "
+          "selection, <=28.981 ms on exact TFT, zero heap drift")
     return 0
 
 

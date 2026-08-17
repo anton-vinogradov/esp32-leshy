@@ -2,7 +2,7 @@
 
 *Read in: **English** · [Русский](UX_ACCESSIBILITY.ru.md)*
 
-Status: **UX-06 accepted and spatial navigation refined on exact 0.64 TFT evidence**.
+Status: **UX-06 accepted; compact incremental navigation measured on exact 0.65 TFT evidence**.
 
 UX-06 requires every current primary operation to remain reachable with the five
 physical buttons and every state/focus distinction to remain understandable without
@@ -45,7 +45,7 @@ maximum sample gap.
 
 The footer is a spatial control map rather than prose: Left is the left cell,
 Up/Down the center cell, and Right+OK the right cell. Each active cell has a drawn
-direction icon/key legend and one localized 16 px action label. Technical state such
+direction icon/key legend and one localized 12 px action label in a 26 px footer. Technical state such
 as RF/storage provenance remains in the screen body. An unavailable Home item does
 not open and displays its reason rather than relying on a muted color.
 
@@ -76,3 +76,13 @@ three-cell component on Home, Diagnostics, Survey setup, Library list/detail,
 Language, and Self-Test. Survey Stop/save now lives inside Detail so Right no longer
 contradicts its stable inward meaning. `E-BUILD-065`/`E-HIL-088`/`E-UX-009` refine
 the accepted UX-06 contract without promoting S3 or a release.
+
+Exact candidate `0.65.0-compact-incremental-ui-measure` preserves that mapping while
+shrinking the footer from 40 to 26 px. It also restores the 0.x repaint rule: an
+Up/Down selection redraws only the old and new opaque rows; a full transition clears
+only content below the already-painted header, and no interactive path calls
+`fillScreen`. Eight Home/Language/Self-Test selection transitions measure
+19.901–28.981 ms on the actual panel (40 ms fail-closed ceiling), versus the observed
+63.615 ms whole-page redraw. Nine exact frames, 21 transitions, invariant heap and
+clean input/buzzer/lease state are bound by `E-BUILD-066`/`E-AUTO-029`/`E-HIL-089`/
+`E-UX-010`.

@@ -102,7 +102,7 @@ tests, so a screen cannot silently move its content into the fixed footer.
 | Choice row | 216×48 with primary and metadata text | Quick / Full-Guided mode selection |
 | Metric row | five 216×28 result slots | Full preflight and Quick/Full result |
 | Footer divider | fixed at y=236 | every interactive screen |
-| Input status + spatial navigation | 216×28 input plus three 70×40 action cells | every interactive screen and HIL |
+| Input status + spatial navigation | 216×28 input plus three 70×26 action cells | every interactive screen and HIL |
 
 Exact candidate `0.54.0-ui-components-measure` accepts UX-04 through
 `E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home and Self-Test consume the same renderer
@@ -186,6 +186,13 @@ Select open the same Home and nested Library destinations; Survey Stop/save move
 inside Detail so the stable navigation model has no list-level exception. Nine
 exact TFT frames, 15 public transitions, invariant heap, healthy input, buzzer LOW,
 and final Russian Home with lease 0 are independently checked.
+
+Exact candidate `0.65.0-compact-incremental-ui-measure` keeps the same three-cell
+mapping but uses 12 px labels in a 26 px footer. Selection changes now repaint only
+the old/new rows, never clear the whole screen, and expose measured `render_mode`/
+`render_us` diagnostics. The exact TFT lane proves eight incremental transitions at
+19.901–28.981 ms, nine final frames, 21 public transitions and zero heap/input/
+resource drift (`E-BUILD-066`/`E-AUTO-029`/`E-HIL-089`/`E-UX-010`).
 
 ## UX-07 real-TFT common-state evidence
 

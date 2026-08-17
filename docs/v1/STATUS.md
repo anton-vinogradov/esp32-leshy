@@ -12,7 +12,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S3 — First persistent Survey Session`.
 - **Last completed stage:** `S2 — Clean 1.x platform`.
-- **Repository baseline:** `main` with retained exact-candidate 0.64 spatial navigation and S3 progress evidence.
+- **Repository baseline:** `main` with retained exact-candidate 0.65 compact incremental navigation and S3 progress evidence.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
 - **Current objective:** close the missing-source real-TFT path, physical power-cut
   evidence, LittleFS parity, and independent-golden
@@ -543,6 +543,9 @@ not a hidden S3 completion criterion.
 | E-BUILD-065 | exact `0.64.0-spatial-navigation-measure` rebuild | pass: RAM 128,816 B, linked flash 1,111,100 B; app/factory 1,111,504/1,177,040 B; app `c4d824e0…140a0`, factory `724afdbd…a4eb`, ELF `b2e92f3f…36ed`, map `535fa2dc…b04`; RTC no-init 20 B | −832 B linked/app/factory and zero static-RAM growth vs 0.63 after replacing prose footers; exact UX refinement candidate, not a stage/release build |
 | E-AUTO-028 | spatial-navigation runner and retained verifier | pass: public Actions prove Right and Select enter the same Home and nested Library destinations, Left and diagnostic Back return through the same boundary, and Up/Down remains bounded selection; the verifier rehashes exact candidate/runner, all PNG/traces/records, three-cell geometry, source behavior, heap/input/buzzer/final cleanup and the updated product HIL sequence | non-destructive local one-board UX regression; active Product Survey stop/save placement is source-bound here and will be exercised by the next applicable product run |
 | E-HIL-088 / E-UX-009 | board-01 exact 0.64 spatial navigation regression | pass: nine actual 240×320 frames cover RU Home/Diagnostics/Survey setup/Library list+detail/Language/Self-Test and EN/final RU Home; 15 transitions prove Left Back, Right/OK Enter and Up/Down Select, with a 40 px three-cell footer using 16 px action labels and drawn direction icons; heap remains 272,688/208,912/188,720 B, input errors/ambiguity/drops are zero, buzzer LOW, and final Russian Home owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-navigation-0.64.json) | restores the proven 0.x spatial convention and moves Survey stop/save inside Detail without promoting S3 or release |
+| E-BUILD-066 | exact `0.65.0-compact-incremental-ui-measure` rebuild | pass: RAM 128,856 B, linked flash 1,112,256 B; app/factory 1,112,656/1,178,192 B; app `3f133d6a…1443`, factory `733fd5ea…1031`, ELF `796d4a49…db4`, map `678673b9…e23`; RTC no-init 20 B | +1,156 B linked flash, +40 B static RAM and +1,152 B images vs 0.64 for bounded render telemetry/snapshots and changed-row helpers; exact UX refinement candidate, not a stage/release build |
+| E-AUTO-029 | compact incremental-navigation runner and retained verifier | pass: the runner records `full`/`incremental` plus device-side `render_us`, proves eight changed-row transitions across Home/Language/Self-Test under a 40 ms fail-closed ceiling, retains nine TFT states/21 public transitions, and checks exact candidate/runner/frame/record hashes, compact geometry, no interactive `fillScreen`, heap/input/buzzer/final cleanup | non-destructive one-board UX regression; it accepts no stage or release gate |
+| E-HIL-089 / E-UX-010 | board-01 exact 0.65 compact/flicker-free regression | pass: three cells shrink from 40 to 26 px with 12 px labels; selection redraws only old/new opaque rows, full transitions clear below the painted header, and eight exact incremental transitions measure 19.901–28.981 ms versus the observed 63.615 ms whole-page redraw. Nine frames/21 transitions preserve Left Back, Right/OK Enter, Up/Down Select; heap remains 272,648/208,872/188,680 B, input errors/ambiguity/drops are zero, buzzer LOW and final Russian Home owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-navigation-0.65.json) | restores the 0.x repaint principle without promoting S3 or release |
 
 ## Known uncertainties and risks
 
@@ -550,9 +553,10 @@ not a hidden S3 completion criterion.
   Roboto Condensed Medium 16/12 passes source/license, 254/254 fit, 18-state TFT,
   Quick/Full, input, buzzer, heap and cleanup regressions. Physical-panel/user optics
   continue in UX-08 rather than remaining an unbounded font-selection risk.
-- UX-06 spatial navigation is refined by exact 0.64: the footer no longer mixes
-  controls with technical status, and its visible Left/Up+Down/Right+OK model matches
-  firmware behavior. Physical-panel optics still continue in UX-08.
+- UX-06 navigation is refined by exact 0.65: the compact 26 px footer no longer
+  mixes controls with technical status, its Left/Up+Down/Right+OK model matches
+  behavior, and changed-row rendering stays below 29 ms on board-01 without a
+  full-screen flash. Physical-panel optics still continue in UX-08.
 - Board-01 provides partial evidence for `HW-T01/T04/T07/T11`; other physical tests
   have not run, and no composite HW-T test is fully closed yet.
 - BOM says ESP32-S3-WROOM-1U-N16 (16 MB, no PSRAM), while the original build guide

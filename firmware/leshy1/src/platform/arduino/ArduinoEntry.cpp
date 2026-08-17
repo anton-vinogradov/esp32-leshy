@@ -369,8 +369,12 @@ std::uint32_t productSurveyWorkerOwnedResources = 0;
 bool productSurveyWorkerReady = false;
 bool productSurveyWorkerScanActive = false;
 
-void renderInteractiveScreen();
+void renderInteractiveScreen(bool clearContent = true);
 void broadcast(const char* line);
+
+bool lastUiActionUsedIncrementalRender = false;
+bool lastUiRenderWasIncremental = false;
+std::uint64_t lastUiRenderUs = 0;
 
 struct SdPhysicalEvidenceWorkspace final {
     char line[4608] = {};
@@ -1921,7 +1925,7 @@ NavigationFooter navigationFooterForCurrentState() {
 
 void renderNavigationKey(NavigationKey key, Rect bounds) {
     const std::int16_t centerX = bounds.x + bounds.width / 2;
-    constexpr std::int16_t centerY = Layout::HintY + 8;
+    const std::int16_t centerY = bounds.y + 6;
     if (key == NavigationKey::Left) {
         display.fillTriangle(centerX - 5, centerY, centerX + 3, centerY - 5,
                              centerX + 3, centerY + 5, Palette::Focus);
@@ -1938,7 +1942,7 @@ void renderNavigationKey(NavigationKey key, Rect bounds) {
         const char* ok = tr(UiTextId::NavOk);
         const std::int16_t okWidth = display.textWidth(ok);
         setUiCursor(UiTextRole::Meta, centerX - okWidth - 3,
-                    Layout::HintY + 1);
+                    bounds.y - 1);
         display.print(ok);
         display.fillTriangle(centerX + 5, centerY - 5, centerX + 5,
                              centerY + 5, centerX + 13, centerY,
@@ -1953,12 +1957,12 @@ void renderNavigationCell(std::uint8_t index, NavigationCell cell) {
                           Layout::Radius, Palette::Surface);
     renderNavigationKey(cell.key, bounds);
     const char* label = tr(cell.label);
-    selectUiFont(UiTextRole::Body);
+    selectUiFont(UiTextRole::Meta);
     const std::int16_t labelWidth = display.textWidth(label);
     display.setTextColor(Palette::TextSecondary, Palette::Surface);
-    setUiCursor(UiTextRole::Body,
+    setUiCursor(UiTextRole::Meta,
                 bounds.x + (bounds.width - labelWidth) / 2,
-                bounds.y + 18);
+                bounds.y + 11);
     display.print(label);
 }
 
@@ -1989,11 +1993,15 @@ std::uint16_t toneColor(Tone tone) {
     }
 }
 
-void renderHeader(const char* title) {
-    display.fillScreen(Palette::Canvas);
+void renderHeader(const char* title, bool clearContent) {
     const Rect header = Components::header();
     display.fillRect(header.x, header.y, header.width, header.height,
                      Palette::Header);
+    if (clearContent) {
+        display.fillRect(0, header.y + header.height, Layout::ScreenWidth,
+                         Layout::ScreenHeight - header.height,
+                         Palette::Canvas);
+    }
     display.setTextColor(Palette::TextPrimary, Palette::Header);
     display.setTextFont(4);
     activeDisplayFont = ActiveDisplayFont::None;
@@ -2090,17 +2098,21 @@ UiTextId homeNote(const AppMenuItem& item) {
     return UiTextId::Ready;
 }
 
-void renderHome() {
-    renderHeader(tr(UiTextId::HomeTitle));
+void renderHomeRow(std::uint8_t index) {
+    const AppMenuItem* item = appCatalog.get(index);
+    if (item == nullptr) return;
+    const bool utility = std::strcmp(item->id, "self-test") == 0;
+    const Rect bounds = Components::homeRow(index, utility);
+    const bool selected = uiController.selection() == index;
+    renderMenuRow(bounds, tr(homeLabel(*item)), tr(homeNote(*item)), selected,
+                  item->enabled,
+                  item->enabled ? Tone::Positive : Tone::Muted);
+}
+
+void renderHome(bool clearContent) {
+    renderHeader(tr(UiTextId::HomeTitle), clearContent);
     for (std::uint8_t i = 0; i < appCatalog.size(); ++i) {
-        const AppMenuItem* item = appCatalog.get(i);
-        if (item == nullptr) continue;
-        const bool utility = std::strcmp(item->id, "self-test") == 0;
-        const Rect bounds = Components::homeRow(i, utility);
-        const bool selected = uiController.selection() == i;
-        renderMenuRow(bounds, tr(homeLabel(*item)), tr(homeNote(*item)),
-                      selected, item->enabled,
-                      item->enabled ? Tone::Positive : Tone::Muted);
+        renderHomeRow(i);
     }
 }
 
@@ -2131,39 +2143,48 @@ SelfTestFacts snapshotSelfTestFacts() {
     return facts;
 }
 
-void renderLanguagePage() {
-    renderHeader(tr(UiTextId::LanguageTitle));
+void renderLanguageRow(std::uint8_t index) {
     const UiTextId labels[2] = {UiTextId::LanguageEnglish,
                                 UiTextId::LanguageRussian};
     const UiTextId notes[2] = {UiTextId::LanguageEnglishNote,
                                UiTextId::LanguageRussianNote};
+    if (index >= 2) return;
+    renderMenuRow(Components::choiceRow(index), tr(labels[index]),
+                  tr(notes[index]), languageController.selection() == index,
+                  true,
+                  languageController.active() ==
+                          (index == 0 ? UiLanguage::English
+                                      : UiLanguage::Russian)
+                      ? Tone::Positive
+                      : Tone::Neutral);
+}
+
+void renderLanguagePage(bool clearContent) {
+    renderHeader(tr(UiTextId::LanguageTitle), clearContent);
     for (std::uint8_t index = 0; index < 2; ++index) {
-        renderMenuRow(Components::choiceRow(index), tr(labels[index]),
-                      tr(notes[index]),
-                      languageController.selection() == index, true,
-                      languageController.active() ==
-                              (index == 0 ? UiLanguage::English
-                                          : UiLanguage::Russian)
-                          ? Tone::Positive
-                          : Tone::Neutral);
+        renderLanguageRow(index);
     }
     display.setTextColor(Palette::TextMuted, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 207);
     display.print(tr(UiTextId::LanguagePersisted));
 }
 
-void renderSelfTestPage() {
+void renderSelfTestModeRow(std::uint8_t index) {
+    const UiTextId labels[2] = {UiTextId::Quick, UiTextId::FullGuided};
+    const UiTextId notes[2] = {UiTextId::QuickNote, UiTextId::FullNote};
+    if (index >= 2) return;
+    const bool selected = selfTestController.selection() == index;
+    renderMenuRow(Components::choiceRow(index), tr(labels[index]),
+                  tr(notes[index]), selected, true,
+                  index == 0 ? Tone::Positive : Tone::Warning);
+}
+
+void renderSelfTestPage(bool clearContent) {
     char line[96] = {};
     if (selfTestController.view() == SelfTestView::ModeMenu) {
-        renderHeader(tr(UiTextId::SelfTestTitle));
-        const UiTextId labels[2] = {UiTextId::Quick, UiTextId::FullGuided};
-        const UiTextId notes[2] = {UiTextId::QuickNote, UiTextId::FullNote};
+        renderHeader(tr(UiTextId::SelfTestTitle), clearContent);
         for (std::uint8_t index = 0; index < 2; ++index) {
-            const bool selected = selfTestController.selection() == index;
-            renderMenuRow(Components::choiceRow(index), tr(labels[index]),
-                          tr(notes[index]),
-                          selected, true,
-                          index == 0 ? Tone::Positive : Tone::Warning);
+            renderSelfTestModeRow(index);
         }
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 207);
@@ -2172,7 +2193,7 @@ void renderSelfTestPage() {
     }
 
     if (selfTestController.view() == SelfTestView::Preflight) {
-        renderHeader(tr(UiTextId::FullPreflight));
+        renderHeader(tr(UiTextId::FullPreflight), clearContent);
         renderMetric(0, tr(UiTextId::QuickChecks8));
         renderMetric(1, tr(UiTextId::CapabilityPlanStaged));
         renderMetric(2, tr(UiTextId::SideEffectsNone));
@@ -2184,7 +2205,7 @@ void renderSelfTestPage() {
     }
 
     if (selfTestController.view() == SelfTestView::VisualCheck) {
-        renderHeader(tr(UiTextId::VisualCheckTitle));
+        renderHeader(tr(UiTextId::VisualCheckTitle), clearContent);
         constexpr UiTextId states[SelfTestController::kVisualStateCount] = {
             UiTextId::VisualDialog,
             UiTextId::VisualUnavailable,
@@ -2212,7 +2233,8 @@ void renderSelfTestPage() {
                      ? tr(UiTextId::SelfTestPass)
                      : (report.status == SelfTestResultStatus::Fail
                             ? tr(UiTextId::SelfTestFail)
-                            : tr(UiTextId::SelfTestBlocked)));
+                            : tr(UiTextId::SelfTestBlocked)),
+                 clearContent);
     renderMetric(0,
                  report.mode == SelfTestMode::Quick ? tr(UiTextId::ModeQuick)
                                                     : tr(UiTextId::ModeFull),
@@ -2240,9 +2262,9 @@ void renderSelfTestPage() {
     display.print(tr(UiTextId::SelfTestReportUsb));
 }
 
-void renderOverview() {
+void renderOverview(bool clearContent) {
     char line[80] = {};
-    renderHeader(tr(UiTextId::DiagnosticsTitle));
+    renderHeader(tr(UiTextId::DiagnosticsTitle), clearContent);
     display.setTextColor(Palette::Positive, Palette::Canvas);
     setUiCursor(UiTextRole::Body, 14, 82);
     display.print(tr(UiTextId::ProfileN16));
@@ -2263,10 +2285,54 @@ void renderOverview() {
 
 }
 
-void renderInventoryPage() {
+constexpr std::size_t kVisibleSurveyRows = 3;
+
+std::size_t surveyFirstVisible(std::size_t selection) {
+    return selection < kVisibleSurveyRows
+        ? 0
+        : selection - kVisibleSurveyRows + 1;
+}
+
+void renderSurveyListRow(std::size_t index, std::size_t firstVisible) {
+    const Observation* observation = surveySession.get(index);
+    if (observation == nullptr) return;
+    const std::int32_t y =
+        100 + static_cast<std::int32_t>(index - firstVisible) * 40;
+    const bool selected = surveyController.selection() == index;
+    const std::uint16_t background = selected ? Palette::SurfaceFocus
+                                               : Palette::Surface;
+    display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth, 36,
+                          Layout::Radius, background);
+    renderFocusCue({Layout::Edge, static_cast<std::int16_t>(y),
+                    Layout::ContentWidth, 36}, selected);
+    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
+                         background);
+    setUiCursor(UiTextRole::Body, 20, y - 2);
+    char visibleLabel[24] = {};
+    const std::size_t visibleLength = observation->labelLength < 15U
+        ? observation->labelLength : 15U;
+    if (visibleLength == 0) {
+        std::strcpy(visibleLabel, tr(UiTextId::Hidden));
+    } else {
+        std::memcpy(visibleLabel, observation->label.data(), visibleLength);
+        if (observation->labelLength > visibleLength) {
+            visibleLabel[visibleLength - 1U] = '~';
+        }
+    }
+    display.print(visibleLabel);
+    char line[96] = {};
+    display.setTextColor(Palette::Positive, background);
+    std::snprintf(line, sizeof(line), tr(UiTextId::ChannelRssiFormat),
+                  static_cast<unsigned>(observation->channel),
+                  static_cast<int>(observation->rssiDbm));
+    setUiCursor(UiTextRole::Meta, 146, y + 13);
+    display.print(line);
+}
+
+void renderInventoryPage(bool clearContent) {
     char line[96] = {};
     if (surveyWorkflow.state() == SurveyWorkflowState::Setup) {
-        renderHeader(tr(UiTextId::SurveySetup));
+        renderHeader(tr(UiTextId::SurveySetup), clearContent);
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         setUiCursor(UiTextRole::Body, 14, 82);
         display.print(tr(UiTextId::SourceWifi));
@@ -2295,7 +2361,7 @@ void renderInventoryPage() {
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Result) {
-        renderHeader(tr(UiTextId::SurveyCommitted));
+        renderHeader(tr(UiTextId::SurveyCommitted), clearContent);
         display.setTextColor(Palette::Focus, Palette::Canvas);
         setUiCursor(UiTextRole::Body, 14, 80);
         display.print(surveySession.id());
@@ -2324,7 +2390,7 @@ void renderInventoryPage() {
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Error) {
-        renderHeader(tr(UiTextId::SurveyError));
+        renderHeader(tr(UiTextId::SurveyError), clearContent);
         display.setTextColor(Palette::Danger, Palette::Canvas);
         setUiCursor(UiTextRole::Body, 14, 82);
         display.print(leshy1::apps::survey::surveyWorkflowStatusName(
@@ -2338,7 +2404,7 @@ void renderInventoryPage() {
         return;
     }
     if (surveyController.view() == SurveyView::Detail) {
-        renderHeader(tr(UiTextId::SurveyDetail));
+        renderHeader(tr(UiTextId::SurveyDetail), clearContent);
         const Observation* observation = surveyController.selected();
         if (observation == nullptr) return;
         display.setTextFont(4);
@@ -2367,7 +2433,7 @@ void renderInventoryPage() {
         return;
     }
 
-    renderHeader(tr(UiTextId::SurveyRunning));
+    renderHeader(tr(UiTextId::SurveyRunning), clearContent);
     display.setTextColor(Palette::Positive, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 70);
     if (std::strcmp(productSurveyRuntime.status, "stopping") == 0) {
@@ -2386,56 +2452,48 @@ void renderInventoryPage() {
                   static_cast<unsigned long long>(progress.dropped));
     setUiCursor(UiTextRole::Meta, 14, 82);
     display.print(line);
-    constexpr std::size_t kVisibleSurveyRows = 3;
     const std::size_t selection = surveyController.selection();
-    const std::size_t firstVisible =
-        selection < kVisibleSurveyRows ? 0 : selection - kVisibleSurveyRows + 1;
+    const std::size_t firstVisible = surveyFirstVisible(selection);
     const std::size_t endVisible =
         surveySession.size() < firstVisible + kVisibleSurveyRows
             ? surveySession.size()
             : firstVisible + kVisibleSurveyRows;
     for (std::size_t index = firstVisible; index < endVisible; ++index) {
-        const Observation* observation = surveySession.get(index);
-        if (observation == nullptr) continue;
-        const std::int32_t y = 100 +
-            static_cast<std::int32_t>(index - firstVisible) * 40;
-        const bool selected = surveyController.selection() == index;
-        const std::uint16_t background = selected ? Palette::SurfaceFocus
-                                                   : Palette::Surface;
-        display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth, 36,
-                              Layout::Radius, background);
-        renderFocusCue({Layout::Edge, static_cast<std::int16_t>(y),
-                        Layout::ContentWidth, 36}, selected);
-        display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
-                             background);
-        setUiCursor(UiTextRole::Body, 20, y - 2);
-        char visibleLabel[24] = {};
-        const std::size_t visibleLength = observation->labelLength < 15U
-            ? observation->labelLength : 15U;
-        if (visibleLength == 0) {
-            std::strcpy(visibleLabel, tr(UiTextId::Hidden));
-        } else {
-            std::memcpy(visibleLabel, observation->label.data(), visibleLength);
-            if (observation->labelLength > visibleLength) {
-                visibleLabel[visibleLength - 1U] = '~';
-            }
-        }
-        display.print(visibleLabel);
-        display.setTextColor(Palette::Positive, background);
-        std::snprintf(line, sizeof(line), tr(UiTextId::ChannelRssiFormat),
-                      static_cast<unsigned>(observation->channel),
-                      static_cast<int>(observation->rssiDbm));
-        setUiCursor(UiTextRole::Meta, 146, y + 13);
-        display.print(line);
+        renderSurveyListRow(index, firstVisible);
     }
 }
 
-void renderLibraryPage() {
+void renderLibraryListRow(std::size_t index) {
+    const LibraryEntry* entry = libraryController.get(index);
+    if (entry == nullptr || entry->session == nullptr) return;
+    const std::int32_t y = 94 + static_cast<std::int32_t>(index) * 48;
+    const bool selected = libraryController.selection() == index;
+    const std::uint16_t background = selected ? Palette::SurfaceFocus
+                                               : Palette::Surface;
+    display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth,
+                          Layout::RowHeight, Layout::Radius, background);
+    renderFocusCue({Layout::Edge, static_cast<std::int16_t>(y),
+                    Layout::ContentWidth, Layout::RowHeight}, selected);
+    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
+                         background);
+    setUiCursor(UiTextRole::Body, 20, y - 1);
+    display.print(entry->session->id());
+    char line[96] = {};
+    display.setTextColor(Palette::Positive, background);
+    std::snprintf(line, sizeof(line), tr(UiTextId::LibraryRowFormat),
+                  static_cast<unsigned>(entry->session->size()),
+                  static_cast<unsigned long>(entry->generation),
+                  leshy1::apps::library::sessionIntegrityName(entry->integrity));
+    setUiCursor(UiTextRole::Meta, 20, y + 23);
+    display.print(line);
+}
+
+void renderLibraryPage(bool clearContent) {
     char line[96] = {};
     const LibraryEntry* selected = libraryController.selected();
     const bool persistent = selected != nullptr && selected->persistent;
     if (libraryController.view() == LibraryView::ExportReady) {
-        renderHeader(tr(UiTextId::ExportReady));
+        renderHeader(tr(UiTextId::ExportReady), clearContent);
         if (selected == nullptr || selected->session == nullptr) return;
         display.setTextColor(Palette::Focus, Palette::Canvas);
         setUiCursor(UiTextRole::Body, 14, 80);
@@ -2455,7 +2513,7 @@ void renderLibraryPage() {
         return;
     }
     if (libraryController.view() == LibraryView::SessionDetail) {
-        renderHeader(tr(UiTextId::SessionDetail));
+        renderHeader(tr(UiTextId::SessionDetail), clearContent);
         if (selected == nullptr || selected->session == nullptr) return;
         display.setTextColor(Palette::Focus, Palette::Canvas);
         setUiCursor(UiTextRole::Body, 14, 80);
@@ -2480,55 +2538,157 @@ void renderLibraryPage() {
         return;
     }
 
-    renderHeader(tr(UiTextId::LibraryOffline));
+    renderHeader(tr(UiTextId::LibraryOffline), clearContent);
     display.setTextColor(Palette::Positive, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 70);
     display.print(persistent ? tr(UiTextId::PersistentSession)
                              : tr(UiTextId::SimulatedRam));
     for (std::size_t index = 0; index < libraryController.size(); ++index) {
-        const LibraryEntry* entry = libraryController.get(index);
-        if (entry == nullptr || entry->session == nullptr) continue;
-        const std::int32_t y = 94 + static_cast<std::int32_t>(index) * 48;
-        const bool isSelected = libraryController.selection() == index;
-        const std::uint16_t background = isSelected ? Palette::SurfaceFocus
-                                                    : Palette::Surface;
-        display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth,
-                              Layout::RowHeight, Layout::Radius, background);
-        renderFocusCue({Layout::Edge, static_cast<std::int16_t>(y),
-                        Layout::ContentWidth, Layout::RowHeight}, isSelected);
-        display.setTextColor(isSelected ? Palette::Focus : Palette::TextSecondary,
-                             background);
-        setUiCursor(UiTextRole::Body, 20, y - 1);
-        display.print(entry->session->id());
-        display.setTextColor(Palette::Positive, background);
-        std::snprintf(line, sizeof(line), tr(UiTextId::LibraryRowFormat),
-                      static_cast<unsigned>(entry->session->size()),
-                      static_cast<unsigned long>(entry->generation),
-                      leshy1::apps::library::sessionIntegrityName(entry->integrity));
-        setUiCursor(UiTextRole::Meta, 20, y + 23);
-        display.print(line);
+        renderLibraryListRow(index);
     }
 }
 
-void renderInteractiveScreen() {
+struct UiRenderSnapshot final {
+    bool valid = false;
+    std::uint8_t page = 0;
+    std::uint8_t rootSelection = 0;
+    std::uint8_t languageSelection = 0;
+    std::uint8_t selfTestView = 0;
+    std::uint8_t selfTestSelection = 0;
+    std::uint8_t surveyState = 0;
+    std::uint8_t surveyView = 0;
+    std::size_t surveySelection = 0;
+    std::size_t surveySize = 0;
+    std::uint8_t libraryView = 0;
+    std::size_t librarySelection = 0;
+    std::size_t librarySize = 0;
+};
+
+UiRenderSnapshot renderedUi{};
+
+UiRenderSnapshot captureUiRenderSnapshot() {
+    return {
+        true,
+        uiController.page(),
+        uiController.selection(),
+        languageController.selection(),
+        static_cast<std::uint8_t>(selfTestController.view()),
+        selfTestController.selection(),
+        static_cast<std::uint8_t>(surveyWorkflow.state()),
+        static_cast<std::uint8_t>(surveyController.view()),
+        surveyController.selection(),
+        surveySession.size(),
+        static_cast<std::uint8_t>(libraryController.view()),
+        libraryController.selection(),
+        libraryController.size(),
+    };
+}
+
+bool renderSelectionDelta() {
+    if (!renderedUi.valid || renderedUi.page != uiController.page()) return false;
+
     if (uiController.isRoot()) {
-        renderHome();
-    } else if (uiController.page() == 1) {
-        renderOverview();
-    } else if (uiController.page() == 2) {
-        renderInventoryPage();
-    } else if (uiController.page() == 3) {
-        renderLibraryPage();
-    } else if (uiController.page() == 4) {
-        renderLanguagePage();
-    } else {
-        renderSelfTestPage();
+        const std::uint8_t current = uiController.selection();
+        if (renderedUi.rootSelection == current) return false;
+        renderHomeRow(renderedUi.rootSelection);
+        renderHomeRow(current);
+        return true;
     }
-    const Rect divider = Components::footerDivider();
-    display.drawFastHLine(divider.x, divider.y, divider.width,
-                          Palette::Divider);
+
+    if (uiController.page() == 2 &&
+        surveyWorkflow.state() == SurveyWorkflowState::Running &&
+        surveyController.view() == SurveyView::List &&
+        renderedUi.surveyState ==
+            static_cast<std::uint8_t>(SurveyWorkflowState::Running) &&
+        renderedUi.surveyView == static_cast<std::uint8_t>(SurveyView::List) &&
+        renderedUi.surveySize == surveySession.size()) {
+        const std::size_t current = surveyController.selection();
+        if (renderedUi.surveySelection == current) return false;
+        const std::size_t oldFirst =
+            surveyFirstVisible(renderedUi.surveySelection);
+        const std::size_t currentFirst = surveyFirstVisible(current);
+        if (oldFirst == currentFirst) {
+            renderSurveyListRow(renderedUi.surveySelection, currentFirst);
+            renderSurveyListRow(current, currentFirst);
+        } else {
+            display.fillRect(Layout::Edge, 100, Layout::ContentWidth, 116,
+                             Palette::Canvas);
+            const std::size_t end =
+                surveySession.size() < currentFirst + kVisibleSurveyRows
+                    ? surveySession.size()
+                    : currentFirst + kVisibleSurveyRows;
+            for (std::size_t index = currentFirst; index < end; ++index) {
+                renderSurveyListRow(index, currentFirst);
+            }
+        }
+        return true;
+    }
+
+    if (uiController.page() == 3 &&
+        libraryController.view() == LibraryView::SessionList &&
+        renderedUi.libraryView ==
+            static_cast<std::uint8_t>(LibraryView::SessionList) &&
+        renderedUi.librarySize == libraryController.size()) {
+        const std::size_t current = libraryController.selection();
+        if (renderedUi.librarySelection == current) return false;
+        renderLibraryListRow(renderedUi.librarySelection);
+        renderLibraryListRow(current);
+        return true;
+    }
+
+    if (uiController.page() == 4) {
+        const std::uint8_t current = languageController.selection();
+        if (renderedUi.languageSelection == current) return false;
+        renderLanguageRow(renderedUi.languageSelection);
+        renderLanguageRow(current);
+        return true;
+    }
+
+    if (uiController.page() == 5 &&
+        selfTestController.view() == SelfTestView::ModeMenu &&
+        renderedUi.selfTestView ==
+            static_cast<std::uint8_t>(SelfTestView::ModeMenu)) {
+        const std::uint8_t current = selfTestController.selection();
+        if (renderedUi.selfTestSelection == current) return false;
+        renderSelfTestModeRow(renderedUi.selfTestSelection);
+        renderSelfTestModeRow(current);
+        return true;
+    }
+    return false;
+}
+
+void renderInteractiveScreen(bool clearContent) {
+    std::uint64_t startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0) startedUs = 1;
+    display.startWrite();
+    const bool incremental = !clearContent && renderSelectionDelta();
+    if (!incremental) {
+        clearContent = true;
+        if (uiController.isRoot()) {
+            renderHome(clearContent);
+        } else if (uiController.page() == 1) {
+            renderOverview(clearContent);
+        } else if (uiController.page() == 2) {
+            renderInventoryPage(clearContent);
+        } else if (uiController.page() == 3) {
+            renderLibraryPage(clearContent);
+        } else if (uiController.page() == 4) {
+            renderLanguagePage(clearContent);
+        } else {
+            renderSelfTestPage(clearContent);
+        }
+        const Rect divider = Components::footerDivider();
+        display.drawFastHLine(divider.x, divider.y, divider.width,
+                              Palette::Divider);
+        renderNavigationFooter();
+    }
     renderInput(lastInputRaw);
-    renderNavigationFooter();
+    display.endWrite();
+    renderedUi = captureUiRenderSnapshot();
+    const std::uint64_t finishedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    lastUiRenderWasIncremental = incremental;
+    lastUiRenderUs = finishedUs >= startedUs ? finishedUs - startedUs : 0;
 }
 
 void emitUiState(Stream& reply, UiAction action, bool changed) {
@@ -2542,7 +2702,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "\"selection\":%u,\"selected_id\":\"%s\","
                   "\"selected_enabled\":%s,\"reason\":\"%s\","
                   "\"language\":\"%s\",\"language_selection\":%u,"
-                  "\"revision\":%lu}",
+                  "\"revision\":%lu,\"render_mode\":\"%s\","
+                  "\"render_us\":%llu}",
                   leshy1::ui::uiActionName(action), changed ? "true" : "false",
                   leshy1::ui::probePageName(uiController.page()),
                   static_cast<unsigned>(uiController.selection()),
@@ -2551,7 +2712,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   selected == nullptr ? "missing selection" : selected->reason,
                   leshy1::ui::uiLanguageName(languageController.active()),
                   static_cast<unsigned>(languageController.selection()),
-                  static_cast<unsigned long>(uiController.revision()));
+                  static_cast<unsigned long>(uiController.revision()),
+                  lastUiRenderWasIncremental ? "incremental" : "full",
+                  static_cast<unsigned long long>(lastUiRenderUs));
     const std::size_t length = std::strlen(line);
     if (length > 0 && length + 2500 < sizeof(line)) {
         const SurveyPipelineProgress pipelineProgress = surveyPipeline.progress();
@@ -2703,7 +2866,31 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     reply.println(line);
 }
 
+bool selectionCanRepaintInPlace(UiAction action) {
+    if (action != UiAction::Up && action != UiAction::Down) return false;
+    if (uiController.isRoot()) return true;
+    if (uiController.page() == 2) {
+        return surveyWorkflow.state() == SurveyWorkflowState::Running &&
+               surveyController.view() == SurveyView::List;
+    }
+    if (uiController.page() == 3) {
+        return libraryController.view() == LibraryView::SessionList;
+    }
+    if (uiController.page() == 4) return true;
+    return uiController.page() == 5 &&
+           selfTestController.view() == SelfTestView::ModeMenu;
+}
+
 bool applyUiAction(UiAction action, bool render = true) {
+    const bool incrementalCandidate = selectionCanRepaintInPlace(action);
+    lastUiActionUsedIncrementalRender = false;
+    const auto finish = [&](bool changed) {
+        lastUiActionUsedIncrementalRender = changed && incrementalCandidate;
+        if (changed && render) {
+            renderInteractiveScreen(!lastUiActionUsedIncrementalRender);
+        }
+        return changed;
+    };
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const bool wasRoot = uiController.isRoot();
     if (!wasRoot && uiController.page() == 2) {
@@ -2790,8 +2977,7 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
         if (handled) {
             uiController.recordHandledAction(action);
-            if (changed && render) renderInteractiveScreen();
-            return changed;
+            return finish(changed);
         }
     }
     if (!wasRoot && uiController.page() == 3) {
@@ -2824,8 +3010,7 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
         if (handled) {
             uiController.recordHandledAction(action);
-            if (changed && render) renderInteractiveScreen();
-            return changed;
+            return finish(changed);
         }
     }
     if (!wasRoot && uiController.page() == 4) {
@@ -2844,15 +3029,10 @@ bool applyUiAction(UiAction action, bool render = true) {
             changed = persisted && languageController.apply();
             lastRuntimeEvent = persisted ? "language_persisted"
                                          : "language_persist_failed";
-            if (persisted && render) renderInteractiveScreen();
         }
         if (handled) {
             uiController.recordHandledAction(action);
-            if (changed && render && action != UiAction::Select &&
-                action != UiAction::Right) {
-                renderInteractiveScreen();
-            }
-            return changed;
+            return finish(changed);
         }
     }
     if (!wasRoot && uiController.page() == 5) {
@@ -2890,8 +3070,7 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
         if (handled) {
             uiController.recordHandledAction(action);
-            if (changed && render) renderInteractiveScreen();
-            return changed;
+            return finish(changed);
         }
     }
     const bool wantsLaunch = wasRoot && (action == UiAction::Select || action == UiAction::Right);
@@ -2933,8 +3112,7 @@ bool applyUiAction(UiAction action, bool render = true) {
         appRuntime.stop();
         lastRuntimeEvent = "stopped";
     }
-    if (changed && render) renderInteractiveScreen();
-    return changed;
+    return finish(changed);
 }
 
 void captureDisplay(Stream& reply) {
@@ -6782,6 +6960,7 @@ void loop() {
     PhysicalInputEvent inputEvent;
     unsigned dispatchedThisBatch = 0;
     bool batchChanged = false;
+    bool batchIncrementalOnly = true;
     UiAction lastBatchAction = UiAction::Unknown;
     while (physicalInputEvents != nullptr &&
            dispatchedThisBatch < kPhysicalInputQueueCapacity &&
@@ -6789,6 +6968,9 @@ void loop() {
         lastInputRaw = inputEvent.raw;
         bootMetrics.inputRaw = inputEvent.raw;
         const bool changed = applyUiAction(inputEvent.action, false);
+        if (changed && !lastUiActionUsedIncrementalRender) {
+            batchIncrementalOnly = false;
+        }
         batchChanged = changed || batchChanged;
         lastBatchAction = inputEvent.action;
         ++physicalInputDispatchedPresses;
@@ -6799,7 +6981,7 @@ void loop() {
         lastInputRaw = physicalButtonInput.stableRaw();
         portEXIT_CRITICAL(&physicalInputMux);
         bootMetrics.inputRaw = lastInputRaw;
-        if (batchChanged) renderInteractiveScreen();
+        if (batchChanged) renderInteractiveScreen(!batchIncrementalOnly);
         else renderInput(lastInputRaw);
         char line[320] = {};
         std::snprintf(line, sizeof(line),

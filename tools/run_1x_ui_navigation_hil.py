@@ -108,44 +108,53 @@ def main() -> int:
         # Right and OK/Select are deliberately proven as equivalent inward
         # actions, while Left and diagnostic Back are equivalent return paths.
         transitions["right_enters"] = perform(
-            device, "right", page="diagnostics", selection=0, changed=True
+            device, "right", page="diagnostics", selection=0, changed=True,
+            render_mode="full"
         )
         screens["diagnostics_ru"] = capture(
             device, args.output, "diagnostics-ru",
             page="diagnostics", language="ru"
         )
         transitions["left_returns"] = perform(
-            device, "left", page="home", selection=0, changed=True
+            device, "left", page="home", selection=0, changed=True,
+            render_mode="full"
         )
         transitions["select_enters"] = perform(
-            device, "select", page="diagnostics", selection=0, changed=True
+            device, "select", page="diagnostics", selection=0, changed=True,
+            render_mode="full"
         )
         transitions["back_returns"] = perform(
-            device, "back", page="home", selection=0, changed=True
+            device, "back", page="home", selection=0, changed=True,
+            render_mode="full"
         )
         transitions["up_at_first_is_bounded"] = perform(
             device, "up", page="home", selection=0, changed=False
         )
 
         transitions["down_selects_survey"] = perform(
-            device, "down", page="home", selection=1, changed=True
+            device, "down", page="home", selection=1, changed=True,
+            render_mode="incremental"
         )
         transitions["right_enters_survey"] = perform(
-            device, "right", page="survey", selection=1, changed=True
+            device, "right", page="survey", selection=1, changed=True,
+            render_mode="full"
         )
         screens["survey_setup_ru"] = capture(
             device, args.output, "survey-setup-ru",
             page="survey", language="ru"
         )
         transitions["left_returns_from_survey"] = perform(
-            device, "left", page="home", selection=1, changed=True
+            device, "left", page="home", selection=1, changed=True,
+            render_mode="full"
         )
 
         transitions["down_selects_library"] = perform(
-            device, "down", page="home", selection=2, changed=True
+            device, "down", page="home", selection=2, changed=True,
+            render_mode="incremental"
         )
         transitions["right_enters_library"] = perform(
-            device, "right", page="library", selection=2, changed=True
+            device, "right", page="library", selection=2, changed=True,
+            render_mode="full"
         )
         screens["library_list_ru"] = capture(
             device, args.output, "library-list-ru",
@@ -175,22 +184,46 @@ def main() -> int:
             perform(device, "left", page="library", selection=2, changed=True)
         perform(device, "left", page="home", selection=2, changed=True)
 
-        perform(device, "down", page="home", selection=3, changed=True)
+        transitions["down_selects_language"] = perform(
+            device, "down", page="home", selection=3, changed=True,
+            render_mode="incremental"
+        )
         transitions["right_enters_language"] = perform(
-            device, "right", page="language", selection=3, changed=True
+            device, "right", page="language", selection=3, changed=True,
+            render_mode="full"
         )
         screens["language_ru"] = capture(
             device, args.output, "language-ru", page="language", language="ru"
         )
+        transitions["language_up_incremental"] = perform(
+            device, "up", page="language", selection=3, changed=True,
+            render_mode="incremental", language_selection=0
+        )
+        transitions["language_down_incremental"] = perform(
+            device, "down", page="language", selection=3, changed=True,
+            render_mode="incremental", language_selection=1
+        )
         perform(device, "left", page="home", selection=3, changed=True)
 
-        perform(device, "down", page="home", selection=4, changed=True)
+        transitions["down_selects_self_test"] = perform(
+            device, "down", page="home", selection=4, changed=True,
+            render_mode="incremental"
+        )
         transitions["right_enters_self_test"] = perform(
-            device, "right", page="self_test", selection=4, changed=True
+            device, "right", page="self_test", selection=4, changed=True,
+            render_mode="full"
         )
         screens["self_test_modes_ru"] = capture(
             device, args.output, "self-test-modes-ru",
             page="self_test", language="ru", self_test_view="mode_menu"
+        )
+        transitions["self_test_down_incremental"] = perform(
+            device, "down", page="self_test", selection=4, changed=True,
+            render_mode="incremental", self_test_mode="full_guided"
+        )
+        transitions["self_test_up_incremental"] = perform(
+            device, "up", page="self_test", selection=4, changed=True,
+            render_mode="incremental", self_test_mode="quick"
         )
         perform(device, "left", page="home", selection=4, changed=True)
 
@@ -234,6 +267,27 @@ def main() -> int:
             before.get("heap_min_free") != after.get("heap_min_free")):
         raise RuntimeError(f"heap changed: before={before}, after={after}")
 
+    changed_transitions = [
+        state for state in transitions.values() if state.get("changed") is True
+    ]
+    incremental_transitions = [
+        state for state in changed_transitions
+        if state.get("render_mode") == "incremental"
+    ]
+    full_transitions = [
+        state for state in changed_transitions if state.get("render_mode") == "full"
+    ]
+    incremental_render_us = [
+        int(state.get("render_us", 0)) for state in incremental_transitions
+    ]
+    if (len(incremental_transitions) != 8 or
+            not incremental_render_us or min(incremental_render_us) <= 0 or
+            max(incremental_render_us) > 40_000):
+        raise RuntimeError(
+            "incremental render regression: "
+            f"count={len(incremental_transitions)} us={incremental_render_us}"
+        )
+
     result = {
         "schema": "leshy.ui_navigation_hil.v1",
         "status": "pass",
@@ -245,11 +299,21 @@ def main() -> int:
             "up_down": "select",
             "context_actions_live_inside_destination": True,
             "technical_status_removed_from_footer": True,
+            "footer_height_px": 26,
+            "selection_repaints_only_changed_rows": True,
+            "full_screen_clear_on_selection": False,
         },
         "screens": screens,
         "screen_count": len(screens),
         "transitions": transitions,
         "transition_count": len(transitions),
+        "rendering": {
+            "incremental_transition_count": len(incremental_transitions),
+            "full_transition_count": len(full_transitions),
+            "incremental_render_us": incremental_render_us,
+            "maximum_incremental_render_us": max(incremental_render_us),
+            "maximum_allowed_incremental_render_us": 40_000,
+        },
         "records": records,
         "heap_invariant": True,
         "final_owner": "none",

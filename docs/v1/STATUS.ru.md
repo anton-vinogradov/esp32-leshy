@@ -12,7 +12,7 @@
 
 - **Активный этап:** `S3 — Первая сохраняемая Survey Session`.
 - **Последний закрытый этап:** `S2 — Чистая платформа 1.x`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.64 пространственной навигацией и S3 progress evidence.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.65 компактной инкрементальной навигацией и S3 progress evidence.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
 - **Главная цель текущего этапа:** закрыть missing-source real-TFT path, physical
@@ -542,6 +542,9 @@
 | E-BUILD-065 | exact rebuild `0.64.0-spatial-navigation-measure` | pass: RAM 128 816 B, linked flash 1 111 100 B; app/factory 1 111 504/1 177 040 B; app `c4d824e0…140a0`, factory `724afdbd…a4eb`, ELF `b2e92f3f…36ed`, map `535fa2dc…b04`; RTC no-init 20 B | −832 B linked/app/factory и zero static-RAM growth vs 0.63 после замены prose footers; exact UX refinement candidate, не stage/release build |
 | E-AUTO-028 | runner пространственной навигации и retained verifier | pass: public Actions доказывают, что Right и Select входят в одинаковые destinations Home и nested Library, Left и diagnostic Back возвращают через одну boundary, Up/Down остаётся bounded selection; verifier пересчитывает exact candidate/runner, все PNG/traces/records, geometry трёх ячеек, source behavior, heap/input/buzzer/final cleanup и обновлённую последовательность product HIL | non-destructive local one-board UX regression; размещение stop/save активного Product Survey здесь source-bound и будет выполнено следующим applicable product run |
 | E-HIL-088 / E-UX-009 | board-01 exact 0.64 regression пространственной навигации | pass: девять actual frames 240×320 охватывают RU Home/Diagnostics/Survey setup/Library list+detail/Language/Self-Test и EN/final RU Home; 15 transitions доказывают Left Back, Right/OK Enter и Up/Down Select, footer 40 px использует три ячейки, action labels 16 px и нарисованные direction icons; heap остаётся 272 688/208 912/188 720 B, input errors/ambiguity/drops равны нулю, buzzer LOW, final русский Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-ui-navigation-0.64.json) | возвращает проверенную в 0.x пространственную convention и переносит Survey stop/save внутрь Detail без promotion S3/release |
+| E-BUILD-066 | exact rebuild `0.65.0-compact-incremental-ui-measure` | pass: RAM 128 856 B, linked flash 1 112 256 B; app/factory 1 112 656/1 178 192 B; app `3f133d6a…1443`, factory `733fd5ea…1031`, ELF `796d4a49…db4`, map `678673b9…e23`; RTC no-init 20 B | +1 156 B linked flash, +40 B static RAM и +1 152 B images vs 0.64 за bounded render telemetry/snapshots и helpers changed-row; exact UX refinement candidate, не stage/release build |
+| E-AUTO-029 | runner компактной инкрементальной навигации и retained verifier | pass: runner записывает `full`/`incremental` и device-side `render_us`, доказывает восемь changed-row transitions Home/Language/Self-Test под fail-closed ceiling 40 ms, сохраняет девять TFT states/21 public transition и проверяет exact candidate/runner/frame/record hashes, компактную geometry, отсутствие interactive `fillScreen`, heap/input/buzzer/final cleanup | non-destructive one-board UX regression; не принимает stage или release gate |
+| E-HIL-089 / E-UX-010 | board-01 exact 0.65 compact/flicker-free regression | pass: три cells уменьшены с 40 до 26 px с labels 12 px; selection перерисовывает только old/new opaque rows, полные transitions очищают область ниже уже нарисованного header, восемь exact incremental transitions занимают 19,901–28,981 ms вместо замеченных 63,615 ms whole-page redraw. Девять frames/21 transition сохраняют Left Back, Right/OK Enter, Up/Down Select; heap остаётся 272 648/208 872/188 680 B, input errors/ambiguity/drops равны нулю, buzzer LOW, final русский Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-ui-navigation-0.65.json) | возвращает принцип repaint 0.x без promotion S3/release |
 
 ## Известные неопределённости и риски
 
@@ -549,9 +552,10 @@
   Condensed Medium 16/12 проходит source/license, fit 254/254, TFT 18 states,
   Quick/Full, input, buzzer, heap и cleanup regressions. Physical-panel/user optics
   продолжаются в UX-08, а не остаются неограниченным риском выбора шрифта.
-- Пространственная навигация UX-06 уточнена exact 0.64: footer больше не смешивает
-  controls с техническим status, а видимая модель Left/Up+Down/Right+OK совпадает с
-  поведением firmware. Physical-panel optics всё ещё продолжаются в UX-08.
+- Навигация UX-06 уточнена exact 0.65: компактный footer 26 px больше не смешивает
+  controls с техническим status, модель Left/Up+Down/Right+OK совпадает с поведением,
+  changed-row rendering укладывается в 29 ms на board-01 без full-screen flash.
+  Physical-panel optics всё ещё продолжаются в UX-08.
 - Board-01 дала partial evidence для `HW-T01/T04/T07/T11`; остальные physical tests
   не выполнены, и ни один составной HW-T test ещё не закрыт целиком.
 - BOM указывает ESP32-S3-WROOM-1U-N16 (16 MB, без PSRAM), а original build guide —

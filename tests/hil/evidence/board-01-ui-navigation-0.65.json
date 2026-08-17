@@ -1,0 +1,99 @@
+{
+  "schema": "leshy.ui_navigation_acceptance.v1",
+  "status": "pass",
+  "gate_eligible": false,
+  "evidence_ids": [
+    "E-BUILD-066",
+    "E-AUTO-029",
+    "E-HIL-089",
+    "E-UX-010"
+  ],
+  "candidate": {
+    "version": "0.65.0-compact-incremental-ui-measure",
+    "firmware_sha256": "3f133d6a1f848818dcd1a246533f5f99d17385b370c2c95193f7ac223aec1443",
+    "factory_sha256": "733fd5eacba7bbc457156802c1d7d5fd85f917a182efe28a33d14efcb8e61031",
+    "app_elf_sha256": "796d4a49b56afbd0376854f16901ecb5fb29909050370b2506677057333b3db4",
+    "map_sha256": "678673b9d18dfa7d209f1ac64b4bb15e36d6118303f340076a570e0fcc354e23",
+    "linked_flash_bytes": 1112256,
+    "static_ram_bytes": 128856,
+    "app_image_bytes": 1112656,
+    "factory_image_bytes": 1178192,
+    "rtc_noinit_bytes": 20,
+    "host_tests_passed": true,
+    "firmware_build_passed": true
+  },
+  "navigation": {
+    "left": "back",
+    "right_or_ok": "enter",
+    "up_down": "select",
+    "footer_height_px": 26,
+    "spatial_cells": 3,
+    "label_font": "Roboto Condensed Medium 12",
+    "key_legend_font": "Roboto Condensed Medium 12",
+    "programmatic_direction_icons": true,
+    "technical_status_removed_from_footer": true,
+    "survey_right_enters_detail": true,
+    "survey_stop_or_save_inside_detail": true,
+    "library_right_or_ok_enters_detail": true
+  },
+  "rendering": {
+    "full_screen_fill_removed": true,
+    "full_transition_clears_content_below_header": true,
+    "selection_repaints_only_changed_rows": true,
+    "incremental_transition_count": 8,
+    "full_transition_count": 12,
+    "incremental_render_us": [
+      21466,
+      21244,
+      19901,
+      28866,
+      28753,
+      21381,
+      28981,
+      28862
+    ],
+    "maximum_incremental_render_us": 28981,
+    "maximum_allowed_incremental_render_us": 40000,
+    "pre_fix_home_render_us": 63615,
+    "pre_fix_home_host_ack_ms": 74.752,
+    "post_fix_home_render_us": 21654,
+    "post_fix_home_host_ack_ms": 33.633
+  },
+  "physical": {
+    "run_path": "tests/hil/evidence/board-01-ui-navigation-0.65/run.json",
+    "run_sha256": "15862fbb5f7b8481d4e4bd66ac14d1c7887e97260c04c002a85abe9429449182",
+    "screen_count": 9,
+    "transition_count": 21,
+    "languages": [
+      "ru",
+      "en"
+    ],
+    "right_and_select_entry_proven": true,
+    "left_and_back_return_proven": true,
+    "nested_library_entry_proven": true,
+    "nested_incremental_selection_proven": true,
+    "heap_total": 272648,
+    "heap_free_before": 208872,
+    "heap_free_after": 208872,
+    "heap_min_before": 188680,
+    "heap_min_after": 188680,
+    "input_read_errors": 0,
+    "input_ambiguous_presses": 0,
+    "input_queue_drops": 0,
+    "maximum_sample_gap_ms": 5,
+    "buzzer_inactive": true,
+    "final_language": "ru",
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "scope": {
+    "ux_03": "accepted",
+    "ux_04": "accepted",
+    "ux_05": "accepted",
+    "ux_06": "accepted_compact_and_incremental",
+    "ux_07": "accepted",
+    "demo_s2": "accepted",
+    "s3": "in_progress",
+    "release_gate_eligible": false
+  }
+}
