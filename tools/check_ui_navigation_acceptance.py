@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless the 0.65 compact incremental-UI evidence is complete."""
+"""Fail closed unless the 0.67 non-blocking physical-key evidence is complete."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from check_visual_system_acceptance import decode_png
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = ROOT / "tests/hil/evidence/board-01-ui-navigation-0.65.json"
+EVIDENCE = ROOT / "tests/hil/evidence/board-01-ui-navigation-0.67.json"
 RUNNER = ROOT / "tools/run_1x_ui_navigation_hil.py"
 RENDERER = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 COMPONENTS = ROOT / "firmware/leshy1/src/ui/UiComponents.h"
@@ -71,26 +71,26 @@ def main() -> int:
             evidence.get("status") == "pass",
             "navigation evidence schema/status mismatch")
     require(failures, evidence.get("evidence_ids") ==
-            ["E-BUILD-066", "E-AUTO-029", "E-HIL-089", "E-UX-010"],
+            ["E-BUILD-068", "E-AUTO-031", "E-HIL-091", "E-UX-012"],
             "navigation evidence ID set mismatch")
     require(failures, evidence.get("gate_eligible") is False,
             "navigation evidence must not promote a stage/release gate")
 
     candidate = evidence.get("candidate", {})
     require(failures, candidate == {
-        "version": "0.65.0-compact-incremental-ui-measure",
+        "version": "0.67.0-nonblocking-keypath-measure",
         "firmware_sha256":
-            "3f133d6a1f848818dcd1a246533f5f99d17385b370c2c95193f7ac223aec1443",
+            "9af801bcabb139c6edcc86ed74b08faa7b98d30de16584fe14ce7a970367e926",
         "factory_sha256":
-            "733fd5eacba7bbc457156802c1d7d5fd85f917a182efe28a33d14efcb8e61031",
+            "74b248da84dc846638cb7066834be5880d8d6d934e9b067410bceaac9dae523e",
         "app_elf_sha256":
-            "796d4a49b56afbd0376854f16901ecb5fb29909050370b2506677057333b3db4",
+            "c1f89b2292c4c0320093c36eeb630d992dd48066228ab850144ae237a9193123",
         "map_sha256":
-            "678673b9d18dfa7d209f1ac64b4bb15e36d6118303f340076a570e0fcc354e23",
-        "linked_flash_bytes": 1112256,
-        "static_ram_bytes": 128856,
-        "app_image_bytes": 1112656,
-        "factory_image_bytes": 1178192,
+            "bc55597172bbecb6e909a95da70bb36e2990aab1b134543990d4c946a8e7ba9a",
+        "linked_flash_bytes": 1112568,
+        "static_ram_bytes": 128896,
+        "app_image_bytes": 1112976,
+        "factory_image_bytes": 1178512,
         "rtc_noinit_bytes": 20,
         "host_tests_passed": True,
         "firmware_build_passed": True,
@@ -110,17 +110,34 @@ def main() -> int:
         "full_screen_fill_removed": True,
         "full_transition_clears_content_below_header": True,
         "selection_repaints_only_changed_rows": True,
+        "selection_skips_footer_repaint": True,
+        "one_queued_press_per_repaint": True,
+        "press_frames_are_never_coalesced": True,
+        "hot_path_serial_writes": 0,
         "incremental_transition_count": 8,
         "full_transition_count": 12,
-        "incremental_render_us": [21466, 21244, 19901, 28866, 28753,
-                                  21381, 28981, 28862],
-        "maximum_incremental_render_us": 28981,
+        "incremental_render_us": [15543, 15282, 13972, 22963, 22961,
+                                  15463, 23057, 23058],
+        "maximum_incremental_render_us": 23058,
         "maximum_allowed_incremental_render_us": 40000,
-        "pre_fix_home_render_us": 63615,
-        "pre_fix_home_host_ack_ms": 74.752,
-        "post_fix_home_render_us": 21654,
-        "post_fix_home_host_ack_ms": 33.633,
     }, "incremental rendering summary mismatch")
+
+    regression = evidence.get("regression", {})
+    incident_path = retained(failures, regression.get("failed_incident_path"),
+                             regression.get("failed_incident_sha256"))
+    incident = json.loads(incident_path.read_text(encoding="utf-8")) \
+        if incident_path else {}
+    require(failures,
+            incident.get("schema") == "leshy.ui_input_incident.v1" and
+            incident.get("status") == "failed" and
+            incident.get("measured_after_observation", {}).get(
+                "queue_high_water") == 5 and
+            incident.get("disposition", {}).get("accepted_as_ux_fix") is False,
+            "0.66 user-lag incident is missing or not fail-closed")
+    require(failures, regression.get("failed_queue_high_water") == 5 and
+            regression.get("passing_queue_high_water") == 1 and
+            regression.get("user_confirmed_responsive") is True,
+            "physical user regression summary mismatch")
 
     physical = evidence.get("physical", {})
     run_path = retained(failures, physical.get("run_path"),
@@ -266,7 +283,7 @@ def main() -> int:
     require(failures, rendering.get("incremental_transition_count") == 8 and
             rendering.get("full_transition_count") == 12 and
             rendering.get("incremental_render_us") == incremental_us and
-            rendering.get("maximum_incremental_render_us") == 28981 and
+            rendering.get("maximum_incremental_render_us") == 23058 and
             rendering.get("maximum_allowed_incremental_render_us") == 40000,
             "measured rendering block mismatch")
 
@@ -280,9 +297,9 @@ def main() -> int:
     after = loaded.get("metrics_after", {})
     require(failures, (before.get("heap_total"), before.get("heap_free"),
                        before.get("heap_min_free")) ==
-            (272648, 208872, 188680) and
+            (272608, 208320, 188140) and
             (after.get("heap_total"), after.get("heap_free"),
-             after.get("heap_min_free")) == (272648, 208872, 188680),
+             after.get("heap_min_free")) == (272608, 208320, 188140),
             "heap invariance mismatch")
     input_state = loaded.get("input", {})
     safe = loaded.get("safe_outputs", {})
@@ -290,7 +307,13 @@ def main() -> int:
             input_state.get("read_errors") == 0 and
             input_state.get("ambiguous_presses") == 0 and
             input_state.get("queue_drops") == 0 and
-            input_state.get("maximum_sample_gap_ms", 999) <= 5,
+            input_state.get("maximum_sample_gap_ms", 999) <= 5 and
+            input_state.get("press_events") == 75 and
+            input_state.get("release_events") == 75 and
+            input_state.get("dispatched_press_events") == 75 and
+            input_state.get("queue_high_water") == 1 and
+            input_state.get("maximum_queue_latency_us") == 1256 and
+            input_state.get("hot_path_serial_writes") == 0,
             "input health mismatch")
     require(failures, safe.get("buzzer_inactive") is True and
             safe.get("buzzer_level") == "low", "buzzer safety mismatch")
@@ -320,10 +343,35 @@ def main() -> int:
     for marker in ("renderSelectionDelta()", "renderHomeRow(",
                    "renderLanguageRow(", "renderSelfTestModeRow(",
                    "renderSurveyListRow(", "renderLibraryListRow(",
-                   "renderInteractiveScreen(!lastUiActionUsedIncrementalRender)",
-                   "renderInteractiveScreen(!batchIncrementalOnly)"):
+                   "renderInteractiveScreen(!lastUiActionUsedIncrementalRender)"):
         require(failures, marker in renderer,
                 f"incremental renderer marker missing: {marker}")
+    loop_body = renderer[renderer.find("void loop() {"):]
+    require(failures,
+            loop_body.count("xQueueReceive(physicalInputEvents") == 1 and
+            "while (physicalInputEvents" not in loop_body and
+            "lastPhysicalInputQueueUs" in loop_body and
+            "lastPhysicalInputEndToEndUs" in loop_body,
+            "0.x-style one-event/one-repaint dispatch contract missing")
+    input_dispatch = loop_body[loop_body.find("PhysicalInputEvent inputEvent;"):
+                               loop_body.find("delay(2);")]
+    require(failures, "broadcast(" not in input_dispatch and
+            "println(" not in input_dispatch and
+            '\\"hot_path_serial_writes\\":0' in renderer,
+            "physical input hot path still performs blocking serial output")
+    render_start = renderer.find("void renderInteractiveScreen(bool clearContent)")
+    render_end = renderer.find("void emitUiState(", render_start)
+    render_body = renderer[render_start:render_end]
+    full_render_start = render_body.find("if (!incremental) {")
+    full_render_end = render_body.find("\n    }\n    display.endWrite();",
+                                       full_render_start)
+    full_render_body = render_body[full_render_start:full_render_end]
+    require(failures, render_start >= 0 and render_end > render_start and
+            full_render_start >= 0 and full_render_end > full_render_start and
+            render_body.count("renderInput(lastInputRaw)") == 1 and
+            "renderNavigationFooter();" in full_render_body and
+            "renderInput(lastInputRaw);" in full_render_body,
+            "incremental selection still repaints footer/input status")
     require(failures, "fillScreen(" not in renderer,
             "interactive renderer reintroduced full-screen fill")
     for identifier in ("NavOk", "NavBack", "NavCancel", "NavSelect",
@@ -355,9 +403,17 @@ def main() -> int:
         "left_and_back_return_proven": True,
         "nested_library_entry_proven": True,
         "nested_incremental_selection_proven": True,
-        "heap_total": 272648,
-        "heap_free_before": 208872, "heap_free_after": 208872,
-        "heap_min_before": 188680, "heap_min_after": 188680,
+        "physical_press_events": 75, "physical_release_events": 75,
+        "physical_dispatched_press_events": 75,
+        "physical_queue_high_water": 1,
+        "physical_maximum_queue_latency_us": 1256,
+        "physical_last_repaint_us": 15429,
+        "physical_last_end_to_end_us": 16703,
+        "physical_maximum_end_to_end_us": 102741,
+        "hot_path_serial_writes": 0,
+        "heap_total": 272608,
+        "heap_free_before": 208320, "heap_free_after": 208320,
+        "heap_min_before": 188140, "heap_min_after": 188140,
         "input_read_errors": 0, "input_ambiguous_presses": 0,
         "input_queue_drops": 0, "maximum_sample_gap_ms": 5,
         "buzzer_inactive": True, "final_language": "ru",
@@ -375,8 +431,8 @@ def main() -> int:
         "docs/v1/RESOURCE_BUDGETS.md", "docs/v1/RESOURCE_BUDGETS.ru.md",
         "docs/v1/TRACEABILITY.md", "docs/v1/TRACEABILITY.ru.md",
     ))
-    for marker in ("0.65", "incremental", "инкремент",
-                   "E-BUILD-066", "E-AUTO-029", "E-HIL-089", "E-UX-010"):
+    for marker in ("0.67", "serial backpressure", "serial backpressure",
+                   "E-BUILD-068", "E-AUTO-031", "E-HIL-091", "E-UX-012"):
         require(failures, marker in docs,
                 f"source-of-truth docs marker missing: {marker}")
 
@@ -384,8 +440,8 @@ def main() -> int:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
-    print("UI navigation acceptance passed: 26 px footer, changed-row-only "
-          "selection, <=28.981 ms on exact TFT, zero heap drift")
+    print("UI navigation acceptance passed: 75 physical presses, non-blocking "
+          "hot path, queue high-water 1, <=1.256 ms queue latency")
     return 0
 
 

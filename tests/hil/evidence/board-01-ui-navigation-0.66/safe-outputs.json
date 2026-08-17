@@ -1,0 +1,9 @@
+{
+  "buzzer_active_level": "high",
+  "buzzer_inactive": true,
+  "buzzer_level": "low",
+  "buzzer_mode": "output",
+  "buzzer_pin": 2,
+  "kind": "state",
+  "schema": "leshy.hardware.safe-outputs.v1"
+}

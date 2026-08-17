@@ -196,6 +196,18 @@ Exact candidate `0.65.0-compact-incremental-ui-measure` сохраняет ту 
 transition и zero drift heap/input/resources (`E-BUILD-066`/`E-AUTO-029`/
 `E-HIL-089`/`E-UX-010`).
 
+Exact candidate `0.66.0-ordered-key-repaint-measure` восстановил правило «одно
+событие — один кадр», но failed user acceptance: синхронная serial telemetry всё
+ещё выполнялась после render timer. Десять нажатий достигли queue high-water 5/64 и
+заметно тормозили.
+
+Exact candidate `0.67.0-nonblocking-keypath-measure` удаляет эту USB/UART работу из
+hot path. Пользователь подтвердил отзывчивую навигацию на 75 физических нажатиях;
+high-water равен 1/64, maximum queue latency — 1,256 ms, последнее изменившее focus
+нажатие — 16,703 ms end-to-end, serial writes/errors/drops равны нулю. Exact TFT
+rendering остаётся 13,972–23,058 ms (`E-BUILD-068`/`E-AUTO-031`/`E-HIL-091`/
+`E-UX-012`).
+
 ## UX-07 — evidence common states на реальном TFT
 
 Exact candidate `0.57.0-ui-state-evidence-measure` принимает UX-07 через

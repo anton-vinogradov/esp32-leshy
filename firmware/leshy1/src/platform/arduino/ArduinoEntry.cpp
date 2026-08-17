@@ -225,6 +225,7 @@ struct PhysicalInputEvent final {
     UiAction action = UiAction::Unknown;
     std::uint8_t raw = 0xFF;
     std::uint32_t atMs = 0;
+    std::uint64_t atUs = 0;
 };
 
 constexpr UBaseType_t kPhysicalInputQueueCapacity = 64;
@@ -234,6 +235,13 @@ portMUX_TYPE physicalInputMux = portMUX_INITIALIZER_UNLOCKED;
 std::uint32_t physicalInputQueueDrops = 0;
 std::uint32_t physicalInputQueueHighWater = 0;
 std::uint32_t physicalInputDispatchedPresses = 0;
+UiAction lastPhysicalInputAction = UiAction::Unknown;
+bool lastPhysicalInputChanged = false;
+std::uint64_t lastPhysicalInputQueueUs = 0;
+std::uint64_t maximumPhysicalInputQueueUs = 0;
+std::uint64_t lastPhysicalInputRenderUs = 0;
+std::uint64_t lastPhysicalInputEndToEndUs = 0;
+std::uint64_t maximumPhysicalInputEndToEndUs = 0;
 bool physicalInputTaskStarted = false;
 
 struct ProductBootRecoveryState final {
@@ -1778,6 +1786,7 @@ void pollPhysicalInput(void*) {
         event.action = physicalButtonInput.sample(valid, current, now);
         event.raw = physicalButtonInput.stableRaw();
         event.atMs = now;
+        event.atUs = static_cast<std::uint64_t>(esp_timer_get_time());
         portEXIT_CRITICAL(&physicalInputMux);
         if (event.action != UiAction::Unknown) {
             if (xQueueSend(physicalInputEvents, &event, 0) != pdTRUE) {
@@ -2681,8 +2690,9 @@ void renderInteractiveScreen(bool clearContent) {
         display.drawFastHLine(divider.x, divider.y, divider.width,
                               Palette::Divider);
         renderNavigationFooter();
+        // As in 0.x MenuScreen::repaint, focus movement leaves chrome untouched.
+        renderInput(lastInputRaw);
     }
-    renderInput(lastInputRaw);
     display.endWrite();
     renderedUi = captureUiRenderSnapshot();
     const std::uint64_t finishedUs =
@@ -3231,7 +3241,7 @@ void emitProductSurveyAdmission(Stream& reply) {
     const leshy1::apps::survey::ProductSurveyPermit surveyPermit =
         leshy1::apps::survey::authorizeProductSurvey(surveyRequest);
 
-    char line[768] = {};
+    char line[1024] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.survey.product_admission.v1\","
@@ -6424,7 +6434,15 @@ void emitInputState(Stream& reply) {
         "\"maximum_sample_gap_ms\":%lu,\"queue_capacity\":%u,"
         "\"queue_depth\":%u,\"queue_high_water\":%lu,"
         "\"queue_drops\":%lu,"
-        "\"dispatched_press_events\":%lu}",
+        "\"dispatched_press_events\":%lu,"
+        "\"last_dispatched_action\":\"%s\","
+        "\"last_dispatched_changed\":%s,"
+        "\"last_queue_latency_us\":%llu,"
+        "\"maximum_queue_latency_us\":%llu,"
+        "\"last_repaint_us\":%llu,"
+        "\"last_end_to_end_us\":%llu,"
+        "\"maximum_end_to_end_us\":%llu,"
+        "\"hot_path_serial_writes\":0}",
         physicalInputTaskStarted && bootMetrics.inputDetected ? "ready" : "unavailable",
         physicalInputTaskStarted ? "true" : "false",
         static_cast<unsigned long>(Pcf8574ButtonInput::kPollPeriodMs),
@@ -6448,7 +6466,14 @@ void emitInputState(Stream& reply) {
         static_cast<unsigned>(kPhysicalInputQueueCapacity), queueDepth,
         static_cast<unsigned long>(queueHighWater),
         static_cast<unsigned long>(queueDrops),
-        static_cast<unsigned long>(physicalInputDispatchedPresses));
+        static_cast<unsigned long>(physicalInputDispatchedPresses),
+        leshy1::ui::uiActionName(lastPhysicalInputAction),
+        lastPhysicalInputChanged ? "true" : "false",
+        static_cast<unsigned long long>(lastPhysicalInputQueueUs),
+        static_cast<unsigned long long>(maximumPhysicalInputQueueUs),
+        static_cast<unsigned long long>(lastPhysicalInputRenderUs),
+        static_cast<unsigned long long>(lastPhysicalInputEndToEndUs),
+        static_cast<unsigned long long>(maximumPhysicalInputEndToEndUs));
     reply.println(line);
 }
 
@@ -6958,42 +6983,37 @@ void loop() {
     poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
     poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
     PhysicalInputEvent inputEvent;
-    unsigned dispatchedThisBatch = 0;
-    bool batchChanged = false;
-    bool batchIncrementalOnly = true;
-    UiAction lastBatchAction = UiAction::Unknown;
-    while (physicalInputEvents != nullptr &&
-           dispatchedThisBatch < kPhysicalInputQueueCapacity &&
-           xQueueReceive(physicalInputEvents, &inputEvent, 0) == pdTRUE) {
+    // Preserve the 0.x one-key/one-repaint order even when presses are queued.
+    if (physicalInputEvents != nullptr &&
+        xQueueReceive(physicalInputEvents, &inputEvent, 0) == pdTRUE) {
+        const std::uint64_t dequeuedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        lastPhysicalInputQueueUs = dequeuedUs >= inputEvent.atUs
+            ? dequeuedUs - inputEvent.atUs : 0;
+        if (lastPhysicalInputQueueUs > maximumPhysicalInputQueueUs) {
+            maximumPhysicalInputQueueUs = lastPhysicalInputQueueUs;
+        }
         lastInputRaw = inputEvent.raw;
         bootMetrics.inputRaw = inputEvent.raw;
         const bool changed = applyUiAction(inputEvent.action, false);
-        if (changed && !lastUiActionUsedIncrementalRender) {
-            batchIncrementalOnly = false;
-        }
-        batchChanged = changed || batchChanged;
-        lastBatchAction = inputEvent.action;
+        lastPhysicalInputAction = inputEvent.action;
+        lastPhysicalInputChanged = changed;
         ++physicalInputDispatchedPresses;
-        ++dispatchedThisBatch;
-    }
-    if (dispatchedThisBatch != 0) {
+        if (changed) {
+            renderInteractiveScreen(!lastUiActionUsedIncrementalRender);
+        }
+        lastPhysicalInputRenderUs = changed ? lastUiRenderUs : 0;
+        const std::uint64_t finishedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        lastPhysicalInputEndToEndUs = finishedUs >= inputEvent.atUs
+            ? finishedUs - inputEvent.atUs : 0;
+        if (lastPhysicalInputEndToEndUs > maximumPhysicalInputEndToEndUs) {
+            maximumPhysicalInputEndToEndUs = lastPhysicalInputEndToEndUs;
+        }
         portENTER_CRITICAL(&physicalInputMux);
         lastInputRaw = physicalButtonInput.stableRaw();
         portEXIT_CRITICAL(&physicalInputMux);
         bootMetrics.inputRaw = lastInputRaw;
-        if (batchChanged) renderInteractiveScreen(!batchIncrementalOnly);
-        else renderInput(lastInputRaw);
-        char line[320] = {};
-        std::snprintf(line, sizeof(line),
-                      "{\"schema\":\"leshy.input.frontend.v1\","
-                      "\"kind\":\"batch\",\"actions\":%u,"
-                      "\"last_action\":\"%s\",\"changed\":%s,"
-                      "\"dispatched_press_events\":%lu}",
-                      dispatchedThisBatch,
-                      leshy1::ui::uiActionName(lastBatchAction),
-                      batchChanged ? "true" : "false",
-                      static_cast<unsigned long>(physicalInputDispatchedPresses));
-        broadcast(line);
     }
     delay(2);
 }

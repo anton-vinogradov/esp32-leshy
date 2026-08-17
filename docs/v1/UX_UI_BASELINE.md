@@ -194,6 +194,16 @@ the old/new rows, never clear the whole screen, and expose measured `render_mode
 19.901–28.981 ms, nine final frames, 21 public transitions and zero heap/input/
 resource drift (`E-BUILD-066`/`E-AUTO-029`/`E-HIL-089`/`E-UX-010`).
 
+Exact candidate `0.66.0-ordered-key-repaint-measure` restored one-event/one-repaint,
+but failed user acceptance because synchronous serial telemetry still ran after the
+render timer. Ten presses reached queue high-water 5/64 and visibly lagged.
+
+Exact candidate `0.67.0-nonblocking-keypath-measure` removes that USB/UART work from
+the hot path. The user confirmed responsive navigation over 75 physical presses;
+high-water is 1/64, maximum queue latency is 1.256 ms, the last changed focus is
+16.703 ms end-to-end, and serial writes/errors/drops are zero. Exact TFT rendering
+remains 13.972–23.058 ms (`E-BUILD-068`/`E-AUTO-031`/`E-HIL-091`/`E-UX-012`).
+
 ## UX-07 real-TFT common-state evidence
 
 Exact candidate `0.57.0-ui-state-evidence-measure` accepts UX-07 through

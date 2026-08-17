@@ -216,3 +216,12 @@ Retained board run охватывает девять frames и 21 transition; в
 инкрементальных transitions занимают 19,901–28,981 ms при неизменном heap и final
 lease 0 (`E-AUTO-029`/`E-HIL-089`/`E-UX-010`). Source checks также отклоняют
 возвращение interactive `fillScreen` или удаление render path старой/новой строки.
+
+Candidate 0.66 добавил source checks «одно событие — один кадр», но render-only
+timer пропустил blocking post-render serial telemetry; user acceptance failed при
+queue high-water 5/64. Поэтому candidate 0.67 отклоняет `broadcast`/`println` во
+всём physical dispatch slice и публикует timing только через on-demand
+`input.state`. Retained lane связывает failed incident, 75 подтверждённых
+пользователем физических нажатий, high-water 1/64, maximum queue latency 1,256 ms,
+zero serial writes/errors/drops, девять exact frames и 21 transition
+(`E-AUTO-031`/`E-HIL-091`/`E-UX-012`).

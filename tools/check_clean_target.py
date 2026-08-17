@@ -130,14 +130,29 @@ def main() -> int:
             "xQueueSend",
             "xQueueReceive",
             "kPhysicalInputQueueCapacity = 64",
-            "dispatchedThisBatch < kPhysicalInputQueueCapacity",
             "applyUiAction(inputEvent.action, false)",
+            "renderInteractiveScreen(!lastUiActionUsedIncrementalRender)",
             "physicalInputQueueHighWater",
-            '\\"kind\\\":\\\"batch',
+            '\\"hot_path_serial_writes\\\":0',
+            "lastPhysicalInputQueueUs",
+            "lastPhysicalInputEndToEndUs",
             '"input.state"',
         ):
             if marker not in entry:
                 errors.append(f"Arduino entry is missing keypad integration: {marker}")
+        loop_body = entry[entry.find("void loop() {"):]
+        if "while (physicalInputEvents" in loop_body:
+            errors.append(
+                "physical keypad events are still drained as a render-coalescing batch"
+            )
+        if loop_body.count("xQueueReceive(physicalInputEvents") != 1:
+            errors.append(
+                "physical keypad loop must dispatch exactly one queued event per repaint"
+            )
+        input_dispatch = loop_body[loop_body.find("PhysicalInputEvent inputEvent;"):
+                                   loop_body.find("delay(2);")]
+        if "broadcast(" in input_dispatch or "println(" in input_dispatch:
+            errors.append("physical keypad hot path contains blocking serial output")
 
     if not survey_workflow_path.is_file():
         errors.append("product Survey workflow is missing")

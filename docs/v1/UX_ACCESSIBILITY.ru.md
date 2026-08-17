@@ -2,7 +2,7 @@
 
 *Читать на: [English](UX_ACCESSIBILITY.md) · **Русский***
 
-Статус: **UX-06 принят; компактная инкрементальная навигация измерена exact TFT evidence 0.65**.
+Статус: **UX-06 принят; упорядоченная и неблокирующая навигация физическими клавишами измерена exact TFT evidence 0.67**.
 
 UX-06 требует, чтобы каждая текущая primary operation была доступна пятью
 физическими кнопками, а любое состояние и focus различались без цвета. Diagnostic
@@ -87,3 +87,18 @@ Up/Down перерисовывает только старую и новую н�
 19,901–28,981 ms на реальной панели при fail-closed ceiling 40 ms вместо замеченных
 63,615 ms whole-page redraw. Девять exact frames, 21 transition, неизменный heap и
 чистые input/buzzer/lease связаны `E-BUILD-066`/`E-AUTO-029`/`E-HIL-089`/`E-UX-010`.
+
+Exact candidate `0.66.0-ordered-key-repaint-measure` перенёс правило порядка из
+0.x, но user acceptance всё ещё failed. Render-only lane показал 13,927–23,043 ms,
+однако не учитывал синхронную USB/UART telemetry после repaint; десять физических
+нажатий дали queue high-water 5/64 и тот же отложенный перескок, который заметил
+пользователь.
+
+Exact candidate `0.67.0-nonblocking-keypath-measure` удаляет все serial writes из
+physical hot path и публикует queue/end-to-end timing только по запросу
+`input.state`. Пользователь подтвердил исчезновение lag после 75 физических
+нажатий; retained run фиксирует 75/75/75 press/release/dispatched events, queue
+high-water 1, maximum queue latency 1,256 ms, zero errors/drops/serial writes и
+16,703 ms end-to-end для последнего изменившего focus нажатия. Девять TFT frames/21
+transition остаются exact, восемь incremental renders занимают 13,972–23,058 ms
+(`E-BUILD-068`/`E-AUTO-031`/`E-HIL-091`/`E-UX-012`).

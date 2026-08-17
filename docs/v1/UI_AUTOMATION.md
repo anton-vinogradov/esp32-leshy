@@ -221,3 +221,11 @@ board run covers nine frames and 21 transitions; all eight incremental transitio
 measure 19.901–28.981 ms, with invariant heap and final lease 0
 (`E-AUTO-029`/`E-HIL-089`/`E-UX-010`). Source checks also reject a reintroduced
 interactive `fillScreen` or removal of the old/new-row render path.
+
+Candidate 0.66 added one-event/one-repaint source checks, but its render-only timer
+missed blocking post-render serial telemetry; user acceptance failed at queue
+high-water 5/64. Candidate 0.67 therefore rejects `broadcast`/`println` anywhere in
+the physical dispatch slice and exposes timing only through on-demand `input.state`.
+The retained lane binds the failed incident, 75 user-confirmed physical presses,
+high-water 1/64, 1.256 ms maximum queue latency, zero serial writes/errors/drops,
+nine exact frames and 21 transitions (`E-AUTO-031`/`E-HIL-091`/`E-UX-012`).

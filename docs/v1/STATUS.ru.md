@@ -12,7 +12,7 @@
 
 - **Активный этап:** `S3 — Первая сохраняемая Survey Session`.
 - **Последний закрытый этап:** `S2 — Чистая платформа 1.x`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.65 компактной инкрементальной навигацией и S3 progress evidence.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.67 non-blocking physical-key navigation и S3 progress evidence.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
 - **Главная цель текущего этапа:** закрыть missing-source real-TFT path, physical
@@ -545,6 +545,12 @@
 | E-BUILD-066 | exact rebuild `0.65.0-compact-incremental-ui-measure` | pass: RAM 128 856 B, linked flash 1 112 256 B; app/factory 1 112 656/1 178 192 B; app `3f133d6a…1443`, factory `733fd5ea…1031`, ELF `796d4a49…db4`, map `678673b9…e23`; RTC no-init 20 B | +1 156 B linked flash, +40 B static RAM и +1 152 B images vs 0.64 за bounded render telemetry/snapshots и helpers changed-row; exact UX refinement candidate, не stage/release build |
 | E-AUTO-029 | runner компактной инкрементальной навигации и retained verifier | pass: runner записывает `full`/`incremental` и device-side `render_us`, доказывает восемь changed-row transitions Home/Language/Self-Test под fail-closed ceiling 40 ms, сохраняет девять TFT states/21 public transition и проверяет exact candidate/runner/frame/record hashes, компактную geometry, отсутствие interactive `fillScreen`, heap/input/buzzer/final cleanup | non-destructive one-board UX regression; не принимает stage или release gate |
 | E-HIL-089 / E-UX-010 | board-01 exact 0.65 compact/flicker-free regression | pass: три cells уменьшены с 40 до 26 px с labels 12 px; selection перерисовывает только old/new opaque rows, полные transitions очищают область ниже уже нарисованного header, восемь exact incremental transitions занимают 19,901–28,981 ms вместо замеченных 63,615 ms whole-page redraw. Девять frames/21 transition сохраняют Left Back, Right/OK Enter, Up/Down Select; heap остаётся 272 648/208 872/188 680 B, input errors/ambiguity/drops равны нулю, buzzer LOW, final русский Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-ui-navigation-0.65.json) | возвращает принцип repaint 0.x без promotion S3/release |
+| E-BUILD-067 | exact rebuild `0.66.0-ordered-key-repaint-measure` | pass: RAM 128 856 B, linked flash 1 112 172 B; app/factory 1 112 576/1 178 112 B; app `2f64dd6f…f482`, factory `730a4945…047`, ELF `a367701b…47a2`, map `51393e75…f6cb6`; RTC no-init 20 B | −84 B linked flash, zero static-RAM delta и −80 B images vs 0.65 после удаления batch aggregation и incremental footer repaint; exact UX refinement candidate, не stage/release build |
+| E-AUTO-030 | verifier упорядоченной key navigation | pass: fail-closed source checks требуют ровно одно queued physical event на repaint, отклоняют drain/coalescing очереди и требуют не трогать footer/input strip при selection repaint; retained verifier пересчитывает exact candidate/runner, девять frames/21 transition, records, geometry и cleanup | diagnostic Actions используют тот же renderer; порядок physical dispatcher source-bound, поскольку actuator кнопок не установлен |
+| E-HIL-090 / E-UX-011 | board-01 exact 0.66 ordered-repaint regression | automated pass, user acceptance failed: render-only measurements дали 13,927–23,043 ms, но десять физических нажатий достигли queue high-water 5/64 и повторили отложенный перескок меню, поскольку синхронная post-render USB/UART telemetry находилась за пределами timer в [retained incident](../../tests/hil/evidence/board-01-ui-navigation-0.66-user-lag.json) | не принимается как UX fix; напрямую приводит к 0.67 non-blocking hot-path work |
+| E-BUILD-068 | exact rebuild `0.67.0-nonblocking-keypath-measure` | pass: RAM 128 896 B, linked flash 1 112 568 B; app/factory 1 112 976/1 178 512 B; app `9af801bc…e926`, factory `74b248da…523e`, ELF `c1f89b22…3123`, map `bc555971…ba9a`; RTC no-init 20 B | +396 B linked flash, +40 B static RAM и +400 B images vs 0.66 за on-demand queue/end-to-end telemetry; в physical hot path не осталось serial writes |
+| E-AUTO-031 | verifier non-blocking physical keys | pass: verifier отклоняет любой `broadcast`/`println` в dispatch slice, связывает failed incident 0.66, exact candidate 0.67 и TFT run девять frames/21 transition и требует 75 физических press/release/dispatch events с queue high-water 1, max queue latency 1,256 ms, zero drops/errors и user confirmation | закрывает measurement blind spot после repaint; не продвигает S3/release |
+| E-HIL-091 / E-UX-012 | board-01 exact 0.67 physical responsiveness regression | pass: пользователь подтверждает исчезновение lag; retained input evidence фиксирует 75 физических нажатий (35 Up, 35 Down, 2 Left, 2 Right, 1 Select), high-water 1/64 против failed 5/64, max queue latency 1,256 ms, last changed focus repaint/end-to-end 15,429/16,703 ms, zero serial writes/errors/drops. Восемь exact TFT incremental renders остаются в 13,972–23,058 ms; heap invariant 272 608/208 320/188 140 B, buzzer LOW и final lease 0 в [machine-checked artifact](../../tests/hil/evidence/board-01-ui-navigation-0.67.json) | принимает non-blocking key path в стиле 0.x без promotion S3/release |
 
 ## Известные неопределённости и риски
 
@@ -552,10 +558,11 @@
   Condensed Medium 16/12 проходит source/license, fit 254/254, TFT 18 states,
   Quick/Full, input, buzzer, heap и cleanup regressions. Physical-panel/user optics
   продолжаются в UX-08, а не остаются неограниченным риском выбора шрифта.
-- Навигация UX-06 уточнена exact 0.65: компактный footer 26 px больше не смешивает
+- Навигация UX-06 уточнена exact 0.67: компактный footer 26 px больше не смешивает
   controls с техническим status, модель Left/Up+Down/Right+OK совпадает с поведением,
-  changed-row rendering укладывается в 29 ms на board-01 без full-screen flash.
-  Physical-panel optics всё ещё продолжаются в UX-08.
+  каждое physical press получает собственный repaint без serial backpressure, а 75
+  подтверждённых пользователем нажатий удерживают queue high-water 1 при latency не
+  выше 1,256 ms. Physical-panel optics всё ещё продолжаются в UX-08.
 - Board-01 дала partial evidence для `HW-T01/T04/T07/T11`; остальные physical tests
   не выполнены, и ни один составной HW-T test ещё не закрыт целиком.
 - BOM указывает ESP32-S3-WROOM-1U-N16 (16 MB, без PSRAM), а original build guide —

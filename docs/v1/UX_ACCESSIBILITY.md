@@ -2,7 +2,7 @@
 
 *Read in: **English** · [Русский](UX_ACCESSIBILITY.ru.md)*
 
-Status: **UX-06 accepted; compact incremental navigation measured on exact 0.65 TFT evidence**.
+Status: **UX-06 accepted; ordered, non-blocking physical-key navigation measured on exact 0.67 TFT evidence**.
 
 UX-06 requires every current primary operation to remain reachable with the five
 physical buttons and every state/focus distinction to remain understandable without
@@ -86,3 +86,17 @@ only content below the already-painted header, and no interactive path calls
 63.615 ms whole-page redraw. Nine exact frames, 21 transitions, invariant heap and
 clean input/buzzer/lease state are bound by `E-BUILD-066`/`E-AUTO-029`/`E-HIL-089`/
 `E-UX-010`.
+
+Exact candidate `0.66.0-ordered-key-repaint-measure` ported the 0.x ordering rule,
+but user acceptance still failed. The render-only lane measured 13.927–23.043 ms
+while missing synchronous post-render USB/UART telemetry; ten physical presses
+produced queue high-water 5/64 and the same delayed jump reported by the user.
+
+Exact candidate `0.67.0-nonblocking-keypath-measure` removes every serial write from
+the physical hot path and exposes queue/end-to-end timing only through on-demand
+`input.state`. The user confirmed the lag was gone after 75 physical presses; the
+retained run records 75/75/75 press/release/dispatched events, queue high-water 1,
+maximum queue latency 1.256 ms, zero errors/drops/serial writes, and a last changed
+focus end-to-end time of 16.703 ms. Nine TFT frames/21 transitions remain exact and
+eight incremental renders measure 13.972–23.058 ms (`E-BUILD-068`/`E-AUTO-031`/
+`E-HIL-091`/`E-UX-012`).

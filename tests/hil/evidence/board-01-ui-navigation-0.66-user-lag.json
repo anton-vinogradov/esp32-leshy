@@ -1,0 +1,38 @@
+{
+  "schema": "leshy.ui_input_incident.v1",
+  "status": "failed",
+  "candidate": {
+    "version": "0.66.0-ordered-key-repaint-measure",
+    "app_elf_sha256": "a367701b26f358dd4ae9626573f22821638c5733f4383e198424050cb52f47a2"
+  },
+  "user_observation": "menu still lagged and two presses caused a delayed multi-item jump",
+  "measured_after_observation": {
+    "press_events": 10,
+    "release_events": 10,
+    "dispatched_press_events": 10,
+    "up_presses": 6,
+    "down_presses": 4,
+    "queue_high_water": 5,
+    "queue_capacity": 64,
+    "queue_depth": 0,
+    "queue_drops": 0,
+    "read_errors": 0,
+    "ambiguous_presses": 0,
+    "maximum_sample_gap_ms": 5
+  },
+  "diagnosis": {
+    "input_and_debounce_healthy": true,
+    "render_only_measurement_missed_post_render_work": true,
+    "physical_hot_path_called_broadcast_after_every_repaint": true,
+    "broadcast_targets": [
+      "USB CDC",
+      "UART0 115200"
+    ],
+    "effect": "synchronous serial backpressure blocked the UI loop while the input task continued queueing presses"
+  },
+  "disposition": {
+    "accepted_as_ux_fix": false,
+    "superseded_by": "0.67.0-nonblocking-keypath-measure",
+    "required_regression": "zero hot-path serial writes plus on-demand queue/end-to-end telemetry and physical user confirmation"
+  }
+}

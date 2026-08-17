@@ -1,0 +1,102 @@
+{
+  "schema": "leshy.ui_navigation_acceptance.v1",
+  "status": "pass",
+  "gate_eligible": false,
+  "evidence_ids": [
+    "E-BUILD-067",
+    "E-AUTO-030",
+    "E-HIL-090",
+    "E-UX-011"
+  ],
+  "candidate": {
+    "version": "0.66.0-ordered-key-repaint-measure",
+    "firmware_sha256": "2f64dd6f713f06a323ba3056ca41e34b1ecf55d615773261856a4e32d97df482",
+    "factory_sha256": "730a49459cab3ee228a28710428ca361b26aa5fbae796a97cda46d77b1c7d047",
+    "app_elf_sha256": "a367701b26f358dd4ae9626573f22821638c5733f4383e198424050cb52f47a2",
+    "map_sha256": "51393e753a603b8d8788621a8ea363a958d51c1f124f1ef0cd9a4133cb7f6cb6",
+    "linked_flash_bytes": 1112172,
+    "static_ram_bytes": 128856,
+    "app_image_bytes": 1112576,
+    "factory_image_bytes": 1178112,
+    "rtc_noinit_bytes": 20,
+    "host_tests_passed": true,
+    "firmware_build_passed": true
+  },
+  "navigation": {
+    "left": "back",
+    "right_or_ok": "enter",
+    "up_down": "select",
+    "footer_height_px": 26,
+    "spatial_cells": 3,
+    "label_font": "Roboto Condensed Medium 12",
+    "key_legend_font": "Roboto Condensed Medium 12",
+    "programmatic_direction_icons": true,
+    "technical_status_removed_from_footer": true,
+    "survey_right_enters_detail": true,
+    "survey_stop_or_save_inside_detail": true,
+    "library_right_or_ok_enters_detail": true
+  },
+  "rendering": {
+    "full_screen_fill_removed": true,
+    "full_transition_clears_content_below_header": true,
+    "selection_repaints_only_changed_rows": true,
+    "selection_skips_footer_repaint": true,
+    "one_queued_press_per_repaint": true,
+    "press_frames_are_never_coalesced": true,
+    "incremental_transition_count": 8,
+    "full_transition_count": 12,
+    "incremental_render_us": [
+      15504,
+      15278,
+      13927,
+      22927,
+      22918,
+      15417,
+      23041,
+      23043
+    ],
+    "maximum_incremental_render_us": 23043,
+    "maximum_allowed_incremental_render_us": 40000,
+    "pre_fix_home_render_us": 63615,
+    "pre_fix_home_host_ack_ms": 74.752,
+    "ordered_home_render_us": 15504,
+    "ordered_maximum_render_us": 23043
+  },
+  "physical": {
+    "run_path": "tests/hil/evidence/board-01-ui-navigation-0.66/run.json",
+    "run_sha256": "d07bf85fc276e0f314a3f8971972891e98194602f2e67db7943611e85e5baa18",
+    "screen_count": 9,
+    "transition_count": 21,
+    "languages": [
+      "ru",
+      "en"
+    ],
+    "right_and_select_entry_proven": true,
+    "left_and_back_return_proven": true,
+    "nested_library_entry_proven": true,
+    "nested_incremental_selection_proven": true,
+    "heap_total": 272648,
+    "heap_free_before": 208872,
+    "heap_free_after": 208872,
+    "heap_min_before": 188680,
+    "heap_min_after": 188680,
+    "input_read_errors": 0,
+    "input_ambiguous_presses": 0,
+    "input_queue_drops": 0,
+    "maximum_sample_gap_ms": 5,
+    "buzzer_inactive": true,
+    "final_language": "ru",
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "scope": {
+    "ux_03": "accepted",
+    "ux_04": "accepted",
+    "ux_05": "accepted",
+    "ux_06": "accepted_compact_incremental_and_ordered",
+    "ux_07": "accepted",
+    "demo_s2": "accepted",
+    "s3": "in_progress",
+    "release_gate_eligible": false
+  }
+}
