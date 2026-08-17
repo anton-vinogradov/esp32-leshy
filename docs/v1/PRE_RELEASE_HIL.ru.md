@@ -87,11 +87,53 @@ evidence; общий «повторить до зелёного» запрещё
 2. **Region-aware:** exact/threshold comparison по именованным регионам; dynamic
    time/RSSI/counter regions имеют явные masks и отдельные semantic assertions.
 3. **External camera:** небольшой обязательный RC subset для panel/backlight/
-   orientation/physical damage, которые GRAM readback принципиально не видит.
+   orientation и грубых физических дефектов отображения, которые GRAM readback
+   принципиально не видит.
 
 Глобальный permissive pixel threshold запрещён: он может скрыть пропавший critical
 text или selection. Обновление golden требует просматриваемого image diff, причины и
 version bump suite; runner не перезаписывает baseline автоматически.
+
+### Контракт external-camera subset
+
+Camera lane является частью одной foreground release-процедуры, а не постоянно
+работающей macOS-службой. Она снимает физическую панель в тех же четырёх устойчивых
+состояниях, для которых product runner уже сохранил GRAM: `setup`, `running`,
+`committed`, `export`. Один station manifest фиксирует:
+
+- `station_id` и точный platform `camera_id`;
+- неизменный размер camera frame;
+- калиброванный четырёхугольник видимой панели в порядке TL/TR/BR/BL;
+- относительные пути к camera PNG и соответствующему GRAM PNG;
+- пороги контраста, корреляции и преимущества правильной ориентации.
+
+`verify_1x_camera_subset.py` выпрямляет область панели, приводит camera и GRAM к
+одной bounded luminance grid и сравнивает ожидаемую ориентацию со всеми поворотами
+0/90/180/270. Blank/underexposed frame, неверный размер, слабая корреляция,
+поворот, отсутствующий/escaping path или ослабление нижней release policy завершаются
+fail-closed. Result содержит SHA-256 manifest и каждого camera/GRAM PNG, фактические
+метрики и причины отказа; повторная проверка этих связей внутри attested bundle не
+позволяет заменить файл после optical verification.
+
+Встроенный macOS provider использует AVFoundation строго как one-shot command:
+
+```sh
+python3 tools/capture_macos_camera.py list
+python3 tools/capture_macos_camera.py capture \
+  --device-id '<exact platform camera id>' --output camera/setup.png
+python3 tools/verify_1x_camera_subset.py \
+  --manifest camera-manifest.json --output camera-result.json
+```
+
+Provider компилируется во временный каталог, снимает один PNG и завершается; ничего
+не устанавливает и не слушает в фоне. Контракт verifier не зависит от macOS или
+конкретной модели камеры, поэтому provider можно заменить другим one-shot capture,
+сохранив тот же PNG/manifest boundary.
+
+Синтетическая positive/negative matrix уже входит в host tests. Camera lane станет
+обязательной частью stable-1.x promotion только после подключения реальной камеры,
+фиксации bench calibration и проверки порогов на board-01. До этого она не создаёт
+фиктивный gate: measurement 0.45 остаётся заведомо non-publishable.
 
 ## Evidence bundle и GitHub attestation
 
@@ -105,6 +147,9 @@ scenarios/*.json         actions, assertions, timings, cleanup
 frames/*.rgb565          source display-controller bytes
 frames/*.png             reviewable screenshots
 frames/*.diff.png        visual failures or reviewed baseline changes
+camera/*.png             external views of the same four product states
+camera-manifest.json     station/camera/calibration and paired frame paths
+camera-result.json       hashes, optical metrics, orientation and pass/fail
 artifacts.sha256         hash of every retained file
 runner-result.json       unsigned local result; не является release trust
 ```

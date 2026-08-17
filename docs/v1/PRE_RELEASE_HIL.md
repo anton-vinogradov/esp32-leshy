@@ -85,12 +85,53 @@ Comparison has three modes:
 1. **Exact:** byte-identical RGB565 for fully deterministic screens.
 2. **Region-aware:** exact/threshold checks over named regions; dynamic time/RSSI/
    counter regions have explicit masks and separate semantic assertions.
-3. **External camera:** a small mandatory RC subset for panel/backlight/orientation/
-   physical damage that GRAM readback cannot observe.
+3. **External camera:** a small mandatory RC subset for panel/backlight/orientation
+   and gross physical rendering defects that GRAM readback cannot observe.
 
 A global permissive pixel threshold is forbidden because it can hide missing
 critical text or selection. Updating a golden requires a reviewable image diff,
 reason, and suite version bump; the runner never rewrites baselines automatically.
+
+### External-camera subset contract
+
+The camera lane belongs to one foreground release procedure; it is not a resident
+macOS service. It observes the physical panel in the same four stable states already
+captured from GRAM by the product runner: `setup`, `running`, `committed`, and
+`export`. One station manifest fixes:
+
+- a `station_id` and exact platform `camera_id`;
+- an invariant camera-frame size;
+- a calibrated visible-panel quadrilateral ordered TL/TR/BR/BL;
+- relative paths to each camera PNG and corresponding GRAM PNG;
+- contrast, reference-correlation, and correct-orientation-margin thresholds.
+
+`verify_1x_camera_subset.py` rectifies the panel, maps both camera and GRAM images
+onto one bounded luminance grid, and compares the expected view with rotations
+0/90/180/270. A blank/underexposed frame, changed dimensions, weak correlation,
+rotation, missing/escaping path, or weakened release-policy floor fails closed. Its
+result binds the manifest and every camera/GRAM PNG by SHA-256 and retains measured
+values and failure reasons; rechecking those bindings inside the attested bundle
+prevents replacement after optical verification.
+
+The built-in macOS provider uses AVFoundation only as a one-shot command:
+
+```sh
+python3 tools/capture_macos_camera.py list
+python3 tools/capture_macos_camera.py capture \
+  --device-id '<exact platform camera id>' --output camera/setup.png
+python3 tools/verify_1x_camera_subset.py \
+  --manifest camera-manifest.json --output camera-result.json
+```
+
+The provider builds in a temporary directory, captures one PNG, and exits; it
+installs nothing and never listens in the background. The verifier contract is not
+tied to macOS or a camera model, so another one-shot capture provider may preserve
+the same PNG/manifest boundary.
+
+A synthetic positive/negative matrix is already part of host tests. The camera lane
+becomes mandatory for stable-1.x promotion only after a real camera is attached, a
+bench calibration is retained, and thresholds pass on board-01. Until then it does
+not create a fictional gate: measurement 0.45 remains explicitly non-publishable.
 
 ## Evidence bundle and GitHub attestation
 
@@ -104,6 +145,9 @@ scenarios/*.json         actions, assertions, timings, cleanup
 frames/*.rgb565          source display-controller bytes
 frames/*.png             reviewable screenshots
 frames/*.diff.png        visual failures or reviewed baseline changes
+camera/*.png             external views of the same four product states
+camera-manifest.json     station/camera/calibration and paired frame paths
+camera-result.json       hashes, optical metrics, orientation and pass/fail
 artifacts.sha256         hash of every retained file
 runner-result.json       unsigned local result; not a release trust boundary
 ```

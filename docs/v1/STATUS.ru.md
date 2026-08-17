@@ -12,8 +12,8 @@
 
 - **Активный этап:** `S1 — Evidence baseline`.
 - **Последний закрытый этап:** `S0 — Governance и граница поколений`.
-- **Рабочая база репозитория:** `acf6a0a` плюс текущие не выпущенные
-  документы/технический прототип 0.45.
+- **Рабочая база репозитория:** `7e9b586` плюс текущий невыпущенный camera-subset
+  контур и технический прототип 0.45.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
 - **Главная цель текущего этапа:** подтвердить ограничения ESP32-DIV и перевести PRD
@@ -451,6 +451,7 @@
 | E-AUTO-013 | однокомандный combined release HIL | pass: `run_1x_release_hil.py` выполняет product HIL точного кандидата, безопасный NVS-only unenroll, generic `device-smoke` revision 6, exact-CID read-only re-enroll и финальный cold boot; `verify_1x_release_hil_bundle.py` независимо связывает оба дочерних run, каждый внутренний hash, candidate/app identity, state isolation и final lease 0; workflow и `publish` используют combined verifier; E-HIL-056 доказывает GitHub-native путь | stable 1.x publish намеренно ещё не выполнялся; camera/power и destructive lanes остаются отдельными |
 | E-HIL-055 | board-01 0.45 combined release HIL | локальный product run `408bad8f085d7012fbc85fa57bdd363d` прошёл/gate-eligible, продвинул generation 4→5 с passive 20/20 accepted/forwarded, четырьмя TFT captures и полным cleanup; изолированный generic run `9c81c9f3d0f9cb0bdb69ebc8d002e8ce` проходит десять goldens без mismatch; unenroll не обращается и не пишет на SD, re-enroll и финальный boot восстанавливают точный CID generation 5/20 read-only без blocked/physical writes, с persistent Library, owner none и lease 0; независимая проверка проходит, deterministic 64-file archive — `760fad19…6abad`; сохранён [артефакт](../../tests/hil/evidence/board-01-release-hil-0.45.json) | local unsigned evidence на одной плате/карте; GitHub OIDC attestation, RF detector, physical power-cut, endurance и dense >64-network acceptance открыты |
 | E-HIL-056 | board-01 GitHub-native combined release HIL | pass: Actions run [`31987498533`](https://github.com/anton-vinogradov/esp32-leshy/actions/runs/31987498533), commit `b878b95`; exact app `05865dc1…18d1a9`, factory `672e3f0c…676d0e`, ELF `a43fdbc6…e33a21`, map `c34384c0…f24b7`, evidence archive `fcc1e5fe…5992`; build/physical/promotion 2:32/1:39/0:30; product run `7476ff6b2c0d96a5332e01079302662d` продвигает 5→6 с passive 16/16 и четырьмя TFT captures; generic run `a15e136702f65bb29cb811e74d29c330` проходит десять goldens, финальный re-enrolled boot допускает 6/16 read-only с zero SD writes, owner none/lease 0; candidate/evidence attestations и inner combined verifier проходят; ephemeral runners после run 0; сохранён [артефакт](../../tests/hil/evidence/board-01-release-hil-0.45.json) | measurement version корректно заканчивает `VALIDATION PASSED — NON-PUBLISHABLE VERSION`; stable publish, RF detector, physical power-cut, endurance, dense >64-network acceptance и external camera открыты |
+| E-AUTO-014 | foreground external-camera subset foundation | host pass: portable stdlib verifier требует exact `setup/running/committed/export`, station/camera identity, фиксированный frame и калиброванный TL/TR/BR/BL quad; сохраняет SHA-256 camera+GRAM и optical metrics; synthetic matrix принимает совпадающие physical views и fail-closed отклоняет rotation, blank panel, weak policy, unsafe path и неполный stage set; one-shot AVFoundation provider компилируется во временный каталог, исполняет `list` и не создаёт service | на текущем Mac camera devices не обнаружены; real board-01 calibration, пороги, четыре physical capture и включение результата в combined GitHub release gate остаются следующей частью этого slice |
 
 ## Известные неопределённости и риски
 
