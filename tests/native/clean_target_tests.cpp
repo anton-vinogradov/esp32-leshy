@@ -13,6 +13,7 @@
 #include "apps/survey/SurveyWorkflow.h"
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
+#include "apps/self_test/SelfTestController.h"
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
 #include "drivers/wifi/WifiPassiveContract.h"
@@ -57,6 +58,7 @@ using namespace leshy1::storage;
 using namespace leshy1::ui;
 using namespace leshy1::apps::survey;
 using namespace leshy1::apps::library;
+using namespace leshy1::apps::self_test;
 
 namespace {
 
@@ -80,12 +82,83 @@ void testVisualThemeContract() {
     CHECK(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth);
     CHECK(Layout::ContentTop + 3 * (Layout::RowHeight + Layout::RowGap) <
           Layout::FooterDividerY);
+    CHECK(Layout::ContentTop + 4 * Layout::HomeRowHeight +
+              3 * Layout::HomeRowGap + Layout::HomeUtilityGap <
+          Layout::FooterDividerY);
     CHECK(Palette::Canvas == rgb565(7, 16, 12));
     CHECK(Palette::Header != Palette::Canvas);
     CHECK(Palette::Surface != Palette::SurfaceFocus);
     CHECK(Palette::TextPrimary != Palette::TextSecondary);
     CHECK(Palette::Focus != Palette::Positive);
     CHECK(Palette::Warning != Palette::Danger);
+}
+
+void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
+    SelfTestFacts healthy;
+    healthy.buildIdentityPresent = true;
+    healthy.profileMatched = true;
+    healthy.displayReady = true;
+    healthy.inputFrontendReady = true;
+    healthy.inputQueueHealthy = true;
+    healthy.buzzerInactive = true;
+    healthy.resourceScopeClean = true;
+    healthy.heapFree = 220U * 1024U;
+    healthy.heapMinimum = 180U * 1024U;
+    healthy.inputQueueDrops = 0;
+    healthy.activeResources = resourceMask(Resource::UiForeground);
+
+    SelfTestController controller;
+    CHECK(controller.view() == SelfTestView::ModeMenu);
+    CHECK(controller.selection() == 0);
+    CHECK(controller.selectedMode() == SelfTestMode::Quick);
+    CHECK(!controller.previousMode());
+    CHECK(controller.activate(healthy, 100));
+    CHECK(controller.runAwaitingFinish());
+    controller.finishRun(125);
+    CHECK(!controller.runAwaitingFinish());
+    CHECK(controller.view() == SelfTestView::Result);
+    CHECK(controller.hasReport());
+    const SelfTestReport& quick = controller.report();
+    CHECK(quick.mode == SelfTestMode::Quick);
+    CHECK(quick.status == SelfTestResultStatus::Pass);
+    CHECK(quick.checkCount == 8);
+    CHECK(quick.passed == 8);
+    CHECK(quick.failed == 0);
+    CHECK(quick.blocked == 0);
+    CHECK(quick.readOnly);
+    CHECK(quick.durationUs == 25);
+    CHECK(std::strcmp(quick.checks[0].id, "quick.build.identity") == 0);
+    CHECK(std::strcmp(quick.checks[7].id, "quick.resource.scope") == 0);
+
+    CHECK(controller.back());
+    CHECK(controller.nextMode());
+    CHECK(controller.selectedMode() == SelfTestMode::FullGuided);
+    CHECK(controller.activate(healthy, 200));
+    CHECK(controller.view() == SelfTestView::Preflight);
+    CHECK(!controller.runAwaitingFinish());
+    CHECK(controller.activate(healthy, 210));
+    controller.finishRun(240);
+    const SelfTestReport& full = controller.report();
+    CHECK(full.mode == SelfTestMode::FullGuided);
+    CHECK(full.status == SelfTestResultStatus::Blocked);
+    CHECK(full.sequence == 2);
+    CHECK(full.checkCount == 9);
+    CHECK(full.passed == 8);
+    CHECK(full.failed == 0);
+    CHECK(full.blocked == 1);
+    CHECK(std::strcmp(full.checks[8].id, "full.capability.coverage") == 0);
+
+    CHECK(controller.back());
+    CHECK(controller.previousMode());
+    SelfTestFacts failed = healthy;
+    failed.buzzerInactive = false;
+    failed.inputQueueDrops = 1;
+    CHECK(controller.activate(failed, 300));
+    controller.finishRun(290);
+    CHECK(controller.report().status == SelfTestResultStatus::Fail);
+    CHECK(controller.report().failed == 2);
+    CHECK(controller.report().durationUs == 0);
+    CHECK(!controller.activate(healthy, 400));
 }
 
 void testProductBootRetryIsNarrowAndBounded() {
@@ -545,7 +618,7 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(constrained.add({"storage.sd", CapabilityState::Unknown, "probe", "not_mounted"}));
     AppCatalog catalog;
     catalog.rebuild(constrained);
-    CHECK(catalog.size() == 3);
+    CHECK(catalog.size() == 4);
     CHECK(catalog.get(0) != nullptr && catalog.get(0)->enabled);
     CHECK(std::strcmp(catalog.get(0)->id, "diagnostics") == 0);
     CHECK(catalog.get(1) != nullptr && !catalog.get(1)->enabled);
@@ -556,6 +629,11 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(catalog.get(0)->resources == resourceMask(Resource::UiForeground));
     CHECK((catalog.get(1)->resources & resourceMask(Resource::EspRf)) != 0);
     CHECK((catalog.get(2)->resources & resourceMask(Resource::Storage)) != 0);
+    CHECK(catalog.get(3) != nullptr && catalog.get(3)->enabled);
+    CHECK(std::strcmp(catalog.get(3)->id, "self-test") == 0);
+    CHECK(std::strcmp(catalog.get(3)->label, "SELF-TEST") == 0);
+    CHECK(catalog.get(3)->page == 4);
+    CHECK(catalog.get(3)->resources == resourceMask(Resource::UiForeground));
 
     HardwareInventory availableInventory;
     CHECK(availableInventory.add(
@@ -626,6 +704,7 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(!catalog.get(2)->simulated);
     CHECK(std::strcmp(catalog.get(2)->reason, "ready") == 0);
     CHECK((catalog.get(2)->resources & resourceMask(Resource::Storage)) != 0);
+    CHECK(catalog.get(3)->enabled);
 }
 
 void testRuntimeAcquiresAtomicallyAndBackReleasesEverything() {
@@ -2785,6 +2864,7 @@ void testSdSector0ReadIsSingleBoundedAndParseOnly() {
 
 int main() {
     testVisualThemeContract();
+    testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
     testProductBootRetryIsNarrowAndBounded();
     testProductStartIdentityRetryStopsBeforeFilesystem();
     testStorageTimingSummaryUsesNearestRank();

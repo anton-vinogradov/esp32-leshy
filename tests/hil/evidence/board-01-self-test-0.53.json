@@ -1,0 +1,113 @@
+{
+  "schema": "leshy.self_test_acceptance.v1",
+  "evidence_id": "E-HIL-077",
+  "captured_at": "2026-08-17",
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "candidate": {
+    "version": "0.53.0-self-test-quick-measure",
+    "firmware_sha256": "25d1f6208b3005b3e13df7e7344837d70526dc83c5b111a077afc4682cc010bb",
+    "factory_sha256": "e42c30c7cc902703a7d74cfd2e29c760b36c83f0357d9bc4e04b23aab026ff1f",
+    "elf_sha256": "06a5e9d406d5d2459c8ab73941248d7279cc177e28381176f0189e8088701e38",
+    "linked_flash_bytes": 1067800,
+    "static_ram_bytes": 128720,
+    "app_image_bytes": 1068208,
+    "factory_image_bytes": 1133744,
+    "rtc_noinit_bytes": 20
+  },
+  "rejected_attempt": {
+    "firmware_sha256": "f2461a07783bd351e3da67f22a05d3184da161f62279dfb301de9d0da8770d17",
+    "factory_sha256": "71ff4a010291af2d6c846e0bc203976b06e2621d7c5388f9460471f484e808b3",
+    "elf_sha256": "3ac34e1c43f7e3c643c5b95ba71655ac7e9436da7f1354a0b803f9bbed12617f",
+    "status": "fail_closed",
+    "failure": "ui.state after TFT capture panicked because a 3072-byte diagnostic JSON buffer was allocated on the loop-task stack",
+    "fix": "ui.state and self-test.report now reuse one bounded 3072-byte static workspace",
+    "raw_path": "board-01-self-test-0.53/initial-stack-panic.raw",
+    "raw_sha256": "2240064cfb34dcdb23cb31979d8bd61f342374df9dabcdf4af2e82bb506bf399"
+  },
+  "quick": {
+    "status": "pass",
+    "plan_version": 1,
+    "checks": 8,
+    "passed": 8,
+    "failed": 0,
+    "blocked": 0,
+    "duration_us": 60,
+    "read_only": true,
+    "radio_tx_commands": 0,
+    "storage_write_commands": 0,
+    "buzzer_activations": 0,
+    "heap_free": 224332,
+    "heap_minimum": 188872,
+    "heap_floor": 131072,
+    "input_queue_drops": 0,
+    "final_owner": "none",
+    "final_lease_mask": 0,
+    "report_path": "board-01-self-test-0.53/quick-report-clean.json",
+    "report_sha256": "7773781e1dbf70dc8092d8ede8f559fbe872d5c6686448fdeead0d9c233dfcd7"
+  },
+  "full_guided": {
+    "status": "blocked",
+    "plan_version": 1,
+    "checks": 9,
+    "passed": 8,
+    "failed": 0,
+    "blocked": 1,
+    "blocked_check": "full.capability.coverage",
+    "reason": "capability checks are intentionally registered through S3-S7; incomplete coverage cannot pass",
+    "report_path": "board-01-self-test-0.53/full-report-active.json",
+    "report_sha256": "0709c443b85f538e2b71e2f5f423a5c181555aafa6db5f5a69ef170bce9742f2"
+  },
+  "runtime": {
+    "heap_total": 272784,
+    "heap_free": 224332,
+    "heap_minimum": 188872,
+    "input_status": "ready",
+    "input_read_errors": 0,
+    "input_ambiguous_presses": 0,
+    "input_queue_depth": 0,
+    "input_queue_drops": 0,
+    "maximum_input_sample_gap_ms": 5,
+    "buzzer_level": "low",
+    "buzzer_inactive": true,
+    "metrics_path": "board-01-self-test-0.53/metrics-final.json",
+    "metrics_sha256": "2491a0eafee27a5c479b73930fa0d7be2546e84554e6f1a63b4c18560fe841aa",
+    "input_path": "board-01-self-test-0.53/input-final.json",
+    "input_sha256": "0b4e41f06545c052d2d35f94f6fe60256d31521812bbf47b767b9134919ab31c",
+    "safe_outputs_path": "board-01-self-test-0.53/safe-outputs-final.json",
+    "safe_outputs_sha256": "edf7741d3c47061d1f5a31b9726534e2a0a299b78c779c652b4abeecb6656fc9"
+  },
+  "screens": {
+    "modes": {
+      "path": "board-01-self-test-0.53/modes.png",
+      "png_sha256": "d70326096aed42682d391cab0395d30eb5c33c362cf09adb9c71e221522af48e",
+      "rgb565_sha256": "9879ccfa14f25efdf13ea92eaf44cc8d8bd81b349411e11f894e04472dd47417"
+    },
+    "quick_result": {
+      "path": "board-01-self-test-0.53/quick-result.png",
+      "png_sha256": "e694a9967fd1f3b2c21963b068edcd0777f91473c8a943118370eea7d51a285c",
+      "rgb565_sha256": "1f2f66fcc885132a321cd50ec9346f90f4decb9ce5d5dbfe417ab38642b44144"
+    },
+    "full_preflight": {
+      "path": "board-01-self-test-0.53/full-preflight.png",
+      "png_sha256": "5c4e3c9e7d0064b837f8aef70c14692f65915ae84defbc0129e7da6b1c31354c",
+      "rgb565_sha256": "a6762a98892714f5e35d0e4ad0922547592b77f8b99b5cf093658ff381e206f2"
+    },
+    "full_blocked": {
+      "path": "board-01-self-test-0.53/full-blocked.png",
+      "png_sha256": "61bbb6f38ed3bddc181710894dea695b3edd741c00847ad6306b148c5ae1a666",
+      "rgb565_sha256": "b20bb64cec1aed24230a4d2a47059fbfae26bb8eea41050798255dbbb83a65d8"
+    },
+    "home_cleanup": {
+      "path": "board-01-self-test-0.53/home-final.png",
+      "png_sha256": "22ea9b75feacb22c2aa9a2bc5fb4264519e0106a918a76a8fdc59c26b8efe503",
+      "rgb565_sha256": "d810b103b68a70a6effd498a7143b581e30d06f58930220d227fdbd6173f5a40"
+    }
+  },
+  "scope": {
+    "quick_s2_slice_accepted": true,
+    "full_guided_complete": false,
+    "s2_gate_complete": false,
+    "release_gate_eligible": false
+  }
+}

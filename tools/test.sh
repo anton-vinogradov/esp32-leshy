@@ -25,6 +25,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/tests/native/clean_target_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/LibraryController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/SessionCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/self_test/SelfTestController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/ProductSurveyAdmission.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyPipeline.cpp" \
@@ -99,6 +100,7 @@ python3 "$repo_dir/tools/check_product_start_resilience_acceptance.py"
 python3 "$repo_dir/tools/check_product_boot_resilience_acceptance.py"
 python3 "$repo_dir/tools/check_product_hardware_watchdog_acceptance.py"
 python3 "$repo_dir/tools/check_visual_system_acceptance.py"
+python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"

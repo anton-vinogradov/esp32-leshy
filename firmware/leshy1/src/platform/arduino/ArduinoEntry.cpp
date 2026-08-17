@@ -21,6 +21,7 @@
 
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
+#include "apps/self_test/SelfTestController.h"
 #include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/SurveyPipeline.h"
@@ -74,6 +75,12 @@ using leshy1::apps::library::LibraryEntry;
 using leshy1::apps::library::LibraryView;
 using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
+using leshy1::apps::self_test::SelfTestController;
+using leshy1::apps::self_test::SelfTestFacts;
+using leshy1::apps::self_test::SelfTestMode;
+using leshy1::apps::self_test::SelfTestReport;
+using leshy1::apps::self_test::SelfTestResultStatus;
+using leshy1::apps::self_test::SelfTestView;
 using leshy1::apps::survey::SurveyController;
 using leshy1::apps::survey::SurveyPipeline;
 using leshy1::apps::survey::SurveyPipelineProgress;
@@ -183,6 +190,7 @@ char runningAppElfSha256[65] = {};
 HilSession hilSession;
 TFT_eSPI display;
 UiController uiController;
+SelfTestController selfTestController;
 constexpr std::size_t kConsoleCommandCapacity = 128;
 constexpr char kLongestConsoleCommand[] =
     "storage.sd.session-store recover disposable-read-only "
@@ -191,6 +199,7 @@ static_assert(sizeof(kLongestConsoleCommand) <= kConsoleCommandCapacity,
               "console command buffer cannot hold the longest command");
 char usbCommand[kConsoleCommandCapacity] = {};
 char uartCommand[kConsoleCommandCapacity] = {};
+char diagnosticJson[3072] = {};
 std::size_t usbLength = 0;
 std::size_t uartLength = 0;
 std::uint8_t lastInputRaw = 0xFF;
@@ -1318,25 +1327,150 @@ void renderHome() {
         const AppMenuItem* item = appCatalog.get(i);
         if (item == nullptr) continue;
         const std::int32_t y = Layout::ContentTop +
-            static_cast<std::int32_t>(i) * (Layout::RowHeight + Layout::RowGap);
+            static_cast<std::int32_t>(i) *
+                (Layout::HomeRowHeight + Layout::HomeRowGap) +
+            (std::strcmp(item->id, "self-test") == 0
+                 ? Layout::HomeUtilityGap
+                 : 0);
         const bool selected = uiController.selection() == i;
         const std::uint16_t background = selected
             ? (item->enabled ? Palette::SurfaceFocus : Palette::SurfaceFocusDisabled)
             : Palette::Surface;
         display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth,
-                              Layout::RowHeight, Layout::Radius, background);
+                              Layout::HomeRowHeight, Layout::Radius, background);
         display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                              background);
         display.setTextFont(2);
-        display.setCursor(22, y + 5);
+        display.setCursor(22, y + 2);
         display.print(item->label);
         display.setTextFont(1);
         display.setTextColor(item->enabled ? Palette::Positive : Palette::TextMuted,
                              background);
-        display.setCursor(22, y + 26);
+        display.setCursor(22, y + 21);
         display.print(item->simulated ? item->reason
                                       : (item->enabled ? "READY" : item->reason));
     }
+}
+
+SelfTestFacts snapshotSelfTestFacts() {
+    std::uint32_t inputQueueDrops = 0;
+    portENTER_CRITICAL(&physicalInputMux);
+    inputQueueDrops = physicalInputQueueDrops;
+    portEXIT_CRITICAL(&physicalInputMux);
+
+    const CapabilityRecord* profile = inventory.find("board.profile");
+    const auto uiOnly = leshy1::kernel::runtime::resourceMask(
+        Resource::UiForeground);
+    SelfTestFacts facts;
+    facts.buildIdentityPresent = std::strlen(runningAppElfSha256) == 64;
+    facts.profileMatched = profile != nullptr &&
+                           profile->state == CapabilityState::Available;
+    facts.displayReady = bootMetrics.displayReadyUs != 0;
+    facts.inputFrontendReady = physicalInputTaskStarted &&
+                               bootMetrics.inputDetected;
+    facts.inputQueueHealthy = physicalInputEvents != nullptr &&
+                              inputQueueDrops == 0;
+    facts.buzzerInactive = BoardSafeOutputs::buzzerHeldInactive();
+    facts.heapFree = ESP.getFreeHeap();
+    facts.heapMinimum = ESP.getMinFreeHeap();
+    facts.inputQueueDrops = inputQueueDrops;
+    facts.activeResources = appRuntime.activeResources();
+    facts.resourceScopeClean = facts.activeResources == uiOnly;
+    return facts;
+}
+
+void renderSelfTestPage() {
+    char line[64] = {};
+    if (selfTestController.view() == SelfTestView::ModeMenu) {
+        renderHeader("SELF-TEST");
+        constexpr const char* labels[2] = {"QUICK", "FULL / GUIDED"};
+        constexpr const char* notes[2] = {"READ ONLY / AUTOMATIC",
+                                          "ALL APPLICABLE CHECKS"};
+        for (std::uint8_t index = 0; index < 2; ++index) {
+            const std::int32_t y = 94 + static_cast<std::int32_t>(index) * 58;
+            const bool selected = selfTestController.selection() == index;
+            const std::uint16_t background = selected ? Palette::SurfaceFocus
+                                                       : Palette::Surface;
+            display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth, 48,
+                                  Layout::Radius, background);
+            display.setTextFont(2);
+            display.setTextColor(selected ? Palette::Focus
+                                          : Palette::TextSecondary,
+                                 background);
+            display.setCursor(20, y + 5);
+            display.print(labels[index]);
+            display.setTextFont(1);
+            display.setTextColor(index == 0 ? Palette::Positive
+                                            : Palette::Warning,
+                                 background);
+            display.setCursor(20, y + 29);
+            display.print(notes[index]);
+        }
+        display.setTextFont(1);
+        display.setTextColor(Palette::TextMuted, Palette::Canvas);
+        display.setCursor(14, 218);
+        display.print("NO AUTOMATIC TEST DURING BOOT");
+        return;
+    }
+
+    if (selfTestController.view() == SelfTestView::Preflight) {
+        renderHeader("FULL / PREFLIGHT");
+        display.setTextFont(2);
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        display.setCursor(14, 88);
+        display.print("QUICK CHECKS       8");
+        display.setCursor(14, 116);
+        display.print("CAPABILITY PLAN  STAGED");
+        display.setCursor(14, 144);
+        display.print("SIDE EFFECTS      NONE");
+        display.setTextColor(Palette::Warning, Palette::Canvas);
+        display.setCursor(14, 178);
+        display.print("RESULT          BLOCKED");
+        display.setTextFont(1);
+        display.setCursor(14, 214);
+        display.print("S3-S8 ADDS GUIDED DEVICE CHECKS");
+        return;
+    }
+
+    const SelfTestReport& report = selfTestController.report();
+    renderHeader(report.status == SelfTestResultStatus::Pass
+                     ? "SELF-TEST / PASS"
+                     : (report.status == SelfTestResultStatus::Fail
+                            ? "SELF-TEST / FAIL"
+                            : "SELF-TEST / BLOCKED"));
+    display.setTextFont(2);
+    display.setTextColor(report.status == SelfTestResultStatus::Pass
+                             ? Palette::Positive
+                             : (report.status == SelfTestResultStatus::Fail
+                                    ? Palette::Danger
+                                    : Palette::Warning),
+                         Palette::Canvas);
+    display.setCursor(14, 84);
+    display.print(report.mode == SelfTestMode::Quick ? "MODE          QUICK"
+                                                     : "MODE    FULL / GUIDED");
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    std::snprintf(line, sizeof(line), "CHECKS       %u / %u",
+                  static_cast<unsigned>(report.passed),
+                  static_cast<unsigned>(report.checkCount));
+    display.setCursor(14, 118);
+    display.print(line);
+    std::snprintf(line, sizeof(line), "FAIL %u   BLOCKED %u",
+                  static_cast<unsigned>(report.failed),
+                  static_cast<unsigned>(report.blocked));
+    display.setCursor(14, 146);
+    display.print(line);
+    std::snprintf(line, sizeof(line), "HEAP MIN     %lu KiB",
+                  static_cast<unsigned long>(report.facts.heapMinimum / 1024U));
+    display.setCursor(14, 174);
+    display.print(line);
+    std::snprintf(line, sizeof(line), "INPUT DROPS  %lu",
+                  static_cast<unsigned long>(report.facts.inputQueueDrops));
+    display.setCursor(14, 202);
+    display.print(line);
+    display.setTextFont(1);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    display.setCursor(14, 222);
+    display.print("READ ONLY | REPORT AVAILABLE OVER USB");
 }
 
 void renderOverview() {
@@ -1617,8 +1751,10 @@ void renderInteractiveScreen() {
         renderOverview();
     } else if (uiController.page() == 2) {
         renderInventoryPage();
-    } else {
+    } else if (uiController.page() == 3) {
         renderLibraryPage();
+    } else {
+        renderSelfTestPage();
     }
     display.drawFastHLine(Layout::Edge, Layout::FooterDividerY,
                           Layout::ContentWidth, Palette::Divider);
@@ -1657,13 +1793,22 @@ void renderInteractiveScreen() {
         display.print(selected != nullptr && selected->persistent
                           ? "select detail | back home | SD"
                           : "select detail | back home | RAM only");
+    } else if (uiController.page() == 4 &&
+               selfTestController.view() == SelfTestView::ModeMenu) {
+        display.print("up/down | select mode | back home");
+    } else if (uiController.page() == 4 &&
+               selfTestController.view() == SelfTestView::Preflight) {
+        display.print("select run available | back modes");
+    } else if (uiController.page() == 4) {
+        display.print("back modes | USB: self-test.report");
     } else {
         display.print("left/back returns | ui.capture ready");
     }
 }
 
 void emitUiState(Stream& reply, UiAction action, bool changed) {
-    char line[2048] = {};
+    auto& line = diagnosticJson;
+    line[0] = '\0';
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const LibraryEntry* selectedLibrary = libraryController.selected();
     std::snprintf(line, sizeof(line),
@@ -1679,8 +1824,13 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   selected == nullptr ? "missing selection" : selected->reason,
                   static_cast<unsigned long>(uiController.revision()));
     const std::size_t length = std::strlen(line);
-    if (length > 0 && length + 1500 < sizeof(line)) {
+    if (length > 0 && length + 2300 < sizeof(line)) {
         const SurveyPipelineProgress pipelineProgress = surveyPipeline.progress();
+        const SelfTestReport& selfTestReport = selfTestController.report();
+        const SelfTestMode visibleSelfTestMode =
+            selfTestController.view() == SelfTestView::Result
+                ? selfTestReport.mode
+                : selfTestController.selectedMode();
         line[length - 1] = '\0';
         std::snprintf(line + length - 1, sizeof(line) - length + 1,
                       ",\"runtime_event\":\"%s\",\"runtime_owner\":\"%s\","
@@ -1715,7 +1865,13 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_cleanup_complete\":%s,"
                       "\"library_simulated\":%s,\"library_view\":\"%s\","
                       "\"library_entries\":%u,\"library_generation\":%lu,"
-                      "\"library_persistent\":%s}",
+                      "\"library_persistent\":%s,"
+                      "\"self_test_view\":\"%s\","
+                      "\"self_test_mode\":\"%s\","
+                      "\"self_test_status\":\"%s\","
+                      "\"self_test_checks\":%u,\"self_test_passed\":%u,"
+                      "\"self_test_failed\":%u,\"self_test_blocked\":%u,"
+                      "\"self_test_read_only\":%s}",
                       lastRuntimeEvent, appRuntime.activeApp(),
                       static_cast<unsigned long>(appRuntime.activeResources()),
                       surveyWorkflow.simulated() ? "true" : "false",
@@ -1779,7 +1935,18 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                                                      ? 0
                                                      : selectedLibrary->generation),
                       selectedLibrary != nullptr && selectedLibrary->persistent
-                          ? "true" : "false");
+                          ? "true" : "false",
+                      leshy1::apps::self_test::selfTestViewName(
+                          selfTestController.view()),
+                      leshy1::apps::self_test::selfTestModeName(
+                          visibleSelfTestMode),
+                      leshy1::apps::self_test::selfTestResultStatusName(
+                          selfTestReport.status),
+                      static_cast<unsigned>(selfTestReport.checkCount),
+                      static_cast<unsigned>(selfTestReport.passed),
+                      static_cast<unsigned>(selfTestReport.failed),
+                      static_cast<unsigned>(selfTestReport.blocked),
+                      selfTestReport.readOnly ? "true" : "false");
     }
     reply.println(line);
 }
@@ -1889,6 +2056,42 @@ bool applyUiAction(UiAction action, bool render = true) {
                 handled = true;
                 changed = libraryController.openSelected();
             }
+        }
+        if (handled) {
+            uiController.recordHandledAction(action);
+            if (changed && render) renderInteractiveScreen();
+            return changed;
+        }
+    }
+    if (!wasRoot && uiController.page() == 4) {
+        bool handled = false;
+        bool changed = false;
+        if (selfTestController.view() == SelfTestView::ModeMenu &&
+            action == UiAction::Up) {
+            handled = true;
+            changed = selfTestController.previousMode();
+        } else if (selfTestController.view() == SelfTestView::ModeMenu &&
+                   action == UiAction::Down) {
+            handled = true;
+            changed = selfTestController.nextMode();
+        } else if (action == UiAction::Select || action == UiAction::Right) {
+            handled = true;
+            const std::uint64_t startedUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+            changed = selfTestController.activate(snapshotSelfTestFacts(),
+                                                   startedUs);
+            if (selfTestController.runAwaitingFinish()) {
+                selfTestController.finishRun(
+                    static_cast<std::uint64_t>(esp_timer_get_time()));
+                lastRuntimeEvent = leshy1::apps::self_test::
+                    selfTestResultStatusName(selfTestController.report().status);
+            } else if (changed) {
+                lastRuntimeEvent = "self_test_preflight";
+            }
+        } else if (action == UiAction::Back || action == UiAction::Left) {
+            changed = selfTestController.back();
+            handled = changed;
+            if (changed) lastRuntimeEvent = "self_test_modes";
         }
         if (handled) {
             uiController.recordHandledAction(action);
@@ -5271,6 +5474,86 @@ void emitInputState(Stream& reply) {
     reply.println(line);
 }
 
+void emitSelfTestReport(Stream& reply) {
+    const SelfTestReport& report = selfTestController.report();
+    auto& line = diagnosticJson;
+    line[0] = '\0';
+    const int prefix = std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.self_test.report.v1\",\"kind\":\"report\","
+        "\"schema_version\":%u,\"plan_version\":%u,"
+        "\"firmware_version\":\"%s\",\"app_elf_sha256\":\"%s\","
+        "\"board_profile\":\"%s\",\"mode\":\"%s\",\"status\":\"%s\","
+        "\"sequence\":%lu,\"started_us\":%llu,\"duration_us\":%llu,"
+        "\"read_only\":%s,\"cancelled\":%s,"
+        "\"passed\":%u,\"failed\":%u,\"blocked\":%u,"
+        "\"side_effects\":{\"radio_tx_commands\":0,"
+        "\"storage_write_commands\":0,\"buzzer_activations\":0},"
+        "\"facts\":{\"build_identity_present\":%s,"
+        "\"profile_matched\":%s,\"display_ready\":%s,"
+        "\"input_frontend_ready\":%s,\"input_queue_healthy\":%s,"
+        "\"buzzer_inactive\":%s,\"resource_scope_clean\":%s,"
+        "\"heap_free\":%lu,\"heap_minimum\":%lu,\"heap_floor\":%lu,"
+        "\"input_queue_drops\":%lu,\"run_resource_mask\":%lu},"
+        "\"checks\":[",
+        static_cast<unsigned>(SelfTestReport::kSchemaVersion),
+        static_cast<unsigned>(SelfTestReport::kPlanVersion), LESHY1_VERSION,
+        runningAppElfSha256, BoardProfile::kId,
+        leshy1::apps::self_test::selfTestModeName(report.mode),
+        leshy1::apps::self_test::selfTestResultStatusName(report.status),
+        static_cast<unsigned long>(report.sequence),
+        static_cast<unsigned long long>(report.startedUs),
+        static_cast<unsigned long long>(report.durationUs),
+        report.readOnly ? "true" : "false",
+        report.cancelled ? "true" : "false",
+        static_cast<unsigned>(report.passed),
+        static_cast<unsigned>(report.failed),
+        static_cast<unsigned>(report.blocked),
+        report.facts.buildIdentityPresent ? "true" : "false",
+        report.facts.profileMatched ? "true" : "false",
+        report.facts.displayReady ? "true" : "false",
+        report.facts.inputFrontendReady ? "true" : "false",
+        report.facts.inputQueueHealthy ? "true" : "false",
+        report.facts.buzzerInactive ? "true" : "false",
+        report.facts.resourceScopeClean ? "true" : "false",
+        static_cast<unsigned long>(report.facts.heapFree),
+        static_cast<unsigned long>(report.facts.heapMinimum),
+        static_cast<unsigned long>(report.facts.heapFloor),
+        static_cast<unsigned long>(report.facts.inputQueueDrops),
+        static_cast<unsigned long>(report.facts.activeResources));
+    if (prefix < 0 || static_cast<std::size_t>(prefix) >= sizeof(line)) {
+        reply.println("{\"schema\":\"leshy.self_test.report.v1\","
+                      "\"kind\":\"error\",\"reason\":\"format_failed\"}");
+        return;
+    }
+    std::size_t used = static_cast<std::size_t>(prefix);
+    for (std::size_t index = 0; index < report.checkCount; ++index) {
+        const auto& check = report.checks[index];
+        const int written = std::snprintf(
+            line + used, sizeof(line) - used,
+            "%s{\"id\":\"%s\",\"status\":\"%s\"}",
+            index == 0 ? "" : ",", check.id == nullptr ? "missing" : check.id,
+            leshy1::apps::self_test::selfTestResultStatusName(check.status));
+        if (written < 0 || static_cast<std::size_t>(written) >= sizeof(line) - used) {
+            reply.println("{\"schema\":\"leshy.self_test.report.v1\","
+                          "\"kind\":\"error\",\"reason\":\"format_failed\"}");
+            return;
+        }
+        used += static_cast<std::size_t>(written);
+    }
+    const int suffix = std::snprintf(
+        line + used, sizeof(line) - used,
+        "],\"current_owner\":\"%s\",\"current_lease_mask\":%lu}",
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    if (suffix < 0 || static_cast<std::size_t>(suffix) >= sizeof(line) - used) {
+        reply.println("{\"schema\":\"leshy.self_test.report.v1\","
+                      "\"kind\":\"error\",\"reason\":\"format_failed\"}");
+        return;
+    }
+    reply.println(line);
+}
+
 void handleCommand(Stream& reply, const char* command) {
     if (std::strncmp(command, "hil.begin ", 10) == 0) {
         emitHilSessionBegin(reply, command);
@@ -5288,6 +5571,8 @@ void handleCommand(Stream& reply, const char* command) {
         emitUiState(reply, UiAction::Unknown, false);
     } else if (std::strcmp(command, "input.state") == 0) {
         emitInputState(reply);
+    } else if (std::strcmp(command, "self-test.report") == 0) {
+        emitSelfTestReport(reply);
     } else if (std::strncmp(command, "ui.key ", 7) == 0) {
         const UiAction action = leshy1::ui::uiActionFromName(command + 7);
         if (action == UiAction::Unknown) {
@@ -5635,6 +5920,7 @@ void setup() {
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
               "\"ui.state\",\"ui.key <action>\",\"input.state\","
+              "\"self-test.report\","
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
               "\"storage.discovery\",\"storage.mount.policy\","
               "\"storage.product.boot-recovery\","

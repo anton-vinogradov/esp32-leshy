@@ -64,8 +64,8 @@ service menu и не release-only serial path.
 ## UX-03 — visual tokens, кандидат S2
 
 Первый implementation slice находится в `ui/VisualTheme.h`. Экраны используют
-семантические роли, а не TFT-константы или локальные RGB. Кандидат станет accepted
-только после UX-05/06 и real-TFT UX-07.
+семантические роли, а не TFT-константы или локальные RGB. UX-03 принят как artifact;
+полный visual baseline S2 всё ещё требует UX-04…07.
 
 | Роль | RGB | Назначение |
 |---|---|---|

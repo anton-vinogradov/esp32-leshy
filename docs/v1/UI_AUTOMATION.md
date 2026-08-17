@@ -162,3 +162,11 @@ Home and Library frames, bound them to app `39fc2c92…43ace`, and finished with
 forwarded, zero drops, and owner/lease `none`/`0` (`E-HIL-076`). A pixel audit also
 detected and closed footer overflow. This accepts UX-03 and part of UX-07; it does
 not yet prove the Self-Test screens or remaining dialog/error/degraded states.
+
+Candidate 0.53 then reaches the last Home item exclusively through normalized
+Actions, captures mode/Quick result/Full preflight/blocked result/final Home, and
+binds the same stable check IDs into `leshy.self_test.report.v1`. The first capture
+regression exposed and retained a loop-task stack panic in the enlarged state
+record; moving both large records to one static bounded workspace fixed it. The
+exact rerun passes Quick 8/8 and returns owner/lease `none`/`0`; Full remains
+visibly and machine-readably blocked on incomplete capability coverage (`E-HIL-077`).

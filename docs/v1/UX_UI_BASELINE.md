@@ -64,8 +64,8 @@ screen, hidden service menu, or release-only serial path.
 ## UX-03 visual-token S2 candidate
 
 The first implementation slice lives in `ui/VisualTheme.h`. Screens consume
-semantic roles rather than TFT constants or local RGB values. The candidate becomes
-accepted only after UX-05/06 and real-TFT UX-07.
+semantic roles rather than TFT constants or local RGB values. UX-03 is accepted as
+an artifact; the complete S2 visual baseline still requires UX-04…07.
 
 | Role | RGB | Purpose |
 |---|---|---|

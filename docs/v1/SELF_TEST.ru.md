@@ -2,7 +2,8 @@
 
 *Читать на: [English](SELF_TEST.md) · **Русский***
 
-Статус: **принят product/UX contract; реализация растёт через S2…S8**.
+Статус: **принят product/UX contract; Quick slice S2 физически принят;
+coverage Full/Guided развивается через S3…S8**.
 
 Self-Test — отдельное приложение в самом низу Home. Оно никогда не перехватывает
 обычную загрузку. Один test engine используется владельцем устройства, полным
@@ -82,6 +83,21 @@ Back отменяет прогон на ближайшей safe boundary, сна
   независимо проверяет screenshots/report/artifact hashes и только затем разрешает
   promotion. Endurance и внешние power/RF fixtures остаются отдельными plan steps,
   но индексируются тем же report.
+
+## Текущая реализация S2
+
+Candidate `0.53.0-self-test-quick-measure` реализует последний пункт Home, menu
+режимов, Full preflight, result screens, восемь стабильных Quick check IDs и
+`leshy.self_test.report.v1`. На board-01 exact candidate прошёл все восемь Quick
+checks read-only за 60 µs, с zero radio/storage/buzzer side effects, zero input
+drops, minimum heap 188 872 B и final owner/lease `none`/`0` (`E-HIL-077`).
+
+Full/Guided намеренно возвращает восемь pass и blocked
+`full.capability.coverage`. Для S2 это правильный результат: незавершённые checks
+S3…S7 не могут быть promoted ни device, ни host. Первый physical attempt также
+обнаружил loop-task stack panic из-за локального diagnostic buffer 3 KiB; failure
+сохранён, buffer перенесён в один bounded static workspace, а exact fixed candidate
+прошёл полный regression.
 
 ## Приёмка
 

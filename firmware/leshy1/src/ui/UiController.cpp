@@ -61,6 +61,7 @@ const char* probePageName(std::uint8_t page) {
         case 1: return "diagnostics";
         case 2: return "survey";
         case 3: return "library";
+        case 4: return "self_test";
         default: return "unknown";
     }
 }

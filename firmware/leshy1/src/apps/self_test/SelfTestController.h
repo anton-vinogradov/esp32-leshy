@@ -1,0 +1,109 @@
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+
+#include "kernel/runtime/Resources.h"
+
+namespace leshy1::apps::self_test {
+
+enum class SelfTestMode : std::uint8_t {
+    Quick,
+    FullGuided,
+};
+
+enum class SelfTestView : std::uint8_t {
+    ModeMenu,
+    Preflight,
+    Result,
+};
+
+enum class SelfTestResultStatus : std::uint8_t {
+    NotRun,
+    Pass,
+    Fail,
+    Blocked,
+};
+
+const char* selfTestModeName(SelfTestMode mode);
+const char* selfTestViewName(SelfTestView view);
+const char* selfTestResultStatusName(SelfTestResultStatus status);
+
+struct SelfTestFacts final {
+    bool buildIdentityPresent = false;
+    bool profileMatched = false;
+    bool displayReady = false;
+    bool inputFrontendReady = false;
+    bool inputQueueHealthy = false;
+    bool buzzerInactive = false;
+    bool resourceScopeClean = false;
+    std::uint32_t heapFree = 0;
+    std::uint32_t heapMinimum = 0;
+    std::uint32_t heapFloor = 128U * 1024U;
+    std::uint32_t inputQueueDrops = 0;
+    kernel::runtime::ResourceMask activeResources = 0;
+};
+
+struct SelfTestCheckResult final {
+    const char* id = nullptr;
+    SelfTestResultStatus status = SelfTestResultStatus::NotRun;
+};
+
+struct SelfTestReport final {
+    static constexpr std::uint16_t kSchemaVersion = 1;
+    static constexpr std::uint16_t kPlanVersion = 1;
+    static constexpr std::size_t kCapacity = 9;
+
+    SelfTestMode mode = SelfTestMode::Quick;
+    SelfTestResultStatus status = SelfTestResultStatus::NotRun;
+    std::uint32_t sequence = 0;
+    std::uint64_t startedUs = 0;
+    std::uint64_t durationUs = 0;
+    std::array<SelfTestCheckResult, kCapacity> checks{};
+    std::size_t checkCount = 0;
+    std::uint8_t passed = 0;
+    std::uint8_t failed = 0;
+    std::uint8_t blocked = 0;
+    bool readOnly = true;
+    bool cancelled = false;
+    SelfTestFacts facts{};
+};
+
+// Allocation-free application model shared by physical buttons and diagnostic
+// Actions. Quick evaluates only already-observable facts and never starts a
+// driver, radio, filesystem, or feedback output. Full/Guided deliberately ends
+// blocked until every applicable capability has registered a check.
+class SelfTestController final {
+public:
+    static constexpr std::uint8_t kModeCount = 2;
+
+    bool previousMode();
+    bool nextMode();
+    bool activate(const SelfTestFacts& facts, std::uint64_t startedUs);
+    void finishRun(std::uint64_t finishedUs);
+    bool back();
+
+    SelfTestView view() const { return view_; }
+    std::uint8_t selection() const { return selection_; }
+    SelfTestMode selectedMode() const;
+    const SelfTestReport& report() const { return report_; }
+    bool hasReport() const {
+        return report_.status != SelfTestResultStatus::NotRun;
+    }
+    bool runAwaitingFinish() const { return runAwaitingFinish_; }
+
+private:
+    void beginReport(SelfTestMode mode, const SelfTestFacts& facts,
+                     std::uint64_t startedUs);
+    void append(const char* id, SelfTestResultStatus status);
+    void evaluateQuick(const SelfTestFacts& facts);
+    void finishResult();
+
+    SelfTestView view_ = SelfTestView::ModeMenu;
+    std::uint8_t selection_ = 0;
+    SelfTestReport report_{};
+    bool runAwaitingFinish_ = false;
+};
+
+}  // namespace leshy1::apps::self_test

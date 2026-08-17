@@ -1,0 +1,78 @@
+{
+  "app_elf_sha256": "06a5e9d406d5d2459c8ab73941248d7279cc177e28381176f0189e8088701e38",
+  "blocked": 1,
+  "board_profile": "esp32-div-v2-n16",
+  "cancelled": false,
+  "checks": [
+    {
+      "id": "quick.build.identity",
+      "status": "pass"
+    },
+    {
+      "id": "quick.board.profile",
+      "status": "pass"
+    },
+    {
+      "id": "quick.runtime.heap",
+      "status": "pass"
+    },
+    {
+      "id": "quick.display.ready",
+      "status": "pass"
+    },
+    {
+      "id": "quick.input.frontend",
+      "status": "pass"
+    },
+    {
+      "id": "quick.input.queue",
+      "status": "pass"
+    },
+    {
+      "id": "quick.output.buzzer",
+      "status": "pass"
+    },
+    {
+      "id": "quick.resource.scope",
+      "status": "pass"
+    },
+    {
+      "id": "full.capability.coverage",
+      "status": "blocked"
+    }
+  ],
+  "current_lease_mask": 1,
+  "current_owner": "self-test",
+  "duration_us": 64,
+  "facts": {
+    "build_identity_present": true,
+    "buzzer_inactive": true,
+    "display_ready": true,
+    "heap_floor": 131072,
+    "heap_free": 224332,
+    "heap_minimum": 188872,
+    "input_frontend_ready": true,
+    "input_queue_drops": 0,
+    "input_queue_healthy": true,
+    "profile_matched": true,
+    "resource_scope_clean": true,
+    "run_resource_mask": 1
+  },
+  "failed": 0,
+  "firmware_version": "0.53.0-self-test-quick-measure",
+  "kind": "report",
+  "mode": "full_guided",
+  "passed": 8,
+  "plan_version": 1,
+  "read_only": true,
+  "schema": "leshy.self_test.report.v1",
+  "schema_version": 1,
+  "sequence": 2,
+  "side_effects": {
+    "buzzer_activations": 0,
+    "radio_tx_commands": 0,
+    "storage_write_commands": 0
+  },
+  "started_us": 51937734,
+  "status": "blocked"
+}

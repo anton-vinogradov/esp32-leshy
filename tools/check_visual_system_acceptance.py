@@ -17,7 +17,6 @@ ROOT = Path(__file__).resolve().parent.parent
 EVIDENCE = ROOT / "tests/hil/evidence/board-01-visual-system-0.52.json"
 THEME = ROOT / "firmware/leshy1/src/ui/VisualTheme.h"
 RENDERER = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
-PLATFORMIO = ROOT / "firmware/leshy1/platformio.ini"
 SHA256 = re.compile(r"[0-9a-f]{64}")
 
 
@@ -144,9 +143,9 @@ def main() -> int:
                       "TFT_GREEN", "TFT_DARKGREY", "TFT_RED", "color565("):
         require(failures, raw_color not in renderer,
                 f"renderer: raw color remains: {raw_color}")
-    require(failures, 'LESHY1_VERSION=\\"0.52.0-visual-system-measure\\"' in
-            PLATFORMIO.read_text(encoding="utf-8"),
-            "platformio.ini: wrong measurement version")
+    # The retained candidate block above binds 0.52 exactly. Current source may
+    # advance while this historical evidence remains reproducible, so accepted
+    # evidence is deliberately not coupled to today's version flag.
 
     expected_names = {"setup", "running", "committed", "export", "library", "home"}
     screens = evidence.get("retained_screens", {})

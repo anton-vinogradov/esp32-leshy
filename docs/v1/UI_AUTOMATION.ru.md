@@ -157,3 +157,11 @@ frames, связал их с app `39fc2c92…43ace` и завершился с 9
 owner/lease `none`/`0` (`E-HIL-076`). Pixel audit также обнаружил и закрыл footer
 overflow. Это принимает UX-03 и часть UX-07, но ещё не доказывает Self-Test screens
 или оставшиеся dialog/error/degraded states.
+
+Candidate 0.53 затем доходит до последнего пункта Home только через normalized
+Actions, снимает mode/Quick result/Full preflight/blocked result/final Home и
+связывает те же стабильные check IDs в `leshy.self_test.report.v1`. Первый capture
+regression обнаружил и сохранил loop-task stack panic в расширенной state record;
+перенос обоих больших records в один static bounded workspace исправил его. Exact
+rerun проходит Quick 8/8 и возвращает owner/lease `none`/`0`; Full остаётся визуально
+и machine-readably blocked на incomplete capability coverage (`E-HIL-077`).
