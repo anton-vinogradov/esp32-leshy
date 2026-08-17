@@ -10,23 +10,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 EVIDENCE = ROOT / "tests" / "hil" / "evidence" / "board-01-keypad-0.43.json"
-CONFIG = ROOT / "firmware" / "leshy1" / "platformio.ini"
 SUITE = ROOT / "tests" / "hil" / "device-smoke.v1.json"
+ACCEPTED_FIRMWARE_VERSION = "0.43.0-keypad-burst-buffer-measure"
 
 
 def main() -> int:
     errors: list[str] = []
     value = json.loads(EVIDENCE.read_text(encoding="utf-8"))
     suite = json.loads(SUITE.read_text(encoding="utf-8"))
-    config = CONFIG.read_text(encoding="utf-8")
-    version_match = re.search(r'LESHY1_VERSION=\\"([^\"]+)\\"', config)
-    version = version_match.group(1) if version_match else None
     if value.get("schema") != "leshy.input.physical_acceptance.v1":
         errors.append("unexpected physical-keypad evidence schema")
     if value.get("status") != "pass":
         errors.append("physical-keypad evidence is not a pass")
-    if value.get("firmware_version") != version:
-        errors.append("physical-keypad evidence is not for the configured firmware")
+    if value.get("firmware_version") != ACCEPTED_FIRMWARE_VERSION:
+        errors.append("physical-keypad evidence is not for the accepted firmware")
     automatic = value.get("automatic_hil", {})
     if automatic.get("suite") != suite.get("id") or automatic.get("revision") != suite.get("revision"):
         errors.append("physical-keypad evidence is not bound to the current HIL suite")

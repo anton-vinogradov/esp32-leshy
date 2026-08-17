@@ -6,6 +6,7 @@
 #include <driver/sdspi_host.h>
 #include <driver/spi_master.h>
 #include <esp_vfs_fat.h>
+#include <diskio_impl.h>
 #include <ff.h>
 
 extern "C" BYTE ff_diskio_get_pdrv_card(const sdmmc_card_t* card);
@@ -19,6 +20,61 @@ namespace {
 using boards::esp32_div_v2::BoardProfile;
 constexpr const char* kSdMountPoint = "/sd-hil";
 constexpr spi_host_device_t kSdHost = SPI2_HOST;
+sdmmc_card_t* readOnlyCards[FF_VOLUMES] = {};
+std::uint32_t blockedWriteCounts[FF_VOLUMES] = {};
+
+DSTATUS readOnlyInitialize(BYTE drive) {
+    if (drive >= FF_VOLUMES || readOnlyCards[drive] == nullptr) {
+        return static_cast<DSTATUS>(STA_NOINIT | STA_PROTECT);
+    }
+    return sdmmc_get_status(readOnlyCards[drive]) == ESP_OK
+               ? STA_PROTECT
+               : static_cast<DSTATUS>(STA_NOINIT | STA_PROTECT);
+}
+
+DSTATUS readOnlyStatus(BYTE drive) {
+    return readOnlyInitialize(drive);
+}
+
+DRESULT readOnlyRead(BYTE drive, BYTE* output, DWORD sector, UINT count) {
+    if (drive >= FF_VOLUMES || readOnlyCards[drive] == nullptr ||
+        output == nullptr || count == 0) {
+        return RES_PARERR;
+    }
+    return sdmmc_read_sectors(readOnlyCards[drive], output, sector, count) ==
+                   ESP_OK
+               ? RES_OK
+               : RES_ERROR;
+}
+
+DRESULT rejectReadOnlyWrite(BYTE drive, const BYTE*, DWORD, UINT) {
+    if (drive < FF_VOLUMES) ++blockedWriteCounts[drive];
+    return RES_WRPRT;
+}
+
+DRESULT readOnlyIoctl(BYTE drive, BYTE command, void* output) {
+    if (drive >= FF_VOLUMES || readOnlyCards[drive] == nullptr) {
+        return RES_PARERR;
+    }
+    switch (command) {
+        case CTRL_SYNC:
+            return RES_OK;
+        case GET_SECTOR_COUNT:
+            if (output == nullptr) return RES_PARERR;
+            *static_cast<DWORD*>(output) = readOnlyCards[drive]->csd.capacity;
+            return RES_OK;
+        case GET_SECTOR_SIZE:
+            if (output == nullptr) return RES_PARERR;
+            *static_cast<WORD*>(output) = readOnlyCards[drive]->csd.sector_size;
+            return RES_OK;
+        case GET_BLOCK_SIZE:
+            if (output == nullptr) return RES_PARERR;
+            *static_cast<DWORD*>(output) = 1;
+            return RES_OK;
+        default:
+            return command == CTRL_TRIM ? RES_WRPRT : RES_PARERR;
+    }
+}
 
 std::uint64_t fatSectorSize(const FATFS* filesystem) {
     if (filesystem == nullptr) return 0;
@@ -38,9 +94,19 @@ bool BoardSdFilesystem::guardSharedChipSelect() {
 }
 
 bool BoardSdFilesystem::begin() {
+    return beginWithMode(false);
+}
+
+bool BoardSdFilesystem::beginReadOnly() {
+    return beginWithMode(true);
+}
+
+bool BoardSdFilesystem::beginWithMode(bool readOnly) {
     if (busInitialized_ || mounted_ || card_ != nullptr) return false;
     cleanupComplete_ = false;
     gpio21StableHigh_ = true;
+    readOnlyGuaranteed_ = false;
+    blockedWriteAttemptsAfterEnd_ = 0;
     mountError_ = ESP_OK;
     driveNumber_ = 0xFF;
     BoardSdSpiTransport::holdRadioTransmitPathsInactive();
@@ -98,17 +164,48 @@ bool BoardSdFilesystem::begin() {
         end();
         return false;
     }
+    if (readOnly && !installReadOnlyDiskIo()) {
+        mountError_ = ESP_ERR_INVALID_STATE;
+        end();
+        return false;
+    }
     return true;
 }
 
+bool BoardSdFilesystem::installReadOnlyDiskIo() {
+    if (!mounted_ || card_ == nullptr || driveNumber_ >= FF_VOLUMES) {
+        return false;
+    }
+    static const ff_diskio_impl_t implementation = {
+        &readOnlyInitialize,
+        &readOnlyStatus,
+        &readOnlyRead,
+        &rejectReadOnlyWrite,
+        &readOnlyIoctl,
+    };
+    readOnlyCards[driveNumber_] = card_;
+    blockedWriteCounts[driveNumber_] = 0;
+    ff_diskio_register(driveNumber_, &implementation);
+    readOnlyGuaranteed_ =
+        (readOnlyStatus(driveNumber_) & STA_PROTECT) != 0;
+    return readOnlyGuaranteed_;
+}
+
 void BoardSdFilesystem::end() {
+    const std::uint8_t previousDrive = driveNumber_;
     bool unmounted = true;
     if (card_ != nullptr) {
         unmounted = esp_vfs_fat_sdcard_unmount(kSdMountPoint, card_) == ESP_OK;
         card_ = nullptr;
     }
+    if (previousDrive < FF_VOLUMES) {
+        blockedWriteAttemptsAfterEnd_ = blockedWriteCounts[previousDrive];
+        blockedWriteCounts[previousDrive] = 0;
+        readOnlyCards[previousDrive] = nullptr;
+    }
     mounted_ = false;
     driveNumber_ = 0xFF;
+    readOnlyGuaranteed_ = false;
     bool busFreed = true;
     if (busInitialized_) {
         busFreed = spi_bus_free(kSdHost) == ESP_OK;
@@ -128,6 +225,12 @@ void BoardSdFilesystem::end() {
         digitalRead(BoardProfile::kNrfCePins[1]) == LOW &&
         digitalRead(BoardProfile::kNrfCePins[2]) == LOW &&
         guardSharedChipSelect();
+}
+
+std::uint32_t BoardSdFilesystem::blockedWriteAttempts() const {
+    return driveNumber_ < FF_VOLUMES
+               ? blockedWriteCounts[driveNumber_]
+               : blockedWriteAttemptsAfterEnd_;
 }
 
 std::uint64_t BoardSdFilesystem::cardCapacityBytes() const {

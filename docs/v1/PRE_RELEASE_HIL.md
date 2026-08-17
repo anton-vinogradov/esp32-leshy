@@ -250,6 +250,13 @@ promotion; a real GitHub workflow run now passes:
 - bounded query steps verify a typed serial artifact inside the same HIL session;
   action/query ambiguity and unsafe commands fail closed, while a partial
   `--scenario` run is never gate-eligible;
+- generic UI regression and product-media recovery use explicit, non-overlapping
+  device states. `storage.product.unenroll confirm` removes only the NVS CID and does
+  not access the SD before deterministic `device-smoke`; afterwards
+  `storage.product.enroll disposable-read-only <CID32>` may restore enrollment only
+  after exact-CID read-only catalog admission with zero SD writes. Version 0.44 passed
+  both halves on board-01 and retains a machine-checked product-boot artifact; folding
+  this state transition into the release orchestrator remains pre-release work;
 - golden bootstrap creates missing compressed RGB565 only and refuses to overwrite
   existing files; a normal run requires exact Home/Back and masked-exact Diagnostics
   with one explicit dynamic region;

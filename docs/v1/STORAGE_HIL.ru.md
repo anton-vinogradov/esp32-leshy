@@ -330,9 +330,8 @@ workspace и получает runtime capability `library.persistent_session`, �
 всю SD generic-available. Actual TFT path Home→List→Detail→Export показывает
 READY, `PERSISTENT SESSION | REAL`, generation 1/valid и `PERSISTED YES`; serial
 artifact имеет `persistent=true`, `simulated=false`, Wi-Fi 52. Back освобождает
-Storage+UI lease 5→0. Это current-boot admission после explicit command: безопасный
-boot mount/catalog/recovery пока не реализован и после reboot стартует simulated
-Library.
+Storage+UI lease 5→0. Это был current-boot admission после explicit command;
+version 0.44 ниже закрывает отдельный safe boot mount/catalog/recovery path.
 
 Version 0.40 добавляет product-level authorization поверх доказанного технического
 path. Для boot catalog разрешён только exact enrolled fingerprint, existing
@@ -341,6 +340,26 @@ Initialize/commit требуют explicit selection, writable driver, byte budge
 ресурсы; format запрещён. Combined Survey gate требует passive plan и lease 14 и
 никогда не делает simulated/RAM fallback. Это host + non-I/O board policy evidence,
 не mount или запись на product namespace.
+
+Version 0.44 реализует этот board lifecycle. Один explicit bootstrap на выбранной
+test card создал `/leshy/sessions/v1`, committed generation 1 с 17 passive Wi-Fi
+observations (895 logical bytes, три file и три directory sync), recovered её и только
+после этого enrolled exact CID. Каждый следующий accepted boot использует ESP-IDF
+FAT/diskio adapter: status содержит `STA_PROTECT`, write/trim callbacks возвращают
+`RES_WRPRT`, format disabled. Boot path держит lease 12, проверяет raw CID/CSD
+capacity, открывает только product root, staged latest valid catalog в Library,
+unmount и release 12→0. `f_getfree` и filesystem-capacity query намеренно отсутствуют:
+реальный full-FAT scan на 64 GB card уже приводил cold boot к зависанию.
+
+Test state управляется явно. `storage.product.unenroll confirm` удаляет только CID
+из NVS и не обращается к SD, поэтому generic `device-smoke` v6 сохраняет deterministic
+simulated/RAM fixture и десять существующих goldens.
+`storage.product.enroll disposable-read-only <CID32>` сохраняет CID в NVS только
+после успешного read-only catalog recovery. Exact candidate 0.44 прошёл generic HIL
+в un-enrolled state, был re-enrolled с zero SD writes, затем cold-booted в persistent
+Library generation 1/17; export valid/non-simulated/RF-off, Back освободил lease 5→0.
+Machine-checked retained artifact:
+[`board-01-product-boot-0.44.json`](../../tests/hil/evidence/board-01-product-boot-0.44.json).
 
 ## Приёмка
 
@@ -354,16 +373,17 @@ Initialize/commit требуют explicit selection, writable driver, byte budge
 | ST-HIL-A06 | Хэши ранее committed payload не меняются после каждого recovery |
 | ST-HIL-A07 | SD и LittleFS измеряются отдельно; throughput report содержит sample size, p50/p95/p99, sync latency и free-space delta |
 | ST-HIL-A08 | Physical power-cut повторяет boundary matrix до verification PR-005/RB-06 |
+| ST-HIL-A09 | Enrolled exact-CID cold boot допускает latest valid product Session через write-blocking driver с zero SD writes и complete lease/mount cleanup |
 
 Offline Library/reopen, bounded export, non-mounting discovery, mount policy, SD
 identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit плюс
 remount/reopen, 32-commit p50/p95/p99 throughput distribution и host/static reset harness
 плюс physical six-boundary matrix реализованы. Fixed queue и batched publish cadence
 теперь host-tested, а E-HIL-038 даёт 9 068 encoded B/s при цели RB-06 2 184 B/s.
-Следующая безопасная работа — реализовать board adapter lifecycle, удовлетворяющий
-read-only boot recovery и explicit bounded commit policy, затем подключить доказанный
-path к product Setup/Running/Stop & Commit и persistent Library catalog/recovery. Export
-этой recovered Session в текущем boot уже подтверждён E-HIL-040. Readiness
+E-HIL-053 закрывает ST-HIL-A09 на одной board/card и отделяет generic fixture от
+product enrollment. Следующая безопасная работа — подключить доказанный
+passive/persistent path к product Setup/Running/Stop & Commit, не перезаписывая
+boot-recovered Library simulated/RAM workflow. Readiness
 retry также ждёт natural transient.
 Physical power-cut всё ещё требует controller. LittleFS не затрагивается,
 пока не доказан отдельный disposable partition/image; текущий flash filesystem может

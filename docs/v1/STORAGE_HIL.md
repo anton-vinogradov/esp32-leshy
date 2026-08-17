@@ -337,9 +337,8 @@ into the caller-owned Library workspace and receives runtime capability
 TFT path Home→List→Detail→Export shows READY, `PERSISTENT SESSION | REAL`,
 generation 1/valid, and `PERSISTED YES`; the serial artifact carries
 `persistent=true`, `simulated=false`, Wi-Fi 52. Back releases the Storage+UI lease
-5→0. This is current-boot admission after an explicit command: safe boot
-mount/catalog/recovery is not implemented, so reboot still starts with simulated
-Library.
+5→0. This earlier result was current-boot admission after an explicit command;
+version 0.44 below closes the separate safe boot mount/catalog/recovery path.
 
 Version 0.40 adds product-level authorization above the proven technical path. Boot
 catalog access permits only the exact enrolled fingerprint, an existing
@@ -348,6 +347,27 @@ Initialize/commit require explicit selection, a writable driver, byte budget, an
 the same resources; format is forbidden. The combined Survey gate requires a
 passive plan and lease 14 and never falls back to simulated/RAM. This is host plus
 non-I/O board policy evidence, not a mount or write to the product namespace.
+
+Version 0.44 implements that board lifecycle. One explicit bootstrap on the selected
+test card created `/leshy/sessions/v1`, committed generation 1 with 17 passive Wi-Fi
+observations (895 logical bytes, three file and three directory syncs), recovered it,
+and only then enrolled the exact CID. Every accepted boot afterwards uses an ESP-IDF
+FAT/diskio adapter whose status advertises `STA_PROTECT` and whose write/trim callbacks
+return `RES_WRPRT`; formatting is disabled. The boot path holds lease 12, validates
+the raw CID/CSD capacity, opens only the product root, stages the latest valid catalog
+into Library, unmounts, and releases 12→0. It intentionally skips `f_getfree` and
+filesystem-capacity queries after a real full-FAT scan was observed to stall cold
+boot on the 64 GB card.
+
+Test-state management is explicit. `storage.product.unenroll confirm` removes only
+the NVS CID and does not access the SD, allowing generic `device-smoke` v6 to retain
+its deterministic simulated/RAM fixture and ten existing goldens.
+`storage.product.enroll disposable-read-only <CID32>` saves the NVS CID only after
+read-only catalog recovery succeeds. The exact 0.44 candidate passed generic HIL in
+the un-enrolled state, was re-enrolled with zero SD writes, then cold-booted into
+generation 1/17 persistent Library; export was valid/non-simulated/RF-off and Back
+released lease 5→0. The machine-checked retained artifact is
+[`board-01-product-boot-0.44.json`](../../tests/hil/evidence/board-01-product-boot-0.44.json).
 
 ## Acceptance
 
@@ -361,17 +381,18 @@ non-I/O board policy evidence, not a mount or write to the product namespace.
 | ST-HIL-A06 | Previously committed payload hashes are unchanged after every recovery |
 | ST-HIL-A07 | SD and LittleFS are measured separately; throughput reports sample size, p50/p95/p99, sync latency, and free-space delta |
 | ST-HIL-A08 | Physical power-cut repeats the boundary matrix before PR-005/RB-06 can be verified |
+| ST-HIL-A09 | Enrolled exact-CID cold boot admits the latest valid product Session through a write-blocking driver with zero SD writes and complete lease/mount cleanup |
 
 The offline Library/reopen, bounded export, non-mounting discovery, mount policy, SD
 identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit plus
 remount/reopen, a 32-commit p50/p95/p99 throughput distribution, and the host/static
 reset harness plus physical six-boundary matrix are implemented. The fixed queue and
 batched publication cadence are now host-tested, and E-HIL-038 delivers 9,068 encoded
-B/s against the 2,184 B/s RB-06 target. The next safe work is to implement a board
-adapter lifecycle satisfying read-only boot recovery and explicit bounded commit
-policy, then connect the proven path to product Setup/Running/Stop & Commit and persistent Library
-catalog/recovery. Export of this recovered Session in the current boot is already
-confirmed by E-HIL-040. The readiness retry also awaits a natural transient. Physical power-cut
+B/s against the 2,184 B/s RB-06 target. E-HIL-053 now closes ST-HIL-A09 on one
+board/card and keeps the generic fixture isolated from product enrollment. The next
+safe work is to connect the proven passive/persistent path to product
+Setup/Running/Stop & Commit without overwriting the boot-recovered Library with the
+simulated/RAM workflow. The readiness retry also awaits a natural transient. Physical power-cut
 still needs a controller.
 LittleFS is not touched until a dedicated disposable partition/image is proven; the
 current flash filesystem may contain legacy/product data.

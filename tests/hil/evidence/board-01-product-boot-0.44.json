@@ -1,0 +1,122 @@
+{
+  "schema": "leshy.storage.product_boot_acceptance.v1",
+  "status": "pass",
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "firmware_version": "0.44.0-sd-readonly-driver-measure",
+  "firmware_sha256": "b997a1ff1ac69c9c8ec8fcfe865c8366cb9c5150af6109eb576d2663acca4451",
+  "app_elf_sha256": "24615f861ec09ae6dcbf0abcf633ff7a6bb0c8613f1c0e99e58f5540c26c6d97",
+  "build": {
+    "linked_flash_bytes": 1053188,
+    "firmware_image_bytes": 1053600,
+    "static_ram_bytes": 120696
+  },
+  "media": {
+    "kind": "sd",
+    "fingerprint": "FE343253440000002000000055019CB7",
+    "capacity_bytes": 62534975488,
+    "product_root": "/leshy/sessions/v1"
+  },
+  "seed": {
+    "command": "storage.product.bootstrap disposable-write <CID32>",
+    "explicit_disposable_scope": true,
+    "status": "valid",
+    "root_created": true,
+    "operation": "initialize_store",
+    "wifi_records": 17,
+    "observations": 17,
+    "queue_high_water": 17,
+    "queue_drops": 0,
+    "generation": 1,
+    "bytes_written": 895,
+    "file_syncs": 3,
+    "directory_syncs": 3,
+    "enrollment_saved": true
+  },
+  "state_isolation": {
+    "unenroll_record_sha256": "3c303486145bc30ee56d5e05e35bb7e94a5cc02e8e82c8e36ef18cf8a863ce12",
+    "nvs_key_removed": true,
+    "sd_accessed": false,
+    "sd_data_untouched": true,
+    "generic_hil": {
+      "suite": "device-smoke",
+      "revision": 6,
+      "run_id": "47a59b27d36589fdf9c88273fb2a57af",
+      "run_sha256": "396fdfd3d77e73814ad5f8e0bc038f7ff99c4a550799d4328ce91dcebd04df34",
+      "artifact_index_sha256": "8b27246b090ab5a4b7f5e44ce835573ee602e74cf9b5f2bccc0694f8dbf859ab",
+      "candidate_flashed": true,
+      "passed": true,
+      "local_gate_eligible": true,
+      "trust_status": "unsigned_local_result",
+      "ready_marker_ms": 506.198,
+      "interactive_ready_us": 394166,
+      "visual_captures": 10,
+      "visual_mismatch_pixels": 0,
+      "final_lease_mask": 0
+    }
+  },
+  "read_only_enrollment": {
+    "record_sha256": "d3b0bb6ebb30ae694ae55fa7539975eaff05b7402b189500c17716ee87c47f49",
+    "status": "valid",
+    "fingerprint_matched": true,
+    "mounted_read_only": true,
+    "read_only_guaranteed": true,
+    "catalog_admitted": true,
+    "generation": 1,
+    "observations": 17,
+    "enrollment_saved": true,
+    "blocked_write_attempts": 0,
+    "sd_physical_write_calls": 0,
+    "owned_after": 0,
+    "cleanup_complete": true
+  },
+  "cold_boot": {
+    "raw_sha256": "f11d9e1b34d9d82213abf59bed712c427a2c84958af17867cc4c02fd48cbecd1",
+    "boot_recovery_record_sha256": "6039dfdecc4e392fbd91b1284d609db60ef8a4f13a763b811812426372038766",
+    "ready_marker_ms": 680.261,
+    "interactive_ready_us": 564144,
+    "heap_total_bytes": 281064,
+    "heap_free_bytes": 232628,
+    "heap_min_free_bytes": 199708,
+    "status": "admitted",
+    "enrolled": true,
+    "fingerprint_matched": true,
+    "mounted_read_only": true,
+    "read_only_guaranteed": true,
+    "catalog_admitted": true,
+    "generation": 1,
+    "observations": 17,
+    "integrity": "valid",
+    "blocked_write_attempts": 0,
+    "sd_physical_write_calls": 0,
+    "owned_during": 12,
+    "owned_after": 0,
+    "cleanup_complete": true
+  },
+  "persistent_library": {
+    "export_record_sha256": "e5157bb912132e1faab72aabdb89ae239b8108c0b290eaa4fd8c2133fb7ad0dc",
+    "export_ready_trace_sha256": "5f392fee5eec4c514a114cc71fffcaf066fc6a3cb407e7a7f8926d9f15a2c13f",
+    "home_trace_sha256": "584f9ba151d974b3e502ba69ccdea3b2d96ce9c3dc3af7a9fe1b8479b75d42ac",
+    "status": "valid",
+    "storage_backend": "persistent_media",
+    "persistent": true,
+    "simulated": false,
+    "radio_touched": false,
+    "session_id": "product-wifi-boot",
+    "generation": 1,
+    "observations": 17,
+    "wifi_observations": 17,
+    "library_lease_mask": 5,
+    "final_lease_mask": 0
+  },
+  "bounded_boot_regression": {
+    "failure_observed": true,
+    "cause": "f_getfree full-FAT scan in cold-boot recovery",
+    "fix": "boot recovery validates raw card capacity and skips filesystem capacity/free-space scans",
+    "static_guard_forbids": [
+      "freeBytes(",
+      "filesystemCapacityBytes("
+    ],
+    "fixed": true
+  }
+}

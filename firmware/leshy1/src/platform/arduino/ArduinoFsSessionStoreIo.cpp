@@ -7,6 +7,8 @@ namespace leshy1::platform::arduino {
 namespace {
 
 constexpr const char* kScratchParent = "/leshy-hil";
+constexpr const char* kProductParent = "/leshy";
+constexpr const char* kProductSessionsParent = "/leshy/sessions";
 
 const char* fresultName(FRESULT result) {
     switch (result) {
@@ -142,29 +144,78 @@ bool ArduinoFsSessionStoreIo::prepare(const storage::WritePermit& permit) {
     return true;
 }
 
+bool ArduinoFsSessionStoreIo::prepare(
+    const storage::ProductStorePermit& permit) {
+    lastFailure_ = "none";
+    lastFresult_ = FR_OK;
+    if (ready_ || driveNumber_ >= FF_VOLUMES || !permit.allowed() ||
+        !permit.writable || permit.byteLimit == 0 ||
+        permit.operation != storage::ProductStoreOperation::InitializeStore ||
+        permit.rootPath == nullptr ||
+        std::strcmp(permit.rootPath, storage::kProductSessionStoreRoot) != 0 ||
+        directoryExists(permit.rootPath)) {
+        recordFailure("product_prepare_precondition", FR_INVALID_PARAMETER);
+        return false;
+    }
+    if (!ensureDirectory(kProductParent) ||
+        !ensureDirectory(kProductSessionsParent) ||
+        !ensureDirectory(permit.rootPath)) {
+        if (std::strcmp(lastFailure_, "none") == 0) {
+            recordFailure("product_directory", FR_INT_ERR);
+        }
+        return false;
+    }
+    std::strcpy(rootPath_, permit.rootPath);
+    byteLimit_ = permit.byteLimit;
+    ready_ = true;
+    writable_ = true;
+    return true;
+}
+
+bool ArduinoFsSessionStoreIo::openExistingWritable(
+    const storage::ProductStorePermit& permit) {
+    return permit.allowed() && permit.writable && permit.byteLimit != 0 &&
+           permit.operation == storage::ProductStoreOperation::CommitSession &&
+           openExistingPath(permit.rootPath, permit.byteLimit, true, true);
+}
+
 bool ArduinoFsSessionStoreIo::openExistingReadOnly(
     const storage::WritePermit& permit) {
     return permit.allowed() && permit.byteLimit != 0 &&
-           openExistingReadOnlyPath(permit.scratchPath, permit.byteLimit);
+           openExistingPath(permit.scratchPath, permit.byteLimit, false, false);
 }
 
 bool ArduinoFsSessionStoreIo::openExistingReadOnly(
     const storage::ReadPermit& permit) {
-    return permit.allowed() && openExistingReadOnlyPath(permit.scratchPath, 0);
+    return permit.allowed() &&
+           openExistingPath(permit.scratchPath, 0, false, false);
 }
 
-bool ArduinoFsSessionStoreIo::openExistingReadOnlyPath(
-    const char* path, std::uint64_t byteLimit) {
+bool ArduinoFsSessionStoreIo::openExistingReadOnly(
+    const storage::ProductStorePermit& permit) {
+    return permit.allowed() && !permit.writable &&
+           permit.operation == storage::ProductStoreOperation::RecoverCatalog &&
+           openExistingPath(permit.rootPath, 0, false, true);
+}
+
+bool ArduinoFsSessionStoreIo::openExistingPath(
+    const char* path, std::uint64_t byteLimit, bool writable,
+    bool productRoot) {
+    const bool approvedRoot = productRoot
+        ? path != nullptr &&
+              std::strcmp(path, storage::kProductSessionStoreRoot) == 0
+        : path != nullptr &&
+              std::strncmp(path, storage::kScratchRoot,
+                           std::strlen(storage::kScratchRoot)) == 0;
     if (ready_ || driveNumber_ >= FF_VOLUMES || path == nullptr ||
-        std::strncmp(path, storage::kScratchRoot,
-                     std::strlen(storage::kScratchRoot)) != 0 ||
+        !approvedRoot ||
         std::strlen(path) >= sizeof(rootPath_) || !directoryExists(path)) {
         return false;
     }
     std::strcpy(rootPath_, path);
     byteLimit_ = byteLimit;
     ready_ = true;
-    writable_ = false;
+    writable_ = writable;
     return true;
 }
 

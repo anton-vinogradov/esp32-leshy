@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <Preferences.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
 #include <Wire.h>
@@ -109,6 +110,7 @@ constexpr std::uint32_t kConsoleBaud = 115200;
 constexpr std::uint32_t kI2cHz = 100000;
 constexpr leshy1::kernel::runtime::ResourceOwner kSdIdentificationOwner = 2;
 constexpr leshy1::kernel::runtime::ResourceOwner kWifiIngressOwner = 3;
+constexpr leshy1::kernel::runtime::ResourceOwner kBootCatalogOwner = 4;
 constexpr std::size_t kSdThroughputSamples = 32;
 constexpr std::size_t kWifiIngressMaxSamples = 32;
 constexpr std::uint64_t kWifiIngressP99EncodedBytesPerSecond = 546;
@@ -128,8 +130,16 @@ constexpr const char* kSdSessionResetPrefix =
     "storage.sd.session-store reset disposable-write ";
 constexpr const char* kSdSessionRecoverPrefix =
     "storage.sd.session-store recover disposable-read-only ";
+constexpr const char* kSdReadOnlyMountPrefix =
+    "storage.sd.readonly-mount disposable-read-only ";
 constexpr const char* kWifiIngressPrefix =
     "survey.wifi.passive-ingress measure passive-only ";
+constexpr const char* kProductBootstrapPrefix =
+    "storage.product.bootstrap disposable-write ";
+constexpr const char* kProductEnrollPrefix =
+    "storage.product.enroll disposable-read-only ";
+constexpr const char* kProductEnrollmentNamespace = "leshy1";
+constexpr const char* kProductEnrollmentKey = "sd.cid.v1";
 HardwareInventory inventory;
 AppCatalog appCatalog;
 ResourceBroker resourceBroker;
@@ -185,6 +195,30 @@ std::uint32_t physicalInputQueueDrops = 0;
 std::uint32_t physicalInputQueueHighWater = 0;
 std::uint32_t physicalInputDispatchedPresses = 0;
 bool physicalInputTaskStarted = false;
+
+struct ProductBootRecoveryState final {
+    const char* status = "not_started";
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    bool enrolled = false;
+    bool fingerprintMatched = false;
+    bool mountedReadOnly = false;
+    bool readOnlyGuaranteed = false;
+    bool rootExists = false;
+    bool opened = false;
+    bool catalogAdmitted = false;
+    bool cleanupComplete = false;
+    leshy1::storage::ProductStoreAccessStatus permitStatus =
+        leshy1::storage::ProductStoreAccessStatus::MissingMedia;
+    leshy1::apps::library::SessionCatalogResult catalog{};
+    std::uint32_t ownedDuring = 0;
+    std::uint32_t ownedAfter = 0;
+    std::uint32_t blockedWriteAttempts = 0;
+};
+
+ProductBootRecoveryState productBootRecovery;
+
+void renderInteractiveScreen();
 
 struct SdPhysicalEvidenceWorkspace final {
     char line[4608] = {};
@@ -301,6 +335,318 @@ bool prepareLibraryDemo() {
                                      true);
     return cataloged.admitted() && cataloged.generation == 1 &&
            cataloged.observations == 3;
+}
+
+bool exactCidFingerprint(const char* value) {
+    if (value == nullptr || std::strlen(value) != 32) return false;
+    for (std::size_t index = 0; index < 32; ++index) {
+        const char current = value[index];
+        if (!((current >= '0' && current <= '9') ||
+              (current >= 'A' && current <= 'F'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void formatCidFingerprint(const leshy1::storage::SdIdentity& identity,
+                          char* output, std::size_t capacity) {
+    if (output == nullptr || capacity < 33) return;
+    output[0] = '\0';
+    for (std::size_t index = 0; index < identity.cid.size(); ++index) {
+        std::snprintf(output + index * 2, capacity - index * 2, "%02X",
+                      static_cast<unsigned>(identity.cid[index]));
+    }
+}
+
+bool loadProductFingerprint(char* output, std::size_t capacity) {
+    if (output == nullptr || capacity < 33) return false;
+    output[0] = '\0';
+    Preferences preferences;
+    if (!preferences.begin(kProductEnrollmentNamespace, true)) return false;
+    const std::size_t stored = preferences.getBytesLength(kProductEnrollmentKey);
+    const std::size_t read = stored == 33
+        ? preferences.getBytes(kProductEnrollmentKey, output, 33) : 0;
+    preferences.end();
+    if (read != 33 || output[32] != '\0' || !exactCidFingerprint(output)) {
+        output[0] = '\0';
+        return false;
+    }
+    return true;
+}
+
+bool saveProductFingerprint(const char* fingerprint) {
+    if (!exactCidFingerprint(fingerprint)) return false;
+    Preferences preferences;
+    if (!preferences.begin(kProductEnrollmentNamespace, false)) return false;
+    const std::size_t written = preferences.putBytes(
+        kProductEnrollmentKey, fingerprint, 33);
+    preferences.end();
+    char verified[33] = {};
+    return written == 33 && loadProductFingerprint(verified, sizeof(verified)) &&
+           std::strcmp(verified, fingerprint) == 0;
+}
+
+bool clearProductFingerprint() {
+    char existing[33] = {};
+    if (!loadProductFingerprint(existing, sizeof(existing))) return true;
+    Preferences preferences;
+    if (!preferences.begin(kProductEnrollmentNamespace, false)) return false;
+    const bool removed = preferences.remove(kProductEnrollmentKey);
+    preferences.end();
+    char verified[33] = {};
+    return removed && !loadProductFingerprint(verified, sizeof(verified));
+}
+
+void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
+                                         bool enrollmentPresent) {
+    productBootRecovery = {};
+    productBootRecovery.status = "invalid_enrollment";
+    productBootRecovery.cleanupComplete = true;
+    productBootRecovery.enrolled = enrollmentPresent;
+    if (!exactCidFingerprint(expectedFingerprint)) return;
+    std::snprintf(productBootRecovery.expectedFingerprint,
+                  sizeof(productBootRecovery.expectedFingerprint), "%s",
+                  expectedFingerprint);
+
+    const bool resourcesAcquired = resourceBroker.acquire(
+        kBootCatalogOwner, leshy1::storage::kSdIdentificationResources);
+    productBootRecovery.ownedDuring = resourceBroker.ownedBy(kBootCatalogOwner);
+    if (!resourcesAcquired) {
+        productBootRecovery.status = "resources_unavailable";
+        productBootRecovery.cleanupComplete = true;
+        return;
+    }
+
+    BoardSdSpiTransport identityTransport;
+    const bool identityBegun = identityTransport.begin();
+    leshy1::storage::SdTransportRunResult identity;
+    if (identityBegun) {
+        leshy1::storage::SdTransportRunPolicy policy;
+        policy.allowPhysical = true;
+        policy.explicitlySelected = true;
+        policy.identificationOnly = true;
+        policy.ownedResources = productBootRecovery.ownedDuring;
+        identity = leshy1::storage::runSdIdentificationStateMachine(
+            leshy1::storage::defaultSdIdentificationPlan(), identityTransport,
+            policy);
+        identityTransport.end();
+    }
+    const bool identityCleanup = identityTransport.cleanupComplete();
+    formatCidFingerprint(identity.identity,
+                         productBootRecovery.observedFingerprint,
+                         sizeof(productBootRecovery.observedFingerprint));
+    productBootRecovery.fingerprintMatched =
+        identity.status == leshy1::storage::SdTransportRunStatus::Valid &&
+        std::strcmp(productBootRecovery.observedFingerprint,
+                    productBootRecovery.expectedFingerprint) == 0;
+
+    BoardSdFilesystem filesystem;
+    const bool mounted = productBootRecovery.fingerprintMatched &&
+                         filesystem.beginReadOnly();
+    productBootRecovery.mountedReadOnly = mounted;
+    productBootRecovery.readOnlyGuaranteed =
+        mounted && filesystem.readOnlyGuaranteed();
+    const std::uint64_t cardCapacity =
+        mounted ? filesystem.cardCapacityBytes() : 0;
+    const bool capacityMatched = mounted &&
+        cardCapacity != 0 && cardCapacity == identity.identity.capacityBytes;
+    productBootRecovery.rootExists = mounted && filesystem.exists(
+        leshy1::storage::kProductSessionStoreRoot);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = capacityMatched;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint = productBootRecovery.observedFingerprint;
+    media.capacityBytes = cardCapacity;
+    // Recovery never writes, so it does not need an O(media-size) free-space
+    // scan. Zero is valid geometry and keeps cold boot bounded.
+    media.freeBytes = 0;
+    leshy1::storage::ProductStoreRequest request;
+    request.operation = leshy1::storage::ProductStoreOperation::RecoverCatalog;
+    request.expectedFingerprint = productBootRecovery.expectedFingerprint;
+    request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+    request.rootExists = productBootRecovery.rootExists;
+    request.driverReadOnlyGuaranteed =
+        productBootRecovery.readOnlyGuaranteed;
+    request.ownedResources = productBootRecovery.ownedDuring;
+    const leshy1::storage::ProductStorePermit permit =
+        leshy1::storage::authorizeProductStore(media, request);
+    productBootRecovery.permitStatus = permit.status;
+
+    if (permit.allowed()) {
+        ArduinoFsSessionStoreIo io(filesystem.driveNumber(),
+                                   sdSessionStoreIoWorkspace);
+        productBootRecovery.opened = io.openExistingReadOnly(permit);
+        if (productBootRecovery.opened) {
+            productBootRecovery.catalog = sessionCatalog.recoverLatest(
+                io, sessionStoreWorkspace, librarySession, libraryController,
+                true, false);
+            productBootRecovery.catalogAdmitted =
+                productBootRecovery.catalog.admitted();
+        }
+        io.end();
+    }
+    productBootRecovery.blockedWriteAttempts =
+        filesystem.blockedWriteAttempts();
+    if (productBootRecovery.fingerprintMatched) filesystem.end();
+    const bool filesystemCleanup =
+        !productBootRecovery.fingerprintMatched || filesystem.cleanupComplete();
+    resourceBroker.releaseAll(kBootCatalogOwner);
+    productBootRecovery.ownedAfter = resourceBroker.ownedBy(kBootCatalogOwner);
+    productBootRecovery.cleanupComplete = identityCleanup && filesystemCleanup &&
+        productBootRecovery.ownedAfter == 0 &&
+        productBootRecovery.blockedWriteAttempts == 0;
+
+    if (!identityBegun || identity.status !=
+                              leshy1::storage::SdTransportRunStatus::Valid) {
+        productBootRecovery.status = "identity_failed";
+    } else if (!productBootRecovery.fingerprintMatched) {
+        productBootRecovery.status = "fingerprint_mismatch";
+    } else if (!mounted || !productBootRecovery.readOnlyGuaranteed) {
+        productBootRecovery.status = "readonly_mount_failed";
+    } else if (!permit.allowed()) {
+        productBootRecovery.status =
+            leshy1::storage::productStoreAccessStatusName(permit.status);
+    } else if (!productBootRecovery.opened) {
+        productBootRecovery.status = "open_failed";
+    } else if (productBootRecovery.catalogAdmitted) {
+        productBootRecovery.status = "admitted";
+        libraryDemoReady = true;
+    } else {
+        productBootRecovery.status =
+            leshy1::apps::library::sessionCatalogStatusName(
+                productBootRecovery.catalog.status);
+    }
+    if (!productBootRecovery.cleanupComplete) {
+        productBootRecovery.status = "cleanup_failed";
+    }
+}
+
+void recoverProductCatalogAtBoot() {
+    char expectedFingerprint[33] = {};
+    if (!loadProductFingerprint(expectedFingerprint,
+                                sizeof(expectedFingerprint))) {
+        productBootRecovery = {};
+        productBootRecovery.status = "unenrolled";
+        productBootRecovery.cleanupComplete = true;
+        return;
+    }
+    recoverProductCatalogForFingerprint(expectedFingerprint, true);
+}
+
+void emitProductBootRecovery(Stream& reply) {
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.storage.product_boot_recovery.v1\","
+        "\"kind\":\"state\",\"status\":\"%s\",\"enrolled\":%s,"
+        "\"expected_fingerprint\":\"%s\",\"observed_fingerprint\":\"%s\","
+        "\"fingerprint_matched\":%s,\"mounted_read_only\":%s,"
+        "\"read_only_guaranteed\":%s,\"write_enabled\":false,"
+        "\"blocked_write_attempts\":%lu,\"product_root\":\"%s\","
+        "\"root_exists\":%s,\"permit_status\":\"%s\",\"opened\":%s,"
+        "\"catalog_status\":\"%s\",\"catalog_admitted\":%s,"
+        "\"generation\":%lu,\"observations\":%u,"
+        "\"integrity\":\"%s\",\"owned_during\":%lu,\"owned_after\":%lu,"
+        "\"cleanup_complete\":%s,\"physical_write_calls\":0}",
+        productBootRecovery.status,
+        productBootRecovery.enrolled ? "true" : "false",
+        productBootRecovery.expectedFingerprint,
+        productBootRecovery.observedFingerprint,
+        productBootRecovery.fingerprintMatched ? "true" : "false",
+        productBootRecovery.mountedReadOnly ? "true" : "false",
+        productBootRecovery.readOnlyGuaranteed ? "true" : "false",
+        static_cast<unsigned long>(productBootRecovery.blockedWriteAttempts),
+        leshy1::storage::kProductSessionStoreRoot,
+        productBootRecovery.rootExists ? "true" : "false",
+        leshy1::storage::productStoreAccessStatusName(
+            productBootRecovery.permitStatus),
+        productBootRecovery.opened ? "true" : "false",
+        leshy1::apps::library::sessionCatalogStatusName(
+            productBootRecovery.catalog.status),
+        productBootRecovery.catalogAdmitted ? "true" : "false",
+        static_cast<unsigned long>(productBootRecovery.catalog.generation),
+        static_cast<unsigned>(productBootRecovery.catalog.observations),
+        leshy1::apps::library::sessionIntegrityName(
+            productBootRecovery.catalog.integrity),
+        static_cast<unsigned long>(productBootRecovery.ownedDuring),
+        static_cast<unsigned long>(productBootRecovery.ownedAfter),
+        productBootRecovery.cleanupComplete ? "true" : "false");
+    reply.println(line);
+}
+
+void admitPersistentLibraryCapability(const char* evidence) {
+    if (inventory.find("library.persistent_session") == nullptr) {
+        inventory.add({"library.persistent_session", CapabilityState::Available,
+                       evidence, "validated_session_open"});
+    }
+    appCatalog.rebuild(inventory);
+    renderInteractiveScreen();
+}
+
+void emitProductEnrollment(Stream& reply, const char* expectedFingerprint) {
+    recoverProductCatalogForFingerprint(expectedFingerprint, false);
+    const bool recoveryValid =
+        std::strcmp(productBootRecovery.status, "admitted") == 0 &&
+        productBootRecovery.catalogAdmitted &&
+        productBootRecovery.readOnlyGuaranteed &&
+        productBootRecovery.blockedWriteAttempts == 0 &&
+        productBootRecovery.cleanupComplete;
+    const bool enrollmentSaved = recoveryValid &&
+        saveProductFingerprint(expectedFingerprint);
+    productBootRecovery.enrolled = enrollmentSaved;
+    if (enrollmentSaved) {
+        admitPersistentLibraryCapability("explicit_readonly_enrollment");
+    }
+
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.storage.product_enrollment.v1\","
+        "\"kind\":\"result\",\"mode\":\"enroll\",\"status\":\"%s\","
+        "\"expected_fingerprint\":\"%s\","
+        "\"observed_fingerprint\":\"%s\",\"fingerprint_matched\":%s,"
+        "\"mounted_read_only\":%s,\"read_only_guaranteed\":%s,"
+        "\"write_enabled\":false,\"blocked_write_attempts\":%lu,"
+        "\"catalog_status\":\"%s\",\"catalog_admitted\":%s,"
+        "\"generation\":%lu,\"observations\":%u,"
+        "\"enrollment_saved\":%s,\"owned_after\":%lu,"
+        "\"cleanup_complete\":%s,\"physical_write_calls\":0}",
+        enrollmentSaved ? "valid" : "failed", expectedFingerprint,
+        productBootRecovery.observedFingerprint,
+        productBootRecovery.fingerprintMatched ? "true" : "false",
+        productBootRecovery.mountedReadOnly ? "true" : "false",
+        productBootRecovery.readOnlyGuaranteed ? "true" : "false",
+        static_cast<unsigned long>(productBootRecovery.blockedWriteAttempts),
+        leshy1::apps::library::sessionCatalogStatusName(
+            productBootRecovery.catalog.status),
+        productBootRecovery.catalogAdmitted ? "true" : "false",
+        static_cast<unsigned long>(productBootRecovery.catalog.generation),
+        static_cast<unsigned>(productBootRecovery.catalog.observations),
+        enrollmentSaved ? "true" : "false",
+        static_cast<unsigned long>(productBootRecovery.ownedAfter),
+        productBootRecovery.cleanupComplete ? "true" : "false");
+    reply.println(line);
+}
+
+void emitProductUnenrollment(Stream& reply) {
+    char enrolledFingerprint[33] = {};
+    const bool wasEnrolled = loadProductFingerprint(
+        enrolledFingerprint, sizeof(enrolledFingerprint));
+    const bool cleared = clearProductFingerprint();
+    char line[512] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.storage.product_enrollment.v1\","
+        "\"kind\":\"result\",\"mode\":\"unenroll\",\"status\":\"%s\","
+        "\"was_enrolled\":%s,\"cleared_fingerprint\":\"%s\","
+        "\"nvs_key_removed\":%s,\"sd_accessed\":false,"
+        "\"sd_data_untouched\":true,\"active_catalog_unchanged\":true,"
+        "\"reboot_required\":true,\"physical_write_calls\":0}",
+        cleared ? "valid" : "failed", wasEnrolled ? "true" : "false",
+        wasEnrolled ? enrolledFingerprint : "", cleared ? "true" : "false");
+    reply.println(line);
 }
 
 bool prepareBatchThroughputSession(std::size_t* encodedBytes) {
@@ -2275,6 +2621,135 @@ bool parseSdSessionStoreCommand(const char* command, const char* prefix,
     return parsed == 2 && std::strlen(fingerprint) == 32 && runId[0] != '\0';
 }
 
+bool parseExactFingerprintCommand(const char* command, const char* prefix,
+                                  char* fingerprint,
+                                  std::size_t fingerprintCapacity) {
+    if (command == nullptr || prefix == nullptr || fingerprint == nullptr ||
+        fingerprintCapacity < 33 ||
+        std::strncmp(command, prefix, std::strlen(prefix)) != 0) {
+        return false;
+    }
+    char extra = '\0';
+    const int parsed = std::sscanf(command + std::strlen(prefix),
+                                   "%32[0-9A-F] %c", fingerprint, &extra);
+    return parsed == 1 && std::strlen(fingerprint) == 32;
+}
+
+void emitPhysicalSdReadOnlyMount(Stream& reply,
+                                 const char* expectedFingerprint) {
+    auto& line = sdPhysicalEvidence.line;
+    auto& cidHex = sdPhysicalEvidence.cidHex;
+    cidHex[0] = '\0';
+    const bool idleUi = uiController.isRoot() && !appRuntime.running();
+    const bool resourcesAcquired = idleUi && resourceBroker.acquire(
+        kSdIdentificationOwner, leshy1::storage::kSdIdentificationResources);
+    const std::uint32_t ownedDuring =
+        resourceBroker.ownedBy(kSdIdentificationOwner);
+
+    BoardSdSpiTransport identityTransport;
+    const bool identityAdapterBegun = resourcesAcquired && identityTransport.begin();
+    leshy1::storage::SdTransportRunResult identity;
+    if (identityAdapterBegun) {
+        leshy1::storage::SdTransportRunPolicy policy;
+        policy.allowPhysical = true;
+        policy.explicitlySelected = true;
+        policy.identificationOnly = true;
+        policy.ownedResources = ownedDuring;
+        identity = leshy1::storage::runSdIdentificationStateMachine(
+            leshy1::storage::defaultSdIdentificationPlan(), identityTransport,
+            policy);
+        identityTransport.end();
+    }
+    const bool identityCleanup = identityTransport.cleanupComplete();
+    for (std::size_t index = 0; index < identity.identity.cid.size(); ++index) {
+        std::snprintf(cidHex + index * 2,
+                      sizeof(sdPhysicalEvidence.cidHex) - index * 2, "%02X",
+                      static_cast<unsigned>(identity.identity.cid[index]));
+    }
+    const bool fingerprintMatched =
+        identity.status == leshy1::storage::SdTransportRunStatus::Valid &&
+        std::strcmp(cidHex, expectedFingerprint) == 0;
+
+    BoardSdFilesystem filesystem;
+    const bool mountAttempted = fingerprintMatched;
+    const bool mounted = fingerprintMatched && filesystem.beginReadOnly();
+    const bool readOnlyGuaranteed = mounted && filesystem.readOnlyGuaranteed();
+    const std::uint64_t cardCapacity =
+        mounted ? filesystem.cardCapacityBytes() : 0;
+    const std::uint64_t filesystemCapacity =
+        mounted ? filesystem.filesystemCapacityBytes() : 0;
+    const std::uint64_t freeBytes = mounted ? filesystem.freeBytes() : 0;
+    const bool capacityMatched = mounted &&
+        cardCapacity == identity.identity.capacityBytes &&
+        filesystemCapacity != 0 && filesystemCapacity <= cardCapacity;
+    const bool rootExists =
+        mounted && filesystem.exists(leshy1::storage::kProductSessionStoreRoot);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = capacityMatched;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint = cidHex;
+    media.capacityBytes = cardCapacity;
+    media.freeBytes = freeBytes;
+    leshy1::storage::ProductStoreRequest request;
+    request.operation = leshy1::storage::ProductStoreOperation::RecoverCatalog;
+    request.expectedFingerprint = expectedFingerprint;
+    request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+    request.rootExists = rootExists;
+    request.driverReadOnlyGuaranteed = readOnlyGuaranteed;
+    request.driverWriteEnabled = false;
+    request.ownedResources = ownedDuring;
+    const leshy1::storage::ProductStorePermit permit =
+        leshy1::storage::authorizeProductStore(media, request);
+    const std::uint32_t blockedWritesBeforeEnd =
+        filesystem.blockedWriteAttempts();
+    filesystem.end();
+    const bool mountCleanup = filesystem.cleanupComplete();
+    const std::uint32_t blockedWrites = filesystem.blockedWriteAttempts();
+    resourceBroker.releaseAll(kSdIdentificationOwner);
+    const std::uint32_t ownedAfter =
+        resourceBroker.ownedBy(kSdIdentificationOwner);
+    const bool valid = idleUi && resourcesAcquired && identityAdapterBegun &&
+        identity.status == leshy1::storage::SdTransportRunStatus::Valid &&
+        identityCleanup && fingerprintMatched && mounted &&
+        readOnlyGuaranteed && capacityMatched && blockedWritesBeforeEnd == 0 &&
+        blockedWrites == 0 && mountCleanup && ownedAfter == 0;
+
+    std::snprintf(
+        line, sizeof(sdPhysicalEvidence.line),
+        "{\"schema\":\"leshy.storage.sd.readonly_mount.v1\","
+        "\"kind\":\"result\",\"status\":\"%s\","
+        "\"expected_fingerprint\":\"%s\",\"cid_hex\":\"%s\","
+        "\"fingerprint_matched\":%s,\"mount_attempted\":%s,"
+        "\"mounted\":%s,\"read_only_guaranteed\":%s,"
+        "\"write_enabled\":false,\"format_allowed\":false,"
+        "\"blocked_write_attempts\":%lu,\"card_capacity_bytes\":%llu,"
+        "\"filesystem_capacity_bytes\":%llu,\"free_bytes\":%llu,"
+        "\"capacity_matched\":%s,\"product_root\":\"%s\","
+        "\"root_exists\":%s,\"permit_status\":\"%s\","
+        "\"owned_during\":%lu,\"owned_after\":%lu,"
+        "\"identity_cleanup\":%s,\"mount_cleanup\":%s,"
+        "\"gpio21_stable_high\":%s,\"physical_write_calls\":0}",
+        valid ? "valid" : "rejected", expectedFingerprint, cidHex,
+        fingerprintMatched ? "true" : "false",
+        mountAttempted ? "true" : "false", mounted ? "true" : "false",
+        readOnlyGuaranteed ? "true" : "false",
+        static_cast<unsigned long>(blockedWrites),
+        static_cast<unsigned long long>(cardCapacity),
+        static_cast<unsigned long long>(filesystemCapacity),
+        static_cast<unsigned long long>(freeBytes),
+        capacityMatched ? "true" : "false",
+        leshy1::storage::kProductSessionStoreRoot,
+        rootExists ? "true" : "false",
+        leshy1::storage::productStoreAccessStatusName(permit.status),
+        static_cast<unsigned long>(ownedDuring),
+        static_cast<unsigned long>(ownedAfter),
+        identityCleanup ? "true" : "false",
+        mountCleanup ? "true" : "false",
+        filesystem.gpio21StableHigh() ? "true" : "false");
+    reply.println(line);
+}
+
 bool parseWifiPersistCommand(const char* command, char* fingerprint,
                              std::size_t fingerprintCapacity, char* runId,
                              std::size_t runIdCapacity,
@@ -2767,6 +3242,212 @@ WifiRecordDisposition collectWifiQueueRecord(
         context->oldestObservationUs = monotonicUs;
     }
     return WifiRecordDisposition::Accepted;
+}
+
+void emitProductStoreBootstrap(Stream& reply,
+                               const char* expectedFingerprint) {
+    auto& line = sdPhysicalEvidence.line;
+    auto& cidHex = sdPhysicalEvidence.cidHex;
+    cidHex[0] = '\0';
+    const bool idleUi = uiController.isRoot() && !appRuntime.running();
+    const leshy1::kernel::runtime::ResourceMask requestedResources =
+        leshy1::storage::kSdIdentificationResources |
+        leshy1::kernel::runtime::resourceMask(Resource::EspRf);
+    const bool resourcesAcquired = idleUi && resourceBroker.acquire(
+        kSdIdentificationOwner, requestedResources);
+    const std::uint32_t ownedDuring =
+        resourceBroker.ownedBy(kSdIdentificationOwner);
+
+    BoardSdSpiTransport identityTransport;
+    const bool identityBegun = resourcesAcquired && identityTransport.begin();
+    leshy1::storage::SdTransportRunResult identity;
+    if (identityBegun) {
+        leshy1::storage::SdTransportRunPolicy policy;
+        policy.allowPhysical = true;
+        policy.explicitlySelected = true;
+        policy.identificationOnly = true;
+        policy.ownedResources = ownedDuring;
+        identity = leshy1::storage::runSdIdentificationStateMachine(
+            leshy1::storage::defaultSdIdentificationPlan(), identityTransport,
+            policy);
+        identityTransport.end();
+    }
+    const bool identityCleanup = identityTransport.cleanupComplete();
+    formatCidFingerprint(identity.identity, cidHex,
+                         sizeof(sdPhysicalEvidence.cidHex));
+    const bool fingerprintMatched =
+        identity.status == leshy1::storage::SdTransportRunStatus::Valid &&
+        std::strcmp(cidHex, expectedFingerprint) == 0;
+
+    BoardSdFilesystem filesystem;
+    const bool mounted = fingerprintMatched && filesystem.begin();
+    const std::uint64_t cardCapacity =
+        mounted ? filesystem.cardCapacityBytes() : 0;
+    const std::uint64_t filesystemCapacity =
+        mounted ? filesystem.filesystemCapacityBytes() : 0;
+    const std::uint64_t freeBefore = mounted ? filesystem.freeBytes() : 0;
+    const bool capacityMatched = mounted &&
+        cardCapacity == identity.identity.capacityBytes &&
+        filesystemCapacity != 0 && filesystemCapacity <= cardCapacity;
+    const bool rootExisted = mounted && filesystem.exists(
+        leshy1::storage::kProductSessionStoreRoot);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = capacityMatched;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint = cidHex;
+    media.capacityBytes = cardCapacity;
+    media.freeBytes = freeBefore;
+    leshy1::storage::ProductStoreRequest request;
+    request.operation = rootExisted
+        ? leshy1::storage::ProductStoreOperation::CommitSession
+        : leshy1::storage::ProductStoreOperation::InitializeStore;
+    request.explicitlySelected = true;
+    request.expectedFingerprint = expectedFingerprint;
+    request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+    request.rootExists = rootExisted;
+    request.driverWriteEnabled = true;
+    request.requiredBytes = 64U * 1024U;
+    request.reserveBytes = 1024U * 1024U;
+    request.ownedResources = ownedDuring;
+    const leshy1::storage::ProductStorePermit permit =
+        leshy1::storage::authorizeProductStore(media, request);
+
+    ArduinoFsSessionStoreIo io(filesystem.driveNumber(),
+                               sdSessionStoreIoWorkspace);
+    const bool opened = permit.allowed() &&
+        (rootExisted ? io.openExistingWritable(permit) : io.prepare(permit));
+    const bool rootCreated = !rootExisted && opened && filesystem.exists(
+        leshy1::storage::kProductSessionStoreRoot);
+
+    BoardWifiPassiveScanner scanner;
+    const leshy1::drivers::wifi::WifiScanPlan wifiPlan =
+        leshy1::drivers::wifi::defaultPassivePlan();
+    std::uint64_t startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0) startedUs = 1;
+    surveyIngressQueue.reset();
+    surveySession.reset();
+    const bool scannerBegun = opened &&
+        leshy1::drivers::wifi::validatePassivePlan(wifiPlan) &&
+        surveySession.start("product-wifi-boot", startedUs) ==
+            SessionStatus::Started && scanner.begin();
+    WifiQueueSinkContext sink{&surveyIngressQueue, 0};
+    BoardWifiPassiveScanResult scan;
+    if (scannerBegun) scan = scanner.scan(wifiPlan, collectWifiQueueRecord, &sink);
+    Observation observation;
+    std::uint32_t appendDropped = 0;
+    while (surveyIngressQueue.pop(&observation)) {
+        if (surveySession.append(observation) != SessionStatus::Appended) {
+            ++appendDropped;
+        }
+    }
+    std::uint64_t stoppedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (stoppedUs < startedUs) stoppedUs = startedUs;
+    const bool stopped = scan.valid() && scan.accepted != 0 &&
+        scan.dropped == 0 && appendDropped == 0 &&
+        surveySession.stop(stoppedUs) == SessionStatus::Stopped;
+    const bool scannerCleanup = scanner.end() && scanner.cleanupComplete();
+    const std::uint32_t queueHighWater = surveyIngressQueue.highWater();
+    const std::uint32_t queueDropped = surveyIngressQueue.dropped();
+    surveyIngressQueue.reset();
+
+    leshy1::storage::SessionStoreCommitResult commit;
+    leshy1::apps::library::SessionCatalogResult cataloged;
+    if (stopped && scannerCleanup && queueDropped == 0) {
+        commit = leshy1::storage::commitNextSession(
+            io, sessionStoreWorkspace, surveySession);
+        if (commit.complete()) {
+            cataloged = sessionCatalog.recoverLatest(
+                io, sessionStoreWorkspace, librarySession, libraryController,
+                true, false);
+        }
+    }
+    const std::uint64_t bytesWritten = io.bytesWritten();
+    const std::uint32_t fileSyncs = io.fileSyncs();
+    const std::uint32_t directorySyncs = io.directorySyncs();
+    const char* ioFailure = io.lastFailure();
+    const char* ioResult = io.lastFresultName();
+    io.end();
+    if (fingerprintMatched) filesystem.end();
+    const bool filesystemCleanup =
+        !fingerprintMatched || filesystem.cleanupComplete();
+    resourceBroker.releaseAll(kSdIdentificationOwner);
+    const std::uint32_t ownedAfter =
+        resourceBroker.ownedBy(kSdIdentificationOwner);
+    const bool enrollmentSaved = cataloged.admitted() &&
+        saveProductFingerprint(expectedFingerprint);
+    const bool valid = idleUi && resourcesAcquired && identityBegun &&
+        identityCleanup && fingerprintMatched && mounted && capacityMatched &&
+        permit.allowed() && opened && (rootExisted || rootCreated) &&
+        scannerBegun && stopped && scannerCleanup && queueDropped == 0 &&
+        appendDropped == 0 && commit.complete() && cataloged.admitted() &&
+        bytesWritten != 0 && fileSyncs != 0 && directorySyncs != 0 &&
+        filesystemCleanup && ownedAfter == 0 && enrollmentSaved;
+
+    surveyDemoReady = prepareSurveyDemo();
+    if (valid) {
+        libraryDemoReady = true;
+        const CapabilityRecord* persistentCapability =
+            inventory.find("library.persistent_session");
+        if (persistentCapability == nullptr) {
+            inventory.add({"library.persistent_session",
+                           CapabilityState::Available,
+                           "explicit_product_bootstrap",
+                           "validated_session_open"});
+        }
+        appCatalog.rebuild(inventory);
+        renderInteractiveScreen();
+    }
+
+    std::snprintf(
+        line, sizeof(sdPhysicalEvidence.line),
+        "{\"schema\":\"leshy.storage.product_bootstrap.v1\","
+        "\"kind\":\"result\",\"status\":\"%s\","
+        "\"expected_fingerprint\":\"%s\",\"cid_hex\":\"%s\","
+        "\"fingerprint_matched\":%s,\"mounted_writable\":%s,"
+        "\"explicitly_selected\":true,\"format_allowed\":false,"
+        "\"product_root\":\"%s\",\"root_existed\":%s,"
+        "\"root_created\":%s,\"operation\":\"%s\","
+        "\"permit_status\":\"%s\",\"opened\":%s,"
+        "\"wifi_scan_status\":\"%s\",\"wifi_records\":%u,"
+        "\"observations\":%u,\"queue_high_water\":%lu,"
+        "\"queue_drops\":%lu,\"append_drops\":%lu,"
+        "\"commit_status\":\"%s\",\"generation\":%lu,"
+        "\"catalog_status\":\"%s\",\"catalog_admitted\":%s,"
+        "\"bytes_written\":%llu,\"file_syncs\":%lu,"
+        "\"directory_syncs\":%lu,\"io_failure\":\"%s\","
+        "\"io_result\":\"%s\",\"enrollment_saved\":%s,"
+        "\"owned_during\":%lu,\"owned_after\":%lu,"
+        "\"identity_cleanup\":%s,\"scanner_cleanup\":%s,"
+        "\"filesystem_cleanup\":%s,\"radio_connect_calls\":0,"
+        "\"application_raw_tx_calls\":0}",
+        valid ? "valid" : "failed", expectedFingerprint, cidHex,
+        fingerprintMatched ? "true" : "false", mounted ? "true" : "false",
+        leshy1::storage::kProductSessionStoreRoot,
+        rootExisted ? "true" : "false", rootCreated ? "true" : "false",
+        leshy1::storage::productStoreOperationName(request.operation),
+        leshy1::storage::productStoreAccessStatusName(permit.status),
+        opened ? "true" : "false",
+        leshy1::platform::arduino::boardWifiScanStatusName(scan.status),
+        static_cast<unsigned>(scan.recordsRead),
+        static_cast<unsigned>(cataloged.observations),
+        static_cast<unsigned long>(queueHighWater),
+        static_cast<unsigned long>(queueDropped),
+        static_cast<unsigned long>(appendDropped),
+        leshy1::storage::sessionStoreStatusName(commit.status),
+        static_cast<unsigned long>(commit.generation),
+        leshy1::apps::library::sessionCatalogStatusName(cataloged.status),
+        cataloged.admitted() ? "true" : "false",
+        static_cast<unsigned long long>(bytesWritten),
+        static_cast<unsigned long>(fileSyncs),
+        static_cast<unsigned long>(directorySyncs), ioFailure, ioResult,
+        enrollmentSaved ? "true" : "false",
+        static_cast<unsigned long>(ownedDuring),
+        static_cast<unsigned long>(ownedAfter),
+        identityCleanup ? "true" : "false",
+        scannerCleanup ? "true" : "false",
+        filesystemCleanup ? "true" : "false");
+    reply.println(line);
 }
 
 void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
@@ -3978,6 +4659,10 @@ void handleCommand(Stream& reply, const char* command) {
         emitStorageDiscovery(reply);
     } else if (std::strcmp(command, "storage.mount.policy") == 0) {
         emitStorageMountPolicy(reply);
+    } else if (std::strcmp(command, "storage.product.boot-recovery") == 0) {
+        emitProductBootRecovery(reply);
+    } else if (std::strcmp(command, "storage.product.unenroll confirm") == 0) {
+        emitProductUnenrollment(reply);
     } else if (std::strcmp(command, "survey.product.admission") == 0) {
         emitProductSurveyAdmission(reply);
     } else if (std::strcmp(command, "storage.sd.protocol") == 0) {
@@ -4008,6 +4693,43 @@ void handleCommand(Stream& reply, const char* command) {
                    command,
                    "storage.sd.inspect-root-cluster disposable-read-only") == 0) {
         emitPhysicalSdRootMetadata(reply);
+    } else if (std::strncmp(command, kSdReadOnlyMountPrefix,
+                            std::strlen(kSdReadOnlyMountPrefix)) == 0) {
+        char fingerprint[33] = {};
+        if (parseExactFingerprintCommand(
+                command, kSdReadOnlyMountPrefix, fingerprint,
+                sizeof(fingerprint))) {
+            emitPhysicalSdReadOnlyMount(reply, fingerprint);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.storage.sd.readonly_mount.v1\","
+                "\"kind\":\"error\",\"reason\":\"invalid_explicit_scope\"}");
+        }
+    } else if (std::strncmp(command, kProductBootstrapPrefix,
+                            std::strlen(kProductBootstrapPrefix)) == 0) {
+        char fingerprint[33] = {};
+        if (parseExactFingerprintCommand(
+                command, kProductBootstrapPrefix, fingerprint,
+                sizeof(fingerprint))) {
+            emitProductStoreBootstrap(reply, fingerprint);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.storage.product_bootstrap.v1\","
+                "\"kind\":\"error\",\"reason\":\"invalid_explicit_scope\"}");
+        }
+    } else if (std::strncmp(command, kProductEnrollPrefix,
+                            std::strlen(kProductEnrollPrefix)) == 0) {
+        char fingerprint[33] = {};
+        if (parseExactFingerprintCommand(
+                command, kProductEnrollPrefix, fingerprint,
+                sizeof(fingerprint))) {
+            emitProductEnrollment(reply, fingerprint);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.storage.product_enrollment.v1\","
+                "\"kind\":\"error\",\"mode\":\"enroll\","
+                "\"reason\":\"invalid_explicit_scope\"}");
+        }
     } else if (std::strncmp(command, kSdSessionResetPrefix,
                             std::strlen(kSdSessionResetPrefix)) == 0) {
         char fingerprint[33] = {};
@@ -4197,6 +4919,7 @@ void setup() {
     bootMetrics.inputReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
     surveyDemoReady = prepareSurveyDemo();
     libraryDemoReady = prepareLibraryDemo();
+    recoverProductCatalogAtBoot();
     storageDiscovery = boardStorageAdapter.discoverReadOnly();
     storageDiscoveryReady = leshy1::storage::validateMediaDiscovery(storageDiscovery) ==
                             leshy1::storage::MediaDiscoveryValidation::Valid;
@@ -4229,6 +4952,11 @@ void setup() {
                    libraryDemoReady ? CapabilityState::Available : CapabilityState::Fault,
                    "E-STORAGE-005_ram_reopen",
                    libraryDemoReady ? "volatile_offline_fixture" : "ram_fixture_invalid"});
+    if (productBootRecovery.catalogAdmitted) {
+        inventory.add({"library.persistent_session", CapabilityState::Available,
+                       "boot_readonly_product_catalog",
+                       "validated_session_open"});
+    }
     inventory.add({"storage.sd", CapabilityState::Unknown,
                    "E-STORAGE-006_gpio38_non_authoritative",
                    storageDiscoveryReady ? storageDiscovery.reason
@@ -4255,6 +4983,8 @@ void setup() {
               "\"ui.state\",\"ui.key <action>\",\"input.state\","
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
               "\"storage.discovery\",\"storage.mount.policy\","
+              "\"storage.product.boot-recovery\","
+              "\"storage.product.unenroll confirm\","
               "\"survey.product.admission\","
               "\"storage.sd.protocol\",\"storage.sd.identification.fixture\","
               "\"storage.sd.transport.fixture\","
@@ -4265,6 +4995,9 @@ void setup() {
               "\"storage.sd.inspect-fsinfo disposable-read-only\","
               "\"storage.sd.inspect-fat-reserved disposable-read-only\","
               "\"storage.sd.inspect-root-cluster disposable-read-only\","
+              "\"storage.sd.readonly-mount disposable-read-only <CID32>\","
+              "\"storage.product.enroll disposable-read-only <CID32>\","
+              "\"storage.product.bootstrap disposable-write <CID32>\","
               "\"storage.sd.session-store disposable-write <CID32> <run-id>\","
               "\"storage.sd.session-store throughput disposable-write <CID32> <run-id>\","
               "\"storage.sd.session-store batch-throughput disposable-write <CID32> <run-id>\","

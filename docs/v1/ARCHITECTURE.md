@@ -107,7 +107,8 @@ high-water 18/64, zero drops, recovered generation 1/52 observations, and
 persistent/real provenance in List/Detail/Export. The latter remains a sequential
 diagnostic command; it proves service rate, data path, and current-boot admission,
 not the product worker invariant that receiver ingress never waits on a durability
-barrier or boot-time catalog/recovery.
+barrier. Boot-time catalog recovery is now a separate measured path; it does not yet
+turn the simulated Survey UI into the real persistent worker.
 
 Product activation is a separate fail-closed boundary. `ProductStorePolicy` fixes
 the only current product root at `/leshy/sessions/v1`: automatic catalog recovery
@@ -117,8 +118,16 @@ commit additionally require an explicit user selection, writable driver, and bou
 size/reserve. `ProductSurveyAdmission` then requires explicit Start, a validated
 passive plan, a writable commit permit, and combined EspRf+Storage+RadioSpi ownership.
 It never silently replaces a requested real/persistent Session with simulated/RAM.
-These policies authorize no I/O themselves; the board adapter lifecycle remains the
-next implementation boundary.
+The 0.44 board lifecycle persists only the exact 32-character CID in NVS, identifies
+the card under lease 12, mounts FAT with formatting disabled, replaces diskio write
+and trim callbacks with `RES_WRPRT`, opens only the fixed product root, stages the
+latest valid generation into Library, then unmounts and releases all resources.
+Recovery deliberately validates raw card capacity and does not call `f_getfree` or
+filesystem-capacity queries: boot does not need free space, and scanning a large FAT
+would make latency depend on media size. Enrollment is saved only after the same
+read-only recovery succeeds; unenrollment removes only the NVS CID and never accesses
+the SD. Initialization/commit remain explicit writable operations. The next product
+boundary is the real passive/persistent Survey worker, not storage boot admission.
 
 ## Data model
 

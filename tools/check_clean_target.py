@@ -208,6 +208,12 @@ def main() -> int:
             "BoardSdSpiTransport::holdRadioTransmitPathsInactive",
             "kSpiHz = 4000000",
             "formatAllowed() const { return false; }",
+            "beginReadOnly",
+            "readOnlyGuaranteed",
+            "ff_diskio_register",
+            "STA_PROTECT",
+            "RES_WRPRT",
+            "rejectReadOnlyWrite",
             "spi_bus_initialize",
             "esp_vfs_fat_sdspi_mount",
             "mount.format_if_mount_failed = false",
@@ -219,7 +225,11 @@ def main() -> int:
             )
             if marker not in combined:
                 errors.append(f"guarded SD filesystem adapter is missing: {marker}")
-        for pattern in (r"\bSD\s*\.\s*writeRAW", r"\bformat\s*\("):
+        for pattern in (
+            r"\bSD\s*\.\s*writeRAW",
+            r"\bformat\s*\(",
+            r"\bsdmmc_write_sectors\s*\(",
+        ):
             if re.search(pattern, filesystem_adapter):
                 errors.append(f"guarded SD filesystem adapter bypasses scope: {pattern}")
 
@@ -230,6 +240,13 @@ def main() -> int:
         for marker in (
             "safeRelativePath",
             "storage::kScratchRoot",
+            "storage::kProductSessionStoreRoot",
+            "storage::ProductStorePermit",
+            "storage::ProductStoreOperation::InitializeStore",
+            "storage::ProductStoreOperation::CommitSession",
+            "storage::ProductStoreOperation::RecoverCatalog",
+            "kProductSessionsParent",
+            "openExistingWritable",
             "directoryExists(permit.scratchPath)",
             "f_mkdir",
             "bytesWritten_ > byteLimit_",
@@ -248,6 +265,38 @@ def main() -> int:
         ):
             if re.search(pattern, session_adapter):
                 errors.append(f"guarded SessionStore adapter can mutate existing paths: {pattern}")
+
+    for marker in (
+        "recoverProductCatalogAtBoot();",
+        "recoverProductCatalogForFingerprint",
+        "loadProductFingerprint",
+        "saveProductFingerprint",
+        "clearProductFingerprint",
+        "filesystem.beginReadOnly()",
+        "io.openExistingReadOnly(permit)",
+        "sessionCatalog.recoverLatest",
+        "resourceBroker.releaseAll(kBootCatalogOwner)",
+        '"storage.product.boot-recovery"',
+        "storage.product.enroll disposable-read-only <CID32>",
+        '"storage.product.unenroll confirm"',
+        "storage.product.bootstrap disposable-write <CID32>",
+        '\\"physical_write_calls\\\":0',
+    ):
+        if marker not in entry:
+            errors.append(f"Arduino entry is missing product boot recovery: {marker}")
+
+    recovery_start = entry.find("void recoverProductCatalogForFingerprint(")
+    recovery_end = entry.find("void recoverProductCatalogAtBoot()", recovery_start)
+    if recovery_start < 0 or recovery_end <= recovery_start:
+        errors.append("bounded product recovery function could not be inspected")
+    else:
+        recovery_body = entry[recovery_start:recovery_end]
+        for forbidden_call in ("freeBytes(", "filesystemCapacityBytes("):
+            if forbidden_call in recovery_body:
+                errors.append(
+                    "boot product recovery contains unbounded FAT geometry scan: "
+                    f"{forbidden_call}"
+                )
 
     for policy_path, markers in (
         (

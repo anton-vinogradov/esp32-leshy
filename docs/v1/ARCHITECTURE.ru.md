@@ -165,8 +165,9 @@ E-HIL-040 повторяет этот path до обычной Library/export: 1
 18/64, zero drops, recovered generation 1/52 observations и persistent/real
 provenance в List/Detail/Export. Последний пока является sequential diagnostic
 command: он доказывает service rate, data path и current-boot admission, но не
-product worker invariant, что receiver ingress никогда не ждёт durability barrier,
-и не boot-time catalog/recovery.
+product worker invariant, что receiver ingress никогда не ждёт durability barrier.
+Boot-time catalog recovery теперь является отдельным измеренным path; simulated
+Survey UI он пока не превращает в real persistent worker.
 
 Product activation выделена в отдельную fail-closed boundary. `ProductStorePolicy`
 фиксирует единственный текущий product root `/leshy/sessions/v1`: automatic catalog
@@ -176,7 +177,16 @@ read-only non-writable driver и ownership Storage+RadioSpi. Initialize/commit
 Затем `ProductSurveyAdmission` требует explicit Start, validated passive plan,
 writable commit permit и combined ownership EspRf+Storage+RadioSpi. Запрошенная
 real/persistent Session никогда молча не заменяется simulated/RAM. Сами политики не
-выполняют I/O; board adapter lifecycle остаётся следующей implementation boundary.
+выполняют I/O. В board lifecycle 0.44 NVS хранит только exact 32-character CID;
+под lease 12 card идентифицируется, FAT монтируется с disabled format, diskio write и
+trim callbacks заменяются на `RES_WRPRT`, открывается только fixed product root,
+последняя valid generation staged в Library, затем mount и все resources освобождаются.
+Recovery намеренно проверяет raw card capacity без `f_getfree` и filesystem-capacity
+query: boot не требует free space, а scan большой FAT сделал бы latency зависимой от
+размера media. Enrollment сохраняется только после такого же read-only recovery;
+unenrollment удаляет только CID из NVS и вообще не обращается к SD. Initialize/commit
+остаются explicit writable operations. Следующая product boundary — real
+passive/persistent Survey worker, а не storage boot admission.
 
 ## 7. Модель данных
 

@@ -5,6 +5,7 @@
 
 #include <ff.h>
 
+#include "storage/ProductStorePolicy.h"
 #include "storage/SessionStore.h"
 #include "storage/StorageGuard.h"
 
@@ -26,8 +27,11 @@ public:
     ~ArduinoFsSessionStoreIo() override { end(); }
 
     bool prepare(const storage::WritePermit& permit);
+    bool prepare(const storage::ProductStorePermit& permit);
+    bool openExistingWritable(const storage::ProductStorePermit& permit);
     bool openExistingReadOnly(const storage::WritePermit& permit);
     bool openExistingReadOnly(const storage::ReadPermit& permit);
+    bool openExistingReadOnly(const storage::ProductStorePermit& permit);
     void end();
 
     bool writeFile(const char* path, const std::uint8_t* data,
@@ -63,7 +67,8 @@ private:
                           std::size_t capacity) const;
     bool formatFullPath(const char* path, char* output,
                         std::size_t capacity) const;
-    bool openExistingReadOnlyPath(const char* path, std::uint64_t byteLimit);
+    bool openExistingPath(const char* path, std::uint64_t byteLimit,
+                          bool writable, bool productRoot);
     void recordFailure(const char* stage, FRESULT result);
 
     ArduinoFsSessionStoreWorkspace& workspace_;
