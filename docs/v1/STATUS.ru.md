@@ -547,10 +547,13 @@
 
 ## Blockers
 
-S3 не заблокирован. Второй экземпляр, мультиметр, logic/RF detector и power fixture
-понадобятся для named S4/S5/S8 evidence; до их появления соответствующие capabilities
-остаются conditional/unavailable и не включаются предположением.
+Реализация S3 может продолжаться через missing-source TFT path, LittleFS parity и
+independent goldens. Финальный gate физически заблокирован отсутствующим сейчас
+управляемым power-cut fixture: software reset не принимается как замена. Второй
+экземпляр, мультиметр и logic/RF detector остаются named gaps следующих этапов;
+затронутые capabilities остаются conditional/unavailable и не включаются
+предположением.
 
 0.51 hardware-watchdog injection, regression и shortened endurance checkpoint
 сохранены (`E-HIL-073…075`). Полный 8 h/32-cycle NFR-004 остаётся обязательным для
-`DEMO-S4`, но больше не удерживает переход S1→S2.
+`DEMO-S4`, а не S3.

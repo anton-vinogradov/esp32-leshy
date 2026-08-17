@@ -548,10 +548,13 @@ not a hidden S3 completion criterion.
 
 ## Blockers
 
-S3 is not blocked. A second board, multimeter, logic/RF detector, and power fixture
-are required by named S4/S5/S8 evidence; until available, affected capabilities stay
-conditional/unavailable rather than being enabled by assumption.
+S3 implementation can continue through the missing-source TFT path, LittleFS parity,
+and independent goldens. Its final gate is physically blocked by the currently
+unavailable controlled power-cut fixture: software reset is not accepted as a
+substitute. A second board, multimeter, and logic/RF detector remain named later-stage
+gaps; affected capabilities stay conditional/unavailable rather than being enabled by
+assumption.
 
 The 0.51 hardware-watchdog injection, regression, and shortened endurance checkpoint
 are retained (`E-HIL-073…075`). The full 8 h/32-cycle NFR-004 remains mandatory for
-`DEMO-S4`, but no longer holds the S1→S2 transition.
+`DEMO-S4`, not S3.
