@@ -416,6 +416,24 @@ attempts. Exact 0.49 затем прошёл один полный product run �
 35→38 (`E-HIL-067/068`). Retained summary:
 [`board-01-product-start-resilience-0.49.json`](../../tests/hil/evidence/board-01-product-start-resilience-0.49.json).
 
+Release gate 0.49 затем завершил шесть exact-candidate cycles, generation 38→44 и
+96/96 forwarded observations, но cycle 7 после 5 719,273 s исчерпал отдельный boot
+identity budget из трёх attempts (`E-HIL-069`). Terminal recovery record остаётся
+fail-closed: empty observed CID, no read-only mount или catalog admission, zero
+blocked/physical writes, complete cleanup и ownership zero. Немедленный read-only
+probe вернул exact CID в 6/8 attempts, поэтому card и prior generation не потеряны.
+
+Diagnostic comparison 32+32 отклонил увеличение bounded R1 response poll с 16 до 64
+byte: extended candidate дал 13 valid identities и четыре response timeouts, а
+retained control 16 byte — 15 valid identities и no timeout; у обоих maximum failure
+streak четыре и каждый cleanup завершён без writes (`E-HIL-070`). Поэтому candidate
+0.50 сохраняет wire policy 100 kHz/16 byte и меняет только narrow reset-separated
+boot budget с трёх до восьми attempts. Host tests покрывают attempts 3…7 и exhaustion
+на 8; неизменный no-OS watchdog 4 s по-прежнему ограничивает каждый recovery call.
+Exact three-cycle regression продвигает 44→47 с 39/39 forwarded, двумя natural
+retries, zero drops/heap drift и final lease 0 (`E-HIL-071`). Retained summary:
+[`board-01-product-boot-resilience-0.50.json`](../../tests/hil/evidence/board-01-product-boot-resilience-0.50.json).
+
 ## Приёмка
 
 | ID | Обязательный результат |
@@ -439,7 +457,8 @@ remount/reopen, 32-commit p50/p95/p99 throughput distribution и host/static res
 E-HIL-053 закрывает ST-HIL-A09, а E-HIL-054 — ST-HIL-A10 на одной board/card,
 сохраняя изоляцию generic fixture от product enrollment. E-HIL-058 отклоняет
 same-boot re-entry; E-HIL-059 подтверждает три normal reset-separated cycles и
-инварианты endurance runner. Positive physical reset-retry event и полный 8 h lane
-ещё открыты. Physical power-cut всё ещё требует controller. LittleFS не затрагивается,
+инварианты endurance runner. E-HIL-069 сохраняет failed gate 0.49, а E-HIL-071
+подтверждает policy восемь attempts через два natural physical reset retries.
+Passing complete 8 h lane ещё открыт. Physical power-cut всё ещё требует controller. LittleFS не затрагивается,
 пока не доказан отдельный disposable partition/image; текущий flash filesystem может
 содержать legacy/product data.

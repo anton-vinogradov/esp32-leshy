@@ -98,8 +98,8 @@ def boot_failures(ready: dict[str, Any], recovery: dict[str, Any],
     attempts = recovery.get("attempts")
     retries = recovery.get("transient_retries")
     if (not isinstance(attempts, int) or isinstance(attempts, bool)
-            or attempts < 1 or attempts > 3):
-        failures.append("boot_recovery.attempts: expected 1..3")
+            or attempts < 1 or attempts > 8):
+        failures.append("boot_recovery.attempts: expected 1..8")
     if (not isinstance(retries, int) or isinstance(retries, bool)
             or not isinstance(attempts, int) or retries != attempts - 1):
         failures.append(

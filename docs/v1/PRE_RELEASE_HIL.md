@@ -339,7 +339,7 @@ The current direct product-lane command is:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.49.0-product-start-resilience-measure \
+  --expected-version 0.50.0-product-boot-resilience-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - omitted `--expected-cid` is discovered only from an admitted enrollment whose
@@ -368,7 +368,7 @@ creating a resident agent or macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.49.0-product-start-resilience-measure \
+  --expected-version 0.50.0-product-boot-resilience-measure \
   --output /tmp/leshy-product-endurance-hil \
   --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
   --interval-seconds 900 --flash --release-endurance
@@ -418,6 +418,19 @@ an empty-CID parse rejection, before any filesystem call. `E-HIL-067/068` then p
 an exact product cycle and a 35→38 three-cycle regression with 46/46 forwarded,
 zero drops, invariant heap, and final lease 0. The retained artifact is checked by
 `check_product_start_resilience_acceptance.py`; the 8 h/32-cycle gate remains open.
+
+The 0.49 release lane then completed six cycles (generation 38→44, 96/96
+forwarded, zero drops and invariant heap) before cycle 7 exhausted the separate
+three-attempt boot budget after 5,719.273 seconds (`E-HIL-069`). A safe immediate
+probe recovered the exact CID in 6/8 attempts, proving that the media remained
+intact and the failure was transient. A proposed 64-byte R1 poll was rejected by
+the 32+32 read-only experiment `E-HIL-070`; it did not improve valid reads over
+the retained 16-byte limit. Candidate 0.50 instead aligns the narrow reset-separated
+boot policy with the existing eight-attempt Product Start budget. The exact
+three-cycle regression `E-HIL-071` advances 44→47 with 39/39 forwarded, two
+natural boot retries, zero drops/heap drift, and lease 0. The retained artifact is
+checked by `check_product_boot_resilience_acceptance.py`; a fresh 8 h/32-cycle run
+is still required.
 
 Local combined run `E-HIL-055` passed on the exact 0.45 candidate: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 with 20 passive Wi-Fi

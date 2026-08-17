@@ -340,7 +340,7 @@ workflow прошли end to end:
 python tools/run_1x_product_survey_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.49.0-product-start-resilience-measure \
+  --expected-version 0.50.0-product-boot-resilience-measure \
   --output /tmp/leshy-product-survey-hil --flash
 ```
 - без `--expected-cid` CID определяется только из admitted enrollment с совпадающими
@@ -369,7 +369,7 @@ resident agent или macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.49.0-product-start-resilience-measure \
+  --expected-version 0.50.0-product-boot-resilience-measure \
   --output /tmp/leshy-product-endurance-hil \
   --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
   --interval-seconds 900 --flash --release-endurance
@@ -420,6 +420,19 @@ CID, до любого filesystem call. Затем `E-HIL-067/068` проход�
 и three-cycle regression 35→38 с 46/46 forwarded, zero drops, invariant heap и final
 lease 0. Retained artifact проверяется
 `check_product_start_resilience_acceptance.py`; gate 8 h/32 cycles остаётся открыт.
+
+Затем release lane 0.49 завершил шесть cycles (generation 38→44, 96/96 forwarded,
+zero drops и invariant heap), но cycle 7 после 5 719,273 s исчерпал отдельный boot
+budget из трёх attempts (`E-HIL-069`). Безопасный немедленный probe получил exact
+CID в 6/8 attempts, доказав, что media сохранилась, а failure был transient.
+Предложенный R1 poll 64 byte отклонён по результату read-only experiment 32+32
+`E-HIL-070`: он не улучшил valid reads относительно сохранённого limit 16 byte.
+Candidate 0.50 вместо этого выравнивает narrow reset-separated boot policy с
+существующим budget Product Start восемь attempts. Exact three-cycle regression
+`E-HIL-071` продвигает 44→47 с 39/39 forwarded, двумя natural boot retries, zero
+drops/heap drift и lease 0. Retained artifact проверяет
+`check_product_boot_resilience_acceptance.py`; свежий run 8 h/32 cycles всё ещё
+обязателен.
 
 Local combined run `E-HIL-055` прошёл на exact candidate 0.45: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 с 20 passive Wi-Fi

@@ -424,6 +424,26 @@ then passed one full product run and a three-cycle 35→38 regression (`E-HIL-06
 Retained summary:
 [`board-01-product-start-resilience-0.49.json`](../../tests/hil/evidence/board-01-product-start-resilience-0.49.json).
 
+The 0.49 release gate later completed six exact-candidate cycles, generation 38→44
+and 96/96 forwarded observations, before cycle 7 exhausted the separate three-boot
+identity budget after 5,719.273 seconds (`E-HIL-069`). The terminal recovery
+record is still fail-closed: empty observed CID, no read-only mount or catalog
+admission, zero blocked/physical writes, complete cleanup, and ownership zero.
+An immediate read-only probe returned the exact CID in 6/8 attempts, so the card and
+prior generation were not lost.
+
+A 32+32 diagnostic comparison rejected increasing the bounded R1 response poll from
+16 to 64 bytes: the extended candidate produced 13 valid identities and four
+response timeouts, while the retained 16-byte control produced 15 valid identities
+and no timeout; both had a maximum failure streak of four and completed every
+cleanup without writes (`E-HIL-070`). Candidate 0.50 therefore keeps the 100 kHz,
+16-byte wire policy and changes only the narrow reset-separated boot budget from
+three to eight attempts. Host tests cover attempts 3…7 and exhaustion at 8; the
+unchanged 4 s no-OS watchdog still bounds every individual recovery call. The exact
+three-cycle regression advances 44→47 with 39/39 forwarded, two natural retries,
+zero drops/heap drift, and final lease 0 (`E-HIL-071`). Retained summary:
+[`board-01-product-boot-resilience-0.50.json`](../../tests/hil/evidence/board-01-product-boot-resilience-0.50.json).
+
 ## Acceptance
 
 | ID | Required result |
@@ -447,8 +467,9 @@ batched publication cadence are now host-tested, and E-HIL-038 delivers 9,068 en
 B/s against the 2,184 B/s RB-06 target. E-HIL-053 closes ST-HIL-A09 and E-HIL-054
 closes ST-HIL-A10 on one board/card while keeping the generic fixture isolated from
 product enrollment. E-HIL-058 rejects same-boot re-entry; E-HIL-059 confirms three
-normal reset-separated cycles and the endurance-runner invariants. A positive
-physical reset-retry event and the complete 8 h lane still remain open. Physical
+normal reset-separated cycles and the endurance-runner invariants. E-HIL-069 retains
+the failed 0.49 gate, while E-HIL-071 confirms the eight-attempt policy through two
+natural physical reset retries. A passing complete 8 h lane still remains open. Physical
 power-cut still needs a controller.
 LittleFS is not touched until a dedicated disposable partition/image is proven; the
 current flash filesystem may contain legacy/product data.

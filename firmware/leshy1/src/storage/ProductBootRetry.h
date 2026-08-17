@@ -20,7 +20,7 @@ struct ProductBootRetryEvidence final {
     std::uint32_t ownedAfter = 0;
 };
 
-constexpr std::uint8_t kProductBootMaximumAttempts = 3;
+constexpr std::uint8_t kProductBootMaximumAttempts = 8;
 constexpr std::uint32_t kProductBootRetryBaseDelayMs = 250;
 constexpr std::uint32_t kProductBootRecoveryWatchdogMs = 4000;
 

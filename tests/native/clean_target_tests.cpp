@@ -76,6 +76,8 @@ void testProductBootRetryIsNarrowAndBounded() {
     CHECK(shouldResetProductBootRetryState(true, true, false, true));
     CHECK(shouldResetProductBootRetryState(true, true, true, false));
     CHECK(kProductBootRecoveryWatchdogMs == 4000);
+    CHECK(kProductBootMaximumAttempts == 8);
+    CHECK(kSdMaxR1PollBytes == 16);
 
     ProductBootRetryEvidence evidence;
     evidence.identityFailed = true;
@@ -86,12 +88,16 @@ void testProductBootRetryIsNarrowAndBounded() {
     evidence.cleanupComplete = true;
     CHECK(shouldRetryProductBootRecovery(evidence, 1));
     CHECK(shouldRetryProductBootRecovery(evidence, 2));
+    CHECK(shouldRetryProductBootRecovery(evidence, 3));
+    CHECK(shouldRetryProductBootRecovery(evidence, 7));
     CHECK(!shouldRetryProductBootRecovery(evidence, 0));
-    CHECK(!shouldRetryProductBootRecovery(evidence, 3));
+    CHECK(!shouldRetryProductBootRecovery(evidence, 8));
     CHECK(productBootRetryDelayMs(0) == 0);
     CHECK(productBootRetryDelayMs(1) == 250);
     CHECK(productBootRetryDelayMs(2) == 500);
-    CHECK(productBootRetryDelayMs(3) == 0);
+    CHECK(productBootRetryDelayMs(3) == 750);
+    CHECK(productBootRetryDelayMs(7) == 1750);
+    CHECK(productBootRetryDelayMs(8) == 0);
 
     ProductBootRetryEvidence mutated = evidence;
     mutated.identityFailed = false;

@@ -21,7 +21,7 @@ RUN_SCHEMA = "leshy.product_endurance_hil.run.v1"
 RELEASE_MINIMUM_SECONDS = 8 * 60 * 60
 RELEASE_MINIMUM_CYCLES = 32
 NORMAL_MAXIMUM_READY_MS = 1500.0
-RETRY_MAXIMUM_READY_MS = 18000.0
+RETRY_MAXIMUM_READY_MS = 30000.0
 
 
 def execute(command: Sequence[str], log_prefix: Path) -> int:
@@ -171,7 +171,7 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
         attempt_metrics[f"{name}_transient_retries"] = retries
         attempt_metrics[f"{name}_timeout_restarts"] = timeouts
         if (not isinstance(attempts, int) or isinstance(attempts, bool)
-                or attempts < 1 or attempts > 3 or retries != attempts - 1):
+                or attempts < 1 or attempts > 8 or retries != attempts - 1):
             failures.append(f"{prefix}.boot_{name}.retry_metrics: invalid")
         if (not isinstance(timeouts, int) or isinstance(timeouts, bool)
                 or timeouts < 0
