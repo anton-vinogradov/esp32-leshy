@@ -3,7 +3,7 @@
 *Read in: [English](UX_UI_BASELINE.md) · **Русский***
 
 Статус: **S1 product UX direction принят; S2 visual gate активен**. Low-fidelity
-UX-01/UX-02 зафиксированы, UX-03…UX-05 приняты; UX-06/UX-07 — текущая работа S2.
+UX-01/UX-02 зафиксированы, UX-03…UX-06 приняты; UX-07 — текущая работа S2.
 
 Документ определяет, когда обсуждается опыт пользователя и когда внешний вид
 становится ограничением реализации. Он не подменяет
@@ -134,7 +134,24 @@ Home и Language на английском. Русский сохраняетс�
 Quick остаётся 8/8 с zero RF/storage/buzzer side effects, input errors и drops равны
 нулю, buzzer остаётся LOW, final owner/lease — `none`/`0`. Retained artifact и
 независимый checker связывают frames, каталог, source шрифта, hashes candidate,
-state trace и final cleanup. UX-06/UX-07 и `DEMO-S2` остаются открыты.
+state trace и final cleanup. На тот момент UX-06/UX-07 и `DEMO-S2` оставались
+открыты.
+
+## UX-06 — кнопки и доступность без цвета
+
+Обязательная [карта input/accessibility](UX_ACCESSIBILITY.ru.md) связывает все пять
+физических PCF8574 keys и diagnostic `Back` с normalized Actions каждого текущего
+экрана. Выбранная row теперь имеет геометрические outline и заполненный chevron в
+дополнение к palette contrast. Unavailable, running, committed, error, pass, fail,
+blocked, persistent/volatile, simulated и passive states остаются явным текстом.
+
+Exact candidate `0.56.0-ui-accessibility-measure` принимает UX-06 через
+`E-BUILD-058`/`E-HIL-080`/`E-UX-006`. Retained physical evidence связывает по 10
+нажатий каждой кнопки с 50/50/50 presses/releases/dispatched и zero errors,
+ambiguity или drops. Exact TFT run через public Actions перемещает focus по всем
+пяти Home rows, Survey, Library, Language и обоим choices Self-Test; pixel checker
+доказывает outline/chevron независимо от цвета. Quick остаётся 8/8, input healthy,
+buzzer LOW, final owner/lease — `none`/`0`. UX-07 и `DEMO-S2` остаются открыты.
 
 ## Gate
 

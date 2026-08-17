@@ -54,6 +54,7 @@
 - [Целевая архитектура](ARCHITECTURE.ru.md)
 - [UX-01: карта экранов и Actions](UX_SCREEN_MAP.ru.md)
 - [UX-02: матрица состояний](UX_STATE_MATRIX.ru.md)
+- [UX-06: карта input и accessibility](UX_ACCESSIBILITY.ru.md)
 - [Architecture Decision Records](adr/README.ru.md) — обязательные решения по
   toolchain, resources, storage и Action boundary
 - [Старая ссылка Roadmap](ROADMAP.ru.md) — только перенаправление

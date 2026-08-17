@@ -52,6 +52,7 @@ accepted decisions change.
 - [Target architecture](ARCHITECTURE.md)
 - [UX-01: screen and Action map](UX_SCREEN_MAP.md)
 - [UX-02: state matrix](UX_STATE_MATRIX.md)
+- [UX-06: input and accessibility map](UX_ACCESSIBILITY.md)
 - [Architecture Decision Records](adr/README.md) — binding toolchain, resource,
   storage, and Action-boundary decisions
 - [Former Roadmap link](ROADMAP.md) — redirect only

@@ -159,9 +159,8 @@ def main() -> int:
             'case 5: return "self_test"' in controller,
             "Language/Self-Test page mapping mismatch")
     platformio = PLATFORMIO.read_text(encoding="utf-8")
-    require(failures, 'LESHY1_VERSION=\\"0.55.0-ui-language-measure\\"' in platformio and
-            "-D LOAD_GFXFF=1" in platformio,
-            "0.55 UTF-8 firmware build contract missing")
+    require(failures, "-D LOAD_GFXFF=1" in platformio,
+            "UTF-8 firmware font build contract missing")
 
     if failures:
         for failure in failures:

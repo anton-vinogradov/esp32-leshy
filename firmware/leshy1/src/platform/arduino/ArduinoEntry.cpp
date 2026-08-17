@@ -1411,6 +1411,18 @@ void renderHeader(const char* title) {
     display.print(title);
 }
 
+void renderFocusCue(Rect bounds, bool selected) {
+    if (!selected) return;
+    display.drawRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, Palette::Focus);
+    const Rect marker = Components::focusMarker(bounds);
+    display.fillTriangle(marker.x, marker.y,
+                         marker.x, marker.y + marker.height,
+                         marker.x + marker.width,
+                         marker.y + marker.height / 2,
+                         Palette::Focus);
+}
+
 void renderMenuRow(Rect bounds, const char* label, const char* note,
                    bool selected, bool enabled, Tone noteTone) {
     const std::uint16_t background = selected
@@ -1418,6 +1430,7 @@ void renderMenuRow(Rect bounds, const char* label, const char* note,
         : Palette::Surface;
     display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
                           Layout::Radius, background);
+    renderFocusCue(bounds, selected);
     display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                          background);
     setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y - 3);
@@ -1739,6 +1752,8 @@ void renderInventoryPage() {
                                                    : Palette::Surface;
         display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth, 36,
                               Layout::Radius, background);
+        renderFocusCue({Layout::Edge, static_cast<std::int16_t>(y),
+                        Layout::ContentWidth, 36}, selected);
         display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                              background);
         setUiCursor(UiTextRole::Body, 20, y - 2);
@@ -1827,6 +1842,8 @@ void renderLibraryPage() {
                                                     : Palette::Surface;
         display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth,
                               Layout::RowHeight, Layout::Radius, background);
+        renderFocusCue({Layout::Edge, static_cast<std::int16_t>(y),
+                        Layout::ContentWidth, Layout::RowHeight}, isSelected);
         display.setTextColor(isSelected ? Palette::Focus : Palette::TextSecondary,
                              background);
         setUiCursor(UiTextRole::Body, 20, y - 1);

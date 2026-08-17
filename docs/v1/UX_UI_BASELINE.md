@@ -3,7 +3,7 @@
 *Read in: **English** · [Русский](UX_UI_BASELINE.ru.md)*
 
 Status: **S1 product UX direction accepted; S2 visual gate active**. Low-fidelity
-UX-01/UX-02 are fixed; UX-03…UX-05 are accepted; UX-06/UX-07 are the current S2 work.
+UX-01/UX-02 are fixed; UX-03…UX-06 are accepted; UX-07 is the current S2 work.
 
 This document defines when user experience is reviewed and when visual appearance
 becomes an implementation constraint. It does not replace the
@@ -134,7 +134,25 @@ Home and Language in English. Russian survives an exact-candidate flash/reset;
 Quick remains 8/8 with zero RF/storage/buzzer side effects, input errors and drops
 remain zero, the buzzer is LOW, and final owner/lease is `none`/`0`. The retained
 artifact and independent checker bind the frames, catalog, font source, candidate
-hashes, state trace, and final cleanup. UX-06/UX-07 and `DEMO-S2` remain open.
+hashes, state trace, and final cleanup. At that point UX-06/UX-07 and `DEMO-S2`
+remained open.
+
+## UX-06 button and non-color accessibility
+
+The binding [input/accessibility map](UX_ACCESSIBILITY.md) maps all five physical
+PCF8574 keys and diagnostic `Back` to normalized Actions for every current screen.
+A selected row now carries a geometric outline and filled chevron in addition to
+palette contrast. Unavailable, running, committed, error, pass, fail, blocked,
+persistent/volatile, simulated, and passive states remain explicit text.
+
+Exact candidate `0.56.0-ui-accessibility-measure` accepts UX-06 through
+`E-BUILD-058`/`E-HIL-080`/`E-UX-006`. Retained physical evidence binds 10 presses
+of each key with 50/50/50 presses/releases/dispatched and zero errors, ambiguity,
+or drops. The exact TFT run moves focus across all five Home rows, Survey, Library,
+Language, and both Self-Test choices through public Actions; the pixel checker
+proves the outline/chevron independent of color. Quick remains 8/8, input remains
+healthy, the buzzer remains LOW, and final owner/lease is `none`/`0`. UX-07 and
+`DEMO-S2` remain open.
 
 ## Gate
 

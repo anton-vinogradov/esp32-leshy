@@ -182,3 +182,10 @@ Diagnostics, Survey, Library, Language, Self-Test, and Quick result plus English
 Home/Language, proves Russian persistence across flash/reset, and finishes Quick
 8/8 with zero input errors/drops, buzzer LOW, and owner/lease `none`/`0`
 (`E-HIL-079`/`E-UX-005`).
+
+Candidate 0.56 adds an outline and filled chevron to every focused shared/menu/list
+row. Twelve exact current TFT captures traverse Home, Survey, Library, Language,
+both Self-Test choices, Quick result, and final cleanup only through normalized
+Actions. A standard-library pixel audit verifies the cue independently of color and
+combines it with the retained 50-event physical-key acceptance (`E-HIL-052/080`,
+`E-UX-006`).

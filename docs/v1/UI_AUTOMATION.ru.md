@@ -177,3 +177,9 @@ Library, Language, Self-Test и Quick result, а также английские
 подтверждает сохранение русского после flash/reset и завершает Quick 8/8 с zero
 input errors/drops, buzzer LOW и owner/lease `none`/`0`
 (`E-HIL-079`/`E-UX-005`).
+
+Candidate 0.56 добавляет outline и заполненный chevron каждой focused shared/menu/list
+row. Двенадцать exact current TFT captures проходят Home, Survey, Library, Language,
+оба choices Self-Test, Quick result и final cleanup только через normalized Actions.
+Standard-library pixel audit проверяет cue независимо от цвета и объединяет его с
+retained physical-key acceptance 50 events (`E-HIL-052/080`, `E-UX-006`).

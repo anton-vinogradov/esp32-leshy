@@ -88,6 +88,13 @@ struct Components final {
         return {Layout::Edge, Layout::HintY, Layout::ContentWidth,
                 static_cast<std::int16_t>(Layout::ScreenHeight - Layout::HintY)};
     }
+
+    // A selected row has a geometric cue in addition to palette changes. The
+    // filled chevron and outline keep keyboard focus visible without color.
+    static constexpr Rect focusMarker(Rect row) {
+        return {static_cast<std::int16_t>(row.x + 3),
+                static_cast<std::int16_t>(row.y + row.height / 2 - 4), 4, 8};
+    }
 };
 
 constexpr bool insideScreen(Rect rect) {
@@ -105,6 +112,12 @@ constexpr bool overlaps(Rect left, Rect right) {
            left.y < right.y + right.height && left.y + left.height > right.y;
 }
 
+constexpr bool contains(Rect outer, Rect inner) {
+    return inner.x >= outer.x && inner.y >= outer.y &&
+           inner.x + inner.width <= outer.x + outer.width &&
+           inner.y + inner.height <= outer.y + outer.height;
+}
+
 static_assert(insideScreen(Components::header()), "header must fit the TFT");
 static_assert(insideScreen(Components::title()), "title must fit the TFT");
 static_assert(beforeFooter(Components::homeRow(4, true)),
@@ -120,5 +133,8 @@ static_assert(!overlaps(Components::footerDivider(), Components::inputStatus()),
               "footer divider and input status must not overlap");
 static_assert(!overlaps(Components::inputStatus(), Components::footerHint()),
               "input status and button hint must not overlap");
+static_assert(contains(Components::homeRow(0, false),
+                       Components::focusMarker(Components::homeRow(0, false))),
+              "non-color focus marker must fit its row");
 
 }  // namespace leshy1::ui::visual

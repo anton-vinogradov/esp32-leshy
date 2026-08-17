@@ -1,0 +1,79 @@
+{
+  "schema": "leshy.ui_accessibility_acceptance.v1",
+  "status": "pass_ux_06_not_stage_or_release_gate",
+  "trust_status": "unsigned_local_result",
+  "gate_eligible": false,
+  "evidence_ids": ["E-BUILD-058", "E-HIL-080", "E-UX-006"],
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "candidate": {
+    "version": "0.56.0-ui-accessibility-measure",
+    "firmware_sha256": "38d9ac9cd746321a7cd182a9ba59d2081a8b0aec25e0af0b02d6e6ac877f3d81",
+    "factory_sha256": "cdb5b3f88a4e8534571d67b911faaaac25760e51cce19baa08a024cd9159c7d4",
+    "app_elf_sha256": "65c4731726aa9e443ed8030a2bfaa709978d87b5ae19820c7de55c4306e47c2a",
+    "map_sha256": "0fb70d4330d50276a5acb0719a8fd93cebc342f3f77b1144dbda839ee07531b1",
+    "linked_flash_bytes": 1105748,
+    "static_ram_bytes": 128744,
+    "app_image_bytes": 1105904,
+    "factory_image_bytes": 1171440,
+    "rtc_noinit_bytes": 20,
+    "host_tests_passed": true,
+    "firmware_build_passed": true
+  },
+  "physical_input": {
+    "retained_path": "tests/hil/evidence/board-01-keypad-0.43.json",
+    "retained_sha256": "c7b8af2ed5f1637aed92b8a8b94e1b56c6260dc398ebd4bfe55c316e7523dbdc",
+    "keys": ["select", "up", "down", "left", "right"],
+    "presses_per_key": 10,
+    "press_events": 50,
+    "release_events": 50,
+    "dispatched_press_events": 50,
+    "read_errors": 0,
+    "ambiguous_presses": 0,
+    "queue_drops": 0,
+    "maximum_sample_gap_ms": 5
+  },
+  "screens": {
+    "home_diagnostics_focus": ["f6019cdff4ae462a3d4ef6e8cd918fa7f057417803b658318ec1b3e59f811b36", "2a3814648d41b103007508ca637602e79df5977d6794d85ff1f27cea07d12797", "7434397eb4e045838a0827e23b6ded84f34ca5e0d2ff8d213277a3591a2c312d"],
+    "home_survey_focus": ["3f6f50c64dd6ce5892a10e17becfb7298900deac4a56975e257908a032cb1d76", "00b6f5a582043e8689c8f55f016845c050fbcf1eedc66129485a01035ae905df", "c4e6ce932508b257409332db15b8743280ecb71095a2f87191daadb2306fcbb9"],
+    "survey_setup": ["dd8930f0a183041b72f22f7eabfc6ad6215d79c5d5654f15ae87cf5f14520831", "58bb420dd593453ccfc69aa9f66688a0ccaa5a1d58eb8c3535f2dc0e1e5105ac", "311c1e4142219fc280e95f267e19ab03dd988ef7148730062834a1c98bcc2619"],
+    "home_library_focus": ["b370dfde77e7969378dbc026b7203cc6961c53ded690453a5f98c5a817a88340", "b03454e4b244a94ef672055d2922dbb8bfb48666465f364b121dc0fb283e58cf", "74ed2808e58a3089d4191a71e0c308499323c9e08cea7524ac3c4db943afda08"],
+    "library_list": ["4ab12184101b17e59cbb380bd92023ff29ea247918f13fe22bc0bb0c1afd5bc8", "7ebb95aa6c652f147f43826f4b29cd38e482c57c8497ce438600daee993b407c", "16d4cd7015ccbe61da4e786eeeef921c63144371e8a189b69c63eff7fea0fda8"],
+    "home_language_focus": ["19a69cd90d2a368cfec215e083a489f8e051814aaf2994eb56f0a86ab503644f", "78e9a98740486fb9855740e74acdbe64ae73866f735f8e02c35324a8159f309a", "5649e845fd1054ae1cb0c6cd495d84a426344b4eb81e6d331a02a0b5907f8a41"],
+    "language_ru": ["c2cf6d4a1cde6686c896acc96922b941b8d87aa9d36e0654554619cfa61f8307", "0f1711889f8ca5e917bae0c87ca3cdb62f59edac6bb79e548b2ac6ea58a37174", "0f9098ebd0e88c0f846bc89ccee3070cb49b3633142b2044103a8345b84c32d4"],
+    "home_self_test_focus": ["7e23ce43fcbf68e740d5e8bb5c68d82b32383751249403c2fc3ca752bc1172b6", "9f24a121e72e8a52361026b1ad002513eecd611e9bcfc6991d2bbd81fbe8b2c2", "0b0df147e0ecf81ecb6ee02d64b8a8e8a5f7a45ad43a1906ed1742006da745ea"],
+    "self_test_quick_focus": ["74c664e3db191bcead4000a7fcfdee64b8ee8291e8912a99ceb0223e3b9dc5e5", "918e96cb0ec0452bdebfb7aef6c9a1c30dae3b24bbea2ae39e3c712ad53f9578", "d3ba42e1cbfc72244e2c55693ef08e55bba0e877cc473bf15fbf6001386bab9b"],
+    "self_test_full_focus": ["44d1e660f06c53d9536918d3806e8854744cf1d1c20b2e642c222033a87150a4", "00b7a6a16c502ed2a6e75fec50bf81c69bd03a3a74dd9703471e55d9ca2eedc7", "4ac9432435a2fe45f6a5a93517be09c55029553d2d600f8fbf2d087c423b7102"],
+    "quick_result": ["944780289ae772c87a958477b18cd41065788880082229b2ab2d658bdd2e14d8", "4de65835fb5ff25f76b81aad3b788faee534a80629ddbc380b1e74c4a362246b", "5666cf8b9ca0005a3dff7559a631c38762a62a5b661db71046d8c9c865408bdb"],
+    "home_final": ["7e23ce43fcbf68e740d5e8bb5c68d82b32383751249403c2fc3ca752bc1172b6", "9f24a121e72e8a52361026b1ad002513eecd611e9bcfc6991d2bbd81fbe8b2c2", "4c2e5f577a16216673a4cb509026171f6f66e08420bf43d8a45950e068186343"]
+  },
+  "runtime": {
+    "metrics_sha256": "18568bc1537848fd543e0a967f9d65e04caf914b87185e0ebe9bba25fe6958e1",
+    "input_sha256": "f276885f4b1726cf42cba38ddda6421fe5febb55fa52be8767b67f1e09532616",
+    "safe_outputs_sha256": "a1aebdf7c4c60f55ddbd9af450b97126af2abc77ea23af7732b27efe1a2a77f2",
+    "quick_report_sha256": "27f580a396a9813a69ffd2f3f8abaa8eee3e1f00d6951b848cedb5b58d6b2329",
+    "heap_total_bytes": 272760,
+    "heap_free_bytes": 224280,
+    "heap_minimum_bytes": 188792,
+    "quick_duration_us": 66,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "pixel_audit": {
+    "focus_outline_pixels_per_row": 210,
+    "focus_marker_minimum_pixels": 67,
+    "focus_moves_across_all_five_home_rows": true,
+    "focus_moves_across_both_self_test_modes": true,
+    "library_focus_has_non_color_cue": true,
+    "manual_visual_review": "pass"
+  },
+  "scope": {
+    "ux_03": "accepted",
+    "ux_04": "accepted",
+    "ux_05": "accepted",
+    "ux_06": "implemented_and_physically_evidenced",
+    "ux_07": "partial",
+    "demo_s2": "open",
+    "release_gate_eligible": false
+  }
+}

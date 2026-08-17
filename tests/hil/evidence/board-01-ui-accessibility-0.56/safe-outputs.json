@@ -1,0 +1,1 @@
+{"schema":"leshy.hardware.safe-outputs.v1","kind":"state","buzzer_pin":2,"buzzer_active_level":"high","buzzer_mode":"output","buzzer_level":"low","buzzer_inactive":true}

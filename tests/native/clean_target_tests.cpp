@@ -100,6 +100,7 @@ void testUiComponentGeometryContract() {
     using leshy1::ui::visual::Components;
     using leshy1::ui::visual::Rect;
     using leshy1::ui::visual::beforeFooter;
+    using leshy1::ui::visual::contains;
     using leshy1::ui::visual::insideScreen;
     using leshy1::ui::visual::overlaps;
 
@@ -108,6 +109,7 @@ void testUiComponentGeometryContract() {
     for (std::uint8_t index = 0; index < 5; ++index) {
         const Rect row = Components::homeRow(index, index == 4);
         CHECK(beforeFooter(row));
+        CHECK(contains(row, Components::focusMarker(row)));
         if (index != 0) {
             CHECK(!overlaps(Components::homeRow(index - 1, false), row));
         }
