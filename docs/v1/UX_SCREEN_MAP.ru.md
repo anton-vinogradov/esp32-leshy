@@ -7,11 +7,13 @@ S2 на реальном TFT; эта карта уже задаёт структ
 
 ## Глобальная оболочка
 
-`UX-S01 Home` содержит шесть задач, а не список радиомодулей:
+`UX-S01 Home` содержит шесть задач, а не список радиомодулей, а последним пунктом —
+всегда доступный utility Self-Test:
 
 ```text
 Обзор       Цели        Захват
 Лаборатория Библиотека  Устройство
+SELF-TEST   (QUICK / FULL-GUIDED)
 ```
 
 На каждом экране остаются видимыми: название контекста, состояние storage/power,
@@ -49,12 +51,15 @@ UX-S01 Home
 │  ├─ UX-S15 Sessions / Captures / Exports / Screenshots
 │  ├─ UX-S16 Item Detail: integrity, provenance, source/derived data
 │  └─ UX-S17 Import / Export / Compare / Open in Lab
-└─ Устройство
+├─ Устройство
    ├─ UX-S23 Device Dashboard
    ├─ UX-S24 Diagnostics / Capability / Module Detail / Report
    ├─ UX-S25 Language / Display / Input / Feedback / Connectivity
    ├─ UX-S26 Storage / Backup-Restore / Factory Reset
    └─ UX-S27 Install / Update / Rollback / Recovery / About
+└─ Self-Test → test context UX-S24
+   ├─ Quick: bounded read-only automatic plan
+   └─ Full / Guided: scoped preflight → applicable checks → report
 
 UX-S28 Global dialog layer: unavailable reason, progress, confirm, error, panic.
 ```
@@ -93,12 +98,13 @@ action. В активном TX `Back` никогда не открывает con
 | Лаборатория | CAP-032…CAP-037 | принимает только saved immutable Capture; Result возвращает source link |
 | Библиотека | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import никогда не обходит parser |
 | Устройство | CAP-001…CAP-008, CAP-045…CAP-047 | Diagnostics объясняет недоступность до входа в task |
+| Self-Test | применимые CAP-001…CAP-047, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
 
 ## Acceptance UX-01
 
 - Каждая `CAP-001…CAP-047` имеет один primary owner и измеримый путь
   entry → success/error/cancel → Back.
-- WF-01 использует UX-S23/S24; WF-02 — UX-S02…S05; WF-03 — UX-S15…S17;
+- WF-01 использует Home→Self-Test/UX-S23/S24; WF-02 — UX-S02…S05; WF-03 — UX-S15…S17;
   WF-04 — UX-S06…S10; WF-05 — UX-S18…S22.
 - Start основной задачи достигается не глубже четырёх переходов от Home; текущий
   receiver остаётся filter/parameter, а не верхним уровнем IA.

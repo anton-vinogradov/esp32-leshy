@@ -24,8 +24,8 @@ accepted decisions change.
 - [Product vision](VISION.md)
 - [Competitive analysis](COMPETITIVE_ANALYSIS.md) — market snapshot and derived
   requirements
-- [Product requirements and acceptance metrics](PRODUCT_REQUIREMENTS.md) — draft
-  baseline
+- [Product requirements and acceptance metrics](PRODUCT_REQUIREMENTS.md) — accepted
+  1.0 baseline
 - [1.0 catalog product review](CAPABILITY_REVIEW.md) — completeness, overlap, and
   six closed scope-gap findings
 - [Reference workflows](REFERENCE_WORKFLOWS.md) — happy/error/cancel paths and
@@ -40,6 +40,8 @@ accepted decisions change.
   physical-evidence retention rules
 - [UI automation and visual evidence](UI_AUTOMATION.md) — one input path, real TFT
   capture, and operator-free menu traversal
+- [On-device Self-Test](SELF_TEST.md) — explicit Quick and Full/Guided modes shared
+  by the user workflow and release HIL
 - [Automated pre-release HIL](PRE_RELEASE_HIL.md) — proposed build-once,
   physical-test, promote-same-bytes pipeline with screenshots and attestation
 - [Storage atomicity HIL](STORAGE_HIL.md) — dual-head recovery, fault boundaries,

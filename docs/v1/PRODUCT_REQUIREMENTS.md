@@ -1,11 +1,11 @@
 # ESP32-Leshy 1.x product requirements
 
-Document status: **draft 0.2 after product review**, 16 August 2026.
+Document status: **accepted 1.0 baseline**, 17 August 2026.
 
 This document turns the [product vision](VISION.md) and
 [competitive analysis](COMPETITIVE_ANALYSIS.md) into a testable 1.0.0 boundary. It
-will be refined after the hardware map and reference-workflow validation; IDs are
-already stable for decision and test traceability.
+Wording and acceptance may be refined through governance, while scope and IDs are
+fixed for decision and test traceability.
 
 ## Product promise
 
@@ -49,7 +49,7 @@ phone, account, or internet connection.
 | PR-006 | Reopen a Session offline after reboot | Lists, details, and source captures work with radios inactive | P0 |
 | PR-007 | Export portable data | PCAP where compatible, JSON/CSV summaries, and compatible IR/NFC/Sub-GHz formats where feasible | P0/P1 |
 | PR-008 | Preserve Target history, notes, tags, and identity links | Merge/split is reversible; automatic links expose confidence/evidence | P1 |
-| PR-009 | Diagnose resources and basic modules | Self-test performs no transmission and saves an exportable report | P0 |
+| PR-009 | Diagnose resources, firmware workflows, and installed hardware through an explicit Self-Test app | The last Home item offers read-only Quick and scoped Full/Guided modes; both use the same versioned checks as release HIL, report `not_applicable/blocked` honestly, leave zero leases, and save an exportable report; no Self-Test runs automatically at boot | P0 |
 | PR-010 | Document install, update, and recovery | Browser install, signed stable/beta OTA, rollback, and recovery pass HIL | P0 |
 | PR-011 | Provide the core experience in EN/RU | One build switches language without truncating critical copy | P1 |
 | PR-012 | Use the same Actions/schema in the local companion | Offline viewing/export; permissions are no broader than the local session | P1 |
@@ -105,12 +105,18 @@ The first source is selected after the hardware map. Passive Wi-Fi scan is the
 provisional candidate because it needs no external module while exercising the full
 data path.
 
-## Baseline gate
+## Baseline acceptance record
 
-The draft becomes the 1.0 baseline after the [hardware map](HARDWARE_ENVELOPE.md) is
-confirmed against the schematic, 0.x code, and `HW-T01…HW-T11` on an ESP32-DIV v2;
-J-01…J-06 have happy/error/cancel paths in the
-[reference workflows](REFERENCE_WORKFLOWS.md);
-every P0 traces to an architecture component and test type; and flash, RAM, storage,
-and power budgets are measured or explicitly constrained in the
-[resource budget ledger](RESOURCE_BUDGETS.md).
+`E-GATE-001` accepts the 1.0 baseline because:
+
+- the [hardware map](HARDWARE_ENVELOPE.md) is supported by schematic, 0.x code, and
+  safe board-01 HIL; unavailable instruments, a second board, and optional assemblies
+  have fail-closed defaults plus named S4/S5/S8 evidence instead of invented claims;
+- J-01…J-06 have happy/error/cancel paths in the
+  [reference workflows](REFERENCE_WORKFLOWS.md);
+- every P0 traces to an architecture component and test type;
+- flash/RAM/storage budgets are measured, while power/shared-bus limits are explicitly
+  constrained in the [resource budget ledger](RESOURCE_BUDGETS.md).
+
+`accepted` fixes mandatory scope; `implemented` and `verified` are assigned separately
+from evidence at the applicable S2…S8 gates.

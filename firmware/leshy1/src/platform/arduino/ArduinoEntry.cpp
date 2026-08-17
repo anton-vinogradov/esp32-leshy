@@ -64,6 +64,7 @@
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/UiController.h"
+#include "ui/VisualTheme.h"
 
 namespace {
 
@@ -111,6 +112,8 @@ using leshy1::services::survey::SurveySession;
 using leshy1::ui::UiAction;
 using leshy1::ui::UiController;
 using leshy1::ui::Pcf8574ButtonInput;
+using leshy1::ui::visual::Layout;
+using leshy1::ui::visual::Palette;
 
 constexpr std::uint32_t kConsoleBaud = 115200;
 constexpr std::uint32_t kI2cHz = 100000;
@@ -311,8 +314,8 @@ struct ResetBoundaryHookContext final {
     unsigned boundaryNumber = 0;
 };
 
-constexpr std::int32_t kScreenWidth = 240;
-constexpr std::int32_t kScreenHeight = 320;
+constexpr std::int32_t kScreenWidth = Layout::ScreenWidth;
+constexpr std::int32_t kScreenHeight = Layout::ScreenHeight;
 constexpr std::int32_t kCaptureRows = 4;
 
 bool appendGoldenObservations(SurveySession& session) {
@@ -1288,23 +1291,24 @@ void pollPhysicalInput(void*) {
 void renderInput(std::uint8_t value) {
     char line[32] = {};
     std::snprintf(line, sizeof(line), "INPUT RAW  0x%02X", value);
-    display.fillRect(12, 244, 216, 28, TFT_BLACK);
-    display.setTextColor(TFT_YELLOW, TFT_BLACK);
+    display.fillRect(Layout::Edge, Layout::InputY, Layout::ContentWidth,
+                     Layout::InputHeight, Palette::Canvas);
+    display.setTextColor(Palette::Focus, Palette::Canvas);
     display.setTextFont(2);
     display.setCursor(16, 250);
     display.print(line);
 }
 
 void renderHeader(const char* title) {
-    display.fillScreen(TFT_BLACK);
-    display.fillRect(0, 0, kScreenWidth, 42, display.color565(26, 58, 40));
-    display.setTextColor(display.color565(231, 207, 143), display.color565(26, 58, 40));
+    display.fillScreen(Palette::Canvas);
+    display.fillRect(0, 0, kScreenWidth, Layout::HeaderHeight, Palette::Header);
+    display.setTextColor(Palette::TextPrimary, Palette::Header);
     display.setTextFont(4);
     display.setCursor(10, 9);
     display.print("LESHY 1.x");
-    display.setTextColor(TFT_WHITE, TFT_BLACK);
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
     display.setTextFont(2);
-    display.setCursor(14, 58);
+    display.setCursor(14, Layout::TitleY);
     display.print(title);
 }
 
@@ -1313,18 +1317,22 @@ void renderHome() {
     for (std::uint8_t i = 0; i < appCatalog.size(); ++i) {
         const AppMenuItem* item = appCatalog.get(i);
         if (item == nullptr) continue;
-        const std::int32_t y = 82 + static_cast<std::int32_t>(i) * 47;
+        const std::int32_t y = Layout::ContentTop +
+            static_cast<std::int32_t>(i) * (Layout::RowHeight + Layout::RowGap);
         const bool selected = uiController.selection() == i;
         const std::uint16_t background = selected
-                                             ? display.color565(item->enabled ? 26 : 66, 78, 52)
-                                             : display.color565(13, 22, 17);
-        display.fillRoundRect(12, y, 216, 40, 4, background);
-        display.setTextColor(selected ? TFT_YELLOW : TFT_LIGHTGREY, background);
+            ? (item->enabled ? Palette::SurfaceFocus : Palette::SurfaceFocusDisabled)
+            : Palette::Surface;
+        display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth,
+                              Layout::RowHeight, Layout::Radius, background);
+        display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
+                             background);
         display.setTextFont(2);
         display.setCursor(22, y + 5);
         display.print(item->label);
         display.setTextFont(1);
-        display.setTextColor(item->enabled ? TFT_GREEN : TFT_DARKGREY, background);
+        display.setTextColor(item->enabled ? Palette::Positive : Palette::TextMuted,
+                             background);
         display.setCursor(22, y + 26);
         display.print(item->simulated ? item->reason
                                       : (item->enabled ? "READY" : item->reason));
@@ -1334,11 +1342,11 @@ void renderHome() {
 void renderOverview() {
     char line[48] = {};
     renderHeader("DIAGNOSTICS");
-    display.setTextColor(TFT_GREEN, TFT_BLACK);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
     display.setCursor(14, 92);
     display.print("PROFILE: N16 / NO PSRAM");
 
-    display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
     std::snprintf(line, sizeof(line), "FLASH   %lu KiB",
                   static_cast<unsigned long>(bootMetrics.flashBytes / 1024U));
     display.setCursor(14, 130);
@@ -1359,7 +1367,7 @@ void renderInventoryPage() {
     if (surveyWorkflow.state() == SurveyWorkflowState::Setup) {
         renderHeader("SURVEY / SETUP");
         display.setTextFont(2);
-        display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         display.setCursor(14, 88);
         display.print("SOURCE      WIFI PASSIVE");
         display.setCursor(14, 116);
@@ -1370,11 +1378,11 @@ void renderInventoryPage() {
         display.print(surveyWorkflow.simulated()
                           ? "MODE        SIMULATED"
                           : "MODE        REAL PASSIVE");
-        display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display.setTextColor(Palette::Focus, Palette::Canvas);
         display.setCursor(14, 190);
         display.print("SELECT      START");
         display.setTextFont(1);
-        display.setTextColor(TFT_GREEN, TFT_BLACK);
+        display.setTextColor(Palette::Positive, Palette::Canvas);
         display.setCursor(14, 218);
         display.print(surveyWorkflow.simulated()
                           ? "FIFO 64 | NO RF | NO COMMIT YET"
@@ -1384,10 +1392,10 @@ void renderInventoryPage() {
     if (surveyWorkflow.state() == SurveyWorkflowState::Result) {
         renderHeader("SURVEY / COMMITTED");
         display.setTextFont(2);
-        display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display.setTextColor(Palette::Focus, Palette::Canvas);
         display.setCursor(14, 86);
         display.print(surveySession.id());
-        display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         std::snprintf(line, sizeof(line), "OBSERVATIONS %u",
                       static_cast<unsigned>(surveySession.size()));
         display.setCursor(14, 126);
@@ -1408,7 +1416,7 @@ void renderInventoryPage() {
         display.setCursor(14, 206);
         display.print(line);
         display.setTextFont(1);
-        display.setTextColor(TFT_GREEN, TFT_BLACK);
+        display.setTextColor(Palette::Positive, Palette::Canvas);
         display.setCursor(14, 222);
         display.print("ONE COMMIT | OPEN FROM LIBRARY");
         return;
@@ -1416,15 +1424,15 @@ void renderInventoryPage() {
     if (surveyWorkflow.state() == SurveyWorkflowState::Error) {
         renderHeader("SURVEY / ERROR");
         display.setTextFont(2);
-        display.setTextColor(TFT_RED, TFT_BLACK);
+        display.setTextColor(Palette::Danger, Palette::Canvas);
         display.setCursor(14, 92);
         display.print(leshy1::apps::survey::surveyWorkflowStatusName(
             surveyWorkflow.lastStatus()));
-        display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         display.setCursor(14, 132);
         display.print("PRIOR LIBRARY PRESERVED");
         display.setTextFont(1);
-        display.setTextColor(TFT_GREEN, TFT_BLACK);
+        display.setTextColor(Palette::Positive, Palette::Canvas);
         display.setCursor(14, 218);
         display.print("BACK HOME | NO HIDDEN RETRY");
         return;
@@ -1434,11 +1442,11 @@ void renderInventoryPage() {
         const Observation* observation = surveyController.selected();
         if (observation == nullptr) return;
         display.setTextFont(4);
-        display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display.setTextColor(Palette::Focus, Palette::Canvas);
         display.setCursor(14, 88);
         display.print(observation->label.data());
         display.setTextFont(2);
-        display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         std::snprintf(line, sizeof(line), "CHANNEL      %u",
                       static_cast<unsigned>(observation->channel));
         display.setCursor(14, 132);
@@ -1452,7 +1460,7 @@ void renderInventoryPage() {
         display.setCursor(14, 184);
         display.print(line);
         display.setTextFont(1);
-        display.setTextColor(TFT_GREEN, TFT_BLACK);
+        display.setTextColor(Palette::Positive, Palette::Canvas);
         display.setCursor(14, 214);
         display.print(surveyWorkflow.simulated()
                           ? "SIMULATED DATA | RF OFF"
@@ -1462,7 +1470,7 @@ void renderInventoryPage() {
 
     renderHeader("SURVEY / RUNNING");
     display.setTextFont(1);
-    display.setTextColor(TFT_GREEN, TFT_BLACK);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
     display.setCursor(14, 76);
     display.print(surveyWorkflow.simulated()
                       ? "RUNNING | SIMULATED | RF OFF"
@@ -1488,11 +1496,13 @@ void renderInventoryPage() {
         const std::int32_t y = 100 +
             static_cast<std::int32_t>(index - firstVisible) * 40;
         const bool selected = surveyController.selection() == index;
-        const std::uint16_t background = selected ? display.color565(26, 78, 52)
-                                                   : display.color565(13, 22, 17);
-        display.fillRoundRect(12, y, 216, 36, 4, background);
+        const std::uint16_t background = selected ? Palette::SurfaceFocus
+                                                   : Palette::Surface;
+        display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth, 36,
+                              Layout::Radius, background);
         display.setTextFont(2);
-        display.setTextColor(selected ? TFT_YELLOW : TFT_LIGHTGREY, background);
+        display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
+                             background);
         display.setCursor(20, y + 3);
         char visibleLabel[16] = {};
         const std::size_t visibleLength = observation->labelLength < 15U
@@ -1507,7 +1517,7 @@ void renderInventoryPage() {
         }
         display.print(visibleLabel);
         display.setTextFont(1);
-        display.setTextColor(TFT_GREEN, background);
+        display.setTextColor(Palette::Positive, background);
         std::snprintf(line, sizeof(line), "CH %u  %d dBm",
                       static_cast<unsigned>(observation->channel),
                       static_cast<int>(observation->rssiDbm));
@@ -1524,10 +1534,10 @@ void renderLibraryPage() {
         renderHeader("EXPORT / READY");
         if (selected == nullptr || selected->session == nullptr) return;
         display.setTextFont(2);
-        display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display.setTextColor(Palette::Focus, Palette::Canvas);
         display.setCursor(14, 86);
         display.print(selected->session->id());
-        display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         display.setCursor(14, 126);
         display.print("FORMAT      JSON V1");
         display.setCursor(14, 152);
@@ -1535,7 +1545,7 @@ void renderLibraryPage() {
         display.setCursor(14, 178);
         display.print(persistent ? "PERSISTED   YES" : "PERSISTED   NO");
         display.setTextFont(1);
-        display.setTextColor(TFT_GREEN, TFT_BLACK);
+        display.setTextColor(Palette::Positive, Palette::Canvas);
         display.setCursor(14, 214);
         display.print(persistent ? "PERSISTENT MEDIA | RF OFF"
                                  : "BOUNDED RAM SOURCE | RF OFF");
@@ -1545,10 +1555,10 @@ void renderLibraryPage() {
         renderHeader("SESSION / DETAIL");
         if (selected == nullptr || selected->session == nullptr) return;
         display.setTextFont(2);
-        display.setTextColor(TFT_YELLOW, TFT_BLACK);
+        display.setTextColor(Palette::Focus, Palette::Canvas);
         display.setCursor(14, 86);
         display.print(selected->session->id());
-        display.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         std::snprintf(line, sizeof(line), "GENERATION   %lu",
                       static_cast<unsigned long>(selected->generation));
         display.setCursor(14, 122);
@@ -1562,7 +1572,7 @@ void renderLibraryPage() {
         display.setCursor(14, 174);
         display.print(line);
         display.setTextFont(1);
-        display.setTextColor(TFT_GREEN, TFT_BLACK);
+        display.setTextColor(Palette::Positive, Palette::Canvas);
         display.setCursor(14, 210);
         display.print(persistent ? "PERSISTENT | RECOVERED | RF OFF"
                                  : "RAM ONLY | VOLATILE | RF OFF");
@@ -1571,7 +1581,7 @@ void renderLibraryPage() {
 
     renderHeader("LIBRARY / OFFLINE");
     display.setTextFont(1);
-    display.setTextColor(TFT_GREEN, TFT_BLACK);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
     display.setCursor(14, 76);
     display.print(persistent ? "PERSISTENT SESSION | REAL | RF OFF"
                              : "SIMULATED RAM | VOLATILE | RF OFF");
@@ -1580,15 +1590,17 @@ void renderLibraryPage() {
         if (entry == nullptr || entry->session == nullptr) continue;
         const std::int32_t y = 94 + static_cast<std::int32_t>(index) * 48;
         const bool isSelected = libraryController.selection() == index;
-        const std::uint16_t background = isSelected ? display.color565(26, 78, 52)
-                                                    : display.color565(13, 22, 17);
-        display.fillRoundRect(12, y, 216, 40, 4, background);
+        const std::uint16_t background = isSelected ? Palette::SurfaceFocus
+                                                    : Palette::Surface;
+        display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth,
+                              Layout::RowHeight, Layout::Radius, background);
         display.setTextFont(2);
-        display.setTextColor(isSelected ? TFT_YELLOW : TFT_LIGHTGREY, background);
+        display.setTextColor(isSelected ? Palette::Focus : Palette::TextSecondary,
+                             background);
         display.setCursor(20, y + 4);
         display.print(entry->session->id());
         display.setTextFont(1);
-        display.setTextColor(TFT_GREEN, background);
+        display.setTextColor(Palette::Positive, background);
         std::snprintf(line, sizeof(line), "%u OBS | GEN %lu | %s",
                       static_cast<unsigned>(entry->session->size()),
                       static_cast<unsigned long>(entry->generation),
@@ -1608,11 +1620,12 @@ void renderInteractiveScreen() {
     } else {
         renderLibraryPage();
     }
-    display.drawFastHLine(12, 236, 216, display.color565(60, 72, 64));
+    display.drawFastHLine(Layout::Edge, Layout::FooterDividerY,
+                          Layout::ContentWidth, Palette::Divider);
     renderInput(lastInputRaw);
-    display.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
     display.setTextFont(1);
-    display.setCursor(20, 302);
+    display.setCursor(20, Layout::HintY);
     if (uiController.isRoot()) {
         display.print("up/down | blocked item has reason");
     } else if (uiController.page() == 2 &&
@@ -1642,7 +1655,7 @@ void renderInteractiveScreen() {
     } else if (uiController.page() == 3) {
         const LibraryEntry* selected = libraryController.selected();
         display.print(selected != nullptr && selected->persistent
-                          ? "select detail | back home | persistent"
+                          ? "select detail | back home | SD"
                           : "select detail | back home | RAM only");
     } else {
         display.print("left/back returns | ui.capture ready");

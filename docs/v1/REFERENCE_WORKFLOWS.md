@@ -45,13 +45,18 @@ assembly is inferred from legacy flags.
 3. Each capability is `declared`, `detected`, `available`, `conflicted`, `fault`, or
    `unknown`, with evidence and a reason.
 4. Menus enable only compatible actions; the user can export the diagnostic report.
+5. The final Home item opens Self-Test: Quick runs a safe read-only plan, while
+   Full/Guided previews applicable checks/fixtures/side effects before it starts.
 
 **Error path:** an ambiguous GPIO5/6 or GPIO14/21 assembly remains `conflicted` or
 `unknown`; Diagnostics explains the expected assembly/profile and performs no trial
 output mode. A missing module becomes `fault` only when the profile declared it.
+An absent profile module is `not_applicable`; a missing fixture or unprovable result
+is `blocked/inconclusive`, never silently passed.
 
 **Cancel/back path:** leaving Diagnostics returns to the previous screen without
-starting a module or retaining a foreground lease.
+starting a module or retaining a foreground lease. Back during Self-Test stops at a
+safe boundary, cleans up, and retains an exportable partial report.
 
 | Acceptance ID | Observable result | Evidence |
 |---|---|---|
@@ -60,6 +65,7 @@ starting a module or retaining a foreground lease.
 | WF-01-A3 | An unavailable action is disabled or hidden before `Action` start and before lease acquisition | Action/ResourceBroker integration trace |
 | WF-01-A4 | Probe/report path emits no RF/IR TX command and exports no saved credentials | policy tests + HIL detector trace + report scan |
 | WF-01-A5 | Back is acknowledged in ≤ 150 ms and the ownership table is empty for the exited context | input/resource trace |
+| WF-01-A6 | User Quick/Full and release HIL invoke the same versioned check IDs; the host rejects missing checks, wrong candidate identity, unexpected side effects, or nonzero final ownership | Self-Test contract tests + physical HIL report verifier |
 
 ## WF-02 — create and save a passive Survey Session
 

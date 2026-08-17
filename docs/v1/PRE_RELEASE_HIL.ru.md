@@ -58,6 +58,13 @@ Actions и безопасные штатные операции. Fault injection
 power-cut/radio HIL выполняются отдельной diagnostic image или внешним оборудованием;
 их evidence дополняет, но не заменяет smoke на точных release bytes.
 
+[Self-Test](SELF_TEST.ru.md) последним пунктом Home — пользовательский клиент того же
+versioned check registry. Quick выбирает bounded read-only subset; Full/Guided после
+явного preflight выбирает все применимые checks. Host runner вызывает те же check IDs
+на exact release bytes, при разрешении добавляет fixtures/endurance и остаётся
+независимым release oracle. Boot-time Quick detour и второго release-only определения
+здоровья устройства нет.
+
 ## Часть host-runner
 
 Suite хранится как versioned declarative manifest. Каждый scenario задаёт:
@@ -172,9 +179,9 @@ protected environment. Постоянного private key, PEM-файла или
 
 | Gate | Когда | Минимум |
 |---|---|---|
-| `device-smoke` | каждый merge/доступная станция | flash, cold boot, Home/Diagnostics/Back, product Survey→commit→Library→export, TFT, resources, safe outputs |
-| `device-regression` | nightly/изменение firmware | все доступные non-destructive workflows, EN/RU golden matrix, repeated navigation, storage read/reopen |
-| `release-candidate` | перед публикацией | полный применимый Stage Demo, install/update/rollback, reboot paths, destructive HIL attestations, budgets и обязательный camera subset |
+| `device-smoke` | каждый merge/доступная станция | flash, cold boot, Self-Test Quick, Home/Diagnostics/Back, product Survey→commit→Library→export, TFT, resources, safe outputs |
+| `device-regression` | nightly/изменение firmware | non-destructive plan Self-Test Full/Guided, все доступные workflows, EN/RU golden matrix, repeated navigation, storage read/reopen |
+| `release-candidate` | перед публикацией | тот же полный применимый Self-Test plan плюс независимый host verdict, Stage Demo, install/update/rollback, reboot paths, destructive HIL attestations, budgets и обязательный camera subset |
 
 GitHub-hosted CI собирает candidate и host tests, затем GitHub-attests exact binary.
 Физический прогон выполняет выделенный self-hosted runner из protected environment
@@ -202,7 +209,7 @@ GitHub-hosted CI собирает candidate и host tests, затем GitHub-att
 
 | Вариант | Плюсы | Минусы | Роль |
 |---|---|---|---|
-| Полный self-test внутри firmware | работает без host, простой запуск на заводе | firmware проверяет само себя; code/flash overhead; трудно менять golden и release policy | только low-level POST/module checks |
+| Device-only self-verdict | работает без host, простой factory launch | firmware проверяла бы сама себя; code/flash overhead; слабый trust candidate/golden | отвергнут как release authority; UI остаётся клиентом shared checks |
 | Отдельная test firmware | можно включить опасную instrumentation | тестируются не exact release bytes; возможен test-only behavior | destructive fault injection |
 | Только camera/button/power robot | максимальный black-box реализм | дороже, медленнее, сложнее диагностировать | небольшой RC subset и physical qualities |
 | Только emulator/host screenshots | быстрый и дешёвый CI | не проверяет TFT, GPIO, buses, timing и реальную сборку | ранний feedback, не release gate |
@@ -614,3 +621,11 @@ attestations — в GitHub/Sigstore. После promotion те же exact bytes 
 Принятие ADR-005 разрешает поэтапную реализацию этого контура. Release workflow 0.x
 ограничен собственными `v0.*` tags; наличие контракта или незапущенного runner само
 по себе не считается закрытым release gate.
+
+Product decision от 17 августа 2026 года остановил 0.51 lane после 12 полностью
+зелёных циклов/11 330,816 s, чтобы перейти S1→S2. `E-HIL-075` сохраняет aggregate и
+все child hashes, generation 51→63, 144/144 observations, 24 cold boots, 48 TFT
+captures, invariant heap и zero drops/retries/timeouts. Runner остаётся честно
+`interrupted`/`gate_eligible=false`: это принятое engineering evidence текущего
+slice, а не release promotion. Полный floor 8 h/32 cycles выполняется как NFR-004 в
+`DEMO-S4` на готовой cross-radio passive platform.

@@ -2,8 +2,8 @@
 
 *Read in: [English](UX_UI_BASELINE.md) · **Русский***
 
-Статус: **обязательная контрольная точка S1/S2**; low-fidelity UX-01/UX-02
-зафиксированы, visual baseline UX-03…UX-07 остаётся S2.
+Статус: **S1 product UX direction принят; S2 visual gate активен**. Low-fidelity
+UX-01/UX-02 зафиксированы, visual baseline UX-03…UX-07 — текущая работа S2.
 
 Документ определяет, когда обсуждается опыт пользователя и когда внешний вид
 становится ограничением реализации. Он не подменяет
@@ -16,7 +16,7 @@
 До закрытия S1 согласуются:
 
 - информационная архитектура `Обзор / Цели / Захват / Лаборатория / Библиотека /
-  Устройство`;
+  Устройство` и постоянный utility-пункт `Self-Test` в самом низу Home;
 - основные пути J-01…J-06 и место каждого `CAP-*`;
 - единая семантика Start/Stop, Select, Back, confirm, cancel и panic;
 - обязательные состояния каждого пути: unavailable, empty, loading, running,
@@ -44,6 +44,10 @@
 После gate изменение базового компонента или interaction pattern требует обновления
 baseline, TFT evidence и затронутых acceptance tests.
 
+Self-Test следует отдельному [product contract](SELF_TEST.ru.md): явные Quick и
+Full/Guided используют обычные Actions и компоненты. Это не boot screen, не скрытое
+service menu и не release-only serial path.
+
 ## Обязательные артефакты baseline
 
 | ID | Артефакт | Проверяемый результат |
@@ -56,6 +60,31 @@ baseline, TFT evidence и затронутых acceptance tests.
 | UX-06 | Input/accessibility map | Все основные действия доступны кнопками; состояние различимо без цвета |
 | UX-07 | Real-TFT evidence | Home, List, Detail, dialog, error/degraded и running state сняты через UI automation |
 | UX-08 | Usability walkthrough | WF-01…WF-05 пройдены на board без скрытых serial-only действий |
+
+## UX-03 — visual tokens, кандидат S2
+
+Первый implementation slice находится в `ui/VisualTheme.h`. Экраны используют
+семантические роли, а не TFT-константы или локальные RGB. Кандидат станет accepted
+только после UX-05/06 и real-TFT UX-07.
+
+| Роль | RGB | Назначение |
+|---|---|---|
+| Canvas / Header | `#07100C` / `#1A3A28` | спокойный тёмный фон и устойчивый brand anchor |
+| Surface / Focus | `#0D1611` / `#1A4E34` | строки и текущий keyboard focus |
+| Primary / Secondary / Muted | `#E7CF8F` / `#C6D0C8` / `#68756B` | иерархия текста без зависимости от размера |
+| Focus | `#F5C542` | выбранный объект или primary Action, не warning |
+| Positive / Warning / Danger | `#55D98A` / `#F7A641` / `#F05D5E` | состояние всегда дублируется текстом/формой |
+
+Geometry фиксирует 240×320, edge 12 px, content width 216 px, header 42 px,
+row 40 px, gap 7 px, radius 4 px и отдельный footer ниже y=236. Footer не может
+перекрывать product content; три list rows обязаны помещаться до него.
+
+Exact candidate 0.52 принимает UX-03 как implementation evidence: шесть retained
+TFT frames 240×320 связаны с candidate, а standard-library pixel audit проверяет
+полную geometry brand/divider/input и пустые bottom guard rows. Audit обнаружил
+wrapped Library footer за пределами его region; текст сокращён, image пересобран,
+прошит и снят заново. UX-07 остаётся partial: ещё открыты dialog и
+unavailable/degraded/error states, а также EN/RU matrix.
 
 ## Gate
 

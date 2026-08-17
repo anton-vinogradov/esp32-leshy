@@ -57,6 +57,13 @@ bypasses do not. Destructive storage/power-cut/radio HIL uses a separate diagnos
 image or external equipment; its evidence complements but never replaces smoke on
 the exact release bytes.
 
+The bottom-of-Home [Self-Test](SELF_TEST.md) is the user-facing client of this same
+versioned check registry. Quick selects the bounded read-only subset; Full/Guided
+selects every applicable check after explicit preflight. The host runner invokes the
+same check IDs on exact release bytes, adds fixtures and endurance where authorized,
+and remains the independent release oracle. There is no boot-time Quick detour and no
+second, release-only definition of device health.
+
 ## Host-runner side
 
 The suite is a versioned declarative manifest. Each scenario declares:
@@ -168,9 +175,9 @@ rechecks all inner hashes, session identities, and candidate bindings.
 
 | Gate | Frequency | Minimum scope |
 |---|---|---|
-| `device-smoke` | each merge/available station | flash, cold boot, Home/Diagnostics/Back, product Survey→commit→Library→export, TFT, resources, safe outputs |
-| `device-regression` | nightly/firmware change | all available non-destructive workflows, EN/RU golden matrix, repeated navigation, storage read/reopen |
-| `release-candidate` | before publishing | full applicable Stage Demo, install/update/rollback, reboot paths, destructive HIL attestations, budgets, mandatory camera subset |
+| `device-smoke` | each merge/available station | flash, cold boot, Self-Test Quick, Home/Diagnostics/Back, product Survey→commit→Library→export, TFT, resources, safe outputs |
+| `device-regression` | nightly/firmware change | Self-Test Full/Guided non-destructive plan, all available workflows, EN/RU golden matrix, repeated navigation, storage read/reopen |
+| `release-candidate` | before publishing | same complete applicable Self-Test plan plus independent host verdict, Stage Demo, install/update/rollback, reboot paths, destructive HIL attestations, budgets, mandatory camera subset |
 
 GitHub-hosted CI builds the candidate, runs host tests, and GitHub-attests the exact
 binary. A dedicated self-hosted runner in the protected `hil-production` environment
@@ -199,7 +206,7 @@ forbidden.
 
 | Option | Advantages | Drawbacks | Role |
 |---|---|---|---|
-| Full on-device self-test | host-independent, simple factory launch | firmware validates itself; code/flash cost; hard-to-change golden/policy | low-level POST/module checks only |
+| Device-only self-verdict | host-independent, simple factory launch | firmware would validate itself; code/flash cost; weak candidate/golden trust | rejected as release authority; the UI remains a client of the shared checks |
 | Separate test firmware | can include dangerous instrumentation | does not test exact release bytes; test-only behavior risk | destructive fault injection |
 | Camera/button/power robot only | strongest black-box fidelity | costly, slow, harder diagnosis | small RC subset and physical qualities |
 | Emulator/host screenshots only | fast, inexpensive CI | no real TFT/GPIO/bus/timing/build proof | early feedback, never the release gate |
@@ -617,3 +624,11 @@ store.
 ADR-005 acceptance authorizes incremental implementation of this flow. The 0.x
 release workflow is restricted to its own `v0.*` tags; a contract or an unexecuted
 runner alone is not a completed release gate.
+
+The 17 August 2026 product decision stopped the 0.51 lane after 12 fully green
+cycles/11,330.816 s in order to transition S1→S2. `E-HIL-075` retains the aggregate
+and all child hashes, generation 51→63, 144/144 observations, 24 cold boots, 48 TFT
+captures, invariant heap, and zero drops/retries/timeouts. The runner remains honestly
+`interrupted`/`gate_eligible=false`: this is accepted engineering evidence for the
+current slice, not release promotion. The full 8 h/32-cycle floor runs as NFR-004 in
+`DEMO-S4` on the completed cross-radio passive platform.

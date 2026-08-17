@@ -170,10 +170,47 @@ def main() -> int:
         "final_owner": "none", "final_lease_mask": 0,
     }, "final_regression.", failures)
 
-    for record in (failed, diagnostics, candidate, injection, regression):
+    endurance = evidence.get("shortened_endurance", {})
+    exact(endurance, {
+        "evidence_id": "E-HIL-075",
+        "status": "accepted_engineering_checkpoint",
+        "runner_status": "interrupted", "gate_eligible": False,
+        "operator_decision_to_move_forward": True,
+        "release_requirement_disposition": "deferred_to_s4_cross_radio_endurance",
+        "aggregate_run_sha256": "9bb5ee9c2780af9eeb0c7257092e8e140ad92623373de720d6828a3729a3446c",
+        "aggregate_artifact_index_sha256": "744b3c419d58cfd0b4b759b1c65b072e94d794c03b304d446473214fddcb233c",
+        "elapsed_seconds": 11330.815788, "required_seconds": 28800,
+        "cycles_completed": 12, "required_cycles": 32, "cid": CID,
+        "generation_before": 51, "generation_after": 63,
+        "observations_accepted": 144, "observations_forwarded": 144,
+        "scan_dropped": 0, "pipeline_dropped": 0,
+        "cold_boots": 24, "boot_attempts": 24,
+        "boot_transient_retries": 0, "boot_timeout_restarts": 0,
+        "product_start_identity_attempts": 12,
+        "product_start_identity_transient_retries": 0,
+        "visual_captures": 48,
+        "heap_total_bytes": 276040, "heap_free_bytes": 227588,
+        "heap_min_free_bytes": 192128, "heap_drift_bytes": 0,
+        "maximum_ready_marker_ms": 961.0193748958409,
+        "final_generation": 63, "final_observations": 12,
+        "final_owner": "none", "final_lease_mask": 0,
+    }, "shortened_endurance.", failures)
+    for field in ("cycle_run_sha256", "cycle_artifact_index_sha256"):
+        hashes = endurance.get(field, [])
+        require(failures, isinstance(hashes, list) and len(hashes) == 12,
+                f"shortened_endurance.{field}: require 12 hashes")
+        if isinstance(hashes, list):
+            require(failures, len(set(hashes)) == 12,
+                    f"shortened_endurance.{field}: hashes must be distinct")
+            for index, value in enumerate(hashes, start=1):
+                require(failures, isinstance(value, str) and
+                        SHA256.fullmatch(value) is not None,
+                        f"shortened_endurance.{field}[{index}]: invalid SHA-256")
+
+    for record in (failed, diagnostics, candidate, injection, regression, endurance):
         if isinstance(record, dict):
             for field, value in record.items():
-                if field.endswith("sha256"):
+                if field.endswith("sha256") and not isinstance(value, list):
                     require(failures, isinstance(value, str) and
                             SHA256.fullmatch(value) is not None,
                             f"{field}: invalid SHA-256")
@@ -183,6 +220,7 @@ def main() -> int:
     limitations = evidence.get("limitations", [])
     joined = "\n".join(limitations) if isinstance(limitations, list) else ""
     for phrase in ("eight-hour", "unknown", "three-cycle regression",
+                   "shortened 12-cycle", "deferred to the S4",
                    "local unsigned", "physical power-cut"):
         require(failures, phrase in joined, f"limitations: missing {phrase!r}")
 
@@ -193,7 +231,8 @@ def main() -> int:
         return 1
     print(
         "product hardware watchdog evidence passed: 0.50 failure retained; "
-        "0.51 hardware timeout recovered and generation 48->51 regression passed"
+        "0.51 hardware timeout recovered, generation 48->51 regression passed, "
+        "and 12-cycle engineering checkpoint retained without release promotion"
     )
     return 0
 

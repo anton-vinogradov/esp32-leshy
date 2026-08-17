@@ -2,8 +2,8 @@
 
 *Read in: **English** · [Русский](CAPABILITY_REVIEW.ru.md)*
 
-Date: 16 August 2026. Result: **product scope coherent; catalog baseline reviewed;
-the PRD technical acceptance gate remains open**.
+Date: 17 August 2026. Result: **product scope coherent; catalog baseline reviewed;
+the PRD technical baseline is accepted by `E-GATE-001`**.
 
 ## Inputs and review rules
 
@@ -44,7 +44,7 @@ must fail closed when its assembly/evidence is absent.
 | Check | Result |
 |---|---|
 | Jobs | J-01…J-06 have capability and WF owners |
-| Requirements | PR-001…PR-019 and NFR-001…NFR-010 appear in stages/traceability; PRD remains draft 0.2 until the technical baseline gate |
+| Requirements | PR-001…PR-019 and NFR-001…NFR-010 appear in stages/traceability; PRD is accepted as baseline 1.0 while verification remains staged |
 | Information architecture | Every CAP-001…CAP-047 has a primary owner under the UX-S01 six-task Home |
 | Error/cancel behavior | UX-02 defines unavailable/loading/degraded/error/confirm/success and cleanup for every screen family |
 | Hardware conditionals | RF shield, GPS, PN532, and sound HW-T09 never become unconditional availability |
@@ -57,5 +57,6 @@ Product review accepts CAP-001…CAP-047 as the complete working 1.0 boundary. A
 major capability after this review needs a separate `J/PR/CAP`, risk impact, and
 stage proposal; wording and acceptance may be refined without hidden scope growth.
 
-This does not close S1 or move the PRD to `accepted`: hardware/resource evidence,
-budget constraints, and the full PRD/STATUS baseline gate remain open.
+Together with constrained hardware/resource evidence, this scope review closes S1
+through `E-GATE-001`. It does not mark capabilities implemented or verified; those
+states require the applicable S2…S8 evidence and gates.

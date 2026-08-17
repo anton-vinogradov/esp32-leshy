@@ -83,12 +83,16 @@ without linking the 0.x monolith.
 Outputs: separate target and layered source tree; pinned toolchain; BoardProfile,
 HardwareProbe, and Diagnostics; Navigator and unified input; AppRuntime, capability
 registry, and atomic ResourceBroker; basic display/storage/logging/crash/time services;
-a real-TFT EN/RU visual/interaction baseline; host CI and minimum boot/input/probe HIL.
+a real-TFT EN/RU visual/interaction baseline; a bottom-of-Home Self-Test app with
+Quick platform checks and a versioned report skeleton; host CI and minimum
+boot/input/probe HIL.
 
 **Exit gate:** a clean build boots without the 0.x menu, reports the actual board,
 survives 1,000 open/back cycles without lost leases or heap growth, tolerates missing
 hardware, and passes reproducible host/HIL checks.
 `DEMO-S2` and UX-01…UX-07 must also pass the common Stage Demo protocol.
+Quick Self-Test must be button-accessible, read-only, bounded, cancellable, and leave
+zero ownership; the Full/Guided registry grows with each later stage.
 
 ## S3 — First vertical slice: Survey Session
 
@@ -109,6 +113,8 @@ Outputs: Wi-Fi/BLE scan, NRF24/CC1101 spectrum, and GPS driver contracts; schedu
 for compatible and exclusive resources with visible duty cycle; common timeline,
 filters, views, and metadata; PCAP plus CSV/JSON exports; bounded queues and
 instrumentation; an 8-hour passive endurance test.
+Every completed passive source also registers its applicable Full/Guided Self-Test
+check instead of creating a release-only diagnostic path.
 
 **Exit gate:** one Session safely joins available passive sources, explains resource
 unavailability, survives reboot/export, and has no heap growth or data corruption.
@@ -161,7 +167,8 @@ feature-complete and passes `DEMO-S7`.
 Outputs: signed stable/beta OTA, rollback, and recovery; full HIL matrix; fuzzing;
 crash journal and diagnostic bundle; performance/storage/power budget evidence;
 complete schemas, threat model, compatibility/support policy; reproducible binary
-hashes and provenance.
+hashes and provenance; one complete Self-Test plan shared by on-device Full/Guided
+and the independently verified release runner.
 
 **Exit gate:** two consecutive RCs have no open P0/P1; a 24-hour mixed workload has
 no freeze, leak, or corruption; interrupted update/write recovery succeeds; every P0

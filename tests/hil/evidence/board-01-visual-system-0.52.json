@@ -1,0 +1,127 @@
+{
+  "schema": "leshy.visual_system_acceptance.v1",
+  "status": "pass_s2_candidate_not_stage_gate",
+  "trust_status": "unsigned_local_result",
+  "gate_eligible": false,
+  "evidence_ids": ["E-BUILD-054", "E-HIL-076", "E-UX-003"],
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "candidate": {
+    "version": "0.52.0-visual-system-measure",
+    "firmware_sha256": "39fc2c923d56de9c495be998ea72b4aec6d6eea7eaac89e358dd9e668aa43ace",
+    "factory_sha256": "56f90026c71a81734773e7a68f38b30f3aaed280ae016eafffab89094321569a",
+    "app_elf_sha256": "d240d6aacbcb55baa91050c0c5bccd1714f3563f542e691cef7fe2b6adc9ada8",
+    "linked_flash_bytes": 1063092,
+    "static_ram_bytes": 125464,
+    "app_image_bytes": 1063248,
+    "factory_image_bytes": 1128784,
+    "rtc_noinit_bytes": 20,
+    "host_tests_passed": true,
+    "firmware_build_passed": true
+  },
+  "visual_contract": {
+    "source": "firmware/leshy1/src/ui/VisualTheme.h",
+    "screen_width": 240,
+    "screen_height": 320,
+    "edge_px": 12,
+    "content_width_px": 216,
+    "header_height_px": 42,
+    "row_height_px": 40,
+    "row_gap_px": 7,
+    "footer_divider_y": 236,
+    "semantic_roles": [
+      "canvas",
+      "header",
+      "surface",
+      "surface_focus",
+      "surface_focus_disabled",
+      "divider",
+      "text_primary",
+      "text_secondary",
+      "text_muted",
+      "focus",
+      "positive",
+      "warning",
+      "danger"
+    ],
+    "raw_tft_colors_remaining_in_renderer": 0,
+    "footer_wrap_regression_fixed": true
+  },
+  "product_hil": {
+    "run_id": "641a328b1437ac638f7186dd5457a9c4",
+    "run_sha256": "703c8fed4d76fef52235927034c1e06cea9cd60a9ca6788cb83ef12f92e82018",
+    "artifact_index_sha256": "33131ac807bac2e043a4cdb0a5c5739f0482a7c0d7836b965d8df44ec4282ecc",
+    "passed": true,
+    "gate_eligible": true,
+    "exact_cid": "FE343253440000002000000055019CB7",
+    "generation_before": 64,
+    "generation_after": 65,
+    "observations": 9,
+    "scan_accepted": 9,
+    "pipeline_forwarded": 9,
+    "scan_dropped": 0,
+    "pipeline_dropped": 0,
+    "ready_before_ms": 962.739875074476,
+    "ready_after_ms": 963.5562906041741,
+    "heap_total_bytes": 276040,
+    "heap_free_bytes": 227588,
+    "heap_min_free_bytes": 192128,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "retained_screens": {
+    "setup": {
+      "path": "tests/hil/evidence/board-01-visual-system-0.52/setup.png",
+      "png_sha256": "fec42519201633c2e7463680da0deb6bca328ff5df9320e8cb630d6629530264"
+    },
+    "running": {
+      "path": "tests/hil/evidence/board-01-visual-system-0.52/running.png",
+      "png_sha256": "b8c9301292a796e149d358d059f4b35649506f3a08a682a6ec93fe7077e1c624"
+    },
+    "committed": {
+      "path": "tests/hil/evidence/board-01-visual-system-0.52/committed.png",
+      "png_sha256": "e96061fd2aa487893674901573c958fce7fcb162aacf1bed1c10e279f3f587cd"
+    },
+    "export": {
+      "path": "tests/hil/evidence/board-01-visual-system-0.52/export.png",
+      "png_sha256": "6cca39099c311451e8f4c2d0887e2a0565e3f068bee623d71b9b86fcaa5e2c00"
+    },
+    "library": {
+      "path": "tests/hil/evidence/board-01-visual-system-0.52/library.png",
+      "png_sha256": "db87186633b503c729efaf30a22e167fd362aca9967a1afeccedf0be1b6ebe4f"
+    },
+    "home": {
+      "path": "tests/hil/evidence/board-01-visual-system-0.52/home.png",
+      "png_sha256": "7c86b5fdc43ffea262b87476ebc4eb3e7c556ae763f3c34ec36c3f58b6d3cc1f"
+    }
+  },
+  "pixel_audit": {
+    "dimensions_match": true,
+    "brand_spans_expected_header_width": true,
+    "footer_divider_present": true,
+    "input_status_present": true,
+    "library_bottom_guard_rows_clear": true,
+    "screens_distinct": true,
+    "manual_visual_review": "pass"
+  },
+  "fixture_mismatch_diagnostic": {
+    "generic_suite_status": "failed_as_designed",
+    "reason": "device-smoke revision 6 expects an unenrolled RAM preview, while board-01 had the enrolled exact-CID product card inserted",
+    "candidate_fault": false,
+    "goldens_promoted": false,
+    "correct_product_aware_runner_used": true
+  },
+  "scope": {
+    "ux_03": "implemented_and_physically_evidenced",
+    "ux_07": "partial",
+    "demo_s2": "open",
+    "remaining": [
+      "UX-04 component sheet",
+      "UX-05 EN/RU content-fit evidence",
+      "UX-06 accessibility/input map",
+      "UX-07 dialog/error/degraded captures",
+      "Self-Test Quick/Full UI and report engine",
+      "DEMO-S2 open/back stress gate"
+    ]
+  }
+}

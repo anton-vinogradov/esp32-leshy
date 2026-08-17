@@ -2,8 +2,8 @@
 
 *Read in: [English](CAPABILITY_REVIEW.md) · **Русский***
 
-Дата: 16 августа 2026 года. Результат: **product scope coherent; catalog baseline
-reviewed; PRD technical acceptance gate остаётся открыт**.
+Дата: 17 августа 2026 года. Результат: **product scope coherent; catalog baseline
+reviewed; PRD technical baseline принят `E-GATE-001`**.
 
 ## Входы и правила проверки
 
@@ -44,7 +44,7 @@ primary owner в IA, requirement, stage, error/cancel path и проверяем
 | Проверка | Результат |
 |---|---|
 | Jobs | J-01…J-06 имеют capabilities и WF owner |
-| Requirements | PR-001…PR-019 и NFR-001…NFR-010 присутствуют в stage/traceability; PRD остаётся draft 0.2 до technical baseline gate |
+| Requirements | PR-001…PR-019 и NFR-001…NFR-010 присутствуют в stage/traceability; PRD принят как baseline 1.0, verification остаётся поэтапной |
 | Information architecture | Все CAP-001…CAP-047 имеют primary owner в UX-S01 six-task Home |
 | Error/cancel behavior | UX-02 задаёт unavailable/loading/degraded/error/confirm/success и cleanup для каждого screen family |
 | Hardware conditionals | RF shield, GPS, PN532, sound HW-T09 не превращаются в unconditional availability |
@@ -58,5 +58,6 @@ Product review принимает CAP-001…CAP-047 как полную рабо
 stage proposal; формулировки и acceptance могут уточняться без скрытого расширения
 scope.
 
-Это не закрывает S1 и не переводит PRD в `accepted`: остаются hardware/resource
-evidence, budget constraints и полный baseline gate, перечисленный в PRD/STATUS.
+Scope review вместе с constrained hardware/resource evidence закрывает S1 через
+`E-GATE-001`. Это не объявляет возможности реализованными или verified: такие статусы
+дают только соответствующие S2…S8 evidence и gates.

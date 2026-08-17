@@ -84,6 +84,11 @@ Each reference workflow receives an automated UI scenario as its screen states a
 implemented. Operator involvement is reserved for evidence the display controller
 cannot supply, not routine menu traversal.
 
+The on-device [Self-Test](SELF_TEST.md) uses this same normalized Action and capture
+boundary. Its Quick and Full/Guided plans never introduce screen setters or a second
+test-only navigation path; release automation selects the same versioned check IDs
+and independently verifies the resulting report, frames, and final cleanup.
+
 ## Current evidence
 
 Board-01 running `0.3.0-ui-automation-measure` accepted diagnostic actions through
@@ -150,3 +155,10 @@ zero-mismatch TFT frames. UI-HIL-A8 then passed on the exact same app: every key
 10, presses/releases/dispatched were 50/50/50, UI revision advanced by 50, maximum
 sample gap was 5 ms, queue high-water was only 6/64, and errors, ambiguity, queue
 depth, and drops were all zero (`E-HIL-052`).
+
+Candidate 0.52 adds semantic visual roles without changing the Action/capture
+boundary. An exact product-aware run retained setup/running/result/export plus final
+Home and Library frames, bound them to app `39fc2c92…43ace`, and finished with 9/9
+forwarded, zero drops, and owner/lease `none`/`0` (`E-HIL-076`). A pixel audit also
+detected and closed footer overflow. This accepts UX-03 and part of UX-07; it does
+not yet prove the Self-Test screens or remaining dialog/error/degraded states.

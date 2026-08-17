@@ -29,13 +29,13 @@ automation.
 
 | ID | Что демонстрируется | Минимальный сквозной путь | Что это доказывает |
 |---|---|---|---|
-| DEMO-S2 | Независимая платформа и UX/UI baseline | boot → capability Home → Diagnostics → disabled reason → Back | clean target, real hardware probe, единые Actions, базовый visual system, zero leaked leases |
+| DEMO-S2 | Независимая платформа и UX/UI baseline | boot → capability Home → Self-Test Quick → Diagnostics/disabled reason → report → Back | clean target, real hardware probe, единые Actions, базовый visual system, user-visible automation, zero leaked leases |
 | DEMO-S3 | Первая сохраняемая Survey Session | Start passive Wi-Fi → List → Detail → Stop → reboot → Library → export | первый реальный end-to-end product workflow и atomic persistent storage |
 | DEMO-S4 | Cross-radio passive Session | несколько совместимых receivers → timeline/radar → degradation → reopen/export | общая модель Observation, scheduler/duty cycle и 8-hour passive stability |
-| DEMO-S5 | Полнота штатного hardware | probe каждого present module → observe/capture → Library → inspect/export; approved replay отдельно | аппаратный паритет, optional/degraded behavior и recovery/power safety |
+| DEMO-S5 | Полнота штатного hardware | Full/Guided preflight → probe каждого present module → observe/capture → Library → inspect/export; approved replay отдельно | аппаратный паритет, optional/degraded behavior, честные N/A/blocked results и recovery/power safety |
 | DEMO-S6 | Targets, compare и companion | baseline Session → повторный проход → diff/Target evidence → local companion export | главные продуктовые отличия и одна Action/schema boundary |
 | DEMO-S7 | Safe Lab и SDK | saved Capture → Lab confirm → bounded TX → timeout/panic; sample extension | feature-complete 1.0, физический stop и расширяемость без обхода policy |
-| DEMO-S8 | Release candidate | install/update → mixed field workflow → interrupted update/write → rollback/recovery | release-complete binary, provenance, endurance и recovery |
+| DEMO-S8 | Release candidate | exact candidate → полный Self-Test plan → mixed field workflow → interrupted update/write → rollback/recovery | одинаковые on-device/release checks, independent oracle, release-complete binary, provenance, endurance и recovery |
 
 ## Ритм тестирования внутри этапа
 

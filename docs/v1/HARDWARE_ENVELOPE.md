@@ -2,7 +2,8 @@
 
 *Read in: **English** · [Русский](HARDWARE_ENVELOPE.ru.md)*
 
-Document status: **S1 draft — design evidence collected, board-01 HIL partially run**.
+Document status: **accepted constrained S1 baseline — design evidence and safe
+board-01 HIL are sufficient for S2; conditional physical evidence remains S4/S5/S8**.
 
 The reproducible procedure and isolated read-only image are documented in
 [`HIL_PROBE.md`](HIL_PROBE.md); having the tool is not physical evidence by itself.

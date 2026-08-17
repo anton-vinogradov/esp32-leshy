@@ -476,7 +476,10 @@ same-boot re-entry; E-HIL-059 подтверждает три normal reset-separ
 подтверждает policy восемь attempts через два natural physical reset retries, а
 E-HIL-072 отклоняет software-watchdog-only recovery после app-entry hang, а
 E-HIL-073/074 подтверждают hardware fallback 0.51 и three-cycle product regression.
-Passing complete 8 h lane ещё открыт. Physical power-cut всё
-ещё требует controller. LittleFS не затрагивается,
+E-HIL-075 добавляет 12 последовательных cycles, generation 51→63, 144/144 records,
+24 cold boots, invariant heap и zero drops при final lease 0; операторская остановка
+сохранена как `interrupted`, поэтому это engineering checkpoint, не release-pass.
+Полный 8 h/32-cycle NFR-004 остаётся `DEMO-S4`. Physical power-cut всё ещё требует
+controller. LittleFS не затрагивается,
 пока не доказан отдельный disposable partition/image; текущий flash filesystem может
 содержать legacy/product data.

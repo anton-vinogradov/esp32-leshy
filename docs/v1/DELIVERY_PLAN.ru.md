@@ -107,12 +107,15 @@ direction приняты.
 - AppRuntime, capability registry и атомарный ResourceBroker;
 - базовые display, storage, logging, crash reason и системное время;
 - visual/interaction baseline, проверенный на реальном TFT для EN/RU и common states;
+- последний пункт Home Self-Test с Quick platform checks и skeleton versioned report;
 - host CI и минимальный HIL boot/input/probe test.
 
 **Exit gate S2:** clean build загружается без кода меню 0.x, показывает достоверную
 диагностику конкретной платы, 1000 open/back циклов не теряют leases/heap, missing
 hardware не мешает boot, повторяемые host и HIL проверки зелёные.
 Дополнительно `DEMO-S2` и UX-01…UX-07 должны пройти по общему Stage Demo protocol.
+Quick Self-Test доступен кнопками, read-only, bounded/cancellable и оставляет zero
+ownership; registry Full/Guided растёт на каждом следующем этапе.
 
 ## S3 — Первый вертикальный срез: Survey Session
 
@@ -145,6 +148,8 @@ power loss не повреждает подтверждённую Session; UI, C
 - PCAP для совместимых сетевых захватов и CSV/JSON export;
 - bounded queues, dropped-event diagnostics и heap/latency instrumentation;
 - 8-часовой passive endurance test.
+- каждый завершённый passive source регистрирует применимый Full/Guided Self-Test
+  check вместо release-only diagnostic path.
 
 **Exit gate S4:** одна Session безопасно объединяет доступные пассивные источники,
 объясняет временно недоступные ресурсы, переживает reboot и экспорт без утечки heap и
@@ -216,7 +221,9 @@ feature-complete и проходит `DEMO-S7`.
 - crash journal и диагностический bundle;
 - performance, storage и power budgets на чистом и заполненном устройстве;
 - user/developer docs, schemas, threat model, support и compatibility policy;
-- release checklist с воспроизводимыми binary hashes и provenance.
+- release checklist с воспроизводимыми binary hashes и provenance;
+- единый полный Self-Test plan для on-device Full/Guided и независимо проверяющего
+  release runner.
 
 **Exit gate S8:** два последовательных RC без открытых P0/P1; 24-часовой mixed
 workload без зависания, утечки или повреждения; успешное восстановление после

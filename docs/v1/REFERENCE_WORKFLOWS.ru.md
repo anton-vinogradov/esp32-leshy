@@ -46,13 +46,18 @@
 3. Каждая capability имеет `declared`, `detected`, `available`, `conflicted`, `fault`
    или `unknown`, evidence и причину.
 4. Меню разрешает только совместимые действия; diagnostic report экспортируется.
+5. Последний пункт Home открывает Self-Test: Quick выполняет безопасный read-only
+   plan, а Full/Guided до старта показывает applicable checks/fixtures/side effects.
 
 **Error path:** неоднозначная GPIO5/6 или GPIO14/21 assembly остаётся `conflicted`
 или `unknown`; Diagnostics объясняет ожидаемый profile и не пробует output modes.
 Отсутствующий module считается `fault` только когда он declared профилем.
+Отсутствующий по profile module получает `not_applicable`; missing fixture или
+недоказуемый результат — `blocked/inconclusive`, но не молчаливый pass.
 
 **Cancel/back path:** выход из Diagnostics возвращает на прошлый экран, не запуская
-module и не удерживая foreground lease.
+module и не удерживая foreground lease. Back во время Self-Test останавливает plan
+на safe boundary, выполняет cleanup и сохраняет экспортируемый partial report.
 
 | Acceptance ID | Наблюдаемый результат | Evidence |
 |---|---|---|
@@ -61,6 +66,7 @@ module и не удерживая foreground lease.
 | WF-01-A3 | Недоступное action disabled/hidden до старта `Action` и до получения lease | Action/ResourceBroker integration trace |
 | WF-01-A4 | Probe/report не даёт RF/IR TX command и не экспортирует сохранённые credentials | policy tests + HIL detector trace + report scan |
 | WF-01-A5 | Back принят не позже 150 мс, ownership table покидаемого контекста пуста | input/resource trace |
+| WF-01-A6 | User Quick/Full и release HIL вызывают одинаковые versioned check IDs; host отклоняет missing checks, wrong candidate identity, unexpected side effects или nonzero final ownership | Self-Test contract tests + physical HIL report verifier |
 
 ## WF-02 — создать и сохранить passive Survey Session
 

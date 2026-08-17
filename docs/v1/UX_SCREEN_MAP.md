@@ -7,11 +7,13 @@ S2 on the real TFT; this map already binds task structure and Back/Stop behavior
 
 ## Global shell
 
-`UX-S01 Home` exposes six jobs rather than a radio-module list:
+`UX-S01 Home` exposes six jobs rather than a radio-module list, followed by the
+always-addressable Self-Test utility as the final item:
 
 ```text
 Survey      Targets     Capture
 Lab         Library     Device
+SELF-TEST   (QUICK / FULL-GUIDED)
 ```
 
 Every screen retains context title, storage/power state, active Session or TX,
@@ -49,12 +51,15 @@ UX-S01 Home
 │  ├─ UX-S15 Sessions / Captures / Exports / Screenshots
 │  ├─ UX-S16 Item Detail: integrity, provenance, source/derived data
 │  └─ UX-S17 Import / Export / Compare / Open in Lab
-└─ Device
+├─ Device
    ├─ UX-S23 Device Dashboard
    ├─ UX-S24 Diagnostics / Capability / Module Detail / Report
    ├─ UX-S25 Language / Display / Input / Feedback / Connectivity
    ├─ UX-S26 Storage / Backup-Restore / Factory Reset
    └─ UX-S27 Install / Update / Rollback / Recovery / About
+└─ Self-Test → UX-S24 test context
+   ├─ Quick: bounded read-only automatic plan
+   └─ Full / Guided: scoped preflight → applicable checks → report
 
 UX-S28 Global dialog layer: unavailable reason, progress, confirm, error, panic.
 ```
@@ -93,12 +98,13 @@ ordinary Back traverses the stack.
 | Lab | CAP-032…CAP-037 | accepts only a saved immutable Capture; Result links back to source |
 | Library | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import never bypasses parsers |
 | Device | CAP-001…CAP-008, CAP-045…CAP-047 | Diagnostics explains unavailability before task entry |
+| Self-Test | CAP-001…CAP-047 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
 
 ## UX-01 acceptance
 
 - Every `CAP-001…CAP-047` has one primary owner and a measurable
   entry → success/error/cancel → Back path.
-- WF-01 uses UX-S23/S24; WF-02 uses UX-S02…S05; WF-03 uses UX-S15…S17;
+- WF-01 uses Home→Self-Test/UX-S23/S24; WF-02 uses UX-S02…S05; WF-03 uses UX-S15…S17;
   WF-04 uses UX-S06…S10; WF-05 uses UX-S18…S22.
 - A primary task starts within four transitions from Home; receivers remain
   filters/parameters rather than top-level IA.

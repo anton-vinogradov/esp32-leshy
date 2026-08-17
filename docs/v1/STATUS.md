@@ -10,21 +10,20 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 ## Now
 
-- **Active stage:** `S1 — Evidence baseline`.
-- **Last completed stage:** `S0 — Governance and generation boundary`.
-- **Repository baseline:** `c530880` plus the current unreleased 0.50 bounded
-  Product Start/boot recovery and endurance slice.
+- **Active stage:** `S2 — Clean 1.x platform`.
+- **Last completed stage:** `S1 — Evidence baseline`.
+- **Repository baseline:** `1c05f32` plus the current S1-gate/S2-kickoff slice.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
-- **Current objective:** confirm ESP32-DIV constraints and promote the 1.0.0 PRD from
-  draft to an accepted baseline.
+- **Current objective:** complete UX-03…UX-07 and a reproducible `DEMO-S2` on the
+  independent 1.x target.
 
 ## Stage state
 
 | Stage | Status | Confirmed result | Remaining gate work |
 |---|---|---|---|
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
-| S1 | `active` | vision, competitive snapshot, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 and Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register, five ADRs, automatic device-smoke v6 plus physical UI-HIL-A8, and an exact-CID real passive Survey→persistent SD→cold-boot Library/export path on board-01 | remaining physical evidence and PRD baseline review |
-| S2 | `planned` | capability-built home, unified input/TFT capture, atomic-head/media-guard contracts, guarded product FAT lifecycle, complete first product Survey workflow, and AppRuntime/ResourceBroker lease path exist | formal S1/S2 gate and production-policy review |
+| S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
+| S2 | `active` | independent target, capability Home, unified input/TFT capture, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, and automated HIL already run on board-01 | freeze UX-03…UX-07 and pass `DEMO-S2` with EN/RU/common states on the real TFT |
 | S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; bounded FSInfo avoids a full FAT scan and abort preserves the prior generation | physical power-cut, endurance, and LittleFS parity remain; requires S2 gate |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
@@ -32,7 +31,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
 | S8 | `planned` | release gates are defined | requires S7 gate |
 
-## S1 completed work
+## S1 closed work
 
 - separated the 0.x and 1.x generations;
 - reviewed original ESP32-DIV, GhostESP, Bruce, Marauder, Flipper Zero, and secondary
@@ -266,25 +265,23 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   dedicated BoardSafeOutputs adapter, forbids direct app/driver control, and emits
   boot/runtime diagnostic state.
 
-## S1 priority queue
+## S2 priority queue
 
-Unavailable boards or instruments limit physical evidence but do not pause the next
-safe documentation/prototype item.
+Unavailable boards and instruments remain tracked evidence gaps, but no longer hold
+the platform and visual stage.
 
-1. Complete partial `HW-T01/T04/T07`: module marking, second v2 board, exact
-   power-manager marking, and separate GPS/PN532 assemblies only when available.
-2. Run manual `HW-T02/T03/T05/T08/T09/T10`; run `HW-T06` only after GPS/PN532 absence
-   is confirmed and an RF detector/logic analyzer is attached.
-3. Continue productizing the proven source→queue→store→Library/export path: the
-   UI/RAM slice with bounded FIFO and visible progress/drop/storage state is
-   automated, and fail-closed real/persistent admission plus the exact product
-   namespace are fixed; next implement an adapter lifecycle satisfying read-only
-   boot recovery and explicit bounded commit, then connect the real passive source,
-   common pipeline, and catalog of the same persistent Session. Exercise reset-readiness retry on the next
-   natural transient. LittleFS still needs a separately proven disposable image;
-   physical power-cut needs a controller.
-4. Measure power/shared-bus/no-TX stability when instruments are available.
-5. Update PRD and traceability from measurements, then review the S1 gate.
+1. UX-03 semantic design tokens are implemented and evidenced on the exact 0.52
+   candidate; finish the UX-04 common component sheet for 240×320.
+2. Implement the bottom-of-Home Self-Test shell, read-only Quick checks, and the
+   machine-readable report skeleton required by the accepted S2 contract.
+3. Verify UX-05 EN/RU content fit and UX-06 button/accessibility mapping.
+4. Complete UX-07 automatically: the retained Home/List/Detail/running/result/export
+   frames pass; dialog and unavailable/degraded/error states remain to capture.
+5. Run `DEMO-S2`: boot → Home → Self-Test Quick → Diagnostics → disabled reason →
+   Back, retaining exact build identity, TFT frames, action/report trace, heap, and
+   zero leases.
+6. Activate S3 after the S2 gate. The existing persistent Survey path is valuable
+   implementation evidence, but cannot close S2 without the visual/interaction baseline.
 
 ## Evidence on the current baseline
 
@@ -483,6 +480,12 @@ safe documentation/prototype item.
 | E-BUILD-053 | `0.51.0-hardware-boot-watchdog-measure` | pass: RAM 125,464 B, linked flash 1,062,900 B; app/factory 1,063,312/1,128,848 B, app `a2931c87…f76d`, factory `2b61a6db…7303`, ELF `75b3939d…d828`; RTC no-init remains 20 B; Task WDT ISR, RTC recorder, and 32-bit atomic exchange resolve in IRAM | +8 B static RAM, +1,048 B linked flash, and +1,056 B images vs 0.50; exact physical candidate is bound by E-HIL-073/074; measurement image, not stable release |
 | E-HIL-073 | board-01 deterministic hardware-watchdog injection 0.51 | pass/gate-eligible local run: exact candidate is flashed and verified; the injection performs no filesystem/physical write, disables the software tier, and Task WDT identifies `loopTask`; firmware reports reset reason 6, ready in 6,697.964 ms, attempt 2 restores exact CID generation 48/16 read-only with `timeout_restarts=1`, zero blocked/physical writes, cleanup true, heap 276,040/227,588/192,128 B, and final owner/lease none/0; run/index/raw hashes are retained in the machine-checked artifact | injected local evidence on one board/card; validates the hardware timeout path, not an 8 h natural incidence rate |
 | E-HIL-074 | board-01 final 0.51 three-cycle regression | pass: exact candidate advances 48→49→50→51 with 37/37 accepted/forwarded, zero drops, six cold boots, 12 captures, invariant heap 276,040/227,588/192,128 B, maximum ready 923.202 ms, exact CID, and final owner/lease none/0; aggregate run/index hashes are retained in the same [artifact](../../tests/hil/evidence/board-01-product-hardware-watchdog-0.51.json) | 152.235 s/three cycles is not the required 8 h/32-cycle release gate; local unsigned one-board evidence |
+| E-HIL-075 | board-01 shortened 0.51 endurance checkpoint | accepted as engineering evidence: the exact candidate completes 12 consecutive cycles over 11,330.816 s, generation 51→63, 144/144 accepted/forwarded, 24 cold boots, 48 TFT captures, exact CID, invariant heap 276,040/227,588/192,128 B, zero drops/retries/timeouts, and final owner/lease none/0; aggregate and all 24 child hashes are retained in the same machine-checked artifact | runner is honestly `interrupted` by product decision and `gate_eligible=false`; this is not a release pass. Full NFR-004 8 h/32 cycles runs in S4 on the cross-radio platform as required by DELIVERY_PLAN |
+| E-GATE-001 | formal S1 gate review | pass: PRD 1.0 accepted; J/PR/NFR/CAP/WF/UX-01/02 are fully bound; hardware/resource unknowns have safe defaults, explicit conditional scope, and named later-stage evidence; the first real persistent Survey slice fits budgets | does not verify the full PRD or declare S2/S3 complete; unavailable second board/instruments remain S4/S5/S8 risks |
+| E-BUILD-054 | `0.52.0-visual-system-measure` exact rebuild | pass: RAM 125,464 B, linked flash 1,063,092 B; app/factory 1,063,248/1,128,784 B; app `39fc2c92…43ace`, factory `56f90026…569a`, ELF `d240d6aa…ada8`; RTC no-init 20 B | +192 B linked flash, zero static-RAM growth, and 64 B smaller app/factory images vs 0.51; measurement image, not a release |
+| E-HIL-076 | board-01 exact 0.52 visual/product run | pass: exact candidate advances generation 64→65 with 9/9 accepted/forwarded, zero drops, heap 276,040/227,588/192,128 B, exact CID, and final owner/lease none/0; six retained 240×320 TFT frames and all artifacts are SHA-256 bound in the [machine-checked artifact](../../tests/hil/evidence/board-01-visual-system-0.52.json) | Home/List/Detail/running/result/export are covered; dialog and unavailable/degraded/error states, EN/RU fit, physical-panel optics, and full S2 demo remain open |
+| E-UX-003 | semantic visual system and pixel audit | pass: renderer consumes `VisualTheme` palette/layout roles, contains no raw TFT color constants, retained frames prove full brand/divider/input geometry and clear bottom guard rows, and a wrapped Library footer found by the audit was shortened and reverified | accepts UX-03 for the current candidate; UX-04…UX-07 remain active and a shared component sheet is not yet complete |
+| E-DOC-004 | on-device Self-Test product contract | accepted: the last Home item exposes explicit read-only Quick and Full/Guided modes; user and release HIL share versioned check IDs while the host independently validates bytes, screenshots, side effects, and cleanup | implementation is open: S2 owns shell/Quick/report, capability checks accumulate through S7, and complete release coverage closes in S8 |
 
 ## Known uncertainties and risks
 
@@ -492,12 +495,10 @@ safe documentation/prototype item.
   says OPI PSRAM; `HW-U01` remains physically open but is constrained to N16/no-PSRAM.
 - Schematic TFT RESET and legacy `TFT_RST=0` conflict; GPIO0 is forbidden as display
   reset until `HW-T02`.
-- Runtime/navigation prototypes in the worktree are integrated into 0.x; they do not
-  satisfy S2 and must not dictate the clean target automatically.
-- Probe-UI flash/RAM/heap figures are a 1.x platform lower bound, not an S3 Survey or
-  final-release budget.
-- The PRD remains `draft 0.2 after product review`; no P0 is accepted or verified
-  until the full technical baseline gate.
+- The clean target contains platform and product prototypes; until `DEMO-S2` they are
+  implementation evidence rather than a closed platform gate.
+- The PRD is accepted as baseline 1.0, but `accepted` is not `verified`: each P0 is
+  verified only by its applicable S2…S8 gate.
 - One board is available, but `HW-T01` requires a second v2 unit; continuity,
   logic/RF, storage, and power evidence is still missing.
 - No microphone/scope evidence exists for the buzzer: exact boot/runtime pad state is
@@ -505,10 +506,10 @@ safe documentation/prototype item.
 
 ## Blockers
 
-S1 as a whole is not blocked. Full HIL needs a second board, multimeter, logic/RF
-detector, and power measurement; unavailable instruments limit evidence but do not
-stop budget, risk-register, or ADR work.
+S2 is not blocked. A second board, multimeter, logic/RF detector, and power fixture
+are required by named S4/S5/S8 evidence; until available, affected capabilities stay
+conditional/unavailable rather than being enabled by assumption.
 
-Board-01 recovered after physical USB power removal. The exact 0.51 watchdog
-injection and short regression now pass (`E-HIL-073/074`); the failed 0.50 lane
-remains retained and a new complete 8 h/32-cycle result is still required.
+The 0.51 hardware-watchdog injection, regression, and shortened endurance checkpoint
+are retained (`E-HIL-073…075`). The full 8 h/32-cycle NFR-004 remains mandatory for
+`DEMO-S4`, but no longer holds the S1→S2 transition.

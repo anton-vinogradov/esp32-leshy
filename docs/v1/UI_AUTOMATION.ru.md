@@ -82,6 +82,11 @@ TFT, проверяет доступность той же revision после c
 его экранов. Участие оператора остаётся только для evidence, которое не может дать
 контроллер дисплея, а не для обычного прохода по меню.
 
+Встроенный [Self-Test](SELF_TEST.ru.md) использует ту же boundary normalized Action
+и capture. Его Quick и Full/Guided plans не вводят screen setters или второй
+test-only navigation path; release automation выбирает те же versioned check IDs и
+независимо проверяет report, frames и final cleanup.
+
 ## Текущее evidence
 
 Board-01 со сборкой `0.3.0-ui-automation-measure` приняла diagnostic actions через
@@ -145,3 +150,10 @@ frames. Затем UI-HIL-A8 прошёл на том же exact app: кажда
 presses/releases/dispatched — 50/50/50, UI revision выросла на 50, maximum sample
 gap 5 ms, queue high-water всего 6/64, errors, ambiguity, queue depth и drops — нули
 (`E-HIL-052`).
+
+Candidate 0.52 добавляет semantic visual roles, не меняя Action/capture boundary.
+Exact product-aware run сохранил setup/running/result/export и финальные Home/Library
+frames, связал их с app `39fc2c92…43ace` и завершился с 9/9 forwarded, zero drops и
+owner/lease `none`/`0` (`E-HIL-076`). Pixel audit также обнаружил и закрыл footer
+overflow. Это принимает UX-03 и часть UX-07, но ещё не доказывает Self-Test screens
+или оставшиеся dialog/error/degraded states.

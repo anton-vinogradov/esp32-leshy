@@ -29,13 +29,13 @@ UI automation.
 
 | ID | Demonstrated result | Minimum end-to-end path | What it proves |
 |---|---|---|---|
-| DEMO-S2 | Independent platform and UX/UI baseline | boot → capability Home → Diagnostics → disabled reason → Back | clean target, real probe, common Actions, base visual system, zero leaked leases |
+| DEMO-S2 | Independent platform and UX/UI baseline | boot → capability Home → Self-Test Quick → Diagnostics/disabled reason → report → Back | clean target, real probe, common Actions, base visual system, user-visible automation, zero leaked leases |
 | DEMO-S3 | First persistent Survey Session | Start passive Wi-Fi → List → Detail → Stop → reboot → Library → export | first real product workflow and atomic persistent storage |
 | DEMO-S4 | Cross-radio passive Session | multiple compatible receivers → timeline/radar → degradation → reopen/export | common Observation model, scheduler/duty cycle, and 8-hour passive stability |
-| DEMO-S5 | Stock-hardware completeness | probe every present module → observe/capture → Library → inspect/export; approved replay separately | hardware parity, optional/degraded behavior, and recovery/power safety |
+| DEMO-S5 | Stock-hardware completeness | Full/Guided preflight → probe every present module → observe/capture → Library → inspect/export; approved replay separately | hardware parity, optional/degraded behavior, honest N/A/blocked results, and recovery/power safety |
 | DEMO-S6 | Targets, compare, and companion | baseline Session → repeat visit → diff/Target evidence → local companion export | primary product differentiation and one Action/schema boundary |
 | DEMO-S7 | Safe Lab and SDK | saved Capture → Lab confirm → bounded TX → timeout/panic; sample extension | feature-complete 1.0, physical stop, and extensibility without policy bypass |
-| DEMO-S8 | Release candidate | install/update → mixed field workflow → interrupted update/write → rollback/recovery | release-complete binary, provenance, endurance, and recovery |
+| DEMO-S8 | Release candidate | exact candidate → complete Self-Test plan → mixed field workflow → interrupted update/write → rollback/recovery | same on-device/release checks, independent oracle, release-complete binary, provenance, endurance, and recovery |
 
 ## Test cadence within a stage
 

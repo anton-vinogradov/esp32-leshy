@@ -486,7 +486,10 @@ normal reset-separated cycles and the endurance-runner invariants. E-HIL-069 ret
 the failed 0.49 gate, E-HIL-071 confirms the eight-attempt policy through two
 natural physical reset retries, and E-HIL-072 rejects software-watchdog-only
 recovery after an app-entry hang. E-HIL-073/074 prove the 0.51 hardware fallback
-and three-cycle product regression. A passing complete 8 h lane still remains open. Physical
-power-cut still needs a controller.
+and three-cycle product regression. E-HIL-075 adds 12 consecutive cycles,
+generation 51→63, 144/144 records, 24 cold boots, invariant heap, and zero drops with
+final lease 0; the operator stop remains `interrupted`, so this is an engineering
+checkpoint rather than a release pass. Full 8 h/32-cycle NFR-004 remains in
+`DEMO-S4`. Physical power-cut still needs a controller.
 LittleFS is not touched until a dedicated disposable partition/image is proven; the
 current flash filesystem may contain legacy/product data.

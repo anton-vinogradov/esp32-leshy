@@ -2,7 +2,8 @@
 
 *Читать на: [English](HARDWARE_ENVELOPE.md) · **Русский***
 
-Статус документа: **S1 draft — design evidence собрано, board-01 HIL выполнен частично**.
+Статус документа: **принятый constrained baseline S1 — design evidence и безопасный
+board-01 HIL достаточны для S2; conditional physical evidence остаётся S4/S5/S8**.
 
 Воспроизводимая процедура и отдельная read-only firmware описаны в
 [`HIL_PROBE.ru.md`](HIL_PROBE.ru.md); наличие инструмента не считается физическим

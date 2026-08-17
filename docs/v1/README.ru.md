@@ -27,7 +27,7 @@
 - [Конкурентный анализ](COMPETITIVE_ANALYSIS.ru.md) — срез рынка и полученные
   требования
 - [Продуктовые требования и измеримые критерии](PRODUCT_REQUIREMENTS.ru.md) —
-  черновой baseline
+  принятый baseline 1.0
 - [Product review каталога 1.0](CAPABILITY_REVIEW.ru.md) — проверка полноты,
   пересечений и шести закрытых пробелов scope
 - [Эталонные сценарии](REFERENCE_WORKFLOWS.ru.md) — happy/error/cancel paths и
@@ -42,6 +42,8 @@
   команды и правила сохранения физического evidence
 - [Автоматизация UI и визуальные evidence](UI_AUTOMATION.ru.md) — единый input path,
   захват реального TFT и проход по меню без оператора
+- [Встроенный Self-Test](SELF_TEST.ru.md) — явные Quick и Full/Guided modes для
+  пользователя и release HIL на одном test engine
 - [Автоматический предрелизный HIL](PRE_RELEASE_HIL.ru.md) — proposed build-once,
   physical-test и promote-same-bytes pipeline с screenshots и attestation
 - [HIL атомарности storage](STORAGE_HIL.ru.md) — dual-head recovery, fault boundaries

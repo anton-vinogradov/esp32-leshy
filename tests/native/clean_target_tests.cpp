@@ -44,6 +44,7 @@
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/UiController.h"
+#include "ui/VisualTheme.h"
 
 using namespace leshy1::domain::apps;
 using namespace leshy1::domain::hardware;
@@ -68,6 +69,24 @@ int failures = 0;
             ++failures;                                                                         \
         }                                                                                       \
     } while (false)
+
+void testVisualThemeContract() {
+    using leshy1::ui::visual::Layout;
+    using leshy1::ui::visual::Palette;
+    using leshy1::ui::visual::rgb565;
+
+    CHECK(Layout::ScreenWidth == 240);
+    CHECK(Layout::ScreenHeight == 320);
+    CHECK(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth);
+    CHECK(Layout::ContentTop + 3 * (Layout::RowHeight + Layout::RowGap) <
+          Layout::FooterDividerY);
+    CHECK(Palette::Canvas == rgb565(7, 16, 12));
+    CHECK(Palette::Header != Palette::Canvas);
+    CHECK(Palette::Surface != Palette::SurfaceFocus);
+    CHECK(Palette::TextPrimary != Palette::TextSecondary);
+    CHECK(Palette::Focus != Palette::Positive);
+    CHECK(Palette::Warning != Palette::Danger);
+}
 
 void testProductBootRetryIsNarrowAndBounded() {
     CHECK(isProductBootRetryReset(true, false, false));
@@ -2765,6 +2784,7 @@ void testSdSector0ReadIsSingleBoundedAndParseOnly() {
 }  // namespace
 
 int main() {
+    testVisualThemeContract();
     testProductBootRetryIsNarrowAndBounded();
     testProductStartIdentityRetryStopsBeforeFilesystem();
     testStorageTimingSummaryUsesNearestRank();

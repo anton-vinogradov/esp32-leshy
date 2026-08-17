@@ -10,22 +10,21 @@
 
 ## Сейчас
 
-- **Активный этап:** `S1 — Evidence baseline`.
-- **Последний закрытый этап:** `S0 — Governance и граница поколений`.
-- **Рабочая база репозитория:** `c530880` плюс текущий невыпущенный slice 0.50 с
-  bounded Product Start/boot recovery и endurance runner.
+- **Активный этап:** `S2 — Чистая платформа 1.x`.
+- **Последний закрытый этап:** `S1 — Evidence baseline`.
+- **Рабочая база репозитория:** `1c05f32` плюс текущий S1 gate/S2 kickoff slice.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
-- **Главная цель текущего этапа:** подтвердить ограничения ESP32-DIV и перевести PRD
-  1.0.0 из draft в принятый baseline.
+- **Главная цель текущего этапа:** завершить UX-03…UX-07 и воспроизводимый
+  `DEMO-S2` на независимой target 1.x.
 
 ## Состояние этапов
 
 | Этап | Статус | Подтверждённый результат | Что отделяет от gate |
 |---|---|---|---|
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
-| S1 | `active` | vision, конкурентный срез, draft PRD 0.2, product-reviewed `CAP-001…047`, UX-01/02 и Stage Demo contracts, workflows, constrained hardware unknowns, partial HIL/budgets, risk register и пять ADR; automatic device-smoke v6 плюс physical UI-HIL-A8 проверяют keypad path, а board-01 проходит exact-CID real passive Survey→persistent SD→cold-boot Library/export | остальные physical evidence и review baseline PRD |
-| S2 | `planned` | существуют capability-built home, unified input/TFT capture, atomic-head/media-guard contracts, guarded product FAT lifecycle, первый complete product Survey workflow и lease path AppRuntime/ResourceBroker | formal S1/S2 gate и review production policy |
+| S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
+| S2 | `active` | независимая target, capability Home, unified input/TFT capture, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts и автоматический HIL уже работают на board-01 | зафиксировать UX-03…UX-07 и пройти `DEMO-S2` с EN/RU/common states на реальном TFT |
 | S3 | `planned` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; bounded FSInfo не делает full FAT scan, abort сохраняет prior generation | открыты physical power-cut, endurance и LittleFS parity; требуется gate S2 |
 | S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
@@ -33,7 +32,7 @@
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
 | S8 | `planned` | release gates определены | требуется gate S7 |
 
-## S1 — выполнено
+## S1 — закрыто
 
 - 0.x отделена от линии 1.x;
 - проанализированы ESP32-DIV original, GhostESP, Bruce, Marauder, Flipper Zero и
@@ -265,25 +264,23 @@
   отдельный BoardSafeOutputs, запрещает прямое управление из apps/drivers и публикует
   boot/runtime diagnostic state.
 
-## S1 — приоритетная очередь
+## S2 — приоритетная очередь
 
-Недоступные платы или приборы ограничивают physical evidence, но не останавливают
-следующий безопасный пункт документации или прототипирования.
+Недоступные платы или приборы остаются tracked evidence gaps, но больше не удерживают
+платформенный и визуальный этап.
 
-1. Дополнить partial `HW-T01/T04/T07`: module marking, вторая v2 board и exact
-   power-manager marking; отдельные GPS/PN532 assembly проверять только при наличии.
-2. Выполнить manual `HW-T02/T03/T05/T08/T09/T10`; `HW-T06` запускать только после
-   подтверждения отсутствия GPS/PN532 и с RF detector/logic analyzer.
-3. Продолжить productization доказанного source→queue→store→Library/export path:
-   UI/RAM slice с bounded FIFO и visible progress/drop/storage state автоматизирован;
-   fail-closed real/persistent admission и точный product namespace уже закреплены;
-   теперь реализовать adapter lifecycle, который удовлетворяет read-only boot
-   recovery и explicit bounded commit, затем подключить к нему real passive source,
-   общий pipeline и catalog той же persistent Session. Проверить reset-readiness retry при следующем natural
-   transient. LittleFS требует отдельно доказанный disposable image, physical
-   power-cut — controller.
-4. Измерить power/shared-bus/no-TX stability при появлении приборов.
-5. Обновить PRD/traceability по результатам измерений и только затем закрыть gate S1.
+1. Semantic design tokens UX-03 реализованы и подтверждены на exact candidate 0.52;
+   завершить common component sheet UX-04 для 240×320.
+2. Реализовать shell Self-Test последним пунктом Home, read-only Quick checks и
+   machine-readable report skeleton по принятому S2 contract.
+3. Проверить UX-05 EN/RU content fit и UX-06 кнопочный/accessibility mapping.
+4. Завершить UX-07 автоматически: retained Home/List/Detail/running/result/export
+   frames проходят; остаются dialog и unavailable/degraded/error states.
+5. Пройти `DEMO-S2`: boot → Home → Self-Test Quick → Diagnostics → disabled reason
+   → Back, сохранив exact build identity, TFT frames, action/report trace, heap и
+   zero leases.
+6. После S2 gate активировать S3. Уже существующий persistent Survey path считается
+   implementation evidence, но не закрывает S2 без visual/interaction baseline.
 
 ## Evidence на текущей базе
 
@@ -482,6 +479,12 @@
 | E-BUILD-053 | `0.51.0-hardware-boot-watchdog-measure` | pass: RAM 125 464 B, linked flash 1 062 900 B; app/factory 1 063 312/1 128 848 B, app `a2931c87…f76d`, factory `2b61a6db…7303`, ELF `75b3939d…d828`; RTC no-init остаётся 20 B; Task WDT ISR, RTC recorder и 32-bit atomic exchange размещены в IRAM | +8 B static RAM, +1 048 B linked flash и +1 056 B images к 0.50; exact physical candidate связан E-HIL-073/074; measurement image, не stable release |
 | E-HIL-073 | board-01 deterministic hardware-watchdog injection 0.51 | pass/gate-eligible local run: exact candidate прошит и verified; injection не делает filesystem/physical write, отключает software tier, а Task WDT указывает `loopTask`; firmware сообщает reset reason 6, ready за 6 697,964 ms, attempt 2 восстанавливает exact CID generation 48/16 read-only с `timeout_restarts=1`, zero blocked/physical writes, cleanup true, heap 276 040/227 588/192 128 B и final owner/lease none/0; run/index/raw hashes retained machine-checked artifact | injected local evidence на одной board/card; проверяет hardware timeout path, но не natural incidence rate за 8 h |
 | E-HIL-074 | board-01 final three-cycle regression 0.51 | pass: exact candidate продвигает 48→49→50→51 с 37/37 accepted/forwarded, zero drops, шестью cold boots, 12 captures, invariant heap 276 040/227 588/192 128 B, maximum ready 923,202 ms, exact CID и final owner/lease none/0; aggregate run/index hashes сохранены в том же [artifact](../../tests/hil/evidence/board-01-product-hardware-watchdog-0.51.json) | 152,235 s/три цикла не заменяют обязательный release gate 8 h/32 cycles; local unsigned one-board evidence |
+| E-HIL-075 | board-01 shortened endurance checkpoint 0.51 | принято как engineering evidence: exact candidate прошёл 12 последовательных циклов за 11 330,816 s, generation 51→63, 144/144 accepted/forwarded, 24 cold boots, 48 TFT captures, exact CID, invariant heap 276 040/227 588/192 128 B, zero drops/retries/timeouts и final owner/lease none/0; aggregate и все 24 child hashes retained в том же machine-checked artifact | runner честно завершён `interrupted` по product decision и `gate_eligible=false`; это не release-pass. Полный NFR-004 8 h/32 cycles выполняется в S4 на cross-radio platform, как задано DELIVERY_PLAN |
+| E-GATE-001 | S1 formal gate review | pass: PRD 1.0 принят; J/PR/NFR/CAP/WF/UX-01/02 полностью связаны; hardware/resource unknowns имеют safe defaults, explicit conditional scope и named later-stage evidence; первый real persistent Survey slice помещается в budgets | не верифицирует весь PRD и не объявляет S2/S3 завершёнными; unavailable second board/instruments остаются рисками S4/S5/S8 |
+| E-BUILD-054 | exact rebuild `0.52.0-visual-system-measure` | pass: RAM 125 464 B, linked flash 1 063 092 B; app/factory 1 063 248/1 128 784 B; app `39fc2c92…43ace`, factory `56f90026…569a`, ELF `d240d6aa…ada8`; RTC no-init 20 B | +192 B linked flash, zero static-RAM growth и app/factory images на 64 B меньше vs 0.51; measurement image, не release |
+| E-HIL-076 | board-01 exact visual/product run 0.52 | pass: exact candidate продвигает generation 64→65 с 9/9 accepted/forwarded, zero drops, heap 276 040/227 588/192 128 B, exact CID и final owner/lease none/0; шесть retained TFT frames 240×320 и все artifacts SHA-256 bound в [machine-checked artifact](../../tests/hil/evidence/board-01-visual-system-0.52.json) | покрыты Home/List/Detail/running/result/export; dialog и unavailable/degraded/error states, EN/RU fit, physical-panel optics и полный S2 demo открыты |
+| E-UX-003 | semantic visual system и pixel audit | pass: renderer использует palette/layout roles из `VisualTheme`, не содержит raw TFT color constants, retained frames подтверждают полные brand/divider/input geometry и чистые bottom guard rows; обнаруженный audit wrapped Library footer сокращён и проверен заново | принимает UX-03 для текущего candidate; UX-04…UX-07 активны, shared component sheet ещё не завершён |
+| E-DOC-004 | product contract встроенного Self-Test | accepted: последний пункт Home открывает явные read-only Quick и Full/Guided modes; user и release HIL разделяют versioned check IDs, а host независимо проверяет bytes, screenshots, side effects и cleanup | implementation открыт: S2 владеет shell/Quick/report, capability checks накапливаются до S7, полное release coverage закрывается в S8 |
 
 ## Известные неопределённости и риски
 
@@ -491,12 +494,10 @@
   OPI PSRAM; `HW-U01` физически открыт, но constrained до N16/no-PSRAM.
 - TFT RESET на schematic и `TFT_RST=0` в legacy flags противоречат друг другу;
   GPIO0 запрещён как display reset до `HW-T02`.
-- В worktree есть runtime/navigation prototype, интегрированный в 0.x. Он не считается
-  реализацией S2 и не должен определять структуру чистой target автоматически.
-- Flash/RAM/heap probe UI — platform lower bound 1.x, не бюджет Survey S3 или final
-  release.
-- PRD имеет статус `draft 0.2 after product review`; P0 requirements ещё не
-  accepted/verified до полного technical baseline gate.
+- Clean target содержит platform и product prototypes; до `DEMO-S2` они являются
+  implementation evidence, а не закрытым platform gate.
+- PRD принят как baseline 1.0, но `accepted` не означает `verified`: verification
+  каждого P0 остаётся за соответствующими S2…S8 gates.
 - Один экземпляр доступен, но `HW-T01` требует второй v2 board; continuity, logic/RF,
   storage и power evidence всё ещё отсутствуют.
 - Для buzzer нет microphone/scope evidence: exact boot/runtime pad state подтверждён,
@@ -504,10 +505,10 @@
 
 ## Blockers
 
-Весь S1 не заблокирован. Для полного HIL нужны второй экземпляр, мультиметр,
-logic analyzer/RF detector и power measurement; отсутствие этих приборов фиксируется
-как ограничение evidence и не останавливает budgets/risk register/ADR.
+S2 не заблокирован. Второй экземпляр, мультиметр, logic/RF detector и power fixture
+понадобятся для named S4/S5/S8 evidence; до их появления соответствующие capabilities
+остаются conditional/unavailable и не включаются предположением.
 
-Board-01 восстановилась после физического снятия USB-питания. Exact watchdog
-injection и short regression 0.51 теперь проходят (`E-HIL-073/074`); failed lane
-0.50 сохранён, а новый полный результат 8 h/32 cycles всё ещё обязателен.
+0.51 hardware-watchdog injection, regression и shortened endurance checkpoint
+сохранены (`E-HIL-073…075`). Полный 8 h/32-cycle NFR-004 остаётся обязательным для
+`DEMO-S4`, но больше не удерживает переход S1→S2.
