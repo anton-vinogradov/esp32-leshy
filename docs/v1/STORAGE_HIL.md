@@ -6,8 +6,9 @@ Document status: **binding safety/verification protocol; host logic, real-file
 fixture, guarded physical FAT commit/remount, per-generation and batched 32-sample
 SD throughput, real-source queue/persistence, and the six-boundary software-reset
 matrix are implemented; exact product UI/reboot/export and the missing-source
-real-TFT/zero-lease path plus normal/remount LittleFS parity are exercised, while
-physical power-cut and the LittleFS six-boundary reset matrix remain open**.
+real-TFT/zero-lease path plus normal/remount and six-boundary software-reset
+LittleFS parity are exercised; controlled physical power-cut remains a separate
+`DEMO-S4` fixture lane**.
 
 This protocol verifies ADR-003 without risking an unknown SD card or retained flash
 data. The ordinary diagnostic image never formats or writes storage during boot or
@@ -227,7 +228,7 @@ A physical run may use only one of these explicitly selected targets:
 - a dedicated disposable LittleFS image/partition created for HIL, never the current
   product/legacy data partition.
 
-The accepted 0.69 implementation uses only the pinned inactive OTA1 partition
+The accepted 0.69/0.70 implementation uses only the pinned inactive OTA1 partition
 `app1` at `0x410000`/4 MiB. Firmware proves that both the running and boot partitions
 are elsewhere, proves that product `spiffs` is disjoint, and hashes all 4 MiB before
 format. The host requires two identical reads, passes that exact hash to firmware,
@@ -281,8 +282,8 @@ Generation/observations remain exactly 68/25 with zero physical/logical SD write
 zero heap drift. The first 0.61 attempt is retained failed because its post-cancel boot
 lost a one-shot PCF8574 read; 0.62 adds bounded 1…8-attempt input-probe telemetry and
 both regression boots pass. At that evidence point physical power-cut and LittleFS
-parity remained open; 0.69 later accepts normal/remount parity while the reset matrix
-remains open.
+parity remained open; 0.69 later accepts normal/remount parity and 0.70 accepts the
+six-boundary software-reset matrix.
 
 Exact 0.68 missing-source evidence (`E-BUILD-069`/`E-AUTO-032`/`E-HIL-092`/
 `E-SURVEY-007`) arms a one-shot diagnostic failure only from idle Home, then consumes
@@ -307,6 +308,19 @@ lease 4→0 and cleanup complete. The host restores exact OTA1 SHA-256
 reopens the prior product generation 68/25 read-only with zero writes. This accepts
 normal/throughput ST-HIL-A07, not the LittleFS reset-boundary matrix or a physical
 power cut.
+
+Exact 0.70 LittleFS reset recovery (`E-BUILD-071`/`E-AUTO-034`/`E-HIL-094`/
+`E-STORAGE-025`) binds each attempt to the current full inactive-OTA1 SHA-256,
+exact CID, run ID and one of the six unchanged `SessionStore` boundaries. A valid
+software-reset RTC continuity token permits only read-only reopen with a typed
+`ReadPermit`; recovery accepts generations 1/1/1/1/1/2, unchanged prior/manifest
+CRCs, and exactly zero bytes written, file syncs and directory syncs. The host first
+proves two identical target reads, restores OTA1 with exactly one flash write, then
+retries only independent read-only verification before comparing the partition
+table and cold-opening product generation 68/25. All six attempts clean resources,
+leave lease zero and preserve heap 266,616/202,200/182,148 B. This accepts the
+software-reset ST-HIL-A07 matrix. Controlled physical power-cut is deliberately
+separate `DEMO-S4` evidence and is not replaced by `esp_restart`.
 
 ## Implemented and physically exercised software-reset harness
 

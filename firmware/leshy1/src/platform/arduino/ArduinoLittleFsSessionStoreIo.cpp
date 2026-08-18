@@ -111,15 +111,32 @@ bool ArduinoLittleFsSessionStoreIo::prepare(
 
 bool ArduinoLittleFsSessionStoreIo::openExistingReadOnly(
     const storage::WritePermit& permit) {
+    if (!permit.allowed()) {
+        recordFailure("readonly_precondition");
+        return false;
+    }
+    return openExistingReadOnlyPath(permit.scratchPath);
+}
+
+bool ArduinoLittleFsSessionStoreIo::openExistingReadOnly(
+    const storage::ReadPermit& permit) {
+    if (!permit.allowed()) {
+        recordFailure("readonly_precondition");
+        return false;
+    }
+    return openExistingReadOnlyPath(permit.scratchPath);
+}
+
+bool ArduinoLittleFsSessionStoreIo::openExistingReadOnlyPath(
+    const char* path) {
     if (ready_ || !filesystem_.mounted() || !filesystem_.readOnly() ||
-        !permit.allowed() ||
-        std::strlen(permit.scratchPath) >= sizeof(rootPath_) ||
-        !directoryExists(permit.scratchPath)) {
+        path == nullptr || std::strlen(path) >= sizeof(rootPath_) ||
+        !directoryExists(path)) {
         recordFailure("readonly_precondition");
         return false;
     }
     resetCounters();
-    std::strcpy(rootPath_, permit.scratchPath);
+    std::strcpy(rootPath_, path);
     ready_ = true;
     writable_ = false;
     return true;

@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -83,20 +84,35 @@ def main() -> int:
         "rtc_noinit_bytes": 20, "host_tests_passed": True,
         "firmware_build_passed": True, "reproducible_rebuild": True,
     }, "exact candidate mismatch")
-    for name, key, size_key in (
-        ("firmware.bin", "firmware_sha256", "app_image_bytes"),
-        ("firmware.factory.bin", "factory_sha256", "factory_image_bytes"),
-        ("firmware.elf", "app_elf_sha256", None),
-        ("firmware.map", "map_sha256", None),
-    ):
-        path = BUILD / name
-        require(failures, path.is_file(), f"build artifact missing: {name}")
-        if path.is_file():
-            require(failures, digest(path) == candidate.get(key),
-                    f"build hash mismatch: {name}")
-            if size_key is not None:
-                require(failures, path.stat().st_size == candidate.get(size_key),
-                        f"build size mismatch: {name}")
+    platform = PLATFORM.read_text(encoding="utf-8")
+    current_version = re.search(
+        r'LESHY1_VERSION=\\"(\d+)\.(\d+)\.[^\\"]+\\"', platform
+    )
+    require(failures,
+            current_version is not None and
+            (int(current_version.group(1)), int(current_version.group(2))) >=
+                (0, 69),
+            "current baseline predates accepted 0.69 LittleFS parity")
+    if (current_version is not None and
+            (int(current_version.group(1)), int(current_version.group(2))) ==
+                (0, 69)):
+        for name, key, size_key in (
+            ("firmware.bin", "firmware_sha256", "app_image_bytes"),
+            ("firmware.factory.bin", "factory_sha256", "factory_image_bytes"),
+            ("firmware.elf", "app_elf_sha256", None),
+            ("firmware.map", "map_sha256", None),
+        ):
+            path = BUILD / name
+            require(failures, path.is_file(), f"build artifact missing: {name}")
+            if path.is_file():
+                require(failures, digest(path) == candidate.get(key),
+                        f"build hash mismatch: {name}")
+                if size_key is not None:
+                    require(
+                        failures,
+                        path.stat().st_size == candidate.get(size_key),
+                        f"build size mismatch: {name}",
+                    )
 
     physical = evidence.get("physical", {})
     run_path = ROOT / physical.get("run_path", "")
@@ -278,10 +294,6 @@ def main() -> int:
     ):
         require(failures, forbidden not in littlefs_body,
                 f"unrelated subsystem reachable: {forbidden}")
-    require(failures,
-            'LESHY1_VERSION=\\"0.69.0-littlefs-parity-measure\\"' in
-                PLATFORM.read_text(encoding="utf-8"),
-            "0.69 version marker missing")
     try:
         ast.parse(RUNNER.read_text(encoding="utf-8"))
         ast.parse(RUNNER_TEST.read_text(encoding="utf-8"))

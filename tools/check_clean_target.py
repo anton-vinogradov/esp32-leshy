@@ -37,6 +37,9 @@ def main() -> int:
     sector_inspection = TARGET / "src" / "storage" / "SdSectorInspection.cpp"
     reset_runner_path = ROOT / "tools" / "run_1x_sd_reset_matrix.py"
     littlefs_runner_path = ROOT / "tools" / "run_1x_littlefs_parity_hil.py"
+    littlefs_reset_runner_path = (
+        ROOT / "tools" / "run_1x_littlefs_reset_matrix_hil.py"
+    )
     sources = "\n".join(path.read_text(encoding="utf-8") for path in source_paths)
     implicit_sources = "\n".join(
         path.read_text(encoding="utf-8")
@@ -756,6 +759,97 @@ def main() -> int:
         ):
             if marker not in littlefs_runner:
                 errors.append(f"guarded LittleFS runner is missing: {marker}")
+
+    for marker in (
+        "storage.littlefs.reset disposable-ota1 ",
+        "storage.littlefs.reset recover read-only ",
+        "armLittleFsResetContinuity",
+        "littleFsResetContinuityValid",
+        "kLittleFsResetRtcMagic",
+        "restartAtLittleFsSessionStoreBoundary",
+        "ESP_RST_SW",
+        "filesystem.hashTarget(observedFingerprint",
+        "filesystem.formatAndMountWritable()",
+        "filesystem.mountReadOnly()",
+        "authorizeExistingScratchRead",
+        '\\"continuity_valid\\":%s',
+        '\\"product_partition_touched\\":false',
+        '\\"sd_accessed\\":false',
+        '\\"nvs_touched\\":false',
+        '\\"radio_touched\\":false',
+    ):
+        if marker not in entry:
+            errors.append(f"guarded LittleFS reset command is missing: {marker}")
+    littlefs_reset_start = entry.find("void emitLittleFsResetArm(")
+    littlefs_reset_end = entry.find("void broadcast(", littlefs_reset_start)
+    if littlefs_reset_start < 0 or littlefs_reset_end <= littlefs_reset_start:
+        errors.append("LittleFS reset functions could not be inspected")
+    else:
+        littlefs_reset_body = entry[littlefs_reset_start:littlefs_reset_end]
+        hash_check = littlefs_reset_body.find("filesystem.hashTarget(")
+        format_call = littlefs_reset_body.find(
+            "filesystem.formatAndMountWritable()"
+        )
+        recovery_start = littlefs_reset_body.find(
+            "void emitLittleFsResetRecovery("
+        )
+        if hash_check < 0 or format_call <= hash_check:
+            errors.append(
+                "LittleFS reset target must be hashed and matched before format"
+            )
+        if recovery_start < 0:
+            errors.append("LittleFS reset recovery function is missing")
+        else:
+            recovery_body = littlefs_reset_body[recovery_start:]
+            if "formatAndMountWritable" in recovery_body:
+                errors.append("LittleFS reset recovery can format or write target")
+            for marker in (
+                "littleFsResetContinuityValid(",
+                "resetReason == ESP_RST_SW",
+                "filesystem.mountReadOnly()",
+                "io.openExistingReadOnly(permit)",
+                "bytesWritten == 0",
+                "fileSyncs == 0",
+                "directorySyncs == 0",
+            ):
+                if marker not in recovery_body:
+                    errors.append(
+                        f"LittleFS reset read-only recovery is missing: {marker}"
+                    )
+        for forbidden_call in (
+            "BoardSd", "productSurveyFilesystem", "saveProductFingerprint",
+            "clearProductFingerprint", "WiFi", "esp_wifi_",
+        ):
+            if forbidden_call in littlefs_reset_body:
+                errors.append(
+                    "LittleFS reset can touch an unrelated product subsystem: "
+                    f"{forbidden_call}"
+                )
+
+    if not littlefs_reset_runner_path.is_file():
+        errors.append("guarded LittleFS reset matrix runner is missing")
+    else:
+        littlefs_reset_runner = littlefs_reset_runner_path.read_text(
+            encoding="utf-8"
+        )
+        for marker in (
+            "--execute-reset-matrix",
+            "two independent reads differ",
+            "read_flash_with_retry(",
+            "restore_flash_single_write(",
+            'stats["write_attempts"] = 1',
+            "restore_read_attempt_limit",
+            "private_backup_deleted_after_verified_restore",
+            "partition_table_unchanged",
+            "target_fingerprint_before",
+            "continuity_valid",
+            "unchanged_recovery_failures",
+            'boundaries == list(BOUNDARIES)',
+        ):
+            if marker not in littlefs_reset_runner:
+                errors.append(
+                    f"guarded LittleFS reset runner is missing: {marker}"
+                )
 
     if not passive_wifi_adapter.is_file():
         errors.append("explicit passive Wi-Fi adapter is missing")

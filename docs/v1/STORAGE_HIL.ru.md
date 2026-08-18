@@ -6,8 +6,9 @@
 fixture, guarded physical FAT commit/remount, per-generation и batched 32-sample SD
 throughput, real-source queue/persistence и host/static six-boundary software-reset
 matrix реализованы; exact product UI/reboot/export и missing-source
-real-TFT/zero-lease path плюс normal/remount LittleFS parity проверены, physical
-power-cut и six-boundary reset matrix LittleFS остаются открыты**.
+real-TFT/zero-lease path плюс normal/remount и six-boundary software-reset
+LittleFS parity проверены; управляемый physical power-cut остаётся отдельной
+fixture lane `DEMO-S4`**.
 
 Протокол проверяет ADR-003 без риска для неизвестной SD card или сохранённых данных
 во flash. Обычная diagnostic image никогда не форматирует и не записывает storage
@@ -222,7 +223,7 @@ Physical run разрешён только на явно выбранной це
 - dedicated disposable LittleFS image/partition для HIL, не текущий раздел данных
   product/legacy.
 
-Принятая реализация 0.69 использует только pinned inactive OTA1 partition `app1` по
+Принятая реализация 0.69/0.70 использует только pinned inactive OTA1 partition `app1` по
 `0x410000` размером 4 MiB. Firmware доказывает, что running и boot partitions находятся
 в другом месте, product `spiffs` не пересекается с target, и хеширует все 4 MiB до
 format. Host требует два одинаковых чтения, передаёт exact hash firmware, хранит
@@ -276,8 +277,8 @@ Generation/observations остаются ровно 68/25 при zero physical/l
 zero heap drift. Первая попытка 0.61 сохранена failed: post-cancel boot потерял
 one-shot read PCF8574. 0.62 добавляет bounded telemetry 1…8 попыток input probe, оба
 regression boot проходят. На этой точке evidence physical power-cut и LittleFS parity
-оставались открыты; 0.69 далее принимает normal/remount parity, а reset matrix остаётся
-открытой.
+оставались открыты; 0.69 далее принимает normal/remount parity, а 0.70 —
+six-boundary software-reset matrix.
 
 Exact evidence missing-source 0.68 (`E-BUILD-069`/`E-AUTO-032`/`E-HIL-092`/
 `E-SURVEY-007`) взводит one-shot diagnostic failure только из idle Home, затем
@@ -302,6 +303,19 @@ cleanup complete. Host восстанавливает exact SHA-256 OTA1 `ade240
 возвращает прежнюю product generation 68/25 с zero writes. Это принимает
 normal/throughput ST-HIL-A07, но не LittleFS reset-boundary matrix и не physical
 power cut.
+
+Exact reset recovery LittleFS 0.70 (`E-BUILD-071`/`E-AUTO-034`/`E-HIL-094`/
+`E-STORAGE-025`) связывает каждую попытку с текущим SHA-256 всего inactive OTA1,
+exact CID, run ID и одной из шести неизменённых boundaries `SessionStore`. Valid
+software-reset RTC continuity token разрешает только read-only reopen с typed
+`ReadPermit`; recovery принимает generations 1/1/1/1/1/2, неизменные prior/manifest
+CRC и ровно zero bytes written, file syncs и directory syncs. Host сначала доказывает
+два одинаковых чтения target, восстанавливает OTA1 ровно одной flash write, затем
+повторяет только независимую read-only verification до сравнения partition table и
+cold reopen product generation 68/25. Все шесть попыток закрывают resources,
+оставляют lease zero и сохраняют heap 266 616/202 200/182 148 B. Это принимает
+software-reset matrix ST-HIL-A07. Управляемый physical power-cut намеренно остаётся
+отдельным evidence `DEMO-S4` и не подменяется `esp_restart`.
 
 ## Реализованный и физически проверенный software-reset harness
 

@@ -15,6 +15,7 @@
 #include <esp_app_desc.h>
 #include <esp_attr.h>
 #include <esp_private/system_internal.h>
+#include <mbedtls/sha256.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/task.h>
@@ -176,6 +177,10 @@ constexpr const char* kProductEnrollPrefix =
     "storage.product.enroll disposable-read-only ";
 constexpr const char* kLittleFsParityPrefix =
     "storage.littlefs.parity disposable-ota1 ";
+constexpr const char* kLittleFsResetPrefix =
+    "storage.littlefs.reset disposable-ota1 ";
+constexpr const char* kLittleFsResetRecoverPrefix =
+    "storage.littlefs.reset recover read-only ";
 constexpr const char* kProductEnrollmentNamespace = "leshy1";
 constexpr const char* kProductEnrollmentKey = "sd.cid.v1";
 constexpr const char* kUiPreferencesNamespace = "leshy1-ui";
@@ -187,6 +192,7 @@ AppRuntime appRuntime(resourceBroker);
 SurveySession surveySession;
 SurveyController surveyController(surveySession);
 SurveySession librarySession;
+SurveySession littleFsResetSession;
 LibraryController libraryController;
 SessionCatalog sessionCatalog;
 leshy1::services::survey::ObservationQueue surveyIngressQueue;
@@ -216,9 +222,9 @@ LanguageController languageController;
 SelfTestController selfTestController;
 constexpr std::size_t kConsoleCommandCapacity = 192;
 constexpr char kLongestConsoleCommand[] =
-    "storage.littlefs.parity disposable-ota1 "
+    "storage.littlefs.reset recover read-only "
     "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff "
-    "s3-littlefs-parity-20260818-a";
+    "s3-littlefs-reset-20260818-b6 6";
 static_assert(sizeof(kLongestConsoleCommand) <= kConsoleCommandCapacity,
               "console command buffer cannot hold the longest command");
 char usbCommand[kConsoleCommandCapacity] = {};
@@ -283,6 +289,13 @@ RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryRestarts;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryAppIdentity;
 RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryTimeouts;
 RTC_NOINIT_ATTR std::uint32_t productBootWatchdogTestRtcState;
+constexpr std::uint32_t kLittleFsResetRtcMagic = 0x4C465231U;
+struct LittleFsResetRtcState final {
+    std::uint32_t magic;
+    std::uint32_t boundary;
+    std::uint8_t token[32];
+};
+RTC_NOINIT_ATTR LittleFsResetRtcState littleFsResetRtcState;
 TaskHandle_t productBootRecoveryWatchdogTask = nullptr;
 bool productBootRecoveryTaskWatchdogAdded = false;
 volatile std::uint32_t productBootRecoveryWatchdogArmed = 0;
@@ -432,6 +445,23 @@ struct ResetBoundaryHookContext final {
     const char* runId = nullptr;
     unsigned boundaryNumber = 0;
 };
+
+leshy1::storage::CommitStage resetBoundaryStage(unsigned number);
+const char* resetExpectedRecovery(unsigned boundary);
+bool resetRecoveredGenerationAllowed(unsigned boundary,
+                                     std::uint32_t generation);
+bool prepareLittleFsResetFixture();
+bool inspectStoredGeneration(
+    leshy1::storage::SessionStoreIo& io,
+    leshy1::storage::SessionStoreWorkspace& workspace,
+    const SurveySession& expected, std::uint32_t generation,
+    StoredGenerationEvidence* evidence);
+bool armLittleFsResetContinuity(const char* fingerprint, const char* runId,
+                                unsigned boundary);
+bool littleFsResetContinuityValid(const char* fingerprint, const char* runId,
+                                  unsigned boundary);
+void restartAtLittleFsSessionStoreBoundary(
+    void* rawContext, leshy1::storage::CommitStage boundary);
 
 constexpr std::int32_t kScreenWidth = Layout::ScreenWidth;
 constexpr std::int32_t kScreenHeight = Layout::ScreenHeight;
@@ -1791,6 +1821,32 @@ bool parseLittleFsParityCommand(const char* command, char* fingerprint,
     return parsed == 2 && std::strlen(fingerprint) == 64 && runId[0] != '\0';
 }
 
+bool parseLittleFsResetCommand(const char* command, const char* prefix,
+                               char* fingerprint,
+                               std::size_t fingerprintCapacity, char* runId,
+                               std::size_t runIdCapacity,
+                               unsigned* boundaryNumber) {
+    if (command == nullptr || prefix == nullptr || fingerprint == nullptr ||
+        runId == nullptr || boundaryNumber == nullptr ||
+        fingerprintCapacity < 65 || runIdCapacity < 33 ||
+        std::strncmp(command, prefix, std::strlen(prefix)) != 0) {
+        return false;
+    }
+    char extra = '\0';
+    unsigned parsedBoundary = 0;
+    const int parsed = std::sscanf(
+        command + std::strlen(prefix),
+        "%64[0-9a-fA-F] %32[A-Za-z0-9_-] %u %c", fingerprint, runId,
+        &parsedBoundary, &extra);
+    if (parsed != 3 || std::strlen(fingerprint) != 64 || runId[0] == '\0' ||
+        !leshy1::storage::isSessionStoreBoundary(
+            resetBoundaryStage(parsedBoundary))) {
+        return false;
+    }
+    *boundaryNumber = parsedBoundary;
+    return true;
+}
+
 void emitLittleFsParity(Stream& reply, const char* expectedFingerprint,
                         const char* runId) {
     auto& line = sdPhysicalEvidence.line;
@@ -2065,6 +2121,369 @@ void emitLittleFsParity(Stream& reply, const char* expectedFingerprint,
         static_cast<unsigned long>(heapFreeBefore),
         static_cast<unsigned long>(heapFreeAfter),
         static_cast<unsigned long>(ESP.getMinFreeHeap()));
+    reply.println(line);
+}
+
+void emitLittleFsResetArm(Stream& reply, const char* expectedFingerprint,
+                          const char* runId, unsigned boundaryNumber) {
+    auto& line = sdPhysicalEvidence.line;
+    littleFsResetRtcState.magic = 0;
+    char observedFingerprint[65] = {};
+    char scratchPath[leshy1::storage::kScratchPathMax] = {};
+    std::snprintf(scratchPath, sizeof(scratchPath), "%s%s",
+                  leshy1::storage::kScratchRoot, runId);
+    const leshy1::storage::CommitStage boundary =
+        resetBoundaryStage(boundaryNumber);
+    const bool idleUi = uiController.isRoot() && !appRuntime.running() &&
+        productSurveyControl() == ProductSurveyWorkerControl::Idle;
+    DisposableOtaLittleFs filesystem;
+    const bool inspected = filesystem.inspect();
+    const bool targetSafe = inspected && filesystem.safeInactiveTarget();
+    const bool resourcesAcquired = idleUi && targetSafe &&
+        resourceBroker.acquire(
+            kLittleFsHilOwner,
+            leshy1::kernel::runtime::resourceMask(Resource::Storage));
+    const std::uint32_t ownedDuring =
+        resourceBroker.ownedBy(kLittleFsHilOwner);
+    const bool targetHashed = resourcesAcquired &&
+        filesystem.hashTarget(observedFingerprint, sizeof(observedFingerprint));
+    const bool fingerprintMatched = targetHashed &&
+        std::strcmp(expectedFingerprint, observedFingerprint) == 0;
+    const bool mounted = fingerprintMatched &&
+        filesystem.formatAndMountWritable();
+    const std::uint64_t capacityBytes = mounted ? filesystem.totalBytes() : 0;
+    const std::uint64_t freeBefore = mounted ? filesystem.freeBytes() : 0;
+    const bool scratchPreexisting = mounted && filesystem.exists(scratchPath);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = mounted && capacityBytes != 0 && freeBefore <= capacityBytes;
+    media.kind = leshy1::storage::MediaKind::LittleFs;
+    media.fingerprint = observedFingerprint;
+    media.capacityBytes = capacityBytes;
+    media.freeBytes = freeBefore;
+    leshy1::storage::WriteRequest request;
+    request.explicitlyDisposable = true;
+    request.expectedFingerprint = expectedFingerprint;
+    request.runId = runId;
+    request.scratchExists = scratchPreexisting;
+    request.requiredBytes = 1024U * 1024U;
+    request.reserveBytes = 512U * 1024U;
+    const leshy1::storage::WritePermit permit =
+        leshy1::storage::authorizeScratchWrite(media, request);
+
+    const char* status = "target_not_inspected";
+    if (!leshy1::storage::isSessionStoreBoundary(boundary)) {
+        status = "invalid_boundary";
+    } else if (!idleUi) {
+        status = "ui_not_idle";
+    } else if (!inspected) {
+        status = "target_not_found";
+    } else if (!targetSafe) {
+        status = "target_not_inactive_ota1";
+    } else if (!resourcesAcquired) {
+        status = "resources_unavailable";
+    } else if (!targetHashed) {
+        status = "target_hash_failed";
+    } else if (!fingerprintMatched) {
+        status = "target_fingerprint_mismatch";
+    } else if (!mounted) {
+        status = "format_or_mount_failed";
+    } else if (!permit.allowed()) {
+        status = "permit_rejected";
+    } else {
+        status = "ready";
+    }
+
+    leshy1::storage::SessionStoreCommitResult initialCommit;
+    leshy1::storage::SessionStoreRecoveryResult initialRecovery;
+    StoredGenerationEvidence priorEvidence;
+    bool fixtureReady = false;
+    bool prepared = false;
+    bool scratchCreated = false;
+    bool priorUnchanged = false;
+    bool continuityArmed = false;
+    std::uint64_t bytesWritten = 0;
+    std::uint32_t fileSyncs = 0;
+    std::uint32_t directorySyncs = 0;
+    const char* ioFailure = "not_started";
+    int ioErrno = 0;
+    if (std::strcmp(status, "ready") == 0) {
+        fixtureReady = prepareLittleFsResetFixture();
+        if (!fixtureReady) status = "fixture_prepare_failed";
+    }
+    if (fixtureReady) {
+        ArduinoLittleFsSessionStoreIo io(filesystem);
+        prepared = io.prepare(permit);
+        scratchCreated = prepared && filesystem.exists(permit.scratchPath);
+        if (!prepared || !scratchCreated) {
+            status = "scratch_prepare_failed";
+        } else {
+            initialCommit = leshy1::storage::commitNextSession(
+                io, sessionStoreWorkspace, littleFsResetSession);
+            initialRecovery = leshy1::storage::recoverSession(
+                io, sessionStoreWorkspace,
+                &sessionStoreWorkspace.validationSession);
+            priorUnchanged = initialCommit.complete() &&
+                initialCommit.generation == 1 && initialRecovery.valid() &&
+                initialRecovery.generation == 1 &&
+                initialRecovery.observations == 3 &&
+                inspectStoredGeneration(
+                    io, sessionStoreWorkspace, littleFsResetSession, 1,
+                    &priorEvidence);
+            if (!priorUnchanged) {
+                status = "initial_generation_failed";
+            } else {
+                continuityArmed = armLittleFsResetContinuity(
+                    expectedFingerprint, runId, boundaryNumber);
+                if (!continuityArmed) {
+                    status = "continuity_arm_failed";
+                } else {
+                    std::snprintf(
+                        line, sizeof(sdPhysicalEvidence.line),
+                        "{\"schema\":\"leshy.storage.littlefs.reset.v1\","
+                        "\"kind\":\"armed\",\"status\":\"ready\","
+                        "\"run_id\":\"%s\",\"boundary\":%u,"
+                        "\"boundary_name\":\"%s\","
+                        "\"expected_recovery\":\"%s\","
+                        "\"expected_fingerprint\":\"%s\","
+                        "\"observed_fingerprint\":\"%s\","
+                        "\"fingerprint_matched\":true,"
+                        "\"target\":\"ota1\",\"target_address\":%lu,"
+                        "\"target_size\":%lu,\"target_inactive\":true,"
+                        "\"scratch_path\":\"%s\","
+                        "\"initial_generation\":1,"
+                        "\"initial_observations\":3,"
+                        "\"prior_segment_crc32c\":%lu,"
+                        "\"prior_manifest_crc32c\":%lu,"
+                        "\"continuity_armed\":true,"
+                        "\"format_performed\":true,"
+                        "\"writes_bounded_to_scratch\":true,"
+                        "\"ota1_restore_required\":true,"
+                        "\"product_partition_touched\":false,"
+                        "\"sd_accessed\":false,\"nvs_touched\":false,"
+                        "\"radio_touched\":false,"
+                        "\"reset_injection\":true,"
+                        "\"physical_power_cut\":false}",
+                        runId, boundaryNumber,
+                        leshy1::storage::sessionStoreBoundaryName(boundary),
+                        resetExpectedRecovery(boundaryNumber),
+                        expectedFingerprint, observedFingerprint,
+                        static_cast<unsigned long>(filesystem.targetAddress()),
+                        static_cast<unsigned long>(filesystem.targetSize()),
+                        permit.scratchPath,
+                        static_cast<unsigned long>(
+                            priorEvidence.observedSegmentCrc),
+                        static_cast<unsigned long>(
+                            priorEvidence.observedManifestCrc));
+                    reply.println(line);
+                    reply.flush();
+                    ResetBoundaryHookContext hookContext{
+                        &reply, runId, boundaryNumber};
+                    leshy1::storage::SessionStoreBoundaryIo injecting(
+                        io, boundary, restartAtLittleFsSessionStoreBoundary,
+                        &hookContext);
+                    static_cast<void>(leshy1::storage::commitNextSession(
+                        injecting, sessionStoreWorkspace,
+                        littleFsResetSession));
+                    status = "reset_not_triggered";
+                }
+            }
+        }
+        bytesWritten = io.bytesWritten();
+        fileSyncs = io.fileSyncs();
+        directorySyncs = io.directorySyncs();
+        ioFailure = io.lastFailure();
+        ioErrno = io.lastErrno();
+        io.end();
+    }
+
+    filesystem.end();
+    resourceBroker.releaseAll(kLittleFsHilOwner);
+    const std::uint32_t ownedAfter = resourceBroker.ownedBy(kLittleFsHilOwner);
+    const bool cleanupComplete = filesystem.cleanupComplete() && ownedAfter == 0;
+    if (std::strcmp(status, "reset_not_triggered") == 0) {
+        littleFsResetRtcState.magic = 0;
+    }
+    std::snprintf(
+        line, sizeof(sdPhysicalEvidence.line),
+        "{\"schema\":\"leshy.storage.littlefs.reset.v1\","
+        "\"kind\":\"result\",\"mode\":\"arm\",\"status\":\"%s\","
+        "\"run_id\":\"%s\",\"boundary\":%u,\"boundary_name\":\"%s\","
+        "\"expected_fingerprint\":\"%s\","
+        "\"observed_fingerprint\":\"%s\","
+        "\"fingerprint_matched\":%s,\"target_inactive\":%s,"
+        "\"format_performed\":%s,\"permit_status\":\"%s\","
+        "\"scratch_preexisting\":%s,\"scratch_created\":%s,"
+        "\"fixture_ready\":%s,\"prior_unchanged\":%s,"
+        "\"continuity_armed\":%s,\"bytes_written\":%llu,"
+        "\"file_syncs\":%lu,\"directory_syncs\":%lu,"
+        "\"io_failure\":\"%s\",\"io_errno\":%d,"
+        "\"owned_during\":%lu,\"owned_after\":%lu,"
+        "\"cleanup_complete\":%s,\"ota1_restore_required\":true,"
+        "\"product_partition_touched\":false,\"sd_accessed\":false,"
+        "\"nvs_touched\":false,\"radio_touched\":false,"
+        "\"reset_injection\":true,\"physical_power_cut\":false}",
+        status, runId, boundaryNumber,
+        leshy1::storage::sessionStoreBoundaryName(boundary),
+        expectedFingerprint, observedFingerprint,
+        fingerprintMatched ? "true" : "false",
+        targetSafe ? "true" : "false",
+        filesystem.formatted() ? "true" : "false",
+        leshy1::storage::permitStatusName(permit.status),
+        scratchPreexisting ? "true" : "false",
+        scratchCreated ? "true" : "false",
+        fixtureReady ? "true" : "false",
+        priorUnchanged ? "true" : "false",
+        continuityArmed ? "true" : "false",
+        static_cast<unsigned long long>(bytesWritten),
+        static_cast<unsigned long>(fileSyncs),
+        static_cast<unsigned long>(directorySyncs), ioFailure, ioErrno,
+        static_cast<unsigned long>(ownedDuring),
+        static_cast<unsigned long>(ownedAfter),
+        cleanupComplete ? "true" : "false");
+    reply.println(line);
+}
+
+void emitLittleFsResetRecovery(Stream& reply,
+                               const char* expectedFingerprint,
+                               const char* runId,
+                               unsigned boundaryNumber) {
+    auto& line = sdPhysicalEvidence.line;
+    const leshy1::storage::CommitStage boundary =
+        resetBoundaryStage(boundaryNumber);
+    const esp_reset_reason_t resetReason = esp_reset_reason();
+    const bool softwareReset = resetReason == ESP_RST_SW;
+    const bool continuityValid = littleFsResetContinuityValid(
+        expectedFingerprint, runId, boundaryNumber);
+    const bool idleUi = uiController.isRoot() && !appRuntime.running() &&
+        productSurveyControl() == ProductSurveyWorkerControl::Idle;
+    DisposableOtaLittleFs filesystem;
+    const bool inspected = filesystem.inspect();
+    const bool targetSafe = inspected && filesystem.safeInactiveTarget();
+    const bool resourcesAcquired = idleUi && targetSafe && softwareReset &&
+        continuityValid && resourceBroker.acquire(
+            kLittleFsHilOwner,
+            leshy1::kernel::runtime::resourceMask(Resource::Storage));
+    const std::uint32_t ownedDuring =
+        resourceBroker.ownedBy(kLittleFsHilOwner);
+    const bool mounted = resourcesAcquired && filesystem.mountReadOnly();
+    const std::uint64_t capacityBytes = mounted ? filesystem.totalBytes() : 0;
+    const std::uint64_t freeBytes = mounted ? filesystem.freeBytes() : 0;
+    char scratchPath[leshy1::storage::kScratchPathMax] = {};
+    std::snprintf(scratchPath, sizeof(scratchPath), "%s%s",
+                  leshy1::storage::kScratchRoot, runId);
+    const bool scratchExists = mounted && filesystem.exists(scratchPath);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = mounted && capacityBytes != 0 && freeBytes <= capacityBytes;
+    media.kind = leshy1::storage::MediaKind::LittleFs;
+    media.fingerprint = expectedFingerprint;
+    media.capacityBytes = capacityBytes;
+    media.freeBytes = freeBytes;
+    leshy1::storage::ExistingScratchReadRequest request;
+    request.explicitlySelected = true;
+    request.expectedFingerprint = expectedFingerprint;
+    request.runId = runId;
+    request.scratchExists = scratchExists;
+    const leshy1::storage::ReadPermit permit =
+        leshy1::storage::authorizeExistingScratchRead(media, request);
+
+    const bool fixtureReady = prepareLittleFsResetFixture();
+    leshy1::storage::SessionStoreRecoveryResult recovery;
+    StoredGenerationEvidence priorEvidence;
+    bool openedReadOnly = false;
+    bool priorUnchanged = false;
+    std::uint64_t bytesWritten = 0;
+    std::uint32_t fileSyncs = 0;
+    std::uint32_t directorySyncs = 0;
+    const char* ioFailure = "not_started";
+    int ioErrno = 0;
+    if (permit.allowed() && fixtureReady) {
+        ArduinoLittleFsSessionStoreIo io(filesystem);
+        openedReadOnly = io.openExistingReadOnly(permit);
+        if (openedReadOnly) {
+            priorUnchanged = inspectStoredGeneration(
+                io, sessionStoreWorkspace, littleFsResetSession, 1,
+                &priorEvidence);
+            recovery = leshy1::storage::recoverSession(
+                io, sessionStoreWorkspace,
+                &sessionStoreWorkspace.validationSession);
+        }
+        bytesWritten = io.bytesWritten();
+        fileSyncs = io.fileSyncs();
+        directorySyncs = io.directorySyncs();
+        ioFailure = io.lastFailure();
+        ioErrno = io.lastErrno();
+        io.end();
+    }
+
+    filesystem.end();
+    resourceBroker.releaseAll(kLittleFsHilOwner);
+    const std::uint32_t ownedAfter = resourceBroker.ownedBy(kLittleFsHilOwner);
+    const bool cleanupComplete = filesystem.cleanupComplete() && ownedAfter == 0;
+    const bool generationAllowed = recovery.valid() &&
+        resetRecoveredGenerationAllowed(boundaryNumber, recovery.generation);
+    const bool valid = leshy1::storage::isSessionStoreBoundary(boundary) &&
+        softwareReset && continuityValid && idleUi && targetSafe && mounted &&
+        permit.allowed() && fixtureReady && openedReadOnly &&
+        generationAllowed && recovery.observations == 3 && priorUnchanged &&
+        bytesWritten == 0 && fileSyncs == 0 && directorySyncs == 0 &&
+        cleanupComplete;
+
+    std::snprintf(
+        line, sizeof(sdPhysicalEvidence.line),
+        "{\"schema\":\"leshy.storage.littlefs.reset.v1\","
+        "\"kind\":\"result\",\"mode\":\"recovery\","
+        "\"status\":\"%s\",\"run_id\":\"%s\",\"boundary\":%u,"
+        "\"boundary_name\":\"%s\",\"expected_recovery\":\"%s\","
+        "\"reset_reason_code\":%u,\"software_reset\":%s,"
+        "\"continuity_valid\":%s,\"target\":\"ota1\","
+        "\"target_address\":%lu,\"target_size\":%lu,"
+        "\"target_inactive\":%s,\"read_permit_status\":\"%s\","
+        "\"scratch_path\":\"%s\",\"scratch_exists\":%s,"
+        "\"mounted_read_only\":%s,\"opened_read_only\":%s,"
+        "\"session_store_io_writable\":false,"
+        "\"recovery_status\":\"%s\",\"recovered_generation\":%lu,"
+        "\"generation_allowed\":%s,\"reopened_observations\":%u,"
+        "\"a_status\":%u,\"b_status\":%u,\"prior_unchanged\":%s,"
+        "\"prior_segment_crc32c\":%lu,"
+        "\"prior_manifest_crc32c\":%lu,"
+        "\"bytes_written\":%llu,\"file_syncs\":%lu,"
+        "\"directory_syncs\":%lu,\"io_failure\":\"%s\","
+        "\"io_errno\":%d,\"owned_during\":%lu,\"owned_after\":%lu,"
+        "\"cleanup_complete\":%s,\"mount_on_boot\":false,"
+        "\"format_allowed\":false,\"existing_paths_deleted\":false,"
+        "\"ota1_restore_required\":true,"
+        "\"product_partition_touched\":false,\"sd_accessed\":false,"
+        "\"nvs_touched\":false,\"radio_touched\":false,"
+        "\"reset_injection\":true,\"physical_power_cut\":false}",
+        valid ? "valid" : "failed", runId, boundaryNumber,
+        leshy1::storage::sessionStoreBoundaryName(boundary),
+        resetExpectedRecovery(boundaryNumber),
+        static_cast<unsigned>(resetReason), softwareReset ? "true" : "false",
+        continuityValid ? "true" : "false",
+        static_cast<unsigned long>(filesystem.targetAddress()),
+        static_cast<unsigned long>(filesystem.targetSize()),
+        targetSafe ? "true" : "false",
+        leshy1::storage::readPermitStatusName(permit.status),
+        permit.allowed() ? permit.scratchPath : scratchPath,
+        scratchExists ? "true" : "false", mounted ? "true" : "false",
+        openedReadOnly ? "true" : "false",
+        leshy1::storage::sessionStoreStatusName(recovery.status),
+        static_cast<unsigned long>(recovery.generation),
+        generationAllowed ? "true" : "false",
+        static_cast<unsigned>(recovery.observations),
+        static_cast<unsigned>(recovery.aStatus),
+        static_cast<unsigned>(recovery.bStatus),
+        priorUnchanged ? "true" : "false",
+        static_cast<unsigned long>(priorEvidence.observedSegmentCrc),
+        static_cast<unsigned long>(priorEvidence.observedManifestCrc),
+        static_cast<unsigned long long>(bytesWritten),
+        static_cast<unsigned long>(fileSyncs),
+        static_cast<unsigned long>(directorySyncs), ioFailure, ioErrno,
+        static_cast<unsigned long>(ownedDuring),
+        static_cast<unsigned long>(ownedAfter),
+        cleanupComplete ? "true" : "false");
     reply.println(line);
 }
 
@@ -4791,6 +5210,69 @@ bool resetRecoveredGenerationAllowed(unsigned boundary,
     return boundary == 6 && generation == 2;
 }
 
+bool prepareLittleFsResetFixture() {
+    littleFsResetSession.reset();
+    return littleFsResetSession.start("littlefs-reset", 1000) ==
+               SessionStatus::Started &&
+        appendGoldenObservations(littleFsResetSession) &&
+        littleFsResetSession.stop(3000) == SessionStatus::Stopped;
+}
+
+bool computeLittleFsResetToken(const char* fingerprint, const char* runId,
+                               unsigned boundary,
+                               std::uint8_t output[32]) {
+    if (fingerprint == nullptr || std::strlen(fingerprint) != 64 ||
+        runId == nullptr || runId[0] == '\0' || output == nullptr ||
+        boundary < 1 || boundary > 6) {
+        return false;
+    }
+    const std::uint8_t separator = 0;
+    const std::uint8_t boundaryByte = static_cast<std::uint8_t>(boundary);
+    mbedtls_sha256_context context;
+    mbedtls_sha256_init(&context);
+    bool valid = mbedtls_sha256_starts(&context, 0) == 0 &&
+        mbedtls_sha256_update(
+            &context, reinterpret_cast<const std::uint8_t*>(fingerprint),
+            std::strlen(fingerprint)) == 0 &&
+        mbedtls_sha256_update(&context, &separator, 1) == 0 &&
+        mbedtls_sha256_update(
+            &context, reinterpret_cast<const std::uint8_t*>(runId),
+            std::strlen(runId)) == 0 &&
+        mbedtls_sha256_update(&context, &separator, 1) == 0 &&
+        mbedtls_sha256_update(&context, &boundaryByte, 1) == 0 &&
+        mbedtls_sha256_finish(&context, output) == 0;
+    mbedtls_sha256_free(&context);
+    return valid;
+}
+
+bool armLittleFsResetContinuity(const char* fingerprint, const char* runId,
+                                unsigned boundary) {
+    littleFsResetRtcState.magic = 0;
+    littleFsResetRtcState.boundary = boundary;
+    if (!computeLittleFsResetToken(
+            fingerprint, runId, boundary, littleFsResetRtcState.token)) {
+        std::memset(littleFsResetRtcState.token, 0,
+                    sizeof(littleFsResetRtcState.token));
+        return false;
+    }
+    littleFsResetRtcState.magic = kLittleFsResetRtcMagic;
+    return true;
+}
+
+bool littleFsResetContinuityValid(const char* fingerprint, const char* runId,
+                                  unsigned boundary) {
+    std::uint8_t expected[32] = {};
+    const bool computed = computeLittleFsResetToken(
+        fingerprint, runId, boundary, expected);
+    const bool valid = computed &&
+        littleFsResetRtcState.magic == kLittleFsResetRtcMagic &&
+        littleFsResetRtcState.boundary == boundary &&
+        std::memcmp(expected, littleFsResetRtcState.token,
+                    sizeof(expected)) == 0;
+    std::memset(expected, 0, sizeof(expected));
+    return valid;
+}
+
 bool inspectStoredGeneration(leshy1::storage::SessionStoreIo& io,
                              leshy1::storage::SessionStoreWorkspace& workspace,
                              const SurveySession& expected,
@@ -4852,6 +5334,29 @@ void restartAtSessionStoreBoundary(void* rawContext,
             "\"kind\":\"reset_trigger\",\"status\":\"boundary_reached\","
             "\"run_id\":\"%s\",\"boundary\":%u,\"boundary_name\":\"%s\","
             "\"reset_injection\":true,\"physical_power_cut\":false}",
+            context->runId != nullptr ? context->runId : "invalid",
+            context->boundaryNumber,
+            leshy1::storage::sessionStoreBoundaryName(boundary));
+        context->reply->println(sdPhysicalEvidence.line);
+        context->reply->flush();
+    }
+    Serial.flush();
+    Serial0.flush();
+    delay(10);
+    esp_restart();
+}
+
+void restartAtLittleFsSessionStoreBoundary(
+    void* rawContext, leshy1::storage::CommitStage boundary) {
+    auto* context = static_cast<ResetBoundaryHookContext*>(rawContext);
+    if (context != nullptr && context->reply != nullptr) {
+        std::snprintf(
+            sdPhysicalEvidence.line, sizeof(sdPhysicalEvidence.line),
+            "{\"schema\":\"leshy.storage.littlefs.reset.v1\","
+            "\"kind\":\"reset_trigger\",\"status\":\"boundary_reached\","
+            "\"run_id\":\"%s\",\"boundary\":%u,\"boundary_name\":\"%s\","
+            "\"continuity_armed\":true,\"reset_injection\":true,"
+            "\"physical_power_cut\":false}",
             context->runId != nullptr ? context->runId : "invalid",
             context->boundaryNumber,
             leshy1::storage::sessionStoreBoundaryName(boundary));
@@ -7057,6 +7562,38 @@ void handleCommand(Stream& reply, const char* command) {
                 "{\"schema\":\"leshy.storage.littlefs.parity.v1\","
                 "\"kind\":\"error\",\"reason\":\"invalid_explicit_scope\"}");
         }
+    } else if (std::strncmp(
+                   command, kLittleFsResetRecoverPrefix,
+                   std::strlen(kLittleFsResetRecoverPrefix)) == 0) {
+        char fingerprint[65] = {};
+        char runId[33] = {};
+        unsigned boundaryNumber = 0;
+        if (parseLittleFsResetCommand(
+                command, kLittleFsResetRecoverPrefix, fingerprint,
+                sizeof(fingerprint), runId, sizeof(runId), &boundaryNumber)) {
+            emitLittleFsResetRecovery(
+                reply, fingerprint, runId, boundaryNumber);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.storage.littlefs.reset.v1\","
+                "\"kind\":\"error\",\"mode\":\"recovery\","
+                "\"reason\":\"invalid_explicit_scope\"}");
+        }
+    } else if (std::strncmp(command, kLittleFsResetPrefix,
+                            std::strlen(kLittleFsResetPrefix)) == 0) {
+        char fingerprint[65] = {};
+        char runId[33] = {};
+        unsigned boundaryNumber = 0;
+        if (parseLittleFsResetCommand(
+                command, kLittleFsResetPrefix, fingerprint,
+                sizeof(fingerprint), runId, sizeof(runId), &boundaryNumber)) {
+            emitLittleFsResetArm(reply, fingerprint, runId, boundaryNumber);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.storage.littlefs.reset.v1\","
+                "\"kind\":\"error\",\"mode\":\"arm\","
+                "\"reason\":\"invalid_explicit_scope\"}");
+        }
     } else if (std::strcmp(command, "storage.sd.protocol") == 0) {
         emitSdReadOnlyProtocol(reply);
     } else if (std::strcmp(command, "storage.sd.identification.fixture") == 0) {
@@ -7397,6 +7934,8 @@ void setup() {
               "\"survey.product.admission\","
               "\"survey.product.test-source-unavailable once|clear\","
               "\"storage.littlefs.parity disposable-ota1 <OTA1-SHA256> <run-id>\","
+              "\"storage.littlefs.reset disposable-ota1 <OTA1-SHA256> <run-id> <1..6>\","
+              "\"storage.littlefs.reset recover read-only <OTA1-SHA256> <run-id> <1..6>\","
               "\"storage.sd.protocol\",\"storage.sd.identification.fixture\","
               "\"storage.sd.transport.fixture\","
               "\"storage.sd.wire\","

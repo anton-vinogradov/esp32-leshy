@@ -12,10 +12,11 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S3 — First persistent Survey Session`.
 - **Last completed stage:** `S2 — Clean 1.x platform`.
-- **Repository baseline:** `main` with retained exact-candidate 0.69 disposable LittleFS normal/remount parity evidence and S3 progress evidence.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 disposable LittleFS six-boundary software-reset evidence and S3 progress evidence.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
-- **Current objective:** close physical power-cut evidence, the LittleFS six-boundary reset matrix, and independent-golden
+- **Current objective:** record independent final TFT goldens and run reproducible
   `DEMO-S3` on the existing real passive Survey → reboot → Library/export path.
+  Controlled physical power-cut is an explicit `DEMO-S4` gate, not a hidden S3 blocker.
 
 ## Stage state
 
@@ -24,7 +25,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
-| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; exact 0.60 retains the persistent Core-0 worker and makes terminal `Idle` a UI acknowledgement after cleanup/commit, exact 0.62 physically cancels during an active scan without commit/resource leak, exact 0.68 exposes a clean missing-source terminal, and exact 0.69 proves normal/remount LittleFS parity on a backed-up inactive OTA1 target | physical power-cut, LittleFS reset-boundary parity, independent demo goldens, and reproducible `DEMO-S3` remain |
+| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; exact 0.60 retains the persistent Core-0 worker and makes terminal `Idle` a UI acknowledgement after cleanup/commit, exact 0.62 physically cancels during an active scan without commit/resource leak, exact 0.68 exposes a clean missing-source terminal, exact 0.69 proves normal/remount LittleFS parity, and exact 0.70 proves all six software-reset boundaries on a backed-up inactive OTA1 target | independent demo goldens and reproducible `DEMO-S3` remain; controlled physical power-cut belongs to `DEMO-S4` |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
@@ -298,16 +299,16 @@ or the physical storage exit condition remains partial.
 | 2. User opens and starts Survey | `pass` | public five-key Actions open real persistent Setup; Start returns in 12 us before identity/scan/mount work, then reaches Running through the worker |
 | 3. Passive source emits normalized Observations | `pass` | 25/25 accepted/forwarded over two continuous scan cycles with zero drops in E-HIL-085 |
 | 4. List → Detail → Back preserves running Survey | `pass` | exact 0.60 progresses from 12 observations/one scan to 25/two scans while Detail is open and acknowledges Back in 105.396 ms |
-| 5. Stop atomically persists once | `partial` | normal Stop publishes exactly generation 67→68 after source stop; E-HIL-086 separately cancels an active physical scan in 86.762 ms with generation/observations unchanged at 68/25, zero SD writes and final lease 0; the SD software-reset matrix and LittleFS normal/remount path pass, while LittleFS reset-boundary and physical power-cut remain |
+| 5. Stop atomically persists once | `pass` | normal Stop publishes exactly generation 67→68 after source stop; E-HIL-086 separately cancels an active physical scan in 86.762 ms with generation/observations unchanged at 68/25, zero SD writes and final lease 0; SD and exact 0.70 LittleFS software-reset matrices plus LittleFS normal/remount parity pass. Controlled physical power-cut is scheduled for `DEMO-S4` |
 | 6. Reboot reopens with radios inactive | `pass` | read-only exact-CID generation 68/25; Library export reports `radio_touched=false` |
 | 7. JSON summary export | `pass` | schema `leshy.library.export.v1`, persistent/non-simulated generation 68 |
-| 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, nine LittleFS runner tests, static target/hash-before-format/source/store ordering guards, exact board runs, and retained independent verifiers |
+| 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, nine normal/remount plus eight reset-matrix LittleFS runner tests, static target/hash-before-format/source/store ordering guards, exact board runs, and retained independent verifiers |
 | 9. Missing source explains itself and leaks nothing | `pass` | exact 0.68 one-shot source-boundary injection produces a localized 240×320 Russian unavailable state only after lease 15→0 cleanup; source start/store open/bytes written are false/false/0, hidden Select retry is rejected, Back returns Home, and cold read-only recovery preserves generation 68/25 in E-HIL-092 |
 
-Additional S3 exit work: the six-boundary reset matrix on the proven disposable
-LittleFS target and separately recorded
-TFT goldens for the final demo. Eight-hour cross-radio endurance remains `DEMO-S4`,
-not a hidden S3 completion criterion.
+Additional S3 exit work: independently recorded TFT goldens and the reproducible
+final demo. Exact 0.70 has accepted the six-boundary LittleFS software-reset matrix.
+Controlled physical power-cut and eight-hour cross-radio endurance remain
+`DEMO-S4`, not hidden S3 completion criteria.
 
 ## Evidence on the current baseline
 
@@ -558,6 +559,9 @@ not a hidden S3 completion criterion.
 | E-BUILD-070 | exact rebuild `0.69.0-littlefs-parity-measure` | pass: RAM 130,216 B, linked flash 1,153,228 B; app/factory 1,153,632/1,219,168 B; app `96e26161…cd49`, factory `04ca1d80…267`, ELF `1a8225ef…0d6`, map `e85a4509…466`; RTC no-init 20 B; immediate rebuild reproduced all four hashes | +39,044 B linked flash, +1,296 B static RAM and +39,040 B images vs 0.68 for explicit-partition LittleFS, full-target SHA-256 and POSIX SessionStore IO; exact parity candidate, not a stage/release build |
 | E-AUTO-033 | fail-closed LittleFS runner, static target audit and retained verifier | pass: nine host tests reject active/product target, incomplete samples, percentile/rate drift and retry failures; the runner requires two matching 4 MiB reads before format, retains a private backup until exact restore, retries bounded USB reads/restores, verifies partition table/product Library, and the independent checker binds exact candidate/source/run/artifacts | the target is the inactive OTA1 partition only; no product `spiffs`, SD, NVS or radio path is reachable, and a private backup is never retained in passing public evidence |
 | E-HIL-093 / E-STORAGE-024 | board-01 exact 0.69 disposable LittleFS normal/remount parity | pass: backed-up inactive OTA1 at `0x410000` formats as 4 MiB LittleFS, commits 32/32 generations with 96+96 durability barriers, recovers generation 32/64 observations before and after read-only remount, and delivers 18,586 encoded B/s vs required 2,184 B/s. OTA1 and partition-table SHA-256 restore exactly on first attempt; cold exact-CID product recovery preserves generation 68/25 with zero physical writes and final Home lease 0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-littlefs-parity-0.69.json) | accepts normal/throughput ST-HIL-A07 only; the LittleFS six-boundary reset matrix, physical power-cut and final independent goldens still prevent `DEMO-S3` promotion |
+| E-BUILD-071 | exact rebuild `0.70.0-littlefs-reset-matrix` | pass: RAM 134,888 B, linked flash 1,165,916 B; app/factory 1,166,320/1,231,856 B; app `83dfc22b…2468a`, factory `8b808a78…70c6`, ELF `5ce79674…5efe`, map `efdb876b…975b`; RTC no-init 60 B; immediate rebuild reproduced all four hashes | +12,688 B linked flash, +4,672 B static RAM, +12,688 B images and +40 B RTC no-init vs 0.69 for reset continuity, exact target binding and read-only recovery; exact storage candidate, not a stage/release build |
+| E-AUTO-034 | fail-closed LittleFS reset runner and independent verifier | pass: eight host tests cover six-boundary ordering, exact target/CID/run binding, generation policy and restore failure; the runner performs one OTA1 restore write followed by independent bounded read-only verification retries, and the checker binds candidate/source/run/artifacts/docs | no automatic second gate or repeated rewrite after transport failure; physical power-cut remains a separate `DEMO-S4` fixture lane |
+| E-HIL-094 / E-STORAGE-025 | board-01 exact 0.70 disposable LittleFS software-reset matrix | pass: all six ordered SessionStore boundaries recover read-only as generations 1/1/1/1/1/2 with unchanged prior/manifest CRCs, zero recovery bytes/file syncs/directory syncs, exact software-reset continuity, complete cleanup and lease 0. Inactive OTA1 `ade2400f…d661` and partition table `339bda68…5ba2` restore exactly after one flash write; cold exact-CID product recovery preserves generation 68/25 and invariant heap 266,616/202,200/182,148 B in the [machine-checked artifact](../../tests/hil/evidence/board-01-littlefs-reset-matrix-0.70.json) | accepts the software-reset ST-HIL-A07 matrix; independent final goldens/reproducible `DEMO-S3` remain, while controlled power-cut is `DEMO-S4` |
 
 ## Known uncertainties and risks
 
@@ -587,10 +591,10 @@ not a hidden S3 completion criterion.
 
 ## Blockers
 
-S3 implementation can continue through LittleFS parity and independent goldens. Its
-final gate is physically blocked by the currently
-unavailable controlled power-cut fixture: software reset is not accepted as a
-substitute. A second board, multimeter, and logic/RF detector remain named later-stage
+S3 implementation can continue through independent goldens and reproducible
+`DEMO-S3`; it has no physical blocker. The currently unavailable controlled
+power-cut fixture remains an explicit `DEMO-S4` requirement, and software reset is
+not accepted as its substitute. A second board, multimeter, and logic/RF detector remain named later-stage
 gaps; affected capabilities stay conditional/unavailable rather than being enabled by
 assumption.
 

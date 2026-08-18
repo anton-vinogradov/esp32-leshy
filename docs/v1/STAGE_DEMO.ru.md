@@ -51,10 +51,11 @@ S3 progress `E-AUTO-023`/`E-HIL-083` переиспользует тот же ex
 через 0.60/0.62, а exact 0.68
 `E-AUTO-032`/`E-HIL-092` закрывает missing-source real-TFT path без запуска source или
 store, записи bytes, изменения прежней Library 68/25, утечки lease или скрытого retry
-по Select. Это всё ещё намеренно не `DEMO-S3`: открыты physical power-cut, LittleFS
-reset-boundary matrix и независимо записанные demo goldens. Exact 0.69
-`E-AUTO-033`/`E-HIL-093` уже принимает отдельный normal/remount throughput slice
-LittleFS с exact restore inactive OTA1.
+по Select. Это всё ещё намеренно не `DEMO-S3`: открыты независимо записанные final
+demo goldens и воспроизводимый gate run. Exact 0.69 `E-AUTO-033`/`E-HIL-093`
+принимает normal/remount throughput LittleFS, а exact 0.70
+`E-AUTO-034`/`E-HIL-094` — все шесть software-reset boundaries с one-write restore
+inactive OTA1. Управляемый physical power-cut — named gate `DEMO-S4`.
 
 ## Ритм тестирования внутри этапа
 

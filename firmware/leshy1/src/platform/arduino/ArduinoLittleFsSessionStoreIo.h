@@ -20,6 +20,7 @@ public:
 
     bool prepare(const storage::WritePermit& permit);
     bool openExistingReadOnly(const storage::WritePermit& permit);
+    bool openExistingReadOnly(const storage::ReadPermit& permit);
     void end();
 
     bool writeFile(const char* path, const std::uint8_t* data,
@@ -49,6 +50,7 @@ private:
     bool ensureDirectory(const char* path);
     void resetCounters();
     void recordFailure(const char* stage);
+    bool openExistingReadOnlyPath(const char* path);
 
     DisposableOtaLittleFs& filesystem_;
     char rootPath_[storage::kScratchPathMax] = {};
