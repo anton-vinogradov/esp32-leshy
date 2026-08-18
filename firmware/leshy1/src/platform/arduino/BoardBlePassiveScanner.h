@@ -24,6 +24,7 @@ enum class BoardBleScanStatus : std::uint8_t {
     InvalidPlan,
     StackInitFailed,
     ScannerUnavailable,
+    ScanTimedOut,
 };
 
 const char* boardBleScanStatusName(BoardBleScanStatus status);

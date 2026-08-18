@@ -252,6 +252,10 @@ def main() -> int:
         passive_ble = passive_ble_adapter.read_text(encoding="utf-8")
         for marker in (
             'activeScan_->setActiveScan(false)',
+            "nullptr, false)",
+            "activeScan_->isScanning()",
+            "BoardBleScanStatus::ScanTimedOut",
+            "activeScan_->getResults()",
             "validatePassivePlan(plan)",
             "plan.maximumRecords",
             "activeScan_->clearResults()",
@@ -261,6 +265,8 @@ def main() -> int:
                 errors.append(f"passive BLE adapter is missing: {marker}")
         if "setActiveScan(true)" in passive_ble:
             errors.append("passive BLE adapter enables transmitting active scan")
+        if "activeScan_->start(plan.durationMs / 1000U, false)" in passive_ble:
+            errors.append("passive BLE adapter uses an unbounded blocking scan")
 
     if not physical_sd_filesystem.is_file():
         errors.append("explicit guarded SD filesystem adapter is missing")

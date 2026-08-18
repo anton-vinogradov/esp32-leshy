@@ -6,6 +6,8 @@
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 namespace leshy1::platform::arduino {
 
@@ -19,6 +21,7 @@ const char* boardBleScanStatusName(BoardBleScanStatus status) {
         case BoardBleScanStatus::StackInitFailed: return "stack_init_failed";
         case BoardBleScanStatus::ScannerUnavailable:
             return "scanner_unavailable";
+        case BoardBleScanStatus::ScanTimedOut: return "scan_timed_out";
     }
     return "unknown";
 }
@@ -59,7 +62,31 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
     activeScan_->setAdvertisedDeviceCallbacks(nullptr, false, true);
     const std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
-    BLEScanResults* results = activeScan_->start(plan.durationMs / 1000U, false);
+    // The blocking BLEScan overload waits forever when NimBLE loses its
+    // discovery-complete notification. Run asynchronously with a local,
+    // fail-closed deadline so the worker can always release its resources.
+    const bool started = activeScan_->start(
+        plan.durationMs / 1000U, nullptr, false);
+    if (!started) {
+        result.status = BoardBleScanStatus::ScannerUnavailable;
+        return result;
+    }
+    constexpr std::uint32_t kCompletionGraceMs = 1000U;
+    const std::uint64_t deadlineUs = startedUs +
+        static_cast<std::uint64_t>(plan.durationMs + kCompletionGraceMs) *
+            1000ULL;
+    while (activeScan_->isScanning()) {
+        if (static_cast<std::uint64_t>(esp_timer_get_time()) >= deadlineUs) {
+            activeScan_->stop();
+            activeScan_->clearResults();
+            result.durationUs =
+                static_cast<std::uint64_t>(esp_timer_get_time()) - startedUs;
+            result.status = BoardBleScanStatus::ScanTimedOut;
+            return result;
+        }
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+    BLEScanResults* results = activeScan_->getResults();
     result.durationUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - startedUs;
     if (results == nullptr) {
