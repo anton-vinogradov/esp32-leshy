@@ -12,12 +12,13 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.76 вплоть до общего Wi-Fi/BLE Observation browser.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.77 вплоть до immutable Capture metadata и canonical CSV export.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
-- **Главная цель текущего этапа:** добавить immutable Capture metadata и compatible
-  CSV/PCAP export поверх принятой Wi-Fi/BLE Session model. Exact 0.76 уже даёт общий
-  read-only browser Все/Wi-Fi/BLE List/Detail, bounded RSSI history и frozen snapshot
-  с выключенным RF, который можно сохранить без повторного scan.
+- **Главная цель текущего этапа:** добавить отдельный passive raw-frame Capture path и
+  compatible PCAP, не выдавая normalized Survey observations за пакеты. Exact 0.77
+  уже сохраняет immutable build/receive provenance в Session schema v3, потоково
+  экспортирует canonical observation CSV и честно сообщает недоступность PCAP, если
+  frame payload не захватывался.
 
 ## Состояние этапов
 
@@ -27,7 +28,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.75 принимают source selection, durable dual-source scheduling и compatible degradation; exact 0.76 `E-HIL-101` замораживает RF после полного real Wi-Fi+BLE cycle и доказывает общий Все/Wi-Fi/BLE List/Detail, bounded RSSI history, 45/45 cold-recovered observations, zero drops/overflow и final lease 0 | реализовать Capture metadata и compatible CSV/PCAP, conditional contracts nRF24/CC1101/GPS плюс применимые Full/Guided checks; затем проверить controlled physical power-cut recovery и 8 h/32-cycle multi-source endurance |
+| S4 | `active` | exact 0.71…0.76 принимают source selection, durable dual-source scheduling/degradation и общий Observation browser; exact 0.77 `E-HIL-102` сохраняет immutable Capture metadata, cold-recovers 47/47 Wi-Fi/BLE observations, потоково выдаёт machine-validated CSV и честно отклоняет PCAP без raw frames при zero drops/overflow и final lease 0 | реализовать отдельный passive raw-frame Capture/PCAP, conditional contracts nRF24/CC1101/GPS плюс применимые Full/Guided checks; затем проверить controlled physical power-cut recovery и 8 h/32-cycle multi-source endurance |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -582,6 +583,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-077 | exact build `0.76.0-observation-browser` | pass: RAM 147 368 B, linked flash 1 426 252 B; app/factory 1 426 656/1 492 192 B; app `89358bc5…19d`, factory `76615971…2b2`, ELF `f86cf116…dd2`, map `e5d0ce70…519`; source commit `bea9261` | +4 420 B linked flash, +8 B static RAM и +4 416 B images vs 0.75 за common filtering, bounded RSSI history, snapshot pause, localized UI и compact read-only telemetry; exact checkpoint, не `DEMO-S4` и не release build |
 | E-AUTO-041 | observation-browser HIL runner и retained verifier | pass: runner ждёт один полный Wi-Fi+BLE cycle, замораживает RF-off snapshot, проходит Все→Wi-Fi→BLE List/Detail, commits, cold-reopens и экспортирует; после flash он наблюдает полный admitted boot до запроса независимого cold reset. Verifier хеширует exact source/candidate/runner и каждый retained artifact, filter/history states, timeline equality, девять TFT frames, CID, heap и cleanup | local evidence одной board; post-flash stabilization не даёт reset прервать живой read-only SD recovery, а Capture/export formats, controlled power-cut и endurance остаются отдельными lanes |
 | E-HIL-101 / E-SURVEY-014 | board-01 exact 0.76 Observation browser | pass: один real Wi-Fi и один real BLE cycle учитывают 8+37=45 accepted/forwarded observations; перевод focus на Filter останавливает RF, финализирует шесть timeline windows и оставляет session backend открытым для read-only browsing. Counts Все/Wi-Fi/BLE равны 45/8/37, оба Detail показывают bounded RSSI history, Save commits generation 80→81 и 2 187 bytes без повторного scan, cold exact-CID reboot открывает/экспортирует те же 45 observations и шесть windows с zero writes, drops, evictions или overflow; heap invariant 234 340/169 720/150 200 B, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-observation-browser-0.76.json) | принимает общий CAP-016 List/Detail/filter и bounded RSSI-history slice CAP-017; Capture metadata/CSV/PCAP, conditional sources/Self-Test, controlled power-cut и 8 h/32-cycle multi-source endurance держат `DEMO-S4` открытым |
+| E-BUILD-078 | exact build `0.77.0-capture-export` | pass: RAM 147 688 B, linked flash 1 432 812 B; app/factory 1 433 216/1 498 752 B; app `60d96834…b4d`, factory `cfe5c9c1…9fa`, ELF `ae41dd3c…268`, map `82f7d7d4…4ce`; source commit `b9e9346` | +6 560 B linked flash, +320 B static RAM и +6 560 B images vs 0.76 за schema-v3 capture provenance, streaming CSV, явный PCAP capability status, UI и diagnostics; exact checkpoint, не `DEMO-S4` и не release build |
+| E-AUTO-042 | host contracts, exact-HIL runner и retained verifier Capture/export | pass: native tests сохраняют byte-compatible schema v1/v2 и round-trip schema-v3 metadata; runner проверяет exact build/CID/receive plans, canonical CRLF framing и каждую CSV row без второго Session-sized buffer. Independent verifier rehashes source, candidate, runner и каждый retained artifact, включая raw CSV и десять TFT frames | PCAP намеренно fail-closed до отдельного raw-frame path; normalized observations никогда не фабрикуются в packets |
+| E-HIL-102 / E-SURVEY-015 | board-01 exact 0.77 Capture metadata и export | pass: один real Wi-Fi+BLE cycle учитывает 16+31=47 accepted/forwarded observations, сохраняет Session schema v3 generation 81→82 с шестью timeline windows и 2 473 bytes и cold-reopens exact CID read-only. Immutable metadata связывает ELF identity и точные passive Wi-Fi/BLE plans, явно фиксирует отсутствие location/frame payload и потоково выдаёт 47 canonical CSV rows/3 275 bytes с точными ordering, source, tuning, RSSI и binary-safe identities/labels; PCAP возвращает `unavailable_no_frame_payload`, heap invariant 234 020/169 400/149 880 B, десять TFT frames проходят visual/integrity checks, drops/overflow равны нулю, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-capture-export-0.77.json) | принимает применимые slices CAP-023 provenance и CAP-026 observation CSV; raw-frame Capture/PCAP, conditional sources/Self-Test, controlled power-cut и 8 h/32-cycle multi-source endurance держат `DEMO-S4` открытым |
 
 ## Известные неопределённости и риски
 
@@ -613,9 +617,10 @@ goldens. Управляемый physical power-cut и восьмичасовой
 
 Реализация S4 разблокирована; source selection, bounded Wi-Fi/BLE scheduling,
 durable dual-source persistence и compatible runtime degradation приняты до exact
-0.75, а общие List/Detail filters и bounded RSSI history приняты exact 0.76. Capture
-metadata/export formats и conditional source/Self-Test contracts остаются software
-work. Недоступный сейчас управляемый
+0.75, общие List/Detail filters и bounded RSSI history приняты exact 0.76, а immutable
+Capture provenance и canonical observation CSV приняты exact 0.77. Отдельный raw-frame
+Capture/PCAP и conditional source/Self-Test contracts остаются software work.
+Недоступный сейчас управляемый
 power-cut fixture остаётся явным exit
 requirement `DEMO-S4`, software reset не принимается как замена. Второй
 экземпляр, мультиметр и logic/RF detector остаются named gaps следующих этапов;

@@ -12,12 +12,13 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.76 S4 checkpoints through the common Wi-Fi/BLE Observation browser.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.77 S4 checkpoints through immutable Capture metadata and canonical CSV export.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
-- **Current objective:** add immutable Capture metadata and compatible CSV/PCAP
-  export over the accepted Wi-Fi/BLE Session model. Exact 0.76 already provides the
-  common read-only All/Wi-Fi/BLE List/Detail browser, bounded RSSI history and an
-  RF-off frozen snapshot that can be saved without rescanning.
+- **Current objective:** add a dedicated passive raw-frame Capture path and compatible
+  PCAP without misrepresenting normalized Survey observations as packets. Exact 0.77
+  already persists immutable build/receive provenance in Session schema v3, streams a
+  canonical observation CSV and reports PCAP honestly unavailable when no frame payload
+  was captured.
 
 ## Stage state
 
@@ -27,7 +28,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71…0.75 accept source selection, durable dual-source scheduling and compatible degradation; exact 0.76 `E-HIL-101` freezes RF after a complete real Wi-Fi+BLE cycle and proves common All/Wi-Fi/BLE List/Detail, bounded RSSI history, 45/45 cold-recovered observations, zero drops/overflow and final lease 0 | implement Capture metadata and compatible CSV/PCAP, conditional nRF24/CC1101/GPS contracts plus applicable Full/Guided checks; then exercise controlled physical power-cut recovery and 8 h/32-cycle multi-source endurance |
+| S4 | `active` | exact 0.71…0.76 accept source selection, durable dual-source scheduling/degradation and the common Observation browser; exact 0.77 `E-HIL-102` persists immutable Capture metadata, cold-recovers 47/47 Wi-Fi/BLE observations, streams a machine-validated CSV and rejects PCAP honestly without raw frames, with zero drops/overflow and final lease 0 | implement dedicated passive raw-frame Capture/PCAP, conditional nRF24/CC1101/GPS contracts plus applicable Full/Guided checks; then exercise controlled physical power-cut recovery and 8 h/32-cycle multi-source endurance |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -584,6 +585,9 @@ endurance are explicit `DEMO-S4` criteria.
 | E-BUILD-077 | exact `0.76.0-observation-browser` build | pass: RAM 147,368 B, linked flash 1,426,252 B; app/factory 1,426,656/1,492,192 B; app `89358bc5…19d`, factory `76615971…2b2`, ELF `f86cf116…dd2`, map `e5d0ce70…519`; source commit `bea9261` | +4,420 B linked flash, +8 B static RAM and +4,416 B images vs 0.75 for common filtering, bounded RSSI history, snapshot pause, localized UI and compact read-only telemetry; exact checkpoint, not `DEMO-S4` or a release build |
 | E-AUTO-041 | observation-browser HIL runner and retained verifier | pass: the runner waits for one complete Wi-Fi+BLE cycle, freezes an RF-off snapshot, exercises All→Wi-Fi→BLE List/Detail, commits, cold-reopens and exports; after flash it observes a complete admitted boot before requesting the independent cold reset. The verifier rehashes exact source/candidate/runner and every retained artifact, filter/history states, timeline equality, nine TFT frames, CID, heap and cleanup | local evidence on one board; the post-flash stabilization prevents a reset from interrupting live read-only SD recovery, while Capture/export formats, controlled power-cut and endurance remain separate lanes |
 | E-HIL-101 / E-SURVEY-014 | board-01 exact 0.76 Observation browser | pass: one real Wi-Fi plus one real BLE cycle accounts 8+37=45 accepted/forwarded observations; moving focus to Filter stops RF, finalizes six timeline windows and keeps the session backend open for read-only browsing. All/Wi-Fi/BLE counts are 45/8/37, both Detail views expose bounded RSSI history, Save commits generation 80→81 and 2,187 bytes without rescanning, cold exact-CID reboot reopens/exports the same 45 observations and six windows with zero writes, drops, evictions or overflow; heap is invariant 234,340/169,720/150,200 B and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-observation-browser-0.76.json) | accepts common CAP-016 List/Detail/filter behavior and the bounded RSSI-history slice of CAP-017; Capture metadata/CSV/PCAP, conditional sources/Self-Test, controlled power-cut and 8 h/32-cycle multi-source endurance keep `DEMO-S4` open |
+| E-BUILD-078 | exact `0.77.0-capture-export` build | pass: RAM 147,688 B, linked flash 1,432,812 B; app/factory 1,433,216/1,498,752 B; app `60d96834…b4d`, factory `cfe5c9c1…9fa`, ELF `ae41dd3c…268`, map `82f7d7d4…4ce`; source commit `b9e9346` | +6,560 B linked flash, +320 B static RAM and +6,560 B images vs 0.76 for schema-v3 capture provenance, streaming CSV, explicit PCAP capability status, UI and diagnostics; exact checkpoint, not `DEMO-S4` or a release build |
+| E-AUTO-042 | capture/export host, exact-HIL runner and retained verifier | pass: native tests preserve byte-compatible schema v1/v2 and round-trip schema-v3 metadata; the runner validates exact build/CID/receive plans, canonical CRLF framing and every CSV row without a second Session-sized buffer. The independent verifier rehashes source, candidate, runner and every retained artifact, including the raw CSV and ten TFT frames | PCAP is deliberately fail-closed until a dedicated raw-frame path exists; normalized observations are never fabricated into packets |
+| E-HIL-102 / E-SURVEY-015 | board-01 exact 0.77 Capture metadata and export | pass: one real Wi-Fi+BLE cycle accounts 16+31=47 accepted/forwarded observations, persists Session schema v3 at generation 81→82 with six timeline windows and 2,473 bytes, and cold-reopens exact CID read-only. Immutable metadata binds ELF identity and exact passive Wi-Fi/BLE plans, explicitly records absent location/frame payload, and streams 47 canonical CSV rows/3,275 bytes with exact ordering, source, tuning, RSSI and binary-safe identities/labels; PCAP returns `unavailable_no_frame_payload`, heap is invariant 234,020/169,400/149,880 B, ten TFT frames pass visual/integrity checks, drops/overflow are zero and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-capture-export-0.77.json) | accepts the applicable CAP-023 provenance and CAP-026 observation-CSV slices; raw-frame Capture/PCAP, conditional sources/Self-Test, controlled power-cut and 8 h/32-cycle multi-source endurance keep `DEMO-S4` open |
 
 ## Known uncertainties and risks
 
@@ -615,9 +619,10 @@ endurance are explicit `DEMO-S4` criteria.
 
 S4 implementation is unblocked; source selection, bounded Wi-Fi/BLE scheduling,
 durable dual-source persistence and compatible runtime degradation are accepted
-through exact 0.75, and common List/Detail filters plus bounded RSSI history are
-accepted by exact 0.76. Capture metadata/export formats and conditional source/Self-Test
-contracts remain software work. The currently unavailable controlled
+through exact 0.75, common List/Detail filters plus bounded RSSI history are accepted
+by exact 0.76, and immutable Capture provenance plus canonical observation CSV are
+accepted by exact 0.77. Dedicated raw-frame Capture/PCAP and conditional
+source/Self-Test contracts remain software work. The currently unavailable controlled
 power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.
 A second board, multimeter, and logic/RF detector remain named later-stage

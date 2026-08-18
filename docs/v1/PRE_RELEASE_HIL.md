@@ -361,6 +361,15 @@ the current combined GitHub workflows have passed end to end:
   timeline equality, CID, heap and cleanup are independently checked by
   `check_observation_browser_acceptance.py`
   (`E-AUTO-041`/`E-HIL-101`/`E-SURVEY-014`);
+- `tools/run_1x_capture_export_hil.py` is the exact Capture/export lane. It preserves
+  the admitted post-flash boot, creates one real Wi-Fi+BLE Session, commits and
+  cold-reopens schema v3, then validates immutable build/receive provenance and streams
+  the raw canonical CSV between typed begin/end markers. Every sequence, timestamp,
+  source, tuning, RSSI and hex-encoded identity/label row is checked; PCAP must return
+  `unavailable_no_frame_payload` until raw frames exist. Exact 0.77 source/candidate,
+  47-row CSV, ten TFT captures, CID, heap and cleanup are independently checked by
+  `check_capture_export_acceptance.py`
+  (`E-AUTO-042`/`E-HIL-102`/`E-SURVEY-015`);
 - `tools/run_1x_littlefs_parity_hil.py` is the fail-closed disposable-flash lane.
   It selects only inactive OTA1 `app1`, requires two matching full reads and a
   firmware-side hash match before format, performs 32 common SessionStore commits

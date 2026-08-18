@@ -1,2 +1,3 @@
 tests/hil/evidence/**/*.ndjson -text -diff
 tests/hil/evidence/**/*.log -text -diff
+tests/hil/evidence/**/*.csv -text -diff

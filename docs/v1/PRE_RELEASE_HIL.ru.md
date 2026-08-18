@@ -363,6 +363,15 @@ workflow прошли end to end:
   timeline equality, CID, heap и cleanup независимо проверяет
   `check_observation_browser_acceptance.py`
   (`E-AUTO-041`/`E-HIL-101`/`E-SURVEY-014`);
+- `tools/run_1x_capture_export_hil.py` — exact lane Capture/export. Он сохраняет
+  admitted post-flash boot, создаёт одну real Wi-Fi+BLE Session, commits и cold-reopens
+  schema v3, затем проверяет immutable build/receive provenance и потоково принимает
+  raw canonical CSV между typed begin/end markers. Проверяются каждые sequence,
+  timestamp, source, tuning, RSSI и hex-encoded identity/label row; PCAP обязан вернуть
+  `unavailable_no_frame_payload`, пока raw frames не существуют. Exact 0.77
+  source/candidate, CSV на 47 rows, десять TFT captures, CID, heap и cleanup независимо
+  проверяет `check_capture_export_acceptance.py`
+  (`E-AUTO-042`/`E-HIL-102`/`E-SURVEY-015`);
 - `tools/run_1x_littlefs_parity_hil.py` — fail-closed lane disposable flash. Он
   выбирает только inactive OTA1 `app1`, требует два совпадающих полных чтения и
   firmware-side hash match до format, делает 32 commits common SessionStore плюс

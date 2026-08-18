@@ -260,9 +260,23 @@ remains owned until Save or Cancel. This prevents user dwell time from overflowi
 the 64-observation Session while keeping the browser read-only. `E-HIL-101` proves one
 complete real Wi-Fi+BLE cycle, 8+37 observations, exact filter counts, RF-off pause,
 generation 80→81 commit, cold reopen/export, nine TFT captures, zero drops/overflow
-and final lease 0. Capture metadata and compatible CSV/PCAP, conditional
-nRF24/CC1101/GPS plus applicable Self-Test contracts, controlled physical power-cut
-and 8 h/32-cycle multi-source endurance remain `DEMO-S4` work.
+and final lease 0.
+
+Exact `0.77.0-capture-export` advances the atomic Session format to schema v3 while
+keeping byte-compatible v1 and readable v2. A fixed CRC-covered Capture record is
+written before observation and timeline records. It binds the producing app ELF,
+selected source mask and exact passive Wi-Fi/BLE receive plans; location and raw-frame
+payload absence are represented explicitly instead of inferred. Library exposes this
+immutable provenance, retains the v2 JSON summary contract and streams canonical CRLF
+CSV one bounded row at a time. Identity and label bytes are lower-case hex so export is
+deterministic and binary-safe without a second Session-sized allocation. The current
+scan drivers retain normalized observations, not raw 802.11/BLE frames, so PCAP returns
+the typed `unavailable_no_frame_payload` result rather than fabricating packets.
+`E-HIL-102` proves generation 81→82, 16+31 observations, exact metadata, a 47-row CSV,
+cold recovery, ten TFT captures, invariant heap, zero drops/overflow and final lease 0.
+Dedicated passive raw-frame Capture/PCAP, conditional nRF24/CC1101/GPS plus applicable
+Self-Test contracts, controlled physical power-cut and 8 h/32-cycle multi-source
+endurance remain `DEMO-S4` work.
 
 ## Data model
 
