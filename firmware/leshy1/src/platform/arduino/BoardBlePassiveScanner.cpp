@@ -11,6 +11,76 @@
 
 namespace leshy1::platform::arduino {
 
+namespace {
+
+class BoundedAdvertisementCallbacks final
+    : public BLEAdvertisedDeviceCallbacks {
+public:
+    BoundedAdvertisementCallbacks(
+        BLEScan* scanner, std::uint16_t maximumRecords,
+        BleRecordVisitor visitor, void* context,
+        BoardBlePassiveScanResult* result)
+        : scanner_(scanner), maximumRecords_(maximumRecords),
+          visitor_(visitor), context_(context), result_(result) {}
+
+    void onResult(BLEAdvertisedDevice source) override {
+        if (result_ == nullptr || scanner_ == nullptr) return;
+        if (result_->recordsReported != UINT16_MAX) {
+            ++result_->recordsReported;
+        }
+        if (result_->recordsRead < maximumRecords_) {
+            BLEAddress address = source.getAddress();
+            const std::uint8_t* native = address.getNative();
+            const String name = source.haveName() ? source.getName() : String();
+            drivers::ble::BleAdvertisementRecord record;
+            if (native != nullptr) {
+#if defined(CONFIG_NIMBLE_ENABLED)
+                std::reverse_copy(native, native + record.address.size(),
+                                  record.address.begin());
+#else
+                std::copy_n(native, record.address.size(),
+                            record.address.begin());
+#endif
+            }
+            record.addressType = source.getAddressType();
+            record.rssiDbm = static_cast<std::int16_t>(source.getRSSI());
+            record.name = name.c_str();
+            record.nameLength = std::min<std::size_t>(
+                name.length(),
+                domain::observations::Observation::kLabelCapacity);
+            ++result_->recordsRead;
+            switch (visitor_(
+                record, static_cast<std::uint64_t>(esp_timer_get_time()),
+                context_)) {
+                case BleRecordDisposition::Accepted:
+                    ++result_->accepted;
+                    break;
+                case BleRecordDisposition::Rejected:
+                    ++result_->rejected;
+                    break;
+                case BleRecordDisposition::Dropped:
+                    ++result_->dropped;
+                    break;
+            }
+        } else if (result_->dropped != UINT16_MAX) {
+            ++result_->dropped;
+        }
+        // Arduino BLE stores every unique advertiser before invoking us. Erase
+        // it immediately so hostile/dense RF environments cannot grow an
+        // unbounded std::map and terminate the NimBLE host task on OOM.
+        scanner_->erase(source.getAddress());
+    }
+
+private:
+    BLEScan* scanner_ = nullptr;
+    std::uint16_t maximumRecords_ = 0;
+    BleRecordVisitor visitor_ = nullptr;
+    void* context_ = nullptr;
+    BoardBlePassiveScanResult* result_ = nullptr;
+};
+
+}  // namespace
+
 BLEScan* BoardBlePassiveScanner::activeScan_ = nullptr;
 
 const char* boardBleScanStatusName(BoardBleScanStatus status) {
@@ -59,7 +129,12 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
     activeScan_->setActiveScan(false);
     activeScan_->setInterval(plan.intervalMs);
     activeScan_->setWindow(plan.windowMs);
-    activeScan_->setAdvertisedDeviceCallbacks(nullptr, false, true);
+    BoundedAdvertisementCallbacks callbacks(
+        activeScan_, plan.maximumRecords, visitor, context, &result);
+    activeScan_->setAdvertisedDeviceCallbacks(&callbacks, false, true);
+#if defined(CONFIG_NIMBLE_ENABLED)
+    activeScan_->setDuplicateFilter(true);
+#endif
     const std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     // The blocking BLEScan overload waits forever when NimBLE loses its
@@ -68,6 +143,7 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
     const bool started = activeScan_->start(
         plan.durationMs / 1000U, nullptr, false);
     if (!started) {
+        activeScan_->setAdvertisedDeviceCallbacks(nullptr, false, true);
         result.status = BoardBleScanStatus::ScannerUnavailable;
         return result;
     }
@@ -78,6 +154,7 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
     while (activeScan_->isScanning()) {
         if (static_cast<std::uint64_t>(esp_timer_get_time()) >= deadlineUs) {
             activeScan_->stop();
+            activeScan_->setAdvertisedDeviceCallbacks(nullptr, false, true);
             activeScan_->clearResults();
             result.durationUs =
                 static_cast<std::uint64_t>(esp_timer_get_time()) - startedUs;
@@ -86,53 +163,9 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
         }
         vTaskDelay(pdMS_TO_TICKS(20));
     }
-    BLEScanResults* results = activeScan_->getResults();
+    activeScan_->setAdvertisedDeviceCallbacks(nullptr, false, true);
     result.durationUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - startedUs;
-    if (results == nullptr) {
-        result.status = BoardBleScanStatus::ScannerUnavailable;
-        return result;
-    }
-
-    const int reported = std::max(0, results->getCount());
-    result.recordsReported = static_cast<std::uint16_t>(
-        std::min<int>(reported, 0xffff));
-    const std::uint16_t recordsToRead = static_cast<std::uint16_t>(
-        std::min<int>(reported, plan.maximumRecords));
-    for (std::uint16_t index = 0; index < recordsToRead; ++index) {
-        BLEAdvertisedDevice source = results->getDevice(index);
-        BLEAddress address = source.getAddress();
-        const std::uint8_t* native = address.getNative();
-        const String name = source.haveName() ? source.getName() : String();
-        drivers::ble::BleAdvertisementRecord record;
-        if (native != nullptr) {
-#if defined(CONFIG_NIMBLE_ENABLED)
-            // NimBLE exposes its native address least-significant byte first;
-            // store the same canonical order users see in BLEAddress::toString.
-            std::reverse_copy(native, native + record.address.size(),
-                              record.address.begin());
-#else
-            std::copy_n(native, record.address.size(), record.address.begin());
-#endif
-        }
-        record.addressType = source.getAddressType();
-        record.rssiDbm = static_cast<std::int16_t>(source.getRSSI());
-        record.name = name.c_str();
-        record.nameLength = std::min<std::size_t>(
-            name.length(), domain::observations::Observation::kLabelCapacity);
-        ++result.recordsRead;
-        switch (visitor(record,
-                        static_cast<std::uint64_t>(esp_timer_get_time()),
-                        context)) {
-            case BleRecordDisposition::Accepted: ++result.accepted; break;
-            case BleRecordDisposition::Rejected: ++result.rejected; break;
-            case BleRecordDisposition::Dropped: ++result.dropped; break;
-        }
-    }
-    if (result.recordsReported > result.recordsRead) {
-        result.dropped = static_cast<std::uint16_t>(
-            result.dropped + result.recordsReported - result.recordsRead);
-    }
     activeScan_->clearResults();
     result.status = BoardBleScanStatus::Valid;
     return result;
