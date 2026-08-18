@@ -12,10 +12,10 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3`, exact 0.71 first user-facing S4 source-plan slice, and exact 0.72 source-timeline runtime checkpoint.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3`, exact 0.71 source-plan, exact 0.72 source-timeline runtime, and exact 0.73 durable timeline persistence checkpoints.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
-- **Current objective:** persist and cold-reopen the bounded timeline already connected
-  by exact 0.72 to the source plan, product worker and Running UI, then add passive BLE
+- **Current objective:** add passive BLE to the source plan and durable timeline accepted
+  by exact 0.73, then implement compatible scheduling and honest runtime degradation
   without changing the Survey setup/navigation model.
   Controlled physical power-cut and the 8 h
   multi-source endurance lane remain explicit `DEMO-S4` gates.
@@ -28,7 +28,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71 `E-HIL-096` accepts interactive UX-S02 source selection; exact 0.72 `E-HIL-097` connects the allocation-free timeline to the real product worker, shows Wi-Fi state/duty on Running TFT, accounts 34/34 observations across two scans with zero drops/overflow, commits generation 71→72 and cold-recovers with lease 0 | persist/reopen/export timeline windows beyond the 16-entry runtime FIFO, then implement passive BLE, compatible scheduling and runtime degradation; close controlled power-cut and 8 h multi-source endurance in `DEMO-S4` |
+| S4 | `active` | exact 0.71 `E-HIL-096` accepts interactive source selection; exact 0.72 `E-HIL-097` connects the allocation-free timeline to the real worker; exact 0.73 `E-HIL-098` drains it durably, commits generation 73→74 with 21/21 observations, cold-reopens and exports five ordered windows with zero drops/overflow and final lease 0 | implement passive BLE, compatible scheduling and runtime degradation; exercise schema-v2 power-cut recovery and close controlled power-cut plus 8 h multi-source endurance in `DEMO-S4` |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -573,6 +573,9 @@ endurance are explicit `DEMO-S4` criteria.
 | E-BUILD-073 | exact `0.72.0-source-timeline-runtime` build | pass: RAM 136,880 B, linked flash 1,174,456 B; app/factory 1,174,864/1,240,400 B; app `680a84ea…bed1`, factory `422eec57…b522`, ELF `a09c8750…13ba`, map `2a35327e…fc39`; source commit `da2b33a` | +5,444 B linked flash, +1,952 B static RAM and +5,440 B images vs 0.71 for worker boundary events, runtime accounting, telemetry and localized Running duty; exact checkpoint, not `DEMO-S4` or a release build |
 | E-AUTO-037 | source-timeline runtime HIL runner and retained verifier | pass: exact candidate/source/artifact hashes, boot retry accounting, CID, two physical scans, per-source state/duty/accepted/drop/FIFO values, terminal close, TFT hashes, cold recovery and final cleanup are independently rechecked | deliberately short checkpoint; persistence/export, FIFO draining, BLE, power-cut and endurance remain outside the accepted scope |
 | E-HIL-097 / E-SURVEY-010 | board-01 exact 0.72 product source-timeline runtime | pass: selected mask 1 drives the real Wi-Fi worker; two scans account 34/34 accepted/forwarded observations, running/terminal duty is 741/639 permille, completed windows are 4→5, drops/overflow are zero, Russian Running TFT visibly says `WI-FI: ПАУЗА | 74% ВРЕМЯ`, Stop commits generation 71→72, both cold boots admit exact CID read-only with bounded 2/1 retry accounting, heap is invariant 264,624/199,952/180,156 B, buzzer/input stay safe and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-source-timeline-runtime-0.72.json) | accepts runtime integration/visibility only; timeline windows are not yet persisted or exported and the 16-entry FIFO therefore remains a fail-closed short-run bound |
+| E-BUILD-074 | exact `0.73.0-source-timeline-persistence` build | pass: RAM 145,184 B, linked flash 1,184,052 B; app/factory 1,184,208/1,249,744 B; app `3bf32bf3…ffa`, factory `680a2815…c91`, ELF `11dc9ae4…fe7`, map `0ad8b322…6323`; source commit `bfe798f` | +9,596 B linked flash, +8,304 B static RAM and +9,344 B images vs 0.72 for schema-v2 timeline persistence, bounded retained history and export; exact checkpoint, not `DEMO-S4` or a release build |
+| E-AUTO-038 | source-timeline persistence runner and retained verifier | pass: native contracts preserve byte-exact schema v1 and cover schema-v2 CRC, bounded eviction and export; the verifier independently rehashes exact candidate/source/runner/artifacts, checks FIFO drain, duration and observation equality, generation continuity, cold reopen, ordered exported windows, TFT captures, heap, CID and cleanup | one-board local evidence; passive BLE, schema-v2 controlled power-cut and endurance remain outside the accepted scope |
+| E-HIL-098 / E-SURVEY-011 | board-01 exact 0.73 durable source timeline | pass: two real Wi-Fi scans account 21/21 accepted/forwarded observations; runtime FIFO ends 0 with high-water 1, persisted/retained windows are 5/5 with zero evictions/drops/overflow, summed windows exactly equal 5,327,283 us timeline elapsed, Stop commits generation 73→74, cold exact-CID reboot reopens and exports the five ordered source/state/reason windows, heap is invariant 256,320/191,648/171,852 B, buzzer/input stay safe and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-source-timeline-persistence-0.73.json) | accepts durable drain/reopen/export for the Wi-Fi source; passive BLE, cross-radio scheduling/degradation, controlled power-cut and 8 h endurance still keep `DEMO-S4` open |
 
 ## Known uncertainties and risks
 
@@ -602,8 +605,8 @@ endurance are explicit `DEMO-S4` criteria.
 
 ## Blockers
 
-S4 implementation is unblocked; its first user-facing source-plan slice is accepted
-by exact 0.71, and shared timeline/BLE work follows. The currently unavailable controlled power-cut fixture remains an explicit
+S4 implementation is unblocked; source selection and durable Wi-Fi timeline are
+accepted through exact 0.73, and passive BLE/scheduling work follows. The currently unavailable controlled power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.
 A second board, multimeter, and logic/RF detector remain named later-stage
 gaps; affected capabilities stay conditional/unavailable rather than being enabled by

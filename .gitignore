@@ -30,3 +30,6 @@ Thumbs.db
 
 # Generated maker-lookup blobs (regenerate: tools/make_devicedb.py)
 data/*.bin
+
+# Local HIL checkpoints; accepted evidence is retained under tests/hil/evidence.
+/work/

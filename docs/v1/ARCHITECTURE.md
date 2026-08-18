@@ -215,6 +215,18 @@ lease 0. This accepts runtime integration and visibility only: schema-v1 persist
 still stores observations without timeline windows, so the FIFO is not yet drained
 durably and a full queue remains an intentional fail-closed short-run bound.
 
+Exact `0.73.0-source-timeline-persistence` closes that persistence boundary without
+breaking existing sessions. SessionCodec schema v2 appends a CRC-bound timeline
+record while schema v1 remains byte-for-byte readable. The product worker drains each
+completed runtime window immediately into a bounded 16-window `SurveySession` ring,
+with explicit total/evicted counts and per-source summaries; an incomplete or invalid
+timeline prevents commit. Stop finalizes the timeline before generation 73→74 is
+published. Cold Library reopen exports `leshy.session.summary.v2` and the retained
+ordered `timeline_windows`, including source/state/reason, exact monotonic bounds and
+accepted/drop counts. Exact `E-HIL-098` proves 21/21 observations, five windows,
+zero FIFO backlog/overflow/drops, cold reopen and final lease 0. Schema-v2 controlled
+power-cut and long multi-source endurance remain separate `DEMO-S4` gates.
+
 ## Data model
 
 Raw observation is separate from interpretation:

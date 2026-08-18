@@ -272,6 +272,18 @@ lease 0. Приняты только runtime integration и visibility: persiste
 ещё хранит observations без timeline windows, поэтому FIFO пока не дренируется durable,
 а полная queue остаётся намеренным fail-closed short-run bound.
 
+Exact `0.73.0-source-timeline-persistence` закрывает эту persistence boundary без
+поломки существующих sessions. SessionCodec schema v2 добавляет CRC-bound timeline
+record, а schema v1 остаётся byte-for-byte читаемой. Product worker немедленно
+дренирует каждое завершённое runtime window в bounded ring `SurveySession` на 16
+окон с явными total/evicted counters и per-source summaries; incomplete или invalid
+timeline блокирует commit. Stop завершает timeline до публикации generation 73→74.
+После cold Library reopen экспортирует `leshy.session.summary.v2` и retained ordered
+`timeline_windows` с source/state/reason, точными monotonic bounds и accepted/drop
+counters. Exact `E-HIL-098` доказывает 21/21 observations, пять windows, zero FIFO
+backlog/overflow/drops, cold reopen и final lease 0. Управляемый power-cut schema v2
+и длительный multi-source endurance остаются отдельными gates `DEMO-S4`.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:
