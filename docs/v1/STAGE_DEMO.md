@@ -90,8 +90,17 @@ Survey→RF spectrum→2.4 GHz/nRF24 path draws a volatile 83-channel activity m
 supports a measured pause/resume, completes 21 dual-receiver sweeps with exact
 receive-only wire accounting, leaves heap/storage invariant and returns Home with
 lease 0. The retained contract does not claim calibrated power or instrumented
-physical RF silence. CC1101, active Full/Guided execution, controlled physical
-power-cut and endurance still keep `DEMO-S4` open.
+physical RF silence. Active Full/Guided execution, controlled physical power-cut and
+endurance still keep `DEMO-S4` open.
+
+Exact 0.83 accepts the second useful shield workflow: Survey→RF spectrum→Sub-GHz/
+CC1101 exposes 315/433/868/915 MHz plans, samples one of 64 bins per main-loop turn
+and redraws only after a sweep. The board run completes every band, holds exactly at
+351 samples during a 400 ms pause, resumes and stops cleanly after 354 samples with
+zero TX/PATABLE/FIFO/storage side effects, invariant heap/storage and final lease 0.
+Its RSSI and frequency scale are not calibrated and physical RF silence is not
+instrumented. Active Full/Guided execution, controlled physical power-cut and
+endurance still keep `DEMO-S4` open.
 
 ## Test cadence within a stage
 

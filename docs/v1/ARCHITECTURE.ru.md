@@ -386,7 +386,17 @@ volatile snapshot в localized live chart, обновления которого
 графика. `E-HIL-107` доказывает 21 полный sweep 2 402…2 484 МГц, стабильный paused
 counter, exact accounting receive windows, zero TX/CC/storage side effects, invariant
 heap/storage и final lease 0. RPD bins показывают threshold activity, а не calibrated
-power; physical RF silence не измерен, workflow CC1101 остаётся следующей.
+power; physical RF silence не измерен.
+
+Exact `0.83.0-cc1101-spectrum` применяет то же разделение к Sub-GHz RSSI, не копируя
+wire model nRF. Pure `Cc1101SpectrumController` владеет четырьмя band plan по 64 bins
+и состоянием interaction. `BoardCc1101PassiveSpectrum` выполняет только один bounded
+sample за проход main loop, разрешает strobes reset/RX/idle, ждёт RX ready не больше
+3 000 us, наблюдает 500 us и возвращается в IDLE; операций TX, PATABLE или FIFO у него
+нет. UI перерисовывается только после полного sweep. `E-HIL-108` доказывает все четыре
+диапазона, стабильную pause 400 ms, exact wire accounting, zero TX/storage side
+effects, invariant heap/storage и final lease 0. Значения — некалиброванный RSSI,
+physical RF silence не измерен; active Full/Guided execution идёт следующим.
 
 ## 7. Модель данных
 

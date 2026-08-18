@@ -179,6 +179,16 @@ and storage writes remain zero. Stop powers both nRF devices down, restores safe
 keeps slot 3/GPIO21 gated/high and releases the lease (`E-HIL-107`/`E-RADIO-002`).
 Without an RF detector this proves the guarded software path, not physical RF silence.
 
+Exact `0.83.0-cc1101-spectrum` adds the corresponding explicit user-started CC1101
+receive path. GPIO5 is admitted only by the no-GPS/no-PN532 board-01 profile;
+`RadioSpi` remains exclusive, nRF slot 3/GPIO21 stays gated/high, and every one of
+the 354 samples uses only the whitelisted RX/IDLE sequence after one reset. Final
+wire counts are 1 reset, 354 RX and 713 IDLE strobes, 11,443 reads, 1,078 writes and
+26,110 SPI bytes; TX, rejected strobe, PATABLE, FIFO and storage-write counters are
+zero. Stop leaves CC1101 IDLE and releases the lease (`E-HIL-108`/`E-RADIO-003`).
+Without an RF detector or calibrated source this proves neither physical RF silence
+nor calibrated RSSI/frequency accuracy.
+
 GPIO2 software evidence: the author's root-cause description and one-line LOW fix in
 [upstream issue #117](https://github.com/cifertech/ESP32-DIV/issues/117#issuecomment-5178973211)
 links the verified

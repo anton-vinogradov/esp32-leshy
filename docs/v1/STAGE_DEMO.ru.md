@@ -90,8 +90,17 @@ Survey→RF spectrum→2.4 GHz/nRF24 рисует volatile карту актив
 поддерживает измеренную pause/resume, завершает 21 sweep через два receiver с exact
 receive-only wire accounting, сохраняет heap/storage invariant и возвращается Home
 с lease 0. Retained contract не заявляет calibrated power или instrumented physical
-RF silence. CC1101, active Full/Guided execution, controlled physical power-cut и
-endurance всё ещё держат `DEMO-S4` открытым.
+RF silence. Active Full/Guided execution, controlled physical power-cut и endurance
+всё ещё держат `DEMO-S4` открытым.
+
+Exact 0.83 принимает вторую полезную workflow shield: Survey→RF spectrum→Sub-GHz/
+CC1101 показывает plans 315/433/868/915 МГц, снимает один из 64 bins за проход main
+loop и перерисовывает экран только после sweep. Board run завершает каждый диапазон,
+удерживает ровно 351 sample во время pause 400 ms, возобновляет работу и чисто
+останавливается после 354 samples при zero TX/PATABLE/FIFO/storage side effects,
+invariant heap/storage и final lease 0. RSSI и frequency scale не калиброваны,
+physical RF silence не измерен. Active Full/Guided execution, controlled physical
+power-cut и endurance всё ещё держат `DEMO-S4` открытым.
 
 ## Ритм тестирования внутри этапа
 

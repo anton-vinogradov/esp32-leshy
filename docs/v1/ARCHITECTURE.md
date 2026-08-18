@@ -330,7 +330,17 @@ volatile snapshot into the localized live chart, whose updates are confined to t
 chart region. `E-HIL-107` proves 21 complete 2,402…2,484 MHz sweeps, a stable paused
 counter, exact receive-window accounting, zero TX/CC/storage side effects, invariant
 heap/storage and final lease 0. RPD bins represent threshold activity, not calibrated
-power; physical RF silence remains unmeasured and the CC1101 workflow remains next.
+power; physical RF silence remains unmeasured.
+
+Exact `0.83.0-cc1101-spectrum` applies the same separation to Sub-GHz RSSI without
+copying the nRF wire model. Pure `Cc1101SpectrumController` owns four 64-bin band
+plans and interaction state. `BoardCc1101PassiveSpectrum` performs only one bounded
+sample per main-loop turn, whitelists reset/RX/idle strobes, waits at most 3,000 us
+for RX ready, observes for 500 us and returns to IDLE; it exposes no TX, PATABLE or
+FIFO operation. UI redraw occurs only after a completed sweep. `E-HIL-108` proves all
+four bands, a stable 400 ms pause, exact wire accounting, zero TX/storage side
+effects, invariant heap/storage and final lease 0. Values are uncalibrated RSSI and
+physical RF silence remains unmeasured; active Full/Guided execution is next.
 
 ## Data model
 

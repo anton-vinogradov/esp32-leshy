@@ -225,6 +225,16 @@ safe pins, сохраняет slot 3/GPIO21 gated/high и освобождает
 (`E-HIL-107`/`E-RADIO-002`). Без RF detector это доказывает guarded software path,
 но не physical RF silence.
 
+Exact `0.83.0-cc1101-spectrum` добавляет соответствующий явный пользовательский
+receive path CC1101. GPIO5 разрешён только профилем board-01 без GPS/PN532;
+`RadioSpi` остаётся exclusive, nRF slot 3/GPIO21 — gated/high, а каждый из 354
+samples использует только разрешённую последовательность RX/IDLE после одного reset.
+Final wire counts — 1 reset, 354 RX и 713 IDLE strobes, 11 443 reads, 1 078 writes и
+26 110 SPI bytes; counters TX, rejected strobe, PATABLE, FIFO и storage write равны
+нулю. Stop оставляет CC1101 в IDLE и освобождает lease
+(`E-HIL-108`/`E-RADIO-003`). Без RF detector и calibrated source это не доказывает
+ни physical RF silence, ни calibrated RSSI/frequency accuracy.
+
 Любая неоднозначность GPIO5/6 или 14/21 заканчивается `conflicted`, а не перебором
 output modes. Probe не должен передавать RF/IR, писать на SD/NFC или издавать звук.
 
