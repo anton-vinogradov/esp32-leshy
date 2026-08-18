@@ -140,13 +140,17 @@ def active_rf_failures(report: dict[str, Any]) -> list[str]:
     reads = wire.get("register_reads")
     if not isinstance(reads, int) or reads < 130:
         failures.append(f"CC1101 active reads are implausible: {reads!r}")
+    # begin() contributes one reset strobe. Each bin is explicitly bounded by
+    # SIDLE -> tune -> SRX -> RSSI read -> SIDLE, and end() adds one SIDLE.
+    # Therefore 64 bins produce 1 + (3 * 64) + 1 = 194 command strobes,
+    # including 2 * 64 + 1 = 129 idle strobes.
     if (wire.get("register_writes") != 208 or
-            wire.get("command_strobes") != 258 or
+            wire.get("command_strobes") != 194 or
             wire.get("reset_strobes") != 1 or
             wire.get("receive_strobes") != 64 or
-            wire.get("idle_strobes") != 193 or
+            wire.get("idle_strobes") != 129 or
             isinstance(reads, int) and
-            wire.get("spi_bytes_clocked") != 2 * (reads + 208) + 258):
+            wire.get("spi_bytes_clocked") != 2 * (reads + 208) + 194):
         failures.append(f"CC1101 active wire differs: {wire!r}")
     expected_effects = {
         "radio_tx_commands": 0, "nrf_tx_mode_entries": 0,
