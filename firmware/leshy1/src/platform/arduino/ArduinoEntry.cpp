@@ -7768,7 +7768,7 @@ void emitLibraryFixture(Stream& reply) {
 }
 
 void emitLibraryExport(Stream& reply) {
-    static char artifact[1024] = {};
+    static char artifact[4096] = {};
     if (libraryController.view() != LibraryView::ExportReady) {
         reply.println(
             "{\"schema\":\"leshy.library.export.v1\",\"kind\":\"artifact\","

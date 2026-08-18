@@ -126,6 +126,41 @@ def export_failures(artifact: dict[str, Any], generation: int,
             "accepted": 0,
             "dropped": 0,
         }, "library_export.timeline.ble"))
+    timeline_windows = artifact.get("timeline_windows")
+    if not isinstance(timeline_windows, list) or len(timeline_windows) != retained:
+        failures.append("library_export.timeline_windows: retained list mismatch")
+    else:
+        accepted = 0
+        dropped = 0
+        latest_end = 0
+        for index, window in enumerate(timeline_windows):
+            if not isinstance(window, dict):
+                failures.append(f"library_export.timeline_windows[{index}]: malformed")
+                continue
+            started = window.get("started_us")
+            ended = window.get("ended_us")
+            if (not isinstance(started, int) or not isinstance(ended, int) or
+                    started <= 0 or ended < started or ended < latest_end):
+                failures.append(
+                    f"library_export.timeline_windows[{index}]: time order mismatch"
+                )
+            latest_end = ended if isinstance(ended, int) else latest_end
+            accepted += window.get("accepted", 0)
+            dropped += window.get("dropped", 0)
+        if evicted == 0 and (accepted != observations or dropped != 0):
+            failures.append("library_export.timeline_windows: observation totals mismatch")
+    timeline_started = timeline.get("started_us")
+    timeline_stopped = timeline.get("stopped_us")
+    if (not isinstance(timeline_started, int) or
+            not isinstance(timeline_stopped, int) or
+            timeline_stopped < timeline_started):
+        failures.append("library_export.timeline: invalid time bounds")
+    elif isinstance(wifi, dict):
+        duration = sum(wifi.get(field, 0) for field in (
+            "scheduled_us", "active_us", "unavailable_us", "fault_us"
+        ))
+        if duration != timeline_stopped - timeline_started:
+            failures.append("library_export.timeline.wifi: duration total mismatch")
     return failures
 
 

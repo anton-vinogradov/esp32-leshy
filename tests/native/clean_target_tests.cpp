@@ -1159,7 +1159,7 @@ void testSessionTimelinePersistsBoundedHistoryAndExactAggregates() {
     CHECK(library.add(reopened, 73, SessionIntegrity::Valid, true, false));
     CHECK(library.openSelected());
     CHECK(library.requestExport());
-    char artifact[1024] = {};
+    char artifact[4096] = {};
     const LibraryExportResult exported =
         library.formatSelectedJsonExport(artifact, sizeof(artifact));
     CHECK(exported.valid());
@@ -1167,6 +1167,9 @@ void testSessionTimelinePersistsBoundedHistoryAndExactAggregates() {
     CHECK(std::strstr(artifact, "leshy.session.summary.v2") != nullptr);
     CHECK(std::strstr(artifact, "\"windows\":5") != nullptr);
     CHECK(std::strstr(artifact, "\"retained\":5") != nullptr);
+    CHECK(std::strstr(artifact, "\"timeline_windows\":[") != nullptr);
+    CHECK(std::strstr(artifact, "\"source\":\"ble\"") != nullptr);
+    CHECK(std::strstr(artifact, "\"reason\":\"driver_unavailable\"") != nullptr);
 
     for (std::size_t index = 0; index < segmentSize; ++index) {
         segment[index] ^= 1U;

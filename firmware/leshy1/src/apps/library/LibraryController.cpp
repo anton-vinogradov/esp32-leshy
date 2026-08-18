@@ -124,17 +124,58 @@ LibraryExportResult LibraryController::formatSelectedJsonExport(char* output,
         "{\"schema\":\"leshy.library.export.v1\",\"kind\":\"artifact\","
         "\"status\":\"valid\",\"generation\":%lu,\"integrity\":\"%s\","
         "\"simulated\":%s,\"persistent\":%s,\"transport\":\"serial_ndjson\","
-        "\"storage_backend\":\"%s\",\"radio_touched\":false,\"session\":%s}",
+        "\"storage_backend\":\"%s\",\"radio_touched\":false,\"session\":%s%s",
         static_cast<unsigned long>(entry->generation),
         sessionIntegrityName(entry->integrity), entry->simulated ? "true" : "false",
         entry->persistent ? "true" : "false",
         entry->persistent ? "persistent_media" : "bounded_ram",
-        sessionSummary);
+        sessionSummary, entry->session->timeline().present
+            ? ",\"timeline_windows\":[" : "}");
     if (written < 0 || static_cast<std::size_t>(written) >= capacity) {
         output[0] = '\0';
         return {LibraryExportStatus::BufferTooSmall, 0};
     }
-    return {LibraryExportStatus::Valid, static_cast<std::size_t>(written)};
+    std::size_t position = static_cast<std::size_t>(written);
+    if (entry->session->timeline().present) {
+        for (std::size_t index = 0;
+             index < entry->session->timelineWindowCount(); ++index) {
+            const services::survey::SourceWindow* window =
+                entry->session->timelineWindow(index);
+            if (window == nullptr) {
+                output[0] = '\0';
+                return {LibraryExportStatus::SessionUnavailable, 0};
+            }
+            const int appended = std::snprintf(
+                output + position, capacity - position,
+                "%s{\"source\":\"%s\",\"state\":\"%s\",\"reason\":\"%s\","
+                "\"started_us\":%llu,\"ended_us\":%llu,"
+                "\"accepted\":%llu,\"dropped\":%llu}",
+                index == 0 ? "" : ",",
+                window->source == domain::observations::RadioKind::Wifi
+                    ? "wifi" : "ble",
+                services::survey::sourceWindowStateName(window->state),
+                services::survey::sourceWindowReasonName(window->reason),
+                static_cast<unsigned long long>(window->startedUs),
+                static_cast<unsigned long long>(window->endedUs),
+                static_cast<unsigned long long>(window->accepted),
+                static_cast<unsigned long long>(window->dropped));
+            if (appended < 0 ||
+                static_cast<std::size_t>(appended) >= capacity - position) {
+                output[0] = '\0';
+                return {LibraryExportStatus::BufferTooSmall, 0};
+            }
+            position += static_cast<std::size_t>(appended);
+        }
+        const int closed = std::snprintf(
+            output + position, capacity - position, "]}");
+        if (closed < 0 ||
+            static_cast<std::size_t>(closed) >= capacity - position) {
+            output[0] = '\0';
+            return {LibraryExportStatus::BufferTooSmall, 0};
+        }
+        position += static_cast<std::size_t>(closed);
+    }
+    return {LibraryExportStatus::Valid, position};
 }
 
 const LibraryEntry* LibraryController::selected() const { return get(selection_); }

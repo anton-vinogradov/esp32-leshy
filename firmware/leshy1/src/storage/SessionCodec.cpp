@@ -821,7 +821,8 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
             "{\"schema\":\"leshy.session.summary.v2\",\"id\":\"%s\","
             "\"started_us\":%llu,\"stopped_us\":%llu,\"observations\":%u,"
             "\"dropped\":%lu,\"sources\":{\"wifi\":%u},\"timeline\":{"
-            "\"selected_mask\":%u,\"windows\":%lu,\"retained\":%u,"
+            "\"selected_mask\":%u,\"started_us\":%llu,\"stopped_us\":%llu,"
+            "\"windows\":%lu,\"retained\":%u,"
             "\"evicted\":%lu,\"overflow\":%llu,"
             "\"wifi\":{\"scheduled_us\":%llu,\"active_us\":%llu,"
             "\"unavailable_us\":%llu,\"fault_us\":%llu,"
@@ -835,6 +836,8 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
             static_cast<unsigned long>(session.dropped()),
             static_cast<unsigned>(wifiCount),
             static_cast<unsigned>(timeline.selectedMask),
+            static_cast<unsigned long long>(timeline.startedUs),
+            static_cast<unsigned long long>(timeline.stoppedUs),
             static_cast<unsigned long>(timeline.totalWindows),
             static_cast<unsigned>(session.timelineWindowCount()),
             static_cast<unsigned long>(timeline.evictedWindows),
