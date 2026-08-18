@@ -66,6 +66,7 @@ const char* surveySetupActivationName(SurveySetupActivation activation) {
     switch (activation) {
         case SurveySetupActivation::None: return "none";
         case SurveySetupActivation::OpenedSources: return "opened_sources";
+        case SurveySetupActivation::OpenedSpectrum: return "opened_spectrum";
         case SurveySetupActivation::SourceChanged: return "source_changed";
         case SurveySetupActivation::SourceUnavailable:
             return "source_unavailable";
@@ -112,6 +113,9 @@ SurveySetupActivation SurveySourceController::activate() {
             view_ = SurveySetupView::Sources;
             selection_ = 0;
             return SurveySetupActivation::OpenedSources;
+        }
+        if (selection_ == 1) {
+            return SurveySetupActivation::OpenedSpectrum;
         }
         return canStart() ? SurveySetupActivation::StartRequested
                           : SurveySetupActivation::StartBlocked;

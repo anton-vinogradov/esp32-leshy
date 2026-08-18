@@ -28,6 +28,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/apps/library/LibraryController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/SessionCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/self_test/SelfTestController.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/spectrum/Nrf24SpectrumController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/ProductSurveyAdmission.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyPipeline.cpp" \
@@ -37,6 +38,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/domain/hardware/HardwareInventory.cpp" \
     "$repo_dir/firmware/leshy1/src/drivers/ble/BlePassiveContract.cpp" \
     "$repo_dir/firmware/leshy1/src/drivers/radio/ShieldReceiverIdentity.cpp" \
+    "$repo_dir/firmware/leshy1/src/drivers/radio/Nrf24PassiveSpectrum.cpp" \
     "$repo_dir/firmware/leshy1/src/drivers/wifi/WifiPassiveContract.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/AppRuntime.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/ResourceBroker.cpp" \

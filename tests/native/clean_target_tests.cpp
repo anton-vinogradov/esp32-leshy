@@ -17,10 +17,12 @@
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/self_test/SelfTestController.h"
+#include "apps/spectrum/Nrf24SpectrumController.h"
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
 #include "drivers/ble/BlePassiveContract.h"
 #include "drivers/radio/ShieldReceiverIdentity.h"
+#include "drivers/radio/Nrf24PassiveSpectrum.h"
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
@@ -71,6 +73,7 @@ using namespace leshy1::apps::survey;
 using namespace leshy1::apps::library;
 using namespace leshy1::apps::self_test;
 using namespace leshy1::apps::capture;
+using namespace leshy1::apps::spectrum;
 
 namespace {
 
@@ -391,6 +394,76 @@ void testShieldReceiverIdentityContractFailsClosed() {
     busy.resourceAcquired = false;
     finalizeShieldReceiverProbe(&busy);
     CHECK(busy.status == ShieldReceiverProbeStatus::Busy);
+}
+
+void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
+    const Nrf24PassiveSpectrumPlan plan =
+        defaultNrf24PassiveSpectrumPlan();
+    CHECK(validateNrf24PassiveSpectrumPlan(plan));
+    CHECK(plan.firstChannel == 2);
+    CHECK(plan.lastChannel == 84);
+    CHECK(plan.dwellUs == 200);
+    Nrf24PassiveSpectrumPlan unsafePlan = plan;
+    unsafePlan.maximumModules = 3;
+    CHECK(!validateNrf24PassiveSpectrumPlan(unsafePlan));
+    unsafePlan = plan;
+    unsafePlan.dwellUs = 100;
+    CHECK(!validateNrf24PassiveSpectrumPlan(unsafePlan));
+
+    Nrf24PassiveSpectrumReport report;
+    report.status = Nrf24PassiveSpectrumStatus::Ready;
+    report.profileDeclared = true;
+    report.gpsExcludedByProfile = true;
+    report.pn532ExcludedByProfile = true;
+    report.resourceOwned = true;
+    report.gpio21StableHigh = true;
+    report.detectedModules = 2;
+    report.cleanupComplete = false;
+    CHECK(validateNrf24PassiveSpectrumReport(report, false));
+    CHECK(!validateNrf24PassiveSpectrumReport(report, true));
+    report.cleanupComplete = true;
+    CHECK(validateNrf24PassiveSpectrumReport(report, true));
+    Nrf24PassiveSpectrumReport unsafe = report;
+    unsafe.txModeEntries = 1;
+    CHECK(!validateNrf24PassiveSpectrumReport(unsafe, true));
+    unsafe = report;
+    unsafe.txPayloadCommands = 1;
+    CHECK(!validateNrf24PassiveSpectrumReport(unsafe, true));
+    unsafe = report;
+    unsafe.nrfSlot3Gated = false;
+    CHECK(!validateNrf24PassiveSpectrumReport(unsafe, true));
+    unsafe = report;
+    unsafe.status = Nrf24PassiveSpectrumStatus::Fault;
+    CHECK(!validateNrf24PassiveSpectrumReport(unsafe, true));
+
+    Nrf24SpectrumController controller;
+    CHECK(controller.start(2, 1000));
+    CHECK(controller.state() == Nrf24SpectrumViewState::Running);
+    Nrf24PassiveSweep sweep;
+    sweep.modules = 2;
+    sweep.startedUs = 1000;
+    sweep.endedUs = 2000;
+    sweep.valid = true;
+    sweep.hits[10] = 1;
+    sweep.hits[40] = 1;
+    CHECK(controller.ingest(sweep));
+    CHECK(controller.sweeps() == 1);
+    CHECK(controller.totalHits() == 2);
+    CHECK(controller.activeBins() == 2);
+    CHECK(controller.intensity(10) == 64);
+    CHECK(controller.hottestChannel() == 12);
+    CHECK(controller.togglePause());
+    CHECK(controller.state() == Nrf24SpectrumViewState::Paused);
+    CHECK(!controller.ingest(sweep));
+    CHECK(controller.togglePause());
+    sweep.startedUs = 2001;
+    sweep.endedUs = 3000;
+    sweep.hits.fill(0);
+    CHECK(controller.ingest(sweep));
+    CHECK(controller.intensity(10) == 56);
+    CHECK(controller.stop());
+    CHECK(controller.state() == Nrf24SpectrumViewState::Idle);
+    CHECK(!controller.start(3, 4000));
 }
 
 void testProductBootRetryIsNarrowAndBounded() {
@@ -2437,11 +2510,16 @@ void testSurveySourcePlanProjectsAvailabilityAndRequiresSelection() {
     CHECK(controller.back());
     CHECK(controller.view() == SurveySetupView::Plan);
     CHECK(controller.next());
+    CHECK(controller.activate() == SurveySetupActivation::OpenedSpectrum);
+    CHECK(controller.next());
     CHECK(controller.activate() == SurveySetupActivation::StartBlocked);
+    CHECK(controller.previous());
     CHECK(controller.previous());
     CHECK(controller.activate() == SurveySetupActivation::OpenedSources);
     CHECK(controller.activate() == SurveySetupActivation::SourceChanged);
     CHECK(controller.back());
+    CHECK(controller.next());
+    CHECK(controller.activate() == SurveySetupActivation::OpenedSpectrum);
     CHECK(controller.next());
     CHECK(controller.activate() == SurveySetupActivation::StartRequested);
 
@@ -2472,6 +2550,8 @@ void testSurveySourcePlanProjectsAvailabilityAndRequiresSelection() {
     CHECK(preview.canStart());
     CHECK(preview.activate() == SurveySetupActivation::OpenedSources);
     CHECK(preview.back());
+    CHECK(preview.next());
+    CHECK(preview.activate() == SurveySetupActivation::OpenedSpectrum);
     CHECK(preview.next());
     CHECK(preview.activate() == SurveySetupActivation::StartRequested);
 }
@@ -3995,6 +4075,7 @@ int main() {
     testLanguageCatalogAndControllerAreBounded();
     testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
     testShieldReceiverIdentityContractFailsClosed();
+    testNrf24PassiveSpectrumContractAndControllerAreBounded();
     testProductBootRetryIsNarrowAndBounded();
     testProductStartIdentityRetryStopsBeforeFilesystem();
     testStorageTimingSummaryUsesNearestRank();

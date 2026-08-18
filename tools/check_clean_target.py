@@ -30,6 +30,10 @@ def main() -> int:
     shield_receiver_adapter = (
         TARGET / "src" / "platform" / "arduino" / "BoardShieldReceiverProbe.cpp"
     )
+    nrf24_spectrum_adapter = (
+        TARGET / "src" / "platform" / "arduino" /
+        "BoardNrf24PassiveSpectrum.cpp"
+    )
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
@@ -65,6 +69,7 @@ def main() -> int:
             passive_wifi_adapter,
             passive_wifi_capture_adapter,
             shield_receiver_adapter,
+            nrf24_spectrum_adapter,
             safe_outputs_adapter,
         )
     )
@@ -81,8 +86,8 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.81.0-shield-receiver-probe\\"' not in config:
-        errors.append("clean target does not identify the 0.81 shield receiver slice")
+    if 'LESHY1_VERSION=\\"0.82.0-nrf24-spectrum\\"' not in config:
+        errors.append("clean target does not identify the 0.82 nRF24 spectrum slice")
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
     for value in forbidden_config:
@@ -142,6 +147,36 @@ def main() -> int:
         ):
             if re.search(pattern, shield_probe):
                 errors.append(f"shield receiver adapter contains TX/select path: {pattern}")
+
+    if not nrf24_spectrum_adapter.is_file():
+        errors.append("guarded nRF24 passive-spectrum adapter is missing")
+    else:
+        spectrum_adapter = nrf24_spectrum_adapter.read_text(encoding="utf-8")
+        for marker in (
+            "kWriteRegister = 0x20",
+            "kReceiveConfig = 0x03",
+            "kRegRpd = 0x09",
+            "kSpectrumSpiHz = 1000000",
+            "pinMode(BoardProfile::kNrfCsPins[2], INPUT)",
+            "digitalWrite(BoardProfile::kNrfCePins[module], HIGH)",
+            "writeRegister(module, kRegConfig, kReceiveConfig)",
+            "validateNrf24PassiveSpectrumReport",
+        ):
+            if marker not in spectrum_adapter:
+                errors.append(
+                    f"nRF24 passive-spectrum adapter is missing invariant: {marker}"
+                )
+        for pattern in (
+            r"\b0xA0\b", r"\b0xB0\b", r"\b0xE1\b",
+            r"\bCONT_WAVE\b", r"\bPLL_LOCK\b",
+            r"digitalWrite\s*\(\s*BoardProfile::kNrfCsPins\[2\]",
+            r"pinMode\s*\(\s*BoardProfile::kNrfCsPins\[2\]\s*,\s*OUTPUT",
+            r"digitalWrite\s*\(\s*BoardProfile::kCc1101CsPin\s*,\s*LOW",
+        ):
+            if re.search(pattern, spectrum_adapter):
+                errors.append(
+                    f"nRF24 passive-spectrum adapter contains TX/select path: {pattern}"
+                )
 
     entry = arduino_entry.read_text(encoding="utf-8")
     buzzer_boot = "BoardSafeOutputs::establishBootInvariant();"

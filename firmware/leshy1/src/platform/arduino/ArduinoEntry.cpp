@@ -26,6 +26,7 @@
 #include "apps/capture/RadiotapPcap.h"
 #include "apps/capture/WifiFrameCapture.h"
 #include "apps/self_test/SelfTestController.h"
+#include "apps/spectrum/Nrf24SpectrumController.h"
 #include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/SurveyPipeline.h"
@@ -36,11 +37,13 @@
 #include "domain/hardware/HardwareInventory.h"
 #include "domain/observations/Observation.h"
 #include "drivers/ble/BlePassiveContract.h"
+#include "drivers/radio/Nrf24PassiveSpectrum.h"
 #include "drivers/radio/ShieldReceiverIdentity.h"
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
 #include "platform/arduino/BoardSafeOutputs.h"
+#include "platform/arduino/BoardNrf24PassiveSpectrum.h"
 #include "platform/arduino/BoardShieldReceiverProbe.h"
 #include "platform/arduino/ArduinoFsSessionStoreIo.h"
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
@@ -102,6 +105,8 @@ using leshy1::apps::self_test::SelfTestMode;
 using leshy1::apps::self_test::SelfTestReport;
 using leshy1::apps::self_test::SelfTestResultStatus;
 using leshy1::apps::self_test::SelfTestView;
+using leshy1::apps::spectrum::Nrf24SpectrumController;
+using leshy1::apps::spectrum::Nrf24SpectrumViewState;
 using leshy1::apps::survey::SurveyController;
 using leshy1::apps::survey::ObservationHistory;
 using leshy1::apps::survey::SurveyFilter;
@@ -128,12 +133,17 @@ using leshy1::domain::observations::RadioKind;
 using leshy1::drivers::ble::BleAdvertisementRecord;
 using leshy1::drivers::radio::ShieldReceiverProbeReport;
 using leshy1::drivers::radio::ShieldReceiverProbeStatus;
+using leshy1::drivers::radio::Nrf24PassiveSpectrumPlan;
+using leshy1::drivers::radio::Nrf24PassiveSpectrumReport;
+using leshy1::drivers::radio::Nrf24PassiveSpectrumStatus;
+using leshy1::drivers::radio::Nrf24PassiveSweep;
 using leshy1::drivers::wifi::WifiScanRecord;
 using leshy1::kernel::runtime::AppRuntime;
 using leshy1::kernel::runtime::LaunchStatus;
 using leshy1::kernel::runtime::Resource;
 using leshy1::kernel::runtime::ResourceBroker;
 using leshy1::platform::arduino::BoardSafeOutputs;
+using leshy1::platform::arduino::BoardNrf24PassiveSpectrum;
 using leshy1::platform::arduino::BoardShieldReceiverProbe;
 using leshy1::platform::arduino::ArduinoFsSessionStoreIo;
 using leshy1::platform::arduino::ArduinoFsSessionStoreWorkspace;
@@ -264,6 +274,25 @@ UiController uiController;
 LanguageController languageController;
 SelfTestController selfTestController;
 ShieldReceiverProbeReport shieldReceiverProbeReport;
+Nrf24SpectrumController nrf24SpectrumController;
+Nrf24PassiveSpectrumReport nrf24SpectrumReport;
+BoardNrf24PassiveSpectrum boardNrf24Spectrum;
+enum class RfSpectrumView : std::uint8_t {
+    None,
+    SourceMenu,
+    Live,
+};
+const char* rfSpectrumViewName(RfSpectrumView view) {
+    switch (view) {
+        case RfSpectrumView::None: return "none";
+        case RfSpectrumView::SourceMenu: return "source_menu";
+        case RfSpectrumView::Live: return "live";
+    }
+    return "unknown";
+}
+RfSpectrumView rfSpectrumView = RfSpectrumView::None;
+std::uint8_t rfSpectrumSelection = 0;
+std::uint64_t nextNrf24SpectrumSweepUs = 0;
 BoardWifiPassiveCapture wifiFrameCapture;
 constexpr WifiFrameCapturePlan kProductWifiFrameCapturePlan{};
 std::uint64_t nextCaptureUiRefreshUs = 0;
@@ -3679,6 +3708,19 @@ NavigationFooter navigationFooterForCurrentState() {
     if (uiController.page() == 1) return {back, {}, {}};
 
     if (uiController.page() == 2) {
+        if (rfSpectrumView == RfSpectrumView::SourceMenu) {
+            return {back, choose, enter};
+        }
+        if (rfSpectrumView == RfSpectrumView::Live) {
+            const Nrf24SpectrumViewState state = nrf24SpectrumController.state();
+            if (state == Nrf24SpectrumViewState::Fault) {
+                return {back, {}, {}};
+            }
+            return {back, {},
+                    {NavigationKey::RightAndSelect,
+                     state == Nrf24SpectrumViewState::Paused
+                         ? UiTextId::NavResume : UiTextId::NavPause}};
+        }
         if (productSurveySourceUnavailableVisible()) {
             return {{NavigationKey::Left, UiTextId::NavHome}, {}, {}};
         }
@@ -3690,7 +3732,7 @@ NavigationFooter navigationFooterForCurrentState() {
             }
             return {back, choose,
                     {NavigationKey::RightAndSelect,
-                     surveySourceController.selection() == 0
+                     surveySourceController.selection() < 2
                          ? UiTextId::NavEnter : UiTextId::NavStart}};
         }
         if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
@@ -4453,6 +4495,12 @@ UiTextId surveySourceNote(const SurveySourceOption& source) {
     return UiTextId::SourceDriverPending;
 }
 
+Rect surveyPlanRowBounds(std::uint8_t index) {
+    return {Layout::Edge,
+            static_cast<std::int16_t>(84 + index * 43),
+            Layout::ContentWidth, 38};
+}
+
 void renderSurveyPlanRow(std::uint8_t index) {
     if (index >= SurveySourceController::kPlanItemCount) return;
     char note[48] = {};
@@ -4468,8 +4516,18 @@ void renderSurveyPlanRow(std::uint8_t index) {
                           static_cast<unsigned>(
                               SurveySourceController::kSourceCount));
         }
-        renderMenuRow(Components::choiceRow(index), tr(UiTextId::PlanSources),
+        renderMenuRow(surveyPlanRowBounds(index), tr(UiTextId::PlanSources),
                       note, selected, true, Tone::Positive);
+        return;
+    }
+    if (index == 1) {
+        const bool available = BoardProfile::kRfShieldDeclared &&
+            !BoardProfile::kGpsDeclared && !BoardProfile::kPn532Declared;
+        renderMenuRow(surveyPlanRowBounds(index), tr(UiTextId::PlanSpectrum),
+                      tr(available ? UiTextId::SpectrumReady
+                                   : UiTextId::SpectrumUnavailable),
+                      selected, available,
+                      available ? Tone::Positive : Tone::Warning);
         return;
     }
     const bool preparing =
@@ -4487,7 +4545,7 @@ void renderSurveyPlanRow(std::uint8_t index) {
                       : (surveySourceController.simulatedPreview()
                              ? UiTextId::StartPreview
                              : UiTextId::StartReady)));
-    renderMenuRow(Components::choiceRow(index), tr(UiTextId::PlanStart),
+    renderMenuRow(surveyPlanRowBounds(index), tr(UiTextId::PlanStart),
                   tr(startNote), selected, ready,
                   ready ? Tone::Positive : Tone::Warning);
 }
@@ -4502,8 +4560,118 @@ void renderSurveySourceRow(std::uint8_t index) {
                   source->selected ? Tone::Positive : Tone::Muted);
 }
 
+void renderRfSpectrumSourceRow(std::uint8_t index) {
+    if (index >= 2) return;
+    const bool selected = rfSpectrumSelection == index;
+    const bool available = index == 0 && BoardProfile::kRfShieldDeclared &&
+        !BoardProfile::kGpsDeclared && !BoardProfile::kPn532Declared;
+    renderMenuRow(Components::choiceRow(index),
+                  tr(index == 0 ? UiTextId::SpectrumNrf24
+                                : UiTextId::SpectrumCc1101),
+                  tr(index == 0 && available ? UiTextId::SpectrumRxReady
+                                             : UiTextId::SpectrumNext),
+                  selected, available,
+                  available ? Tone::Positive : Tone::Muted);
+}
+
+void renderRfSpectrumSourceMenu(bool clearContent) {
+    renderHeader(tr(UiTextId::SpectrumSources), clearContent);
+    renderRfSpectrumSourceRow(0);
+    renderRfSpectrumSourceRow(1);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 207);
+    display.print(tr(UiTextId::SpectrumRxOnly));
+}
+
+std::uint16_t spectrumTone(std::uint8_t intensity) {
+    if (intensity < 24U) return Palette::TextMuted;
+    if (intensity < 96U) return Palette::Positive;
+    if (intensity < 176U) return Palette::Focus;
+    if (intensity < 232U) return Palette::Warning;
+    return Palette::Danger;
+}
+
+void renderNrf24SpectrumPlot() {
+    constexpr std::int16_t kPlotX = Layout::Edge;
+    constexpr std::int16_t kPlotY = 94;
+    constexpr std::int16_t kPlotWidth = Layout::ContentWidth;
+    constexpr std::int16_t kPlotHeight = 80;
+    display.fillRect(kPlotX, kPlotY, kPlotWidth, kPlotHeight,
+                     Palette::Surface);
+    for (std::int16_t x = 0; x < kPlotWidth; ++x) {
+        const std::size_t bin = static_cast<std::size_t>(x) *
+            Nrf24SpectrumController::kChannelCount / kPlotWidth;
+        const std::uint8_t intensity = nrf24SpectrumController.intensity(bin);
+        const std::int16_t height = intensity == 0
+            ? 1
+            : static_cast<std::int16_t>(1 +
+                  static_cast<std::uint32_t>(intensity) *
+                      (kPlotHeight - 2) / 255U);
+        display.drawFastVLine(kPlotX + x, kPlotY + kPlotHeight - height,
+                              height, spectrumTone(intensity));
+    }
+    display.drawRect(kPlotX, kPlotY, kPlotWidth, kPlotHeight,
+                     Palette::Divider);
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, kPlotX, 177);
+    display.print(tr(UiTextId::SpectrumAxisFirst));
+    setUiCursor(UiTextRole::Meta, 105, 177);
+    display.print(tr(UiTextId::SpectrumAxisMiddle));
+    setUiCursor(UiTextRole::Meta, 202, 177);
+    display.print(tr(UiTextId::SpectrumAxisLast));
+}
+
+void renderNrf24SpectrumMetrics() {
+    char line[64] = {};
+    display.fillRect(Layout::Edge, 78, Layout::ContentWidth, 15,
+                     Palette::Canvas);
+    const Nrf24SpectrumViewState state = nrf24SpectrumController.state();
+    const UiTextId stateText = state == Nrf24SpectrumViewState::Running
+        ? UiTextId::SpectrumRunning
+        : (state == Nrf24SpectrumViewState::Paused
+               ? UiTextId::SpectrumPaused : UiTextId::SpectrumFault);
+    display.setTextColor(state == Nrf24SpectrumViewState::Fault
+                             ? Palette::Danger : Palette::Positive,
+                         Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 78);
+    display.print(tr(stateText));
+
+    display.fillRect(Layout::Edge, 193, Layout::ContentWidth, 41,
+                     Palette::Canvas);
+    std::snprintf(line, sizeof(line), tr(UiTextId::SpectrumSweepsFormat),
+                  static_cast<unsigned long>(nrf24SpectrumController.sweeps()),
+                  static_cast<unsigned long long>(
+                      nrf24SpectrumController.totalHits()));
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 193);
+    display.print(line);
+    std::snprintf(line, sizeof(line), tr(UiTextId::SpectrumPeakFormat),
+                  static_cast<unsigned>(2400U +
+                      nrf24SpectrumController.hottestChannel()),
+                  static_cast<unsigned>(nrf24SpectrumController.activeBins()));
+    setUiCursor(UiTextRole::Meta, 14, 207);
+    display.print(line);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 221);
+    display.print(tr(UiTextId::SpectrumRxOnly));
+}
+
+void renderNrf24SpectrumPage(bool clearContent) {
+    renderHeader(tr(UiTextId::SpectrumTitle), clearContent);
+    renderNrf24SpectrumPlot();
+    renderNrf24SpectrumMetrics();
+}
+
 void renderInventoryPage(bool clearContent) {
     char line[96] = {};
+    if (rfSpectrumView == RfSpectrumView::SourceMenu) {
+        renderRfSpectrumSourceMenu(clearContent);
+        return;
+    }
+    if (rfSpectrumView == RfSpectrumView::Live) {
+        renderNrf24SpectrumPage(clearContent);
+        return;
+    }
     if (productSurveySourceUnavailableVisible()) {
         renderHeader(tr(UiTextId::SurveyUnavailable), clearContent);
         display.setTextColor(Palette::Danger, Palette::Canvas);
@@ -4534,7 +4702,9 @@ void renderInventoryPage(bool clearContent) {
             }
         }
         display.setTextColor(Palette::Positive, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 207);
+        setUiCursor(UiTextRole::Meta, 14,
+                    surveySourceController.view() == SurveySetupView::Sources
+                        ? 207 : 219);
         display.print(surveyWorkflow.simulated()
                           ? tr(UiTextId::FifoNoRf)
                           : tr(UiTextId::FifoRxOnly));
@@ -4878,6 +5048,8 @@ struct UiRenderSnapshot final {
     std::uint8_t languageSelection = 0;
     std::uint8_t selfTestView = 0;
     std::uint8_t selfTestSelection = 0;
+    std::uint8_t rfSpectrumView = 0;
+    std::uint8_t rfSpectrumSelection = 0;
     std::uint8_t surveyState = 0;
     std::uint8_t surveySetupView = 0;
     std::uint8_t surveySetupSelection = 0;
@@ -4904,6 +5076,8 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         languageController.selection(),
         static_cast<std::uint8_t>(selfTestController.view()),
         selfTestController.selection(),
+        static_cast<std::uint8_t>(rfSpectrumView),
+        rfSpectrumSelection,
         static_cast<std::uint8_t>(surveyWorkflow.state()),
         static_cast<std::uint8_t>(surveySourceController.view()),
         surveySourceController.selection(),
@@ -4936,6 +5110,18 @@ bool renderSelectionDelta() {
         }
         renderHomeRow(renderedUi.rootSelection, currentFirst);
         renderHomeRow(current, currentFirst);
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        rfSpectrumView == RfSpectrumView::SourceMenu &&
+        renderedUi.rfSpectrumView ==
+            static_cast<std::uint8_t>(RfSpectrumView::SourceMenu)) {
+        const std::uint8_t current = rfSpectrumSelection;
+        if (renderedUi.rfSpectrumSelection == current) return false;
+        renderRfSpectrumSourceRow(renderedUi.rfSpectrumSelection);
+        renderRfSpectrumSourceRow(current);
+        renderNavigationFooter();
         return true;
     }
 
@@ -5089,6 +5275,73 @@ void renderInteractiveScreen(bool clearContent) {
         static_cast<std::uint64_t>(esp_timer_get_time());
     lastUiRenderWasIncremental = incremental;
     lastUiRenderUs = finishedUs >= startedUs ? finishedUs - startedUs : 0;
+}
+
+bool startNrf24Spectrum() {
+    nrf24SpectrumController.reset();
+    nrf24SpectrumReport = {};
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0) startedUs = 1;
+    const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
+        AppRuntime::kForegroundOwner;
+    const Nrf24PassiveSpectrumPlan plan =
+        leshy1::drivers::radio::defaultNrf24PassiveSpectrumPlan();
+    const bool hardwareReady = boardNrf24Spectrum.begin(
+        owned, plan, &nrf24SpectrumReport);
+    const bool started = hardwareReady && nrf24SpectrumController.start(
+        nrf24SpectrumReport.detectedModules, startedUs);
+    if (!started) {
+        boardNrf24Spectrum.end();
+        nrf24SpectrumController.fail();
+    }
+    rfSpectrumView = RfSpectrumView::Live;
+    nextNrf24SpectrumSweepUs = startedUs;
+    lastRuntimeEvent = started ? "nrf24_spectrum_running"
+                               : "nrf24_spectrum_start_failed";
+    return true;
+}
+
+bool stopNrf24Spectrum(bool returnToSourceMenu) {
+    const bool cleanup = boardNrf24Spectrum.end();
+    if (nrf24SpectrumController.state() != Nrf24SpectrumViewState::Idle) {
+        nrf24SpectrumController.stop();
+    }
+    rfSpectrumView = returnToSourceMenu ? RfSpectrumView::SourceMenu
+                                        : RfSpectrumView::None;
+    nextNrf24SpectrumSweepUs = 0;
+    lastRuntimeEvent = cleanup ? "nrf24_spectrum_stopped"
+                               : "nrf24_spectrum_cleanup_failed";
+    return true;
+}
+
+void serviceNrf24Spectrum() {
+    if (rfSpectrumView != RfSpectrumView::Live ||
+        nrf24SpectrumController.state() !=
+            Nrf24SpectrumViewState::Running) {
+        return;
+    }
+    const std::uint64_t nowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs < nextNrf24SpectrumSweepUs) return;
+    Nrf24PassiveSweep sweep;
+    const bool valid = boardNrf24Spectrum.sweep(&sweep) &&
+                       nrf24SpectrumController.ingest(sweep);
+    if (!valid) {
+        boardNrf24Spectrum.end();
+        nrf24SpectrumController.fail();
+        lastRuntimeEvent = "nrf24_spectrum_runtime_fault";
+        renderInteractiveScreen(true);
+        return;
+    }
+    nextNrf24SpectrumSweepUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) + 40000ULL;
+    if (!uiController.isRoot() && uiController.page() == 2) {
+        display.startWrite();
+        renderNrf24SpectrumPlot();
+        renderNrf24SpectrumMetrics();
+        display.endWrite();
+    }
 }
 
 void releaseWifiFrameCaptureRfLease() {
@@ -5668,7 +5921,46 @@ bool applyUiAction(UiAction action, bool render = true) {
     if (!wasRoot && uiController.page() == 2) {
         bool handled = false;
         bool changed = false;
-        if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
+        if (rfSpectrumView == RfSpectrumView::SourceMenu) {
+            handled = true;
+            if (action == UiAction::Up && rfSpectrumSelection != 0) {
+                rfSpectrumSelection = 0;
+                changed = true;
+            } else if (action == UiAction::Down && rfSpectrumSelection != 1) {
+                rfSpectrumSelection = 1;
+                changed = true;
+            } else if ((action == UiAction::Select ||
+                        action == UiAction::Right) &&
+                       rfSpectrumSelection == 0) {
+                changed = startNrf24Spectrum();
+            } else if ((action == UiAction::Select ||
+                        action == UiAction::Right) &&
+                       rfSpectrumSelection == 1) {
+                lastRuntimeEvent = "cc1101_spectrum_not_implemented";
+            } else if (action == UiAction::Back || action == UiAction::Left) {
+                rfSpectrumView = RfSpectrumView::None;
+                lastRuntimeEvent = "survey_spectrum_plan";
+                changed = true;
+            }
+        } else if (rfSpectrumView == RfSpectrumView::Live) {
+            handled = true;
+            if (action == UiAction::Back || action == UiAction::Left) {
+                changed = stopNrf24Spectrum(true);
+            } else if ((action == UiAction::Select ||
+                        action == UiAction::Right) &&
+                       nrf24SpectrumController.togglePause()) {
+                changed = true;
+                lastRuntimeEvent = nrf24SpectrumController.state() ==
+                    Nrf24SpectrumViewState::Paused
+                        ? "nrf24_spectrum_paused"
+                        : "nrf24_spectrum_running";
+                if (nrf24SpectrumController.state() ==
+                    Nrf24SpectrumViewState::Running) {
+                    nextNrf24SpectrumSweepUs =
+                        static_cast<std::uint64_t>(esp_timer_get_time());
+                }
+            }
+        } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
             productSurveySourceUnavailableVisible() &&
             (action == UiAction::Select || action == UiAction::Right ||
              action == UiAction::Up || action == UiAction::Down)) {
@@ -5714,6 +6006,16 @@ bool applyUiAction(UiAction action, bool render = true) {
                 surveySetupActivationName(activation);
             if (activation == SurveySetupActivation::OpenedSources) {
                 changed = true;
+            } else if (activation ==
+                       SurveySetupActivation::OpenedSpectrum) {
+                const bool available = BoardProfile::kRfShieldDeclared &&
+                    !BoardProfile::kGpsDeclared &&
+                    !BoardProfile::kPn532Declared;
+                if (available) {
+                    rfSpectrumView = RfSpectrumView::SourceMenu;
+                    rfSpectrumSelection = 0;
+                    changed = true;
+                }
             } else if (activation ==
                        SurveySetupActivation::StartRequested) {
                 if (productSurveyRuntime.selected) {
@@ -6005,6 +6307,14 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
         if (openable && selected != nullptr &&
             std::strcmp(selected->id, "survey") == 0) {
+            if (rfSpectrumView != RfSpectrumView::None ||
+                boardNrf24Spectrum.active()) {
+                stopNrf24Spectrum(false);
+            } else {
+                nrf24SpectrumController.reset();
+                nrf24SpectrumReport = {};
+            }
+            rfSpectrumSelection = 0;
             if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
                 surveyPipeline.resetToSetup();
             }
@@ -9875,6 +10185,57 @@ void emitShieldReceiverProbeReport(Stream& reply) {
     reply.println(line);
 }
 
+void emitNrf24SpectrumReport(Stream& reply) {
+    const auto& report = nrf24SpectrumReport;
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.nrf24.spectrum.v1\",\"kind\":\"state\","
+        "\"view\":\"%s\",\"state\":\"%s\",\"status\":\"%s\","
+        "\"range_mhz\":[2402,2484],\"channels\":%u,\"dwell_us\":%u,"
+        "\"modules\":%u,\"sweeps\":%lu,\"total_hits\":%llu,"
+        "\"active_bins\":%u,\"peak_channel\":%u,\"peak_mhz\":%u,"
+        "\"rx_only\":%s,\"volatile\":true,\"adapter_active\":%s,"
+        "\"profile_declared\":%s,\"nrf_slot3_gated\":%s,"
+        "\"gpio21_stable_high\":%s,\"cleanup_complete\":%s,"
+        "\"wire\":{\"register_reads\":%lu,\"register_writes\":%lu,"
+        "\"spi_bytes_clocked\":%lu,\"receive_ce_high_events\":%lu},"
+        "\"side_effects\":{\"tx_mode_entries\":%lu,"
+        "\"tx_payload_commands\":%lu,\"cc_command_strobes\":%lu,"
+        "\"storage_writes\":0},\"read_only_query\":true,"
+        "\"current_owner\":\"%s\",\"current_lease_mask\":%lu}",
+        rfSpectrumViewName(rfSpectrumView),
+        leshy1::apps::spectrum::nrf24SpectrumViewStateName(
+            nrf24SpectrumController.state()),
+        leshy1::drivers::radio::nrf24PassiveSpectrumStatusName(report.status),
+        static_cast<unsigned>(Nrf24SpectrumController::kChannelCount),
+        static_cast<unsigned>(
+            leshy1::drivers::radio::defaultNrf24PassiveSpectrumPlan().dwellUs),
+        static_cast<unsigned>(nrf24SpectrumController.modules()),
+        static_cast<unsigned long>(nrf24SpectrumController.sweeps()),
+        static_cast<unsigned long long>(nrf24SpectrumController.totalHits()),
+        static_cast<unsigned>(nrf24SpectrumController.activeBins()),
+        static_cast<unsigned>(nrf24SpectrumController.hottestChannel()),
+        static_cast<unsigned>(2400U +
+            nrf24SpectrumController.hottestChannel()),
+        report.rxOnly ? "true" : "false",
+        boardNrf24Spectrum.active() ? "true" : "false",
+        report.profileDeclared ? "true" : "false",
+        report.nrfSlot3Gated ? "true" : "false",
+        report.gpio21StableHigh ? "true" : "false",
+        report.cleanupComplete ? "true" : "false",
+        static_cast<unsigned long>(report.registerReads),
+        static_cast<unsigned long>(report.registerWrites),
+        static_cast<unsigned long>(report.spiBytesClocked),
+        static_cast<unsigned long>(report.receiveCeHighEvents),
+        static_cast<unsigned long>(report.txModeEntries),
+        static_cast<unsigned long>(report.txPayloadCommands),
+        static_cast<unsigned long>(report.ccCommandStrobes),
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
 void handleCommand(Stream& reply, const char* command) {
     if (std::strncmp(command, "hil.begin ", 10) == 0) {
         emitHilSessionBegin(reply, command);
@@ -9888,6 +10249,8 @@ void handleCommand(Stream& reply, const char* command) {
         emitSafeOutputs(reply);
     } else if (std::strcmp(command, "hardware.shield.receivers") == 0) {
         emitShieldReceiverProbeReport(reply);
+    } else if (std::strcmp(command, "hardware.nrf24.spectrum") == 0) {
+        emitNrf24SpectrumReport(reply);
     } else if (std::strcmp(command, "ping") == 0) {
         broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"pong\"}");
     } else if (std::strcmp(command, "ui.state") == 0) {
@@ -10363,6 +10726,7 @@ void setup() {
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
               "\"hardware.shield.receivers\","
+              "\"hardware.nrf24.spectrum\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"capture.state\",\"capture.export.pcap\","
               "\"input.state\","
@@ -10404,6 +10768,7 @@ void loop() {
     serviceProductSurveyWorker();
     serviceWifiFrameCapture();
     serviceWifiFrameCapturePersist();
+    serviceNrf24Spectrum();
     poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
     poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
     PhysicalInputEvent inputEvent;

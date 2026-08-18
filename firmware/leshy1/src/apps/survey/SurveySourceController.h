@@ -28,6 +28,7 @@ enum class SurveySourceState : std::uint8_t {
 enum class SurveySetupActivation : std::uint8_t {
     None,
     OpenedSources,
+    OpenedSpectrum,
     SourceChanged,
     SourceUnavailable,
     StartRequested,
@@ -55,7 +56,7 @@ struct SurveySourceOption final {
 class SurveySourceController final {
 public:
     static constexpr std::size_t kSourceCount = 2;
-    static constexpr std::uint8_t kPlanItemCount = 2;
+    static constexpr std::uint8_t kPlanItemCount = 3;
 
     void rebuild(const domain::hardware::HardwareInventory& inventory,
                  bool simulatedPreview = false);
