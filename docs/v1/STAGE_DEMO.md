@@ -64,6 +64,13 @@ zero drops, cold read-only reopen and valid Library export; all five comparisons
 zero unmasked mismatch, heap is invariant, and final ownership is zero. S3 is closed
 and S4 is active; this does not promote a release or waive any `DEMO-S4` gate.
 
+S4 progress through exact 0.74 now covers selectable and durable real Wi-Fi/BLE:
+`E-AUTO-039`/`E-HIL-099` serializes one scan per source, records 6+34 observations,
+commits generation 76→77, cold-reopens six ordered dual-source windows and ends with
+zero drops/overflow and lease 0. This is a slice checkpoint, not `DEMO-S4`: injected
+degradation, controlled physical power-cut and 8-hour multi-source stability remain
+mandatory.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

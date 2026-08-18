@@ -284,6 +284,20 @@ counters. Exact `E-HIL-098` доказывает 21/21 observations, пять wi
 backlog/overflow/drops, cold reopen и final lease 0. Управляемый power-cut schema v2
 и длительный multi-source endurance остаются отдельными gates `DEMO-S4`.
 
+Exact `0.74.0-passive-ble` добавляет второй real source без ослабления этих
+boundaries. Bounded Arduino BLE scan потоково передаёт каждое advertisement прямо в
+общий Observation pipeline и сразу удаляет его из library map, поэтому высокая RF
+плотность не создаёт неограниченно растущую таблицу retained devices. Wi-Fi и BLE
+scans остаются serialized в product worker; binary start gate заставляет worker
+опубликовать, а UI task — принять timeline boundary `ScanStarted` до того, как driver
+сможет передать observation, сохраняя cross-queue monotonic ordering. SessionCodec v2
+принимает BLE observations с нулевыми channel/frequency, сохраняя exact decode schema
+v1, а Library summary экспортирует явные per-source counts. Exact `E-HIL-099`
+доказывает один real Wi-Fi и один real BLE cycle, 6+34 observations, generation
+76→77, шесть ordered persisted/exported windows, zero drops/overflow, exact-CID cold
+recovery и final lease 0. Следующим срезом S4 остаётся injected unavailable/fault
+recovery.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

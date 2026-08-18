@@ -64,6 +64,13 @@ cold read-only reopen и valid Library export; все пять сравнени�
 mismatch, heap invariant, final ownership нулевой. S3 закрыт, S4 активен; это не
 promote release и не отменяет ни один gate `DEMO-S4`.
 
+Progress S4 до exact 0.74 теперь покрывает selectable и durable real Wi-Fi/BLE:
+`E-AUTO-039`/`E-HIL-099` сериализует по одному scan каждого source, записывает 6+34
+observations, commits generation 76→77, после cold reopen возвращает шесть ordered
+dual-source windows и заканчивает с zero drops/overflow и lease 0. Это slice
+checkpoint, не `DEMO-S4`: injected degradation, управляемый physical power-cut и
+8-hour multi-source stability остаются обязательными.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases.

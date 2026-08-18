@@ -12,11 +12,11 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, exact 0.71 source-plan, exact 0.72 runtime общей timeline и exact 0.73 durable timeline persistence checkpoints.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.74 вплоть до real dual-source Wi-Fi/BLE persistence.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
-- **Главная цель текущего этапа:** добавить passive BLE к source plan и durable
-  timeline, принятым exact 0.73, затем реализовать compatible scheduling и честную
-  runtime degradation без смены Survey setup/navigation model.
+- **Главная цель текущего этапа:** построить compatible runtime degradation поверх
+  passive Wi-Fi/BLE plan, serialized scheduling и durable dual-source timeline,
+  принятых exact 0.74, без смены Survey setup/navigation model.
   Управляемый physical power-cut и 8 h multi-source
   endurance остаются явными gates `DEMO-S4`.
 
@@ -28,7 +28,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71 `E-HIL-096` принимает interactive source selection; exact 0.72 `E-HIL-097` подключает allocation-free timeline к real worker; exact 0.73 `E-HIL-098` durable-drains её, commits generation 73→74 с 21/21 observations, cold-reopens и экспортирует пять ordered windows с zero drops/overflow и final lease 0 | реализовать passive BLE, compatible scheduling и runtime degradation; проверить schema-v2 power-cut recovery и закрыть controlled power-cut плюс 8 h multi-source endurance в `DEMO-S4` |
+| S4 | `active` | exact 0.71…0.73 принимают source selection и durable timeline; exact 0.74 `E-HIL-099` выполняет по одному real Wi-Fi и BLE cycle, учитывает 6+34=40 observations, commits generation 76→77 и cold-reopens/экспортирует шесть ordered dual-source windows с zero drops/overflow и final lease 0 | реализовать и инъекционно проверить честную runtime degradation; проверить schema-v2 power-cut recovery и закрыть controlled power-cut плюс 8 h multi-source endurance в `DEMO-S4` |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -574,6 +574,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-074 | exact build `0.73.0-source-timeline-persistence` | pass: RAM 145 184 B, linked flash 1 184 052 B; app/factory 1 184 208/1 249 744 B; app `3bf32bf3…ffa`, factory `680a2815…c91`, ELF `11dc9ae4…fe7`, map `0ad8b322…6323`; source commit `bfe798f` | +9 596 B linked flash, +8 304 B static RAM и +9 344 B images vs 0.72 за persistence timeline schema v2, bounded retained history и export; exact checkpoint, не `DEMO-S4` и не release build |
 | E-AUTO-038 | source-timeline persistence runner и retained verifier | pass: native contracts сохраняют byte-exact schema v1 и покрывают CRC schema v2, bounded eviction и export; verifier независимо rehashes exact candidate/source/runner/artifacts, проверяет FIFO drain, duration/observation equality, generation continuity, cold reopen, ordered exported windows, TFT captures, heap, CID и cleanup | local evidence одной board; passive BLE, управляемый power-cut schema v2 и endurance вне принятого scope |
 | E-HIL-098 / E-SURVEY-011 | board-01 exact 0.73 durable source timeline | pass: два real Wi-Fi scans учитывают 21/21 accepted/forwarded observations; runtime FIFO заканчивает 0 с high-water 1, persisted/retained windows 5/5 при zero evictions/drops/overflow, сумма windows точно равна timeline elapsed 5 327 283 us, Stop commits generation 73→74, cold exact-CID reboot открывает и экспортирует пять ordered source/state/reason windows, heap invariant 256 320/191 648/171 852 B, buzzer/input safe, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-source-timeline-persistence-0.73.json) | принимает durable drain/reopen/export для Wi-Fi source; passive BLE, cross-radio scheduling/degradation, controlled power-cut и 8 h endurance всё ещё держат `DEMO-S4` открытым |
+| E-BUILD-075 | exact build `0.74.0-passive-ble` | pass: RAM 147 360 B, linked flash 1 419 892 B; app/factory 1 420 304/1 485 840 B; app `806964a6…bff`, factory `4aee6025…521`, ELF `80a02f09…16e`, map `d0713748…001`; source commit `ab7ff27` | +235 840 B linked flash, +2 176 B static RAM и +236 096 B images vs 0.73 за bounded Arduino BLE scanner, streaming ingress, dual-source scheduling и telemetry; exact checkpoint, не `DEMO-S4` и не release build |
+| E-AUTO-039 | passive-BLE HIL runner и retained verifier | pass: host contracts покрывают BLE codec roundtrip и fail-closed поведение runner; independent verifier rehashes exact candidate/source/runner/artifacts и проверяет оба cold boot, exact CID, один Wi-Fi и один BLE cycle, serialized timeline boundaries, per-source counts, шесть persisted/exported windows, пять TFT captures, heap и cleanup | local evidence одной board; injected degradation, controlled power-cut и endurance вне принятого scope |
+| E-HIL-099 / E-SURVEY-012 | board-01 exact 0.74 passive Wi-Fi/BLE Survey | pass: оба sources available и выбраны; один real Wi-Fi scan и один real BLE scan учитывают 6+34=40 accepted/forwarded observations с zero drops, FIFO заканчивает 0/high-water 2, сохраняются шесть ordered windows, Stop commits generation 76→77 и 2 025 bytes, cold exact-CID reboot открывает schema-v2 source counts и экспортирует Wi-Fi/BLE windows, heap invariant 234 348/169 728/150 208 B, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-passive-ble-0.74.json) | принимает passive BLE, bounded scheduling и durable dual-source persistence; injected degradation, controlled power-cut и 8 h multi-source endurance всё ещё держат `DEMO-S4` открытым |
 
 ## Известные неопределённости и риски
 
@@ -603,8 +606,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 
 ## Blockers
 
-Реализация S4 разблокирована; source selection и durable Wi-Fi timeline приняты до
-exact 0.73, далее идут passive BLE и scheduling. Недоступный сейчас управляемый power-cut fixture остаётся явным exit
+Реализация S4 разблокирована; source selection, bounded Wi-Fi/BLE scheduling и
+durable dual-source persistence приняты до exact 0.74. Следующей идёт честная runtime
+degradation. Недоступный сейчас управляемый power-cut fixture остаётся явным exit
 requirement `DEMO-S4`, software reset не принимается как замена. Второй
 экземпляр, мультиметр и logic/RF detector остаются named gaps следующих этапов;
 затронутые capabilities остаются conditional/unavailable и не включаются

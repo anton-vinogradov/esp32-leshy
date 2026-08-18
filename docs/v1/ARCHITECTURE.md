@@ -227,6 +227,19 @@ accepted/drop counts. Exact `E-HIL-098` proves 21/21 observations, five windows,
 zero FIFO backlog/overflow/drops, cold reopen and final lease 0. Schema-v2 controlled
 power-cut and long multi-source endurance remain separate `DEMO-S4` gates.
 
+Exact `0.74.0-passive-ble` adds the second real source without weakening those
+boundaries. A bounded Arduino BLE scan streams each advertisement directly into the
+common Observation pipeline and removes it from the library map immediately, so RF
+density cannot grow an unbounded retained-device table. Wi-Fi and BLE scans remain
+serialized by the product worker; a binary start gate makes the worker publish and
+the UI task accept each timeline `ScanStarted` boundary before the driver can emit an
+observation, preserving cross-queue monotonic ordering. SessionCodec v2 accepts BLE
+observations with zero channel/frequency while retaining exact schema-v1 decode, and
+the Library summary exports explicit per-source counts. Exact `E-HIL-099` proves one
+real Wi-Fi plus one real BLE cycle, 6+34 observations, generation 76→77, six ordered
+persisted/exported windows, zero drops/overflow, exact-CID cold recovery and final
+lease 0. Injected unavailable/fault recovery remains the next S4 slice.
+
 ## Data model
 
 Raw observation is separate from interpretation:
