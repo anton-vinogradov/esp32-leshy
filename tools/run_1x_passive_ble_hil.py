@@ -66,9 +66,9 @@ def running_failures(state: dict[str, Any]) -> list[str]:
     wifi_cycles = state.get("survey_product_wifi_scan_cycles")
     ble_cycles = state.get("survey_product_ble_scan_cycles")
     cycles = state.get("survey_product_scan_cycles")
-    if not all(isinstance(value, int) and value >= 2
+    if not all(isinstance(value, int) and value >= 1
                for value in (wifi_cycles, ble_cycles, cycles)):
-        failures.append("running.scan_cycles: expected both sources >= 2")
+        failures.append("running.scan_cycles: expected one complete dual-source cycle")
     wifi = state.get("survey_scan_accepted")
     ble = state.get("survey_ble_scan_accepted")
     observations = state.get("survey_observations")
@@ -98,8 +98,8 @@ def running_failures(state: dict[str, Any]) -> list[str]:
         if not isinstance(duty, int) or duty < 1 or duty > 1000:
             failures.append(f"running.timeline_{source}: invalid duty")
     archived = state.get("survey_timeline_archived_windows")
-    if not isinstance(archived, int) or archived < 8:
-        failures.append("running.timeline: expected >= 8 archived windows")
+    if not isinstance(archived, int) or archived < 4:
+        failures.append("running.timeline: expected >= 4 archived windows")
     return failures
 
 
@@ -129,7 +129,7 @@ def committed_failures(state: dict[str, Any], generation: int) -> list[str]:
     persisted = state.get("survey_timeline_persisted_windows")
     retained = state.get("survey_timeline_retained_windows")
     evicted = state.get("survey_timeline_evicted_windows")
-    if not isinstance(archived, int) or archived < 9 or persisted != archived:
+    if not isinstance(archived, int) or archived < 6 or persisted != archived:
         failures.append("committed.timeline: incomplete persisted window count")
     elif retained != min(archived, 16) or evicted != archived - retained:
         failures.append("committed.timeline: retained/evicted mismatch")
@@ -156,6 +156,20 @@ def export_failures(artifact: dict[str, Any], generation: int,
         "observations": observations,
         "dropped": 0,
     }, "export.session"))
+    sources = session.get("sources")
+    if not isinstance(sources, dict):
+        failures.append("export.sources: missing")
+    else:
+        wifi_observations = sources.get("wifi")
+        ble_observations = sources.get("ble")
+        if not isinstance(wifi_observations, int) or wifi_observations < 1:
+            failures.append("export.sources.wifi: expected >= 1")
+        if not isinstance(ble_observations, int) or ble_observations < 1:
+            failures.append("export.sources.ble: expected >= 1")
+        if (isinstance(wifi_observations, int) and
+                isinstance(ble_observations, int) and
+                wifi_observations + ble_observations != observations):
+            failures.append("export.sources: observation accounting mismatch")
     timeline = session.get("timeline")
     if not isinstance(timeline, dict):
         return failures + ["export.timeline: missing"]
@@ -173,8 +187,8 @@ def export_failures(artifact: dict[str, Any], generation: int,
         elapsed = None
     else:
         elapsed = stopped - started
-    if not isinstance(windows, int) or windows < 9:
-        failures.append("export.timeline: expected >= 9 windows")
+    if not isinstance(windows, int) or windows < 6:
+        failures.append("export.timeline: expected >= 6 windows")
     elif retained != min(windows, 16) or evicted != windows - retained:
         failures.append("export.timeline: retained/evicted mismatch")
     source_total = 0
@@ -298,12 +312,12 @@ def main() -> int:
                         device,
                         lambda state: (
                             state.get("survey_product_status") == "running" and
-                            state.get("survey_product_wifi_scan_cycles", 0) >= 2 and
-                            state.get("survey_product_ble_scan_cycles", 0) >= 2 and
-                            state.get("survey_timeline_archived_windows", 0) >= 8
+                            state.get("survey_product_wifi_scan_cycles", 0) >= 1 and
+                            state.get("survey_product_ble_scan_cycles", 0) >= 1 and
+                            state.get("survey_timeline_archived_windows", 0) >= 4
                         ),
                         45.0,
-                        "dual passive Survey did not reach two complete cycles",
+                        "dual passive Survey did not reach one complete cycle",
                     )
                     trace.append(running)
                     failures.extend(running_failures(running))

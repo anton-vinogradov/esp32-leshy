@@ -1520,6 +1520,45 @@ void testSessionCodecCommitsCanonicalDataAndReopensOffline() {
                       "checksum_mismatch") == 0);
 }
 
+void testSessionCodecRoundTripsBleWithoutInventingWifiFields() {
+    SurveySession original;
+    CHECK(original.start("ble-codec", 1000) == SessionStatus::Started);
+    Observation advertisement;
+    advertisement.monotonicUs = 2000;
+    advertisement.radio = RadioKind::Ble;
+    advertisement.frequencyKhz = 0;
+    advertisement.channel = 0;
+    advertisement.rssiDbm = -61;
+    advertisement.identity = {1, 2, 3, 4, 5, 6};
+    advertisement.identityLength = 6;
+    std::memcpy(advertisement.label.data(), "field-tag", 10);
+    advertisement.labelLength = 9;
+    CHECK(original.append(advertisement) == SessionStatus::Appended);
+    CHECK(original.stop(3000) == SessionStatus::Stopped);
+
+    std::array<std::uint8_t, kSessionSegmentMaxBytes> segment{};
+    std::array<std::uint8_t, kSessionManifestMaxBytes> manifest{};
+    std::size_t segmentSize = 0;
+    std::size_t manifestSize = 0;
+    CHECK(encodeObservationSegment(original, segment.data(), segment.size(),
+                                   &segmentSize) == SessionCodecStatus::Valid);
+    CHECK(encodeSessionManifest(original, segment.data(), segmentSize,
+                                manifest.data(), manifest.size(),
+                                &manifestSize) == SessionCodecStatus::Valid);
+
+    SurveySession reopened;
+    CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
+                        segmentSize, &reopened) == SessionCodecStatus::Valid);
+    CHECK(reopened.size() == 1);
+    const Observation* restored = reopened.get(0);
+    CHECK(restored != nullptr && restored->radio == RadioKind::Ble);
+    CHECK(restored != nullptr && restored->frequencyKhz == 0);
+    CHECK(restored != nullptr && restored->channel == 0);
+    CHECK(restored != nullptr && restored->identity == advertisement.identity);
+    CHECK(restored != nullptr &&
+          std::strcmp(restored->label.data(), "field-tag") == 0);
+}
+
 class MemorySessionStoreIo final : public SessionStoreIo {
 public:
     bool writeFile(const char* path, const std::uint8_t* data, std::size_t size) override {
@@ -3450,6 +3489,7 @@ int main() {
     testProductStorePolicySeparatesReadOnlyBootFromExplicitWrites();
     testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam();
     testSessionCodecCommitsCanonicalDataAndReopensOffline();
+    testSessionCodecRoundTripsBleWithoutInventingWifiFields();
     testOfflineLibraryControllerIsBoundedAndPreservesProvenance();
     testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity();
     testBoundedSessionStoreCommitsRecoversAndFallsBack();

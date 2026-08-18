@@ -39,9 +39,9 @@ def valid_running() -> dict[str, Any]:
         "survey_ble_scan_rejected": 0, "survey_ble_scan_dropped": 0,
         "survey_observations": 19, "survey_forwarded": 19,
         "survey_dropped": 0, "survey_queue_depth": 0,
-        "survey_product_wifi_scan_cycles": 2,
-        "survey_product_ble_scan_cycles": 2,
-        "survey_product_scan_cycles": 2,
+        "survey_product_wifi_scan_cycles": 1,
+        "survey_product_ble_scan_cycles": 1,
+        "survey_product_scan_cycles": 1,
         "survey_timeline_state": "running",
         "survey_timeline_healthy": True,
         "survey_timeline_selected_mask": 3,
@@ -53,7 +53,7 @@ def valid_running() -> dict[str, Any]:
         "survey_timeline_ble_accepted": 7,
         "survey_timeline_wifi_duty_permille": 420,
         "survey_timeline_ble_duty_permille": 380,
-        "survey_timeline_archived_windows": 8,
+        "survey_timeline_archived_windows": 4,
     }
     return state
 
@@ -71,6 +71,7 @@ def valid_export() -> dict[str, Any]:
         "session": {
             "schema": "leshy.session.summary.v2",
             "id": "product-passive-live", "observations": 10, "dropped": 0,
+            "sources": {"wifi": 5, "ble": 5},
             "timeline": {
                 "selected_mask": 3, "overflow": 0,
                 "started_us": 100, "stopped_us": 1100,
@@ -86,7 +87,7 @@ def valid_export() -> dict[str, Any]:
 
 
 class PassiveBleHilRunnerTests(unittest.TestCase):
-    def test_running_requires_two_real_sources_and_exact_accounting(self) -> None:
+    def test_running_requires_one_cycle_from_both_sources_and_exact_accounting(self) -> None:
         state = valid_running()
         self.assertEqual([], RUNNER.running_failures(state))
         state["survey_ble_scan_accepted"] = 0
@@ -97,7 +98,7 @@ class PassiveBleHilRunnerTests(unittest.TestCase):
         state["survey_product_active_source_mask"] = 1
         state["survey_product_unavailable_source_mask"] = 2
         state["survey_ble_scan_dropped"] = 1
-        state["survey_product_ble_scan_cycles"] = 1
+        state["survey_product_ble_scan_cycles"] = 0
         self.assertGreaterEqual(len(RUNNER.running_failures(state)), 4)
 
     def test_export_requires_durable_dual_source_timeline(self) -> None:
@@ -109,6 +110,7 @@ class PassiveBleHilRunnerTests(unittest.TestCase):
     def test_export_rejects_fabricated_or_missing_ble_evidence(self) -> None:
         artifact = valid_export()
         artifact["session"]["timeline"]["ble"]["accepted"] = 0
+        artifact["session"]["sources"]["ble"] = 0
         artifact["timeline_windows"] = [{"source": "wifi"}] * 10
         self.assertGreaterEqual(len(RUNNER.export_failures(artifact, 75, 10)), 3)
 

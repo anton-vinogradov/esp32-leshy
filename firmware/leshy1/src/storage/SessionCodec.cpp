@@ -227,11 +227,19 @@ bool validSessionId(const std::uint8_t* value, std::size_t size) {
 SessionCodecStatus encodeObservation(const domain::observations::Observation& observation,
                                      std::uint8_t* output, std::size_t capacity,
                                      std::size_t* outputSize) {
-    if (output == nullptr || outputSize == nullptr || observation.identityLength == 0 ||
+    const bool wifi =
+        observation.radio == domain::observations::RadioKind::Wifi;
+    const bool ble = observation.radio == domain::observations::RadioKind::Ble;
+    const bool validRadioFields =
+        (wifi && observation.channel > 0 && observation.channel <= 14 &&
+         observation.frequencyKhz > 0) ||
+        (ble && observation.channel == 0 && observation.frequencyKhz == 0);
+    if (output == nullptr || outputSize == nullptr ||
+        (!wifi && !ble) || !validRadioFields ||
+        observation.identityLength == 0 ||
         observation.identityLength > observation.identity.size() ||
         observation.labelLength > domain::observations::Observation::kLabelCapacity ||
-        observation.channel == 0 || observation.channel > 14 || observation.rssiDbm < -127 ||
-        observation.rssiDbm > 0 || observation.frequencyKhz == 0) {
+        observation.rssiDbm < -127 || observation.rssiDbm > 0) {
         return SessionCodecStatus::InvalidArgument;
     }
     CborWriter writer(output, capacity);
@@ -269,16 +277,21 @@ SessionCodecStatus decodeObservation(const std::uint8_t* input, std::size_t size
     if (!key(reader, 0) || !reader.unsignedValue(&observation.sequence) ||
         !key(reader, 1) || !reader.unsignedValue(&observation.monotonicUs) ||
         !key(reader, 2) || !reader.unsignedValue(&unsignedValue) ||
-        unsignedValue != static_cast<std::uint8_t>(domain::observations::RadioKind::Wifi)) {
+        (unsignedValue != static_cast<std::uint8_t>(
+                              domain::observations::RadioKind::Wifi) &&
+         unsignedValue != static_cast<std::uint8_t>(
+                              domain::observations::RadioKind::Ble))) {
         return SessionCodecStatus::Malformed;
     }
-    observation.radio = domain::observations::RadioKind::Wifi;
+    observation.radio = static_cast<domain::observations::RadioKind>(
+        static_cast<std::uint8_t>(unsignedValue));
     if (!key(reader, 3) || !reader.unsignedValue(&unsignedValue) ||
         unsignedValue > std::numeric_limits<std::uint32_t>::max()) {
         return SessionCodecStatus::Malformed;
     }
     observation.frequencyKhz = static_cast<std::uint32_t>(unsignedValue);
-    if (!key(reader, 4) || !reader.unsignedValue(&unsignedValue) || unsignedValue > 14) {
+    if (!key(reader, 4) || !reader.unsignedValue(&unsignedValue) ||
+        unsignedValue > std::numeric_limits<std::uint16_t>::max()) {
         return SessionCodecStatus::Malformed;
     }
     observation.channel = static_cast<std::uint16_t>(unsignedValue);
@@ -303,8 +316,14 @@ SessionCodecStatus decodeObservation(const std::uint8_t* input, std::size_t size
     observation.label[length] = '\0';
     observation.labelLength = static_cast<std::uint8_t>(length);
     if (!reader.complete()) return SessionCodecStatus::TrailingData;
+    const bool validRadioFields =
+        (observation.radio == domain::observations::RadioKind::Wifi &&
+         observation.channel > 0 && observation.channel <= 14 &&
+         observation.frequencyKhz > 0) ||
+        (observation.radio == domain::observations::RadioKind::Ble &&
+         observation.channel == 0 && observation.frequencyKhz == 0);
     if (observation.sequence == 0 || observation.monotonicUs == 0 ||
-        observation.channel == 0 || observation.frequencyKhz == 0) {
+        !validRadioFields) {
         return SessionCodecStatus::Malformed;
     }
     *output = observation;
@@ -786,11 +805,16 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
         return false;
     }
     std::size_t wifiCount = 0;
+    std::size_t bleCount = 0;
     for (std::size_t index = 0; index < session.size(); ++index) {
         const domain::observations::Observation* observation = session.get(index);
         if (observation != nullptr &&
             observation->radio == domain::observations::RadioKind::Wifi) {
             ++wifiCount;
+        } else if (observation != nullptr &&
+                   observation->radio ==
+                       domain::observations::RadioKind::Ble) {
+            ++bleCount;
         }
     }
     const services::survey::SessionTimelineSummary& timeline = session.timeline();
@@ -820,7 +844,8 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
             output, capacity,
             "{\"schema\":\"leshy.session.summary.v2\",\"id\":\"%s\","
             "\"started_us\":%llu,\"stopped_us\":%llu,\"observations\":%u,"
-            "\"dropped\":%lu,\"sources\":{\"wifi\":%u},\"timeline\":{"
+            "\"dropped\":%lu,\"sources\":{\"wifi\":%u,\"ble\":%u},"
+            "\"timeline\":{"
             "\"selected_mask\":%u,\"started_us\":%llu,\"stopped_us\":%llu,"
             "\"windows\":%lu,\"retained\":%u,"
             "\"evicted\":%lu,\"overflow\":%llu,"
@@ -835,6 +860,7 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
             static_cast<unsigned>(session.size()),
             static_cast<unsigned long>(session.dropped()),
             static_cast<unsigned>(wifiCount),
+            static_cast<unsigned>(bleCount),
             static_cast<unsigned>(timeline.selectedMask),
             static_cast<unsigned long long>(timeline.startedUs),
             static_cast<unsigned long long>(timeline.stoppedUs),

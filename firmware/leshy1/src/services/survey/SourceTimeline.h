@@ -117,6 +117,7 @@ public:
     std::uint8_t selectedMask() const { return selectedMask_; }
     std::uint64_t startedUs() const { return startedUs_; }
     std::uint64_t endedUs() const { return endedUs_; }
+    std::uint64_t latestUs() const { return latestUs_; }
     std::size_t queuedWindows() const { return windowSize_; }
     std::size_t windowHighWater() const { return windowHighWater_; }
     std::uint64_t overflowEvents() const { return overflowEvents_; }

@@ -18,6 +18,7 @@
 #include <mbedtls/sha256.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <freertos/semphr.h>
 #include <freertos/task.h>
 
 #include "apps/library/LibraryController.h"
@@ -370,6 +371,10 @@ struct ProductSurveyRuntimeState final {
     std::uint8_t unavailableSourceMask = 0;
     const char* timelineStatus = "idle";
     const char* timelineArchiveStatus = "idle";
+    const char* timelineFailureStatus = "none";
+    const char* timelineFailureStage = "none";
+    std::uint64_t timelineFailureEventUs = 0;
+    std::uint64_t timelineFailureLatestUs = 0;
     bool timelineHealthy = true;
     std::uint32_t timelineArchivedWindows = 0;
 };
@@ -443,6 +448,8 @@ constexpr UBaseType_t kProductSurveyObservationCapacity =
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
 QueueHandle_t productSurveyWorkerEvents = nullptr;
 QueueHandle_t productSurveyObservations = nullptr;
+StaticSemaphore_t productSurveyScanStartGateStorage{};
+SemaphoreHandle_t productSurveyScanStartGate = nullptr;
 TaskHandle_t productSurveyWorkerTaskHandle = nullptr;
 portMUX_TYPE productSurveyWorkerMux = portMUX_INITIALIZER_UNLOCKED;
 ProductSurveyWorkerControl productSurveyWorkerControl =
@@ -1170,10 +1177,17 @@ void runProductSurveyWorker(void*) {
                 if (scanStartedUs == 0) scanStartedUs = 1;
                 const std::uint32_t sourceCycles =
                     source == RadioKind::Wifi ? wifiScanCycles : bleScanCycles;
+                // Event and observation queues cannot establish ordering with
+                // each other. Clear any stale acknowledgement, publish the
+                // window transition, and wait until the UI task has made this
+                // source Active before its driver can emit observations.
+                xSemaphoreTake(productSurveyScanStartGate, 0);
                 sendProductSurveyWorkerEvent(
                     ProductSurveyWorkerEventKind::ScanStarted, report, source,
                     wifiAggregate, bleAggregate, scanCycles, sourceCycles,
                     scanStartedUs, scanStartedUs);
+                xSemaphoreTake(productSurveyScanStartGate, portMAX_DELAY);
+                if (productSurveyStopRequested()) break;
                 setProductSurveyScanActive(true);
                 BoardWifiPassiveScanResult wifiScan;
                 BoardBlePassiveScanResult bleScan;
@@ -1303,12 +1317,15 @@ void runProductSurveyWorker(void*) {
 }
 
 bool initializeProductSurveyWorker() {
+    productSurveyScanStartGate = xSemaphoreCreateBinaryStatic(
+        &productSurveyScanStartGateStorage);
     productSurveyWorkerEvents = xQueueCreate(
         kProductSurveyWorkerEventCapacity,
         sizeof(ProductSurveyWorkerEvent));
     productSurveyObservations = xQueueCreate(
         kProductSurveyObservationCapacity, sizeof(Observation));
-    if (productSurveyWorkerEvents == nullptr ||
+    if (productSurveyScanStartGate == nullptr ||
+        productSurveyWorkerEvents == nullptr ||
         productSurveyObservations == nullptr) {
         if (productSurveyWorkerEvents != nullptr) {
             vQueueDelete(productSurveyWorkerEvents);
@@ -1328,6 +1345,7 @@ bool initializeProductSurveyWorker() {
         vQueueDelete(productSurveyObservations);
         productSurveyWorkerEvents = nullptr;
         productSurveyObservations = nullptr;
+        productSurveyScanStartGate = nullptr;
     }
     return started;
 }
@@ -1421,11 +1439,22 @@ bool requestProductSurveyWorkerStop(bool cancel) {
     return true;
 }
 
-bool applyProductSurveyTimelineStatus(SourceTimelineStatus status,
-                                      SourceTimelineStatus expected) {
+bool applyProductSurveyTimelineStatus(
+    SourceTimelineStatus status, SourceTimelineStatus expected,
+    const char* stage = "unspecified", std::uint64_t eventUs = 0) {
     productSurveyRuntime.timelineStatus =
         leshy1::services::survey::sourceTimelineStatusName(status);
-    if (status != expected) productSurveyRuntime.timelineHealthy = false;
+    if (status != expected) {
+        if (std::strcmp(productSurveyRuntime.timelineFailureStatus, "none") == 0) {
+            productSurveyRuntime.timelineFailureStatus =
+                productSurveyRuntime.timelineStatus;
+            productSurveyRuntime.timelineFailureStage = stage;
+            productSurveyRuntime.timelineFailureEventUs = eventUs;
+            productSurveyRuntime.timelineFailureLatestUs =
+                productSurveyTimeline.latestUs();
+        }
+        productSurveyRuntime.timelineHealthy = false;
+    }
     return status == expected;
 }
 
@@ -1437,6 +1466,14 @@ bool drainProductSurveyTimelineWindows() {
         if (dequeued != SourceTimelineStatus::WindowDequeued) {
             productSurveyRuntime.timelineArchiveStatus =
                 leshy1::services::survey::sourceTimelineStatusName(dequeued);
+            if (std::strcmp(productSurveyRuntime.timelineFailureStatus,
+                            "none") == 0) {
+                productSurveyRuntime.timelineFailureStatus =
+                    productSurveyRuntime.timelineArchiveStatus;
+                productSurveyRuntime.timelineFailureStage = "archive_pop";
+                productSurveyRuntime.timelineFailureLatestUs =
+                    productSurveyTimeline.latestUs();
+            }
             productSurveyRuntime.timelineHealthy = false;
             return false;
         }
@@ -1445,6 +1482,15 @@ bool drainProductSurveyTimelineWindows() {
             leshy1::services::survey::sessionTimelineStatusName(archived);
         if (archived !=
             leshy1::services::survey::SessionTimelineStatus::Appended) {
+            if (std::strcmp(productSurveyRuntime.timelineFailureStatus,
+                            "none") == 0) {
+                productSurveyRuntime.timelineFailureStatus =
+                    productSurveyRuntime.timelineArchiveStatus;
+                productSurveyRuntime.timelineFailureStage = "archive_append";
+                productSurveyRuntime.timelineFailureEventUs = window.endedUs;
+                productSurveyRuntime.timelineFailureLatestUs =
+                    productSurveyTimeline.latestUs();
+            }
             productSurveyRuntime.timelineHealthy = false;
             return false;
         }
@@ -1460,7 +1506,8 @@ bool recordProductSurveyTimelineDrops(RadioKind source, std::uint16_t count,
             productSurveyTimeline.recordObservation(
                 source, false, monotonicUs);
         if (!applyProductSurveyTimelineStatus(
-                status, SourceTimelineStatus::ObservationRecorded)) {
+                status, SourceTimelineStatus::ObservationRecorded,
+                "driver_drop", monotonicUs)) {
             return false;
         }
     }
@@ -1481,7 +1528,8 @@ bool drainProductSurveyWorkerObservations() {
             productSurveyTimeline.recordObservation(
                 observation.radio, accepted, observation.monotonicUs);
         if (!applyProductSurveyTimelineStatus(
-                timelineStatus, SourceTimelineStatus::ObservationRecorded)) {
+                timelineStatus, SourceTimelineStatus::ObservationRecorded,
+                "observation", observation.monotonicUs)) {
             productSurveyRuntime.status = "timeline_record_failed";
             lastRuntimeEvent = productSurveyRuntime.status;
         }
@@ -1514,7 +1562,9 @@ bool closeProductSurveyScanWindow(const ProductSurveyWorkerEvent& event,
               : SourceWindowReason::DutyCycle,
         event.scanEndedUs);
     return applyProductSurveyTimelineStatus(
-               status, SourceTimelineStatus::Transitioned) &&
+               status, SourceTimelineStatus::Transitioned,
+               fault ? "scan_fault_close" : "scan_close",
+               event.scanEndedUs) &&
            drainProductSurveyTimelineWindows();
 }
 
@@ -1588,7 +1638,8 @@ void serviceProductSurveyWorker() {
                             source, SourceWindowState::Unavailable,
                             SourceWindowReason::DriverUnavailable, startedUs);
                     if (!applyProductSurveyTimelineStatus(
-                            unavailable, SourceTimelineStatus::Transitioned) ||
+                            unavailable, SourceTimelineStatus::Transitioned,
+                            "initial_unavailable", startedUs) ||
                         !drainProductSurveyTimelineWindows()) {
                         degradationRecorded = false;
                         break;
@@ -1597,7 +1648,8 @@ void serviceProductSurveyWorker() {
             }
             if (pipelineStarted != SurveyPipelineStatus::Started ||
                 !applyProductSurveyTimelineStatus(
-                    timelineStarted, SourceTimelineStatus::Started) ||
+                    timelineStarted, SourceTimelineStatus::Started,
+                    "timeline_start", startedUs) ||
                 archiveStarted !=
                     leshy1::services::survey::SessionTimelineStatus::Started ||
                 !degradationRecorded) {
@@ -1617,13 +1669,16 @@ void serviceProductSurveyWorker() {
                 productSurveyTimeline.transition(
                     event.source, SourceWindowState::Active,
                     SourceWindowReason::None, event.scanStartedUs);
-            if (!applyProductSurveyTimelineStatus(
-                    status, SourceTimelineStatus::Transitioned) ||
-                !drainProductSurveyTimelineWindows()) {
+            const bool scanStartReady = applyProductSurveyTimelineStatus(
+                    status, SourceTimelineStatus::Transitioned,
+                    "scan_start", event.scanStartedUs) &&
+                drainProductSurveyTimelineWindows();
+            if (!scanStartReady) {
                 productSurveyRuntime.status = "timeline_start_failed";
                 lastRuntimeEvent = productSurveyRuntime.status;
                 requestProductSurveyWorkerStop(true);
             }
+            xSemaphoreGive(productSurveyScanStartGate);
         } else if (event.kind == ProductSurveyWorkerEventKind::Scan) {
             if (closeProductSurveyScanWindow(event, false)) {
                 productSurveyRuntime.status = "running";
@@ -1656,7 +1711,8 @@ void serviceProductSurveyWorker() {
                 : SourceTimelineStatus::InvalidState;
             const bool sourceStopped = windowClosed &&
                 applyProductSurveyTimelineStatus(
-                    timelineStopped, SourceTimelineStatus::Stopped) &&
+                    timelineStopped, SourceTimelineStatus::Stopped,
+                    "timeline_stop", event.eventUs) &&
                 drainProductSurveyTimelineWindows();
             const auto* wifi = productSurveyTimeline.source(RadioKind::Wifi);
             const auto* ble = productSurveyTimeline.source(RadioKind::Ble);
@@ -1691,7 +1747,8 @@ void serviceProductSurveyWorker() {
             const bool timelineCancelled = windowClosed &&
                 (cancelled == SourceTimelineStatus::Cancelled);
             applyProductSurveyTimelineStatus(
-                cancelled, SourceTimelineStatus::Cancelled);
+                cancelled, SourceTimelineStatus::Cancelled,
+                "timeline_cancel", event.eventUs);
             releaseProductSurveyAfterTerminal(
                 timelineCancelled ? "cancelled" : "timeline_cancel_failed",
                 true);
@@ -1703,7 +1760,8 @@ void serviceProductSurveyWorker() {
                 const SourceTimelineStatus cancelled =
                     productSurveyTimeline.cancel(event.eventUs);
                 applyProductSurveyTimelineStatus(
-                    cancelled, SourceTimelineStatus::Cancelled);
+                    cancelled, SourceTimelineStatus::Cancelled,
+                    "timeline_failure_cancel", event.eventUs);
             }
             const bool keepVisible = event.report.admissionStatus ==
                 leshy1::apps::survey::ProductSurveyAdmissionStatus::SourceUnavailable;
@@ -4174,6 +4232,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_timeline_status\":\"%s\","
                       "\"survey_timeline_archive_status\":\"%s\","
                       "\"survey_timeline_healthy\":%s,"
+                      "\"survey_timeline_failure_status\":\"%s\","
+                      "\"survey_timeline_failure_stage\":\"%s\","
+                      "\"survey_timeline_failure_event_us\":%llu,"
+                      "\"survey_timeline_failure_latest_us\":%llu,"
                       "\"survey_timeline_archived_windows\":%lu,"
                       "\"survey_timeline_persisted\":%s,"
                       "\"survey_timeline_persisted_windows\":%lu,"
@@ -4291,6 +4353,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       productSurveyRuntime.timelineStatus,
                       productSurveyRuntime.timelineArchiveStatus,
                       productSurveyRuntime.timelineHealthy ? "true" : "false",
+                      productSurveyRuntime.timelineFailureStatus,
+                      productSurveyRuntime.timelineFailureStage,
+                      static_cast<unsigned long long>(
+                          productSurveyRuntime.timelineFailureEventUs),
+                      static_cast<unsigned long long>(
+                          productSurveyRuntime.timelineFailureLatestUs),
                       static_cast<unsigned long>(
                           productSurveyRuntime.timelineArchivedWindows),
                       storedTimeline != nullptr && storedTimeline->present &&
