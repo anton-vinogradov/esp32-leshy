@@ -215,6 +215,16 @@ CE-high/strobe/TX равны нулю (`E-HIL-106`/`E-RADIO-001`). Это тол
 register-identity evidence. HW-T06 остаётся partial: RF detector для доказательства
 physical silence недоступен.
 
+Exact `0.82.0-nrf24-spectrum` добавляет явный запускаемый пользователем receive path,
+но не boot probe. Он получает тот же exclusive domain `RadioSpi`, проверяет оба
+declared receiver, переводит каждый в `PRIM_RX` и поднимает CE только для bounded
+receive windows 200 us при sweep по 83 каналам. Final exact counts — 1 743 CE receive
+windows, 1 753 reads, 1 755 writes и 7 016 SPI bytes; TX-mode/payload commands,
+CC strobes и storage writes остаются нулевыми. Stop выключает оба nRF, восстанавливает
+safe pins, сохраняет slot 3/GPIO21 gated/high и освобождает lease
+(`E-HIL-107`/`E-RADIO-002`). Без RF detector это доказывает guarded software path,
+но не physical RF silence.
+
 Любая неоднозначность GPIO5/6 или 14/21 заканчивается `conflicted`, а не перебором
 output modes. Probe не должен передавать RF/IR, писать на SD/NFC или издавать звук.
 

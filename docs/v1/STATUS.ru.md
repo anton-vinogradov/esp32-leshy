@@ -12,10 +12,10 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.81 вплоть до persistent Wi-Fi Capture, plan-v3 registration и plan-v4 read-only identity check приёмников RF shield.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.82 вплоть до persistent Wi-Fi Capture, plan-v4 identity RF shield и первой пользовательской workflow spectrum nRF24.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
-- **Главная цель текущего этапа:** превратить принятый identity boundary nRF24/CC1101
-  в полезные passive receiver workflows и active execution Full/Guided, затем проверить
+- **Главная цель текущего этапа:** дополнить принятую workflow spectrum nRF24
+  поддержкой CC1101 и active execution Full/Guided, затем проверить
   controlled power-cut recovery и 8 h/32-cycle multi-source endurance.
 
 ## Состояние этапов
@@ -26,7 +26,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.79 принимают passive multi-source, browser/export и persistent Capture; exact 0.80 регистрирует их в Full/Guided; exact 0.81 plan v4 обнаруживает nRF24 #1/#2 и CC1101 bounded read-only probe, проходит `full.s4.shield.receivers`, сохраняет GPIO21 gated и оставляет blocked только total future coverage | реализовать полезные passive workflows nRF24/CC1101 и active execution Full/Guided; затем проверить controlled physical power-cut recovery и 8 h/32-cycle multi-source endurance |
+| S4 | `active` | exact 0.71…0.79 принимают passive multi-source, browser/export и persistent Capture; exact 0.80 регистрирует их в Full/Guided; exact 0.81 обнаруживает declared RF shield; exact 0.82 добавляет явно запускаемую пользователем receive-only карту активности nRF24 по 83 каналам с pause/resume и полным cleanup | реализовать соответствующую workflow CC1101 и active execution Full/Guided; затем проверить controlled physical power-cut recovery и 8 h/32-cycle multi-source endurance |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -42,15 +42,15 @@
 |---|---|---|
 | Основа устройства и UX | `готово / S2` — boot, board profile, пять клавиш, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test и автоматический TFT capture; plan-v4 Full/Guided регистрирует завершённые workflows S3/S4 и conditionally пробует declared RF shield | выполнять каждую применимую зарегистрированную workflow и добавлять новые hardware checks |
 | Survey и Library | `готово / S3` — реальный passive Wi-Fi, atomic Session, List/Detail, offline reopen и export | используется как принятый фундамент, не переписывается отдельной веткой |
-| Passive multi-radio и Capture | `в работе / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV и privacy-confirmed persistent Wi-Fi PCAP работают; plan-v4 Self-Test также идентифицирует два nRF24 и один CC1101 без TX и честно классифицирует отсутствующие модули | passive user workflows nRF24/CC1101, active Full/Guided execution, power-cut и endurance |
+| Passive multi-radio и Capture | `в работе / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV и privacy-confirmed persistent Wi-Fi PCAP работают; два приёмника nRF24 теперь также дают живую карту активности 2 402…2 484 МГц, а Self-Test идентифицирует declared shield без TX и честно классифицирует отсутствующие модули | пользовательская workflow CC1101, active Full/Guided execution, power-cut и endurance |
 | Всё штатное железо ESP32-DIV | `впереди / S5` — scope и fail-closed hardware envelope описаны, но законченных IR/PN532/GPS/power workflows ещё нет | probe → capture/observe → Library → inspect/export для каждого применимого модуля |
 | Targets, compare и companion | `впереди / S6` — product model и границы определены, пользовательские сценарии ещё не реализованы | две Survey сравниваются через evidence-backed Targets и тот же локальный Web/USB companion |
 | Safe Lab и расширения | `впереди / S7` — safety/resource boundaries приняты, active workflows и SDK ещё не реализованы | feature-complete каталог, permissioned extensions и доказанный panic/timeout stop |
 | Надёжность и доставка 1.0 | `впереди / S8` — release HIL концепт и часть инфраструктуры существуют, но это не release evidence | signed OTA/rollback/recovery, полный HIL/Self-Test, 24 h mixed workload и два зелёных RC |
 
 Итого по этапам: S0–S3 закрыты, S4 активен, S5–S8 впереди. По пользовательской
-ценности уже существует законченный Survey→Library путь и первый настоящий packet
-Capture; полнота штатного железа начинается после gate S4, а основные отличия
+ценности уже существуют законченный Survey→Library путь, настоящий packet Capture
+и первая живая spectrum-карта nRF24; полнота штатного железа начинается после gate S4, а основные отличия
 Targets/compare/companion — на S6.
 
 ## S1 — закрыто
@@ -617,6 +617,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-082 | exact build `0.81.0-shield-receiver-probe` | pass: RAM 152 552 B, linked flash 1 459 232 B; app/factory 1 459 632/1 525 168 B; app `2d0bc0cf…379`, factory `fb667d4d…120`, ELF `e86968d4…033`, map `963efe9b…6f1`; source commit `b125470` | +3 220 B linked flash, +32 B static RAM и +3 216 B images vs 0.80 за pure identity contract, guarded board adapter, plan-v4 facts/report и diagnostics; exact checkpoint, не `DEMO-S4` и не release build |
 | E-AUTO-046 | native, exact-HIL и retained verification shield receivers | pass: host cases отклоняют floating identities, partial detection, busy/profile conflicts, любое CE-high/strobe/TX event и GPIO21 low. Independent verifier связывает source/candidate/runner, exact inventory из 33 файлов, оба binaries, storage continuity, ordered plan-v4 reports, wire/side-effect bounds, десять TFT captures и cleanup | read-only identity evidence одной board; RF detector недоступен, поэтому physical RF silence, passive activity reception и spectrum behavior не заявляются |
 | E-HIL-106 / E-SELFTEST-003 / E-RADIO-001 | board-01 exact 0.81 identity приёмников RF shield из Full/Guided | pass checkpoint: Quick 8/8; Full/Guided plan v4 — 16 pass/0 fail/1 blocked/3 N/A. Под foreground lease Self-Test он обнаруживает nRF24 #1/#2 и CC1101 PARTNUM 0/VERSION 0x14 ровно через 8 nRF register reads, 2 CC status reads и 20 SPI bytes; CE-high, CC strobes и TX commands равны нулю, nRF #3/GPIO21 остаётся gated/high, RadioSpi освобождён, storage остаётся generation 83/0, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-shield-receiver-self-test-0.81.json) | принимает только bounded read-only receiver identity и закрывает `full.s4.shield.receivers`; полезные passive receiver workflows, physical RF instrumentation, active Full execution, power-cut и endurance держат `DEMO-S4` открытым |
+| E-BUILD-083 | exact build `0.82.0-nrf24-spectrum` | pass: RAM 152 752 B, linked flash 1 466 356 B; app/factory 1 466 768/1 532 304 B; app `af88b1f…61e`, factory `03a9cef6…1f9`, ELF `cb4946c1…c72`, map `5aa7e185…834`; source commit `9ce989e` | +7 124 B linked flash, +200 B static RAM и +7 136 B images vs 0.81 за pure spectrum plan/controller, guarded dual-nRF adapter, localized live chart и telemetry; exact checkpoint, не `DEMO-S4` и не release build |
+| E-AUTO-047 | host, exact-HIL и retained verification spectrum nRF24 | pass: native cases покрывают selection/start/pause/resume/stop, fail-closed конфликты profile/resource/identity и точный receive-only wire accounting; independent verifier связывает source/candidate/runner, оба binaries, exact inventory из 24 файлов, шесть TFT states, storage/heap continuity и final cleanup | software receive-only evidence одной board; RF instrument недоступен, поэтому physical RF silence не заявляется |
+| E-HIL-107 / E-RADIO-002 | board-01 exact 0.82 пользовательский spectrum nRF24 | pass checkpoint: Survey→RF spectrum→2.4 GHz/nRF24 проходит все 83 канала от 2 402 до 2 484 МГц через оба declared receivers с dwell 200 us. Exact run завершает 21 sweep, сообщает 99 RPD hits и 22 final active bins, остаётся на 13 sweeps во время pause 400 ms и после resume достигает 21; wire totals — 1 753 reads, 1 755 writes, 7 016 SPI bytes и 1 743 CE receive windows. Counters TX-mode/payload/CC-strobe/storage-write равны нулю, GPIO21/slot 3 остаётся gated/high, generation остаётся 83/0, heap invariant 228 956/164 212/144 816 B, шесть TFT states проходят review, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-nrf24-spectrum-0.82.json) | принимает volatile пользовательскую карту активности nRF24 и её software receive-only contract; это не calibrated power analyzer, physical no-TX measurement или workflow CC1101, `DEMO-S4` остаётся открытым |
 
 ## Известные неопределённости и риски
 
@@ -654,8 +657,10 @@ Wi-Fi frame Capture с настоящим PCAP принят exact 0.78, а atomi
 Capture→Library persistence принят exact 0.79. Exact 0.80 регистрирует завершённые
 S3/S4 и факты no-extension assembly в Full/Guided plan v3. Exact 0.81 переводит
 identity check declared RF shield в plan v4 после bounded read-only detection nRF24
-#1/#2 и CC1101; полезные passive receiver workflows и active execution product
-workflows остаются software work.
+#1/#2 и CC1101. Exact 0.82 принимает первую полезную workflow shield: явно
+запускаемую volatile карту активности nRF24 по 83 каналам с pause/resume, invariant
+heap/storage и полным cleanup. Соответствующая workflow CC1101 и active execution
+product workflows остаются software work.
 Недоступный сейчас управляемый
 power-cut fixture остаётся явным exit
 requirement `DEMO-S4`, software reset не принимается как замена. Второй

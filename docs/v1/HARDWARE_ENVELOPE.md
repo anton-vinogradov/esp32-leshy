@@ -170,6 +170,15 @@ strobe and TX counters remain zero (`E-HIL-106`/`E-RADIO-001`). This is software
 register-identity evidence only. HW-T06 remains partial because no RF detector was
 available to prove physical silence.
 
+Exact `0.82.0-nrf24-spectrum` adds an explicit user-started receive path, never a
+boot probe. It acquires the same exclusive `RadioSpi` domain, verifies both declared
+receivers, powers each into `PRIM_RX`, and raises CE only for bounded 200 us receive
+windows while sweeping 83 channels. Final exact counts are 1,743 CE receive windows,
+1,753 reads, 1,755 writes and 7,016 SPI bytes; TX-mode/payload commands, CC strobes
+and storage writes remain zero. Stop powers both nRF devices down, restores safe pins,
+keeps slot 3/GPIO21 gated/high and releases the lease (`E-HIL-107`/`E-RADIO-002`).
+Without an RF detector this proves the guarded software path, not physical RF silence.
+
 GPIO2 software evidence: the author's root-cause description and one-line LOW fix in
 [upstream issue #117](https://github.com/cifertech/ESP32-DIV/issues/117#issuecomment-5178973211)
 links the verified

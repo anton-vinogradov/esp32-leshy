@@ -321,6 +321,17 @@ a passive observation pipeline or physical RF-silence measurement. Those workflo
 active Full/Guided execution, controlled physical power-cut and 8 h/32-cycle endurance
 remain `DEMO-S4` work.
 
+Exact `0.82.0-nrf24-spectrum` builds the first useful shield workflow above that
+identity boundary without coupling UI rendering to SPI. A pure
+`Nrf24SpectrumController` owns the 83-bin plan and pause/resume/stop state; the
+Arduino adapter alone owns the dual-receiver register sequence, 200 us dwell and
+safe cleanup. `SurveySourceController` only maps typed Actions and projects a
+volatile snapshot into the localized live chart, whose updates are confined to the
+chart region. `E-HIL-107` proves 21 complete 2,402…2,484 MHz sweeps, a stable paused
+counter, exact receive-window accounting, zero TX/CC/storage side effects, invariant
+heap/storage and final lease 0. RPD bins represent threshold activity, not calibrated
+power; physical RF silence remains unmeasured and the CC1101 workflow remains next.
+
 ## Data model
 
 Raw observation is separate from interpretation:

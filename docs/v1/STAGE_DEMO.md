@@ -85,6 +85,14 @@ coverage remains blocked. Useful passive receiver workflows, active Full/Guided
 execution, controlled physical power-cut and 8 h/32-cycle multi-source stability
 remain mandatory.
 
+Exact 0.82 accepts the first of those useful shield workflows: an explicit
+Survey→RF spectrum→2.4 GHz/nRF24 path draws a volatile 83-channel activity map,
+supports a measured pause/resume, completes 21 dual-receiver sweeps with exact
+receive-only wire accounting, leaves heap/storage invariant and returns Home with
+lease 0. The retained contract does not claim calibrated power or instrumented
+physical RF silence. CC1101, active Full/Guided execution, controlled physical
+power-cut and endurance still keep `DEMO-S4` open.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

@@ -377,6 +377,17 @@ boundary, а не passive observation pipeline или physical RF-silence measur
 Эти workflows, active Full/Guided execution, controlled physical power-cut и
 8 h/32-cycle endurance остаются работой `DEMO-S4`.
 
+Exact `0.82.0-nrf24-spectrum` строит первую полезную workflow shield поверх этого
+identity boundary, не связывая UI rendering со SPI. Pure
+`Nrf24SpectrumController` владеет plan на 83 bins и состояниями pause/resume/stop;
+только Arduino adapter владеет register sequence двух receivers, dwell 200 us и
+safe cleanup. `SurveySourceController` лишь отображает typed Actions и проецирует
+volatile snapshot в localized live chart, обновления которого ограничены областью
+графика. `E-HIL-107` доказывает 21 полный sweep 2 402…2 484 МГц, стабильный paused
+counter, exact accounting receive windows, zero TX/CC/storage side effects, invariant
+heap/storage и final lease 0. RPD bins показывают threshold activity, а не calibrated
+power; physical RF silence не измерен, workflow CC1101 остаётся следующей.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:
