@@ -1,0 +1,84 @@
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+
+#include "domain/hardware/HardwareInventory.h"
+
+namespace leshy1::apps::survey {
+
+enum class SurveySetupView : std::uint8_t {
+    Plan,
+    Sources,
+};
+
+enum class SurveySourceKind : std::uint8_t {
+    Wifi,
+    Ble,
+};
+
+enum class SurveySourceState : std::uint8_t {
+    Available,
+    Unavailable,
+    Conflicted,
+    Fault,
+};
+
+enum class SurveySetupActivation : std::uint8_t {
+    None,
+    OpenedSources,
+    SourceChanged,
+    SourceUnavailable,
+    StartRequested,
+    StartBlocked,
+};
+
+const char* surveySetupViewName(SurveySetupView view);
+const char* surveySourceKindName(SurveySourceKind kind);
+const char* surveySourceStateName(SurveySourceState state);
+const char* surveySetupActivationName(SurveySetupActivation activation);
+
+struct SurveySourceOption final {
+    const char* id = nullptr;
+    SurveySourceKind kind = SurveySourceKind::Wifi;
+    SurveySourceState state = SurveySourceState::Unavailable;
+    const char* reason = nullptr;
+    bool selected = false;
+
+    bool available() const { return state == SurveySourceState::Available; }
+};
+
+// Allocation-free draft plan for UX-S02. Availability is projected from the
+// boot inventory, while selection remains a user choice. A source can never be
+// selected merely because it was declared or detected.
+class SurveySourceController final {
+public:
+    static constexpr std::size_t kSourceCount = 2;
+    static constexpr std::uint8_t kPlanItemCount = 2;
+
+    void rebuild(const domain::hardware::HardwareInventory& inventory,
+                 bool simulatedPreview = false);
+
+    bool previous();
+    bool next();
+    SurveySetupActivation activate();
+    bool back();
+
+    SurveySetupView view() const { return view_; }
+    std::uint8_t selection() const { return selection_; }
+    const SurveySourceOption* get(std::size_t index) const;
+    const SurveySourceOption* find(SurveySourceKind kind) const;
+    std::size_t selectedCount() const;
+    std::uint8_t selectedMask() const;
+    bool canStart() const { return selectedCount() != 0 || simulatedPreview_; }
+    bool simulatedPreview() const { return simulatedPreview_; }
+
+private:
+    std::array<SurveySourceOption, kSourceCount> sources_{};
+    SurveySetupView view_ = SurveySetupView::Plan;
+    std::uint8_t selection_ = 0;
+    bool simulatedPreview_ = false;
+};
+
+}  // namespace leshy1::apps::survey

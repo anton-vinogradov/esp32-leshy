@@ -29,6 +29,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/apps/survey/ProductSurveyAdmission.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyPipeline.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/survey/SurveySourceController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyWorkflow.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/apps/AppCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/hardware/HardwareInventory.cpp" \

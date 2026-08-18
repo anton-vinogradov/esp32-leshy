@@ -26,6 +26,7 @@
 #include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/SurveyPipeline.h"
+#include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
 #include "boards/esp32_div_v2/BoardProfile.h"
 #include "domain/apps/AppCatalog.h"
@@ -92,6 +93,12 @@ using leshy1::apps::survey::SurveyController;
 using leshy1::apps::survey::SurveyPipeline;
 using leshy1::apps::survey::SurveyPipelineProgress;
 using leshy1::apps::survey::SurveyPipelineStatus;
+using leshy1::apps::survey::SurveySetupActivation;
+using leshy1::apps::survey::SurveySetupView;
+using leshy1::apps::survey::SurveySourceController;
+using leshy1::apps::survey::SurveySourceKind;
+using leshy1::apps::survey::SurveySourceOption;
+using leshy1::apps::survey::SurveySourceState;
 using leshy1::apps::survey::SurveyView;
 using leshy1::apps::survey::SurveyWorkflow;
 using leshy1::apps::survey::SurveyWorkflowState;
@@ -191,6 +198,7 @@ ResourceBroker resourceBroker;
 AppRuntime appRuntime(resourceBroker);
 SurveySession surveySession;
 SurveyController surveyController(surveySession);
+SurveySourceController surveySourceController;
 SurveySession librarySession;
 SurveySession littleFsResetSession;
 LibraryController libraryController;
@@ -2655,8 +2663,15 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{NavigationKey::Left, UiTextId::NavHome}, {}, {}};
         }
         if (surveyWorkflow.state() == SurveyWorkflowState::Setup) {
-            return {back, {},
-                    {NavigationKey::RightAndSelect, UiTextId::NavStart}};
+            if (surveySourceController.view() == SurveySetupView::Sources) {
+                return {back, choose,
+                        {NavigationKey::RightAndSelect,
+                         UiTextId::NavToggle}};
+            }
+            return {back, choose,
+                    {NavigationKey::RightAndSelect,
+                     surveySourceController.selection() == 0
+                         ? UiTextId::NavEnter : UiTextId::NavStart}};
         }
         if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
             surveyController.view() == SurveyView::Detail) {
@@ -3112,6 +3127,74 @@ void renderSurveyListRow(std::size_t index, std::size_t firstVisible) {
     display.print(line);
 }
 
+UiTextId surveySourceLabel(const SurveySourceOption& source) {
+    return source.kind == SurveySourceKind::Wifi
+        ? UiTextId::SourceWifiRow : UiTextId::SourceBleRow;
+}
+
+UiTextId surveySourceNote(const SurveySourceOption& source) {
+    if (source.state == SurveySourceState::Available) {
+        return source.selected ? UiTextId::SourceOnReady
+                               : UiTextId::SourceOffReady;
+    }
+    if (source.state == SurveySourceState::Conflicted) {
+        return UiTextId::SourceConflicted;
+    }
+    if (source.state == SurveySourceState::Fault) {
+        return UiTextId::SourceFault;
+    }
+    return UiTextId::SourceDriverPending;
+}
+
+void renderSurveyPlanRow(std::uint8_t index) {
+    if (index >= SurveySourceController::kPlanItemCount) return;
+    char note[48] = {};
+    const bool selected = surveySourceController.selection() == index;
+    if (index == 0) {
+        if (surveySourceController.simulatedPreview() &&
+            surveySourceController.selectedCount() == 0) {
+            std::snprintf(note, sizeof(note), "%s", tr(UiTextId::SourcesPreview));
+        } else {
+            std::snprintf(note, sizeof(note), tr(UiTextId::SourcesCountFormat),
+                          static_cast<unsigned>(
+                              surveySourceController.selectedCount()),
+                          static_cast<unsigned>(
+                              SurveySourceController::kSourceCount));
+        }
+        renderMenuRow(Components::choiceRow(index), tr(UiTextId::PlanSources),
+                      note, selected, true, Tone::Positive);
+        return;
+    }
+    const bool preparing =
+        std::strcmp(productSurveyRuntime.status, "preparing") == 0;
+    const bool cancelling =
+        std::strcmp(productSurveyRuntime.status, "cancelling") == 0;
+    const bool ready = surveySourceController.canStart() &&
+                       !preparing && !cancelling;
+    const UiTextId startNote = preparing
+        ? UiTextId::StartPreparing
+        : (cancelling
+               ? UiTextId::StartCancelling
+               : (!ready
+                      ? UiTextId::StartNeedsSource
+                      : (surveySourceController.simulatedPreview()
+                             ? UiTextId::StartPreview
+                             : UiTextId::StartReady)));
+    renderMenuRow(Components::choiceRow(index), tr(UiTextId::PlanStart),
+                  tr(startNote), selected, ready,
+                  ready ? Tone::Positive : Tone::Warning);
+}
+
+void renderSurveySourceRow(std::uint8_t index) {
+    const SurveySourceOption* source = surveySourceController.get(index);
+    if (source == nullptr) return;
+    const bool selected = surveySourceController.selection() == index;
+    renderMenuRow(Components::choiceRow(index), tr(surveySourceLabel(*source)),
+                  tr(surveySourceNote(*source)), selected,
+                  source->available(),
+                  source->selected ? Tone::Positive : Tone::Muted);
+}
+
 void renderInventoryPage(bool clearContent) {
     char line[96] = {};
     if (productSurveySourceUnavailableVisible()) {
@@ -3130,26 +3213,18 @@ void renderInventoryPage(bool clearContent) {
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Setup) {
-        renderHeader(tr(UiTextId::SurveySetup), clearContent);
-        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Body, 14, 82);
-        display.print(tr(UiTextId::SourceWifi));
-        setUiCursor(UiTextRole::Body, 14, 110);
-        display.print(surveyWorkflow.persistent()
-                          ? tr(UiTextId::StorageProduct)
-                          : tr(UiTextId::StorageRamPreview));
-        setUiCursor(UiTextRole::Body, 14, 138);
-        display.print(surveyWorkflow.simulated()
-                          ? tr(UiTextId::ModeSimulated)
-                          : tr(UiTextId::ModeRealPassive));
-        display.setTextColor(Palette::Focus, Palette::Canvas);
-        setUiCursor(UiTextRole::Body, 14, 181);
-        if (std::strcmp(productSurveyRuntime.status, "preparing") == 0) {
-            display.print(tr(UiTextId::SurveyPreparing));
-        } else if (std::strcmp(productSurveyRuntime.status, "cancelling") == 0) {
-            display.print(tr(UiTextId::SurveyCancelling));
+        if (surveySourceController.view() == SurveySetupView::Sources) {
+            renderHeader(tr(UiTextId::SurveySources), clearContent);
+            for (std::uint8_t index = 0;
+                 index < SurveySourceController::kSourceCount; ++index) {
+                renderSurveySourceRow(index);
+            }
         } else {
-            display.print(tr(UiTextId::SelectStart));
+            renderHeader(tr(UiTextId::SurveySetup), clearContent);
+            for (std::uint8_t index = 0;
+                 index < SurveySourceController::kPlanItemCount; ++index) {
+                renderSurveyPlanRow(index);
+            }
         }
         display.setTextColor(Palette::Positive, Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 207);
@@ -3354,6 +3429,9 @@ struct UiRenderSnapshot final {
     std::uint8_t selfTestView = 0;
     std::uint8_t selfTestSelection = 0;
     std::uint8_t surveyState = 0;
+    std::uint8_t surveySetupView = 0;
+    std::uint8_t surveySetupSelection = 0;
+    std::uint8_t surveySourceMask = 0;
     std::uint8_t surveyView = 0;
     std::size_t surveySelection = 0;
     std::size_t surveySize = 0;
@@ -3373,6 +3451,9 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         static_cast<std::uint8_t>(selfTestController.view()),
         selfTestController.selection(),
         static_cast<std::uint8_t>(surveyWorkflow.state()),
+        static_cast<std::uint8_t>(surveySourceController.view()),
+        surveySourceController.selection(),
+        surveySourceController.selectedMask(),
         static_cast<std::uint8_t>(surveyController.view()),
         surveyController.selection(),
         surveySession.size(),
@@ -3390,6 +3471,26 @@ bool renderSelectionDelta() {
         if (renderedUi.rootSelection == current) return false;
         renderHomeRow(renderedUi.rootSelection);
         renderHomeRow(current);
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        surveyWorkflow.state() == SurveyWorkflowState::Setup &&
+        renderedUi.surveyState ==
+            static_cast<std::uint8_t>(SurveyWorkflowState::Setup) &&
+        renderedUi.surveySetupView ==
+            static_cast<std::uint8_t>(surveySourceController.view()) &&
+        renderedUi.surveySourceMask == surveySourceController.selectedMask()) {
+        const std::uint8_t current = surveySourceController.selection();
+        if (renderedUi.surveySetupSelection == current) return false;
+        if (surveySourceController.view() == SurveySetupView::Sources) {
+            renderSurveySourceRow(renderedUi.surveySetupSelection);
+            renderSurveySourceRow(current);
+        } else {
+            renderSurveyPlanRow(renderedUi.surveySetupSelection);
+            renderSurveyPlanRow(current);
+        }
+        renderNavigationFooter();
         return true;
     }
 
@@ -3535,6 +3636,13 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_dropped\":%llu,\"survey_queue_depth\":%u,"
                       "\"survey_queue_high_water\":%u,"
                       "\"survey_batch_trigger\":\"%s\","
+                      "\"survey_setup_view\":\"%s\","
+                      "\"survey_setup_selection\":%u,"
+                      "\"survey_source_selected_mask\":%u,"
+                      "\"survey_source_selected_count\":%u,"
+                      "\"survey_source_can_start\":%s,"
+                      "\"survey_source_wifi_state\":\"%s\","
+                      "\"survey_source_ble_state\":\"%s\","
                       "\"survey_product_selected\":%s,"
                       "\"survey_product_status\":\"%s\","
                       "\"survey_product_backend_open\":%s,"
@@ -3598,6 +3706,27 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(pipelineProgress.queueHighWater),
                       leshy1::services::survey::sessionBatchTriggerName(
                           pipelineProgress.trigger),
+                      leshy1::apps::survey::surveySetupViewName(
+                          surveySourceController.view()),
+                      static_cast<unsigned>(
+                          surveySourceController.selection()),
+                      static_cast<unsigned>(
+                          surveySourceController.selectedMask()),
+                      static_cast<unsigned>(
+                          surveySourceController.selectedCount()),
+                      surveySourceController.canStart() ? "true" : "false",
+                      leshy1::apps::survey::surveySourceStateName(
+                          surveySourceController.find(SurveySourceKind::Wifi) ==
+                                  nullptr
+                              ? SurveySourceState::Unavailable
+                              : surveySourceController.find(
+                                    SurveySourceKind::Wifi)->state),
+                      leshy1::apps::survey::surveySourceStateName(
+                          surveySourceController.find(SurveySourceKind::Ble) ==
+                                  nullptr
+                              ? SurveySourceState::Unavailable
+                              : surveySourceController.find(
+                                    SurveySourceKind::Ble)->state),
                       productSurveyRuntime.selected ? "true" : "false",
                       productSurveyRuntime.status,
                       productSurveyRuntime.backendOpen ? "true" : "false",
@@ -3681,8 +3810,9 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (action != UiAction::Up && action != UiAction::Down) return false;
     if (uiController.isRoot()) return true;
     if (uiController.page() == 2) {
-        return surveyWorkflow.state() == SurveyWorkflowState::Running &&
-               surveyController.view() == SurveyView::List;
+        return surveyWorkflow.state() == SurveyWorkflowState::Setup ||
+               (surveyWorkflow.state() == SurveyWorkflowState::Running &&
+                surveyController.view() == SurveyView::List);
     }
     if (uiController.page() == 3) {
         return libraryController.view() == LibraryView::SessionList;
@@ -3708,26 +3838,70 @@ bool applyUiAction(UiAction action, bool render = true) {
         bool handled = false;
         bool changed = false;
         if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
-            (action == UiAction::Select || action == UiAction::Right)) {
+            productSurveySourceUnavailableVisible() &&
+            (action == UiAction::Select || action == UiAction::Right ||
+             action == UiAction::Up || action == UiAction::Down)) {
             handled = true;
-            if (productSurveySourceUnavailableVisible()) {
-                lastRuntimeEvent = "source_unavailable_waiting_back";
-            } else if (productSurveyRuntime.selected) {
-                if (productSurveyControl() ==
-                    ProductSurveyWorkerControl::Idle) {
-                    changed = startProductSurvey();
+            lastRuntimeEvent = "source_unavailable_waiting_back";
+        } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
+                   surveySourceController.view() ==
+                       SurveySetupView::Sources) {
+            if (action == UiAction::Up) {
+                handled = true;
+                changed = surveySourceController.previous();
+            } else if (action == UiAction::Down) {
+                handled = true;
+                changed = surveySourceController.next();
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                handled = true;
+                const SurveySetupActivation activation =
+                    surveySourceController.activate();
+                changed = activation ==
+                    SurveySetupActivation::SourceChanged;
+                lastRuntimeEvent = leshy1::apps::survey::
+                    surveySetupActivationName(activation);
+            } else if (action == UiAction::Back ||
+                       action == UiAction::Left) {
+                handled = true;
+                changed = surveySourceController.back();
+                if (changed) lastRuntimeEvent = "survey_source_plan";
+            }
+        } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
+                   (action == UiAction::Up || action == UiAction::Down)) {
+            handled = true;
+            changed = action == UiAction::Up
+                ? surveySourceController.previous()
+                : surveySourceController.next();
+        } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
+                   (action == UiAction::Select ||
+                    action == UiAction::Right)) {
+            handled = true;
+            const SurveySetupActivation activation =
+                surveySourceController.activate();
+            lastRuntimeEvent = leshy1::apps::survey::
+                surveySetupActivationName(activation);
+            if (activation == SurveySetupActivation::OpenedSources) {
+                changed = true;
+            } else if (activation ==
+                       SurveySetupActivation::StartRequested) {
+                if (productSurveyRuntime.selected) {
+                    if (productSurveyControl() ==
+                        ProductSurveyWorkerControl::Idle) {
+                        changed = startProductSurvey();
+                    }
+                } else {
+                    std::uint64_t startedUs =
+                        static_cast<std::uint64_t>(esp_timer_get_time());
+                    if (startedUs == 0) startedUs = 1;
+                    const SurveyPipelineStatus started = surveyPipeline.start(
+                        "product-wifi-preview", startedUs);
+                    changed = started == SurveyPipelineStatus::Started &&
+                              publishGoldenObservations(surveyPipeline);
+                    lastRuntimeEvent =
+                        leshy1::apps::survey::surveyPipelineStatusName(
+                            changed ? surveyPipeline.lastStatus() : started);
                 }
-            } else {
-                std::uint64_t startedUs =
-                    static_cast<std::uint64_t>(esp_timer_get_time());
-                if (startedUs == 0) startedUs = 1;
-                const SurveyPipelineStatus started =
-                    surveyPipeline.start("product-wifi-preview", startedUs);
-                changed = started == SurveyPipelineStatus::Started &&
-                          publishGoldenObservations(surveyPipeline);
-                lastRuntimeEvent =
-                    leshy1::apps::survey::surveyPipelineStatusName(
-                        changed ? surveyPipeline.lastStatus() : started);
             }
         } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
                    (action == UiAction::Back || action == UiAction::Left)) {
@@ -3908,6 +4082,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             productSurveyRuntime = {};
             productSurveyRuntime.selected = !selected->simulated;
             productSurveyRuntime.workerReady = productSurveyWorkerReady;
+            surveySourceController.rebuild(inventory, selected->simulated);
             const SurveyWorkflowStatus configured = surveyWorkflow.configure(
                 productSurveyRuntime.selected, selected->simulated);
             if (configured != SurveyWorkflowStatus::Ready) {
@@ -7880,6 +8055,8 @@ void setup() {
                    bootMetrics.inputDetected ? "raw_byte_available" : "no_read_response"});
     inventory.add({"radio.wifi", CapabilityState::Declared, "esp32_s3_builtin",
                    "passive_contract_ready_driver_not_started"});
+    inventory.add({"radio.ble", CapabilityState::Declared, "esp32_s3_builtin",
+                   "passive_driver_not_implemented"});
     inventory.add({"survey.simulated",
                    surveyDemoReady ? CapabilityState::Available : CapabilityState::Fault,
                    "E-SURVEY-001_golden_trace",

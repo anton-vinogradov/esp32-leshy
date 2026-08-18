@@ -10,6 +10,7 @@
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyPipeline.h"
+#include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
@@ -1488,6 +1489,80 @@ void testGoldenSurveyTraceUsesListDetailBackAndExplicitStop() {
     CHECK(controller.stop(3000) == SessionStatus::Stopped);
     CHECK(controller.stop(3001) == SessionStatus::AlreadyStopped);
     CHECK(controller.session().size() == 3);
+}
+
+void testSurveySourcePlanProjectsAvailabilityAndRequiresSelection() {
+    HardwareInventory inventory;
+    CHECK(inventory.add({"radio.wifi", CapabilityState::Declared,
+                         "builtin", "driver_not_started"}));
+    CHECK(inventory.add({"survey.persistent_passive",
+                         CapabilityState::Available, "worker",
+                         "wifi_worker_ready"}));
+    CHECK(inventory.add({"radio.ble", CapabilityState::Declared,
+                         "builtin", "driver_not_implemented"}));
+
+    SurveySourceController controller;
+    controller.rebuild(inventory);
+    CHECK(controller.view() == SurveySetupView::Plan);
+    CHECK(controller.selection() == 0);
+    CHECK(controller.selectedCount() == 1);
+    CHECK(controller.selectedMask() == 1);
+    CHECK(controller.canStart());
+    const SurveySourceOption* wifi = controller.find(SurveySourceKind::Wifi);
+    const SurveySourceOption* ble = controller.find(SurveySourceKind::Ble);
+    CHECK(wifi != nullptr && wifi->available() && wifi->selected);
+    CHECK(wifi != nullptr && std::strcmp(wifi->reason, "wifi_worker_ready") == 0);
+    CHECK(ble != nullptr && !ble->available() && !ble->selected);
+    CHECK(ble != nullptr &&
+          std::strcmp(ble->reason, "driver_not_implemented") == 0);
+
+    CHECK(controller.activate() == SurveySetupActivation::OpenedSources);
+    CHECK(controller.view() == SurveySetupView::Sources);
+    CHECK(controller.activate() == SurveySetupActivation::SourceChanged);
+    CHECK(!controller.canStart());
+    CHECK(controller.next());
+    CHECK(controller.activate() == SurveySetupActivation::SourceUnavailable);
+    CHECK(controller.selectedMask() == 0);
+    CHECK(controller.back());
+    CHECK(controller.view() == SurveySetupView::Plan);
+    CHECK(controller.next());
+    CHECK(controller.activate() == SurveySetupActivation::StartBlocked);
+    CHECK(controller.previous());
+    CHECK(controller.activate() == SurveySetupActivation::OpenedSources);
+    CHECK(controller.activate() == SurveySetupActivation::SourceChanged);
+    CHECK(controller.back());
+    CHECK(controller.next());
+    CHECK(controller.activate() == SurveySetupActivation::StartRequested);
+
+    HardwareInventory bleOnly;
+    CHECK(bleOnly.add({"radio.wifi", CapabilityState::Fault, "builtin",
+                       "wifi_fault"}));
+    CHECK(bleOnly.add({"radio.ble", CapabilityState::Available, "builtin",
+                       "ble_ready"}));
+    controller.rebuild(bleOnly);
+    CHECK(controller.selectedCount() == 1);
+    CHECK(controller.selectedMask() == 2);
+    CHECK(controller.find(SurveySourceKind::Wifi) != nullptr &&
+          controller.find(SurveySourceKind::Wifi)->state ==
+              SurveySourceState::Fault);
+    CHECK(controller.find(SurveySourceKind::Ble) != nullptr &&
+          controller.find(SurveySourceKind::Ble)->selected);
+    CHECK(std::strcmp(surveySetupViewName(SurveySetupView::Sources),
+                      "sources") == 0);
+    CHECK(std::strcmp(surveySourceKindName(SurveySourceKind::Ble), "ble") == 0);
+    CHECK(std::strcmp(surveySourceStateName(SurveySourceState::Conflicted),
+                      "conflicted") == 0);
+
+    HardwareInventory previewInventory;
+    SurveySourceController preview;
+    preview.rebuild(previewInventory, true);
+    CHECK(preview.simulatedPreview());
+    CHECK(preview.selectedCount() == 0);
+    CHECK(preview.canStart());
+    CHECK(preview.activate() == SurveySetupActivation::OpenedSources);
+    CHECK(preview.back());
+    CHECK(preview.next());
+    CHECK(preview.activate() == SurveySetupActivation::StartRequested);
 }
 
 void testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure() {
@@ -2990,6 +3065,7 @@ int main() {
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
     testGoldenSurveyTraceUsesListDetailBackAndExplicitStop();
+    testSurveySourcePlanProjectsAvailabilityAndRequiresSelection();
     testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure();
     testSessionStoreIoRouterSwitchesOnlyTheSelectedBackend();
     testSurveyPipelineQueuesDrainsDropsAndCommitsWithStopPolicy();
