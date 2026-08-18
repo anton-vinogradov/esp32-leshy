@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove plan-v5 active receive-only Full/Guided checks on the real device."""
+"""Prove plan-v6 active RF and read-only artifact checks on the real device."""
 
 from __future__ import annotations
 
@@ -26,9 +26,10 @@ from run_1x_product_survey_hil import (
 )
 
 
-RUN_SCHEMA = "leshy.full_guided_rf_self_test_hil.run.v1"
+RUN_SCHEMA = "leshy.full_guided_artifact_self_test_hil.run.v1"
 REPORT_SCHEMA = "leshy.self_test.report.v1"
 ACTIVE_RF_SCHEMA = "leshy.self_test.active_rf.v1"
+ACTIVE_ARTIFACT_SCHEMA = "leshy.self_test.active_artifact.v1"
 QUICK_IDS = [
     "quick.build.identity",
     "quick.board.profile",
@@ -54,6 +55,9 @@ FULL_CHECKS = [
     ("full.s4.shield.receivers", "pass"),
     ("full.s4.spectrum.nrf24.receive", "pass"),
     ("full.s4.spectrum.cc1101.receive", "pass"),
+    ("full.s4.storage.recovery.audit", "pass"),
+    ("full.s4.library.export.audit", "pass"),
+    ("full.s4.capture.pcap.audit", "pass"),
     ("full.capability.coverage", "blocked"),
 ]
 
@@ -61,12 +65,12 @@ FULL_CHECKS = [
 def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
     failures = expect(report, {
         "schema_version": 1,
-        "plan_version": 5,
+        "plan_version": 6,
         "mode": "full_guided" if full else "quick",
         "status": "blocked" if full else "pass",
         "read_only": not full,
         "cancelled": False,
-        "passed": 18 if full else 8,
+        "passed": 21 if full else 8,
         "failed": 0,
         "blocked": 1 if full else 0,
         "not_applicable": 3 if full else 0,
@@ -108,6 +112,13 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
             "nrf24_spectrum_exercise_passed",
             "cc1101_spectrum_exercise_complete",
             "cc1101_spectrum_exercise_passed",
+            "persistent_recovery_audit_complete",
+            "persistent_recovery_audit_passed",
+            "library_export_audit_complete",
+            "library_export_audit_passed",
+            "capture_pcap_audit_complete",
+            "capture_pcap_audit_applicable",
+            "capture_pcap_audit_passed",
         ):
             if facts.get(key) is not True:
                 failures.append(f"shield receiver fact is not true: {key}")
@@ -116,7 +127,7 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
 
 def active_rf_failures(report: dict[str, Any]) -> list[str]:
     failures = expect(report, {
-        "plan_version": 5, "step": "complete", "rx_only": True,
+        "plan_version": 6, "step": "complete", "rx_only": True,
         "resource_acquired": True, "resource_released": True,
         "cleanup_complete": True, "current_owner": "self-test",
         "current_lease_mask": 1,
@@ -161,6 +172,49 @@ def active_rf_failures(report: dict[str, Any]) -> list[str]:
     if report.get("side_effects") != expected_effects:
         failures.append(
             f"active RF side effects differ: {report.get('side_effects')!r}")
+    return failures
+
+
+def active_artifact_failures(report: dict[str, Any],
+                             recovery: dict[str, Any]) -> list[str]:
+    failures = expect(report, {
+        "plan_version": 6, "step": "complete", "read_only": True,
+        "expected_cid": recovery.get("expected_fingerprint"),
+        "cleanup_complete": True, "current_owner": "self-test",
+        "current_lease_mask": 1,
+    }, "active_artifact")
+    recovered = report.get("recovery", {})
+    failures.extend(expect(recovered, {
+        "complete": True, "passed": True, "status": "admitted",
+        "generation_before": recovery.get("generation"),
+        "generation_after": recovery.get("generation"),
+        "observations_before": recovery.get("observations"),
+        "observations_after": recovery.get("observations"),
+        "mounted_read_only": True, "cleanup_complete": True,
+    }, "active_artifact.recovery"))
+    library = report.get("library", {})
+    failures.extend(expect(library, {
+        "complete": True, "passed": True,
+        "csv_records": recovery.get("observations"),
+    }, "active_artifact.library"))
+    for field in ("json_bytes", "metadata_bytes", "csv_bytes"):
+        value = library.get(field)
+        if not isinstance(value, int) or value <= 0:
+            failures.append(f"artifact library {field} is invalid: {value!r}")
+    capture = report.get("capture", {})
+    failures.extend(expect(capture, {
+        "complete": True, "applicable": True, "passed": True,
+        "pcap_frames": 16, "pcap_bytes": 2773,
+    }, "active_artifact.capture"))
+    if not isinstance(capture.get("pcap_fnv1a"), int) or not capture.get(
+            "pcap_fnv1a"):
+        failures.append("artifact PCAP digest is absent")
+    if report.get("side_effects") != {
+        "radio_tx_commands": 0, "storage_write_commands": 0,
+        "blocked_write_attempts": 0,
+    }:
+        failures.append(
+            f"artifact side effects differ: {report.get('side_effects')!r}")
     return failures
 
 
@@ -243,6 +297,7 @@ def main() -> int:
     full: dict[str, Any] = {}
     shield_probe: dict[str, Any] = {}
     active_rf: dict[str, Any] = {}
+    active_artifact: dict[str, Any] = {}
     input_state: dict[str, Any] = {}
     safe_outputs: dict[str, Any] = {}
     final: dict[str, Any] = {}
@@ -337,16 +392,28 @@ def main() -> int:
                 }, "active_checks"))
                 captures["active_checks"] = capture(
                     device, frames, "active-checks")
-                deadline = time.monotonic() + 15.0
+                artifact_captured = False
+                deadline = time.monotonic() + 30.0
                 while time.monotonic() < deadline:
                     state = query(device, b"ui.state", "leshy.ui.v1", "state")
                     trace.append(state)
                     if state.get("self_test_view") == "result":
                         break
+                    if (not artifact_captured and
+                            state.get("self_test_active_step") == "complete" and
+                            state.get("self_test_artifact_step") in {
+                                "recover", "library_json", "library_csv",
+                                "capture_pcap",
+                            }):
+                        captures["active_artifacts"] = capture(
+                            device, frames, "active-artifacts")
+                        artifact_captured = True
                     time.sleep(0.05)
+                if not artifact_captured:
+                    failures.append("active artifact UI phase was not captured")
                 failures.extend(expect(state, {
                     "self_test_view": "result", "self_test_status": "blocked",
-                    "self_test_checks": 22, "self_test_passed": 18,
+                    "self_test_checks": 25, "self_test_passed": 21,
                     "self_test_failed": 0, "self_test_blocked": 1,
                     "self_test_not_applicable": 3, "lease_mask": 1,
                 }, "full_result"))
@@ -356,6 +423,11 @@ def main() -> int:
                 active_rf = query(
                     device, b"self-test.active-rf", ACTIVE_RF_SCHEMA, "report")
                 failures.extend(active_rf_failures(active_rf))
+                active_artifact = query(
+                    device, b"self-test.active-artifact",
+                    ACTIVE_ARTIFACT_SCHEMA, "report")
+                failures.extend(active_artifact_failures(
+                    active_artifact, recovery_before))
                 shield_probe = query(
                     device, b"hardware.shield.receivers",
                     "leshy.shield.receiver_probe.v1", "report",
@@ -419,6 +491,7 @@ def main() -> int:
         "full_report": full,
         "shield_receiver_probe": shield_probe,
         "active_rf": active_rf,
+        "active_artifact": active_artifact,
         "input": input_state,
         "safe_outputs": safe_outputs,
         "recovery_after": recovery_after,
