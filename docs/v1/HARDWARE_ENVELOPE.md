@@ -189,6 +189,14 @@ zero. Stop leaves CC1101 IDLE and releases the lease (`E-HIL-108`/`E-RADIO-003`)
 Without an RF detector or calibrated source this proves neither physical RF silence
 nor calibrated RSSI/frequency accuracy.
 
+Exact `0.84.0-full-guided-rf` reuses those guarded receive adapters only after the
+Full/Guided preflight. Plan v5 acquires `RadioSpi`, completes one 83-channel sweep on
+both nRF24 receivers and one 64-bin CC1101 433 MHz sweep, then returns both adapters
+to safe state before release. The accepted run accounts 83 RX CE windows and
+1 reset/64 RX/129 IDLE CC1101 strobes with zero TX-mode/payload/TX-strobe/PATABLE/
+FIFO/storage counters (`E-HIL-109`/`E-RADIO-004`). This remains software-counter
+evidence; HW-T06 is still partial without an RF detector.
+
 GPIO2 software evidence: the author's root-cause description and one-line LOW fix in
 [upstream issue #117](https://github.com/cifertech/ESP32-DIV/issues/117#issuecomment-5178973211)
 links the verified

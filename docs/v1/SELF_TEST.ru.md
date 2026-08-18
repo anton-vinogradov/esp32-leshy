@@ -3,8 +3,9 @@
 *Читать на: [English](SELF_TEST.md) · **Русский***
 
 Статус: **принят product/UX contract; Quick/guided UI S2, registration завершённых
-capabilities S3/S4 и conditional read-only identity check RF shield физически приняты;
-active execution workflows из Full/Guided продолжается через S4…S8**.
+capabilities S3/S4, conditional identity check RF shield и первый active receive-only
+RF execution физически приняты; остальные workflows Full/Guided продолжаются через
+S4…S8**.
 
 Self-Test — отдельное приложение в самом низу Home. Оно никогда не перехватывает
 обычную загрузку. Один test engine используется владельцем устройства, полным
@@ -149,6 +150,32 @@ total capability coverage (`E-AUTO-046`/`E-HIL-106`/`E-SELFTEST-003`/
 `E-RADIO-001`). Это доказывает bounded read-only identity, но не physical RF silence,
 passive activity reception или spectrum capture; для них нужны отдельные workflows,
 а для physical silence — недоступный сейчас RF instrument.
+
+## Принятый active receive-only RF checkpoint
+
+Exact candidate `0.84.0-full-guided-rf` переводит общий report на plan version 5 и
+добавляет `full.s4.spectrum.nrf24.receive` и
+`full.s4.spectrum.cc1101.receive`. После пяти semantic UI cards Full/Guided на 500 ms
+показывает cancellable active screen, получает `RadioSpi`, выполняет один полный
+receive sweep 83 каналов на двух declared nRF24, затем один receive sweep CC1101 по
+64 bins в plan 433 МГц. Работа cooperative, Back очищает оба adapter до release.
+Quick остаётся неизменным read-only; Full теперь честно `read_only:false`, потому что
+настраивает приёмники, хотя в нём не представимы transmit или storage-write paths.
+
+На board-01 Quick проходит 8/8, Full возвращает 18 pass / 0 fail / 1 blocked / 3 N/A.
+Exact accounting nRF24: 93 reads, 95 writes, 376 SPI bytes и 83 verified RX CE windows.
+CC1101: 2 060 reads, 208 writes, 4 730 SPI bytes и 1 reset / 64 RX / 129 idle strobes.
+Все counters TX-mode, payload, TX-strobe, PATABLE, FIFO, rejected-command и
+storage-write равны нулю; generation остаётся 83, одиннадцать real TFT states проходят
+review, final owner/lease — `none`/`0`
+(`E-BUILD-085`/`E-AUTO-049`/`E-HIL-109`/`E-SELFTEST-004`/`E-RADIO-004`).
+
+Первый exact HIL attempt сохранён как fail-closed failure модели runner: она ожидала
+лишний idle strobe на каждый bin CC1101. Source и observed wire accounting показывают
+реальную последовательность `SIDLE → tune → SRX → read → SIDLE`; independent equation
+исправлен, те же bytes прошивки прошли. Checkpoint доказывает software-instrumented
+receive-only execution, но не physical RF silence. Total capability coverage и active
+Survey/Library/Capture execution остаются blocked/open.
 
 ## Приёмка
 

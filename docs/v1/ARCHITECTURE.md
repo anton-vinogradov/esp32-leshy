@@ -340,7 +340,18 @@ for RX ready, observes for 500 us and returns to IDLE; it exposes no TX, PATABLE
 FIFO operation. UI redraw occurs only after a completed sweep. `E-HIL-108` proves all
 four bands, a stable 400 ms pause, exact wire accounting, zero TX/storage side
 effects, invariant heap/storage and final lease 0. Values are uncalibrated RSSI and
-physical RF silence remains unmeasured; active Full/Guided execution is next.
+physical RF silence remains unmeasured.
+
+Exact `0.84.0-full-guided-rf` makes those two receiver contracts executable from
+plan-v5 Full/Guided without making boot or Quick active. The orchestration shows a
+500 ms cancellable boundary, acquires `RadioSpi` once, completes one bounded dual-
+nRF24 sweep, then advances CC1101 by one bin per main-loop turn before releasing the
+resource and producing the final report. Stable active-check IDs and
+`leshy.self_test.active_rf.v1` separate device progress from the independent host
+oracle. `E-HIL-109` proves Quick 8/8, Full 18 pass/0 fail/1 blocked/3 N/A, exact wire
+accounting, zero TX/storage side effects, 11 real TFT states and final lease 0. The
+first runner equation mismatch is retained fail closed. Physical RF silence and
+active execution of the remaining Survey/Library/Capture workflows stay open.
 
 ## Data model
 

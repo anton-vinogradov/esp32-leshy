@@ -102,6 +102,15 @@ invariant heap/storage и final lease 0. RSSI и frequency scale не калиб
 physical RF silence не измерен. Active Full/Guided execution, controlled physical
 power-cut и endurance всё ещё держат `DEMO-S4` открытым.
 
+Exact 0.84 принимает первый active execution slice Full/Guided. Plan v5 сохраняет
+Quick read-only 8/8, затем активно выполняет один полный receive sweep двух nRF24 и
+один receive sweep CC1101 433 МГц по 64 bins. Full возвращает 18 pass, zero fail,
+один честный blocker future coverage и три N/A; все TX/storage counters остаются
+нулевыми, storage generation — 83, 11 TFT states проходят review, final lease — zero.
+Первый mismatch equation runner сохранён fail closed. Remaining
+Survey/Library/Capture execution, controlled physical power-cut и 8 h/32-cycle
+endurance всё ещё держат `DEMO-S4` открытым.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases.

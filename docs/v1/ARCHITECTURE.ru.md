@@ -396,7 +396,18 @@ sample за проход main loop, разрешает strobes reset/RX/idle, ж
 нет. UI перерисовывается только после полного sweep. `E-HIL-108` доказывает все четыре
 диапазона, стабильную pause 400 ms, exact wire accounting, zero TX/storage side
 effects, invariant heap/storage и final lease 0. Значения — некалиброванный RSSI,
-physical RF silence не измерен; active Full/Guided execution идёт следующим.
+physical RF silence не измерен.
+
+Exact `0.84.0-full-guided-rf` делает эти два receiver contract исполняемыми из
+plan-v5 Full/Guided, не превращая boot или Quick в active. Orchestration показывает
+cancellable boundary 500 ms, один раз получает `RadioSpi`, завершает bounded sweep
+двух nRF24, затем продвигает CC1101 по одному bin за проход main loop до release и
+итогового report. Stable active-check IDs и `leshy.self_test.active_rf.v1` отделяют
+device progress от independent host oracle. `E-HIL-109` доказывает Quick 8/8, Full
+18 pass/0 fail/1 blocked/3 N/A, exact wire accounting, zero TX/storage side effects,
+11 real TFT states и final lease 0. Первый mismatch equation runner сохранён fail
+closed. Physical RF silence и active execution остальных Survey/Library/Capture
+workflows остаются открыты.
 
 ## 7. Модель данных
 

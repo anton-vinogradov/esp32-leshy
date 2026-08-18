@@ -235,6 +235,14 @@ Final wire counts — 1 reset, 354 RX и 713 IDLE strobes, 11 443 reads, 1 078 w
 (`E-HIL-108`/`E-RADIO-003`). Без RF detector и calibrated source это не доказывает
 ни physical RF silence, ни calibrated RSSI/frequency accuracy.
 
+Exact `0.84.0-full-guided-rf` повторно использует эти guarded receive adapters только
+после preflight Full/Guided. Plan v5 получает `RadioSpi`, завершает один sweep 83
+каналов на обоих nRF24 и один sweep CC1101 433 МГц по 64 bins, затем возвращает оба
+adapter в safe state до release. Принятый run учитывает 83 RX CE windows и
+1 reset/64 RX/129 IDLE strobes CC1101 при zero TX-mode/payload/TX-strobe/PATABLE/
+FIFO/storage counters (`E-HIL-109`/`E-RADIO-004`). Это по-прежнему software-counter
+evidence; HW-T06 остаётся partial без RF detector.
+
 Любая неоднозначность GPIO5/6 или 14/21 заканчивается `conflicted`, а не перебором
 output modes. Probe не должен передавать RF/IR, писать на SD/NFC или издавать звук.
 

@@ -102,6 +102,15 @@ Its RSSI and frequency scale are not calibrated and physical RF silence is not
 instrumented. Active Full/Guided execution, controlled physical power-cut and
 endurance still keep `DEMO-S4` open.
 
+Exact 0.84 accepts the first active Full/Guided execution slice. Plan v5 leaves
+Quick read-only at 8/8, then actively performs one complete dual-nRF24 receive sweep
+and one 64-bin CC1101 433 MHz receive sweep. Full returns 18 pass, zero fail, one
+honest future-coverage blocker and three N/A; all TX/storage counters stay zero,
+storage generation remains 83, 11 TFT states pass review and final lease is zero.
+The initial runner equation mismatch is retained fail closed. Remaining
+Survey/Library/Capture execution, controlled physical power-cut and 8 h/32-cycle
+endurance still keep `DEMO-S4` open.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

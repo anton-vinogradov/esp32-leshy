@@ -12,10 +12,10 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.83 S4 checkpoints through persistent Wi-Fi Capture, plan-v4 RF-shield identity and user-facing nRF24 plus CC1101 spectrum workflows.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.84 S4 checkpoints through persistent Wi-Fi Capture, both user-facing spectrum workflows, and plan-v5 active receive-only RF checks in Full/Guided.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
-- **Current objective:** execute the accepted product workflows from Full/Guided,
-  then exercise controlled
+- **Current objective:** extend plan-v5 active Full/Guided execution from the
+  accepted receiver checks to the remaining applicable S3/S4 workflows, then exercise controlled
   power-cut recovery and the 8 h/32-cycle multi-source endurance gate.
 
 ## Stage state
@@ -26,7 +26,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71…0.79 accept the passive multi-source, browser/export and persistent Capture path; exact 0.80 registers it in Full/Guided; exact 0.81 detects the declared RF shield; exact 0.82/0.83 add explicit user-started, receive-only nRF24 and four-band CC1101 spectrum views with pause/resume and complete cleanup | implement active Full/Guided execution; then exercise controlled physical power-cut recovery and 8 h/32-cycle multi-source endurance |
+| S4 | `active` | exact 0.71…0.79 accept the passive multi-source, browser/export and persistent Capture path; exact 0.80 registers it in Full/Guided; exact 0.81 detects the declared RF shield; exact 0.82/0.83 add explicit user-started spectrum views; exact 0.84 actively executes the two receive-only RF checks from plan v5 with complete cleanup | extend active Full/Guided to the remaining applicable workflows; then exercise controlled physical power-cut recovery and 8 h/32-cycle multi-source endurance |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -40,9 +40,9 @@ items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 
 | Product block | Now | Next qualitative transition |
 |---|---|---|
-| Device foundation and UX | `done / S2` — boot, board profile, five keys, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test and automated TFT capture; plan-v4 Full/Guided registers completed S3/S4 workflows and conditionally probes the declared RF shield | execute each applicable registered workflow and keep adding new hardware checks |
+| Device foundation and UX | `done / S2` — boot, board profile, five keys, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test and automated TFT capture; plan-v5 Full/Guided registers completed S3/S4 workflows and actively executes both declared receive-only RF checks | extend active execution to the remaining applicable workflows and keep adding hardware checks |
 | Survey and Library | `done / S3` — real passive Wi-Fi, atomic Session, List/Detail, offline reopen and export | reuse this accepted foundation rather than fork a new data path |
-| Passive multi-radio and Capture | `active / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV and privacy-confirmed persistent Wi-Fi PCAP work; two nRF24 receivers provide a live 2,402…2,484 MHz activity map and CC1101 provides live 315/433/868/915 MHz RSSI maps, while Self-Test identifies the declared shield without TX and classifies absent modules honestly | active Full/Guided execution, power-cut and endurance |
+| Passive multi-radio and Capture | `active / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV and privacy-confirmed persistent Wi-Fi PCAP work; two nRF24 receivers provide a live 2,402…2,484 MHz activity map and CC1101 provides live 315/433/868/915 MHz RSSI maps; Self-Test identifies the shield and now actively repeats one complete nRF24 plus 433 MHz CC1101 receive pass without TX | remaining active workflow execution, power-cut and endurance |
 | Complete standard ESP32-DIV hardware | `ahead / S5` — scope and fail-closed hardware envelope exist, but complete IR/PN532/GPS/power workflows do not | probe → capture/observe → Library → inspect/export for every applicable module |
 | Targets, compare and companion | `ahead / S6` — product model and boundaries exist, user workflows are not implemented | compare two Surveys through evidence-backed Targets and the same local Web/USB companion |
 | Safe Lab and extensions | `ahead / S7` — safety/resource boundaries are accepted, active workflows and SDK are not implemented | feature-complete catalog, permissioned extensions and proven panic/timeout stop |
@@ -626,6 +626,9 @@ endurance are explicit `DEMO-S4` criteria.
 | E-BUILD-084 | exact `0.83.0-cc1101-spectrum` build | pass: RAM 152,928 B, linked flash 1,473,780 B; app/factory 1,474,192/1,539,728 B; app `8d0d8f80…68ca`, factory `89452c13…c1c`, ELF `0900944f…f2c`, map `3aa5932e…eb`; source commit `b3c97d7` | +7,424 B linked flash, +176 B static RAM and +7,424 B images vs 0.82 for the pure band plan/controller, one-sample-per-loop guarded adapter, localized live RSSI chart and telemetry; exact checkpoint, not `DEMO-S4` or a release build |
 | E-AUTO-048 | CC1101 spectrum host, exact-HIL and retained verification | pass: native/static cases cover four-band selection, start/pause/resume/stop, one-bin cooperative sampling, fail-closed profile/resource/identity conflicts and the whitelist of reset/RX/idle strobes; the independent verifier binds source/candidate/runner, both binaries, exact 33-file inventory, nine TFT states, storage/heap continuity, wire equations and final cleanup | one-board software receive-only evidence; no RF instrument was available, so physical RF silence, RSSI calibration and frequency-accuracy calibration are not claimed |
 | E-HIL-108 / E-RADIO-003 | board-01 exact 0.83 user-facing CC1101 spectrum | pass checkpoint: Survey→RF spectrum→Sub-GHz/CC1101 completes at least one 64-bin sweep in each 315/433/868/915 MHz plan with 500 us settle and bounded 3,000 us RX-ready timeout. A 400 ms pause holds the adapter at exactly 351 samples and resume advances it to 353; Stop completes at 354 samples with reset/RX/idle strobes 1/354/713, 11,443 reads, 1,078 writes and 26,110 SPI bytes. TX, PATABLE, FIFO, rejected-strobe and storage-write counters remain zero, GPIO21/slot 3 stays gated/high, generation remains 83/0, heap is invariant 228,780/164,036/144,640 B, nine TFT states pass review and final Home owner/lease is none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-cc1101-spectrum-0.83.json) | accepts the volatile user-started four-band CC1101 RSSI map and its software receive-only contract; it is not a calibrated analyzer or instrumented physical no-TX measurement, and active Full/Guided, power-cut and endurance keep `DEMO-S4` open |
+| E-BUILD-085 | exact `0.84.0-full-guided-rf` build | pass: RAM 153,064 B, linked flash 1,478,132 B; app/factory 1,478,544/1,544,080 B; app `79d319d9…4a52`, factory `716fe048…fc7e`, ELF `48ecd530…01a`, map `3fab30ae…b27`; source commit `32aad3c` | +4,352 B linked flash, +136 B static RAM and +4,352 B images vs 0.83 for plan-v5 active state, two new check IDs, cooperative RF execution, report telemetry and a cancellable 500 ms pre-start window; exact checkpoint, not `DEMO-S4` or a release build |
+| E-AUTO-049 | active Full/Guided RF runner and retained verifier | pass: the runner flashes exact bytes, drives Quick plus Full/Guided through preflight, five common states and visible active progress, then independently checks plan/check order, exact receiver accounting, storage/CID continuity, 11 TFT states, input/buzzer and final cleanup. The first run failed closed because the runner expected one nonexistent extra CC1101 `SIDLE` per bin; that run and the incorrect runner blob are retained, the equation was corrected from source/wire evidence, and the same candidate passed | one-board software-counter evidence; no RF instrument was available and the failure is classified as a runner expectation error, not hidden as a product pass |
+| E-HIL-109 / E-SELFTEST-004 / E-RADIO-004 | board-01 exact 0.84 active receive-only checks in Full/Guided | pass checkpoint: Quick remains read-only 8/8; Full/Guided plan v5 returns 18 pass/0 fail/1 honest capability blocker/3 N/A after actively executing one 83-channel sweep across two nRF24 receivers and one 64-bin CC1101 433 MHz sweep. Exact nRF wire is 93 reads/95 writes/376 SPI bytes/83 RX CE windows; CC wire is 2,060 reads/208 writes/4,730 SPI bytes and reset/RX/idle strobes 1/64/129. All TX-mode/payload/strobe/PATABLE/FIFO/rejected/storage-write counters are zero, generation remains 83/0, heap is 228,644/163,900/144,504 B, 11 TFT states pass visual review and final Home owner/lease is none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-rf-0.84.json) | accepts active receive-only RF execution and its cancellation boundary inside Self-Test; remaining Survey/Library/Capture execution, instrumented physical RF silence, controlled power-cut and endurance keep `DEMO-S4` open |
 
 ## Known uncertainties and risks
 
@@ -666,8 +669,10 @@ assembly facts in Full/Guided plan v3. Exact 0.81 promotes the declared RF-shiel
 receiver identity check to plan v4 after bounded read-only detection of nRF24 #1/#2
 and CC1101. Exact 0.82/0.83 accept both useful shield workflows: an explicit volatile
 83-channel nRF24 activity map and a four-band CC1101 RSSI map, each with pause/resume,
-invariant heap/storage and complete cleanup. Active execution of the accepted product
-workflows from Full/Guided remains software work.
+invariant heap/storage and complete cleanup. Exact 0.84 promotes both receiver paths
+to active plan-v5 Full/Guided checks with a visible cancellable boundary, exact
+receive-only accounting and zero final ownership. Active execution of the remaining
+accepted Survey/Library/Capture workflows is still software work.
 The currently unavailable controlled
 power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.
