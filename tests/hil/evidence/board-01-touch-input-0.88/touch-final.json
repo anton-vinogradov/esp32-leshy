@@ -1,0 +1,32 @@
+{
+  "calibration": [
+    533,
+    2996,
+    531,
+    3117,
+    6
+  ],
+  "calibration_required_at_boot": false,
+  "calibration_source": "leshy1",
+  "calibration_succeeded_at_boot": true,
+  "footer_interactive": false,
+  "handled_presses": 4,
+  "kind": "state",
+  "last_changed": true,
+  "last_x": 76,
+  "last_y": 91,
+  "missed_presses": 2,
+  "press_events": 1,
+  "pressed": false,
+  "pressure_threshold": 80,
+  "raw_pressure": 14,
+  "rejected_coordinates": 0,
+  "release_debounce_ms": 35,
+  "release_events": 1,
+  "samples": 854,
+  "schema": "leshy.touch.frontend.v1",
+  "status": "ready",
+  "synthetic_presses": 5,
+  "touch_back_enabled": false,
+  "touched_samples": 1
+}

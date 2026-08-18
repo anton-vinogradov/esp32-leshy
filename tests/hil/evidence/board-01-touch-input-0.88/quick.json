@@ -1,0 +1,113 @@
+{
+  "app_elf_sha256": "9af4a20f603c57722e3c11b8fb44b8c1ba65ca03516bd1be41784c439c1d4e30",
+  "blocked": 0,
+  "board_profile": "esp32-div-v2-n16",
+  "cancelled": false,
+  "checks": [
+    {
+      "id": "quick.build.identity",
+      "status": "pass"
+    },
+    {
+      "id": "quick.board.profile",
+      "status": "pass"
+    },
+    {
+      "id": "quick.runtime.heap",
+      "status": "pass"
+    },
+    {
+      "id": "quick.display.ready",
+      "status": "pass"
+    },
+    {
+      "id": "quick.input.touch",
+      "status": "pass"
+    },
+    {
+      "id": "quick.input.frontend",
+      "status": "pass"
+    },
+    {
+      "id": "quick.input.queue",
+      "status": "pass"
+    },
+    {
+      "id": "quick.output.buzzer",
+      "status": "pass"
+    },
+    {
+      "id": "quick.resource.scope",
+      "status": "pass"
+    }
+  ],
+  "current_lease_mask": 1,
+  "current_owner": "self-test",
+  "duration_us": 123,
+  "facts": {
+    "build_identity_present": true,
+    "buzzer_inactive": true,
+    "capture_pcap_audit_applicable": false,
+    "capture_pcap_audit_complete": false,
+    "capture_pcap_audit_passed": false,
+    "cc1101_spectrum_exercise_complete": false,
+    "cc1101_spectrum_exercise_passed": false,
+    "display_ready": true,
+    "disposable_cleanup_complete": false,
+    "disposable_cleanup_passed": false,
+    "disposable_commit_complete": false,
+    "disposable_commit_passed": false,
+    "disposable_export_complete": false,
+    "disposable_export_passed": false,
+    "disposable_remount_complete": false,
+    "disposable_remount_passed": false,
+    "enrolled_storage_ready": true,
+    "gps_declared": false,
+    "heap_floor": 131072,
+    "heap_free": 167028,
+    "heap_minimum": 147632,
+    "input_frontend_ready": true,
+    "input_queue_drops": 0,
+    "input_queue_healthy": true,
+    "ir_declared": false,
+    "library_export_audit_complete": false,
+    "library_export_audit_passed": false,
+    "nrf24_spectrum_exercise_complete": false,
+    "nrf24_spectrum_exercise_passed": false,
+    "passive_ble_ready": true,
+    "passive_wifi_capture_ready": true,
+    "persistent_library_ready": true,
+    "persistent_recovery_audit_complete": false,
+    "persistent_recovery_audit_passed": false,
+    "persistent_survey_ready": true,
+    "persistent_wifi_capture_ready": true,
+    "pn532_declared": false,
+    "profile_matched": true,
+    "resource_scope_clean": true,
+    "run_resource_mask": 1,
+    "shield_receiver_probe_complete": false,
+    "shield_receiver_probe_passed": false,
+    "shield_receivers_applicable": true,
+    "touch_frontend_ready": true
+  },
+  "failed": 0,
+  "firmware_version": "0.88.0-touch-input",
+  "kind": "report",
+  "mode": "quick",
+  "not_applicable": 0,
+  "passed": 9,
+  "plan_version": 8,
+  "read_only": true,
+  "schema": "leshy.self_test.report.v1",
+  "schema_version": 1,
+  "sequence": 1,
+  "side_effects": {
+    "buzzer_activations": 0,
+    "product_storage_write_commands": 0,
+    "radio_tx_commands": 0,
+    "storage_write_bytes": 0,
+    "storage_write_commands": 0
+  },
+  "started_us": 44977471,
+  "status": "pass"
+}

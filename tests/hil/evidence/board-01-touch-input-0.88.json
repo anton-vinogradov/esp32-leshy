@@ -1,0 +1,92 @@
+{
+  "schema": "leshy.touch_input_acceptance.v1",
+  "status": "pass_physical_touch_checkpoint",
+  "board": "board-01",
+  "candidate": {
+    "version": "0.88.0-touch-input",
+    "source_commit": "c96590e728bfa9fd0be3b68c1668eca27ff9ba2e",
+    "firmware_sha256": "479e8aff67678e2833f6a8c43ef48f4a3bc62ffb6091a974ab37eae26432ae92",
+    "factory_sha256": "4dfc89a3dfe42c2844868559eb93f7784b85825a10d9ff58a32a0e36ac551479",
+    "app_elf_sha256": "9af4a20f603c57722e3c11b8fb44b8c1ba65ca03516bd1be41784c439c1d4e30",
+    "runner_sha256": "a57fad1ce7901502c17505be3fef0781e486aa04f59893d562b1cf881938f442",
+    "firmware_bytes": 1497456,
+    "factory_bytes": 1562992,
+    "static_ram_bytes": 149936,
+    "linked_flash_bytes": 1497056
+  },
+  "regression": {
+    "failed_candidate_app_elf_sha256": "9ec5ec01e8a87a9c9b028503d9cd9f3790d2f56443332c502060e3cee4e631d4",
+    "failed_candidate_firmware_sha256": "f1f108cd984c4b1f47f2bfeb0e011476542fd13f063a53a4844c9cf2bb513b63",
+    "failed_pressure_threshold": 350,
+    "physical_wait_seconds": 180,
+    "samples_without_touch_event": 15055,
+    "touched_samples": 0,
+    "idle_raw_pressure_observed": [3, 14],
+    "calibration_crc_valid": true,
+    "calibration": [533, 2996, 531, 3117, 6],
+    "diagnosis": "runtime pressure threshold was stricter than the library calibration threshold",
+    "fix": "non-blocking boot fallback plus an 80 pressure threshold, coordinate stability, edge lock and 35 ms release debounce"
+  },
+  "evidence": {
+    "bundle": "tests/hil/evidence/board-01-touch-input-0.88",
+    "files": 22,
+    "tft_states": 4,
+    "original_run_sha256": "d93c6458b7f7fb57c847d0a1174b2901f65bcdc8d647b0f3ec0dd6aeb9da2ab7",
+    "canonical_run_sha256": "55ecad0fa0ef48798ef27fbfeee6b402fac2b7258a4afc635e7a2a69ebe0f303",
+    "artifact_index_sha256": "5b52f4440201ac801910ee7eb883e955a9dff48982f732232432ef17cb2b93bc"
+  },
+  "verified": {
+    "physical_touch": {
+      "calibration_source": "leshy1",
+      "calibration": [533, 2996, 531, 3117, 6],
+      "pressure_threshold": 80,
+      "point": [76, 91],
+      "press_events": 1,
+      "handled_presses": 1,
+      "synthetic_presses": 0,
+      "opened_page": "diagnostics"
+    },
+    "geometry": {
+      "visible_home_targets": 3,
+      "home_target_height_px": 46,
+      "minimum_target_height_px": 44,
+      "header_interactive": false,
+      "footer_interactive": false,
+      "touch_back_enabled": false,
+      "physical_left_is_back": true
+    },
+    "final_touch": {
+      "handled_presses": 4,
+      "missed_presses": 2,
+      "synthetic_presses": 5,
+      "release_events": 1,
+      "rejected_coordinates": 0
+    },
+    "quick": {
+      "plan_version": 8,
+      "passed": 9,
+      "failed": 0,
+      "blocked": 0,
+      "touch_check": "pass"
+    },
+    "heap": {
+      "total": 231772,
+      "free_before": 167028,
+      "free_after": 167028,
+      "minimum_before": 147632,
+      "minimum_after": 147632,
+      "invariant": true
+    },
+    "input_queue_drops": 0,
+    "buzzer_inactive": true,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "limits": {
+    "touch_corrective_complete": true,
+    "controlled_power_cut_complete": false,
+    "one_hour_endurance_complete": false,
+    "demo_s4_complete": false,
+    "release_gate_eligible": false
+  }
+}

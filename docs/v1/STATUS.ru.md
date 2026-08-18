@@ -2,7 +2,7 @@
 
 *Читать на: [English](STATUS.md) · **Русский***
 
-Последнее обновление: **18 августа 2026 года**.
+Последнее обновление: **19 августа 2026 года**.
 
 Это единственный документ с живым состоянием проекта. Границы этапов находятся в
 [DELIVERY_PLAN.ru.md](DELIVERY_PLAN.ru.md), а правила обновления — в
@@ -12,15 +12,16 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.87 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact, guarded disposable write/remount/export/cleanup и final heap-budget enforcement в Full/Guided plan v7.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.88 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact, guarded disposable write/remount/export/cleanup, final heap-budget enforcement и calibrated touch navigation.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** проверить controlled physical power-cut recovery
   и multi-source endurance ≥45 минут/≥8 циклов в часовом операционном бюджете — два
   оставшихся gate `DEMO-S4`.
-- **Последний принятый checkpoint:** exact 0.87 повторно вычисляет Quick по финальным
-  facts Full/Guided и использует общий serial scratch workspace diagnostics/storage;
-  board-01 проходит heap floor 128 KiB с minimum 133 884 B, сохраняя весь disposable
-  workflow exact 0.86 и неизменную product generation 83/0.
+- **Последний принятый checkpoint:** exact 0.88 добавляет один неблокирующий
+  calibrated path XPT2046 в существующий Navigator. Один физический tap открывает
+  нужную строку Home; три строки по 46 px пригодны для пальца, header/footer не
+  интерактивны, только physical Left выполняет Back, Quick plan v8 проходит 9/9,
+  heap и final ownership инвариантны. Gates S4 power-cut/endurance не изменились.
 
 ## Состояние этапов
 
@@ -28,7 +29,7 @@
 |---|---|---|---|
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
-| S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
+| S2 | `done` | независимая target, unified five-key плюс calibrated touch input/TFT capture, finger-sized common rows, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
 | S4 | `active` | exact 0.71…0.79 принимают passive multi-source, browser/export и persistent Capture; exact 0.80…0.85 регистрируют и активно проверяют receiver/artifact paths; exact 0.86 выполняет guarded disposable commit/remount/export/cleanup; exact 0.87 закрывает false positive final heap report и проходит floor 128 KiB | проверить controlled physical power-cut recovery и multi-source endurance ≥45 минут/≥8 циклов в течение часа |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
@@ -44,7 +45,7 @@
 
 | Блок продукта | Сейчас | Ближайший качественный переход |
 |---|---|---|
-| Основа устройства и UX | `готово / S2` — boot, board profile, пять клавиш, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test и автоматический TFT capture; plan-v7 Full/Guided выполняет declared receive-only RF, artifact и изолированные disposable-storage checks | сохранять общий plan при добавлении следующих hardware checks |
+| Основа устройства и UX | `готово / S2` — boot, board profile, пять клавиш плюс calibrated touch, finger-sized common rows, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test и автоматический TFT capture; plan-v7 Full/Guided выполняет declared receive-only RF, artifact и изолированные disposable-storage checks | сохранять общий plan при добавлении следующих hardware checks |
 | Survey и Library | `готово / S3` — реальный passive Wi-Fi, atomic Session, List/Detail, offline reopen и export | используется как принятый фундамент, не переписывается отдельной веткой |
 | Passive multi-radio и Capture | `в работе / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV и privacy-confirmed persistent Wi-Fi PCAP работают; два nRF24 дают живую карту 2 402…2 484 МГц, CC1101 — RSSI-карты 315/433/868/915 МГц; Self-Test повторяет оба receive path, проверяет последний SD artifact и доказывает изолированный disposable commit/remount/export/cleanup cycle | controlled power-cut и endurance |
 | Всё штатное железо ESP32-DIV | `впереди / S5` — scope и fail-closed hardware envelope описаны, но законченных IR/PN532/GPS/power workflows ещё нет | probe → capture/observe → Library → inspect/export для каждого применимого модуля |
@@ -638,6 +639,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-HIL-111 / E-SELFTEST-006 / E-STORAGE-027 | board-01 exact 0.86 disposable workflow в Full/Guided | pass checkpoint: Quick остаётся read-only 8/8; Full/Guided plan v7 — 25 pass/0 fail/1 capability blocker/3 N/A. Exact CID разрешает только `/leshy-hil/full-guided-v7`; generation 1 с тремя observations commits ровно через три writes/504 B и три file плюс три directory syncs, read-only remount восстанавливает и экспортирует JSON 876 B, metadata 862 B и CSV 3 rows/297 B, затем удаляет все три файла и scratch directory. Product generation/observations остаются 83/0 при zero product writes, RF/TX regression проходит, input errors/drops равны нулю, buzzer inactive, 13 TFT states сохранены, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-disposable-0.86.json) | принимает controlled disposable Session creation/remount/export/cleanup внутри Self-Test; physical RF instrumentation, controlled power-cut и endurance gate до одного часа держат `DEMO-S4` открытым |
 | E-BUILD-088 | exact build `0.87.0-full-guided-heap-budget` | pass: RAM 149 864 B, linked flash 1 491 172 B; app/factory 1 491 584/1 557 120 B; app `83e0b5cb…cdbdc`, factory `19294d3a…8bb1`, ELF `9e82f00f…0f3f`, map `fc4528b5…d56`; source commit `a943f3c` | −4 608 B static RAM, +40 B linked flash и +48 B images vs 0.86 благодаря замене двух непересекающихся workspaces 4 608/5 120 B одним serial workspace 5 120 B |
 | E-AUTO-052 / E-HIL-112 / E-SELFTEST-007 | regression final heap budget и board-01 exact 0.87 Full/Guided | pass: native negative case доказывает, что healthy preflight и final heap ниже floor дают один fail; retained physical candidate перестраивает ordered report из final facts и проходит `quick.runtime.heap` с minimum/floor/margin 133 884/131 072/2 812 B. Full остаётся 25 pass/0 fail/1 blocker/3 N/A; disposable writes 3/504 B с exact cleanup, product 83/0, input drops/TX zero, 13 TFT states и final Home/lease 0 связаны в [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-heap-budget-0.87.json) | закрывает обнаруженные heap-floor issue и stale-result false positive; controlled physical power-cut и endurance gate ≤1 часа остаются единственной работой `DEMO-S4` |
+| E-BUILD-089 | exact build `0.88.0-touch-input` | pass: RAM 149 936 B, linked flash 1 497 056 B; app/factory 1 497 456/1 562 992 B; app `479e8aff…ae92`, factory `4dfc89a3…1479`, ELF `9af4a20f…4e30`; source commit `c96590e` | +72 B static RAM, +5 884 B linked flash и +5 872 B images vs 0.87 для persistence/import/fallback calibration XPT2046, native touch sampling, общих hit targets и telemetry |
+| E-AUTO-053 | touch host/HIL и retained verifier | pass: unit/source checks связывают geometry targets, общий dispatch, edge lock, coordinate stability и release debounce; canonical bundle из 22 файлов связывает exact source/runner/binaries, четыре TFT captures и run hashes. Отклонённый attempt threshold 350 сохранён с 15 055 samples, zero touch events, idle pressure 3…14 и valid calibration, а не скрыт | synthetic `ui.touch` доказывает deterministic target/chrome behavior, но не принимается как physical-touch evidence; physical point отдельно связан E-HIL-113 |
+| E-HIL-113 / E-UX-013 / E-SELFTEST-008 | board-01 exact 0.88 calibrated touch navigation | pass checkpoint: один physical point `(76,91)` с exact calibration `[533,2996,531,3117,6]` и threshold 80 открывает Diagnostics с одним press/dispatch. Home имеет три targets 216×46 px; header/footer дают miss, touch Back отсутствует, physical Left остаётся Back. Quick plan v8 проходит 9/9, включая `quick.input.touch`; четыре TFT states, heap 231 772/167 028/147 632 B до и после, zero drops, buzzer inactive и final owner/lease none/0 связаны в [machine-checked artifact](../../tests/hil/evidence/board-01-touch-input-0.88.json) | принимает touch corrective без promotion `DEMO-S4`; controlled physical power-cut и endurance gate ≤1 часа остаются открыты |
 
 ## Известные неопределённости и риски
 
@@ -650,6 +654,11 @@ goldens. Управляемый physical power-cut и восьмичасовой
   каждое physical press получает собственный repaint без serial backpressure, а 75
   подтверждённых пользователем нажатий удерживают queue high-water 1 при latency не
   выше 1,256 ms. Physical-panel optics всё ещё продолжаются в UX-08.
+- Touch navigation принята exact 0.88: boot не блокируется calibration, calibration
+  CRC-проверяется в NVS (с legacy/default fallback), а physical point открывает
+  нужную строку Home высотой 46 px. Failed run с threshold 350 сохранён; threshold
+  80 принят относительно measured idle range 3…14. Это evidence одной board/panel,
+  а не утверждение о предкалибровке каждой партии display/touch-controller.
 - Board-01 дала partial evidence для `HW-T01/T04/T07/T11`; остальные physical tests
   не выполнены, и ни один составной HW-T test ещё не закрыт целиком.
 - BOM указывает ESP32-S3-WROOM-1U-N16 (16 MB, без PSRAM), а original build guide —
@@ -689,6 +698,9 @@ read-only remount, Library export и exact cleanup без изменения pro
 Exact 0.87 затем удаляет дублирующий diagnostics buffer и перестраивает финальный
 report Full/Guided из end-of-run facts. Тот же physical workflow теперь имеет
 minimum 133 884 B при floor 131 072 B; native case ниже floor завершается fail.
+Exact 0.88 — focused input corrective: calibrated physical touch, общие finger-sized
+targets, non-interactive chrome и Quick 9/9 приняты без изменения storage, radio или
+оставшихся exit criteria S4.
 Недоступный сейчас управляемый
 power-cut fixture остаётся явным exit
 requirement `DEMO-S4`, software reset не принимается как замена. Второй

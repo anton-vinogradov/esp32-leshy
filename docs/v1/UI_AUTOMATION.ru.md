@@ -37,6 +37,21 @@ I2C не меняет debounced state; для следующего action той
 а не отдельный renderer override; `ui.state` сообщает active language и selection
 экрана Язык.
 
+### Граница calibrated touch
+
+Physical input XPT2046 и diagnostic `ui.touch <x> <y>` сходятся на public boundary
+`dispatchTouchPoint`. Hit выбирает и открывает ту же строку Navigator, что Up/Down
+плюс Right-or-OK; page-specific setter не вызывается. Header и footer не имеют touch
+targets, footer остаётся только легендой physical keys, Back намеренно доступен
+только через physical Left. Common interactive rows имеют высоту не менее 44 px.
+
+`touch.state` сообщает readiness/source/data calibration, pressure threshold и
+counters samples/press/release/miss. Calibration никогда не блокирует boot: 1.x
+CRC-проверяет собственную NVS record, может импортировать legacy record 0.x, иначе
+стартует с safe default, оставляя доступными buttons, UI и diagnostics. `ui.touch`
+подходит для воспроизводимых geometry hit/miss tests, но не заменяет хотя бы один
+real panel tap в physical acceptance evidence.
+
 ### Захват реального дисплея
 
 `ui.capture` читает GRAM ILI9341 тайлами по четыре строки и возвращает:
@@ -82,6 +97,7 @@ TFT, проверяет доступность той же revision после c
 | UI-HIL-A6 | Golden/snapshot comparison не игнорирует критичный текст или selection | host visual test каждого screen/state |
 | UI-HIL-A7 | Connect, capture и disconnect UI client не перезагружают плату | reset counter/revision continuity trace |
 | UI-HIL-A8 | 10 обычных нажатий каждой physical кнопки дают ровно 50 presses и 50 releases, по 10 каждого normalized action, 50 dispatched public UI actions, без ambiguity, I2C error, duplicate и queue drop | guided physical burst + machine-checked [artifact до/после](../../tests/hil/evidence/board-01-keypad-0.43.json) |
+| UI-HIL-A9 | Один physical calibrated panel tap ровно один раз открывает нужную public row; synthetic points отдельно доказывают все visible targets и отклоняют header/footer/Back | telemetry physical point + state transition + retained TFT/geometry artifact |
 
 Каждый reference workflow получает автоматизированный UI scenario по мере появления
 его экранов. Участие оператора остаётся только для evidence, которое не может дать
@@ -232,3 +248,12 @@ localized terminal state TFT, запрещает скрытый retry по Selec
 Back и делает cold reboot, чтобы доказать неизменность прежней Library. Exact bytes
 framebuffer, hashes candidate/runner, CID, zero starts source/store, zero writes,
 invariant heap и final lease 0 сохранены в `E-AUTO-032`/`E-HIL-092`.
+
+Candidate 0.88 добавляет calibrated touch без второй state machine навигации. Первый
+exact attempt сохранён fail closed: threshold 350 увидел 15 055 samples и ни одного
+press при valid CRC calibration NVS. Threshold 80, coordinate stability, edge lock и
+release debounce 35 ms затем приняли одну real point `(76,91)` и ровно один раз
+открыли Diagnostics. Synthetic points далее покрывают три targets Home 216×46 px и
+явные misses header/footer; touch Back отсутствует. Quick plan v8 проходит 9/9,
+сохранены четыре actual TFT frames, heap не изменился, final owner/lease `none`/`0`
+(`E-AUTO-053`/`E-HIL-113`/`E-UX-013`).

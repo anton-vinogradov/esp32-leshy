@@ -37,6 +37,22 @@ by the public Language screen. It is an automation entry into a product operatio
 not a separate renderer override; `ui.state` reports both active language and
 Language-screen selection.
 
+### Calibrated touch boundary
+
+Physical XPT2046 input and diagnostic `ui.touch <x> <y>` converge at the public
+`dispatchTouchPoint` boundary. A hit selects and enters the same Navigator row as
+Up/Down plus Right-or-OK; it never calls a page-specific setter. Header and footer
+have no touch targets, the footer remains only a legend for physical keys, and Back
+is intentionally available only through physical Left. Common interactive rows are
+at least 44 px high.
+
+`touch.state` reports calibration readiness/source/data, pressure threshold and
+sample/press/release/miss counters. Calibration never blocks boot: 1.x CRC-validates
+its own NVS record, may import the legacy 0.x record, and otherwise starts with a
+safe default so buttons, UI and diagnostics stay available. `ui.touch` is useful for
+repeatable hit/miss geometry tests, but it cannot replace at least one real panel tap
+in physical acceptance evidence.
+
 ### Actual display capture
 
 `ui.capture` reads the ILI9341 display GRAM in four-row tiles and returns:
@@ -84,6 +100,7 @@ evidence client must not reset the board.
 | UI-HIL-A6 | Golden/snapshot comparison ignores no critical text or selection state | host visual test per screen/state |
 | UI-HIL-A7 | UI client connect, capture, and disconnect do not reset the board | reset counter/revision continuity trace |
 | UI-HIL-A8 | 10 ordinary presses of each physical key produce exactly 50 presses and 50 releases, 10 per normalized action, 50 dispatched public UI actions, and no ambiguity, I2C error, duplicate, or queue drop | guided physical burst + machine-checked [before/after artifact](../../tests/hil/evidence/board-01-keypad-0.43.json) |
+| UI-HIL-A9 | One physical calibrated panel tap opens the intended public row exactly once; synthetic points separately prove all visible targets and reject header/footer/Back | physical point telemetry + state transition + retained TFT/geometry artifact |
 
 Each reference workflow receives an automated UI scenario as its screen states are
 implemented. Operator involvement is reserved for evidence the display controller
@@ -236,3 +253,12 @@ localized TFT terminal state, rejects a hidden Select retry, returns Home with B
 and cold-reboots to prove the prior Library is unchanged. Exact framebuffer bytes,
 candidate and runner hashes, CID, zero source/store starts, zero writes, invariant
 heap, and final lease 0 are retained in `E-AUTO-032`/`E-HIL-092`.
+
+Candidate 0.88 adds calibrated touch without adding another navigation state machine.
+The first exact attempt is retained fail closed: threshold 350 saw 15,055 samples and
+no press although the NVS calibration CRC was valid. Threshold 80, coordinate
+stability, edge lock and 35 ms release debounce then accepted one real point `(76,91)`
+and opened Diagnostics exactly once. Synthetic points subsequently cover three
+216×46 px Home targets and explicit header/footer misses; there is no touch Back.
+Quick plan v8 passes 9/9, four actual TFT frames are retained, heap is unchanged and
+final owner/lease is `none`/`0` (`E-AUTO-053`/`E-HIL-113`/`E-UX-013`).

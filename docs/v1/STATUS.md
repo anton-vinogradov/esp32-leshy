@@ -2,7 +2,7 @@
 
 *Read in: **English** · [Русский](STATUS.ru.md)*
 
-Last updated: **18 August 2026**.
+Last updated: **19 August 2026**.
 
 This is the only document containing live project state. Stable stage boundaries are
 in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
@@ -12,15 +12,16 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.87 S4 checkpoints through persistent Wi-Fi Capture, both user-facing spectrum workflows, receive-only RF checks, read-only artifact audit, guarded disposable write/remount/export/cleanup, and final heap-budget enforcement in Full/Guided plan v7.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.88 S4 checkpoints through persistent Wi-Fi Capture, both user-facing spectrum workflows, receive-only RF checks, read-only artifact audit, guarded disposable write/remount/export/cleanup, final heap-budget enforcement, and calibrated touch navigation.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** exercise controlled physical power-cut recovery and the
   ≥45-minute/≥8-cycle multi-source endurance gate within its one-hour operational
   budget, the two remaining `DEMO-S4` gates.
-- **Latest accepted checkpoint:** exact 0.87 re-evaluates Quick from the final
-  Full/Guided facts and shares the serial diagnostics/storage scratch workspace;
-  board-01 passes the 128 KiB heap floor at 133,884 B while retaining the complete
-  exact 0.86 disposable workflow and unchanged product generation 83/0.
+- **Latest accepted checkpoint:** exact 0.88 adds one non-blocking calibrated XPT2046
+  input path to the existing Navigator. One physical tap opens the intended Home row;
+  three 46 px rows are finger-sized, header/footer are non-interactive, physical Left
+  remains the only Back action, Quick plan v8 passes 9/9, and heap/final ownership are
+  invariant. The S4 power-cut and endurance gates are unchanged.
 
 ## Stage state
 
@@ -28,7 +29,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 |---|---|---|---|
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
-| S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
+| S2 | `done` | independent target, capability Home, unified five-key plus calibrated touch input/TFT capture, finger-sized common rows, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
 | S4 | `active` | exact 0.71…0.79 accept passive multi-source, browser/export and persistent Capture; exact 0.80…0.85 register and actively audit receiver/artifact paths; exact 0.86 performs guarded disposable commit/remount/export/cleanup; exact 0.87 closes the final-report heap false positive and passes the 128 KiB floor | exercise controlled physical power-cut recovery and ≥45-minute/≥8-cycle multi-source endurance within one hour |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
@@ -44,7 +45,7 @@ items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 
 | Product block | Now | Next qualitative transition |
 |---|---|---|
-| Device foundation and UX | `done / S2` — boot, board profile, five keys, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test and automated TFT capture; plan-v7 Full/Guided executes declared receive-only RF, artifact and isolated disposable-storage checks | retain the shared plan while adding later hardware checks |
+| Device foundation and UX | `done / S2` — boot, board profile, five keys plus calibrated touch, finger-sized common rows, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test and automated TFT capture; plan-v7 Full/Guided executes declared receive-only RF, artifact and isolated disposable-storage checks | retain the shared plan while adding later hardware checks |
 | Survey and Library | `done / S3` — real passive Wi-Fi, atomic Session, List/Detail, offline reopen and export | reuse this accepted foundation rather than fork a new data path |
 | Passive multi-radio and Capture | `active / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV and privacy-confirmed persistent Wi-Fi PCAP work; two nRF24 receivers provide a live 2,402…2,484 MHz activity map and CC1101 provides live 315/433/868/915 MHz RSSI maps; Self-Test repeats both receive paths, audits the latest SD artifact and proves an isolated disposable commit/remount/export/cleanup cycle | controlled power-cut and endurance |
 | Complete standard ESP32-DIV hardware | `ahead / S5` — scope and fail-closed hardware envelope exist, but complete IR/PN532/GPS/power workflows do not | probe → capture/observe → Library → inspect/export for every applicable module |
@@ -641,6 +642,9 @@ endurance are explicit `DEMO-S4` criteria.
 | E-HIL-111 / E-SELFTEST-006 / E-STORAGE-027 | board-01 exact 0.86 disposable workflow in Full/Guided | pass checkpoint: Quick remains read-only 8/8; Full/Guided plan v7 is 25 pass/0 fail/1 capability blocker/3 N/A. Exact CID authorizes only `/leshy-hil/full-guided-v7`; generation 1 with three observations commits through exactly three writes/504 B and three file plus three directory syncs, read-only remount recovers and exports JSON 876 B, metadata 862 B and CSV 3 rows/297 B, then removes all three files and the scratch directory. Product generation/observations remain 83/0 with zero product writes, RF/TX regression passes, input errors/drops are zero, buzzer remains inactive, 13 TFT states are retained and final Home owner/lease is none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-disposable-0.86.json) | accepts controlled disposable Session creation/remount/export/cleanup inside Self-Test; physical RF instrumentation, controlled power-cut and the one-hour endurance gate keep `DEMO-S4` open |
 | E-BUILD-088 | exact `0.87.0-full-guided-heap-budget` build | pass: RAM 149,864 B, linked flash 1,491,172 B; app/factory 1,491,584/1,557,120 B; app `83e0b5cb…cdbdc`, factory `19294d3a…8bb1`, ELF `9e82f00f…0f3f`, map `fc4528b5…d56`; source commit `a943f3c` | −4,608 B static RAM, +40 B linked flash and +48 B images vs 0.86 by replacing two non-overlapping 4,608/5,120 B diagnostic workspaces with one 5,120 B serial workspace |
 | E-AUTO-052 / E-HIL-112 / E-SELFTEST-007 | final heap-budget regression and board-01 exact 0.87 Full/Guided | pass: a native negative case proves that healthy preflight followed by final heap below floor produces one failure; the retained physical candidate rebuilds the ordered report from final facts and passes `quick.runtime.heap` at minimum/floor/margin 133,884/131,072/2,812 B. Full remains 25 pass/0 fail/1 blocker/3 N/A; disposable writes remain 3/504 B with exact cleanup, product remains 83/0, input drops/TX are zero, 13 TFT states and final Home/lease 0 are bound in the [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-heap-budget-0.87.json) | closes the observed heap-floor issue and stale-result false positive; controlled physical power-cut and the ≤1-hour endurance gate remain the only `DEMO-S4` work |
+| E-BUILD-089 | exact `0.88.0-touch-input` build | pass: RAM 149,936 B, linked flash 1,497,056 B; app/factory 1,497,456/1,562,992 B; app `479e8aff…ae92`, factory `4dfc89a3…1479`, ELF `9af4a20f…4e30`; source commit `c96590e` | +72 B static RAM, +5,884 B linked flash and +5,872 B images vs 0.87 for XPT2046 calibration persistence/import/fallback, native touch sampling, shared hit targets and telemetry |
+| E-AUTO-053 | touch host/HIL and retained verifier | pass: unit/source checks bind target geometry, shared dispatch, edge lock, coordinate stability and release debounce; a 22-file canonical bundle binds exact source/runner/binaries, four TFT captures and run hashes. The rejected threshold-350 attempt is retained with 15,055 samples, zero touch events, idle pressure 3…14 and valid calibration rather than hidden | synthetic `ui.touch` proves deterministic target/chrome behavior but is not accepted as physical-touch evidence; the physical point is bound separately by E-HIL-113 |
+| E-HIL-113 / E-UX-013 / E-SELFTEST-008 | board-01 exact 0.88 calibrated touch navigation | pass checkpoint: one physical point `(76,91)` using exact calibration `[533,2996,531,3117,6]` and threshold 80 opens Diagnostics with one press/one dispatch. Home exposes three 216×46 px targets; header/footer miss, no touch Back exists, physical Left remains Back. Quick plan v8 passes 9/9 including `quick.input.touch`; four TFT states, heap 231,772/167,028/147,632 B before and after, zero drops, buzzer inactive and final owner/lease none/0 are bound in the [machine-checked artifact](../../tests/hil/evidence/board-01-touch-input-0.88.json) | accepts the touch corrective without promoting `DEMO-S4`; controlled physical power-cut and the ≤1-hour endurance gate remain open |
 
 ## Known uncertainties and risks
 
@@ -653,6 +657,11 @@ endurance are explicit `DEMO-S4` criteria.
   behavior, each physical press receives its own repaint without serial backpressure,
   and 75 user-confirmed presses keep queue high-water at 1 with at most 1.256 ms
   queue latency. Physical-panel optics still continue in UX-08.
+- Touch navigation is accepted by exact 0.88: boot never blocks on calibration,
+  calibration is CRC-validated in NVS (with a legacy/default fallback), and a physical
+  point opens the intended 46 px Home row. The failed threshold-350 run is retained;
+  threshold 80 is accepted against the measured idle range 3…14. This is one-board
+  panel evidence, not a claim that every display/touch-controller lot is pre-calibrated.
 - Board-01 provides partial evidence for `HW-T01/T04/T07/T11`; other physical tests
   have not run, and no composite HW-T test is fully closed yet.
 - BOM says ESP32-S3-WROOM-1U-N16 (16 MB, no PSRAM), while the original build guide
@@ -692,6 +701,9 @@ Library export and exact cleanup without changing product generation 83/0.
 Exact 0.87 then removes the duplicate diagnostics buffer and rebuilds the final
 Full/Guided report from end-of-run facts. The same physical workflow now has a
 133,884 B minimum against the 131,072 B floor; a native below-floor case fails.
+Exact 0.88 is a focused input corrective: calibrated physical touch, shared
+finger-sized targets, non-interactive chrome and Quick 9/9 are accepted without
+changing storage, radio or the remaining S4 exit criteria.
 The currently unavailable controlled
 power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.

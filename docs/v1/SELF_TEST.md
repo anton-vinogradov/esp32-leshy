@@ -240,6 +240,23 @@ fails; board-01 passes at 133,884/131,072 B minimum/floor with the same 25/0/1/3
 functional result and exact cleanup (`E-BUILD-088`/`E-AUTO-052`/`E-HIL-112`/
 `E-SELFTEST-007`).
 
+## Accepted touch-input checkpoint
+
+Exact `0.88.0-touch-input` advances the report to plan version 8 and adds the
+read-only `quick.input.touch` check. It verifies that the physical frontend is
+initialized, calibration is ready and the public touch dispatcher is present; it
+does not synthesize a pass from coordinates or run interactive calibration during
+boot. Quick now passes 9/9 with zero RF, storage or buzzer side effects.
+
+The HIL separately requires one real panel tap before synthetic geometry coverage.
+On board-01 point `(76,91)` opens Diagnostics exactly once using the CRC-valid
+calibration `[533,2996,531,3117,6]`. The rejected threshold-350 attempt and its zero
+touch events are retained; threshold 80 passes against idle raw pressure 3…14.
+Header/footer and touch Back are rejected, four TFT states are retained, heap is
+unchanged and final lease is zero (`E-BUILD-089`/`E-AUTO-053`/`E-HIL-113`/
+`E-SELFTEST-008`). Full/Guided plan-v7 workflow semantics remain accepted by exact
+0.87; they were not rerun or silently promoted by this focused corrective.
+
 ## Acceptance
 
 1. `SELF-TEST` is reachable by normal buttons as the last Home item; no serial-only

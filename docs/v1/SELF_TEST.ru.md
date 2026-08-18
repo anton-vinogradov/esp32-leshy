@@ -239,6 +239,23 @@ floor даёт fail; board-01 проходит с minimum/floor 133 884/131 072 
 functional результате 25/0/1/3 и exact cleanup (`E-BUILD-088`/`E-AUTO-052`/
 `E-HIL-112`/`E-SELFTEST-007`).
 
+## Принятый checkpoint touch input
+
+Exact `0.88.0-touch-input` переводит report на plan version 8 и добавляет read-only
+check `quick.input.touch`. Он проверяет, что physical frontend инициализирован,
+calibration ready и public touch dispatcher присутствует; он не создаёт pass из
+synthetic coordinates и не запускает interactive calibration во время boot. Quick
+теперь проходит 9/9 с zero RF, storage и buzzer side effects.
+
+HIL отдельно требует один real panel tap до synthetic geometry coverage. На board-01
+point `(76,91)` ровно один раз открывает Diagnostics с CRC-valid calibration
+`[533,2996,531,3117,6]`. Отклонённый attempt threshold 350 и его zero touch events
+сохранены; threshold 80 проходит относительно idle raw pressure 3…14. Header/footer
+и touch Back отклоняются, сохранены четыре TFT states, heap не изменился, final lease
+zero (`E-BUILD-089`/`E-AUTO-053`/`E-HIL-113`/`E-SELFTEST-008`). Семантика workflow
+Full/Guided plan-v7 остаётся принятой по exact 0.87; focused corrective не перезапускал
+и не повышал её статус молча.
+
 ## Приёмка
 
 1. `SELF-TEST` доступен штатными кнопками последним пунктом Home; serial-only Action
