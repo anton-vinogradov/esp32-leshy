@@ -15,10 +15,10 @@ from typing import Any
 import serial
 
 from capture_1x_ui import PassiveSerial, read_exact, read_json, synchronize_console
+from capture_1x_boot import reset_and_capture
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import (
     flash_candidate,
-    reset_and_capture,
     sha256_file,
     write_json,
 )
