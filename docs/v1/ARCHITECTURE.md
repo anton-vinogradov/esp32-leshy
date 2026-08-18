@@ -307,9 +307,19 @@ emits ordered checks for completed S3/S4 readiness and persistence, while option
 assembly declarations map to `not_applicable` and unfinished receiver contracts map
 to `blocked`. The same report drives the TFT and independent HIL oracle, records zero
 side effects, and keeps only the UI lease. `E-HIL-105` proves 15 pass/0 fail/2 blocked/
-3 N/A and final lease 0. Conditional nRF24/CC1101 receivers, active Full/Guided
-workflow execution, controlled physical power-cut and 8 h/32-cycle endurance remain
-`DEMO-S4` work.
+3 N/A and final lease 0.
+
+Exact `0.81.0-shield-receiver-probe` adds a narrow hardware adapter below that pure
+plan engine. It is called only from user-confirmed Full/Guided while the foreground
+owner holds `RadioSpi`; boot and Quick never call it. The adapter keeps nRF CE LOW,
+reads only four identity/config registers on slots 1/2, never selects slot 3/GPIO21,
+and reads only CC1101 PARTNUM/VERSION status registers. The pure contract rejects
+floating/partial identities, profile/resource conflicts, any CE-high/strobe/TX event
+or incomplete cleanup. `E-HIL-106` binds the exact 8 nRF reads, 2 CC reads, 20 SPI
+bytes, three detected receivers and final lease 0. This is an identity boundary, not
+a passive observation pipeline or physical RF-silence measurement. Those workflows,
+active Full/Guided execution, controlled physical power-cut and 8 h/32-cycle endurance
+remain `DEMO-S4` work.
 
 ## Data model
 

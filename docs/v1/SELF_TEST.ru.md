@@ -2,9 +2,9 @@
 
 *Читать на: [English](SELF_TEST.md) · **Русский***
 
-Статус: **принят product/UX contract; Quick/guided UI S2 и registration slice
-завершённых capabilities S3/S4 физически приняты; active execution workflows из
-Full/Guided продолжается через S4…S8**.
+Статус: **принят product/UX contract; Quick/guided UI S2, registration завершённых
+capabilities S3/S4 и conditional read-only identity check RF shield физически приняты;
+active execution workflows из Full/Guided продолжается через S4…S8**.
 
 Self-Test — отдельное приложение в самом низу Home. Оно никогда не перехватывает
 обычную загрузку. Один test engine используется владельцем устройства, полным
@@ -129,6 +129,26 @@ hardware в failure или false pass. Два оставшихся checks —
 `none`/`0` (`E-AUTO-045`/`E-HIL-105`/`E-SELFTEST-002`). Это доказывает honest
 registration и readiness/persistence checks, но намеренно ещё не утверждает, что
 Full/Guided активно выполняет каждую product workflow.
+
+## Принятый identity checkpoint RF shield
+
+Exact candidate `0.81.0-shield-receiver-probe` переводит общий report на plan version
+4. Только после подтверждения preflight пользователем foreground owner Self-Test
+получает `RadioSpi` и выполняет bounded identity probe. Слоты nRF24 1 и 2 читают по
+четыре регистра при постоянно LOW CE; slot 3 никогда не выбирается, GPIO21 обязан
+оставаться HIGH. У CC1101 читаются только status-регистры PARTNUM и VERSION. Любой
+profile conflict, busy lease, floating/partial identity, side-effect counter или
+ошибка cleanup приводит к fail closed. При boot эти приёмники не пробуются.
+
+Board-01 обнаруживает оба nRF24 и CC1101 PARTNUM 0/VERSION 0x14 ровно за 8 nRF
+register reads, 2 CC status reads и 20 SPI bytes. CE-high events, CC command strobes
+и radio-TX commands равны нулю; storage остаётся generation 83 с zero observations,
+final owner/lease возвращается к `none`/`0`. Поэтому Full даёт 16 pass / 0 fail /
+1 blocked / 3 N/A: `full.s4.shield.receivers` проходит, blocked остаётся только future
+total capability coverage (`E-AUTO-046`/`E-HIL-106`/`E-SELFTEST-003`/
+`E-RADIO-001`). Это доказывает bounded read-only identity, но не physical RF silence,
+passive activity reception или spectrum capture; для них нужны отдельные workflows,
+а для physical silence — недоступный сейчас RF instrument.
 
 ## Приёмка
 

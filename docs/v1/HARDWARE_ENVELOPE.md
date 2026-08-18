@@ -162,6 +162,14 @@ probe. Holding the buzzer LOW is a safety invariant, not an actuator probe.
 
 Ambiguous GPIO5/6 or 14/21 yields `conflicted`, never trial-and-error output modes.
 
+The product does not currently execute that optional radio sequence at boot. Exact
+`0.81.0-shield-receiver-probe` runs the permitted subset only after the user confirms
+Full/Guided and `RadioSpi` is acquired: nRF #1/#2 and CC1101 are detected with exact
+read bounds 8/2/20, nRF #3 remains gated, GPIO21 remains HIGH, and all CE-high,
+strobe and TX counters remain zero (`E-HIL-106`/`E-RADIO-001`). This is software and
+register-identity evidence only. HW-T06 remains partial because no RF detector was
+available to prove physical silence.
+
 GPIO2 software evidence: the author's root-cause description and one-line LOW fix in
 [upstream issue #117](https://github.com/cifertech/ESP32-DIV/issues/117#issuecomment-5178973211)
 links the verified
@@ -198,7 +206,7 @@ flag or a successful unrelated probe.
 | HW-U04 | design-only LF33 evidence; current/thermal headroom unknown | no default combined shield load; each new combination remains unavailable under RB-08 | marking + HW-T10 rail/thermal matrix |
 | HW-U05 | operator reports no GPS/PN532 assembly on board-01; no standard connector contract proven | default profile declares both absent; either requires its own explicit assembly profile, never output-mode autodetect | assembly photo/spec + HW-T07 |
 | HW-U06 | partial: GPIO38 reads LOW with one inserted/identified card; polarity/batch consistency remain unmeasured | GPIO38 is not authoritative in S2; storage state comes from a bounded explicit operation and remains fault/absent on failure | HW-T05 across media and board batch |
-| HW-U07 | partial: three guarded SD identity runs complete with exclusive Storage+RadioSpi, GPIO21 HIGH, stable CID/CSD, and cleanup; instrumented coexistence remains unmeasured | `spi_radio` is an exclusive operation lease; SD and shield receivers never overlap | HW-T03/HW-T05 + radio→SD→radio recovery + RB-07 endurance |
+| HW-U07 | partial: three guarded SD identity runs and the exact 0.81 sequential receiver probe complete with exclusive RadioSpi, GPIO21 HIGH, stable CID/CSD/generation and cleanup; instrumented coexistence remains unmeasured | `spi_radio` is an exclusive operation lease; SD and shield receivers never overlap | HW-T03/HW-T05 + radio→SD→radio recovery + RB-07 endurance |
 | HW-U08 | electrical/ADC behavior is unmeasured; the false-sound software root cause is confirmed by 0.x and upstream issue #117 | battery percentage is unavailable; GPIO2 is never ADC-sampled and is held OUTPUT LOW from the first setup instruction; HIGH belongs only to a future bounded sound service | HW-T09 for ADC/sound characterization; silent invariant closes through boot/runtime state plus audible observation |
 | HW-U09 | no safe passive digital identity | IR is available only from an explicit RF-shield profile; no autodetect; IR TX additionally requires Lab/ADR-002 evidence | assembly manifest/detector + HW-T08 |
 | HW-U10 | no rail peak/thermal measurement | first slice is Wi-Fi-only; shield operations are one receiver at a time after per-module HIL; combined modes unavailable | HW-T10 and RB-08 endurance |

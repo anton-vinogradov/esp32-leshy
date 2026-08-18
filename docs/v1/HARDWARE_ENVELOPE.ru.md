@@ -207,6 +207,14 @@ unknown     — universal safe probe невозможен
 11. WS2812, активация buzzer, IR TX и любые RF TX не участвуют в автоматическом
     boot probe; удержание buzzer LOW — safety invariant, а не actuator probe.
 
+Product сейчас не выполняет optional radio sequence при boot. Exact
+`0.81.0-shield-receiver-probe` запускает разрешённый subset только после подтверждения
+Full/Guided пользователем и получения `RadioSpi`: nRF #1/#2 и CC1101 обнаружены с
+exact read bounds 8/2/20, nRF #3 остаётся gated, GPIO21 остаётся HIGH, все counters
+CE-high/strobe/TX равны нулю (`E-HIL-106`/`E-RADIO-001`). Это только software и
+register-identity evidence. HW-T06 остаётся partial: RF detector для доказательства
+physical silence недоступен.
+
 Любая неоднозначность GPIO5/6 или 14/21 заканчивается `conflicted`, а не перебором
 output modes. Probe не должен передавать RF/IR, писать на SD/NFC или издавать звук.
 
@@ -245,7 +253,7 @@ Software evidence для GPIO2: авторское описание root cause �
 | HW-U04 | только design evidence LF33; current/thermal headroom неизвестен | никакой default combined shield load; новая combination unavailable по RB-08 | marking + HW-T10 rail/thermal matrix |
 | HW-U05 | оператор подтвердил отсутствие GPS/PN532 assembly на board-01; standard connector contract не доказан | default profile объявляет оба absent; каждому нужен explicit assembly profile, output-mode autodetect запрещён | assembly photo/spec + HW-T07 |
 | HW-U06 | partial: GPIO38 LOW с одной inserted/identified card; polarity и batch consistency не измерены | GPIO38 не authoritative в S2; storage state определяется bounded explicit operation и остаётся fault/absent при failure | HW-T05 на разных media/batch |
-| HW-U07 | partial: три guarded SD identity runs завершаются с exclusive Storage+RadioSpi, GPIO21 HIGH, stable CID/CSD и cleanup; instrumented coexistence не измерен | `spi_radio` — exclusive operation lease; SD и shield receivers не пересекаются | HW-T03/HW-T05 + radio→SD→radio recovery + endurance RB-07 |
+| HW-U07 | partial: три guarded SD identity runs и exact 0.81 sequential receiver probe завершаются с exclusive RadioSpi, GPIO21 HIGH, stable CID/CSD/generation и cleanup; instrumented coexistence не измерен | `spi_radio` — exclusive operation lease; SD и shield receivers не пересекаются | HW-T03/HW-T05 + radio→SD→radio recovery + endurance RB-07 |
 | HW-U08 | electrical/ADC behavior не измерен; software root cause ложного звука подтверждён 0.x и upstream issue #117 | battery percentage unavailable; GPIO2 никогда не sampled как ADC и с первой инструкции setup удерживается OUTPUT LOW; HIGH разрешён только будущему bounded sound service | HW-T09 для ADC/sound characterization; silent invariant закрывается boot/runtime state + audible observation |
 | HW-U09 | нет безопасного passive digital identity | IR available только из explicit RF-shield profile; autodetect отсутствует; IR TX дополнительно требует Lab/ADR-002 evidence | assembly manifest/detector + HW-T08 |
 | HW-U10 | нет rail peak/thermal measurements | первый slice только Wi-Fi; shield по одному receiver после per-module HIL; combined modes unavailable | HW-T10 и endurance RB-08 |

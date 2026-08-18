@@ -364,8 +364,18 @@ checks readiness/persistence завершённых S3/S4, optional assembly dec
 становятся `not_applicable`, незавершённые receiver contracts — `blocked`. Один report
 управляет TFT и independent HIL oracle, фиксирует zero side effects и удерживает только
 UI lease. `E-HIL-105` доказывает 15 pass/0 fail/2 blocked/3 N/A и final lease 0.
-Conditional receivers nRF24/CC1101, active Full/Guided workflow execution, controlled
-physical power-cut и 8 h/32-cycle endurance остаются работой `DEMO-S4`.
+
+Exact `0.81.0-shield-receiver-probe` добавляет узкий hardware adapter под этим pure
+plan engine. Он вызывается только из подтверждённого пользователем Full/Guided, пока
+foreground owner владеет `RadioSpi`; boot и Quick его не вызывают. Adapter удерживает
+nRF CE LOW, читает только четыре identity/config register у slots 1/2, никогда не
+выбирает slot 3/GPIO21 и читает у CC1101 только status PARTNUM/VERSION. Pure contract
+отклоняет floating/partial identities, конфликты profile/resource, любое CE-high/
+strobe/TX event или incomplete cleanup. `E-HIL-106` связывает exact 8 nRF reads,
+2 CC reads, 20 SPI bytes, три detected receivers и final lease 0. Это identity
+boundary, а не passive observation pipeline или physical RF-silence measurement.
+Эти workflows, active Full/Guided execution, controlled physical power-cut и
+8 h/32-cycle endurance остаются работой `DEMO-S4`.
 
 ## 7. Модель данных
 

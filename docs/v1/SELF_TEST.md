@@ -2,9 +2,9 @@
 
 *Read in: **English** · [Русский](SELF_TEST.ru.md)*
 
-Status: **accepted product/UX contract; S2 Quick/guided UI and the completed S3/S4
-capability-registration slice are physically accepted; active Full/Guided workflow
-execution continues through S4…S8**.
+Status: **accepted product/UX contract; S2 Quick/guided UI, completed S3/S4
+registration and the conditional read-only RF-shield identity check are physically
+accepted; active Full/Guided workflow execution continues through S4…S8**.
 
 Self-Test is an explicit application at the bottom of Home. It is never an automatic
 boot detour. The same test engine serves a device owner, a guided field check, and
@@ -129,6 +129,26 @@ generation 83, zero radio-TX/storage-write/buzzer side effects, healthy input, a
 final owner/lease `none`/`0` (`E-AUTO-045`/`E-HIL-105`/`E-SELFTEST-002`). This proves
 honest registration and readiness/persistence checks; it deliberately does not yet
 claim that Full/Guided actively executes every product workflow.
+
+## Accepted RF-shield identity checkpoint
+
+Exact candidate `0.81.0-shield-receiver-probe` advances the shared report to plan
+version 4. Only after the user confirms the Full/Guided preflight, the foreground
+Self-Test owner acquires `RadioSpi` and runs a bounded identity probe. nRF24 slots 1
+and 2 each expose four registers while CE remains LOW; slot 3 is never selected and
+GPIO21 must remain HIGH. CC1101 exposes only PARTNUM and VERSION status registers.
+Any profile conflict, busy lease, floating/partial identity, side-effect counter or
+cleanup failure fails closed. Nothing probes these receivers at boot.
+
+Board-01 detects both nRF24 receivers and CC1101 PARTNUM 0/VERSION 0x14 in exactly
+8 nRF register reads, 2 CC status reads and 20 SPI bytes. CE-high events, CC command
+strobes and radio-TX commands are zero; storage remains generation 83 with zero
+observations, and final owner/lease returns to `none`/`0`. Full is therefore 16 pass /
+0 fail / 1 blocked / 3 N/A: `full.s4.shield.receivers` passes and only future total
+capability coverage remains blocked (`E-AUTO-046`/`E-HIL-106`/`E-SELFTEST-003`/
+`E-RADIO-001`). This proves bounded read-only identity, not physical RF silence,
+passive activity reception or spectrum capture; those need their own workflows and,
+for physical silence, unavailable RF instrumentation.
 
 ## Acceptance
 

@@ -388,14 +388,19 @@ the current combined GitHub workflows have passed end to end:
   aggregate metadata. Exact 0.79 is independently checked by
   `check_persistent_wifi_capture_acceptance.py`
   (`E-AUTO-044`/`E-HIL-104`/`E-CAPTURE-002`);
-- `tools/run_1x_self_test_coverage_hil.py` is the exact non-destructive plan-v3 lane.
-  It flashes the exact candidate, binds ELF/CID and admitted storage continuity,
-  drives Quick plus Full/Guided through all five common UI states, and independently
-  requires the ordered S3/S4 check registry. Exact 0.80 passes 15 checks, reports
-  absent GPS/PN532/IR as three N/A and retains two honest blockers for shield
-  receivers/total coverage, with zero side effects, ten TFT captures and final lease
-  0. `check_self_test_coverage_acceptance.py` rehashes the complete retained bundle
-  (`E-AUTO-045`/`E-HIL-105`/`E-SELFTEST-002`);
+- `tools/run_1x_self_test_coverage_hil.py` is the current exact non-destructive
+  plan-v4 lane. It flashes the exact candidate, binds ELF/CID and admitted storage
+  continuity, drives Quick plus Full/Guided through all five common UI states, and
+  requires the ordered S3/S4 registry plus the user-confirmed read-only RF-shield
+  probe. Exact 0.81 passes 16 checks, reports absent GPS/PN532/IR as three N/A and
+  retains only the honest total-coverage blocker. It additionally requires two
+  plausible nRF24 identities, CC1101 PARTNUM 0/VERSION 0x14, exact 8/2/20 read/byte
+  bounds, zero CE-high/strobe/TX events, GPIO21 high, RadioSpi cleanup, ten TFT
+  captures and final lease 0. `check_shield_receiver_self_test_acceptance.py`
+  rehashes that retained bundle (`E-AUTO-046`/`E-HIL-106`/`E-SELFTEST-003`/
+  `E-RADIO-001`). Historical exact 0.80 remains independently reproducible because
+  `check_self_test_coverage_acceptance.py` retrieves its plan-v3 runner blob from the
+  pinned runner commit;
 - `tools/run_1x_littlefs_parity_hil.py` is the fail-closed disposable-flash lane.
   It selects only inactive OTA1 `app1`, requires two matching full reads and a
   firmware-side hash match before format, performs 32 common SessionStore commits
