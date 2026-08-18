@@ -111,6 +111,8 @@ LESHY_UI_TEXT(RealPassive, Meta, 212, "REAL PASSIVE | RX ONLY", u8"ПАССИВ�
 LESHY_UI_TEXT(SurveyRunning, Body, 206, "SURVEY / RUNNING", u8"СКАНЕР / РАБОТАЕТ")
 LESHY_UI_TEXT(RunningSimulated, Meta, 212, "RUNNING | SIMULATED | RF OFF", u8"РАБОТАЕТ | СИМУЛЯЦИЯ | RF ВЫКЛ")
 LESHY_UI_TEXT(RunningPassive, Meta, 212, "RUNNING | REAL PASSIVE | RX ONLY", u8"РАБОТАЕТ | ПАССИВНО | ТОЛЬКО RX")
+LESHY_UI_TEXT(TimelineWifiActiveFormat, Meta, 212, "WI-FI: RX | %u%% TIME", u8"WI-FI: ПРИЕМ | %u%% ВРЕМЯ")
+LESHY_UI_TEXT(TimelineWifiWaitingFormat, Meta, 212, "WI-FI: WAIT | %u%% TIME", u8"WI-FI: ПАУЗА | %u%% ВРЕМЯ")
 LESHY_UI_TEXT(SurveyStopping, Meta, 212, "STOPPING SOURCE | SAVING NEXT", u8"ОСТАНОВКА | ЗАТЕМ СОХРАНЕНИЕ")
 LESHY_UI_TEXT(FifoFormat, Meta, 212, "FIFO %u/64 | HIGH %u | DROP %llu", u8"FIFO %u/64 | ПИК %u | ПОТЕРЬ %llu")
 LESHY_UI_TEXT(Hidden, Body, 196, "<hidden>", u8"<скрыто>")

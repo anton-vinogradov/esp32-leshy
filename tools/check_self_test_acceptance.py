@@ -208,9 +208,12 @@ def main() -> int:
             "Self-Test is not the final catalog item")
     require(failures, 'case 5: return "self_test"' in
             UI_CONTROLLER.read_text(encoding="utf-8"), "Self-Test page mapping missing")
-    require(failures, "char diagnosticJson[3072]" in ui and
-            "char line[3072]" not in ui,
-            "diagnostic JSON must reuse static bounded workspace")
+    diagnostic_workspace = re.search(r"char diagnosticJson\[(\d+)\] = \{\};", ui)
+    require(failures,
+            diagnostic_workspace is not None and
+            3072 <= int(diagnostic_workspace.group(1)) <= 4096 and
+            re.search(r"char line\[(?:3072|4096)\]", ui) is None,
+            "diagnostic JSON must reuse one static 3-4 KiB bounded workspace")
     # The exact candidate block binds the historical 0.53 evidence. Current
     # source may advance while this accepted Self-Test evidence stays replayable.
     require(failures, evidence.get("scope") == {

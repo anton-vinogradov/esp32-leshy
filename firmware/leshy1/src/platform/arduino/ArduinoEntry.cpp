@@ -49,6 +49,7 @@
 #include "services/survey/IngressTiming.h"
 #include "services/survey/ObservationQueue.h"
 #include "services/survey/SessionBatchPolicy.h"
+#include "services/survey/SourceTimeline.h"
 #include "services/survey/SurveySession.h"
 #include "storage/AtomicHead.h"
 #include "storage/MediaDiscovery.h"
@@ -109,6 +110,7 @@ using leshy1::domain::hardware::CapabilityRecord;
 using leshy1::domain::hardware::CapabilityState;
 using leshy1::domain::hardware::HardwareInventory;
 using leshy1::domain::observations::Observation;
+using leshy1::domain::observations::RadioKind;
 using leshy1::drivers::wifi::WifiScanRecord;
 using leshy1::kernel::runtime::AppRuntime;
 using leshy1::kernel::runtime::LaunchStatus;
@@ -131,6 +133,12 @@ using leshy1::services::diagnostics::HilSession;
 using leshy1::services::diagnostics::HilSessionStatus;
 using leshy1::services::survey::SessionState;
 using leshy1::services::survey::SessionStatus;
+using leshy1::services::survey::SourceTimeline;
+using leshy1::services::survey::SourceTimelineState;
+using leshy1::services::survey::SourceTimelineStatus;
+using leshy1::services::survey::SourceWindow;
+using leshy1::services::survey::SourceWindowReason;
+using leshy1::services::survey::SourceWindowState;
 using leshy1::services::survey::SurveySession;
 using leshy1::ui::UiAction;
 using leshy1::ui::UiController;
@@ -215,6 +223,7 @@ SurveyWorkflow surveyWorkflow(surveyController, surveyStoreRouter,
                               sessionStoreWorkspace, librarySession,
                               libraryController, false, true);
 SurveyPipeline surveyPipeline(surveyWorkflow, surveyIngressQueue);
+SourceTimeline productSurveyTimeline;
 BoardStorageAdapter boardStorageAdapter;
 leshy1::storage::MediaDiscovery storageDiscovery;
 bool storageDiscoveryReady = false;
@@ -237,7 +246,7 @@ static_assert(sizeof(kLongestConsoleCommand) <= kConsoleCommandCapacity,
               "console command buffer cannot hold the longest command");
 char usbCommand[kConsoleCommandCapacity] = {};
 char uartCommand[kConsoleCommandCapacity] = {};
-char diagnosticJson[3072] = {};
+char diagnosticJson[4096] = {};
 std::size_t usbLength = 0;
 std::size_t uartLength = 0;
 std::uint8_t lastInputRaw = 0xFF;
@@ -347,6 +356,9 @@ struct ProductSurveyRuntimeState final {
     std::uint32_t scanCycles = 0;
     std::uint64_t startActionUs = 0;
     std::uint64_t stopActionUs = 0;
+    std::uint8_t selectedSourceMask = 0;
+    const char* timelineStatus = "idle";
+    bool timelineHealthy = true;
 };
 
 ProductSurveyRuntimeState productSurveyRuntime;
@@ -361,6 +373,7 @@ enum class ProductSurveyWorkerControl : std::uint8_t {
 
 enum class ProductSurveyWorkerEventKind : std::uint8_t {
     Prepared,
+    ScanStarted,
     Scan,
     Stopped,
     Cancelled,
@@ -398,6 +411,10 @@ struct ProductSurveyWorkerEvent final {
     ProductSurveyWorkerReport report{};
     BoardWifiPassiveScanResult scan{};
     std::uint32_t scanCycles = 0;
+    std::uint64_t eventUs = 0;
+    std::uint64_t scanStartedUs = 0;
+    std::uint64_t scanEndedUs = 0;
+    std::uint16_t scanDropped = 0;
 };
 
 constexpr UBaseType_t kProductSurveyWorkerEventCapacity = 8;
@@ -800,9 +817,17 @@ void sendProductSurveyWorkerEvent(
     ProductSurveyWorkerEventKind kind,
     const ProductSurveyWorkerReport& report,
     const BoardWifiPassiveScanResult& scan = {},
-    std::uint32_t scanCycles = 0) {
+    std::uint32_t scanCycles = 0, std::uint64_t eventUs = 0,
+    std::uint64_t scanStartedUs = 0, std::uint64_t scanEndedUs = 0,
+    std::uint16_t scanDropped = 0) {
     if (productSurveyWorkerEvents == nullptr) return;
-    const ProductSurveyWorkerEvent event{kind, report, scan, scanCycles};
+    if (eventUs == 0) {
+        eventUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        if (eventUs == 0) eventUs = 1;
+    }
+    const ProductSurveyWorkerEvent event{
+        kind, report, scan, scanCycles, eventUs, scanStartedUs,
+        scanEndedUs, scanDropped};
     xQueueSend(productSurveyWorkerEvents, &event, portMAX_DELAY);
 }
 
@@ -1043,12 +1068,29 @@ void runProductSurveyWorker(void*) {
         BoardWifiPassiveScanResult aggregate;
         std::uint32_t scanCycles = 0;
         bool scanFailed = false;
+        bool pendingScanWindow = false;
+        std::uint64_t pendingScanStartedUs = 0;
+        std::uint64_t pendingScanEndedUs = 0;
+        std::uint16_t pendingScanDropped = 0;
         while (!productSurveyStopRequested()) {
+            std::uint64_t scanStartedUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+            if (scanStartedUs == 0) scanStartedUs = 1;
+            sendProductSurveyWorkerEvent(
+                ProductSurveyWorkerEventKind::ScanStarted, report, {},
+                scanCycles, scanStartedUs, scanStartedUs);
             setProductSurveyScanActive(true);
             const BoardWifiPassiveScanResult scan = scanner.scan(
                 leshy1::drivers::wifi::defaultPassivePlan(),
                 enqueueProductSurveyWorkerRecord, nullptr);
             setProductSurveyScanActive(false);
+            std::uint64_t scanEndedUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+            if (scanEndedUs < scanStartedUs) scanEndedUs = scanStartedUs;
+            pendingScanWindow = true;
+            pendingScanStartedUs = scanStartedUs;
+            pendingScanEndedUs = scanEndedUs;
+            pendingScanDropped = scan.dropped;
             if (productSurveyStopRequested()) break;
             if (!scan.valid()) {
                 report.status = "scan_failed";
@@ -1059,7 +1101,9 @@ void runProductSurveyWorker(void*) {
             accumulateProductSurveyScan(&aggregate, scan);
             sendProductSurveyWorkerEvent(
                 ProductSurveyWorkerEventKind::Scan,
-                report, aggregate, scanCycles);
+                report, aggregate, scanCycles, scanEndedUs, scanStartedUs,
+                scanEndedUs, scan.dropped);
+            pendingScanWindow = false;
             ulTaskNotifyTake(
                 pdTRUE, pdMS_TO_TICKS(kProductSurveyScanIntervalMs));
         }
@@ -1069,6 +1113,9 @@ void runProductSurveyWorker(void*) {
         setProductSurveyScanActive(false);
         report.scannerCleanupComplete = scanner.end();
         report.sourceActive = false;
+        std::uint64_t terminalUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (terminalUs == 0) terminalUs = 1;
         if (scanFailed ||
             terminalControl == ProductSurveyWorkerControl::CancelRequested) {
             cleanupProductSurveyWorkerHardware(&report);
@@ -1076,18 +1123,27 @@ void runProductSurveyWorker(void*) {
         if (scanFailed) {
             sendProductSurveyWorkerEvent(
                 ProductSurveyWorkerEventKind::Failed,
-                report, aggregate, scanCycles);
+                report, aggregate, scanCycles, terminalUs,
+                pendingScanWindow ? pendingScanStartedUs : 0,
+                pendingScanWindow ? pendingScanEndedUs : 0,
+                pendingScanWindow ? pendingScanDropped : 0);
         } else if (terminalControl ==
                    ProductSurveyWorkerControl::StopRequested) {
             report.status = "stopped";
             sendProductSurveyWorkerEvent(
                 ProductSurveyWorkerEventKind::Stopped,
-                report, aggregate, scanCycles);
+                report, aggregate, scanCycles, terminalUs,
+                pendingScanWindow ? pendingScanStartedUs : 0,
+                pendingScanWindow ? pendingScanEndedUs : 0,
+                pendingScanWindow ? pendingScanDropped : 0);
         } else {
             report.status = "cancelled";
             sendProductSurveyWorkerEvent(
                 ProductSurveyWorkerEventKind::Cancelled,
-                report, aggregate, scanCycles);
+                report, aggregate, scanCycles, terminalUs,
+                pendingScanWindow ? pendingScanStartedUs : 0,
+                pendingScanWindow ? pendingScanEndedUs : 0,
+                pendingScanWindow ? pendingScanDropped : 0);
         }
     }
 }
@@ -1145,8 +1201,18 @@ bool startProductSurvey() {
         return false;
     }
     productSurveyRuntime = {};
+    productSurveyTimeline.reset();
     productSurveyRuntime.status = "preparing";
     productSurveyRuntime.selected = true;
+    productSurveyRuntime.selectedSourceMask =
+        surveySourceController.selectedMask();
+    productSurveyRuntime.timelineStatus = "preparing";
+    if (productSurveyRuntime.selectedSourceMask == 0) {
+        productSurveyRuntime.status = "source_plan_empty";
+        productSurveyRuntime.timelineStatus = "invalid_mask";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return false;
+    }
     productSurveyRuntime.cleanupComplete = false;
     productSurveyRuntime.workerReady = true;
     portENTER_CRITICAL(&productSurveyWorkerMux);
@@ -1200,6 +1266,28 @@ bool requestProductSurveyWorkerStop(bool cancel) {
     return true;
 }
 
+bool applyProductSurveyTimelineStatus(SourceTimelineStatus status,
+                                      SourceTimelineStatus expected) {
+    productSurveyRuntime.timelineStatus =
+        leshy1::services::survey::sourceTimelineStatusName(status);
+    if (status != expected) productSurveyRuntime.timelineHealthy = false;
+    return status == expected;
+}
+
+bool recordProductSurveyTimelineDrops(std::uint16_t count,
+                                      std::uint64_t monotonicUs) {
+    for (std::uint16_t index = 0; index < count; ++index) {
+        const SourceTimelineStatus status =
+            productSurveyTimeline.recordObservation(
+                RadioKind::Wifi, false, monotonicUs);
+        if (!applyProductSurveyTimelineStatus(
+                status, SourceTimelineStatus::ObservationRecorded)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool drainProductSurveyWorkerObservations() {
     if (productSurveyObservations == nullptr ||
         surveyWorkflow.state() != SurveyWorkflowState::Running) {
@@ -1209,6 +1297,15 @@ bool drainProductSurveyWorkerObservations() {
     Observation observation;
     while (xQueueReceive(productSurveyObservations, &observation, 0) == pdTRUE) {
         const SurveyPipelineStatus queued = surveyPipeline.enqueue(observation);
+        const bool accepted = queued == SurveyPipelineStatus::Queued;
+        const SourceTimelineStatus timelineStatus =
+            productSurveyTimeline.recordObservation(
+                observation.radio, accepted, observation.monotonicUs);
+        if (!applyProductSurveyTimelineStatus(
+                timelineStatus, SourceTimelineStatus::ObservationRecorded)) {
+            productSurveyRuntime.status = "timeline_record_failed";
+            lastRuntimeEvent = productSurveyRuntime.status;
+        }
         changed = queued == SurveyPipelineStatus::Queued || changed;
         observation = {};
     }
@@ -1218,6 +1315,27 @@ bool drainProductSurveyWorkerObservations() {
             SurveyPipelineStatus::Drained;
     }
     return changed;
+}
+
+bool closeProductSurveyScanWindow(const ProductSurveyWorkerEvent& event,
+                                  bool fault) {
+    if (event.scanStartedUs == 0 || event.scanEndedUs < event.scanStartedUs) {
+        return true;
+    }
+    drainProductSurveyWorkerObservations();
+    if (!productSurveyRuntime.timelineHealthy) return false;
+    if (!recordProductSurveyTimelineDrops(event.scanDropped,
+                                          event.scanEndedUs)) {
+        return false;
+    }
+    const SourceTimelineStatus status = productSurveyTimeline.transition(
+        RadioKind::Wifi,
+        fault ? SourceWindowState::Fault : SourceWindowState::Scheduled,
+        fault ? SourceWindowReason::DriverFault
+              : SourceWindowReason::DutyCycle,
+        event.scanEndedUs);
+    return applyProductSurveyTimelineStatus(
+        status, SourceTimelineStatus::Transitioned);
 }
 
 void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
@@ -1245,14 +1363,22 @@ void serviceProductSurveyWorker() {
     ProductSurveyWorkerEvent event;
     while (xQueueReceive(productSurveyWorkerEvents, &event, 0) == pdTRUE) {
         applyProductSurveyWorkerReport(event.report);
-        productSurveyRuntime.scan = event.scan;
-        productSurveyRuntime.scanCycles = event.scanCycles;
+        if (event.kind != ProductSurveyWorkerEventKind::ScanStarted) {
+            productSurveyRuntime.scan = event.scan;
+            productSurveyRuntime.scanCycles = event.scanCycles;
+        }
         if (event.kind == ProductSurveyWorkerEventKind::Prepared) {
-            std::uint64_t startedUs =
-                static_cast<std::uint64_t>(esp_timer_get_time());
+            std::uint64_t startedUs = event.eventUs;
             if (startedUs == 0) startedUs = 1;
-            if (surveyPipeline.start("product-wifi-live", startedUs) !=
-                SurveyPipelineStatus::Started) {
+            const SourceTimelineStatus timelineStarted =
+                productSurveyTimeline.start(
+                    productSurveyRuntime.selectedSourceMask, startedUs);
+            const SurveyPipelineStatus pipelineStarted = surveyPipeline.start(
+                "product-wifi-live", startedUs);
+            if (!applyProductSurveyTimelineStatus(
+                    timelineStarted, SourceTimelineStatus::Started) ||
+                pipelineStarted != SurveyPipelineStatus::Started) {
+                productSurveyTimeline.reset();
                 requestProductSurveyWorkerStop(true);
                 productSurveyRuntime.status = "workflow_start_failed";
             } else {
@@ -1262,17 +1388,42 @@ void serviceProductSurveyWorker() {
                 lastRuntimeEvent = "product_survey_running";
             }
             render = true;
+        } else if (event.kind ==
+                   ProductSurveyWorkerEventKind::ScanStarted) {
+            const SourceTimelineStatus status =
+                productSurveyTimeline.transition(
+                    RadioKind::Wifi, SourceWindowState::Active,
+                    SourceWindowReason::None, event.scanStartedUs);
+            if (!applyProductSurveyTimelineStatus(
+                    status, SourceTimelineStatus::Transitioned)) {
+                productSurveyRuntime.status = "timeline_start_failed";
+                lastRuntimeEvent = productSurveyRuntime.status;
+                requestProductSurveyWorkerStop(true);
+            }
         } else if (event.kind == ProductSurveyWorkerEventKind::Scan) {
-            drainProductSurveyWorkerObservations();
-            productSurveyRuntime.status = "running";
-            productSurveyRuntime.sourceActive = true;
-            lastRuntimeEvent = "product_survey_scan";
+            if (closeProductSurveyScanWindow(event, false)) {
+                productSurveyRuntime.status = "running";
+                productSurveyRuntime.sourceActive = true;
+                lastRuntimeEvent = "product_survey_scan";
+            } else {
+                productSurveyRuntime.status = "timeline_close_failed";
+                lastRuntimeEvent = productSurveyRuntime.status;
+                requestProductSurveyWorkerStop(true);
+            }
             render = true;
         } else if (event.kind == ProductSurveyWorkerEventKind::Stopped) {
-            drainProductSurveyWorkerObservations();
+            const bool windowClosed = closeProductSurveyScanWindow(event, false);
             productSurveyRuntime.sourceActive = false;
-            const SurveyPipelineStatus stopped = stopProductSurvey();
-            if (stopped != SurveyPipelineStatus::Committed) {
+            const SourceTimelineStatus timelineStopped = windowClosed
+                ? productSurveyTimeline.stop(event.eventUs)
+                : SourceTimelineStatus::InvalidState;
+            const bool timelineComplete = windowClosed &&
+                applyProductSurveyTimelineStatus(
+                    timelineStopped, SourceTimelineStatus::Stopped);
+            const SurveyPipelineStatus stopped = timelineComplete
+                ? stopProductSurvey() : SurveyPipelineStatus::WorkflowRejected;
+            if (!timelineComplete ||
+                stopped != SurveyPipelineStatus::Committed) {
                 releaseProductSurveyAfterTerminal("commit_failed", true);
                 render = false;
             } else {
@@ -1280,9 +1431,28 @@ void serviceProductSurveyWorker() {
                 render = true;
             }
         } else if (event.kind == ProductSurveyWorkerEventKind::Cancelled) {
-            releaseProductSurveyAfterTerminal("cancelled", true);
+            const bool windowClosed = closeProductSurveyScanWindow(event, false);
+            const SourceTimelineStatus cancelled =
+                productSurveyTimeline.state() == SourceTimelineState::Running
+                    ? productSurveyTimeline.cancel(event.eventUs)
+                    : SourceTimelineStatus::Cancelled;
+            const bool timelineCancelled = windowClosed &&
+                (cancelled == SourceTimelineStatus::Cancelled);
+            applyProductSurveyTimelineStatus(
+                cancelled, SourceTimelineStatus::Cancelled);
+            releaseProductSurveyAfterTerminal(
+                timelineCancelled ? "cancelled" : "timeline_cancel_failed",
+                true);
             render = false;
         } else {
+            const bool windowClosed = closeProductSurveyScanWindow(event, true);
+            if (!windowClosed) event.report.status = "timeline_fault_failed";
+            if (productSurveyTimeline.state() == SourceTimelineState::Running) {
+                const SourceTimelineStatus cancelled =
+                    productSurveyTimeline.cancel(event.eventUs);
+                applyProductSurveyTimelineStatus(
+                    cancelled, SourceTimelineStatus::Cancelled);
+            }
             const bool keepVisible = event.report.admissionStatus ==
                 leshy1::apps::survey::ProductSurveyAdmissionStatus::SourceUnavailable;
             releaseProductSurveyAfterTerminal(event.report.status, !keepVisible);
@@ -3313,6 +3483,20 @@ void renderInventoryPage(bool clearContent) {
         display.print(tr(UiTextId::SurveyStopping));
     } else if (std::strcmp(productSurveyRuntime.status, "cancelling") == 0) {
         display.print(tr(UiTextId::SurveyCancelling));
+    } else if (!surveyWorkflow.simulated() &&
+               productSurveyTimeline.state() == SourceTimelineState::Running) {
+        const auto* wifi = productSurveyTimeline.source(RadioKind::Wifi);
+        const std::uint16_t dutyPercent = static_cast<std::uint16_t>(
+            productSurveyTimeline.dutyPermille(
+                RadioKind::Wifi,
+                static_cast<std::uint64_t>(esp_timer_get_time())) / 10U);
+        const UiTextId stateFormat =
+            wifi != nullptr && wifi->state == SourceWindowState::Active
+                ? UiTextId::TimelineWifiActiveFormat
+                : UiTextId::TimelineWifiWaitingFormat;
+        std::snprintf(line, sizeof(line), tr(stateFormat),
+                      static_cast<unsigned>(dutyPercent));
+        display.print(line);
     } else {
         display.print(surveyWorkflow.simulated()
                           ? tr(UiTextId::RunningSimulated)
@@ -3616,8 +3800,17 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   lastUiRenderWasIncremental ? "incremental" : "full",
                   static_cast<unsigned long long>(lastUiRenderUs));
     const std::size_t length = std::strlen(line);
-    if (length > 0 && length + 2500 < sizeof(line)) {
+    if (length > 0 && length + 3500 < sizeof(line)) {
         const SurveyPipelineProgress pipelineProgress = surveyPipeline.progress();
+        const auto* wifiTimeline =
+            productSurveyTimeline.source(RadioKind::Wifi);
+        const auto* bleTimeline =
+            productSurveyTimeline.source(RadioKind::Ble);
+        std::uint64_t timelineAsOfUs =
+            productSurveyTimeline.state() == SourceTimelineState::Running
+                ? static_cast<std::uint64_t>(esp_timer_get_time())
+                : productSurveyTimeline.endedUs();
+        if (timelineAsOfUs == 0) timelineAsOfUs = 1;
         const SelfTestReport& selfTestReport = selfTestController.report();
         const SelfTestMode visibleSelfTestMode =
             selfTestController.view() == SelfTestView::Result
@@ -3643,6 +3836,21 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_source_can_start\":%s,"
                       "\"survey_source_wifi_state\":\"%s\","
                       "\"survey_source_ble_state\":\"%s\","
+                      "\"survey_timeline_state\":\"%s\","
+                      "\"survey_timeline_status\":\"%s\","
+                      "\"survey_timeline_healthy\":%s,"
+                      "\"survey_timeline_selected_mask\":%u,"
+                      "\"survey_timeline_queue_depth\":%u,"
+                      "\"survey_timeline_queue_high_water\":%u,"
+                      "\"survey_timeline_overflow\":%llu,"
+                      "\"survey_timeline_wifi_state\":\"%s\","
+                      "\"survey_timeline_wifi_duty_permille\":%u,"
+                      "\"survey_timeline_wifi_accepted\":%llu,"
+                      "\"survey_timeline_wifi_dropped\":%llu,"
+                      "\"survey_timeline_ble_state\":\"%s\","
+                      "\"survey_timeline_ble_duty_permille\":%u,"
+                      "\"survey_timeline_ble_accepted\":%llu,"
+                      "\"survey_timeline_ble_dropped\":%llu,"
                       "\"survey_product_selected\":%s,"
                       "\"survey_product_status\":\"%s\","
                       "\"survey_product_backend_open\":%s,"
@@ -3727,6 +3935,40 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                               ? SurveySourceState::Unavailable
                               : surveySourceController.find(
                                     SurveySourceKind::Ble)->state),
+                      leshy1::services::survey::sourceTimelineStateName(
+                          productSurveyTimeline.state()),
+                      productSurveyRuntime.timelineStatus,
+                      productSurveyRuntime.timelineHealthy ? "true" : "false",
+                      static_cast<unsigned>(
+                          productSurveyTimeline.selectedMask()),
+                      static_cast<unsigned>(
+                          productSurveyTimeline.queuedWindows()),
+                      static_cast<unsigned>(
+                          productSurveyTimeline.windowHighWater()),
+                      static_cast<unsigned long long>(
+                          productSurveyTimeline.overflowEvents()),
+                      leshy1::services::survey::sourceWindowStateName(
+                          wifiTimeline == nullptr
+                              ? SourceWindowState::Unselected
+                              : wifiTimeline->state),
+                      static_cast<unsigned>(
+                          productSurveyTimeline.dutyPermille(
+                              RadioKind::Wifi, timelineAsOfUs)),
+                      static_cast<unsigned long long>(
+                          wifiTimeline == nullptr ? 0 : wifiTimeline->accepted),
+                      static_cast<unsigned long long>(
+                          wifiTimeline == nullptr ? 0 : wifiTimeline->dropped),
+                      leshy1::services::survey::sourceWindowStateName(
+                          bleTimeline == nullptr
+                              ? SourceWindowState::Unselected
+                              : bleTimeline->state),
+                      static_cast<unsigned>(
+                          productSurveyTimeline.dutyPermille(
+                              RadioKind::Ble, timelineAsOfUs)),
+                      static_cast<unsigned long long>(
+                          bleTimeline == nullptr ? 0 : bleTimeline->accepted),
+                      static_cast<unsigned long long>(
+                          bleTimeline == nullptr ? 0 : bleTimeline->dropped),
                       productSurveyRuntime.selected ? "true" : "false",
                       productSurveyRuntime.status,
                       productSurveyRuntime.backendOpen ? "true" : "false",
