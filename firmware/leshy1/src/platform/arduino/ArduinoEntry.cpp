@@ -95,6 +95,8 @@ using leshy1::apps::self_test::SelfTestReport;
 using leshy1::apps::self_test::SelfTestResultStatus;
 using leshy1::apps::self_test::SelfTestView;
 using leshy1::apps::survey::SurveyController;
+using leshy1::apps::survey::ObservationHistory;
+using leshy1::apps::survey::SurveyFilter;
 using leshy1::apps::survey::SurveyPipeline;
 using leshy1::apps::survey::SurveyPipelineProgress;
 using leshy1::apps::survey::SurveyPipelineStatus;
@@ -389,6 +391,8 @@ enum class ProductSurveyWorkerControl : std::uint8_t {
     Idle,
     Starting,
     Running,
+    Paused,
+    PauseRequested,
     StopRequested,
     CancelRequested,
 };
@@ -398,6 +402,7 @@ enum class ProductSurveyWorkerEventKind : std::uint8_t {
     ScanStarted,
     Scan,
     SourceUnavailable,
+    Paused,
     Stopped,
     Cancelled,
     Failed,
@@ -736,7 +741,8 @@ bool transitionProductSurveyControl(ProductSurveyWorkerControl expected,
 
 bool productSurveyStopRequested() {
     const ProductSurveyWorkerControl control = productSurveyControl();
-    return control == ProductSurveyWorkerControl::StopRequested ||
+    return control == ProductSurveyWorkerControl::PauseRequested ||
+           control == ProductSurveyWorkerControl::StopRequested ||
            control == ProductSurveyWorkerControl::CancelRequested;
 }
 
@@ -1377,6 +1383,19 @@ void runProductSurveyWorker(void*) {
                 pendingScanWindow ? pendingScanEndedUs : 0,
                 pendingScanWindow ? pendingScanDropped : 0);
         } else if (terminalControl ==
+                   ProductSurveyWorkerControl::PauseRequested) {
+            report.status = "paused";
+            sendProductSurveyWorkerEvent(
+                ProductSurveyWorkerEventKind::Paused,
+                report, pendingScanSource, wifiAggregate, bleAggregate,
+                scanCycles,
+                pendingScanSource == RadioKind::Wifi
+                    ? wifiScanCycles : bleScanCycles,
+                terminalUs,
+                pendingScanWindow ? pendingScanStartedUs : 0,
+                pendingScanWindow ? pendingScanEndedUs : 0,
+                pendingScanWindow ? pendingScanDropped : 0);
+        } else if (terminalControl ==
                    ProductSurveyWorkerControl::StopRequested) {
             report.status = "stopped";
             sendProductSurveyWorkerEvent(
@@ -1500,6 +1519,8 @@ SurveyPipelineStatus stopProductSurvey() {
     return status;
 }
 
+void releaseProductSurveyAfterTerminal(const char* status, bool returnHome);
+
 bool requestProductSurveyWorkerStop(bool cancel) {
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -1526,6 +1547,40 @@ bool requestProductSurveyWorkerStop(bool cancel) {
         xTaskNotifyGive(productSurveyWorkerTaskHandle);
     }
     return true;
+}
+
+bool requestProductSurveyWorkerPause() {
+    const std::uint64_t actionStartedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (productSurveyControl() != ProductSurveyWorkerControl::Running) {
+        return false;
+    }
+    setProductSurveyControl(ProductSurveyWorkerControl::PauseRequested);
+    productSurveyRuntime.status = "pausing";
+    productSurveyRuntime.stopActionUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) - actionStartedUs;
+    lastRuntimeEvent = "product_survey_pausing";
+    BoardWifiPassiveScanner::cancelActiveScan();
+    BoardBlePassiveScanner::cancelActiveScan();
+    if (productSurveyWorkerTaskHandle != nullptr) {
+        xTaskNotifyGive(productSurveyWorkerTaskHandle);
+    }
+    return true;
+}
+
+bool commitPausedProductSurvey() {
+    if (productSurveyControl() != ProductSurveyWorkerControl::Paused) {
+        return false;
+    }
+    const SurveyPipelineStatus committed = stopProductSurvey();
+    if (committed == SurveyPipelineStatus::Committed) {
+        constexpr ProductSurveyWorkerControl terminalControl =
+            ProductSurveyWorkerControl::Idle;
+        setProductSurveyControl(terminalControl);
+        return true;
+    }
+    releaseProductSurveyAfterTerminal("commit_failed", true);
+    return false;
 }
 
 bool applyProductSurveyTimelineStatus(
@@ -1799,6 +1854,39 @@ void serviceProductSurveyWorker() {
                 requestProductSurveyWorkerStop(true);
             }
             render = true;
+        } else if (event.kind == ProductSurveyWorkerEventKind::Paused) {
+            const bool windowClosed = closeProductSurveyScanWindow(event);
+            productSurveyRuntime.sourceActive = false;
+            const SourceTimelineStatus timelineStopped = windowClosed
+                ? productSurveyTimeline.stop(event.eventUs)
+                : SourceTimelineStatus::InvalidState;
+            const bool sourceStopped = windowClosed &&
+                applyProductSurveyTimelineStatus(
+                    timelineStopped, SourceTimelineStatus::Stopped,
+                    "timeline_pause", event.eventUs) &&
+                drainProductSurveyTimelineWindows();
+            const auto* wifi = productSurveyTimeline.source(RadioKind::Wifi);
+            const auto* ble = productSurveyTimeline.source(RadioKind::Ble);
+            const auto archiveFinalized =
+                sourceStopped && wifi != nullptr && ble != nullptr
+                    ? surveySession.finalizeTimeline(
+                          event.eventUs, *wifi, *ble,
+                          productSurveyTimeline.overflowEvents())
+                    : leshy1::services::survey::SessionTimelineStatus::InvalidSummary;
+            productSurveyRuntime.timelineArchiveStatus =
+                leshy1::services::survey::sessionTimelineStatusName(
+                    archiveFinalized);
+            if (sourceStopped &&
+                archiveFinalized ==
+                    leshy1::services::survey::SessionTimelineStatus::Finalized) {
+                productSurveyRuntime.status = "paused";
+                lastRuntimeEvent = "product_survey_paused";
+                setProductSurveyControl(ProductSurveyWorkerControl::Paused);
+                render = true;
+            } else {
+                releaseProductSurveyAfterTerminal("pause_failed", true);
+                render = false;
+            }
         } else if (event.kind == ProductSurveyWorkerEventKind::Stopped) {
             const bool windowClosed = closeProductSurveyScanWindow(event);
             productSurveyRuntime.sourceActive = false;
@@ -3252,6 +3340,11 @@ NavigationFooter navigationFooterForCurrentState() {
                          ? UiTextId::NavEnter : UiTextId::NavStart}};
         }
         if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
+            surveyController.view() == SurveyView::Filter) {
+            return {{NavigationKey::Left, UiTextId::NavList}, choose,
+                    {NavigationKey::RightAndSelect, UiTextId::NavApply}};
+        }
+        if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
             surveyController.view() == SurveyView::Detail) {
             return {{NavigationKey::Left, UiTextId::NavList}, {},
                     {NavigationKey::RightAndSelect,
@@ -3260,7 +3353,9 @@ NavigationFooter navigationFooterForCurrentState() {
         }
         if (surveyWorkflow.state() == SurveyWorkflowState::Running) {
             return {{NavigationKey::Left, UiTextId::NavCancel}, choose,
-                    {NavigationKey::RightAndSelect, UiTextId::NavDetails}};
+                    {NavigationKey::RightAndSelect,
+                     surveyController.filterFocused()
+                         ? UiTextId::NavFilter : UiTextId::NavDetails}};
         }
         return {{NavigationKey::Left, UiTextId::NavHome}, {}, {}};
     }
@@ -3660,7 +3755,9 @@ void renderOverview(bool clearContent) {
 
 }
 
-constexpr std::size_t kVisibleSurveyRows = 3;
+constexpr std::size_t kVisibleSurveyRows = 2;
+constexpr std::int16_t kSurveyFilterY = 101;
+constexpr std::int16_t kSurveyRowsY = 132;
 
 std::size_t surveyFirstVisible(std::size_t selection) {
     return selection < kVisibleSurveyRows
@@ -3669,11 +3766,12 @@ std::size_t surveyFirstVisible(std::size_t selection) {
 }
 
 void renderSurveyListRow(std::size_t index, std::size_t firstVisible) {
-    const Observation* observation = surveySession.get(index);
+    const Observation* observation = surveyController.visibleAt(index);
     if (observation == nullptr) return;
     const std::int32_t y =
-        108 + static_cast<std::int32_t>(index - firstVisible) * 40;
-    const bool selected = surveyController.selection() == index;
+        kSurveyRowsY + static_cast<std::int32_t>(index - firstVisible) * 40;
+    const bool selected = !surveyController.filterFocused() &&
+                          surveyController.selection() == index;
     const std::uint16_t background = selected ? Palette::SurfaceFocus
                                                : Palette::Surface;
     display.fillRoundRect(Layout::Edge, y, Layout::ContentWidth, 36,
@@ -3707,6 +3805,93 @@ void renderSurveyListRow(std::size_t index, std::size_t firstVisible) {
     }
     setUiCursor(UiTextRole::Meta, 146, y + 13);
     display.print(line);
+}
+
+UiTextId surveyFilterLabel(SurveyFilter filter) {
+    switch (filter) {
+        case SurveyFilter::Wifi: return UiTextId::FilterWifi;
+        case SurveyFilter::Ble: return UiTextId::FilterBle;
+        case SurveyFilter::All:
+        default: return UiTextId::FilterAll;
+    }
+}
+
+UiTextId surveyFilterBarFormat(SurveyFilter filter) {
+    switch (filter) {
+        case SurveyFilter::Wifi: return UiTextId::FilterBarWifiFormat;
+        case SurveyFilter::Ble: return UiTextId::FilterBarBleFormat;
+        case SurveyFilter::All:
+        default: return UiTextId::FilterBarAllFormat;
+    }
+}
+
+void renderSurveyFilterBar() {
+    const bool selected = surveyController.filterFocused();
+    const std::uint16_t background = selected ? Palette::SurfaceFocus
+                                               : Palette::Surface;
+    display.fillRoundRect(Layout::Edge, kSurveyFilterY, Layout::ContentWidth, 26,
+                          Layout::Radius, background);
+    renderFocusCue({Layout::Edge, kSurveyFilterY, Layout::ContentWidth, 26},
+                   selected);
+    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
+                         background);
+    char line[64] = {};
+    std::snprintf(line, sizeof(line), tr(surveyFilterBarFormat(
+                      surveyController.filter())),
+                  static_cast<unsigned>(surveyController.visibleSize()));
+    setUiCursor(UiTextRole::Body, 20, kSurveyFilterY + 3);
+    display.print(line);
+}
+
+void renderSurveyFilterOption(std::uint8_t index) {
+    if (index > static_cast<std::uint8_t>(SurveyFilter::Ble)) return;
+    const SurveyFilter filter = static_cast<SurveyFilter>(index);
+    char note[48] = {};
+    std::snprintf(note, sizeof(note), tr(UiTextId::FilterCountFormat),
+                  static_cast<unsigned>(surveyController.filterCount(filter)));
+    renderMenuRow(Components::choiceRow(index), tr(surveyFilterLabel(filter)),
+                  note, surveyController.draftFilter() == filter, true,
+                  filter == surveyController.filter() ? Tone::Positive
+                                                       : Tone::Neutral);
+}
+
+void renderRssiHistory(const ObservationHistory& history) {
+    if (!history.valid || history.retainedSamples == 0) return;
+    char line[64] = {};
+    std::snprintf(line, sizeof(line), tr(UiTextId::RssiHistoryFormat),
+                  static_cast<unsigned>(history.sampleCount),
+                  static_cast<int>(history.minimumRssiDbm),
+                  static_cast<int>(history.maximumRssiDbm));
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 199);
+    display.print(line);
+
+    constexpr std::int16_t x = 136;
+    constexpr std::int16_t y = 187;
+    constexpr std::int16_t width = 90;
+    constexpr std::int16_t height = 35;
+    display.drawRoundRect(x, y, width, height, Layout::Radius, Palette::Divider);
+    const auto pointY = [&](std::int16_t rssi) {
+        const std::int16_t bounded = rssi < -100 ? -100 : (rssi > -20 ? -20 : rssi);
+        return static_cast<std::int16_t>(
+            y + height - 3 - ((bounded + 100) * (height - 6)) / 80);
+    };
+    if (history.retainedSamples == 1) {
+        display.fillCircle(x + width / 2, pointY(history.samples[0]), 2,
+                           Palette::Focus);
+        return;
+    }
+    for (std::uint8_t index = 1; index < history.retainedSamples; ++index) {
+        const std::int16_t previousX = static_cast<std::int16_t>(
+            x + 3 + ((index - 1U) * (width - 6)) /
+                        (history.retainedSamples - 1U));
+        const std::int16_t currentX = static_cast<std::int16_t>(
+            x + 3 + (index * (width - 6)) /
+                        (history.retainedSamples - 1U));
+        display.drawLine(previousX, pointY(history.samples[index - 1U]),
+                         currentX, pointY(history.samples[index]),
+                         Palette::Focus);
+    }
 }
 
 UiTextId surveySourceLabel(const SurveySourceOption& source) {
@@ -3858,6 +4043,14 @@ void renderInventoryPage(bool clearContent) {
         display.print(tr(UiTextId::BackNoRetry));
         return;
     }
+    if (surveyController.view() == SurveyView::Filter) {
+        renderHeader(tr(UiTextId::SurveyFilter), clearContent);
+        for (std::uint8_t index = 0;
+             index <= static_cast<std::uint8_t>(SurveyFilter::Ble); ++index) {
+            renderSurveyFilterOption(index);
+        }
+        return;
+    }
     if (surveyController.view() == SurveyView::Detail) {
         renderHeader(tr(UiTextId::SurveyDetail), clearContent);
         const Observation* observation = surveyController.selected();
@@ -3895,18 +4088,27 @@ void renderInventoryPage(bool clearContent) {
                       static_cast<int>(observation->rssiDbm));
         setUiCursor(UiTextRole::Body, 14, 174);
         display.print(line);
-        display.setTextColor(Palette::Positive, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 203);
-        display.print(surveyWorkflow.simulated()
-                          ? tr(UiTextId::SimulatedData)
-                          : tr(UiTextId::RealPassive));
+        const ObservationHistory history = surveyController.selectedHistory();
+        if (history.valid) {
+            renderRssiHistory(history);
+        } else {
+            display.setTextColor(Palette::Positive, Palette::Canvas);
+            setUiCursor(UiTextRole::Meta, 14, 203);
+            display.print(surveyWorkflow.simulated()
+                              ? tr(UiTextId::SimulatedData)
+                              : tr(UiTextId::RealPassive));
+        }
         return;
     }
 
     renderHeader(tr(UiTextId::SurveyRunning), clearContent);
     display.setTextColor(Palette::Positive, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 70);
-    if (std::strcmp(productSurveyRuntime.status, "stopping") == 0) {
+    if (std::strcmp(productSurveyRuntime.status, "paused") == 0) {
+        display.print(tr(UiTextId::SurveyPaused));
+    } else if (std::strcmp(productSurveyRuntime.status, "pausing") == 0) {
+        display.print(tr(UiTextId::SurveyPausing));
+    } else if (std::strcmp(productSurveyRuntime.status, "stopping") == 0) {
         display.print(tr(UiTextId::SurveyStopping));
     } else if (std::strcmp(productSurveyRuntime.status, "cancelling") == 0) {
         display.print(tr(UiTextId::SurveyCancelling));
@@ -3980,11 +4182,12 @@ void renderInventoryPage(bool clearContent) {
     setUiCursor(UiTextRole::Meta, 14,
                 productSurveyTimeline.selectedMask() == 3 ? 89 : 82);
     display.print(line);
+    renderSurveyFilterBar();
     const std::size_t selection = surveyController.selection();
     const std::size_t firstVisible = surveyFirstVisible(selection);
     const std::size_t endVisible =
-        surveySession.size() < firstVisible + kVisibleSurveyRows
-            ? surveySession.size()
+        surveyController.visibleSize() < firstVisible + kVisibleSurveyRows
+            ? surveyController.visibleSize()
             : firstVisible + kVisibleSurveyRows;
     for (std::size_t index = firstVisible; index < endVisible; ++index) {
         renderSurveyListRow(index, firstVisible);
@@ -4121,8 +4324,12 @@ struct UiRenderSnapshot final {
     std::uint8_t surveySetupSelection = 0;
     std::uint8_t surveySourceMask = 0;
     std::uint8_t surveyView = 0;
+    std::uint8_t surveyFilter = 0;
+    std::uint8_t surveyDraftFilter = 0;
+    bool surveyFilterFocused = false;
     std::size_t surveySelection = 0;
     std::size_t surveySize = 0;
+    std::size_t surveyVisibleSize = 0;
     std::uint8_t libraryView = 0;
     std::size_t librarySelection = 0;
     std::size_t librarySize = 0;
@@ -4143,8 +4350,12 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         surveySourceController.selection(),
         surveySourceController.selectedMask(),
         static_cast<std::uint8_t>(surveyController.view()),
+        static_cast<std::uint8_t>(surveyController.filter()),
+        static_cast<std::uint8_t>(surveyController.draftFilter()),
+        surveyController.filterFocused(),
         surveyController.selection(),
         surveySession.size(),
+        surveyController.visibleSize(),
         static_cast<std::uint8_t>(libraryController.view()),
         libraryController.selection(),
         libraryController.size(),
@@ -4184,13 +4395,46 @@ bool renderSelectionDelta() {
 
     if (uiController.page() == 2 &&
         surveyWorkflow.state() == SurveyWorkflowState::Running &&
+        surveyController.view() == SurveyView::Filter &&
+        renderedUi.surveyState ==
+            static_cast<std::uint8_t>(SurveyWorkflowState::Running) &&
+        renderedUi.surveyView == static_cast<std::uint8_t>(SurveyView::Filter) &&
+        renderedUi.surveySize == surveySession.size()) {
+        const std::uint8_t current =
+            static_cast<std::uint8_t>(surveyController.draftFilter());
+        if (renderedUi.surveyDraftFilter == current) return false;
+        renderSurveyFilterOption(renderedUi.surveyDraftFilter);
+        renderSurveyFilterOption(current);
+        renderNavigationFooter();
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        surveyWorkflow.state() == SurveyWorkflowState::Running &&
         surveyController.view() == SurveyView::List &&
         renderedUi.surveyState ==
             static_cast<std::uint8_t>(SurveyWorkflowState::Running) &&
         renderedUi.surveyView == static_cast<std::uint8_t>(SurveyView::List) &&
-        renderedUi.surveySize == surveySession.size()) {
+        renderedUi.surveyFilter ==
+            static_cast<std::uint8_t>(surveyController.filter()) &&
+        renderedUi.surveySize == surveySession.size() &&
+        renderedUi.surveyVisibleSize == surveyController.visibleSize()) {
         const std::size_t current = surveyController.selection();
-        if (renderedUi.surveySelection == current) return false;
+        const bool currentFilterFocused = surveyController.filterFocused();
+        if (renderedUi.surveySelection == current &&
+            renderedUi.surveyFilterFocused == currentFilterFocused) return false;
+        if (renderedUi.surveyFilterFocused != currentFilterFocused) {
+            renderSurveyFilterBar();
+            if (!renderedUi.surveyFilterFocused) {
+                renderSurveyListRow(renderedUi.surveySelection,
+                                    surveyFirstVisible(renderedUi.surveySelection));
+            }
+            if (!currentFilterFocused) {
+                renderSurveyListRow(current, surveyFirstVisible(current));
+            }
+            renderNavigationFooter();
+            return true;
+        }
         const std::size_t oldFirst =
             surveyFirstVisible(renderedUi.surveySelection);
         const std::size_t currentFirst = surveyFirstVisible(current);
@@ -4198,11 +4442,11 @@ bool renderSelectionDelta() {
             renderSurveyListRow(renderedUi.surveySelection, currentFirst);
             renderSurveyListRow(current, currentFirst);
         } else {
-            display.fillRect(Layout::Edge, 108, Layout::ContentWidth, 116,
+            display.fillRect(Layout::Edge, kSurveyRowsY, Layout::ContentWidth, 92,
                              Palette::Canvas);
             const std::size_t end =
-                surveySession.size() < currentFirst + kVisibleSurveyRows
-                    ? surveySession.size()
+                surveyController.visibleSize() < currentFirst + kVisibleSurveyRows
+                    ? surveyController.visibleSize()
                     : currentFirst + kVisibleSurveyRows;
             for (std::size_t index = currentFirst; index < end; ++index) {
                 renderSurveyListRow(index, currentFirst);
@@ -4426,7 +4670,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       lastRuntimeEvent, appRuntime.activeApp(),
                       static_cast<unsigned long>(appRuntime.activeResources()),
                       surveyWorkflow.simulated() ? "true" : "false",
-                      surveyController.view() == SurveyView::Detail ? "detail" : "list",
+                      leshy1::apps::survey::surveyViewName(
+                          surveyController.view()),
                       leshy1::apps::survey::surveyWorkflowStateName(
                           surveyWorkflow.state()),
                       leshy1::apps::survey::surveyWorkflowStatusName(
@@ -4630,13 +4875,48 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     reply.println(line);
 }
 
+void emitSurveyBrowser(Stream& reply) {
+    const Observation* selected = surveyController.selected();
+    const ObservationHistory history = surveyController.selectedHistory();
+    char line[768] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.survey.browser.v1\",\"kind\":\"state\","
+        "\"view\":\"%s\",\"filter\":\"%s\",\"draft_filter\":\"%s\","
+        "\"filter_focused\":%s,\"total\":%u,\"visible\":%u,"
+        "\"selection\":%u,\"selected\":%s,\"selected_radio\":\"%s\","
+        "\"history_valid\":%s,\"history_samples\":%u,"
+        "\"history_retained\":%u,\"history_min_rssi_dbm\":%d,"
+        "\"history_max_rssi_dbm\":%d,\"history_latest_rssi_dbm\":%d,"
+        "\"read_only_query\":true,\"radio_touched\":false,"
+        "\"storage_touched\":false}",
+        leshy1::apps::survey::surveyViewName(surveyController.view()),
+        leshy1::apps::survey::surveyFilterName(surveyController.filter()),
+        leshy1::apps::survey::surveyFilterName(surveyController.draftFilter()),
+        surveyController.filterFocused() ? "true" : "false",
+        static_cast<unsigned>(surveySession.size()),
+        static_cast<unsigned>(surveyController.visibleSize()),
+        static_cast<unsigned>(surveyController.selection()),
+        selected == nullptr ? "false" : "true",
+        selected == nullptr ? "none"
+                            : (selected->radio == RadioKind::Ble ? "ble" : "wifi"),
+        history.valid ? "true" : "false",
+        static_cast<unsigned>(history.sampleCount),
+        static_cast<unsigned>(history.retainedSamples),
+        static_cast<int>(history.minimumRssiDbm),
+        static_cast<int>(history.maximumRssiDbm),
+        static_cast<int>(history.latestRssiDbm));
+    reply.println(line);
+}
+
 bool selectionCanRepaintInPlace(UiAction action) {
     if (action != UiAction::Up && action != UiAction::Down) return false;
     if (uiController.isRoot()) return true;
     if (uiController.page() == 2) {
         return surveyWorkflow.state() == SurveyWorkflowState::Setup ||
                (surveyWorkflow.state() == SurveyWorkflowState::Running &&
-                surveyController.view() == SurveyView::List);
+                (surveyController.view() == SurveyView::List ||
+                 surveyController.view() == SurveyView::Filter));
     }
     if (uiController.page() == 3) {
         return libraryController.view() == LibraryView::SessionList;
@@ -4745,6 +5025,24 @@ bool applyUiAction(UiAction action, bool render = true) {
                         surveyPipeline.lastStatus());
             }
         } else if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
+                   surveyController.view() == SurveyView::Filter) {
+            handled = true;
+            if (action == UiAction::Up) {
+                changed = surveyController.previous();
+            } else if (action == UiAction::Down) {
+                changed = surveyController.next();
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                changed = surveyController.activateFilter();
+                if (changed) lastRuntimeEvent = "survey_filter_applied";
+            } else if (action == UiAction::Back ||
+                       action == UiAction::Left) {
+                changed = surveyController.back();
+                if (changed) lastRuntimeEvent = "survey_filter_cancelled";
+            } else {
+                handled = false;
+            }
+        } else if (surveyWorkflow.state() == SurveyWorkflowState::Running &&
                    surveyController.view() == SurveyView::Detail) {
             if (action == UiAction::Back || action == UiAction::Left) {
                 handled = true;
@@ -4753,7 +5051,11 @@ bool applyUiAction(UiAction action, bool render = true) {
                        action == UiAction::Right) {
                 handled = true;
                 if (productSurveyRuntime.selected) {
-                    changed = requestProductSurveyWorkerStop(false);
+                    changed =
+                        productSurveyControl() ==
+                                ProductSurveyWorkerControl::Paused
+                            ? commitPausedProductSurvey()
+                            : requestProductSurveyWorkerStop(false);
                 } else {
                     const SurveyPipelineStatus status =
                         surveyPipeline.stopAndCommit(
@@ -4768,6 +5070,12 @@ bool applyUiAction(UiAction action, bool render = true) {
             if (action == UiAction::Up) {
                 handled = true;
                 changed = surveyController.previous();
+                if (changed && surveyController.filterFocused() &&
+                    productSurveyRuntime.selected &&
+                    productSurveyControl() ==
+                        ProductSurveyWorkerControl::Running) {
+                    changed = requestProductSurveyWorkerPause() || changed;
+                }
             } else if (action == UiAction::Down) {
                 handled = true;
                 changed = surveyController.next();
@@ -4779,7 +5087,13 @@ bool applyUiAction(UiAction action, bool render = true) {
                        surveyWorkflow.state() == SurveyWorkflowState::Running) {
                 if (productSurveyRuntime.selected) {
                     handled = true;
-                    changed = requestProductSurveyWorkerStop(true);
+                    if (productSurveyControl() ==
+                        ProductSurveyWorkerControl::Paused) {
+                        releaseProductSurveyAfterTerminal("cancelled", true);
+                        changed = true;
+                    } else {
+                        changed = requestProductSurveyWorkerStop(true);
+                    }
                 } else {
                     surveyPipeline.cancel();
                     lastRuntimeEvent = "survey_cancelled";
@@ -8540,6 +8854,8 @@ void handleCommand(Stream& reply, const char* command) {
         broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"pong\"}");
     } else if (std::strcmp(command, "ui.state") == 0) {
         emitUiState(reply, UiAction::Unknown, false);
+    } else if (std::strcmp(command, "survey.browser") == 0) {
+        emitSurveyBrowser(reply);
     } else if (std::strcmp(command, "input.state") == 0) {
         emitInputState(reply);
     } else if (std::strcmp(command, "self-test.report") == 0) {
@@ -8975,7 +9291,8 @@ void setup() {
               "\"hil.begin <session-id> <app-elf-sha256>\","
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
-              "\"ui.state\",\"ui.key <action>\",\"input.state\","
+              "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
+              "\"input.state\","
               "\"self-test.report\","
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
               "\"storage.discovery\",\"storage.mount.policy\","

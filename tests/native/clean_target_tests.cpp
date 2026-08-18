@@ -1901,6 +1901,76 @@ void testGoldenSurveyTraceUsesListDetailBackAndExplicitStop() {
     CHECK(controller.session().size() == 3);
 }
 
+void testSurveyBrowserFiltersSourcesAndBuildsBoundedRssiHistory() {
+    SurveySession session;
+    SurveyController controller(session);
+    CHECK(controller.start("browser-001", 1000) == SessionStatus::Started);
+
+    const std::array<std::uint8_t, 6> wifiIdentity{{1, 2, 3, 4, 5, 6}};
+    const std::array<std::uint8_t, 6> bleIdentity{{6, 5, 4, 3, 2, 1}};
+    const auto append = [&](RadioKind radio,
+                            const std::array<std::uint8_t, 6>& identity,
+                            std::int16_t rssi, std::uint64_t atUs) {
+        Observation observation;
+        observation.monotonicUs = atUs;
+        observation.radio = radio;
+        observation.identity = identity;
+        observation.identityLength = 6;
+        observation.rssiDbm = rssi;
+        CHECK(controller.publish(observation) == SessionStatus::Appended);
+    };
+    append(RadioKind::Wifi, wifiIdentity, -70, 1100);
+    append(RadioKind::Ble, bleIdentity, -82, 1200);
+    append(RadioKind::Wifi, wifiIdentity, -55, 1300);
+    append(RadioKind::Ble, bleIdentity, -61, 1400);
+
+    CHECK(controller.visibleSize() == 4);
+    CHECK(controller.filter() == SurveyFilter::All);
+    CHECK(std::strcmp(surveyViewName(controller.view()), "list") == 0);
+    CHECK(std::strcmp(surveyFilterName(controller.filter()), "all") == 0);
+    CHECK(controller.previous());
+    CHECK(controller.filterFocused());
+    CHECK(controller.selected() == nullptr);
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == SurveyView::Filter);
+    CHECK(controller.next());
+    CHECK(controller.draftFilter() == SurveyFilter::Wifi);
+    CHECK(controller.activateFilter());
+    CHECK(controller.filter() == SurveyFilter::Wifi);
+    CHECK(controller.visibleSize() == 2);
+    CHECK(controller.filterFocused());
+    CHECK(controller.next());
+    CHECK(!controller.filterFocused());
+    CHECK(controller.selected() != nullptr &&
+          controller.selected()->radio == RadioKind::Wifi);
+    ObservationHistory history = controller.selectedHistory();
+    CHECK(history.valid);
+    CHECK(history.sampleCount == 2);
+    CHECK(history.retainedSamples == 2);
+    CHECK(history.minimumRssiDbm == -70);
+    CHECK(history.maximumRssiDbm == -55);
+    CHECK(history.latestRssiDbm == -55);
+    CHECK(history.samples[0] == -70 && history.samples[1] == -55);
+
+    CHECK(controller.previous());
+    CHECK(controller.filterFocused());
+    CHECK(controller.openSelected());
+    CHECK(controller.next());
+    CHECK(controller.draftFilter() == SurveyFilter::Ble);
+    CHECK(controller.activateFilter());
+    CHECK(controller.visibleSize() == 2);
+    CHECK(controller.next());
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == SurveyView::Detail);
+    history = controller.selectedHistory();
+    CHECK(history.valid && history.sampleCount == 2);
+    CHECK(history.minimumRssiDbm == -82);
+    CHECK(history.maximumRssiDbm == -61);
+    CHECK(history.latestRssiDbm == -61);
+    CHECK(controller.back());
+    CHECK(controller.view() == SurveyView::List);
+}
+
 void testSurveySourcePlanProjectsAvailabilityAndRequiresSelection() {
     HardwareInventory inventory;
     CHECK(inventory.add({"radio.wifi", CapabilityState::Declared,
@@ -3515,6 +3585,7 @@ int main() {
     testSourceTimelineOverflowRejectsStateChangeAndCanDrain();
     testSessionTimelinePersistsBoundedHistoryAndExactAggregates();
     testGoldenSurveyTraceUsesListDetailBackAndExplicitStop();
+    testSurveyBrowserFiltersSourcesAndBuildsBoundedRssiHistory();
     testSurveySourcePlanProjectsAvailabilityAndRequiresSelection();
     testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure();
     testSessionStoreIoRouterSwitchesOnlyTheSelectedBackend();

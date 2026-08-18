@@ -569,6 +569,23 @@ def main() -> int:
                 f"product Survey runtime-degradation evidence is missing: {marker}"
             )
 
+    for marker in (
+        'enum class SurveyFilter',
+        'ObservationHistory selectedHistory() const',
+        'const domain::observations::Observation* visibleAt(',
+    ):
+        if marker not in sources:
+            errors.append(f"Survey observation browser contract is missing: {marker}")
+
+    for marker in (
+        'renderSurveyFilterBar()',
+        'renderRssiHistory(',
+        '\"survey.browser\"',
+        '\\"schema\\":\\"leshy.survey.browser.v1\\"',
+    ):
+        if marker not in entry:
+            errors.append(f"Survey observation browser UI/evidence is missing: {marker}")
+
     if not product_start_retry_path.is_file():
         errors.append("Product Start identity retry policy is missing")
     else:
