@@ -195,6 +195,12 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     healthy.heapMinimum = 180U * 1024U;
     healthy.inputQueueDrops = 0;
     healthy.activeResources = resourceMask(Resource::UiForeground);
+    healthy.persistentSurveyReady = true;
+    healthy.passiveBleReady = true;
+    healthy.passiveWifiCaptureReady = true;
+    healthy.enrolledStorageReady = true;
+    healthy.persistentLibraryReady = true;
+    healthy.persistentWifiCaptureReady = true;
 
     SelfTestController controller;
     CHECK(controller.view() == SelfTestView::ModeMenu);
@@ -249,13 +255,27 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(full.mode == SelfTestMode::FullGuided);
     CHECK(full.status == SelfTestResultStatus::Blocked);
     CHECK(full.sequence == 2);
-    CHECK(full.checkCount == 10);
-    CHECK(full.passed == 9);
+    CHECK(full.checkCount == 20);
+    CHECK(full.passed == 15);
     CHECK(full.failed == 0);
-    CHECK(full.blocked == 1);
+    CHECK(full.blocked == 2);
+    CHECK(full.notApplicable == 3);
     CHECK(std::strcmp(full.checks[8].id, "full.ui.common_states") == 0);
-    CHECK(std::strcmp(full.checks[9].id, "full.capability.coverage") == 0);
-    CHECK(SelfTestReport::kPlanVersion == 2);
+    CHECK(std::strcmp(full.checks[9].id,
+                      "full.s3.survey.persistence") == 0);
+    CHECK(std::strcmp(full.checks[14].id,
+                      "full.s4.capture.persistence") == 0);
+    CHECK(std::strcmp(full.checks[15].id, "full.assembly.gps") == 0);
+    CHECK(full.checks[15].status == SelfTestResultStatus::NotApplicable);
+    CHECK(std::strcmp(full.checks[18].id,
+                      "full.s4.shield.receivers") == 0);
+    CHECK(full.checks[18].status == SelfTestResultStatus::Blocked);
+    CHECK(std::strcmp(full.checks[19].id,
+                      "full.capability.coverage") == 0);
+    CHECK(std::strcmp(selfTestResultStatusName(
+                          SelfTestResultStatus::NotApplicable),
+                      "not_applicable") == 0);
+    CHECK(SelfTestReport::kPlanVersion == 3);
 
     CHECK(controller.back());
     CHECK(controller.previousMode());
@@ -268,6 +288,25 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(controller.report().failed == 2);
     CHECK(controller.report().durationUs == 0);
     CHECK(!controller.activate(healthy, 400));
+
+    SelfTestFacts incomplete = healthy;
+    incomplete.passiveBleReady = false;
+    incomplete.gpsDeclared = true;
+    SelfTestController coverageFailure;
+    CHECK(coverageFailure.nextMode());
+    CHECK(coverageFailure.activate(incomplete, 500));
+    CHECK(coverageFailure.activate(incomplete, 510));
+    for (std::uint8_t state = 1;
+         state < SelfTestController::kVisualStateCount; ++state) {
+        CHECK(coverageFailure.activate(incomplete, 510 + state));
+    }
+    CHECK(coverageFailure.activate(incomplete, 520));
+    const SelfTestReport& incompleteReport = coverageFailure.report();
+    CHECK(incompleteReport.status == SelfTestResultStatus::Fail);
+    CHECK(incompleteReport.passed == 14);
+    CHECK(incompleteReport.failed == 1);
+    CHECK(incompleteReport.blocked == 3);
+    CHECK(incompleteReport.notApplicable == 2);
 }
 
 void testProductBootRetryIsNarrowAndBounded() {

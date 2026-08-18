@@ -3984,6 +3984,15 @@ SelfTestFacts snapshotSelfTestFacts() {
     portEXIT_CRITICAL(&physicalInputMux);
 
     const CapabilityRecord* profile = inventory.find("board.profile");
+    const CapabilityRecord* persistentSurvey =
+        inventory.find("survey.persistent_passive");
+    const CapabilityRecord* passiveBle = inventory.find("radio.ble");
+    const CapabilityRecord* passiveWifiCapture =
+        inventory.find("capture.wifi_passive");
+    const CapabilityRecord* persistentLibrary =
+        inventory.find("library.persistent_session");
+    const CapabilityRecord* persistentWifiCapture =
+        inventory.find("capture.wifi_persistent");
     const auto uiOnly = leshy1::kernel::runtime::resourceMask(
         Resource::UiForeground);
     SelfTestFacts facts;
@@ -4001,6 +4010,25 @@ SelfTestFacts snapshotSelfTestFacts() {
     facts.inputQueueDrops = inputQueueDrops;
     facts.activeResources = appRuntime.activeResources();
     facts.resourceScopeClean = facts.activeResources == uiOnly;
+    facts.persistentSurveyReady = persistentSurvey != nullptr &&
+        persistentSurvey->state == CapabilityState::Available;
+    facts.passiveBleReady = passiveBle != nullptr &&
+        passiveBle->state == CapabilityState::Available;
+    facts.passiveWifiCaptureReady = passiveWifiCapture != nullptr &&
+        passiveWifiCapture->state == CapabilityState::Available;
+    facts.enrolledStorageReady = productBootRecovery.enrolled &&
+        productBootRecovery.fingerprintMatched &&
+        productBootRecovery.catalogAdmitted &&
+        productBootRecovery.readOnlyGuaranteed &&
+        productBootRecovery.cleanupComplete &&
+        productBootRecovery.ownedAfter == 0;
+    facts.persistentLibraryReady = persistentLibrary != nullptr &&
+        persistentLibrary->state == CapabilityState::Available;
+    facts.persistentWifiCaptureReady = persistentWifiCapture != nullptr &&
+        persistentWifiCapture->state == CapabilityState::Available;
+    facts.gpsDeclared = BoardProfile::kGpsDeclared;
+    facts.pn532Declared = BoardProfile::kPn532Declared;
+    facts.irDeclared = BoardProfile::kIrDeclared;
     return facts;
 }
 
@@ -4194,7 +4222,8 @@ void renderSelfTestPage(bool clearContent) {
     renderMetric(1, line);
     std::snprintf(line, sizeof(line), tr(UiTextId::FailBlockedFormat),
                   static_cast<unsigned>(report.failed),
-                  static_cast<unsigned>(report.blocked));
+                  static_cast<unsigned>(report.blocked),
+                  static_cast<unsigned>(report.notApplicable));
     renderMetric(2, line);
     std::snprintf(line, sizeof(line), tr(UiTextId::HeapMinFormat),
                   static_cast<unsigned long>(report.facts.heapMinimum / 1024U));
@@ -5226,6 +5255,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"self_test_status\":\"%s\","
                       "\"self_test_checks\":%u,\"self_test_passed\":%u,"
                       "\"self_test_failed\":%u,\"self_test_blocked\":%u,"
+                      "\"self_test_not_applicable\":%u,"
                       "\"self_test_read_only\":%s}",
                       lastRuntimeEvent, appRuntime.activeApp(),
                       static_cast<unsigned long>(appRuntime.activeResources()),
@@ -5430,6 +5460,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(selfTestReport.passed),
                       static_cast<unsigned>(selfTestReport.failed),
                       static_cast<unsigned>(selfTestReport.blocked),
+                      static_cast<unsigned>(selfTestReport.notApplicable),
                       selfTestReport.readOnly ? "true" : "false");
     }
     reply.println(line);
@@ -9648,6 +9679,7 @@ void emitSelfTestReport(Stream& reply) {
         "\"sequence\":%lu,\"started_us\":%llu,\"duration_us\":%llu,"
         "\"read_only\":%s,\"cancelled\":%s,"
         "\"passed\":%u,\"failed\":%u,\"blocked\":%u,"
+        "\"not_applicable\":%u,"
         "\"side_effects\":{\"radio_tx_commands\":0,"
         "\"storage_write_commands\":0,\"buzzer_activations\":0},"
         "\"facts\":{\"build_identity_present\":%s,"
@@ -9655,7 +9687,14 @@ void emitSelfTestReport(Stream& reply) {
         "\"input_frontend_ready\":%s,\"input_queue_healthy\":%s,"
         "\"buzzer_inactive\":%s,\"resource_scope_clean\":%s,"
         "\"heap_free\":%lu,\"heap_minimum\":%lu,\"heap_floor\":%lu,"
-        "\"input_queue_drops\":%lu,\"run_resource_mask\":%lu},"
+        "\"input_queue_drops\":%lu,\"run_resource_mask\":%lu,"
+        "\"persistent_survey_ready\":%s,\"passive_ble_ready\":%s,"
+        "\"passive_wifi_capture_ready\":%s,"
+        "\"enrolled_storage_ready\":%s,"
+        "\"persistent_library_ready\":%s,"
+        "\"persistent_wifi_capture_ready\":%s,"
+        "\"gps_declared\":%s,\"pn532_declared\":%s,"
+        "\"ir_declared\":%s},"
         "\"checks\":[",
         static_cast<unsigned>(SelfTestReport::kSchemaVersion),
         static_cast<unsigned>(SelfTestReport::kPlanVersion), LESHY1_VERSION,
@@ -9670,6 +9709,7 @@ void emitSelfTestReport(Stream& reply) {
         static_cast<unsigned>(report.passed),
         static_cast<unsigned>(report.failed),
         static_cast<unsigned>(report.blocked),
+        static_cast<unsigned>(report.notApplicable),
         report.facts.buildIdentityPresent ? "true" : "false",
         report.facts.profileMatched ? "true" : "false",
         report.facts.displayReady ? "true" : "false",
@@ -9681,7 +9721,16 @@ void emitSelfTestReport(Stream& reply) {
         static_cast<unsigned long>(report.facts.heapMinimum),
         static_cast<unsigned long>(report.facts.heapFloor),
         static_cast<unsigned long>(report.facts.inputQueueDrops),
-        static_cast<unsigned long>(report.facts.activeResources));
+        static_cast<unsigned long>(report.facts.activeResources),
+        report.facts.persistentSurveyReady ? "true" : "false",
+        report.facts.passiveBleReady ? "true" : "false",
+        report.facts.passiveWifiCaptureReady ? "true" : "false",
+        report.facts.enrolledStorageReady ? "true" : "false",
+        report.facts.persistentLibraryReady ? "true" : "false",
+        report.facts.persistentWifiCaptureReady ? "true" : "false",
+        report.facts.gpsDeclared ? "true" : "false",
+        report.facts.pn532Declared ? "true" : "false",
+        report.facts.irDeclared ? "true" : "false");
     if (prefix < 0 || static_cast<std::size_t>(prefix) >= sizeof(line)) {
         reply.println("{\"schema\":\"leshy.self_test.report.v1\","
                       "\"kind\":\"error\",\"reason\":\"format_failed\"}");
@@ -10134,6 +10183,14 @@ void setup() {
         "explicit_promiscuous_rx_only_adapter",
         flashMatches && psramMatches ? "bounded_ram_capture_ready"
                                      : "board_profile_mismatch"});
+    inventory.add({
+        "capture.wifi_persistent",
+        captureStoreEvents != nullptr && productBootRecovery.catalogAdmitted
+            ? CapabilityState::Available : CapabilityState::Fault,
+        "schema_v4_exact_media_background_commit",
+        captureStoreEvents != nullptr && productBootRecovery.catalogAdmitted
+            ? "privacy_confirmed_atomic_capture_ready"
+            : "capture_worker_or_exact_media_unavailable"});
     inventory.add({
         "radio.ble",
         productSurveyWorkerReady && productBootRecovery.catalogAdmitted

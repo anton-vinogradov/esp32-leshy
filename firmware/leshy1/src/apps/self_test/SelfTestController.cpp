@@ -37,6 +37,7 @@ const char* selfTestResultStatusName(SelfTestResultStatus status) {
         case SelfTestResultStatus::Pass: return "pass";
         case SelfTestResultStatus::Fail: return "fail";
         case SelfTestResultStatus::Blocked: return "blocked";
+        case SelfTestResultStatus::NotApplicable: return "not_applicable";
     }
     return "unknown";
 }
@@ -81,7 +82,41 @@ void SelfTestController::append(const char* id, SelfTestResultStatus status) {
         ++report_.failed;
     } else if (status == SelfTestResultStatus::Blocked) {
         ++report_.blocked;
+    } else if (status == SelfTestResultStatus::NotApplicable) {
+        ++report_.notApplicable;
     }
+}
+
+void SelfTestController::evaluateCapabilityCoverage(
+    const SelfTestFacts& facts) {
+    append("full.s3.survey.persistence",
+           facts.persistentSurveyReady ? SelfTestResultStatus::Pass
+                                       : SelfTestResultStatus::Fail);
+    append("full.s4.radio.ble.passive",
+           facts.passiveBleReady ? SelfTestResultStatus::Pass
+                                 : SelfTestResultStatus::Fail);
+    append("full.s4.capture.wifi.passive",
+           facts.passiveWifiCaptureReady ? SelfTestResultStatus::Pass
+                                         : SelfTestResultStatus::Fail);
+    append("full.s4.storage.enrolled",
+           facts.enrolledStorageReady ? SelfTestResultStatus::Pass
+                                      : SelfTestResultStatus::Fail);
+    append("full.s4.library.recovery",
+           facts.persistentLibraryReady ? SelfTestResultStatus::Pass
+                                        : SelfTestResultStatus::Fail);
+    append("full.s4.capture.persistence",
+           facts.persistentWifiCaptureReady ? SelfTestResultStatus::Pass
+                                            : SelfTestResultStatus::Fail);
+    append("full.assembly.gps",
+           facts.gpsDeclared ? SelfTestResultStatus::Blocked
+                             : SelfTestResultStatus::NotApplicable);
+    append("full.assembly.pn532",
+           facts.pn532Declared ? SelfTestResultStatus::Blocked
+                               : SelfTestResultStatus::NotApplicable);
+    append("full.shield.ir",
+           facts.irDeclared ? SelfTestResultStatus::Blocked
+                            : SelfTestResultStatus::NotApplicable);
+    append("full.s4.shield.receivers", SelfTestResultStatus::Blocked);
 }
 
 void SelfTestController::evaluateQuick(const SelfTestFacts& facts) {
@@ -138,6 +173,7 @@ bool SelfTestController::activate(const SelfTestFacts& facts,
             return true;
         }
         append("full.ui.common_states", SelfTestResultStatus::Pass);
+        evaluateCapabilityCoverage(report_.facts);
         append("full.capability.coverage", SelfTestResultStatus::Blocked);
         finishResult();
         return true;

@@ -25,6 +25,7 @@ enum class SelfTestResultStatus : std::uint8_t {
     Pass,
     Fail,
     Blocked,
+    NotApplicable,
 };
 
 const char* selfTestModeName(SelfTestMode mode);
@@ -45,6 +46,15 @@ struct SelfTestFacts final {
     std::uint32_t heapFloor = 128U * 1024U;
     std::uint32_t inputQueueDrops = 0;
     kernel::runtime::ResourceMask activeResources = 0;
+    bool persistentSurveyReady = false;
+    bool passiveBleReady = false;
+    bool passiveWifiCaptureReady = false;
+    bool enrolledStorageReady = false;
+    bool persistentLibraryReady = false;
+    bool persistentWifiCaptureReady = false;
+    bool gpsDeclared = false;
+    bool pn532Declared = false;
+    bool irDeclared = false;
 };
 
 struct SelfTestCheckResult final {
@@ -54,8 +64,8 @@ struct SelfTestCheckResult final {
 
 struct SelfTestReport final {
     static constexpr std::uint16_t kSchemaVersion = 1;
-    static constexpr std::uint16_t kPlanVersion = 2;
-    static constexpr std::size_t kCapacity = 10;
+    static constexpr std::uint16_t kPlanVersion = 3;
+    static constexpr std::size_t kCapacity = 20;
 
     SelfTestMode mode = SelfTestMode::Quick;
     SelfTestResultStatus status = SelfTestResultStatus::NotRun;
@@ -67,6 +77,7 @@ struct SelfTestReport final {
     std::uint8_t passed = 0;
     std::uint8_t failed = 0;
     std::uint8_t blocked = 0;
+    std::uint8_t notApplicable = 0;
     bool readOnly = true;
     bool cancelled = false;
     SelfTestFacts facts{};
@@ -102,6 +113,7 @@ private:
                      std::uint64_t startedUs);
     void append(const char* id, SelfTestResultStatus status);
     void evaluateQuick(const SelfTestFacts& facts);
+    void evaluateCapabilityCoverage(const SelfTestFacts& facts);
     void finishResult();
 
     SelfTestView view_ = SelfTestView::ModeMenu;

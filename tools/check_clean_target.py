@@ -74,8 +74,8 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.79.0-persistent-frame-capture\\"' not in config:
-        errors.append("clean target does not identify the 0.79 persistent frame capture slice")
+    if 'LESHY1_VERSION=\\"0.80.0-self-test-coverage\\"' not in config:
+        errors.append("clean target does not identify the 0.80 Self-Test coverage slice")
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
     for value in forbidden_config:
