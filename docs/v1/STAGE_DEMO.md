@@ -72,9 +72,12 @@ interval, and ends with zero drops/overflow and lease 0. This is a slice checkpo
 not `DEMO-S4`. Exact 0.76 then accepts the common read-only Observation browser:
 All/Wi-Fi/BLE filters, List/Detail, bounded RSSI history and an RF-off frozen snapshot
 cover 45 observations, generation 80→81, nine exact TFT states, cold recovery and
-zero drops/overflow. Capture metadata and compatible CSV/PCAP, conditional
-source/Self-Test contracts, controlled physical power-cut and 8 h/32-cycle
-multi-source stability remain mandatory.
+zero drops/overflow. Exact 0.77 then accepts immutable Capture provenance and the
+47-row canonical observation CSV. Exact 0.78 accepts a deliberately separate bounded
+Wi-Fi packet Capture: 16 retained real frames, parsed radiotap PCAP, aggregate-only
+repository evidence, RAM scrub and final lease 0. Atomic privacy-aware Capture
+persistence, conditional source/Self-Test contracts, controlled physical power-cut
+and 8 h/32-cycle multi-source stability remain mandatory.
 
 ## Test cadence within a stage
 

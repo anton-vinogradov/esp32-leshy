@@ -47,6 +47,28 @@ S7 means **feature-complete**: every accepted P0/P1 and applicable conditional
 `CAP-*` is implemented. S8 means **release-complete**: the same capabilities pass
 the release matrix, endurance, and recovery; S8 does not add major feature scope.
 
+## Product functionality map
+
+This is the readable top-level index of the complete planned 1.0 product. The
+[capability catalog](CAPABILITY_CATALOG.md) remains the normative, testable inventory
+of all 47 `CAP-*` items; this map groups them by user outcome and assigns every group
+to the stage that must deliver it. Live completion status belongs in
+[STATUS.md](STATUS.md).
+
+| Product area | Planned user-visible functionality | Owning stage |
+|---|---|---|
+| Device foundation and UX | reliable boot and board profiles; unified five-key navigation; consistent EN/RU visual system and feedback; safe resource arbitration; Diagnostics; on-device Quick plus extensible Full/Guided Self-Test | S2, then extended through S8 |
+| Survey and evidence library | explicit passive Survey Start/Stop; normalized observations; List/Detail; atomic Session storage; offline Library; cold reopen; JSON and recorded-trace export | S3 |
+| Passive multi-radio observation and packet Capture | selectable Wi-Fi/BLE; compatible nRF24/CC1101 spectrum contracts; GPS context; common timeline, filters, RSSI views and capture metadata; dedicated bounded Wi-Fi frame Capture; PCAP plus CSV/JSON; visible degradation/duty; privacy-aware persistence; power-cut recovery and multi-source endurance | S4 |
+| Complete standard ESP32-DIV hardware | IR capture/decode/library and authorized replay; PN532 tag/NDEF/dump and authorized write/restore; GPS fix/track/time; resilient SD/LittleFS browse/import/export; calibration, power, sleep/resume and low-voltage safety | S5 |
+| Targets, comparison and local companion | target identities/history/correlation, tags and notes; reversible merge/split; session/capture baseline and diff; localization and GPS map; offline search; local Web/USB companion over the same Actions and schemas | S6 |
+| Safe Lab and extensions | explicit legal/safety context; controlled TX/write paths, indication, timeout and panic stop; permissioned app descriptors and scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension and simulator traces | S7 |
+| Trust, recovery and distribution | stable/beta signed OTA, rollback and recovery; one release/on-device Self-Test plan; automated HIL, screenshots, endurance, fault injection and fuzzing; crash bundle; backup/restore; reproducible binaries, provenance, compatibility and support policy | S8 |
+
+Screenshots, accessibility, privacy, resource budgets, data integrity and fail-closed
+cleanup are cross-cutting acceptance properties: they are exercised in every owning
+stage rather than postponed to S8.
+
 ## S0 — Governance and generation boundary
 
 **Goal:** prevent the 0.x PoC and the new product from becoming one ambiguous line.

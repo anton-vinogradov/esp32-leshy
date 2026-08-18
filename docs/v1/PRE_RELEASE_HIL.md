@@ -370,6 +370,15 @@ the current combined GitHub workflows have passed end to end:
   47-row CSV, ten TFT captures, CID, heap and cleanup are independently checked by
   `check_capture_export_acceptance.py`
   (`E-AUTO-042`/`E-HIL-102`/`E-SURVEY-015`);
+- `tools/run_1x_wifi_frame_capture_hil.py` is the exact bounded packet-Capture lane.
+  It flashes the exact candidate, preserves the admitted read-only product recovery,
+  exercises Capture Setup→Running→manual Stop→PCAP→Back and parses every streamed
+  PCAP global/record/radiotap field. It requires the 16×256-byte RAM bound, counted
+  overflow, zero invalid/connect/raw-TX/storage calls, five exact TFT states, payload
+  scrub and final lease 0. Passing repository evidence deliberately retains no raw
+  802.11 or PCAP bytes, only hashes and non-identifying counts/tuning/RSSI ranges.
+  Exact 0.78 is independently checked by `check_wifi_frame_capture_acceptance.py`
+  (`E-AUTO-043`/`E-HIL-103`/`E-CAPTURE-001`);
 - `tools/run_1x_littlefs_parity_hil.py` is the fail-closed disposable-flash lane.
   It selects only inactive OTA1 `app1`, requires two matching full reads and a
   firmware-side hash match before format, performs 32 common SessionStore commits

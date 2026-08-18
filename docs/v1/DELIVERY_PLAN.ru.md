@@ -51,6 +51,28 @@ S7 означает **feature-complete**: все принятые P0/P1 и пр�
 `CAP-*` реализованы. S8 означает **release-complete**: те же возможности выдержали
 release matrix, endurance и recovery; крупный feature scope в S8 не добавляется.
 
+## Карта функциональности продукта
+
+Это человекочитаемый верхнеуровневый индекс всего запланированного продукта 1.0.
+Нормативным проверяемым перечнем всех 47 пунктов `CAP-*` остаётся
+[каталог возможностей](CAPABILITY_CATALOG.ru.md); здесь они сгруппированы по
+пользовательскому результату, и у каждого блока есть этап-владелец. Живой статус
+реализации находится в [STATUS.ru.md](STATUS.ru.md).
+
+| Область продукта | Запланированная пользовательская функциональность | Этап-владелец |
+|---|---|---|
+| Основа устройства и UX | надёжная загрузка и board profiles; единая навигация пятью клавишами; согласованный EN/RU visual system и feedback; безопасное владение ресурсами; Diagnostics; встроенный Quick и расширяемый Full/Guided Self-Test | S2, затем расширяется до S8 |
+| Survey и библиотека доказательств | явные Start/Stop passive Survey; нормализованные observations; List/Detail; atomic Session storage; offline Library; cold reopen; JSON и recorded-trace export | S3 |
+| Пассивное multi-radio наблюдение и packet Capture | выбираемые Wi-Fi/BLE; совместимые contracts nRF24/CC1101 spectrum; GPS context; общие timeline, filters, RSSI views и capture metadata; отдельный bounded Wi-Fi frame Capture; PCAP и CSV/JSON; видимые degradation/duty; privacy-aware persistence; power-cut recovery и multi-source endurance | S4 |
+| Всё штатное железо ESP32-DIV | IR capture/decode/library и разрешённый replay; PN532 tag/NDEF/dump и разрешённые write/restore; GPS fix/track/time; устойчивые SD/LittleFS browse/import/export; calibration, power, sleep/resume и low-voltage safety | S5 |
+| Targets, сравнение и локальный companion | identities/history/correlation целей, tags и notes; обратимые merge/split; baseline/diff сессий и захватов; localization и GPS map; offline search; локальный Web/USB companion над теми же Actions и schemas | S6 |
+| Безопасная Lab и расширения | явный legal/safety context; контролируемые TX/write paths, indication, timeout и panic stop; permissioned app descriptors и scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension и simulator traces | S7 |
+| Доверие, восстановление и доставка | stable/beta signed OTA, rollback и recovery; единый release/on-device Self-Test plan; автоматические HIL, screenshots, endurance, fault injection и fuzzing; crash bundle; backup/restore; воспроизводимые binaries, provenance, compatibility и support policy | S8 |
+
+Screenshots, accessibility, privacy, resource budgets, data integrity и fail-closed
+cleanup являются сквозными acceptance-свойствами: они проверяются на каждом
+этапе-владельце, а не откладываются до S8.
+
 ## S0 — Governance и граница поколений
 
 **Цель:** исключить смешивание PoC 0.x и нового продукта.

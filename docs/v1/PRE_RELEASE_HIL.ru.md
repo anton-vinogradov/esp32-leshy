@@ -372,6 +372,15 @@ workflow прошли end to end:
   source/candidate, CSV на 47 rows, десять TFT captures, CID, heap и cleanup независимо
   проверяет `check_capture_export_acceptance.py`
   (`E-AUTO-042`/`E-HIL-102`/`E-SURVEY-015`);
+- `tools/run_1x_wifi_frame_capture_hil.py` — exact lane bounded packet Capture. Он
+  flash-ит exact candidate, сохраняет admitted read-only product recovery, проходит
+  Capture Setup→Running→manual Stop→PCAP→Back и разбирает каждое global/record/radiotap
+  поле streamed PCAP. Lane требует RAM bound 16×256 B, учтённый overflow, zero
+  invalid/connect/raw-TX/storage calls, пять exact TFT states, payload scrub и final
+  lease 0. Passing repository evidence намеренно не сохраняет raw 802.11 или PCAP
+  bytes, только hashes и неидентифицирующие counts/tuning/RSSI ranges. Exact 0.78
+  независимо проверяет `check_wifi_frame_capture_acceptance.py`
+  (`E-AUTO-043`/`E-HIL-103`/`E-CAPTURE-001`);
 - `tools/run_1x_littlefs_parity_hil.py` — fail-closed lane disposable flash. Он
   выбирает только inactive OTA1 `app1`, требует два совпадающих полных чтения и
   firmware-side hash match до format, делает 32 commits common SessionStore плюс

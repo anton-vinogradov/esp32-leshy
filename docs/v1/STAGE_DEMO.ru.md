@@ -72,9 +72,12 @@ generation 77→78, cold-reopens восемь ordered windows с точным un
 exact 0.76 затем принимает общий read-only Observation browser — фильтры
 Все/Wi-Fi/BLE, List/Detail, bounded RSSI history и frozen snapshot с выключенным RF
 для 45 observations, generation 80→81, девяти exact TFT states, cold recovery и zero
-drops/overflow. Capture metadata и compatible CSV/PCAP, conditional source/Self-Test
-contracts, controlled physical power-cut и 8 h/32-cycle multi-source stability
-остаются обязательными.
+drops/overflow. Exact 0.77 затем принимает immutable Capture provenance и canonical
+observation CSV на 47 rows. Exact 0.78 принимает намеренно отдельный bounded Wi-Fi
+packet Capture: 16 retained real frames, разобранный radiotap PCAP, aggregate-only
+repository evidence, RAM scrub и final lease 0. Atomic privacy-aware Capture
+persistence, conditional source/Self-Test contracts, controlled physical power-cut
+и 8 h/32-cycle multi-source stability остаются обязательными.
 
 ## Ритм тестирования внутри этапа
 

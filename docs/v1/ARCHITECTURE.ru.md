@@ -332,9 +332,21 @@ provenance, сохраняет контракт JSON summary v2 и потоко�
 typed результат `unavailable_no_frame_payload`, не фабрикуя packets. `E-HIL-102`
 доказывает generation 81→82, 16+31 observations, exact metadata, CSV на 47 rows, cold
 recovery, десять TFT captures, invariant heap, zero drops/overflow и final lease 0.
-Отдельный passive raw-frame Capture/PCAP, conditional nRF24/CC1101/GPS и применимые
-Self-Test contracts, controlled physical power-cut и 8 h/32-cycle multi-source
-endurance остаются работой `DEMO-S4`.
+
+Exact `0.78.0-wifi-frame-capture` добавляет отдельный packet path, не меняя модель
+Observation. `WifiFrameCapture` владеет fixed store на 16 frames с snap bound 256 B;
+Arduino adapter входит в STA promiscuous receive без NVS persistence, application
+connect или raw TX и проходит явный план каналов 2,4 GHz. Stop сначала отключает
+driver и освобождает Radio, затем замораживает bounded frames для streaming PCAP 2.4
+writer. Каждая record содержит 15-byte radiotap header с flags, channel и RSSI, за
+которым идут захваченные 802.11 bytes; writer не создаёт второй payload buffer.
+Capture по умолчанию volatile, не пишет storage, а Back обнуляет store до release UI.
+`E-HIL-103` доказывает 34 reported/16 retained real frames, payload 4 096 B, 18
+учтённых capacity drops, разобранный PCAP 16 records/4 616 B, пять TFT states,
+read-only prior Session, scrubbed RAM и final lease 0. Atomic privacy-aware Capture
+persistence, conditional nRF24/CC1101/GPS и применимые Self-Test contracts,
+controlled physical power-cut и 8 h/32-cycle multi-source endurance остаются работой
+`DEMO-S4`.
 
 ## 7. Модель данных
 

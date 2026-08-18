@@ -274,9 +274,21 @@ scan drivers retain normalized observations, not raw 802.11/BLE frames, so PCAP 
 the typed `unavailable_no_frame_payload` result rather than fabricating packets.
 `E-HIL-102` proves generation 81→82, 16+31 observations, exact metadata, a 47-row CSV,
 cold recovery, ten TFT captures, invariant heap, zero drops/overflow and final lease 0.
-Dedicated passive raw-frame Capture/PCAP, conditional nRF24/CC1101/GPS plus applicable
-Self-Test contracts, controlled physical power-cut and 8 h/32-cycle multi-source
-endurance remain `DEMO-S4` work.
+
+Exact `0.78.0-wifi-frame-capture` adds the separate packet path instead of changing
+the Observation model. `WifiFrameCapture` owns a fixed 16-frame store with a 256-byte
+snap bound; the Arduino adapter enters STA promiscuous receive without NVS persistence,
+application connect or raw TX and hops the explicit 2.4 GHz channel plan. Stop first
+detaches the driver and releases Radio, then freezes the bounded frames for a streaming
+PCAP 2.4 writer. Each record contains a 15-byte radiotap header with flags, channel and
+RSSI followed by the captured 802.11 bytes; the writer allocates no second payload
+buffer. Capture is volatile by default, performs no storage write, and Back zeroes the
+store before releasing UI. `E-HIL-103` proves 34 reported/16 retained real frames,
+4,096 B payload, 18 counted capacity drops, a parsed 16-record/4,616 B PCAP, five TFT
+states, read-only prior Session, scrubbed RAM and final lease 0. Atomic privacy-aware
+Capture persistence, conditional nRF24/CC1101/GPS plus applicable Self-Test contracts,
+controlled physical power-cut and 8 h/32-cycle multi-source endurance remain
+`DEMO-S4` work.
 
 ## Data model
 
