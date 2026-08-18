@@ -345,6 +345,14 @@ workflow прошли end to end:
   68/25 независимо перепроверяются
   `check_product_survey_missing_source_acceptance.py`
   (`E-AUTO-032`/`E-HIL-092`/`E-SURVEY-007`);
+- `tools/run_1x_littlefs_parity_hil.py` — fail-closed lane disposable flash. Он
+  выбирает только inactive OTA1 `app1`, требует два совпадающих полных чтения и
+  firmware-side hash match до format, делает 32 commits common SessionStore плюс
+  read-only remount recovery, затем восстанавливает и хеширует OTA1 и partition table
+  до cold product-Library check. Passing evidence никогда не сохраняет private
+  backup. Exact 0.69 и retained run независимо проверяет
+  `check_littlefs_parity_acceptance.py` (`E-AUTO-033`/`E-HIL-093`/
+  `E-STORAGE-024`); reset-boundary и physical power-cut lanes остаются отдельными;
 - `tools/run_1x_ui_typography_hil.py` — service-free exact-TFT lane typography. Он
   требует уже flashed candidate, проверяет identity запущенного app и hashes candidate
   artifacts, нормализует Home/language/persisted Self-Test mode и снимает 18 EN/RU

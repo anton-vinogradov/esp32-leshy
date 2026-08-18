@@ -35,10 +35,12 @@
 #include "kernel/runtime/ResourceBroker.h"
 #include "platform/arduino/BoardSafeOutputs.h"
 #include "platform/arduino/ArduinoFsSessionStoreIo.h"
+#include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
 #include "platform/arduino/BoardSdFilesystem.h"
 #include "platform/arduino/BoardStorageAdapter.h"
 #include "platform/arduino/BoardSdSpiTransport.h"
 #include "platform/arduino/BoardWifiPassiveScanner.h"
+#include "platform/arduino/DisposableOtaLittleFs.h"
 #include "platform/arduino/RamSessionStoreIo.h"
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
@@ -107,11 +109,13 @@ using leshy1::kernel::runtime::ResourceBroker;
 using leshy1::platform::arduino::BoardSafeOutputs;
 using leshy1::platform::arduino::ArduinoFsSessionStoreIo;
 using leshy1::platform::arduino::ArduinoFsSessionStoreWorkspace;
+using leshy1::platform::arduino::ArduinoLittleFsSessionStoreIo;
 using leshy1::platform::arduino::BoardSdFilesystem;
 using leshy1::platform::arduino::BoardStorageAdapter;
 using leshy1::platform::arduino::BoardSdSpiTransport;
 using leshy1::platform::arduino::BoardWifiPassiveScanner;
 using leshy1::platform::arduino::BoardWifiPassiveScanResult;
+using leshy1::platform::arduino::DisposableOtaLittleFs;
 using leshy1::platform::arduino::WifiRecordDisposition;
 using leshy1::platform::arduino::RamSessionStoreIo;
 using leshy1::services::diagnostics::BootMetrics;
@@ -140,6 +144,7 @@ constexpr std::uint32_t kInputProbeRetryDelayMs = 5;
 constexpr leshy1::kernel::runtime::ResourceOwner kSdIdentificationOwner = 2;
 constexpr leshy1::kernel::runtime::ResourceOwner kWifiIngressOwner = 3;
 constexpr leshy1::kernel::runtime::ResourceOwner kBootCatalogOwner = 4;
+constexpr leshy1::kernel::runtime::ResourceOwner kLittleFsHilOwner = 5;
 constexpr std::size_t kSdThroughputSamples = 32;
 constexpr std::size_t kWifiIngressMaxSamples = 32;
 constexpr std::uint64_t kWifiIngressP99EncodedBytesPerSecond = 546;
@@ -169,6 +174,8 @@ constexpr const char* kProductBootstrapPrefix =
     "storage.product.bootstrap disposable-write ";
 constexpr const char* kProductEnrollPrefix =
     "storage.product.enroll disposable-read-only ";
+constexpr const char* kLittleFsParityPrefix =
+    "storage.littlefs.parity disposable-ota1 ";
 constexpr const char* kProductEnrollmentNamespace = "leshy1";
 constexpr const char* kProductEnrollmentKey = "sd.cid.v1";
 constexpr const char* kUiPreferencesNamespace = "leshy1-ui";
@@ -207,10 +214,11 @@ TFT_eSPI display;
 UiController uiController;
 LanguageController languageController;
 SelfTestController selfTestController;
-constexpr std::size_t kConsoleCommandCapacity = 128;
+constexpr std::size_t kConsoleCommandCapacity = 192;
 constexpr char kLongestConsoleCommand[] =
-    "storage.sd.session-store recover disposable-read-only "
-    "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF s1-session-store-20260816-a 6";
+    "storage.littlefs.parity disposable-ota1 "
+    "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff "
+    "s3-littlefs-parity-20260818-a";
 static_assert(sizeof(kLongestConsoleCommand) <= kConsoleCommandCapacity,
               "console command buffer cannot hold the longest command");
 char usbCommand[kConsoleCommandCapacity] = {};
@@ -1765,6 +1773,299 @@ bool prepareBatchThroughputSession(std::size_t* encodedBytes) {
                leshy1::storage::SessionCodecStatus::Valid &&
            *encodedBytes >=
                leshy1::services::survey::SessionBatchPolicy{}.targetEncodedBytes;
+}
+
+bool parseLittleFsParityCommand(const char* command, char* fingerprint,
+                                std::size_t fingerprintCapacity, char* runId,
+                                std::size_t runIdCapacity) {
+    if (command == nullptr || fingerprint == nullptr || runId == nullptr ||
+        fingerprintCapacity < 65 || runIdCapacity < 33 ||
+        std::strncmp(command, kLittleFsParityPrefix,
+                     std::strlen(kLittleFsParityPrefix)) != 0) {
+        return false;
+    }
+    char extra = '\0';
+    const int parsed = std::sscanf(
+        command + std::strlen(kLittleFsParityPrefix),
+        "%64[0-9a-fA-F] %32[A-Za-z0-9_-] %c", fingerprint, runId, &extra);
+    return parsed == 2 && std::strlen(fingerprint) == 64 && runId[0] != '\0';
+}
+
+void emitLittleFsParity(Stream& reply, const char* expectedFingerprint,
+                        const char* runId) {
+    auto& line = sdPhysicalEvidence.line;
+    auto& commitUs = sdPhysicalEvidence.commitUs;
+    commitUs.fill(0);
+    char observedFingerprint[65] = {};
+    const bool idleUi = uiController.isRoot() && !appRuntime.running() &&
+        productSurveyControl() == ProductSurveyWorkerControl::Idle;
+    DisposableOtaLittleFs filesystem;
+    const bool inspected = filesystem.inspect();
+    const bool targetSafe = inspected && filesystem.safeInactiveTarget();
+    const bool resourcesAcquired = idleUi && targetSafe &&
+        resourceBroker.acquire(
+            kLittleFsHilOwner,
+            leshy1::kernel::runtime::resourceMask(Resource::Storage));
+    const std::uint32_t ownedDuring =
+        resourceBroker.ownedBy(kLittleFsHilOwner);
+    const bool targetHashed = resourcesAcquired &&
+        filesystem.hashTarget(observedFingerprint, sizeof(observedFingerprint));
+    const bool fingerprintMatched = targetHashed &&
+        std::strcmp(expectedFingerprint, observedFingerprint) == 0;
+    const std::uint32_t heapFreeBefore = ESP.getFreeHeap();
+    const std::uint64_t mountStartedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    const bool mounted = fingerprintMatched &&
+        filesystem.formatAndMountWritable();
+    const std::uint64_t mountUs = mounted
+        ? static_cast<std::uint64_t>(esp_timer_get_time()) - mountStartedUs : 0;
+    const std::uint64_t capacityBytes = mounted ? filesystem.totalBytes() : 0;
+    const std::uint64_t freeBefore = mounted ? filesystem.freeBytes() : 0;
+    const bool scratchPreexisting = mounted && filesystem.exists(
+        leshy1::storage::kScratchRoot);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = mounted && capacityBytes != 0 && freeBefore <= capacityBytes;
+    media.kind = leshy1::storage::MediaKind::LittleFs;
+    media.fingerprint = observedFingerprint;
+    media.capacityBytes = capacityBytes;
+    media.freeBytes = freeBefore;
+    leshy1::storage::WriteRequest request;
+    request.explicitlyDisposable = true;
+    request.expectedFingerprint = expectedFingerprint;
+    request.runId = runId;
+    request.scratchExists = scratchPreexisting;
+    request.requiredBytes = 1024U * 1024U;
+    request.reserveBytes = 512U * 1024U;
+    const leshy1::storage::WritePermit permit =
+        leshy1::storage::authorizeScratchWrite(media, request);
+
+    const char* status = "target_not_inspected";
+    if (!idleUi) {
+        status = "ui_not_idle";
+    } else if (!inspected) {
+        status = "target_not_found";
+    } else if (!targetSafe) {
+        status = "target_not_inactive_ota1";
+    } else if (!resourcesAcquired) {
+        status = "resources_unavailable";
+    } else if (!targetHashed) {
+        status = "target_hash_failed";
+    } else if (!fingerprintMatched) {
+        status = "target_fingerprint_mismatch";
+    } else if (!mounted) {
+        status = "format_or_mount_failed";
+    } else if (!permit.allowed()) {
+        status = "permit_rejected";
+    } else {
+        status = "ready";
+    }
+
+    std::size_t fixtureSegmentBytes = 0;
+    const bool fixtureReady = std::strcmp(status, "ready") == 0 &&
+        prepareBatchThroughputSession(&fixtureSegmentBytes);
+    if (std::strcmp(status, "ready") == 0 && !fixtureReady) {
+        status = "fixture_prepare_failed";
+    }
+
+    std::size_t commitsCompleted = 0;
+    std::uint64_t bytesWritten = 0;
+    std::uint32_t fileSyncs = 0;
+    std::uint32_t directorySyncs = 0;
+    const char* ioFailure = "not_started";
+    int ioErrno = 0;
+    bool prepared = false;
+    leshy1::storage::SessionStoreRecoveryResult recoveryBeforeRemount;
+    leshy1::storage::SessionStoreRecoveryResult recoveryAfterRemount;
+    std::uint64_t freeAfter = freeBefore;
+    if (fixtureReady) {
+        ArduinoLittleFsSessionStoreIo io(filesystem);
+        prepared = io.prepare(permit);
+        if (!prepared || !filesystem.exists(permit.scratchPath)) {
+            status = "scratch_prepare_failed";
+        } else {
+            for (std::size_t sample = 0; sample < kSdThroughputSamples;
+                 ++sample) {
+                const std::uint64_t started =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                const leshy1::storage::SessionStoreCommitResult committed =
+                    leshy1::storage::commitNextSession(
+                        io, sessionStoreWorkspace, librarySession);
+                commitUs[sample] =
+                    static_cast<std::uint64_t>(esp_timer_get_time()) - started;
+                if (!committed.complete() ||
+                    committed.generation != sample + 1U) {
+                    status = "commit_failed";
+                    break;
+                }
+                ++commitsCompleted;
+            }
+            if (commitsCompleted == kSdThroughputSamples) {
+                recoveryBeforeRemount = leshy1::storage::recoverSession(
+                    io, sessionStoreWorkspace,
+                    &sessionStoreWorkspace.validationSession);
+                status = recoveryBeforeRemount.valid() &&
+                                 recoveryBeforeRemount.generation ==
+                                     kSdThroughputSamples &&
+                                 recoveryBeforeRemount.observations ==
+                                     SurveySession::kObservationCapacity
+                    ? "awaiting_remount" : "pre_remount_recovery_failed";
+            }
+        }
+        bytesWritten = io.bytesWritten();
+        fileSyncs = io.fileSyncs();
+        directorySyncs = io.directorySyncs();
+        ioFailure = io.lastFailure();
+        ioErrno = io.lastErrno();
+        freeAfter = filesystem.freeBytes();
+        io.end();
+    }
+
+    filesystem.end();
+    const bool writableCleanup = filesystem.cleanupComplete();
+    bool remountedReadOnly = false;
+    bool reopenedReadOnly = false;
+    if (std::strcmp(status, "awaiting_remount") == 0) {
+        remountedReadOnly = filesystem.mountReadOnly();
+        if (remountedReadOnly && filesystem.exists(permit.scratchPath)) {
+            ArduinoLittleFsSessionStoreIo readOnlyIo(filesystem);
+            reopenedReadOnly = readOnlyIo.openExistingReadOnly(permit);
+            if (reopenedReadOnly) {
+                recoveryAfterRemount = leshy1::storage::recoverSession(
+                    readOnlyIo, sessionStoreWorkspace,
+                    &sessionStoreWorkspace.validationSession);
+            }
+            readOnlyIo.end();
+        }
+        status = recoveryAfterRemount.valid() &&
+                         recoveryAfterRemount.generation ==
+                             kSdThroughputSamples &&
+                         recoveryAfterRemount.observations ==
+                             SurveySession::kObservationCapacity
+            ? "valid" : "post_remount_recovery_failed";
+    }
+    filesystem.end();
+    const bool cleanupComplete = writableCleanup && filesystem.cleanupComplete();
+    resourceBroker.releaseAll(kLittleFsHilOwner);
+    const std::uint32_t ownedAfter = resourceBroker.ownedBy(kLittleFsHilOwner);
+
+    const leshy1::storage::StorageTimingSummary timings =
+        leshy1::storage::summarizeStorageTimings(
+            commitUs.data(), commitsCompleted);
+    const std::uint64_t encodedPayloadBytesPerSecond =
+        timings.valid && timings.totalUs != 0
+            ? (static_cast<std::uint64_t>(fixtureSegmentBytes) *
+               commitsCompleted * 1000000ULL) / timings.totalUs
+            : 0;
+    const bool storageRateTargetMet =
+        encodedPayloadBytesPerSecond >=
+            kStorageRequiredEncodedBytesPerSecond;
+    const bool valid = std::strcmp(status, "valid") == 0 && targetSafe &&
+        fingerprintMatched && mounted && filesystem.formatted() &&
+        permit.allowed() && prepared &&
+        commitsCompleted == kSdThroughputSamples && timings.valid &&
+        bytesWritten != 0 && fileSyncs == kSdThroughputSamples * 3U &&
+        directorySyncs == fileSyncs && remountedReadOnly && reopenedReadOnly &&
+        storageRateTargetMet && cleanupComplete && ownedAfter == 0;
+    if (!valid && std::strcmp(status, "valid") == 0) {
+        status = "postcondition_failed";
+    }
+    const std::uint32_t heapFreeAfter = ESP.getFreeHeap();
+
+    std::snprintf(
+        line, sizeof(sdPhysicalEvidence.line),
+        "{\"schema\":\"leshy.storage.littlefs.parity.v1\","
+        "\"kind\":\"result\",\"status\":\"%s\","
+        "\"explicitly_disposable\":true,\"target\":\"ota1\","
+        "\"expected_fingerprint\":\"%s\","
+        "\"observed_fingerprint\":\"%s\","
+        "\"fingerprint_matched\":%s,\"run_id\":\"%s\","
+        "\"target_address\":%lu,\"target_size\":%lu,"
+        "\"running_address\":%lu,\"boot_address\":%lu,"
+        "\"target_inactive\":%s,"
+        "\"host_backup_fingerprint_confirmed\":%s,"
+        "\"ota1_restore_required\":true,\"ota1_restored\":false,"
+        "\"partition_table_modified\":false,"
+        "\"product_partition_touched\":false,\"nvs_touched\":false,"
+        "\"sd_accessed\":false,\"radio_touched\":false,"
+        "\"format_allowed\":true,\"format_performed\":%s,"
+        "\"mounted_writable\":%s,\"remounted_read_only\":%s,"
+        "\"reopened_read_only\":%s,\"mount_us\":%llu,"
+        "\"permit_status\":\"%s\",\"scratch_path\":\"%s\","
+        "\"scratch_preexisting_after_format\":%s,"
+        "\"byte_limit\":%llu,\"filesystem_capacity_bytes\":%llu,"
+        "\"free_before\":%llu,\"free_after\":%llu,"
+        "\"bytes_written\":%llu,\"file_syncs\":%lu,"
+        "\"directory_syncs\":%lu,"
+        "\"file_sync_covers_directory\":true,"
+        "\"commit_samples_requested\":%u,"
+        "\"commit_samples_completed\":%u,\"commit_total_us\":%llu,"
+        "\"commit_min_us\":%llu,\"commit_p50_us\":%llu,"
+        "\"commit_p95_us\":%llu,\"commit_p99_us\":%llu,"
+        "\"commit_max_us\":%llu,\"fixture_observations\":%u,"
+        "\"fixture_segment_bytes\":%u,"
+        "\"encoded_payload_bytes_per_second\":%llu,"
+        "\"required_encoded_bytes_per_second\":%llu,"
+        "\"storage_rate_target_met\":%s,"
+        "\"pre_remount_status\":\"%s\","
+        "\"pre_remount_generation\":%lu,"
+        "\"post_remount_status\":\"%s\","
+        "\"post_remount_generation\":%lu,"
+        "\"post_remount_observations\":%u,"
+        "\"io_failure\":\"%s\",\"io_errno\":%d,"
+        "\"owned_during\":%lu,\"owned_after\":%lu,"
+        "\"cleanup_complete\":%s,\"heap_free_before\":%lu,"
+        "\"heap_free_after\":%lu,\"heap_min_free\":%lu,"
+        "\"reset_injection\":false,\"physical_power_cut\":false}",
+        status, expectedFingerprint, observedFingerprint,
+        fingerprintMatched ? "true" : "false", runId,
+        static_cast<unsigned long>(filesystem.targetAddress()),
+        static_cast<unsigned long>(filesystem.targetSize()),
+        static_cast<unsigned long>(filesystem.runningAddress()),
+        static_cast<unsigned long>(filesystem.bootAddress()),
+        targetSafe ? "true" : "false",
+        fingerprintMatched ? "true" : "false",
+        filesystem.formatted() ? "true" : "false",
+        mounted ? "true" : "false",
+        remountedReadOnly ? "true" : "false",
+        reopenedReadOnly ? "true" : "false",
+        static_cast<unsigned long long>(mountUs),
+        leshy1::storage::permitStatusName(permit.status),
+        permit.allowed() ? permit.scratchPath : "",
+        scratchPreexisting ? "true" : "false",
+        static_cast<unsigned long long>(permit.byteLimit),
+        static_cast<unsigned long long>(capacityBytes),
+        static_cast<unsigned long long>(freeBefore),
+        static_cast<unsigned long long>(freeAfter),
+        static_cast<unsigned long long>(bytesWritten),
+        static_cast<unsigned long>(fileSyncs),
+        static_cast<unsigned long>(directorySyncs),
+        static_cast<unsigned>(kSdThroughputSamples),
+        static_cast<unsigned>(commitsCompleted),
+        static_cast<unsigned long long>(timings.totalUs),
+        static_cast<unsigned long long>(timings.minimumUs),
+        static_cast<unsigned long long>(timings.p50Us),
+        static_cast<unsigned long long>(timings.p95Us),
+        static_cast<unsigned long long>(timings.p99Us),
+        static_cast<unsigned long long>(timings.maximumUs),
+        static_cast<unsigned>(SurveySession::kObservationCapacity),
+        static_cast<unsigned>(fixtureSegmentBytes),
+        static_cast<unsigned long long>(encodedPayloadBytesPerSecond),
+        static_cast<unsigned long long>(
+            kStorageRequiredEncodedBytesPerSecond),
+        storageRateTargetMet ? "true" : "false",
+        leshy1::storage::sessionStoreStatusName(recoveryBeforeRemount.status),
+        static_cast<unsigned long>(recoveryBeforeRemount.generation),
+        leshy1::storage::sessionStoreStatusName(recoveryAfterRemount.status),
+        static_cast<unsigned long>(recoveryAfterRemount.generation),
+        static_cast<unsigned>(recoveryAfterRemount.observations),
+        ioFailure, ioErrno, static_cast<unsigned long>(ownedDuring),
+        static_cast<unsigned long>(ownedAfter),
+        cleanupComplete ? "true" : "false",
+        static_cast<unsigned long>(heapFreeBefore),
+        static_cast<unsigned long>(heapFreeAfter),
+        static_cast<unsigned long>(ESP.getMinFreeHeap()));
+    reply.println(line);
 }
 
 void broadcast(const char* line) {
@@ -6743,6 +7044,19 @@ void handleCommand(Stream& reply, const char* command) {
     } else if (std::strncmp(
                    command, "survey.product.test-source-unavailable ", 39) == 0) {
         emitProductSurveySourceUnavailableTest(reply, command);
+    } else if (std::strncmp(command, kLittleFsParityPrefix,
+                            std::strlen(kLittleFsParityPrefix)) == 0) {
+        char fingerprint[65] = {};
+        char runId[33] = {};
+        if (parseLittleFsParityCommand(
+                command, fingerprint, sizeof(fingerprint), runId,
+                sizeof(runId))) {
+            emitLittleFsParity(reply, fingerprint, runId);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.storage.littlefs.parity.v1\","
+                "\"kind\":\"error\",\"reason\":\"invalid_explicit_scope\"}");
+        }
     } else if (std::strcmp(command, "storage.sd.protocol") == 0) {
         emitSdReadOnlyProtocol(reply);
     } else if (std::strcmp(command, "storage.sd.identification.fixture") == 0) {
@@ -7082,6 +7396,7 @@ void setup() {
               "\"storage.product.unenroll confirm\","
               "\"survey.product.admission\","
               "\"survey.product.test-source-unavailable once|clear\","
+              "\"storage.littlefs.parity disposable-ota1 <OTA1-SHA256> <run-id>\","
               "\"storage.sd.protocol\",\"storage.sd.identification.fixture\","
               "\"storage.sd.transport.fixture\","
               "\"storage.sd.wire\","

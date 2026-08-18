@@ -6,8 +6,8 @@
 fixture, guarded physical FAT commit/remount, per-generation и batched 32-sample SD
 throughput, real-source queue/persistence и host/static six-boundary software-reset
 matrix реализованы; exact product UI/reboot/export и missing-source
-real-TFT/zero-lease path проверены, physical power-cut и LittleFS parity остаются
-открыты**.
+real-TFT/zero-lease path плюс normal/remount LittleFS parity проверены, physical
+power-cut и six-boundary reset matrix LittleFS остаются открыты**.
 
 Протокол проверяет ADR-003 без риска для неизвестной SD card или сохранённых данных
 во flash. Обычная diagnostic image никогда не форматирует и не записывает storage
@@ -222,6 +222,14 @@ Physical run разрешён только на явно выбранной це
 - dedicated disposable LittleFS image/partition для HIL, не текущий раздел данных
   product/legacy.
 
+Принятая реализация 0.69 использует только pinned inactive OTA1 partition `app1` по
+`0x410000` размером 4 MiB. Firmware доказывает, что running и boot partitions находятся
+в другом месте, product `spiffs` не пересекается с target, и хеширует все 4 MiB до
+format. Host требует два одинаковых чтения, передаёт exact hash firmware, хранит
+private backup до совпадения полного restore readback и partition table и удаляет
+private copy только после verification. Поэтому passing public bundle содержит только
+hashes/logs, но не OTA contents.
+
 Сначала выполняется read-only discovery. Target с неожиданным fingerprint,
 существующим scratch namespace, mount error, недостатком места или filesystem
 inconsistency отклоняется. Все записи bounded каталогом `/leshy-hil/<run-id>/`;
@@ -267,7 +275,9 @@ cleanup закрывает source/backend и освобождает lease 15→0
 Generation/observations остаются ровно 68/25 при zero physical/logical SD writes и
 zero heap drift. Первая попытка 0.61 сохранена failed: post-cancel boot потерял
 one-shot read PCF8574. 0.62 добавляет bounded telemetry 1…8 попыток input probe, оба
-regression boot проходят. Physical power-cut и LittleFS parity остаются открыты.
+regression boot проходят. На этой точке evidence physical power-cut и LittleFS parity
+оставались открыты; 0.69 далее принимает normal/remount parity, а reset matrix остаётся
+открытой.
 
 Exact evidence missing-source 0.68 (`E-BUILD-069`/`E-AUTO-032`/`E-HIL-092`/
 `E-SURVEY-007`) взводит one-shot diagnostic failure только из idle Home, затем
@@ -279,6 +289,19 @@ store permit validation завершаются первыми, но `scanner.beg
 retry. Cold read-only recovery до и после остаётся generation 68/25 с zero physical
 writes; source start/store open/bytes written/observations равны false/false/0/0.
 Это закрывает критерий 9 S3 без подмены physical power-cut или LittleFS parity.
+
+Exact parity LittleFS 0.69 (`E-BUILD-070`/`E-AUTO-033`/`E-HIL-093`/
+`E-STORAGE-024`) выполняет неизменный common `SessionStore` через explicit inactive
+OTA1 LittleFS adapter. Он завершает 32/32 generations и 96 file плюс 96 covered
+directory sync barriers, восстанавливает generation 32 с 64 observations до и после
+read-only remount и измеряет min/p50/p95/p99/max commit time как
+65 748/155 467/847 921/978 403/978 403 us. Encoded throughput равен 18 586 B/s при
+цели RB-06 2 184 B/s. Product `spiffs`, SD, NVS и radio не затрагиваются; lease 4→0,
+cleanup complete. Host восстанавливает exact SHA-256 OTA1 `ade2400f…d661` и
+неизменный SHA-256 partition table `339bda68…5ba2`, затем cold read-only recovery
+возвращает прежнюю product generation 68/25 с zero writes. Это принимает
+normal/throughput ST-HIL-A07, но не LittleFS reset-boundary matrix и не physical
+power cut.
 
 ## Реализованный и физически проверенный software-reset harness
 
@@ -531,7 +554,7 @@ E-HIL-075 добавляет 12 последовательных cycles, generat
 сохранена как `interrupted`, поэтому это engineering checkpoint, не release-pass.
 Полный 8 h/32-cycle NFR-004 остаётся `DEMO-S4`. E-HIL-092 закрывает ST-HIL-A11 на
 той же board/card с localized real-TFT failure, zero source/store start, неизменной
-generation 68/25 и final lease 0. Physical power-cut всё ещё требует controller.
-LittleFS не затрагивается,
-пока не доказан отдельный disposable partition/image; текущий flash filesystem может
-содержать legacy/product data.
+generation 68/25 и final lease 0. E-HIL-093 закрывает normal/remount половину
+ST-HIL-A07 на изолированном и полностью восстановленном inactive OTA1 target. Те же
+шесть commit boundaries всё ещё требуют отдельной LittleFS reset matrix, а physical
+power-cut — controller.

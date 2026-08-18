@@ -6,6 +6,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -261,10 +262,14 @@ def main() -> int:
         "LESHY_UI_TEXT(BackNoRetry,",
     ):
         require(failures, marker in strings, f"UI text missing: {marker}")
+    current_version = re.search(
+        r'LESHY1_VERSION=\\"(\d+)\.(\d+)\.[^\\"]+\\"', platform
+    )
     require(failures,
-            'LESHY1_VERSION=\\"0.68.0-missing-source-tft-measure\\"' in
-                platform,
-            "0.68 version marker missing")
+            current_version is not None and
+            (int(current_version.group(1)), int(current_version.group(2))) >=
+                (0, 68),
+            "current baseline predates accepted 0.68 missing-source path")
     try:
         ast.parse(RUNNER.read_text(encoding="utf-8"))
         ast.parse(RUNNER_TEST.read_text(encoding="utf-8"))

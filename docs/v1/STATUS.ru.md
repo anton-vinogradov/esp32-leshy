@@ -12,10 +12,10 @@
 
 - **Активный этап:** `S3 — Первая сохраняемая Survey Session`.
 - **Последний закрытый этап:** `S2 — Чистая платформа 1.x`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.68 missing-source real-TFT evidence и S3 progress evidence.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.69 evidence нормальной/remount parity disposable LittleFS и S3 progress evidence.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
-- **Главная цель текущего этапа:** закрыть physical power-cut evidence, LittleFS parity и independent-golden
+- **Главная цель текущего этапа:** закрыть physical power-cut evidence, six-boundary reset matrix LittleFS и independent-golden
   `DEMO-S3` на существующем пути real passive Survey → reboot → Library/export.
 
 ## Состояние этапов
@@ -25,7 +25,7 @@
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
-| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; exact 0.60 сохраняет persistent Core-0 worker и делает terminal `Idle` UI-acknowledgement после cleanup/commit, exact 0.62 физически отменяет active scan без commit/resource leak, а exact 0.68 оставляет localized missing-source state видимым только после cleanup/release lease без запуска source/store и изменения prior generation | открыты physical power-cut, LittleFS parity, independent demo goldens и воспроизводимый `DEMO-S3` |
+| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; exact 0.60 сохраняет persistent Core-0 worker и делает terminal `Idle` UI-acknowledgement после cleanup/commit, exact 0.62 физически отменяет active scan без commit/resource leak, exact 0.68 показывает clean missing-source terminal, а exact 0.69 доказывает normal/remount LittleFS parity на backed-up inactive OTA1 target | открыты physical power-cut, LittleFS reset-boundary parity, independent demo goldens и воспроизводимый `DEMO-S3` |
 | S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
@@ -297,13 +297,14 @@
 | 2. Пользователь открывает и запускает Survey | `pass` | public five-key Actions открывают real persistent Setup; Start возвращается за 12 us до identity/scan/mount work, затем worker переводит UI в Running |
 | 3. Passive source выдаёт normalized Observations | `pass` | 25/25 accepted/forwarded за два continuous scan cycles при zero drops в E-HIL-085 |
 | 4. List → Detail → Back сохраняет работающую Survey | `pass` | exact 0.60 при открытом Detail продвигается с 12 observations/одного scan до 25/двух scans и подтверждает Back за 105,396 ms |
-| 5. Stop атомарно сохраняет один раз | `partial` | normal Stop публикует ровно generation 67→68 после остановки source; E-HIL-086 отдельно отменяет active physical scan за 86,762 ms при неизменных generation/observations 68/25, zero SD writes и final lease 0; software-reset matrix проходит, остаётся physical power-cut |
+| 5. Stop атомарно сохраняет один раз | `partial` | normal Stop публикует ровно generation 67→68 после остановки source; E-HIL-086 отдельно отменяет active physical scan за 86,762 ms при неизменных generation/observations 68/25, zero SD writes и final lease 0; SD software-reset matrix и LittleFS normal/remount path проходят, остаются LittleFS reset-boundary и physical power-cut |
 | 6. Reboot открывает Session при выключенном radio | `pass` | read-only exact-CID generation 68/25; Library export сообщает `radio_touched=false` |
 | 7. JSON summary export | `pass` | schema `leshy.library.export.v1`, persistent/non-simulated generation 68 |
-| 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, восемь runner contract tests, static guards terminal/source/store ordering, exact board runs и retained independent verifiers |
+| 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, девять LittleFS runner tests, static guards target/hash-before-format/source/store ordering, exact board runs и retained independent verifiers |
 | 9. Missing source объясняет себя и не оставляет leases | `pass` | exact 0.68 one-shot injection на source boundary создаёт localized русский unavailable state 240×320 только после cleanup lease 15→0; source start/store open/bytes written равны false/false/0, hidden retry по Select отклоняется, Back возвращает Home, cold read-only recovery сохраняет generation 68/25 в E-HIL-092 |
 
-Дополнительная exit-работа S3: parity на dedicated disposable LittleFS и отдельно
+Дополнительная exit-работа S3: six-boundary reset matrix на проверенном disposable
+LittleFS target и отдельно
 записанные TFT goldens финального demo. Восьмичасовой cross-radio endurance остаётся
 `DEMO-S4`, а не скрытым критерием завершения S3.
 
@@ -553,6 +554,9 @@
 | E-BUILD-069 | exact rebuild `0.68.0-missing-source-tft-measure` | pass: RAM 128 920 B, linked flash 1 114 184 B; app/factory 1 114 592/1 180 128 B; app `a2703aba…e64`, factory `2eaaa12b…787d`, ELF `ef98e4f9…32f0`, map `c782efdc…28d5`; RTC no-init 20 B | +1 616 B linked flash, +24 B static RAM и +1 616 B images vs 0.67 за localized terminal UI, one-shot source-boundary injection и explicit source/store telemetry; exact candidate критерия 9 S3, не stage/release build |
 | E-AUTO-032 | missing-source HIL runner и independent verifier | pass: пять host negative tests отклоняют hidden source start/store open, leaked resources/writes, hidden retry и generation change; retained verifier пересчитывает exact candidate/runner/все TFT и boot artifacts, source-before-store ordering, localized strings, cleanup и no-promotion scope | diagnostic one-shot injection принимается только из idle Home и потребляется на реальной Product Start source boundary; подмена source/store запрещена |
 | E-HIL-092 / E-SURVEY-007 | board-01 exact 0.68 missing-source real-TFT path | pass: exact CID валидируется, затем one-shot injection предотвращает `scanner.begin` до SessionStore open; localized русский TFT 240×320 сообщает unavailable source/no Session/prior Library preserved, при этом owner/lease none/0, store open false, bytes written 0 и observations 0. Select отклоняется без retry, Back возвращает Home, cold read-only reboot сохраняет generation 68/25 с zero physical writes, heap остаётся 272 584/208 168/188 116 B и final lease 0 в [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-missing-source-0.68.json) | принимает критерий 9 S3; physical power-cut, LittleFS parity и final independent goldens всё ещё блокируют promotion `DEMO-S3` |
+| E-BUILD-070 | exact rebuild `0.69.0-littlefs-parity-measure` | pass: RAM 130 216 B, linked flash 1 153 228 B; app/factory 1 153 632/1 219 168 B; app `96e26161…cd49`, factory `04ca1d80…267`, ELF `1a8225ef…0d6`, map `e85a4509…466`; RTC no-init 20 B; immediate rebuild воспроизвёл все четыре hash | +39 044 B linked flash, +1 296 B static RAM и +39 040 B images vs 0.68 за explicit-partition LittleFS, SHA-256 всего target и POSIX SessionStore IO; exact parity candidate, не stage/release build |
+| E-AUTO-033 | fail-closed LittleFS runner, static target audit и retained verifier | pass: девять host tests отклоняют active/product target, incomplete samples, percentile/rate drift и retry failures; runner требует два совпадающих чтения 4 MiB до format, хранит private backup до exact restore, bounded-повторяет USB reads/restores, проверяет partition table/product Library, а independent checker связывает exact candidate/source/run/artifacts | target — только inactive OTA1; product `spiffs`, SD, NVS и radio недостижимы, private backup не сохраняется в passing public evidence |
+| E-HIL-093 / E-STORAGE-024 | board-01 exact 0.69 normal/remount parity disposable LittleFS | pass: backed-up inactive OTA1 по `0x410000` форматируется как LittleFS 4 MiB, commits 32/32 generations с 96+96 durability barriers, восстанавливает generation 32/64 observations до и после read-only remount и выдаёт 18 586 encoded B/s против required 2 184 B/s. SHA-256 OTA1 и partition table восстановлены точно с первой попытки; cold exact-CID product recovery сохраняет generation 68/25 с zero physical writes и final Home lease 0 в [machine-checked artifact](../../tests/hil/evidence/board-01-littlefs-parity-0.69.json) | принимает только normal/throughput ST-HIL-A07; LittleFS six-boundary reset matrix, physical power-cut и final independent goldens всё ещё блокируют promotion `DEMO-S3` |
 
 ## Известные неопределённости и риски
 

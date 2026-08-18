@@ -52,7 +52,9 @@ reviewed and final ownership is zero. Normal-path evidence has since advanced th
 `E-AUTO-032`/`E-HIL-092` closes the missing-source real-TFT path without starting the
 source or store, writing bytes, changing the prior 68/25 Library, leaking a lease, or
 allowing a hidden Select retry. It is still deliberately not `DEMO-S3`: physical
-power-cut, LittleFS parity, and independently recorded demo goldens remain open.
+power-cut, the LittleFS reset-boundary matrix, and independently recorded demo goldens
+remain open. Exact 0.69 `E-AUTO-033`/`E-HIL-093` has already accepted the separate
+normal/remount LittleFS throughput slice with exact inactive-OTA1 restoration.
 
 ## Test cadence within a stage
 

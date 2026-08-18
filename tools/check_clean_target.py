@@ -21,6 +21,8 @@ def main() -> int:
     physical_sd_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSdSpiTransport.cpp"
     physical_sd_filesystem = TARGET / "src" / "platform" / "arduino" / "BoardSdFilesystem.cpp"
     session_store_filesystem = TARGET / "src" / "platform" / "arduino" / "ArduinoFsSessionStoreIo.cpp"
+    littlefs_partition_adapter = TARGET / "src" / "platform" / "arduino" / "DisposableOtaLittleFs.cpp"
+    littlefs_session_store = TARGET / "src" / "platform" / "arduino" / "ArduinoLittleFsSessionStoreIo.cpp"
     session_store_router = TARGET / "src" / "storage" / "SessionStoreIoRouter.cpp"
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
@@ -34,6 +36,7 @@ def main() -> int:
     session_catalog_path = TARGET / "src" / "apps" / "library" / "SessionCatalog.cpp"
     sector_inspection = TARGET / "src" / "storage" / "SdSectorInspection.cpp"
     reset_runner_path = ROOT / "tools" / "run_1x_sd_reset_matrix.py"
+    littlefs_runner_path = ROOT / "tools" / "run_1x_littlefs_parity_hil.py"
     sources = "\n".join(path.read_text(encoding="utf-8") for path in source_paths)
     implicit_sources = "\n".join(
         path.read_text(encoding="utf-8")
@@ -307,6 +310,73 @@ def main() -> int:
         ):
             if re.search(pattern, session_adapter):
                 errors.append(f"guarded SessionStore adapter can mutate existing paths: {pattern}")
+
+    if not littlefs_partition_adapter.is_file():
+        errors.append("disposable OTA1 LittleFS adapter is missing")
+    else:
+        littlefs_partition = littlefs_partition_adapter.read_text(encoding="utf-8")
+        littlefs_partition += "\n" + littlefs_partition_adapter.with_suffix(
+            ".h"
+        ).read_text(encoding="utf-8")
+        for marker in (
+            "kExpectedAddress = 0x410000",
+            "kExpectedSize = 0x400000",
+            'kPartitionLabel = "app1"',
+            "ESP_PARTITION_SUBTYPE_APP_OTA_1",
+            "esp_ota_get_running_partition",
+            "esp_ota_get_boot_partition",
+            'ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs"',
+            "config.partition = target_",
+            "config.partition_label = nullptr",
+            "config.format_if_mount_failed = false",
+            "config.read_only = readOnly",
+            "esp_littlefs_format_partition(target_)",
+        ):
+            if marker not in littlefs_partition:
+                errors.append(
+                    f"disposable OTA1 LittleFS adapter is missing: {marker}"
+                )
+        for pattern in (
+            r"\bLittleFS\s*\.\s*begin\s*\(",
+            r"\bSPIFFS\s*\.\s*begin\s*\(",
+            r"\besp_littlefs_format\s*\(",
+        ):
+            if re.search(pattern, littlefs_partition):
+                errors.append(
+                    f"disposable LittleFS adapter can select a global/product target: {pattern}"
+                )
+
+    if not littlefs_session_store.is_file():
+        errors.append("guarded LittleFS SessionStore adapter is missing")
+    else:
+        littlefs_io = littlefs_session_store.read_text(encoding="utf-8")
+        littlefs_io += "\n" + littlefs_session_store.with_suffix(
+            ".h"
+        ).read_text(encoding="utf-8")
+        for marker in (
+            'kScratchParent = "/leshy-hil"',
+            "storage::kScratchRoot",
+            "bytesWritten_ > byteLimit_",
+            "O_WRONLY | O_CREAT | O_TRUNC",
+            "::write",
+            "::fsync",
+            "::close",
+            "::stat",
+            "fileSyncCoversDirectory() const { return true; }",
+            "writable_ = false",
+        ):
+            if marker not in littlefs_io:
+                errors.append(
+                    f"guarded LittleFS SessionStore adapter is missing: {marker}"
+                )
+        for pattern in (
+            r"\bremove\s*\(", r"\brmdir\s*\(", r"\brename\s*\(",
+            r"\bunlink\s*\(",
+        ):
+            if re.search(pattern, littlefs_io):
+                errors.append(
+                    f"guarded LittleFS adapter can delete or rename paths: {pattern}"
+                )
 
     for marker in (
         "recoverProductCatalogAtBoot();",
@@ -608,6 +678,45 @@ def main() -> int:
         if marker not in entry:
             errors.append(f"guarded physical SessionStore command is missing: {marker}")
 
+    for marker in (
+        "storage.littlefs.parity disposable-ota1 ",
+        "DisposableOtaLittleFs filesystem",
+        "filesystem.safeInactiveTarget()",
+        "filesystem.hashTarget(observedFingerprint",
+        "std::strcmp(expectedFingerprint, observedFingerprint) == 0",
+        "filesystem.formatAndMountWritable()",
+        "ArduinoLittleFsSessionStoreIo io(filesystem)",
+        "filesystem.mountReadOnly()",
+        '\\"product_partition_touched\\":false',
+        '\\"nvs_touched\\":false',
+        '\\"sd_accessed\\":false',
+        '\\"radio_touched\\":false',
+        '\\"ota1_restore_required\\":true',
+    ):
+        if marker not in entry:
+            errors.append(f"guarded LittleFS parity command is missing: {marker}")
+    littlefs_start = entry.find("void emitLittleFsParity(")
+    littlefs_end = entry.find("void broadcast(", littlefs_start)
+    if littlefs_start < 0 or littlefs_end <= littlefs_start:
+        errors.append("LittleFS parity function could not be inspected")
+    else:
+        littlefs_body = entry[littlefs_start:littlefs_end]
+        hash_check = littlefs_body.find("filesystem.hashTarget(")
+        format_call = littlefs_body.find("filesystem.formatAndMountWritable()")
+        if hash_check < 0 or format_call <= hash_check:
+            errors.append(
+                "LittleFS target must be hashed and matched before format"
+            )
+        for forbidden_call in (
+            "BoardSd", "productSurveyFilesystem", "saveProductFingerprint",
+            "clearProductFingerprint", "WiFi", "esp_wifi_",
+        ):
+            if forbidden_call in littlefs_body:
+                errors.append(
+                    "LittleFS parity can touch an unrelated product subsystem: "
+                    f"{forbidden_call}"
+                )
+
     if not reset_runner_path.is_file():
         errors.append("guarded SD reset matrix runner is missing")
     else:
@@ -626,6 +735,27 @@ def main() -> int:
         ):
             if marker not in reset_runner:
                 errors.append(f"guarded reset retry policy is missing: {marker}")
+
+    if not littlefs_runner_path.is_file():
+        errors.append("guarded LittleFS parity runner is missing")
+    else:
+        littlefs_runner = littlefs_runner_path.read_text(encoding="utf-8")
+        for marker in (
+            "OTA1_OFFSET = 0x410000",
+            "OTA1_SIZE = 0x400000",
+            "PARTITION_TABLE_OFFSET = 0x8000",
+            "two independent reads differ",
+            "RESTORE_ATTEMPTS = 3",
+            "READ_ATTEMPTS = 3",
+            "read_flash_with_retry(",
+            "restore_flash(",
+            "OTA1 restore remained unverified",
+            "private_backup_deleted_after_verified_restore",
+            "partition_table_unchanged",
+            "unchanged_recovery_failures",
+        ):
+            if marker not in littlefs_runner:
+                errors.append(f"guarded LittleFS runner is missing: {marker}")
 
     if not passive_wifi_adapter.is_file():
         errors.append("explicit passive Wi-Fi adapter is missing")

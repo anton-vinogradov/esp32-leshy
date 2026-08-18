@@ -343,6 +343,14 @@ the current combined GitHub workflows have passed end to end:
   and prior Library 68/25 are independently rechecked by
   `check_product_survey_missing_source_acceptance.py`
   (`E-AUTO-032`/`E-HIL-092`/`E-SURVEY-007`);
+- `tools/run_1x_littlefs_parity_hil.py` is the fail-closed disposable-flash lane.
+  It selects only inactive OTA1 `app1`, requires two matching full reads and a
+  firmware-side hash match before format, performs 32 common SessionStore commits
+  plus read-only remount recovery, then restores and rehashes OTA1 and the partition
+  table before a cold product-Library check. Passing evidence never retains the
+  private backup. Exact 0.69 and the retained run are independently checked by
+  `check_littlefs_parity_acceptance.py` (`E-AUTO-033`/`E-HIL-093`/
+  `E-STORAGE-024`); reset-boundary and physical power-cut lanes remain separate;
 - `tools/run_1x_ui_typography_hil.py` is the service-free exact-TFT typography lane.
   It requires an already flashed candidate, validates the running app identity and
   candidate artifact hashes, normalizes Home/language/persisted Self-Test mode, and

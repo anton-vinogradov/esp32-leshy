@@ -170,8 +170,19 @@ the real source boundary. E-HIL-092 proves that an unavailable passive source is
 as a localized terminal TFT state only after cleanup and lease release: source start
 and store open are both false, zero bytes and observations are created, Select cannot
 silently retry, Back returns Home, and cold read-only recovery preserves generation
-68 with 25 observations. Physical power-cut, endurance, LittleFS parity, and
-independent demo goldens remain open.
+68 with 25 observations. At that evidence point physical power-cut, endurance,
+LittleFS parity, and independent demo goldens remained open; the normal/remount
+LittleFS slice is accepted by 0.69 below.
+
+Version 0.69 adds a HIL-only LittleFS backend without changing the product partition
+map. It accepts only inactive OTA1 `app1` at `0x410000`/4 MiB, proves the running and
+boot applications are elsewhere and product `spiffs` is disjoint, then requires an
+exact host-provided full-partition SHA-256 before format. The common `SessionStore`
+uses a confined POSIX adapter under `/hil-lfs/leshy-hil/<run-id>`; file `fsync` is the
+LittleFS metadata/directory durability barrier. E-HIL-093 proves 32 commits,
+read-only remount recovery and throughput, while the host proves two-read backup,
+exact OTA1/table restore and unchanged product Library. The six-boundary LittleFS
+reset matrix, physical power-cut, endurance and independent demo goldens remain open.
 
 ## Data model
 

@@ -228,8 +228,19 @@ E-HIL-092 доказывает, что недоступный passive source п�
 terminal TFT state только после cleanup и release lease: source start и store open
 равны false, создано zero bytes/observations, Select не делает скрытый retry, Back
 возвращает Home, а cold read-only recovery сохраняет generation 68 и 25 observations.
-Physical power-cut, endurance, LittleFS parity и independent demo goldens остаются
-открыты.
+На этой точке evidence physical power-cut, endurance, LittleFS parity и independent
+demo goldens оставались открыты; normal/remount slice LittleFS принимается 0.69 ниже.
+
+Version 0.69 добавляет HIL-only backend LittleFS без изменения product partition map.
+Он принимает только inactive OTA1 `app1` по `0x410000`/4 MiB, доказывает, что running
+и boot apps находятся в другом месте, а product `spiffs` не пересекается с target,
+затем требует exact host-provided SHA-256 всего partition до format. Common
+`SessionStore` использует confined POSIX adapter под
+`/hil-lfs/leshy-hil/<run-id>`; file `fsync` служит durability barrier metadata/directory
+LittleFS. E-HIL-093 доказывает 32 commits, read-only remount recovery и throughput,
+а host — two-read backup, exact restore OTA1/table и unchanged product Library.
+Six-boundary reset matrix LittleFS, physical power-cut, endurance и independent demo
+goldens остаются открыты.
 
 ## 7. Модель данных
 
