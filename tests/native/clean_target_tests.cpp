@@ -26,6 +26,7 @@
 #include "services/survey/IngressTiming.h"
 #include "services/survey/ObservationQueue.h"
 #include "services/survey/SessionBatchPolicy.h"
+#include "services/survey/SourceTimeline.h"
 #include "services/survey/SurveySession.h"
 #include "storage/AtomicHead.h"
 #include "storage/MediaDiscovery.h"
@@ -924,6 +925,143 @@ void testSurveySessionIsOrderedBoundedAndStopIsIdempotent() {
     CHECK(session.stop(4001) == SessionStatus::AlreadyStopped);
     CHECK(session.append(observation) == SessionStatus::NotRunning);
     CHECK(std::strcmp(sessionStatusName(SessionStatus::Full), "full") == 0);
+}
+
+void testSourceTimelineStreamsHonestDutyWindowsAndDrops() {
+    SourceTimeline timeline;
+    const std::uint8_t wifi = sourceMask(RadioKind::Wifi);
+    const std::uint8_t ble = sourceMask(RadioKind::Ble);
+    CHECK(kSupportedSourceMask == (wifi | ble));
+    CHECK(timeline.start(0, 100) == SourceTimelineStatus::InvalidMask);
+    CHECK(timeline.start(static_cast<std::uint8_t>(1U << 7U), 100) ==
+          SourceTimelineStatus::InvalidMask);
+    CHECK(timeline.start(wifi | ble, 100) == SourceTimelineStatus::Started);
+    CHECK(timeline.state() == SourceTimelineState::Running);
+    CHECK(timeline.selectedMask() == (wifi | ble));
+    CHECK(timeline.source(RadioKind::Wifi) != nullptr &&
+          timeline.source(RadioKind::Wifi)->state ==
+              SourceWindowState::Scheduled);
+    CHECK(timeline.recordObservation(RadioKind::Wifi, true, 105) ==
+          SourceTimelineStatus::InvalidState);
+    CHECK(timeline.transition(RadioKind::Wifi, SourceWindowState::Active,
+                              SourceWindowReason::DutyCycle, 110) ==
+          SourceTimelineStatus::InvalidReason);
+
+    CHECK(timeline.transition(RadioKind::Wifi, SourceWindowState::Active,
+                              SourceWindowReason::None, 110) ==
+          SourceTimelineStatus::Transitioned);
+    CHECK(timeline.recordObservation(RadioKind::Wifi, true, 120) ==
+          SourceTimelineStatus::ObservationRecorded);
+    CHECK(timeline.recordObservation(RadioKind::Wifi, false, 125) ==
+          SourceTimelineStatus::ObservationRecorded);
+    CHECK(timeline.transition(RadioKind::Ble,
+                              SourceWindowState::Unavailable,
+                              SourceWindowReason::DriverUnavailable, 130) ==
+          SourceTimelineStatus::Transitioned);
+    CHECK(timeline.transition(RadioKind::Wifi, SourceWindowState::Scheduled,
+                              SourceWindowReason::DutyCycle, 140) ==
+          SourceTimelineStatus::Transitioned);
+    CHECK(timeline.transition(RadioKind::Ble, SourceWindowState::Active,
+                              SourceWindowReason::None, 150) ==
+          SourceTimelineStatus::Transitioned);
+    CHECK(timeline.recordObservation(RadioKind::Ble, true, 160) ==
+          SourceTimelineStatus::ObservationRecorded);
+    CHECK(timeline.transition(RadioKind::Wifi, SourceWindowState::Active,
+                              SourceWindowReason::None, 159) ==
+          SourceTimelineStatus::OutOfOrder);
+    CHECK(timeline.stop(200) == SourceTimelineStatus::Stopped);
+    CHECK(timeline.state() == SourceTimelineState::Stopped);
+    CHECK(timeline.queuedWindows() == 6);
+    CHECK(timeline.windowHighWater() == 6);
+    CHECK(timeline.overflowEvents() == 0);
+
+    const SourceRuntimeSummary* wifiSummary = timeline.source(RadioKind::Wifi);
+    const SourceRuntimeSummary* bleSummary = timeline.source(RadioKind::Ble);
+    CHECK(wifiSummary != nullptr && wifiSummary->scheduledUs == 70);
+    CHECK(wifiSummary != nullptr && wifiSummary->activeUs == 30);
+    CHECK(wifiSummary != nullptr && wifiSummary->accepted == 1);
+    CHECK(wifiSummary != nullptr && wifiSummary->dropped == 1);
+    CHECK(wifiSummary != nullptr && wifiSummary->windows == 3);
+    CHECK(wifiSummary != nullptr && wifiSummary->transitions == 2);
+    CHECK(bleSummary != nullptr && bleSummary->scheduledUs == 30);
+    CHECK(bleSummary != nullptr && bleSummary->unavailableUs == 20);
+    CHECK(bleSummary != nullptr && bleSummary->activeUs == 50);
+    CHECK(bleSummary != nullptr && bleSummary->accepted == 1);
+    CHECK(bleSummary != nullptr && bleSummary->dropped == 0);
+    CHECK(timeline.dutyPermille(RadioKind::Wifi, 200) == 300);
+    CHECK(timeline.dutyPermille(RadioKind::Ble, 200) == 500);
+
+    static constexpr std::array<RadioKind, 6> kExpectedSources{{
+        RadioKind::Wifi, RadioKind::Ble, RadioKind::Wifi,
+        RadioKind::Ble, RadioKind::Wifi, RadioKind::Ble,
+    }};
+    static constexpr std::array<SourceWindowState, 6> kExpectedStates{{
+        SourceWindowState::Scheduled, SourceWindowState::Scheduled,
+        SourceWindowState::Active, SourceWindowState::Unavailable,
+        SourceWindowState::Scheduled, SourceWindowState::Active,
+    }};
+    for (std::size_t index = 0; index < kExpectedSources.size(); ++index) {
+        SourceWindow window;
+        CHECK(timeline.pop(&window) ==
+              SourceTimelineStatus::WindowDequeued);
+        CHECK(window.source == kExpectedSources[index]);
+        CHECK(window.state == kExpectedStates[index]);
+        CHECK(window.endedUs >= window.startedUs);
+    }
+    SourceWindow empty;
+    CHECK(timeline.pop(&empty) == SourceTimelineStatus::Empty);
+    CHECK(std::strcmp(sourceWindowStateName(SourceWindowState::Unavailable),
+                      "unavailable") == 0);
+    CHECK(std::strcmp(sourceWindowReasonName(
+                          SourceWindowReason::DriverUnavailable),
+                      "driver_unavailable") == 0);
+    CHECK(std::strcmp(sourceTimelineStateName(SourceTimelineState::Stopped),
+                      "stopped") == 0);
+    CHECK(std::strcmp(sourceTimelineStatusName(SourceTimelineStatus::Full),
+                      "full") == 0);
+}
+
+void testSourceTimelineOverflowRejectsStateChangeAndCanDrain() {
+    SourceTimeline timeline;
+    CHECK(timeline.start(sourceMask(RadioKind::Wifi), 1) ==
+          SourceTimelineStatus::Started);
+    SourceWindowState next = SourceWindowState::Active;
+    for (std::size_t index = 0; index < SourceTimeline::kWindowCapacity;
+         ++index) {
+        CHECK(timeline.transition(RadioKind::Wifi, next,
+                                  next == SourceWindowState::Active
+                                      ? SourceWindowReason::None
+                                      : SourceWindowReason::DutyCycle,
+                                  2 + index) ==
+              SourceTimelineStatus::Transitioned);
+        next = next == SourceWindowState::Active
+            ? SourceWindowState::Scheduled : SourceWindowState::Active;
+    }
+    CHECK(timeline.queuedWindows() == SourceTimeline::kWindowCapacity);
+    const SourceWindowState stateBefore =
+        timeline.source(RadioKind::Wifi)->state;
+    CHECK(timeline.transition(RadioKind::Wifi, next,
+                              next == SourceWindowState::Active
+                                  ? SourceWindowReason::None
+                                  : SourceWindowReason::DutyCycle,
+                              18) == SourceTimelineStatus::Full);
+    CHECK(timeline.source(RadioKind::Wifi)->state == stateBefore);
+    CHECK(timeline.overflowEvents() == 1);
+    CHECK(timeline.stop(19) == SourceTimelineStatus::Full);
+    CHECK(timeline.state() == SourceTimelineState::Running);
+    CHECK(timeline.overflowEvents() == 2);
+
+    SourceWindow drained;
+    CHECK(timeline.pop(&drained) == SourceTimelineStatus::WindowDequeued);
+    CHECK(timeline.transition(RadioKind::Wifi, next,
+                              next == SourceWindowState::Active
+                                  ? SourceWindowReason::None
+                                  : SourceWindowReason::DutyCycle,
+                              18) == SourceTimelineStatus::Transitioned);
+    CHECK(timeline.pop(&drained) == SourceTimelineStatus::WindowDequeued);
+    CHECK(timeline.stop(19) == SourceTimelineStatus::Stopped);
+    CHECK(timeline.source(RadioKind::Wifi)->state ==
+          SourceWindowState::Stopped);
 }
 
 SurveySession stoppedSessionWithId(const char* id, std::uint64_t stoppedUs) {
@@ -3064,6 +3202,8 @@ int main() {
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
+    testSourceTimelineStreamsHonestDutyWindowsAndDrops();
+    testSourceTimelineOverflowRejectsStateChangeAndCanDrain();
     testGoldenSurveyTraceUsesListDetailBackAndExplicitStop();
     testSurveySourcePlanProjectsAvailabilityAndRequiresSelection();
     testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure();

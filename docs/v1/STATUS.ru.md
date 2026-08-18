@@ -12,10 +12,11 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact 0.71 первого пользовательского source-plan slice S4.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, exact 0.71 первого пользовательского source-plan slice S4 и host-verified source contract общей timeline 0.72 в процессе интеграции.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
-- **Главная цель текущего этапа:** расширить принятый source plan 0.71 общим timeline
-  contract, затем добавить passive BLE без смены Survey setup/navigation model.
+- **Главная цель текущего этапа:** подключить bounded shared-timeline contract 0.72 к
+  принятому source plan 0.71, product worker, persistent Session и Running UI, затем
+  добавить passive BLE без смены Survey setup/navigation model.
   Управляемый physical power-cut и 8 h multi-source
   endurance остаются явными gates `DEMO-S4`.
 
@@ -27,7 +28,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71 `E-HIL-096` принимает interactive UX-S02 source selection: Wi-Fi по умолчанию включён, BLE явно недоступен, пустой Start заблокирован, пять TFT states помещаются, heap инвариантен, Back заканчивает lease 0 | реализовать passive BLE, shared timeline/capture/export, compatible scheduling и runtime degradation; закрыть controlled power-cut и 8 h multi-source endurance в `DEMO-S4` |
+| S4 | `active` | exact 0.71 `E-HIL-096` принимает interactive UX-S02 source selection; work-in-progress 0.72 добавляет host-verified allocation-free streaming timeline contract с per-source duty/unavailability/drop accounting и fail-closed FIFO overflow | интегрировать/persist/show timeline, затем реализовать passive BLE, compatible scheduling и runtime degradation; закрыть controlled power-cut и 8 h multi-source endurance в `DEMO-S4` |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |

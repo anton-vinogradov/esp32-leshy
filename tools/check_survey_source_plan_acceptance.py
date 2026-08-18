@@ -131,21 +131,29 @@ def main() -> int:
     require(failures,
             source_commit == "b0901f9e19346ba1f8e970e932270681c6c287ed",
             "source commit mismatch")
-    source_paths = (
-        "firmware/leshy1/platformio.ini",
-        "firmware/leshy1/src/apps/survey/SurveySourceController.cpp",
-        "firmware/leshy1/src/apps/survey/SurveySourceController.h",
-        "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp",
-        "firmware/leshy1/src/ui/UiStrings.def",
-        "tests/native/clean_target_tests.cpp",
-        "tools/run_1x_survey_source_plan_hil.py",
-    )
-    for relative in source_paths:
+    source_files = {
+        "firmware/leshy1/platformio.ini":
+            "b419615a40366ae4d6bee4e7038892e6f0f8e90ee87947ae22c35ef28f7c878d",
+        "firmware/leshy1/src/apps/survey/SurveySourceController.cpp":
+            "4bf523af57e8f927f9f15b3ecddf88b76215fafe46449c16e4cba22320d6b3f8",
+        "firmware/leshy1/src/apps/survey/SurveySourceController.h":
+            "701c295674240d7acf4071afcbe64e724d3b710854af99b8b67245df981a2744",
+        "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp":
+            "04d7593db34300b566c89284e0ba5bddabdeb4d942301f7f614a83f5b07f8469",
+        "firmware/leshy1/src/ui/UiStrings.def":
+            "890fb95809c4aeb552ff2007a8592ce0a77032368f5e22213bfa19ae75f9d76c",
+        "tests/native/clean_target_tests.cpp":
+            "d46963439881d26a3c7b18366093a2a57ae564bee297f055cc8395bc84e17f1c",
+        "tools/run_1x_survey_source_plan_hil.py":
+            "d8c4f5decacdca9a2f05123668f5d2c523f932a660f8fbca56c2769eaf39ebc5",
+    }
+    for relative, expected_sha256 in source_files.items():
         blob = git_blob(source_commit, relative)
         require(failures, blob is not None, f"source blob missing: {relative}")
         if blob is not None:
-            require(failures, blob == (ROOT / relative).read_bytes(),
-                    f"source drift after physical run: {relative}")
+            require(failures,
+                    hashlib.sha256(blob).hexdigest() == expected_sha256,
+                    f"source commit blob mismatch: {relative}")
     require(failures,
             digest(ROOT / "tools/run_1x_survey_source_plan_hil.py") ==
             physical.get("runner_sha256"), "runner hash mismatch")

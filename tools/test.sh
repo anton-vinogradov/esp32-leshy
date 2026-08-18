@@ -42,6 +42,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/services/survey/IngressTiming.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/ObservationQueue.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SessionBatchPolicy.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/AtomicHead.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/MediaDiscovery.cpp" \

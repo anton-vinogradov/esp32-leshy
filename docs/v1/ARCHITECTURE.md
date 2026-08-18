@@ -197,6 +197,19 @@ Actions and incremental renderer; leaving Setup releases the foreground lease. T
 is the stable UI/domain seam for the next shared timeline and passive BLE work, not a
 claim that the BLE driver or `DEMO-S4` is complete.
 
+The `0.72.0-source-timeline-contract` work-in-progress adds the first shared radio
+time model without pretending that its storage/runtime integration already exists.
+`SourceTimeline` owns two fixed source slots and streams completed scheduled, active,
+unavailable, and fault windows through a 16-entry FIFO. It retains per-source
+64-bit accepted/drop counters and accumulated durations, reports duty cycle in
+permille, rejects out-of-order transitions and invalid state/reason pairs, and leaves
+the current state unchanged when the FIFO is full while incrementing an overflow
+counter. Host contracts cover overlapping Wi-Fi/BLE windows, temporary BLE driver
+unavailability, observation drops, terminal accounting, FIFO drain/retry, and
+overflow-safe stop. The model is not yet connected to the product worker, persisted
+Session format, Running UI, or physical HIL, so this is a source contract rather than
+an accepted S4 capability.
+
 ## Data model
 
 Raw observation is separate from interpretation:

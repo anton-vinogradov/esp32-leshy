@@ -8,6 +8,7 @@ namespace leshy1::domain::observations {
 
 enum class RadioKind : std::uint8_t {
     Wifi = 1,
+    Ble = 2,
 };
 
 struct Observation final {

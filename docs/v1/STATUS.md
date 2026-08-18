@@ -12,10 +12,11 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71 first user-facing S4 source-plan slice.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3`, exact 0.71 first user-facing S4 source-plan slice, and the host-verified 0.72 shared-timeline source contract under integration.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
-- **Current objective:** extend the accepted 0.71 source plan with a shared timeline
-  contract, then add passive BLE without changing the Survey setup/navigation model.
+- **Current objective:** connect the bounded 0.72 shared-timeline contract to the
+  accepted 0.71 source plan, product worker, persistent Session and Running UI, then
+  add passive BLE without changing the Survey setup/navigation model.
   Controlled physical power-cut and the 8 h
   multi-source endurance lane remain explicit `DEMO-S4` gates.
 
@@ -27,7 +28,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71 `E-HIL-096` accepts interactive UX-S02 source selection: Wi-Fi defaults on, BLE is visibly unavailable, empty Start is blocked, five TFT states fit, heap is invariant and Back ends at lease 0 | implement passive BLE, shared timeline/capture/export, compatible scheduling and runtime degradation; close controlled power-cut and 8 h multi-source endurance in `DEMO-S4` |
+| S4 | `active` | exact 0.71 `E-HIL-096` accepts interactive UX-S02 source selection; work-in-progress 0.72 adds a host-verified allocation-free streaming timeline contract with per-source duty/unavailability/drop accounting and fail-closed FIFO overflow | integrate/persist/show the timeline, then implement passive BLE, compatible scheduling and runtime degradation; close controlled power-cut and 8 h multi-source endurance in `DEMO-S4` |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
