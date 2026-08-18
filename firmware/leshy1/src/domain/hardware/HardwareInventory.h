@@ -25,7 +25,7 @@ struct CapabilityRecord {
 
 class HardwareInventory final {
 public:
-    static constexpr std::size_t kCapacity = 16;
+    static constexpr std::size_t kCapacity = 20;
 
     bool add(CapabilityRecord record);
     const CapabilityRecord* find(const char* key) const;

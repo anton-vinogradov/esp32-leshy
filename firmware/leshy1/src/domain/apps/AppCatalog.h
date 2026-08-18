@@ -21,7 +21,7 @@ struct AppMenuItem final {
 
 class AppCatalog final {
 public:
-    static constexpr std::size_t kCapacity = 5;
+    static constexpr std::size_t kCapacity = 6;
 
     void rebuild(const hardware::HardwareInventory& inventory);
     const AppMenuItem* get(std::size_t index) const;

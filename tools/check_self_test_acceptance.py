@@ -202,11 +202,11 @@ def main() -> int:
         require(failures, f'"{check_id}"' in source, f"source check missing: {check_id}")
     for forbidden in ("WiFi", "SD.", "digitalWrite", "tone(", "SPI.begin"):
         require(failures, forbidden not in source, f"Self-Test starts forbidden path: {forbidden}")
-    require(failures, "kCapacity = 5" in CATALOG_HEADER.read_text(encoding="utf-8") and
+    require(failures, "kCapacity = 6" in CATALOG_HEADER.read_text(encoding="utf-8") and
             '"self-test", "SELF-TEST"' in catalog and
             catalog.index('"self-test", "SELF-TEST"') > catalog.index('"language", "LANGUAGE"'),
             "Self-Test is not the final catalog item")
-    require(failures, 'case 5: return "self_test"' in
+    require(failures, 'case 6: return "self_test"' in
             UI_CONTROLLER.read_text(encoding="utf-8"), "Self-Test page mapping missing")
     diagnostic_workspace = re.search(r"char diagnosticJson\[(\d+)\] = \{\};", ui)
     require(failures,

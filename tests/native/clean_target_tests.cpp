@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "apps/capture/RadiotapPcap.h"
+#include "apps/capture/WifiFrameCapture.h"
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyPipeline.h"
@@ -66,6 +68,7 @@ using namespace leshy1::ui;
 using namespace leshy1::apps::survey;
 using namespace leshy1::apps::library;
 using namespace leshy1::apps::self_test;
+using namespace leshy1::apps::capture;
 
 namespace {
 
@@ -728,7 +731,7 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(constrained.add({"storage.sd", CapabilityState::Unknown, "probe", "not_mounted"}));
     AppCatalog catalog;
     catalog.rebuild(constrained);
-    CHECK(catalog.size() == 5);
+    CHECK(catalog.size() == 6);
     CHECK(catalog.get(0) != nullptr && catalog.get(0)->enabled);
     CHECK(std::strcmp(catalog.get(0)->id, "diagnostics") == 0);
     CHECK(catalog.get(1) != nullptr && !catalog.get(1)->enabled);
@@ -739,25 +742,33 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(catalog.get(0)->resources == resourceMask(Resource::UiForeground));
     CHECK((catalog.get(1)->resources & resourceMask(Resource::EspRf)) != 0);
     CHECK((catalog.get(2)->resources & resourceMask(Resource::Storage)) != 0);
-    CHECK(catalog.get(3) != nullptr && catalog.get(3)->enabled);
-    CHECK(std::strcmp(catalog.get(3)->id, "language") == 0);
+    CHECK(catalog.get(3) != nullptr && !catalog.get(3)->enabled);
+    CHECK(std::strcmp(catalog.get(3)->id, "capture") == 0);
     CHECK(catalog.get(3)->page == 4);
     CHECK(catalog.get(4) != nullptr && catalog.get(4)->enabled);
-    CHECK(std::strcmp(catalog.get(4)->id, "self-test") == 0);
-    CHECK(std::strcmp(catalog.get(4)->label, "SELF-TEST") == 0);
+    CHECK(std::strcmp(catalog.get(4)->id, "language") == 0);
     CHECK(catalog.get(4)->page == 5);
     CHECK(catalog.get(4)->resources == resourceMask(Resource::UiForeground));
+    CHECK(catalog.get(5) != nullptr && catalog.get(5)->enabled);
+    CHECK(std::strcmp(catalog.get(5)->id, "self-test") == 0);
+    CHECK(std::strcmp(catalog.get(5)->label, "SELF-TEST") == 0);
+    CHECK(catalog.get(5)->page == 6);
+    CHECK(catalog.get(5)->resources == resourceMask(Resource::UiForeground));
 
     HardwareInventory availableInventory;
     CHECK(availableInventory.add(
         {"board.profile", CapabilityState::Available, "runtime", "match"}));
     CHECK(availableInventory.add(
         {"radio.wifi", CapabilityState::Available, "probe", "ready"}));
+    CHECK(availableInventory.add(
+        {"capture.wifi_passive", CapabilityState::Available, "adapter", "ready"}));
     CHECK(availableInventory.add({"storage.sd", CapabilityState::Available, "probe", "ready"}));
     catalog.rebuild(availableInventory);
     CHECK(catalog.get(0)->enabled);
     CHECK(catalog.get(1)->enabled);
     CHECK(catalog.get(2)->enabled);
+    CHECK(catalog.get(3)->enabled);
+    CHECK((catalog.get(3)->resources & resourceMask(Resource::EspRf)) != 0);
 
     HardwareInventory simulatedInventory;
     CHECK(simulatedInventory.add(
@@ -817,7 +828,8 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(!catalog.get(2)->simulated);
     CHECK(std::strcmp(catalog.get(2)->reason, "ready") == 0);
     CHECK((catalog.get(2)->resources & resourceMask(Resource::Storage)) != 0);
-    CHECK(catalog.get(3)->enabled);
+    CHECK(!catalog.get(3)->enabled);
+    CHECK(catalog.get(4)->enabled);
 }
 
 void testRuntimeAcquiresAtomicallyAndBackReleasesEverything() {
@@ -1748,6 +1760,85 @@ void testCaptureMetadataV3AndCsvExportAreCanonical() {
     CHECK(std::strcmp(captureMetadataStatusName(
                           CaptureMetadataStatus::Configured),
                       "configured") == 0);
+}
+
+struct PcapMemorySink final {
+    std::vector<std::uint8_t> bytes;
+};
+
+bool appendPcapBytes(const std::uint8_t* data, std::size_t size, void* context) {
+    auto* sink = static_cast<PcapMemorySink*>(context);
+    if (sink == nullptr || (data == nullptr && size != 0U)) return false;
+    sink->bytes.insert(sink->bytes.end(), data, data + size);
+    return true;
+}
+
+void testWifiFrameCaptureExportsByteExactRadiotapPcap() {
+    WifiFrameCapture capture;
+    WifiFrameCapturePlan invalid;
+    invalid.channel = 14;
+    CHECK(!capture.begin(invalid, 1000000));
+
+    WifiFrameCapturePlan plan;
+    plan.channel = 0;
+    plan.durationMs = 10000;
+    plan.channelDwellMs = 120;
+    plan.snapLength = 64;
+    plan.maximumFrames = 2;
+    CHECK(validateWifiFrameCapturePlan(plan));
+    CHECK(capture.begin(plan, 1000000));
+    CHECK(capture.stats().state == WifiFrameCaptureState::Running);
+
+    std::array<std::uint8_t, 80> management{};
+    for (std::size_t index = 0; index < management.size(); ++index) {
+        management[index] = static_cast<std::uint8_t>(index);
+    }
+    const std::array<std::uint8_t, 4> control{{0xD4, 0x00, 0x00, 0x00}};
+    CHECK(capture.append(management.data(), management.size(), 1500000, -42,
+                         6, WifiFrameKind::Management, true));
+    CHECK(capture.append(control.data(), control.size(), 1750000, -70, 1,
+                         WifiFrameKind::Control, true));
+    CHECK(!capture.append(control.data(), control.size(), 1800000, -71, 1,
+                          WifiFrameKind::Control, true));
+    CHECK(capture.stats().framesReported == 3);
+    CHECK(capture.stats().framesAccepted == 2);
+    CHECK(capture.stats().framesDroppedCapacity == 1);
+    CHECK(capture.stats().framesDroppedInvalid == 0);
+    CHECK(capture.stats().payloadBytes == 68);
+    CHECK(capture.frame(0) != nullptr &&
+          capture.frame(0)->capturedLength == 64);
+    CHECK(capture.frame(0) != nullptr &&
+          capture.frame(0)->originalLength == 80);
+    CHECK(radiotapPcapSize(capture) == 0);
+    CHECK(capture.complete(2000000));
+
+    PcapMemorySink sink;
+    const PcapExportResult result =
+        writeRadiotapPcap(capture, appendPcapBytes, &sink);
+    CHECK(result.valid);
+    CHECK(result.framesWritten == 2);
+    CHECK(result.bytesWritten == 154);
+    CHECK(radiotapPcapSize(capture) == result.bytesWritten);
+    CHECK(sink.bytes.size() == result.bytesWritten);
+    CHECK(sink.bytes[0] == 0xD4 && sink.bytes[1] == 0xC3 &&
+          sink.bytes[2] == 0xB2 && sink.bytes[3] == 0xA1);
+    CHECK(sink.bytes[4] == 2 && sink.bytes[6] == 4);
+    CHECK(sink.bytes[20] == 127 && sink.bytes[21] == 0);
+    CHECK(sink.bytes[24] == 1 && sink.bytes[28] == 0x20 &&
+          sink.bytes[29] == 0xA1 && sink.bytes[30] == 0x07);
+    CHECK(sink.bytes[32] == 79 && sink.bytes[36] == 95);
+    CHECK(sink.bytes[40] == 0 && sink.bytes[42] == 15);
+    CHECK(sink.bytes[44] == 0x2A && sink.bytes[48] == 0x10);
+    CHECK(sink.bytes[50] == 0x85 && sink.bytes[51] == 0x09);
+    CHECK(sink.bytes[54] == static_cast<std::uint8_t>(-42));
+    CHECK(sink.bytes[55] == 0 && sink.bytes[56] == 1);
+    CHECK(std::strcmp(wifiFrameKindName(WifiFrameKind::Data), "data") == 0);
+    CHECK(std::strcmp(wifiFrameCaptureStateName(capture.stats().state),
+                      "complete") == 0);
+
+    capture.reset();
+    CHECK(capture.stats().state == WifiFrameCaptureState::Idle);
+    CHECK(capture.size() == 0 && capture.frame(0) == nullptr);
 }
 
 class MemorySessionStoreIo final : public SessionStoreIo {
@@ -3754,6 +3845,7 @@ int main() {
     testSessionCodecCommitsCanonicalDataAndReopensOffline();
     testSessionCodecRoundTripsBleWithoutInventingWifiFields();
     testCaptureMetadataV3AndCsvExportAreCanonical();
+    testWifiFrameCaptureExportsByteExactRadiotapPcap();
     testOfflineLibraryControllerIsBoundedAndPreservesProvenance();
     testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity();
     testBoundedSessionStoreCommitsRecoversAndFallsBack();

@@ -23,6 +23,8 @@
 
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
+#include "apps/capture/RadiotapPcap.h"
+#include "apps/capture/WifiFrameCapture.h"
 #include "apps/self_test/SelfTestController.h"
 #include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyController.h"
@@ -45,6 +47,7 @@
 #include "platform/arduino/BoardBlePassiveScanner.h"
 #include "platform/arduino/BoardSdSpiTransport.h"
 #include "platform/arduino/BoardWifiPassiveScanner.h"
+#include "platform/arduino/BoardWifiPassiveCapture.h"
 #include "platform/arduino/DisposableOtaLittleFs.h"
 #include "platform/arduino/RamSessionStoreIo.h"
 #include "services/diagnostics/BootReport.h"
@@ -88,6 +91,9 @@ using leshy1::apps::library::LibraryEntry;
 using leshy1::apps::library::LibraryView;
 using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
+using leshy1::apps::capture::PcapExportResult;
+using leshy1::apps::capture::WifiFrameCapturePlan;
+using leshy1::apps::capture::WifiFrameCaptureState;
 using leshy1::apps::self_test::SelfTestController;
 using leshy1::apps::self_test::SelfTestFacts;
 using leshy1::apps::self_test::SelfTestMode;
@@ -134,6 +140,7 @@ using leshy1::platform::arduino::BoardBlePassiveScanResult;
 using leshy1::platform::arduino::BleRecordDisposition;
 using leshy1::platform::arduino::BoardSdSpiTransport;
 using leshy1::platform::arduino::BoardWifiPassiveScanner;
+using leshy1::platform::arduino::BoardWifiPassiveCapture;
 using leshy1::platform::arduino::BoardWifiPassiveScanResult;
 using leshy1::platform::arduino::DisposableOtaLittleFs;
 using leshy1::platform::arduino::WifiRecordDisposition;
@@ -250,6 +257,9 @@ TFT_eSPI display;
 UiController uiController;
 LanguageController languageController;
 SelfTestController selfTestController;
+BoardWifiPassiveCapture wifiFrameCapture;
+constexpr WifiFrameCapturePlan kProductWifiFrameCapturePlan{};
+std::uint64_t nextCaptureUiRefreshUs = 0;
 constexpr std::size_t kConsoleCommandCapacity = 192;
 constexpr char kLongestConsoleCommand[] =
     "storage.littlefs.reset recover read-only "
@@ -3431,11 +3441,24 @@ NavigationFooter navigationFooterForCurrentState() {
     }
 
     if (uiController.page() == 4) {
+        const auto state = wifiFrameCapture.stats().state;
+        if (state == WifiFrameCaptureState::Idle) {
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavStart}};
+        }
+        if (state == WifiFrameCaptureState::Running) {
+            return {{NavigationKey::Left, UiTextId::NavCancel}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavStop}};
+        }
+        return {{NavigationKey::Left, UiTextId::NavHome}, {}, {}};
+    }
+
+    if (uiController.page() == 5) {
         return {back, choose,
                 {NavigationKey::RightAndSelect, UiTextId::NavApply}};
     }
 
-    if (uiController.page() == 5) {
+    if (uiController.page() == 6) {
         if (selfTestController.view() == SelfTestView::ModeMenu) {
             return {back, choose, enter};
         }
@@ -3606,6 +3629,7 @@ UiTextId homeLabel(const AppMenuItem& item) {
     if (std::strcmp(item.id, "diagnostics") == 0) return UiTextId::AppDiagnostics;
     if (std::strcmp(item.id, "survey") == 0) return UiTextId::AppSurvey;
     if (std::strcmp(item.id, "library") == 0) return UiTextId::AppLibrary;
+    if (std::strcmp(item.id, "capture") == 0) return UiTextId::AppCapture;
     if (std::strcmp(item.id, "language") == 0) return UiTextId::AppLanguage;
     return UiTextId::AppSelfTest;
 }
@@ -3622,15 +3646,30 @@ UiTextId homeNote(const AppMenuItem& item) {
         if (item.simulated) return UiTextId::NoteLibrarySimulated;
         if (!item.enabled) return UiTextId::NoteLibraryUnavailable;
     }
+    if (std::strcmp(item.id, "capture") == 0) {
+        return item.enabled ? UiTextId::NoteCaptureReady
+                            : UiTextId::NoteCaptureUnavailable;
+    }
     if (std::strcmp(item.id, "language") == 0) return UiTextId::NoteLanguage;
     if (std::strcmp(item.id, "self-test") == 0) return UiTextId::NoteSelfTest;
     return UiTextId::Ready;
 }
 
-void renderHomeRow(std::uint8_t index) {
+constexpr std::uint8_t kVisibleHomeRows = 5;
+
+std::uint8_t homeFirstVisible(std::uint8_t selection) {
+    return selection < kVisibleHomeRows
+               ? 0U
+               : static_cast<std::uint8_t>(selection -
+                                           (kVisibleHomeRows - 1U));
+}
+
+void renderHomeRow(std::uint8_t index, std::uint8_t firstVisible) {
     const AppMenuItem* item = appCatalog.get(index);
     if (item == nullptr) return;
-    const Rect bounds = Components::homeRow(index);
+    if (index < firstVisible || index >= firstVisible + kVisibleHomeRows) return;
+    const Rect bounds = Components::homeRow(
+        static_cast<std::uint8_t>(index - firstVisible));
     const bool selected = uiController.selection() == index;
     renderMenuRow(bounds, tr(homeLabel(*item)), tr(homeNote(*item)), selected,
                   item->enabled,
@@ -3639,8 +3678,12 @@ void renderHomeRow(std::uint8_t index) {
 
 void renderHome(bool clearContent) {
     renderHeader(tr(UiTextId::HomeTitle), clearContent);
-    for (std::uint8_t i = 0; i < appCatalog.size(); ++i) {
-        renderHomeRow(i);
+    const std::uint8_t first = homeFirstVisible(uiController.selection());
+    const std::size_t end = appCatalog.size() < first + kVisibleHomeRows
+                                ? appCatalog.size()
+                                : first + kVisibleHomeRows;
+    for (std::uint8_t i = first; i < end; ++i) {
+        renderHomeRow(i, first);
     }
 }
 
@@ -3695,6 +3738,59 @@ void renderLanguagePage(bool clearContent) {
     display.setTextColor(Palette::TextMuted, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 207);
     display.print(tr(UiTextId::LanguagePersisted));
+}
+
+void renderCapturePage(bool clearContent) {
+    const auto stats = wifiFrameCapture.stats();
+    char line[64] = {};
+    if (stats.state == WifiFrameCaptureState::Idle) {
+        renderHeader(tr(UiTextId::CaptureSetup), clearContent);
+        renderMetric(0, tr(UiTextId::CaptureSource), Tone::Positive);
+        renderMetric(1, tr(UiTextId::CaptureChannels));
+        renderMetric(2, tr(UiTextId::CaptureLimit));
+        renderMetric(3, tr(UiTextId::CaptureSnaplen));
+        display.setTextColor(Palette::TextMuted, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 207);
+        display.print(tr(UiTextId::CaptureStartNote));
+        return;
+    }
+
+    if (stats.state == WifiFrameCaptureState::Running) {
+        renderHeader(tr(UiTextId::CaptureRunning), clearContent);
+    } else if (stats.state == WifiFrameCaptureState::Complete) {
+        renderHeader(tr(UiTextId::CaptureResult), clearContent);
+    } else {
+        renderHeader(tr(UiTextId::CaptureError), clearContent);
+    }
+    std::snprintf(line, sizeof(line), tr(UiTextId::CaptureFramesFormat),
+                  static_cast<unsigned long>(stats.framesAccepted),
+                  static_cast<unsigned>(kProductWifiFrameCapturePlan.maximumFrames));
+    renderMetric(0, line,
+                 stats.state == WifiFrameCaptureState::Failed
+                     ? Tone::Danger : Tone::Positive);
+    std::snprintf(line, sizeof(line), tr(UiTextId::CaptureBytesFormat),
+                  static_cast<unsigned long>(stats.payloadBytes));
+    renderMetric(1, line);
+    std::snprintf(line, sizeof(line), tr(UiTextId::CaptureDropsFormat),
+                  static_cast<unsigned long>(stats.framesDroppedCapacity +
+                                             stats.framesDroppedInvalid));
+    renderMetric(2, line,
+                 stats.framesDroppedCapacity + stats.framesDroppedInvalid == 0
+                     ? Tone::Positive : Tone::Warning);
+    std::snprintf(line, sizeof(line), tr(UiTextId::CaptureChannelFormat),
+                  static_cast<unsigned>(wifiFrameCapture.currentChannel()));
+    renderMetric(3, line);
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 207);
+    if (stats.state == WifiFrameCaptureState::Running) {
+        display.print(tr(UiTextId::CaptureStopNote));
+    } else if (stats.state == WifiFrameCaptureState::Complete) {
+        display.print(tr(UiTextId::CapturePcapNote));
+        setUiCursor(UiTextRole::Meta, 14, 222);
+        display.print(tr(UiTextId::CaptureScrubNote));
+    } else {
+        display.print(tr(UiTextId::CaptureFailureNote));
+    }
 }
 
 void renderSelfTestModeRow(std::uint8_t index) {
@@ -4429,8 +4525,15 @@ bool renderSelectionDelta() {
     if (uiController.isRoot()) {
         const std::uint8_t current = uiController.selection();
         if (renderedUi.rootSelection == current) return false;
-        renderHomeRow(renderedUi.rootSelection);
-        renderHomeRow(current);
+        const std::uint8_t oldFirst =
+            homeFirstVisible(renderedUi.rootSelection);
+        const std::uint8_t currentFirst = homeFirstVisible(current);
+        if (oldFirst != currentFirst) {
+            renderHome(false);
+            return true;
+        }
+        renderHomeRow(renderedUi.rootSelection, currentFirst);
+        renderHomeRow(current, currentFirst);
         return true;
     }
 
@@ -4528,7 +4631,7 @@ bool renderSelectionDelta() {
         return true;
     }
 
-    if (uiController.page() == 4) {
+    if (uiController.page() == 5) {
         const std::uint8_t current = languageController.selection();
         if (renderedUi.languageSelection == current) return false;
         renderLanguageRow(renderedUi.languageSelection);
@@ -4536,7 +4639,7 @@ bool renderSelectionDelta() {
         return true;
     }
 
-    if (uiController.page() == 5 &&
+    if (uiController.page() == 6 &&
         selfTestController.view() == SelfTestView::ModeMenu &&
         renderedUi.selfTestView ==
             static_cast<std::uint8_t>(SelfTestView::ModeMenu)) {
@@ -4565,6 +4668,8 @@ void renderInteractiveScreen(bool clearContent) {
         } else if (uiController.page() == 3) {
             renderLibraryPage(clearContent);
         } else if (uiController.page() == 4) {
+            renderCapturePage(clearContent);
+        } else if (uiController.page() == 5) {
             renderLanguagePage(clearContent);
         } else {
             renderSelfTestPage(clearContent);
@@ -4582,6 +4687,60 @@ void renderInteractiveScreen(bool clearContent) {
         static_cast<std::uint64_t>(esp_timer_get_time());
     lastUiRenderWasIncremental = incremental;
     lastUiRenderUs = finishedUs >= startedUs ? finishedUs - startedUs : 0;
+}
+
+void releaseWifiFrameCaptureRfLease() {
+    resourceBroker.release(
+        AppRuntime::kForegroundOwner,
+        leshy1::kernel::runtime::resourceMask(Resource::EspRf));
+}
+
+bool startWifiFrameCapture() {
+    wifiFrameCapture.reset();
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    const bool started =
+        wifiFrameCapture.begin(kProductWifiFrameCapturePlan, startedUs);
+    nextCaptureUiRefreshUs = startedUs + 500000ULL;
+    lastRuntimeEvent = started ? "capture_running" : "capture_start_failed";
+    if (!started) releaseWifiFrameCaptureRfLease();
+    return true;
+}
+
+bool stopWifiFrameCapture() {
+    std::uint64_t endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (endedUs == 0U) endedUs = 1U;
+    const bool cleanup = wifiFrameCapture.stop(endedUs);
+    releaseWifiFrameCaptureRfLease();
+    const auto state = wifiFrameCapture.stats().state;
+    lastRuntimeEvent =
+        state == WifiFrameCaptureState::Complete && cleanup
+            ? "capture_complete"
+            : "capture_failed";
+    return true;
+}
+
+void serviceWifiFrameCapture() {
+    const auto before = wifiFrameCapture.stats();
+    if (before.state != WifiFrameCaptureState::Running) return;
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    wifiFrameCapture.service(nowUs);
+    const auto after = wifiFrameCapture.stats();
+    const bool terminal = after.state != WifiFrameCaptureState::Running;
+    if (terminal) {
+        releaseWifiFrameCaptureRfLease();
+        lastRuntimeEvent = after.state == WifiFrameCaptureState::Complete &&
+                                   wifiFrameCapture.cleanupComplete()
+                               ? "capture_complete"
+                               : "capture_failed";
+    }
+    if (uiController.page() == 4 &&
+        (terminal || nowUs >= nextCaptureUiRefreshUs)) {
+        nextCaptureUiRefreshUs = nowUs + 500000ULL;
+        renderInteractiveScreen(true);
+    }
 }
 
 void emitUiState(Stream& reply, UiAction action, bool changed) {
@@ -4936,6 +5095,101 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     reply.println(line);
 }
 
+void emitWifiFrameCaptureState(Stream& reply) {
+    const auto stats = wifiFrameCapture.stats();
+    const auto& plan = wifiFrameCapture.capture().plan();
+    const std::size_t pcapBytes =
+        leshy1::apps::capture::radiotapPcapSize(wifiFrameCapture.capture());
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.wifi_frame.v1\",\"kind\":\"state\","
+        "\"state\":\"%s\",\"passive_only\":true,\"rx_only\":true,"
+        "\"application_connect_calls\":0,\"application_raw_tx_calls\":0,"
+        "\"physical_no_tx_verified\":false,\"storage_written\":false,"
+        "\"volatile_ram\":true,\"immutable_after_stop\":true,"
+        "\"channel_plan\":%u,\"current_channel\":%u,"
+        "\"duration_ms\":%lu,\"channel_dwell_ms\":%u,"
+        "\"snap_length\":%u,\"maximum_frames\":%u,"
+        "\"started_us\":%llu,\"ended_us\":%llu,"
+        "\"frames_reported\":%lu,\"frames_accepted\":%lu,"
+        "\"frames_dropped_capacity\":%lu,"
+        "\"frames_dropped_invalid\":%lu,\"payload_bytes\":%lu,"
+        "\"driver_error\":%ld,\"pcap_available\":%s,"
+        "\"pcap_bytes\":%u,\"pcap_linktype\":127,"
+        "\"pcap_timebase\":\"monotonic_us\","
+        "\"cleanup_complete\":%s,\"lease_mask\":%lu}",
+        leshy1::apps::capture::wifiFrameCaptureStateName(stats.state),
+        static_cast<unsigned>(plan.channel),
+        static_cast<unsigned>(wifiFrameCapture.currentChannel()),
+        static_cast<unsigned long>(plan.durationMs),
+        static_cast<unsigned>(plan.channelDwellMs),
+        static_cast<unsigned>(plan.snapLength),
+        static_cast<unsigned>(plan.maximumFrames),
+        static_cast<unsigned long long>(stats.startedUs),
+        static_cast<unsigned long long>(stats.endedUs),
+        static_cast<unsigned long>(stats.framesReported),
+        static_cast<unsigned long>(stats.framesAccepted),
+        static_cast<unsigned long>(stats.framesDroppedCapacity),
+        static_cast<unsigned long>(stats.framesDroppedInvalid),
+        static_cast<unsigned long>(stats.payloadBytes),
+        static_cast<long>(stats.driverError),
+        pcapBytes == 0U ? "false" : "true",
+        static_cast<unsigned>(pcapBytes),
+        wifiFrameCapture.cleanupComplete() ? "true" : "false",
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
+struct StreamPcapSink final {
+    Stream* stream = nullptr;
+};
+
+bool writePcapBytes(const std::uint8_t* data, std::size_t size,
+                    void* context) {
+    auto* sink = static_cast<StreamPcapSink*>(context);
+    return sink != nullptr && sink->stream != nullptr &&
+           sink->stream->write(data, size) == size;
+}
+
+void emitWifiFrameCapturePcap(Stream& reply) {
+    const auto stats = wifiFrameCapture.stats();
+    const std::size_t expected =
+        leshy1::apps::capture::radiotapPcapSize(wifiFrameCapture.capture());
+    if (stats.state != WifiFrameCaptureState::Complete || expected == 0U) {
+        reply.println(
+            "{\"schema\":\"leshy.capture.pcap.v1\",\"kind\":\"error\","
+            "\"reason\":\"capture_not_complete\"}");
+        return;
+    }
+    char line[320] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.pcap.v1\",\"kind\":\"pcap_begin\","
+        "\"bytes\":%u,\"frames\":%u,\"linktype\":127,"
+        "\"timebase\":\"monotonic_us\",\"streaming\":true,"
+        "\"payload_retained_by_firmware\":true,"
+        "\"storage_written\":false}",
+        static_cast<unsigned>(expected),
+        static_cast<unsigned>(wifiFrameCapture.capture().size()));
+    reply.println(line);
+    reply.flush();
+    StreamPcapSink sink{&reply};
+    const PcapExportResult result =
+        leshy1::apps::capture::writeRadiotapPcap(
+            wifiFrameCapture.capture(), writePcapBytes, &sink);
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.pcap.v1\",\"kind\":\"pcap_end\","
+        "\"status\":\"%s\",\"bytes\":%u,\"frames\":%u,"
+        "\"storage_written\":false}",
+        result.valid ? "valid" : "stream_failed",
+        static_cast<unsigned>(result.bytesWritten),
+        static_cast<unsigned>(result.framesWritten));
+    reply.println(line);
+    reply.flush();
+}
+
 void emitSurveyBrowser(Stream& reply) {
     const Observation* selected = surveyController.selected();
     const ObservationHistory history = surveyController.selectedHistory();
@@ -4982,8 +5236,8 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (uiController.page() == 3) {
         return libraryController.view() == LibraryView::SessionList;
     }
-    if (uiController.page() == 4) return true;
-    return uiController.page() == 5 &&
+    if (uiController.page() == 5) return true;
+    return uiController.page() == 6 &&
            selfTestController.view() == SelfTestView::ModeMenu;
 }
 
@@ -5200,6 +5454,26 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
     }
     if (!wasRoot && uiController.page() == 4) {
+        const auto state = wifiFrameCapture.stats().state;
+        if (state == WifiFrameCaptureState::Idle &&
+            (action == UiAction::Select || action == UiAction::Right)) {
+            uiController.recordHandledAction(action);
+            return finish(startWifiFrameCapture());
+        }
+        if (state == WifiFrameCaptureState::Running &&
+            (action == UiAction::Select || action == UiAction::Right)) {
+            uiController.recordHandledAction(action);
+            return finish(stopWifiFrameCapture());
+        }
+        if (action == UiAction::Back || action == UiAction::Left) {
+            if (state == WifiFrameCaptureState::Running) {
+                stopWifiFrameCapture();
+            }
+            wifiFrameCapture.reset();
+            nextCaptureUiRefreshUs = 0;
+        }
+    }
+    if (!wasRoot && uiController.page() == 5) {
         bool handled = false;
         bool changed = false;
         if (action == UiAction::Up) {
@@ -5221,7 +5495,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             return finish(changed);
         }
     }
-    if (!wasRoot && uiController.page() == 5) {
+    if (!wasRoot && uiController.page() == 6) {
         bool handled = false;
         bool changed = false;
         if (selfTestController.view() == SelfTestView::ModeMenu &&
@@ -5271,6 +5545,11 @@ bool applyUiAction(UiAction action, bool render = true) {
         if (openable && selected != nullptr &&
             std::strcmp(selected->id, "language") == 0) {
             languageController.enter();
+        }
+        if (openable && selected != nullptr &&
+            std::strcmp(selected->id, "capture") == 0) {
+            wifiFrameCapture.reset();
+            nextCaptureUiRefreshUs = 0;
         }
         if (openable && selected != nullptr &&
             std::strcmp(selected->id, "survey") == 0) {
@@ -9020,6 +9299,10 @@ void handleCommand(Stream& reply, const char* command) {
         emitUiState(reply, UiAction::Unknown, false);
     } else if (std::strcmp(command, "survey.browser") == 0) {
         emitSurveyBrowser(reply);
+    } else if (std::strcmp(command, "capture.state") == 0) {
+        emitWifiFrameCaptureState(reply);
+    } else if (std::strcmp(command, "capture.export.pcap") == 0) {
+        emitWifiFrameCapturePcap(reply);
     } else if (std::strcmp(command, "input.state") == 0) {
         emitInputState(reply);
     } else if (std::strcmp(command, "self-test.report") == 0) {
@@ -9411,6 +9694,13 @@ void setup() {
     inventory.add({"radio.wifi", CapabilityState::Declared, "esp32_s3_builtin",
                    "passive_contract_ready_driver_not_started"});
     inventory.add({
+        "capture.wifi_passive",
+        flashMatches && psramMatches ? CapabilityState::Available
+                                     : CapabilityState::Fault,
+        "explicit_promiscuous_rx_only_adapter",
+        flashMatches && psramMatches ? "bounded_ram_capture_ready"
+                                     : "board_profile_mismatch"});
+    inventory.add({
         "radio.ble",
         productSurveyWorkerReady && productBootRecovery.catalogAdmitted
             ? CapabilityState::Available : CapabilityState::Declared,
@@ -9462,6 +9752,7 @@ void setup() {
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
+              "\"capture.state\",\"capture.export.pcap\","
               "\"input.state\","
               "\"self-test.report\","
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
@@ -9499,6 +9790,7 @@ void setup() {
 
 void loop() {
     serviceProductSurveyWorker();
+    serviceWifiFrameCapture();
     poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
     poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
     PhysicalInputEvent inputEvent;

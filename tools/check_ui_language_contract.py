@@ -149,14 +149,14 @@ def main() -> int:
         require(failures, token in renderer, f"renderer contract missing: {token}")
 
     catalog = CATALOG.read_text(encoding="utf-8")
-    require(failures, "kCapacity = 5" in CATALOG_HEADER.read_text(encoding="utf-8"),
+    require(failures, "kCapacity = 6" in CATALOG_HEADER.read_text(encoding="utf-8"),
             "Home capacity must include Language and final Self-Test")
     require(failures, catalog.index('"language", "LANGUAGE"') <
             catalog.index('"self-test", "SELF-TEST"'),
             "Language must precede final Self-Test")
     controller = CONTROLLER.read_text(encoding="utf-8")
-    require(failures, 'case 4: return "language"' in controller and
-            'case 5: return "self_test"' in controller,
+    require(failures, 'case 5: return "language"' in controller and
+            'case 6: return "self_test"' in controller,
             "Language/Self-Test page mapping mismatch")
     platformio = PLATFORMIO.read_text(encoding="utf-8")
     require(failures, "-D LOAD_GFXFF=1" in platformio,

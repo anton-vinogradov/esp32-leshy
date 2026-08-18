@@ -23,6 +23,8 @@ trap 'rm -rf "$test_tmp"' EXIT
     -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/clean_target_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/capture/RadiotapPcap.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/capture/WifiFrameCapture.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/LibraryController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/SessionCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/self_test/SelfTestController.cpp" \

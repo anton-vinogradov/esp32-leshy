@@ -62,15 +62,24 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
                            : kernel::runtime::Resource::UiForeground |
                                  kernel::runtime::Resource::Storage};
 
+    const bool frameCapture = available(inventory, "capture.wifi_passive");
     items_[size_++] = {
-        "language", "LANGUAGE", "interface language", 4, true, false,
+        "capture", "CAPTURE",
+        frameCapture ? "wifi frames / volatile" : "passive capture unavailable",
+        4, frameCapture, false,
+        kernel::runtime::resourceMask(
+            kernel::runtime::Resource::UiForeground) |
+            kernel::runtime::resourceMask(kernel::runtime::Resource::EspRf)};
+
+    items_[size_++] = {
+        "language", "LANGUAGE", "interface language", 5, true, false,
         kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
 
     // Self-Test remains the final utility item even when the profile is
     // degraded: explaining a failed check is part of its purpose. Opening it
     // owns only the UI; Quick starts no hardware or storage resource.
     items_[size_++] = {
-        "self-test", "SELF-TEST", "quick / full guided", 5, true, false,
+        "self-test", "SELF-TEST", "quick / full guided", 6, true, false,
         kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
 }
 

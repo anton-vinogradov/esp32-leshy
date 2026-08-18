@@ -25,6 +25,7 @@ def main() -> int:
     littlefs_session_store = TARGET / "src" / "platform" / "arduino" / "ArduinoLittleFsSessionStoreIo.cpp"
     session_store_router = TARGET / "src" / "storage" / "SessionStoreIoRouter.cpp"
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
+    passive_wifi_capture_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveCapture.cpp"
     passive_ble_adapter = TARGET / "src" / "platform" / "arduino" / "BoardBlePassiveScanner.cpp"
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
@@ -53,6 +54,7 @@ def main() -> int:
             physical_sd_adapter,
             physical_sd_filesystem,
             passive_wifi_adapter,
+            passive_wifi_capture_adapter,
             safe_outputs_adapter,
         )
     )
@@ -69,8 +71,8 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.77.0-capture-export\\"' not in config:
-        errors.append("clean target does not identify the 0.77 capture/export slice")
+    if 'LESHY1_VERSION=\\"0.78.0-wifi-frame-capture\\"' not in config:
+        errors.append("clean target does not identify the 0.78 Wi-Fi frame capture slice")
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
     for value in forbidden_config:
@@ -1021,6 +1023,37 @@ def main() -> int:
         ).read_text(encoding="utf-8")
         if "observations_.fill(domain::observations::Observation{})" not in survey_session:
             errors.append("SurveySession reset does not scrub retained observations")
+
+    if not passive_wifi_capture_adapter.is_file():
+        errors.append("explicit passive Wi-Fi frame capture adapter is missing")
+    else:
+        frame_capture = passive_wifi_capture_adapter.read_text(encoding="utf-8")
+        for marker in (
+            "init.nvs_enable = 0",
+            "esp_wifi_set_storage(WIFI_STORAGE_RAM)",
+            "esp_wifi_set_mode(WIFI_MODE_STA)",
+            "WIFI_PROMIS_FILTER_MASK_MGMT",
+            "WIFI_PROMIS_FILTER_MASK_CTRL",
+            "WIFI_PROMIS_FILTER_MASK_DATA",
+            "esp_wifi_set_promiscuous_rx_cb(&receive)",
+            "esp_wifi_set_promiscuous(true)",
+            "esp_wifi_set_promiscuous(false)",
+            "esp_wifi_stop()",
+            "esp_wifi_deinit()",
+        ):
+            if marker not in frame_capture:
+                errors.append(f"passive frame capture adapter is missing: {marker}")
+        for pattern in (
+            r"\bWIFI_MODE_(?:AP|APSTA)\b",
+            r"\besp_wifi_connect\s*\(",
+            r"\besp_wifi_set_config\s*\(",
+            r"\besp_wifi_80211_tx\s*\(",
+            r"\bWiFi\s*\.\s*(?:begin|softAP)\s*\(",
+        ):
+            if re.search(pattern, frame_capture):
+                errors.append(
+                    f"passive frame capture adapter contains TX/config path: {pattern}"
+                )
 
     privacy_sources = arduino_entry.read_text(encoding="utf-8") + "\n" + \
         sector_inspection.read_text(encoding="utf-8")
