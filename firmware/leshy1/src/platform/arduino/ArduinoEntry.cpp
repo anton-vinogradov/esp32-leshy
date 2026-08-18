@@ -452,7 +452,7 @@ static_assert(sizeof(kLongestConsoleCommand) <= kConsoleCommandCapacity,
               "console command buffer cannot hold the longest command");
 char usbCommand[kConsoleCommandCapacity] = {};
 char uartCommand[kConsoleCommandCapacity] = {};
-char diagnosticJson[4096] = {};
+char diagnosticJson[4608] = {};
 std::size_t usbLength = 0;
 std::size_t uartLength = 0;
 std::uint8_t lastInputRaw = 0xFF;
