@@ -673,12 +673,14 @@ def main() -> int:
             encoding="utf-8"
         )
         for marker in (
-            "leshy.self_test_coverage_hil.run.v1",
+            "leshy.shield_receiver_self_test_hil.run.v1",
             '"full.s3.survey.persistence"',
             '"full.s4.radio.ble.passive"',
             '"full.s4.capture.persistence"',
             '"full.s4.shield.receivers"',
             '"not_applicable"',
+            "hardware.shield.receivers",
+            "shield_probe_failures(",
             '"radio_tx_commands": 0',
             '"storage_write_commands": 0',
         ):

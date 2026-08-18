@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove the plan-v3 S3/S4 Self-Test coverage report on the real device."""
+"""Prove the plan-v4 read-only shield receiver Self-Test on the real device."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from run_1x_product_survey_hil import (
 )
 
 
-RUN_SCHEMA = "leshy.self_test_coverage_hil.run.v1"
+RUN_SCHEMA = "leshy.shield_receiver_self_test_hil.run.v1"
 REPORT_SCHEMA = "leshy.self_test.report.v1"
 QUICK_IDS = [
     "quick.build.identity",
@@ -50,7 +50,7 @@ FULL_CHECKS = [
     ("full.assembly.gps", "not_applicable"),
     ("full.assembly.pn532", "not_applicable"),
     ("full.shield.ir", "not_applicable"),
-    ("full.s4.shield.receivers", "blocked"),
+    ("full.s4.shield.receivers", "pass"),
     ("full.capability.coverage", "blocked"),
 ]
 
@@ -58,14 +58,14 @@ FULL_CHECKS = [
 def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
     failures = expect(report, {
         "schema_version": 1,
-        "plan_version": 3,
+        "plan_version": 4,
         "mode": "full_guided" if full else "quick",
         "status": "blocked" if full else "pass",
         "read_only": True,
         "cancelled": False,
-        "passed": 15 if full else 8,
+        "passed": 16 if full else 8,
         "failed": 0,
-        "blocked": 2 if full else 0,
+        "blocked": 1 if full else 0,
         "not_applicable": 3 if full else 0,
         "current_owner": "self-test",
         "current_lease_mask": 1,
@@ -97,6 +97,53 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
             failures.append(f"absent assembly is not explicit: {key}")
     if facts.get("run_resource_mask") != 1:
         failures.append("Self-Test report was not scoped to UI-only lease 1")
+    if full:
+        for key in (
+            "shield_receivers_applicable", "shield_receiver_probe_complete",
+            "shield_receiver_probe_passed",
+        ):
+            if facts.get(key) is not True:
+                failures.append(f"shield receiver fact is not true: {key}")
+    return failures
+
+
+def shield_probe_failures(report: dict[str, Any]) -> list[str]:
+    failures = expect(report, {
+        "schema_version": 1, "status": "pass", "read_only": True,
+        "profile_declared": True, "gps_excluded_by_profile": True,
+        "pn532_excluded_by_profile": True, "nrf_slot3_gated": True,
+        "gpio21_stable_high": True, "resource_acquired": True,
+        "resource_released": True, "cleanup_complete": True,
+        "detected_receivers": 3, "current_owner": "self-test",
+        "current_lease_mask": 1,
+    }, "shield_receiver_probe")
+    nrf = report.get("nrf", [])
+    if len(nrf) != 2:
+        failures.append(f"shield probe NRF count differs: {len(nrf)}")
+    else:
+        for slot, item in enumerate(nrf, 1):
+            if (item.get("slot") != slot or item.get("detected") is not True or
+                    not isinstance(item.get("status"), int) or
+                    item.get("status") & 0x80 or
+                    not isinstance(item.get("channel"), int) or
+                    not 0 <= item.get("channel") <= 125):
+                failures.append(f"NRF slot {slot} identity is implausible: {item!r}")
+    cc1101 = report.get("cc1101", {})
+    if (cc1101.get("detected") is not True or cc1101.get("ready") is not True or
+            not isinstance(cc1101.get("status"), int) or
+            cc1101.get("status") == 0xFF or cc1101.get("partnum") != 0 or
+            cc1101.get("version") != 0x14):
+        failures.append(f"CC1101 identity differs: {cc1101!r}")
+    if report.get("wire") != {
+        "nrf_register_reads": 8, "cc_status_reads": 2,
+        "spi_bytes_clocked": 20,
+    }:
+        failures.append(f"shield probe wire bounds differ: {report.get('wire')!r}")
+    if report.get("side_effects") != {
+        "nrf_ce_high_events": 0, "cc_command_strobes": 0,
+        "radio_tx_commands": 0,
+    }:
+        failures.append(f"shield probe side effects differ: {report.get('side_effects')!r}")
     return failures
 
 
@@ -137,6 +184,7 @@ def main() -> int:
     recovery_after: dict[str, Any] = {}
     quick: dict[str, Any] = {}
     full: dict[str, Any] = {}
+    shield_probe: dict[str, Any] = {}
     input_state: dict[str, Any] = {}
     safe_outputs: dict[str, Any] = {}
     final: dict[str, Any] = {}
@@ -227,13 +275,18 @@ def main() -> int:
                 trace.append(state)
                 failures.extend(expect(state, {
                     "self_test_view": "result", "self_test_status": "blocked",
-                    "self_test_checks": 20, "self_test_passed": 15,
-                    "self_test_failed": 0, "self_test_blocked": 2,
+                    "self_test_checks": 20, "self_test_passed": 16,
+                    "self_test_failed": 0, "self_test_blocked": 1,
                     "self_test_not_applicable": 3, "lease_mask": 1,
                 }, "full_result"))
                 captures["full_result"] = capture(device, frames, "full-result")
                 full = query(device, b"self-test.report", REPORT_SCHEMA, "report")
                 failures.extend(report_failures(full, full=True))
+                shield_probe = query(
+                    device, b"hardware.shield.receivers",
+                    "leshy.shield.receiver_probe.v1", "report",
+                )
+                failures.extend(shield_probe_failures(shield_probe))
 
                 trace.append(action(device, "left"))
                 state = action(device, "left")
@@ -290,6 +343,7 @@ def main() -> int:
         "recovery_before": recovery_before,
         "quick_report": quick,
         "full_report": full,
+        "shield_receiver_probe": shield_probe,
         "input": input_state,
         "safe_outputs": safe_outputs,
         "recovery_after": recovery_after,
