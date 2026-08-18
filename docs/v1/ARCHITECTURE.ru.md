@@ -438,6 +438,14 @@ timeline и исправленный pass сохранены; только вт�
 и затем удаляет их. Controlled physical power-cut и endurance в пределах часа
 остаются открыты.
 
+Exact `0.87.0-full-guided-heap-budget` закрывает defect достоверности/budget
+diagnostics, обнаруженный 0.86. Storage line 4 608 bytes и diagnostic JSON buffer
+5 120 bytes никогда не выполняются одновременно в single main-loop command path,
+поэтому теперь используют один workspace 5 120 bytes. Full/Guided также очищает и
+перестраивает ordered report из final facts; падение heap к концу run больше не может
+сохранить healthy result preflight. Native injection ниже floor даёт fail, board-01
+проходит с 133 884 B против 131 072 B.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

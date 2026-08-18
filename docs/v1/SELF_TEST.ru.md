@@ -230,6 +230,15 @@ window, учитывающее все три observations, и проходит 1
 доказывает изолированный disposable path, но не controlled physical power-cut или
 endurance.
 
+Exact `0.87.0-full-guided-heap-budget` исправляет два связанных ограничения,
+обнаруженных этим run. Final snapshot Full/Guided теперь перестраивает Quick перед
+выдачей ordered report, поэтому heap minimum, пересёкший floor во время active work,
+становится настоящим failure. Serial commands diagnostics/storage используют один
+bounded workspace 5 120 bytes, возвращая 4 608 B static RAM. Native injection ниже
+floor даёт fail; board-01 проходит с minimum/floor 133 884/131 072 B при том же
+functional результате 25/0/1/3 и exact cleanup (`E-BUILD-088`/`E-AUTO-052`/
+`E-HIL-112`/`E-SELFTEST-007`).
+
 ## Приёмка
 
 1. `SELF-TEST` доступен штатными кнопками последним пунктом Home; serial-only Action

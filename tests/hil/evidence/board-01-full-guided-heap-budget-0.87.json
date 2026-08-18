@@ -1,0 +1,85 @@
+{
+  "schema": "leshy.full_guided_heap_budget_acceptance.v1",
+  "status": "pass_final_heap_budget_checkpoint",
+  "board": "board-01",
+  "candidate": {
+    "version": "0.87.0-full-guided-heap-budget",
+    "source_commit": "a943f3c588e09e9e7fa8c604039247154cbf5d31",
+    "runner_commit": "a943f3c588e09e9e7fa8c604039247154cbf5d31",
+    "firmware_sha256": "83e0b5cbea4bf32726171b6f96b2302db9e5181f2f18c6fa4bd21226dcccdbdc",
+    "factory_sha256": "19294d3a40c577751403e90e4f551a50ef1acfbe3ccc53364f840c62c5768bb1",
+    "app_elf_sha256": "9e82f00f8a6acd109a26a0faae1fb8f77f55036d9d614aa3581b30609a2f0f3f",
+    "map_sha256": "fc4528b5bf6cda624b9a8f3e95e3caf2899c3bdc1afa128750494a1959a2ad56",
+    "app_bytes": 1491584,
+    "factory_bytes": 1557120,
+    "linked_flash_bytes": 1491172,
+    "static_ram_bytes": 149864
+  },
+  "regression": {
+    "previous_evidence": "tests/hil/evidence/board-01-full-guided-disposable-0.86.json",
+    "previous_run_sha256": "ad1fd709cc83ed692f1886f83662ff1f215e8481a9831ba98186cc2f9b6e97c6",
+    "previous_heap_minimum": 129276,
+    "heap_floor": 131072,
+    "previous_false_positive": "quick.runtime.heap was evaluated only before active Full/Guided work",
+    "fix": "rebuild the complete ordered report from final facts and reuse the serial diagnostic/storage workspace",
+    "static_ram_delta_bytes": -4608,
+    "heap_minimum_delta_bytes": 4608
+  },
+  "evidence": {
+    "bundle": "tests/hil/evidence/board-01-full-guided-heap-budget-0.87",
+    "files": 45,
+    "tft_states": 13,
+    "run_sha256": "fda39211e8d62c6c18a99f96c213e481fd787ad85971c0c31f9bfe0386d2dc8e",
+    "artifact_index_sha256": "b7668d9ec7b2f064cb8c3ba39a6cffe0ee0d7dbb5bc59bb18eb5871200ffd31b",
+    "runner_sha256": "e3f3e2f26ca127f9423ae0797d11a1420cb53aed63db89f443ff5bcf53dd54e4"
+  },
+  "verified": {
+    "cid": "FE343253440000002000000055019CB7",
+    "quick": {"passed": 8, "failed": 0, "read_only": true},
+    "full_guided": {
+      "plan_version": 7,
+      "passed": 25,
+      "failed": 0,
+      "blocked": 1,
+      "not_applicable": 3,
+      "duration_us": 8772635
+    },
+    "heap": {
+      "total": 231844,
+      "boot_free": 167100,
+      "final_free": 166884,
+      "minimum": 133884,
+      "floor": 131072,
+      "margin": 2812,
+      "final_check": "pass"
+    },
+    "disposable": {
+      "write_calls": 3,
+      "write_bytes": 504,
+      "file_syncs": 3,
+      "directory_syncs": 3,
+      "files_removed": 3,
+      "scratch_removed": true
+    },
+    "product_continuity": {
+      "generation_before": 83,
+      "generation_after": 83,
+      "observations_before": 0,
+      "observations_after": 0,
+      "physical_write_calls": 0,
+      "passed": true
+    },
+    "radio_tx_commands": 0,
+    "input_read_errors": 0,
+    "input_queue_drops": 0,
+    "buzzer_inactive": true,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "limits": {
+    "controlled_power_cut_complete": false,
+    "one_hour_endurance_complete": false,
+    "demo_s4_complete": false,
+    "release_gate_eligible": false
+  }
+}

@@ -231,6 +231,15 @@ accounting for all three observations and passes 13 TFT states
 (`E-BUILD-087`/`E-AUTO-051`/`E-HIL-111`/`E-SELFTEST-006`/`E-STORAGE-027`). This proves
 the isolated disposable path, not controlled physical power-cut or endurance.
 
+Exact `0.87.0-full-guided-heap-budget` corrects two related constraints exposed by
+that run. The final Full/Guided snapshot now rebuilds Quick before emitting the
+ordered report, so a heap minimum that crosses the floor during active work becomes
+an actual failure. The serial diagnostics/storage commands share one bounded
+5,120-byte workspace, recovering 4,608 B of static RAM. Native below-floor injection
+fails; board-01 passes at 133,884/131,072 B minimum/floor with the same 25/0/1/3
+functional result and exact cleanup (`E-BUILD-088`/`E-AUTO-052`/`E-HIL-112`/
+`E-SELFTEST-007`).
+
 ## Acceptance
 
 1. `SELF-TEST` is reachable by normal buttons as the last Home item; no serial-only

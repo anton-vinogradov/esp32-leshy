@@ -132,6 +132,12 @@ final lease 0. Первый candidate без timeline сохранён fail clos
 Controlled physical power-cut и endurance gate ≥45 минут/≥8 циклов в пределах часа
 теперь являются двумя оставшимися gates `DEMO-S4`.
 
+Exact 0.87 затем закрывает heap-budget defect, обнаруженный evidence 0.86. Final
+facts теперь перестраивают Quick, native case ниже floor даёт fail, один общий serial
+workspace возвращает 4 608 B static RAM. Тот же physical plan-v7 run проходит с
+minimum 133 884 B против floor 131 072 B при неизменном functional/cleanup evidence.
+Это закрывает heap issue, но не два оставшихся gate `DEMO-S4`.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases.

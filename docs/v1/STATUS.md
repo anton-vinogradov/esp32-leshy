@@ -12,14 +12,15 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.86 S4 checkpoints through persistent Wi-Fi Capture, both user-facing spectrum workflows, receive-only RF checks, read-only artifact audit, and guarded disposable write/remount/export/cleanup in Full/Guided plan v7.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.87 S4 checkpoints through persistent Wi-Fi Capture, both user-facing spectrum workflows, receive-only RF checks, read-only artifact audit, guarded disposable write/remount/export/cleanup, and final heap-budget enforcement in Full/Guided plan v7.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** exercise controlled physical power-cut recovery and the
   ≥45-minute/≥8-cycle multi-source endurance gate within its one-hour operational
   budget, the two remaining `DEMO-S4` gates.
-- **Latest accepted checkpoint:** exact 0.86 Full/Guided plan v7 writes a three-record
-  test Session only under `/leshy-hil/full-guided-v7`, read-only remounts and exports
-  it, removes the exact scratch tree, and proves product generation 83/0 unchanged.
+- **Latest accepted checkpoint:** exact 0.87 re-evaluates Quick from the final
+  Full/Guided facts and shares the serial diagnostics/storage scratch workspace;
+  board-01 passes the 128 KiB heap floor at 133,884 B while retaining the complete
+  exact 0.86 disposable workflow and unchanged product generation 83/0.
 
 ## Stage state
 
@@ -29,7 +30,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71…0.79 accept the passive multi-source, browser/export and persistent Capture path; exact 0.80…0.85 register and actively audit receiver/artifact paths; exact 0.86 plan v7 performs guarded disposable commit, read-only remount/export and exact cleanup while product generation 83/0 stays unchanged | exercise controlled physical power-cut recovery and ≥45-minute/≥8-cycle multi-source endurance within one hour |
+| S4 | `active` | exact 0.71…0.79 accept passive multi-source, browser/export and persistent Capture; exact 0.80…0.85 register and actively audit receiver/artifact paths; exact 0.86 performs guarded disposable commit/remount/export/cleanup; exact 0.87 closes the final-report heap false positive and passes the 128 KiB floor | exercise controlled physical power-cut recovery and ≥45-minute/≥8-cycle multi-source endurance within one hour |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -638,6 +639,8 @@ endurance are explicit `DEMO-S4` criteria.
 | E-BUILD-087 | exact `0.86.0-full-guided-disposable` build | pass: RAM 154,472 B, linked flash 1,491,132 B; app/factory 1,491,536/1,557,072 B; app `a6e6501a…7118`, factory `afa91d8b…2bf73`, ELF `ebc4a265…dd5`, map `a1f82b46…fa9c`; source commit `827fd5d` | +8,564 B linked flash, +760 B static RAM and +8,560 B images vs 0.85 for plan-v7 disposable states, exact scratch IO counters and a 5,120-byte diagnostics workspace; exact checkpoint, not `DEMO-S4` or a release build |
 | E-AUTO-051 | disposable Full/Guided HIL and independent retained verifier | pass: the runner flashes exact bytes, drives Quick and Full/Guided, verifies ordered plan-v7 results, exact CID, isolated write counts, read-only remount/export, product continuity, cleanup, 13 TFT states, input/buzzer and final lease. The first candidate is retained fail closed with zero writes after its fixture omitted the timeline required by capture metadata; the corrected fixture finalizes one matching Wi-Fi window before commit | one-board exact-scratch write evidence; no product Session/Capture is created or replaced and raw nearby payload is not retained |
 | E-HIL-111 / E-SELFTEST-006 / E-STORAGE-027 | board-01 exact 0.86 disposable workflow in Full/Guided | pass checkpoint: Quick remains read-only 8/8; Full/Guided plan v7 is 25 pass/0 fail/1 capability blocker/3 N/A. Exact CID authorizes only `/leshy-hil/full-guided-v7`; generation 1 with three observations commits through exactly three writes/504 B and three file plus three directory syncs, read-only remount recovers and exports JSON 876 B, metadata 862 B and CSV 3 rows/297 B, then removes all three files and the scratch directory. Product generation/observations remain 83/0 with zero product writes, RF/TX regression passes, input errors/drops are zero, buzzer remains inactive, 13 TFT states are retained and final Home owner/lease is none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-disposable-0.86.json) | accepts controlled disposable Session creation/remount/export/cleanup inside Self-Test; physical RF instrumentation, controlled power-cut and the one-hour endurance gate keep `DEMO-S4` open |
+| E-BUILD-088 | exact `0.87.0-full-guided-heap-budget` build | pass: RAM 149,864 B, linked flash 1,491,172 B; app/factory 1,491,584/1,557,120 B; app `83e0b5cb…cdbdc`, factory `19294d3a…8bb1`, ELF `9e82f00f…0f3f`, map `fc4528b5…d56`; source commit `a943f3c` | −4,608 B static RAM, +40 B linked flash and +48 B images vs 0.86 by replacing two non-overlapping 4,608/5,120 B diagnostic workspaces with one 5,120 B serial workspace |
+| E-AUTO-052 / E-HIL-112 / E-SELFTEST-007 | final heap-budget regression and board-01 exact 0.87 Full/Guided | pass: a native negative case proves that healthy preflight followed by final heap below floor produces one failure; the retained physical candidate rebuilds the ordered report from final facts and passes `quick.runtime.heap` at minimum/floor/margin 133,884/131,072/2,812 B. Full remains 25 pass/0 fail/1 blocker/3 N/A; disposable writes remain 3/504 B with exact cleanup, product remains 83/0, input drops/TX are zero, 13 TFT states and final Home/lease 0 are bound in the [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-heap-budget-0.87.json) | closes the observed heap-floor issue and stale-result false positive; controlled physical power-cut and the ≤1-hour endurance gate remain the only `DEMO-S4` work |
 
 ## Known uncertainties and risks
 
@@ -686,6 +689,9 @@ re-identifies and read-only reopens the enrolled SD artifact, exercises Library
 JSON/CSV and streams persisted PCAP without retaining payload or writing user data.
 Exact 0.86 plan v7 adds controlled disposable Session creation, read-only remount,
 Library export and exact cleanup without changing product generation 83/0.
+Exact 0.87 then removes the duplicate diagnostics buffer and rebuilds the final
+Full/Guided report from end-of-run facts. The same physical workflow now has a
+133,884 B minimum against the 131,072 B floor; a native below-floor case fails.
 The currently unavailable controlled
 power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.

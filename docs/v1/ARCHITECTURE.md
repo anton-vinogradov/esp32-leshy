@@ -380,6 +380,13 @@ recovery proves generation 83/0 unchanged. The failed no-timeline candidate and 
 corrected pass are both retained; only the latter writes three files/504 bytes and
 then removes them. Controlled physical power-cut and one-hour endurance remain open.
 
+Exact `0.87.0-full-guided-heap-budget` closes a diagnostic truth/budget defect exposed
+by 0.86. The 4,608-byte storage line and 5,120-byte diagnostic JSON buffer never run
+concurrently on the single main-loop command path, so one 5,120-byte workspace now
+serves both. Full/Guided also clears and rebuilds its ordered report from final facts;
+an end-of-run heap drop can no longer retain the healthy preflight result. Native
+below-floor injection fails, while board-01 passes at 133,884 B against 131,072 B.
+
 ## Data model
 
 Raw observation is separate from interpretation:

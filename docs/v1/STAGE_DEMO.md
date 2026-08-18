@@ -131,6 +131,12 @@ candidate binds capture metadata to a finalized Wi-Fi timeline. Controlled physi
 power-cut and the ≥45-minute/≥8-cycle endurance gate inside one hour are now the two
 remaining `DEMO-S4` gates.
 
+Exact 0.87 then closes the heap-budget defect observed in the 0.86 evidence. Final
+facts now rebuild Quick, a native below-floor case fails, and one shared serial
+workspace recovers 4,608 B static RAM. The same physical plan-v7 run passes at a
+133,884 B minimum against the 131,072 B floor with unchanged functional/cleanup
+evidence. This closes the heap issue, not either remaining `DEMO-S4` gate.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

@@ -12,15 +12,15 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.86 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact и guarded disposable write/remount/export/cleanup в Full/Guided plan v7.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.87 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact, guarded disposable write/remount/export/cleanup и final heap-budget enforcement в Full/Guided plan v7.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** проверить controlled physical power-cut recovery
   и multi-source endurance ≥45 минут/≥8 циклов в часовом операционном бюджете — два
   оставшихся gate `DEMO-S4`.
-- **Последний принятый checkpoint:** exact 0.86 Full/Guided plan v7 записывает test
-  Session из трёх records только в `/leshy-hil/full-guided-v7`, read-only remount-ит
-  и экспортирует её, удаляет exact scratch tree и подтверждает неизменность product
-  generation 83/0.
+- **Последний принятый checkpoint:** exact 0.87 повторно вычисляет Quick по финальным
+  facts Full/Guided и использует общий serial scratch workspace diagnostics/storage;
+  board-01 проходит heap floor 128 KiB с minimum 133 884 B, сохраняя весь disposable
+  workflow exact 0.86 и неизменную product generation 83/0.
 
 ## Состояние этапов
 
@@ -30,7 +30,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.79 принимают passive multi-source, browser/export и persistent Capture; exact 0.80…0.85 регистрируют и активно проверяют receiver/artifact paths; exact 0.86 plan v7 выполняет guarded disposable commit, read-only remount/export и exact cleanup при неизменной product generation 83/0 | проверить controlled physical power-cut recovery и multi-source endurance ≥45 минут/≥8 циклов в течение часа |
+| S4 | `active` | exact 0.71…0.79 принимают passive multi-source, browser/export и persistent Capture; exact 0.80…0.85 регистрируют и активно проверяют receiver/artifact paths; exact 0.86 выполняет guarded disposable commit/remount/export/cleanup; exact 0.87 закрывает false positive final heap report и проходит floor 128 KiB | проверить controlled physical power-cut recovery и multi-source endurance ≥45 минут/≥8 циклов в течение часа |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -636,6 +636,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-087 | exact build `0.86.0-full-guided-disposable` | pass: RAM 154 472 B, linked flash 1 491 132 B; app/factory 1 491 536/1 557 072 B; app `a6e6501a…7118`, factory `afa91d8b…2bf73`, ELF `ebc4a265…dd5`, map `a1f82b46…fa9c`; source commit `827fd5d` | +8 564 B linked flash, +760 B static RAM и +8 560 B images vs 0.85 за plan-v7 disposable states, exact scratch IO counters и diagnostics workspace 5 120 bytes; exact checkpoint, не `DEMO-S4` и не release build |
 | E-AUTO-051 | disposable HIL Full/Guided и independent retained verifier | pass: runner прошивает exact bytes, проводит Quick и Full/Guided, проверяет ordered plan-v7 results, exact CID, изолированные write counts, read-only remount/export, product continuity, cleanup, 13 TFT states, input/buzzer и final lease. Первый candidate сохранён fail closed с zero writes: fixture не содержала timeline, обязательную для capture metadata; исправленная fixture финализирует один matching Wi-Fi window до commit | evidence exact-scratch write на одной board; product Session/Capture не создаётся и не заменяется, raw nearby payload не сохраняется |
 | E-HIL-111 / E-SELFTEST-006 / E-STORAGE-027 | board-01 exact 0.86 disposable workflow в Full/Guided | pass checkpoint: Quick остаётся read-only 8/8; Full/Guided plan v7 — 25 pass/0 fail/1 capability blocker/3 N/A. Exact CID разрешает только `/leshy-hil/full-guided-v7`; generation 1 с тремя observations commits ровно через три writes/504 B и три file плюс три directory syncs, read-only remount восстанавливает и экспортирует JSON 876 B, metadata 862 B и CSV 3 rows/297 B, затем удаляет все три файла и scratch directory. Product generation/observations остаются 83/0 при zero product writes, RF/TX regression проходит, input errors/drops равны нулю, buzzer inactive, 13 TFT states сохранены, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-disposable-0.86.json) | принимает controlled disposable Session creation/remount/export/cleanup внутри Self-Test; physical RF instrumentation, controlled power-cut и endurance gate до одного часа держат `DEMO-S4` открытым |
+| E-BUILD-088 | exact build `0.87.0-full-guided-heap-budget` | pass: RAM 149 864 B, linked flash 1 491 172 B; app/factory 1 491 584/1 557 120 B; app `83e0b5cb…cdbdc`, factory `19294d3a…8bb1`, ELF `9e82f00f…0f3f`, map `fc4528b5…d56`; source commit `a943f3c` | −4 608 B static RAM, +40 B linked flash и +48 B images vs 0.86 благодаря замене двух непересекающихся workspaces 4 608/5 120 B одним serial workspace 5 120 B |
+| E-AUTO-052 / E-HIL-112 / E-SELFTEST-007 | regression final heap budget и board-01 exact 0.87 Full/Guided | pass: native negative case доказывает, что healthy preflight и final heap ниже floor дают один fail; retained physical candidate перестраивает ordered report из final facts и проходит `quick.runtime.heap` с minimum/floor/margin 133 884/131 072/2 812 B. Full остаётся 25 pass/0 fail/1 blocker/3 N/A; disposable writes 3/504 B с exact cleanup, product 83/0, input drops/TX zero, 13 TFT states и final Home/lease 0 связаны в [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-heap-budget-0.87.json) | закрывает обнаруженные heap-floor issue и stale-result false positive; controlled physical power-cut и endurance gate ≤1 часа остаются единственной работой `DEMO-S4` |
 
 ## Известные неопределённости и риски
 
@@ -684,6 +686,9 @@ Library JSON/CSV и потоково формирует persisted PCAP без с
 user data. Exact 0.86 plan v7 добавляет controlled disposable Session creation,
 read-only remount, Library export и exact cleanup без изменения product generation
 83/0.
+Exact 0.87 затем удаляет дублирующий diagnostics buffer и перестраивает финальный
+report Full/Guided из end-of-run facts. Тот же physical workflow теперь имеет
+minimum 133 884 B при floor 131 072 B; native case ниже floor завершается fail.
 Недоступный сейчас управляемый
 power-cut fixture остаётся явным exit
 requirement `DEMO-S4`, software reset не принимается как замена. Второй
