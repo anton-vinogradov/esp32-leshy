@@ -34,6 +34,10 @@ def main() -> int:
         TARGET / "src" / "platform" / "arduino" /
         "BoardNrf24PassiveSpectrum.cpp"
     )
+    cc1101_spectrum_adapter = (
+        TARGET / "src" / "platform" / "arduino" /
+        "BoardCc1101PassiveSpectrum.cpp"
+    )
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
@@ -70,6 +74,7 @@ def main() -> int:
             passive_wifi_capture_adapter,
             shield_receiver_adapter,
             nrf24_spectrum_adapter,
+            cc1101_spectrum_adapter,
             safe_outputs_adapter,
         )
     )
@@ -86,8 +91,8 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.82.0-nrf24-spectrum\\"' not in config:
-        errors.append("clean target does not identify the 0.82 nRF24 spectrum slice")
+    if 'LESHY1_VERSION=\\"0.83.0-cc1101-spectrum\\"' not in config:
+        errors.append("clean target does not identify the 0.83 CC1101 spectrum slice")
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
     for value in forbidden_config:
@@ -176,6 +181,39 @@ def main() -> int:
             if re.search(pattern, spectrum_adapter):
                 errors.append(
                     f"nRF24 passive-spectrum adapter contains TX/select path: {pattern}"
+                )
+
+    if not cc1101_spectrum_adapter.is_file():
+        errors.append("guarded CC1101 passive-spectrum adapter is missing")
+    else:
+        cc_spectrum = cc1101_spectrum_adapter.read_text(encoding="utf-8")
+        for marker in (
+            "kCommandReset = 0x30",
+            "kCommandReceive = 0x34",
+            "kCommandIdle = 0x36",
+            "allowedReceiveRegister",
+            "kSpectrumSpiHz = 1000000",
+            "pinMode(BoardProfile::kNrfCsPins[2], INPUT)",
+            "report_->rejectedStrobes",
+            "validateCc1101PassiveSpectrumReport",
+        ):
+            if marker not in cc_spectrum:
+                errors.append(
+                    f"CC1101 passive-spectrum adapter is missing invariant: {marker}"
+                )
+        for pattern in (
+            r"kCommandTransmit",
+            r"kRegisterPaTable",
+            r"kRegisterFifo",
+            r"command\s*\(\s*0x35",
+            r"writeRegister\s*\(\s*0x3[EF]",
+            r"digitalWrite\s*\(\s*BoardProfile::kNrfCePins[^,]*,\s*HIGH",
+            r"digitalWrite\s*\(\s*BoardProfile::kNrfCsPins\[[01]\]\s*,\s*LOW",
+            r"pinMode\s*\(\s*BoardProfile::kNrfCsPins\[2\]\s*,\s*OUTPUT",
+        ):
+            if re.search(pattern, cc_spectrum):
+                errors.append(
+                    f"CC1101 passive-spectrum adapter contains TX/select path: {pattern}"
                 )
 
     entry = arduino_entry.read_text(encoding="utf-8")

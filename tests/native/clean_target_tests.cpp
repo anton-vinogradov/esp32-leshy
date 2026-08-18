@@ -17,11 +17,13 @@
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/self_test/SelfTestController.h"
+#include "apps/spectrum/Cc1101SpectrumController.h"
 #include "apps/spectrum/Nrf24SpectrumController.h"
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
 #include "drivers/ble/BlePassiveContract.h"
 #include "drivers/radio/ShieldReceiverIdentity.h"
+#include "drivers/radio/Cc1101PassiveSpectrum.h"
 #include "drivers/radio/Nrf24PassiveSpectrum.h"
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
@@ -464,6 +466,101 @@ void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
     CHECK(controller.stop());
     CHECK(controller.state() == Nrf24SpectrumViewState::Idle);
     CHECK(!controller.start(3, 4000));
+}
+
+void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
+    const auto plan315 = cc1101PassiveSpectrumPlan(
+        Cc1101SpectrumBand::Band315);
+    const auto plan433 = cc1101PassiveSpectrumPlan(
+        Cc1101SpectrumBand::Band433);
+    const auto plan868 = cc1101PassiveSpectrumPlan(
+        Cc1101SpectrumBand::Band868);
+    const auto plan915 = cc1101PassiveSpectrumPlan(
+        Cc1101SpectrumBand::Band915);
+    CHECK(validateCc1101PassiveSpectrumPlan(plan315));
+    CHECK(validateCc1101PassiveSpectrumPlan(plan433));
+    CHECK(validateCc1101PassiveSpectrumPlan(plan868));
+    CHECK(validateCc1101PassiveSpectrumPlan(plan915));
+    CHECK(cc1101SpectrumFrequencyKHz(plan433, 0) == 433050);
+    CHECK(cc1101SpectrumFrequencyKHz(plan433, 63) == 434790);
+    Cc1101PassiveSpectrumPlan unsafePlan = plan433;
+    unsafePlan.firstKHz = 348001;
+    CHECK(!validateCc1101PassiveSpectrumPlan(unsafePlan));
+    unsafePlan = plan433;
+    unsafePlan.settleUs = 100;
+    CHECK(!validateCc1101PassiveSpectrumPlan(unsafePlan));
+
+    Cc1101PassiveSpectrumReport report;
+    report.status = Cc1101PassiveSpectrumStatus::Ready;
+    report.profileDeclared = true;
+    report.gpsExcludedByProfile = true;
+    report.pn532ExcludedByProfile = true;
+    report.resourceOwned = true;
+    report.gpio21StableHigh = true;
+    report.receiverDetected = true;
+    report.partNumber = 0;
+    report.version = 0x14;
+    report.commandStrobes = 7;
+    report.resetStrobes = 1;
+    report.receiveStrobes = 2;
+    report.idleStrobes = 4;
+    report.cleanupComplete = false;
+    CHECK(validateCc1101PassiveSpectrumReport(report, false));
+    CHECK(!validateCc1101PassiveSpectrumReport(report, true));
+    report.cleanupComplete = true;
+    CHECK(validateCc1101PassiveSpectrumReport(report, true));
+    Cc1101PassiveSpectrumReport unsafe = report;
+    unsafe.txStrobes = 1;
+    CHECK(!validateCc1101PassiveSpectrumReport(unsafe, true));
+    unsafe = report;
+    unsafe.paTableWrites = 1;
+    CHECK(!validateCc1101PassiveSpectrumReport(unsafe, true));
+    unsafe = report;
+    unsafe.commandStrobes = 8;
+    CHECK(!validateCc1101PassiveSpectrumReport(unsafe, true));
+
+    Cc1101SpectrumController controller;
+    CHECK(controller.start(1000));
+    CHECK(controller.state() == Cc1101SpectrumViewState::Running);
+    CHECK(controller.band() == Cc1101SpectrumBand::Band433);
+    Cc1101PassiveSample sample;
+    sample.band = Cc1101SpectrumBand::Band433;
+    sample.bin = 0;
+    sample.frequencyKHz = cc1101SpectrumFrequencyKHz(plan433, 0);
+    sample.rssiDbm = -90;
+    sample.startedUs = 1000;
+    sample.endedUs = 1100;
+    sample.valid = true;
+    CHECK(controller.ingest(sample));
+    CHECK(controller.nextBin() == 1);
+    CHECK(controller.samples() == 1);
+    CHECK(controller.intensity(0) == 28);
+    CHECK(controller.peakKHz() == 433050);
+    CHECK(controller.peakRssiDbm() == -90);
+    CHECK(!controller.ingest(sample));
+    for (std::uint8_t bin = 1; bin < 64; ++bin) {
+        sample.bin = bin;
+        sample.frequencyKHz = cc1101SpectrumFrequencyKHz(plan433, bin);
+        sample.rssiDbm = static_cast<std::int16_t>(-100 + bin / 4);
+        sample.startedUs = 1100 + static_cast<std::uint64_t>(bin) * 100;
+        sample.endedUs = sample.startedUs + 50;
+        CHECK(controller.ingest(sample));
+    }
+    CHECK(controller.sweeps() == 1);
+    CHECK(controller.nextBin() == 0);
+    CHECK(controller.samples() == 64);
+    CHECK(controller.togglePause());
+    CHECK(controller.state() == Cc1101SpectrumViewState::Paused);
+    CHECK(!controller.ingest(sample));
+    CHECK(controller.nextBand());
+    CHECK(controller.band() == Cc1101SpectrumBand::Band868);
+    CHECK(controller.sweeps() == 0);
+    CHECK(controller.samples() == 0);
+    CHECK(controller.previousBand());
+    CHECK(controller.band() == Cc1101SpectrumBand::Band433);
+    CHECK(controller.togglePause());
+    CHECK(controller.stop());
+    CHECK(controller.state() == Cc1101SpectrumViewState::Idle);
 }
 
 void testProductBootRetryIsNarrowAndBounded() {
@@ -4076,6 +4173,7 @@ int main() {
     testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
     testShieldReceiverIdentityContractFailsClosed();
     testNrf24PassiveSpectrumContractAndControllerAreBounded();
+    testCc1101PassiveSpectrumContractAndControllerAreBounded();
     testProductBootRetryIsNarrowAndBounded();
     testProductStartIdentityRetryStopsBeforeFilesystem();
     testStorageTimingSummaryUsesNearestRank();
