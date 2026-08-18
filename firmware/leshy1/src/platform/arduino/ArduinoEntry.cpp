@@ -216,6 +216,9 @@ constexpr std::uint64_t kStorageRequiredEncodedBytesPerSecond =
 constexpr std::uint64_t kProductSurveyCommitBytes = 64U * 1024U;
 constexpr std::uint64_t kProductSurveyReserveBytes = 1024U * 1024U;
 constexpr unsigned kWifiPersistMaxScans = 8;
+constexpr const char* kFullGuidedDisposableRunId = "full-guided-v7";
+constexpr std::uint64_t kFullGuidedDisposableBytes = 64U * 1024U;
+constexpr std::uint64_t kFullGuidedDisposableReserve = 1024U * 1024U;
 constexpr const char* kSdSessionStorePrefix =
     "storage.sd.session-store disposable-write ";
 constexpr const char* kSdSessionThroughputPrefix =
@@ -330,6 +333,10 @@ enum class FullGuidedArtifactStep : std::uint8_t {
     LibraryJson,
     LibraryCsv,
     CapturePcap,
+    DisposableCommit,
+    DisposableRemountExport,
+    DisposableCleanup,
+    ProductVerify,
     Complete,
     Failed,
     Cancelled,
@@ -341,6 +348,13 @@ const char* fullGuidedArtifactStepName(FullGuidedArtifactStep step) {
         case FullGuidedArtifactStep::LibraryJson: return "library_json";
         case FullGuidedArtifactStep::LibraryCsv: return "library_csv";
         case FullGuidedArtifactStep::CapturePcap: return "capture_pcap";
+        case FullGuidedArtifactStep::DisposableCommit:
+            return "disposable_commit";
+        case FullGuidedArtifactStep::DisposableRemountExport:
+            return "disposable_remount_export";
+        case FullGuidedArtifactStep::DisposableCleanup:
+            return "disposable_cleanup";
+        case FullGuidedArtifactStep::ProductVerify: return "product_verify";
         case FullGuidedArtifactStep::Complete: return "complete";
         case FullGuidedArtifactStep::Failed: return "failed";
         case FullGuidedArtifactStep::Cancelled: return "cancelled";
@@ -371,6 +385,38 @@ struct FullGuidedArtifactState final {
     std::size_t pcapFrames = 0;
     std::uint32_t pcapFnv1a = 2166136261U;
     std::uint32_t blockedWriteAttempts = 0;
+    bool disposableCommitComplete = false;
+    bool disposableCommitPassed = false;
+    bool disposableRemountComplete = false;
+    bool disposableRemountPassed = false;
+    bool disposableExportComplete = false;
+    bool disposableExportPassed = false;
+    bool disposableCleanupComplete = false;
+    bool disposableCleanupPassed = false;
+    bool productVerifyComplete = false;
+    bool productVerifyPassed = false;
+    bool disposableResourceAcquired = false;
+    bool disposableResourceReleased = true;
+    bool disposableIdentityPassed = false;
+    bool scratchPreexisting = false;
+    bool scratchCreated = false;
+    bool scratchRemoved = false;
+    bool workflowPassed = true;
+    char disposableObservedFingerprint[33] = {};
+    char disposableScratchPath[leshy1::storage::kScratchPathMax] = {};
+    std::uint32_t disposableGeneration = 0;
+    std::size_t disposableObservations = 0;
+    std::size_t disposableJsonBytes = 0;
+    std::size_t disposableMetadataBytes = 0;
+    std::size_t disposableCsvBytes = 0;
+    std::size_t disposableCsvRecords = 0;
+    std::uint64_t disposableStorageWriteBytes = 0;
+    std::uint32_t disposableStorageWriteCalls = 0;
+    std::uint32_t disposableFileSyncs = 0;
+    std::uint32_t disposableDirectorySyncs = 0;
+    std::uint16_t disposableFilesRemoved = 0;
+    std::uint32_t productGenerationFinal = 0;
+    std::size_t productObservationsFinal = 0;
 };
 struct FullGuidedPcapSink final {
     std::size_t bytes = 0;
@@ -452,7 +498,7 @@ static_assert(sizeof(kLongestConsoleCommand) <= kConsoleCommandCapacity,
               "console command buffer cannot hold the longest command");
 char usbCommand[kConsoleCommandCapacity] = {};
 char uartCommand[kConsoleCommandCapacity] = {};
-char diagnosticJson[4608] = {};
+char diagnosticJson[5120] = {};
 std::size_t usbLength = 0;
 std::size_t uartLength = 0;
 std::uint8_t lastInputRaw = 0xFF;
@@ -4254,6 +4300,28 @@ SelfTestFacts snapshotSelfTestFacts() {
     facts.capturePcapAuditApplicable =
         fullGuidedArtifactState.captureApplicable;
     facts.capturePcapAuditPassed = fullGuidedArtifactState.capturePassed;
+    facts.disposableCommitComplete =
+        fullGuidedArtifactState.disposableCommitComplete;
+    facts.disposableCommitPassed =
+        fullGuidedArtifactState.disposableCommitPassed;
+    facts.disposableRemountComplete =
+        fullGuidedArtifactState.disposableRemountComplete;
+    facts.disposableRemountPassed =
+        fullGuidedArtifactState.disposableRemountPassed;
+    facts.disposableExportComplete =
+        fullGuidedArtifactState.disposableExportComplete;
+    facts.disposableExportPassed =
+        fullGuidedArtifactState.disposableExportPassed;
+    facts.disposableCleanupComplete =
+        fullGuidedArtifactState.disposableCleanupComplete;
+    facts.disposableCleanupPassed =
+        fullGuidedArtifactState.disposableCleanupPassed &&
+        fullGuidedArtifactState.productVerifyComplete &&
+        fullGuidedArtifactState.productVerifyPassed;
+    facts.disposableStorageWriteCalls =
+        fullGuidedArtifactState.disposableStorageWriteCalls;
+    facts.disposableStorageWriteBytes =
+        fullGuidedArtifactState.disposableStorageWriteBytes;
     return facts;
 }
 
@@ -4433,6 +4501,44 @@ void renderSelfTestPage(bool clearContent) {
                                      : UiTextId::FullActiveTitle),
                      clearContent);
         if (artifactPhase) {
+            const bool disposablePhase =
+                fullGuidedArtifactState.step ==
+                    FullGuidedArtifactStep::DisposableCommit ||
+                fullGuidedArtifactState.step ==
+                    FullGuidedArtifactStep::DisposableRemountExport ||
+                fullGuidedArtifactState.step ==
+                    FullGuidedArtifactStep::DisposableCleanup ||
+                fullGuidedArtifactState.step ==
+                    FullGuidedArtifactStep::ProductVerify;
+            if (disposablePhase) {
+                renderMetric(
+                    0,
+                    fullGuidedArtifactState.disposableCommitPassed
+                        ? tr(UiTextId::FullActiveScratchPass)
+                        : tr(UiTextId::FullActiveScratchRun),
+                    fullGuidedArtifactState.disposableCommitPassed
+                        ? Tone::Positive : Tone::Warning);
+                renderMetric(
+                    1,
+                    fullGuidedArtifactState.disposableExportPassed
+                        ? tr(UiTextId::FullActiveRemountPass)
+                        : tr(UiTextId::FullActiveRemountRun),
+                    fullGuidedArtifactState.disposableExportPassed
+                        ? Tone::Positive : Tone::Warning);
+                renderMetric(
+                    2,
+                    fullGuidedArtifactState.disposableCleanupPassed &&
+                            fullGuidedArtifactState.productVerifyPassed
+                        ? tr(UiTextId::FullActiveCleanupPass)
+                        : tr(UiTextId::FullActiveCleanupRun),
+                    fullGuidedArtifactState.disposableCleanupPassed &&
+                            fullGuidedArtifactState.productVerifyPassed
+                        ? Tone::Positive : Tone::Warning);
+                display.setTextColor(Palette::TextMuted, Palette::Canvas);
+                setUiCursor(UiTextRole::Meta, 14, 207);
+                display.print(tr(UiTextId::FullActiveDataSafety));
+                return;
+            }
             renderMetric(
                 0,
                 fullGuidedArtifactState.recoveryPassed
@@ -5727,6 +5833,377 @@ void restoreFullGuidedLibraryView() {
     }
 }
 
+void finishFullGuidedActiveChecks(bool success);
+
+void releaseFullGuidedDisposableResources() {
+    resourceBroker.release(
+        AppRuntime::kForegroundOwner,
+        leshy1::storage::kSdIdentificationResources);
+    fullGuidedArtifactState.disposableResourceReleased =
+        resourceBroker.ownerOf(Resource::Storage) ==
+            leshy1::kernel::runtime::kNoOwner &&
+        resourceBroker.ownerOf(Resource::RadioSpi) ==
+            leshy1::kernel::runtime::kNoOwner;
+}
+
+bool acquireFullGuidedDisposableResources() {
+    fullGuidedArtifactState.disposableResourceReleased = false;
+    fullGuidedArtifactState.disposableResourceAcquired =
+        resourceBroker.acquire(
+            AppRuntime::kForegroundOwner,
+            leshy1::storage::kSdIdentificationResources);
+    return fullGuidedArtifactState.disposableResourceAcquired;
+}
+
+bool identifyFullGuidedDisposableMedia(std::uint64_t* capacityBytes) {
+    if (capacityBytes == nullptr) return false;
+    *capacityBytes = 0;
+    BoardSdSpiTransport transport;
+    if (!transport.begin()) return false;
+    leshy1::storage::SdTransportRunPolicy policy;
+    policy.allowPhysical = true;
+    policy.explicitlySelected = true;
+    policy.identificationOnly = true;
+    policy.ownedResources = resourceBroker.ownedBy(
+        AppRuntime::kForegroundOwner);
+    const leshy1::storage::SdTransportRunResult identity =
+        leshy1::storage::runSdIdentificationStateMachine(
+            leshy1::storage::defaultSdIdentificationPlan(), transport,
+            policy);
+    transport.end();
+    fullGuidedArtifactState.disposableObservedFingerprint[0] = '\0';
+    if (identity.status == leshy1::storage::SdTransportRunStatus::Valid) {
+        formatCidFingerprint(
+            identity.identity,
+            fullGuidedArtifactState.disposableObservedFingerprint,
+            sizeof(fullGuidedArtifactState.disposableObservedFingerprint));
+        *capacityBytes = identity.identity.capacityBytes;
+    }
+    fullGuidedArtifactState.disposableIdentityPassed =
+        identity.status == leshy1::storage::SdTransportRunStatus::Valid &&
+        transport.cleanupComplete() &&
+        std::strcmp(
+            fullGuidedArtifactState.disposableObservedFingerprint,
+            fullGuidedArtifactState.expectedFingerprint) == 0;
+    return fullGuidedArtifactState.disposableIdentityPassed;
+}
+
+leshy1::storage::MediaIdentity fullGuidedDisposableMedia(
+    const BoardSdFilesystem& filesystem, std::uint64_t identifiedCapacity) {
+    leshy1::storage::MediaIdentity media;
+    media.present = filesystem.mounted() && identifiedCapacity != 0 &&
+        filesystem.cardCapacityBytes() == identifiedCapacity &&
+        filesystem.filesystemCapacityBytes() != 0 &&
+        filesystem.filesystemCapacityBytes() <= identifiedCapacity;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint =
+        fullGuidedArtifactState.disposableObservedFingerprint;
+    media.capacityBytes = filesystem.cardCapacityBytes();
+    media.freeBytes = filesystem.freeBytes();
+    return media;
+}
+
+bool removeFullGuidedDisposableScratch(BoardSdFilesystem& filesystem,
+                                       const leshy1::storage::MediaIdentity& media) {
+    const bool exists = filesystem.exists(
+        fullGuidedArtifactState.disposableScratchPath);
+    if (!exists) {
+        fullGuidedArtifactState.scratchRemoved = true;
+        return true;
+    }
+    leshy1::storage::ScratchCleanupRequest request;
+    request.explicitlyDisposable = true;
+    request.expectedFingerprint =
+        fullGuidedArtifactState.expectedFingerprint;
+    request.runId = kFullGuidedDisposableRunId;
+    request.scratchExists = true;
+    const leshy1::storage::ScratchCleanupPermit permit =
+        leshy1::storage::authorizeScratchCleanup(media, request);
+    ArduinoFsSessionStoreIo io(filesystem.driveNumber(),
+                               sdSessionStoreIoWorkspace);
+    const bool removed = permit.allowed() && io.removeScratch(permit);
+    fullGuidedArtifactState.disposableFilesRemoved += io.filesRemoved();
+    fullGuidedArtifactState.scratchRemoved = removed &&
+        !filesystem.exists(fullGuidedArtifactState.disposableScratchPath);
+    return fullGuidedArtifactState.scratchRemoved;
+}
+
+void runFullGuidedDisposableCommit() {
+    bool filesystemAttempted = false;
+    bool filesystemCleanup = true;
+    bool passed = false;
+    if (acquireFullGuidedDisposableResources()) {
+        std::uint64_t identifiedCapacity = 0;
+        if (identifyFullGuidedDisposableMedia(&identifiedCapacity)) {
+            BoardSdFilesystem filesystem;
+            filesystemAttempted = true;
+            if (filesystem.begin()) {
+                const leshy1::storage::MediaIdentity media =
+                    fullGuidedDisposableMedia(filesystem, identifiedCapacity);
+                fullGuidedArtifactState.scratchPreexisting =
+                    filesystem.exists(
+                        fullGuidedArtifactState.disposableScratchPath);
+                const bool staleReady =
+                    !fullGuidedArtifactState.scratchPreexisting ||
+                    removeFullGuidedDisposableScratch(filesystem, media);
+                leshy1::storage::WriteRequest request;
+                request.explicitlyDisposable = true;
+                request.expectedFingerprint =
+                    fullGuidedArtifactState.expectedFingerprint;
+                request.runId = kFullGuidedDisposableRunId;
+                request.scratchExists = filesystem.exists(
+                    fullGuidedArtifactState.disposableScratchPath);
+                request.requiredBytes = kFullGuidedDisposableBytes;
+                request.reserveBytes = kFullGuidedDisposableReserve;
+                const leshy1::storage::WritePermit permit =
+                    leshy1::storage::authorizeScratchWrite(media, request);
+
+                littleFsResetSession.reset();
+                const CaptureMetadata metadata = productCaptureMetadata(
+                    leshy1::services::survey::sourceMask(RadioKind::Wifi));
+                const bool fixtureReady = staleReady && permit.allowed() &&
+                    littleFsResetSession.start(
+                        kFullGuidedDisposableRunId, 1000) ==
+                        SessionStatus::Started &&
+                    littleFsResetSession.configureCaptureMetadata(metadata) ==
+                        leshy1::services::survey::
+                            CaptureMetadataStatus::Configured &&
+                    appendGoldenObservations(littleFsResetSession) &&
+                    littleFsResetSession.stop(3000) == SessionStatus::Stopped;
+                if (fixtureReady) {
+                    ArduinoFsSessionStoreIo io(
+                        filesystem.driveNumber(), sdSessionStoreIoWorkspace);
+                    const bool prepared = io.prepare(permit);
+                    fullGuidedArtifactState.scratchCreated = prepared &&
+                        filesystem.exists(permit.scratchPath);
+                    fullGuidedArtifactState.scratchRemoved = false;
+                    leshy1::storage::SessionStoreCommitResult commit;
+                    leshy1::storage::SessionStoreRecoveryResult recovery;
+                    if (fullGuidedArtifactState.scratchCreated) {
+                        commit = leshy1::storage::commitNextSession(
+                            io, sessionStoreWorkspace,
+                            littleFsResetSession);
+                        if (commit.complete()) {
+                            recovery = leshy1::storage::recoverSession(
+                                io, sessionStoreWorkspace,
+                                &sessionStoreWorkspace.validationSession);
+                        }
+                    }
+                    fullGuidedArtifactState.disposableStorageWriteBytes +=
+                        io.bytesWritten();
+                    fullGuidedArtifactState.disposableStorageWriteCalls +=
+                        io.writeCalls();
+                    fullGuidedArtifactState.disposableFileSyncs +=
+                        io.fileSyncs();
+                    fullGuidedArtifactState.disposableDirectorySyncs +=
+                        io.directorySyncs();
+                    fullGuidedArtifactState.disposableGeneration =
+                        recovery.generation;
+                    fullGuidedArtifactState.disposableObservations =
+                        recovery.observations;
+                    passed = commit.complete() && commit.generation == 1 &&
+                        recovery.valid() && recovery.generation == 1 &&
+                        recovery.observations == 3 &&
+                        io.bytesWritten() != 0 && io.writeCalls() == 3 &&
+                        io.fileSyncs() == 3 && io.directorySyncs() == 3;
+                    io.end();
+                }
+            }
+            filesystem.end();
+            filesystemCleanup = filesystem.cleanupComplete();
+        }
+    }
+    releaseFullGuidedDisposableResources();
+    fullGuidedArtifactState.disposableCommitComplete = true;
+    fullGuidedArtifactState.disposableCommitPassed = passed &&
+        (!filesystemAttempted || filesystemCleanup) &&
+        fullGuidedArtifactState.disposableResourceReleased;
+    fullGuidedArtifactState.workflowPassed =
+        fullGuidedArtifactState.workflowPassed &&
+        fullGuidedArtifactState.disposableCommitPassed;
+    fullGuidedArtifactState.step =
+        fullGuidedArtifactState.disposableCommitPassed
+            ? FullGuidedArtifactStep::DisposableRemountExport
+            : FullGuidedArtifactStep::DisposableCleanup;
+    lastRuntimeEvent = fullGuidedArtifactState.disposableCommitPassed
+        ? "self_test_disposable_remount"
+        : "self_test_disposable_commit_failed";
+    renderInteractiveScreen(true);
+}
+
+void runFullGuidedDisposableRemountExport() {
+    bool filesystemAttempted = false;
+    bool filesystemCleanup = true;
+    bool remountPassed = false;
+    bool exportPassed = false;
+    if (acquireFullGuidedDisposableResources()) {
+        std::uint64_t identifiedCapacity = 0;
+        if (identifyFullGuidedDisposableMedia(&identifiedCapacity)) {
+            BoardSdFilesystem filesystem;
+            filesystemAttempted = true;
+            if (filesystem.beginReadOnly()) {
+                const leshy1::storage::MediaIdentity media =
+                    fullGuidedDisposableMedia(filesystem, identifiedCapacity);
+                leshy1::storage::ExistingScratchReadRequest request;
+                request.explicitlySelected = true;
+                request.expectedFingerprint =
+                    fullGuidedArtifactState.expectedFingerprint;
+                request.runId = kFullGuidedDisposableRunId;
+                request.scratchExists = filesystem.exists(
+                    fullGuidedArtifactState.disposableScratchPath);
+                const leshy1::storage::ReadPermit permit =
+                    leshy1::storage::authorizeExistingScratchRead(
+                        media, request);
+                ArduinoFsSessionStoreIo io(
+                    filesystem.driveNumber(), sdSessionStoreIoWorkspace);
+                const bool opened = permit.allowed() &&
+                    io.openExistingReadOnly(permit);
+                leshy1::storage::SessionStoreRecoveryResult recovery;
+                if (opened) {
+                    recovery = leshy1::storage::recoverSession(
+                        io, sessionStoreWorkspace,
+                        &sessionStoreWorkspace.validationSession);
+                }
+                remountPassed = opened && recovery.valid() &&
+                    recovery.generation == 1 && recovery.observations == 3 &&
+                    io.bytesWritten() == 0 && io.writeCalls() == 0 &&
+                    io.fileSyncs() == 0 && io.directorySyncs() == 0;
+                if (remountPassed) {
+                    LibraryController disposableLibrary;
+                    exportPassed = disposableLibrary.add(
+                        sessionStoreWorkspace.validationSession,
+                        recovery.generation, SessionIntegrity::Valid, true,
+                        false) && disposableLibrary.openSelected() &&
+                        disposableLibrary.requestExport();
+                    if (exportPassed) {
+                        const auto json =
+                            disposableLibrary.formatSelectedJsonExport(
+                                diagnosticJson, sizeof(diagnosticJson));
+                        fullGuidedArtifactState.disposableJsonBytes =
+                            json.bytes;
+                        const auto metadata = disposableLibrary.
+                            formatSelectedCaptureMetadata(
+                                diagnosticJson, sizeof(diagnosticJson));
+                        fullGuidedArtifactState.disposableMetadataBytes =
+                            metadata.bytes;
+                        char row[256] = {};
+                        const auto header =
+                            disposableLibrary.formatSelectedCsvHeader(
+                                row, sizeof(row));
+                        fullGuidedArtifactState.disposableCsvBytes =
+                            header.bytes;
+                        exportPassed = json.valid() && json.bytes != 0 &&
+                            metadata.valid() && metadata.bytes != 0 &&
+                            header.valid() && header.bytes != 0;
+                        for (std::size_t index = 0;
+                             exportPassed && index < recovery.observations;
+                             ++index) {
+                            const auto record =
+                                disposableLibrary.formatSelectedCsvRow(
+                                    index, row, sizeof(row));
+                            exportPassed = record.valid() &&
+                                record.bytes != 0;
+                            if (exportPassed) {
+                                fullGuidedArtifactState.disposableCsvBytes +=
+                                    record.bytes;
+                                ++fullGuidedArtifactState.
+                                    disposableCsvRecords;
+                            }
+                        }
+                        exportPassed = exportPassed &&
+                            fullGuidedArtifactState.disposableCsvRecords == 3;
+                    }
+                }
+                io.end();
+            }
+            filesystem.end();
+            filesystemCleanup = filesystem.cleanupComplete() &&
+                filesystem.blockedWriteAttempts() == 0;
+        }
+    }
+    releaseFullGuidedDisposableResources();
+    fullGuidedArtifactState.disposableRemountComplete = true;
+    fullGuidedArtifactState.disposableRemountPassed = remountPassed &&
+        (!filesystemAttempted || filesystemCleanup) &&
+        fullGuidedArtifactState.disposableResourceReleased;
+    fullGuidedArtifactState.disposableExportComplete = true;
+    fullGuidedArtifactState.disposableExportPassed = exportPassed &&
+        fullGuidedArtifactState.disposableRemountPassed;
+    fullGuidedArtifactState.workflowPassed =
+        fullGuidedArtifactState.workflowPassed &&
+        fullGuidedArtifactState.disposableRemountPassed &&
+        fullGuidedArtifactState.disposableExportPassed;
+    fullGuidedArtifactState.step = FullGuidedArtifactStep::DisposableCleanup;
+    lastRuntimeEvent = fullGuidedArtifactState.disposableExportPassed
+        ? "self_test_disposable_cleanup"
+        : "self_test_disposable_remount_failed";
+    renderInteractiveScreen(true);
+}
+
+bool runFullGuidedDisposableCleanup() {
+    bool filesystemAttempted = false;
+    bool filesystemCleanup = true;
+    bool passed = !fullGuidedArtifactState.scratchCreated;
+    if (acquireFullGuidedDisposableResources()) {
+        std::uint64_t identifiedCapacity = 0;
+        if (identifyFullGuidedDisposableMedia(&identifiedCapacity)) {
+            BoardSdFilesystem filesystem;
+            filesystemAttempted = true;
+            if (filesystem.begin()) {
+                const leshy1::storage::MediaIdentity media =
+                    fullGuidedDisposableMedia(filesystem, identifiedCapacity);
+                passed = removeFullGuidedDisposableScratch(filesystem, media);
+            }
+            filesystem.end();
+            filesystemCleanup = filesystem.cleanupComplete();
+        }
+    }
+    releaseFullGuidedDisposableResources();
+    fullGuidedArtifactState.disposableCleanupComplete = true;
+    fullGuidedArtifactState.disposableCleanupPassed = passed &&
+        (!filesystemAttempted || filesystemCleanup) &&
+        fullGuidedArtifactState.disposableResourceReleased;
+    fullGuidedArtifactState.workflowPassed =
+        fullGuidedArtifactState.workflowPassed &&
+        fullGuidedArtifactState.disposableCleanupPassed;
+    fullGuidedArtifactState.step = FullGuidedArtifactStep::ProductVerify;
+    lastRuntimeEvent = fullGuidedArtifactState.disposableCleanupPassed
+        ? "self_test_product_verify"
+        : "self_test_disposable_cleanup_failed";
+    renderInteractiveScreen(true);
+    return fullGuidedArtifactState.disposableCleanupPassed;
+}
+
+void runFullGuidedProductVerify() {
+    char expectedFingerprint[33] = {};
+    std::snprintf(expectedFingerprint, sizeof(expectedFingerprint), "%s",
+                  fullGuidedArtifactState.expectedFingerprint);
+    recoverProductCatalogForFingerprint(expectedFingerprint, true);
+    fullGuidedArtifactState.productVerifyComplete = true;
+    fullGuidedArtifactState.productGenerationFinal =
+        productBootRecovery.catalog.generation;
+    fullGuidedArtifactState.productObservationsFinal =
+        productBootRecovery.catalog.observations;
+    const LibraryEntry* entry = libraryController.selected();
+    fullGuidedArtifactState.productVerifyPassed =
+        std::strcmp(productBootRecovery.status, "admitted") == 0 &&
+        productBootRecovery.catalogAdmitted &&
+        productBootRecovery.readOnlyGuaranteed &&
+        productBootRecovery.cleanupComplete &&
+        productBootRecovery.ownedAfter == 0 &&
+        productBootRecovery.blockedWriteAttempts == 0 &&
+        fullGuidedArtifactState.productGenerationFinal ==
+            fullGuidedArtifactState.generationBefore &&
+        fullGuidedArtifactState.productObservationsFinal ==
+            fullGuidedArtifactState.observationsBefore &&
+        entry != nullptr && entry->session != nullptr && entry->persistent &&
+        entry->generation == fullGuidedArtifactState.generationBefore;
+    fullGuidedArtifactState.workflowPassed =
+        fullGuidedArtifactState.workflowPassed &&
+        fullGuidedArtifactState.productVerifyPassed;
+    finishFullGuidedActiveChecks(fullGuidedArtifactState.workflowPassed);
+}
+
 void finishFullGuidedActiveChecks(bool success) {
     const bool nrfCleanup = boardNrf24Spectrum.end();
     const bool ccCleanup = boardCc1101Spectrum.end();
@@ -5742,7 +6219,9 @@ void finishFullGuidedActiveChecks(bool success) {
     fullGuidedArtifactState.cleanupComplete =
         productBootRecovery.cleanupComplete && storageReleased &&
         libraryController.view() == LibraryView::SessionList &&
-        fullGuidedArtifactState.blockedWriteAttempts == 0;
+        fullGuidedArtifactState.blockedWriteAttempts == 0 &&
+        fullGuidedArtifactState.disposableCleanupPassed &&
+        fullGuidedArtifactState.productVerifyPassed;
     const bool passed = success && fullGuidedRfState.cleanupComplete &&
         fullGuidedArtifactState.cleanupComplete;
     fullGuidedArtifactState.step = passed
@@ -5765,6 +6244,10 @@ void startFullGuidedArtifactChecks() {
     std::snprintf(fullGuidedArtifactState.expectedFingerprint,
                   sizeof(fullGuidedArtifactState.expectedFingerprint), "%s",
                   productBootRecovery.expectedFingerprint);
+    std::snprintf(fullGuidedArtifactState.disposableScratchPath,
+                  sizeof(fullGuidedArtifactState.disposableScratchPath),
+                  "%s%s", leshy1::storage::kScratchRoot,
+                  kFullGuidedDisposableRunId);
     if (!productBootRecovery.enrolled ||
         !exactCidFingerprint(fullGuidedArtifactState.expectedFingerprint)) {
         fullGuidedArtifactState.recoveryComplete = true;
@@ -5822,27 +6305,41 @@ void startFullGuidedRfChecks() {
     lastRuntimeEvent = "self_test_active_nrf24";
 }
 
-void cancelFullGuidedRfChecks() {
+bool cancelFullGuidedRfChecks() {
     const bool nrfCleanup = boardNrf24Spectrum.end();
     const bool ccCleanup = boardCc1101Spectrum.end();
     releaseFullGuidedRfResource();
     fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup &&
         fullGuidedRfState.resourceReleased;
+    bool disposableCleanup = true;
+    if (fullGuidedArtifactState.scratchCreated &&
+        !fullGuidedArtifactState.scratchRemoved) {
+        disposableCleanup = runFullGuidedDisposableCleanup();
+    }
+    if (fullGuidedArtifactState.recoveryComplete) {
+        char expectedFingerprint[33] = {};
+        std::snprintf(expectedFingerprint, sizeof(expectedFingerprint), "%s",
+                      fullGuidedArtifactState.expectedFingerprint);
+        recoverProductCatalogForFingerprint(expectedFingerprint, true);
+    }
     fullGuidedRfState.step = FullGuidedRfStep::Cancelled;
-    restoreFullGuidedLibraryView();
     fullGuidedArtifactState.step = FullGuidedArtifactStep::Cancelled;
+    restoreFullGuidedLibraryView();
     fullGuidedArtifactState.cleanupComplete =
         productBootRecovery.cleanupComplete &&
         resourceBroker.ownerOf(Resource::Storage) ==
             leshy1::kernel::runtime::kNoOwner &&
         fullGuidedRfState.resourceReleased &&
-        libraryController.view() == LibraryView::SessionList;
+        libraryController.view() == LibraryView::SessionList &&
+        disposableCleanup;
     fullGuidedRfStartAfterUs = 0;
     fullGuidedArtifactStartAfterUs = 0;
     lastRuntimeEvent = fullGuidedRfState.cleanupComplete &&
                                fullGuidedArtifactState.cleanupComplete
         ? "self_test_active_cancelled"
         : "self_test_active_cancel_failed";
+    return fullGuidedRfState.cleanupComplete &&
+        fullGuidedArtifactState.cleanupComplete;
 }
 
 void serviceFullGuidedArtifactChecks() {
@@ -5968,7 +6465,11 @@ void serviceFullGuidedArtifactChecks() {
         fullGuidedArtifactState.captureApplicable =
             capture.present && capture.framePayloadCaptured;
         if (!fullGuidedArtifactState.captureApplicable) {
-            finishFullGuidedActiveChecks(true);
+            fullGuidedArtifactState.workflowPassed = true;
+            fullGuidedArtifactState.step =
+                FullGuidedArtifactStep::DisposableCommit;
+            lastRuntimeEvent = "self_test_disposable_commit";
+            renderInteractiveScreen(true);
             return;
         }
         leshy1::storage::PersistedWifiFrameCaptureView persisted;
@@ -5994,7 +6495,37 @@ void serviceFullGuidedArtifactChecks() {
             pcap.framesWritten == persisted.frameCount() &&
             pcap.framesWritten == capture.framePayloadRecords &&
             pcap.bytesWritten == expectedBytes && sink.bytes == expectedBytes;
-        finishFullGuidedActiveChecks(fullGuidedArtifactState.capturePassed);
+        fullGuidedArtifactState.workflowPassed =
+            fullGuidedArtifactState.capturePassed;
+        fullGuidedArtifactState.step =
+            fullGuidedArtifactState.capturePassed
+                ? FullGuidedArtifactStep::DisposableCommit
+                : FullGuidedArtifactStep::DisposableCleanup;
+        lastRuntimeEvent = fullGuidedArtifactState.capturePassed
+            ? "self_test_disposable_commit"
+            : "self_test_capture_pcap_failed";
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (fullGuidedArtifactState.step ==
+        FullGuidedArtifactStep::DisposableCommit) {
+        runFullGuidedDisposableCommit();
+        return;
+    }
+    if (fullGuidedArtifactState.step ==
+        FullGuidedArtifactStep::DisposableRemountExport) {
+        runFullGuidedDisposableRemountExport();
+        return;
+    }
+    if (fullGuidedArtifactState.step ==
+        FullGuidedArtifactStep::DisposableCleanup) {
+        runFullGuidedDisposableCleanup();
+        return;
+    }
+    if (fullGuidedArtifactState.step ==
+        FullGuidedArtifactStep::ProductVerify) {
+        runFullGuidedProductVerify();
+        return;
     }
 }
 
@@ -7054,12 +7585,18 @@ bool applyUiAction(UiAction action, bool render = true) {
                 lastRuntimeEvent = "self_test_preflight";
             }
         } else if (action == UiAction::Back || action == UiAction::Left) {
+            bool cleanupReady = true;
             if (selfTestController.view() == SelfTestView::ActiveChecks) {
-                cancelFullGuidedRfChecks();
+                cleanupReady = cancelFullGuidedRfChecks();
             }
-            changed = selfTestController.back();
+            changed = cleanupReady && selfTestController.back();
             handled = changed;
-            if (changed) lastRuntimeEvent = "self_test_modes";
+            if (changed) {
+                lastRuntimeEvent = "self_test_modes";
+            } else if (!cleanupReady) {
+                handled = true;
+                lastRuntimeEvent = "self_test_cancel_cleanup_failed";
+            }
         }
         if (handled) {
             uiController.recordHandledAction(action);
@@ -10823,7 +11360,10 @@ void emitSelfTestReport(Stream& reply) {
         "\"passed\":%u,\"failed\":%u,\"blocked\":%u,"
         "\"not_applicable\":%u,"
         "\"side_effects\":{\"radio_tx_commands\":%lu,"
-        "\"storage_write_commands\":0,\"buzzer_activations\":0},"
+        "\"storage_write_commands\":%lu,"
+        "\"storage_write_bytes\":%llu,"
+        "\"product_storage_write_commands\":0,"
+        "\"buzzer_activations\":0},"
         "\"facts\":{\"build_identity_present\":%s,"
         "\"profile_matched\":%s,\"display_ready\":%s,"
         "\"input_frontend_ready\":%s,\"input_queue_healthy\":%s,"
@@ -10850,7 +11390,15 @@ void emitSelfTestReport(Stream& reply) {
         "\"library_export_audit_passed\":%s,"
         "\"capture_pcap_audit_complete\":%s,"
         "\"capture_pcap_audit_applicable\":%s,"
-        "\"capture_pcap_audit_passed\":%s},"
+        "\"capture_pcap_audit_passed\":%s,"
+        "\"disposable_commit_complete\":%s,"
+        "\"disposable_commit_passed\":%s,"
+        "\"disposable_remount_complete\":%s,"
+        "\"disposable_remount_passed\":%s,"
+        "\"disposable_export_complete\":%s,"
+        "\"disposable_export_passed\":%s,"
+        "\"disposable_cleanup_complete\":%s,"
+        "\"disposable_cleanup_passed\":%s},"
         "\"checks\":[",
         static_cast<unsigned>(SelfTestReport::kSchemaVersion),
         static_cast<unsigned>(SelfTestReport::kPlanVersion), LESHY1_VERSION,
@@ -10867,6 +11415,12 @@ void emitSelfTestReport(Stream& reply) {
         static_cast<unsigned>(report.blocked),
         static_cast<unsigned>(report.notApplicable),
         static_cast<unsigned long>(radioTxCommands),
+        static_cast<unsigned long>(
+            report.mode == SelfTestMode::FullGuided
+                ? report.facts.disposableStorageWriteCalls : 0),
+        static_cast<unsigned long long>(
+            report.mode == SelfTestMode::FullGuided
+                ? report.facts.disposableStorageWriteBytes : 0),
         report.facts.buildIdentityPresent ? "true" : "false",
         report.facts.profileMatched ? "true" : "false",
         report.facts.displayReady ? "true" : "false",
@@ -10901,7 +11455,15 @@ void emitSelfTestReport(Stream& reply) {
         report.facts.libraryExportAuditPassed ? "true" : "false",
         report.facts.capturePcapAuditComplete ? "true" : "false",
         report.facts.capturePcapAuditApplicable ? "true" : "false",
-        report.facts.capturePcapAuditPassed ? "true" : "false");
+        report.facts.capturePcapAuditPassed ? "true" : "false",
+        report.facts.disposableCommitComplete ? "true" : "false",
+        report.facts.disposableCommitPassed ? "true" : "false",
+        report.facts.disposableRemountComplete ? "true" : "false",
+        report.facts.disposableRemountPassed ? "true" : "false",
+        report.facts.disposableExportComplete ? "true" : "false",
+        report.facts.disposableExportPassed ? "true" : "false",
+        report.facts.disposableCleanupComplete ? "true" : "false",
+        report.facts.disposableCleanupPassed ? "true" : "false");
     if (prefix < 0 || static_cast<std::size_t>(prefix) >= sizeof(line)) {
         reply.println("{\"schema\":\"leshy.self_test.report.v1\","
                       "\"kind\":\"error\",\"reason\":\"format_failed\"}");
@@ -11008,7 +11570,7 @@ void emitFullGuidedArtifactReport(Stream& reply) {
         line, sizeof(line),
         "{\"schema\":\"leshy.self_test.active_artifact.v1\","
         "\"kind\":\"report\",\"plan_version\":%u,\"step\":\"%s\","
-        "\"read_only\":true,\"expected_cid\":\"%s\","
+        "\"read_only\":false,\"expected_cid\":\"%s\","
         "\"recovery\":{\"complete\":%s,\"passed\":%s,"
         "\"status\":\"%s\",\"generation_before\":%lu,"
         "\"generation_after\":%lu,\"observations_before\":%u,"
@@ -11020,8 +11582,27 @@ void emitFullGuidedArtifactReport(Stream& reply) {
         "\"capture\":{\"complete\":%s,\"applicable\":%s,"
         "\"passed\":%s,\"pcap_frames\":%u,\"pcap_bytes\":%u,"
         "\"pcap_fnv1a\":%lu},"
+        "\"disposable\":{\"run_id\":\"%s\","
+        "\"scratch_path\":\"%s\",\"observed_cid\":\"%s\","
+        "\"identity_passed\":%s,\"scratch_preexisting\":%s,"
+        "\"scratch_created\":%s,\"commit_complete\":%s,"
+        "\"commit_passed\":%s,\"generation\":%lu,"
+        "\"observations\":%u,\"write_calls\":%lu,"
+        "\"write_bytes\":%llu,\"file_syncs\":%lu,"
+        "\"directory_syncs\":%lu,\"remount_complete\":%s,"
+        "\"remount_passed\":%s,\"export_complete\":%s,"
+        "\"export_passed\":%s,\"json_bytes\":%u,"
+        "\"metadata_bytes\":%u,\"csv_records\":%u,"
+        "\"csv_bytes\":%u,\"cleanup_complete\":%s,"
+        "\"cleanup_passed\":%s,\"files_removed\":%u,"
+        "\"scratch_removed\":%s},"
+        "\"product_continuity\":{\"complete\":%s,\"passed\":%s,"
+        "\"generation_final\":%lu,\"observations_final\":%u},"
         "\"side_effects\":{\"radio_tx_commands\":0,"
-        "\"storage_write_commands\":0,\"blocked_write_attempts\":%lu},"
+        "\"disposable_storage_write_commands\":%lu,"
+        "\"disposable_storage_write_bytes\":%llu,"
+        "\"product_storage_write_commands\":0,"
+        "\"blocked_write_attempts\":%lu},"
         "\"cleanup_complete\":%s,\"current_owner\":\"%s\","
         "\"current_lease_mask\":%lu}",
         static_cast<unsigned>(SelfTestReport::kPlanVersion),
@@ -11049,6 +11630,53 @@ void emitFullGuidedArtifactReport(Stream& reply) {
         static_cast<unsigned>(fullGuidedArtifactState.pcapFrames),
         static_cast<unsigned>(fullGuidedArtifactState.pcapBytes),
         static_cast<unsigned long>(fullGuidedArtifactState.pcapFnv1a),
+        kFullGuidedDisposableRunId,
+        fullGuidedArtifactState.disposableScratchPath,
+        fullGuidedArtifactState.disposableObservedFingerprint,
+        fullGuidedArtifactState.disposableIdentityPassed ? "true" : "false",
+        fullGuidedArtifactState.scratchPreexisting ? "true" : "false",
+        fullGuidedArtifactState.scratchCreated ? "true" : "false",
+        fullGuidedArtifactState.disposableCommitComplete ? "true" : "false",
+        fullGuidedArtifactState.disposableCommitPassed ? "true" : "false",
+        static_cast<unsigned long>(
+            fullGuidedArtifactState.disposableGeneration),
+        static_cast<unsigned>(
+            fullGuidedArtifactState.disposableObservations),
+        static_cast<unsigned long>(
+            fullGuidedArtifactState.disposableStorageWriteCalls),
+        static_cast<unsigned long long>(
+            fullGuidedArtifactState.disposableStorageWriteBytes),
+        static_cast<unsigned long>(
+            fullGuidedArtifactState.disposableFileSyncs),
+        static_cast<unsigned long>(
+            fullGuidedArtifactState.disposableDirectorySyncs),
+        fullGuidedArtifactState.disposableRemountComplete ? "true" : "false",
+        fullGuidedArtifactState.disposableRemountPassed ? "true" : "false",
+        fullGuidedArtifactState.disposableExportComplete ? "true" : "false",
+        fullGuidedArtifactState.disposableExportPassed ? "true" : "false",
+        static_cast<unsigned>(
+            fullGuidedArtifactState.disposableJsonBytes),
+        static_cast<unsigned>(
+            fullGuidedArtifactState.disposableMetadataBytes),
+        static_cast<unsigned>(
+            fullGuidedArtifactState.disposableCsvRecords),
+        static_cast<unsigned>(
+            fullGuidedArtifactState.disposableCsvBytes),
+        fullGuidedArtifactState.disposableCleanupComplete ? "true" : "false",
+        fullGuidedArtifactState.disposableCleanupPassed ? "true" : "false",
+        static_cast<unsigned>(
+            fullGuidedArtifactState.disposableFilesRemoved),
+        fullGuidedArtifactState.scratchRemoved ? "true" : "false",
+        fullGuidedArtifactState.productVerifyComplete ? "true" : "false",
+        fullGuidedArtifactState.productVerifyPassed ? "true" : "false",
+        static_cast<unsigned long>(
+            fullGuidedArtifactState.productGenerationFinal),
+        static_cast<unsigned>(
+            fullGuidedArtifactState.productObservationsFinal),
+        static_cast<unsigned long>(
+            fullGuidedArtifactState.disposableStorageWriteCalls),
+        static_cast<unsigned long long>(
+            fullGuidedArtifactState.disposableStorageWriteBytes),
         static_cast<unsigned long>(
             fullGuidedArtifactState.blockedWriteAttempts),
         fullGuidedArtifactState.cleanupComplete ? "true" : "false",

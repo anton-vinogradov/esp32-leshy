@@ -158,6 +158,30 @@ void SelfTestController::evaluateCapabilityCoverage(
                       : (facts.capturePcapAuditPassed
                              ? SelfTestResultStatus::Pass
                              : SelfTestResultStatus::Fail)));
+    append("full.s4.storage.disposable.commit",
+           !facts.disposableCommitComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.disposableCommitPassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
+    append("full.s4.storage.disposable.remount",
+           !facts.disposableRemountComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.disposableRemountPassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
+    append("full.s4.library.disposable.export",
+           !facts.disposableExportComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.disposableExportPassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
+    append("full.s4.storage.disposable.cleanup",
+           !facts.disposableCleanupComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.disposableCleanupPassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
 }
 
 void SelfTestController::evaluateQuick(const SelfTestFacts& facts) {

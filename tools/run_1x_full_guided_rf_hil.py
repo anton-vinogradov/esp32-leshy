@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove plan-v6 active RF and read-only artifact checks on the real device."""
+"""Prove plan-v7 RF, artifact and disposable storage checks on the device."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from run_1x_product_survey_hil import (
 )
 
 
-RUN_SCHEMA = "leshy.full_guided_artifact_self_test_hil.run.v1"
+RUN_SCHEMA = "leshy.full_guided_disposable_self_test_hil.run.v2"
 REPORT_SCHEMA = "leshy.self_test.report.v1"
 ACTIVE_RF_SCHEMA = "leshy.self_test.active_rf.v1"
 ACTIVE_ARTIFACT_SCHEMA = "leshy.self_test.active_artifact.v1"
@@ -58,6 +58,10 @@ FULL_CHECKS = [
     ("full.s4.storage.recovery.audit", "pass"),
     ("full.s4.library.export.audit", "pass"),
     ("full.s4.capture.pcap.audit", "pass"),
+    ("full.s4.storage.disposable.commit", "pass"),
+    ("full.s4.storage.disposable.remount", "pass"),
+    ("full.s4.library.disposable.export", "pass"),
+    ("full.s4.storage.disposable.cleanup", "pass"),
     ("full.capability.coverage", "blocked"),
 ]
 
@@ -65,12 +69,12 @@ FULL_CHECKS = [
 def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
     failures = expect(report, {
         "schema_version": 1,
-        "plan_version": 6,
+        "plan_version": 7,
         "mode": "full_guided" if full else "quick",
         "status": "blocked" if full else "pass",
         "read_only": not full,
         "cancelled": False,
-        "passed": 21 if full else 8,
+        "passed": 25 if full else 8,
         "failed": 0,
         "blocked": 1 if full else 0,
         "not_applicable": 3 if full else 0,
@@ -83,12 +87,16 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
     if actual != expected:
         failures.append(f"report checks differ: {actual!r}")
     side_effects = report.get("side_effects", {})
-    if side_effects != {
-        "radio_tx_commands": 0,
-        "storage_write_commands": 0,
-        "buzzer_activations": 0,
-    }:
+    expected_writes = 3 if full else 0
+    if side_effects.get("radio_tx_commands") != 0 or side_effects.get(
+            "storage_write_commands") != expected_writes or side_effects.get(
+            "product_storage_write_commands") != 0 or side_effects.get(
+            "buzzer_activations") != 0:
         failures.append(f"unexpected Self-Test side effects: {side_effects!r}")
+    write_bytes = side_effects.get("storage_write_bytes")
+    if (full and (not isinstance(write_bytes, int) or write_bytes <= 0)) or (
+            not full and write_bytes != 0):
+        failures.append(f"unexpected Self-Test write bytes: {write_bytes!r}")
     facts = report.get("facts", {})
     for key in (
         "build_identity_present", "profile_matched", "display_ready",
@@ -119,6 +127,10 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
             "capture_pcap_audit_complete",
             "capture_pcap_audit_applicable",
             "capture_pcap_audit_passed",
+            "disposable_commit_complete", "disposable_commit_passed",
+            "disposable_remount_complete", "disposable_remount_passed",
+            "disposable_export_complete", "disposable_export_passed",
+            "disposable_cleanup_complete", "disposable_cleanup_passed",
         ):
             if facts.get(key) is not True:
                 failures.append(f"shield receiver fact is not true: {key}")
@@ -127,7 +139,7 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
 
 def active_rf_failures(report: dict[str, Any]) -> list[str]:
     failures = expect(report, {
-        "plan_version": 6, "step": "complete", "rx_only": True,
+        "plan_version": 7, "step": "complete", "rx_only": True,
         "resource_acquired": True, "resource_released": True,
         "cleanup_complete": True, "current_owner": "self-test",
         "current_lease_mask": 1,
@@ -178,7 +190,7 @@ def active_rf_failures(report: dict[str, Any]) -> list[str]:
 def active_artifact_failures(report: dict[str, Any],
                              recovery: dict[str, Any]) -> list[str]:
     failures = expect(report, {
-        "plan_version": 6, "step": "complete", "read_only": True,
+        "plan_version": 7, "step": "complete", "read_only": False,
         "expected_cid": recovery.get("expected_fingerprint"),
         "cleanup_complete": True, "current_owner": "self-test",
         "current_lease_mask": 1,
@@ -209,12 +221,40 @@ def active_artifact_failures(report: dict[str, Any],
     if not isinstance(capture.get("pcap_fnv1a"), int) or not capture.get(
             "pcap_fnv1a"):
         failures.append("artifact PCAP digest is absent")
-    if report.get("side_effects") != {
-        "radio_tx_commands": 0, "storage_write_commands": 0,
-        "blocked_write_attempts": 0,
-    }:
+    disposable = report.get("disposable", {})
+    failures.extend(expect(disposable, {
+        "run_id": "full-guided-v7",
+        "scratch_path": "/leshy-hil/full-guided-v7",
+        "observed_cid": recovery.get("expected_fingerprint"),
+        "identity_passed": True, "scratch_created": True,
+        "commit_complete": True, "commit_passed": True,
+        "generation": 1, "observations": 3, "write_calls": 3,
+        "file_syncs": 3, "directory_syncs": 3,
+        "remount_complete": True, "remount_passed": True,
+        "export_complete": True, "export_passed": True,
+        "csv_records": 3, "cleanup_complete": True,
+        "cleanup_passed": True, "files_removed": 3,
+        "scratch_removed": True,
+    }, "active_artifact.disposable"))
+    for field in ("write_bytes", "json_bytes", "metadata_bytes", "csv_bytes"):
+        value = disposable.get(field)
+        if not isinstance(value, int) or value <= 0:
+            failures.append(f"disposable {field} is invalid: {value!r}")
+    continuity = report.get("product_continuity", {})
+    failures.extend(expect(continuity, {
+        "complete": True, "passed": True,
+        "generation_final": recovery.get("generation"),
+        "observations_final": recovery.get("observations"),
+    }, "active_artifact.product_continuity"))
+    effects = report.get("side_effects", {})
+    if (effects.get("radio_tx_commands") != 0 or
+            effects.get("disposable_storage_write_commands") != 3 or
+            effects.get("disposable_storage_write_bytes") !=
+            disposable.get("write_bytes") or
+            effects.get("product_storage_write_commands") != 0 or
+            effects.get("blocked_write_attempts") != 0):
         failures.append(
-            f"artifact side effects differ: {report.get('side_effects')!r}")
+            f"artifact side effects differ: {effects!r}")
     return failures
 
 
@@ -393,7 +433,8 @@ def main() -> int:
                 captures["active_checks"] = capture(
                     device, frames, "active-checks")
                 artifact_captured = False
-                deadline = time.monotonic() + 30.0
+                disposable_captured = False
+                deadline = time.monotonic() + 45.0
                 while time.monotonic() < deadline:
                     state = query(device, b"ui.state", "leshy.ui.v1", "state")
                     trace.append(state)
@@ -408,12 +449,23 @@ def main() -> int:
                         captures["active_artifacts"] = capture(
                             device, frames, "active-artifacts")
                         artifact_captured = True
+                    if (not disposable_captured and
+                            state.get("self_test_artifact_step") in {
+                                "disposable_commit",
+                                "disposable_remount_export",
+                                "disposable_cleanup", "product_verify",
+                            }):
+                        captures["active_disposable"] = capture(
+                            device, frames, "active-disposable")
+                        disposable_captured = True
                     time.sleep(0.05)
                 if not artifact_captured:
                     failures.append("active artifact UI phase was not captured")
+                if not disposable_captured:
+                    failures.append("active disposable UI phase was not captured")
                 failures.extend(expect(state, {
                     "self_test_view": "result", "self_test_status": "blocked",
-                    "self_test_checks": 25, "self_test_passed": 21,
+                    "self_test_checks": 29, "self_test_passed": 25,
                     "self_test_failed": 0, "self_test_blocked": 1,
                     "self_test_not_applicable": 3, "lease_mask": 1,
                 }, "full_result"))

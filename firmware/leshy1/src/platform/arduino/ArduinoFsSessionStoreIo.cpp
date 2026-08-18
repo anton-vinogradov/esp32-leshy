@@ -342,6 +342,7 @@ bool ArduinoFsSessionStoreIo::writeFile(
         return false;
     }
     pendingOpen_ = true;
+    ++writeCalls_;
     UINT written = 0;
     result = f_write(&workspace_.file, data, static_cast<UINT>(size), &written);
     bytesWritten_ += written;

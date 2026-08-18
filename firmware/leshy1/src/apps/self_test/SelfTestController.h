@@ -70,6 +70,16 @@ struct SelfTestFacts final {
     bool capturePcapAuditComplete = false;
     bool capturePcapAuditApplicable = false;
     bool capturePcapAuditPassed = false;
+    bool disposableCommitComplete = false;
+    bool disposableCommitPassed = false;
+    bool disposableRemountComplete = false;
+    bool disposableRemountPassed = false;
+    bool disposableExportComplete = false;
+    bool disposableExportPassed = false;
+    bool disposableCleanupComplete = false;
+    bool disposableCleanupPassed = false;
+    std::uint32_t disposableStorageWriteCalls = 0;
+    std::uint64_t disposableStorageWriteBytes = 0;
 };
 
 struct SelfTestCheckResult final {
@@ -79,8 +89,8 @@ struct SelfTestCheckResult final {
 
 struct SelfTestReport final {
     static constexpr std::uint16_t kSchemaVersion = 1;
-    static constexpr std::uint16_t kPlanVersion = 6;
-    static constexpr std::size_t kCapacity = 25;
+    static constexpr std::uint16_t kPlanVersion = 7;
+    static constexpr std::size_t kCapacity = 29;
 
     SelfTestMode mode = SelfTestMode::Quick;
     SelfTestResultStatus status = SelfTestResultStatus::NotRun;

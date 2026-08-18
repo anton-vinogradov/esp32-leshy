@@ -222,6 +222,16 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     healthy.capturePcapAuditComplete = true;
     healthy.capturePcapAuditApplicable = true;
     healthy.capturePcapAuditPassed = true;
+    healthy.disposableCommitComplete = true;
+    healthy.disposableCommitPassed = true;
+    healthy.disposableRemountComplete = true;
+    healthy.disposableRemountPassed = true;
+    healthy.disposableExportComplete = true;
+    healthy.disposableExportPassed = true;
+    healthy.disposableCleanupComplete = true;
+    healthy.disposableCleanupPassed = true;
+    healthy.disposableStorageWriteCalls = 3;
+    healthy.disposableStorageWriteBytes = 1024;
 
     SelfTestController controller;
     CHECK(controller.view() == SelfTestView::ModeMenu);
@@ -278,8 +288,8 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(full.status == SelfTestResultStatus::Blocked);
     CHECK(!full.readOnly);
     CHECK(full.sequence == 2);
-    CHECK(full.checkCount == 25);
-    CHECK(full.passed == 21);
+    CHECK(full.checkCount == 29);
+    CHECK(full.passed == 25);
     CHECK(full.failed == 0);
     CHECK(full.blocked == 1);
     CHECK(full.notApplicable == 3);
@@ -309,11 +319,23 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
                       "full.s4.capture.pcap.audit") == 0);
     CHECK(full.checks[23].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[24].id,
+                      "full.s4.storage.disposable.commit") == 0);
+    CHECK(full.checks[24].status == SelfTestResultStatus::Pass);
+    CHECK(std::strcmp(full.checks[25].id,
+                      "full.s4.storage.disposable.remount") == 0);
+    CHECK(full.checks[25].status == SelfTestResultStatus::Pass);
+    CHECK(std::strcmp(full.checks[26].id,
+                      "full.s4.library.disposable.export") == 0);
+    CHECK(full.checks[26].status == SelfTestResultStatus::Pass);
+    CHECK(std::strcmp(full.checks[27].id,
+                      "full.s4.storage.disposable.cleanup") == 0);
+    CHECK(full.checks[27].status == SelfTestResultStatus::Pass);
+    CHECK(std::strcmp(full.checks[28].id,
                       "full.capability.coverage") == 0);
     CHECK(std::strcmp(selfTestResultStatusName(
                           SelfTestResultStatus::NotApplicable),
                       "not_applicable") == 0);
-    CHECK(SelfTestReport::kPlanVersion == 6);
+    CHECK(SelfTestReport::kPlanVersion == 7);
 
     CHECK(controller.back());
     CHECK(controller.previousMode());
@@ -343,7 +365,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(coverageFailure.completeActiveChecks(incomplete, 530));
     const SelfTestReport& incompleteReport = coverageFailure.report();
     CHECK(incompleteReport.status == SelfTestResultStatus::Fail);
-    CHECK(incompleteReport.passed == 20);
+    CHECK(incompleteReport.passed == 24);
     CHECK(incompleteReport.failed == 1);
     CHECK(incompleteReport.blocked == 2);
     CHECK(incompleteReport.notApplicable == 2);
@@ -361,7 +383,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     }
     CHECK(blockedProbe.activate(unprobed, 620));
     CHECK(blockedProbe.completeActiveChecks(unprobed, 630));
-    CHECK(blockedProbe.report().passed == 20);
+    CHECK(blockedProbe.report().passed == 24);
     CHECK(blockedProbe.report().failed == 0);
     CHECK(blockedProbe.report().blocked == 2);
     CHECK(blockedProbe.report().notApplicable == 3);
@@ -380,7 +402,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(activeFailure.view() == SelfTestView::ActiveChecks);
     CHECK(activeFailure.completeActiveChecks(failedRf, 730));
     CHECK(activeFailure.report().status == SelfTestResultStatus::Fail);
-    CHECK(activeFailure.report().passed == 20);
+    CHECK(activeFailure.report().passed == 24);
     CHECK(activeFailure.report().failed == 1);
     CHECK(activeFailure.report().blocked == 1);
 
@@ -398,7 +420,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(optionalCapture.activate(missingArtifact, 760));
     CHECK(optionalCapture.completeActiveChecks(missingArtifact, 770));
     CHECK(optionalCapture.report().status == SelfTestResultStatus::Blocked);
-    CHECK(optionalCapture.report().passed == 20);
+    CHECK(optionalCapture.report().passed == 24);
     CHECK(optionalCapture.report().failed == 0);
     CHECK(optionalCapture.report().blocked == 1);
     CHECK(optionalCapture.report().notApplicable == 4);

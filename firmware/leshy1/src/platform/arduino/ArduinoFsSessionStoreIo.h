@@ -50,6 +50,7 @@ public:
     bool writable() const { return writable_; }
     bool pendingWrite() const { return pendingOpen_; }
     std::uint64_t bytesWritten() const { return bytesWritten_; }
+    std::uint32_t writeCalls() const { return writeCalls_; }
     std::uint32_t fileSyncs() const { return fileSyncs_; }
     std::uint32_t directorySyncs() const { return directorySyncs_; }
     std::uint16_t filesRemoved() const { return filesRemoved_; }
@@ -84,6 +85,7 @@ private:
     std::size_t pendingSize_ = 0;
     std::uint64_t byteLimit_ = 0;
     std::uint64_t bytesWritten_ = 0;
+    std::uint32_t writeCalls_ = 0;
     std::uint32_t fileSyncs_ = 0;
     std::uint32_t directorySyncs_ = 0;
     std::uint16_t filesRemoved_ = 0;
