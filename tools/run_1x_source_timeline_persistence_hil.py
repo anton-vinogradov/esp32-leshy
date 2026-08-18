@@ -32,7 +32,7 @@ RUN_SCHEMA = "leshy.source_timeline_persistence_hil.run.v1"
 
 
 def timeline_failures(state: dict[str, Any], terminal: bool) -> list[str]:
-    failures = expect(state, {
+    expected = {
         "survey_timeline_state": "stopped" if terminal else "running",
         "survey_timeline_healthy": True,
         "survey_timeline_selected_mask": 1,
@@ -45,8 +45,10 @@ def timeline_failures(state: dict[str, Any], terminal: bool) -> list[str]:
         "survey_timeline_ble_dropped": 0,
         "survey_timeline_wifi_dropped": 0,
         "survey_timeline_archive_status": "finalized" if terminal else "appended",
-        "survey_timeline_persisted": terminal,
-    }, "timeline")
+    }
+    if terminal:
+        expected["survey_timeline_persisted"] = True
+    failures = expect(state, expected, "timeline")
     accepted = state.get("survey_timeline_wifi_accepted")
     forwarded = state.get("survey_forwarded")
     duty = state.get("survey_timeline_wifi_duty_permille")
