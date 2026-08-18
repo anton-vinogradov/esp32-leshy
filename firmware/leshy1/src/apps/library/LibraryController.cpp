@@ -259,10 +259,11 @@ LibraryExportResult LibraryController::formatSelectedCaptureMetadata(
         "\"ble\":{\"selected\":%s,\"duration_ms\":%lu,"
         "\"interval_ms\":%u,\"window_ms\":%u,\"maximum_records\":%u}},"
         "\"location\":{\"status\":\"not_recorded\"},"
-        "\"payload\":{\"status\":\"not_captured\",\"bytes\":0},"
+        "\"payload\":{\"status\":\"%s\",\"bytes\":%llu,"
+        "\"records\":%u,\"snap_length\":%u,\"format\":\"%s\"},"
         "\"exports\":{\"json_summary\":\"available\","
         "\"csv_observations\":\"available\","
-        "\"pcap\":\"unavailable_no_frame_payload\"},"
+        "\"pcap\":\"%s\"},"
         "\"radio_touched\":false}",
         static_cast<unsigned long>(entry->generation),
         sessionIntegrityName(entry->integrity),
@@ -281,7 +282,16 @@ LibraryExportResult LibraryController::formatSelectedCaptureMetadata(
         static_cast<unsigned long>(capture.bleDurationMs),
         static_cast<unsigned>(capture.bleIntervalMs),
         static_cast<unsigned>(capture.bleWindowMs),
-        static_cast<unsigned>(capture.bleMaximumRecords));
+        static_cast<unsigned>(capture.bleMaximumRecords),
+        capture.framePayloadCaptured ? "captured_raw_80211" : "not_captured",
+        static_cast<unsigned long long>(capture.framePayloadBytes),
+        static_cast<unsigned>(capture.framePayloadRecords),
+        static_cast<unsigned>(capture.framePayloadSnapLength),
+        capture.framePayloadFormat ==
+                services::survey::FramePayloadFormat::Ieee80211
+            ? "ieee80211" : "none",
+        capture.framePayloadCaptured ? "available_radiotap" :
+                                       "unavailable_no_frame_payload");
     return formatResult(output, capacity, written);
 }
 
@@ -362,13 +372,22 @@ LibraryExportResult LibraryController::formatSelectedPcapStatus(
         output[0] = '\0';
         return {LibraryExportStatus::CaptureMetadataUnavailable, 0};
     }
+    const auto& capture = entry->session->captureMetadata();
+    const std::uint64_t pcapBytes = capture.framePayloadCaptured
+        ? 24ULL + static_cast<std::uint64_t>(capture.framePayloadRecords) * 31ULL +
+              capture.framePayloadBytes
+        : 0ULL;
     const int written = std::snprintf(
         output, capacity,
         "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"artifact\","
-        "\"status\":\"unavailable_no_frame_payload\",\"generation\":%lu,"
-        "\"session_id\":\"%s\",\"records\":0,\"bytes\":0,"
+        "\"status\":\"%s\",\"generation\":%lu,"
+        "\"session_id\":\"%s\",\"records\":%u,\"bytes\":%llu,"
         "\"radio_touched\":false}",
-        static_cast<unsigned long>(entry->generation), entry->session->id());
+        capture.framePayloadCaptured ? "available" :
+                                       "unavailable_no_frame_payload",
+        static_cast<unsigned long>(entry->generation), entry->session->id(),
+        static_cast<unsigned>(capture.framePayloadRecords),
+        static_cast<unsigned long long>(pcapBytes));
     return formatResult(output, capacity, written);
 }
 

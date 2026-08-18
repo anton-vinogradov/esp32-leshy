@@ -149,10 +149,13 @@ SessionStoreStatus reopenSelected(SessionStoreIo& io, SessionStoreWorkspace& wor
                     &segmentSize) != SessionStoreIo::ReadStatus::Ok) {
         return SessionStoreStatus::IoError;
     }
-    return reopenSession(workspace.manifest.data(), manifestSize, workspace.segment.data(),
-                         segmentSize, output) == SessionCodecStatus::Valid
-               ? SessionStoreStatus::Valid
-               : SessionStoreStatus::CorruptGeneration;
+    const bool valid = reopenSession(
+        workspace.manifest.data(), manifestSize, workspace.segment.data(),
+        segmentSize, output) == SessionCodecStatus::Valid;
+    workspace.manifestSize = valid ? manifestSize : 0;
+    workspace.segmentSize = valid ? segmentSize : 0;
+    return valid ? SessionStoreStatus::Valid
+                 : SessionStoreStatus::CorruptGeneration;
 }
 
 }  // namespace
@@ -213,6 +216,8 @@ SessionStoreCommitResult commitSession(SessionStoreIo& io, SessionStoreWorkspace
         result.status = SessionStoreStatus::EncodeFailed;
         return result;
     }
+    workspace.segmentSize = segmentSize;
+    workspace.manifestSize = manifestSize;
     StoreCommitBackend backend(io, workspace, segmentSize, manifestSize, generation,
                                publishSlot);
     if (!backend.pathsReady()) {
@@ -225,6 +230,49 @@ SessionStoreCommitResult commitSession(SessionStoreIo& io, SessionStoreWorkspace
     result.stage = committed.stage;
     result.status = committed.complete ? SessionStoreStatus::Valid
                                        : commitFailureStatus(committed.stage);
+    if (result.complete()) workspace.generation = generation;
+    return result;
+}
+
+SessionStoreCommitResult commitWifiFrameCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::WifiFrameSource& frames,
+    std::uint32_t generation, HeadSlot publishSlot) {
+    SessionStoreCommitResult result;
+    result.generation = generation;
+    result.publishedSlot = publishSlot;
+    if (session.state() != services::survey::SessionState::Stopped) {
+        result.status = SessionStoreStatus::SessionNotStopped;
+        return result;
+    }
+    std::size_t segmentSize = 0;
+    std::size_t manifestSize = 0;
+    if (encodeWifiFrameCaptureSegment(
+            session, frames, workspace.segment.data(), workspace.segment.size(),
+            &segmentSize) != SessionCodecStatus::Valid ||
+        encodeSessionManifest(
+            session, workspace.segment.data(), segmentSize,
+            workspace.manifest.data(), workspace.manifest.size(),
+            &manifestSize) != SessionCodecStatus::Valid) {
+        result.status = SessionStoreStatus::EncodeFailed;
+        return result;
+    }
+    workspace.segmentSize = segmentSize;
+    workspace.manifestSize = manifestSize;
+    StoreCommitBackend backend(io, workspace, segmentSize, manifestSize,
+                               generation, publishSlot);
+    if (!backend.pathsReady()) {
+        result.status = SessionStoreStatus::PathError;
+        return result;
+    }
+    const HeadRecord head{generation, static_cast<std::uint32_t>(manifestSize),
+                          crc32c(workspace.manifest.data(), manifestSize)};
+    const CommitResult committed = commitGeneration(backend, head);
+    result.stage = committed.stage;
+    result.status = committed.complete ? SessionStoreStatus::Valid
+                                       : commitFailureStatus(committed.stage);
+    if (result.complete()) workspace.generation = generation;
     return result;
 }
 
@@ -248,6 +296,31 @@ SessionStoreCommitResult commitNextSession(SessionStoreIo& io,
     const HeadSlot publish =
         current.choice == RecoveryChoice::A ? HeadSlot::B : HeadSlot::A;
     return commitSession(io, workspace, session, current.generation + 1U, publish);
+}
+
+SessionStoreCommitResult commitNextWifiFrameCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::WifiFrameSource& frames) {
+    SessionStoreCommitResult result;
+    if (session.state() != services::survey::SessionState::Stopped) {
+        result.status = SessionStoreStatus::SessionNotStopped;
+        return result;
+    }
+    const SessionStoreRecoveryResult current =
+        recoverSession(io, workspace, &workspace.validationSession);
+    if (current.status == SessionStoreStatus::Empty) {
+        return commitWifiFrameCapture(io, workspace, session, frames, 1,
+                                      HeadSlot::A);
+    }
+    if (!current.valid()) {
+        result.status = current.status;
+        return result;
+    }
+    const HeadSlot publish =
+        current.choice == RecoveryChoice::A ? HeadSlot::B : HeadSlot::A;
+    return commitWifiFrameCapture(io, workspace, session, frames,
+                                  current.generation + 1U, publish);
 }
 
 SessionStoreRecoveryResult recoverSession(SessionStoreIo& io,
@@ -279,7 +352,10 @@ SessionStoreRecoveryResult recoverSession(SessionStoreIo& io,
     }
     result.generation = recovered.selected.generation;
     result.status = reopenSelected(io, workspace, result.generation, output);
-    if (result.status == SessionStoreStatus::Valid) result.observations = output->size();
+    if (result.status == SessionStoreStatus::Valid) {
+        result.observations = output->size();
+        workspace.generation = result.generation;
+    }
     return result;
 }
 

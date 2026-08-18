@@ -55,7 +55,12 @@ enum class CaptureMetadataStatus : std::uint8_t {
 
 const char* captureMetadataStatusName(CaptureMetadataStatus status);
 
-// Immutable acquisition provenance for schema-v3 Sessions. It records the exact
+enum class FramePayloadFormat : std::uint8_t {
+    None,
+    Ieee80211,
+};
+
+// Immutable acquisition provenance for schema-v3+ Sessions. It records the exact
 // passive receive plans and build identity that produced the normalized records.
 // Frame payload and location flags are explicit so exports cannot invent PCAP or
 // coordinates from observation-only scans.
@@ -75,6 +80,9 @@ struct CaptureMetadata final {
     std::uint16_t bleWindowMs = 0;
     std::uint16_t bleMaximumRecords = 0;
     std::uint64_t framePayloadBytes = 0;
+    std::uint16_t framePayloadRecords = 0;
+    std::uint16_t framePayloadSnapLength = 0;
+    FramePayloadFormat framePayloadFormat = FramePayloadFormat::None;
     std::array<std::uint8_t, kAppIdentityBytes> appIdentity{};
     std::uint8_t appIdentityLength = 0;
 };

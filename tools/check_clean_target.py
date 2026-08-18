@@ -71,8 +71,8 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.78.0-wifi-frame-capture\\"' not in config:
-        errors.append("clean target does not identify the 0.78 Wi-Fi frame capture slice")
+    if 'LESHY1_VERSION=\\"0.79.0-persistent-frame-capture\\"' not in config:
+        errors.append("clean target does not identify the 0.79 persistent frame capture slice")
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
     for value in forbidden_config:
@@ -620,12 +620,14 @@ def main() -> int:
     for marker in (
         "configureCaptureMetadata",
         "kSessionSchemaVersion = 3",
+        "kWifiFrameSessionSchemaVersion = 4",
         "kTimelineSessionSchemaVersion = 2",
         "kCaptureMagic",
         "kCaptureRecordBytes = 72",
         '\\"leshy.capture.metadata.v1\\"',
-        '\\"unavailable_no_frame_payload\\"',
+        'unavailable_no_frame_payload',
         "formatSelectedCsvRow",
+        "openPersistedWifiFrameCapture",
     ):
         if marker not in capture_sources and marker not in sources:
             errors.append(f"immutable capture/export contract is missing: {marker}")
@@ -641,8 +643,16 @@ def main() -> int:
     ):
         if marker not in entry:
             errors.append(f"product capture/export integration is missing: {marker}")
-    if "framePayloadCaptured = true" in entry:
-        errors.append("product capture falsely claims retained raw frame payloads")
+    for marker in (
+        "productWifiFrameCaptureMetadata()",
+        "metadata.framePayloadCaptured = true",
+        "commitNextWifiFrameCapture(",
+        "CapturePersistState::Confirm",
+        "RAW 802.11",
+        "sessionStoreWorkspace.generation",
+    ):
+        if marker not in sources:
+            errors.append(f"persistent frame capture integration is missing: {marker}")
 
     if not product_start_retry_path.is_file():
         errors.append("Product Start identity retry policy is missing")

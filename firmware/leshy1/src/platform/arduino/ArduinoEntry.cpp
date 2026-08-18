@@ -152,6 +152,7 @@ using leshy1::services::survey::SessionState;
 using leshy1::services::survey::SessionStatus;
 using leshy1::services::survey::CaptureMetadata;
 using leshy1::services::survey::CaptureMetadataStatus;
+using leshy1::services::survey::FramePayloadFormat;
 using leshy1::services::survey::SourceFailureClass;
 using leshy1::services::survey::SourceTimeline;
 using leshy1::services::survey::SourceTimelineState;
@@ -260,6 +261,36 @@ SelfTestController selfTestController;
 BoardWifiPassiveCapture wifiFrameCapture;
 constexpr WifiFrameCapturePlan kProductWifiFrameCapturePlan{};
 std::uint64_t nextCaptureUiRefreshUs = 0;
+enum class CapturePersistState : std::uint8_t {
+    Result,
+    Confirm,
+    Saving,
+    Saved,
+    Failed,
+};
+struct CaptureStoreEvent final {
+    const char* status = "not_started";
+    bool valid = false;
+    bool cleanupComplete = false;
+    std::uint32_t generation = 0;
+    leshy1::storage::SessionStoreStatus storeStatus =
+        leshy1::storage::SessionStoreStatus::InvalidArgument;
+};
+CapturePersistState capturePersistState = CapturePersistState::Result;
+const char* capturePersistStatus = "volatile";
+std::uint32_t capturePersistGeneration = 0;
+QueueHandle_t captureStoreEvents = nullptr;
+TaskHandle_t captureStoreTaskHandle = nullptr;
+const char* capturePersistStateName(CapturePersistState state) {
+    switch (state) {
+        case CapturePersistState::Result: return "volatile";
+        case CapturePersistState::Confirm: return "confirm";
+        case CapturePersistState::Saving: return "saving";
+        case CapturePersistState::Saved: return "saved";
+        case CapturePersistState::Failed: return "failed";
+    }
+    return "failed";
+}
 constexpr std::size_t kConsoleCommandCapacity = 192;
 constexpr char kLongestConsoleCommand[] =
     "storage.littlefs.reset recover read-only "
@@ -1771,6 +1802,255 @@ CaptureMetadata productCaptureMetadata(std::uint8_t selectedSourceMask) {
         }
     }
     return metadata;
+}
+
+CaptureMetadata productWifiFrameCaptureMetadata() {
+    CaptureMetadata metadata = productCaptureMetadata(
+        leshy1::services::survey::sourceMask(RadioKind::Wifi));
+    const auto& plan = wifiFrameCapture.capture().plan();
+    const auto& stats = wifiFrameCapture.stats();
+    metadata.wifiShowHidden = false;
+    metadata.wifiMaxMsPerChannel = plan.channelDwellMs;
+    metadata.wifiChannel = plan.channel;
+    metadata.framePayloadCaptured = true;
+    metadata.framePayloadBytes = stats.payloadBytes;
+    metadata.framePayloadRecords = static_cast<std::uint16_t>(
+        wifiFrameCapture.capture().size());
+    metadata.framePayloadSnapLength = plan.snapLength;
+    metadata.framePayloadFormat = FramePayloadFormat::Ieee80211;
+    return metadata;
+}
+
+void runCaptureStoreWorker(void*) {
+    CaptureStoreEvent event;
+    event.status = "store_failed";
+    bool identityCleanupComplete = true;
+    bool filesystemAttempted = false;
+    leshy1::storage::SdTransportRunResult identity;
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    do {
+        const auto required =
+            leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
+            leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+            leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+        const auto owned = resourceBroker.ownedBy(AppRuntime::kForegroundOwner);
+        if ((owned & required) != required) {
+            event.status = "resources_missing";
+            break;
+        }
+        if (!loadProductFingerprint(expectedFingerprint,
+                                    sizeof(expectedFingerprint))) {
+            event.status = "enrollment_missing";
+            break;
+        }
+        for (std::uint8_t attempt = 1;
+             attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
+             ++attempt) {
+            BoardSdSpiTransport transport;
+            const bool begun = transport.begin();
+            identity = {};
+            if (begun) {
+                leshy1::storage::SdTransportRunPolicy policy;
+                policy.allowPhysical = true;
+                policy.explicitlySelected = true;
+                policy.identificationOnly = true;
+                policy.ownedResources = owned;
+                identity = leshy1::storage::runSdIdentificationStateMachine(
+                    leshy1::storage::defaultSdIdentificationPlan(), transport,
+                    policy);
+                transport.end();
+            }
+            identityCleanupComplete = transport.cleanupComplete();
+            formatCidFingerprint(identity.identity, observedFingerprint,
+                                 sizeof(observedFingerprint));
+            if (identityCleanupComplete &&
+                identity.status ==
+                    leshy1::storage::SdTransportRunStatus::Valid) {
+                break;
+            }
+            const leshy1::storage::ProductStartIdentityRetryEvidence evidence{
+                true, true, exactCidFingerprint(expectedFingerprint),
+                (owned & required) == required,
+                transport.physicalSpiStarted(), identity.status,
+                std::strcmp(observedFingerprint,
+                            "00000000000000000000000000000000") == 0,
+                identityCleanupComplete, filesystemAttempted,
+            };
+            if (!leshy1::storage::shouldRetryProductStartIdentity(
+                    evidence, attempt)) {
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(
+                leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+        }
+        if (!identityCleanupComplete ||
+            identity.status != leshy1::storage::SdTransportRunStatus::Valid) {
+            event.status = "identity_failed";
+            break;
+        }
+        if (std::strcmp(expectedFingerprint, observedFingerprint) != 0) {
+            event.status = "fingerprint_mismatch";
+            break;
+        }
+        filesystemAttempted = true;
+        if (!productSurveyFilesystem.begin()) {
+            event.status = "mount_failed";
+            break;
+        }
+        const std::uint64_t cardCapacity =
+            productSurveyFilesystem.cardCapacityBytes();
+        const std::uint64_t cachedFree =
+            productSurveyFilesystem.cachedFreeBytes();
+        const bool rootExists = productSurveyFilesystem.exists(
+            leshy1::storage::kProductSessionStoreRoot);
+        leshy1::storage::MediaIdentity media;
+        media.present = cardCapacity != 0 &&
+            cardCapacity == identity.identity.capacityBytes;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = observedFingerprint;
+        media.capacityBytes = cardCapacity;
+        media.freeBytes = cachedFree;
+        leshy1::storage::ProductStoreRequest request;
+        request.operation =
+            leshy1::storage::ProductStoreOperation::CommitSession;
+        request.explicitlySelected = true;
+        request.expectedFingerprint = expectedFingerprint;
+        request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        request.rootExists = rootExists;
+        request.driverWriteEnabled = true;
+        request.requiredBytes = kProductSurveyCommitBytes;
+        request.reserveBytes = kProductSurveyReserveBytes;
+        request.ownedResources = owned;
+        const leshy1::storage::ProductStorePermit permit =
+            leshy1::storage::authorizeProductStore(media, request);
+        if (!permit.allowed()) {
+            event.status =
+                leshy1::storage::productStoreAccessStatusName(permit.status);
+            break;
+        }
+        if (!productSurveyStore.selectDrive(
+                productSurveyFilesystem.driveNumber()) ||
+            !productSurveyStore.openExistingWritable(permit)) {
+            event.status = "store_open_failed";
+            break;
+        }
+
+        const auto& stats = wifiFrameCapture.stats();
+        char sessionId[SurveySession::kSessionIdCapacity + 1] = {};
+        std::snprintf(sessionId, sizeof(sessionId), "wifi-cap-%08llx",
+                      static_cast<unsigned long long>(
+                          stats.startedUs & 0xFFFFFFFFULL));
+        surveySession.reset();
+        if (stats.state != WifiFrameCaptureState::Complete ||
+            wifiFrameCapture.capture().size() == 0 ||
+            surveySession.start(sessionId, stats.startedUs) !=
+                SessionStatus::Started ||
+            surveySession.configureCaptureMetadata(
+                productWifiFrameCaptureMetadata()) !=
+                CaptureMetadataStatus::Configured ||
+            surveySession.stop(stats.endedUs) != SessionStatus::Stopped) {
+            event.status = "artifact_invalid";
+            break;
+        }
+        const leshy1::storage::SessionStoreCommitResult commit =
+            leshy1::storage::commitNextWifiFrameCapture(
+                productSurveyStore, sessionStoreWorkspace, surveySession,
+                wifiFrameCapture.capture());
+        event.storeStatus = commit.status;
+        if (!commit.complete()) {
+            event.status = leshy1::storage::sessionStoreStatusName(commit.status);
+            break;
+        }
+        const leshy1::storage::SessionStoreRecoveryResult recovered =
+            leshy1::storage::recoverSession(
+                productSurveyStore, sessionStoreWorkspace,
+                &sessionStoreWorkspace.validationSession);
+        if (!recovered.valid() || recovered.generation != commit.generation) {
+            event.status = "reopen_failed";
+            event.storeStatus = recovered.status;
+            break;
+        }
+        event.valid = true;
+        event.generation = recovered.generation;
+        event.status = "saved";
+    } while (false);
+
+    productSurveyStore.end();
+    if (productSurveyFilesystem.mounted()) productSurveyFilesystem.end();
+    const bool filesystemCleanup = !filesystemAttempted ||
+        productSurveyFilesystem.cleanupComplete();
+    event.cleanupComplete = identityCleanupComplete && filesystemCleanup &&
+        !productSurveyFilesystem.mounted();
+    if (!event.cleanupComplete) {
+        event.valid = false;
+        event.status = "cleanup_failed";
+    }
+    if (captureStoreEvents != nullptr) {
+        xQueueSend(captureStoreEvents, &event, portMAX_DELAY);
+    }
+    vTaskDelete(nullptr);
+}
+
+bool requestWifiFrameCapturePersist() {
+    if (capturePersistState != CapturePersistState::Confirm ||
+        wifiFrameCapture.stats().state != WifiFrameCaptureState::Complete ||
+        wifiFrameCapture.capture().size() == 0) {
+        return false;
+    }
+    if (captureStoreEvents == nullptr || captureStoreTaskHandle != nullptr) {
+        capturePersistState = CapturePersistState::Failed;
+        capturePersistStatus = "worker_unavailable";
+        lastRuntimeEvent = "capture_store_worker_unavailable";
+        return true;
+    }
+    const auto storageResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    if (!resourceBroker.acquire(AppRuntime::kForegroundOwner,
+                                storageResources)) {
+        capturePersistState = CapturePersistState::Failed;
+        capturePersistStatus = "resources_busy";
+        lastRuntimeEvent = "capture_store_resources_busy";
+        return true;
+    }
+    capturePersistState = CapturePersistState::Saving;
+    capturePersistStatus = "saving";
+    const bool started = xTaskCreatePinnedToCore(
+        runCaptureStoreWorker, "leshy-cap-store", 8192, nullptr, 1,
+        &captureStoreTaskHandle, 0) == pdPASS;
+    if (!started) {
+        resourceBroker.release(AppRuntime::kForegroundOwner, storageResources);
+        captureStoreTaskHandle = nullptr;
+        capturePersistState = CapturePersistState::Failed;
+        capturePersistStatus = "worker_unavailable";
+        lastRuntimeEvent = "capture_store_worker_unavailable";
+    } else {
+        lastRuntimeEvent = "capture_store_saving";
+    }
+    return true;
+}
+
+void serviceWifiFrameCapturePersist() {
+    if (captureStoreEvents == nullptr) return;
+    CaptureStoreEvent event;
+    if (xQueueReceive(captureStoreEvents, &event, 0) != pdTRUE) return;
+    captureStoreTaskHandle = nullptr;
+    const auto storageResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    resourceBroker.release(AppRuntime::kForegroundOwner, storageResources);
+    const bool admitted = event.valid && event.cleanupComplete &&
+        libraryController.replaceWithOwnedCopy(
+            sessionStoreWorkspace.validationSession, librarySession,
+            event.generation, SessionIntegrity::Valid, true, false);
+    capturePersistState = admitted ? CapturePersistState::Saved
+                                   : CapturePersistState::Failed;
+    capturePersistStatus = admitted ? "saved" : event.status;
+    capturePersistGeneration = admitted ? event.generation : 0;
+    lastRuntimeEvent = admitted ? "capture_store_saved"
+                                : "capture_store_failed";
+    if (uiController.page() == 4) renderInteractiveScreen();
 }
 
 void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
@@ -3450,6 +3730,16 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{NavigationKey::Left, UiTextId::NavCancel}, {},
                     {NavigationKey::RightAndSelect, UiTextId::NavStop}};
         }
+        if (state == WifiFrameCaptureState::Complete &&
+            capturePersistState == CapturePersistState::Result) {
+            return {{NavigationKey::Left, UiTextId::NavHome}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavSave}};
+        }
+        if (state == WifiFrameCaptureState::Complete &&
+            capturePersistState == CapturePersistState::Confirm) {
+            return {{NavigationKey::Left, UiTextId::NavBack}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavSave}};
+        }
         return {{NavigationKey::Left, UiTextId::NavHome}, {}, {}};
     }
 
@@ -3758,7 +4048,17 @@ void renderCapturePage(bool clearContent) {
     if (stats.state == WifiFrameCaptureState::Running) {
         renderHeader(tr(UiTextId::CaptureRunning), clearContent);
     } else if (stats.state == WifiFrameCaptureState::Complete) {
-        renderHeader(tr(UiTextId::CaptureResult), clearContent);
+        const UiTextId title =
+            capturePersistState == CapturePersistState::Confirm
+                ? UiTextId::CaptureSaveConfirm
+                : capturePersistState == CapturePersistState::Saving
+                      ? UiTextId::CaptureSaving
+                      : capturePersistState == CapturePersistState::Saved
+                            ? UiTextId::CaptureSaved
+                            : capturePersistState == CapturePersistState::Failed
+                                  ? UiTextId::CaptureSaveFailed
+                                  : UiTextId::CaptureResult;
+        renderHeader(tr(title), clearContent);
     } else {
         renderHeader(tr(UiTextId::CaptureError), clearContent);
     }
@@ -3785,9 +4085,30 @@ void renderCapturePage(bool clearContent) {
     if (stats.state == WifiFrameCaptureState::Running) {
         display.print(tr(UiTextId::CaptureStopNote));
     } else if (stats.state == WifiFrameCaptureState::Complete) {
-        display.print(tr(UiTextId::CapturePcapNote));
+        const UiTextId firstNote =
+            capturePersistState == CapturePersistState::Confirm
+                ? UiTextId::CapturePrivacyNote
+                : capturePersistState == CapturePersistState::Saving
+                      ? UiTextId::CaptureSavingNote
+                      : capturePersistState == CapturePersistState::Saved
+                            ? UiTextId::CaptureSavedNote
+                            : capturePersistState == CapturePersistState::Failed
+                                  ? UiTextId::CaptureSaveFailedNote
+                                  : UiTextId::CapturePcapNote;
+        display.print(tr(firstNote));
         setUiCursor(UiTextRole::Meta, 14, 222);
-        display.print(tr(UiTextId::CaptureScrubNote));
+        if (capturePersistState == CapturePersistState::Confirm) {
+            display.print(tr(UiTextId::CaptureConfirmNote));
+        } else if (capturePersistState == CapturePersistState::Saved) {
+            std::snprintf(line, sizeof(line), "GEN %lu | %s",
+                          static_cast<unsigned long>(capturePersistGeneration),
+                          capturePersistStatus);
+            display.print(line);
+        } else if (capturePersistState == CapturePersistState::Failed) {
+            display.print(capturePersistStatus);
+        } else if (capturePersistState == CapturePersistState::Result) {
+            display.print(tr(UiTextId::CaptureScrubNote));
+        }
     } else {
         display.print(tr(UiTextId::CaptureFailureNote));
     }
@@ -4365,8 +4686,13 @@ void renderLibraryListRow(std::size_t index) {
     display.print(entry->session->id());
     char line[96] = {};
     display.setTextColor(Palette::Positive, background);
-    std::snprintf(line, sizeof(line), tr(UiTextId::LibraryRowFormat),
-                  static_cast<unsigned>(entry->session->size()),
+    const auto& capture = entry->session->captureMetadata();
+    std::snprintf(line, sizeof(line),
+                  tr(capture.framePayloadCaptured
+                         ? UiTextId::LibraryCaptureRowFormat
+                         : UiTextId::LibraryRowFormat),
+                  static_cast<unsigned>(capture.framePayloadCaptured
+                      ? capture.framePayloadRecords : entry->session->size()),
                   static_cast<unsigned long>(entry->generation),
                   leshy1::apps::library::sessionIntegrityName(entry->integrity));
     setUiCursor(UiTextRole::Meta, 20, y + 23);
@@ -4389,9 +4715,12 @@ void renderLibraryPage(bool clearContent) {
         setUiCursor(UiTextRole::Body, 14, 132);
         display.print(tr(UiTextId::FormatSummaryReady));
         setUiCursor(UiTextRole::Body, 14, 155);
-        display.print(tr(UiTextId::FormatCsvReady));
+        const bool rawFrames = selected->session->captureMetadata().framePayloadCaptured;
+        display.print(tr(rawFrames ? UiTextId::FormatCsvNoObservations
+                                   : UiTextId::FormatCsvReady));
         setUiCursor(UiTextRole::Meta, 14, 180);
-        display.print(tr(UiTextId::FormatPcapNoFrames));
+        display.print(tr(rawFrames ? UiTextId::FormatPcapReady
+                                   : UiTextId::FormatPcapNoFrames));
         setUiCursor(UiTextRole::Meta, 14, 201);
         display.print(tr(UiTextId::TransportSerial));
         display.setTextColor(Palette::Positive, Palette::Canvas);
@@ -4411,8 +4740,16 @@ void renderLibraryPage(bool clearContent) {
                       static_cast<unsigned long>(selected->generation));
         setUiCursor(UiTextRole::Body, 14, 116);
         display.print(line);
-        std::snprintf(line, sizeof(line), tr(UiTextId::ObservationsFormat),
-                      static_cast<unsigned>(selected->session->size()));
+        const auto& capture = selected->session->captureMetadata();
+        if (capture.framePayloadCaptured) {
+            std::snprintf(
+                line, sizeof(line), tr(UiTextId::CapturePayloadFormat),
+                static_cast<unsigned>(capture.framePayloadRecords),
+                static_cast<unsigned long long>(capture.framePayloadBytes));
+        } else {
+            std::snprintf(line, sizeof(line), tr(UiTextId::ObservationsFormat),
+                          static_cast<unsigned>(selected->session->size()));
+        }
         setUiCursor(UiTextRole::Body, 14, 142);
         display.print(line);
         std::snprintf(line, sizeof(line), tr(UiTextId::IntegrityFormat),
@@ -4697,6 +5034,9 @@ void releaseWifiFrameCaptureRfLease() {
 
 bool startWifiFrameCapture() {
     wifiFrameCapture.reset();
+    capturePersistState = CapturePersistState::Result;
+    capturePersistStatus = "volatile";
+    capturePersistGeneration = 0;
     std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (startedUs == 0U) startedUs = 1U;
@@ -5106,8 +5446,10 @@ void emitWifiFrameCaptureState(Stream& reply) {
         "{\"schema\":\"leshy.capture.wifi_frame.v1\",\"kind\":\"state\","
         "\"state\":\"%s\",\"passive_only\":true,\"rx_only\":true,"
         "\"application_connect_calls\":0,\"application_raw_tx_calls\":0,"
-        "\"physical_no_tx_verified\":false,\"storage_written\":false,"
+        "\"physical_no_tx_verified\":false,\"storage_written\":%s,"
         "\"volatile_ram\":true,\"immutable_after_stop\":true,"
+        "\"persist_state\":\"%s\",\"persist_status\":\"%s\","
+        "\"persist_generation\":%lu,"
         "\"channel_plan\":%u,\"current_channel\":%u,"
         "\"duration_ms\":%lu,\"channel_dwell_ms\":%u,"
         "\"snap_length\":%u,\"maximum_frames\":%u,"
@@ -5120,6 +5462,9 @@ void emitWifiFrameCaptureState(Stream& reply) {
         "\"pcap_timebase\":\"monotonic_us\","
         "\"cleanup_complete\":%s,\"lease_mask\":%lu}",
         leshy1::apps::capture::wifiFrameCaptureStateName(stats.state),
+        capturePersistState == CapturePersistState::Saved ? "true" : "false",
+        capturePersistStateName(capturePersistState), capturePersistStatus,
+        static_cast<unsigned long>(capturePersistGeneration),
         static_cast<unsigned>(plan.channel),
         static_cast<unsigned>(wifiFrameCapture.currentChannel()),
         static_cast<unsigned long>(plan.durationMs),
@@ -5465,11 +5810,43 @@ bool applyUiAction(UiAction action, bool render = true) {
             uiController.recordHandledAction(action);
             return finish(stopWifiFrameCapture());
         }
+        if (state == WifiFrameCaptureState::Complete &&
+            capturePersistState == CapturePersistState::Result &&
+            (action == UiAction::Select || action == UiAction::Right)) {
+            capturePersistState = CapturePersistState::Confirm;
+            capturePersistStatus = "awaiting_confirmation";
+            lastRuntimeEvent = "capture_store_confirm";
+            uiController.recordHandledAction(action);
+            return finish(true);
+        }
+        if (state == WifiFrameCaptureState::Complete &&
+            capturePersistState == CapturePersistState::Confirm &&
+            (action == UiAction::Select || action == UiAction::Right)) {
+            uiController.recordHandledAction(action);
+            return finish(requestWifiFrameCapturePersist());
+        }
+        if (state == WifiFrameCaptureState::Complete &&
+            capturePersistState == CapturePersistState::Confirm &&
+            (action == UiAction::Back || action == UiAction::Left)) {
+            capturePersistState = CapturePersistState::Result;
+            capturePersistStatus = "volatile";
+            lastRuntimeEvent = "capture_store_cancelled";
+            uiController.recordHandledAction(action);
+            return finish(true);
+        }
+        if (state == WifiFrameCaptureState::Complete &&
+            capturePersistState == CapturePersistState::Saving) {
+            uiController.recordHandledAction(action);
+            return finish(false);
+        }
         if (action == UiAction::Back || action == UiAction::Left) {
             if (state == WifiFrameCaptureState::Running) {
                 stopWifiFrameCapture();
             }
             wifiFrameCapture.reset();
+            capturePersistState = CapturePersistState::Result;
+            capturePersistStatus = "volatile";
+            capturePersistGeneration = 0;
             nextCaptureUiRefreshUs = 0;
         }
     }
@@ -5549,6 +5926,9 @@ bool applyUiAction(UiAction action, bool render = true) {
         if (openable && selected != nullptr &&
             std::strcmp(selected->id, "capture") == 0) {
             wifiFrameCapture.reset();
+            capturePersistState = CapturePersistState::Result;
+            capturePersistStatus = "volatile";
+            capturePersistGeneration = 0;
             nextCaptureUiRefreshUs = 0;
         }
         if (openable && selected != nullptr &&
@@ -9054,18 +9434,71 @@ void emitLibraryPcapStatus(Stream& reply) {
             "\"status\":\"not_requested\",\"radio_touched\":false}");
         return;
     }
-    const auto result = libraryController.formatSelectedPcapStatus(
-        diagnosticJson, sizeof(diagnosticJson));
-    if (result.valid()) {
+    const LibraryEntry* entry = libraryController.selected();
+    if (entry == nullptr || entry->session == nullptr ||
+        !entry->session->captureMetadata().framePayloadCaptured) {
+        const auto result = libraryController.formatSelectedPcapStatus(
+            diagnosticJson, sizeof(diagnosticJson));
+        if (result.valid()) {
+            reply.println(diagnosticJson);
+        } else {
+            std::snprintf(
+                diagnosticJson, sizeof(diagnosticJson),
+                "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"artifact\","
+                "\"status\":\"%s\",\"radio_touched\":false}",
+                leshy1::apps::library::libraryExportStatusName(result.status));
+            reply.println(diagnosticJson);
+        }
+        return;
+    }
+    if (entry->generation != sessionStoreWorkspace.generation) {
+        reply.println(
+            "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"error\","
+            "\"reason\":\"generation_not_loaded\",\"radio_touched\":false}");
+        return;
+    }
+    leshy1::storage::PersistedWifiFrameCaptureView persisted;
+    const auto opened = leshy1::storage::openPersistedWifiFrameCapture(
+        *entry->session, sessionStoreWorkspace.segment.data(),
+        sessionStoreWorkspace.segmentSize, &persisted);
+    if (opened != leshy1::storage::SessionCodecStatus::Valid) {
+        std::snprintf(
+            diagnosticJson, sizeof(diagnosticJson),
+            "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"error\","
+            "\"reason\":\"%s\",\"radio_touched\":false}",
+            leshy1::storage::sessionCodecStatusName(opened));
         reply.println(diagnosticJson);
         return;
     }
+    const auto& source = static_cast<
+        const leshy1::domain::captures::WifiFrameSource&>(persisted);
+    const std::size_t expected =
+        leshy1::apps::capture::radiotapPcapSize(source);
     std::snprintf(
         diagnosticJson, sizeof(diagnosticJson),
-        "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"artifact\","
-        "\"status\":\"%s\",\"radio_touched\":false}",
-        leshy1::apps::library::libraryExportStatusName(result.status));
+        "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"pcap_begin\","
+        "\"status\":\"valid\",\"generation\":%lu,\"session_id\":\"%s\","
+        "\"bytes\":%u,\"frames\":%u,\"linktype\":127,"
+        "\"timebase\":\"monotonic_us\",\"streaming\":true,"
+        "\"persistent\":true,\"radio_touched\":false}",
+        static_cast<unsigned long>(entry->generation), entry->session->id(),
+        static_cast<unsigned>(expected),
+        static_cast<unsigned>(persisted.frameCount()));
     reply.println(diagnosticJson);
+    reply.flush();
+    StreamPcapSink sink{&reply};
+    const PcapExportResult pcap = leshy1::apps::capture::writeRadiotapPcap(
+        source, writePcapBytes, &sink);
+    std::snprintf(
+        diagnosticJson, sizeof(diagnosticJson),
+        "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"pcap_end\","
+        "\"status\":\"%s\",\"bytes\":%u,\"frames\":%u,"
+        "\"persistent\":true,\"radio_touched\":false}",
+        pcap.valid ? "valid" : "stream_failed",
+        static_cast<unsigned>(pcap.bytesWritten),
+        static_cast<unsigned>(pcap.framesWritten));
+    reply.println(diagnosticJson);
+    reply.flush();
 }
 
 void emitHilSessionBegin(Stream& reply, const char* command) {
@@ -9672,6 +10105,7 @@ void setup() {
     storageDiscoveryReady = leshy1::storage::validateMediaDiscovery(storageDiscovery) ==
                             leshy1::storage::MediaDiscoveryValidation::Valid;
     productSurveyWorkerReady = initializeProductSurveyWorker();
+    captureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
 
     inventory.add({"board.profile",
                    flashMatches && psramMatches ? CapabilityState::Available
@@ -9791,6 +10225,7 @@ void setup() {
 void loop() {
     serviceProductSurveyWorker();
     serviceWifiFrameCapture();
+    serviceWifiFrameCapturePersist();
     poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
     poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
     PhysicalInputEvent inputEvent;

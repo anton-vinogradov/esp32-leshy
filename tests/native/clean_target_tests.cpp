@@ -1547,7 +1547,7 @@ void testSessionCodecCommitsCanonicalDataAndReopensOffline() {
 
     std::array<std::uint8_t, kSessionManifestMaxBytes> futureManifest = manifest;
     CHECK(manifestSize > 2);
-    futureManifest[2] = 4;
+    futureManifest[2] = kWifiFrameSessionSchemaVersion + 1U;
     CHECK(decodeSessionManifest(futureManifest.data(), manifestSize, &decodedManifest) ==
           SessionCodecStatus::UnsupportedSchema);
     futureManifest = manifest;
@@ -1835,6 +1835,64 @@ void testWifiFrameCaptureExportsByteExactRadiotapPcap() {
     CHECK(std::strcmp(wifiFrameKindName(WifiFrameKind::Data), "data") == 0);
     CHECK(std::strcmp(wifiFrameCaptureStateName(capture.stats().state),
                       "complete") == 0);
+
+    SurveySession artifact;
+    CHECK(artifact.start("wifi-frames-01", 1000000) == SessionStatus::Started);
+    CaptureMetadata metadata;
+    metadata.present = true;
+    metadata.passive = true;
+    metadata.selectedSourceMask = sourceMask(RadioKind::Wifi);
+    metadata.wifiMaxMsPerChannel = plan.channelDwellMs;
+    metadata.wifiChannel = plan.channel;
+    metadata.framePayloadCaptured = true;
+    metadata.framePayloadBytes = capture.stats().payloadBytes;
+    metadata.framePayloadRecords = capture.size();
+    metadata.framePayloadSnapLength = plan.snapLength;
+    metadata.framePayloadFormat = FramePayloadFormat::Ieee80211;
+    metadata.appIdentity.fill(0xAB);
+    metadata.appIdentityLength = metadata.appIdentity.size();
+    CHECK(artifact.configureCaptureMetadata(metadata) ==
+          CaptureMetadataStatus::Configured);
+    CHECK(artifact.stop(2000000) == SessionStatus::Stopped);
+
+    std::array<std::uint8_t, kSessionSegmentMaxBytes> segment{};
+    std::array<std::uint8_t, kSessionManifestMaxBytes> manifest{};
+    std::size_t segmentSize = 0;
+    std::size_t manifestSize = 0;
+    CHECK(encodeWifiFrameCaptureSegment(
+              artifact, capture, segment.data(), segment.size(), &segmentSize) ==
+          SessionCodecStatus::Valid);
+    CHECK(encodeSessionManifest(
+              artifact, segment.data(), segmentSize, manifest.data(),
+              manifest.size(), &manifestSize) == SessionCodecStatus::Valid);
+    SessionManifest decodedManifest;
+    CHECK(decodeSessionManifest(manifest.data(), manifestSize,
+                                &decodedManifest) == SessionCodecStatus::Valid);
+    CHECK(decodedManifest.schemaVersion == kWifiFrameSessionSchemaVersion);
+    SurveySession reopened;
+    CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
+                        segmentSize, &reopened) == SessionCodecStatus::Valid);
+    CHECK(reopened.captureMetadata().framePayloadCaptured);
+    CHECK(reopened.captureMetadata().framePayloadRecords == 2);
+    std::array<char, 768> captureSummary{};
+    CHECK(formatSessionJsonSummary(reopened, captureSummary.data(),
+                                   captureSummary.size()));
+    CHECK(std::strstr(captureSummary.data(), "leshy.capture.summary.v1") != nullptr);
+    CHECK(std::strstr(captureSummary.data(), "\"frames\":2") != nullptr);
+    PersistedWifiFrameCaptureView persisted;
+    CHECK(openPersistedWifiFrameCapture(reopened, segment.data(), segmentSize,
+                                        &persisted) == SessionCodecStatus::Valid);
+    CHECK(persisted.frameCount() == capture.size());
+    PcapMemorySink persistedSink;
+    const PcapExportResult persistedPcap = writeRadiotapPcap(
+        static_cast<const leshy1::domain::captures::WifiFrameSource&>(persisted),
+        appendPcapBytes, &persistedSink);
+    CHECK(persistedPcap.valid);
+    CHECK(persistedSink.bytes == sink.bytes);
+    segment[100] ^= 0x01U;
+    CHECK(openPersistedWifiFrameCapture(reopened, segment.data(), segmentSize,
+                                        &persisted) ==
+          SessionCodecStatus::ChecksumMismatch);
 
     capture.reset();
     CHECK(capture.stats().state == WifiFrameCaptureState::Idle);

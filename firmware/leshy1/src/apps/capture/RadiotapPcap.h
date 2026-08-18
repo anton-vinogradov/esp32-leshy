@@ -16,6 +16,10 @@ struct PcapExportResult final {
     std::size_t framesWritten = 0;
 };
 
+std::size_t radiotapPcapSize(const domain::captures::WifiFrameSource& source);
+PcapExportResult writeRadiotapPcap(
+    const domain::captures::WifiFrameSource& source,
+    PcapByteSink sink, void* context);
 std::size_t radiotapPcapSize(const WifiFrameCapture& capture);
 PcapExportResult writeRadiotapPcap(const WifiFrameCapture& capture,
                                    PcapByteSink sink, void* context);

@@ -36,50 +36,51 @@ bool emit(PcapByteSink sink, void* context, const std::uint8_t* data,
 
 }  // namespace
 
-std::size_t radiotapPcapSize(const WifiFrameCapture& capture) {
-    if (capture.stats().state != WifiFrameCaptureState::Complete) return 0;
+std::size_t radiotapPcapSize(
+    const domain::captures::WifiFrameSource& source) {
     std::size_t bytes = kGlobalHeaderBytes;
-    for (std::size_t index = 0; index < capture.size(); ++index) {
-        const WifiFrame* frame = capture.frame(index);
-        if (frame == nullptr) return 0;
+    for (std::size_t index = 0; index < source.frameCount(); ++index) {
+        domain::captures::WifiFrameView frame;
+        if (!source.frameView(index, &frame) || frame.payload == nullptr) return 0;
         bytes += kRecordHeaderBytes + kRadiotapHeaderBytes +
-                 frame->capturedLength;
+                 frame.capturedLength;
     }
     return bytes;
 }
 
-PcapExportResult writeRadiotapPcap(const WifiFrameCapture& capture,
-                                   PcapByteSink sink, void* context) {
+PcapExportResult writeRadiotapPcap(
+    const domain::captures::WifiFrameSource& source,
+    PcapByteSink sink, void* context) {
     PcapExportResult result;
-    if (sink == nullptr ||
-        capture.stats().state != WifiFrameCaptureState::Complete) {
-        return result;
-    }
+    if (sink == nullptr || source.frameCount() == 0U ||
+        source.snapLength() == 0U) return result;
 
     std::array<std::uint8_t, kGlobalHeaderBytes> global{};
     put32(global.data(), 0xA1B2C3D4U);
     put16(global.data() + 4, 2U);
     put16(global.data() + 6, 4U);
     put32(global.data() + 16, static_cast<std::uint32_t>(
-        kRadiotapHeaderBytes + capture.plan().snapLength));
+        kRadiotapHeaderBytes + source.snapLength()));
     put32(global.data() + 20, kRadiotapLinkType);
     if (!emit(sink, context, global.data(), global.size(), &result)) {
         return result;
     }
 
-    for (std::size_t index = 0; index < capture.size(); ++index) {
-        const WifiFrame* frame = capture.frame(index);
-        if (frame == nullptr) return result;
+    for (std::size_t index = 0; index < source.frameCount(); ++index) {
+        domain::captures::WifiFrameView frame;
+        if (!source.frameView(index, &frame) || frame.payload == nullptr) {
+            return result;
+        }
         const std::uint32_t capturedLength = static_cast<std::uint32_t>(
-            kRadiotapHeaderBytes + frame->capturedLength);
+            kRadiotapHeaderBytes + frame.capturedLength);
         const std::uint32_t originalLength = static_cast<std::uint32_t>(
-            kRadiotapHeaderBytes + frame->originalLength);
+            kRadiotapHeaderBytes + frame.originalLength);
 
         std::array<std::uint8_t, kRecordHeaderBytes> record{};
-        put32(record.data(), static_cast<std::uint32_t>(frame->monotonicUs /
+        put32(record.data(), static_cast<std::uint32_t>(frame.monotonicUs /
                                                         1000000ULL));
         put32(record.data() + 4, static_cast<std::uint32_t>(
-            frame->monotonicUs % 1000000ULL));
+            frame.monotonicUs % 1000000ULL));
         put32(record.data() + 8, capturedLength);
         put32(record.data() + 12, originalLength);
         if (!emit(sink, context, record.data(), record.size(), &result)) {
@@ -90,20 +91,34 @@ PcapExportResult writeRadiotapPcap(const WifiFrameCapture& capture,
         put16(radiotap.data() + 2, kRadiotapHeaderBytes);
         // FLAGS + CHANNEL + DBM_ANTSIGNAL. Channel begins at an aligned offset.
         put32(radiotap.data() + 4, (1U << 1U) | (1U << 3U) | (1U << 5U));
-        radiotap[8] = frame->fcsIncluded ? 0x10U : 0U;
-        put16(radiotap.data() + 10, channelFrequencyMhz(frame->channel));
+        radiotap[8] = frame.fcsIncluded ? 0x10U : 0U;
+        put16(radiotap.data() + 10, channelFrequencyMhz(frame.channel));
         put16(radiotap.data() + 12, 0x0080U);  // 2 GHz channel.
-        radiotap[14] = static_cast<std::uint8_t>(frame->rssiDbm);
+        radiotap[14] = static_cast<std::uint8_t>(frame.rssiDbm);
         if (!emit(sink, context, radiotap.data(), radiotap.size(), &result) ||
-            !emit(sink, context, frame->payload.data(), frame->capturedLength,
+            !emit(sink, context, frame.payload, frame.capturedLength,
                   &result)) {
             return result;
         }
         ++result.framesWritten;
     }
-    result.valid = result.framesWritten == capture.size() &&
-                   result.bytesWritten == radiotapPcapSize(capture);
+    result.valid = result.framesWritten == source.frameCount() &&
+                   result.bytesWritten == radiotapPcapSize(source);
     return result;
+}
+
+std::size_t radiotapPcapSize(const WifiFrameCapture& capture) {
+    if (capture.stats().state != WifiFrameCaptureState::Complete) return 0;
+    return radiotapPcapSize(
+        static_cast<const domain::captures::WifiFrameSource&>(capture));
+}
+
+PcapExportResult writeRadiotapPcap(const WifiFrameCapture& capture,
+                                   PcapByteSink sink, void* context) {
+    if (capture.stats().state != WifiFrameCaptureState::Complete) return {};
+    return writeRadiotapPcap(
+        static_cast<const domain::captures::WifiFrameSource&>(capture),
+        sink, context);
 }
 
 }  // namespace leshy1::apps::capture

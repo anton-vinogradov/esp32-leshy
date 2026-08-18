@@ -48,6 +48,9 @@ struct SessionStoreWorkspace final {
     std::array<std::uint8_t, kHeadWireSize> headA{};
     std::array<std::uint8_t, kHeadWireSize> headB{};
     services::survey::SurveySession validationSession{};
+    std::size_t segmentSize = 0;
+    std::size_t manifestSize = 0;
+    std::uint32_t generation = 0;
 };
 
 enum class SessionStoreStatus : std::uint8_t {
@@ -82,6 +85,15 @@ SessionStoreCommitResult commitSession(SessionStoreIo& io, SessionStoreWorkspace
 SessionStoreCommitResult commitNextSession(SessionStoreIo& io,
                                            SessionStoreWorkspace& workspace,
                                            const services::survey::SurveySession& session);
+SessionStoreCommitResult commitWifiFrameCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::WifiFrameSource& frames,
+    std::uint32_t generation, HeadSlot publishSlot);
+SessionStoreCommitResult commitNextWifiFrameCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::WifiFrameSource& frames);
 
 struct SessionStoreRecoveryResult final {
     SessionStoreStatus status = SessionStoreStatus::NoGeneration;

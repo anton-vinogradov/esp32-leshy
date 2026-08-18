@@ -4,13 +4,11 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "domain/captures/WifiFrame.h"
+
 namespace leshy1::apps::capture {
 
-enum class WifiFrameKind : std::uint8_t {
-    Management,
-    Control,
-    Data,
-};
+using WifiFrameKind = domain::captures::WifiFrameKind;
 
 const char* wifiFrameKindName(WifiFrameKind kind);
 
@@ -59,7 +57,7 @@ struct WifiFrameCaptureStats final {
     std::int32_t driverError = 0;
 };
 
-class WifiFrameCapture final {
+class WifiFrameCapture final : public domain::captures::WifiFrameSource {
 public:
     static constexpr std::size_t kFrameCapacity = 16;
 
@@ -75,6 +73,10 @@ public:
     const WifiFrameCaptureStats& stats() const { return stats_; }
     const WifiFrame* frame(std::size_t index) const;
     std::size_t size() const { return size_; }
+    std::size_t frameCount() const override { return size_; }
+    std::uint16_t snapLength() const override { return plan_.snapLength; }
+    bool frameView(std::size_t index,
+                   domain::captures::WifiFrameView* output) const override;
 
 private:
     WifiFrameCapturePlan plan_{};

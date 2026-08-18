@@ -17,7 +17,12 @@ constexpr std::size_t kTimelineSummaryBytes = 60;
 constexpr std::size_t kTimelineWindowBytes = 36;
 constexpr std::uint8_t kCaptureMagic[4] = {'L', 'C', 'A', 'P'};
 constexpr std::uint8_t kCaptureWireVersion = 1;
+constexpr std::uint8_t kWifiFrameCaptureWireVersion = 2;
 constexpr std::size_t kCaptureRecordBytes = 72;
+constexpr std::uint8_t kWifiFrameMagic[4] = {'L', 'W', 'F', 'C'};
+constexpr std::uint8_t kWifiFrameWireVersion = 1;
+constexpr std::size_t kWifiFrameHeaderBytes = 16;
+constexpr std::size_t kWifiFrameRecordHeaderBytes = 20;
 constexpr std::uint8_t kCaptureFlagPassive = 1U << 0U;
 constexpr std::uint8_t kCaptureFlagWifiShowHidden = 1U << 1U;
 constexpr std::uint8_t kCaptureFlagLocation = 1U << 2U;
@@ -512,7 +517,8 @@ SessionCodecStatus encodeCaptureRecord(
     }
     std::memset(output, 0, kCaptureRecordBytes);
     std::memcpy(output, kCaptureMagic, sizeof(kCaptureMagic));
-    output[4] = kCaptureWireVersion;
+    output[4] = metadata.framePayloadCaptured
+        ? kWifiFrameCaptureWireVersion : kCaptureWireVersion;
     output[5] = metadata.selectedSourceMask;
     output[6] = (metadata.passive ? kCaptureFlagPassive : 0) |
         (metadata.wifiShowHidden ? kCaptureFlagWifiShowHidden : 0) |
@@ -525,6 +531,9 @@ SessionCodecStatus encodeCaptureRecord(
     put16(output + 20, metadata.bleIntervalMs);
     put16(output + 22, metadata.bleWindowMs);
     put16(output + 24, metadata.bleMaximumRecords);
+    put16(output + 26, metadata.framePayloadRecords);
+    put16(output + 28, metadata.framePayloadSnapLength);
+    output[30] = static_cast<std::uint8_t>(metadata.framePayloadFormat);
     put64(output + 32, metadata.framePayloadBytes);
     std::memcpy(output + 40, metadata.appIdentity.data(),
                 metadata.appIdentity.size());
@@ -537,11 +546,19 @@ SessionCodecStatus decodeCaptureRecord(
     services::survey::SurveySession* output) {
     if (input == nullptr || output == nullptr || size != kCaptureRecordBytes ||
         std::memcmp(input, kCaptureMagic, sizeof(kCaptureMagic)) != 0 ||
-        input[4] != kCaptureWireVersion || input[7] != 32 ||
+        (input[4] != kCaptureWireVersion &&
+         input[4] != kWifiFrameCaptureWireVersion) || input[7] != 32 ||
         (input[6] & static_cast<std::uint8_t>(~kCaptureKnownFlags)) != 0 ||
         input[13] != 0 || input[14] != 0 || input[15] != 0 ||
-        input[26] != 0 || input[27] != 0 || input[28] != 0 ||
-        input[29] != 0 || input[30] != 0 || input[31] != 0) {
+        input[31] != 0) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    const bool payloadWire = input[4] == kWifiFrameCaptureWireVersion;
+    if ((!payloadWire &&
+         (input[26] != 0 || input[27] != 0 || input[28] != 0 ||
+          input[29] != 0 || input[30] != 0 ||
+          (input[6] & kCaptureFlagFramePayload) != 0)) ||
+        (payloadWire && (input[6] & kCaptureFlagFramePayload) == 0)) {
         return SessionCodecStatus::CaptureInvalid;
     }
     services::survey::CaptureMetadata metadata;
@@ -560,12 +577,140 @@ SessionCodecStatus decodeCaptureRecord(
     metadata.bleIntervalMs = get16(input + 20);
     metadata.bleWindowMs = get16(input + 22);
     metadata.bleMaximumRecords = get16(input + 24);
+    metadata.framePayloadRecords = get16(input + 26);
+    metadata.framePayloadSnapLength = get16(input + 28);
+    metadata.framePayloadFormat = static_cast<services::survey::FramePayloadFormat>(
+        input[30]);
     metadata.framePayloadBytes = get64(input + 32);
     std::memcpy(metadata.appIdentity.data(), input + 40,
                 metadata.appIdentity.size());
     return output->configureCaptureMetadata(metadata) ==
             services::survey::CaptureMetadataStatus::Configured
         ? SessionCodecStatus::Valid : SessionCodecStatus::CaptureInvalid;
+}
+
+SessionCodecStatus encodeWifiFrameBlock(
+    const services::survey::SurveySession& session,
+    const domain::captures::WifiFrameSource& frames,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr || frames.frameCount() == 0 ||
+        frames.frameCount() > PersistedWifiFrameCaptureView::kFrameCapacity ||
+        frames.snapLength() < 32 || frames.snapLength() > 256 ||
+        capacity < kWifiFrameHeaderBytes) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::memset(output, 0, kWifiFrameHeaderBytes);
+    std::memcpy(output, kWifiFrameMagic, sizeof(kWifiFrameMagic));
+    output[4] = kWifiFrameWireVersion;
+    output[5] = static_cast<std::uint8_t>(frames.frameCount());
+    put16(output + 6, frames.snapLength());
+    std::size_t position = kWifiFrameHeaderBytes;
+    std::uint32_t payloadBytes = 0;
+    std::uint64_t previousUs = 0;
+    for (std::size_t index = 0; index < frames.frameCount(); ++index) {
+        domain::captures::WifiFrameView frame;
+        if (!frames.frameView(index, &frame) || frame.payload == nullptr ||
+            frame.capturedLength == 0 ||
+            frame.capturedLength > frames.snapLength() ||
+            frame.capturedLength > frame.originalLength || frame.channel == 0 ||
+            frame.channel > 14 || static_cast<std::uint8_t>(frame.kind) > 2 ||
+            frame.monotonicUs < session.startedUs() ||
+            frame.monotonicUs > session.stoppedUs() ||
+            (previousUs != 0 && frame.monotonicUs < previousUs) ||
+            kWifiFrameRecordHeaderBytes + frame.capturedLength >
+                capacity - position) {
+            return SessionCodecStatus::CaptureInvalid;
+        }
+        std::uint8_t* record = output + position;
+        std::memset(record, 0, kWifiFrameRecordHeaderBytes);
+        put64(record, frame.monotonicUs);
+        put16(record + 8, frame.capturedLength);
+        put16(record + 10, frame.originalLength);
+        put16(record + 12, static_cast<std::uint16_t>(frame.rssiDbm));
+        record[14] = frame.channel;
+        record[15] = static_cast<std::uint8_t>(frame.kind);
+        record[16] = frame.fcsIncluded ? 1U : 0U;
+        std::memcpy(record + kWifiFrameRecordHeaderBytes, frame.payload,
+                    frame.capturedLength);
+        position += kWifiFrameRecordHeaderBytes + frame.capturedLength;
+        payloadBytes += frame.capturedLength;
+        previousUs = frame.monotonicUs;
+    }
+    put32(output + 8, payloadBytes);
+    const auto& metadata = session.captureMetadata();
+    if (metadata.framePayloadBytes != payloadBytes ||
+        metadata.framePayloadRecords != frames.frameCount() ||
+        metadata.framePayloadSnapLength != frames.snapLength() ||
+        metadata.framePayloadFormat !=
+            services::survey::FramePayloadFormat::Ieee80211) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    *outputSize = position;
+    return SessionCodecStatus::Valid;
+}
+
+SessionCodecStatus decodeWifiFrameBlock(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* input, std::size_t size,
+    std::uint16_t* recordOffsets, std::size_t offsetCapacity,
+    std::size_t* decodedCount, std::uint16_t* decodedSnapLength) {
+    if (input == nullptr || size < kWifiFrameHeaderBytes ||
+        std::memcmp(input, kWifiFrameMagic, sizeof(kWifiFrameMagic)) != 0 ||
+        input[4] != kWifiFrameWireVersion || input[12] != 0 ||
+        input[13] != 0 || input[14] != 0 || input[15] != 0) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    const std::size_t count = input[5];
+    const std::uint16_t snapLength = get16(input + 6);
+    const std::uint32_t expectedPayloadBytes = get32(input + 8);
+    if (count == 0 || count > PersistedWifiFrameCaptureView::kFrameCapacity ||
+        snapLength < 32 || snapLength > 256 ||
+        (recordOffsets != nullptr && offsetCapacity < count)) {
+        return SessionCodecStatus::BoundsExceeded;
+    }
+    std::size_t position = kWifiFrameHeaderBytes;
+    std::uint32_t payloadBytes = 0;
+    std::uint64_t previousUs = 0;
+    for (std::size_t index = 0; index < count; ++index) {
+        if (size - position < kWifiFrameRecordHeaderBytes ||
+            position > std::numeric_limits<std::uint16_t>::max()) {
+            return SessionCodecStatus::BoundsExceeded;
+        }
+        const std::uint8_t* record = input + position;
+        const std::uint64_t monotonicUs = get64(record);
+        const std::uint16_t capturedLength = get16(record + 8);
+        const std::uint16_t originalLength = get16(record + 10);
+        if (capturedLength == 0 || capturedLength > snapLength ||
+            capturedLength > originalLength ||
+            kWifiFrameRecordHeaderBytes + capturedLength > size - position ||
+            record[14] == 0 || record[14] > 14 || record[15] > 2 ||
+            (record[16] & static_cast<std::uint8_t>(~1U)) != 0 ||
+            record[17] != 0 || record[18] != 0 || record[19] != 0 ||
+            monotonicUs < session.startedUs() ||
+            monotonicUs > session.stoppedUs() ||
+            (previousUs != 0 && monotonicUs < previousUs)) {
+            return SessionCodecStatus::CaptureInvalid;
+        }
+        if (recordOffsets != nullptr) {
+            recordOffsets[index] = static_cast<std::uint16_t>(position);
+        }
+        position += kWifiFrameRecordHeaderBytes + capturedLength;
+        payloadBytes += capturedLength;
+        previousUs = monotonicUs;
+    }
+    const auto& metadata = session.captureMetadata();
+    if (position != size || payloadBytes != expectedPayloadBytes ||
+        !metadata.framePayloadCaptured ||
+        metadata.framePayloadBytes != payloadBytes ||
+        metadata.framePayloadRecords != count ||
+        metadata.framePayloadSnapLength != snapLength ||
+        metadata.framePayloadFormat !=
+            services::survey::FramePayloadFormat::Ieee80211) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    if (decodedCount != nullptr) *decodedCount = count;
+    if (decodedSnapLength != nullptr) *decodedSnapLength = snapLength;
+    return SessionCodecStatus::Valid;
 }
 
 SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_t size,
@@ -584,14 +729,17 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
     const std::uint16_t decodedAdditionalRecords = get16(footer + 6);
     if (version != kLegacySegmentSchemaVersion &&
         version != kTimelineSegmentSchemaVersion &&
-        version != kSegmentSchemaVersion) {
+        version != kSegmentSchemaVersion &&
+        version != kWifiFrameSegmentSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     if ((version == kLegacySegmentSchemaVersion &&
          decodedAdditionalRecords != 0) ||
         (version == kTimelineSegmentSchemaVersion &&
          decodedAdditionalRecords != 1) ||
-        (version == kSegmentSchemaVersion && decodedAdditionalRecords != 2)) {
+        (version == kSegmentSchemaVersion && decodedAdditionalRecords != 2) ||
+        (version == kWifiFrameSegmentSchemaVersion &&
+         decodedAdditionalRecords != 2)) {
         return SessionCodecStatus::Malformed;
     }
     const std::uint32_t decodedCount = get32(footer + 8);
@@ -614,6 +762,86 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
 }
 
 }  // namespace
+
+void PersistedWifiFrameCaptureView::reset() {
+    block_ = nullptr;
+    blockSize_ = 0;
+    recordOffsets_.fill(0);
+    count_ = 0;
+    snapLength_ = 0;
+}
+
+bool PersistedWifiFrameCaptureView::frameView(
+    std::size_t index, domain::captures::WifiFrameView* output) const {
+    if (output == nullptr || block_ == nullptr || index >= count_) return false;
+    const std::size_t offset = recordOffsets_[index];
+    if (offset > blockSize_ ||
+        blockSize_ - offset < kWifiFrameRecordHeaderBytes) return false;
+    const std::uint8_t* record = block_ + offset;
+    const std::uint16_t capturedLength = get16(record + 8);
+    if (capturedLength > blockSize_ - offset - kWifiFrameRecordHeaderBytes) {
+        return false;
+    }
+    output->monotonicUs = get64(record);
+    output->capturedLength = capturedLength;
+    output->originalLength = get16(record + 10);
+    output->rssiDbm = static_cast<std::int16_t>(get16(record + 12));
+    output->channel = record[14];
+    output->kind = static_cast<domain::captures::WifiFrameKind>(record[15]);
+    output->fcsIncluded = (record[16] & 1U) != 0;
+    output->payload = record + kWifiFrameRecordHeaderBytes;
+    return true;
+}
+
+SessionCodecStatus openPersistedWifiFrameCapture(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* segment, std::size_t segmentSize,
+    PersistedWifiFrameCaptureView* output) {
+    if (output == nullptr || segment == nullptr ||
+        session.state() != services::survey::SessionState::Stopped) {
+        return SessionCodecStatus::InvalidArgument;
+    }
+    output->reset();
+    std::uint32_t recordCount = 0;
+    std::uint32_t bodyLength = 0;
+    std::uint16_t schemaVersion = 0;
+    std::uint16_t additionalRecords = 0;
+    SessionCodecStatus status = validateSegmentFooter(
+        segment, segmentSize, &recordCount, &bodyLength, &schemaVersion,
+        &additionalRecords);
+    if (status != SessionCodecStatus::Valid) return status;
+    if (schemaVersion != kWifiFrameSegmentSchemaVersion || recordCount != 0 ||
+        additionalRecords != 2 || bodyLength < 16) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::size_t position = 0;
+    const std::uint32_t captureLength = get32(segment + position);
+    const std::uint32_t captureCrc = get32(segment + position + 4);
+    position += 8;
+    if (captureLength != kCaptureRecordBytes ||
+        captureLength > bodyLength - position ||
+        captureCrc != crc32c(segment + position, captureLength)) {
+        return SessionCodecStatus::ChecksumMismatch;
+    }
+    position += captureLength;
+    if (bodyLength - position < 8) return SessionCodecStatus::BoundsExceeded;
+    const std::uint32_t blockLength = get32(segment + position);
+    const std::uint32_t blockCrc = get32(segment + position + 4);
+    position += 8;
+    if (blockLength < kWifiFrameHeaderBytes ||
+        blockLength != bodyLength - position ||
+        blockCrc != crc32c(segment + position, blockLength)) {
+        return SessionCodecStatus::ChecksumMismatch;
+    }
+    output->block_ = segment + position;
+    output->blockSize_ = blockLength;
+    status = decodeWifiFrameBlock(
+        session, output->block_, output->blockSize_,
+        output->recordOffsets_.data(), output->recordOffsets_.size(),
+        &output->count_, &output->snapLength_);
+    if (status != SessionCodecStatus::Valid) output->reset();
+    return status;
+}
 
 const char* sessionCodecStatusName(SessionCodecStatus status) {
     switch (status) {
@@ -641,6 +869,9 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
     }
     const bool hasTimeline = session.timeline().present;
     const bool hasCapture = session.captureMetadata().present;
+    if (hasCapture && session.captureMetadata().framePayloadCaptured) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
     if (hasCapture && (!hasTimeline ||
         session.captureMetadata().selectedSourceMask !=
             session.timeline().selectedMask)) {
@@ -698,6 +929,59 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
     return SessionCodecStatus::Valid;
 }
 
+SessionCodecStatus encodeWifiFrameCaptureSegment(
+    const services::survey::SurveySession& session,
+    const domain::captures::WifiFrameSource& frames,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr ||
+        session.state() != services::survey::SessionState::Stopped ||
+        capacity > kSessionSegmentMaxBytes || session.size() != 0 ||
+        session.timeline().present ||
+        !session.captureMetadata().present ||
+        !session.captureMetadata().framePayloadCaptured) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    CborWriter writer(output, capacity);
+    std::uint8_t captureRecord[kCaptureRecordBytes] = {};
+    std::size_t captureRecordSize = 0;
+    SessionCodecStatus status = encodeCaptureRecord(
+        session.captureMetadata(), captureRecord, sizeof(captureRecord),
+        &captureRecordSize);
+    if (status != SessionCodecStatus::Valid) return status;
+    writer.be32(static_cast<std::uint32_t>(captureRecordSize));
+    writer.be32(crc32c(captureRecord, captureRecordSize));
+    writer.raw(captureRecord, captureRecordSize);
+    if (!writer.ok() || writer.size() + 8 > capacity) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    std::size_t frameBlockSize = 0;
+    std::uint8_t* frameBlock = output + writer.size() + 8;
+    status = encodeWifiFrameBlock(
+        session, frames, frameBlock, capacity - writer.size() - 8,
+        &frameBlockSize);
+    if (status != SessionCodecStatus::Valid) return status;
+    writer.be32(static_cast<std::uint32_t>(frameBlockSize));
+    writer.be32(crc32c(frameBlock, frameBlockSize));
+    writer.raw(frameBlock, frameBlockSize);
+    if (!writer.ok() || kSegmentFooterBytes > capacity - writer.size()) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    const std::size_t bodySize = writer.size();
+    std::uint8_t footer[kSegmentFooterBytes] = {};
+    std::memcpy(footer, kSegmentMagic, sizeof(kSegmentMagic));
+    put16(footer + 4, kWifiFrameSegmentSchemaVersion);
+    put16(footer + 6, 2);
+    put32(footer + 8, 0);
+    put32(footer + 12, static_cast<std::uint32_t>(bodySize));
+    put32(footer + 16, crc32c(output, bodySize));
+    put32(footer + 20, crc32c(footer, 20));
+    if (!writer.raw(footer, sizeof(footer))) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    *outputSize = writer.size();
+    return SessionCodecStatus::Valid;
+}
+
 SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& session,
                                          const std::uint8_t* segment, std::size_t segmentSize,
                                          std::uint8_t* output, std::size_t capacity,
@@ -718,7 +1002,9 @@ SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& 
     CborWriter writer(output, capacity);
     writer.map(8);
     writer.unsignedValue(0);
-    writer.unsignedValue(segmentVersion == kSegmentSchemaVersion
+    writer.unsignedValue(segmentVersion == kWifiFrameSegmentSchemaVersion
+                             ? kWifiFrameSessionSchemaVersion
+                             : segmentVersion == kSegmentSchemaVersion
                              ? kSessionSchemaVersion
                              : segmentVersion == kTimelineSegmentSchemaVersion
                                    ? kTimelineSessionSchemaVersion
@@ -757,7 +1043,8 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
     }
     if (value != kLegacySessionSchemaVersion &&
         value != kTimelineSessionSchemaVersion &&
-        value != kSessionSchemaVersion) {
+        value != kSessionSchemaVersion &&
+        value != kWifiFrameSessionSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     const std::uint16_t decodedSchemaVersion =
@@ -821,13 +1108,16 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
                                    &additionalRecords);
     if (status != SessionCodecStatus::Valid) return status;
     const std::uint16_t expectedSegmentVersion =
-        manifest.schemaVersion == kSessionSchemaVersion
+        manifest.schemaVersion == kWifiFrameSessionSchemaVersion
+            ? kWifiFrameSegmentSchemaVersion
+            : manifest.schemaVersion == kSessionSchemaVersion
             ? kSegmentSchemaVersion : kLegacySegmentSchemaVersion;
     const std::uint16_t compatibleSegmentVersion =
         manifest.schemaVersion == kTimelineSessionSchemaVersion
             ? kTimelineSegmentSchemaVersion : expectedSegmentVersion;
     const std::uint16_t expectedAdditionalRecords =
-        manifest.schemaVersion == kSessionSchemaVersion
+        manifest.schemaVersion == kWifiFrameSessionSchemaVersion
+            ? 2 : manifest.schemaVersion == kSessionSchemaVersion
             ? 2 : manifest.schemaVersion == kTimelineSessionSchemaVersion ? 1 : 0;
     if (recordCount != manifest.observationCount ||
         segmentVersion != compatibleSegmentVersion ||
@@ -843,7 +1133,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         return SessionCodecStatus::Malformed;
     }
     std::size_t position = 0;
-    if (manifest.schemaVersion == kSessionSchemaVersion) {
+    if (manifest.schemaVersion == kSessionSchemaVersion ||
+        manifest.schemaVersion == kWifiFrameSessionSchemaVersion) {
         if (bodyLength - position < 8) {
             output->reset();
             return SessionCodecStatus::BoundsExceeded;
@@ -897,7 +1188,37 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         }
         position += recordLength;
     }
-    if (additionalRecords >= 1) {
+    if (manifest.schemaVersion == kWifiFrameSessionSchemaVersion) {
+        if (bodyLength - position < 8) {
+            output->reset();
+            return SessionCodecStatus::BoundsExceeded;
+        }
+        const std::uint32_t recordLength = get32(segment + position);
+        const std::uint32_t recordCrc = get32(segment + position + 4);
+        position += 8;
+        if (recordLength < kWifiFrameHeaderBytes ||
+            recordLength > bodyLength - position) {
+            output->reset();
+            return SessionCodecStatus::BoundsExceeded;
+        }
+        if (recordCrc != crc32c(segment + position, recordLength)) {
+            output->reset();
+            return SessionCodecStatus::ChecksumMismatch;
+        }
+        // Stop first so frame timestamps can be checked against both bounds.
+        if (output->stop(manifest.stoppedUs) !=
+            services::survey::SessionStatus::Stopped) {
+            output->reset();
+            return SessionCodecStatus::TimelineInvalid;
+        }
+        status = decodeWifiFrameBlock(*output, segment + position, recordLength,
+                                      nullptr, 0, nullptr, nullptr);
+        if (status != SessionCodecStatus::Valid) {
+            output->reset();
+            return status;
+        }
+        position += recordLength;
+    } else if (additionalRecords >= 1) {
         if (bodyLength - position < 8) {
             output->reset();
             return SessionCodecStatus::BoundsExceeded;
@@ -932,7 +1253,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         output->reset();
         return SessionCodecStatus::TrailingData;
     }
-    if (output->stop(manifest.stoppedUs) != services::survey::SessionStatus::Stopped) {
+    if (manifest.schemaVersion != kWifiFrameSessionSchemaVersion &&
+        output->stop(manifest.stoppedUs) != services::survey::SessionStatus::Stopped) {
         output->reset();
         return SessionCodecStatus::TimelineInvalid;
     }
@@ -960,7 +1282,21 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
     }
     const services::survey::SessionTimelineSummary& timeline = session.timeline();
     int written = -1;
-    if (!timeline.present) {
+    if (session.captureMetadata().framePayloadCaptured) {
+        const auto& capture = session.captureMetadata();
+        written = std::snprintf(
+            output, capacity,
+            "{\"schema\":\"leshy.capture.summary.v1\",\"id\":\"%s\","
+            "\"started_us\":%llu,\"stopped_us\":%llu,"
+            "\"frames\":%u,\"payload_bytes\":%llu,\"snap_length\":%u,"
+            "\"format\":\"ieee80211\",\"passive\":true}",
+            session.id(),
+            static_cast<unsigned long long>(session.startedUs()),
+            static_cast<unsigned long long>(session.stoppedUs()),
+            static_cast<unsigned>(capture.framePayloadRecords),
+            static_cast<unsigned long long>(capture.framePayloadBytes),
+            static_cast<unsigned>(capture.framePayloadSnapLength));
+    } else if (!timeline.present) {
         written = std::snprintf(
             output, capacity,
             "{\"schema\":\"leshy.session.summary.v1\",\"id\":\"%s\","

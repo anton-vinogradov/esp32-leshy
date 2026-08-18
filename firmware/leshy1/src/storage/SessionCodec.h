@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "domain/captures/WifiFrame.h"
 #include "services/survey/SurveySession.h"
 
 namespace leshy1::storage {
@@ -11,9 +12,11 @@ namespace leshy1::storage {
 constexpr std::uint16_t kLegacySessionSchemaVersion = 1;
 constexpr std::uint16_t kTimelineSessionSchemaVersion = 2;
 constexpr std::uint16_t kSessionSchemaVersion = 3;
+constexpr std::uint16_t kWifiFrameSessionSchemaVersion = 4;
 constexpr std::uint16_t kLegacySegmentSchemaVersion = 1;
 constexpr std::uint16_t kTimelineSegmentSchemaVersion = 2;
 constexpr std::uint16_t kSegmentSchemaVersion = 3;
+constexpr std::uint16_t kWifiFrameSegmentSchemaVersion = 4;
 constexpr std::size_t kSessionManifestMaxBytes = 256;
 constexpr std::size_t kObservationRecordMaxBytes = 128;
 constexpr std::size_t kTimelineRecordMaxBytes = 1024;
@@ -48,6 +51,10 @@ const char* sessionCodecStatusName(SessionCodecStatus status);
 SessionCodecStatus encodeObservationSegment(const services::survey::SurveySession& session,
                                             std::uint8_t* output, std::size_t capacity,
                                             std::size_t* outputSize);
+SessionCodecStatus encodeWifiFrameCaptureSegment(
+    const services::survey::SurveySession& session,
+    const domain::captures::WifiFrameSource& frames,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
 SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& session,
                                          const std::uint8_t* segment, std::size_t segmentSize,
                                          std::uint8_t* output, std::size_t capacity,
@@ -57,6 +64,33 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
 SessionCodecStatus reopenSession(const std::uint8_t* manifest, std::size_t manifestSize,
                                  const std::uint8_t* segment, std::size_t segmentSize,
                                  services::survey::SurveySession* output);
+
+class PersistedWifiFrameCaptureView final
+    : public domain::captures::WifiFrameSource {
+public:
+    static constexpr std::size_t kFrameCapacity = 16;
+
+    void reset();
+    std::size_t frameCount() const override { return count_; }
+    std::uint16_t snapLength() const override { return snapLength_; }
+    bool frameView(std::size_t index,
+                   domain::captures::WifiFrameView* output) const override;
+
+private:
+    friend SessionCodecStatus openPersistedWifiFrameCapture(
+        const services::survey::SurveySession&, const std::uint8_t*,
+        std::size_t, PersistedWifiFrameCaptureView*);
+    const std::uint8_t* block_ = nullptr;
+    std::size_t blockSize_ = 0;
+    std::array<std::uint16_t, kFrameCapacity> recordOffsets_{};
+    std::size_t count_ = 0;
+    std::uint16_t snapLength_ = 0;
+};
+
+SessionCodecStatus openPersistedWifiFrameCapture(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* segment, std::size_t segmentSize,
+    PersistedWifiFrameCaptureView* output);
 bool formatSessionJsonSummary(const services::survey::SurveySession& session, char* output,
                               std::size_t capacity);
 

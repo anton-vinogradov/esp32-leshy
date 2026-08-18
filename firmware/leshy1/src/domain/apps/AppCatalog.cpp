@@ -65,7 +65,7 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
     const bool frameCapture = available(inventory, "capture.wifi_passive");
     items_[size_++] = {
         "capture", "CAPTURE",
-        frameCapture ? "wifi frames / volatile" : "passive capture unavailable",
+        frameCapture ? "wifi frames / explicit sd save" : "passive capture unavailable",
         4, frameCapture, false,
         kernel::runtime::resourceMask(
             kernel::runtime::Resource::UiForeground) |

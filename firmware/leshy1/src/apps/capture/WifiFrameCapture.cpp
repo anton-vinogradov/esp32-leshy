@@ -113,4 +113,19 @@ const WifiFrame* WifiFrameCapture::frame(std::size_t index) const {
     return index < size_ ? &frames_[index] : nullptr;
 }
 
+bool WifiFrameCapture::frameView(
+    std::size_t index, domain::captures::WifiFrameView* output) const {
+    const WifiFrame* stored = frame(index);
+    if (stored == nullptr || output == nullptr) return false;
+    output->monotonicUs = stored->monotonicUs;
+    output->capturedLength = stored->capturedLength;
+    output->originalLength = stored->originalLength;
+    output->rssiDbm = stored->rssiDbm;
+    output->channel = stored->channel;
+    output->kind = stored->kind;
+    output->fcsIncluded = stored->fcsIncluded;
+    output->payload = stored->payload.data();
+    return true;
+}
+
 }  // namespace leshy1::apps::capture

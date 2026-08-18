@@ -163,9 +163,19 @@ CaptureMetadataStatus SurveySession::configureCaptureMetadata(
               metadata.bleMaximumRecords <= kObservationCapacity
         : metadata.bleDurationMs == 0 && metadata.bleIntervalMs == 0 &&
               metadata.bleWindowMs == 0 && metadata.bleMaximumRecords == 0;
+    const bool validFramePayload = metadata.framePayloadCaptured
+        ? wifiSelected && !bleSelected && metadata.framePayloadBytes > 0 &&
+              metadata.framePayloadRecords > 0 &&
+              metadata.framePayloadRecords <= 16 &&
+              metadata.framePayloadSnapLength >= 32 &&
+              metadata.framePayloadSnapLength <= 256 &&
+              metadata.framePayloadFormat == FramePayloadFormat::Ieee80211
+        : metadata.framePayloadBytes == 0 &&
+              metadata.framePayloadRecords == 0 &&
+              metadata.framePayloadSnapLength == 0 &&
+              metadata.framePayloadFormat == FramePayloadFormat::None;
     if (!metadata.present || !metadata.passive || !validMask || !validWifi ||
-        !validBle || metadata.locationPresent || metadata.framePayloadCaptured ||
-        metadata.framePayloadBytes != 0 ||
+        !validBle || metadata.locationPresent || !validFramePayload ||
         metadata.appIdentityLength != metadata.appIdentity.size()) {
         return CaptureMetadataStatus::InvalidMetadata;
     }
