@@ -16,7 +16,8 @@
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** расширить active execution plan-v6 Full/Guided
   с принятых receiver и persisted-artifact checks на controlled Survey/Capture execution, затем проверить
-  controlled power-cut recovery и 8 h/32-cycle multi-source endurance.
+  controlled power-cut recovery и multi-source endurance ≥45 минут/≥8 циклов в
+  часовом операционном бюджете.
 - **Реализация в работе:** следующая write boundary plan v7 уже имеет
   host/build-verified disposable cleanup permit по exact CID и bounded pre-scan
   известных имён для `/leshy-hil/<run-id>`. Она ещё не зарегистрирована как pass
@@ -30,7 +31,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.79 принимают passive multi-source, browser/export и persistent Capture; exact 0.80 регистрирует их в Full/Guided; exact 0.81 обнаруживает declared RF shield; exact 0.82/0.83 добавляют явные spectrum views; exact 0.84 активно выполняет обе receive-only RF-проверки; exact 0.85 read-only повторно открывает enrolled SD artifact и выполняет Library JSON/CSV плюс persisted PCAP из plan v6 | расширить active Full/Guided до controlled создания новых Survey/Capture; затем проверить controlled physical power-cut recovery и 8 h/32-cycle multi-source endurance |
+| S4 | `active` | exact 0.71…0.79 принимают passive multi-source, browser/export и persistent Capture; exact 0.80 регистрирует их в Full/Guided; exact 0.81 обнаруживает declared RF shield; exact 0.82/0.83 добавляют явные spectrum views; exact 0.84 активно выполняет обе receive-only RF-проверки; exact 0.85 read-only повторно открывает enrolled SD artifact и выполняет Library JSON/CSV плюс persisted PCAP из plan v6 | расширить active Full/Guided до controlled создания новых Survey/Capture; затем проверить controlled physical power-cut recovery и multi-source endurance ≥45 минут/≥8 циклов в течение часа |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -50,7 +51,7 @@
 | Всё штатное железо ESP32-DIV | `впереди / S5` — scope и fail-closed hardware envelope описаны, но законченных IR/PN532/GPS/power workflows ещё нет | probe → capture/observe → Library → inspect/export для каждого применимого модуля |
 | Targets, compare и companion | `впереди / S6` — product model и границы определены, пользовательские сценарии ещё не реализованы | две Survey сравниваются через evidence-backed Targets и тот же локальный Web/USB companion |
 | Safe Lab и расширения | `впереди / S7` — safety/resource boundaries приняты, active workflows и SDK ещё не реализованы | feature-complete каталог, permissioned extensions и доказанный panic/timeout stop |
-| Надёжность и доставка 1.0 | `впереди / S8` — release HIL концепт и часть инфраструктуры существуют, но это не release evidence | signed OTA/rollback/recovery, полный HIL/Self-Test, 24 h mixed workload и два зелёных RC |
+| Надёжность и доставка 1.0 | `впереди / S8` — release HIL концепт и часть инфраструктуры существуют, но это не release evidence | signed OTA/rollback/recovery, полный HIL/Self-Test, mixed workload с часовым бюджетом и два зелёных RC |
 
 Итого по этапам: S0–S3 закрыты, S4 активен, S5–S8 впереди. По пользовательской
 ценности уже существуют законченный Survey→Library путь, настоящий packet Capture
@@ -687,5 +688,11 @@ requirement `DEMO-S4`, software reset не принимается как зам�
 предположением.
 
 0.51 hardware-watchdog injection, regression и shortened endurance checkpoint
-сохранены (`E-HIL-073…075`). Полный 8 h/32-cycle NFR-004 остаётся обязательным для
-`DEMO-S4`, а не S3.
+сохранены (`E-HIL-073…075`). 18 августа 2026 года владелец продукта заменил прежний
+release-критерий 8 h/32 cycles: NFR-004 теперь требует ≥45 минут и ≥8 полных циклов,
+а configured и measured elapsed release-прогона обязаны оставаться в пределах
+одного часа. Двухцикловый regression имеет budget ≤10 минут. Старые строки
+`E-AUTO-015`/`E-HIL-059…075` намеренно сохраняют policy, действовавшую при создании
+этих records, и не восстанавливают её. Run 8 h остаётся optional extended
+qualification после крупных storage/runtime/radio changes и не блокирует обычный
+release.

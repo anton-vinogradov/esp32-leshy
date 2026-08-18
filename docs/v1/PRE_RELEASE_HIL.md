@@ -513,10 +513,10 @@ creating a resident agent or macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.51.0-hardware-boot-watchdog-measure \
+  --expected-version EXACT_CANDIDATE_VERSION \
   --output /tmp/leshy-product-endurance-hil \
-  --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
-  --interval-seconds 900 --flash --release-endurance
+  --duration-seconds 2700 --minimum-cycles 8 --maximum-cycles 12 \
+  --interval-seconds 300 --flash --release-endurance
 ```
 
 It flashes only cycle 1, verifies candidate/app/CID continuity on every later cycle,
@@ -525,13 +525,17 @@ must advance exactly one generation, keep scan/pipeline drops at zero, perform t
 read-only recovery boots, retain four GRAM captures, preserve the first heap tuple,
 and finish at Home with no owner or lease. A 30-second heartbeat keeps the one-shot
 foreground process observable. `--release-endurance` is rejected unless verified
-flashing, at least 28,800 seconds, and at least 32 cycles are all configured; short
-development runs remain `gate_eligible=false` even when they pass.
+flashing, a configured duration of 2,700…3,600 seconds, and at least eight cycles
+are requested. It also fails closed if measured elapsed time exceeds the one-hour
+operational budget. Short development runs remain `gate_eligible=false` even when
+they pass. A normal release gate is expected to finish in roughly 47–50 minutes;
+a two-cycle regression has a ten-minute execution budget.
 
 `E-HIL-059` is the first retained runner smoke: three cycles, six cold boots,
 generation 12→15, 51/51 observations, zero drops/heap drift, and final lease 0. It is
-deliberately not endurance evidence. The required 8 h/32-cycle lane is a separate
-run, while physical power-cut and the external-camera subset remain separate gates.
+deliberately not endurance evidence. It also predates the current
+≥45-minute/≥8-cycle policy; physical power-cut and the external-camera subset remain
+separate gates.
 
 The first 0.46 release-endurance attempt is retained as `E-HIL-060`, not discarded:
 it positively exercised reset-separated boot retry and then failed closed on a
@@ -544,8 +548,8 @@ it records only RTC state and calls `esp_restart_noos`. `E-HIL-063` deterministi
 injects that timeout and recovers generation 27 read-only with zero SD writes;
 `E-HIL-064` then advances 27→30 with 45/45 observations, zero drops, and invariant
 heap. The retained incident/regression artifact is checked by
-`check_product_recovery_acceptance.py`; it is still a short local result, not the
-8 h release gate.
+`check_product_recovery_acceptance.py`; it was still a short local result under the
+then-current 8 h release policy.
 
 The next 0.48 release attempt is retained as `E-HIL-065`: cycle 1 exhausted all
 three Product Start identity attempts with an empty CID, then exposed a host
@@ -562,7 +566,8 @@ cleaned the bus, and returned ownership to zero. Candidate 0.49 therefore uses
 an empty-CID parse rejection, before any filesystem call. `E-HIL-067/068` then pass
 an exact product cycle and a 35→38 three-cycle regression with 46/46 forwarded,
 zero drops, invariant heap, and final lease 0. The retained artifact is checked by
-`check_product_start_resilience_acceptance.py`; the 8 h/32-cycle gate remains open.
+`check_product_start_resilience_acceptance.py`; the then-current 8 h/32-cycle gate
+remained open.
 
 The 0.49 release lane then completed six cycles (generation 38→44, 96/96
 forwarded, zero drops and invariant heap) before cycle 7 exhausted the separate
@@ -574,8 +579,8 @@ the retained 16-byte limit. Candidate 0.50 instead aligns the narrow reset-separ
 boot policy with the existing eight-attempt Product Start budget. The exact
 three-cycle regression `E-HIL-071` advances 44→47 with 39/39 forwarded, two
 natural boot retries, zero drops/heap drift, and lease 0. The retained artifact is
-checked by `check_product_boot_resilience_acceptance.py`; a fresh 8 h/32-cycle run
-is still required.
+checked by `check_product_boot_resilience_acceptance.py`; a fresh run under the
+then-current 8 h/32-cycle policy was still required.
 
 That fresh 0.50 lane failed as retained `E-HIL-072`: cycle 1 advanced 47→48 with
 16/16 forwarded and a clean final lease, but cycle 2 produced two clean boot retry
@@ -588,8 +593,8 @@ the exact candidate, observes Task WDT on `loopTask`, reset reason 6, and read-o
 attempt-2 recovery with `timeout_restarts=1`, zero writes, complete cleanup, and
 lease 0. `E-HIL-074` then advances 48→51 with 37/37 forwarded, six cold boots,
 zero drops/heap drift, and final lease 0. The retained failure and successful fix
-are checked by `check_product_hardware_watchdog_acceptance.py`; only a new complete
-8 h/32-cycle result remains before promotion.
+are checked by `check_product_hardware_watchdog_acceptance.py`; at that point only a
+new complete result under the then-current 8 h/32-cycle policy remained.
 
 Local combined run `E-HIL-055` passed on the exact 0.45 candidate: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 with 20 passive Wi-Fi
@@ -768,5 +773,9 @@ cycles/11,330.816 s in order to transition S1→S2. `E-HIL-075` retains the aggr
 and all child hashes, generation 51→63, 144/144 observations, 24 cold boots, 48 TFT
 captures, invariant heap, and zero drops/retries/timeouts. The runner remains honestly
 `interrupted`/`gate_eligible=false`: this is accepted engineering evidence for the
-current slice, not release promotion. The full 8 h/32-cycle floor runs as NFR-004 in
-`DEMO-S4` on the completed cross-radio passive platform.
+current slice, not release promotion. On 18 August 2026 the release criterion was
+superseded by NFR-004: ≥45 minutes and ≥8 complete cycles, with configured and
+measured elapsed time bounded by one operational hour, on the completed exact
+cross-radio passive candidate. The prior 8 h run remains available only as optional
+extended qualification after major storage/runtime/radio changes and never blocks an
+ordinary release.

@@ -375,7 +375,8 @@ strobe/TX event или incomplete cleanup. `E-HIL-106` связывает exact 
 2 CC reads, 20 SPI bytes, три detected receivers и final lease 0. Это identity
 boundary, а не passive observation pipeline или physical RF-silence measurement.
 Эти workflows, active Full/Guided execution, controlled physical power-cut и
-8 h/32-cycle endurance остаются работой `DEMO-S4`.
+endurance gate ≥45 минут/≥8 циклов в часовом операционном бюджете остаётся работой
+`DEMO-S4`.
 
 Exact `0.82.0-nrf24-spectrum` строит первую полезную workflow shield поверх этого
 identity boundary, не связывая UI rendering со SPI. Pure
@@ -485,7 +486,8 @@ Diagnostic client проходит через тот же Navigator и чита�
 3. Simulated drivers: записанные radio traces воспроизводят сценарии без эфира.
 4. HIL: boot, input, probe, TFT GRAM capture + navigation trace, begin/stop каждого
    модуля, OTA rollback.
-5. Endurance: 8-часовой survey, power loss во время записи, 1000 переходов apps.
+5. Endurance: release run ≥45 минут/≥8 циклов с бюджетом ≤1 час, power loss во
+   время записи, 1000 переходов apps; более длинная qualification необязательна.
 
 `tools/test.sh` уже запускает первый слой без PlatformIO; CI проверяет и host tests,
 и полную прошивку.

@@ -100,7 +100,7 @@ Stop не создаёт второй commit.
 | WF-02-A3 | Detail/List сохраняют selection; Back укладывается в 150 мс, не теряет и не останавливает source lease случайно | navigation/resource trace |
 | WF-02-A4 | Stop подтверждает данные один раз; reboot/power-cut injection не портит старые committed данные | storage fault matrix + HIL power-cut test |
 | WF-02-A5 | Failed/cancelled start оставляет ноль workers, foreground leases и видимых committed Sessions | negative integration test |
-| WF-02-A6 | 8-часовой passive run не даёт monotonic heap growth, зависания UI или повреждения Session | endurance HIL |
+| WF-02-A6 | Passive run не менее 45 минут/восьми циклов укладывается в часовой release budget без monotonic heap growth, зависания UI, drops, leaked leases или повреждения Session | endurance HIL |
 
 ## WF-03 — открыть и экспортировать offline
 

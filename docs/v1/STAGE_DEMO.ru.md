@@ -31,7 +31,7 @@ automation.
 |---|---|---|---|
 | DEMO-S2 | Независимая платформа и UX/UI baseline | boot → capability Home → Self-Test Quick → Diagnostics/disabled reason → report → Back | clean target, real hardware probe, единые Actions, базовый visual system, user-visible automation, zero leaked leases |
 | DEMO-S3 | Первая сохраняемая Survey Session | Start passive Wi-Fi → List → Detail → Stop → reboot → Library → export | первый реальный end-to-end product workflow и atomic persistent storage |
-| DEMO-S4 | Cross-radio passive Session | несколько совместимых receivers → timeline/radar → degradation → reopen/export | общая модель Observation, scheduler/duty cycle и 8-hour passive stability |
+| DEMO-S4 | Cross-radio passive Session | несколько совместимых receivers → timeline/radar → degradation → reopen/export | общая модель Observation, scheduler/duty cycle и passive stability ≥45 минут/≥8 циклов в часовом release budget |
 | DEMO-S5 | Полнота штатного hardware | Full/Guided preflight → probe каждого present module → observe/capture → Library → inspect/export; approved replay отдельно | аппаратный паритет, optional/degraded behavior, честные N/A/blocked results и recovery/power safety |
 | DEMO-S6 | Targets, compare и companion | baseline Session → повторный проход → diff/Target evidence → local companion export | главные продуктовые отличия и одна Action/schema boundary |
 | DEMO-S7 | Safe Lab и SDK | saved Capture → Lab confirm → bounded TX → timeout/panic; sample extension | feature-complete 1.0, физический stop и расширяемость без обхода policy |
@@ -82,7 +82,7 @@ privacy-confirmed atomic persistence, generation 82→83, cold read-only reopen 
 16 checks проходят, три отсутствующие assembly дают N/A, identity check declared
 nRF24 #1/#2 и CC1101 проходит под exact read-only wire bounds, blocked остаётся только
 total future coverage. Полезные passive receiver workflows, active Full/Guided
-execution, controlled physical power-cut и 8 h/32-cycle multi-source stability
+execution, controlled physical power-cut и multi-source stability ≥45 минут/≥8 циклов
 остаются обязательными.
 
 Exact 0.82 принимает первую из этих полезных workflows shield: явный путь
@@ -108,7 +108,7 @@ Quick read-only 8/8, затем активно выполняет один по�
 один честный blocker future coverage и три N/A; все TX/storage counters остаются
 нулевыми, storage generation — 83, 11 TFT states проходят review, final lease — zero.
 Первый mismatch equation runner сохранён fail closed. Remaining
-Survey/Library/Capture execution, controlled physical power-cut и 8 h/32-cycle
+Survey/Library/Capture execution, controlled physical power-cut и endurance с часовым бюджетом
 endurance всё ещё держат `DEMO-S4` открытым.
 
 Exact 0.85 принимает следующий slice Full/Guided. Plan v6 сначала выполняет RF
@@ -119,7 +119,7 @@ JSON и capture metadata, staged CSV и machine-parsed PCAP 16 records/2 773 B. 
 storage writes и TX events остаются нулевыми, 12 TFT states проходят review, final
 lease — zero. Первый telemetry-truncation failure сохранён fail closed рядом с
 исправленным run. Создание новой disposable Survey/Capture, controlled physical
-power-cut и cross-radio endurance gate 8 h/32 cycles всё ещё держат `DEMO-S4`
+power-cut и cross-radio endurance gate ≥45 минут/≥8 циклов всё ещё держат `DEMO-S4`
 открытым.
 
 ## Ритм тестирования внутри этапа

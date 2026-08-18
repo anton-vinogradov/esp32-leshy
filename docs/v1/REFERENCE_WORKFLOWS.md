@@ -100,7 +100,7 @@ repeated Stop cannot create a second commit.
 | WF-02-A3 | Detail/List navigation preserves selection; Back meets 150 ms and does not leak or accidentally stop source leases | navigation/resource trace |
 | WF-02-A4 | Stop commits once; reboot/power-cut injection cannot corrupt older committed data | storage fault matrix + HIL power-cut test |
 | WF-02-A5 | Failed/cancelled start leaves zero workers, zero foreground leases, and no visible committed Session | negative integration test |
-| WF-02-A6 | An 8-hour passive run has no monotonic heap growth, UI freeze, or Session corruption | endurance HIL |
+| WF-02-A6 | A ≥45-minute/≥8-cycle passive run completes inside the one-hour release budget with no monotonic heap growth, UI freeze, drops, leaked leases, or Session corruption | endurance HIL |
 
 ## WF-03 — reopen and export offline
 

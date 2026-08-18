@@ -318,7 +318,8 @@ floating/partial identities, profile/resource conflicts, any CE-high/strobe/TX e
 or incomplete cleanup. `E-HIL-106` binds the exact 8 nRF reads, 2 CC reads, 20 SPI
 bytes, three detected receivers and final lease 0. This is an identity boundary, not
 a passive observation pipeline or physical RF-silence measurement. Those workflows,
-active Full/Guided execution, controlled physical power-cut and 8 h/32-cycle endurance
+active Full/Guided execution, controlled physical power-cut and the ≥45-minute/
+≥8-cycle endurance gate inside its one-hour operational budget
 remain `DEMO-S4` work.
 
 Exact `0.82.0-nrf24-spectrum` builds the first useful shield workflow above that

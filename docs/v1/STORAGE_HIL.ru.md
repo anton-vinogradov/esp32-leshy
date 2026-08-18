@@ -461,7 +461,8 @@ generation 2 без commit и с lease 0. Retained evidence:
 одна verified flash и следующий цикл без flash непрерывно продвинули generation
 6→7→8, приняли и передали 44/44 observations без drop, выполнили четыре read-only
 cold-boot recovery и сохранили одинаковые heap total/free/min во всех точках. Это
-раннее evidence отсутствия накопительного сбоя, но два цикла не заменяют 8-hour
+раннее evidence отсутствия накопительного сбоя, но два цикла не заменяют release
+endurance ≥45 минут/≥8 циклов
 endurance. Retained summary:
 [`board-01-product-repeatability-0.45.json`](../../tests/hil/evidence/board-01-product-repeatability-0.45.json).
 
@@ -566,7 +567,8 @@ E-HIL-073/074 подтверждают hardware fallback 0.51 и three-cycle pro
 E-HIL-075 добавляет 12 последовательных cycles, generation 51→63, 144/144 records,
 24 cold boots, invariant heap и zero drops при final lease 0; операторская остановка
 сохранена как `interrupted`, поэтому это engineering checkpoint, не release-pass.
-Полный 8 h/32-cycle NFR-004 остаётся `DEMO-S4`. E-HIL-092 закрывает ST-HIL-A11 на
+NFR-004 ≥45 минут/≥8 циклов с часовым бюджетом остаётся `DEMO-S4`. E-HIL-092
+закрывает ST-HIL-A11 на
 той же board/card с localized real-TFT failure, zero source/store start, неизменной
 generation 68/25 и final lease 0. E-HIL-093 закрывает normal/remount половину
 ST-HIL-A07 на изолированном и полностью восстановленном inactive OTA1 target. Те же

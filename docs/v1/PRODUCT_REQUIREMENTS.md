@@ -68,7 +68,7 @@ phone, account, or internet connection.
 | NFR-001 | Cold boot to an interactive screen ≤ 2 s on a healthy standard setup |
 | NFR-002 | Back is handled ≤ 150 ms and releases foreground leases |
 | NFR-003 | UI callbacks block a core ≤ 10 ms; long operations are cancellable |
-| NFR-004 | An 8-hour passive Survey has no monotonic heap growth, UI freeze, or Session corruption |
+| NFR-004 | A release endurance run covers at least 45 minutes and eight complete passive Survey cycles, finishes within a one-hour operational budget, and has no monotonic heap growth, UI freeze, drops, leaked leases, or Session corruption |
 | NFR-005 | Queues are bounded; overflow is measured and cannot corrupt memory |
 | NFR-006 | No driver/app uses shared radio/SPI/UART/filesystem outside a lease/service contract |
 | NFR-007 | Imported formats have bounds tests and fuzz corpora; malformed input cannot reboot the device |

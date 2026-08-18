@@ -153,12 +153,19 @@ class EnduranceRunnerTests(unittest.TestCase):
         self.assertIn("boot_after.timeout_metrics", combined)
 
     def test_release_policy_has_non_weakenable_floor(self) -> None:
-        valid, failures = RUNNER.release_policy(True, True, 28800, 32)
+        valid, failures = RUNNER.release_policy(True, True, 2700, 8)
         self.assertTrue(valid)
         self.assertFalse(failures)
-        valid, failures = RUNNER.release_policy(False, False, 28799, 31)
+        valid, failures = RUNNER.release_policy(False, False, 2699, 7)
         self.assertFalse(valid)
         self.assertEqual(4, len(failures))
+
+    def test_release_policy_rejects_more_than_one_hour(self) -> None:
+        valid, failures = RUNNER.release_policy(True, True, 3601, 8)
+        self.assertFalse(valid)
+        self.assertEqual(
+            ["duration must be at most 3600 seconds"], failures
+        )
 
 
 if __name__ == "__main__":

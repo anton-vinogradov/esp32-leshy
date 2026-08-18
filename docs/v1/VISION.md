@@ -64,7 +64,9 @@ coherence, data quality, and reliability—not raw feature count.
 - cold boot to an interactive home screen in at most 2 seconds;
 - Back exits any app in at most 150 ms and releases every lease;
 - no app touches a shared radio, SPI bus, or UART without a resource lease;
-- an 8-hour survey has no heap growth, UI stall, or file corruption;
+- the mandatory endurance gate completes within one hour, covers at least 45 minutes
+  and eight full cycles, and has no heap growth, UI stall, drops, lease leak, or file
+  corruption;
 - capture parsers run in host tests and malformed input never reboots the device;
 - every app declares capabilities, resources, and safety level;
 - firmware plus standard apps pass build and smoke/HIL gates before release.

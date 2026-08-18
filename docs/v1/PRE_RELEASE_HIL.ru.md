@@ -513,10 +513,10 @@ resident agent или macOS service:
 python tools/run_1x_product_endurance_hil.py \
   --port /dev/cu.usbmodem2101 \
   --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
-  --expected-version 0.51.0-hardware-boot-watchdog-measure \
+  --expected-version EXACT_CANDIDATE_VERSION \
   --output /tmp/leshy-product-endurance-hil \
-  --duration-seconds 28800 --minimum-cycles 32 --maximum-cycles 64 \
-  --interval-seconds 900 --flash --release-endurance
+  --duration-seconds 2700 --minimum-cycles 8 --maximum-cycles 12 \
+  --interval-seconds 300 --flash --release-endurance
 ```
 
 Он прошивает только cycle 1, а в следующих проверяет continuity candidate/app/CID.
@@ -525,14 +525,17 @@ python tools/run_1x_product_endurance_hil.py \
 выполнить два read-only recovery boots, удержать четыре GRAM captures, не изменить
 первый heap tuple и закончить на Home без owner/lease. Heartbeat каждые 30 секунд
 делает одноразовый foreground process наблюдаемым. `--release-endurance` отклоняется,
-если не заданы verified flash, минимум 28 800 секунд и 32 cycles; короткий development
-run даже при pass остаётся `gate_eligible=false`.
+если не заданы verified flash, configured duration 2 700…3 600 секунд и минимум
+восемь cycles. Он также fail closed, если measured elapsed превышает часовой
+операционный budget. Короткий development run даже при pass остаётся
+`gate_eligible=false`. Обычный release gate ожидаемо занимает около 47–50 минут;
+двухцикловый regression имеет execution budget десять минут.
 
 `E-HIL-059` — первый сохранённый smoke runner: три цикла, шесть cold boots,
 generation 12→15, 51/51 observations, zero drops/heap drift и final lease 0. Он
-намеренно не считается endurance evidence. Обязательный lane 8 h/32 cycles —
-отдельный run; physical power-cut и external-camera subset также остаются отдельными
-gates.
+намеренно не считается endurance evidence и предшествует текущей policy
+≥45 минут/≥8 циклов; physical power-cut и external-camera subset также остаются
+отдельными gates.
 
 Первая попытка release-endurance 0.46 сохранена как `E-HIL-060`, а не отброшена:
 она положительно выполнила reset-separated boot retry, а затем fail-closed поймала
@@ -545,8 +548,8 @@ watchdog 4 s. Watchdog не пишет log и не запускает shutdown h
 инъецирует timeout и read-only восстанавливает generation 27 с zero SD writes;
 `E-HIL-064` затем продвигает 27→30 с 45/45 observations, zero drops и invariant
 heap. Retained incident/regression artifact проверяет
-`check_product_recovery_acceptance.py`; это всё ещё короткий local result, а не
-release gate 8 h.
+`check_product_recovery_acceptance.py`; по действовавшей тогда policy это всё ещё был
+короткий local result, а не release gate 8 h.
 
 Следующая release-попытка 0.48 сохранена как `E-HIL-065`: cycle 1 исчерпал все три
 Product Start identity attempts с пустым CID, затем проявил host `TypeError`
@@ -563,7 +566,8 @@ ownership в zero. Поэтому candidate 0.49 использует 100 kHz и
 CID, до любого filesystem call. Затем `E-HIL-067/068` проходят exact product cycle
 и three-cycle regression 35→38 с 46/46 forwarded, zero drops, invariant heap и final
 lease 0. Retained artifact проверяется
-`check_product_start_resilience_acceptance.py`; gate 8 h/32 cycles остаётся открыт.
+`check_product_start_resilience_acceptance.py`; действовавший тогда gate 8 h/32
+cycles оставался открыт.
 
 Затем release lane 0.49 завершил шесть cycles (generation 38→44, 96/96 forwarded,
 zero drops и invariant heap), но cycle 7 после 5 719,273 s исчерпал отдельный boot
@@ -575,8 +579,8 @@ Candidate 0.50 вместо этого выравнивает narrow reset-separ
 существующим budget Product Start восемь attempts. Exact three-cycle regression
 `E-HIL-071` продвигает 44→47 с 39/39 forwarded, двумя natural boot retries, zero
 drops/heap drift и lease 0. Retained artifact проверяет
-`check_product_boot_resilience_acceptance.py`; свежий run 8 h/32 cycles всё ещё
-обязателен.
+`check_product_boot_resilience_acceptance.py`; свежий run по действовавшей тогда
+policy 8 h/32 cycles всё ещё был обязателен.
 
 Этот свежий lane 0.50 сохранён как failed `E-HIL-072`: cycle 1 продвинул 47→48 с
 16/16 forwarded и clean final lease, но cycle 2 после двух clean boot retry records
@@ -589,8 +593,8 @@ hardware Task WDT tier, IRAM hook которого сохраняет тольк
 `timeout_restarts=1`, zero writes, complete cleanup и lease 0. Затем `E-HIL-074`
 продвигает 48→51 с 37/37 forwarded, шестью cold boots, zero drops/heap drift и final
 lease 0. Retained failure и успешный fix проверяет
-`check_product_hardware_watchdog_acceptance.py`; до promotion остаётся только новый
-полный результат 8 h/32 cycles.
+`check_product_hardware_watchdog_acceptance.py`; на тот момент до promotion оставался
+только новый полный результат по policy 8 h/32 cycles.
 
 Local combined run `E-HIL-055` прошёл на exact candidate 0.45: product run
 `408bad8f085d7012fbc85fa57bdd363d` committed generation 4→5 с 20 passive Wi-Fi
@@ -764,5 +768,8 @@ Product decision от 17 августа 2026 года остановил 0.51 la
 все child hashes, generation 51→63, 144/144 observations, 24 cold boots, 48 TFT
 captures, invariant heap и zero drops/retries/timeouts. Runner остаётся честно
 `interrupted`/`gate_eligible=false`: это принятое engineering evidence текущего
-slice, а не release promotion. Полный floor 8 h/32 cycles выполняется как NFR-004 в
-`DEMO-S4` на готовой cross-radio passive platform.
+slice, а не release promotion. 18 августа 2026 года критерий заменён NFR-004:
+≥45 минут и ≥8 полных циклов при configured и measured elapsed не более одного часа
+на готовом exact cross-radio passive candidate. Прежний run 8 h остаётся только
+необязательной extended qualification после крупных storage/runtime/radio changes и
+никогда не блокирует обычный release.

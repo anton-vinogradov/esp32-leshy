@@ -139,7 +139,8 @@ observations, cold-reopens/exports it and returns Home with zero leases.
 Outputs: Wi-Fi/BLE scan, NRF24/CC1101 spectrum, and GPS driver contracts; scheduler
 for compatible and exclusive resources with visible duty cycle; common timeline,
 filters, views, and metadata; PCAP plus CSV/JSON exports; bounded queues and
-instrumentation; an 8-hour passive endurance test.
+instrumentation; a release endurance test of at least 45 minutes/eight complete
+cycles within a one-hour operational budget.
 Every completed passive source also registers its applicable Full/Guided Self-Test
 check instead of creating a release-only diagnostic path.
 
@@ -199,8 +200,9 @@ complete schemas, threat model, compatibility/support policy; reproducible binar
 hashes and provenance; one complete Self-Test plan shared by on-device Full/Guided
 and the independently verified release runner.
 
-**Exit gate:** two consecutive RCs have no open P0/P1; a 24-hour mixed workload has
-no freeze, leak, or corruption; interrupted update/write recovery succeeds; every P0
+**Exit gate:** two consecutive RCs have no open P0/P1; a mixed workload covers at
+least 45 minutes/eight cycles and finishes within one hour with no freeze, leak,
+drops, or corruption; interrupted update/write recovery succeeds; every P0
 requirement is `verified`; `DEMO-S8` passes without adding new feature scope.
 
 ## After 1.0.0

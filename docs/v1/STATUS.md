@@ -16,7 +16,8 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** extend plan-v6 active Full/Guided execution from the
   accepted receiver and persisted-artifact checks to controlled Survey/Capture execution, then exercise controlled
-  power-cut recovery and the 8 h/32-cycle multi-source endurance gate.
+  power-cut recovery and the ≥45-minute/≥8-cycle multi-source endurance gate
+  within its one-hour operational budget.
 - **Implementation in progress:** the next plan-v7 write boundary now has a
   host/build-verified exact-CID disposable cleanup permit and a bounded
   known-filename pre-scan for `/leshy-hil/<run-id>`. It is not registered as a
@@ -30,7 +31,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71…0.79 accept the passive multi-source, browser/export and persistent Capture path; exact 0.80 registers it in Full/Guided; exact 0.81 detects the declared RF shield; exact 0.82/0.83 add explicit user-started spectrum views; exact 0.84 actively executes both receive-only RF checks; exact 0.85 read-only reopens the enrolled SD artifact and exercises Library JSON/CSV plus persisted PCAP from plan v6 | extend active Full/Guided to controlled new Survey/Capture execution; then exercise controlled physical power-cut recovery and 8 h/32-cycle multi-source endurance |
+| S4 | `active` | exact 0.71…0.79 accept the passive multi-source, browser/export and persistent Capture path; exact 0.80 registers it in Full/Guided; exact 0.81 detects the declared RF shield; exact 0.82/0.83 add explicit user-started spectrum views; exact 0.84 actively executes both receive-only RF checks; exact 0.85 read-only reopens the enrolled SD artifact and exercises Library JSON/CSV plus persisted PCAP from plan v6 | extend active Full/Guided to controlled new Survey/Capture execution; then exercise controlled physical power-cut recovery and ≥45-minute/≥8-cycle multi-source endurance within one hour |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -50,7 +51,7 @@ items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 | Complete standard ESP32-DIV hardware | `ahead / S5` — scope and fail-closed hardware envelope exist, but complete IR/PN532/GPS/power workflows do not | probe → capture/observe → Library → inspect/export for every applicable module |
 | Targets, compare and companion | `ahead / S6` — product model and boundaries exist, user workflows are not implemented | compare two Surveys through evidence-backed Targets and the same local Web/USB companion |
 | Safe Lab and extensions | `ahead / S7` — safety/resource boundaries are accepted, active workflows and SDK are not implemented | feature-complete catalog, permissioned extensions and proven panic/timeout stop |
-| Reliability and 1.0 delivery | `ahead / S8` — release-HIL concept and some infrastructure exist, but this is not release evidence | signed OTA/rollback/recovery, full HIL/Self-Test, 24 h mixed workload and two green RCs |
+| Reliability and 1.0 delivery | `ahead / S8` — release-HIL concept and some infrastructure exist, but this is not release evidence | signed OTA/rollback/recovery, full HIL/Self-Test, one-hour-budget mixed workload and two green RCs |
 
 In stage terms S0–S3 are closed, S4 is active and S5–S8 are ahead. In user value,
 the complete Survey→Library path, a real packet Capture and live nRF24/CC1101
@@ -691,5 +692,11 @@ gaps; affected capabilities stay conditional/unavailable rather than being enabl
 assumption.
 
 The 0.51 hardware-watchdog injection, regression, and shortened endurance checkpoint
-are retained (`E-HIL-073…075`). The full 8 h/32-cycle NFR-004 remains mandatory for
-`DEMO-S4`, not S3.
+are retained (`E-HIL-073…075`). On 18 August 2026 the product owner superseded the
+former 8 h/32-cycle release criterion: NFR-004 now requires ≥45 minutes and ≥8
+complete cycles, while both configured and measured release elapsed time must stay
+within one hour. A two-cycle regression is budgeted at ≤10 minutes. The older
+`E-AUTO-015`/`E-HIL-059…075` rows intentionally preserve the policy in force when
+those records were created; they do not restore that gate. An 8 h run is optional
+extended qualification after major storage/runtime/radio changes and is not an
+ordinary-release blocker.

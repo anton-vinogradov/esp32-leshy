@@ -31,7 +31,7 @@ UI automation.
 |---|---|---|---|
 | DEMO-S2 | Independent platform and UX/UI baseline | boot → capability Home → Self-Test Quick → Diagnostics/disabled reason → report → Back | clean target, real probe, common Actions, base visual system, user-visible automation, zero leaked leases |
 | DEMO-S3 | First persistent Survey Session | Start passive Wi-Fi → List → Detail → Stop → reboot → Library → export | first real product workflow and atomic persistent storage |
-| DEMO-S4 | Cross-radio passive Session | multiple compatible receivers → timeline/radar → degradation → reopen/export | common Observation model, scheduler/duty cycle, and 8-hour passive stability |
+| DEMO-S4 | Cross-radio passive Session | multiple compatible receivers → timeline/radar → degradation → reopen/export | common Observation model, scheduler/duty cycle, and ≥45-minute/≥8-cycle passive stability inside a one-hour release budget |
 | DEMO-S5 | Stock-hardware completeness | Full/Guided preflight → probe every present module → observe/capture → Library → inspect/export; approved replay separately | hardware parity, optional/degraded behavior, honest N/A/blocked results, and recovery/power safety |
 | DEMO-S6 | Targets, compare, and companion | baseline Session → repeat visit → diff/Target evidence → local companion export | primary product differentiation and one Action/schema boundary |
 | DEMO-S7 | Safe Lab and SDK | saved Capture → Lab confirm → bounded TX → timeout/panic; sample extension | feature-complete 1.0, physical stop, and extensibility without policy bypass |
@@ -82,7 +82,7 @@ completed platform/S3/S4 checks in Self-Test. Exact 0.81 advances it to plan v4:
 checks pass, three absent assemblies are N/A, the declared nRF24 #1/#2 and CC1101
 identity check passes under exact read-only wire bounds, and only total future
 coverage remains blocked. Useful passive receiver workflows, active Full/Guided
-execution, controlled physical power-cut and 8 h/32-cycle multi-source stability
+execution, controlled physical power-cut and ≥45-minute/≥8-cycle multi-source stability
 remain mandatory.
 
 Exact 0.82 accepts the first of those useful shield workflows: an explicit
@@ -108,7 +108,7 @@ and one 64-bin CC1101 433 MHz receive sweep. Full returns 18 pass, zero fail, on
 honest future-coverage blocker and three N/A; all TX/storage counters stay zero,
 storage generation remains 83, 11 TFT states pass review and final lease is zero.
 The initial runner equation mismatch is retained fail closed. Remaining
-Survey/Library/Capture execution, controlled physical power-cut and 8 h/32-cycle
+Survey/Library/Capture execution, controlled physical power-cut and the one-hour-budget endurance
 endurance still keep `DEMO-S4` open.
 
 Exact 0.85 accepts the next Full/Guided slice. Plan v6 runs the RF phase first,
@@ -119,7 +119,7 @@ pass, zero fail, one honest future-coverage blocker and three N/A; storage write
 TX events remain zero, 12 TFT states pass review and final lease is zero. The first
 telemetry-truncation failure is retained fail closed beside the corrected run.
 Fresh disposable Survey/Capture creation, controlled physical power-cut and the
-8 h/32-cycle cross-radio endurance gate still keep `DEMO-S4` open.
+≥45-minute/≥8-cycle cross-radio endurance gate still keep `DEMO-S4` open.
 
 ## Test cadence within a stage
 

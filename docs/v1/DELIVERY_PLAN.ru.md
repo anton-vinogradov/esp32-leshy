@@ -174,7 +174,8 @@ observations, cold-reopens/exports её и возвращает Home с zero lea
 - общая timeline, фильтры, List/Detail/Radar и capture metadata;
 - PCAP для совместимых сетевых захватов и CSV/JSON export;
 - bounded queues, dropped-event diagnostics и heap/latency instrumentation;
-- 8-часовой passive endurance test.
+- release endurance test не менее 45 минут/восьми полных циклов в операционном
+  бюджете один час.
 - каждый завершённый passive source регистрирует применимый Full/Guided Self-Test
   check вместо release-only diagnostic path.
 
@@ -253,8 +254,9 @@ feature-complete и проходит `DEMO-S7`.
 - единый полный Self-Test plan для on-device Full/Guided и независимо проверяющего
   release runner.
 
-**Exit gate S8:** два последовательных RC без открытых P0/P1; 24-часовой mixed
-workload без зависания, утечки или повреждения; успешное восстановление после
+**Exit gate S8:** два последовательных RC без открытых P0/P1; mixed workload
+охватывает не менее 45 минут/восьми циклов и укладывается в один час без зависания,
+утечки, drops или повреждения; успешное восстановление после
 прерванных update и write; все P0 requirements имеют статус `verified`; `DEMO-S8`
 проходит без добавления нового feature scope.
 

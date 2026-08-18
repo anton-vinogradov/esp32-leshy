@@ -576,7 +576,8 @@ recovery after an app-entry hang. E-HIL-073/074 prove the 0.51 hardware fallback
 and three-cycle product regression. E-HIL-075 adds 12 consecutive cycles,
 generation 51→63, 144/144 records, 24 cold boots, invariant heap, and zero drops with
 final lease 0; the operator stop remains `interrupted`, so this is an engineering
-checkpoint rather than a release pass. Full 8 h/32-cycle NFR-004 remains in
+checkpoint rather than a release pass. The ≥45-minute/≥8-cycle NFR-004 release
+gate, bounded by one operational hour, remains in
 `DEMO-S4`. E-HIL-092 closes ST-HIL-A11 on the same board/card with a localized
 real-TFT failure, zero source/store start, unchanged generation 68/25, and final lease
 0. E-HIL-093 closes the normal/remount LittleFS half of ST-HIL-A07 on the isolated,

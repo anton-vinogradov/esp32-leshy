@@ -18,8 +18,11 @@ from run_1x_product_survey_hil import valid_cid
 
 
 RUN_SCHEMA = "leshy.product_endurance_hil.run.v1"
-RELEASE_MINIMUM_SECONDS = 8 * 60 * 60
-RELEASE_MINIMUM_CYCLES = 32
+RELEASE_MINIMUM_SECONDS = 45 * 60
+RELEASE_MAXIMUM_SECONDS = 60 * 60
+RELEASE_MINIMUM_CYCLES = 8
+RELEASE_DEFAULT_MAXIMUM_CYCLES = 12
+RELEASE_DEFAULT_INTERVAL_SECONDS = 5 * 60
 NORMAL_MAXIMUM_READY_MS = 1500.0
 RETRY_MAXIMUM_READY_MS = 30000.0
 
@@ -271,6 +274,8 @@ def release_policy(flash: bool, acknowledged: bool, duration_seconds: float,
         failures.append("--release-endurance acknowledgement is required")
     if duration_seconds < RELEASE_MINIMUM_SECONDS:
         failures.append(f"duration must be at least {RELEASE_MINIMUM_SECONDS} seconds")
+    if duration_seconds > RELEASE_MAXIMUM_SECONDS:
+        failures.append(f"duration must be at most {RELEASE_MAXIMUM_SECONDS} seconds")
     if minimum_cycles < RELEASE_MINIMUM_CYCLES:
         failures.append(f"minimum cycles must be at least {RELEASE_MINIMUM_CYCLES}")
     return not failures, failures
@@ -312,8 +317,13 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--duration-seconds", type=float, default=RELEASE_MINIMUM_SECONDS)
     parser.add_argument("--minimum-cycles", type=int, default=RELEASE_MINIMUM_CYCLES)
-    parser.add_argument("--maximum-cycles", type=int, default=64)
-    parser.add_argument("--interval-seconds", type=float, default=900.0)
+    parser.add_argument(
+        "--maximum-cycles", type=int, default=RELEASE_DEFAULT_MAXIMUM_CYCLES
+    )
+    parser.add_argument(
+        "--interval-seconds", type=float,
+        default=RELEASE_DEFAULT_INTERVAL_SECONDS,
+    )
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--release-endurance", action="store_true")
     parser.add_argument("--flash-offset", default="0x10000")
@@ -366,6 +376,9 @@ def main() -> int:
             "release_endurance_requested": args.release_endurance,
             "release_policy_satisfied": policy_ok,
             "release_policy_failures": policy_failures,
+            "required_release_duration_seconds": RELEASE_MINIMUM_SECONDS,
+            "maximum_release_elapsed_seconds": RELEASE_MAXIMUM_SECONDS,
+            "required_release_minimum_cycles": RELEASE_MINIMUM_CYCLES,
             "duration_seconds": args.duration_seconds,
             "minimum_cycles": args.minimum_cycles,
             "maximum_cycles": args.maximum_cycles,
@@ -456,6 +469,10 @@ def main() -> int:
         result["status"] = "failed"
 
     elapsed = time.monotonic() - started_monotonic
+    if (args.release_endurance and elapsed > RELEASE_MAXIMUM_SECONDS
+            and "release endurance exceeded one-hour operational budget"
+            not in failures):
+        failures.append("release endurance exceeded one-hour operational budget")
     requirements_met = (
         len(summaries) >= args.minimum_cycles and elapsed >= args.duration_seconds
     )
@@ -478,6 +495,10 @@ def main() -> int:
         "final_observations": prior_observations,
         "failures": failures,
     })
+    result["policy"]["measured_elapsed_within_budget"] = (
+        elapsed <= RELEASE_MAXIMUM_SECONDS
+        if args.release_endurance else None
+    )
     if result["status"] == "in_progress":
         result["status"] = "failed"
     checkpoint(args.output, result)
