@@ -1,0 +1,74 @@
+{
+  "candidate": {
+    "app_elf_sha256": "5ce796743f0282cc2d2f458e80ce405cf04acca9ac0c9c068f5e11605bd85efe",
+    "firmware_sha256": "83dfc22bab7462a47cd329d6d7720dc8705bb9738ba08eb9fdc50e4df8f2468a",
+    "version": "0.70.0-littlefs-reset-matrix"
+  },
+  "captures": [
+    {
+      "golden_sha256": "d0b1311214d67de6159c417541c7db73c38760758022926d46e4931cd3295abf",
+      "masks": [],
+      "mode": "exact",
+      "name": "setup",
+      "rgb565_sha256": "db542dc80c30e7f58a35d02da34e5140d878fff296bfed341502e361fa97beae"
+    },
+    {
+      "golden_sha256": "7797e7ab550aa0e32fee98ebb01dcb9e4a4a75d4e0bea0048ed6b50d001f0781",
+      "masks": [
+        [
+          0,
+          64,
+          240,
+          154
+        ]
+      ],
+      "mode": "masked_exact",
+      "name": "running",
+      "rgb565_sha256": "267ffeed82fea9e6ef8191a12e388b2875d453b1e80875eb6a98504e09d9d5c8"
+    },
+    {
+      "golden_sha256": "caf54ac6fbec4a86f09de35fa3ff1a067cf72246d8a4f5673fad32abc8f433e0",
+      "masks": [
+        [
+          0,
+          108,
+          240,
+          92
+        ]
+      ],
+      "mode": "masked_exact",
+      "name": "detail",
+      "rgb565_sha256": "e0ec0e4dceece623f2190b9831a8fd79b77cf933860c65d307dd44a4c8461392"
+    },
+    {
+      "golden_sha256": "ee471c51226121ab1290dbdefaad1c625b94411c03c7be06886e5ed7b4b81fa1",
+      "masks": [
+        [
+          0,
+          114,
+          240,
+          104
+        ]
+      ],
+      "mode": "masked_exact",
+      "name": "committed",
+      "rgb565_sha256": "d611f3779288a4dbf29793ef633242bea50a145bb296082e1cea0c0dc308fc5e"
+    },
+    {
+      "golden_sha256": "6b8a0b410d46bb46db1e3cc9e81c64145af1c68b88195c8b1b8592cc847cbb83",
+      "masks": [],
+      "mode": "exact",
+      "name": "export",
+      "rgb565_sha256": "8a57140d5cfe9c56a5a5892b8f9d30cc58002b7ecd5d41328f68456b167b82bb"
+    }
+  ],
+  "gate_eligible": false,
+  "manual_visual_review": "pass",
+  "product_run_id": "fccfeebcdd6a418ca67b0902706cf0ee",
+  "product_run_sha256": "8823ec1d2309002f60335b1fe81eb9a00cb51704421dc7a12e2ee5d0508b2df5",
+  "product_runner_sha256": "3cc181648504fdf1fded23c73836ddaf38b0d3720558ea9a068c909622982506",
+  "recorded_at_utc": "2026-08-18T01:34:39.357172+00:00",
+  "schema": "leshy.stage_demo_s3.golden_recording.v1",
+  "suite_id": "stage-demo-s3",
+  "suite_revision": 1
+}

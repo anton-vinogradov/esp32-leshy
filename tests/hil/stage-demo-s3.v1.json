@@ -1,0 +1,38 @@
+{
+  "schema": "leshy.stage_demo_s3.suite.v1",
+  "id": "stage-demo-s3",
+  "revision": 1,
+  "recording_manifest": "goldens/esp32-div-v2-n16/stage-s3-0.70-recording.json",
+  "captures": [
+    {
+      "name": "setup",
+      "golden": "goldens/esp32-div-v2-n16/stage-s3-0.70-setup.rgb565.zlib",
+      "mode": "exact",
+      "masks": []
+    },
+    {
+      "name": "running",
+      "golden": "goldens/esp32-div-v2-n16/stage-s3-0.70-running.rgb565.zlib",
+      "mode": "masked_exact",
+      "masks": [[0, 64, 240, 154]]
+    },
+    {
+      "name": "detail",
+      "golden": "goldens/esp32-div-v2-n16/stage-s3-0.70-detail.rgb565.zlib",
+      "mode": "masked_exact",
+      "masks": [[0, 108, 240, 92]]
+    },
+    {
+      "name": "committed",
+      "golden": "goldens/esp32-div-v2-n16/stage-s3-0.70-committed.rgb565.zlib",
+      "mode": "masked_exact",
+      "masks": [[0, 114, 240, 104]]
+    },
+    {
+      "name": "export",
+      "golden": "goldens/esp32-div-v2-n16/stage-s3-0.70-export.rgb565.zlib",
+      "mode": "exact",
+      "masks": []
+    }
+  ]
+}
