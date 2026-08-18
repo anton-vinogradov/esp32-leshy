@@ -1,0 +1,108 @@
+{
+  "active_artifact": {},
+  "active_rf": {},
+  "boot": {
+    "app_elf_sha256": "28d1ef64b5d21c642a8b3e7599ec09f57f048fe66a33746b4f4581ca0ddd59cb",
+    "buzzer_inactive": true,
+    "buzzer_safety_configured": true,
+    "display_ready_us": 304640,
+    "flash_bytes": 16777216,
+    "heap_free": 163764,
+    "heap_min_free": 144368,
+    "heap_total": 228508,
+    "input_detected": true,
+    "input_probe_attempts": 1,
+    "input_probe_transient_retries": 0,
+    "input_raw": 255,
+    "input_ready_us": 305549,
+    "interactive_ready_us": 958923,
+    "kind": "ready",
+    "legacy_sources": false,
+    "profile": "esp32-div-v2-n16",
+    "profile_revision": "S1-2026-08-16",
+    "psram_bytes": 0,
+    "psram_found": false,
+    "reset_reason_code": 11,
+    "runtime_ready_us": 32611,
+    "schema": "leshy.boot.v1",
+    "setup_enter_us": 31614,
+    "target": "clean_1x_measure",
+    "version": "0.85.0-full-guided-artifacts"
+  },
+  "candidate": {
+    "app_elf_sha256": "28d1ef64b5d21c642a8b3e7599ec09f57f048fe66a33746b4f4581ca0ddd59cb",
+    "firmware_sha256": "10a34ef9219b86baca7d244e2cd7bee09c31fa9bccffdf766824376c96827cf4",
+    "flashed": true,
+    "source_commit": "22c6ac7ffc5811394a6c95bb057293ace433071e",
+    "version": "0.85.0-full-guided-artifacts"
+  },
+  "captures": {},
+  "cleanup_after": {
+    "actions": [],
+    "attempted": true,
+    "complete": false,
+    "errors": [
+      "TimeoutError: timed out waiting for leshy.ui.v1/state"
+    ]
+  },
+  "cleanup_before": {
+    "actions": [],
+    "attempted": true,
+    "complete": false,
+    "errors": [
+      "TimeoutError: timed out waiting for leshy.ui.v1/state"
+    ]
+  },
+  "expected_cid": "FE343253440000002000000055019CB7",
+  "failures": [
+    "self_test_phase: RuntimeError: initial cleanup did not reach Home/lease 0",
+    "cleanup_after: terminal zero lease unproven"
+  ],
+  "final": {},
+  "full_report": {},
+  "gate_eligible": false,
+  "input": {},
+  "passed": false,
+  "privacy": {
+    "pcap_retained_in_evidence": false,
+    "raw_80211_payload_retained_in_evidence": false,
+    "self_test_report_contains_nearby_identifiers": false
+  },
+  "quick_report": {},
+  "recovery_after": {},
+  "recovery_before": {
+    "attempts": 1,
+    "blocked_write_attempts": 0,
+    "catalog_admitted": true,
+    "catalog_status": "admitted",
+    "cleanup_complete": true,
+    "enrolled": true,
+    "expected_fingerprint": "FE343253440000002000000055019CB7",
+    "fingerprint_matched": true,
+    "generation": 83,
+    "integrity": "valid",
+    "kind": "state",
+    "mounted_read_only": true,
+    "observations": 0,
+    "observed_fingerprint": "FE343253440000002000000055019CB7",
+    "opened": true,
+    "owned_after": 0,
+    "owned_during": 12,
+    "permit_status": "permitted",
+    "physical_write_calls": 0,
+    "product_root": "/leshy/sessions/v1",
+    "read_only_guaranteed": true,
+    "root_exists": true,
+    "schema": "leshy.storage.product_boot_recovery.v1",
+    "status": "admitted",
+    "timeout_restarts": 0,
+    "transient_retries": 0,
+    "write_enabled": false
+  },
+  "run_id": "30ebe9845bf5470fb6efc9baff2651c7",
+  "runner_source_sha256": "6322e818f7aa3c3baf994b089617f8fd56b8ba2aace7693444749a2f3bad9b0f",
+  "safe_outputs": {},
+  "schema": "leshy.full_guided_artifact_self_test_hil.run.v1",
+  "shield_receiver_probe": {},
+  "trace": []
+}

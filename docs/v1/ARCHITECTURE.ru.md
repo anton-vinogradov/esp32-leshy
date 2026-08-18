@@ -409,6 +409,23 @@ device progress от independent host oracle. `E-HIL-109` доказывает Q
 closed. Physical RF silence и active execution остальных Survey/Library/Capture
 workflows остаются открыты.
 
+Exact `0.85.0-full-guided-artifacts` переводит Full/Guided на plan v6, сохраняя
+Quick read-only и строго последовательное владение radio/storage. После cleanup
+RF-adapters и release `RadioSpi` отдельная cancellable data boundary 500 ms получает
+`Storage|RadioSpi`, заново идентифицирует enrolled CID, монтирует его read-only и
+повторно использует boot recovery path для последней atomic Session. Staged discard
+sinks затем проверяют Library JSON, capture metadata, по одной CSV record за проход
+main loop и, когда сохранённые raw frames существуют, streaming radiotap PCAP без
+создания или замены пользовательских данных. Stable check IDs и
+`leshy.self_test.active_artifact.v1` публикуют recovery, bytes/records/hash exporters
+и final cleanup независимому oracle. `E-HIL-110` доказывает Quick 8/8 и Full 21
+pass/0 fail/1 blocked/3 N/A, unchanged generation 83, PCAP 16 records/2 773 B,
+zero storage writes/TX events и final lease 0. Первый run с обрезанным расширенным
+`ui.state` сохранён fail closed; bounded diagnostics workspace затем увеличен до
+4 608 bytes, а исправленный exact candidate прогнан заново. Создание новой
+disposable Survey/Capture, controlled physical power-cut и endurance остаются
+открыты.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

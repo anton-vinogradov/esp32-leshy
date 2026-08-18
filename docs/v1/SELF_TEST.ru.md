@@ -177,6 +177,32 @@ review, final owner/lease — `none`/`0`
 receive-only execution, но не physical RF silence. Total capability coverage и active
 Survey/Library/Capture execution остаются blocked/open.
 
+## Принятый read-only checkpoint сохранённого artifact
+
+Exact candidate `0.85.0-full-guided-artifacts` переводит Full/Guided на plan version 6
+с `full.s4.storage.recovery.audit`, `full.s4.library.export.audit` и
+`full.s4.capture.pcap.audit`. После release `RadioSpi` receive-проверками отдельный
+cancellable data screen на 500 ms повторно идентифицирует enrolled SD card, монтирует
+её с read-only guarantee драйвера и открывает последнюю atomic Session. JSON metadata
+форматируется в общем bounded workspace; CSV продвигается по одной записи за проход
+main loop; persisted raw Wi-Fi frames при наличии потоково формируются как radiotap
+PCAP в discard sink, считающий bytes/records и FNV-1a без удержания payload. Library
+view и всё ownership Storage/RadioSpi восстанавливаются до итогового report.
+
+Board-01 проходит 21 check с zero failures, одним future capability blocker и тремя
+profile N/A. Exact CID и continuity generation/observations равны `FE34…9CB7` и
+83/0→83/0. Audit создаёт JSON 432 bytes, capture metadata 880 bytes, zero-row CSV
+94 bytes и digest PCAP 16 кадров/2 773 bytes; counters storage-write, blocked-write и
+radio-TX остаются нулевыми. Если в latest valid Session нет persisted frame payload,
+PCAP artifact check честно становится N/A, а не выдуманным pass.
+
+Первый physical attempt сохранён fail closed: расширенный `ui.state` превысил прежний
+diagnostics buffer 4 096 bytes. Единственный bounded workspace увеличен до 4 608 bytes,
+host limits обновлены, исправленный exact candidate прошёл все 12 визуально проверенных
+TFT states и final lease 0 (`E-BUILD-086`/`E-AUTO-050`/`E-HIL-110`/
+`E-SELFTEST-005`/`E-STORAGE-026`/`E-CAPTURE-003`). Это не создаёт fresh Survey/Capture
+и не меняет user data.
+
 ## Приёмка
 
 1. `SELF-TEST` доступен штатными кнопками последним пунктом Home; serial-only Action

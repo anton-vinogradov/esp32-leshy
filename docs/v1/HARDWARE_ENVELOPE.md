@@ -197,6 +197,15 @@ to safe state before release. The accepted run accounts 83 RX CE windows and
 FIFO/storage counters (`E-HIL-109`/`E-RADIO-004`). This remains software-counter
 evidence; HW-T06 is still partial without an RF detector.
 
+Exact `0.85.0-full-guided-artifacts` releases that RF phase before acquiring the
+declared `Storage|RadioSpi` set for its persisted-artifact phase. It re-identifies
+CID `FE343253440000002000000055019CB7`, mounts the SD card read-only, recovers the
+latest atomic Session through the same guarded path used at boot, streams its
+Library/export artifacts only to discard sinks, then unmounts and releases both
+resources. `E-HIL-110` observes generation 83/observation 0 continuity, zero blocked
+or attempted storage writes, a byte-counted 16-frame PCAP and final lease 0. This is
+read-only workflow evidence, not the separate controlled power-cut test.
+
 GPIO2 software evidence: the author's root-cause description and one-line LOW fix in
 [upstream issue #117](https://github.com/cifertech/ESP32-DIV/issues/117#issuecomment-5178973211)
 links the verified

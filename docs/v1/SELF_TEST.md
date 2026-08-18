@@ -178,6 +178,32 @@ equation was corrected and the same firmware bytes passed. This checkpoint prove
 software-instrumented receive-only execution, not physical RF silence. Total
 capability coverage and active Survey/Library/Capture execution remain blocked/open.
 
+## Accepted read-only persisted-artifact checkpoint
+
+Exact candidate `0.85.0-full-guided-artifacts` advances Full/Guided to plan version 6
+with `full.s4.storage.recovery.audit`, `full.s4.library.export.audit`, and
+`full.s4.capture.pcap.audit`. After the receive checks release `RadioSpi`, a separate
+500 ms cancellable data screen re-identifies the enrolled SD card, mounts it with the
+driver's read-only guarantee, and reopens the latest atomic Session. JSON metadata is
+formatted in the bounded shared workspace; CSV advances one record per main-loop turn;
+persisted raw Wi-Fi frames, when present, are streamed as radiotap PCAP into a discard
+sink that counts bytes/records and FNV-1a without retaining payload. The Library view
+and all Storage/RadioSpi ownership are restored before the final report.
+
+Board-01 passes 21 checks with zero failures, one future capability blocker and three
+profile N/A results. Exact CID and generation/observation continuity are
+`FE34…9CB7` and 83/0→83/0. The audit produces 432-byte JSON, 880-byte capture metadata,
+94-byte zero-row CSV and a 16-frame/2,773-byte PCAP digest; storage-write, blocked-write
+and radio-TX counters remain zero. If the latest valid Session has no persisted frame
+payload, the PCAP artifact check is honestly N/A rather than fabricated pass.
+
+The first physical attempt is retained fail closed because the expanded `ui.state`
+exceeded the old 4,096-byte diagnostics buffer. The single bounded workspace was
+raised to 4,608 bytes, host limits were updated, and the corrected exact candidate
+passed all 12 visually reviewed TFT states and final lease 0
+(`E-BUILD-086`/`E-AUTO-050`/`E-HIL-110`/`E-SELFTEST-005`/`E-STORAGE-026`/
+`E-CAPTURE-003`). This does not create a fresh Survey/Capture or modify user data.
+
 ## Acceptance
 
 1. `SELF-TEST` is reachable by normal buttons as the last Home item; no serial-only

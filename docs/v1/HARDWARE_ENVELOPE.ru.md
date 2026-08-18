@@ -243,6 +243,16 @@ adapter в safe state до release. Принятый run учитывает 83 R
 FIFO/storage counters (`E-HIL-109`/`E-RADIO-004`). Это по-прежнему software-counter
 evidence; HW-T06 остаётся partial без RF detector.
 
+Exact `0.85.0-full-guided-artifacts` освобождает эту RF phase до получения
+объявленного набора `Storage|RadioSpi` для persisted-artifact phase. Он заново
+идентифицирует CID `FE343253440000002000000055019CB7`, монтирует SD read-only,
+восстанавливает последнюю atomic Session через тот же guarded path, что используется
+при boot, потоково направляет Library/export artifacts только в discard sinks, затем
+unmount-ит карту и освобождает оба ресурса. `E-HIL-110` наблюдает continuity
+generation 83/observation 0, zero blocked или attempted storage writes, PCAP из 16
+frames с точным byte count и final lease 0. Это evidence read-only workflow, а не
+отдельный controlled power-cut test.
+
 Любая неоднозначность GPIO5/6 или 14/21 заканчивается `conflicted`, а не перебором
 output modes. Probe не должен передавать RF/IR, писать на SD/NFC или издавать звук.
 

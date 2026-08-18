@@ -111,6 +111,16 @@ The initial runner equation mismatch is retained fail closed. Remaining
 Survey/Library/Capture execution, controlled physical power-cut and 8 h/32-cycle
 endurance still keep `DEMO-S4` open.
 
+Exact 0.85 accepts the next Full/Guided slice. Plan v6 runs the RF phase first,
+releases it, then crosses a separate cancellable boundary into a read-only persisted
+artifact audit: exact-CID recovery of generation 83, Library JSON and capture
+metadata, staged CSV, and a machine-parsed 16-record/2,773 B PCAP. Full returns 21
+pass, zero fail, one honest future-coverage blocker and three N/A; storage writes and
+TX events remain zero, 12 TFT states pass review and final lease is zero. The first
+telemetry-truncation failure is retained fail closed beside the corrected run.
+Fresh disposable Survey/Capture creation, controlled physical power-cut and the
+8 h/32-cycle cross-radio endurance gate still keep `DEMO-S4` open.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

@@ -353,6 +353,23 @@ accounting, zero TX/storage side effects, 11 real TFT states and final lease 0. 
 first runner equation mismatch is retained fail closed. Physical RF silence and
 active execution of the remaining Survey/Library/Capture workflows stay open.
 
+Exact `0.85.0-full-guided-artifacts` advances Full/Guided to plan v6 while keeping
+Quick read-only and keeping radio and storage ownership strictly sequential. After
+the RF adapters have cleaned up and released `RadioSpi`, a separate 500 ms
+cancellable data boundary acquires `Storage|RadioSpi`, re-identifies the enrolled
+CID, mounts read-only and reuses the boot recovery path for the latest atomic
+Session. Staged discard sinks then exercise Library JSON, capture metadata, one CSV
+record per main-loop turn and, when persisted raw frames exist, streaming radiotap
+PCAP without creating or replacing user data. Stable check IDs plus
+`leshy.self_test.active_artifact.v1` expose recovery, exporter bytes/records/hash and
+final cleanup to the independent oracle. `E-HIL-110` proves Quick 8/8 and Full 21
+pass/0 fail/1 blocked/3 N/A, unchanged generation 83, a 16-record/2,773 B PCAP,
+zero storage writes/TX events and final lease 0. The first run that truncated the
+expanded `ui.state` is retained fail closed; the bounded diagnostics workspace was
+then raised to 4,608 bytes and the exact corrected candidate was rerun. Creating a
+fresh disposable Survey/Capture, controlled physical power-cut and endurance remain
+open.
+
 ## Data model
 
 Raw observation is separate from interpretation:

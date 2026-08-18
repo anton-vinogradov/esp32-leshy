@@ -111,6 +111,17 @@ Quick read-only 8/8, затем активно выполняет один по�
 Survey/Library/Capture execution, controlled physical power-cut и 8 h/32-cycle
 endurance всё ещё держат `DEMO-S4` открытым.
 
+Exact 0.85 принимает следующий slice Full/Guided. Plan v6 сначала выполняет RF
+phase, освобождает её, затем через отдельную cancellable boundary переходит к
+read-only audit сохранённых artifacts: recovery generation 83 по exact CID, Library
+JSON и capture metadata, staged CSV и machine-parsed PCAP 16 records/2 773 B. Full
+возвращает 21 pass, zero fail, один честный blocker future coverage и три N/A;
+storage writes и TX events остаются нулевыми, 12 TFT states проходят review, final
+lease — zero. Первый telemetry-truncation failure сохранён fail closed рядом с
+исправленным run. Создание новой disposable Survey/Capture, controlled physical
+power-cut и cross-radio endurance gate 8 h/32 cycles всё ещё держат `DEMO-S4`
+открытым.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases.

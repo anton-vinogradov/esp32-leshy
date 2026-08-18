@@ -1,0 +1,108 @@
+{
+  "schema": "leshy.full_guided_artifact_acceptance.v1",
+  "status": "pass_read_only_artifact_checkpoint",
+  "board": "board-01",
+  "candidate": {
+    "version": "0.85.0-full-guided-artifacts",
+    "source_commit": "a8a49b7ed7221697c4e0a8aeadfba8cda3f0bfb7",
+    "runner_commit": "820b3c6a5e7368022b3bce589c8c2214af8dbc4e",
+    "firmware_sha256": "8b84668eda48da4f1d68b2991f76d8149ab4b9139e137786aa8ec965dffe626f",
+    "factory_sha256": "4fdc83dc4c0f7d09993404bf5a3ee0efb745aa141001a433732c495672c4dcd1",
+    "app_elf_sha256": "a2125efcf0549bd9739c33585bfb2b2380e85dd955e7b496deec26659be7dd09",
+    "map_sha256": "d580a0206a0e2a2116d932a382283ed759f3920f08c02d22d23e3dbe9f6ed381",
+    "app_bytes": 1482976,
+    "factory_bytes": 1548512,
+    "linked_flash_bytes": 1482568,
+    "static_ram_bytes": 153712
+  },
+  "failure_history": {
+    "initial_source_commit": "22c6ac7ffc5811394a6c95bb057293ace433071e",
+    "failed_run_sha256": "3c5d4468dfe849b8d404427e47143cd1a874c8b2f06364f818fb4a63abe516a9",
+    "disposition": "fail_closed_ui_state_truncated",
+    "root_cause": "the extended ui.state exceeded the former 4096-byte bounded diagnostics workspace",
+    "fix": "increase the single bounded diagnostics workspace to 4608 bytes and retain the limit in host acceptance"
+  },
+  "evidence": {
+    "bundle": "tests/hil/evidence/board-01-full-guided-artifacts-0.85",
+    "files": 43,
+    "tft_states": 12,
+    "run_sha256": "a4013a2a26db9a96b49dace7e57bf2d189eb5538c831a1b31b4e626f98c37f6b",
+    "artifact_index_sha256": "c731d34be33f546290dbc3a73e89341d89bfe1e942c25a8abdeed9325fa67b29",
+    "runner_sha256": "6322e818f7aa3c3baf994b089617f8fd56b8ba2aace7693444749a2f3bad9b0f"
+  },
+  "verified": {
+    "cid": "FE343253440000002000000055019CB7",
+    "quick": {
+      "passed": 8,
+      "failed": 0,
+      "read_only": true
+    },
+    "full_guided": {
+      "plan_version": 6,
+      "passed": 21,
+      "failed": 0,
+      "blocked": 1,
+      "not_applicable": 3,
+      "duration_us": 6024523
+    },
+    "recovery": {
+      "generation_before": 83,
+      "generation_after": 83,
+      "observations_before": 0,
+      "observations_after": 0,
+      "mounted_read_only": true,
+      "blocked_write_attempts": 0,
+      "cleanup_complete": true
+    },
+    "library": {
+      "json_bytes": 432,
+      "metadata_bytes": 880,
+      "csv_records": 0,
+      "csv_bytes": 94
+    },
+    "capture": {
+      "pcap_frames": 16,
+      "pcap_bytes": 2773,
+      "pcap_fnv1a": 673903271
+    },
+    "nrf24": {
+      "sweeps": 1,
+      "channels": 83,
+      "modules": 2,
+      "register_reads": 93,
+      "register_writes": 95,
+      "spi_bytes": 376,
+      "receive_ce_high_events": 83
+    },
+    "cc1101": {
+      "band": "433",
+      "bins": 64,
+      "register_reads": 2097,
+      "register_writes": 208,
+      "spi_bytes": 4804,
+      "reset_strobes": 1,
+      "receive_strobes": 64,
+      "idle_strobes": 129
+    },
+    "radio_tx_commands": 0,
+    "storage_write_commands": 0,
+    "heap_total": 227996,
+    "heap_free": 163252,
+    "heap_minimum_after_full": 130252,
+    "input_read_errors": 0,
+    "input_queue_drops": 0,
+    "buzzer_inactive": true,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "limits": {
+    "new_survey_or_capture_started": false,
+    "user_data_written": false,
+    "capture_pcap_check_requires_a_persisted_frame_artifact": true,
+    "physical_rf_silence_instrumented": false,
+    "controlled_power_cut_complete": false,
+    "eight_hour_endurance_complete": false,
+    "demo_s4_complete": false,
+    "release_gate_eligible": false
+  }
+}
