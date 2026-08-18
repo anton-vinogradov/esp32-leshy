@@ -1064,6 +1064,146 @@ void testSourceTimelineOverflowRejectsStateChangeAndCanDrain() {
           SourceWindowState::Stopped);
 }
 
+void testSessionTimelinePersistsBoundedHistoryAndExactAggregates() {
+    const std::uint8_t wifiMask = sourceMask(RadioKind::Wifi);
+    const std::uint8_t bleMask = sourceMask(RadioKind::Ble);
+    SurveySession original;
+    CHECK(original.start("timeline-v2", 1000) == SessionStatus::Started);
+    CHECK(original.startTimeline(wifiMask | bleMask, 1000) ==
+          SessionTimelineStatus::Started);
+
+    Observation observation;
+    observation.monotonicUs = 1500;
+    observation.radio = RadioKind::Wifi;
+    observation.frequencyKhz = 2437000;
+    observation.channel = 6;
+    observation.rssiDbm = -60;
+    observation.identity = {0x02, 0x00, 0x00, 0x00, 0x00, 0x01};
+    observation.identityLength = 6;
+    std::memcpy(observation.label.data(), "ap", 3);
+    observation.labelLength = 2;
+    CHECK(original.append(observation) == SessionStatus::Appended);
+
+    static constexpr std::array<SourceWindow, 5> kWindows{{
+        {RadioKind::Ble, SourceWindowState::Scheduled,
+         SourceWindowReason::DutyCycle, 1000, 1050, 0, 0},
+        {RadioKind::Wifi, SourceWindowState::Scheduled,
+         SourceWindowReason::DutyCycle, 1000, 1100, 0, 0},
+        {RadioKind::Wifi, SourceWindowState::Active,
+         SourceWindowReason::None, 1100, 1900, 1, 0},
+        {RadioKind::Ble, SourceWindowState::Unavailable,
+         SourceWindowReason::DriverUnavailable, 1050, 2000, 0, 0},
+        {RadioKind::Wifi, SourceWindowState::Scheduled,
+         SourceWindowReason::DutyCycle, 1900, 2000, 0, 0},
+    }};
+    for (const SourceWindow& window : kWindows) {
+        CHECK(original.appendTimelineWindow(window) ==
+              SessionTimelineStatus::Appended);
+    }
+
+    SourceRuntimeSummary wifi;
+    wifi.selected = true;
+    wifi.state = SourceWindowState::Stopped;
+    wifi.scheduledUs = 200;
+    wifi.activeUs = 800;
+    wifi.accepted = 1;
+    wifi.windows = 3;
+    wifi.transitions = 2;
+    SourceRuntimeSummary ble;
+    ble.selected = true;
+    ble.state = SourceWindowState::Stopped;
+    ble.scheduledUs = 50;
+    ble.unavailableUs = 950;
+    ble.windows = 2;
+    ble.transitions = 1;
+    CHECK(original.stop(2100) == SessionStatus::TimelineIncomplete);
+    CHECK(original.finalizeTimeline(2000, wifi, ble, 0) ==
+          SessionTimelineStatus::Finalized);
+    CHECK(original.stop(2100) == SessionStatus::Stopped);
+
+    std::array<std::uint8_t, kSessionSegmentMaxBytes> segment{};
+    std::array<std::uint8_t, kSessionManifestMaxBytes> manifest{};
+    std::size_t segmentSize = 0;
+    std::size_t manifestSize = 0;
+    CHECK(encodeObservationSegment(original, segment.data(), segment.size(),
+                                   &segmentSize) == SessionCodecStatus::Valid);
+    CHECK(encodeSessionManifest(original, segment.data(), segmentSize,
+                                manifest.data(), manifest.size(),
+                                &manifestSize) == SessionCodecStatus::Valid);
+    SessionManifest decodedManifest;
+    CHECK(decodeSessionManifest(manifest.data(), manifestSize,
+                                &decodedManifest) == SessionCodecStatus::Valid);
+    CHECK(decodedManifest.schemaVersion == kSessionSchemaVersion);
+
+    SurveySession reopened;
+    CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
+                        segmentSize, &reopened) == SessionCodecStatus::Valid);
+    CHECK(reopened.timeline().present && reopened.timeline().finalized);
+    CHECK(reopened.timeline().selectedMask == (wifiMask | bleMask));
+    CHECK(reopened.timeline().totalWindows == 5);
+    CHECK(reopened.timeline().evictedWindows == 0);
+    CHECK(reopened.timelineWindowCount() == 5);
+    CHECK(reopened.timeline().sources[0].activeUs == 800);
+    CHECK(reopened.timeline().sources[0].accepted == 1);
+    CHECK(reopened.timeline().sources[1].unavailableUs == 950);
+    CHECK(reopened.timelineWindow(0) != nullptr &&
+          reopened.timelineWindow(0)->source == RadioKind::Ble);
+
+    char summary[768] = {};
+    CHECK(formatSessionJsonSummary(reopened, summary, sizeof(summary)));
+    CHECK(std::strstr(summary, "leshy.session.summary.v2") != nullptr);
+    CHECK(std::strstr(summary, "\"windows\":5") != nullptr);
+    CHECK(std::strstr(summary, "\"duty_permille\":800") != nullptr);
+
+    LibraryController library;
+    CHECK(library.add(reopened, 73, SessionIntegrity::Valid, true, false));
+    CHECK(library.openSelected());
+    CHECK(library.requestExport());
+    char artifact[1024] = {};
+    const LibraryExportResult exported =
+        library.formatSelectedJsonExport(artifact, sizeof(artifact));
+    CHECK(exported.valid());
+    CHECK(std::strstr(artifact, "leshy.library.export.v1") != nullptr);
+    CHECK(std::strstr(artifact, "leshy.session.summary.v2") != nullptr);
+    CHECK(std::strstr(artifact, "\"windows\":5") != nullptr);
+    CHECK(std::strstr(artifact, "\"retained\":5") != nullptr);
+
+    for (std::size_t index = 0; index < segmentSize; ++index) {
+        segment[index] ^= 1U;
+        CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
+                            segmentSize, &reopened) != SessionCodecStatus::Valid);
+        segment[index] ^= 1U;
+    }
+
+    SurveySession bounded;
+    CHECK(bounded.start("timeline-ring", 1000) == SessionStatus::Started);
+    CHECK(bounded.startTimeline(wifiMask, 1000) ==
+          SessionTimelineStatus::Started);
+    for (std::size_t index = 0; index < 20; ++index) {
+        const SourceWindow window{
+            RadioKind::Wifi, SourceWindowState::Scheduled,
+            SourceWindowReason::DutyCycle, 1000 + index * 10,
+            1010 + index * 10, 0, 0};
+        CHECK(bounded.appendTimelineWindow(window) ==
+              SessionTimelineStatus::Appended);
+    }
+    wifi = {};
+    wifi.selected = true;
+    wifi.state = SourceWindowState::Stopped;
+    wifi.scheduledUs = 200;
+    wifi.windows = 20;
+    wifi.transitions = 19;
+    ble = {};
+    CHECK(bounded.finalizeTimeline(1200, wifi, ble, 0) ==
+          SessionTimelineStatus::Finalized);
+    CHECK(bounded.stop(1200) == SessionStatus::Stopped);
+    CHECK(bounded.timeline().totalWindows == 20);
+    CHECK(bounded.timeline().evictedWindows == 4);
+    CHECK(bounded.timelineWindowCount() == 16);
+    CHECK(bounded.timelineWindow(0) != nullptr &&
+          bounded.timelineWindow(0)->startedUs == 1040);
+}
+
 SurveySession stoppedSessionWithId(const char* id, std::uint64_t stoppedUs) {
     SurveySession session;
     CHECK(session.start(id, 1000) == SessionStatus::Started);
@@ -1302,7 +1442,7 @@ void testSessionCodecCommitsCanonicalDataAndReopensOffline() {
 
     std::array<std::uint8_t, kSessionManifestMaxBytes> futureManifest = manifest;
     CHECK(manifestSize > 2);
-    futureManifest[2] = 2;
+    futureManifest[2] = 3;
     CHECK(decodeSessionManifest(futureManifest.data(), manifestSize, &decodedManifest) ==
           SessionCodecStatus::UnsupportedSchema);
     futureManifest = manifest;
@@ -3204,6 +3344,7 @@ int main() {
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
     testSourceTimelineStreamsHonestDutyWindowsAndDrops();
     testSourceTimelineOverflowRejectsStateChangeAndCanDrain();
+    testSessionTimelinePersistsBoundedHistoryAndExactAggregates();
     testGoldenSurveyTraceUsesListDetailBackAndExplicitStop();
     testSurveySourcePlanProjectsAvailabilityAndRequiresSelection();
     testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure();

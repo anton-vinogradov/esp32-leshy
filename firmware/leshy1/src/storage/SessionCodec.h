@@ -8,14 +8,18 @@
 
 namespace leshy1::storage {
 
-constexpr std::uint16_t kSessionSchemaVersion = 1;
-constexpr std::uint16_t kSegmentSchemaVersion = 1;
+constexpr std::uint16_t kLegacySessionSchemaVersion = 1;
+constexpr std::uint16_t kSessionSchemaVersion = 2;
+constexpr std::uint16_t kLegacySegmentSchemaVersion = 1;
+constexpr std::uint16_t kSegmentSchemaVersion = 2;
 constexpr std::size_t kSessionManifestMaxBytes = 256;
 constexpr std::size_t kObservationRecordMaxBytes = 128;
+constexpr std::size_t kTimelineRecordMaxBytes = 1024;
 constexpr std::size_t kSessionSegmentMaxBytes = 12288;
 constexpr std::size_t kSegmentFooterBytes = 24;
 
 struct SessionManifest final {
+    std::uint16_t schemaVersion = 0;
     std::array<char, services::survey::SurveySession::kSessionIdCapacity + 1> sessionId{};
     std::uint64_t startedUs = 0;
     std::uint64_t stoppedUs = 0;

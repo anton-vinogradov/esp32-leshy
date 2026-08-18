@@ -10,6 +10,11 @@ namespace leshy1::storage {
 namespace {
 
 constexpr std::uint8_t kSegmentMagic[4] = {'L', 'S', 'H', 'S'};
+constexpr std::uint8_t kTimelineMagic[4] = {'L', 'T', 'L', 'N'};
+constexpr std::uint8_t kTimelineWireVersion = 1;
+constexpr std::size_t kTimelineHeaderBytes = 40;
+constexpr std::size_t kTimelineSummaryBytes = 60;
+constexpr std::size_t kTimelineWindowBytes = 36;
 
 void put16(std::uint8_t* output, std::uint16_t value) {
     output[0] = static_cast<std::uint8_t>(value >> 8U);
@@ -23,6 +28,13 @@ void put32(std::uint8_t* output, std::uint32_t value) {
     output[3] = static_cast<std::uint8_t>(value);
 }
 
+void put64(std::uint8_t* output, std::uint64_t value) {
+    for (std::size_t index = 0; index < 8; ++index) {
+        output[index] = static_cast<std::uint8_t>(
+            value >> ((7U - index) * 8U));
+    }
+}
+
 std::uint16_t get16(const std::uint8_t* input) {
     return static_cast<std::uint16_t>((static_cast<std::uint16_t>(input[0]) << 8U) |
                                       static_cast<std::uint16_t>(input[1]));
@@ -33,6 +45,14 @@ std::uint32_t get32(const std::uint8_t* input) {
            (static_cast<std::uint32_t>(input[1]) << 16U) |
            (static_cast<std::uint32_t>(input[2]) << 8U) |
            static_cast<std::uint32_t>(input[3]);
+}
+
+std::uint64_t get64(const std::uint8_t* input) {
+    std::uint64_t value = 0;
+    for (std::size_t index = 0; index < 8; ++index) {
+        value = (value << 8U) | input[index];
+    }
+    return value;
 }
 
 class CborWriter final {
@@ -291,19 +311,189 @@ SessionCodecStatus decodeObservation(const std::uint8_t* input, std::size_t size
     return SessionCodecStatus::Valid;
 }
 
+void encodeTimelineSummary(
+    const services::survey::SourceRuntimeSummary& summary,
+    std::uint8_t* output) {
+    output[0] = summary.selected ? 1 : 0;
+    output[1] = static_cast<std::uint8_t>(summary.state);
+    output[2] = 0;
+    output[3] = 0;
+    put64(output + 4, summary.scheduledUs);
+    put64(output + 12, summary.activeUs);
+    put64(output + 20, summary.unavailableUs);
+    put64(output + 28, summary.faultUs);
+    put64(output + 36, summary.accepted);
+    put64(output + 44, summary.dropped);
+    put32(output + 52, summary.windows);
+    put32(output + 56, summary.transitions);
+}
+
+bool decodeTimelineSummary(
+    const std::uint8_t* input,
+    services::survey::SourceRuntimeSummary* output) {
+    if (input == nullptr || output == nullptr || input[0] > 1 ||
+        input[1] > static_cast<std::uint8_t>(
+            services::survey::SourceWindowState::Stopped) ||
+        input[2] != 0 || input[3] != 0) {
+        return false;
+    }
+    output->selected = input[0] != 0;
+    output->state = static_cast<services::survey::SourceWindowState>(input[1]);
+    output->scheduledUs = get64(input + 4);
+    output->activeUs = get64(input + 12);
+    output->unavailableUs = get64(input + 20);
+    output->faultUs = get64(input + 28);
+    output->accepted = get64(input + 36);
+    output->dropped = get64(input + 44);
+    output->windows = get32(input + 52);
+    output->transitions = get32(input + 56);
+    return true;
+}
+
+SessionCodecStatus encodeTimelineRecord(
+    const services::survey::SurveySession& session, std::uint8_t* output,
+    std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr) {
+        return SessionCodecStatus::InvalidArgument;
+    }
+    const services::survey::SessionTimelineSummary& timeline = session.timeline();
+    const std::size_t retained = session.timelineWindowCount();
+    const std::size_t required = kTimelineHeaderBytes +
+        services::survey::SourceTimeline::kSourceCount * kTimelineSummaryBytes +
+        retained * kTimelineWindowBytes;
+    if (!timeline.present || !timeline.finalized || timeline.selectedMask == 0 ||
+        retained > services::survey::SurveySession::kTimelineWindowCapacity ||
+        timeline.totalWindows != timeline.evictedWindows + retained ||
+        timeline.startedUs < session.startedUs() ||
+        timeline.stoppedUs < timeline.startedUs ||
+        timeline.stoppedUs > session.stoppedUs()) {
+        return SessionCodecStatus::TimelineInvalid;
+    }
+    if (required > capacity || required > kTimelineRecordMaxBytes) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    std::memset(output, 0, required);
+    std::memcpy(output, kTimelineMagic, sizeof(kTimelineMagic));
+    output[4] = kTimelineWireVersion;
+    output[5] = timeline.selectedMask;
+    output[6] = static_cast<std::uint8_t>(retained);
+    output[7] = 1;  // finalized
+    put64(output + 8, timeline.startedUs);
+    put64(output + 16, timeline.stoppedUs);
+    put32(output + 24, timeline.totalWindows);
+    put32(output + 28, timeline.evictedWindows);
+    put64(output + 32, timeline.overflowEvents);
+    std::size_t position = kTimelineHeaderBytes;
+    for (const services::survey::SourceRuntimeSummary& source : timeline.sources) {
+        encodeTimelineSummary(source, output + position);
+        position += kTimelineSummaryBytes;
+    }
+    for (std::size_t index = 0; index < retained; ++index) {
+        const services::survey::SourceWindow* window =
+            session.timelineWindow(index);
+        if (window == nullptr) return SessionCodecStatus::TimelineInvalid;
+        output[position] = static_cast<std::uint8_t>(window->source);
+        output[position + 1] = static_cast<std::uint8_t>(window->state);
+        output[position + 2] = static_cast<std::uint8_t>(window->reason);
+        output[position + 3] = 0;
+        put64(output + position + 4, window->startedUs);
+        put64(output + position + 12, window->endedUs);
+        put64(output + position + 20, window->accepted);
+        put64(output + position + 28, window->dropped);
+        position += kTimelineWindowBytes;
+    }
+    *outputSize = position;
+    return SessionCodecStatus::Valid;
+}
+
+SessionCodecStatus decodeTimelineRecord(
+    const std::uint8_t* input, std::size_t size,
+    services::survey::SurveySession* output) {
+    if (input == nullptr || output == nullptr || size < kTimelineHeaderBytes +
+            services::survey::SourceTimeline::kSourceCount * kTimelineSummaryBytes ||
+        size > kTimelineRecordMaxBytes ||
+        std::memcmp(input, kTimelineMagic, sizeof(kTimelineMagic)) != 0 ||
+        input[4] != kTimelineWireVersion || input[7] != 1) {
+        return SessionCodecStatus::Malformed;
+    }
+    const std::uint8_t selectedMask = input[5];
+    const std::size_t retained = input[6];
+    const std::size_t expectedSize = kTimelineHeaderBytes +
+        services::survey::SourceTimeline::kSourceCount * kTimelineSummaryBytes +
+        retained * kTimelineWindowBytes;
+    if (retained > services::survey::SurveySession::kTimelineWindowCapacity ||
+        expectedSize != size) {
+        return SessionCodecStatus::BoundsExceeded;
+    }
+    const std::uint64_t startedUs = get64(input + 8);
+    const std::uint64_t stoppedUs = get64(input + 16);
+    const std::uint32_t totalWindows = get32(input + 24);
+    const std::uint32_t evictedWindows = get32(input + 28);
+    const std::uint64_t overflowEvents = get64(input + 32);
+    if (totalWindows != evictedWindows + retained || stoppedUs < startedUs) {
+        return SessionCodecStatus::TimelineInvalid;
+    }
+    std::array<services::survey::SourceRuntimeSummary,
+               services::survey::SourceTimeline::kSourceCount> sources{};
+    std::size_t position = kTimelineHeaderBytes;
+    for (services::survey::SourceRuntimeSummary& source : sources) {
+        if (!decodeTimelineSummary(input + position, &source)) {
+            return SessionCodecStatus::Malformed;
+        }
+        position += kTimelineSummaryBytes;
+    }
+    if (output->startTimeline(selectedMask, startedUs) !=
+            services::survey::SessionTimelineStatus::Started ||
+        output->restoreTimelineEvictions(evictedWindows) !=
+            services::survey::SessionTimelineStatus::Appended) {
+        return SessionCodecStatus::TimelineInvalid;
+    }
+    for (std::size_t index = 0; index < retained; ++index) {
+        if (input[position + 3] != 0) return SessionCodecStatus::Malformed;
+        services::survey::SourceWindow window;
+        window.source = static_cast<domain::observations::RadioKind>(
+            input[position]);
+        window.state = static_cast<services::survey::SourceWindowState>(
+            input[position + 1]);
+        window.reason = static_cast<services::survey::SourceWindowReason>(
+            input[position + 2]);
+        window.startedUs = get64(input + position + 4);
+        window.endedUs = get64(input + position + 12);
+        window.accepted = get64(input + position + 20);
+        window.dropped = get64(input + position + 28);
+        if (output->appendTimelineWindow(window) !=
+            services::survey::SessionTimelineStatus::Appended) {
+            return SessionCodecStatus::TimelineInvalid;
+        }
+        position += kTimelineWindowBytes;
+    }
+    return output->finalizeTimeline(stoppedUs, sources[0], sources[1],
+                                    overflowEvents) ==
+            services::survey::SessionTimelineStatus::Finalized
+        ? SessionCodecStatus::Valid : SessionCodecStatus::TimelineInvalid;
+}
+
 SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_t size,
                                          std::uint32_t* recordCount,
-                                         std::uint32_t* bodyLength) {
+                                         std::uint32_t* bodyLength,
+                                         std::uint16_t* schemaVersion = nullptr,
+                                         std::uint16_t* timelineRecords = nullptr) {
     if (segment == nullptr || size < kSegmentFooterBytes || size > kSessionSegmentMaxBytes) {
         return SessionCodecStatus::BoundsExceeded;
     }
     const std::uint8_t* footer = segment + size - kSegmentFooterBytes;
-    if (std::memcmp(footer, kSegmentMagic, sizeof(kSegmentMagic)) != 0 ||
-        get16(footer + 6) != 0) {
+    if (std::memcmp(footer, kSegmentMagic, sizeof(kSegmentMagic)) != 0) {
         return SessionCodecStatus::Malformed;
     }
-    if (get16(footer + 4) != kSegmentSchemaVersion) {
+    const std::uint16_t version = get16(footer + 4);
+    const std::uint16_t decodedTimelineRecords = get16(footer + 6);
+    if (version != kLegacySegmentSchemaVersion &&
+        version != kSegmentSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
+    }
+    if ((version == kLegacySegmentSchemaVersion && decodedTimelineRecords != 0) ||
+        (version == kSegmentSchemaVersion && decodedTimelineRecords != 1)) {
+        return SessionCodecStatus::Malformed;
     }
     const std::uint32_t decodedCount = get32(footer + 8);
     const std::uint32_t decodedBodyLength = get32(footer + 12);
@@ -317,6 +507,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
     }
     if (recordCount != nullptr) *recordCount = decodedCount;
     if (bodyLength != nullptr) *bodyLength = decodedBodyLength;
+    if (schemaVersion != nullptr) *schemaVersion = version;
+    if (timelineRecords != nullptr) *timelineRecords = decodedTimelineRecords;
     return SessionCodecStatus::Valid;
 }
 
@@ -358,14 +550,26 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
         writer.be32(crc32c(record, recordSize));
         writer.raw(record, recordSize);
     }
+    const bool hasTimeline = session.timeline().present;
+    if (hasTimeline) {
+        std::array<std::uint8_t, kTimelineRecordMaxBytes> record{};
+        std::size_t recordSize = 0;
+        const SessionCodecStatus status = encodeTimelineRecord(
+            session, record.data(), record.size(), &recordSize);
+        if (status != SessionCodecStatus::Valid) return status;
+        writer.be32(static_cast<std::uint32_t>(recordSize));
+        writer.be32(crc32c(record.data(), recordSize));
+        writer.raw(record.data(), recordSize);
+    }
     if (!writer.ok() || kSegmentFooterBytes > capacity - writer.size()) {
         return SessionCodecStatus::BufferTooSmall;
     }
     const std::size_t bodySize = writer.size();
     std::uint8_t footer[kSegmentFooterBytes] = {};
     std::memcpy(footer, kSegmentMagic, sizeof(kSegmentMagic));
-    put16(footer + 4, kSegmentSchemaVersion);
-    put16(footer + 6, 0);
+    put16(footer + 4, hasTimeline ? kSegmentSchemaVersion
+                                  : kLegacySegmentSchemaVersion);
+    put16(footer + 6, hasTimeline ? 1 : 0);
     put32(footer + 8, static_cast<std::uint32_t>(session.size()));
     put32(footer + 12, static_cast<std::uint32_t>(bodySize));
     put32(footer + 16, crc32c(output, bodySize));
@@ -385,15 +589,19 @@ SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& 
         return SessionCodecStatus::InvalidArgument;
     }
     std::uint32_t recordCount = 0;
+    std::uint16_t segmentVersion = 0;
     const SessionCodecStatus footerStatus =
-        validateSegmentFooter(segment, segmentSize, &recordCount, nullptr);
+        validateSegmentFooter(segment, segmentSize, &recordCount, nullptr,
+                              &segmentVersion);
     if (footerStatus != SessionCodecStatus::Valid) return footerStatus;
     if (recordCount != session.size()) return SessionCodecStatus::Malformed;
 
     CborWriter writer(output, capacity);
     writer.map(8);
     writer.unsignedValue(0);
-    writer.unsignedValue(kSessionSchemaVersion);
+    writer.unsignedValue(segmentVersion == kSegmentSchemaVersion
+                             ? kSessionSchemaVersion
+                             : kLegacySessionSchemaVersion);
     writer.unsignedValue(1);
     writer.unsignedValue(1);  // kind: Session
     writer.unsignedValue(2);
@@ -426,7 +634,11 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
         !reader.unsignedValue(&value)) {
         return SessionCodecStatus::Malformed;
     }
-    if (value != kSessionSchemaVersion) return SessionCodecStatus::UnsupportedSchema;
+    if (value != kLegacySessionSchemaVersion && value != kSessionSchemaVersion) {
+        return SessionCodecStatus::UnsupportedSchema;
+    }
+    const std::uint16_t decodedSchemaVersion =
+        static_cast<std::uint16_t>(value);
     if (!key(reader, 1) || !reader.unsignedValue(&value) || value != 1 || !key(reader, 2)) {
         return SessionCodecStatus::Malformed;
     }
@@ -436,6 +648,7 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
         return SessionCodecStatus::BoundsExceeded;
     }
     SessionManifest manifest;
+    manifest.schemaVersion = decodedSchemaVersion;
     std::memcpy(manifest.sessionId.data(), id, idLength);
     manifest.sessionId[idLength] = '\0';
     if (!key(reader, 3) || !reader.unsignedValue(&manifest.startedUs) || !key(reader, 4) ||
@@ -478,9 +691,20 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
     }
     std::uint32_t recordCount = 0;
     std::uint32_t bodyLength = 0;
-    status = validateSegmentFooter(segment, segmentSize, &recordCount, &bodyLength);
+    std::uint16_t segmentVersion = 0;
+    std::uint16_t timelineRecords = 0;
+    status = validateSegmentFooter(segment, segmentSize, &recordCount,
+                                   &bodyLength, &segmentVersion,
+                                   &timelineRecords);
     if (status != SessionCodecStatus::Valid) return status;
-    if (recordCount != manifest.observationCount) return SessionCodecStatus::Malformed;
+    const std::uint16_t expectedSegmentVersion =
+        manifest.schemaVersion == kSessionSchemaVersion
+            ? kSegmentSchemaVersion : kLegacySegmentSchemaVersion;
+    if (recordCount != manifest.observationCount ||
+        segmentVersion != expectedSegmentVersion ||
+        timelineRecords != (manifest.schemaVersion == kSessionSchemaVersion ? 1 : 0)) {
+        return SessionCodecStatus::Malformed;
+    }
 
     // The maximum Session is several KiB. It must live in caller-owned bounded
     // storage, never as a hidden task-stack copy on the ESP32 loop task.
@@ -520,6 +744,30 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         }
         position += recordLength;
     }
+    if (timelineRecords == 1) {
+        if (bodyLength - position < 8) {
+            output->reset();
+            return SessionCodecStatus::BoundsExceeded;
+        }
+        const std::uint32_t recordLength = get32(segment + position);
+        const std::uint32_t recordCrc = get32(segment + position + 4);
+        position += 8;
+        if (recordLength == 0 || recordLength > kTimelineRecordMaxBytes ||
+            recordLength > bodyLength - position) {
+            output->reset();
+            return SessionCodecStatus::BoundsExceeded;
+        }
+        if (recordCrc != crc32c(segment + position, recordLength)) {
+            output->reset();
+            return SessionCodecStatus::ChecksumMismatch;
+        }
+        status = decodeTimelineRecord(segment + position, recordLength, output);
+        if (status != SessionCodecStatus::Valid) {
+            output->reset();
+            return status;
+        }
+        position += recordLength;
+    }
     if (position != bodyLength) {
         output->reset();
         return SessionCodecStatus::TrailingData;
@@ -545,15 +793,65 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
             ++wifiCount;
         }
     }
-    const int written = std::snprintf(
-        output, capacity,
-        "{\"schema\":\"leshy.session.summary.v1\",\"id\":\"%s\","
-        "\"started_us\":%llu,\"stopped_us\":%llu,\"observations\":%u,"
-        "\"dropped\":%lu,\"sources\":{\"wifi\":%u}}",
-        session.id(), static_cast<unsigned long long>(session.startedUs()),
-        static_cast<unsigned long long>(session.stoppedUs()),
-        static_cast<unsigned>(session.size()), static_cast<unsigned long>(session.dropped()),
-        static_cast<unsigned>(wifiCount));
+    const services::survey::SessionTimelineSummary& timeline = session.timeline();
+    int written = -1;
+    if (!timeline.present) {
+        written = std::snprintf(
+            output, capacity,
+            "{\"schema\":\"leshy.session.summary.v1\",\"id\":\"%s\","
+            "\"started_us\":%llu,\"stopped_us\":%llu,\"observations\":%u,"
+            "\"dropped\":%lu,\"sources\":{\"wifi\":%u}}",
+            session.id(), static_cast<unsigned long long>(session.startedUs()),
+            static_cast<unsigned long long>(session.stoppedUs()),
+            static_cast<unsigned>(session.size()),
+            static_cast<unsigned long>(session.dropped()),
+            static_cast<unsigned>(wifiCount));
+    } else if (timeline.finalized) {
+        const std::uint64_t elapsed = timeline.stoppedUs - timeline.startedUs;
+        const auto duty = [elapsed](
+            const services::survey::SourceRuntimeSummary& source) {
+            if (!source.selected || elapsed == 0) return 0U;
+            if (source.activeUs >= elapsed) return 1000U;
+            return static_cast<unsigned>((source.activeUs * 1000U) / elapsed);
+        };
+        const auto& wifi = timeline.sources[0];
+        const auto& ble = timeline.sources[1];
+        written = std::snprintf(
+            output, capacity,
+            "{\"schema\":\"leshy.session.summary.v2\",\"id\":\"%s\","
+            "\"started_us\":%llu,\"stopped_us\":%llu,\"observations\":%u,"
+            "\"dropped\":%lu,\"sources\":{\"wifi\":%u},\"timeline\":{"
+            "\"selected_mask\":%u,\"windows\":%lu,\"retained\":%u,"
+            "\"evicted\":%lu,\"overflow\":%llu,"
+            "\"wifi\":{\"scheduled_us\":%llu,\"active_us\":%llu,"
+            "\"unavailable_us\":%llu,\"fault_us\":%llu,"
+            "\"duty_permille\":%u,\"accepted\":%llu,\"dropped\":%llu},"
+            "\"ble\":{\"scheduled_us\":%llu,\"active_us\":%llu,"
+            "\"unavailable_us\":%llu,\"fault_us\":%llu,"
+            "\"duty_permille\":%u,\"accepted\":%llu,\"dropped\":%llu}}}",
+            session.id(), static_cast<unsigned long long>(session.startedUs()),
+            static_cast<unsigned long long>(session.stoppedUs()),
+            static_cast<unsigned>(session.size()),
+            static_cast<unsigned long>(session.dropped()),
+            static_cast<unsigned>(wifiCount),
+            static_cast<unsigned>(timeline.selectedMask),
+            static_cast<unsigned long>(timeline.totalWindows),
+            static_cast<unsigned>(session.timelineWindowCount()),
+            static_cast<unsigned long>(timeline.evictedWindows),
+            static_cast<unsigned long long>(timeline.overflowEvents),
+            static_cast<unsigned long long>(wifi.scheduledUs),
+            static_cast<unsigned long long>(wifi.activeUs),
+            static_cast<unsigned long long>(wifi.unavailableUs),
+            static_cast<unsigned long long>(wifi.faultUs), duty(wifi),
+            static_cast<unsigned long long>(wifi.accepted),
+            static_cast<unsigned long long>(wifi.dropped),
+            static_cast<unsigned long long>(ble.scheduledUs),
+            static_cast<unsigned long long>(ble.activeUs),
+            static_cast<unsigned long long>(ble.unavailableUs),
+            static_cast<unsigned long long>(ble.faultUs), duty(ble),
+            static_cast<unsigned long long>(ble.accepted),
+            static_cast<unsigned long long>(ble.dropped));
+    }
     return written >= 0 && static_cast<std::size_t>(written) < capacity;
 }
 

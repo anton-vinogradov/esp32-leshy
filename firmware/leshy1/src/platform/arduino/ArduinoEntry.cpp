@@ -358,7 +358,9 @@ struct ProductSurveyRuntimeState final {
     std::uint64_t stopActionUs = 0;
     std::uint8_t selectedSourceMask = 0;
     const char* timelineStatus = "idle";
+    const char* timelineArchiveStatus = "idle";
     bool timelineHealthy = true;
+    std::uint32_t timelineArchivedWindows = 0;
 };
 
 ProductSurveyRuntimeState productSurveyRuntime;
@@ -1274,6 +1276,30 @@ bool applyProductSurveyTimelineStatus(SourceTimelineStatus status,
     return status == expected;
 }
 
+bool drainProductSurveyTimelineWindows() {
+    leshy1::services::survey::SourceWindow window;
+    while (true) {
+        const SourceTimelineStatus dequeued = productSurveyTimeline.pop(&window);
+        if (dequeued == SourceTimelineStatus::Empty) return true;
+        if (dequeued != SourceTimelineStatus::WindowDequeued) {
+            productSurveyRuntime.timelineArchiveStatus =
+                leshy1::services::survey::sourceTimelineStatusName(dequeued);
+            productSurveyRuntime.timelineHealthy = false;
+            return false;
+        }
+        const auto archived = surveySession.appendTimelineWindow(window);
+        productSurveyRuntime.timelineArchiveStatus =
+            leshy1::services::survey::sessionTimelineStatusName(archived);
+        if (archived !=
+            leshy1::services::survey::SessionTimelineStatus::Appended) {
+            productSurveyRuntime.timelineHealthy = false;
+            return false;
+        }
+        ++productSurveyRuntime.timelineArchivedWindows;
+        window = {};
+    }
+}
+
 bool recordProductSurveyTimelineDrops(std::uint16_t count,
                                       std::uint64_t monotonicUs) {
     for (std::uint16_t index = 0; index < count; ++index) {
@@ -1335,7 +1361,8 @@ bool closeProductSurveyScanWindow(const ProductSurveyWorkerEvent& event,
               : SourceWindowReason::DutyCycle,
         event.scanEndedUs);
     return applyProductSurveyTimelineStatus(
-        status, SourceTimelineStatus::Transitioned);
+               status, SourceTimelineStatus::Transitioned) &&
+           drainProductSurveyTimelineWindows();
 }
 
 void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
@@ -1370,14 +1397,27 @@ void serviceProductSurveyWorker() {
         if (event.kind == ProductSurveyWorkerEventKind::Prepared) {
             std::uint64_t startedUs = event.eventUs;
             if (startedUs == 0) startedUs = 1;
-            const SourceTimelineStatus timelineStarted =
-                productSurveyTimeline.start(
-                    productSurveyRuntime.selectedSourceMask, startedUs);
             const SurveyPipelineStatus pipelineStarted = surveyPipeline.start(
                 "product-wifi-live", startedUs);
-            if (!applyProductSurveyTimelineStatus(
+            const SourceTimelineStatus timelineStarted =
+                pipelineStarted == SurveyPipelineStatus::Started
+                    ? productSurveyTimeline.start(
+                          productSurveyRuntime.selectedSourceMask, startedUs)
+                    : SourceTimelineStatus::InvalidState;
+            const auto archiveStarted =
+                pipelineStarted == SurveyPipelineStatus::Started &&
+                        timelineStarted == SourceTimelineStatus::Started
+                    ? surveySession.startTimeline(
+                          productSurveyRuntime.selectedSourceMask, startedUs)
+                    : leshy1::services::survey::SessionTimelineStatus::NotRunning;
+            productSurveyRuntime.timelineArchiveStatus =
+                leshy1::services::survey::sessionTimelineStatusName(
+                    archiveStarted);
+            if (pipelineStarted != SurveyPipelineStatus::Started ||
+                !applyProductSurveyTimelineStatus(
                     timelineStarted, SourceTimelineStatus::Started) ||
-                pipelineStarted != SurveyPipelineStatus::Started) {
+                archiveStarted !=
+                    leshy1::services::survey::SessionTimelineStatus::Started) {
                 productSurveyTimeline.reset();
                 requestProductSurveyWorkerStop(true);
                 productSurveyRuntime.status = "workflow_start_failed";
@@ -1395,7 +1435,8 @@ void serviceProductSurveyWorker() {
                     RadioKind::Wifi, SourceWindowState::Active,
                     SourceWindowReason::None, event.scanStartedUs);
             if (!applyProductSurveyTimelineStatus(
-                    status, SourceTimelineStatus::Transitioned)) {
+                    status, SourceTimelineStatus::Transitioned) ||
+                !drainProductSurveyTimelineWindows()) {
                 productSurveyRuntime.status = "timeline_start_failed";
                 lastRuntimeEvent = productSurveyRuntime.status;
                 requestProductSurveyWorkerStop(true);
@@ -1417,9 +1458,24 @@ void serviceProductSurveyWorker() {
             const SourceTimelineStatus timelineStopped = windowClosed
                 ? productSurveyTimeline.stop(event.eventUs)
                 : SourceTimelineStatus::InvalidState;
-            const bool timelineComplete = windowClosed &&
+            const bool sourceStopped = windowClosed &&
                 applyProductSurveyTimelineStatus(
-                    timelineStopped, SourceTimelineStatus::Stopped);
+                    timelineStopped, SourceTimelineStatus::Stopped) &&
+                drainProductSurveyTimelineWindows();
+            const auto* wifi = productSurveyTimeline.source(RadioKind::Wifi);
+            const auto* ble = productSurveyTimeline.source(RadioKind::Ble);
+            const auto archiveFinalized =
+                sourceStopped && wifi != nullptr && ble != nullptr
+                    ? surveySession.finalizeTimeline(
+                          event.eventUs, *wifi, *ble,
+                          productSurveyTimeline.overflowEvents())
+                    : leshy1::services::survey::SessionTimelineStatus::InvalidSummary;
+            productSurveyRuntime.timelineArchiveStatus =
+                leshy1::services::survey::sessionTimelineStatusName(
+                    archiveFinalized);
+            const bool timelineComplete = sourceStopped &&
+                archiveFinalized ==
+                    leshy1::services::survey::SessionTimelineStatus::Finalized;
             const SurveyPipelineStatus stopped = timelineComplete
                 ? stopProductSurvey() : SurveyPipelineStatus::WorkflowRejected;
             if (!timelineComplete ||
@@ -3588,10 +3644,33 @@ void renderLibraryPage(bool clearContent) {
                       leshy1::apps::library::sessionIntegrityName(selected->integrity));
         setUiCursor(UiTextRole::Body, 14, 168);
         display.print(line);
+        const auto& timeline = selected->session->timeline();
+        if (timeline.present && timeline.finalized) {
+            const std::uint64_t elapsed = timeline.stoppedUs - timeline.startedUs;
+            const std::uint16_t wifiDuty = elapsed == 0
+                ? 0
+                : static_cast<std::uint16_t>(
+                      timeline.sources[0].activeUs >= elapsed
+                          ? 100
+                          : (timeline.sources[0].activeUs * 100U) / elapsed);
+            std::snprintf(
+                line, sizeof(line), tr(UiTextId::TimelineStoredFormat),
+                static_cast<unsigned long>(timeline.totalWindows),
+                static_cast<unsigned>(selected->session->timelineWindowCount()),
+                static_cast<unsigned>(wifiDuty));
+            setUiCursor(UiTextRole::Body, 14, 192);
+            display.print(line);
+        }
         display.setTextColor(Palette::Positive, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 199);
-        display.print(persistent ? tr(UiTextId::PersistentRecovered)
-                                 : tr(UiTextId::RamVolatile));
+        setUiCursor(UiTextRole::Meta, 14,
+                    timeline.present && timeline.finalized ? 216 : 199);
+        display.print(
+            !persistent
+                ? tr(UiTextId::RamVolatile)
+                : (selected->integrity ==
+                           leshy1::apps::library::SessionIntegrity::Valid
+                       ? tr(UiTextId::PersistentValid)
+                       : tr(UiTextId::PersistentRecovered)));
         return;
     }
 
@@ -3806,6 +3885,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
             productSurveyTimeline.source(RadioKind::Wifi);
         const auto* bleTimeline =
             productSurveyTimeline.source(RadioKind::Ble);
+        const auto* storedTimeline =
+            selectedLibrary != nullptr && selectedLibrary->session != nullptr
+                ? &selectedLibrary->session->timeline() : nullptr;
         std::uint64_t timelineAsOfUs =
             productSurveyTimeline.state() == SourceTimelineState::Running
                 ? static_cast<std::uint64_t>(esp_timer_get_time())
@@ -3838,7 +3920,13 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_source_ble_state\":\"%s\","
                       "\"survey_timeline_state\":\"%s\","
                       "\"survey_timeline_status\":\"%s\","
+                      "\"survey_timeline_archive_status\":\"%s\","
                       "\"survey_timeline_healthy\":%s,"
+                      "\"survey_timeline_archived_windows\":%lu,"
+                      "\"survey_timeline_persisted\":%s,"
+                      "\"survey_timeline_persisted_windows\":%lu,"
+                      "\"survey_timeline_retained_windows\":%u,"
+                      "\"survey_timeline_evicted_windows\":%lu,"
                       "\"survey_timeline_selected_mask\":%u,"
                       "\"survey_timeline_queue_depth\":%u,"
                       "\"survey_timeline_queue_high_water\":%u,"
@@ -3938,7 +4026,24 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       leshy1::services::survey::sourceTimelineStateName(
                           productSurveyTimeline.state()),
                       productSurveyRuntime.timelineStatus,
+                      productSurveyRuntime.timelineArchiveStatus,
                       productSurveyRuntime.timelineHealthy ? "true" : "false",
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.timelineArchivedWindows),
+                      storedTimeline != nullptr && storedTimeline->present &&
+                              storedTimeline->finalized
+                          ? "true" : "false",
+                      static_cast<unsigned long>(
+                          storedTimeline == nullptr
+                              ? 0 : storedTimeline->totalWindows),
+                      static_cast<unsigned>(
+                          selectedLibrary == nullptr ||
+                                  selectedLibrary->session == nullptr
+                              ? 0
+                              : selectedLibrary->session->timelineWindowCount()),
+                      static_cast<unsigned long>(
+                          storedTimeline == nullptr
+                              ? 0 : storedTimeline->evictedWindows),
                       static_cast<unsigned>(
                           productSurveyTimeline.selectedMask()),
                       static_cast<unsigned>(
@@ -7494,7 +7599,7 @@ void emitSessionFixture(Stream& reply) {
                       "\"radio_touched\":false}");
         return;
     }
-    static char summary[256] = {};
+    static char summary[768] = {};
     auto& segment = sessionStoreWorkspace.segment;
     auto& manifest = sessionStoreWorkspace.manifest;
     SurveySession& reopened = sessionStoreWorkspace.validationSession;
@@ -7534,7 +7639,7 @@ void emitSessionFixture(Stream& reply) {
         status = leshy1::storage::SessionCodecStatus::BufferTooSmall;
     }
 
-    char line[768] = {};
+    char line[1280] = {};
     if (status == leshy1::storage::SessionCodecStatus::Valid) {
         std::snprintf(
             line, sizeof(line),
@@ -7575,7 +7680,7 @@ void emitSessionStoreFixture(Stream& reply) {
     SurveySession& reopened = sessionStoreWorkspace.validationSession;
     const leshy1::storage::SessionStoreRecoveryResult newest =
         leshy1::storage::recoverSession(ramSessionStore, sessionStoreWorkspace, &reopened);
-    static char summary[256] = {};
+    static char summary[768] = {};
     const bool summaryReady = newest.valid() &&
                               leshy1::storage::formatSessionJsonSummary(
                                   reopened, summary, sizeof(summary));
@@ -7632,11 +7737,11 @@ void emitSessionStoreFixture(Stream& reply) {
 
 void emitLibraryFixture(Stream& reply) {
     const LibraryEntry* entry = libraryController.selected();
-    static char summary[256] = {};
+    static char summary[768] = {};
     const bool valid = libraryDemoReady && entry != nullptr && entry->session != nullptr &&
                        leshy1::storage::formatSessionJsonSummary(
                            *entry->session, summary, sizeof(summary));
-    char line[768] = {};
+    char line[1280] = {};
     if (valid) {
         std::snprintf(
             line, sizeof(line),
@@ -7663,7 +7768,7 @@ void emitLibraryFixture(Stream& reply) {
 }
 
 void emitLibraryExport(Stream& reply) {
-    static char artifact[640] = {};
+    static char artifact[1024] = {};
     if (libraryController.view() != LibraryView::ExportReady) {
         reply.println(
             "{\"schema\":\"leshy.library.export.v1\",\"kind\":\"artifact\","

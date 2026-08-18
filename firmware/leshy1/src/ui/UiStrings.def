@@ -127,6 +127,8 @@ LESHY_UI_TEXT(PersistentMedia, Meta, 212, "PERSISTENT MEDIA | RF OFF", u8"ПОС
 LESHY_UI_TEXT(BoundedRamSource, Meta, 212, "BOUNDED RAM SOURCE | RF OFF", u8"ОГРАНИЧЕННАЯ RAM | RF ВЫКЛ")
 LESHY_UI_TEXT(SessionDetail, Body, 206, "SESSION / DETAIL", u8"СЕССИЯ / ДЕТАЛИ")
 LESHY_UI_TEXT(IntegrityFormat, Body, 212, "INTEGRITY    %s", u8"ЦЕЛОСТНОСТЬ  %s")
+LESHY_UI_TEXT(TimelineStoredFormat, Body, 212, "HISTORY %lu/%u | WI-FI %u%%", u8"ИСТОРИЯ %lu/%u | WI-FI %u%%")
+LESHY_UI_TEXT(PersistentValid, Meta, 212, "PERSISTENT | VALID | RF OFF", u8"SD | ЦЕЛО | RF ВЫКЛ")
 LESHY_UI_TEXT(PersistentRecovered, Meta, 212, "PERSISTENT | RECOVERED | RF OFF", u8"SD | ВОССТАНОВЛЕНО | RF ВЫКЛ")
 LESHY_UI_TEXT(RamVolatile, Meta, 212, "RAM ONLY | VOLATILE | RF OFF", u8"ТОЛЬКО RAM | ВРЕМЕННО | RF ВЫКЛ")
 LESHY_UI_TEXT(LibraryOffline, Body, 206, "LIBRARY / OFFLINE", u8"БИБЛИОТЕКА / ОФЛАЙН")

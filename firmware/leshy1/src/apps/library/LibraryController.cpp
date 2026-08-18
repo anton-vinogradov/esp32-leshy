@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <cstring>
 
+#include "storage/SessionCodec.h"
+
 namespace leshy1::apps::library {
 
 const char* sessionIntegrityName(SessionIntegrity integrity) {
@@ -111,32 +113,23 @@ LibraryExportResult LibraryController::formatSelectedJsonExport(char* output,
         output[0] = '\0';
         return {LibraryExportStatus::SessionUnavailable, 0};
     }
-    std::size_t wifiCount = 0;
-    for (std::size_t index = 0; index < entry->session->size(); ++index) {
-        const domain::observations::Observation* observation = entry->session->get(index);
-        if (observation != nullptr &&
-            observation->radio == domain::observations::RadioKind::Wifi) {
-            ++wifiCount;
-        }
+    char sessionSummary[768] = {};
+    if (!storage::formatSessionJsonSummary(
+            *entry->session, sessionSummary, sizeof(sessionSummary))) {
+        output[0] = '\0';
+        return {LibraryExportStatus::BufferTooSmall, 0};
     }
     const int written = std::snprintf(
         output, capacity,
         "{\"schema\":\"leshy.library.export.v1\",\"kind\":\"artifact\","
         "\"status\":\"valid\",\"generation\":%lu,\"integrity\":\"%s\","
         "\"simulated\":%s,\"persistent\":%s,\"transport\":\"serial_ndjson\","
-        "\"storage_backend\":\"%s\",\"radio_touched\":false,\"session\":{"
-        "\"schema\":\"leshy.session.summary.v1\",\"id\":\"%s\","
-        "\"started_us\":%llu,\"stopped_us\":%llu,\"observations\":%u,"
-        "\"dropped\":%lu,\"sources\":{\"wifi\":%u}}}",
+        "\"storage_backend\":\"%s\",\"radio_touched\":false,\"session\":%s}",
         static_cast<unsigned long>(entry->generation),
         sessionIntegrityName(entry->integrity), entry->simulated ? "true" : "false",
         entry->persistent ? "true" : "false",
-        entry->persistent ? "persistent_media" : "bounded_ram", entry->session->id(),
-        static_cast<unsigned long long>(entry->session->startedUs()),
-        static_cast<unsigned long long>(entry->session->stoppedUs()),
-        static_cast<unsigned>(entry->session->size()),
-        static_cast<unsigned long>(entry->session->dropped()),
-        static_cast<unsigned>(wifiCount));
+        entry->persistent ? "persistent_media" : "bounded_ram",
+        sessionSummary);
     if (written < 0 || static_cast<std::size_t>(written) >= capacity) {
         output[0] = '\0';
         return {LibraryExportStatus::BufferTooSmall, 0};
