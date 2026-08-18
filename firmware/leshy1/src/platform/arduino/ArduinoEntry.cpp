@@ -323,6 +323,7 @@ struct FullGuidedRfState final {
 FullGuidedRfState fullGuidedRfState;
 Nrf24PassiveSpectrumReport fullGuidedNrf24Report;
 Cc1101PassiveSpectrumReport fullGuidedCc1101Report;
+std::uint64_t fullGuidedRfStartAfterUs = 0;
 enum class RfSpectrumKind : std::uint8_t {
     Nrf24,
     Cc1101,
@@ -5669,6 +5670,7 @@ void cancelFullGuidedRfChecks() {
     fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup &&
         fullGuidedRfState.resourceReleased;
     fullGuidedRfState.step = FullGuidedRfStep::Cancelled;
+    fullGuidedRfStartAfterUs = 0;
     lastRuntimeEvent = fullGuidedRfState.cleanupComplete
         ? "self_test_active_rf_cancelled"
         : "self_test_active_rf_cancel_failed";
@@ -5677,6 +5679,9 @@ void cancelFullGuidedRfChecks() {
 void serviceFullGuidedRfChecks() {
     if (selfTestController.view() != SelfTestView::ActiveChecks) return;
     if (fullGuidedRfState.step == FullGuidedRfStep::Idle) {
+        const std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs < fullGuidedRfStartAfterUs) return;
         startFullGuidedRfChecks();
         return;
     }
@@ -6689,6 +6694,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                 fullGuidedRfState = {};
                 fullGuidedNrf24Report = {};
                 fullGuidedCc1101Report = {};
+                fullGuidedRfStartAfterUs = startedUs + 500000ULL;
                 lastRuntimeEvent = "self_test_active_rf_pending";
             }
             if (selfTestController.runAwaitingFinish() &&
