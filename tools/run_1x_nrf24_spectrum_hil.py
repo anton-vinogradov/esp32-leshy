@@ -155,7 +155,7 @@ def main() -> int:
                 trace.append(state)
                 failures.extend(expect(state, {
                     "page": "survey", "survey_setup_view": "plan",
-                    "survey_setup_selection": 0, "current_owner": "survey",
+                    "survey_setup_selection": 0, "runtime_owner": "survey",
                     "lease_mask": 15,
                 }, "survey_plan"))
                 captures["plan"] = capture(device, frames, "plan")
@@ -180,7 +180,7 @@ def main() -> int:
                 failures.extend(expect(state, {
                     "runtime_event": "nrf24_spectrum_running",
                     "page": "survey", "changed": True,
-                    "current_owner": "survey", "lease_mask": 15,
+                    "runtime_owner": "survey", "lease_mask": 15,
                 }, "spectrum_start"))
                 time.sleep(0.6)
                 reports["running"] = query(
