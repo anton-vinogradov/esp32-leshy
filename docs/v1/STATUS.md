@@ -12,13 +12,12 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.74 S4 checkpoints through real dual-source Wi-Fi/BLE persistence.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.75 S4 checkpoints through durable Wi-Fi/BLE runtime degradation.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
-- **Current objective:** build compatible runtime degradation on the passive Wi-Fi/BLE
-  plan, serialized scheduling and durable dual-source timeline accepted by exact 0.74,
-  without changing the Survey setup/navigation model.
-  Controlled physical power-cut and the 8 h
-  multi-source endurance lane remain explicit `DEMO-S4` gates.
+- **Current objective:** exercise schema-v2 recovery under a controlled physical
+  power cut, then close the 8 h/32-cycle multi-source endurance lane. Exact 0.75
+  already preserves the Survey setup/navigation model while continuing a compatible
+  source after another selected source becomes unavailable.
 
 ## Stage state
 
@@ -28,7 +27,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71…0.73 accept source selection and durable timeline; exact 0.74 `E-HIL-099` runs one real Wi-Fi plus one real BLE cycle, accounts 6+34=40 observations, commits generation 76→77 and cold-reopens/exports six ordered dual-source windows with zero drops/overflow and final lease 0 | implement and inject honest runtime degradation; exercise schema-v2 power-cut recovery and close controlled power-cut plus 8 h multi-source endurance in `DEMO-S4` |
+| S4 | `active` | exact 0.71…0.74 accept source selection, durable timeline and real Wi-Fi/BLE scheduling; exact 0.75 `E-HIL-100` injects BLE unavailability during a dual-source run, continues two real Wi-Fi cycles, commits 28 observations and cold-reopens/exports the exact unavailable interval with zero drops/overflow and final lease 0 | exercise schema-v2 controlled physical power-cut recovery and close 8 h/32-cycle multi-source endurance in `DEMO-S4` |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -579,6 +578,9 @@ endurance are explicit `DEMO-S4` criteria.
 | E-BUILD-075 | exact `0.74.0-passive-ble` build | pass: RAM 147,360 B, linked flash 1,419,892 B; app/factory 1,420,304/1,485,840 B; app `806964a6…bff`, factory `4aee6025…521`, ELF `80a02f09…16e`, map `d0713748…001`; source commit `ab7ff27` | +235,840 B linked flash, +2,176 B static RAM and +236,096 B images vs 0.73 for the bounded Arduino BLE scanner, streaming ingress, dual-source scheduling and telemetry; exact checkpoint, not `DEMO-S4` or a release build |
 | E-AUTO-039 | passive-BLE HIL runner and retained verifier | pass: host contracts cover BLE codec roundtrip and runner fail-closed behavior; the independent verifier rehashes exact candidate/source/runner/artifacts, checks both cold boots, exact CID, one Wi-Fi and one BLE cycle, serialized timeline boundaries, per-source counts, six persisted/exported windows, five TFT captures, heap and cleanup | one-board local evidence; injected degradation, controlled power-cut and endurance remain outside the accepted scope |
 | E-HIL-099 / E-SURVEY-012 | board-01 exact 0.74 passive Wi-Fi/BLE Survey | pass: both sources are available and selected; one real Wi-Fi scan plus one real BLE scan account 6+34=40 accepted/forwarded observations with zero drops, FIFO ends 0/high-water 2, six ordered windows persist, Stop commits generation 76→77 and 2,025 bytes, cold exact-CID reboot reopens schema-v2 source counts and exports Wi-Fi/BLE windows, heap is invariant 234,348/169,728/150,208 B and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-passive-ble-0.74.json) | accepts passive BLE, bounded scheduling and durable dual-source persistence; injected degradation, controlled power-cut and 8 h multi-source endurance still keep `DEMO-S4` open |
+| E-BUILD-076 | exact `0.75.0-runtime-degradation` build | pass: RAM 147,360 B, linked flash 1,421,832 B; app/factory 1,422,240/1,487,776 B; app `d4f11ffb…7ad`, factory `5e9ab132…19b`, ELF `be56d684…162`, map `e1a42a70…f27`; source commit `aff0a1e` | +1,940 B linked flash, zero static-RAM growth and +1,936 B images vs 0.74 for the pure degradation policy, one-shot test hook, honest runtime state and UI/telemetry; exact checkpoint, not `DEMO-S4` or a release build |
+| E-AUTO-040 | runtime-degradation HIL runner and retained verifier | pass: three host cases cover timeout, terminal-state and export rejection; the independent verifier rehashes exact source/candidate/runner and every retained artifact, validates idle one-shot injection with zero hardware/storage side effects, continued compatible-source cycles, durable timeline equality, cold recovery, five TFT frames, exact CID, heap and cleanup | local evidence on one board; the deterministic hook models the driver result and does not replace controlled power-cut or long natural-incidence endurance |
+| E-HIL-100 / E-SURVEY-013 | board-01 exact 0.75 runtime degradation | pass: an idle/Home one-shot marks BLE unavailable during a selected Wi-Fi+BLE Session without touching hardware or storage; active mask becomes Wi-Fi-only, two real Wi-Fi cycles still account 28/28 observations, Running remains `running_degraded` with visible BLE unavailable, FIFO ends 0/high-water 2, eight ordered windows persist, Stop commits generation 77→78 and 1,898 bytes, cold exact-CID reboot reopens and exports BLE `driver_unavailable` for 3,625,744 us with zero BLE fault time, heap is invariant 234,348/169,728/150,208 B and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-runtime-degradation-0.75.json) | accepts compatible runtime continuation and durable honest unavailability; the operator also accepted the current main UI gallery. Controlled physical power-cut and 8 h/32-cycle multi-source endurance keep `DEMO-S4` open |
 
 ## Known uncertainties and risks
 
@@ -608,9 +610,9 @@ endurance are explicit `DEMO-S4` criteria.
 
 ## Blockers
 
-S4 implementation is unblocked; source selection, bounded Wi-Fi/BLE scheduling and
-durable dual-source persistence are accepted through exact 0.74. Honest runtime
-degradation is next. The currently unavailable controlled power-cut fixture remains an explicit
+S4 implementation is unblocked; source selection, bounded Wi-Fi/BLE scheduling,
+durable dual-source persistence and compatible runtime degradation are accepted
+through exact 0.75. The currently unavailable controlled power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.
 A second board, multimeter, and logic/RF detector remain named later-stage
 gaps; affected capabilities stay conditional/unavailable rather than being enabled by

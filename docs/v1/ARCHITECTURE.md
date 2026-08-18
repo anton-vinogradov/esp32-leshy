@@ -238,7 +238,19 @@ observations with zero channel/frequency while retaining exact schema-v1 decode,
 the Library summary exports explicit per-source counts. Exact `E-HIL-099` proves one
 real Wi-Fi plus one real BLE cycle, 6+34 observations, generation 76→77, six ordered
 persisted/exported windows, zero drops/overflow, exact-CID cold recovery and final
-lease 0. Injected unavailable/fault recovery remains the next S4 slice.
+lease 0. The following exact slice accepts injected unavailable/fault recovery.
+
+Exact `0.75.0-runtime-degradation` closes that slice with a pure decision boundary
+between driver results and product state. An unavailable or faulted source is removed
+from the active mask and gets an explicit timeline state/reason; the Session continues
+only while another compatible selected source remains. Later successful scans cannot
+erase `running_degraded`. A diagnostic one-shot can substitute the next driver result
+only while Home/idle and reports that it touched neither hardware nor storage. Exact
+`E-HIL-100` injects BLE unavailability, then proves two real Wi-Fi cycles still reach
+28 observations, persists eight windows including 3,625,744 us of BLE
+`driver_unavailable`, cold-reopens/exports it with zero fault time, zero drops and
+final lease 0. Controlled physical power-cut and 8 h/32-cycle multi-source endurance
+remain the two `DEMO-S4` exit boundaries.
 
 ## Data model
 

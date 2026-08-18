@@ -295,8 +295,20 @@ scans остаются serialized в product worker; binary start gate заст�
 v1, а Library summary экспортирует явные per-source counts. Exact `E-HIL-099`
 доказывает один real Wi-Fi и один real BLE cycle, 6+34 observations, generation
 76→77, шесть ordered persisted/exported windows, zero drops/overflow, exact-CID cold
-recovery и final lease 0. Следующим срезом S4 остаётся injected unavailable/fault
-recovery.
+recovery и final lease 0. Следующий exact slice принимает injected
+unavailable/fault recovery.
+
+Exact `0.75.0-runtime-degradation` закрывает этот срез pure decision boundary между
+driver results и product state. Unavailable или faulted source удаляется из active
+mask и получает явные timeline state/reason; Session продолжается только пока остаётся
+другой compatible selected source. Последующие успешные scans не могут стереть
+`running_degraded`. Diagnostic one-shot может подменить следующий driver result только
+в Home/idle и сообщает, что не коснулся hardware или storage. Exact `E-HIL-100`
+инъекционно делает BLE unavailable, затем доказывает, что два real Wi-Fi cycles всё
+ещё дают 28 observations, сохраняет восемь windows, включая 3 625 744 us BLE
+`driver_unavailable`, cold-reopens/экспортирует их при zero fault time, zero drops и
+final lease 0. Controlled physical power-cut и 8 h/32-cycle multi-source endurance
+остаются двумя exit boundaries `DEMO-S4`.
 
 ## 7. Модель данных
 

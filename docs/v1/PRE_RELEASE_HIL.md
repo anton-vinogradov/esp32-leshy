@@ -343,6 +343,15 @@ the current combined GitHub workflows have passed end to end:
   and prior Library 68/25 are independently rechecked by
   `check_product_survey_missing_source_acceptance.py`
   (`E-AUTO-032`/`E-HIL-092`/`E-SURVEY-007`);
+- `tools/run_1x_runtime_degradation_hil.py` is the exact runtime-source negative
+  lane. It arms a one-shot BLE-unavailable result only from idle Home without
+  hardware/storage access, starts a public dual-source Survey, and requires the
+  active mask to become Wi-Fi-only while at least two real Wi-Fi cycles continue.
+  It then commits, cold-reopens and exports the exact unavailable window before
+  returning Home at lease 0. The retained exact 0.75 run, five TFT captures,
+  source/candidate hashes, timeline durations, CID and invariant heap are
+  independently checked by `check_runtime_degradation_acceptance.py`
+  (`E-AUTO-040`/`E-HIL-100`/`E-SURVEY-013`);
 - `tools/run_1x_littlefs_parity_hil.py` is the fail-closed disposable-flash lane.
   It selects only inactive OTA1 `app1`, requires two matching full reads and a
   firmware-side hash match before format, performs 32 common SessionStore commits

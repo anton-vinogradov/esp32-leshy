@@ -345,6 +345,15 @@ workflow прошли end to end:
   68/25 независимо перепроверяются
   `check_product_survey_missing_source_acceptance.py`
   (`E-AUTO-032`/`E-HIL-092`/`E-SURVEY-007`);
+- `tools/run_1x_runtime_degradation_hil.py` — exact runtime-source negative lane.
+  Он arm one-shot BLE-unavailable result только из idle Home без доступа к
+  hardware/storage, запускает public dual-source Survey и требует перехода active
+  mask в Wi-Fi-only при продолжении не менее двух real Wi-Fi cycles. Затем lane
+  commits, cold-reopens и экспортирует точное unavailable window до возврата Home с
+  lease 0. Retained exact run 0.75, пять TFT captures, hashes source/candidate,
+  timeline durations, CID и invariant heap независимо проверяет
+  `check_runtime_degradation_acceptance.py`
+  (`E-AUTO-040`/`E-HIL-100`/`E-SURVEY-013`);
 - `tools/run_1x_littlefs_parity_hil.py` — fail-closed lane disposable flash. Он
   выбирает только inactive OTA1 `app1`, требует два совпадающих полных чтения и
   firmware-side hash match до format, делает 32 commits common SessionStore плюс
