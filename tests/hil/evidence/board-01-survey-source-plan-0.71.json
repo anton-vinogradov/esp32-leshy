@@ -1,0 +1,75 @@
+{
+  "schema": "leshy.survey_source_plan_acceptance.v1",
+  "status": "pass_s4_user_slice",
+  "passed": true,
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "observed_cid": "FE343253440000002000000055019CB7",
+  "source_commit": "b0901f9e19346ba1f8e970e932270681c6c287ed",
+  "candidate": {
+    "version": "0.71.0-survey-source-plan",
+    "firmware_sha256": "5636f3b48aa06a1aa488c75f1368d12f37e8cedfd5e2daed4595af4669e821e6",
+    "factory_sha256": "dea1d2ce8386a98b7d8ec6b2680008089d14093dcabedb17d37ae53c5dd5692a",
+    "app_elf_sha256": "e35896c4a4e289ef5f221c4edbbe6ab7303c7983316668fe5a8ba3c95a6c5057",
+    "map_sha256": "82ea3089d5c55be9104c830cfe255d3bc1aedf8380b3962abb17f488380056b2",
+    "firmware_bytes": 1169424,
+    "factory_bytes": 1234960,
+    "linked_flash_bytes": 1169012,
+    "linked_ram_bytes": 134928
+  },
+  "physical": {
+    "run_path": "tests/hil/evidence/board-01-survey-source-plan-0.71/run.json",
+    "run_sha256": "3e15b288b27a97c12e834f7eabfacd0a98abd19661322b3abce971bffb169dd9",
+    "artifact_index_path": "tests/hil/evidence/board-01-survey-source-plan-0.71/artifacts.sha256",
+    "artifact_index_sha256": "b10f761963087336add12a319291a0bc319706a4ecdd6ff0e65035b63670ee34",
+    "runner_sha256": "d8c4f5decacdca9a2f05123668f5d2c523f932a660f8fbca56c2769eaf39ebc5",
+    "screen_count": 5,
+    "transition_count": 11,
+    "maximum_incremental_render_us": 31818,
+    "maximum_allowed_incremental_render_us": 40000,
+    "heap_free_before": 202160,
+    "heap_free_after": 202160,
+    "heap_min_before": 182108,
+    "heap_min_after": 182108,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "accepted_contract": {
+    "ux_screen": "UX-S02",
+    "setup_is_interactive": true,
+    "available_sources_user_selectable": true,
+    "wifi_default_selected": true,
+    "ble_visible_unavailable": true,
+    "unavailable_source_activation_rejected": true,
+    "empty_plan_start_blocked": true,
+    "selection_restore_reenables_start": true,
+    "hidden_fallback": false,
+    "radio_started": false,
+    "storage_opened": false,
+    "five_tft_states_visually_reviewed": true,
+    "heap_invariant": true,
+    "safe_cleanup": true
+  },
+  "evidence_ids": [
+    "E-BUILD-072",
+    "E-AUTO-036",
+    "E-HIL-096",
+    "E-SURVEY-009"
+  ],
+  "requirements": [
+    "PR-002",
+    "PR-003",
+    "PR-004",
+    "NFR-002",
+    "NFR-003",
+    "NFR-010"
+  ],
+  "limitations": [
+    "This accepts the first S4 user-facing source-plan slice, not DEMO-S4 or release eligibility.",
+    "BLE remains declared but unavailable until its passive driver, normalized observations, scheduling, storage and HIL are complete.",
+    "The source-plan gate deliberately starts no radio and opens no storage; the exact 0.70 DEMO-S3 baseline retains real Wi-Fi persistence evidence.",
+    "Shared multi-source timeline, duty-cycle windows, degradation, capture/export, power-cut and 8-hour endurance remain open S4 work."
+  ]
+}

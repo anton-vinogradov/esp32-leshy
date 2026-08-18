@@ -12,12 +12,11 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, independent TFT goldens и evidence six-boundary software-reset disposable LittleFS.
-- **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
-  нет.
-- **Главная цель текущего этапа:** начать пользовательские capabilities S4 на общей
-  passive Observation/Session platform: сначала source selection и shared timeline
-  contracts, затем passive BLE. Управляемый physical power-cut и 8 h multi-source
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact 0.71 первого пользовательского source-plan slice S4.
+- **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
+- **Главная цель текущего этапа:** расширить принятый source plan 0.71 общим timeline
+  contract, затем добавить passive BLE без смены Survey setup/navigation model.
+  Управляемый physical power-cut и 8 h multi-source
   endurance остаются явными gates `DEMO-S4`.
 
 ## Состояние этапов
@@ -28,7 +27,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | common cross-radio model, capability catalog и доказанные S3 foundations Observation/Session/storage/UI существуют | реализовать passive source selection, BLE, shared timeline/capture/export, compatible scheduling и visible unavailability; закрыть controlled power-cut и 8 h multi-source endurance в `DEMO-S4` |
+| S4 | `active` | exact 0.71 `E-HIL-096` принимает interactive UX-S02 source selection: Wi-Fi по умолчанию включён, BLE явно недоступен, пустой Start заблокирован, пять TFT states помещаются, heap инвариантен, Back заканчивает lease 0 | реализовать passive BLE, shared timeline/capture/export, compatible scheduling и runtime degradation; закрыть controlled power-cut и 8 h multi-source endurance в `DEMO-S4` |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -565,6 +564,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-AUTO-035 | independent-golden suite, runner и verifier DEMO-S3 | pass: отдельный non-gate recording run замораживает пять визуально проверенных RGB565 goldens в commit `6b602b6`; exact comparison маскирует только dynamic Wi-Fi rows/counters, отклоняет drift runner/candidate/run-ID и независимо хеширует nested product evidence | local unsigned evidence одной board; release trust/attestation остаётся S8 |
 | E-HIL-095 / E-SURVEY-008 | board-01 exact 0.70 final persistent Survey demo | pass: distinct exact candidate run продвигает generation 69→70 с 29/29 accepted/forwarded, zero drops, live Detail progress и bounded Back; Stop commits один раз, cold read-only recovery возвращает 70/29 с zero physical writes, Library export valid/persistent/non-simulated/radio-off, heap invariant 266 616/202 200/182 148 B, final Home owner/lease none/0. Все пять TFT states имеют zero unmasked mismatch в [machine-checked artifact](../../tests/hil/evidence/board-01-stage-demo-s3-0.70.json) | только stage gate; нет release promotion, BLE/cross-radio, controlled power-cut или 8 h multi-source claim |
 | E-GATE-003 | воспроизводимый `DEMO-S3` | pass: все девять criteria S3 retained, source-bound и machine-checked на exact 0.70; S3 закрыт, S4 начат | release остаётся ineligible; впереди `DEMO-S4…S8` |
+| E-BUILD-072 | exact build `0.71.0-survey-source-plan` | pass: RAM 134 928 B, linked flash 1 169 012 B; app/factory 1 169 424/1 234 960 B; app `5636f3b…21e6`, factory `dea1d2ce…92a`, ELF `e35896c4…c5057`, map `82ea3089…56b2`; source commit `b0901f9` | первый пользовательский slice S4, не `DEMO-S4` и не release build |
+| E-AUTO-036 | source-plan HIL runner и retained verifier | pass: независимо перепроверяются exact candidate/source/artifact hashes, пять TFT states, 11 transitions, включение/выключение Wi-Fi, отказ unavailable BLE, block Start для пустого plan, heap/input/buzzer и final cleanup | gate намеренно не запускает radio и не открывает storage; real persistence остаётся привязана к exact 0.70 `DEMO-S3` |
+| E-HIL-096 / E-SURVEY-009 | board-01 exact 0.71 interactive source plan Survey | pass: русский UX-S02 Plan→Sources использует Up/Down для выбора, Right/OK для активации и Left Back; Wi-Fi выбран по умолчанию, BLE сообщает unavailable/driver, выключение Wi-Fi делает Start недоступным, восстановление снова разрешает Start. Пять визуально проверенных TFT captures помещаются; max incremental repaint 31,818 ms, heap остаётся 266 576/202 160/182 108 B, input errors/drops zero, buzzer LOW, final owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-survey-source-plan-0.71.json) | принимает только source-plan UX S4.1; passive BLE, shared timeline/scheduler/degradation, power-cut и endurance остаются открыты |
 
 ## Известные неопределённости и риски
 
@@ -594,8 +596,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 
 ## Blockers
 
-Реализация S4 разблокирована и начинается с пользовательской работы passive
-source/timeline. Недоступный сейчас управляемый power-cut fixture остаётся явным exit
+Реализация S4 разблокирована; первый пользовательский source-plan slice принят exact
+0.71, далее идут shared timeline и BLE. Недоступный сейчас управляемый power-cut fixture остаётся явным exit
 requirement `DEMO-S4`, software reset не принимается как замена. Второй
 экземпляр, мультиметр и logic/RF detector остаются named gaps следующих этапов;
 затронутые capabilities остаются conditional/unavailable и не включаются

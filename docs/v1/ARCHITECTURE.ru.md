@@ -245,6 +245,15 @@ Version 0.70/E-HIL-094 затем закрывает все шесть software-
 cold reopen/export и пять independent TFT matches. S4 теперь активен; physical
 power-cut и multi-source endurance остаются его explicit gates.
 
+Первый пользовательский slice S4 — exact `0.71.0-survey-source-plan`
+(`E-HIL-096`/`E-SURVEY-009`). Allocation-free `SurveySourceController` проецирует
+boot inventory в draft plan UX-S02 отдельно от исполнения drivers: выбрать можно
+только source со state `available`, пустой real plan не запускается, declared BLE
+остаётся видимым с причиной unavailable. Навигация Plan/Sources использует общие
+Actions и incremental renderer; выход из Setup освобождает foreground lease. Это
+стабильная UI/domain граница для следующих shared timeline и passive BLE, а не claim
+готовности BLE driver или `DEMO-S4`.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

@@ -12,11 +12,11 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3`, independent TFT goldens, and disposable LittleFS six-boundary software-reset evidence.
-- **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
-- **Current objective:** begin user-facing S4 capability work on the common passive
-  Observation/Session platform, starting with source selection and shared timeline
-  contracts before adding passive BLE. Controlled physical power-cut and the 8 h
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71 first user-facing S4 source-plan slice.
+- **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
+- **Current objective:** extend the accepted 0.71 source plan with a shared timeline
+  contract, then add passive BLE without changing the Survey setup/navigation model.
+  Controlled physical power-cut and the 8 h
   multi-source endurance lane remain explicit `DEMO-S4` gates.
 
 ## Stage state
@@ -27,7 +27,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | common cross-radio model, capability catalog and S3-proven Observation/Session/storage/UI foundations exist | implement passive source selection, BLE, shared timeline/capture/export, compatible scheduling and visible unavailability; close controlled power-cut and 8 h multi-source endurance in `DEMO-S4` |
+| S4 | `active` | exact 0.71 `E-HIL-096` accepts interactive UX-S02 source selection: Wi-Fi defaults on, BLE is visibly unavailable, empty Start is blocked, five TFT states fit, heap is invariant and Back ends at lease 0 | implement passive BLE, shared timeline/capture/export, compatible scheduling and runtime degradation; close controlled power-cut and 8 h multi-source endurance in `DEMO-S4` |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -566,6 +566,9 @@ endurance are explicit `DEMO-S4` criteria.
 | E-AUTO-035 | independent-golden DEMO-S3 suite, runner and verifier | pass: a separate non-gate recording run freezes five visually reviewed RGB565 goldens in commit `6b602b6`; exact comparison masks only dynamic Wi-Fi rows/counters, refuses runner/candidate/run-ID drift, and independently rehashes nested product evidence | local unsigned one-board evidence; release trust/attestation remains S8 |
 | E-HIL-095 / E-SURVEY-008 | board-01 exact 0.70 final persistent Survey demo | pass: distinct exact candidate run advances generation 69→70 with 29/29 accepted/forwarded, zero drops, live Detail progress and bounded Back; Stop commits once, cold read-only recovery returns 70/29 with zero physical writes, Library export is valid/persistent/non-simulated/radio-off, heap is invariant 266,616/202,200/182,148 B and final Home owner/lease are none/0. All five TFT states have zero unmasked mismatch in the [machine-checked artifact](../../tests/hil/evidence/board-01-stage-demo-s3-0.70.json) | stage gate only; no release promotion, BLE/cross-radio, controlled power-cut or 8 h multi-source claim |
 | E-GATE-003 | reproducible `DEMO-S3` | pass: all nine S3 criteria are retained, source-bound and machine-checked on exact 0.70; S3 is closed and S4 starts | release remains ineligible; `DEMO-S4…S8` remain |
+| E-BUILD-072 | exact `0.71.0-survey-source-plan` build | pass: RAM 134,928 B, linked flash 1,169,012 B; app/factory 1,169,424/1,234,960 B; app `5636f3b…21e6`, factory `dea1d2ce…92a`, ELF `e35896c4…c5057`, map `82ea3089…56b2`; source commit `b0901f9` | first S4 user slice, not `DEMO-S4` or a release build |
+| E-AUTO-036 | source-plan HIL runner and retained verifier | pass: exact candidate/source/artifact hashes, five TFT states, 11 transitions, Wi-Fi enable/disable, unavailable BLE rejection, empty-plan Start block, heap/input/buzzer and final cleanup are independently rechecked | gate deliberately starts no radio and opens no storage; real persistence remains bound to exact 0.70 `DEMO-S3` |
+| E-HIL-096 / E-SURVEY-009 | board-01 exact 0.71 interactive Survey source plan | pass: Russian UX-S02 Plan→Sources uses Up/Down selection, Right/OK activation and Left Back; Wi-Fi is selected by default, BLE says unavailable/driver, disabling Wi-Fi makes Start unavailable, restoring it re-enables Start. Five visually reviewed TFT captures fit; max incremental repaint is 31.818 ms, heap remains 266,576/202,160/182,108 B, input errors/drops are zero, buzzer is LOW and final owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-survey-source-plan-0.71.json) | accepts only S4.1 source-plan UX; passive BLE, shared timeline/scheduler/degradation, power-cut and endurance remain open |
 
 ## Known uncertainties and risks
 
@@ -595,8 +598,8 @@ endurance are explicit `DEMO-S4` criteria.
 
 ## Blockers
 
-S4 implementation is unblocked and starts with user-facing passive source/timeline
-work. The currently unavailable controlled power-cut fixture remains an explicit
+S4 implementation is unblocked; its first user-facing source-plan slice is accepted
+by exact 0.71, and shared timeline/BLE work follows. The currently unavailable controlled power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.
 A second board, multimeter, and logic/RF detector remain named later-stage
 gaps; affected capabilities stay conditional/unavailable rather than being enabled by

@@ -188,6 +188,15 @@ candidate: generation 69→70, 29/29 observations, cold reopen/export and five
 independent TFT matches. S4 is now active; physical power-cut and multi-source
 endurance remain its explicit gates.
 
+The first S4 user-facing slice is exact `0.71.0-survey-source-plan`
+(`E-HIL-096`/`E-SURVEY-009`). An allocation-free `SurveySourceController` projects
+boot inventory into a draft UX-S02 plan separately from driver execution: only
+`available` sources can be selected, empty real plans cannot Start, and declared BLE
+remains visible with an unavailable reason. Plan/Sources navigation uses the common
+Actions and incremental renderer; leaving Setup releases the foreground lease. This
+is the stable UI/domain seam for the next shared timeline and passive BLE work, not a
+claim that the BLE driver or `DEMO-S4` is complete.
+
 ## Data model
 
 Raw observation is separate from interpretation:
