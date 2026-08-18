@@ -290,6 +290,39 @@ BoardNrf24PassiveSpectrum boardNrf24Spectrum;
 Cc1101SpectrumController cc1101SpectrumController;
 Cc1101PassiveSpectrumReport cc1101SpectrumReport;
 BoardCc1101PassiveSpectrum boardCc1101Spectrum;
+enum class FullGuidedRfStep : std::uint8_t {
+    Idle,
+    Nrf24Sweep,
+    Cc1101Sweep,
+    Complete,
+    Failed,
+    Cancelled,
+};
+const char* fullGuidedRfStepName(FullGuidedRfStep step) {
+    switch (step) {
+        case FullGuidedRfStep::Idle: return "idle";
+        case FullGuidedRfStep::Nrf24Sweep: return "nrf24_sweep";
+        case FullGuidedRfStep::Cc1101Sweep: return "cc1101_sweep";
+        case FullGuidedRfStep::Complete: return "complete";
+        case FullGuidedRfStep::Failed: return "failed";
+        case FullGuidedRfStep::Cancelled: return "cancelled";
+    }
+    return "unknown";
+}
+struct FullGuidedRfState final {
+    FullGuidedRfStep step = FullGuidedRfStep::Idle;
+    bool resourceAcquired = false;
+    bool resourceReleased = true;
+    bool cleanupComplete = true;
+    bool nrf24Complete = false;
+    bool nrf24Passed = false;
+    bool cc1101Complete = false;
+    bool cc1101Passed = false;
+    std::uint8_t cc1101Bins = 0;
+};
+FullGuidedRfState fullGuidedRfState;
+Nrf24PassiveSpectrumReport fullGuidedNrf24Report;
+Cc1101PassiveSpectrumReport fullGuidedCc1101Report;
 enum class RfSpectrumKind : std::uint8_t {
     Nrf24,
     Cc1101,
@@ -3839,6 +3872,9 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{NavigationKey::Left, UiTextId::NavCancel}, {},
                     {NavigationKey::RightAndSelect, UiTextId::NavNext}};
         }
+        if (selfTestController.view() == SelfTestView::ActiveChecks) {
+            return {{NavigationKey::Left, UiTextId::NavCancel}, {}, {}};
+        }
         return {{NavigationKey::Left, UiTextId::NavModes}, {}, {}};
     }
     return {back, {}, {}};
@@ -4138,6 +4174,10 @@ SelfTestFacts snapshotSelfTestFacts() {
         shieldReceiverProbeReport.status == ShieldReceiverProbeStatus::Pass &&
         shieldReceiverProbeReport.resourceReleased &&
         shieldReceiverProbeReport.cleanupComplete;
+    facts.nrf24SpectrumExerciseComplete = fullGuidedRfState.nrf24Complete;
+    facts.nrf24SpectrumExercisePassed = fullGuidedRfState.nrf24Passed;
+    facts.cc1101SpectrumExerciseComplete = fullGuidedRfState.cc1101Complete;
+    facts.cc1101SpectrumExercisePassed = fullGuidedRfState.cc1101Passed;
     return facts;
 }
 
@@ -4310,6 +4350,30 @@ void renderSelfTestPage(bool clearContent) {
         return;
     }
 
+    if (selfTestController.view() == SelfTestView::ActiveChecks) {
+        renderHeader(tr(UiTextId::FullActiveTitle), clearContent);
+        if (fullGuidedRfState.step == FullGuidedRfStep::Idle) {
+            renderMetric(0, tr(UiTextId::FullActivePreparing), Tone::Warning);
+        } else {
+            renderMetric(
+                0,
+                fullGuidedRfState.nrf24Passed
+                    ? tr(UiTextId::FullActiveNrfPass)
+                    : tr(UiTextId::FullActiveNrfRunning),
+                fullGuidedRfState.nrf24Passed ? Tone::Positive
+                                               : Tone::Warning);
+        }
+        std::snprintf(line, sizeof(line), tr(UiTextId::FullActiveCcFormat),
+                      static_cast<unsigned>(fullGuidedRfState.cc1101Bins));
+        renderMetric(1, line,
+                     fullGuidedRfState.cc1101Passed ? Tone::Positive
+                                                    : Tone::Warning);
+        display.setTextColor(Palette::TextMuted, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 207);
+        display.print(tr(UiTextId::FullActiveSafety));
+        return;
+    }
+
     const SelfTestReport& report = selfTestController.report();
     renderHeader(report.status == SelfTestResultStatus::Pass
                      ? tr(UiTextId::SelfTestPass)
@@ -4342,7 +4406,8 @@ void renderSelfTestPage(bool clearContent) {
     renderMetric(4, line);
     display.setTextColor(Palette::Positive, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 218);
-    display.print(tr(UiTextId::SelfTestReportUsb));
+    display.print(tr(report.readOnly ? UiTextId::SelfTestReportUsb
+                                    : UiTextId::SelfTestReportActiveUsb));
 }
 
 void renderOverview(bool clearContent) {
@@ -5541,6 +5606,131 @@ void serviceCc1101Spectrum() {
     }
 }
 
+void releaseFullGuidedRfResource() {
+    if (fullGuidedRfState.resourceAcquired) {
+        resourceBroker.release(
+            AppRuntime::kForegroundOwner,
+            leshy1::kernel::runtime::resourceMask(Resource::RadioSpi));
+    }
+    fullGuidedRfState.resourceReleased =
+        resourceBroker.ownerOf(Resource::RadioSpi) ==
+        leshy1::kernel::runtime::kNoOwner;
+}
+
+void finishFullGuidedRfChecks(bool success) {
+    const bool nrfCleanup = boardNrf24Spectrum.end();
+    const bool ccCleanup = boardCc1101Spectrum.end();
+    releaseFullGuidedRfResource();
+    fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup &&
+        fullGuidedRfState.resourceReleased;
+    fullGuidedRfState.step = success && fullGuidedRfState.cleanupComplete
+        ? FullGuidedRfStep::Complete : FullGuidedRfStep::Failed;
+    const std::uint64_t finishedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    selfTestController.completeActiveChecks(snapshotSelfTestFacts(), finishedUs);
+    lastRuntimeEvent = success && fullGuidedRfState.cleanupComplete
+        ? "self_test_active_rf_complete" : "self_test_active_rf_failed";
+    renderInteractiveScreen(true);
+}
+
+void startFullGuidedRfChecks() {
+    fullGuidedRfState = {};
+    fullGuidedRfState.resourceReleased = false;
+    fullGuidedRfState.cleanupComplete = false;
+    fullGuidedNrf24Report = {};
+    fullGuidedCc1101Report = {};
+    const auto radioSpi =
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    fullGuidedRfState.resourceAcquired =
+        resourceBroker.acquire(AppRuntime::kForegroundOwner, radioSpi);
+    if (!fullGuidedRfState.resourceAcquired) {
+        fullGuidedRfState.nrf24Complete = true;
+        finishFullGuidedRfChecks(false);
+        return;
+    }
+    const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
+        AppRuntime::kForegroundOwner;
+    if (!boardNrf24Spectrum.begin(
+            owned,
+            leshy1::drivers::radio::defaultNrf24PassiveSpectrumPlan(),
+            &fullGuidedNrf24Report)) {
+        fullGuidedRfState.nrf24Complete = true;
+        finishFullGuidedRfChecks(false);
+        return;
+    }
+    fullGuidedRfState.step = FullGuidedRfStep::Nrf24Sweep;
+    lastRuntimeEvent = "self_test_active_nrf24";
+}
+
+void cancelFullGuidedRfChecks() {
+    const bool nrfCleanup = boardNrf24Spectrum.end();
+    const bool ccCleanup = boardCc1101Spectrum.end();
+    releaseFullGuidedRfResource();
+    fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup &&
+        fullGuidedRfState.resourceReleased;
+    fullGuidedRfState.step = FullGuidedRfStep::Cancelled;
+    lastRuntimeEvent = fullGuidedRfState.cleanupComplete
+        ? "self_test_active_rf_cancelled"
+        : "self_test_active_rf_cancel_failed";
+}
+
+void serviceFullGuidedRfChecks() {
+    if (selfTestController.view() != SelfTestView::ActiveChecks) return;
+    if (fullGuidedRfState.step == FullGuidedRfStep::Idle) {
+        startFullGuidedRfChecks();
+        return;
+    }
+    if (fullGuidedRfState.step == FullGuidedRfStep::Nrf24Sweep) {
+        Nrf24PassiveSweep sweep;
+        const bool swept = boardNrf24Spectrum.sweep(&sweep);
+        const bool cleanup = boardNrf24Spectrum.end();
+        fullGuidedRfState.nrf24Complete = true;
+        fullGuidedRfState.nrf24Passed = swept && sweep.valid && cleanup &&
+            fullGuidedNrf24Report.sweeps == 1 &&
+            fullGuidedNrf24Report.cleanupComplete;
+        if (!fullGuidedRfState.nrf24Passed) {
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
+            AppRuntime::kForegroundOwner;
+        if (!boardCc1101Spectrum.begin(owned, &fullGuidedCc1101Report)) {
+            fullGuidedRfState.cc1101Complete = true;
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        fullGuidedRfState.step = FullGuidedRfStep::Cc1101Sweep;
+        lastRuntimeEvent = "self_test_active_cc1101";
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (fullGuidedRfState.step == FullGuidedRfStep::Cc1101Sweep) {
+        const Cc1101PassiveSpectrumPlan plan =
+            leshy1::drivers::radio::cc1101PassiveSpectrumPlan(
+                leshy1::drivers::radio::Cc1101SpectrumBand::Band433);
+        Cc1101PassiveSample sample;
+        const bool sampled = boardCc1101Spectrum.sample(
+            plan, fullGuidedRfState.cc1101Bins, &sample);
+        if (!sampled || !sample.valid) {
+            fullGuidedRfState.cc1101Complete = true;
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        ++fullGuidedRfState.cc1101Bins;
+        if (fullGuidedRfState.cc1101Bins <
+            Cc1101PassiveSpectrumPlan::kBinCount) {
+            return;
+        }
+        const bool cleanup = boardCc1101Spectrum.end();
+        fullGuidedRfState.cc1101Complete = true;
+        fullGuidedRfState.cc1101Passed = cleanup &&
+            fullGuidedCc1101Report.samples ==
+                Cc1101PassiveSpectrumPlan::kBinCount &&
+            fullGuidedCc1101Report.cleanupComplete;
+        finishFullGuidedRfChecks(fullGuidedRfState.cc1101Passed);
+    }
+}
+
 void releaseWifiFrameCaptureRfLease() {
     resourceBroker.release(
         AppRuntime::kForegroundOwner,
@@ -5742,7 +5932,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"self_test_checks\":%u,\"self_test_passed\":%u,"
                       "\"self_test_failed\":%u,\"self_test_blocked\":%u,"
                       "\"self_test_not_applicable\":%u,"
-                      "\"self_test_read_only\":%s}",
+                      "\"self_test_read_only\":%s,"
+                      "\"self_test_active_step\":\"%s\","
+                      "\"self_test_active_cc_bins\":%u}",
                       lastRuntimeEvent, appRuntime.activeApp(),
                       static_cast<unsigned long>(appRuntime.activeResources()),
                       surveyWorkflow.simulated() ? "true" : "false",
@@ -5947,7 +6139,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(selfTestReport.failed),
                       static_cast<unsigned>(selfTestReport.blocked),
                       static_cast<unsigned>(selfTestReport.notApplicable),
-                      selfTestReport.readOnly ? "true" : "false");
+                      selfTestReport.readOnly ? "true" : "false",
+                      fullGuidedRfStepName(fullGuidedRfState.step),
+                      static_cast<unsigned>(fullGuidedRfState.cc1101Bins));
     }
     reply.println(line);
 }
@@ -6490,6 +6684,13 @@ bool applyUiAction(UiAction action, bool render = true) {
             if (completesFullPlan) runShieldReceiverSelfTestProbe();
             changed = selfTestController.activate(snapshotSelfTestFacts(),
                                                    startedUs);
+            if (changed &&
+                selfTestController.view() == SelfTestView::ActiveChecks) {
+                fullGuidedRfState = {};
+                fullGuidedNrf24Report = {};
+                fullGuidedCc1101Report = {};
+                lastRuntimeEvent = "self_test_active_rf_pending";
+            }
             if (selfTestController.runAwaitingFinish() &&
                 selfTestController.view() == SelfTestView::Result) {
                 selfTestController.finishRun(
@@ -6498,10 +6699,16 @@ bool applyUiAction(UiAction action, bool render = true) {
                     selfTestResultStatusName(selfTestController.report().status);
             } else if (selfTestController.view() == SelfTestView::VisualCheck) {
                 lastRuntimeEvent = "self_test_visual_check";
+            } else if (selfTestController.view() ==
+                       SelfTestView::ActiveChecks) {
+                lastRuntimeEvent = "self_test_active_rf_pending";
             } else if (changed) {
                 lastRuntimeEvent = "self_test_preflight";
             }
         } else if (action == UiAction::Back || action == UiAction::Left) {
+            if (selfTestController.view() == SelfTestView::ActiveChecks) {
+                cancelFullGuidedRfChecks();
+            }
             changed = selfTestController.back();
             handled = changed;
             if (changed) lastRuntimeEvent = "self_test_modes";
@@ -10250,6 +10457,11 @@ void emitInputState(Stream& reply) {
 
 void emitSelfTestReport(Stream& reply) {
     const SelfTestReport& report = selfTestController.report();
+    const std::uint32_t radioTxCommands =
+        shieldReceiverProbeReport.radioTxCommands +
+        fullGuidedNrf24Report.txModeEntries +
+        fullGuidedNrf24Report.txPayloadCommands +
+        fullGuidedCc1101Report.txStrobes;
     auto& line = diagnosticJson;
     line[0] = '\0';
     const int prefix = std::snprintf(
@@ -10262,7 +10474,7 @@ void emitSelfTestReport(Stream& reply) {
         "\"read_only\":%s,\"cancelled\":%s,"
         "\"passed\":%u,\"failed\":%u,\"blocked\":%u,"
         "\"not_applicable\":%u,"
-        "\"side_effects\":{\"radio_tx_commands\":0,"
+        "\"side_effects\":{\"radio_tx_commands\":%lu,"
         "\"storage_write_commands\":0,\"buzzer_activations\":0},"
         "\"facts\":{\"build_identity_present\":%s,"
         "\"profile_matched\":%s,\"display_ready\":%s,"
@@ -10279,7 +10491,11 @@ void emitSelfTestReport(Stream& reply) {
         "\"ir_declared\":%s,"
         "\"shield_receivers_applicable\":%s,"
         "\"shield_receiver_probe_complete\":%s,"
-        "\"shield_receiver_probe_passed\":%s},"
+        "\"shield_receiver_probe_passed\":%s,"
+        "\"nrf24_spectrum_exercise_complete\":%s,"
+        "\"nrf24_spectrum_exercise_passed\":%s,"
+        "\"cc1101_spectrum_exercise_complete\":%s,"
+        "\"cc1101_spectrum_exercise_passed\":%s},"
         "\"checks\":[",
         static_cast<unsigned>(SelfTestReport::kSchemaVersion),
         static_cast<unsigned>(SelfTestReport::kPlanVersion), LESHY1_VERSION,
@@ -10295,6 +10511,7 @@ void emitSelfTestReport(Stream& reply) {
         static_cast<unsigned>(report.failed),
         static_cast<unsigned>(report.blocked),
         static_cast<unsigned>(report.notApplicable),
+        static_cast<unsigned long>(radioTxCommands),
         report.facts.buildIdentityPresent ? "true" : "false",
         report.facts.profileMatched ? "true" : "false",
         report.facts.displayReady ? "true" : "false",
@@ -10318,7 +10535,11 @@ void emitSelfTestReport(Stream& reply) {
         report.facts.irDeclared ? "true" : "false",
         report.facts.shieldReceiversApplicable ? "true" : "false",
         report.facts.shieldReceiverProbeComplete ? "true" : "false",
-        report.facts.shieldReceiverProbePassed ? "true" : "false");
+        report.facts.shieldReceiverProbePassed ? "true" : "false",
+        report.facts.nrf24SpectrumExerciseComplete ? "true" : "false",
+        report.facts.nrf24SpectrumExercisePassed ? "true" : "false",
+        report.facts.cc1101SpectrumExerciseComplete ? "true" : "false",
+        report.facts.cc1101SpectrumExercisePassed ? "true" : "false");
     if (prefix < 0 || static_cast<std::size_t>(prefix) >= sizeof(line)) {
         reply.println("{\"schema\":\"leshy.self_test.report.v1\","
                       "\"kind\":\"error\",\"reason\":\"format_failed\"}");
@@ -10349,6 +10570,73 @@ void emitSelfTestReport(Stream& reply) {
                       "\"kind\":\"error\",\"reason\":\"format_failed\"}");
         return;
     }
+    reply.println(line);
+}
+
+void emitFullGuidedRfReport(Stream& reply) {
+    const std::uint32_t radioTxCommands =
+        shieldReceiverProbeReport.radioTxCommands +
+        fullGuidedNrf24Report.txModeEntries +
+        fullGuidedNrf24Report.txPayloadCommands +
+        fullGuidedCc1101Report.txStrobes;
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.self_test.active_rf.v1\",\"kind\":\"report\","
+        "\"plan_version\":%u,\"step\":\"%s\",\"rx_only\":true,"
+        "\"resource_acquired\":%s,\"resource_released\":%s,"
+        "\"cleanup_complete\":%s,"
+        "\"nrf24\":{\"complete\":%s,\"passed\":%s,\"sweeps\":%lu,"
+        "\"channels\":83,\"modules\":%u,\"wire\":{"
+        "\"register_reads\":%lu,\"register_writes\":%lu,"
+        "\"spi_bytes_clocked\":%lu,\"receive_ce_high_events\":%lu},"
+        "\"cleanup_complete\":%s},"
+        "\"cc1101\":{\"complete\":%s,\"passed\":%s,"
+        "\"band\":\"433\",\"bins\":%u,\"wire\":{"
+        "\"register_reads\":%lu,\"register_writes\":%lu,"
+        "\"spi_bytes_clocked\":%lu,\"command_strobes\":%lu,"
+        "\"reset_strobes\":%lu,\"receive_strobes\":%lu,"
+        "\"idle_strobes\":%lu},\"cleanup_complete\":%s},"
+        "\"side_effects\":{\"radio_tx_commands\":%lu,"
+        "\"nrf_tx_mode_entries\":%lu,\"nrf_tx_payload_commands\":%lu,"
+        "\"cc_tx_strobes\":%lu,\"cc_pa_table_writes\":%lu,"
+        "\"cc_fifo_writes\":%lu,\"cc_rejected_strobes\":%lu,"
+        "\"storage_write_commands\":0},"
+        "\"current_owner\":\"%s\",\"current_lease_mask\":%lu}",
+        static_cast<unsigned>(SelfTestReport::kPlanVersion),
+        fullGuidedRfStepName(fullGuidedRfState.step),
+        fullGuidedRfState.resourceAcquired ? "true" : "false",
+        fullGuidedRfState.resourceReleased ? "true" : "false",
+        fullGuidedRfState.cleanupComplete ? "true" : "false",
+        fullGuidedRfState.nrf24Complete ? "true" : "false",
+        fullGuidedRfState.nrf24Passed ? "true" : "false",
+        static_cast<unsigned long>(fullGuidedNrf24Report.sweeps),
+        static_cast<unsigned>(fullGuidedNrf24Report.detectedModules),
+        static_cast<unsigned long>(fullGuidedNrf24Report.registerReads),
+        static_cast<unsigned long>(fullGuidedNrf24Report.registerWrites),
+        static_cast<unsigned long>(fullGuidedNrf24Report.spiBytesClocked),
+        static_cast<unsigned long>(fullGuidedNrf24Report.receiveCeHighEvents),
+        fullGuidedNrf24Report.cleanupComplete ? "true" : "false",
+        fullGuidedRfState.cc1101Complete ? "true" : "false",
+        fullGuidedRfState.cc1101Passed ? "true" : "false",
+        static_cast<unsigned>(fullGuidedRfState.cc1101Bins),
+        static_cast<unsigned long>(fullGuidedCc1101Report.registerReads),
+        static_cast<unsigned long>(fullGuidedCc1101Report.registerWrites),
+        static_cast<unsigned long>(fullGuidedCc1101Report.spiBytesClocked),
+        static_cast<unsigned long>(fullGuidedCc1101Report.commandStrobes),
+        static_cast<unsigned long>(fullGuidedCc1101Report.resetStrobes),
+        static_cast<unsigned long>(fullGuidedCc1101Report.receiveStrobes),
+        static_cast<unsigned long>(fullGuidedCc1101Report.idleStrobes),
+        fullGuidedCc1101Report.cleanupComplete ? "true" : "false",
+        static_cast<unsigned long>(radioTxCommands),
+        static_cast<unsigned long>(fullGuidedNrf24Report.txModeEntries),
+        static_cast<unsigned long>(fullGuidedNrf24Report.txPayloadCommands),
+        static_cast<unsigned long>(fullGuidedCc1101Report.txStrobes),
+        static_cast<unsigned long>(fullGuidedCc1101Report.paTableWrites),
+        static_cast<unsigned long>(fullGuidedCc1101Report.fifoWrites),
+        static_cast<unsigned long>(fullGuidedCc1101Report.rejectedStrobes),
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
     reply.println(line);
 }
 
@@ -10568,6 +10856,8 @@ void handleCommand(Stream& reply, const char* command) {
         emitInputState(reply);
     } else if (std::strcmp(command, "self-test.report") == 0) {
         emitSelfTestReport(reply);
+    } else if (std::strcmp(command, "self-test.active-rf") == 0) {
+        emitFullGuidedRfReport(reply);
     } else if (std::strncmp(command, "ui.language ", 12) == 0) {
         UiLanguage requested = UiLanguage::English;
         if (!leshy1::ui::uiLanguageFromName(command + 12, &requested)) {
@@ -11034,7 +11324,7 @@ void setup() {
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"capture.state\",\"capture.export.pcap\","
               "\"input.state\","
-              "\"self-test.report\","
+              "\"self-test.report\",\"self-test.active-rf\","
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
               "\"storage.discovery\",\"storage.mount.policy\","
               "\"storage.product.boot-recovery\","
@@ -11072,6 +11362,7 @@ void loop() {
     serviceProductSurveyWorker();
     serviceWifiFrameCapture();
     serviceWifiFrameCapturePersist();
+    serviceFullGuidedRfChecks();
     serviceNrf24Spectrum();
     serviceCc1101Spectrum();
     poll(Serial, usbCommand, usbLength, sizeof(usbCommand));

@@ -91,8 +91,8 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.83.0-cc1101-spectrum\\"' not in config:
-        errors.append("clean target does not identify the 0.83 CC1101 spectrum slice")
+    if 'LESHY1_VERSION=\\"0.84.0-full-guided-rf\\"' not in config:
+        errors.append("clean target does not identify the 0.84 Full/Guided RF slice")
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
     for value in forbidden_config:

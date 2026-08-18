@@ -211,6 +211,10 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     healthy.shieldReceiversApplicable = true;
     healthy.shieldReceiverProbeComplete = true;
     healthy.shieldReceiverProbePassed = true;
+    healthy.nrf24SpectrumExerciseComplete = true;
+    healthy.nrf24SpectrumExercisePassed = true;
+    healthy.cc1101SpectrumExerciseComplete = true;
+    healthy.cc1101SpectrumExercisePassed = true;
 
     SelfTestController controller;
     CHECK(controller.view() == SelfTestView::ModeMenu);
@@ -254,19 +258,21 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
         CHECK(controller.visualState() == state);
     }
     CHECK(controller.activate(healthy, 230));
+    CHECK(controller.view() == SelfTestView::ActiveChecks);
+    CHECK(controller.completeActiveChecks(healthy, 240));
     CHECK(controller.view() == SelfTestView::Result);
     CHECK(std::strcmp(selfTestVisualStateName(1), "unavailable") == 0);
     CHECK(std::strcmp(selfTestVisualStateName(2), "degraded") == 0);
     CHECK(std::strcmp(selfTestVisualStateName(3), "error") == 0);
     CHECK(std::strcmp(selfTestVisualStateName(4), "running") == 0);
     CHECK(std::strcmp(selfTestVisualStateName(5), "none") == 0);
-    controller.finishRun(240);
     const SelfTestReport& full = controller.report();
     CHECK(full.mode == SelfTestMode::FullGuided);
     CHECK(full.status == SelfTestResultStatus::Blocked);
+    CHECK(!full.readOnly);
     CHECK(full.sequence == 2);
-    CHECK(full.checkCount == 20);
-    CHECK(full.passed == 16);
+    CHECK(full.checkCount == 22);
+    CHECK(full.passed == 18);
     CHECK(full.failed == 0);
     CHECK(full.blocked == 1);
     CHECK(full.notApplicable == 3);
@@ -281,11 +287,17 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
                       "full.s4.shield.receivers") == 0);
     CHECK(full.checks[18].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[19].id,
+                      "full.s4.spectrum.nrf24.receive") == 0);
+    CHECK(full.checks[19].status == SelfTestResultStatus::Pass);
+    CHECK(std::strcmp(full.checks[20].id,
+                      "full.s4.spectrum.cc1101.receive") == 0);
+    CHECK(full.checks[20].status == SelfTestResultStatus::Pass);
+    CHECK(std::strcmp(full.checks[21].id,
                       "full.capability.coverage") == 0);
     CHECK(std::strcmp(selfTestResultStatusName(
                           SelfTestResultStatus::NotApplicable),
                       "not_applicable") == 0);
-    CHECK(SelfTestReport::kPlanVersion == 4);
+    CHECK(SelfTestReport::kPlanVersion == 5);
 
     CHECK(controller.back());
     CHECK(controller.previousMode());
@@ -311,9 +323,11 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
         CHECK(coverageFailure.activate(incomplete, 510 + state));
     }
     CHECK(coverageFailure.activate(incomplete, 520));
+    CHECK(coverageFailure.view() == SelfTestView::ActiveChecks);
+    CHECK(coverageFailure.completeActiveChecks(incomplete, 530));
     const SelfTestReport& incompleteReport = coverageFailure.report();
     CHECK(incompleteReport.status == SelfTestResultStatus::Fail);
-    CHECK(incompleteReport.passed == 15);
+    CHECK(incompleteReport.passed == 17);
     CHECK(incompleteReport.failed == 1);
     CHECK(incompleteReport.blocked == 2);
     CHECK(incompleteReport.notApplicable == 2);
@@ -330,10 +344,44 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
         CHECK(blockedProbe.activate(unprobed, 610 + state));
     }
     CHECK(blockedProbe.activate(unprobed, 620));
-    CHECK(blockedProbe.report().passed == 15);
+    CHECK(blockedProbe.completeActiveChecks(unprobed, 630));
+    CHECK(blockedProbe.report().passed == 17);
     CHECK(blockedProbe.report().failed == 0);
     CHECK(blockedProbe.report().blocked == 2);
     CHECK(blockedProbe.report().notApplicable == 3);
+
+    SelfTestFacts failedRf = healthy;
+    failedRf.cc1101SpectrumExercisePassed = false;
+    SelfTestController activeFailure;
+    CHECK(activeFailure.nextMode());
+    CHECK(activeFailure.activate(failedRf, 700));
+    CHECK(activeFailure.activate(failedRf, 710));
+    for (std::uint8_t state = 1;
+         state < SelfTestController::kVisualStateCount; ++state) {
+        CHECK(activeFailure.activate(failedRf, 710 + state));
+    }
+    CHECK(activeFailure.activate(failedRf, 720));
+    CHECK(activeFailure.view() == SelfTestView::ActiveChecks);
+    CHECK(activeFailure.completeActiveChecks(failedRf, 730));
+    CHECK(activeFailure.report().status == SelfTestResultStatus::Fail);
+    CHECK(activeFailure.report().passed == 17);
+    CHECK(activeFailure.report().failed == 1);
+    CHECK(activeFailure.report().blocked == 1);
+
+    SelfTestFacts cancelled = healthy;
+    SelfTestController activeCancel;
+    CHECK(activeCancel.nextMode());
+    CHECK(activeCancel.activate(cancelled, 800));
+    CHECK(activeCancel.activate(cancelled, 810));
+    for (std::uint8_t state = 1;
+         state < SelfTestController::kVisualStateCount; ++state) {
+        CHECK(activeCancel.activate(cancelled, 810 + state));
+    }
+    CHECK(activeCancel.activate(cancelled, 820));
+    CHECK(activeCancel.back());
+    CHECK(activeCancel.view() == SelfTestView::Preflight);
+    CHECK(activeCancel.report().cancelled);
+    CHECK(!activeCancel.runAwaitingFinish());
 }
 
 void testShieldReceiverIdentityContractFailsClosed() {

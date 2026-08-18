@@ -17,6 +17,7 @@ enum class SelfTestView : std::uint8_t {
     ModeMenu,
     Preflight,
     VisualCheck,
+    ActiveChecks,
     Result,
 };
 
@@ -58,6 +59,10 @@ struct SelfTestFacts final {
     bool shieldReceiversApplicable = false;
     bool shieldReceiverProbeComplete = false;
     bool shieldReceiverProbePassed = false;
+    bool nrf24SpectrumExerciseComplete = false;
+    bool nrf24SpectrumExercisePassed = false;
+    bool cc1101SpectrumExerciseComplete = false;
+    bool cc1101SpectrumExercisePassed = false;
 };
 
 struct SelfTestCheckResult final {
@@ -67,8 +72,8 @@ struct SelfTestCheckResult final {
 
 struct SelfTestReport final {
     static constexpr std::uint16_t kSchemaVersion = 1;
-    static constexpr std::uint16_t kPlanVersion = 4;
-    static constexpr std::size_t kCapacity = 20;
+    static constexpr std::uint16_t kPlanVersion = 5;
+    static constexpr std::size_t kCapacity = 22;
 
     SelfTestMode mode = SelfTestMode::Quick;
     SelfTestResultStatus status = SelfTestResultStatus::NotRun;
@@ -98,6 +103,8 @@ public:
     bool previousMode();
     bool nextMode();
     bool activate(const SelfTestFacts& facts, std::uint64_t startedUs);
+    bool completeActiveChecks(const SelfTestFacts& facts,
+                              std::uint64_t finishedUs);
     void finishRun(std::uint64_t finishedUs);
     bool back();
 

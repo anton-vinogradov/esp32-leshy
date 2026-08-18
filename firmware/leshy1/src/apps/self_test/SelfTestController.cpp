@@ -15,6 +15,7 @@ const char* selfTestViewName(SelfTestView view) {
         case SelfTestView::ModeMenu: return "mode_menu";
         case SelfTestView::Preflight: return "preflight";
         case SelfTestView::VisualCheck: return "visual_check";
+        case SelfTestView::ActiveChecks: return "active_checks";
         case SelfTestView::Result: return "result";
     }
     return "unknown";
@@ -69,6 +70,7 @@ void SelfTestController::beginReport(SelfTestMode mode,
     report_.sequence = nextSequence;
     report_.startedUs = startedUs;
     report_.facts = facts;
+    report_.readOnly = mode == SelfTestMode::Quick;
     runAwaitingFinish_ = true;
     visualState_ = 0;
 }
@@ -124,6 +126,18 @@ void SelfTestController::evaluateCapabilityCoverage(
                       : (facts.shieldReceiverProbePassed
                              ? SelfTestResultStatus::Pass
                              : SelfTestResultStatus::Fail)));
+    append("full.s4.spectrum.nrf24.receive",
+           !facts.nrf24SpectrumExerciseComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.nrf24SpectrumExercisePassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
+    append("full.s4.spectrum.cc1101.receive",
+           !facts.cc1101SpectrumExerciseComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.cc1101SpectrumExercisePassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
 }
 
 void SelfTestController::evaluateQuick(const SelfTestFacts& facts) {
@@ -179,11 +193,7 @@ bool SelfTestController::activate(const SelfTestFacts& facts,
             ++visualState_;
             return true;
         }
-        report_.facts = facts;
-        append("full.ui.common_states", SelfTestResultStatus::Pass);
-        evaluateCapabilityCoverage(report_.facts);
-        append("full.capability.coverage", SelfTestResultStatus::Blocked);
-        finishResult();
+        view_ = SelfTestView::ActiveChecks;
         return true;
     }
 
@@ -200,6 +210,20 @@ bool SelfTestController::activate(const SelfTestFacts& facts,
     return true;
 }
 
+bool SelfTestController::completeActiveChecks(
+    const SelfTestFacts& facts, std::uint64_t finishedUs) {
+    if (view_ != SelfTestView::ActiveChecks || !runAwaitingFinish_) {
+        return false;
+    }
+    report_.facts = facts;
+    append("full.ui.common_states", SelfTestResultStatus::Pass);
+    evaluateCapabilityCoverage(report_.facts);
+    append("full.capability.coverage", SelfTestResultStatus::Blocked);
+    finishResult();
+    finishRun(finishedUs);
+    return true;
+}
+
 void SelfTestController::finishRun(std::uint64_t finishedUs) {
     if (!runAwaitingFinish_) return;
     report_.durationUs = finishedUs >= report_.startedUs
@@ -210,7 +234,8 @@ void SelfTestController::finishRun(std::uint64_t finishedUs) {
 
 bool SelfTestController::back() {
     if (view_ == SelfTestView::ModeMenu) return false;
-    if (view_ == SelfTestView::VisualCheck) {
+    if (view_ == SelfTestView::VisualCheck ||
+        view_ == SelfTestView::ActiveChecks) {
         report_.cancelled = true;
         runAwaitingFinish_ = false;
         view_ = SelfTestView::Preflight;
