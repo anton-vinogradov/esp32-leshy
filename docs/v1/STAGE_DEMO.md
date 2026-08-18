@@ -108,8 +108,8 @@ and one 64-bin CC1101 433 MHz receive sweep. Full returns 18 pass, zero fail, on
 honest future-coverage blocker and three N/A; all TX/storage counters stay zero,
 storage generation remains 83, 11 TFT states pass review and final lease is zero.
 The initial runner equation mismatch is retained fail closed. Remaining
-Survey/Library/Capture execution, controlled physical power-cut and the one-hour-budget endurance
-endurance still keep `DEMO-S4` open.
+Survey/Library/Capture execution, controlled physical power-cut and the one-hour-budget
+endurance gate still keep `DEMO-S4` open.
 
 Exact 0.85 accepts the next Full/Guided slice. Plan v6 runs the RF phase first,
 releases it, then crosses a separate cancellable boundary into a read-only persisted
@@ -120,6 +120,16 @@ TX events remain zero, 12 TFT states pass review and final lease is zero. The fi
 telemetry-truncation failure is retained fail closed beside the corrected run.
 Fresh disposable Survey/Capture creation, controlled physical power-cut and the
 ≥45-minute/≥8-cycle cross-radio endurance gate still keep `DEMO-S4` open.
+
+Exact 0.86 accepts the disposable Full/Guided slice. Plan v7 adds four checks that
+create a three-observation Session only under the exact-CID scratch namespace,
+commit it with three writes and durability barriers, recover/export it after a
+read-only remount, then remove every exact scratch file. Product generation 83/0 is
+unchanged, TX/product-write counters stay zero, 13 TFT states and final lease 0 pass.
+The first no-timeline candidate is retained fail closed with zero writes; the fixed
+candidate binds capture metadata to a finalized Wi-Fi timeline. Controlled physical
+power-cut and the ≥45-minute/≥8-cycle endurance gate inside one hour are now the two
+remaining `DEMO-S4` gates.
 
 ## Test cadence within a stage
 

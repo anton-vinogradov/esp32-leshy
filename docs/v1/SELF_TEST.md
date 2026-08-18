@@ -204,11 +204,10 @@ passed all 12 visually reviewed TFT states and final lease 0
 (`E-BUILD-086`/`E-AUTO-050`/`E-HIL-110`/`E-SELFTEST-005`/`E-STORAGE-026`/
 `E-CAPTURE-003`). This does not create a fresh Survey/Capture or modify user data.
 
-## Next write-capable boundary (in progress, not accepted)
+## Accepted disposable write/remount/export checkpoint
 
-Plan v7 may create a test Session only in an exact disposable namespace after the
-user explicitly starts Full/Guided. The safety shape is now implemented at
-host/build-contract level: exact enrolled CID, bounded run ID, and a dedicated
+Plan v7 creates a test Session only in an exact disposable namespace after the user
+explicitly starts Full/Guided: exact enrolled CID, bounded run ID, and a dedicated
 cleanup permit resolve only `/leshy-hil/<run-id>`. Cleanup first scans the entire
 directory without mutation and accepts only bounded SessionStore names
 (`head-a.bin`, `head-b.bin`, and exact eight-digit manifest/segment files); a nested
@@ -216,12 +215,21 @@ directory, unknown file, malformed generation or more than eight entries fails
 closed before deletion. General remove, rename and recursive-delete APIs remain
 forbidden.
 
-This contract is not yet a Self-Test check or board result. Promotion requires a
-fresh disposable commit, writable→read-only remount recovery, exporter verification,
-exact scratch removal verified after another remount, restoration of the original
-product generation, cancellation cleanup, TFT evidence and zero final leases. Until
-that physical run passes, exact 0.85 remains the accepted baseline and Full/Guided
-must not claim write-path coverage.
+Exact `0.86.0-full-guided-disposable` registers four checks for commit, read-only
+remount, Library export and cleanup. Board-01 writes generation 1 with three fixture
+observations through exactly three writes/504 bytes and three file plus three
+directory syncs. Read-only remount recovers the same generation and exports JSON,
+metadata and three CSV rows; cleanup removes the three exact files and scratch
+directory. Product generation/observations remain 83/0 with zero product writes,
+and final Home owns no resources.
+
+The first physical candidate is retained fail closed: capture metadata selected
+Wi-Fi but the fixture omitted its mandatory matching finalized timeline, so encoding
+stopped before the first storage write. Cleanup still removed the empty scratch and
+preserved product data. The corrected exact candidate adds one Wi-Fi timeline window
+accounting for all three observations and passes 13 TFT states
+(`E-BUILD-087`/`E-AUTO-051`/`E-HIL-111`/`E-SELFTEST-006`/`E-STORAGE-027`). This proves
+the isolated disposable path, not controlled physical power-cut or endurance.
 
 ## Acceptance
 

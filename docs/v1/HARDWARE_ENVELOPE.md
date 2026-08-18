@@ -206,6 +206,13 @@ resources. `E-HIL-110` observes generation 83/observation 0 continuity, zero blo
 or attempted storage writes, a byte-counted 16-frame PCAP and final lease 0. This is
 read-only workflow evidence, not the separate controlled power-cut test.
 
+Exact `0.86.0-full-guided-disposable` then uses the same exclusive resource set in
+three non-overlapping phases: exact-CID writable scratch commit, read-only remount and
+export, and exact typed cleanup. `E-HIL-111` observes three writes/504 bytes only in
+`/leshy-hil/full-guided-v7`, zero product writes, removal of all three scratch files,
+unchanged product generation 83/0 and final lease 0. It does not replace physical
+power-cut or instrumented RF-silence evidence.
+
 GPIO2 software evidence: the author's root-cause description and one-line LOW fix in
 [upstream issue #117](https://github.com/cifertech/ESP32-DIV/issues/117#issuecomment-5178973211)
 links the verified

@@ -108,8 +108,8 @@ Quick read-only 8/8, затем активно выполняет один по�
 один честный blocker future coverage и три N/A; все TX/storage counters остаются
 нулевыми, storage generation — 83, 11 TFT states проходят review, final lease — zero.
 Первый mismatch equation runner сохранён fail closed. Remaining
-Survey/Library/Capture execution, controlled physical power-cut и endurance с часовым бюджетом
-endurance всё ещё держат `DEMO-S4` открытым.
+Survey/Library/Capture execution, controlled physical power-cut и endurance gate с
+часовым бюджетом всё ещё держат `DEMO-S4` открытым.
 
 Exact 0.85 принимает следующий slice Full/Guided. Plan v6 сначала выполняет RF
 phase, освобождает её, затем через отдельную cancellable boundary переходит к
@@ -121,6 +121,16 @@ lease — zero. Первый telemetry-truncation failure сохранён fail 
 исправленным run. Создание новой disposable Survey/Capture, controlled physical
 power-cut и cross-radio endurance gate ≥45 минут/≥8 циклов всё ещё держат `DEMO-S4`
 открытым.
+
+Exact 0.86 принимает disposable slice Full/Guided. Plan v7 добавляет четыре checks,
+которые создают Session из трёх observations только в scratch namespace exact CID,
+commit-ят её тремя writes и durability barriers, восстанавливают/экспортируют после
+read-only remount, затем удаляют каждый exact scratch file. Product generation 83/0
+не меняется, counters TX/product-write остаются нулевыми, проходят 13 TFT states и
+final lease 0. Первый candidate без timeline сохранён fail closed с zero writes;
+исправленный candidate связывает capture metadata с finalized Wi-Fi timeline.
+Controlled physical power-cut и endurance gate ≥45 минут/≥8 циклов в пределах часа
+теперь являются двумя оставшимися gates `DEMO-S4`.
 
 ## Ритм тестирования внутри этапа
 

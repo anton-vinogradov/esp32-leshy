@@ -401,6 +401,14 @@ the current combined GitHub workflows have passed end to end:
   `E-RADIO-001`). Historical exact 0.80 remains independently reproducible because
   `check_self_test_coverage_acceptance.py` retrieves its plan-v3 runner blob from the
   pinned runner commit;
+- `tools/run_1x_full_guided_rf_hil.py` is the current combined plan-v7 lane despite
+  its historical filename. It flashes exact bytes, drives Quick plus Full/Guided
+  through RF, persisted-artifact and disposable-storage phases, captures 13 TFT
+  states, and requires exact CID, three isolated writes/504 B, read-only remount and
+  export, typed scratch cleanup, unchanged product generation, zero TX/product writes
+  and final lease 0. Exact 0.86 and its retained first fail-closed no-timeline attempt
+  are independently checked by `check_full_guided_disposable_acceptance.py`
+  (`E-AUTO-051`/`E-HIL-111`/`E-SELFTEST-006`/`E-STORAGE-027`);
 - `tools/run_1x_littlefs_parity_hil.py` is the fail-closed disposable-flash lane.
   It selects only inactive OTA1 `app1`, requires two matching full reads and a
   firmware-side hash match before format, performs 32 common SessionStore commits

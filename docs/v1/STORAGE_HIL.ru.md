@@ -551,6 +551,7 @@ final lease 0. Retained summary:
 | ST-HIL-A09 | Enrolled exact-CID cold boot допускает latest valid product Session через write-blocking driver с zero SD writes и complete lease/mount cleanup |
 | ST-HIL-A10 | Explicit product Survey принимает real passive observations, публикует ровно одну следующую bounded generation, переживает read-only reboot/export и aborts без commit или leaked lease |
 | ST-HIL-A11 | Missing source Product Survey показывает localized real-TFT unavailable state только после полного cleanup; source/store start, Session, write, hidden retry и leaked lease отсутствуют, prior Library переживает reboot |
+| ST-HIL-A12 | Full/Guided может записывать только exact-CID disposable scratch Session, обязан восстановить/экспортировать её после read-only remount, удалить только typed known files и доказать неизменный product catalog с zero final leases |
 
 Offline Library/reopen, bounded export, non-mounting discovery, mount policy, SD
 identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit плюс
@@ -574,3 +575,8 @@ generation 68/25 и final lease 0. E-HIL-093 закрывает normal/remount �
 ST-HIL-A07 на изолированном и полностью восстановленном inactive OTA1 target. Те же
 шесть commit boundaries всё ещё требуют отдельной LittleFS reset matrix, а physical
 power-cut — controller.
+E-HIL-111 закрывает ST-HIL-A12 на enrolled board-01: три exact scratch writes/504 B,
+read-only recovery/export generation 1, cleanup трёх files, unchanged product 83/0 и
+final lease 0. Сохранённый первый attempt останавливается до любой write, потому что
+capture metadata не имела matching timeline; этот failure является evidence, а не
+отброшенным run.

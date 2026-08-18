@@ -253,6 +253,13 @@ generation 83/observation 0, zero blocked или attempted storage writes, PCAP 
 frames с точным byte count и final lease 0. Это evidence read-only workflow, а не
 отдельный controlled power-cut test.
 
+Exact `0.86.0-full-guided-disposable` затем использует тот же exclusive resource set
+в трёх непересекающихся phases: exact-CID writable scratch commit, read-only remount
+и export, exact typed cleanup. `E-HIL-111` наблюдает три writes/504 bytes только в
+`/leshy-hil/full-guided-v7`, zero product writes, удаление всех трёх scratch files,
+неизменную product generation 83/0 и final lease 0. Это не заменяет physical
+power-cut или instrumented RF-silence evidence.
+
 Любая неоднозначность GPIO5/6 или 14/21 заканчивается `conflicted`, а не перебором
 output modes. Probe не должен передавать RF/IR, писать на SD/NFC или издавать звук.
 

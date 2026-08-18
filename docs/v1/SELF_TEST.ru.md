@@ -203,23 +203,32 @@ TFT states и final lease 0 (`E-BUILD-086`/`E-AUTO-050`/`E-HIL-110`/
 `E-SELFTEST-005`/`E-STORAGE-026`/`E-CAPTURE-003`). Это не создаёт fresh Survey/Capture
 и не меняет user data.
 
-## Следующая write-capable boundary (в работе, не принята)
+## Принятый checkpoint disposable write/remount/export
 
-Plan v7 может создавать test Session только в exact disposable namespace после
-явного запуска Full/Guided пользователем. Safety shape уже реализована на уровне
-host/build contract: exact enrolled CID, bounded run ID и отдельный cleanup permit
-разрешают только `/leshy-hil/<run-id>`. До любой мутации cleanup полностью сканирует
+Plan v7 создаёт test Session только в exact disposable namespace после явного
+запуска Full/Guided пользователем: exact enrolled CID, bounded run ID и отдельный
+cleanup permit разрешают только `/leshy-hil/<run-id>`. До любой мутации cleanup полностью сканирует
 каталог и принимает только bounded имена SessionStore (`head-a.bin`, `head-b.bin` и
 точные восьмизначные manifest/segment files); nested directory, неизвестный файл,
 malformed generation или больше восьми entries приводит к fail closed до удаления.
 Общие remove, rename и recursive-delete API остаются запрещены.
 
-Этот contract ещё не является check Self-Test или board result. Для promotion нужны
-fresh disposable commit, recovery после writable→read-only remount, проверка
-exporters, exact удаление scratch с подтверждением после ещё одного remount,
-восстановление исходной product generation, cleanup при cancel, TFT evidence и zero
-final leases. Пока physical run не прошёл, accepted baseline остаётся exact 0.85, а
-Full/Guided не заявляет покрытие write path.
+Exact `0.86.0-full-guided-disposable` регистрирует четыре checks: commit, read-only
+remount, Library export и cleanup. Board-01 записывает generation 1 с тремя fixture
+observations ровно через три writes/504 bytes и три file плюс три directory syncs.
+Read-only remount восстанавливает ту же generation и экспортирует JSON, metadata и
+три CSV rows; cleanup удаляет три exact files и scratch directory. Product
+generation/observations остаются 83/0 с zero product writes, final Home не владеет
+ресурсами.
+
+Первый physical candidate сохранён fail closed: capture metadata выбирала Wi-Fi, но
+fixture не имела обязательной matching finalized timeline, поэтому encoding
+остановился до первой storage write. Cleanup всё равно удалил пустой scratch и
+сохранил product data. Исправленный exact candidate добавляет одно Wi-Fi timeline
+window, учитывающее все три observations, и проходит 13 TFT states
+(`E-BUILD-087`/`E-AUTO-051`/`E-HIL-111`/`E-SELFTEST-006`/`E-STORAGE-027`). Это
+доказывает изолированный disposable path, но не controlled physical power-cut или
+endurance.
 
 ## Приёмка
 

@@ -371,6 +371,15 @@ then raised to 4,608 bytes and the exact corrected candidate was rerun. Creating
 fresh disposable Survey/Capture, controlled physical power-cut and endurance remain
 open.
 
+Exact `0.86.0-full-guided-disposable` advances this boundary to plan v7. After the
+read-only artifact audit, separate short-lived `Storage|RadioSpi` leases identify the
+same enrolled CID, authorize only `/leshy-hil/full-guided-v7`, commit a deterministic
+three-observation Session with finalized capture timeline, release, read-only remount
+and export it, then reacquire for typed exact cleanup. A final read-only product
+recovery proves generation 83/0 unchanged. The failed no-timeline candidate and the
+corrected pass are both retained; only the latter writes three files/504 bytes and
+then removes them. Controlled physical power-cut and one-hour endurance remain open.
+
 ## Data model
 
 Raw observation is separate from interpretation:

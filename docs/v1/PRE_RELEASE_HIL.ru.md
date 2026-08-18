@@ -402,6 +402,14 @@ workflow прошли end to end:
   (`E-AUTO-046`/`E-HIL-106`/`E-SELFTEST-003`/`E-RADIO-001`). Historical exact 0.80
   остаётся independently reproducible: `check_self_test_coverage_acceptance.py`
   получает его runner plan v3 из pinned runner commit;
+- `tools/run_1x_full_guided_rf_hil.py` — текущий combined lane plan v7, несмотря на
+  историческое имя. Он flash-ит exact bytes, проводит Quick плюс Full/Guided через
+  RF, persisted-artifact и disposable-storage phases, снимает 13 TFT states и
+  требует exact CID, три isolated writes/504 B, read-only remount/export, typed
+  scratch cleanup, unchanged product generation, zero TX/product writes и final
+  lease 0. Exact 0.86 и его сохранённый первый fail-closed attempt без timeline
+  независимо проверяются `check_full_guided_disposable_acceptance.py`
+  (`E-AUTO-051`/`E-HIL-111`/`E-SELFTEST-006`/`E-STORAGE-027`);
 - `tools/run_1x_littlefs_parity_hil.py` — fail-closed lane disposable flash. Он
   выбирает только inactive OTA1 `app1`, требует два совпадающих полных чтения и
   firmware-side hash match до format, делает 32 commits common SessionStore плюс

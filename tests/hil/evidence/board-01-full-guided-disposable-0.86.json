@@ -1,0 +1,97 @@
+{
+  "schema": "leshy.full_guided_disposable_acceptance.v1",
+  "status": "pass_disposable_storage_checkpoint",
+  "board": "board-01",
+  "candidate": {
+    "version": "0.86.0-full-guided-disposable",
+    "source_commit": "827fd5d7479d4b808dce960728f4e03c7fce7797",
+    "runner_commit": "97392f084e11fc1ab73b6d3af97edcad27557b84",
+    "firmware_sha256": "a6e6501abe01aef18a4c9729cd3a0d55ecbeaa80d9d109ca357f0729c9767118",
+    "factory_sha256": "afa91d8ba49d87b7c44b9fdbdf85e2d01719d7667b3ba76e8f79540d4f22bf73",
+    "app_elf_sha256": "ebc4a265d9661cc8b4269729fe0ba7c605a568696e67a743daa55dcd403c0dd5",
+    "map_sha256": "a1f82b4654f5b1ceab2b24f6bdd739cd8b48092edf0fb001a632dc610ba8fa9c",
+    "app_bytes": 1491536,
+    "factory_bytes": 1557072,
+    "linked_flash_bytes": 1491132,
+    "static_ram_bytes": 154472
+  },
+  "failure_history": {
+    "initial_source_commit": "97392f084e11fc1ab73b6d3af97edcad27557b84",
+    "failed_run_sha256": "53201c8518af81070499b14ccfa0a3a865b6b66361fb1d6946c67ee44bdf9ba2",
+    "disposition": "fail_closed_before_storage_write",
+    "root_cause": "capture metadata selected Wi-Fi but the disposable fixture omitted the required matching finalized source timeline",
+    "fix": "construct and finalize one exact Wi-Fi timeline window accounting for all three fixture observations before commit"
+  },
+  "evidence": {
+    "bundle": "tests/hil/evidence/board-01-full-guided-disposable-0.86",
+    "files": 45,
+    "tft_states": 13,
+    "run_sha256": "ad1fd709cc83ed692f1886f83662ff1f215e8481a9831ba98186cc2f9b6e97c6",
+    "artifact_index_sha256": "989f736da004017f2147b7b6174771c51e6589c7defdf618947e591523934cec",
+    "runner_sha256": "e3f3e2f26ca127f9423ae0797d11a1420cb53aed63db89f443ff5bcf53dd54e4"
+  },
+  "verified": {
+    "cid": "FE343253440000002000000055019CB7",
+    "quick": {
+      "passed": 8,
+      "failed": 0,
+      "read_only": true
+    },
+    "full_guided": {
+      "plan_version": 7,
+      "passed": 25,
+      "failed": 0,
+      "blocked": 1,
+      "not_applicable": 3,
+      "duration_us": 8729161
+    },
+    "disposable": {
+      "run_id": "full-guided-v7",
+      "scratch_path": "/leshy-hil/full-guided-v7",
+      "scratch_preexisting": false,
+      "scratch_created": true,
+      "generation": 1,
+      "observations": 3,
+      "write_calls": 3,
+      "write_bytes": 504,
+      "file_syncs": 3,
+      "directory_syncs": 3,
+      "remount_read_only": true,
+      "json_bytes": 876,
+      "metadata_bytes": 862,
+      "csv_records": 3,
+      "csv_bytes": 297,
+      "files_removed": 3,
+      "scratch_removed": true
+    },
+    "product_continuity": {
+      "generation_before": 83,
+      "generation_after": 83,
+      "observations_before": 0,
+      "observations_after": 0,
+      "physical_write_calls": 0,
+      "passed": true
+    },
+    "radio_tx_commands": 0,
+    "product_storage_write_commands": 0,
+    "blocked_write_attempts": 0,
+    "heap_total": 227236,
+    "heap_free": 162492,
+    "heap_minimum_after_full": 129276,
+    "input_read_errors": 0,
+    "input_queue_drops": 0,
+    "buzzer_inactive": true,
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "limits": {
+    "disposable_scratch_written": true,
+    "product_data_written": false,
+    "raw_capture_retained_in_evidence": false,
+    "physical_rf_silence_instrumented": false,
+    "controlled_power_cut_complete": false,
+    "one_hour_endurance_complete": false,
+    "demo_s4_complete": false,
+    "release_gate_eligible": false
+  }
+}

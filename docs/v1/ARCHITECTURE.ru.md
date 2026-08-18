@@ -427,6 +427,17 @@ zero storage writes/TX events и final lease 0. Первый run с обреза
 disposable Survey/Capture, controlled physical power-cut и endurance остаются
 открыты.
 
+Exact `0.86.0-full-guided-disposable` переводит эту boundary в plan v7. После
+read-only artifact audit отдельные short-lived leases `Storage|RadioSpi`
+идентифицируют тот же enrolled CID, разрешают только
+`/leshy-hil/full-guided-v7`, commit-ят deterministic Session из трёх observations с
+finalized capture timeline, освобождают ресурсы, read-only remount-ят и экспортируют
+её, затем снова получают ресурсы для typed exact cleanup. Финальный read-only
+product recovery подтверждает неизменную generation 83/0. Failed candidate без
+timeline и исправленный pass сохранены; только второй записывает три files/504 bytes
+и затем удаляет их. Controlled physical power-cut и endurance в пределах часа
+остаются открыты.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

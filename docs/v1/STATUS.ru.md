@@ -12,16 +12,15 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.85 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, active receive-only RF checks и read-only audit сохранённого artifact в Full/Guided plan v6.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.86 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact и guarded disposable write/remount/export/cleanup в Full/Guided plan v7.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
-- **Главная цель текущего этапа:** расширить active execution plan-v6 Full/Guided
-  с принятых receiver и persisted-artifact checks на controlled Survey/Capture execution, затем проверить
-  controlled power-cut recovery и multi-source endurance ≥45 минут/≥8 циклов в
-  часовом операционном бюджете.
-- **Реализация в работе:** следующая write boundary plan v7 уже имеет
-  host/build-verified disposable cleanup permit по exact CID и bounded pre-scan
-  известных имён для `/leshy-hil/<run-id>`. Она ещё не зарегистрирована как pass
-  Self-Test и не имеет physical acceptance; baseline остаётся exact 0.85.
+- **Главная цель текущего этапа:** проверить controlled physical power-cut recovery
+  и multi-source endurance ≥45 минут/≥8 циклов в часовом операционном бюджете — два
+  оставшихся gate `DEMO-S4`.
+- **Последний принятый checkpoint:** exact 0.86 Full/Guided plan v7 записывает test
+  Session из трёх records только в `/leshy-hil/full-guided-v7`, read-only remount-ит
+  и экспортирует её, удаляет exact scratch tree и подтверждает неизменность product
+  generation 83/0.
 
 ## Состояние этапов
 
@@ -31,7 +30,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.79 принимают passive multi-source, browser/export и persistent Capture; exact 0.80 регистрирует их в Full/Guided; exact 0.81 обнаруживает declared RF shield; exact 0.82/0.83 добавляют явные spectrum views; exact 0.84 активно выполняет обе receive-only RF-проверки; exact 0.85 read-only повторно открывает enrolled SD artifact и выполняет Library JSON/CSV плюс persisted PCAP из plan v6 | расширить active Full/Guided до controlled создания новых Survey/Capture; затем проверить controlled physical power-cut recovery и multi-source endurance ≥45 минут/≥8 циклов в течение часа |
+| S4 | `active` | exact 0.71…0.79 принимают passive multi-source, browser/export и persistent Capture; exact 0.80…0.85 регистрируют и активно проверяют receiver/artifact paths; exact 0.86 plan v7 выполняет guarded disposable commit, read-only remount/export и exact cleanup при неизменной product generation 83/0 | проверить controlled physical power-cut recovery и multi-source endurance ≥45 минут/≥8 циклов в течение часа |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -45,9 +44,9 @@
 
 | Блок продукта | Сейчас | Ближайший качественный переход |
 |---|---|---|
-| Основа устройства и UX | `готово / S2` — boot, board profile, пять клавиш, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test и автоматический TFT capture; plan-v6 Full/Guided активно выполняет обе declared receive-only RF-проверки и без записи проверяет enrolled persisted artifact | расширять active execution до controlled создания workflows и добавлять hardware checks |
+| Основа устройства и UX | `готово / S2` — boot, board profile, пять клавиш, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test и автоматический TFT capture; plan-v7 Full/Guided выполняет declared receive-only RF, artifact и изолированные disposable-storage checks | сохранять общий plan при добавлении следующих hardware checks |
 | Survey и Library | `готово / S3` — реальный passive Wi-Fi, atomic Session, List/Detail, offline reopen и export | используется как принятый фундамент, не переписывается отдельной веткой |
-| Passive multi-radio и Capture | `в работе / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV и privacy-confirmed persistent Wi-Fi PCAP работают; два nRF24 дают живую карту 2 402…2 484 МГц, CC1101 — RSSI-карты 315/433/868/915 МГц; Self-Test повторяет оба receive path и теперь read-only открывает/экспортирует последний SD artifact, включая PCAP из 16 кадров при его наличии | controlled создание новых Survey/Capture, power-cut и endurance |
+| Passive multi-radio и Capture | `в работе / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV и privacy-confirmed persistent Wi-Fi PCAP работают; два nRF24 дают живую карту 2 402…2 484 МГц, CC1101 — RSSI-карты 315/433/868/915 МГц; Self-Test повторяет оба receive path, проверяет последний SD artifact и доказывает изолированный disposable commit/remount/export/cleanup cycle | controlled power-cut и endurance |
 | Всё штатное железо ESP32-DIV | `впереди / S5` — scope и fail-closed hardware envelope описаны, но законченных IR/PN532/GPS/power workflows ещё нет | probe → capture/observe → Library → inspect/export для каждого применимого модуля |
 | Targets, compare и companion | `впереди / S6` — product model и границы определены, пользовательские сценарии ещё не реализованы | две Survey сравниваются через evidence-backed Targets и тот же локальный Web/USB companion |
 | Safe Lab и расширения | `впереди / S7` — safety/resource boundaries приняты, active workflows и SDK ещё не реализованы | feature-complete каталог, permissioned extensions и доказанный panic/timeout stop |
@@ -634,6 +633,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-086 | exact build `0.85.0-full-guided-artifacts` | pass: RAM 153 712 B, linked flash 1 482 568 B; app/factory 1 482 976/1 548 512 B; app `8b84668e…626f`, factory `4fdc83dc…cd1`, ELF `a2125efc…dd09`, map `d580a020…d381`; source commit `a8a49b7` | +4 436 B linked flash, +648 B static RAM и +4 432 B images vs 0.84 за plan-v6 artifact state, read-only SD recovery, staged JSON/CSV/PCAP audit, telemetry и bounded diagnostics workspace 4 608 bytes; exact checkpoint, не `DEMO-S4` и не release build |
 | E-AUTO-050 | HIL Full/Guided artifact и independent retained verifier | pass: runner прошивает exact bytes, снимает RF и data phases, проверяет ordered plan-v6 results, exact CID/generation continuity, byte/record counts Library, persisted PCAP stream, 12 TFT states, input/buzzer и final lease. Первый physical attempt сохранён fail closed: расширенный `ui.state` превысил прежний buffer 4 096 bytes; product fix увеличил единственный bounded workspace до 4 608 bytes, исправленный candidate прошёл | read-only audit существующего latest artifact на одной board; он не создаёт новый Survey/Capture и не пишет user data, а отсутствие persisted frame artifact честно даёт N/A |
 | E-HIL-110 / E-SELFTEST-005 / E-STORAGE-026 / E-CAPTURE-003 | board-01 exact 0.85 read-only persisted-artifact checks в Full/Guided | pass checkpoint: Quick остаётся 8/8; Full/Guided plan v6 — 21 pass/0 fail/1 capability blocker/3 N/A. Он повторно идентифицирует exact CID `FE34…9CB7`, монтирует read-only, открывает неизменённую generation 83/0, форматирует Library JSON 432 bytes, immutable metadata 880 bytes и zero-row CSV 94 bytes, затем потоково отправляет persisted PCAP из 16 кадров/2 773 bytes в discard sink с FNV-1a `673903271`. Storage/TX commands и blocked writes равны нулю; RF regression проходит, heap 227 996/163 252/130 252 B, 12 TFT states проходят visual review, final owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-artifacts-0.85.json) | принимает active read-only execution recovery/Library/Capture artifact; controlled создание новых Survey/Capture data, physical RF instrumentation, power-cut и endurance держат `DEMO-S4` открытым |
+| E-BUILD-087 | exact build `0.86.0-full-guided-disposable` | pass: RAM 154 472 B, linked flash 1 491 132 B; app/factory 1 491 536/1 557 072 B; app `a6e6501a…7118`, factory `afa91d8b…2bf73`, ELF `ebc4a265…dd5`, map `a1f82b46…fa9c`; source commit `827fd5d` | +8 564 B linked flash, +760 B static RAM и +8 560 B images vs 0.85 за plan-v7 disposable states, exact scratch IO counters и diagnostics workspace 5 120 bytes; exact checkpoint, не `DEMO-S4` и не release build |
+| E-AUTO-051 | disposable HIL Full/Guided и independent retained verifier | pass: runner прошивает exact bytes, проводит Quick и Full/Guided, проверяет ordered plan-v7 results, exact CID, изолированные write counts, read-only remount/export, product continuity, cleanup, 13 TFT states, input/buzzer и final lease. Первый candidate сохранён fail closed с zero writes: fixture не содержала timeline, обязательную для capture metadata; исправленная fixture финализирует один matching Wi-Fi window до commit | evidence exact-scratch write на одной board; product Session/Capture не создаётся и не заменяется, raw nearby payload не сохраняется |
+| E-HIL-111 / E-SELFTEST-006 / E-STORAGE-027 | board-01 exact 0.86 disposable workflow в Full/Guided | pass checkpoint: Quick остаётся read-only 8/8; Full/Guided plan v7 — 25 pass/0 fail/1 capability blocker/3 N/A. Exact CID разрешает только `/leshy-hil/full-guided-v7`; generation 1 с тремя observations commits ровно через три writes/504 B и три file плюс три directory syncs, read-only remount восстанавливает и экспортирует JSON 876 B, metadata 862 B и CSV 3 rows/297 B, затем удаляет все три файла и scratch directory. Product generation/observations остаются 83/0 при zero product writes, RF/TX regression проходит, input errors/drops равны нулю, buzzer inactive, 13 TFT states сохранены, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-full-guided-disposable-0.86.json) | принимает controlled disposable Session creation/remount/export/cleanup внутри Self-Test; physical RF instrumentation, controlled power-cut и endurance gate до одного часа держат `DEMO-S4` открытым |
 
 ## Известные неопределённости и риски
 
@@ -679,7 +681,9 @@ cancellable boundary, exact receive-only accounting и zero final ownership. Act
 execution остальных принятых Survey/Library/Capture workflows уточнён exact 0.85:
 plan v6 повторно идентифицирует и read-only открывает enrolled SD artifact, выполняет
 Library JSON/CSV и потоково формирует persisted PCAP без сохранения payload или записи
-user data. Controlled создание нового Survey/Capture из Full/Guided остаётся software work.
+user data. Exact 0.86 plan v7 добавляет controlled disposable Session creation,
+read-only remount, Library export и exact cleanup без изменения product generation
+83/0.
 Недоступный сейчас управляемый
 power-cut fixture остаётся явным exit
 requirement `DEMO-S4`, software reset не принимается как замена. Второй
