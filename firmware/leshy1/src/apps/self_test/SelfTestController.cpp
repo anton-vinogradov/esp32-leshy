@@ -138,6 +138,26 @@ void SelfTestController::evaluateCapabilityCoverage(
                : (facts.cc1101SpectrumExercisePassed
                       ? SelfTestResultStatus::Pass
                       : SelfTestResultStatus::Fail));
+    append("full.s4.storage.recovery.audit",
+           !facts.persistentRecoveryAuditComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.persistentRecoveryAuditPassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
+    append("full.s4.library.export.audit",
+           !facts.libraryExportAuditComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.libraryExportAuditPassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
+    append("full.s4.capture.pcap.audit",
+           !facts.capturePcapAuditComplete
+               ? SelfTestResultStatus::Blocked
+               : (!facts.capturePcapAuditApplicable
+                      ? SelfTestResultStatus::NotApplicable
+                      : (facts.capturePcapAuditPassed
+                             ? SelfTestResultStatus::Pass
+                             : SelfTestResultStatus::Fail)));
 }
 
 void SelfTestController::evaluateQuick(const SelfTestFacts& facts) {

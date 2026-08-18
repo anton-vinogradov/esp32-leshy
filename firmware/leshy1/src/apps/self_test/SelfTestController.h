@@ -63,6 +63,13 @@ struct SelfTestFacts final {
     bool nrf24SpectrumExercisePassed = false;
     bool cc1101SpectrumExerciseComplete = false;
     bool cc1101SpectrumExercisePassed = false;
+    bool persistentRecoveryAuditComplete = false;
+    bool persistentRecoveryAuditPassed = false;
+    bool libraryExportAuditComplete = false;
+    bool libraryExportAuditPassed = false;
+    bool capturePcapAuditComplete = false;
+    bool capturePcapAuditApplicable = false;
+    bool capturePcapAuditPassed = false;
 };
 
 struct SelfTestCheckResult final {
@@ -72,8 +79,8 @@ struct SelfTestCheckResult final {
 
 struct SelfTestReport final {
     static constexpr std::uint16_t kSchemaVersion = 1;
-    static constexpr std::uint16_t kPlanVersion = 5;
-    static constexpr std::size_t kCapacity = 22;
+    static constexpr std::uint16_t kPlanVersion = 6;
+    static constexpr std::size_t kCapacity = 25;
 
     SelfTestMode mode = SelfTestMode::Quick;
     SelfTestResultStatus status = SelfTestResultStatus::NotRun;

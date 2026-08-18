@@ -324,6 +324,71 @@ FullGuidedRfState fullGuidedRfState;
 Nrf24PassiveSpectrumReport fullGuidedNrf24Report;
 Cc1101PassiveSpectrumReport fullGuidedCc1101Report;
 std::uint64_t fullGuidedRfStartAfterUs = 0;
+enum class FullGuidedArtifactStep : std::uint8_t {
+    Idle,
+    Recover,
+    LibraryJson,
+    LibraryCsv,
+    CapturePcap,
+    Complete,
+    Failed,
+    Cancelled,
+};
+const char* fullGuidedArtifactStepName(FullGuidedArtifactStep step) {
+    switch (step) {
+        case FullGuidedArtifactStep::Idle: return "idle";
+        case FullGuidedArtifactStep::Recover: return "recover";
+        case FullGuidedArtifactStep::LibraryJson: return "library_json";
+        case FullGuidedArtifactStep::LibraryCsv: return "library_csv";
+        case FullGuidedArtifactStep::CapturePcap: return "capture_pcap";
+        case FullGuidedArtifactStep::Complete: return "complete";
+        case FullGuidedArtifactStep::Failed: return "failed";
+        case FullGuidedArtifactStep::Cancelled: return "cancelled";
+    }
+    return "unknown";
+}
+struct FullGuidedArtifactState final {
+    FullGuidedArtifactStep step = FullGuidedArtifactStep::Idle;
+    char expectedFingerprint[33] = {};
+    bool recoveryComplete = false;
+    bool recoveryPassed = false;
+    bool libraryComplete = false;
+    bool libraryPassed = false;
+    bool captureComplete = false;
+    bool captureApplicable = false;
+    bool capturePassed = false;
+    bool cleanupComplete = true;
+    std::uint32_t generationBefore = 0;
+    std::uint32_t generationAfter = 0;
+    std::size_t observationsBefore = 0;
+    std::size_t observationsAfter = 0;
+    std::size_t jsonBytes = 0;
+    std::size_t metadataBytes = 0;
+    std::size_t csvBytes = 0;
+    std::size_t csvRecords = 0;
+    std::size_t csvIndex = 0;
+    std::size_t pcapBytes = 0;
+    std::size_t pcapFrames = 0;
+    std::uint32_t pcapFnv1a = 2166136261U;
+    std::uint32_t blockedWriteAttempts = 0;
+};
+struct FullGuidedPcapSink final {
+    std::size_t bytes = 0;
+    std::uint32_t fnv1a = 2166136261U;
+};
+bool writeFullGuidedPcapBytes(const std::uint8_t* data, std::size_t size,
+                              void* context) {
+    if ((data == nullptr && size != 0) || context == nullptr) return false;
+    auto* sink = static_cast<FullGuidedPcapSink*>(context);
+    for (std::size_t index = 0; index < size; ++index) {
+        sink->fnv1a ^= data[index];
+        sink->fnv1a *= 16777619U;
+    }
+    sink->bytes += size;
+    return true;
+}
+FullGuidedArtifactState fullGuidedArtifactState;
+std::uint64_t fullGuidedArtifactStartAfterUs = 0;
 enum class RfSpectrumKind : std::uint8_t {
     Nrf24,
     Cc1101,
@@ -4179,6 +4244,16 @@ SelfTestFacts snapshotSelfTestFacts() {
     facts.nrf24SpectrumExercisePassed = fullGuidedRfState.nrf24Passed;
     facts.cc1101SpectrumExerciseComplete = fullGuidedRfState.cc1101Complete;
     facts.cc1101SpectrumExercisePassed = fullGuidedRfState.cc1101Passed;
+    facts.persistentRecoveryAuditComplete =
+        fullGuidedArtifactState.recoveryComplete;
+    facts.persistentRecoveryAuditPassed =
+        fullGuidedArtifactState.recoveryPassed;
+    facts.libraryExportAuditComplete = fullGuidedArtifactState.libraryComplete;
+    facts.libraryExportAuditPassed = fullGuidedArtifactState.libraryPassed;
+    facts.capturePcapAuditComplete = fullGuidedArtifactState.captureComplete;
+    facts.capturePcapAuditApplicable =
+        fullGuidedArtifactState.captureApplicable;
+    facts.capturePcapAuditPassed = fullGuidedArtifactState.capturePassed;
     return facts;
 }
 
@@ -4352,7 +4427,32 @@ void renderSelfTestPage(bool clearContent) {
     }
 
     if (selfTestController.view() == SelfTestView::ActiveChecks) {
-        renderHeader(tr(UiTextId::FullActiveTitle), clearContent);
+        const bool artifactPhase =
+            fullGuidedRfState.step == FullGuidedRfStep::Complete;
+        renderHeader(tr(artifactPhase ? UiTextId::FullActiveDataTitle
+                                     : UiTextId::FullActiveTitle),
+                     clearContent);
+        if (artifactPhase) {
+            renderMetric(
+                0,
+                fullGuidedArtifactState.recoveryPassed
+                    ? tr(UiTextId::FullActiveStoragePass)
+                    : tr(UiTextId::FullActiveStorageRun),
+                fullGuidedArtifactState.recoveryPassed ? Tone::Positive
+                                                       : Tone::Warning);
+            renderMetric(
+                1,
+                fullGuidedArtifactState.libraryPassed
+                    ? tr(UiTextId::FullActiveLibraryPass)
+                    : tr(UiTextId::FullActiveLibraryRun),
+                fullGuidedArtifactState.libraryPassed ? Tone::Positive
+                                                      : Tone::Warning);
+            renderMetric(2, tr(UiTextId::FullActiveCaptureRun), Tone::Warning);
+            display.setTextColor(Palette::TextMuted, Palette::Canvas);
+            setUiCursor(UiTextRole::Meta, 14, 207);
+            display.print(tr(UiTextId::FullActiveDataSafety));
+            return;
+        }
         if (fullGuidedRfState.step == FullGuidedRfStep::Idle) {
             renderMetric(0, tr(UiTextId::FullActivePreparing), Tone::Warning);
         } else {
@@ -5618,6 +5718,66 @@ void releaseFullGuidedRfResource() {
         leshy1::kernel::runtime::kNoOwner;
 }
 
+void restoreFullGuidedLibraryView() {
+    if (libraryController.view() == LibraryView::ExportReady) {
+        libraryController.back();
+    }
+    if (libraryController.view() == LibraryView::SessionDetail) {
+        libraryController.back();
+    }
+}
+
+void finishFullGuidedActiveChecks(bool success) {
+    const bool nrfCleanup = boardNrf24Spectrum.end();
+    const bool ccCleanup = boardCc1101Spectrum.end();
+    releaseFullGuidedRfResource();
+    fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup &&
+        fullGuidedRfState.resourceReleased;
+    restoreFullGuidedLibraryView();
+    const bool storageReleased =
+        resourceBroker.ownerOf(Resource::Storage) ==
+            leshy1::kernel::runtime::kNoOwner &&
+        resourceBroker.ownerOf(Resource::RadioSpi) ==
+            leshy1::kernel::runtime::kNoOwner;
+    fullGuidedArtifactState.cleanupComplete =
+        productBootRecovery.cleanupComplete && storageReleased &&
+        libraryController.view() == LibraryView::SessionList &&
+        fullGuidedArtifactState.blockedWriteAttempts == 0;
+    const bool passed = success && fullGuidedRfState.cleanupComplete &&
+        fullGuidedArtifactState.cleanupComplete;
+    fullGuidedArtifactState.step = passed
+        ? FullGuidedArtifactStep::Complete : FullGuidedArtifactStep::Failed;
+    const std::uint64_t finishedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    selfTestController.completeActiveChecks(snapshotSelfTestFacts(), finishedUs);
+    lastRuntimeEvent = passed ? "self_test_active_artifact_complete"
+                              : "self_test_active_checks_failed";
+    renderInteractiveScreen(true);
+}
+
+void startFullGuidedArtifactChecks() {
+    fullGuidedArtifactState = {};
+    fullGuidedArtifactState.cleanupComplete = false;
+    fullGuidedArtifactState.generationBefore =
+        productBootRecovery.catalog.generation;
+    fullGuidedArtifactState.observationsBefore =
+        productBootRecovery.catalog.observations;
+    std::snprintf(fullGuidedArtifactState.expectedFingerprint,
+                  sizeof(fullGuidedArtifactState.expectedFingerprint), "%s",
+                  productBootRecovery.expectedFingerprint);
+    if (!productBootRecovery.enrolled ||
+        !exactCidFingerprint(fullGuidedArtifactState.expectedFingerprint)) {
+        fullGuidedArtifactState.recoveryComplete = true;
+        finishFullGuidedActiveChecks(false);
+        return;
+    }
+    fullGuidedArtifactState.step = FullGuidedArtifactStep::Recover;
+    fullGuidedArtifactStartAfterUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) + 500000ULL;
+    lastRuntimeEvent = "self_test_active_storage_recover";
+    renderInteractiveScreen(true);
+}
+
 void finishFullGuidedRfChecks(bool success) {
     const bool nrfCleanup = boardNrf24Spectrum.end();
     const bool ccCleanup = boardCc1101Spectrum.end();
@@ -5626,12 +5786,11 @@ void finishFullGuidedRfChecks(bool success) {
         fullGuidedRfState.resourceReleased;
     fullGuidedRfState.step = success && fullGuidedRfState.cleanupComplete
         ? FullGuidedRfStep::Complete : FullGuidedRfStep::Failed;
-    const std::uint64_t finishedUs =
-        static_cast<std::uint64_t>(esp_timer_get_time());
-    selfTestController.completeActiveChecks(snapshotSelfTestFacts(), finishedUs);
-    lastRuntimeEvent = success && fullGuidedRfState.cleanupComplete
-        ? "self_test_active_rf_complete" : "self_test_active_rf_failed";
-    renderInteractiveScreen(true);
+    if (!success || !fullGuidedRfState.cleanupComplete) {
+        finishFullGuidedActiveChecks(false);
+        return;
+    }
+    startFullGuidedArtifactChecks();
 }
 
 void startFullGuidedRfChecks() {
@@ -5670,14 +5829,181 @@ void cancelFullGuidedRfChecks() {
     fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup &&
         fullGuidedRfState.resourceReleased;
     fullGuidedRfState.step = FullGuidedRfStep::Cancelled;
+    restoreFullGuidedLibraryView();
+    fullGuidedArtifactState.step = FullGuidedArtifactStep::Cancelled;
+    fullGuidedArtifactState.cleanupComplete =
+        productBootRecovery.cleanupComplete &&
+        resourceBroker.ownerOf(Resource::Storage) ==
+            leshy1::kernel::runtime::kNoOwner &&
+        fullGuidedRfState.resourceReleased &&
+        libraryController.view() == LibraryView::SessionList;
     fullGuidedRfStartAfterUs = 0;
-    lastRuntimeEvent = fullGuidedRfState.cleanupComplete
-        ? "self_test_active_rf_cancelled"
-        : "self_test_active_rf_cancel_failed";
+    fullGuidedArtifactStartAfterUs = 0;
+    lastRuntimeEvent = fullGuidedRfState.cleanupComplete &&
+                               fullGuidedArtifactState.cleanupComplete
+        ? "self_test_active_cancelled"
+        : "self_test_active_cancel_failed";
+}
+
+void serviceFullGuidedArtifactChecks() {
+    if (fullGuidedRfState.step != FullGuidedRfStep::Complete) return;
+    if (fullGuidedArtifactState.step == FullGuidedArtifactStep::Recover) {
+        const std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs < fullGuidedArtifactStartAfterUs) return;
+        fullGuidedArtifactStartAfterUs = 0;
+        char expectedFingerprint[33] = {};
+        std::snprintf(expectedFingerprint, sizeof(expectedFingerprint), "%s",
+                      fullGuidedArtifactState.expectedFingerprint);
+        recoverProductCatalogForFingerprint(expectedFingerprint, true);
+        fullGuidedArtifactState.recoveryComplete = true;
+        fullGuidedArtifactState.generationAfter =
+            productBootRecovery.catalog.generation;
+        fullGuidedArtifactState.observationsAfter =
+            productBootRecovery.catalog.observations;
+        fullGuidedArtifactState.blockedWriteAttempts =
+            productBootRecovery.blockedWriteAttempts;
+        fullGuidedArtifactState.recoveryPassed =
+            std::strcmp(productBootRecovery.status, "admitted") == 0 &&
+            productBootRecovery.catalogAdmitted &&
+            productBootRecovery.readOnlyGuaranteed &&
+            productBootRecovery.cleanupComplete &&
+            productBootRecovery.ownedAfter == 0 &&
+            productBootRecovery.blockedWriteAttempts == 0 &&
+            fullGuidedArtifactState.generationAfter ==
+                fullGuidedArtifactState.generationBefore &&
+            fullGuidedArtifactState.observationsAfter ==
+                fullGuidedArtifactState.observationsBefore;
+        if (!fullGuidedArtifactState.recoveryPassed) {
+            finishFullGuidedActiveChecks(false);
+            return;
+        }
+        const LibraryEntry* entry = libraryController.selected();
+        if (entry == nullptr || entry->session == nullptr ||
+            !entry->persistent ||
+            entry->generation != fullGuidedArtifactState.generationAfter ||
+            !libraryController.openSelected() ||
+            !libraryController.requestExport()) {
+            fullGuidedArtifactState.libraryComplete = true;
+            finishFullGuidedActiveChecks(false);
+            return;
+        }
+        fullGuidedArtifactState.step = FullGuidedArtifactStep::LibraryJson;
+        lastRuntimeEvent = "self_test_active_library_json";
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (fullGuidedArtifactState.step == FullGuidedArtifactStep::LibraryJson) {
+        const auto json = libraryController.formatSelectedJsonExport(
+            diagnosticJson, sizeof(diagnosticJson));
+        const bool jsonValid = json.valid() && json.bytes != 0 &&
+            std::strstr(diagnosticJson, "\"status\":\"valid\"") != nullptr;
+        fullGuidedArtifactState.jsonBytes = json.bytes;
+        const auto metadata = libraryController.formatSelectedCaptureMetadata(
+            diagnosticJson, sizeof(diagnosticJson));
+        const bool metadataValid = metadata.valid() && metadata.bytes != 0 &&
+            std::strstr(diagnosticJson, "\"immutable\":true") != nullptr;
+        fullGuidedArtifactState.metadataBytes = metadata.bytes;
+        if (!jsonValid || !metadataValid) {
+            fullGuidedArtifactState.libraryComplete = true;
+            finishFullGuidedActiveChecks(false);
+            return;
+        }
+        fullGuidedArtifactState.step = FullGuidedArtifactStep::LibraryCsv;
+        lastRuntimeEvent = "self_test_active_library_csv";
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (fullGuidedArtifactState.step == FullGuidedArtifactStep::LibraryCsv) {
+        char row[256] = {};
+        if (fullGuidedArtifactState.csvBytes == 0) {
+            const auto header = libraryController.formatSelectedCsvHeader(
+                row, sizeof(row));
+            if (!header.valid() || header.bytes == 0) {
+                fullGuidedArtifactState.libraryComplete = true;
+                finishFullGuidedActiveChecks(false);
+                return;
+            }
+            fullGuidedArtifactState.csvBytes = header.bytes;
+        }
+        const LibraryEntry* entry = libraryController.selected();
+        if (entry == nullptr || entry->session == nullptr) {
+            fullGuidedArtifactState.libraryComplete = true;
+            finishFullGuidedActiveChecks(false);
+            return;
+        }
+        if (fullGuidedArtifactState.csvIndex < entry->session->size()) {
+            const auto record = libraryController.formatSelectedCsvRow(
+                fullGuidedArtifactState.csvIndex, row, sizeof(row));
+            if (!record.valid() || record.bytes == 0) {
+                fullGuidedArtifactState.libraryComplete = true;
+                finishFullGuidedActiveChecks(false);
+                return;
+            }
+            fullGuidedArtifactState.csvBytes += record.bytes;
+            ++fullGuidedArtifactState.csvRecords;
+            ++fullGuidedArtifactState.csvIndex;
+            return;
+        }
+        fullGuidedArtifactState.libraryComplete = true;
+        fullGuidedArtifactState.libraryPassed =
+            fullGuidedArtifactState.csvRecords == entry->session->size();
+        if (!fullGuidedArtifactState.libraryPassed) {
+            finishFullGuidedActiveChecks(false);
+            return;
+        }
+        fullGuidedArtifactState.step = FullGuidedArtifactStep::CapturePcap;
+        lastRuntimeEvent = "self_test_active_capture_pcap";
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (fullGuidedArtifactState.step == FullGuidedArtifactStep::CapturePcap) {
+        fullGuidedArtifactState.captureComplete = true;
+        const LibraryEntry* entry = libraryController.selected();
+        if (entry == nullptr || entry->session == nullptr) {
+            finishFullGuidedActiveChecks(false);
+            return;
+        }
+        const auto& capture = entry->session->captureMetadata();
+        fullGuidedArtifactState.captureApplicable =
+            capture.present && capture.framePayloadCaptured;
+        if (!fullGuidedArtifactState.captureApplicable) {
+            finishFullGuidedActiveChecks(true);
+            return;
+        }
+        leshy1::storage::PersistedWifiFrameCaptureView persisted;
+        const auto opened = leshy1::storage::openPersistedWifiFrameCapture(
+            *entry->session, sessionStoreWorkspace.segment.data(),
+            sessionStoreWorkspace.segmentSize, &persisted);
+        const auto& source = static_cast<
+            const leshy1::domain::captures::WifiFrameSource&>(persisted);
+        const std::size_t expectedBytes = opened ==
+                leshy1::storage::SessionCodecStatus::Valid
+            ? leshy1::apps::capture::radiotapPcapSize(source) : 0;
+        FullGuidedPcapSink sink;
+        const PcapExportResult pcap = opened ==
+                leshy1::storage::SessionCodecStatus::Valid
+            ? leshy1::apps::capture::writeRadiotapPcap(
+                  source, writeFullGuidedPcapBytes, &sink)
+            : PcapExportResult{};
+        fullGuidedArtifactState.pcapBytes = sink.bytes;
+        fullGuidedArtifactState.pcapFrames = pcap.framesWritten;
+        fullGuidedArtifactState.pcapFnv1a = sink.fnv1a;
+        fullGuidedArtifactState.capturePassed = pcap.valid &&
+            persisted.frameCount() != 0 &&
+            pcap.framesWritten == persisted.frameCount() &&
+            pcap.framesWritten == capture.framePayloadRecords &&
+            pcap.bytesWritten == expectedBytes && sink.bytes == expectedBytes;
+        finishFullGuidedActiveChecks(fullGuidedArtifactState.capturePassed);
+    }
 }
 
 void serviceFullGuidedRfChecks() {
     if (selfTestController.view() != SelfTestView::ActiveChecks) return;
+    if (fullGuidedRfState.step == FullGuidedRfStep::Complete) {
+        serviceFullGuidedArtifactChecks();
+        return;
+    }
     if (fullGuidedRfState.step == FullGuidedRfStep::Idle) {
         const std::uint64_t nowUs =
             static_cast<std::uint64_t>(esp_timer_get_time());
@@ -5939,7 +6265,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"self_test_not_applicable\":%u,"
                       "\"self_test_read_only\":%s,"
                       "\"self_test_active_step\":\"%s\","
-                      "\"self_test_active_cc_bins\":%u}",
+                      "\"self_test_active_cc_bins\":%u,"
+                      "\"self_test_artifact_step\":\"%s\","
+                      "\"self_test_artifact_recovery_complete\":%s,"
+                      "\"self_test_artifact_library_complete\":%s,"
+                      "\"self_test_artifact_capture_complete\":%s,"
+                      "\"self_test_artifact_pcap_frames\":%u}",
                       lastRuntimeEvent, appRuntime.activeApp(),
                       static_cast<unsigned long>(appRuntime.activeResources()),
                       surveyWorkflow.simulated() ? "true" : "false",
@@ -6146,7 +6477,17 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(selfTestReport.notApplicable),
                       selfTestReport.readOnly ? "true" : "false",
                       fullGuidedRfStepName(fullGuidedRfState.step),
-                      static_cast<unsigned>(fullGuidedRfState.cc1101Bins));
+                      static_cast<unsigned>(fullGuidedRfState.cc1101Bins),
+                      fullGuidedArtifactStepName(
+                          fullGuidedArtifactState.step),
+                      fullGuidedArtifactState.recoveryComplete
+                          ? "true" : "false",
+                      fullGuidedArtifactState.libraryComplete
+                          ? "true" : "false",
+                      fullGuidedArtifactState.captureComplete
+                          ? "true" : "false",
+                      static_cast<unsigned>(
+                          fullGuidedArtifactState.pcapFrames));
     }
     reply.println(line);
 }
@@ -6692,6 +7033,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             if (changed &&
                 selfTestController.view() == SelfTestView::ActiveChecks) {
                 fullGuidedRfState = {};
+                fullGuidedArtifactState = {};
                 fullGuidedNrf24Report = {};
                 fullGuidedCc1101Report = {};
                 fullGuidedRfStartAfterUs = startedUs + 500000ULL;
@@ -10501,7 +10843,14 @@ void emitSelfTestReport(Stream& reply) {
         "\"nrf24_spectrum_exercise_complete\":%s,"
         "\"nrf24_spectrum_exercise_passed\":%s,"
         "\"cc1101_spectrum_exercise_complete\":%s,"
-        "\"cc1101_spectrum_exercise_passed\":%s},"
+        "\"cc1101_spectrum_exercise_passed\":%s,"
+        "\"persistent_recovery_audit_complete\":%s,"
+        "\"persistent_recovery_audit_passed\":%s,"
+        "\"library_export_audit_complete\":%s,"
+        "\"library_export_audit_passed\":%s,"
+        "\"capture_pcap_audit_complete\":%s,"
+        "\"capture_pcap_audit_applicable\":%s,"
+        "\"capture_pcap_audit_passed\":%s},"
         "\"checks\":[",
         static_cast<unsigned>(SelfTestReport::kSchemaVersion),
         static_cast<unsigned>(SelfTestReport::kPlanVersion), LESHY1_VERSION,
@@ -10545,7 +10894,14 @@ void emitSelfTestReport(Stream& reply) {
         report.facts.nrf24SpectrumExerciseComplete ? "true" : "false",
         report.facts.nrf24SpectrumExercisePassed ? "true" : "false",
         report.facts.cc1101SpectrumExerciseComplete ? "true" : "false",
-        report.facts.cc1101SpectrumExercisePassed ? "true" : "false");
+        report.facts.cc1101SpectrumExercisePassed ? "true" : "false",
+        report.facts.persistentRecoveryAuditComplete ? "true" : "false",
+        report.facts.persistentRecoveryAuditPassed ? "true" : "false",
+        report.facts.libraryExportAuditComplete ? "true" : "false",
+        report.facts.libraryExportAuditPassed ? "true" : "false",
+        report.facts.capturePcapAuditComplete ? "true" : "false",
+        report.facts.capturePcapAuditApplicable ? "true" : "false",
+        report.facts.capturePcapAuditPassed ? "true" : "false");
     if (prefix < 0 || static_cast<std::size_t>(prefix) >= sizeof(line)) {
         reply.println("{\"schema\":\"leshy.self_test.report.v1\","
                       "\"kind\":\"error\",\"reason\":\"format_failed\"}");
@@ -10641,6 +10997,61 @@ void emitFullGuidedRfReport(Stream& reply) {
         static_cast<unsigned long>(fullGuidedCc1101Report.paTableWrites),
         static_cast<unsigned long>(fullGuidedCc1101Report.fifoWrites),
         static_cast<unsigned long>(fullGuidedCc1101Report.rejectedStrobes),
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
+void emitFullGuidedArtifactReport(Stream& reply) {
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.self_test.active_artifact.v1\","
+        "\"kind\":\"report\",\"plan_version\":%u,\"step\":\"%s\","
+        "\"read_only\":true,\"expected_cid\":\"%s\","
+        "\"recovery\":{\"complete\":%s,\"passed\":%s,"
+        "\"status\":\"%s\",\"generation_before\":%lu,"
+        "\"generation_after\":%lu,\"observations_before\":%u,"
+        "\"observations_after\":%u,\"mounted_read_only\":%s,"
+        "\"cleanup_complete\":%s},"
+        "\"library\":{\"complete\":%s,\"passed\":%s,"
+        "\"json_bytes\":%u,\"metadata_bytes\":%u,"
+        "\"csv_records\":%u,\"csv_bytes\":%u},"
+        "\"capture\":{\"complete\":%s,\"applicable\":%s,"
+        "\"passed\":%s,\"pcap_frames\":%u,\"pcap_bytes\":%u,"
+        "\"pcap_fnv1a\":%lu},"
+        "\"side_effects\":{\"radio_tx_commands\":0,"
+        "\"storage_write_commands\":0,\"blocked_write_attempts\":%lu},"
+        "\"cleanup_complete\":%s,\"current_owner\":\"%s\","
+        "\"current_lease_mask\":%lu}",
+        static_cast<unsigned>(SelfTestReport::kPlanVersion),
+        fullGuidedArtifactStepName(fullGuidedArtifactState.step),
+        fullGuidedArtifactState.expectedFingerprint,
+        fullGuidedArtifactState.recoveryComplete ? "true" : "false",
+        fullGuidedArtifactState.recoveryPassed ? "true" : "false",
+        productBootRecovery.status,
+        static_cast<unsigned long>(
+            fullGuidedArtifactState.generationBefore),
+        static_cast<unsigned long>(fullGuidedArtifactState.generationAfter),
+        static_cast<unsigned>(fullGuidedArtifactState.observationsBefore),
+        static_cast<unsigned>(fullGuidedArtifactState.observationsAfter),
+        productBootRecovery.readOnlyGuaranteed ? "true" : "false",
+        productBootRecovery.cleanupComplete ? "true" : "false",
+        fullGuidedArtifactState.libraryComplete ? "true" : "false",
+        fullGuidedArtifactState.libraryPassed ? "true" : "false",
+        static_cast<unsigned>(fullGuidedArtifactState.jsonBytes),
+        static_cast<unsigned>(fullGuidedArtifactState.metadataBytes),
+        static_cast<unsigned>(fullGuidedArtifactState.csvRecords),
+        static_cast<unsigned>(fullGuidedArtifactState.csvBytes),
+        fullGuidedArtifactState.captureComplete ? "true" : "false",
+        fullGuidedArtifactState.captureApplicable ? "true" : "false",
+        fullGuidedArtifactState.capturePassed ? "true" : "false",
+        static_cast<unsigned>(fullGuidedArtifactState.pcapFrames),
+        static_cast<unsigned>(fullGuidedArtifactState.pcapBytes),
+        static_cast<unsigned long>(fullGuidedArtifactState.pcapFnv1a),
+        static_cast<unsigned long>(
+            fullGuidedArtifactState.blockedWriteAttempts),
+        fullGuidedArtifactState.cleanupComplete ? "true" : "false",
         appRuntime.activeApp(),
         static_cast<unsigned long>(appRuntime.activeResources()));
     reply.println(line);
@@ -10864,6 +11275,8 @@ void handleCommand(Stream& reply, const char* command) {
         emitSelfTestReport(reply);
     } else if (std::strcmp(command, "self-test.active-rf") == 0) {
         emitFullGuidedRfReport(reply);
+    } else if (std::strcmp(command, "self-test.active-artifact") == 0) {
+        emitFullGuidedArtifactReport(reply);
     } else if (std::strncmp(command, "ui.language ", 12) == 0) {
         UiLanguage requested = UiLanguage::English;
         if (!leshy1::ui::uiLanguageFromName(command + 12, &requested)) {
@@ -11331,6 +11744,7 @@ void setup() {
               "\"capture.state\",\"capture.export.pcap\","
               "\"input.state\","
               "\"self-test.report\",\"self-test.active-rf\","
+              "\"self-test.active-artifact\","
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
               "\"storage.discovery\",\"storage.mount.policy\","
               "\"storage.product.boot-recovery\","
