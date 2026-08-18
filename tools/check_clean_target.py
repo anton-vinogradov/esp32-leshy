@@ -27,6 +27,9 @@ def main() -> int:
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
     passive_wifi_capture_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveCapture.cpp"
     passive_ble_adapter = TARGET / "src" / "platform" / "arduino" / "BoardBlePassiveScanner.cpp"
+    shield_receiver_adapter = (
+        TARGET / "src" / "platform" / "arduino" / "BoardShieldReceiverProbe.cpp"
+    )
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
@@ -61,6 +64,7 @@ def main() -> int:
             physical_sd_filesystem,
             passive_wifi_adapter,
             passive_wifi_capture_adapter,
+            shield_receiver_adapter,
             safe_outputs_adapter,
         )
     )
@@ -77,8 +81,8 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.80.0-self-test-coverage\\"' not in config:
-        errors.append("clean target does not identify the 0.80 Self-Test coverage slice")
+    if 'LESHY1_VERSION=\\"0.81.0-shield-receiver-probe\\"' not in config:
+        errors.append("clean target does not identify the 0.81 shield receiver slice")
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
     for value in forbidden_config:
@@ -113,6 +117,31 @@ def main() -> int:
         ):
             if re.search(pattern, safe_outputs):
                 errors.append(f"board safe-output adapter can activate buzzer: {pattern}")
+
+    if not shield_receiver_adapter.is_file():
+        errors.append("guarded shield receiver adapter is missing")
+    else:
+        shield_probe = shield_receiver_adapter.read_text(encoding="utf-8")
+        for marker in (
+            "kNrfReadRegister = 0x00",
+            "kCcReadPartNumber = 0xF0",
+            "kCcReadVersion = 0xF1",
+            "kProbeSpiHz = 1000000",
+            "pinMode(BoardProfile::kNrfCsPins[2], INPUT)",
+            "digitalWrite(pin, LOW)",
+            "gpio21Safe()",
+            "finalizeShieldReceiverProbe(report_)",
+        ):
+            if marker not in shield_probe:
+                errors.append(f"shield receiver adapter is missing invariant: {marker}")
+        for pattern in (
+            r"digitalWrite\s*\(\s*BoardProfile::kNrfCePins[^,]*,\s*HIGH\s*\)",
+            r"digitalWrite\s*\(\s*BoardProfile::kNrfCsPins\[2\]",
+            r"\b0x20\b", r"\b0x31\b", r"\b0x34\b", r"\b0x35\b",
+            r"\b0x36\b", r"\b0x3B\b",
+        ):
+            if re.search(pattern, shield_probe):
+                errors.append(f"shield receiver adapter contains TX/select path: {pattern}")
 
     entry = arduino_entry.read_text(encoding="utf-8")
     buzzer_boot = "BoardSafeOutputs::establishBootInvariant();"

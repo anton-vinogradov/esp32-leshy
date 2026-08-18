@@ -55,6 +55,9 @@ struct SelfTestFacts final {
     bool gpsDeclared = false;
     bool pn532Declared = false;
     bool irDeclared = false;
+    bool shieldReceiversApplicable = false;
+    bool shieldReceiverProbeComplete = false;
+    bool shieldReceiverProbePassed = false;
 };
 
 struct SelfTestCheckResult final {
@@ -64,7 +67,7 @@ struct SelfTestCheckResult final {
 
 struct SelfTestReport final {
     static constexpr std::uint16_t kSchemaVersion = 1;
-    static constexpr std::uint16_t kPlanVersion = 3;
+    static constexpr std::uint16_t kPlanVersion = 4;
     static constexpr std::size_t kCapacity = 20;
 
     SelfTestMode mode = SelfTestMode::Quick;

@@ -37,6 +37,11 @@ struct BoardProfile final {
     static constexpr int kCc1101CsPin = 5;
     static constexpr std::uint32_t kSdIdentificationSpiHz = 100000;
 
+    // The measured board-01 assembly carries the stock RF shield, while external
+    // GPS/PN532 modules are excluded. Receiver identity is still probed only from
+    // explicit Full/Guided Self-Test, never automatically during boot.
+    static constexpr bool kRfShieldDeclared = true;
+
     // HW-U05/U09: external assemblies and IR are never autodetected.
     static constexpr bool kGpsDeclared = false;
     static constexpr bool kPn532Declared = false;

@@ -36,6 +36,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/domain/apps/AppCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/hardware/HardwareInventory.cpp" \
     "$repo_dir/firmware/leshy1/src/drivers/ble/BlePassiveContract.cpp" \
+    "$repo_dir/firmware/leshy1/src/drivers/radio/ShieldReceiverIdentity.cpp" \
     "$repo_dir/firmware/leshy1/src/drivers/wifi/WifiPassiveContract.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/AppRuntime.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/ResourceBroker.cpp" \

@@ -20,6 +20,7 @@
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
 #include "drivers/ble/BlePassiveContract.h"
+#include "drivers/radio/ShieldReceiverIdentity.h"
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
@@ -60,6 +61,7 @@ using namespace leshy1::domain::apps;
 using namespace leshy1::domain::hardware;
 using namespace leshy1::domain::observations;
 using namespace leshy1::drivers::wifi;
+using namespace leshy1::drivers::radio;
 using namespace leshy1::kernel::runtime;
 using namespace leshy1::services::diagnostics;
 using namespace leshy1::services::survey;
@@ -201,6 +203,9 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     healthy.enrolledStorageReady = true;
     healthy.persistentLibraryReady = true;
     healthy.persistentWifiCaptureReady = true;
+    healthy.shieldReceiversApplicable = true;
+    healthy.shieldReceiverProbeComplete = true;
+    healthy.shieldReceiverProbePassed = true;
 
     SelfTestController controller;
     CHECK(controller.view() == SelfTestView::ModeMenu);
@@ -256,9 +261,9 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(full.status == SelfTestResultStatus::Blocked);
     CHECK(full.sequence == 2);
     CHECK(full.checkCount == 20);
-    CHECK(full.passed == 15);
+    CHECK(full.passed == 16);
     CHECK(full.failed == 0);
-    CHECK(full.blocked == 2);
+    CHECK(full.blocked == 1);
     CHECK(full.notApplicable == 3);
     CHECK(std::strcmp(full.checks[8].id, "full.ui.common_states") == 0);
     CHECK(std::strcmp(full.checks[9].id,
@@ -269,13 +274,13 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(full.checks[15].status == SelfTestResultStatus::NotApplicable);
     CHECK(std::strcmp(full.checks[18].id,
                       "full.s4.shield.receivers") == 0);
-    CHECK(full.checks[18].status == SelfTestResultStatus::Blocked);
+    CHECK(full.checks[18].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[19].id,
                       "full.capability.coverage") == 0);
     CHECK(std::strcmp(selfTestResultStatusName(
                           SelfTestResultStatus::NotApplicable),
                       "not_applicable") == 0);
-    CHECK(SelfTestReport::kPlanVersion == 3);
+    CHECK(SelfTestReport::kPlanVersion == 4);
 
     CHECK(controller.back());
     CHECK(controller.previousMode());
@@ -303,10 +308,89 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(coverageFailure.activate(incomplete, 520));
     const SelfTestReport& incompleteReport = coverageFailure.report();
     CHECK(incompleteReport.status == SelfTestResultStatus::Fail);
-    CHECK(incompleteReport.passed == 14);
+    CHECK(incompleteReport.passed == 15);
     CHECK(incompleteReport.failed == 1);
-    CHECK(incompleteReport.blocked == 3);
+    CHECK(incompleteReport.blocked == 2);
     CHECK(incompleteReport.notApplicable == 2);
+
+    SelfTestFacts unprobed = healthy;
+    unprobed.shieldReceiverProbeComplete = false;
+    unprobed.shieldReceiverProbePassed = false;
+    SelfTestController blockedProbe;
+    CHECK(blockedProbe.nextMode());
+    CHECK(blockedProbe.activate(unprobed, 600));
+    CHECK(blockedProbe.activate(unprobed, 610));
+    for (std::uint8_t state = 1;
+         state < SelfTestController::kVisualStateCount; ++state) {
+        CHECK(blockedProbe.activate(unprobed, 610 + state));
+    }
+    CHECK(blockedProbe.activate(unprobed, 620));
+    CHECK(blockedProbe.report().passed == 15);
+    CHECK(blockedProbe.report().failed == 0);
+    CHECK(blockedProbe.report().blocked == 2);
+    CHECK(blockedProbe.report().notApplicable == 3);
+}
+
+void testShieldReceiverIdentityContractFailsClosed() {
+    ShieldReceiverProbeReport passing;
+    passing.profileDeclared = true;
+    passing.gpsExcludedByProfile = true;
+    passing.pn532ExcludedByProfile = true;
+    passing.resourceAcquired = true;
+    passing.gpio21StableHigh = true;
+    passing.cleanupComplete = true;
+    passing.nrfRegisterReads = 8;
+    passing.ccStatusReads = 2;
+    passing.spiBytesClocked = 20;
+    passing.nrf[0] = {0x0E, 0x08, 2, 0x0E, 0, false};
+    passing.nrf[1] = {0x0E, 0x08, 40, 0x0E, 0, false};
+    passing.cc1101 = {0x0F, 0x00, 0x14, true, false};
+    finalizeShieldReceiverProbe(&passing);
+    CHECK(passing.status == ShieldReceiverProbeStatus::Pass);
+    CHECK(passing.detectedReceivers == 3);
+    CHECK(passing.nrf[0].detected && passing.nrf[1].detected);
+    CHECK(passing.cc1101.detected);
+    CHECK(std::strcmp(shieldReceiverProbeStatusName(passing.status), "pass") == 0);
+
+    ShieldReceiverProbeReport floating = passing;
+    floating.nrf[0] = {};
+    floating.nrf[1] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, false};
+    floating.cc1101 = {0xFF, 0xFF, 0xFF, false, false};
+    finalizeShieldReceiverProbe(&floating);
+    CHECK(floating.status == ShieldReceiverProbeStatus::Failed);
+    CHECK(floating.detectedReceivers == 0);
+
+    ShieldReceiverProbeReport partial = passing;
+    partial.nrf[1] = {};
+    finalizeShieldReceiverProbe(&partial);
+    CHECK(partial.status == ShieldReceiverProbeStatus::Partial);
+    CHECK(partial.detectedReceivers == 2);
+
+    ShieldReceiverProbeReport unsafe = passing;
+    unsafe.nrfCeHighEvents = 1;
+    finalizeShieldReceiverProbe(&unsafe);
+    CHECK(unsafe.status == ShieldReceiverProbeStatus::Failed);
+    unsafe = passing;
+    unsafe.ccCommandStrobes = 1;
+    finalizeShieldReceiverProbe(&unsafe);
+    CHECK(unsafe.status == ShieldReceiverProbeStatus::Failed);
+    unsafe = passing;
+    unsafe.radioTxCommands = 1;
+    finalizeShieldReceiverProbe(&unsafe);
+    CHECK(unsafe.status == ShieldReceiverProbeStatus::Failed);
+    unsafe = passing;
+    unsafe.gpio21StableHigh = false;
+    finalizeShieldReceiverProbe(&unsafe);
+    CHECK(unsafe.status == ShieldReceiverProbeStatus::Failed);
+
+    ShieldReceiverProbeReport refused = passing;
+    refused.gpsExcludedByProfile = false;
+    finalizeShieldReceiverProbe(&refused);
+    CHECK(refused.status == ShieldReceiverProbeStatus::RefusedProfile);
+    ShieldReceiverProbeReport busy = passing;
+    busy.resourceAcquired = false;
+    finalizeShieldReceiverProbe(&busy);
+    CHECK(busy.status == ShieldReceiverProbeStatus::Busy);
 }
 
 void testProductBootRetryIsNarrowAndBounded() {
@@ -3910,6 +3994,7 @@ int main() {
     testUiComponentGeometryContract();
     testLanguageCatalogAndControllerAreBounded();
     testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
+    testShieldReceiverIdentityContractFailsClosed();
     testProductBootRetryIsNarrowAndBounded();
     testProductStartIdentityRetryStopsBeforeFilesystem();
     testStorageTimingSummaryUsesNearestRank();

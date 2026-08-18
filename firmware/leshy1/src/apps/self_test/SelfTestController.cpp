@@ -116,7 +116,14 @@ void SelfTestController::evaluateCapabilityCoverage(
     append("full.shield.ir",
            facts.irDeclared ? SelfTestResultStatus::Blocked
                             : SelfTestResultStatus::NotApplicable);
-    append("full.s4.shield.receivers", SelfTestResultStatus::Blocked);
+    append("full.s4.shield.receivers",
+           !facts.shieldReceiversApplicable
+               ? SelfTestResultStatus::NotApplicable
+               : (!facts.shieldReceiverProbeComplete
+                      ? SelfTestResultStatus::Blocked
+                      : (facts.shieldReceiverProbePassed
+                             ? SelfTestResultStatus::Pass
+                             : SelfTestResultStatus::Fail)));
 }
 
 void SelfTestController::evaluateQuick(const SelfTestFacts& facts) {
@@ -172,6 +179,7 @@ bool SelfTestController::activate(const SelfTestFacts& facts,
             ++visualState_;
             return true;
         }
+        report_.facts = facts;
         append("full.ui.common_states", SelfTestResultStatus::Pass);
         evaluateCapabilityCoverage(report_.facts);
         append("full.capability.coverage", SelfTestResultStatus::Blocked);

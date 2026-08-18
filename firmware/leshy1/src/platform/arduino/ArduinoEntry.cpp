@@ -36,10 +36,12 @@
 #include "domain/hardware/HardwareInventory.h"
 #include "domain/observations/Observation.h"
 #include "drivers/ble/BlePassiveContract.h"
+#include "drivers/radio/ShieldReceiverIdentity.h"
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
 #include "platform/arduino/BoardSafeOutputs.h"
+#include "platform/arduino/BoardShieldReceiverProbe.h"
 #include "platform/arduino/ArduinoFsSessionStoreIo.h"
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
 #include "platform/arduino/BoardSdFilesystem.h"
@@ -124,12 +126,15 @@ using leshy1::domain::hardware::HardwareInventory;
 using leshy1::domain::observations::Observation;
 using leshy1::domain::observations::RadioKind;
 using leshy1::drivers::ble::BleAdvertisementRecord;
+using leshy1::drivers::radio::ShieldReceiverProbeReport;
+using leshy1::drivers::radio::ShieldReceiverProbeStatus;
 using leshy1::drivers::wifi::WifiScanRecord;
 using leshy1::kernel::runtime::AppRuntime;
 using leshy1::kernel::runtime::LaunchStatus;
 using leshy1::kernel::runtime::Resource;
 using leshy1::kernel::runtime::ResourceBroker;
 using leshy1::platform::arduino::BoardSafeOutputs;
+using leshy1::platform::arduino::BoardShieldReceiverProbe;
 using leshy1::platform::arduino::ArduinoFsSessionStoreIo;
 using leshy1::platform::arduino::ArduinoFsSessionStoreWorkspace;
 using leshy1::platform::arduino::ArduinoLittleFsSessionStoreIo;
@@ -258,6 +263,7 @@ TFT_eSPI display;
 UiController uiController;
 LanguageController languageController;
 SelfTestController selfTestController;
+ShieldReceiverProbeReport shieldReceiverProbeReport;
 BoardWifiPassiveCapture wifiFrameCapture;
 constexpr WifiFrameCapturePlan kProductWifiFrameCapturePlan{};
 std::uint64_t nextCaptureUiRefreshUs = 0;
@@ -3977,6 +3983,27 @@ void renderHome(bool clearContent) {
     }
 }
 
+void runShieldReceiverSelfTestProbe() {
+    shieldReceiverProbeReport = {};
+    shieldReceiverProbeReport.profileDeclared = BoardProfile::kRfShieldDeclared;
+    shieldReceiverProbeReport.gpsExcludedByProfile = !BoardProfile::kGpsDeclared;
+    shieldReceiverProbeReport.pn532ExcludedByProfile = !BoardProfile::kPn532Declared;
+    const auto radioSpi = leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    if (!resourceBroker.acquire(AppRuntime::kForegroundOwner, radioSpi)) {
+        leshy1::drivers::radio::finalizeShieldReceiverProbe(
+            &shieldReceiverProbeReport);
+        return;
+    }
+    BoardShieldReceiverProbe probe;
+    probe.run(resourceBroker.ownerOf(Resource::RadioSpi) ==
+                  AppRuntime::kForegroundOwner,
+              &shieldReceiverProbeReport);
+    resourceBroker.release(AppRuntime::kForegroundOwner, radioSpi);
+    shieldReceiverProbeReport.resourceReleased =
+        resourceBroker.ownerOf(Resource::RadioSpi) ==
+        leshy1::kernel::runtime::kNoOwner;
+}
+
 SelfTestFacts snapshotSelfTestFacts() {
     std::uint32_t inputQueueDrops = 0;
     portENTER_CRITICAL(&physicalInputMux);
@@ -4029,6 +4056,15 @@ SelfTestFacts snapshotSelfTestFacts() {
     facts.gpsDeclared = BoardProfile::kGpsDeclared;
     facts.pn532Declared = BoardProfile::kPn532Declared;
     facts.irDeclared = BoardProfile::kIrDeclared;
+    facts.shieldReceiversApplicable = BoardProfile::kRfShieldDeclared;
+    facts.shieldReceiverProbeComplete =
+        shieldReceiverProbeReport.status == ShieldReceiverProbeStatus::Pass ||
+        shieldReceiverProbeReport.status == ShieldReceiverProbeStatus::Partial ||
+        shieldReceiverProbeReport.status == ShieldReceiverProbeStatus::Failed;
+    facts.shieldReceiverProbePassed =
+        shieldReceiverProbeReport.status == ShieldReceiverProbeStatus::Pass &&
+        shieldReceiverProbeReport.resourceReleased &&
+        shieldReceiverProbeReport.cleanupComplete;
     return facts;
 }
 
@@ -5918,6 +5954,11 @@ bool applyUiAction(UiAction action, bool render = true) {
             handled = true;
             const std::uint64_t startedUs =
                 static_cast<std::uint64_t>(esp_timer_get_time());
+            const bool completesFullPlan =
+                selfTestController.view() == SelfTestView::VisualCheck &&
+                selfTestController.visualState() + 1U >=
+                    SelfTestController::kVisualStateCount;
+            if (completesFullPlan) runShieldReceiverSelfTestProbe();
             changed = selfTestController.activate(snapshotSelfTestFacts(),
                                                    startedUs);
             if (selfTestController.runAwaitingFinish() &&
@@ -9694,7 +9735,10 @@ void emitSelfTestReport(Stream& reply) {
         "\"persistent_library_ready\":%s,"
         "\"persistent_wifi_capture_ready\":%s,"
         "\"gps_declared\":%s,\"pn532_declared\":%s,"
-        "\"ir_declared\":%s},"
+        "\"ir_declared\":%s,"
+        "\"shield_receivers_applicable\":%s,"
+        "\"shield_receiver_probe_complete\":%s,"
+        "\"shield_receiver_probe_passed\":%s},"
         "\"checks\":[",
         static_cast<unsigned>(SelfTestReport::kSchemaVersion),
         static_cast<unsigned>(SelfTestReport::kPlanVersion), LESHY1_VERSION,
@@ -9730,7 +9774,10 @@ void emitSelfTestReport(Stream& reply) {
         report.facts.persistentWifiCaptureReady ? "true" : "false",
         report.facts.gpsDeclared ? "true" : "false",
         report.facts.pn532Declared ? "true" : "false",
-        report.facts.irDeclared ? "true" : "false");
+        report.facts.irDeclared ? "true" : "false",
+        report.facts.shieldReceiversApplicable ? "true" : "false",
+        report.facts.shieldReceiverProbeComplete ? "true" : "false",
+        report.facts.shieldReceiverProbePassed ? "true" : "false");
     if (prefix < 0 || static_cast<std::size_t>(prefix) >= sizeof(line)) {
         reply.println("{\"schema\":\"leshy.self_test.report.v1\","
                       "\"kind\":\"error\",\"reason\":\"format_failed\"}");
@@ -9764,6 +9811,70 @@ void emitSelfTestReport(Stream& reply) {
     reply.println(line);
 }
 
+void emitShieldReceiverProbeReport(Stream& reply) {
+    const auto& report = shieldReceiverProbeReport;
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.shield.receiver_probe.v1\",\"kind\":\"report\","
+        "\"schema_version\":%u,\"status\":\"%s\",\"read_only\":%s,"
+        "\"profile_declared\":%s,\"gps_excluded_by_profile\":%s,"
+        "\"pn532_excluded_by_profile\":%s,\"nrf_slot3_gated\":%s,"
+        "\"gpio21_stable_high\":%s,\"resource_acquired\":%s,"
+        "\"resource_released\":%s,\"cleanup_complete\":%s,"
+        "\"detected_receivers\":%u,"
+        "\"nrf\":["
+        "{\"slot\":1,\"detected\":%s,\"status\":%u,\"config\":%u,"
+        "\"channel\":%u,\"rf_setup\":%u,\"feature\":%u},"
+        "{\"slot\":2,\"detected\":%s,\"status\":%u,\"config\":%u,"
+        "\"channel\":%u,\"rf_setup\":%u,\"feature\":%u}],"
+        "\"cc1101\":{\"detected\":%s,\"ready\":%s,\"status\":%u,"
+        "\"partnum\":%u,\"version\":%u},"
+        "\"wire\":{\"nrf_register_reads\":%u,\"cc_status_reads\":%u,"
+        "\"spi_bytes_clocked\":%u},"
+        "\"side_effects\":{\"nrf_ce_high_events\":%u,"
+        "\"cc_command_strobes\":%u,\"radio_tx_commands\":%u},"
+        "\"current_owner\":\"%s\",\"current_lease_mask\":%lu}",
+        static_cast<unsigned>(ShieldReceiverProbeReport::kSchemaVersion),
+        leshy1::drivers::radio::shieldReceiverProbeStatusName(report.status),
+        report.readOnly ? "true" : "false",
+        report.profileDeclared ? "true" : "false",
+        report.gpsExcludedByProfile ? "true" : "false",
+        report.pn532ExcludedByProfile ? "true" : "false",
+        report.nrfSlot3Gated ? "true" : "false",
+        report.gpio21StableHigh ? "true" : "false",
+        report.resourceAcquired ? "true" : "false",
+        report.resourceReleased ? "true" : "false",
+        report.cleanupComplete ? "true" : "false",
+        static_cast<unsigned>(report.detectedReceivers),
+        report.nrf[0].detected ? "true" : "false",
+        static_cast<unsigned>(report.nrf[0].status),
+        static_cast<unsigned>(report.nrf[0].config),
+        static_cast<unsigned>(report.nrf[0].channel),
+        static_cast<unsigned>(report.nrf[0].rfSetup),
+        static_cast<unsigned>(report.nrf[0].feature),
+        report.nrf[1].detected ? "true" : "false",
+        static_cast<unsigned>(report.nrf[1].status),
+        static_cast<unsigned>(report.nrf[1].config),
+        static_cast<unsigned>(report.nrf[1].channel),
+        static_cast<unsigned>(report.nrf[1].rfSetup),
+        static_cast<unsigned>(report.nrf[1].feature),
+        report.cc1101.detected ? "true" : "false",
+        report.cc1101.ready ? "true" : "false",
+        static_cast<unsigned>(report.cc1101.status),
+        static_cast<unsigned>(report.cc1101.partNumber),
+        static_cast<unsigned>(report.cc1101.version),
+        static_cast<unsigned>(report.nrfRegisterReads),
+        static_cast<unsigned>(report.ccStatusReads),
+        static_cast<unsigned>(report.spiBytesClocked),
+        static_cast<unsigned>(report.nrfCeHighEvents),
+        static_cast<unsigned>(report.ccCommandStrobes),
+        static_cast<unsigned>(report.radioTxCommands),
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
 void handleCommand(Stream& reply, const char* command) {
     if (std::strncmp(command, "hil.begin ", 10) == 0) {
         emitHilSessionBegin(reply, command);
@@ -9775,6 +9886,8 @@ void handleCommand(Stream& reply, const char* command) {
         emitInventory();
     } else if (std::strcmp(command, "hardware.safe-outputs") == 0) {
         emitSafeOutputs(reply);
+    } else if (std::strcmp(command, "hardware.shield.receivers") == 0) {
+        emitShieldReceiverProbeReport(reply);
     } else if (std::strcmp(command, "ping") == 0) {
         broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"pong\"}");
     } else if (std::strcmp(command, "ui.state") == 0) {
@@ -10231,6 +10344,13 @@ void setup() {
                    "not_declared_no_autodetect"});
     inventory.add({"shield.ir", CapabilityState::Unknown, "HW-U09",
                    "explicit_profile_required"});
+    inventory.add({"shield.receivers",
+                   BoardProfile::kRfShieldDeclared ? CapabilityState::Declared
+                                                   : CapabilityState::Unknown,
+                   "board_profile_full_guided_identity_probe",
+                   BoardProfile::kRfShieldDeclared
+                       ? "nrf1_nrf2_cc1101_read_only_probe_available"
+                       : "rf_shield_not_declared"});
 
     appCatalog.rebuild(inventory);
     renderInteractiveScreen();
@@ -10242,6 +10362,7 @@ void setup() {
               "\"hil.begin <session-id> <app-elf-sha256>\","
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
+              "\"hardware.shield.receivers\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"capture.state\",\"capture.export.pcap\","
               "\"input.state\","
