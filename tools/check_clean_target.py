@@ -31,12 +31,16 @@ def main() -> int:
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
     survey_workflow_path = TARGET / "src" / "apps" / "survey" / "SurveyWorkflow.cpp"
     survey_pipeline_path = TARGET / "src" / "apps" / "survey" / "SurveyPipeline.cpp"
+    survey_session_path = TARGET / "src" / "services" / "survey" / "SurveySession.cpp"
+    session_codec_path = TARGET / "src" / "storage" / "SessionCodec.cpp"
+    library_controller_path = TARGET / "src" / "apps" / "library" / "LibraryController.cpp"
     product_survey_policy_path = TARGET / "src" / "apps" / "survey" / "ProductSurveyAdmission.cpp"
     product_store_policy_path = TARGET / "src" / "storage" / "ProductStorePolicy.cpp"
     product_start_retry_path = TARGET / "src" / "storage" / "ProductStartRetry.cpp"
     session_catalog_path = TARGET / "src" / "apps" / "library" / "SessionCatalog.cpp"
     sector_inspection = TARGET / "src" / "storage" / "SdSectorInspection.cpp"
     reset_runner_path = ROOT / "tools" / "run_1x_sd_reset_matrix.py"
+    capture_export_runner_path = ROOT / "tools" / "run_1x_capture_export_hil.py"
     littlefs_runner_path = ROOT / "tools" / "run_1x_littlefs_parity_hil.py"
     littlefs_reset_runner_path = (
         ROOT / "tools" / "run_1x_littlefs_reset_matrix_hil.py"
@@ -64,6 +68,9 @@ def main() -> int:
     for value in required:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
+
+    if 'LESHY1_VERSION=\\"0.77.0-capture-export\\"' not in config:
+        errors.append("clean target does not identify the 0.77 capture/export slice")
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
     for value in forbidden_config:
@@ -585,6 +592,55 @@ def main() -> int:
     ):
         if marker not in entry:
             errors.append(f"Survey observation browser UI/evidence is missing: {marker}")
+
+    if not capture_export_runner_path.is_file():
+        errors.append("exact capture/export HIL runner is missing")
+    else:
+        capture_export_runner = capture_export_runner_path.read_text(
+            encoding="utf-8"
+        )
+        for marker in (
+            "leshy.capture_export_hil.run.v1",
+            "capture_metadata_failures(",
+            "read_csv_export(",
+            "csv_export_failures(",
+            "unavailable_no_frame_payload",
+            "exact app ELF identity mismatch",
+            "canonical CRLF framing",
+        ):
+            if marker not in capture_export_runner:
+                errors.append(f"capture/export HIL runner is missing: {marker}")
+
+    capture_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (survey_session_path, session_codec_path, library_controller_path)
+    )
+    for marker in (
+        "configureCaptureMetadata",
+        "kSessionSchemaVersion = 3",
+        "kTimelineSessionSchemaVersion = 2",
+        "kCaptureMagic",
+        "kCaptureRecordBytes = 72",
+        '\\"leshy.capture.metadata.v1\\"',
+        '\\"unavailable_no_frame_payload\\"',
+        "formatSelectedCsvRow",
+    ):
+        if marker not in capture_sources and marker not in sources:
+            errors.append(f"immutable capture/export contract is missing: {marker}")
+    for marker in (
+        "productCaptureMetadata(",
+        "surveySession.configureCaptureMetadata(",
+        '"library.capture"',
+        '"library.export.csv"',
+        '"library.export.pcap"',
+        '\\"leshy.library.csv.v1\\"',
+        '\\"leshy.library.pcap.v1\\"',
+        "reply.print(row)",
+    ):
+        if marker not in entry:
+            errors.append(f"product capture/export integration is missing: {marker}")
+    if "framePayloadCaptured = true" in entry:
+        errors.append("product capture falsely claims retained raw frame payloads")
 
     if not product_start_retry_path.is_file():
         errors.append("Product Start identity retry policy is missing")

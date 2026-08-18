@@ -15,6 +15,16 @@ constexpr std::uint8_t kTimelineWireVersion = 1;
 constexpr std::size_t kTimelineHeaderBytes = 40;
 constexpr std::size_t kTimelineSummaryBytes = 60;
 constexpr std::size_t kTimelineWindowBytes = 36;
+constexpr std::uint8_t kCaptureMagic[4] = {'L', 'C', 'A', 'P'};
+constexpr std::uint8_t kCaptureWireVersion = 1;
+constexpr std::size_t kCaptureRecordBytes = 72;
+constexpr std::uint8_t kCaptureFlagPassive = 1U << 0U;
+constexpr std::uint8_t kCaptureFlagWifiShowHidden = 1U << 1U;
+constexpr std::uint8_t kCaptureFlagLocation = 1U << 2U;
+constexpr std::uint8_t kCaptureFlagFramePayload = 1U << 3U;
+constexpr std::uint8_t kCaptureKnownFlags =
+    kCaptureFlagPassive | kCaptureFlagWifiShowHidden |
+    kCaptureFlagLocation | kCaptureFlagFramePayload;
 
 void put16(std::uint8_t* output, std::uint16_t value) {
     output[0] = static_cast<std::uint8_t>(value >> 8U);
@@ -492,11 +502,77 @@ SessionCodecStatus decodeTimelineRecord(
         ? SessionCodecStatus::Valid : SessionCodecStatus::TimelineInvalid;
 }
 
+SessionCodecStatus encodeCaptureRecord(
+    const services::survey::CaptureMetadata& metadata,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr ||
+        capacity < kCaptureRecordBytes || !metadata.present ||
+        metadata.appIdentityLength != metadata.appIdentity.size()) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::memset(output, 0, kCaptureRecordBytes);
+    std::memcpy(output, kCaptureMagic, sizeof(kCaptureMagic));
+    output[4] = kCaptureWireVersion;
+    output[5] = metadata.selectedSourceMask;
+    output[6] = (metadata.passive ? kCaptureFlagPassive : 0) |
+        (metadata.wifiShowHidden ? kCaptureFlagWifiShowHidden : 0) |
+        (metadata.locationPresent ? kCaptureFlagLocation : 0) |
+        (metadata.framePayloadCaptured ? kCaptureFlagFramePayload : 0);
+    output[7] = metadata.appIdentityLength;
+    put32(output + 8, metadata.wifiMaxMsPerChannel);
+    output[12] = metadata.wifiChannel;
+    put32(output + 16, metadata.bleDurationMs);
+    put16(output + 20, metadata.bleIntervalMs);
+    put16(output + 22, metadata.bleWindowMs);
+    put16(output + 24, metadata.bleMaximumRecords);
+    put64(output + 32, metadata.framePayloadBytes);
+    std::memcpy(output + 40, metadata.appIdentity.data(),
+                metadata.appIdentity.size());
+    *outputSize = kCaptureRecordBytes;
+    return SessionCodecStatus::Valid;
+}
+
+SessionCodecStatus decodeCaptureRecord(
+    const std::uint8_t* input, std::size_t size,
+    services::survey::SurveySession* output) {
+    if (input == nullptr || output == nullptr || size != kCaptureRecordBytes ||
+        std::memcmp(input, kCaptureMagic, sizeof(kCaptureMagic)) != 0 ||
+        input[4] != kCaptureWireVersion || input[7] != 32 ||
+        (input[6] & static_cast<std::uint8_t>(~kCaptureKnownFlags)) != 0 ||
+        input[13] != 0 || input[14] != 0 || input[15] != 0 ||
+        input[26] != 0 || input[27] != 0 || input[28] != 0 ||
+        input[29] != 0 || input[30] != 0 || input[31] != 0) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    services::survey::CaptureMetadata metadata;
+    metadata.present = true;
+    metadata.selectedSourceMask = input[5];
+    metadata.passive = (input[6] & kCaptureFlagPassive) != 0;
+    metadata.wifiShowHidden =
+        (input[6] & kCaptureFlagWifiShowHidden) != 0;
+    metadata.locationPresent = (input[6] & kCaptureFlagLocation) != 0;
+    metadata.framePayloadCaptured =
+        (input[6] & kCaptureFlagFramePayload) != 0;
+    metadata.appIdentityLength = input[7];
+    metadata.wifiMaxMsPerChannel = get32(input + 8);
+    metadata.wifiChannel = input[12];
+    metadata.bleDurationMs = get32(input + 16);
+    metadata.bleIntervalMs = get16(input + 20);
+    metadata.bleWindowMs = get16(input + 22);
+    metadata.bleMaximumRecords = get16(input + 24);
+    metadata.framePayloadBytes = get64(input + 32);
+    std::memcpy(metadata.appIdentity.data(), input + 40,
+                metadata.appIdentity.size());
+    return output->configureCaptureMetadata(metadata) ==
+            services::survey::CaptureMetadataStatus::Configured
+        ? SessionCodecStatus::Valid : SessionCodecStatus::CaptureInvalid;
+}
+
 SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_t size,
                                          std::uint32_t* recordCount,
                                          std::uint32_t* bodyLength,
                                          std::uint16_t* schemaVersion = nullptr,
-                                         std::uint16_t* timelineRecords = nullptr) {
+                                         std::uint16_t* additionalRecords = nullptr) {
     if (segment == nullptr || size < kSegmentFooterBytes || size > kSessionSegmentMaxBytes) {
         return SessionCodecStatus::BoundsExceeded;
     }
@@ -505,13 +581,17 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
         return SessionCodecStatus::Malformed;
     }
     const std::uint16_t version = get16(footer + 4);
-    const std::uint16_t decodedTimelineRecords = get16(footer + 6);
+    const std::uint16_t decodedAdditionalRecords = get16(footer + 6);
     if (version != kLegacySegmentSchemaVersion &&
+        version != kTimelineSegmentSchemaVersion &&
         version != kSegmentSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
-    if ((version == kLegacySegmentSchemaVersion && decodedTimelineRecords != 0) ||
-        (version == kSegmentSchemaVersion && decodedTimelineRecords != 1)) {
+    if ((version == kLegacySegmentSchemaVersion &&
+         decodedAdditionalRecords != 0) ||
+        (version == kTimelineSegmentSchemaVersion &&
+         decodedAdditionalRecords != 1) ||
+        (version == kSegmentSchemaVersion && decodedAdditionalRecords != 2)) {
         return SessionCodecStatus::Malformed;
     }
     const std::uint32_t decodedCount = get32(footer + 8);
@@ -527,7 +607,9 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
     if (recordCount != nullptr) *recordCount = decodedCount;
     if (bodyLength != nullptr) *bodyLength = decodedBodyLength;
     if (schemaVersion != nullptr) *schemaVersion = version;
-    if (timelineRecords != nullptr) *timelineRecords = decodedTimelineRecords;
+    if (additionalRecords != nullptr) {
+        *additionalRecords = decodedAdditionalRecords;
+    }
     return SessionCodecStatus::Valid;
 }
 
@@ -543,6 +625,7 @@ const char* sessionCodecStatusName(SessionCodecStatus status) {
         case SessionCodecStatus::BoundsExceeded: return "bounds_exceeded";
         case SessionCodecStatus::ChecksumMismatch: return "checksum_mismatch";
         case SessionCodecStatus::TimelineInvalid: return "timeline_invalid";
+        case SessionCodecStatus::CaptureInvalid: return "capture_invalid";
         case SessionCodecStatus::TrailingData: return "trailing_data";
     }
     return "malformed";
@@ -556,7 +639,24 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
         capacity > kSessionSegmentMaxBytes) {
         return SessionCodecStatus::InvalidArgument;
     }
+    const bool hasTimeline = session.timeline().present;
+    const bool hasCapture = session.captureMetadata().present;
+    if (hasCapture && (!hasTimeline ||
+        session.captureMetadata().selectedSourceMask !=
+            session.timeline().selectedMask)) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
     CborWriter writer(output, capacity);
+    if (hasCapture) {
+        std::uint8_t record[kCaptureRecordBytes] = {};
+        std::size_t recordSize = 0;
+        const SessionCodecStatus status = encodeCaptureRecord(
+            session.captureMetadata(), record, sizeof(record), &recordSize);
+        if (status != SessionCodecStatus::Valid) return status;
+        writer.be32(static_cast<std::uint32_t>(recordSize));
+        writer.be32(crc32c(record, recordSize));
+        writer.raw(record, recordSize);
+    }
     for (std::size_t index = 0; index < session.size(); ++index) {
         const domain::observations::Observation* observation = session.get(index);
         if (observation == nullptr) return SessionCodecStatus::InvalidArgument;
@@ -569,7 +669,6 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
         writer.be32(crc32c(record, recordSize));
         writer.raw(record, recordSize);
     }
-    const bool hasTimeline = session.timeline().present;
     if (hasTimeline) {
         std::array<std::uint8_t, kTimelineRecordMaxBytes> record{};
         std::size_t recordSize = 0;
@@ -586,9 +685,10 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
     const std::size_t bodySize = writer.size();
     std::uint8_t footer[kSegmentFooterBytes] = {};
     std::memcpy(footer, kSegmentMagic, sizeof(kSegmentMagic));
-    put16(footer + 4, hasTimeline ? kSegmentSchemaVersion
-                                  : kLegacySegmentSchemaVersion);
-    put16(footer + 6, hasTimeline ? 1 : 0);
+    put16(footer + 4, hasCapture ? kSegmentSchemaVersion
+                                : hasTimeline ? kTimelineSegmentSchemaVersion
+                                              : kLegacySegmentSchemaVersion);
+    put16(footer + 6, hasCapture ? 2 : hasTimeline ? 1 : 0);
     put32(footer + 8, static_cast<std::uint32_t>(session.size()));
     put32(footer + 12, static_cast<std::uint32_t>(bodySize));
     put32(footer + 16, crc32c(output, bodySize));
@@ -620,7 +720,9 @@ SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& 
     writer.unsignedValue(0);
     writer.unsignedValue(segmentVersion == kSegmentSchemaVersion
                              ? kSessionSchemaVersion
-                             : kLegacySessionSchemaVersion);
+                             : segmentVersion == kTimelineSegmentSchemaVersion
+                                   ? kTimelineSessionSchemaVersion
+                                   : kLegacySessionSchemaVersion);
     writer.unsignedValue(1);
     writer.unsignedValue(1);  // kind: Session
     writer.unsignedValue(2);
@@ -653,7 +755,9 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
         !reader.unsignedValue(&value)) {
         return SessionCodecStatus::Malformed;
     }
-    if (value != kLegacySessionSchemaVersion && value != kSessionSchemaVersion) {
+    if (value != kLegacySessionSchemaVersion &&
+        value != kTimelineSessionSchemaVersion &&
+        value != kSessionSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     const std::uint16_t decodedSchemaVersion =
@@ -711,17 +815,23 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
     std::uint32_t recordCount = 0;
     std::uint32_t bodyLength = 0;
     std::uint16_t segmentVersion = 0;
-    std::uint16_t timelineRecords = 0;
+    std::uint16_t additionalRecords = 0;
     status = validateSegmentFooter(segment, segmentSize, &recordCount,
                                    &bodyLength, &segmentVersion,
-                                   &timelineRecords);
+                                   &additionalRecords);
     if (status != SessionCodecStatus::Valid) return status;
     const std::uint16_t expectedSegmentVersion =
         manifest.schemaVersion == kSessionSchemaVersion
             ? kSegmentSchemaVersion : kLegacySegmentSchemaVersion;
+    const std::uint16_t compatibleSegmentVersion =
+        manifest.schemaVersion == kTimelineSessionSchemaVersion
+            ? kTimelineSegmentSchemaVersion : expectedSegmentVersion;
+    const std::uint16_t expectedAdditionalRecords =
+        manifest.schemaVersion == kSessionSchemaVersion
+            ? 2 : manifest.schemaVersion == kTimelineSessionSchemaVersion ? 1 : 0;
     if (recordCount != manifest.observationCount ||
-        segmentVersion != expectedSegmentVersion ||
-        timelineRecords != (manifest.schemaVersion == kSessionSchemaVersion ? 1 : 0)) {
+        segmentVersion != compatibleSegmentVersion ||
+        additionalRecords != expectedAdditionalRecords) {
         return SessionCodecStatus::Malformed;
     }
 
@@ -733,6 +843,30 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         return SessionCodecStatus::Malformed;
     }
     std::size_t position = 0;
+    if (manifest.schemaVersion == kSessionSchemaVersion) {
+        if (bodyLength - position < 8) {
+            output->reset();
+            return SessionCodecStatus::BoundsExceeded;
+        }
+        const std::uint32_t recordLength = get32(segment + position);
+        const std::uint32_t recordCrc = get32(segment + position + 4);
+        position += 8;
+        if (recordLength != kCaptureRecordBytes ||
+            recordLength > bodyLength - position) {
+            output->reset();
+            return SessionCodecStatus::BoundsExceeded;
+        }
+        if (recordCrc != crc32c(segment + position, recordLength)) {
+            output->reset();
+            return SessionCodecStatus::ChecksumMismatch;
+        }
+        status = decodeCaptureRecord(segment + position, recordLength, output);
+        if (status != SessionCodecStatus::Valid) {
+            output->reset();
+            return status;
+        }
+        position += recordLength;
+    }
     for (std::uint32_t index = 0; index < recordCount; ++index) {
         if (bodyLength - position < 8) {
             output->reset();
@@ -763,7 +897,7 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         }
         position += recordLength;
     }
-    if (timelineRecords == 1) {
+    if (additionalRecords >= 1) {
         if (bodyLength - position < 8) {
             output->reset();
             return SessionCodecStatus::BoundsExceeded;
@@ -786,6 +920,13 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
             return status;
         }
         position += recordLength;
+    }
+    if (manifest.schemaVersion == kSessionSchemaVersion &&
+        (!output->captureMetadata().present || !output->timeline().present ||
+         output->captureMetadata().selectedSourceMask !=
+             output->timeline().selectedMask)) {
+        output->reset();
+        return SessionCodecStatus::CaptureInvalid;
     }
     if (position != bodyLength) {
         output->reset();

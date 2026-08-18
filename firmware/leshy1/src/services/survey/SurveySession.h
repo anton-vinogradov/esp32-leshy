@@ -46,6 +46,39 @@ enum class SessionTimelineStatus : std::uint8_t {
 
 const char* sessionTimelineStatusName(SessionTimelineStatus status);
 
+enum class CaptureMetadataStatus : std::uint8_t {
+    Configured,
+    InvalidState,
+    InvalidMetadata,
+    AlreadyConfigured,
+};
+
+const char* captureMetadataStatusName(CaptureMetadataStatus status);
+
+// Immutable acquisition provenance for schema-v3 Sessions. It records the exact
+// passive receive plans and build identity that produced the normalized records.
+// Frame payload and location flags are explicit so exports cannot invent PCAP or
+// coordinates from observation-only scans.
+struct CaptureMetadata final {
+    static constexpr std::size_t kAppIdentityBytes = 32;
+
+    bool present = false;
+    bool passive = true;
+    bool wifiShowHidden = false;
+    bool locationPresent = false;
+    bool framePayloadCaptured = false;
+    std::uint8_t selectedSourceMask = 0;
+    std::uint32_t wifiMaxMsPerChannel = 0;
+    std::uint8_t wifiChannel = 0;
+    std::uint32_t bleDurationMs = 0;
+    std::uint16_t bleIntervalMs = 0;
+    std::uint16_t bleWindowMs = 0;
+    std::uint16_t bleMaximumRecords = 0;
+    std::uint64_t framePayloadBytes = 0;
+    std::array<std::uint8_t, kAppIdentityBytes> appIdentity{};
+    std::uint8_t appIdentityLength = 0;
+};
+
 struct SessionTimelineSummary final {
     bool present = false;
     bool finalized = false;
@@ -68,6 +101,8 @@ public:
     SessionStatus start(const char* sessionId, std::uint64_t monotonicUs);
     SessionStatus append(const domain::observations::Observation& observation);
     SessionStatus stop(std::uint64_t monotonicUs);
+    CaptureMetadataStatus configureCaptureMetadata(
+        const CaptureMetadata& metadata);
     SessionTimelineStatus startTimeline(std::uint8_t selectedMask,
                                         std::uint64_t monotonicUs);
     SessionTimelineStatus appendTimelineWindow(const SourceWindow& window);
@@ -84,6 +119,7 @@ public:
     std::uint64_t stoppedUs() const { return stoppedUs_; }
     std::size_t size() const { return size_; }
     std::uint32_t dropped() const { return dropped_; }
+    const CaptureMetadata& captureMetadata() const { return captureMetadata_; }
     const domain::observations::Observation* get(std::size_t index) const;
     const SessionTimelineSummary& timeline() const { return timeline_; }
     std::size_t timelineWindowCount() const { return timelineWindowSize_; }
@@ -97,6 +133,7 @@ private:
     std::uint64_t stoppedUs_ = 0;
     std::size_t size_ = 0;
     std::uint32_t dropped_ = 0;
+    CaptureMetadata captureMetadata_{};
     SessionTimelineSummary timeline_{};
     std::array<SourceWindow, kTimelineWindowCapacity> timelineWindows_{};
     std::size_t timelineWindowHead_ = 0;

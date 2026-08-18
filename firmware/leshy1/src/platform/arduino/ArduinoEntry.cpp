@@ -143,6 +143,8 @@ using leshy1::services::diagnostics::HilSession;
 using leshy1::services::diagnostics::HilSessionStatus;
 using leshy1::services::survey::SessionState;
 using leshy1::services::survey::SessionStatus;
+using leshy1::services::survey::CaptureMetadata;
+using leshy1::services::survey::CaptureMetadataStatus;
 using leshy1::services::survey::SourceFailureClass;
 using leshy1::services::survey::SourceTimeline;
 using leshy1::services::survey::SourceTimelineState;
@@ -1713,6 +1715,54 @@ bool closeProductSurveyScanWindow(
            drainProductSurveyTimelineWindows();
 }
 
+int hexNibble(char value) {
+    if (value >= '0' && value <= '9') return value - '0';
+    if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+    if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+    return -1;
+}
+
+CaptureMetadata productCaptureMetadata(std::uint8_t selectedSourceMask) {
+    CaptureMetadata metadata;
+    metadata.present = true;
+    metadata.passive = true;
+    metadata.selectedSourceMask = selectedSourceMask;
+    const auto wifiPlan = leshy1::drivers::wifi::defaultPassivePlan();
+    if ((selectedSourceMask & leshy1::services::survey::sourceMask(
+            RadioKind::Wifi)) != 0) {
+        metadata.wifiShowHidden = wifiPlan.showHidden;
+        metadata.wifiMaxMsPerChannel = wifiPlan.maxMsPerChannel;
+        metadata.wifiChannel = wifiPlan.channel;
+    }
+    const auto blePlan = leshy1::drivers::ble::defaultPassivePlan();
+    if ((selectedSourceMask & leshy1::services::survey::sourceMask(
+            RadioKind::Ble)) != 0) {
+        metadata.bleDurationMs = blePlan.durationMs;
+        metadata.bleIntervalMs = blePlan.intervalMs;
+        metadata.bleWindowMs = blePlan.windowMs;
+        metadata.bleMaximumRecords = blePlan.maximumRecords;
+    }
+    if (std::strlen(runningAppElfSha256) ==
+        metadata.appIdentity.size() * 2U) {
+        bool valid = true;
+        for (std::size_t index = 0; index < metadata.appIdentity.size(); ++index) {
+            const int high = hexNibble(runningAppElfSha256[index * 2U]);
+            const int low = hexNibble(runningAppElfSha256[index * 2U + 1U]);
+            if (high < 0 || low < 0) {
+                valid = false;
+                break;
+            }
+            metadata.appIdentity[index] = static_cast<std::uint8_t>(
+                (static_cast<unsigned>(high) << 4U) |
+                static_cast<unsigned>(low));
+        }
+        if (valid) {
+            metadata.appIdentityLength = metadata.appIdentity.size();
+        }
+    }
+    return metadata;
+}
+
 void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
     if (surveyWorkflow.state() == SurveyWorkflowState::Running ||
         surveyWorkflow.state() == SurveyWorkflowState::Setup) {
@@ -1753,8 +1803,15 @@ void serviceProductSurveyWorker() {
             if (startedUs == 0) startedUs = 1;
             const SurveyPipelineStatus pipelineStarted = surveyPipeline.start(
                 "product-passive-live", startedUs);
-            const SourceTimelineStatus timelineStarted =
+            const CaptureMetadataStatus captureConfigured =
                 pipelineStarted == SurveyPipelineStatus::Started
+                    ? surveySession.configureCaptureMetadata(
+                          productCaptureMetadata(
+                              productSurveyRuntime.selectedSourceMask))
+                    : CaptureMetadataStatus::InvalidState;
+            const SourceTimelineStatus timelineStarted =
+                pipelineStarted == SurveyPipelineStatus::Started &&
+                        captureConfigured == CaptureMetadataStatus::Configured
                     ? productSurveyTimeline.start(
                           productSurveyRuntime.selectedSourceMask, startedUs)
                     : SourceTimelineStatus::InvalidState;
@@ -1792,6 +1849,7 @@ void serviceProductSurveyWorker() {
                 }
             }
             if (pipelineStarted != SurveyPipelineStatus::Started ||
+                captureConfigured != CaptureMetadataStatus::Configured ||
                 !applyProductSurveyTimelineStatus(
                     timelineStarted, SourceTimelineStatus::Started,
                     "timeline_start", startedUs) ||
@@ -4230,15 +4288,18 @@ void renderLibraryPage(bool clearContent) {
         setUiCursor(UiTextRole::Body, 14, 80);
         display.print(selected->session->id());
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Body, 14, 120);
-        display.print(tr(UiTextId::FormatJson));
-        setUiCursor(UiTextRole::Body, 14, 146);
+        setUiCursor(UiTextRole::Meta, 14, 111);
+        display.print(tr(UiTextId::CaptureImmutable));
+        setUiCursor(UiTextRole::Body, 14, 132);
+        display.print(tr(UiTextId::FormatSummaryReady));
+        setUiCursor(UiTextRole::Body, 14, 155);
+        display.print(tr(UiTextId::FormatCsvReady));
+        setUiCursor(UiTextRole::Meta, 14, 180);
+        display.print(tr(UiTextId::FormatPcapNoFrames));
+        setUiCursor(UiTextRole::Meta, 14, 201);
         display.print(tr(UiTextId::TransportSerial));
-        setUiCursor(UiTextRole::Body, 14, 172);
-        display.print(persistent ? tr(UiTextId::PersistedYes)
-                                 : tr(UiTextId::PersistedNo));
         display.setTextColor(Palette::Positive, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 203);
+        setUiCursor(UiTextRole::Meta, 14, 219);
         display.print(persistent ? tr(UiTextId::PersistentMedia)
                                  : tr(UiTextId::BoundedRamSource));
         return;
@@ -8625,6 +8686,109 @@ void emitLibraryExport(Stream& reply) {
     reply.println(line);
 }
 
+void emitLibraryCaptureMetadata(Stream& reply) {
+    if (libraryController.view() != LibraryView::ExportReady) {
+        reply.println(
+            "{\"schema\":\"leshy.capture.metadata.v1\",\"kind\":\"capture\","
+            "\"status\":\"not_requested\",\"radio_touched\":false}");
+        return;
+    }
+    const auto result = libraryController.formatSelectedCaptureMetadata(
+        diagnosticJson, sizeof(diagnosticJson));
+    if (result.valid()) {
+        reply.println(diagnosticJson);
+        return;
+    }
+    std::snprintf(
+        diagnosticJson, sizeof(diagnosticJson),
+        "{\"schema\":\"leshy.capture.metadata.v1\",\"kind\":\"capture\","
+        "\"status\":\"%s\",\"radio_touched\":false}",
+        leshy1::apps::library::libraryExportStatusName(result.status));
+    reply.println(diagnosticJson);
+}
+
+void emitLibraryCsvExport(Stream& reply) {
+    const LibraryEntry* entry = libraryController.selected();
+    if (libraryController.view() != LibraryView::ExportReady || entry == nullptr ||
+        entry->session == nullptr) {
+        reply.println(
+            "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"begin\","
+            "\"status\":\"not_requested\",\"radio_touched\":false}");
+        return;
+    }
+    char row[256] = {};
+    const auto header = libraryController.formatSelectedCsvHeader(
+        row, sizeof(row));
+    if (!header.valid()) {
+        std::snprintf(
+            diagnosticJson, sizeof(diagnosticJson),
+            "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"begin\","
+            "\"status\":\"%s\",\"radio_touched\":false}",
+            leshy1::apps::library::libraryExportStatusName(header.status));
+        reply.println(diagnosticJson);
+        return;
+    }
+    std::snprintf(
+        diagnosticJson, sizeof(diagnosticJson),
+        "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"begin\","
+        "\"status\":\"valid\",\"generation\":%lu,\"session_id\":\"%s\","
+        "\"records\":%u,\"columns\":9,\"line_endings\":\"crlf\","
+        "\"identity_encoding\":\"lower_hex\",\"label_encoding\":\"lower_hex\","
+        "\"radio_touched\":false}",
+        static_cast<unsigned long>(entry->generation), entry->session->id(),
+        static_cast<unsigned>(entry->session->size()));
+    reply.println(diagnosticJson);
+    reply.print(row);
+    std::size_t bytes = header.bytes;
+    std::size_t records = 0;
+    for (std::size_t index = 0; index < entry->session->size(); ++index) {
+        const auto formatted = libraryController.formatSelectedCsvRow(
+            index, row, sizeof(row));
+        if (!formatted.valid()) {
+            std::snprintf(
+                diagnosticJson, sizeof(diagnosticJson),
+                "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"end\","
+                "\"status\":\"%s\",\"records\":%u,\"bytes\":%u,"
+                "\"radio_touched\":false}",
+                leshy1::apps::library::libraryExportStatusName(formatted.status),
+                static_cast<unsigned>(records), static_cast<unsigned>(bytes));
+            reply.println(diagnosticJson);
+            return;
+        }
+        reply.print(row);
+        bytes += formatted.bytes;
+        ++records;
+    }
+    std::snprintf(
+        diagnosticJson, sizeof(diagnosticJson),
+        "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"end\","
+        "\"status\":\"complete\",\"records\":%u,\"bytes\":%u,"
+        "\"radio_touched\":false}",
+        static_cast<unsigned>(records), static_cast<unsigned>(bytes));
+    reply.println(diagnosticJson);
+}
+
+void emitLibraryPcapStatus(Stream& reply) {
+    if (libraryController.view() != LibraryView::ExportReady) {
+        reply.println(
+            "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"artifact\","
+            "\"status\":\"not_requested\",\"radio_touched\":false}");
+        return;
+    }
+    const auto result = libraryController.formatSelectedPcapStatus(
+        diagnosticJson, sizeof(diagnosticJson));
+    if (result.valid()) {
+        reply.println(diagnosticJson);
+        return;
+    }
+    std::snprintf(
+        diagnosticJson, sizeof(diagnosticJson),
+        "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"artifact\","
+        "\"status\":\"%s\",\"radio_touched\":false}",
+        leshy1::apps::library::libraryExportStatusName(result.status));
+    reply.println(diagnosticJson);
+}
+
 void emitHilSessionBegin(Stream& reply, const char* command) {
     constexpr const char* prefix = "hil.begin ";
     const char* arguments = command + std::strlen(prefix);
@@ -9128,6 +9292,12 @@ void handleCommand(Stream& reply, const char* command) {
         emitLibraryFixture(reply);
     } else if (std::strcmp(command, "library.export") == 0) {
         emitLibraryExport(reply);
+    } else if (std::strcmp(command, "library.capture") == 0) {
+        emitLibraryCaptureMetadata(reply);
+    } else if (std::strcmp(command, "library.export.csv") == 0) {
+        emitLibraryCsvExport(reply);
+    } else if (std::strcmp(command, "library.export.pcap") == 0) {
+        emitLibraryPcapStatus(reply);
     } else if (command[0] != '\0') {
         reply.println("{\"schema\":\"leshy.boot.v1\",\"kind\":\"error\","
                       "\"reason\":\"unknown_command\"}");
@@ -9323,7 +9493,8 @@ void setup() {
               "\"survey.wifi.passive-persist disposable-write <CID32> <run-id> <1..8>\","
               "\"survey.wifi.passive-ingress measure passive-only <1..32>\","
               "\"survey.contract\",\"session.fixture\",\"session.store.fixture\","
-              "\"library.fixture\",\"library.export\"]}");
+              "\"library.fixture\",\"library.export\",\"library.capture\","
+              "\"library.export.csv\",\"library.export.pcap\"]}");
 }
 
 void loop() {

@@ -26,6 +26,8 @@ enum class LibraryExportStatus : std::uint8_t {
     InvalidArgument,
     SessionUnavailable,
     BufferTooSmall,
+    CaptureMetadataUnavailable,
+    RecordOutOfRange,
 };
 
 const char* libraryExportStatusName(LibraryExportStatus status);
@@ -62,6 +64,14 @@ public:
     bool requestExport();
     bool back();
     LibraryExportResult formatSelectedJsonExport(char* output, std::size_t capacity) const;
+    LibraryExportResult formatSelectedCaptureMetadata(
+        char* output, std::size_t capacity) const;
+    LibraryExportResult formatSelectedCsvHeader(
+        char* output, std::size_t capacity) const;
+    LibraryExportResult formatSelectedCsvRow(
+        std::size_t index, char* output, std::size_t capacity) const;
+    LibraryExportResult formatSelectedPcapStatus(
+        char* output, std::size_t capacity) const;
 
     LibraryView view() const { return view_; }
     std::size_t selection() const { return selection_; }

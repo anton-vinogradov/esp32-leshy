@@ -1223,7 +1223,7 @@ void testSessionTimelinePersistsBoundedHistoryAndExactAggregates() {
     SessionManifest decodedManifest;
     CHECK(decodeSessionManifest(manifest.data(), manifestSize,
                                 &decodedManifest) == SessionCodecStatus::Valid);
-    CHECK(decodedManifest.schemaVersion == kSessionSchemaVersion);
+    CHECK(decodedManifest.schemaVersion == kTimelineSessionSchemaVersion);
 
     SurveySession reopened;
     CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
@@ -1535,7 +1535,7 @@ void testSessionCodecCommitsCanonicalDataAndReopensOffline() {
 
     std::array<std::uint8_t, kSessionManifestMaxBytes> futureManifest = manifest;
     CHECK(manifestSize > 2);
-    futureManifest[2] = 3;
+    futureManifest[2] = 4;
     CHECK(decodeSessionManifest(futureManifest.data(), manifestSize, &decodedManifest) ==
           SessionCodecStatus::UnsupportedSchema);
     futureManifest = manifest;
@@ -1589,6 +1589,165 @@ void testSessionCodecRoundTripsBleWithoutInventingWifiFields() {
     CHECK(restored != nullptr && restored->identity == advertisement.identity);
     CHECK(restored != nullptr &&
           std::strcmp(restored->label.data(), "field-tag") == 0);
+}
+
+void testCaptureMetadataV3AndCsvExportAreCanonical() {
+    const std::uint8_t wifiMask = sourceMask(RadioKind::Wifi);
+    const std::uint8_t bleMask = sourceMask(RadioKind::Ble);
+    SurveySession original;
+    CHECK(original.start("capture-v3", 1000) == SessionStatus::Started);
+    CaptureMetadata metadata;
+    metadata.present = true;
+    metadata.passive = true;
+    metadata.wifiShowHidden = true;
+    metadata.selectedSourceMask = wifiMask | bleMask;
+    metadata.wifiMaxMsPerChannel = 120;
+    metadata.wifiChannel = 0;
+    metadata.bleDurationMs = 2000;
+    metadata.bleIntervalMs = 100;
+    metadata.bleWindowMs = 90;
+    metadata.bleMaximumRecords = 64;
+    metadata.appIdentityLength = metadata.appIdentity.size();
+    for (std::size_t index = 0; index < metadata.appIdentity.size(); ++index) {
+        metadata.appIdentity[index] = static_cast<std::uint8_t>(index + 1U);
+    }
+    CHECK(original.configureCaptureMetadata(metadata) ==
+          CaptureMetadataStatus::Configured);
+    CHECK(original.configureCaptureMetadata(metadata) ==
+          CaptureMetadataStatus::AlreadyConfigured);
+    CHECK(original.startTimeline(wifiMask | bleMask, 1000) ==
+          SessionTimelineStatus::Started);
+
+    Observation wifi;
+    wifi.monotonicUs = 1200;
+    wifi.radio = RadioKind::Wifi;
+    wifi.frequencyKhz = 2437000;
+    wifi.channel = 6;
+    wifi.rssiDbm = -51;
+    wifi.identity = {1, 2, 3, 4, 5, 6};
+    wifi.identityLength = 6;
+    std::memcpy(wifi.label.data(), "alpha", 6);
+    wifi.labelLength = 5;
+    CHECK(original.append(wifi) == SessionStatus::Appended);
+    Observation ble;
+    ble.monotonicUs = 1300;
+    ble.radio = RadioKind::Ble;
+    ble.rssiDbm = -70;
+    ble.identity = {10, 11, 12, 13, 14, 15};
+    ble.identityLength = 6;
+    std::memcpy(ble.label.data(), "beacon", 7);
+    ble.labelLength = 6;
+    CHECK(original.append(ble) == SessionStatus::Appended);
+
+    static constexpr std::array<SourceWindow, 5> kWindows{{
+        {RadioKind::Wifi, SourceWindowState::Scheduled,
+         SourceWindowReason::DutyCycle, 1000, 1100, 0, 0},
+        {RadioKind::Wifi, SourceWindowState::Active,
+         SourceWindowReason::None, 1100, 1400, 1, 0},
+        {RadioKind::Ble, SourceWindowState::Scheduled,
+         SourceWindowReason::DutyCycle, 1000, 1400, 0, 0},
+        {RadioKind::Wifi, SourceWindowState::Scheduled,
+         SourceWindowReason::DutyCycle, 1400, 1600, 0, 0},
+        {RadioKind::Ble, SourceWindowState::Active,
+         SourceWindowReason::None, 1400, 1600, 1, 0},
+    }};
+    for (const SourceWindow& window : kWindows) {
+        CHECK(original.appendTimelineWindow(window) ==
+              SessionTimelineStatus::Appended);
+    }
+    SourceRuntimeSummary wifiSummary;
+    wifiSummary.selected = true;
+    wifiSummary.state = SourceWindowState::Stopped;
+    wifiSummary.scheduledUs = 300;
+    wifiSummary.activeUs = 300;
+    wifiSummary.accepted = 1;
+    wifiSummary.windows = 3;
+    wifiSummary.transitions = 2;
+    SourceRuntimeSummary bleSummary;
+    bleSummary.selected = true;
+    bleSummary.state = SourceWindowState::Stopped;
+    bleSummary.scheduledUs = 400;
+    bleSummary.activeUs = 200;
+    bleSummary.accepted = 1;
+    bleSummary.windows = 2;
+    bleSummary.transitions = 1;
+    CHECK(original.finalizeTimeline(1600, wifiSummary, bleSummary, 0) ==
+          SessionTimelineStatus::Finalized);
+    CHECK(original.stop(1700) == SessionStatus::Stopped);
+
+    std::array<std::uint8_t, kSessionSegmentMaxBytes> segment{};
+    std::array<std::uint8_t, kSessionManifestMaxBytes> manifest{};
+    std::size_t segmentSize = 0;
+    std::size_t manifestSize = 0;
+    CHECK(encodeObservationSegment(original, segment.data(), segment.size(),
+                                   &segmentSize) == SessionCodecStatus::Valid);
+    CHECK(encodeSessionManifest(original, segment.data(), segmentSize,
+                                manifest.data(), manifest.size(),
+                                &manifestSize) == SessionCodecStatus::Valid);
+    SessionManifest decodedManifest;
+    CHECK(decodeSessionManifest(manifest.data(), manifestSize,
+                                &decodedManifest) == SessionCodecStatus::Valid);
+    CHECK(decodedManifest.schemaVersion == kSessionSchemaVersion);
+
+    SurveySession reopened;
+    CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
+                        segmentSize, &reopened) == SessionCodecStatus::Valid);
+    CHECK(reopened.captureMetadata().present);
+    CHECK(reopened.captureMetadata().selectedSourceMask == (wifiMask | bleMask));
+    CHECK(reopened.captureMetadata().wifiShowHidden);
+    CHECK(reopened.captureMetadata().wifiMaxMsPerChannel == 120);
+    CHECK(reopened.captureMetadata().bleDurationMs == 2000);
+    CHECK(reopened.captureMetadata().bleIntervalMs == 100);
+    CHECK(reopened.captureMetadata().bleWindowMs == 90);
+    CHECK(reopened.captureMetadata().bleMaximumRecords == 64);
+    CHECK(reopened.captureMetadata().appIdentity == metadata.appIdentity);
+    CHECK(!reopened.captureMetadata().framePayloadCaptured);
+    CHECK(reopened.captureMetadata().framePayloadBytes == 0);
+
+    LibraryController library;
+    CHECK(library.add(reopened, 82, SessionIntegrity::Valid, true, false));
+    CHECK(library.openSelected());
+    CHECK(library.requestExport());
+    char capture[1600] = {};
+    CHECK(library.formatSelectedCaptureMetadata(
+              capture, sizeof(capture)).valid());
+    CHECK(std::strstr(capture, "leshy.capture.metadata.v1") != nullptr);
+    CHECK(std::strstr(capture, "\"immutable\":true") != nullptr);
+    CHECK(std::strstr(capture, "\"wifi\":1,\"ble\":1") != nullptr);
+    CHECK(std::strstr(capture, "0102030405060708090a0b0c0d0e0f10") != nullptr);
+    CHECK(std::strstr(capture, "\"csv_observations\":\"available\"") != nullptr);
+    CHECK(std::strstr(capture, "\"pcap\":\"unavailable_no_frame_payload\"") != nullptr);
+
+    char csv[256] = {};
+    const auto header = library.formatSelectedCsvHeader(csv, sizeof(csv));
+    CHECK(header.valid());
+    CHECK(std::strcmp(
+              csv,
+              "session_id,sequence,monotonic_us,radio,frequency_khz,channel,"
+              "rssi_dbm,identity_hex,label_hex\r\n") == 0);
+    CHECK(library.formatSelectedCsvRow(0, csv, sizeof(csv)).valid());
+    CHECK(std::strcmp(csv,
+                      "capture-v3,1,1200,wifi,2437000,6,-51,"
+                      "010203040506,616c706861\r\n") == 0);
+    CHECK(library.formatSelectedCsvRow(1, csv, sizeof(csv)).valid());
+    CHECK(std::strcmp(csv,
+                      "capture-v3,2,1300,ble,0,0,-70,"
+                      "0a0b0c0d0e0f,626561636f6e\r\n") == 0);
+    CHECK(library.formatSelectedCsvRow(2, csv, sizeof(csv)).status ==
+          LibraryExportStatus::RecordOutOfRange);
+    CHECK(library.formatSelectedPcapStatus(csv, sizeof(csv)).valid());
+    CHECK(std::strstr(csv, "unavailable_no_frame_payload") != nullptr);
+
+    CaptureMetadata invalid = metadata;
+    invalid.framePayloadCaptured = true;
+    invalid.framePayloadBytes = 1;
+    SurveySession rejected;
+    CHECK(rejected.start("capture-invalid", 1) == SessionStatus::Started);
+    CHECK(rejected.configureCaptureMetadata(invalid) ==
+          CaptureMetadataStatus::InvalidMetadata);
+    CHECK(std::strcmp(captureMetadataStatusName(
+                          CaptureMetadataStatus::Configured),
+                      "configured") == 0);
 }
 
 class MemorySessionStoreIo final : public SessionStoreIo {
@@ -3594,6 +3753,7 @@ int main() {
     testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam();
     testSessionCodecCommitsCanonicalDataAndReopensOffline();
     testSessionCodecRoundTripsBleWithoutInventingWifiFields();
+    testCaptureMetadataV3AndCsvExportAreCanonical();
     testOfflineLibraryControllerIsBoundedAndPreservesProvenance();
     testSessionCatalogRecoversReadOnlyAndMarksFallbackIntegrity();
     testBoundedSessionStoreCommitsRecoversAndFallsBack();

@@ -53,6 +53,16 @@ const char* sessionTimelineStatusName(SessionTimelineStatus status) {
     return "invalid_summary";
 }
 
+const char* captureMetadataStatusName(CaptureMetadataStatus status) {
+    switch (status) {
+        case CaptureMetadataStatus::Configured: return "configured";
+        case CaptureMetadataStatus::InvalidState: return "invalid_state";
+        case CaptureMetadataStatus::InvalidMetadata: return "invalid_metadata";
+        case CaptureMetadataStatus::AlreadyConfigured: return "already_configured";
+    }
+    return "invalid_metadata";
+}
+
 namespace {
 
 bool validWindow(const SourceWindow& window, std::uint8_t selectedMask) {
@@ -113,11 +123,63 @@ void SurveySession::reset() {
     stoppedUs_ = 0;
     size_ = 0;
     dropped_ = 0;
+    captureMetadata_ = {};
     timeline_ = {};
     timelineWindows_.fill(SourceWindow{});
     timelineWindowHead_ = 0;
     timelineWindowSize_ = 0;
     latestTimelineWindowEndUs_ = 0;
+}
+
+CaptureMetadataStatus SurveySession::configureCaptureMetadata(
+    const CaptureMetadata& metadata) {
+    if (state_ != SessionState::Running || size_ != 0) {
+        return CaptureMetadataStatus::InvalidState;
+    }
+    if (captureMetadata_.present) {
+        return CaptureMetadataStatus::AlreadyConfigured;
+    }
+    const bool wifiSelected =
+        (metadata.selectedSourceMask & sourceMask(
+            domain::observations::RadioKind::Wifi)) != 0;
+    const bool bleSelected =
+        (metadata.selectedSourceMask & sourceMask(
+            domain::observations::RadioKind::Ble)) != 0;
+    const bool validMask = metadata.selectedSourceMask != 0 &&
+        (metadata.selectedSourceMask &
+         static_cast<std::uint8_t>(~kSupportedSourceMask)) == 0;
+    const bool validWifi = wifiSelected
+        ? metadata.wifiMaxMsPerChannel >= 20 &&
+              metadata.wifiMaxMsPerChannel <= 1000 &&
+              metadata.wifiChannel <= 14
+        : metadata.wifiMaxMsPerChannel == 0 && metadata.wifiChannel == 0 &&
+              !metadata.wifiShowHidden;
+    const bool validBle = bleSelected
+        ? metadata.bleDurationMs > 0 && metadata.bleDurationMs <= 60000 &&
+              metadata.bleIntervalMs > 0 &&
+              metadata.bleWindowMs > 0 &&
+              metadata.bleWindowMs <= metadata.bleIntervalMs &&
+              metadata.bleMaximumRecords > 0 &&
+              metadata.bleMaximumRecords <= kObservationCapacity
+        : metadata.bleDurationMs == 0 && metadata.bleIntervalMs == 0 &&
+              metadata.bleWindowMs == 0 && metadata.bleMaximumRecords == 0;
+    if (!metadata.present || !metadata.passive || !validMask || !validWifi ||
+        !validBle || metadata.locationPresent || metadata.framePayloadCaptured ||
+        metadata.framePayloadBytes != 0 ||
+        metadata.appIdentityLength != metadata.appIdentity.size()) {
+        return CaptureMetadataStatus::InvalidMetadata;
+    }
+    bool identityPresent = false;
+    for (const std::uint8_t byte : metadata.appIdentity) {
+        identityPresent = identityPresent || byte != 0;
+    }
+    if (!identityPresent) return CaptureMetadataStatus::InvalidMetadata;
+    if (timeline_.present &&
+        timeline_.selectedMask != metadata.selectedSourceMask) {
+        return CaptureMetadataStatus::InvalidMetadata;
+    }
+    captureMetadata_ = metadata;
+    return CaptureMetadataStatus::Configured;
 }
 
 SessionStatus SurveySession::start(const char* sessionId, std::uint64_t monotonicUs) {

@@ -21,9 +21,41 @@ const char* libraryExportStatusName(LibraryExportStatus status) {
         case LibraryExportStatus::InvalidArgument: return "invalid_argument";
         case LibraryExportStatus::SessionUnavailable: return "session_unavailable";
         case LibraryExportStatus::BufferTooSmall: return "buffer_too_small";
+        case LibraryExportStatus::CaptureMetadataUnavailable:
+            return "capture_metadata_unavailable";
+        case LibraryExportStatus::RecordOutOfRange: return "record_out_of_range";
     }
     return "invalid_argument";
 }
+
+namespace {
+
+char hexDigit(std::uint8_t value) {
+    return value < 10 ? static_cast<char>('0' + value)
+                      : static_cast<char>('a' + value - 10);
+}
+
+template <std::size_t Capacity>
+void formatHex(const std::uint8_t* input, std::size_t size,
+               std::array<char, Capacity>& output) {
+    output.fill('\0');
+    if (input == nullptr || size * 2U + 1U > output.size()) return;
+    for (std::size_t index = 0; index < size; ++index) {
+        output[index * 2U] = hexDigit(input[index] >> 4U);
+        output[index * 2U + 1U] = hexDigit(input[index] & 0x0FU);
+    }
+}
+
+LibraryExportResult formatResult(char* output, std::size_t capacity,
+                                 int written) {
+    if (written < 0 || static_cast<std::size_t>(written) >= capacity) {
+        if (output != nullptr && capacity != 0) output[0] = '\0';
+        return {LibraryExportStatus::BufferTooSmall, 0};
+    }
+    return {LibraryExportStatus::Valid, static_cast<std::size_t>(written)};
+}
+
+}  // namespace
 
 void LibraryController::clear() {
     entries_.fill({});
@@ -176,6 +208,168 @@ LibraryExportResult LibraryController::formatSelectedJsonExport(char* output,
         position += static_cast<std::size_t>(closed);
     }
     return {LibraryExportStatus::Valid, position};
+}
+
+LibraryExportResult LibraryController::formatSelectedCaptureMetadata(
+    char* output, std::size_t capacity) const {
+    if (output == nullptr || capacity == 0) {
+        return {LibraryExportStatus::InvalidArgument, 0};
+    }
+    const LibraryEntry* entry = selected();
+    if (entry == nullptr || entry->session == nullptr ||
+        entry->session->state() != services::survey::SessionState::Stopped) {
+        output[0] = '\0';
+        return {LibraryExportStatus::SessionUnavailable, 0};
+    }
+    const auto& capture = entry->session->captureMetadata();
+    if (!capture.present || capture.appIdentityLength != capture.appIdentity.size()) {
+        output[0] = '\0';
+        return {LibraryExportStatus::CaptureMetadataUnavailable, 0};
+    }
+    std::size_t wifiCount = 0;
+    std::size_t bleCount = 0;
+    for (std::size_t index = 0; index < entry->session->size(); ++index) {
+        const auto* observation = entry->session->get(index);
+        if (observation == nullptr) continue;
+        if (observation->radio == domain::observations::RadioKind::Wifi) {
+            ++wifiCount;
+        } else if (observation->radio == domain::observations::RadioKind::Ble) {
+            ++bleCount;
+        }
+    }
+    std::array<char, services::survey::CaptureMetadata::kAppIdentityBytes * 2U + 1U>
+        identity{};
+    formatHex(capture.appIdentity.data(), capture.appIdentityLength, identity);
+    const bool wifiSelected = (capture.selectedSourceMask &
+        services::survey::sourceMask(domain::observations::RadioKind::Wifi)) != 0;
+    const bool bleSelected = (capture.selectedSourceMask &
+        services::survey::sourceMask(domain::observations::RadioKind::Ble)) != 0;
+    const int written = std::snprintf(
+        output, capacity,
+        "{\"schema\":\"leshy.capture.metadata.v1\",\"kind\":\"capture\","
+        "\"status\":\"valid\",\"generation\":%lu,\"integrity\":\"%s\","
+        "\"persistent\":%s,\"immutable\":true,\"session_id\":\"%s\","
+        "\"timebase\":\"monotonic_us\",\"started_us\":%llu,"
+        "\"stopped_us\":%llu,\"observations\":%u,\"dropped\":%lu,"
+        "\"sources\":{\"wifi\":%u,\"ble\":%u},"
+        "\"build\":{\"app_elf_sha256\":\"%s\"},"
+        "\"receive\":{\"mode\":\"passive\",\"selected_mask\":%u,"
+        "\"wifi\":{\"selected\":%s,\"show_hidden\":%s,\"channel\":%u,"
+        "\"max_ms_per_channel\":%lu},"
+        "\"ble\":{\"selected\":%s,\"duration_ms\":%lu,"
+        "\"interval_ms\":%u,\"window_ms\":%u,\"maximum_records\":%u}},"
+        "\"location\":{\"status\":\"not_recorded\"},"
+        "\"payload\":{\"status\":\"not_captured\",\"bytes\":0},"
+        "\"exports\":{\"json_summary\":\"available\","
+        "\"csv_observations\":\"available\","
+        "\"pcap\":\"unavailable_no_frame_payload\"},"
+        "\"radio_touched\":false}",
+        static_cast<unsigned long>(entry->generation),
+        sessionIntegrityName(entry->integrity),
+        entry->persistent ? "true" : "false", entry->session->id(),
+        static_cast<unsigned long long>(entry->session->startedUs()),
+        static_cast<unsigned long long>(entry->session->stoppedUs()),
+        static_cast<unsigned>(entry->session->size()),
+        static_cast<unsigned long>(entry->session->dropped()),
+        static_cast<unsigned>(wifiCount), static_cast<unsigned>(bleCount),
+        identity.data(), static_cast<unsigned>(capture.selectedSourceMask),
+        wifiSelected ? "true" : "false",
+        capture.wifiShowHidden ? "true" : "false",
+        static_cast<unsigned>(capture.wifiChannel),
+        static_cast<unsigned long>(capture.wifiMaxMsPerChannel),
+        bleSelected ? "true" : "false",
+        static_cast<unsigned long>(capture.bleDurationMs),
+        static_cast<unsigned>(capture.bleIntervalMs),
+        static_cast<unsigned>(capture.bleWindowMs),
+        static_cast<unsigned>(capture.bleMaximumRecords));
+    return formatResult(output, capacity, written);
+}
+
+LibraryExportResult LibraryController::formatSelectedCsvHeader(
+    char* output, std::size_t capacity) const {
+    if (output == nullptr || capacity == 0) {
+        return {LibraryExportStatus::InvalidArgument, 0};
+    }
+    const LibraryEntry* entry = selected();
+    if (entry == nullptr || entry->session == nullptr ||
+        entry->session->state() != services::survey::SessionState::Stopped) {
+        output[0] = '\0';
+        return {LibraryExportStatus::SessionUnavailable, 0};
+    }
+    if (!entry->session->captureMetadata().present) {
+        output[0] = '\0';
+        return {LibraryExportStatus::CaptureMetadataUnavailable, 0};
+    }
+    const int written = std::snprintf(
+        output, capacity,
+        "session_id,sequence,monotonic_us,radio,frequency_khz,channel,"
+        "rssi_dbm,identity_hex,label_hex\r\n");
+    return formatResult(output, capacity, written);
+}
+
+LibraryExportResult LibraryController::formatSelectedCsvRow(
+    std::size_t index, char* output, std::size_t capacity) const {
+    if (output == nullptr || capacity == 0) {
+        return {LibraryExportStatus::InvalidArgument, 0};
+    }
+    const LibraryEntry* entry = selected();
+    if (entry == nullptr || entry->session == nullptr ||
+        entry->session->state() != services::survey::SessionState::Stopped) {
+        output[0] = '\0';
+        return {LibraryExportStatus::SessionUnavailable, 0};
+    }
+    if (!entry->session->captureMetadata().present) {
+        output[0] = '\0';
+        return {LibraryExportStatus::CaptureMetadataUnavailable, 0};
+    }
+    const auto* observation = entry->session->get(index);
+    if (observation == nullptr) {
+        output[0] = '\0';
+        return {LibraryExportStatus::RecordOutOfRange, 0};
+    }
+    std::array<char, domain::observations::Observation::kIdentityCapacity * 2U + 1U>
+        identity{};
+    std::array<char, domain::observations::Observation::kLabelCapacity * 2U + 1U>
+        label{};
+    formatHex(observation->identity.data(), observation->identityLength, identity);
+    formatHex(reinterpret_cast<const std::uint8_t*>(observation->label.data()),
+              observation->labelLength, label);
+    const int written = std::snprintf(
+        output, capacity, "%s,%llu,%llu,%s,%lu,%u,%d,%s,%s\r\n",
+        entry->session->id(),
+        static_cast<unsigned long long>(observation->sequence),
+        static_cast<unsigned long long>(observation->monotonicUs),
+        observation->radio == domain::observations::RadioKind::Wifi
+            ? "wifi" : "ble",
+        static_cast<unsigned long>(observation->frequencyKhz),
+        static_cast<unsigned>(observation->channel),
+        static_cast<int>(observation->rssiDbm), identity.data(), label.data());
+    return formatResult(output, capacity, written);
+}
+
+LibraryExportResult LibraryController::formatSelectedPcapStatus(
+    char* output, std::size_t capacity) const {
+    if (output == nullptr || capacity == 0) {
+        return {LibraryExportStatus::InvalidArgument, 0};
+    }
+    const LibraryEntry* entry = selected();
+    if (entry == nullptr || entry->session == nullptr ||
+        entry->session->state() != services::survey::SessionState::Stopped) {
+        output[0] = '\0';
+        return {LibraryExportStatus::SessionUnavailable, 0};
+    }
+    if (!entry->session->captureMetadata().present) {
+        output[0] = '\0';
+        return {LibraryExportStatus::CaptureMetadataUnavailable, 0};
+    }
+    const int written = std::snprintf(
+        output, capacity,
+        "{\"schema\":\"leshy.library.pcap.v1\",\"kind\":\"artifact\","
+        "\"status\":\"unavailable_no_frame_payload\",\"generation\":%lu,"
+        "\"session_id\":\"%s\",\"records\":0,\"bytes\":0,"
+        "\"radio_touched\":false}",
+        static_cast<unsigned long>(entry->generation), entry->session->id());
+    return formatResult(output, capacity, written);
 }
 
 const LibraryEntry* LibraryController::selected() const { return get(selection_); }

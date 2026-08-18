@@ -9,9 +9,11 @@
 namespace leshy1::storage {
 
 constexpr std::uint16_t kLegacySessionSchemaVersion = 1;
-constexpr std::uint16_t kSessionSchemaVersion = 2;
+constexpr std::uint16_t kTimelineSessionSchemaVersion = 2;
+constexpr std::uint16_t kSessionSchemaVersion = 3;
 constexpr std::uint16_t kLegacySegmentSchemaVersion = 1;
-constexpr std::uint16_t kSegmentSchemaVersion = 2;
+constexpr std::uint16_t kTimelineSegmentSchemaVersion = 2;
+constexpr std::uint16_t kSegmentSchemaVersion = 3;
 constexpr std::size_t kSessionManifestMaxBytes = 256;
 constexpr std::size_t kObservationRecordMaxBytes = 128;
 constexpr std::size_t kTimelineRecordMaxBytes = 1024;
@@ -37,6 +39,7 @@ enum class SessionCodecStatus : std::uint8_t {
     BoundsExceeded,
     ChecksumMismatch,
     TimelineInvalid,
+    CaptureInvalid,
     TrailingData,
 };
 
