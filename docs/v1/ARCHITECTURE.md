@@ -249,8 +249,20 @@ only while Home/idle and reports that it touched neither hardware nor storage. E
 `E-HIL-100` injects BLE unavailability, then proves two real Wi-Fi cycles still reach
 28 observations, persists eight windows including 3,625,744 us of BLE
 `driver_unavailable`, cold-reopens/exports it with zero fault time, zero drops and
-final lease 0. Controlled physical power-cut and 8 h/32-cycle multi-source endurance
-remain the two `DEMO-S4` exit boundaries.
+final lease 0.
+
+Exact `0.76.0-observation-browser` adds a common allocation-free Survey browser over
+the retained Observation records. All/Wi-Fi/BLE filters map visible rows back to the
+same bounded session without copying records; List opens radio-neutral Detail and a
+12-sample RSSI history. Moving focus to browsing requests a worker-owned snapshot:
+the active RF source is stopped, the timeline is finalized, and the storage backend
+remains owned until Save or Cancel. This prevents user dwell time from overflowing
+the 64-observation Session while keeping the browser read-only. `E-HIL-101` proves one
+complete real Wi-Fi+BLE cycle, 8+37 observations, exact filter counts, RF-off pause,
+generation 80→81 commit, cold reopen/export, nine TFT captures, zero drops/overflow
+and final lease 0. Capture metadata and compatible CSV/PCAP, conditional
+nRF24/CC1101/GPS plus applicable Self-Test contracts, controlled physical power-cut
+and 8 h/32-cycle multi-source endurance remain `DEMO-S4` work.
 
 ## Data model
 

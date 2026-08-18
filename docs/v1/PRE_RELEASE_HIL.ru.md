@@ -354,6 +354,15 @@ workflow прошли end to end:
   timeline durations, CID и invariant heap независимо проверяет
   `check_runtime_degradation_acceptance.py`
   (`E-AUTO-040`/`E-HIL-100`/`E-SURVEY-013`);
+- `tools/run_1x_observation_browser_hil.py` — exact lane общего browser. Он наблюдает
+  admitted post-flash boot до любого независимого reset, ждёт один полный real
+  Wi-Fi+BLE cycle, переводит focus на Filter для остановки RF и финализации стабильного
+  snapshot, затем проходит Все/Wi-Fi/BLE List/Detail и RSSI history. Lane сохраняет
+  Session без повторного scan, cold-reopens/экспортирует те же данные и требует final
+  lease 0. Exact 0.76 source/candidate/runner, девять TFT captures, filter counts,
+  timeline equality, CID, heap и cleanup независимо проверяет
+  `check_observation_browser_acceptance.py`
+  (`E-AUTO-041`/`E-HIL-101`/`E-SURVEY-014`);
 - `tools/run_1x_littlefs_parity_hil.py` — fail-closed lane disposable flash. Он
   выбирает только inactive OTA1 `app1`, требует два совпадающих полных чтения и
   firmware-side hash match до format, делает 32 commits common SessionStore плюс

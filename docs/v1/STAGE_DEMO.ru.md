@@ -69,8 +69,12 @@ compatible runtime degradation. `E-AUTO-040`/`E-HIL-100` безопасно ин
 BLE unavailable, продолжает два real Wi-Fi cycles и 28 observations, commits
 generation 77→78, cold-reopens восемь ordered windows с точным unavailable interval
 и заканчивает с zero drops/overflow и lease 0. Это slice checkpoint, не `DEMO-S4`:
-controlled physical power-cut и 8 h/32-cycle multi-source stability остаются
-обязательными.
+exact 0.76 затем принимает общий read-only Observation browser — фильтры
+Все/Wi-Fi/BLE, List/Detail, bounded RSSI history и frozen snapshot с выключенным RF
+для 45 observations, generation 80→81, девяти exact TFT states, cold recovery и zero
+drops/overflow. Capture metadata и compatible CSV/PCAP, conditional source/Self-Test
+contracts, controlled physical power-cut и 8 h/32-cycle multi-source stability
+остаются обязательными.
 
 ## Ритм тестирования внутри этапа
 

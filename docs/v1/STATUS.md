@@ -12,12 +12,12 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.75 S4 checkpoints through durable Wi-Fi/BLE runtime degradation.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.76 S4 checkpoints through the common Wi-Fi/BLE Observation browser.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
-- **Current objective:** exercise schema-v2 recovery under a controlled physical
-  power cut, then close the 8 h/32-cycle multi-source endurance lane. Exact 0.75
-  already preserves the Survey setup/navigation model while continuing a compatible
-  source after another selected source becomes unavailable.
+- **Current objective:** add immutable Capture metadata and compatible CSV/PCAP
+  export over the accepted Wi-Fi/BLE Session model. Exact 0.76 already provides the
+  common read-only All/Wi-Fi/BLE List/Detail browser, bounded RSSI history and an
+  RF-off frozen snapshot that can be saved without rescanning.
 
 ## Stage state
 
@@ -27,7 +27,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71…0.74 accept source selection, durable timeline and real Wi-Fi/BLE scheduling; exact 0.75 `E-HIL-100` injects BLE unavailability during a dual-source run, continues two real Wi-Fi cycles, commits 28 observations and cold-reopens/exports the exact unavailable interval with zero drops/overflow and final lease 0 | exercise schema-v2 controlled physical power-cut recovery and close 8 h/32-cycle multi-source endurance in `DEMO-S4` |
+| S4 | `active` | exact 0.71…0.75 accept source selection, durable dual-source scheduling and compatible degradation; exact 0.76 `E-HIL-101` freezes RF after a complete real Wi-Fi+BLE cycle and proves common All/Wi-Fi/BLE List/Detail, bounded RSSI history, 45/45 cold-recovered observations, zero drops/overflow and final lease 0 | implement Capture metadata and compatible CSV/PCAP, conditional nRF24/CC1101/GPS contracts plus applicable Full/Guided checks; then exercise controlled physical power-cut recovery and 8 h/32-cycle multi-source endurance |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -581,6 +581,9 @@ endurance are explicit `DEMO-S4` criteria.
 | E-BUILD-076 | exact `0.75.0-runtime-degradation` build | pass: RAM 147,360 B, linked flash 1,421,832 B; app/factory 1,422,240/1,487,776 B; app `d4f11ffb…7ad`, factory `5e9ab132…19b`, ELF `be56d684…162`, map `e1a42a70…f27`; source commit `aff0a1e` | +1,940 B linked flash, zero static-RAM growth and +1,936 B images vs 0.74 for the pure degradation policy, one-shot test hook, honest runtime state and UI/telemetry; exact checkpoint, not `DEMO-S4` or a release build |
 | E-AUTO-040 | runtime-degradation HIL runner and retained verifier | pass: three host cases cover timeout, terminal-state and export rejection; the independent verifier rehashes exact source/candidate/runner and every retained artifact, validates idle one-shot injection with zero hardware/storage side effects, continued compatible-source cycles, durable timeline equality, cold recovery, five TFT frames, exact CID, heap and cleanup | local evidence on one board; the deterministic hook models the driver result and does not replace controlled power-cut or long natural-incidence endurance |
 | E-HIL-100 / E-SURVEY-013 | board-01 exact 0.75 runtime degradation | pass: an idle/Home one-shot marks BLE unavailable during a selected Wi-Fi+BLE Session without touching hardware or storage; active mask becomes Wi-Fi-only, two real Wi-Fi cycles still account 28/28 observations, Running remains `running_degraded` with visible BLE unavailable, FIFO ends 0/high-water 2, eight ordered windows persist, Stop commits generation 77→78 and 1,898 bytes, cold exact-CID reboot reopens and exports BLE `driver_unavailable` for 3,625,744 us with zero BLE fault time, heap is invariant 234,348/169,728/150,208 B and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-runtime-degradation-0.75.json) | accepts compatible runtime continuation and durable honest unavailability; the operator also accepted the current main UI gallery. Controlled physical power-cut and 8 h/32-cycle multi-source endurance keep `DEMO-S4` open |
+| E-BUILD-077 | exact `0.76.0-observation-browser` build | pass: RAM 147,368 B, linked flash 1,426,252 B; app/factory 1,426,656/1,492,192 B; app `89358bc5…19d`, factory `76615971…2b2`, ELF `f86cf116…dd2`, map `e5d0ce70…519`; source commit `bea9261` | +4,420 B linked flash, +8 B static RAM and +4,416 B images vs 0.75 for common filtering, bounded RSSI history, snapshot pause, localized UI and compact read-only telemetry; exact checkpoint, not `DEMO-S4` or a release build |
+| E-AUTO-041 | observation-browser HIL runner and retained verifier | pass: the runner waits for one complete Wi-Fi+BLE cycle, freezes an RF-off snapshot, exercises All→Wi-Fi→BLE List/Detail, commits, cold-reopens and exports; after flash it observes a complete admitted boot before requesting the independent cold reset. The verifier rehashes exact source/candidate/runner and every retained artifact, filter/history states, timeline equality, nine TFT frames, CID, heap and cleanup | local evidence on one board; the post-flash stabilization prevents a reset from interrupting live read-only SD recovery, while Capture/export formats, controlled power-cut and endurance remain separate lanes |
+| E-HIL-101 / E-SURVEY-014 | board-01 exact 0.76 Observation browser | pass: one real Wi-Fi plus one real BLE cycle accounts 8+37=45 accepted/forwarded observations; moving focus to Filter stops RF, finalizes six timeline windows and keeps the session backend open for read-only browsing. All/Wi-Fi/BLE counts are 45/8/37, both Detail views expose bounded RSSI history, Save commits generation 80→81 and 2,187 bytes without rescanning, cold exact-CID reboot reopens/exports the same 45 observations and six windows with zero writes, drops, evictions or overflow; heap is invariant 234,340/169,720/150,200 B and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-observation-browser-0.76.json) | accepts common CAP-016 List/Detail/filter behavior and the bounded RSSI-history slice of CAP-017; Capture metadata/CSV/PCAP, conditional sources/Self-Test, controlled power-cut and 8 h/32-cycle multi-source endurance keep `DEMO-S4` open |
 
 ## Known uncertainties and risks
 
@@ -612,7 +615,10 @@ endurance are explicit `DEMO-S4` criteria.
 
 S4 implementation is unblocked; source selection, bounded Wi-Fi/BLE scheduling,
 durable dual-source persistence and compatible runtime degradation are accepted
-through exact 0.75. The currently unavailable controlled power-cut fixture remains an explicit
+through exact 0.75, and common List/Detail filters plus bounded RSSI history are
+accepted by exact 0.76. Capture metadata/export formats and conditional source/Self-Test
+contracts remain software work. The currently unavailable controlled
+power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.
 A second board, multimeter, and logic/RF detector remain named later-stage
 gaps; affected capabilities stay conditional/unavailable rather than being enabled by

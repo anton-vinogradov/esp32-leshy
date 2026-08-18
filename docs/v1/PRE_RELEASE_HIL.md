@@ -352,6 +352,15 @@ the current combined GitHub workflows have passed end to end:
   source/candidate hashes, timeline durations, CID and invariant heap are
   independently checked by `check_runtime_degradation_acceptance.py`
   (`E-AUTO-040`/`E-HIL-100`/`E-SURVEY-013`);
+- `tools/run_1x_observation_browser_hil.py` is the exact common-browser lane. It
+  observes the admitted post-flash boot before any independent reset, waits for one
+  complete real Wi-Fi+BLE cycle, moves focus to Filter to stop RF and finalize a
+  stable snapshot, then exercises All/Wi-Fi/BLE List/Detail and RSSI history. It
+  saves without rescanning, cold-reopens/exports the same session and requires final
+  lease 0. Exact 0.76 source/candidate/runner, nine TFT captures, filter counts,
+  timeline equality, CID, heap and cleanup are independently checked by
+  `check_observation_browser_acceptance.py`
+  (`E-AUTO-041`/`E-HIL-101`/`E-SURVEY-014`);
 - `tools/run_1x_littlefs_parity_hil.py` is the fail-closed disposable-flash lane.
   It selects only inactive OTA1 `app1`, requires two matching full reads and a
   firmware-side hash match before format, performs 32 common SessionStore commits

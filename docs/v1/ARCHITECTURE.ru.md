@@ -307,8 +307,20 @@ mask и получает явные timeline state/reason; Session продол�
 инъекционно делает BLE unavailable, затем доказывает, что два real Wi-Fi cycles всё
 ещё дают 28 observations, сохраняет восемь windows, включая 3 625 744 us BLE
 `driver_unavailable`, cold-reopens/экспортирует их при zero fault time, zero drops и
-final lease 0. Controlled physical power-cut и 8 h/32-cycle multi-source endurance
-остаются двумя exit boundaries `DEMO-S4`.
+final lease 0.
+
+Exact `0.76.0-observation-browser` добавляет общий allocation-free Survey browser
+поверх retained Observation records. Фильтры Все/Wi-Fi/BLE отображают visible rows
+обратно в ту же bounded session без копирования records; List открывает radio-neutral
+Detail и историю RSSI до 12 samples. Перевод focus к просмотру запрашивает snapshot,
+которым владеет worker: активный RF source останавливается, timeline финализируется,
+а storage backend остаётся под ownership до Save или Cancel. Так ожидание пользователя
+не переполняет Session на 64 observations, а browser остаётся read-only. `E-HIL-101`
+доказывает полный real Wi-Fi+BLE cycle, 8+37 observations, точные filter counts,
+RF-off pause, commit generation 80→81, cold reopen/export, девять TFT captures, zero
+drops/overflow и final lease 0. Capture metadata и compatible CSV/PCAP, conditional
+nRF24/CC1101/GPS и применимые Self-Test contracts, controlled physical power-cut и
+8 h/32-cycle multi-source endurance остаются работой `DEMO-S4`.
 
 ## 7. Модель данных
 

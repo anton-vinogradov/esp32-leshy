@@ -12,12 +12,12 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.75 вплоть до durable Wi-Fi/BLE runtime degradation.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.76 вплоть до общего Wi-Fi/BLE Observation browser.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
-- **Главная цель текущего этапа:** проверить recovery schema v2 при управляемом
-  physical power-cut, затем закрыть 8 h/32-cycle multi-source endurance. Exact 0.75
-  уже сохраняет Survey setup/navigation model и продолжает compatible source после
-  того, как другой выбранный source становится unavailable.
+- **Главная цель текущего этапа:** добавить immutable Capture metadata и compatible
+  CSV/PCAP export поверх принятой Wi-Fi/BLE Session model. Exact 0.76 уже даёт общий
+  read-only browser Все/Wi-Fi/BLE List/Detail, bounded RSSI history и frozen snapshot
+  с выключенным RF, который можно сохранить без повторного scan.
 
 ## Состояние этапов
 
@@ -27,7 +27,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.74 принимают source selection, durable timeline и real Wi-Fi/BLE scheduling; exact 0.75 `E-HIL-100` инъекционно делает BLE unavailable во время dual-source run, продолжает два real Wi-Fi cycles, commits 28 observations и cold-reopens/экспортирует точный unavailable interval с zero drops/overflow и final lease 0 | проверить recovery schema v2 при controlled physical power-cut и закрыть 8 h/32-cycle multi-source endurance в `DEMO-S4` |
+| S4 | `active` | exact 0.71…0.75 принимают source selection, durable dual-source scheduling и compatible degradation; exact 0.76 `E-HIL-101` замораживает RF после полного real Wi-Fi+BLE cycle и доказывает общий Все/Wi-Fi/BLE List/Detail, bounded RSSI history, 45/45 cold-recovered observations, zero drops/overflow и final lease 0 | реализовать Capture metadata и compatible CSV/PCAP, conditional contracts nRF24/CC1101/GPS плюс применимые Full/Guided checks; затем проверить controlled physical power-cut recovery и 8 h/32-cycle multi-source endurance |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -579,6 +579,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-076 | exact build `0.75.0-runtime-degradation` | pass: RAM 147 360 B, linked flash 1 421 832 B; app/factory 1 422 240/1 487 776 B; app `d4f11ffb…7ad`, factory `5e9ab132…19b`, ELF `be56d684…162`, map `e1a42a70…f27`; source commit `aff0a1e` | +1 940 B linked flash, zero static-RAM growth и +1 936 B images vs 0.74 за pure degradation policy, one-shot test hook, честные runtime state и UI/telemetry; exact checkpoint, не `DEMO-S4` и не release build |
 | E-AUTO-040 | runtime-degradation HIL runner и retained verifier | pass: три host case покрывают timeout, terminal-state и export rejection; independent verifier rehashes exact source/candidate/runner и каждый retained artifact, проверяет idle one-shot injection с zero hardware/storage side effects, продолжение compatible-source cycles, durable timeline equality, cold recovery, пять TFT frames, exact CID, heap и cleanup | local evidence одной board; deterministic hook моделирует driver result и не заменяет controlled power-cut или длительный endurance natural incidence |
 | E-HIL-100 / E-SURVEY-013 | board-01 exact 0.75 runtime degradation | pass: idle/Home one-shot делает BLE unavailable во время выбранной Wi-Fi+BLE Session без касания hardware/storage; active mask становится Wi-Fi-only, два real Wi-Fi cycles всё ещё учитывают 28/28 observations, Running остаётся `running_degraded` с видимым BLE unavailable, FIFO заканчивает 0/high-water 2, сохраняются восемь ordered windows, Stop commits generation 77→78 и 1 898 bytes, cold exact-CID reboot открывает и экспортирует BLE `driver_unavailable` длительностью 3 625 744 us при zero BLE fault time, heap invariant 234 348/169 728/150 208 B, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-runtime-degradation-0.75.json) | принимает compatible runtime continuation и durable honest unavailability; оператор также принял текущую галерею основных UI-состояний. Controlled physical power-cut и 8 h/32-cycle multi-source endurance держат `DEMO-S4` открытым |
+| E-BUILD-077 | exact build `0.76.0-observation-browser` | pass: RAM 147 368 B, linked flash 1 426 252 B; app/factory 1 426 656/1 492 192 B; app `89358bc5…19d`, factory `76615971…2b2`, ELF `f86cf116…dd2`, map `e5d0ce70…519`; source commit `bea9261` | +4 420 B linked flash, +8 B static RAM и +4 416 B images vs 0.75 за common filtering, bounded RSSI history, snapshot pause, localized UI и compact read-only telemetry; exact checkpoint, не `DEMO-S4` и не release build |
+| E-AUTO-041 | observation-browser HIL runner и retained verifier | pass: runner ждёт один полный Wi-Fi+BLE cycle, замораживает RF-off snapshot, проходит Все→Wi-Fi→BLE List/Detail, commits, cold-reopens и экспортирует; после flash он наблюдает полный admitted boot до запроса независимого cold reset. Verifier хеширует exact source/candidate/runner и каждый retained artifact, filter/history states, timeline equality, девять TFT frames, CID, heap и cleanup | local evidence одной board; post-flash stabilization не даёт reset прервать живой read-only SD recovery, а Capture/export formats, controlled power-cut и endurance остаются отдельными lanes |
+| E-HIL-101 / E-SURVEY-014 | board-01 exact 0.76 Observation browser | pass: один real Wi-Fi и один real BLE cycle учитывают 8+37=45 accepted/forwarded observations; перевод focus на Filter останавливает RF, финализирует шесть timeline windows и оставляет session backend открытым для read-only browsing. Counts Все/Wi-Fi/BLE равны 45/8/37, оба Detail показывают bounded RSSI history, Save commits generation 80→81 и 2 187 bytes без повторного scan, cold exact-CID reboot открывает/экспортирует те же 45 observations и шесть windows с zero writes, drops, evictions или overflow; heap invariant 234 340/169 720/150 200 B, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-observation-browser-0.76.json) | принимает общий CAP-016 List/Detail/filter и bounded RSSI-history slice CAP-017; Capture metadata/CSV/PCAP, conditional sources/Self-Test, controlled power-cut и 8 h/32-cycle multi-source endurance держат `DEMO-S4` открытым |
 
 ## Известные неопределённости и риски
 
@@ -610,7 +613,10 @@ goldens. Управляемый physical power-cut и восьмичасовой
 
 Реализация S4 разблокирована; source selection, bounded Wi-Fi/BLE scheduling,
 durable dual-source persistence и compatible runtime degradation приняты до exact
-0.75. Недоступный сейчас управляемый power-cut fixture остаётся явным exit
+0.75, а общие List/Detail filters и bounded RSSI history приняты exact 0.76. Capture
+metadata/export formats и conditional source/Self-Test contracts остаются software
+work. Недоступный сейчас управляемый
+power-cut fixture остаётся явным exit
 requirement `DEMO-S4`, software reset не принимается как замена. Второй
 экземпляр, мультиметр и logic/RF detector остаются named gaps следующих этапов;
 затронутые capabilities остаются conditional/unavailable и не включаются
