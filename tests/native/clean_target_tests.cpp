@@ -89,8 +89,7 @@ void testVisualThemeContract() {
     CHECK(Layout::ContentTop + 3 * (Layout::RowHeight + Layout::RowGap) <
           Layout::FooterDividerY);
     CHECK(Layout::ContentTop + 5 * Layout::HomeRowHeight +
-              4 * Layout::HomeRowGap + Layout::HomeUtilityGap <
-          Layout::FooterDividerY);
+              4 * Layout::HomeRowGap < Layout::FooterDividerY);
     CHECK(Palette::Canvas == rgb565(7, 16, 12));
     CHECK(Palette::Header != Palette::Canvas);
     CHECK(Palette::Surface != Palette::SurfaceFocus);
@@ -101,6 +100,7 @@ void testVisualThemeContract() {
 
 void testUiComponentGeometryContract() {
     using leshy1::ui::visual::Components;
+    using leshy1::ui::visual::Layout;
     using leshy1::ui::visual::Rect;
     using leshy1::ui::visual::beforeFooter;
     using leshy1::ui::visual::contains;
@@ -110,11 +110,14 @@ void testUiComponentGeometryContract() {
     CHECK(insideScreen(Components::header()));
     CHECK(insideScreen(Components::title()));
     for (std::uint8_t index = 0; index < 5; ++index) {
-        const Rect row = Components::homeRow(index, index == 4);
+        const Rect row = Components::homeRow(index);
         CHECK(beforeFooter(row));
         CHECK(contains(row, Components::focusMarker(row)));
         if (index != 0) {
-            CHECK(!overlaps(Components::homeRow(index - 1, false), row));
+            const Rect previous = Components::homeRow(index - 1);
+            CHECK(!overlaps(previous, row));
+            CHECK(row.y - previous.y ==
+                  Layout::HomeRowHeight + Layout::HomeRowGap);
         }
     }
     CHECK(!overlaps(Components::choiceRow(0), Components::choiceRow(1)));

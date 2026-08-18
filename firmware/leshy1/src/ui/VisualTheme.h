@@ -44,8 +44,7 @@ struct Layout final {
     static constexpr std::int16_t RowHeight = 40;
     static constexpr std::int16_t RowGap = 7;
     static constexpr std::int16_t HomeRowHeight = 28;
-    static constexpr std::int16_t HomeRowGap = 1;
-    static constexpr std::int16_t HomeUtilityGap = 3;
+    static constexpr std::int16_t HomeRowGap = 2;
     static constexpr std::int16_t Radius = 4;
     static constexpr std::int16_t FooterDividerY = 236;
     static constexpr std::int16_t InputY = 244;
@@ -59,8 +58,7 @@ static_assert(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth,
 static_assert(Layout::FooterDividerY > Layout::ContentTop,
               "footer must remain below product content");
 static_assert(Layout::ContentTop + 5 * Layout::HomeRowHeight +
-                  4 * Layout::HomeRowGap + Layout::HomeUtilityGap <
-                  Layout::FooterDividerY,
+                  4 * Layout::HomeRowGap < Layout::FooterDividerY,
               "five Home rows and the final utility must fit above the footer");
 static_assert(Layout::HintY < Layout::ScreenHeight,
               "button hint must remain visible");

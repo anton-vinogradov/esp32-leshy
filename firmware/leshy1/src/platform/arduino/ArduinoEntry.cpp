@@ -3321,8 +3321,7 @@ UiTextId homeNote(const AppMenuItem& item) {
 void renderHomeRow(std::uint8_t index) {
     const AppMenuItem* item = appCatalog.get(index);
     if (item == nullptr) return;
-    const bool utility = std::strcmp(item->id, "self-test") == 0;
-    const Rect bounds = Components::homeRow(index, utility);
+    const Rect bounds = Components::homeRow(index);
     const bool selected = uiController.selection() == index;
     renderMenuRow(bounds, tr(homeLabel(*item)), tr(homeNote(*item)), selected,
                   item->enabled,

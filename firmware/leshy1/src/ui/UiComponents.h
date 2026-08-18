@@ -42,14 +42,13 @@ struct Components final {
         return {Layout::Edge, 52, Layout::ContentWidth, 20};
     }
 
-    static constexpr Rect homeRow(std::uint8_t index, bool utility) {
+    static constexpr Rect homeRow(std::uint8_t index) {
         return {
             Layout::Edge,
             static_cast<std::int16_t>(
                 Layout::ContentTop +
                 static_cast<std::int16_t>(index) *
-                    (Layout::HomeRowHeight + Layout::HomeRowGap) +
-                (utility ? Layout::HomeUtilityGap : 0)),
+                    (Layout::HomeRowHeight + Layout::HomeRowGap)),
             Layout::ContentWidth,
             Layout::HomeRowHeight,
         };
@@ -137,7 +136,7 @@ constexpr bool contains(Rect outer, Rect inner) {
 
 static_assert(insideScreen(Components::header()), "header must fit the TFT");
 static_assert(insideScreen(Components::title()), "title must fit the TFT");
-static_assert(beforeFooter(Components::homeRow(4, true)),
+static_assert(beforeFooter(Components::homeRow(4)),
               "final Home utility must fit above the footer");
 static_assert(beforeFooter(Components::choiceRow(1)),
               "two mode choices must fit above the footer");
@@ -145,8 +144,7 @@ static_assert(beforeFooter(Components::metricRow(4)),
               "five result metrics must fit above the footer");
 static_assert(beforeFooter(Components::stateCard()),
               "guided common-state card must fit above the footer");
-static_assert(!overlaps(Components::homeRow(3, false),
-                        Components::homeRow(4, true)),
+static_assert(!overlaps(Components::homeRow(3), Components::homeRow(4)),
               "Home utility must be visually separated");
 static_assert(!overlaps(Components::footerDivider(), Components::inputStatus()),
               "footer divider and input status must not overlap");
@@ -165,8 +163,8 @@ static_assert(Components::navigationCell(2).x +
                       Components::navigationCell(2).width ==
                   Layout::Edge + Layout::ContentWidth,
               "navigation cells must span the content width");
-static_assert(contains(Components::homeRow(0, false),
-                       Components::focusMarker(Components::homeRow(0, false))),
+static_assert(contains(Components::homeRow(0),
+                       Components::focusMarker(Components::homeRow(0))),
               "non-color focus marker must fit its row");
 
 }  // namespace leshy1::ui::visual
