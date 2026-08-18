@@ -25,6 +25,7 @@ def main() -> int:
     littlefs_session_store = TARGET / "src" / "platform" / "arduino" / "ArduinoLittleFsSessionStoreIo.cpp"
     session_store_router = TARGET / "src" / "storage" / "SessionStoreIoRouter.cpp"
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
+    passive_ble_adapter = TARGET / "src" / "platform" / "arduino" / "BoardBlePassiveScanner.cpp"
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
@@ -244,6 +245,22 @@ def main() -> int:
         ):
             if marker not in passive_adapter:
                 errors.append(f"passive Wi-Fi adapter is missing: {marker}")
+
+    if not passive_ble_adapter.is_file():
+        errors.append("explicit passive BLE adapter is missing")
+    else:
+        passive_ble = passive_ble_adapter.read_text(encoding="utf-8")
+        for marker in (
+            'activeScan_->setActiveScan(false)',
+            "validatePassivePlan(plan)",
+            "plan.maximumRecords",
+            "activeScan_->clearResults()",
+            "BLEDevice::deinit(false)",
+        ):
+            if marker not in passive_ble:
+                errors.append(f"passive BLE adapter is missing: {marker}")
+        if "setActiveScan(true)" in passive_ble:
+            errors.append("passive BLE adapter enables transmitting active scan")
 
     if not physical_sd_filesystem.is_file():
         errors.append("explicit guarded SD filesystem adapter is missing")
@@ -486,6 +503,7 @@ def main() -> int:
         "productSurveyRuntime.cancelRequestedDuringScan = scanWasActive;",
         '\\"survey_product_cancel_requested_during_scan\\"',
         "BoardWifiPassiveScanner::cancelActiveScan();",
+        "BoardBlePassiveScanner::cancelActiveScan();",
     ):
         if marker not in entry:
             errors.append(
@@ -514,7 +532,11 @@ def main() -> int:
         errors.append("missing-source/store-open ordering could not be inspected")
     else:
         source_boundary = entry[source_failure:store_open]
-        for marker in ("scanner->begin()", "authorizeProductSurvey"):
+        for marker in (
+            "wifiScanner->begin()",
+            "bleScanner->begin()",
+            "authorizeProductSurvey",
+        ):
             if marker not in source_boundary:
                 errors.append(
                     f"missing-source boundary is missing before store open: {marker}"

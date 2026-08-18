@@ -32,6 +32,7 @@
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
 #include "domain/observations/Observation.h"
+#include "drivers/ble/BlePassiveContract.h"
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
@@ -40,6 +41,7 @@
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
 #include "platform/arduino/BoardSdFilesystem.h"
 #include "platform/arduino/BoardStorageAdapter.h"
+#include "platform/arduino/BoardBlePassiveScanner.h"
 #include "platform/arduino/BoardSdSpiTransport.h"
 #include "platform/arduino/BoardWifiPassiveScanner.h"
 #include "platform/arduino/DisposableOtaLittleFs.h"
@@ -111,6 +113,7 @@ using leshy1::domain::hardware::CapabilityState;
 using leshy1::domain::hardware::HardwareInventory;
 using leshy1::domain::observations::Observation;
 using leshy1::domain::observations::RadioKind;
+using leshy1::drivers::ble::BleAdvertisementRecord;
 using leshy1::drivers::wifi::WifiScanRecord;
 using leshy1::kernel::runtime::AppRuntime;
 using leshy1::kernel::runtime::LaunchStatus;
@@ -122,6 +125,9 @@ using leshy1::platform::arduino::ArduinoFsSessionStoreWorkspace;
 using leshy1::platform::arduino::ArduinoLittleFsSessionStoreIo;
 using leshy1::platform::arduino::BoardSdFilesystem;
 using leshy1::platform::arduino::BoardStorageAdapter;
+using leshy1::platform::arduino::BoardBlePassiveScanner;
+using leshy1::platform::arduino::BoardBlePassiveScanResult;
+using leshy1::platform::arduino::BleRecordDisposition;
 using leshy1::platform::arduino::BoardSdSpiTransport;
 using leshy1::platform::arduino::BoardWifiPassiveScanner;
 using leshy1::platform::arduino::BoardWifiPassiveScanResult;
@@ -346,6 +352,7 @@ struct ProductSurveyRuntimeState final {
     leshy1::apps::survey::ProductSurveyAdmissionStatus admissionStatus =
         leshy1::apps::survey::ProductSurveyAdmissionStatus::ExplicitStartRequired;
     BoardWifiPassiveScanResult scan{};
+    BoardBlePassiveScanResult bleScan{};
     bool workerReady = false;
     bool sourceActive = false;
     bool sourceStartAttempted = false;
@@ -354,9 +361,13 @@ struct ProductSurveyRuntimeState final {
     std::uint64_t storeBytesWritten = 0;
     bool cancelRequestedDuringScan = false;
     std::uint32_t scanCycles = 0;
+    std::uint32_t wifiScanCycles = 0;
+    std::uint32_t bleScanCycles = 0;
     std::uint64_t startActionUs = 0;
     std::uint64_t stopActionUs = 0;
     std::uint8_t selectedSourceMask = 0;
+    std::uint8_t activeSourceMask = 0;
+    std::uint8_t unavailableSourceMask = 0;
     const char* timelineStatus = "idle";
     const char* timelineArchiveStatus = "idle";
     bool timelineHealthy = true;
@@ -377,6 +388,7 @@ enum class ProductSurveyWorkerEventKind : std::uint8_t {
     Prepared,
     ScanStarted,
     Scan,
+    SourceUnavailable,
     Stopped,
     Cancelled,
     Failed,
@@ -406,13 +418,19 @@ struct ProductSurveyWorkerReport final {
         leshy1::storage::ProductStoreAccessStatus::MissingMedia;
     leshy1::apps::survey::ProductSurveyAdmissionStatus admissionStatus =
         leshy1::apps::survey::ProductSurveyAdmissionStatus::ExplicitStartRequired;
+    std::uint8_t selectedSourceMask = 0;
+    std::uint8_t activeSourceMask = 0;
+    std::uint8_t unavailableSourceMask = 0;
 };
 
 struct ProductSurveyWorkerEvent final {
     ProductSurveyWorkerEventKind kind = ProductSurveyWorkerEventKind::Failed;
     ProductSurveyWorkerReport report{};
+    RadioKind source = RadioKind::Wifi;
     BoardWifiPassiveScanResult scan{};
+    BoardBlePassiveScanResult bleScan{};
     std::uint32_t scanCycles = 0;
+    std::uint32_t sourceScanCycles = 0;
     std::uint64_t eventUs = 0;
     std::uint64_t scanStartedUs = 0;
     std::uint64_t scanEndedUs = 0;
@@ -781,6 +799,8 @@ void applyProductSurveyWorkerReport(
     productSurveyRuntime.cachedFreeBytes = report.cachedFreeBytes;
     productSurveyRuntime.storeStatus = report.storeStatus;
     productSurveyRuntime.admissionStatus = report.admissionStatus;
+    productSurveyRuntime.activeSourceMask = report.activeSourceMask;
+    productSurveyRuntime.unavailableSourceMask = report.unavailableSourceMask;
 }
 
 void accumulateProductSurveyScan(BoardWifiPassiveScanResult* total,
@@ -788,6 +808,23 @@ void accumulateProductSurveyScan(BoardWifiPassiveScanResult* total,
     if (total == nullptr) return;
     total->status = scan.status;
     total->driverError = scan.driverError;
+    total->durationUs += scan.durationUs;
+    total->recordsReported = static_cast<std::uint16_t>(
+        total->recordsReported + scan.recordsReported);
+    total->recordsRead = static_cast<std::uint16_t>(
+        total->recordsRead + scan.recordsRead);
+    total->accepted = static_cast<std::uint16_t>(
+        total->accepted + scan.accepted);
+    total->rejected = static_cast<std::uint16_t>(
+        total->rejected + scan.rejected);
+    total->dropped = static_cast<std::uint16_t>(
+        total->dropped + scan.dropped);
+}
+
+void accumulateProductSurveyBleScan(BoardBlePassiveScanResult* total,
+                                    const BoardBlePassiveScanResult& scan) {
+    if (total == nullptr) return;
+    total->status = scan.status;
     total->durationUs += scan.durationUs;
     total->recordsReported = static_cast<std::uint16_t>(
         total->recordsReported + scan.recordsReported);
@@ -815,11 +852,28 @@ WifiRecordDisposition enqueueProductSurveyWorkerRecord(
     return WifiRecordDisposition::Accepted;
 }
 
+BleRecordDisposition enqueueProductSurveyWorkerBleRecord(
+    const BleAdvertisementRecord& record, std::uint64_t monotonicUs, void*) {
+    Observation observation;
+    if (!leshy1::drivers::ble::normalizePassiveRecord(
+            record, monotonicUs, &observation)) {
+        return BleRecordDisposition::Rejected;
+    }
+    if (productSurveyObservations == nullptr ||
+        xQueueSend(productSurveyObservations, &observation, 0) != pdTRUE) {
+        return BleRecordDisposition::Dropped;
+    }
+    return BleRecordDisposition::Accepted;
+}
+
 void sendProductSurveyWorkerEvent(
     ProductSurveyWorkerEventKind kind,
     const ProductSurveyWorkerReport& report,
+    RadioKind source = RadioKind::Wifi,
     const BoardWifiPassiveScanResult& scan = {},
-    std::uint32_t scanCycles = 0, std::uint64_t eventUs = 0,
+    const BoardBlePassiveScanResult& bleScan = {},
+    std::uint32_t scanCycles = 0, std::uint32_t sourceScanCycles = 0,
+    std::uint64_t eventUs = 0,
     std::uint64_t scanStartedUs = 0, std::uint64_t scanEndedUs = 0,
     std::uint16_t scanDropped = 0) {
     if (productSurveyWorkerEvents == nullptr) return;
@@ -828,8 +882,8 @@ void sendProductSurveyWorkerEvent(
         if (eventUs == 0) eventUs = 1;
     }
     const ProductSurveyWorkerEvent event{
-        kind, report, scan, scanCycles, eventUs, scanStartedUs,
-        scanEndedUs, scanDropped};
+        kind, report, source, scan, bleScan, scanCycles, sourceScanCycles,
+        eventUs, scanStartedUs, scanEndedUs, scanDropped};
     xQueueSend(productSurveyWorkerEvents, &event, portMAX_DELAY);
 }
 
@@ -850,18 +904,22 @@ void cleanupProductSurveyWorkerHardware(
 }
 
 ProductSurveyWorkerReport prepareProductSurveyWorker(
-    BoardWifiPassiveScanner* scanner) {
+    BoardWifiPassiveScanner* wifiScanner,
+    BoardBlePassiveScanner* bleScanner) {
     ProductSurveyWorkerReport report;
     report.status = "preparing";
     report.cleanupComplete = false;
-    if (scanner == nullptr) {
+    if (wifiScanner == nullptr || bleScanner == nullptr) {
         report.status = "worker_missing";
         return report;
     }
 
     portENTER_CRITICAL(&productSurveyWorkerMux);
     const std::uint32_t ownedResources = productSurveyWorkerOwnedResources;
+    const std::uint8_t selectedSourceMask =
+        productSurveyRuntime.selectedSourceMask;
     portEXIT_CRITICAL(&productSurveyWorkerMux);
+    report.selectedSourceMask = selectedSourceMask;
     const auto required =
         leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
         leshy1::kernel::runtime::resourceMask(Resource::EspRf) |
@@ -992,19 +1050,35 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
 
     report.sourceFailureInjected =
         consumeProductSurveySourceUnavailableInjection();
-    report.sourceStartAttempted = !report.sourceFailureInjected;
-    const bool scannerBegun = report.sourceFailureInjected
-        ? false : scanner->begin();
+    report.sourceStartAttempted = !report.sourceFailureInjected &&
+        selectedSourceMask != 0;
+    const std::uint8_t wifiMask =
+        leshy1::services::survey::sourceMask(RadioKind::Wifi);
+    const std::uint8_t bleMask =
+        leshy1::services::survey::sourceMask(RadioKind::Ble);
+    const bool wifiSelected = (selectedSourceMask & wifiMask) != 0;
+    const bool bleSelected = (selectedSourceMask & bleMask) != 0;
+    const bool wifiBegun = !report.sourceFailureInjected && wifiSelected
+        ? wifiScanner->begin() : false;
+    const bool bleBegun = !report.sourceFailureInjected && bleSelected
+        ? bleScanner->begin() : false;
+    report.activeSourceMask = static_cast<std::uint8_t>(
+        (wifiBegun ? wifiMask : 0U) | (bleBegun ? bleMask : 0U));
+    report.unavailableSourceMask = static_cast<std::uint8_t>(
+        selectedSourceMask & ~report.activeSourceMask);
     leshy1::apps::survey::ProductSurveyRequest surveyRequest;
     surveyRequest.explicitStart = true;
-    surveyRequest.sourceAvailable = scannerBegun;
+    surveyRequest.sourceAvailable = report.activeSourceMask != 0;
+    surveyRequest.selectedSourceMask = selectedSourceMask;
+    surveyRequest.availableSourceMask = report.activeSourceMask;
     surveyRequest.scanPlan = leshy1::drivers::wifi::defaultPassivePlan();
+    surveyRequest.bleScanPlan = leshy1::drivers::ble::defaultPassivePlan();
     surveyRequest.storePermit = storePermit;
     surveyRequest.ownedResources = ownedResources;
     const leshy1::apps::survey::ProductSurveyPermit surveyPermit =
         leshy1::apps::survey::authorizeProductSurvey(surveyRequest);
     report.admissionStatus = surveyPermit.status;
-    report.scannerCleanupComplete = !scannerBegun;
+    report.scannerCleanupComplete = !wifiBegun && !bleBegun;
     if (!surveyPermit.allowed()) {
         report.status =
             leshy1::apps::survey::productSurveyAdmissionStatusName(
@@ -1038,11 +1112,14 @@ void runProductSurveyWorker(void*) {
             xQueueReset(productSurveyObservations);
         }
         setProductSurveyScanActive(false);
-        BoardWifiPassiveScanner scanner;
+        BoardWifiPassiveScanner wifiScanner;
+        BoardBlePassiveScanner bleScanner;
         ProductSurveyWorkerReport report =
-            prepareProductSurveyWorker(&scanner);
+            prepareProductSurveyWorker(&wifiScanner, &bleScanner);
         if (std::strcmp(report.status, "prepared") != 0) {
-            report.scannerCleanupComplete = scanner.end();
+            const bool wifiCleanup = wifiScanner.end();
+            const bool bleCleanup = bleScanner.end();
+            report.scannerCleanupComplete = wifiCleanup && bleCleanup;
             report.sourceActive = false;
             cleanupProductSurveyWorkerHardware(&report);
             const bool cancelled = productSurveyCancelRequested() ||
@@ -1058,7 +1135,9 @@ void runProductSurveyWorker(void*) {
                 ProductSurveyWorkerControl::Starting,
                 ProductSurveyWorkerControl::Running)) {
             report.status = "cancelled";
-            report.scannerCleanupComplete = scanner.end();
+            const bool wifiCleanup = wifiScanner.end();
+            const bool bleCleanup = bleScanner.end();
+            report.scannerCleanupComplete = wifiCleanup && bleCleanup;
             report.sourceActive = false;
             cleanupProductSurveyWorkerHardware(&report);
             sendProductSurveyWorkerEvent(
@@ -1067,45 +1146,104 @@ void runProductSurveyWorker(void*) {
         }
         sendProductSurveyWorkerEvent(
             ProductSurveyWorkerEventKind::Prepared, report);
-        BoardWifiPassiveScanResult aggregate;
+        BoardWifiPassiveScanResult wifiAggregate;
+        BoardBlePassiveScanResult bleAggregate;
         std::uint32_t scanCycles = 0;
+        std::uint32_t wifiScanCycles = 0;
+        std::uint32_t bleScanCycles = 0;
         bool scanFailed = false;
         bool pendingScanWindow = false;
+        RadioKind pendingScanSource = RadioKind::Wifi;
         std::uint64_t pendingScanStartedUs = 0;
         std::uint64_t pendingScanEndedUs = 0;
         std::uint16_t pendingScanDropped = 0;
         while (!productSurveyStopRequested()) {
-            std::uint64_t scanStartedUs =
-                static_cast<std::uint64_t>(esp_timer_get_time());
-            if (scanStartedUs == 0) scanStartedUs = 1;
-            sendProductSurveyWorkerEvent(
-                ProductSurveyWorkerEventKind::ScanStarted, report, {},
-                scanCycles, scanStartedUs, scanStartedUs);
-            setProductSurveyScanActive(true);
-            const BoardWifiPassiveScanResult scan = scanner.scan(
-                leshy1::drivers::wifi::defaultPassivePlan(),
-                enqueueProductSurveyWorkerRecord, nullptr);
-            setProductSurveyScanActive(false);
-            std::uint64_t scanEndedUs =
-                static_cast<std::uint64_t>(esp_timer_get_time());
-            if (scanEndedUs < scanStartedUs) scanEndedUs = scanStartedUs;
-            pendingScanWindow = true;
-            pendingScanStartedUs = scanStartedUs;
-            pendingScanEndedUs = scanEndedUs;
-            pendingScanDropped = scan.dropped;
-            if (productSurveyStopRequested()) break;
-            if (!scan.valid()) {
-                report.status = "scan_failed";
-                scanFailed = true;
-                break;
+            const std::array<RadioKind, 2> schedule{
+                RadioKind::Wifi, RadioKind::Ble};
+            for (const RadioKind source : schedule) {
+                const std::uint8_t mask =
+                    leshy1::services::survey::sourceMask(source);
+                if ((report.activeSourceMask & mask) == 0) continue;
+                if (productSurveyStopRequested()) break;
+                std::uint64_t scanStartedUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                if (scanStartedUs == 0) scanStartedUs = 1;
+                const std::uint32_t sourceCycles =
+                    source == RadioKind::Wifi ? wifiScanCycles : bleScanCycles;
+                sendProductSurveyWorkerEvent(
+                    ProductSurveyWorkerEventKind::ScanStarted, report, source,
+                    wifiAggregate, bleAggregate, scanCycles, sourceCycles,
+                    scanStartedUs, scanStartedUs);
+                setProductSurveyScanActive(true);
+                BoardWifiPassiveScanResult wifiScan;
+                BoardBlePassiveScanResult bleScan;
+                if (source == RadioKind::Wifi) {
+                    wifiScan = wifiScanner.scan(
+                        leshy1::drivers::wifi::defaultPassivePlan(),
+                        enqueueProductSurveyWorkerRecord, nullptr);
+                } else {
+                    bleScan = bleScanner.scan(
+                        leshy1::drivers::ble::defaultPassivePlan(),
+                        enqueueProductSurveyWorkerBleRecord, nullptr);
+                }
+                setProductSurveyScanActive(false);
+                std::uint64_t scanEndedUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                if (scanEndedUs < scanStartedUs) scanEndedUs = scanStartedUs;
+                pendingScanWindow = true;
+                pendingScanSource = source;
+                pendingScanStartedUs = scanStartedUs;
+                pendingScanEndedUs = scanEndedUs;
+                pendingScanDropped = source == RadioKind::Wifi
+                    ? wifiScan.dropped : bleScan.dropped;
+                if (productSurveyStopRequested()) break;
+                const bool valid = source == RadioKind::Wifi
+                    ? wifiScan.valid() : bleScan.valid();
+                if (!valid) {
+                    report.activeSourceMask = static_cast<std::uint8_t>(
+                        report.activeSourceMask & ~mask);
+                    report.unavailableSourceMask = static_cast<std::uint8_t>(
+                        report.unavailableSourceMask | mask);
+                    report.status = report.activeSourceMask == 0
+                        ? "all_sources_failed" : "source_degraded";
+                    sendProductSurveyWorkerEvent(
+                        ProductSurveyWorkerEventKind::SourceUnavailable,
+                        report, source, wifiAggregate, bleAggregate,
+                        scanCycles, sourceCycles, scanEndedUs,
+                        scanStartedUs, scanEndedUs, pendingScanDropped);
+                    pendingScanWindow = false;
+                    if (report.activeSourceMask == 0) {
+                        scanFailed = true;
+                        break;
+                    }
+                    continue;
+                }
+                if (source == RadioKind::Wifi) {
+                    ++wifiScanCycles;
+                    accumulateProductSurveyScan(&wifiAggregate, wifiScan);
+                } else {
+                    ++bleScanCycles;
+                    accumulateProductSurveyBleScan(&bleAggregate, bleScan);
+                }
+                const bool wifiActive =
+                    (report.activeSourceMask &
+                     leshy1::services::survey::sourceMask(RadioKind::Wifi)) != 0;
+                const bool bleActive =
+                    (report.activeSourceMask &
+                     leshy1::services::survey::sourceMask(RadioKind::Ble)) != 0;
+                scanCycles = wifiActive && bleActive
+                    ? (wifiScanCycles < bleScanCycles
+                           ? wifiScanCycles : bleScanCycles)
+                    : (wifiActive ? wifiScanCycles : bleScanCycles);
+                sendProductSurveyWorkerEvent(
+                    ProductSurveyWorkerEventKind::Scan, report, source,
+                    wifiAggregate, bleAggregate, scanCycles,
+                    source == RadioKind::Wifi ? wifiScanCycles : bleScanCycles,
+                    scanEndedUs, scanStartedUs, scanEndedUs,
+                    pendingScanDropped);
+                pendingScanWindow = false;
             }
-            ++scanCycles;
-            accumulateProductSurveyScan(&aggregate, scan);
-            sendProductSurveyWorkerEvent(
-                ProductSurveyWorkerEventKind::Scan,
-                report, aggregate, scanCycles, scanEndedUs, scanStartedUs,
-                scanEndedUs, scan.dropped);
-            pendingScanWindow = false;
+            if (productSurveyStopRequested() || scanFailed) break;
             ulTaskNotifyTake(
                 pdTRUE, pdMS_TO_TICKS(kProductSurveyScanIntervalMs));
         }
@@ -1113,7 +1251,9 @@ void runProductSurveyWorker(void*) {
         const ProductSurveyWorkerControl terminalControl =
             productSurveyControl();
         setProductSurveyScanActive(false);
-        report.scannerCleanupComplete = scanner.end();
+        const bool wifiCleanup = wifiScanner.end();
+        const bool bleCleanup = bleScanner.end();
+        report.scannerCleanupComplete = wifiCleanup && bleCleanup;
         report.sourceActive = false;
         std::uint64_t terminalUs =
             static_cast<std::uint64_t>(esp_timer_get_time());
@@ -1125,7 +1265,11 @@ void runProductSurveyWorker(void*) {
         if (scanFailed) {
             sendProductSurveyWorkerEvent(
                 ProductSurveyWorkerEventKind::Failed,
-                report, aggregate, scanCycles, terminalUs,
+                report, pendingScanSource, wifiAggregate, bleAggregate,
+                scanCycles,
+                pendingScanSource == RadioKind::Wifi
+                    ? wifiScanCycles : bleScanCycles,
+                terminalUs,
                 pendingScanWindow ? pendingScanStartedUs : 0,
                 pendingScanWindow ? pendingScanEndedUs : 0,
                 pendingScanWindow ? pendingScanDropped : 0);
@@ -1134,7 +1278,11 @@ void runProductSurveyWorker(void*) {
             report.status = "stopped";
             sendProductSurveyWorkerEvent(
                 ProductSurveyWorkerEventKind::Stopped,
-                report, aggregate, scanCycles, terminalUs,
+                report, pendingScanSource, wifiAggregate, bleAggregate,
+                scanCycles,
+                pendingScanSource == RadioKind::Wifi
+                    ? wifiScanCycles : bleScanCycles,
+                terminalUs,
                 pendingScanWindow ? pendingScanStartedUs : 0,
                 pendingScanWindow ? pendingScanEndedUs : 0,
                 pendingScanWindow ? pendingScanDropped : 0);
@@ -1142,7 +1290,11 @@ void runProductSurveyWorker(void*) {
             report.status = "cancelled";
             sendProductSurveyWorkerEvent(
                 ProductSurveyWorkerEventKind::Cancelled,
-                report, aggregate, scanCycles, terminalUs,
+                report, pendingScanSource, wifiAggregate, bleAggregate,
+                scanCycles,
+                pendingScanSource == RadioKind::Wifi
+                    ? wifiScanCycles : bleScanCycles,
+                terminalUs,
                 pendingScanWindow ? pendingScanStartedUs : 0,
                 pendingScanWindow ? pendingScanEndedUs : 0,
                 pendingScanWindow ? pendingScanDropped : 0);
@@ -1262,6 +1414,7 @@ bool requestProductSurveyWorkerStop(bool cancel) {
     lastRuntimeEvent = cancel ? "product_survey_cancelling"
                               : "product_survey_stopping";
     BoardWifiPassiveScanner::cancelActiveScan();
+    BoardBlePassiveScanner::cancelActiveScan();
     if (productSurveyWorkerTaskHandle != nullptr) {
         xTaskNotifyGive(productSurveyWorkerTaskHandle);
     }
@@ -1300,12 +1453,12 @@ bool drainProductSurveyTimelineWindows() {
     }
 }
 
-bool recordProductSurveyTimelineDrops(std::uint16_t count,
+bool recordProductSurveyTimelineDrops(RadioKind source, std::uint16_t count,
                                       std::uint64_t monotonicUs) {
     for (std::uint16_t index = 0; index < count; ++index) {
         const SourceTimelineStatus status =
             productSurveyTimeline.recordObservation(
-                RadioKind::Wifi, false, monotonicUs);
+                source, false, monotonicUs);
         if (!applyProductSurveyTimelineStatus(
                 status, SourceTimelineStatus::ObservationRecorded)) {
             return false;
@@ -1350,12 +1503,12 @@ bool closeProductSurveyScanWindow(const ProductSurveyWorkerEvent& event,
     }
     drainProductSurveyWorkerObservations();
     if (!productSurveyRuntime.timelineHealthy) return false;
-    if (!recordProductSurveyTimelineDrops(event.scanDropped,
+    if (!recordProductSurveyTimelineDrops(event.source, event.scanDropped,
                                           event.scanEndedUs)) {
         return false;
     }
     const SourceTimelineStatus status = productSurveyTimeline.transition(
-        RadioKind::Wifi,
+        event.source,
         fault ? SourceWindowState::Fault : SourceWindowState::Scheduled,
         fault ? SourceWindowReason::DriverFault
               : SourceWindowReason::DutyCycle,
@@ -1392,13 +1545,19 @@ void serviceProductSurveyWorker() {
         applyProductSurveyWorkerReport(event.report);
         if (event.kind != ProductSurveyWorkerEventKind::ScanStarted) {
             productSurveyRuntime.scan = event.scan;
+            productSurveyRuntime.bleScan = event.bleScan;
             productSurveyRuntime.scanCycles = event.scanCycles;
+            if (event.source == RadioKind::Wifi) {
+                productSurveyRuntime.wifiScanCycles = event.sourceScanCycles;
+            } else {
+                productSurveyRuntime.bleScanCycles = event.sourceScanCycles;
+            }
         }
         if (event.kind == ProductSurveyWorkerEventKind::Prepared) {
             std::uint64_t startedUs = event.eventUs;
             if (startedUs == 0) startedUs = 1;
             const SurveyPipelineStatus pipelineStarted = surveyPipeline.start(
-                "product-wifi-live", startedUs);
+                "product-passive-live", startedUs);
             const SourceTimelineStatus timelineStarted =
                 pipelineStarted == SurveyPipelineStatus::Started
                     ? productSurveyTimeline.start(
@@ -1413,11 +1572,35 @@ void serviceProductSurveyWorker() {
             productSurveyRuntime.timelineArchiveStatus =
                 leshy1::services::survey::sessionTimelineStatusName(
                     archiveStarted);
+            bool degradationRecorded = true;
+            if (pipelineStarted == SurveyPipelineStatus::Started &&
+                timelineStarted == SourceTimelineStatus::Started &&
+                archiveStarted ==
+                    leshy1::services::survey::SessionTimelineStatus::Started) {
+                for (const RadioKind source :
+                     std::array<RadioKind, 2>{RadioKind::Wifi, RadioKind::Ble}) {
+                    if ((event.report.unavailableSourceMask &
+                         leshy1::services::survey::sourceMask(source)) == 0) {
+                        continue;
+                    }
+                    const SourceTimelineStatus unavailable =
+                        productSurveyTimeline.transition(
+                            source, SourceWindowState::Unavailable,
+                            SourceWindowReason::DriverUnavailable, startedUs);
+                    if (!applyProductSurveyTimelineStatus(
+                            unavailable, SourceTimelineStatus::Transitioned) ||
+                        !drainProductSurveyTimelineWindows()) {
+                        degradationRecorded = false;
+                        break;
+                    }
+                }
+            }
             if (pipelineStarted != SurveyPipelineStatus::Started ||
                 !applyProductSurveyTimelineStatus(
                     timelineStarted, SourceTimelineStatus::Started) ||
                 archiveStarted !=
-                    leshy1::services::survey::SessionTimelineStatus::Started) {
+                    leshy1::services::survey::SessionTimelineStatus::Started ||
+                !degradationRecorded) {
                 productSurveyTimeline.reset();
                 requestProductSurveyWorkerStop(true);
                 productSurveyRuntime.status = "workflow_start_failed";
@@ -1432,7 +1615,7 @@ void serviceProductSurveyWorker() {
                    ProductSurveyWorkerEventKind::ScanStarted) {
             const SourceTimelineStatus status =
                 productSurveyTimeline.transition(
-                    RadioKind::Wifi, SourceWindowState::Active,
+                    event.source, SourceWindowState::Active,
                     SourceWindowReason::None, event.scanStartedUs);
             if (!applyProductSurveyTimelineStatus(
                     status, SourceTimelineStatus::Transitioned) ||
@@ -1448,6 +1631,19 @@ void serviceProductSurveyWorker() {
                 lastRuntimeEvent = "product_survey_scan";
             } else {
                 productSurveyRuntime.status = "timeline_close_failed";
+                lastRuntimeEvent = productSurveyRuntime.status;
+                requestProductSurveyWorkerStop(true);
+            }
+            render = true;
+        } else if (event.kind ==
+                   ProductSurveyWorkerEventKind::SourceUnavailable) {
+            if (closeProductSurveyScanWindow(event, true)) {
+                productSurveyRuntime.status = "running_degraded";
+                productSurveyRuntime.sourceActive =
+                    event.report.activeSourceMask != 0;
+                lastRuntimeEvent = "product_survey_source_degraded";
+            } else {
+                productSurveyRuntime.status = "timeline_degrade_failed";
                 lastRuntimeEvent = productSurveyRuntime.status;
                 requestProductSurveyWorkerStop(true);
             }
@@ -3321,7 +3517,7 @@ void renderSurveyListRow(std::size_t index, std::size_t firstVisible) {
     const Observation* observation = surveySession.get(index);
     if (observation == nullptr) return;
     const std::int32_t y =
-        100 + static_cast<std::int32_t>(index - firstVisible) * 40;
+        108 + static_cast<std::int32_t>(index - firstVisible) * 40;
     const bool selected = surveyController.selection() == index;
     const std::uint16_t background = selected ? Palette::SurfaceFocus
                                                : Palette::Surface;
@@ -3346,9 +3542,14 @@ void renderSurveyListRow(std::size_t index, std::size_t firstVisible) {
     display.print(visibleLabel);
     char line[96] = {};
     display.setTextColor(Palette::Positive, background);
-    std::snprintf(line, sizeof(line), tr(UiTextId::ChannelRssiFormat),
-                  static_cast<unsigned>(observation->channel),
-                  static_cast<int>(observation->rssiDbm));
+    if (observation->radio == RadioKind::Ble) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::BleRssiFormat),
+                      static_cast<int>(observation->rssiDbm));
+    } else {
+        std::snprintf(line, sizeof(line), tr(UiTextId::ChannelRssiFormat),
+                      static_cast<unsigned>(observation->channel),
+                      static_cast<int>(observation->rssiDbm));
+    }
     setUiCursor(UiTextRole::Meta, 146, y + 13);
     display.print(line);
 }
@@ -3512,14 +3713,29 @@ void renderInventoryPage(bool clearContent) {
         display.setCursor(14, 88);
         display.print(observation->label.data());
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        std::snprintf(line, sizeof(line), tr(UiTextId::ChannelFormat),
-                      static_cast<unsigned>(observation->channel));
-        setUiCursor(UiTextRole::Body, 14, 122);
-        display.print(line);
-        std::snprintf(line, sizeof(line), tr(UiTextId::FrequencyFormat),
-                      static_cast<unsigned long>(observation->frequencyKhz));
-        setUiCursor(UiTextRole::Body, 14, 148);
-        display.print(line);
+        if (observation->radio == RadioKind::Ble) {
+            setUiCursor(UiTextRole::Body, 14, 122);
+            display.print(tr(UiTextId::BleSource));
+            std::snprintf(
+                line, sizeof(line), tr(UiTextId::BleAddressFormat),
+                static_cast<unsigned>(observation->identity[0]),
+                static_cast<unsigned>(observation->identity[1]),
+                static_cast<unsigned>(observation->identity[2]),
+                static_cast<unsigned>(observation->identity[3]),
+                static_cast<unsigned>(observation->identity[4]),
+                static_cast<unsigned>(observation->identity[5]));
+            setUiCursor(UiTextRole::Meta, 14, 151);
+            display.print(line);
+        } else {
+            std::snprintf(line, sizeof(line), tr(UiTextId::ChannelFormat),
+                          static_cast<unsigned>(observation->channel));
+            setUiCursor(UiTextRole::Body, 14, 122);
+            display.print(line);
+            std::snprintf(line, sizeof(line), tr(UiTextId::FrequencyFormat),
+                          static_cast<unsigned long>(observation->frequencyKhz));
+            setUiCursor(UiTextRole::Body, 14, 148);
+            display.print(line);
+        }
         std::snprintf(line, sizeof(line), tr(UiTextId::RssiFormat),
                       static_cast<int>(observation->rssiDbm));
         setUiCursor(UiTextRole::Body, 14, 174);
@@ -3541,18 +3757,44 @@ void renderInventoryPage(bool clearContent) {
         display.print(tr(UiTextId::SurveyCancelling));
     } else if (!surveyWorkflow.simulated() &&
                productSurveyTimeline.state() == SourceTimelineState::Running) {
+        const std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
         const auto* wifi = productSurveyTimeline.source(RadioKind::Wifi);
-        const std::uint16_t dutyPercent = static_cast<std::uint16_t>(
-            productSurveyTimeline.dutyPermille(
-                RadioKind::Wifi,
-                static_cast<std::uint64_t>(esp_timer_get_time())) / 10U);
-        const UiTextId stateFormat =
-            wifi != nullptr && wifi->state == SourceWindowState::Active
-                ? UiTextId::TimelineWifiActiveFormat
-                : UiTextId::TimelineWifiWaitingFormat;
-        std::snprintf(line, sizeof(line), tr(stateFormat),
-                      static_cast<unsigned>(dutyPercent));
-        display.print(line);
+        const auto* ble = productSurveyTimeline.source(RadioKind::Ble);
+        const bool both = wifi != nullptr && wifi->selected &&
+                          ble != nullptr && ble->selected;
+        std::int16_t sourceY = both ? 63 : 70;
+        if (wifi != nullptr && wifi->selected) {
+            const UiTextId stateFormat =
+                wifi->state == SourceWindowState::Active
+                    ? UiTextId::TimelineWifiActiveFormat
+                    : UiTextId::TimelineWifiWaitingFormat;
+            std::snprintf(
+                line, sizeof(line), tr(stateFormat),
+                static_cast<unsigned>(productSurveyTimeline.dutyPermille(
+                    RadioKind::Wifi, nowUs) / 10U));
+            setUiCursor(UiTextRole::Meta, 14, sourceY);
+            display.print(line);
+            sourceY += 13;
+        }
+        if (ble != nullptr && ble->selected) {
+            if (ble->state == SourceWindowState::Unavailable ||
+                ble->state == SourceWindowState::Fault) {
+                std::snprintf(line, sizeof(line), "%s",
+                              tr(UiTextId::TimelineBleUnavailable));
+            } else {
+                const UiTextId stateFormat =
+                    ble->state == SourceWindowState::Active
+                        ? UiTextId::TimelineBleActiveFormat
+                        : UiTextId::TimelineBleWaitingFormat;
+                std::snprintf(
+                    line, sizeof(line), tr(stateFormat),
+                    static_cast<unsigned>(productSurveyTimeline.dutyPermille(
+                        RadioKind::Ble, nowUs) / 10U));
+            }
+            setUiCursor(UiTextRole::Meta, 14, sourceY);
+            display.print(line);
+        }
     } else {
         display.print(surveyWorkflow.simulated()
                           ? tr(UiTextId::RunningSimulated)
@@ -3563,7 +3805,8 @@ void renderInventoryPage(bool clearContent) {
                   static_cast<unsigned>(progress.queueDepth),
                   static_cast<unsigned>(progress.queueHighWater),
                   static_cast<unsigned long long>(progress.dropped));
-    setUiCursor(UiTextRole::Meta, 14, 82);
+    setUiCursor(UiTextRole::Meta, 14,
+                productSurveyTimeline.selectedMask() == 3 ? 89 : 82);
     display.print(line);
     const std::size_t selection = surveyController.selection();
     const std::size_t firstVisible = surveyFirstVisible(selection);
@@ -3653,17 +3896,27 @@ void renderLibraryPage(bool clearContent) {
                       timeline.sources[0].activeUs >= elapsed
                           ? 100
                           : (timeline.sources[0].activeUs * 100U) / elapsed);
+            const std::uint16_t bleDuty = elapsed == 0
+                ? 0
+                : static_cast<std::uint16_t>(
+                      timeline.sources[1].activeUs >= elapsed
+                          ? 100
+                          : (timeline.sources[1].activeUs * 100U) / elapsed);
             std::snprintf(
                 line, sizeof(line), tr(UiTextId::TimelineStoredFormat),
                 static_cast<unsigned long>(timeline.totalWindows),
-                static_cast<unsigned>(selected->session->timelineWindowCount()),
-                static_cast<unsigned>(wifiDuty));
-            setUiCursor(UiTextRole::Body, 14, 192);
+                static_cast<unsigned>(selected->session->timelineWindowCount()));
+            setUiCursor(UiTextRole::Body, 14, 188);
+            display.print(line);
+            std::snprintf(line, sizeof(line), tr(UiTextId::TimelineDutyFormat),
+                          static_cast<unsigned>(wifiDuty),
+                          static_cast<unsigned>(bleDuty));
+            setUiCursor(UiTextRole::Meta, 14, 207);
             display.print(line);
         }
         display.setTextColor(Palette::Positive, Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14,
-                    timeline.present && timeline.finalized ? 216 : 199);
+                    timeline.present && timeline.finalized ? 222 : 199);
         display.print(
             !persistent
                 ? tr(UiTextId::RamVolatile)
@@ -3773,7 +4026,7 @@ bool renderSelectionDelta() {
             renderSurveyListRow(renderedUi.surveySelection, currentFirst);
             renderSurveyListRow(current, currentFirst);
         } else {
-            display.fillRect(Layout::Edge, 100, Layout::ContentWidth, 116,
+            display.fillRect(Layout::Edge, 108, Layout::ContentWidth, 116,
                              Palette::Canvas);
             const std::size_t end =
                 surveySession.size() < currentFirst + kVisibleSurveyRows
@@ -3939,6 +4192,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_timeline_ble_duty_permille\":%u,"
                       "\"survey_timeline_ble_accepted\":%llu,"
                       "\"survey_timeline_ble_dropped\":%llu,"
+                      "\"survey_product_selected_source_mask\":%u,"
+                      "\"survey_product_active_source_mask\":%u,"
+                      "\"survey_product_unavailable_source_mask\":%u,"
                       "\"survey_product_selected\":%s,"
                       "\"survey_product_status\":\"%s\","
                       "\"survey_product_backend_open\":%s,"
@@ -3957,6 +4213,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_scan_accepted\":%u,"
                       "\"survey_scan_rejected\":%u,"
                       "\"survey_scan_dropped\":%u,"
+                      "\"survey_ble_scan_status\":\"%s\","
+                      "\"survey_ble_scan_reported\":%u,"
+                      "\"survey_ble_scan_read\":%u,"
+                      "\"survey_ble_scan_accepted\":%u,"
+                      "\"survey_ble_scan_rejected\":%u,"
+                      "\"survey_ble_scan_dropped\":%u,"
                       "\"survey_product_cleanup_complete\":%s,"
                       "\"survey_product_worker_ready\":%s,"
                       "\"survey_product_source_active\":%s,"
@@ -3968,6 +4230,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_scan_active\":%s,"
                       "\"survey_product_cancel_requested_during_scan\":%s,"
                       "\"survey_product_scan_cycles\":%lu,"
+                      "\"survey_product_wifi_scan_cycles\":%lu,"
+                      "\"survey_product_ble_scan_cycles\":%lu,"
                       "\"survey_product_start_action_us\":%llu,"
                       "\"survey_product_stop_action_us\":%llu,"
                       "\"library_simulated\":%s,\"library_view\":\"%s\","
@@ -4074,6 +4338,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           bleTimeline == nullptr ? 0 : bleTimeline->accepted),
                       static_cast<unsigned long long>(
                           bleTimeline == nullptr ? 0 : bleTimeline->dropped),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.selectedSourceMask),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.activeSourceMask),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.unavailableSourceMask),
                       productSurveyRuntime.selected ? "true" : "false",
                       productSurveyRuntime.status,
                       productSurveyRuntime.backendOpen ? "true" : "false",
@@ -4102,6 +4372,18 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(productSurveyRuntime.scan.accepted),
                       static_cast<unsigned>(productSurveyRuntime.scan.rejected),
                       static_cast<unsigned>(productSurveyRuntime.scan.dropped),
+                      leshy1::platform::arduino::boardBleScanStatusName(
+                          productSurveyRuntime.bleScan.status),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.bleScan.recordsReported),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.bleScan.recordsRead),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.bleScan.accepted),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.bleScan.rejected),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.bleScan.dropped),
                       productSurveyRuntime.cleanupComplete ? "true" : "false",
                       productSurveyRuntime.workerReady ? "true" : "false",
                       productSurveyRuntime.sourceActive ? "true" : "false",
@@ -4117,6 +4399,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           ? "true" : "false",
                       static_cast<unsigned long>(
                           productSurveyRuntime.scanCycles),
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.wifiScanCycles),
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.bleScanCycles),
                       static_cast<unsigned long long>(
                           productSurveyRuntime.startActionUs),
                       static_cast<unsigned long long>(
@@ -8402,8 +8688,13 @@ void setup() {
                    bootMetrics.inputDetected ? "raw_byte_available" : "no_read_response"});
     inventory.add({"radio.wifi", CapabilityState::Declared, "esp32_s3_builtin",
                    "passive_contract_ready_driver_not_started"});
-    inventory.add({"radio.ble", CapabilityState::Declared, "esp32_s3_builtin",
-                   "passive_driver_not_implemented"});
+    inventory.add({
+        "radio.ble",
+        productSurveyWorkerReady && productBootRecovery.catalogAdmitted
+            ? CapabilityState::Available : CapabilityState::Declared,
+        "esp32_s3_builtin_receive_only",
+        productSurveyWorkerReady && productBootRecovery.catalogAdmitted
+            ? "passive_ble_worker_ready" : "product_worker_or_media_unavailable"});
     inventory.add({"survey.simulated",
                    surveyDemoReady ? CapabilityState::Available : CapabilityState::Fault,
                    "E-SURVEY-001_golden_trace",

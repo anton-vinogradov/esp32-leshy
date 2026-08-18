@@ -17,6 +17,7 @@
 #include "apps/self_test/SelfTestController.h"
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
+#include "drivers/ble/BlePassiveContract.h"
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
@@ -894,6 +895,60 @@ void testWifiIngressIsPassiveOnlyAndNormalizesObservations() {
     record.rssiDbm = -67;
     record.bssid = {};
     CHECK(!normalizePassiveRecord(record, 2000, &observation));
+}
+
+void testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations() {
+    using leshy1::drivers::ble::BleAdvertisementRecord;
+    using leshy1::drivers::ble::BleScanPlan;
+
+    BleScanPlan plan = leshy1::drivers::ble::defaultPassivePlan();
+    CHECK(leshy1::drivers::ble::validatePassivePlan(plan));
+    CHECK(plan.passive);
+    CHECK(plan.windowMs <= plan.intervalMs);
+
+    plan.passive = false;
+    CHECK(!leshy1::drivers::ble::validatePassivePlan(plan));
+    plan = leshy1::drivers::ble::defaultPassivePlan();
+    plan.durationMs = 1500;
+    CHECK(!leshy1::drivers::ble::validatePassivePlan(plan));
+    plan = leshy1::drivers::ble::defaultPassivePlan();
+    plan.windowMs = static_cast<std::uint16_t>(plan.intervalMs + 1U);
+    CHECK(!leshy1::drivers::ble::validatePassivePlan(plan));
+    plan = leshy1::drivers::ble::defaultPassivePlan();
+    plan.maximumRecords = 129;
+    CHECK(!leshy1::drivers::ble::validatePassivePlan(plan));
+
+    BleAdvertisementRecord record;
+    record.address = {0xc0, 0x98, 0xe5, 0x44, 0x33, 0x22};
+    record.addressType = 1;
+    record.rssiDbm = -61;
+    record.name = "field-tag";
+    record.nameLength = 9;
+    Observation observation;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 3000, &observation));
+    CHECK(observation.radio == RadioKind::Ble);
+    CHECK(observation.frequencyKhz == 0);
+    CHECK(observation.channel == 0);
+    CHECK(observation.rssiDbm == -61);
+    CHECK(observation.identityLength == 6);
+    CHECK(observation.identity == record.address);
+    CHECK(std::strcmp(observation.label.data(), "field-tag") == 0);
+
+    record.address = {};
+    CHECK(!leshy1::drivers::ble::normalizePassiveRecord(
+        record, 3000, &observation));
+    record.address.fill(0xff);
+    CHECK(!leshy1::drivers::ble::normalizePassiveRecord(
+        record, 3000, &observation));
+    record.address = {1, 2, 3, 4, 5, 6};
+    record.rssiDbm = 21;
+    CHECK(!leshy1::drivers::ble::normalizePassiveRecord(
+        record, 3000, &observation));
+    record.rssiDbm = -61;
+    record.name = nullptr;
+    CHECK(!leshy1::drivers::ble::normalizePassiveRecord(
+        record, 3000, &observation));
 }
 
 void testSurveySessionIsOrderedBoundedAndStopIsIdempotent() {
@@ -2197,6 +2252,28 @@ void testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam() {
     CHECK(permit.persistent);
     CHECK(!permit.simulated);
     CHECK(permit.requiredResources == surveyResources);
+    CHECK(permit.selectedSourceMask == 1);
+    CHECK(permit.availableSourceMask == 1);
+    CHECK(permit.degradedSourceMask == 0);
+
+    request.selectedSourceMask = 3;
+    request.availableSourceMask = 1;
+    permit = authorizeProductSurvey(request);
+    CHECK(permit.allowed());
+    CHECK(permit.selectedSourceMask == 3);
+    CHECK(permit.availableSourceMask == 1);
+    CHECK(permit.degradedSourceMask == 2);
+    request.availableSourceMask = 3;
+    permit = authorizeProductSurvey(request);
+    CHECK(permit.allowed());
+    request.selectedSourceMask = 2;
+    request.availableSourceMask = 2;
+    request.scanPlan.passive = false;
+    permit = authorizeProductSurvey(request);
+    CHECK(permit.allowed());
+    request.scanPlan = defaultPassivePlan();
+    request.selectedSourceMask = 3;
+    request.availableSourceMask = 3;
 
     ProductSurveyRequest rejected = request;
     rejected.explicitStart = false;
@@ -2207,7 +2284,20 @@ void testProductSurveyAdmissionNeverFallsBackToSimulatedOrRam() {
     CHECK(authorizeProductSurvey(rejected).status ==
           ProductSurveyAdmissionStatus::SourceUnavailable);
     rejected = request;
+    rejected.selectedSourceMask = 0;
+    rejected.availableSourceMask = 0;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::SourceUnavailable);
+    rejected = request;
+    rejected.availableSourceMask = 4;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::SourceUnavailable);
+    rejected = request;
     rejected.scanPlan.passive = false;
+    CHECK(authorizeProductSurvey(rejected).status ==
+          ProductSurveyAdmissionStatus::PassivePlanRejected);
+    rejected = request;
+    rejected.bleScanPlan.passive = false;
     CHECK(authorizeProductSurvey(rejected).status ==
           ProductSurveyAdmissionStatus::PassivePlanRejected);
     rejected = request;
@@ -3344,6 +3434,7 @@ int main() {
     testAppCatalogProjectsCapabilityStatesBeforeLaunch();
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
+    testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations();
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
     testSourceTimelineStreamsHonestDutyWindowsAndDrops();
     testSourceTimelineOverflowRejectsStateChangeAndCanDrain();

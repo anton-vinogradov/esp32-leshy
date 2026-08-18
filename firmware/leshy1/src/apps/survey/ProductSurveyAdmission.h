@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+#include "drivers/ble/BlePassiveContract.h"
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/Resources.h"
 #include "storage/ProductStorePolicy.h"
@@ -25,7 +26,10 @@ const char* productSurveyAdmissionStatusName(
 struct ProductSurveyRequest final {
     bool explicitStart = false;
     bool sourceAvailable = false;
+    std::uint8_t selectedSourceMask = 1;
+    std::uint8_t availableSourceMask = 1;
     drivers::wifi::WifiScanPlan scanPlan{};
+    drivers::ble::BleScanPlan bleScanPlan{};
     storage::ProductStorePermit storePermit{};
     kernel::runtime::ResourceMask ownedResources = 0;
     bool conflictingOwner = false;
@@ -38,6 +42,9 @@ struct ProductSurveyPermit final {
     bool passive = true;
     bool persistent = true;
     bool simulated = false;
+    std::uint8_t selectedSourceMask = 0;
+    std::uint8_t availableSourceMask = 0;
+    std::uint8_t degradedSourceMask = 0;
 
     bool allowed() const {
         return status == ProductSurveyAdmissionStatus::Permitted;

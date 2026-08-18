@@ -250,7 +250,8 @@ def main() -> int:
     source_boundary = entry[entry.find("report.sourceFailureInjected ="):
                             entry.find("report.storeOpenAttempted = true")]
     require(failures,
-            "scanner->begin()" in source_boundary and
+            "wifiScanner->begin()" in source_boundary and
+            "bleScanner->begin()" in source_boundary and
             "authorizeProductSurvey" in source_boundary and
             "openExistingWritable" not in source_boundary,
             "source failure is not ordered before store open")
