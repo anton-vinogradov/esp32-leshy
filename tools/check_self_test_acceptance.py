@@ -209,9 +209,18 @@ def main() -> int:
     require(failures, 'case 6: return "self_test"' in
             UI_CONTROLLER.read_text(encoding="utf-8"), "Self-Test page mapping missing")
     diagnostic_workspace = re.search(r"char diagnosticJson\[(\d+)\] = \{\};", ui)
+    shared_workspace = re.search(
+        r"struct SdPhysicalEvidenceWorkspace final \{.*?"
+        r"char line\[(\d+)\] = \{\};",
+        ui, re.DOTALL)
+    workspace_size = (
+        int(diagnostic_workspace.group(1))
+        if diagnostic_workspace is not None else
+        int(shared_workspace.group(1))
+        if shared_workspace is not None and
+           "auto& diagnosticJson = sdPhysicalEvidence.line;" in ui else 0)
     require(failures,
-            diagnostic_workspace is not None and
-            3072 <= int(diagnostic_workspace.group(1)) <= 5120 and
+            3072 <= workspace_size <= 5120 and
             re.search(r"char line\[(?:3072|4096)\]", ui) is None,
             "diagnostic JSON must reuse one static 3-5 KiB bounded workspace")
     # The exact candidate block binds the historical 0.53 evidence. Current

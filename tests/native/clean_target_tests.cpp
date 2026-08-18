@@ -370,6 +370,26 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(incompleteReport.blocked == 2);
     CHECK(incompleteReport.notApplicable == 2);
 
+    SelfTestFacts degradedHeap = healthy;
+    degradedHeap.heapMinimum = degradedHeap.heapFloor - 1U;
+    SelfTestController finalHeapFailure;
+    CHECK(finalHeapFailure.nextMode());
+    CHECK(finalHeapFailure.activate(healthy, 540));
+    CHECK(finalHeapFailure.activate(healthy, 550));
+    for (std::uint8_t state = 1;
+         state < SelfTestController::kVisualStateCount; ++state) {
+        CHECK(finalHeapFailure.activate(healthy, 550 + state));
+    }
+    CHECK(finalHeapFailure.activate(healthy, 560));
+    CHECK(finalHeapFailure.completeActiveChecks(degradedHeap, 570));
+    const SelfTestReport& heapFailure = finalHeapFailure.report();
+    CHECK(heapFailure.status == SelfTestResultStatus::Fail);
+    CHECK(heapFailure.checks[2].status == SelfTestResultStatus::Fail);
+    CHECK(heapFailure.passed == 24);
+    CHECK(heapFailure.failed == 1);
+    CHECK(heapFailure.blocked == 1);
+    CHECK(heapFailure.notApplicable == 3);
+
     SelfTestFacts unprobed = healthy;
     unprobed.shieldReceiverProbeComplete = false;
     unprobed.shieldReceiverProbePassed = false;

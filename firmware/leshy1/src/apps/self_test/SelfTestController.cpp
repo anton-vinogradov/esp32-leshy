@@ -260,6 +260,16 @@ bool SelfTestController::completeActiveChecks(
         return false;
     }
     report_.facts = facts;
+    // Quick facts can degrade while Full/Guided owns drivers and storage. Rebuild
+    // the ordered result from the final snapshot so the report cannot retain an
+    // optimistic preflight heap/input/output/resource result.
+    report_.checks.fill({});
+    report_.checkCount = 0;
+    report_.passed = 0;
+    report_.failed = 0;
+    report_.blocked = 0;
+    report_.notApplicable = 0;
+    evaluateQuick(report_.facts);
     append("full.ui.common_states", SelfTestResultStatus::Pass);
     evaluateCapabilityCoverage(report_.facts);
     append("full.capability.coverage", SelfTestResultStatus::Blocked);

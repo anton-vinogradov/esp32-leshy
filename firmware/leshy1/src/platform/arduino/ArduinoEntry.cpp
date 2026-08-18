@@ -498,7 +498,6 @@ static_assert(sizeof(kLongestConsoleCommand) <= kConsoleCommandCapacity,
               "console command buffer cannot hold the longest command");
 char usbCommand[kConsoleCommandCapacity] = {};
 char uartCommand[kConsoleCommandCapacity] = {};
-char diagnosticJson[5120] = {};
 std::size_t usbLength = 0;
 std::size_t uartLength = 0;
 std::uint8_t lastInputRaw = 0xFF;
@@ -722,7 +721,7 @@ bool lastUiRenderWasIncremental = false;
 std::uint64_t lastUiRenderUs = 0;
 
 struct SdPhysicalEvidenceWorkspace final {
-    char line[4608] = {};
+    char line[5120] = {};
     char summaryA[512] = {};
     char summaryB[512] = {};
     char summaryC[512] = {};
@@ -734,6 +733,10 @@ struct SdPhysicalEvidenceWorkspace final {
 };
 
 SdPhysicalEvidenceWorkspace sdPhysicalEvidence;
+// Diagnostic replies and explicit physical-storage commands run serially on the
+// main loop. Reuse their largest scratch line instead of reserving a second 5 KiB
+// buffer that would permanently reduce the no-PSRAM product heap.
+auto& diagnosticJson = sdPhysicalEvidence.line;
 
 struct StoredGenerationEvidence final {
     std::uint32_t expectedSegmentCrc = 0;
