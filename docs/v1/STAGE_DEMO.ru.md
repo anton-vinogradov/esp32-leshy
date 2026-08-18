@@ -77,9 +77,11 @@ observation CSV на 47 rows. Exact 0.78 принимает намеренно �
 packet Capture: 16 retained real frames, разобранный radiotap PCAP, aggregate-only
 repository evidence, RAM scrub и final lease 0. Exact 0.79 затем принимает explicit
 privacy-confirmed atomic persistence, generation 82→83, cold read-only reopen Library
-и byte-exact PCAP без второго payload buffer. Conditional source/Self-Test contracts,
-controlled physical power-cut и 8 h/32-cycle multi-source stability остаются
-обязательными.
+и byte-exact PCAP без второго payload buffer. Exact 0.80 затем переводит общий
+Self-Test на plan v3: все 15 завершённых platform/S3/S4 checks проходят, три
+отсутствующие assembly дают N/A, shield receivers и total coverage остаются честно
+blocked. Conditional receiver contracts, active Full/Guided execution, controlled
+physical power-cut и 8 h/32-cycle multi-source stability остаются обязательными.
 
 ## Ритм тестирования внутри этапа
 

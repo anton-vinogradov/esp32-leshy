@@ -2,8 +2,9 @@
 
 *Читать на: [English](SELF_TEST.md) · **Русский***
 
-Статус: **принят product/UX contract; Quick и guided UI-state slices S2 физически
-приняты; capability coverage Full/Guided развивается через S3…S8**.
+Статус: **принят product/UX contract; Quick/guided UI S2 и registration slice
+завершённых capabilities S3/S4 физически приняты; active execution workflows из
+Full/Guided продолжается через S4…S8**.
 
 Self-Test — отдельное приложение в самом низу Home. Оно никогда не перехватывает
 обычную загрузку. Один test engine используется владельцем устройства, полным
@@ -111,6 +112,23 @@ Full/Guided через штатный five-key Action path, а `ui.state` пуб
 `self_test_visual_state`, чтобы release driver проверял то же semantic state, которое
 видит пользователь. DEMO-S2 проходит 29 steps, девять TFT comparisons, Quick 8/8 и
 zero final leases; полный capability coverage честно остаётся blocked до S3…S7.
+
+## Принятый registration checkpoint S3/S4
+
+Exact candidate `0.80.0-self-test-coverage` переводит общий report на plan version 3.
+Он сохраняет восемь read-only Quick checks и регистрирует ещё семь passing checks:
+common UI states, persistent Survey, passive BLE, passive Wi-Fi Capture, enrolled
+storage, cold Library recovery и persistent raw Capture. Фактическая no-extension
+assembly отмечает GPS, PN532 и IR как `not_applicable`, не превращая отсутствующее
+hardware в failure или false pass. Два оставшихся checks —
+`full.s4.shield.receivers` и `full.capability.coverage` — остаются `blocked`.
+
+На board-01 independent host принял exact ordered report 15 pass / 0 fail / 2 blocked /
+3 N/A, десять real TFT states, exact firmware/ELF/CID, неизменную storage generation
+83, zero radio-TX/storage-write/buzzer side effects, healthy input и final owner/lease
+`none`/`0` (`E-AUTO-045`/`E-HIL-105`/`E-SELFTEST-002`). Это доказывает honest
+registration и readiness/persistence checks, но намеренно ещё не утверждает, что
+Full/Guided активно выполняет каждую product workflow.
 
 ## Приёмка
 

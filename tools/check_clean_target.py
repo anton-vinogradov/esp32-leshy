@@ -45,6 +45,9 @@ def main() -> int:
     persistent_capture_runner_path = (
         ROOT / "tools" / "run_1x_persistent_wifi_capture_hil.py"
     )
+    self_test_coverage_runner_path = (
+        ROOT / "tools" / "run_1x_self_test_coverage_hil.py"
+    )
     littlefs_runner_path = ROOT / "tools" / "run_1x_littlefs_parity_hil.py"
     littlefs_reset_runner_path = (
         ROOT / "tools" / "run_1x_littlefs_reset_matrix_hil.py"
@@ -633,6 +636,25 @@ def main() -> int:
         ):
             if marker not in persistent_capture_runner:
                 errors.append(f"persistent Capture runner is missing: {marker}")
+
+    if not self_test_coverage_runner_path.is_file():
+        errors.append("S3/S4 Self-Test coverage HIL runner is missing")
+    else:
+        self_test_coverage_runner = self_test_coverage_runner_path.read_text(
+            encoding="utf-8"
+        )
+        for marker in (
+            "leshy.self_test_coverage_hil.run.v1",
+            '"full.s3.survey.persistence"',
+            '"full.s4.radio.ble.passive"',
+            '"full.s4.capture.persistence"',
+            '"full.s4.shield.receivers"',
+            '"not_applicable"',
+            '"radio_tx_commands": 0',
+            '"storage_write_commands": 0',
+        ):
+            if marker not in self_test_coverage_runner:
+                errors.append(f"Self-Test coverage runner is missing: {marker}")
 
     capture_sources = "\n".join(
         path.read_text(encoding="utf-8")

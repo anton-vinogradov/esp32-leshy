@@ -77,9 +77,11 @@ zero drops/overflow. Exact 0.77 then accepts immutable Capture provenance and th
 Wi-Fi packet Capture: 16 retained real frames, parsed radiotap PCAP, aggregate-only
 repository evidence, RAM scrub and final lease 0. Exact 0.79 then accepts explicit
 privacy-confirmed atomic persistence, generation 82→83, cold read-only Library reopen
-and a byte-exact PCAP without a second payload buffer. Conditional source/Self-Test
-contracts, controlled physical power-cut and 8 h/32-cycle multi-source stability
-remain mandatory.
+and a byte-exact PCAP without a second payload buffer. Exact 0.80 then upgrades the
+shared Self-Test to plan v3: all 15 completed platform/S3/S4 checks pass, three absent
+assemblies are N/A, and shield receivers plus total coverage remain honestly blocked.
+Conditional receiver contracts, active Full/Guided execution, controlled physical
+power-cut and 8 h/32-cycle multi-source stability remain mandatory.
 
 ## Test cadence within a stage
 

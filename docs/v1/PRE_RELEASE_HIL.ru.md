@@ -390,6 +390,14 @@ workflow прошли end to end:
   hashes и aggregate metadata. Exact 0.79 независимо проверяет
   `check_persistent_wifi_capture_acceptance.py`
   (`E-AUTO-044`/`E-HIL-104`/`E-CAPTURE-002`);
+- `tools/run_1x_self_test_coverage_hil.py` — exact non-destructive lane plan v3. Он
+  flash-ит exact candidate, связывает ELF/CID и continuity admitted storage, проводит
+  Quick плюс Full/Guided через все пять common UI states и независимо требует ordered
+  registry checks S3/S4. Exact 0.80 проходит 15 checks, отмечает отсутствующие
+  GPS/PN532/IR как три N/A и сохраняет два честных blocker для shield receivers/total
+  coverage, с zero side effects, десятью TFT captures и final lease 0.
+  `check_self_test_coverage_acceptance.py` rehashes весь retained bundle
+  (`E-AUTO-045`/`E-HIL-105`/`E-SELFTEST-002`);
 - `tools/run_1x_littlefs_parity_hil.py` — fail-closed lane disposable flash. Он
   выбирает только inactive OTA1 `app1`, требует два совпадающих полных чтения и
   firmware-side hash match до format, делает 32 commits common SessionStore плюс

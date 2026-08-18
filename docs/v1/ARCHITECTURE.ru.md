@@ -355,9 +355,17 @@ generation, fail-closed открывает её снова и освобожда
 напрямую, поэтому Library PCAP не создаёт второй frame-payload buffer. Back scrub-ит
 volatile capture RAM, но не удаляет явно сохранённый artifact. `E-HIL-104` доказывает
 generation 82→83, 16 records/2 253 payload bytes, равенство live/cold PCAP 2 773 B,
-read-only recovery, invariant heap, девять TFT states и final lease 0. Conditional
-nRF24/CC1101/GPS и применимые Self-Test contracts, controlled physical power-cut и
-8 h/32-cycle multi-source endurance остаются работой `DEMO-S4`.
+read-only recovery, invariant heap, девять TFT states и final lease 0.
+
+Exact `0.80.0-self-test-coverage` превращает capability registration в явную
+architecture boundary вместо вывода о здоровье из доступности меню. Boot inventory
+facts проецируются в plan-v3 `SelfTestFacts`; один deterministic engine выдаёт ordered
+checks readiness/persistence завершённых S3/S4, optional assembly declarations
+становятся `not_applicable`, незавершённые receiver contracts — `blocked`. Один report
+управляет TFT и independent HIL oracle, фиксирует zero side effects и удерживает только
+UI lease. `E-HIL-105` доказывает 15 pass/0 fail/2 blocked/3 N/A и final lease 0.
+Conditional receivers nRF24/CC1101, active Full/Guided workflow execution, controlled
+physical power-cut и 8 h/32-cycle endurance остаются работой `DEMO-S4`.
 
 ## 7. Модель данных
 

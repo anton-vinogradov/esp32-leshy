@@ -2,8 +2,9 @@
 
 *Read in: **English** · [Русский](SELF_TEST.ru.md)*
 
-Status: **accepted product/UX contract; S2 Quick and guided UI-state slices
-physically accepted; Full/Guided capability coverage grows through S3…S8**.
+Status: **accepted product/UX contract; S2 Quick/guided UI and the completed S3/S4
+capability-registration slice are physically accepted; active Full/Guided workflow
+execution continues through S4…S8**.
 
 Self-Test is an explicit application at the bottom of Home. It is never an automatic
 boot detour. The same test engine serves a device owner, a guided field check, and
@@ -111,6 +112,23 @@ normal five-key Action path, and `ui.state` publishes the current
 `self_test_visual_state` so a release driver can verify the same semantic state that
 the user sees. DEMO-S2 passes 29 steps, nine TFT comparisons, Quick 8/8, and zero
 final leases; Full capability coverage remains honestly blocked until S3…S7.
+
+## Accepted S3/S4 registration checkpoint
+
+Exact candidate `0.80.0-self-test-coverage` advances the shared report to plan
+version 3. It retains the eight read-only Quick checks and registers seven more
+passing checks for common UI states, persistent Survey, passive BLE, passive Wi-Fi
+Capture, enrolled storage, cold Library recovery, and persistent raw Capture. The
+actual no-extension assembly reports GPS, PN532, and IR as `not_applicable`; it does
+not convert missing hardware into failures or false passes. The two remaining checks,
+`full.s4.shield.receivers` and `full.capability.coverage`, remain `blocked`.
+
+On board-01 the independent host accepted the exact 15 pass / 0 fail / 2 blocked /
+3 N/A ordered report, ten real TFT states, exact firmware/ELF/CID, unchanged storage
+generation 83, zero radio-TX/storage-write/buzzer side effects, healthy input, and
+final owner/lease `none`/`0` (`E-AUTO-045`/`E-HIL-105`/`E-SELFTEST-002`). This proves
+honest registration and readiness/persistence checks; it deliberately does not yet
+claim that Full/Guided actively executes every product workflow.
 
 ## Acceptance
 

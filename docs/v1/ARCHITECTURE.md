@@ -298,8 +298,18 @@ workspace directly, so Library PCAP creates no second frame-payload buffer. Back
 scrubs volatile capture RAM but does not delete an explicitly saved artifact.
 `E-HIL-104` proves generation 82→83, 16 records/2,253 payload bytes, live/cold
 2,773-byte PCAP equality, read-only recovery, invariant heap, nine TFT states and final
-lease 0. Conditional nRF24/CC1101/GPS plus applicable Self-Test contracts, controlled
-physical power-cut and 8 h/32-cycle multi-source endurance remain `DEMO-S4` work.
+lease 0.
+
+Exact `0.80.0-self-test-coverage` makes capability registration an explicit
+architecture boundary rather than inferring health from menu availability. Boot
+inventory facts are projected into plan-v3 `SelfTestFacts`; one deterministic engine
+emits ordered checks for completed S3/S4 readiness and persistence, while optional
+assembly declarations map to `not_applicable` and unfinished receiver contracts map
+to `blocked`. The same report drives the TFT and independent HIL oracle, records zero
+side effects, and keeps only the UI lease. `E-HIL-105` proves 15 pass/0 fail/2 blocked/
+3 N/A and final lease 0. Conditional nRF24/CC1101 receivers, active Full/Guided
+workflow execution, controlled physical power-cut and 8 h/32-cycle endurance remain
+`DEMO-S4` work.
 
 ## Data model
 

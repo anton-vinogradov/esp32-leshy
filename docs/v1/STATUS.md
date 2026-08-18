@@ -12,10 +12,10 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.79 S4 checkpoints through a privacy-confirmed persistent Wi-Fi frame Capture, cold Library reopen, and byte-exact PCAP.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.80 S4 checkpoints through persistent Wi-Fi Capture plus plan-v3 Full/Guided registration of every completed S3/S4 workflow.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
-- **Current objective:** close conditional nRF24/CC1101/GPS behavior for the actual
-  no-extension assembly and applicable Full/Guided Self-Test coverage, then exercise
+- **Current objective:** close conditional nRF24/CC1101 receiver behavior for the
+  actual no-extension assembly and execute those workflows from Full/Guided, then exercise
   controlled power-cut recovery and the 8 h/32-cycle multi-source endurance gate.
 
 ## Stage state
@@ -26,7 +26,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71…0.78 accept source selection, durable dual-source scheduling/degradation, Observation browser, provenance/CSV and bounded raw Wi-Fi Capture; exact 0.79 `E-HIL-104` adds explicit privacy confirmation, atomic schema-v4 persistence to the enrolled SD, cold read-only Library reopen and byte-exact PCAP with invariant heap and final lease 0 | implement conditional nRF24/CC1101/GPS contracts for the declared no-extension assembly plus applicable Full/Guided checks; then exercise controlled physical power-cut recovery and 8 h/32-cycle multi-source endurance |
+| S4 | `active` | exact 0.71…0.79 accept the passive multi-source, browser/export and persistent Capture path; exact 0.80 `E-HIL-105` upgrades Full/Guided to plan v3, passes all 15 completed S3/S4/platform checks, reports absent GPS/PN532/IR as three N/A, and leaves shield receivers plus total coverage honestly blocked with zero side effects/final lease | implement conditional nRF24/CC1101 receiver contracts and invoke applicable workflows from Full/Guided; then exercise controlled physical power-cut recovery and 8 h/32-cycle multi-source endurance |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -40,9 +40,9 @@ items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 
 | Product block | Now | Next qualitative transition |
 |---|---|---|
-| Device foundation and UX | `done / S2` — boot, board profile, five keys, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test skeleton and automated TFT capture | extend the Full/Guided registry with every new hardware workflow |
+| Device foundation and UX | `done / S2` — boot, board profile, five keys, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test and automated TFT capture; plan-v3 Full/Guided now registers completed S3/S4 workflows | execute each applicable registered workflow and keep adding new hardware checks |
 | Survey and Library | `done / S3` — real passive Wi-Fi, atomic Session, List/Detail, offline reopen and export | reuse this accepted foundation rather than fork a new data path |
-| Passive multi-radio and Capture | `active / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV and privacy-confirmed persistent Wi-Fi PCAP work; raw payload is bounded to 16×256 B, atomically saved only on request, cold-reopened from Library and scrubbed from live RAM on Back | conditional nRF24/CC1101/GPS declarations, applicable Full/Guided Self-Test, power-cut and endurance |
+| Passive multi-radio and Capture | `active / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV and privacy-confirmed persistent Wi-Fi PCAP work; plan-v3 Self-Test passes their registered readiness/persistence checks and classifies absent modules honestly | conditional nRF24/CC1101 receiver workflows, active Full/Guided execution, power-cut and endurance |
 | Complete standard ESP32-DIV hardware | `ahead / S5` — scope and fail-closed hardware envelope exist, but complete IR/PN532/GPS/power workflows do not | probe → capture/observe → Library → inspect/export for every applicable module |
 | Targets, compare and companion | `ahead / S6` — product model and boundaries exist, user workflows are not implemented | compare two Surveys through evidence-backed Targets and the same local Web/USB companion |
 | Safe Lab and extensions | `ahead / S7` — safety/resource boundaries are accepted, active workflows and SDK are not implemented | feature-complete catalog, permissioned extensions and proven panic/timeout stop |
@@ -613,6 +613,9 @@ endurance are explicit `DEMO-S4` criteria.
 | E-BUILD-080 | exact `0.79.0-persistent-frame-capture` build | pass: RAM 152,424 B, linked flash 1,454,428 B; app/factory 1,454,832/1,520,368 B; app `9e4a76fb…337`, factory `0c3fb99a…769`, ELF `0b1a83a7…309`, map `6c15c56c…a0f`; source commit `8568547` | +8,428 B linked flash, +48 B static RAM and +8,432 B images vs 0.78 for schema-v4 frame records, zero-copy persistent view, privacy confirmation, background atomic save and Library PCAP; exact checkpoint, not `DEMO-S4` or a release build |
 | E-AUTO-044 | persistent Wi-Fi Capture native tests, exact-HIL runner and retained verifier | pass: native tests prove live→schema-v4 segment→reopen→PCAP byte equality and reject corrupt frame blocks fail closed; the HIL runner drives explicit Save/confirmation, cold reboot and Library export. The independent verifier rehashes source/candidate/runner and exact 30-file inventory, both binaries, nine TFT frames, CID, generation, heap, privacy and cleanup | repository evidence deliberately excludes raw 802.11 bytes and PCAP; physical no-TX still requires the unavailable RF instrument |
 | E-HIL-104 / E-CAPTURE-002 | board-01 exact 0.79 persistent Wi-Fi frame Capture | pass: explicit capture retains 16/28 real frames and 2,253 B while counting 12 capacity and zero invalid drops; privacy confirmation atomically advances generation 82→83 on the exact enrolled CID. A cold boot reopens schema v4 read-only with zero recovery writes, Library reports 16 raw IEEE 802.11 records and streams a 2,773-byte PCAP byte-identical to the live export (`8ac6d71a…7f1`); total/free/min heap remains exactly 229,284/164,540/145,144 B. Back scrubs live RAM, nine 240×320 TFT states pass visual/integrity review, and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-persistent-wifi-capture-0.79.json) | accepts privacy-aware atomic Capture→Library persistence and cold compatible PCAP for CAP-023/024/026/042; conditional sources/Self-Test, controlled power-cut and endurance keep `DEMO-S4` open |
+| E-BUILD-081 | exact `0.80.0-self-test-coverage` build | pass: RAM 152,520 B, linked flash 1,456,012 B; app/factory 1,456,416/1,521,952 B; app `7c409a89…d06`, factory `69fe24c7…485`, ELF `4aea8541…d38`, map `5b61e02e…270`; source commit `a1b6599` | +1,584 B linked flash, +96 B static RAM and +1,584 B images vs 0.79 for plan-v3 capability facts, ordered S3/S4 checks, N/A accounting and UI/report telemetry; exact checkpoint, not `DEMO-S4` or a release build |
+| E-AUTO-045 | S3/S4 Self-Test host, exact-HIL runner and retained verifier | pass: native cases prove the healthy 15/20 result and fail-closed missing/declared facts; the physical runner flashes exact bytes, drives Quick plus Full/Guided through all common states and returns Home. The independent verifier rehashes source/candidate/runner, exact 33-file inventory, both binaries, ordered check IDs, reports, continuity, ten TFT captures, side effects and cleanup | one-board non-destructive evidence; registered readiness/persistence is not yet active execution of every product workflow, and absent external RF instrumentation remains explicit |
+| E-HIL-105 / E-SELFTEST-002 | board-01 exact 0.80 S3/S4 Self-Test coverage | pass checkpoint: Quick remains 8/8; Full/Guided plan v3 passes 15 completed platform/S3/S4 checks, returns zero failures, marks absent GPS/PN532/IR as three `not_applicable`, and honestly blocks `full.s4.shield.receivers` plus `full.capability.coverage`. Exact firmware/ELF/CID match, generation/observations stay 83/0 with zero recovery writes, both reports record zero radio-TX/storage-write/buzzer side effects, ten 240×320 TFT states pass operator/integrity review, input drops are zero, buzzer is LOW and final Home owner/lease are none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-self-test-coverage-0.80.json) | accepts registration and honest disposition of completed S3/S4/no-extension capability checks; shield receiver contracts, active Full execution, power-cut and endurance keep `DEMO-S4` open |
 
 ## Known uncertainties and risks
 
@@ -648,7 +651,9 @@ through exact 0.75, common List/Detail filters plus bounded RSSI history are acc
 by exact 0.76, immutable Capture provenance plus canonical observation CSV are
 accepted by exact 0.77, a bounded volatile Wi-Fi frame Capture with real PCAP is
 accepted by exact 0.78, and atomic privacy-confirmed Capture→Library persistence is
-accepted by exact 0.79. Conditional source/Self-Test contracts remain software work.
+accepted by exact 0.79. Exact 0.80 registers the completed S3/S4 and no-extension
+assembly facts in Full/Guided plan v3; conditional nRF24/CC1101 receiver contracts
+and active workflow execution remain software work.
 The currently unavailable controlled
 power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.

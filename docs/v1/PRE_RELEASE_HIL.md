@@ -388,6 +388,14 @@ the current combined GitHub workflows have passed end to end:
   aggregate metadata. Exact 0.79 is independently checked by
   `check_persistent_wifi_capture_acceptance.py`
   (`E-AUTO-044`/`E-HIL-104`/`E-CAPTURE-002`);
+- `tools/run_1x_self_test_coverage_hil.py` is the exact non-destructive plan-v3 lane.
+  It flashes the exact candidate, binds ELF/CID and admitted storage continuity,
+  drives Quick plus Full/Guided through all five common UI states, and independently
+  requires the ordered S3/S4 check registry. Exact 0.80 passes 15 checks, reports
+  absent GPS/PN532/IR as three N/A and retains two honest blockers for shield
+  receivers/total coverage, with zero side effects, ten TFT captures and final lease
+  0. `check_self_test_coverage_acceptance.py` rehashes the complete retained bundle
+  (`E-AUTO-045`/`E-HIL-105`/`E-SELFTEST-002`);
 - `tools/run_1x_littlefs_parity_hil.py` is the fail-closed disposable-flash lane.
   It selects only inactive OTA1 `app1`, requires two matching full reads and a
   firmware-side hash match before format, performs 32 common SessionStore commits
