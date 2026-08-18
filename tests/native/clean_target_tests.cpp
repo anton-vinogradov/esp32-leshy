@@ -27,6 +27,7 @@
 #include "services/survey/IngressTiming.h"
 #include "services/survey/ObservationQueue.h"
 #include "services/survey/SessionBatchPolicy.h"
+#include "services/survey/SourceDegradation.h"
 #include "services/survey/SourceTimeline.h"
 #include "services/survey/SurveySession.h"
 #include "storage/AtomicHead.h"
@@ -983,6 +984,37 @@ void testSurveySessionIsOrderedBoundedAndStopIsIdempotent() {
     CHECK(session.stop(4001) == SessionStatus::AlreadyStopped);
     CHECK(session.append(observation) == SessionStatus::NotRunning);
     CHECK(std::strcmp(sessionStatusName(SessionStatus::Full), "full") == 0);
+}
+
+void testSourceDegradationKeepsOnlyCompatibleSourcesRunning() {
+    using leshy1::services::survey::SourceFailureClass;
+    const std::uint8_t wifi = sourceMask(RadioKind::Wifi);
+    const std::uint8_t ble = sourceMask(RadioKind::Ble);
+
+    const auto bleUnavailable = decideSourceDegradation(
+        wifi | ble, 0, RadioKind::Ble, SourceFailureClass::Unavailable);
+    CHECK(bleUnavailable.valid);
+    CHECK(bleUnavailable.continueSession);
+    CHECK(bleUnavailable.activeSourceMask == wifi);
+    CHECK(bleUnavailable.unavailableSourceMask == ble);
+    CHECK(bleUnavailable.windowState == SourceWindowState::Unavailable);
+    CHECK(bleUnavailable.windowReason == SourceWindowReason::DriverUnavailable);
+    CHECK(std::strcmp(bleUnavailable.status, "source_degraded") == 0);
+
+    const auto wifiFault = decideSourceDegradation(
+        wifi, ble, RadioKind::Wifi, SourceFailureClass::Fault);
+    CHECK(wifiFault.valid);
+    CHECK(!wifiFault.continueSession);
+    CHECK(wifiFault.activeSourceMask == 0);
+    CHECK(wifiFault.unavailableSourceMask == (wifi | ble));
+    CHECK(wifiFault.windowState == SourceWindowState::Fault);
+    CHECK(wifiFault.windowReason == SourceWindowReason::DriverFault);
+    CHECK(std::strcmp(wifiFault.status, "all_sources_failed") == 0);
+
+    const auto duplicateFailure = decideSourceDegradation(
+        wifi, ble, RadioKind::Ble, SourceFailureClass::Unavailable);
+    CHECK(!duplicateFailure.valid);
+    CHECK(!duplicateFailure.continueSession);
 }
 
 void testSourceTimelineStreamsHonestDutyWindowsAndDrops() {
@@ -3478,6 +3510,7 @@ int main() {
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations();
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
+    testSourceDegradationKeepsOnlyCompatibleSourcesRunning();
     testSourceTimelineStreamsHonestDutyWindowsAndDrops();
     testSourceTimelineOverflowRejectsStateChangeAndCanDrain();
     testSessionTimelinePersistsBoundedHistoryAndExactAggregates();

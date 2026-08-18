@@ -43,6 +43,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/services/survey/IngressTiming.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/ObservationQueue.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SessionBatchPolicy.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SourceDegradation.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/AtomicHead.cpp" \
@@ -133,6 +134,7 @@ python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"
 python3 "$repo_dir/tools/test_source_timeline_hil_runner.py"
 python3 "$repo_dir/tools/test_passive_ble_hil_runner.py"
+python3 "$repo_dir/tools/test_runtime_degradation_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_cancel_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_missing_source_hil_runner.py"
 python3 "$repo_dir/tools/test_littlefs_parity_hil_runner.py"

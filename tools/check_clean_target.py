@@ -552,6 +552,23 @@ def main() -> int:
         if "openExistingWritable" in source_boundary:
             errors.append("missing-source path can open the store before admission")
 
+    for marker in (
+        "survey.product.test-runtime-unavailable wifi|ble|clear",
+        "consumeProductSurveyRuntimeUnavailableInjection(source)",
+        "decideSourceDegradation(",
+        'event.report.unavailableSourceMask == 0',
+        "SourceWindowState::Unavailable",
+        "SourceWindowReason::DriverUnavailable",
+        'tr(UiTextId::TimelineWifiUnavailable)',
+        'tr(UiTextId::TimelineBleUnavailable)',
+        '\\"survey_product_runtime_source_failure_injected\\"',
+        '\\"survey_product_runtime_source_injection_armed_mask\\"',
+    ):
+        if marker not in entry:
+            errors.append(
+                f"product Survey runtime-degradation evidence is missing: {marker}"
+            )
+
     if not product_start_retry_path.is_file():
         errors.append("Product Start identity retry policy is missing")
     else:

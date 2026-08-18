@@ -115,6 +115,7 @@ LESHY_UI_TEXT(RunningSimulated, Meta, 212, "RUNNING | SIMULATED | RF OFF", u8"Р
 LESHY_UI_TEXT(RunningPassive, Meta, 212, "RUNNING | REAL PASSIVE | RX ONLY", u8"РАБОТАЕТ | ПАССИВНО | ТОЛЬКО RX")
 LESHY_UI_TEXT(TimelineWifiActiveFormat, Meta, 212, "WI-FI: RX | %u%% TIME", u8"WI-FI: ПРИЕМ | %u%% ВРЕМЯ")
 LESHY_UI_TEXT(TimelineWifiWaitingFormat, Meta, 212, "WI-FI: WAIT | %u%% TIME", u8"WI-FI: ПАУЗА | %u%% ВРЕМЯ")
+LESHY_UI_TEXT(TimelineWifiUnavailable, Meta, 212, "WI-FI: UNAVAILABLE", u8"WI-FI: НЕДОСТУПЕН")
 LESHY_UI_TEXT(TimelineBleActiveFormat, Meta, 212, "BLE: RX | %u%% TIME", u8"BLE: ПРИЕМ | %u%% ВРЕМЯ")
 LESHY_UI_TEXT(TimelineBleWaitingFormat, Meta, 212, "BLE: WAIT | %u%% TIME", u8"BLE: ПАУЗА | %u%% ВРЕМЯ")
 LESHY_UI_TEXT(TimelineBleUnavailable, Meta, 212, "BLE: UNAVAILABLE", u8"BLE: НЕДОСТУПЕН")
