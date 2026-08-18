@@ -57,6 +57,13 @@ recorded final demo goldens and the reproducible gate run remain open. Exact 0.6
 `E-AUTO-034`/`E-HIL-094` accepts all six software-reset boundaries with one-write
 inactive-OTA1 restoration. Controlled physical power-cut is a named `DEMO-S4` gate.
 
+`DEMO-S3` is now accepted by `E-AUTO-035`/`E-HIL-095`/`E-GATE-003`. A separate
+non-gate recording run froze five manually reviewed TFT goldens before the distinct
+gate run. Exact 0.70 then advanced generation 69→70 with 29/29 passive observations,
+zero drops, cold read-only reopen and valid Library export; all five comparisons have
+zero unmasked mismatch, heap is invariant, and final ownership is zero. S3 is closed
+and S4 is active; this does not promote a release or waive any `DEMO-S4` gate.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

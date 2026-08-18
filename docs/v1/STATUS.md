@@ -10,13 +10,14 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 ## Now
 
-- **Active stage:** `S3 — First persistent Survey Session`.
-- **Last completed stage:** `S2 — Clean 1.x platform`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 disposable LittleFS six-boundary software-reset evidence and S3 progress evidence.
+- **Active stage:** `S4 — Cross-radio passive platform`.
+- **Last completed stage:** `S3 — First persistent Survey Session`.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3`, independent TFT goldens, and disposable LittleFS six-boundary software-reset evidence.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
-- **Current objective:** record independent final TFT goldens and run reproducible
-  `DEMO-S3` on the existing real passive Survey → reboot → Library/export path.
-  Controlled physical power-cut is an explicit `DEMO-S4` gate, not a hidden S3 blocker.
+- **Current objective:** begin user-facing S4 capability work on the common passive
+  Observation/Session platform, starting with source selection and shared timeline
+  contracts before adding passive BLE. Controlled physical power-cut and the 8 h
+  multi-source endurance lane remain explicit `DEMO-S4` gates.
 
 ## Stage state
 
@@ -25,8 +26,8 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
-| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; exact 0.60 retains the persistent Core-0 worker and makes terminal `Idle` a UI acknowledgement after cleanup/commit, exact 0.62 physically cancels during an active scan without commit/resource leak, exact 0.68 exposes a clean missing-source terminal, exact 0.69 proves normal/remount LittleFS parity, and exact 0.70 proves all six software-reset boundaries on a backed-up inactive OTA1 target | independent demo goldens and reproducible `DEMO-S3` remain; controlled physical power-cut belongs to `DEMO-S4` |
-| S4 | `planned` | target cross-radio model exists | requires S3 gate |
+| S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
+| S4 | `active` | common cross-radio model, capability catalog and S3-proven Observation/Session/storage/UI foundations exist | implement passive source selection, BLE, shared timeline/capture/export, compatible scheduling and visible unavailability; close controlled power-cut and 8 h multi-source endurance in `DEMO-S4` |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -284,14 +285,14 @@ the platform and visual stage.
    Diagnostics → disabled reason → Back retained 29 Action/query steps, nine
    zero-mismatch real-TFT frames, exact build identity, Quick 8/8, heap, safe buzzer,
    and zero final leases.
-5. **Active:** close the explicit S3 matrix below and promote the existing real
-   passive Survey → reboot → Library/export path only through reproducible `DEMO-S3`.
+5. `DEMO-S3` passed on exact 0.70 in `E-GATE-003`/`E-HIL-095`: the distinct gate
+   run matches five frozen goldens, advances generation 69→70 with 29/29 passive
+   observations, cold-reopens/exports it and returns Home with zero leases.
 
 ## S3 acceptance matrix
 
-The nine PRD slice criteria remain the binding checklist. `pass` below means current
-exact-candidate evidence exists; it does not make the stage gate pass while any row
-or the physical storage exit condition remains partial.
+The nine PRD slice criteria are closed by exact-candidate `DEMO-S3`. `pass` below is
+retained and independently machine-checked by `E-GATE-003`/`E-HIL-095`.
 
 | PRD slice criterion | Current state | Evidence / remaining work |
 |---|---|---|
@@ -305,10 +306,10 @@ or the physical storage exit condition remains partial.
 | 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, nine normal/remount plus eight reset-matrix LittleFS runner tests, static target/hash-before-format/source/store ordering guards, exact board runs, and retained independent verifiers |
 | 9. Missing source explains itself and leaks nothing | `pass` | exact 0.68 one-shot source-boundary injection produces a localized 240×320 Russian unavailable state only after lease 15→0 cleanup; source start/store open/bytes written are false/false/0, hidden Select retry is rejected, Back returns Home, and cold read-only recovery preserves generation 68/25 in E-HIL-092 |
 
-Additional S3 exit work: independently recorded TFT goldens and the reproducible
-final demo. Exact 0.70 has accepted the six-boundary LittleFS software-reset matrix.
-Controlled physical power-cut and eight-hour cross-radio endurance remain
-`DEMO-S4`, not hidden S3 completion criteria.
+S3 has no remaining exit work. Exact 0.70 accepts the six-boundary LittleFS
+software-reset matrix and a distinct reproducible final demo against independently
+recorded TFT goldens. Controlled physical power-cut and eight-hour multi-source
+endurance are explicit `DEMO-S4` criteria.
 
 ## Evidence on the current baseline
 
@@ -562,6 +563,9 @@ Controlled physical power-cut and eight-hour cross-radio endurance remain
 | E-BUILD-071 | exact rebuild `0.70.0-littlefs-reset-matrix` | pass: RAM 134,888 B, linked flash 1,165,916 B; app/factory 1,166,320/1,231,856 B; app `83dfc22b…2468a`, factory `8b808a78…70c6`, ELF `5ce79674…5efe`, map `efdb876b…975b`; RTC no-init 60 B; immediate rebuild reproduced all four hashes | +12,688 B linked flash, +4,672 B static RAM, +12,688 B images and +40 B RTC no-init vs 0.69 for reset continuity, exact target binding and read-only recovery; exact storage candidate, not a stage/release build |
 | E-AUTO-034 | fail-closed LittleFS reset runner and independent verifier | pass: eight host tests cover six-boundary ordering, exact target/CID/run binding, generation policy and restore failure; the runner performs one OTA1 restore write followed by independent bounded read-only verification retries, and the checker binds candidate/source/run/artifacts/docs | no automatic second gate or repeated rewrite after transport failure; physical power-cut remains a separate `DEMO-S4` fixture lane |
 | E-HIL-094 / E-STORAGE-025 | board-01 exact 0.70 disposable LittleFS software-reset matrix | pass: all six ordered SessionStore boundaries recover read-only as generations 1/1/1/1/1/2 with unchanged prior/manifest CRCs, zero recovery bytes/file syncs/directory syncs, exact software-reset continuity, complete cleanup and lease 0. Inactive OTA1 `ade2400f…d661` and partition table `339bda68…5ba2` restore exactly after one flash write; cold exact-CID product recovery preserves generation 68/25 and invariant heap 266,616/202,200/182,148 B in the [machine-checked artifact](../../tests/hil/evidence/board-01-littlefs-reset-matrix-0.70.json) | accepts the software-reset ST-HIL-A07 matrix; independent final goldens/reproducible `DEMO-S3` remain, while controlled power-cut is `DEMO-S4` |
+| E-AUTO-035 | independent-golden DEMO-S3 suite, runner and verifier | pass: a separate non-gate recording run freezes five visually reviewed RGB565 goldens in commit `6b602b6`; exact comparison masks only dynamic Wi-Fi rows/counters, refuses runner/candidate/run-ID drift, and independently rehashes nested product evidence | local unsigned one-board evidence; release trust/attestation remains S8 |
+| E-HIL-095 / E-SURVEY-008 | board-01 exact 0.70 final persistent Survey demo | pass: distinct exact candidate run advances generation 69→70 with 29/29 accepted/forwarded, zero drops, live Detail progress and bounded Back; Stop commits once, cold read-only recovery returns 70/29 with zero physical writes, Library export is valid/persistent/non-simulated/radio-off, heap is invariant 266,616/202,200/182,148 B and final Home owner/lease are none/0. All five TFT states have zero unmasked mismatch in the [machine-checked artifact](../../tests/hil/evidence/board-01-stage-demo-s3-0.70.json) | stage gate only; no release promotion, BLE/cross-radio, controlled power-cut or 8 h multi-source claim |
+| E-GATE-003 | reproducible `DEMO-S3` | pass: all nine S3 criteria are retained, source-bound and machine-checked on exact 0.70; S3 is closed and S4 starts | release remains ineligible; `DEMO-S4…S8` remain |
 
 ## Known uncertainties and risks
 
@@ -591,10 +595,10 @@ Controlled physical power-cut and eight-hour cross-radio endurance remain
 
 ## Blockers
 
-S3 implementation can continue through independent goldens and reproducible
-`DEMO-S3`; it has no physical blocker. The currently unavailable controlled
-power-cut fixture remains an explicit `DEMO-S4` requirement, and software reset is
-not accepted as its substitute. A second board, multimeter, and logic/RF detector remain named later-stage
+S4 implementation is unblocked and starts with user-facing passive source/timeline
+work. The currently unavailable controlled power-cut fixture remains an explicit
+`DEMO-S4` exit requirement, and software reset is not accepted as its substitute.
+A second board, multimeter, and logic/RF detector remain named later-stage
 gaps; affected capabilities stay conditional/unavailable rather than being enabled by
 assumption.
 

@@ -57,6 +57,13 @@ demo goldens и воспроизводимый gate run. Exact 0.69 `E-AUTO-033`
 `E-AUTO-034`/`E-HIL-094` — все шесть software-reset boundaries с one-write restore
 inactive OTA1. Управляемый physical power-cut — named gate `DEMO-S4`.
 
+`DEMO-S3` теперь принят `E-AUTO-035`/`E-HIL-095`/`E-GATE-003`. Отдельный non-gate
+recording run заморозил пять вручную проверенных TFT goldens до distinct gate run.
+Exact 0.70 затем продвинул generation 69→70 с 29/29 passive observations, zero drops,
+cold read-only reopen и valid Library export; все пять сравнений имеют zero unmasked
+mismatch, heap invariant, final ownership нулевой. S3 закрыт, S4 активен; это не
+promote release и не отменяет ни один gate `DEMO-S4`.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases.

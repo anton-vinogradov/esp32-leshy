@@ -1,0 +1,91 @@
+{
+  "candidate": {
+    "app_elf_sha256": "5ce796743f0282cc2d2f458e80ce405cf04acca9ac0c9c068f5e11605bd85efe",
+    "firmware_sha256": "83dfc22bab7462a47cd329d6d7720dc8705bb9738ba08eb9fdc50e4df8f2468a",
+    "version": "0.70.0-littlefs-reset-matrix"
+  },
+  "comparisons": [
+    {
+      "actual_sha256": "db542dc80c30e7f58a35d02da34e5140d878fff296bfed341502e361fa97beae",
+      "golden_sha256": "d0b1311214d67de6159c417541c7db73c38760758022926d46e4931cd3295abf",
+      "masks": [],
+      "mismatch_pixels": 0,
+      "mode": "exact",
+      "name": "setup",
+      "passed": true
+    },
+    {
+      "actual_sha256": "896cac82884091c154e7aecac94d536f8bb10223e98361792a9b1221df0294ed",
+      "golden_sha256": "7797e7ab550aa0e32fee98ebb01dcb9e4a4a75d4e0bea0048ed6b50d001f0781",
+      "masks": [
+        [
+          0,
+          64,
+          240,
+          154
+        ]
+      ],
+      "mismatch_pixels": 0,
+      "mode": "masked_exact",
+      "name": "running",
+      "passed": true
+    },
+    {
+      "actual_sha256": "f1f986c08d90c6513e3ae0f5483ddf26b240567ffe20087549f0be781a0be09b",
+      "golden_sha256": "caf54ac6fbec4a86f09de35fa3ff1a067cf72246d8a4f5673fad32abc8f433e0",
+      "masks": [
+        [
+          0,
+          108,
+          240,
+          92
+        ]
+      ],
+      "mismatch_pixels": 0,
+      "mode": "masked_exact",
+      "name": "detail",
+      "passed": true
+    },
+    {
+      "actual_sha256": "31dbfa4184d4ed64b2c205bb7a38c9b7ea3f66e9bedbff816167b58b0a50ee66",
+      "golden_sha256": "ee471c51226121ab1290dbdefaad1c625b94411c03c7be06886e5ed7b4b81fa1",
+      "masks": [
+        [
+          0,
+          114,
+          240,
+          104
+        ]
+      ],
+      "mismatch_pixels": 0,
+      "mode": "masked_exact",
+      "name": "committed",
+      "passed": true
+    },
+    {
+      "actual_sha256": "8a57140d5cfe9c56a5a5892b8f9d30cc58002b7ecd5d41328f68456b167b82bb",
+      "golden_sha256": "6b8a0b410d46bb46db1e3cc9e81c64145af1c68b88195c8b1b8592cc847cbb83",
+      "masks": [],
+      "mismatch_pixels": 0,
+      "mode": "exact",
+      "name": "export",
+      "passed": true
+    }
+  ],
+  "completed_at_utc": "2026-08-18T01:38:06.480627+00:00",
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "failures": [],
+  "golden_recording": {},
+  "mode": "gate",
+  "passed": true,
+  "product_run_id": "b67dcfbc766b3bc74f870ac5eba26a20",
+  "product_run_sha256": "317aedc44dda9a0f56a91147424bbe6683938ecb70e0c97878a11026eeedc7ac",
+  "product_runner_sha256": "3cc181648504fdf1fded23c73836ddaf38b0d3720558ea9a068c909622982506",
+  "release_gate_eligible": false,
+  "runner_sha256": "de014b2cd398d064ec9ace409be7ec44eb47761d05bc8ac489516ff3c01da61f",
+  "schema": "leshy.stage_demo_s3.run.v1",
+  "stage_gate_eligible": true,
+  "suite_id": "stage-demo-s3",
+  "suite_revision": 1,
+  "suite_sha256": "293db9a6d9daa59ec626ec38ca553e05a66b6e5dda95cba21015eae3dbab027c"
+}

@@ -1,0 +1,77 @@
+{
+  "schema": "leshy.stage_demo_s3_acceptance.v1",
+  "status": "pass_s3_stage_gate",
+  "stage_gate_eligible": true,
+  "release_gate_eligible": false,
+  "evidence_ids": [
+    "E-AUTO-035",
+    "E-HIL-095",
+    "E-SURVEY-008",
+    "E-GATE-003"
+  ],
+  "candidate": {
+    "version": "0.70.0-littlefs-reset-matrix",
+    "source_commit": "35c8a94f0d2728d6c0d53a5eb413ddf1f4a08def",
+    "firmware_sha256": "83dfc22bab7462a47cd329d6d7720dc8705bb9738ba08eb9fdc50e4df8f2468a",
+    "factory_sha256": "8b808a78b4258625e96a5eee11be921982cedd0035f2a7d03ab45b1af4f770c6",
+    "app_elf_sha256": "5ce796743f0282cc2d2f458e80ce405cf04acca9ac0c9c068f5e11605bd85efe",
+    "map_sha256": "efdb876b37a9feb32390eed8aacad01a8e3d0dcaf2aae23e2a2784c56ac9975b",
+    "linked_flash_bytes": 1165916,
+    "static_ram_bytes": 134888,
+    "app_image_bytes": 1166320,
+    "factory_image_bytes": 1231856,
+    "rtc_noinit_bytes": 60,
+    "reproducible_rebuild": true
+  },
+  "independent_goldens": {
+    "source_commit": "6b602b6d31f0b95c57d46febf52257a829001043",
+    "recording_manifest": "tests/hil/goldens/esp32-div-v2-n16/stage-s3-0.70-recording.json",
+    "recording_manifest_sha256": "9f34f60984b451e7f6e47dfd86cc85243557d2dbac60255e8638d4b45d8e39b2",
+    "manual_visual_review": "pass",
+    "recording_gate_eligible": false,
+    "gate_run_is_distinct": true,
+    "capture_count": 5
+  },
+  "physical": {
+    "board": "board-01",
+    "exact_cid": "FE343253440000002000000055019CB7",
+    "run_id": "b67dcfbc766b3bc74f870ac5eba26a20",
+    "run_path": "tests/hil/evidence/board-01-stage-demo-s3-0.70/run.json",
+    "run_sha256": "cbb13a12c4ae8115fbe18b7bb8347e2fd1e782479fff0c538822a135348bfad5",
+    "artifact_index_sha256": "fafcf0e220341da3f1ef794b74bd1778832d59aeea64cdc15000e69374b3a7b1",
+    "product_run_sha256": "317aedc44dda9a0f56a91147424bbe6683938ecb70e0c97878a11026eeedc7ac",
+    "product_artifact_index_sha256": "0e0962f23de7827911cebba0d92346075eb820a72d036ab8aeade48a4b420d63",
+    "runner_sha256": "de014b2cd398d064ec9ace409be7ec44eb47761d05bc8ac489516ff3c01da61f",
+    "product_runner_sha256": "3cc181648504fdf1fded23c73836ddaf38b0d3720558ea9a068c909622982506",
+    "suite_sha256": "293db9a6d9daa59ec626ec38ca553e05a66b6e5dda95cba21015eae3dbab027c",
+    "generation_before": 69,
+    "generation_after": 70,
+    "observations": 29,
+    "accepted": 29,
+    "forwarded": 29,
+    "drops": 0,
+    "capture_comparisons_passed": 5,
+    "unmasked_mismatch_pixels": 0,
+    "heap_total_free_min": [266616, 202200, 182148],
+    "final_page": "home",
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "s3_criteria": {
+    "1_clean_boot_probe": "pass",
+    "2_user_start": "pass",
+    "3_passive_normalized_observations": "pass",
+    "4_list_detail_back": "pass",
+    "5_atomic_stop_commit": "pass",
+    "6_reboot_offline_reopen": "pass",
+    "7_json_summary_export": "pass",
+    "8_host_and_hil_coverage": "pass",
+    "9_missing_source_visible_zero_lease": "pass"
+  },
+  "stage_state": {
+    "s3": "done",
+    "s4": "active",
+    "physical_power_cut": "required_by_demo_s4",
+    "eight_hour_cross_radio_endurance": "required_by_demo_s4"
+  }
+}

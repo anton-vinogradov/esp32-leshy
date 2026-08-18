@@ -133,8 +133,13 @@ ownership; registry Full/Guided растёт на каждом следующе�
 - recorded trace для воспроизводимого host integration test.
 
 **Exit gate S3:** все девять критериев первого среза из PRD подтверждены evidence;
-power loss не повреждает подтверждённую Session; UI, CLI/test harness используют одну
-семантику Actions.
+software-reset interruption не повреждает подтверждённую Session; UI, CLI/test
+harness используют одну семантику Actions. Управляемое физическое снятие питания
+измеряется с multi-source workload в S4.
+
+Gate закрыт exact 0.70 `E-AUTO-035`/`E-HIL-095`/`E-GATE-003`: distinct run совпадает
+с пятью independently recorded TFT goldens, commits generation 69→70 с 29/29 passive
+observations, cold-reopens/exports её и возвращает Home с zero leases.
 
 ## S4 — Cross-radio passive platform
 
@@ -152,8 +157,9 @@ power loss не повреждает подтверждённую Session; UI, C
   check вместо release-only diagnostic path.
 
 **Exit gate S4:** одна Session безопасно объединяет доступные пассивные источники,
-объясняет временно недоступные ресурсы, переживает reboot и экспорт без утечки heap и
-повреждения данных.
+объясняет временно недоступные ресурсы, переживает reboot/export и controlled
+physical power-cut без утечки heap и повреждения данных. Это расширяет baseline S3,
+принятый `E-HIL-095`/`E-GATE-003`.
 
 ## S5 — Полнота железа ESP32-DIV
 

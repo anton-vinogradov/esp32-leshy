@@ -102,8 +102,13 @@ Outputs: Start/Stop Survey Actions; normalized Observations from one driver; sha
 List/Detail with correct back/cancel/error states; atomic Session storage; offline
 reopen after reboot; JSON summary export; a recorded trace for host integration.
 
-**Exit gate:** all nine PRD slice criteria have evidence; power loss preserves
-committed Session data; UI, CLI/test harness use identical Action semantics.
+**Exit gate:** all nine PRD slice criteria have evidence; software-reset interruption
+preserves committed Session data; UI, CLI/test harness use identical Action semantics.
+Controlled physical power removal is measured with the multi-source workload in S4.
+
+Closed by exact 0.70 `E-AUTO-035`/`E-HIL-095`/`E-GATE-003`: a distinct run matches
+five independently recorded TFT goldens, commits generation 69→70 with 29/29 passive
+observations, cold-reopens/exports it and returns Home with zero leases.
 
 ## S4 — Cross-radio passive platform
 
@@ -117,7 +122,9 @@ Every completed passive source also registers its applicable Full/Guided Self-Te
 check instead of creating a release-only diagnostic path.
 
 **Exit gate:** one Session safely joins available passive sources, explains resource
-unavailability, survives reboot/export, and has no heap growth or data corruption.
+unavailability, survives reboot/export and controlled physical power-cut, and has no
+heap growth or data corruption. This extends the S3 baseline accepted by
+`E-HIL-095`/`E-GATE-003`.
 
 ## S5 — Complete ESP32-DIV hardware
 

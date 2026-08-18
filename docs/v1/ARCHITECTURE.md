@@ -181,8 +181,12 @@ exact host-provided full-partition SHA-256 before format. The common `SessionSto
 uses a confined POSIX adapter under `/hil-lfs/leshy-hil/<run-id>`; file `fsync` is the
 LittleFS metadata/directory durability barrier. E-HIL-093 proves 32 commits,
 read-only remount recovery and throughput, while the host proves two-read backup,
-exact OTA1/table restore and unchanged product Library. The six-boundary LittleFS
-reset matrix, physical power-cut, endurance and independent demo goldens remain open.
+exact OTA1/table restore and unchanged product Library. Version 0.70/E-HIL-094 then
+closes all six LittleFS software-reset boundaries with typed read-only recovery and
+one-write exact restore. `E-HIL-095`/`E-GATE-003` closes S3 on the same exact 0.70
+candidate: generation 69→70, 29/29 observations, cold reopen/export and five
+independent TFT matches. S4 is now active; physical power-cut and multi-source
+endurance remain its explicit gates.
 
 ## Data model
 

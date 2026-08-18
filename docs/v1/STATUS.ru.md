@@ -10,14 +10,15 @@
 
 ## Сейчас
 
-- **Активный этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Последний закрытый этап:** `S2 — Чистая платформа 1.x`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 evidence six-boundary software-reset disposable LittleFS и S3 progress evidence.
+- **Активный этап:** `S4 — Cross-radio passive platform`.
+- **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, independent TFT goldens и evidence six-boundary software-reset disposable LittleFS.
 - **Релизный статус:** 0.x — замороженный PoC; пользовательского бинарника 1.x ещё
   нет.
-- **Главная цель текущего этапа:** записать независимые финальные TFT goldens и выполнить воспроизводимый
-  `DEMO-S3` на существующем пути real passive Survey → reboot → Library/export.
-  Управляемый physical power-cut — явный gate `DEMO-S4`, а не скрытый blocker S3.
+- **Главная цель текущего этапа:** начать пользовательские capabilities S4 на общей
+  passive Observation/Session platform: сначала source selection и shared timeline
+  contracts, затем passive BLE. Управляемый physical power-cut и 8 h multi-source
+  endurance остаются явными gates `DEMO-S4`.
 
 ## Состояние этапов
 
@@ -26,8 +27,8 @@
 | S0 | `done` | архив 0.x, governance, delivery plan, status, traceability, маркировка installer 0.x | — |
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
-| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback и interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export работают на board-01 с RB-06 margin; exact 0.60 сохраняет persistent Core-0 worker и делает terminal `Idle` UI-acknowledgement после cleanup/commit, exact 0.62 физически отменяет active scan без commit/resource leak, exact 0.68 показывает clean missing-source terminal, exact 0.69 доказывает normal/remount LittleFS parity, а exact 0.70 — все шесть software-reset boundaries на backed-up inactive OTA1 target | остаются independent demo goldens и воспроизводимый `DEMO-S3`; управляемый physical power-cut относится к `DEMO-S4` |
-| S4 | `planned` | целевая cross-radio модель описана | требуется gate S3 |
+| S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
+| S4 | `active` | common cross-radio model, capability catalog и доказанные S3 foundations Observation/Session/storage/UI существуют | реализовать passive source selection, BLE, shared timeline/capture/export, compatible scheduling и visible unavailability; закрыть controlled power-cut и 8 h multi-source endurance в `DEMO-S4` |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -283,14 +284,14 @@
    Diagnostics → disabled reason → Back сохранил 29 Action/query steps, девять
    zero-mismatch real-TFT frames, exact build identity, Quick 8/8, heap, safe buzzer
    и zero final leases.
-5. **Активно:** закрыть явную матрицу S3 ниже и promote существующий real passive
-   Survey → reboot → Library/export только через воспроизводимый `DEMO-S3`.
+5. `DEMO-S3` прошёл на exact 0.70 в `E-GATE-003`/`E-HIL-095`: distinct gate run
+   совпадает с пятью frozen goldens, продвигает generation 69→70 с 29/29 passive
+   observations, cold-reopens/exports её и возвращает Home с zero leases.
 
 ## Матрица приёмки S3
 
-Девять критериев среза PRD остаются обязательным checklist. `pass` ниже означает,
-что exact-candidate evidence уже есть; stage gate не считается пройденным, пока
-какая-либо строка или physical storage exit condition остаётся partial.
+Девять критериев среза PRD закрыты exact-candidate `DEMO-S3`. `pass` ниже retained и
+независимо machine-checked в `E-GATE-003`/`E-HIL-095`.
 
 | Критерий среза PRD | Текущее состояние | Evidence / оставшаяся работа |
 |---|---|---|
@@ -304,10 +305,10 @@
 | 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, девять normal/remount и восемь reset-matrix LittleFS runner tests, static guards target/hash-before-format/source/store ordering, exact board runs и retained independent verifiers |
 | 9. Missing source объясняет себя и не оставляет leases | `pass` | exact 0.68 one-shot injection на source boundary создаёт localized русский unavailable state 240×320 только после cleanup lease 15→0; source start/store open/bytes written равны false/false/0, hidden retry по Select отклоняется, Back возвращает Home, cold read-only recovery сохраняет generation 68/25 в E-HIL-092 |
 
-Дополнительная exit-работа S3: независимо записанные TFT goldens и воспроизводимый
-финальный demo. Exact 0.70 принимает six-boundary software-reset matrix LittleFS.
-Управляемый physical power-cut и восьмичасовой cross-radio endurance остаются
-`DEMO-S4`, а не скрытыми критериями завершения S3.
+У S3 нет оставшейся exit-работы. Exact 0.70 принимает six-boundary software-reset
+matrix LittleFS и distinct reproducible final demo по independently recorded TFT
+goldens. Управляемый physical power-cut и восьмичасовой multi-source endurance —
+явные criteria `DEMO-S4`.
 
 ## Evidence на текущей базе
 
@@ -561,6 +562,9 @@
 | E-BUILD-071 | exact rebuild `0.70.0-littlefs-reset-matrix` | pass: RAM 134 888 B, linked flash 1 165 916 B; app/factory 1 166 320/1 231 856 B; app `83dfc22b…2468a`, factory `8b808a78…70c6`, ELF `5ce79674…5efe`, map `efdb876b…975b`; RTC no-init 60 B; immediate rebuild воспроизвёл все четыре hash | +12 688 B linked flash, +4 672 B static RAM, +12 688 B images и +40 B RTC no-init vs 0.69 за reset continuity, exact target binding и read-only recovery; exact storage candidate, не stage/release build |
 | E-AUTO-034 | fail-closed LittleFS reset runner и independent verifier | pass: восемь host tests покрывают six-boundary ordering, exact target/CID/run binding, generation policy и restore failure; runner делает одну OTA1 restore write, затем независимые bounded read-only verification retries, checker связывает candidate/source/run/artifacts/docs | нет automatic second gate или повторной перезаписи после transport failure; physical power-cut остаётся отдельной fixture lane `DEMO-S4` |
 | E-HIL-094 / E-STORAGE-025 | board-01 exact 0.70 software-reset matrix disposable LittleFS | pass: все шесть ordered SessionStore boundaries восстанавливаются read-only как generations 1/1/1/1/1/2 с unchanged prior/manifest CRC, zero recovery bytes/file syncs/directory syncs, exact software-reset continuity, complete cleanup и lease 0. Inactive OTA1 `ade2400f…d661` и partition table `339bda68…5ba2` восстановлены точно после одной flash write; cold exact-CID product recovery сохраняет generation 68/25 и invariant heap 266 616/202 200/182 148 B в [machine-checked artifact](../../tests/hil/evidence/board-01-littlefs-reset-matrix-0.70.json) | принимает software-reset matrix ST-HIL-A07; остаются independent final goldens/воспроизводимый `DEMO-S3`, управляемый power-cut относится к `DEMO-S4` |
+| E-AUTO-035 | independent-golden suite, runner и verifier DEMO-S3 | pass: отдельный non-gate recording run замораживает пять визуально проверенных RGB565 goldens в commit `6b602b6`; exact comparison маскирует только dynamic Wi-Fi rows/counters, отклоняет drift runner/candidate/run-ID и независимо хеширует nested product evidence | local unsigned evidence одной board; release trust/attestation остаётся S8 |
+| E-HIL-095 / E-SURVEY-008 | board-01 exact 0.70 final persistent Survey demo | pass: distinct exact candidate run продвигает generation 69→70 с 29/29 accepted/forwarded, zero drops, live Detail progress и bounded Back; Stop commits один раз, cold read-only recovery возвращает 70/29 с zero physical writes, Library export valid/persistent/non-simulated/radio-off, heap invariant 266 616/202 200/182 148 B, final Home owner/lease none/0. Все пять TFT states имеют zero unmasked mismatch в [machine-checked artifact](../../tests/hil/evidence/board-01-stage-demo-s3-0.70.json) | только stage gate; нет release promotion, BLE/cross-radio, controlled power-cut или 8 h multi-source claim |
+| E-GATE-003 | воспроизводимый `DEMO-S3` | pass: все девять criteria S3 retained, source-bound и machine-checked на exact 0.70; S3 закрыт, S4 начат | release остаётся ineligible; впереди `DEMO-S4…S8` |
 
 ## Известные неопределённости и риски
 
@@ -590,9 +594,9 @@
 
 ## Blockers
 
-Реализация S3 может продолжаться через independent goldens и воспроизводимый
-`DEMO-S3`; physical blocker отсутствует. Недоступный сейчас управляемый power-cut
-fixture остаётся явным требованием `DEMO-S4`, software reset не принимается как замена. Второй
+Реализация S4 разблокирована и начинается с пользовательской работы passive
+source/timeline. Недоступный сейчас управляемый power-cut fixture остаётся явным exit
+requirement `DEMO-S4`, software reset не принимается как замена. Второй
 экземпляр, мультиметр и logic/RF detector остаются named gaps следующих этапов;
 затронутые capabilities остаются conditional/unavailable и не включаются
 предположением.

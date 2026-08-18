@@ -239,8 +239,11 @@ Version 0.69 добавляет HIL-only backend LittleFS без изменен�
 `/hil-lfs/leshy-hil/<run-id>`; file `fsync` служит durability barrier metadata/directory
 LittleFS. E-HIL-093 доказывает 32 commits, read-only remount recovery и throughput,
 а host — two-read backup, exact restore OTA1/table и unchanged product Library.
-Six-boundary reset matrix LittleFS, physical power-cut, endurance и independent demo
-goldens остаются открыты.
+Version 0.70/E-HIL-094 затем закрывает все шесть software-reset boundaries LittleFS
+с typed read-only recovery и one-write exact restore. `E-HIL-095`/`E-GATE-003`
+закрывает S3 на том же exact candidate 0.70: generation 69→70, 29/29 observations,
+cold reopen/export и пять independent TFT matches. S4 теперь активен; physical
+power-cut и multi-source endurance остаются его explicit gates.
 
 ## 7. Модель данных
 
