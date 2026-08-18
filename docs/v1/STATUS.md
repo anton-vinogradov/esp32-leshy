@@ -17,6 +17,10 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Current objective:** extend plan-v6 active Full/Guided execution from the
   accepted receiver and persisted-artifact checks to controlled Survey/Capture execution, then exercise controlled
   power-cut recovery and the 8 h/32-cycle multi-source endurance gate.
+- **Implementation in progress:** the next plan-v7 write boundary now has a
+  host/build-verified exact-CID disposable cleanup permit and a bounded
+  known-filename pre-scan for `/leshy-hil/<run-id>`. It is not registered as a
+  Self-Test pass and has no physical acceptance yet; exact 0.85 remains baseline.
 
 ## Stage state
 

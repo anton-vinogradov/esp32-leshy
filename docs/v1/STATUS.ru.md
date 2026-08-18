@@ -17,6 +17,10 @@
 - **Главная цель текущего этапа:** расширить active execution plan-v6 Full/Guided
   с принятых receiver и persisted-artifact checks на controlled Survey/Capture execution, затем проверить
   controlled power-cut recovery и 8 h/32-cycle multi-source endurance.
+- **Реализация в работе:** следующая write boundary plan v7 уже имеет
+  host/build-verified disposable cleanup permit по exact CID и bounded pre-scan
+  известных имён для `/leshy-hil/<run-id>`. Она ещё не зарегистрирована как pass
+  Self-Test и не имеет physical acceptance; baseline остаётся exact 0.85.
 
 ## Состояние этапов
 

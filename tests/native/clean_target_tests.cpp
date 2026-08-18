@@ -421,6 +421,57 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(!activeCancel.runAwaitingFinish());
 }
 
+void testDisposableScratchCleanupPermitIsExactAndFailClosed() {
+    leshy1::storage::MediaIdentity media;
+    media.present = true;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint = "FE343253440000002000000055019CB7";
+    media.capacityBytes = 16ULL * 1024ULL * 1024ULL * 1024ULL;
+    media.freeBytes = 8ULL * 1024ULL * 1024ULL * 1024ULL;
+
+    leshy1::storage::ScratchCleanupRequest request;
+    request.explicitlyDisposable = true;
+    request.expectedFingerprint = media.fingerprint;
+    request.runId = "full-guided-v7";
+    request.scratchExists = true;
+    const auto permit =
+        leshy1::storage::authorizeScratchCleanup(media, request);
+    CHECK(permit.allowed());
+    CHECK(std::strcmp(permit.scratchPath,
+                      "/leshy-hil/full-guided-v7") == 0);
+    CHECK(std::strcmp(leshy1::storage::scratchCleanupStatusName(permit.status),
+                      "permitted") == 0);
+
+    request.explicitlyDisposable = false;
+    CHECK(leshy1::storage::authorizeScratchCleanup(media, request).status ==
+          leshy1::storage::ScratchCleanupStatus::
+              ExplicitAuthorizationRequired);
+    request.explicitlyDisposable = true;
+    request.expectedFingerprint = "DIFFERENT";
+    CHECK(leshy1::storage::authorizeScratchCleanup(media, request).status ==
+          leshy1::storage::ScratchCleanupStatus::FingerprintMismatch);
+    request.expectedFingerprint = media.fingerprint;
+    request.runId = "../product";
+    CHECK(leshy1::storage::authorizeScratchCleanup(media, request).status ==
+          leshy1::storage::ScratchCleanupStatus::InvalidRunId);
+    request.runId = "full-guided-v7";
+    request.scratchExists = false;
+    CHECK(leshy1::storage::authorizeScratchCleanup(media, request).status ==
+          leshy1::storage::ScratchCleanupStatus::ScratchMissing);
+
+    CHECK(leshy1::storage::isSessionStoreScratchFileName("head-a.bin"));
+    CHECK(leshy1::storage::isSessionStoreScratchFileName("head-b.bin"));
+    CHECK(leshy1::storage::isSessionStoreScratchFileName(
+        "segment-00000001.bin"));
+    CHECK(leshy1::storage::isSessionStoreScratchFileName(
+        "manifest-42949672.bin"));
+    CHECK(!leshy1::storage::isSessionStoreScratchFileName("notes.txt"));
+    CHECK(!leshy1::storage::isSessionStoreScratchFileName(
+        "segment-00000001.bin.bak"));
+    CHECK(!leshy1::storage::isSessionStoreScratchFileName(
+        "../segment-00000001.bin"));
+}
+
 void testShieldReceiverIdentityContractFailsClosed() {
     ShieldReceiverProbeReport passing;
     passing.profileDeclared = true;
@@ -4256,6 +4307,7 @@ int main() {
     testUiComponentGeometryContract();
     testLanguageCatalogAndControllerAreBounded();
     testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
+    testDisposableScratchCleanupPermitIsExactAndFailClosed();
     testShieldReceiverIdentityContractFailsClosed();
     testNrf24PassiveSpectrumContractAndControllerAreBounded();
     testCc1101PassiveSpectrumContractAndControllerAreBounded();

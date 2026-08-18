@@ -198,6 +198,92 @@ bool ArduinoFsSessionStoreIo::openExistingReadOnly(
            openExistingPath(permit.rootPath, 0, false, true);
 }
 
+bool ArduinoFsSessionStoreIo::removeScratch(
+    const storage::ScratchCleanupPermit& permit) {
+    static constexpr std::size_t kMaximumFiles = 8;
+    char names[kMaximumFiles][storage::kSessionStorePathMax] = {};
+    std::size_t count = 0;
+    filesRemoved_ = 0;
+    scratchRemoved_ = false;
+    lastFailure_ = "none";
+    lastFresult_ = FR_OK;
+    if (ready_ || pendingOpen_ || driveNumber_ >= FF_VOLUMES ||
+        !permit.allowed() ||
+        std::strncmp(permit.scratchPath, storage::kScratchRoot,
+                     std::strlen(storage::kScratchRoot)) != 0) {
+        recordFailure("cleanup_precondition", FR_INVALID_PARAMETER);
+        return false;
+    }
+
+    char root[kFullPathCapacity] = {};
+    if (!formatVolumePath(permit.scratchPath, root, sizeof(root))) {
+        recordFailure("cleanup_path", FR_INVALID_NAME);
+        return false;
+    }
+    FF_DIR directory{};
+    FRESULT result = f_opendir(&directory, root);
+    if (result != FR_OK) {
+        recordFailure("cleanup_open", result);
+        return false;
+    }
+    bool safe = true;
+    for (;;) {
+        workspace_.information = {};
+        result = f_readdir(&directory, &workspace_.information);
+        if (result != FR_OK) {
+            safe = false;
+            recordFailure("cleanup_scan", result);
+            break;
+        }
+        const char* name = workspace_.information.fname;
+        if (name[0] == '\0') break;
+        if ((workspace_.information.fattrib & AM_DIR) != 0 ||
+            !storage::isSessionStoreScratchFileName(name) ||
+            count >= kMaximumFiles ||
+            std::strlen(name) >= storage::kSessionStorePathMax) {
+            safe = false;
+            recordFailure("cleanup_unknown_entry", FR_DENIED);
+            break;
+        }
+        std::strcpy(names[count++], name);
+    }
+    const FRESULT closeResult = f_closedir(&directory);
+    if (closeResult != FR_OK && safe) {
+        safe = false;
+        recordFailure("cleanup_close", closeResult);
+    }
+    if (!safe) return false;
+
+    for (std::size_t index = 0; index < count; ++index) {
+        char child[kFullPathCapacity] = {};
+        const int written = std::snprintf(child, sizeof(child), "%s/%s",
+                                          root, names[index]);
+        if (written <= 0 ||
+            static_cast<std::size_t>(written) >= sizeof(child)) {
+            recordFailure("cleanup_child_path", FR_INVALID_NAME);
+            return false;
+        }
+        result = f_unlink(child);
+        if (result != FR_OK) {
+            recordFailure("cleanup_file", result);
+            return false;
+        }
+        ++filesRemoved_;
+    }
+    result = f_unlink(root);
+    if (result != FR_OK) {
+        recordFailure("cleanup_directory", result);
+        return false;
+    }
+    workspace_.information = {};
+    result = f_stat(root, &workspace_.information);
+    scratchRemoved_ = result == FR_NO_FILE || result == FR_NO_PATH;
+    if (!scratchRemoved_) {
+        recordFailure("cleanup_verify", result == FR_OK ? FR_EXIST : result);
+    }
+    return scratchRemoved_;
+}
+
 bool ArduinoFsSessionStoreIo::selectDrive(std::uint8_t driveNumber) {
     if (ready_ || pendingOpen_ || driveNumber >= FF_VOLUMES) return false;
     driveNumber_ = driveNumber;

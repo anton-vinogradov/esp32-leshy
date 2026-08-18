@@ -34,6 +34,7 @@ public:
     bool openExistingReadOnly(const storage::WritePermit& permit);
     bool openExistingReadOnly(const storage::ReadPermit& permit);
     bool openExistingReadOnly(const storage::ProductStorePermit& permit);
+    bool removeScratch(const storage::ScratchCleanupPermit& permit);
     bool selectDrive(std::uint8_t driveNumber);
     void end();
 
@@ -51,6 +52,8 @@ public:
     std::uint64_t bytesWritten() const { return bytesWritten_; }
     std::uint32_t fileSyncs() const { return fileSyncs_; }
     std::uint32_t directorySyncs() const { return directorySyncs_; }
+    std::uint16_t filesRemoved() const { return filesRemoved_; }
+    bool scratchRemoved() const { return scratchRemoved_; }
     bool fatFileSyncCoversDirectory() const {
         return fatFileSyncCoversDirectory_;
     }
@@ -83,6 +86,8 @@ private:
     std::uint64_t bytesWritten_ = 0;
     std::uint32_t fileSyncs_ = 0;
     std::uint32_t directorySyncs_ = 0;
+    std::uint16_t filesRemoved_ = 0;
+    bool scratchRemoved_ = false;
     bool ready_ = false;
     bool writable_ = false;
     bool pendingOpen_ = false;

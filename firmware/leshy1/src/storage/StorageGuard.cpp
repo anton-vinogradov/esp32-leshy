@@ -1,6 +1,7 @@
 #include "StorageGuard.h"
 
 #include <cstdio>
+#include <cstring>
 
 namespace leshy1::storage {
 namespace {
@@ -145,6 +146,81 @@ ReadPermit authorizeExistingScratchRead(
     }
     permit.status = ReadPermitStatus::Permitted;
     return permit;
+}
+
+const char* scratchCleanupStatusName(ScratchCleanupStatus status) {
+    switch (status) {
+        case ScratchCleanupStatus::Permitted: return "permitted";
+        case ScratchCleanupStatus::MissingMedia: return "missing_media";
+        case ScratchCleanupStatus::ExplicitAuthorizationRequired:
+            return "explicit_authorization_required";
+        case ScratchCleanupStatus::InvalidFingerprint:
+            return "invalid_fingerprint";
+        case ScratchCleanupStatus::FingerprintMismatch:
+            return "fingerprint_mismatch";
+        case ScratchCleanupStatus::InvalidRunId: return "invalid_run_id";
+        case ScratchCleanupStatus::ScratchMissing: return "scratch_missing";
+    }
+    return "invalid_status";
+}
+
+ScratchCleanupPermit authorizeScratchCleanup(
+    const MediaIdentity& media, const ScratchCleanupRequest& request) {
+    ScratchCleanupPermit permit;
+    if (!media.present) return permit;
+    if (!request.explicitlyDisposable) {
+        permit.status = ScratchCleanupStatus::ExplicitAuthorizationRequired;
+        return permit;
+    }
+    if (!boundedToken(media.fingerprint, kFingerprintMax, false) ||
+        !boundedToken(request.expectedFingerprint, kFingerprintMax, false)) {
+        permit.status = ScratchCleanupStatus::InvalidFingerprint;
+        return permit;
+    }
+    if (!boundedEqual(media.fingerprint, request.expectedFingerprint,
+                      kFingerprintMax)) {
+        permit.status = ScratchCleanupStatus::FingerprintMismatch;
+        return permit;
+    }
+    if (!boundedToken(request.runId, kRunIdMax, true)) {
+        permit.status = ScratchCleanupStatus::InvalidRunId;
+        return permit;
+    }
+    if (!request.scratchExists) {
+        permit.status = ScratchCleanupStatus::ScratchMissing;
+        return permit;
+    }
+    const int written = std::snprintf(
+        permit.scratchPath, sizeof(permit.scratchPath), "%s%s",
+        kScratchRoot, request.runId);
+    if (written <= 0 || static_cast<std::size_t>(written) >=
+                            sizeof(permit.scratchPath)) {
+        permit.status = ScratchCleanupStatus::InvalidRunId;
+        permit.scratchPath[0] = '\0';
+        return permit;
+    }
+    permit.status = ScratchCleanupStatus::Permitted;
+    return permit;
+}
+
+bool isSessionStoreScratchFileName(const char* name) {
+    if (name == nullptr) return false;
+    if (std::strcmp(name, "head-a.bin") == 0 ||
+        std::strcmp(name, "head-b.bin") == 0) {
+        return true;
+    }
+    constexpr std::size_t kPrefixSize = 8;
+    constexpr std::size_t kDigits = 8;
+    constexpr const char* kSuffix = ".bin";
+    const bool segment = std::strncmp(name, "segment-", kPrefixSize) == 0;
+    const bool manifest = std::strncmp(name, "manifest-", 9) == 0;
+    const std::size_t prefix = segment ? kPrefixSize : (manifest ? 9U : 0U);
+    if (prefix == 0) return false;
+    for (std::size_t index = 0; index < kDigits; ++index) {
+        const char value = name[prefix + index];
+        if (value < '0' || value > '9') return false;
+    }
+    return std::strcmp(name + prefix + kDigits, kSuffix) == 0;
 }
 
 }  // namespace leshy1::storage

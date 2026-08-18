@@ -453,10 +453,26 @@ def main() -> int:
                 errors.append(f"guarded SessionStore adapter is missing: {marker}")
         for pattern in (
             r"\bremove\s*\(", r"\brmdir\s*\(", r"\brename\s*\(",
-            r"\bf_unlink\s*\(",
         ):
             if re.search(pattern, session_adapter):
                 errors.append(f"guarded SessionStore adapter can mutate existing paths: {pattern}")
+        cleanup_markers = (
+            "removeScratch(",
+            "ScratchCleanupPermit",
+            "isSessionStoreScratchFileName",
+            "cleanup_unknown_entry",
+            "kMaximumFiles = 8",
+            "scratchRemoved_",
+        )
+        for marker in cleanup_markers:
+            if marker not in session_adapter:
+                errors.append(
+                    f"guarded SessionStore cleanup is missing exact-scope marker: {marker}"
+                )
+        if len(re.findall(r"\bf_unlink\s*\(", session_adapter)) != 2:
+            errors.append(
+                "guarded SessionStore cleanup must use exactly one file unlink and one exact-directory unlink"
+            )
 
     if not littlefs_partition_adapter.is_file():
         errors.append("disposable OTA1 LittleFS adapter is missing")

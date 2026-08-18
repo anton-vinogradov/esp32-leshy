@@ -203,6 +203,24 @@ TFT states и final lease 0 (`E-BUILD-086`/`E-AUTO-050`/`E-HIL-110`/
 `E-SELFTEST-005`/`E-STORAGE-026`/`E-CAPTURE-003`). Это не создаёт fresh Survey/Capture
 и не меняет user data.
 
+## Следующая write-capable boundary (в работе, не принята)
+
+Plan v7 может создавать test Session только в exact disposable namespace после
+явного запуска Full/Guided пользователем. Safety shape уже реализована на уровне
+host/build contract: exact enrolled CID, bounded run ID и отдельный cleanup permit
+разрешают только `/leshy-hil/<run-id>`. До любой мутации cleanup полностью сканирует
+каталог и принимает только bounded имена SessionStore (`head-a.bin`, `head-b.bin` и
+точные восьмизначные manifest/segment files); nested directory, неизвестный файл,
+malformed generation или больше восьми entries приводит к fail closed до удаления.
+Общие remove, rename и recursive-delete API остаются запрещены.
+
+Этот contract ещё не является check Self-Test или board result. Для promotion нужны
+fresh disposable commit, recovery после writable→read-only remount, проверка
+exporters, exact удаление scratch с подтверждением после ещё одного remount,
+восстановление исходной product generation, cleanup при cancel, TFT evidence и zero
+final leases. Пока physical run не прошёл, accepted baseline остаётся exact 0.85, а
+Full/Guided не заявляет покрытие write path.
+
 ## Приёмка
 
 1. `SELF-TEST` доступен штатными кнопками последним пунктом Home; serial-only Action

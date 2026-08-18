@@ -204,6 +204,25 @@ passed all 12 visually reviewed TFT states and final lease 0
 (`E-BUILD-086`/`E-AUTO-050`/`E-HIL-110`/`E-SELFTEST-005`/`E-STORAGE-026`/
 `E-CAPTURE-003`). This does not create a fresh Survey/Capture or modify user data.
 
+## Next write-capable boundary (in progress, not accepted)
+
+Plan v7 may create a test Session only in an exact disposable namespace after the
+user explicitly starts Full/Guided. The safety shape is now implemented at
+host/build-contract level: exact enrolled CID, bounded run ID, and a dedicated
+cleanup permit resolve only `/leshy-hil/<run-id>`. Cleanup first scans the entire
+directory without mutation and accepts only bounded SessionStore names
+(`head-a.bin`, `head-b.bin`, and exact eight-digit manifest/segment files); a nested
+directory, unknown file, malformed generation or more than eight entries fails
+closed before deletion. General remove, rename and recursive-delete APIs remain
+forbidden.
+
+This contract is not yet a Self-Test check or board result. Promotion requires a
+fresh disposable commit, writable→read-only remount recovery, exporter verification,
+exact scratch removal verified after another remount, restoration of the original
+product generation, cancellation cleanup, TFT evidence and zero final leases. Until
+that physical run passes, exact 0.85 remains the accepted baseline and Full/Guided
+must not claim write-path coverage.
+
 ## Acceptance
 
 1. `SELF-TEST` is reachable by normal buttons as the last Home item; no serial-only
