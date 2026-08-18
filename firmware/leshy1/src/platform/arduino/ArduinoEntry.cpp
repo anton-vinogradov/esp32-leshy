@@ -5959,8 +5959,20 @@ void runFullGuidedDisposableCommit() {
                     leshy1::storage::authorizeScratchWrite(media, request);
 
                 littleFsResetSession.reset();
-                const CaptureMetadata metadata = productCaptureMetadata(
-                    leshy1::services::survey::sourceMask(RadioKind::Wifi));
+                const std::uint8_t selectedSourceMask =
+                    leshy1::services::survey::sourceMask(RadioKind::Wifi);
+                const CaptureMetadata metadata =
+                    productCaptureMetadata(selectedSourceMask);
+                const SourceWindow wifiWindow{
+                    RadioKind::Wifi, SourceWindowState::Active,
+                    SourceWindowReason::None, 1000, 3000, 3, 0};
+                leshy1::services::survey::SourceRuntimeSummary wifiSummary;
+                wifiSummary.selected = true;
+                wifiSummary.state = SourceWindowState::Stopped;
+                wifiSummary.activeUs = 2000;
+                wifiSummary.accepted = 3;
+                wifiSummary.windows = 1;
+                leshy1::services::survey::SourceRuntimeSummary bleSummary;
                 const bool fixtureReady = staleReady && permit.allowed() &&
                     littleFsResetSession.start(
                         kFullGuidedDisposableRunId, 1000) ==
@@ -5968,7 +5980,18 @@ void runFullGuidedDisposableCommit() {
                     littleFsResetSession.configureCaptureMetadata(metadata) ==
                         leshy1::services::survey::
                             CaptureMetadataStatus::Configured &&
+                    littleFsResetSession.startTimeline(
+                        selectedSourceMask, 1000) ==
+                        leshy1::services::survey::
+                            SessionTimelineStatus::Started &&
                     appendGoldenObservations(littleFsResetSession) &&
+                    littleFsResetSession.appendTimelineWindow(wifiWindow) ==
+                        leshy1::services::survey::
+                            SessionTimelineStatus::Appended &&
+                    littleFsResetSession.finalizeTimeline(
+                        3000, wifiSummary, bleSummary, 0) ==
+                        leshy1::services::survey::
+                            SessionTimelineStatus::Finalized &&
                     littleFsResetSession.stop(3000) == SessionStatus::Stopped;
                 if (fixtureReady) {
                     ArduinoFsSessionStoreIo io(
