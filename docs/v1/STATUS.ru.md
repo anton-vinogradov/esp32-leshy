@@ -12,12 +12,11 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.78 вплоть до отдельного bounded Wi-Fi frame Capture и настоящего streaming PCAP.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.79 вплоть до privacy-confirmed persistent Wi-Fi frame Capture, cold reopen в Library и byte-exact PCAP.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
-- **Главная цель текущего этапа:** превратить exact 0.78 volatile Wi-Fi frame Capture
-  в privacy-aware atomic persistent Capture/Library artifact, затем закрыть
-  conditional nRF24/CC1101/GPS и применимые Full/Guided checks, controlled power-cut
-  и 8 h/32-cycle multi-source endurance.
+- **Главная цель текущего этапа:** закрыть conditional behavior nRF24/CC1101/GPS для
+  фактической сборки без extension modules и применимое покрытие Full/Guided Self-Test,
+  затем проверить controlled power-cut recovery и 8 h/32-cycle multi-source endurance.
 
 ## Состояние этапов
 
@@ -27,7 +26,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.77 принимают source selection, durable dual-source scheduling/degradation, общий Observation browser, immutable Capture metadata и CSV; exact 0.78 `E-HIL-103` отдельно принимает 16 bounded raw Wi-Fi frames в volatile RAM, потоково формирует настоящий radiotap PCAP, не выполняет connect/raw TX/storage writes, scrub-ит payload на Back и заканчивает lease 0 | сохранить Capture atomic/privacy-aware в Library; реализовать conditional contracts nRF24/CC1101/GPS плюс применимые Full/Guided checks; затем проверить controlled physical power-cut recovery и 8 h/32-cycle multi-source endurance |
+| S4 | `active` | exact 0.71…0.78 принимают source selection, durable dual-source scheduling/degradation, Observation browser, provenance/CSV и bounded raw Wi-Fi Capture; exact 0.79 `E-HIL-104` добавляет явное privacy confirmation, atomic schema-v4 persistence на enrolled SD, cold read-only reopen в Library и byte-exact PCAP при invariant heap и final lease 0 | реализовать conditional contracts nRF24/CC1101/GPS для declared no-extension assembly плюс применимые Full/Guided checks; затем проверить controlled physical power-cut recovery и 8 h/32-cycle multi-source endurance |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -43,7 +42,7 @@
 |---|---|---|
 | Основа устройства и UX | `готово / S2` — boot, board profile, пять клавиш, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test skeleton и автоматический TFT capture | Full/Guided registry пополняется вместе с каждым новым hardware workflow |
 | Survey и Library | `готово / S3` — реальный passive Wi-Fi, atomic Session, List/Detail, offline reopen и export | используется как принятый фундамент, не переписывается отдельной веткой |
-| Passive multi-radio и Capture | `в работе / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance, CSV и отдельный volatile Wi-Fi PCAP работают; raw payload ограничен 16×256 B и удаляется на Back | atomic persistent Capture/Library с privacy controls; затем conditional nRF24/CC1101/GPS, Full/Guided, power-cut и endurance |
+| Passive multi-radio и Capture | `в работе / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV и privacy-confirmed persistent Wi-Fi PCAP работают; raw payload ограничен 16×256 B, atomic сохраняется только по запросу, cold-reopens из Library и удаляется из live RAM на Back | conditional declarations nRF24/CC1101/GPS, применимый Full/Guided Self-Test, power-cut и endurance |
 | Всё штатное железо ESP32-DIV | `впереди / S5` — scope и fail-closed hardware envelope описаны, но законченных IR/PN532/GPS/power workflows ещё нет | probe → capture/observe → Library → inspect/export для каждого применимого модуля |
 | Targets, compare и companion | `впереди / S6` — product model и границы определены, пользовательские сценарии ещё не реализованы | две Survey сравниваются через evidence-backed Targets и тот же локальный Web/USB companion |
 | Safe Lab и расширения | `впереди / S7` — safety/resource boundaries приняты, active workflows и SDK ещё не реализованы | feature-complete каталог, permissioned extensions и доказанный panic/timeout stop |
@@ -609,6 +608,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-079 | exact build `0.78.0-wifi-frame-capture` | pass: RAM 152 376 B, linked flash 1 446 000 B; app/factory 1 446 400/1 511 936 B; app `68841ec6…68b`, factory `4e3f3401…993`, ELF `b62345dc…647`, map `f4188a5e…2c6`; source commit `0bc06d2` | +13 188 B linked flash, +4 688 B static RAM и +13 184 B images vs 0.77 за bounded frame store, отдельный promiscuous receive adapter, radiotap PCAP writer, Capture UI/telemetry и шестой пункт Home; exact checkpoint, не `DEMO-S4` и не release build |
 | E-AUTO-043 | native tests, exact-HIL runner и retained verifier Wi-Fi frame Capture | pass: byte-exact host tests покрывают PCAP 2.4 global/record/radiotap fields, truncation bounds и capture lifecycle; physical runner разбирает каждую streamed record, сохраняет только hash/count/channel/RSSI aggregates вместо raw payload, а independent verifier связывает source candidate, runner commit, exact bundle inventory, пять TFT frames, read-only prior Session и final scrub/lease | software доказывает zero application connect/raw-TX calls, но не может заявить physical no-TX без отсутствующего RF instrument; persistent retention/privacy остаётся отдельным checkpoint |
 | E-HIL-103 / E-CAPTURE-001 | board-01 exact 0.78 volatile Wi-Fi frame Capture | pass: explicit Right/OK start получает 34 real promiscuous frames, удерживая первые bounded 16×256 B/4 096 B и учитывая 18 capacity drops плюс zero invalid drops. Manual stop замораживает данные, освобождает radio при открытом UI и потоково выдаёт valid PCAP v2.4 размером 4 616 B с 16 radiotap/802.11 records, linktype 127, channels 1…7, RSSI −91…−64 dBm и hash `3721a12…c8`; connect/raw TX/storage write не выполняются. Back scrub-ит весь frame/PCAP state, пять exact TFT states 240×320 проходят visual/integrity review, prior generation 82/47 открывается read-only с zero writes, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-wifi-frame-capture-0.78.json) | принимает volatile raw-frame/compatible-PCAP slice CAP-042 и применимую export semantics CAP-026; atomic persistent Capture/Library, privacy controls, conditional sources/Self-Test, controlled power-cut и endurance держат `DEMO-S4` открытым |
+| E-BUILD-080 | exact build `0.79.0-persistent-frame-capture` | pass: RAM 152 424 B, linked flash 1 454 428 B; app/factory 1 454 832/1 520 368 B; app `9e4a76fb…337`, factory `0c3fb99a…769`, ELF `0b1a83a7…309`, map `6c15c56c…a0f`; source commit `8568547` | +8 428 B linked flash, +48 B static RAM и +8 432 B images vs 0.78 за schema-v4 frame records, zero-copy persistent view, privacy confirmation, background atomic save и Library PCAP; exact checkpoint, не `DEMO-S4` и не release build |
+| E-AUTO-044 | native tests, exact-HIL runner и retained verifier persistent Wi-Fi Capture | pass: native tests доказывают byte equality live→schema-v4 segment→reopen→PCAP и fail-closed отклоняют corrupt frame blocks; HIL runner проходит explicit Save/confirmation, cold reboot и Library export. Independent verifier rehashes source/candidate/runner и exact inventory из 30 файлов, оба binaries, девять TFT frames, CID, generation, heap, privacy и cleanup | repository evidence намеренно не содержит raw 802.11 bytes и PCAP; physical no-TX всё ещё требует отсутствующий RF instrument |
+| E-HIL-104 / E-CAPTURE-002 | board-01 exact 0.79 persistent Wi-Fi frame Capture | pass: explicit capture сохраняет 16/28 real frames и 2 253 B, учитывая 12 capacity и zero invalid drops; privacy confirmation atomic продвигает generation 82→83 на exact enrolled CID. Cold boot открывает schema v4 read-only с zero recovery writes, Library сообщает 16 raw IEEE 802.11 records и потоково выдаёт PCAP 2 773 B, byte-identical live export (`8ac6d71a…7f1`); heap total/free/min остаётся точно 229 284/164 540/145 144 B. Back scrub-ит live RAM, девять TFT states 240×320 проходят visual/integrity review, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-persistent-wifi-capture-0.79.json) | принимает privacy-aware atomic Capture→Library persistence и cold compatible PCAP для CAP-023/024/026/042; conditional sources/Self-Test, controlled power-cut и endurance держат `DEMO-S4` открытым |
 
 ## Известные неопределённости и риски
 
@@ -641,9 +643,10 @@ goldens. Управляемый physical power-cut и восьмичасовой
 Реализация S4 разблокирована; source selection, bounded Wi-Fi/BLE scheduling,
 durable dual-source persistence и compatible runtime degradation приняты до exact
 0.75, общие List/Detail filters и bounded RSSI history приняты exact 0.76, immutable
-Capture provenance и canonical observation CSV приняты exact 0.77, а bounded volatile
-Wi-Fi frame Capture с настоящим PCAP принят exact 0.78. Atomic privacy-aware Capture
-persistence и conditional source/Self-Test contracts остаются software work.
+Capture provenance и canonical observation CSV приняты exact 0.77, bounded volatile
+Wi-Fi frame Capture с настоящим PCAP принят exact 0.78, а atomic privacy-confirmed
+Capture→Library persistence принят exact 0.79. Conditional source/Self-Test contracts
+остаются software work.
 Недоступный сейчас управляемый
 power-cut fixture остаётся явным exit
 requirement `DEMO-S4`, software reset не принимается как замена. Второй

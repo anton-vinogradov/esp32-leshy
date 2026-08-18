@@ -381,6 +381,15 @@ workflow прошли end to end:
   bytes, только hashes и неидентифицирующие counts/tuning/RSSI ranges. Exact 0.78
   независимо проверяет `check_wifi_frame_capture_acceptance.py`
   (`E-AUTO-043`/`E-HIL-103`/`E-CAPTURE-001`);
+- `tools/run_1x_persistent_wifi_capture_hil.py` — exact lane persistent Capture. Он
+  проходит Capture→Stop→Save→privacy confirm, требует один atomic generation advance
+  на exact enrolled CID, scrub-ит live RAM, делает cold reboot, открывает Library
+  read-only и требует byte-for-byte равенство её streamed PCAP и live PCAP. Lane также
+  связывает heap invariance, zero recovery writes, девять TFT states и final lease 0.
+  Raw 802.11 bytes/PCAP остаются только на enrolled SD; retained evidence содержит
+  hashes и aggregate metadata. Exact 0.79 независимо проверяет
+  `check_persistent_wifi_capture_acceptance.py`
+  (`E-AUTO-044`/`E-HIL-104`/`E-CAPTURE-002`);
 - `tools/run_1x_littlefs_parity_hil.py` — fail-closed lane disposable flash. Он
   выбирает только inactive OTA1 `app1`, требует два совпадающих полных чтения и
   firmware-side hash match до format, делает 32 commits common SessionStore плюс

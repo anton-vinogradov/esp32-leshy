@@ -379,6 +379,15 @@ the current combined GitHub workflows have passed end to end:
   802.11 or PCAP bytes, only hashes and non-identifying counts/tuning/RSSI ranges.
   Exact 0.78 is independently checked by `check_wifi_frame_capture_acceptance.py`
   (`E-AUTO-043`/`E-HIL-103`/`E-CAPTURE-001`);
+- `tools/run_1x_persistent_wifi_capture_hil.py` is the exact persistent-Capture lane.
+  It drives Capture→Stop→Save→privacy confirm, requires one atomic generation advance
+  on the exact enrolled CID, scrubs live RAM, cold-reboots, reopens Library read-only
+  and requires its streamed PCAP to equal the live PCAP byte for byte. It also binds
+  heap invariance, zero recovery writes, nine TFT states and final lease 0. Raw 802.11
+  bytes/PCAP remain only on the enrolled SD; retained evidence contains hashes and
+  aggregate metadata. Exact 0.79 is independently checked by
+  `check_persistent_wifi_capture_acceptance.py`
+  (`E-AUTO-044`/`E-HIL-104`/`E-CAPTURE-002`);
 - `tools/run_1x_littlefs_parity_hil.py` is the fail-closed disposable-flash lane.
   It selects only inactive OTA1 `app1`, requires two matching full reads and a
   firmware-side hash match before format, performs 32 common SessionStore commits

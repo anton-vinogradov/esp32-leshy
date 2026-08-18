@@ -75,9 +75,11 @@ exact 0.76 затем принимает общий read-only Observation browse
 drops/overflow. Exact 0.77 затем принимает immutable Capture provenance и canonical
 observation CSV на 47 rows. Exact 0.78 принимает намеренно отдельный bounded Wi-Fi
 packet Capture: 16 retained real frames, разобранный radiotap PCAP, aggregate-only
-repository evidence, RAM scrub и final lease 0. Atomic privacy-aware Capture
-persistence, conditional source/Self-Test contracts, controlled physical power-cut
-и 8 h/32-cycle multi-source stability остаются обязательными.
+repository evidence, RAM scrub и final lease 0. Exact 0.79 затем принимает explicit
+privacy-confirmed atomic persistence, generation 82→83, cold read-only reopen Library
+и byte-exact PCAP без второго payload buffer. Conditional source/Self-Test contracts,
+controlled physical power-cut и 8 h/32-cycle multi-source stability остаются
+обязательными.
 
 ## Ритм тестирования внутри этапа
 

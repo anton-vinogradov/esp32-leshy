@@ -42,6 +42,9 @@ def main() -> int:
     sector_inspection = TARGET / "src" / "storage" / "SdSectorInspection.cpp"
     reset_runner_path = ROOT / "tools" / "run_1x_sd_reset_matrix.py"
     capture_export_runner_path = ROOT / "tools" / "run_1x_capture_export_hil.py"
+    persistent_capture_runner_path = (
+        ROOT / "tools" / "run_1x_persistent_wifi_capture_hil.py"
+    )
     littlefs_runner_path = ROOT / "tools" / "run_1x_littlefs_parity_hil.py"
     littlefs_reset_runner_path = (
         ROOT / "tools" / "run_1x_littlefs_reset_matrix_hil.py"
@@ -612,6 +615,24 @@ def main() -> int:
         ):
             if marker not in capture_export_runner:
                 errors.append(f"capture/export HIL runner is missing: {marker}")
+
+    if not persistent_capture_runner_path.is_file():
+        errors.append("persistent Wi-Fi Capture HIL runner is missing")
+    else:
+        persistent_capture_runner = persistent_capture_runner_path.read_text(
+            encoding="utf-8"
+        )
+        for marker in (
+            "leshy.persistent_wifi_capture_hil.run.v1",
+            '"persist_state": "confirm"',
+            '"persist_state": "saved"',
+            "library.export.pcap",
+            "cold Library PCAP differs from live Capture PCAP",
+            '"raw_80211_payload_retained_in_evidence": False',
+            '"pcap_retained_in_evidence": False',
+        ):
+            if marker not in persistent_capture_runner:
+                errors.append(f"persistent Capture runner is missing: {marker}")
 
     capture_sources = "\n".join(
         path.read_text(encoding="utf-8")

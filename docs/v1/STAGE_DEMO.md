@@ -75,9 +75,11 @@ cover 45 observations, generation 80→81, nine exact TFT states, cold recovery 
 zero drops/overflow. Exact 0.77 then accepts immutable Capture provenance and the
 47-row canonical observation CSV. Exact 0.78 accepts a deliberately separate bounded
 Wi-Fi packet Capture: 16 retained real frames, parsed radiotap PCAP, aggregate-only
-repository evidence, RAM scrub and final lease 0. Atomic privacy-aware Capture
-persistence, conditional source/Self-Test contracts, controlled physical power-cut
-and 8 h/32-cycle multi-source stability remain mandatory.
+repository evidence, RAM scrub and final lease 0. Exact 0.79 then accepts explicit
+privacy-confirmed atomic persistence, generation 82→83, cold read-only Library reopen
+and a byte-exact PCAP without a second payload buffer. Conditional source/Self-Test
+contracts, controlled physical power-cut and 8 h/32-cycle multi-source stability
+remain mandatory.
 
 ## Test cadence within a stage
 

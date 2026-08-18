@@ -343,10 +343,21 @@ writer. Каждая record содержит 15-byte radiotap header с flags, c
 Capture по умолчанию volatile, не пишет storage, а Back обнуляет store до release UI.
 `E-HIL-103` доказывает 34 reported/16 retained real frames, payload 4 096 B, 18
 учтённых capacity drops, разобранный PCAP 16 records/4 616 B, пять TFT states,
-read-only prior Session, scrubbed RAM и final lease 0. Atomic privacy-aware Capture
-persistence, conditional nRF24/CC1101/GPS и применимые Self-Test contracts,
-controlled physical power-cut и 8 h/32-cycle multi-source endurance остаются работой
-`DEMO-S4`.
+read-only prior Session, scrubbed RAM и final lease 0.
+
+Exact `0.79.0-persistent-frame-capture` продолжает тот же bounded source через один
+atomic storage path. Session schema v4 добавляет CRC-covered fixed frame block `LWFC`
+и Capture metadata v2, сохраняя decoding v1–v3. Save — отдельное действие пользователя
+с явным privacy confirmation для raw identities. Background worker проверяет exact
+enrolled CID, владеет Storage+RadioSpi только во время commit, публикует одну новую
+generation, fail-closed открывает её снова и освобождает ресурсы до подтверждения UI.
+`PersistedWifiFrameCaptureView` читает существующий SessionStore workspace 12 KiB
+напрямую, поэтому Library PCAP не создаёт второй frame-payload buffer. Back scrub-ит
+volatile capture RAM, но не удаляет явно сохранённый artifact. `E-HIL-104` доказывает
+generation 82→83, 16 records/2 253 payload bytes, равенство live/cold PCAP 2 773 B,
+read-only recovery, invariant heap, девять TFT states и final lease 0. Conditional
+nRF24/CC1101/GPS и применимые Self-Test contracts, controlled physical power-cut и
+8 h/32-cycle multi-source endurance остаются работой `DEMO-S4`.
 
 ## 7. Модель данных
 

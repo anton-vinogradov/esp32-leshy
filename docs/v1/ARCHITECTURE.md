@@ -285,10 +285,21 @@ RSSI followed by the captured 802.11 bytes; the writer allocates no second paylo
 buffer. Capture is volatile by default, performs no storage write, and Back zeroes the
 store before releasing UI. `E-HIL-103` proves 34 reported/16 retained real frames,
 4,096 B payload, 18 counted capacity drops, a parsed 16-record/4,616 B PCAP, five TFT
-states, read-only prior Session, scrubbed RAM and final lease 0. Atomic privacy-aware
-Capture persistence, conditional nRF24/CC1101/GPS plus applicable Self-Test contracts,
-controlled physical power-cut and 8 h/32-cycle multi-source endurance remain
-`DEMO-S4` work.
+states, read-only prior Session, scrubbed RAM and final lease 0.
+
+Exact `0.79.0-persistent-frame-capture` extends the same bounded source through one
+atomic storage path. Session schema v4 adds a CRC-covered fixed `LWFC` frame block and
+v2 Capture metadata while preserving decoding of v1–v3. Save is a separate user action
+and requires an explicit raw-identity privacy confirmation. A background worker checks
+the exact enrolled CID, acquires Storage+RadioSpi only for the commit, publishes one
+new generation, reopens it fail closed, and returns ownership before UI acknowledges
+success. `PersistedWifiFrameCaptureView` reads the existing 12 KiB SessionStore
+workspace directly, so Library PCAP creates no second frame-payload buffer. Back
+scrubs volatile capture RAM but does not delete an explicitly saved artifact.
+`E-HIL-104` proves generation 82→83, 16 records/2,253 payload bytes, live/cold
+2,773-byte PCAP equality, read-only recovery, invariant heap, nine TFT states and final
+lease 0. Conditional nRF24/CC1101/GPS plus applicable Self-Test contracts, controlled
+physical power-cut and 8 h/32-cycle multi-source endurance remain `DEMO-S4` work.
 
 ## Data model
 
