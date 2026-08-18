@@ -335,6 +335,16 @@ workflow прошли end to end:
   writes и lease 0. `check_product_survey_active_cancel_acceptance.py` пересчитывает
   retained failed input-probe incident 0.61 и exact passing bundle 0.62; 0.62 также
   публикует bounded attempts/retries boot probe PCF8574;
+- `tools/run_1x_product_survey_missing_source_hil.py` — dedicated negative lane exact
+  source. Он arm one-shot fault только из idle Home без runtime owner, входит в Product
+  Survey через public Actions и требует localized terminal TFT state после cleanup и
+  release lease. Lane доказывает, что source start и store open не выполнялись,
+  создано zero bytes/observations, Select не делает скрытый retry, Back возвращает
+  Home, а cold read-only recovery сохраняет прежнюю generation. Exact candidate 0.68,
+  bytes runner, hashes framebuffer, CID, invariant heap, zero writes и прежняя Library
+  68/25 независимо перепроверяются
+  `check_product_survey_missing_source_acceptance.py`
+  (`E-AUTO-032`/`E-HIL-092`/`E-SURVEY-007`);
 - `tools/run_1x_ui_typography_hil.py` — service-free exact-TFT lane typography. Он
   требует уже flashed candidate, проверяет identity запущенного app и hashes candidate
   artifacts, нормализует Home/language/persisted Self-Test mode и снимает 18 EN/RU
@@ -386,6 +396,17 @@ python tools/run_1x_product_survey_cancel_hil.py \
   --expected-version 0.62.0-input-probe-resilience-measure \
   --expected-cid FE343253440000002000000055019CB7 \
   --output /tmp/leshy-product-survey-cancel-hil --flash
+```
+
+Dedicated regression terminal state при missing source:
+
+```bash
+python tools/run_1x_product_survey_missing_source_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.68.0-missing-source-tft-measure \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output /tmp/leshy-product-survey-missing-source-hil --flash
 ```
 
 Exact regression typography после build и flash того же candidate:

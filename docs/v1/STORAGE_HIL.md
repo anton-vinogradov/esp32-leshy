@@ -5,8 +5,9 @@
 Document status: **binding safety/verification protocol; host logic, real-file
 fixture, guarded physical FAT commit/remount, per-generation and batched 32-sample
 SD throughput, real-source queue/persistence, and the six-boundary software-reset
-matrix are implemented; exact product UI/reboot/export is exercised, while physical
-power-cut and LittleFS parity remain open**.
+matrix are implemented; exact product UI/reboot/export and the missing-source
+real-TFT/zero-lease path are exercised, while physical power-cut and LittleFS parity
+remain open**.
 
 This protocol verifies ADR-003 without risking an unknown SD card or retained flash
 data. The ordinary diagnostic image never formats or writes storage during boot or
@@ -273,6 +274,17 @@ zero heap drift. The first 0.61 attempt is retained failed because its post-canc
 lost a one-shot PCF8574 read; 0.62 adds bounded 1…8-attempt input-probe telemetry and
 both regression boots pass. Physical power-cut and LittleFS parity remain open.
 
+Exact 0.68 missing-source evidence (`E-BUILD-069`/`E-AUTO-032`/`E-HIL-092`/
+`E-SURVEY-007`) arms a one-shot diagnostic failure only from idle Home, then consumes
+it at the real Product Start source boundary. Exact-CID identity and bounded store
+permit validation complete first, but `scanner.begin` and SessionStore open never
+run. The localized Russian 240×320 TFT remains on `SURVEY / UNAVAILABLE` after full
+cleanup and lease 15→0, explicitly says no source/no Session/prior Library preserved,
+and exposes only Left/Home. Select cannot trigger a hidden retry. Cold read-only
+recovery before and after remains generation 68/25 with zero physical writes; source
+start/store open/bytes written/observations are false/false/0/0. This closes S3
+criterion 9 without substituting for physical power-cut or LittleFS parity.
+
 ## Implemented and physically exercised software-reset harness
 
 Version `0.30.0-sd-session-reset-measure` adds a diagnostic
@@ -510,6 +522,7 @@ boots, zero drops/heap drift, and final lease 0. Retained summary:
 | ST-HIL-A08 | Physical power-cut repeats the boundary matrix before PR-005/RB-06 can be verified |
 | ST-HIL-A09 | Enrolled exact-CID cold boot admits the latest valid product Session through a write-blocking driver with zero SD writes and complete lease/mount cleanup |
 | ST-HIL-A10 | Explicit product Survey accepts real passive observations, publishes exactly one next bounded generation, survives read-only reboot/export, and aborts without a commit or leaked lease |
+| ST-HIL-A11 | Missing Product Survey source produces a localized real-TFT unavailable state only after complete cleanup; no source/store start, Session, write, hidden retry, or leaked lease occurs, and prior Library survives reboot |
 
 The offline Library/reopen, bounded export, non-mounting discovery, mount policy, SD
 identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit plus
@@ -527,6 +540,8 @@ and three-cycle product regression. E-HIL-075 adds 12 consecutive cycles,
 generation 51→63, 144/144 records, 24 cold boots, invariant heap, and zero drops with
 final lease 0; the operator stop remains `interrupted`, so this is an engineering
 checkpoint rather than a release pass. Full 8 h/32-cycle NFR-004 remains in
-`DEMO-S4`. Physical power-cut still needs a controller.
+`DEMO-S4`. E-HIL-092 closes ST-HIL-A11 on the same board/card with a localized
+real-TFT failure, zero source/store start, unchanged generation 68/25, and final lease
+0. Physical power-cut still needs a controller.
 LittleFS is not touched until a dedicated disposable partition/image is proven; the
 current flash filesystem may contain legacy/product data.

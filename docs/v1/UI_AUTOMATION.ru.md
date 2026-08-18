@@ -225,3 +225,10 @@ queue high-water 5/64. Поэтому candidate 0.67 отклоняет `broadca
 пользователем физических нажатий, high-water 1/64, maximum queue latency 1,256 ms,
 zero serial writes/errors/drops, девять exact frames и 21 transition
 (`E-AUTO-031`/`E-HIL-091`/`E-UX-012`).
+
+Candidate 0.68 добавляет product failure-state lane без камеры и ручного прохода.
+Он inject один недоступный passive source на реальной границе start, снимает
+localized terminal state TFT, запрещает скрытый retry по Select, возвращает Home по
+Back и делает cold reboot, чтобы доказать неизменность прежней Library. Exact bytes
+framebuffer, hashes candidate/runner, CID, zero starts source/store, zero writes,
+invariant heap и final lease 0 сохранены в `E-AUTO-032`/`E-HIL-092`.

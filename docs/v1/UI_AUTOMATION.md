@@ -229,3 +229,10 @@ the physical dispatch slice and exposes timing only through on-demand `input.sta
 The retained lane binds the failed incident, 75 user-confirmed physical presses,
 high-water 1/64, 1.256 ms maximum queue latency, zero serial writes/errors/drops,
 nine exact frames and 21 transitions (`E-AUTO-031`/`E-HIL-091`/`E-UX-012`).
+
+Candidate 0.68 adds a product failure-state lane without camera or manual traversal.
+It injects one unavailable passive source at its real start boundary, captures the
+localized TFT terminal state, rejects a hidden Select retry, returns Home with Back,
+and cold-reboots to prove the prior Library is unchanged. Exact framebuffer bytes,
+candidate and runner hashes, CID, zero source/store starts, zero writes, invariant
+heap, and final lease 0 are retained in `E-AUTO-032`/`E-HIL-092`.

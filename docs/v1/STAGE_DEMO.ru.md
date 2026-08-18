@@ -47,9 +47,12 @@ S2, а не release: полный capability coverage остаётся blocked, 
 S3 progress `E-AUTO-023`/`E-HIL-083` переиспользует тот же exact candidate 0.58 и
 подтверждает real passive product path через live List→Detail→Back, commit generation
 65→66, cold read-only reopen, Library и JSON export. Пять TFT states визуально
-проверены, final ownership равен нулю. Это намеренно не `DEMO-S3`: открыты
-missing-source real-TFT path, physical power-cut, LittleFS parity и независимо
-записанные demo goldens.
+проверены, final ownership равен нулю. Normal-path evidence с тех пор продвинулся
+через 0.60/0.62, а exact 0.68
+`E-AUTO-032`/`E-HIL-092` закрывает missing-source real-TFT path без запуска source или
+store, записи bytes, изменения прежней Library 68/25, утечки lease или скрытого retry
+по Select. Это всё ещё намеренно не `DEMO-S3`: открыты physical power-cut, LittleFS
+parity и независимо записанные demo goldens.
 
 ## Ритм тестирования внутри этапа
 

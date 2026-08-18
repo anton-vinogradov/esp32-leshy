@@ -165,8 +165,13 @@ path and final zero-lease cleanup are physically accepted in E-HIL-084. Version 
 additionally holds worker control ownership until UI terminal acknowledgement,
 preventing a new Start from overtaking an older terminal event; E-HIL-085 confirms the
 unchanged normal hardware path. E-HIL-086 now closes physical cancellation during an
-active scan without commit or leak. Physical power-cut, endurance, LittleFS parity,
-missing-source TFT evidence, and independent demo goldens remain open.
+active scan without commit or leak. Version 0.68 adds a one-shot release-test fault at
+the real source boundary. E-HIL-092 proves that an unavailable passive source is shown
+as a localized terminal TFT state only after cleanup and lease release: source start
+and store open are both false, zero bytes and observations are created, Select cannot
+silently retry, Back returns Home, and cold read-only recovery preserves generation
+68 with 25 observations. Physical power-cut, endurance, LittleFS parity, and
+independent demo goldens remain open.
 
 ## Data model
 

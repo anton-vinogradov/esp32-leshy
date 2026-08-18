@@ -333,6 +333,16 @@ the current combined GitHub workflows have passed end to end:
   0. `check_product_survey_active_cancel_acceptance.py` rehashes the retained failed
   0.61 input-probe incident and the exact passing 0.62 bundle; 0.62 also emits bounded
   PCF8574 boot-probe attempts/retries;
+- `tools/run_1x_product_survey_missing_source_hil.py` is the exact-source negative
+  lane. It arms a one-shot fault only from an idle Home with no runtime owner, enters
+  Product Survey through public Actions, and requires a localized terminal TFT state
+  after cleanup and lease release. It proves that source start and store open were not
+  attempted, zero bytes/observations were created, Select cannot hidden-retry, Back
+  returns Home, and cold read-only recovery preserves the prior generation. The exact
+  0.68 candidate, runner bytes, framebuffer hashes, CID, invariant heap, zero writes,
+  and prior Library 68/25 are independently rechecked by
+  `check_product_survey_missing_source_acceptance.py`
+  (`E-AUTO-032`/`E-HIL-092`/`E-SURVEY-007`);
 - `tools/run_1x_ui_typography_hil.py` is the service-free exact-TFT typography lane.
   It requires an already flashed candidate, validates the running app identity and
   candidate artifact hashes, normalizes Home/language/persisted Self-Test mode, and
@@ -385,6 +395,17 @@ python tools/run_1x_product_survey_cancel_hil.py \
   --expected-version 0.62.0-input-probe-resilience-measure \
   --expected-cid FE343253440000002000000055019CB7 \
   --output /tmp/leshy-product-survey-cancel-hil --flash
+```
+
+The dedicated missing-source terminal-state regression is:
+
+```bash
+python tools/run_1x_product_survey_missing_source_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.68.0-missing-source-tft-measure \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output /tmp/leshy-product-survey-missing-source-hil --flash
 ```
 
 The exact typography regression, after building and flashing the same candidate, is:

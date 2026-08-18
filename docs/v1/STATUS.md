@@ -12,10 +12,9 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S3 — First persistent Survey Session`.
 - **Last completed stage:** `S2 — Clean 1.x platform`.
-- **Repository baseline:** `main` with retained exact-candidate 0.67 non-blocking physical-key navigation and S3 progress evidence.
+- **Repository baseline:** `main` with retained exact-candidate 0.68 missing-source real-TFT evidence and S3 progress evidence.
 - **Release state:** 0.x is a frozen PoC; no user-facing 1.x binary exists.
-- **Current objective:** close the missing-source real-TFT path, physical power-cut
-  evidence, LittleFS parity, and independent-golden
+- **Current objective:** close physical power-cut evidence, LittleFS parity, and independent-golden
   `DEMO-S3` on the existing real passive Survey → reboot → Library/export path.
 
 ## Stage state
@@ -25,7 +24,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S0 | `done` | 0.x archive, governance, delivery plan, status, traceability, 0.x installer label | — |
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key input/TFT capture, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
-| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; exact 0.60 retains the persistent Core-0 worker and makes terminal `Idle` a UI acknowledgement after cleanup/commit, while exact 0.62 physically cancels during an active scan without commit or resource leak and adds a bounded PCF8574 boot probe after a retained 0.61 transient failure | missing-source real-TFT evidence, physical power-cut, LittleFS parity, independent demo goldens, and reproducible `DEMO-S3` remain |
+| S3 | `active` | bounded Survey/UI, deterministic codec, auto-publishing SessionStore, guarded FAT persistence/reopen/throughput/software-reset recovery, generation fallback, and the interactive real passive Wi-Fi→FIFO→persistent product SessionStore→cold-boot Library/export path run on board-01 with RB-06 margin; exact 0.60 retains the persistent Core-0 worker and makes terminal `Idle` a UI acknowledgement after cleanup/commit, exact 0.62 physically cancels during an active scan without commit/resource leak, and exact 0.68 leaves a localized missing-source state visible only after cleanup/lease release without starting source/store or changing the prior generation | physical power-cut, LittleFS parity, independent demo goldens, and reproducible `DEMO-S3` remain |
 | S4 | `planned` | target cross-radio model exists | requires S3 gate |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
@@ -302,8 +301,8 @@ or the physical storage exit condition remains partial.
 | 5. Stop atomically persists once | `partial` | normal Stop publishes exactly generation 67→68 after source stop; E-HIL-086 separately cancels an active physical scan in 86.762 ms with generation/observations unchanged at 68/25, zero SD writes and final lease 0; software-reset matrix passes, while physical power-cut remains |
 | 6. Reboot reopens with radios inactive | `pass` | read-only exact-CID generation 68/25; Library export reports `radio_touched=false` |
 | 7. JSON summary export | `pass` | schema `leshy.library.export.v1`, persistent/non-simulated generation 68 |
-| 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, seven runner contract tests, static terminal-ownership guard, exact board runs, and retained independent verifiers |
-| 9. Missing source explains itself and leaks nothing | `partial` | AppCatalog/admission host contract passes; real-TFT state and physical zero-lease trace remain |
+| 8. Host + HIL coverage | `pass` | domain/storage/navigation tests, eight runner contract tests, static terminal/source/store ordering guards, exact board runs, and retained independent verifiers |
+| 9. Missing source explains itself and leaks nothing | `pass` | exact 0.68 one-shot source-boundary injection produces a localized 240×320 Russian unavailable state only after lease 15→0 cleanup; source start/store open/bytes written are false/false/0, hidden Select retry is rejected, Back returns Home, and cold read-only recovery preserves generation 68/25 in E-HIL-092 |
 
 Additional S3 exit work: dedicated disposable LittleFS parity and separately recorded
 TFT goldens for the final demo. Eight-hour cross-radio endurance remains `DEMO-S4`,
@@ -552,6 +551,9 @@ not a hidden S3 completion criterion.
 | E-BUILD-068 | exact `0.67.0-nonblocking-keypath-measure` rebuild | pass: RAM 128,896 B, linked flash 1,112,568 B; app/factory 1,112,976/1,178,512 B; app `9af801bc…e926`, factory `74b248da…523e`, ELF `c1f89b22…3123`, map `bc555971…ba9a`; RTC no-init 20 B | +396 B linked flash, +40 B static RAM and +400 B images vs 0.66 for on-demand queue/end-to-end telemetry; no serial write remains in physical hot path |
 | E-AUTO-031 | non-blocking physical-key verifier | pass: verifier rejects any `broadcast`/`println` in the dispatch slice, binds the failed 0.66 incident, exact 0.67 candidate and nine-frame/21-transition TFT run, and requires 75 physical press/release/dispatch events with queue high-water 1, max queue latency 1.256 ms, zero drops/errors and user confirmation | closes the measurement blind spot after repaint; does not promote S3/release |
 | E-HIL-091 / E-UX-012 | board-01 exact 0.67 physical responsiveness regression | pass: user confirms the lag is gone; retained input evidence records 75 physical presses (35 Up, 35 Down, 2 Left, 2 Right, 1 Select), high-water 1/64 vs failed 5/64, max queue latency 1.256 ms, last changed focus repaint/end-to-end 15.429/16.703 ms, zero serial writes/errors/drops. Eight exact TFT incremental renders remain 13.972–23.058 ms; heap is invariant 272,608/208,320/188,140 B, buzzer LOW and final lease 0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-ui-navigation-0.67.json) | accepts the non-blocking 0.x-style key path without promoting S3 or release |
+| E-BUILD-069 | exact `0.68.0-missing-source-tft-measure` rebuild | pass: RAM 128,920 B, linked flash 1,114,184 B; app/factory 1,114,592/1,180,128 B; app `a2703aba…e64`, factory `2eaaa12b…787d`, ELF `ef98e4f9…32f0`, map `c782efdc…28d5`; RTC no-init 20 B | +1,616 B linked flash, +24 B static RAM and +1,616 B images vs 0.67 for localized terminal UI, one-shot source-boundary injection and explicit source/store telemetry; exact S3 criterion-9 candidate, not a stage/release build |
+| E-AUTO-032 | missing-source HIL runner and independent verifier | pass: five host negative tests reject hidden source start/store open, leaked resources/writes, hidden retry and generation change; retained verifier rehashes exact candidate/runner/all TFT and boot artifacts, source-before-store ordering, localized strings, cleanup and no-promotion scope | diagnostic one-shot injection is accepted only from idle Home and consumed at the real Product Start source boundary; no source/store substitution is allowed |
+| E-HIL-092 / E-SURVEY-007 | board-01 exact 0.68 missing-source real-TFT path | pass: exact CID is validated, then a one-shot injection prevents `scanner.begin` and precedes SessionStore open; localized Russian 240×320 TFT says source unavailable/no Session/prior Library preserved, while owner/lease are none/0, store open false, bytes written 0 and observations 0. Select is rejected without retry, Back reaches Home, cold read-only reboot preserves generation 68/25 with zero physical writes, heap remains 272,584/208,168/188,116 B and final lease 0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-product-survey-missing-source-0.68.json) | accepts S3 criterion 9; physical power-cut, LittleFS parity and final independent goldens still prevent `DEMO-S3` promotion |
 
 ## Known uncertainties and risks
 
@@ -581,8 +583,8 @@ not a hidden S3 completion criterion.
 
 ## Blockers
 
-S3 implementation can continue through the missing-source TFT path, LittleFS parity,
-and independent goldens. Its final gate is physically blocked by the currently
+S3 implementation can continue through LittleFS parity and independent goldens. Its
+final gate is physically blocked by the currently
 unavailable controlled power-cut fixture: software reset is not accepted as a
 substitute. A second board, multimeter, and logic/RF detector remain named later-stage
 gaps; affected capabilities stay conditional/unavailable rather than being enabled by

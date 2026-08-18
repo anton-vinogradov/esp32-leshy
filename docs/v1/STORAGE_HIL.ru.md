@@ -5,8 +5,9 @@
 Статус документа: **обязательный safety/verification protocol; host logic, real-file
 fixture, guarded physical FAT commit/remount, per-generation и batched 32-sample SD
 throughput, real-source queue/persistence и host/static six-boundary software-reset
-matrix реализованы; exact product UI/reboot/export проверен, physical power-cut и
-LittleFS parity остаются открыты**.
+matrix реализованы; exact product UI/reboot/export и missing-source
+real-TFT/zero-lease path проверены, physical power-cut и LittleFS parity остаются
+открыты**.
 
 Протокол проверяет ADR-003 без риска для неизвестной SD card или сохранённых данных
 во flash. Обычная diagnostic image никогда не форматирует и не записывает storage
@@ -268,6 +269,17 @@ zero heap drift. Первая попытка 0.61 сохранена failed: pos
 one-shot read PCF8574. 0.62 добавляет bounded telemetry 1…8 попыток input probe, оба
 regression boot проходят. Physical power-cut и LittleFS parity остаются открыты.
 
+Exact evidence missing-source 0.68 (`E-BUILD-069`/`E-AUTO-032`/`E-HIL-092`/
+`E-SURVEY-007`) взводит one-shot diagnostic failure только из idle Home, затем
+потребляет её на реальной Product Start source boundary. Exact-CID identity и bounded
+store permit validation завершаются первыми, но `scanner.begin` и SessionStore open
+не запускаются. Localized русский TFT 240×320 остаётся на `СКАНЕР / НЕДОСТУПЕН`
+после полного cleanup и lease 15→0, явно сообщает об отсутствии source/Session и
+сохранности prior Library, оставляя только Left/Home. Select не вызывает hidden
+retry. Cold read-only recovery до и после остаётся generation 68/25 с zero physical
+writes; source start/store open/bytes written/observations равны false/false/0/0.
+Это закрывает критерий 9 S3 без подмены physical power-cut или LittleFS parity.
+
 ## Реализованный и физически проверенный software-reset harness
 
 Version `0.30.0-sd-session-reset-measure` добавляет diagnostic wrapper
@@ -500,6 +512,7 @@ final lease 0. Retained summary:
 | ST-HIL-A08 | Physical power-cut повторяет boundary matrix до verification PR-005/RB-06 |
 | ST-HIL-A09 | Enrolled exact-CID cold boot допускает latest valid product Session через write-blocking driver с zero SD writes и complete lease/mount cleanup |
 | ST-HIL-A10 | Explicit product Survey принимает real passive observations, публикует ровно одну следующую bounded generation, переживает read-only reboot/export и aborts без commit или leaked lease |
+| ST-HIL-A11 | Missing source Product Survey показывает localized real-TFT unavailable state только после полного cleanup; source/store start, Session, write, hidden retry и leaked lease отсутствуют, prior Library переживает reboot |
 
 Offline Library/reopen, bounded export, non-mounting discovery, mount policy, SD
 identity/geometry/technical-metadata paths, guarded FAT `SessionStore` commit плюс
@@ -516,7 +529,9 @@ E-HIL-073/074 подтверждают hardware fallback 0.51 и three-cycle pro
 E-HIL-075 добавляет 12 последовательных cycles, generation 51→63, 144/144 records,
 24 cold boots, invariant heap и zero drops при final lease 0; операторская остановка
 сохранена как `interrupted`, поэтому это engineering checkpoint, не release-pass.
-Полный 8 h/32-cycle NFR-004 остаётся `DEMO-S4`. Physical power-cut всё ещё требует
-controller. LittleFS не затрагивается,
+Полный 8 h/32-cycle NFR-004 остаётся `DEMO-S4`. E-HIL-092 закрывает ST-HIL-A11 на
+той же board/card с localized real-TFT failure, zero source/store start, неизменной
+generation 68/25 и final lease 0. Physical power-cut всё ещё требует controller.
+LittleFS не затрагивается,
 пока не доказан отдельный disposable partition/image; текущий flash filesystem может
 содержать legacy/product data.

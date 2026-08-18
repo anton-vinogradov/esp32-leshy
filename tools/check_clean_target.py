@@ -419,6 +419,36 @@ def main() -> int:
                 f"product Survey active-scan cancellation evidence is missing: {marker}"
             )
 
+    for marker in (
+        "survey.product.test-source-unavailable once|clear",
+        "consumeProductSurveySourceUnavailableInjection()",
+        "productSurveySourceUnavailableVisible()",
+        "report.sourceStartAttempted = !report.sourceFailureInjected",
+        "report.storeOpenAttempted = true",
+        "releaseProductSurveyAfterTerminal(event.report.status, !keepVisible)",
+        "source_unavailable_waiting_back",
+        '\\"survey_product_source_start_attempted\\"',
+        '\\"survey_product_store_open_attempted\\"',
+        '\\"survey_product_store_bytes_written\\"',
+    ):
+        if marker not in entry:
+            errors.append(
+                f"product Survey missing-source evidence is missing: {marker}"
+            )
+    source_failure = entry.find("report.sourceFailureInjected =")
+    store_open = entry.find("report.storeOpenAttempted = true", source_failure)
+    if source_failure < 0 or store_open <= source_failure:
+        errors.append("missing-source/store-open ordering could not be inspected")
+    else:
+        source_boundary = entry[source_failure:store_open]
+        for marker in ("scanner->begin()", "authorizeProductSurvey"):
+            if marker not in source_boundary:
+                errors.append(
+                    f"missing-source boundary is missing before store open: {marker}"
+                )
+        if "openExistingWritable" in source_boundary:
+            errors.append("missing-source path can open the store before admission")
+
     if not product_start_retry_path.is_file():
         errors.append("Product Start identity retry policy is missing")
     else:

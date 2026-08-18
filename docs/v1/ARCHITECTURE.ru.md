@@ -223,8 +223,13 @@ cleanup физически принят в E-HIL-084. Version 0.60 дополн�
 control worker до UI terminal acknowledgement, не позволяя новому Start обогнать
 старый terminal event; E-HIL-085 подтверждает неизменный normal hardware path.
 E-HIL-086 теперь закрывает physical cancel во время active scan без commit/leak.
-Physical power-cut, endurance, LittleFS parity, missing-source TFT evidence и
-independent demo goldens остаются открыты.
+Version 0.68 добавляет one-shot release-test fault на реальной границе source.
+E-HIL-092 доказывает, что недоступный passive source показывается как локализованный
+terminal TFT state только после cleanup и release lease: source start и store open
+равны false, создано zero bytes/observations, Select не делает скрытый retry, Back
+возвращает Home, а cold read-only recovery сохраняет generation 68 и 25 observations.
+Physical power-cut, endurance, LittleFS parity и independent demo goldens остаются
+открыты.
 
 ## 7. Модель данных
 

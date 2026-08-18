@@ -310,6 +310,10 @@ struct ProductSurveyRuntimeState final {
     BoardWifiPassiveScanResult scan{};
     bool workerReady = false;
     bool sourceActive = false;
+    bool sourceStartAttempted = false;
+    bool sourceFailureInjected = false;
+    bool storeOpenAttempted = false;
+    std::uint64_t storeBytesWritten = 0;
     bool cancelRequestedDuringScan = false;
     std::uint32_t scanCycles = 0;
     std::uint64_t startActionUs = 0;
@@ -342,6 +346,10 @@ struct ProductSurveyWorkerReport final {
     bool scannerCleanupComplete = true;
     bool cleanupComplete = true;
     bool sourceActive = false;
+    bool sourceStartAttempted = false;
+    bool sourceFailureInjected = false;
+    bool storeOpenAttempted = false;
+    std::uint64_t storeBytesWritten = 0;
     std::uint8_t identityAttempts = 0;
     std::uint8_t identityTransientRetries = 0;
     leshy1::storage::SdTransportRunStatus identityStatus =
@@ -376,6 +384,7 @@ ProductSurveyWorkerControl productSurveyWorkerControl =
 std::uint32_t productSurveyWorkerOwnedResources = 0;
 bool productSurveyWorkerReady = false;
 bool productSurveyWorkerScanActive = false;
+bool productSurveySourceUnavailableOnce = false;
 
 void renderInteractiveScreen(bool clearContent = true);
 void broadcast(const char* line);
@@ -584,6 +593,7 @@ bool saveUiLanguage(UiLanguage language) {
 }
 
 bool closeProductSurveyBackend() {
+    productSurveyRuntime.storeBytesWritten = productSurveyStore.bytesWritten();
     productSurveyStore.end();
     const bool filesystemWasMounted = productSurveyFilesystem.mounted();
     if (filesystemWasMounted) productSurveyFilesystem.end();
@@ -643,6 +653,35 @@ bool productSurveyScanActive() {
     return active;
 }
 
+bool productSurveySourceUnavailableInjectionArmed() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed = productSurveySourceUnavailableOnce;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+void setProductSurveySourceUnavailableInjection(bool armed) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    productSurveySourceUnavailableOnce = armed;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+bool consumeProductSurveySourceUnavailableInjection() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool injected = productSurveySourceUnavailableOnce;
+    productSurveySourceUnavailableOnce = false;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return injected;
+}
+
+bool productSurveySourceUnavailableVisible() {
+    return productSurveyRuntime.selected &&
+        productSurveyRuntime.cleanupComplete &&
+        productSurveyRuntime.admissionStatus ==
+            leshy1::apps::survey::ProductSurveyAdmissionStatus::SourceUnavailable &&
+        std::strcmp(productSurveyRuntime.status, "source_unavailable") == 0;
+}
+
 void setProductSurveyScanActive(bool active) {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     productSurveyWorkerScanActive = active;
@@ -659,6 +698,10 @@ void applyProductSurveyWorkerReport(
         report.scannerCleanupComplete;
     productSurveyRuntime.cleanupComplete = report.cleanupComplete;
     productSurveyRuntime.sourceActive = report.sourceActive;
+    productSurveyRuntime.sourceStartAttempted = report.sourceStartAttempted;
+    productSurveyRuntime.sourceFailureInjected = report.sourceFailureInjected;
+    productSurveyRuntime.storeOpenAttempted = report.storeOpenAttempted;
+    productSurveyRuntime.storeBytesWritten = report.storeBytesWritten;
     productSurveyRuntime.identityAttempts = report.identityAttempts;
     productSurveyRuntime.identityTransientRetries =
         report.identityTransientRetries;
@@ -720,6 +763,7 @@ void sendProductSurveyWorkerEvent(
 void cleanupProductSurveyWorkerHardware(
     ProductSurveyWorkerReport* report) {
     if (report == nullptr) return;
+    report->storeBytesWritten = productSurveyStore.bytesWritten();
     productSurveyStore.end();
     if (productSurveyFilesystem.mounted()) productSurveyFilesystem.end();
     surveyStoreRouter.bind(ramSessionStore);
@@ -873,7 +917,11 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         return report;
     }
 
-    const bool scannerBegun = scanner->begin();
+    report.sourceFailureInjected =
+        consumeProductSurveySourceUnavailableInjection();
+    report.sourceStartAttempted = !report.sourceFailureInjected;
+    const bool scannerBegun = report.sourceFailureInjected
+        ? false : scanner->begin();
     leshy1::apps::survey::ProductSurveyRequest surveyRequest;
     surveyRequest.explicitStart = true;
     surveyRequest.sourceAvailable = scannerBegun;
@@ -894,6 +942,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         report.status = "cancelled";
         return report;
     }
+    report.storeOpenAttempted = true;
     if (!productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
         !productSurveyStore.openExistingWritable(storePermit)) {
         report.status = "store_open_failed";
@@ -1125,7 +1174,7 @@ bool drainProductSurveyWorkerObservations() {
     return changed;
 }
 
-void releaseProductSurveyAfterTerminal(const char* status) {
+void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
     if (surveyWorkflow.state() == SurveyWorkflowState::Running ||
         surveyWorkflow.state() == SurveyWorkflowState::Setup) {
         surveyPipeline.cancel();
@@ -1135,7 +1184,7 @@ void releaseProductSurveyAfterTerminal(const char* status) {
                                       ? status
                                       : "cleanup_failed";
     lastRuntimeEvent = productSurveyRuntime.status;
-    if (!uiController.isRoot() && uiController.page() == 2) {
+    if (returnHome && !uiController.isRoot() && uiController.page() == 2) {
         uiController.apply(UiAction::Back,
                            static_cast<std::uint8_t>(appCatalog.size()), false);
     }
@@ -1178,17 +1227,19 @@ void serviceProductSurveyWorker() {
             productSurveyRuntime.sourceActive = false;
             const SurveyPipelineStatus stopped = stopProductSurvey();
             if (stopped != SurveyPipelineStatus::Committed) {
-                releaseProductSurveyAfterTerminal("commit_failed");
+                releaseProductSurveyAfterTerminal("commit_failed", true);
                 render = false;
             } else {
                 setProductSurveyControl(ProductSurveyWorkerControl::Idle);
                 render = true;
             }
         } else if (event.kind == ProductSurveyWorkerEventKind::Cancelled) {
-            releaseProductSurveyAfterTerminal("cancelled");
+            releaseProductSurveyAfterTerminal("cancelled", true);
             render = false;
         } else {
-            releaseProductSurveyAfterTerminal(event.report.status);
+            const bool keepVisible = event.report.admissionStatus ==
+                leshy1::apps::survey::ProductSurveyAdmissionStatus::SourceUnavailable;
+            releaseProductSurveyAfterTerminal(event.report.status, !keepVisible);
             render = false;
         }
     }
@@ -1880,6 +1931,9 @@ NavigationFooter navigationFooterForCurrentState() {
     if (uiController.page() == 1) return {back, {}, {}};
 
     if (uiController.page() == 2) {
+        if (productSurveySourceUnavailableVisible()) {
+            return {{NavigationKey::Left, UiTextId::NavHome}, {}, {}};
+        }
         if (surveyWorkflow.state() == SurveyWorkflowState::Setup) {
             return {back, {},
                     {NavigationKey::RightAndSelect, UiTextId::NavStart}};
@@ -2340,6 +2394,21 @@ void renderSurveyListRow(std::size_t index, std::size_t firstVisible) {
 
 void renderInventoryPage(bool clearContent) {
     char line[96] = {};
+    if (productSurveySourceUnavailableVisible()) {
+        renderHeader(tr(UiTextId::SurveyUnavailable), clearContent);
+        display.setTextColor(Palette::Danger, Palette::Canvas);
+        setUiCursor(UiTextRole::Body, 14, 82);
+        display.print(tr(UiTextId::SourceUnavailableReason));
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        setUiCursor(UiTextRole::Body, 14, 116);
+        display.print(tr(UiTextId::NoSessionCreated));
+        setUiCursor(UiTextRole::Body, 14, 150);
+        display.print(tr(UiTextId::PriorLibraryPreserved));
+        display.setTextColor(Palette::Positive, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 207);
+        display.print(tr(UiTextId::BackNoRetry));
+        return;
+    }
     if (surveyWorkflow.state() == SurveyWorkflowState::Setup) {
         renderHeader(tr(UiTextId::SurveySetup), clearContent);
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
@@ -2767,6 +2836,11 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_cleanup_complete\":%s,"
                       "\"survey_product_worker_ready\":%s,"
                       "\"survey_product_source_active\":%s,"
+                      "\"survey_product_source_start_attempted\":%s,"
+                      "\"survey_product_source_failure_injected\":%s,"
+                      "\"survey_product_source_injection_armed\":%s,"
+                      "\"survey_product_store_open_attempted\":%s,"
+                      "\"survey_product_store_bytes_written\":%llu,"
                       "\"survey_product_scan_active\":%s,"
                       "\"survey_product_cancel_requested_during_scan\":%s,"
                       "\"survey_product_scan_cycles\":%lu,"
@@ -2835,6 +2909,13 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       productSurveyRuntime.cleanupComplete ? "true" : "false",
                       productSurveyRuntime.workerReady ? "true" : "false",
                       productSurveyRuntime.sourceActive ? "true" : "false",
+                      productSurveyRuntime.sourceStartAttempted ? "true" : "false",
+                      productSurveyRuntime.sourceFailureInjected ? "true" : "false",
+                      productSurveySourceUnavailableInjectionArmed()
+                          ? "true" : "false",
+                      productSurveyRuntime.storeOpenAttempted ? "true" : "false",
+                      static_cast<unsigned long long>(
+                          productSurveyRuntime.storeBytesWritten),
                       productSurveyScanActive() ? "true" : "false",
                       productSurveyRuntime.cancelRequestedDuringScan
                           ? "true" : "false",
@@ -2909,7 +2990,9 @@ bool applyUiAction(UiAction action, bool render = true) {
         if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
             (action == UiAction::Select || action == UiAction::Right)) {
             handled = true;
-            if (productSurveyRuntime.selected) {
+            if (productSurveySourceUnavailableVisible()) {
+                lastRuntimeEvent = "source_unavailable_waiting_back";
+            } else if (productSurveyRuntime.selected) {
                 if (productSurveyControl() ==
                     ProductSurveyWorkerControl::Idle) {
                     changed = startProductSurvey();
@@ -3262,6 +3345,44 @@ void emitProductSurveyAdmission(Stream& reply) {
         leshy1::storage::productStoreOperationName(storePermit.operation),
         leshy1::storage::kProductSessionStoreRoot,
         static_cast<unsigned long>(surveyPermit.requiredResources));
+    reply.println(line);
+}
+
+void emitProductSurveySourceUnavailableTest(Stream& reply,
+                                            const char* command) {
+    const bool arm = std::strcmp(
+        command, "survey.product.test-source-unavailable once") == 0;
+    const bool clear = std::strcmp(
+        command, "survey.product.test-source-unavailable clear") == 0;
+    const bool safeState = productSurveyControl() ==
+            ProductSurveyWorkerControl::Idle &&
+        uiController.isRoot() && !appRuntime.running();
+    const char* status = "invalid_request";
+    if (clear && productSurveyControl() == ProductSurveyWorkerControl::Idle) {
+        setProductSurveySourceUnavailableInjection(false);
+        status = "cleared";
+    } else if (arm && safeState) {
+        setProductSurveySourceUnavailableInjection(true);
+        status = "armed";
+    } else if (arm) {
+        status = "unsafe_state";
+    }
+    char line[384] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.survey.source_unavailable_test.v1\","
+        "\"kind\":\"state\",\"status\":\"%s\",\"one_shot\":true,"
+        "\"armed\":%s,\"worker_idle\":%s,\"ui_home\":%s,"
+        "\"runtime_owner\":\"%s\",\"lease_mask\":%lu,"
+        "\"hardware_touched\":false,\"source_started\":false,"
+        "\"storage_mounted\":false,\"storage_written\":false}",
+        status,
+        productSurveySourceUnavailableInjectionArmed() ? "true" : "false",
+        productSurveyControl() == ProductSurveyWorkerControl::Idle
+            ? "true" : "false",
+        uiController.isRoot() ? "true" : "false",
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
     reply.println(line);
 }
 
@@ -6619,6 +6740,9 @@ void handleCommand(Stream& reply, const char* command) {
         emitProductUnenrollment(reply);
     } else if (std::strcmp(command, "survey.product.admission") == 0) {
         emitProductSurveyAdmission(reply);
+    } else if (std::strncmp(
+                   command, "survey.product.test-source-unavailable ", 39) == 0) {
+        emitProductSurveySourceUnavailableTest(reply, command);
     } else if (std::strcmp(command, "storage.sd.protocol") == 0) {
         emitSdReadOnlyProtocol(reply);
     } else if (std::strcmp(command, "storage.sd.identification.fixture") == 0) {
@@ -6957,6 +7081,7 @@ void setup() {
               "\"storage.product.boot-watchdog-test confirm\","
               "\"storage.product.unenroll confirm\","
               "\"survey.product.admission\","
+              "\"survey.product.test-source-unavailable once|clear\","
               "\"storage.sd.protocol\",\"storage.sd.identification.fixture\","
               "\"storage.sd.transport.fixture\","
               "\"storage.sd.wire\","

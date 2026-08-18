@@ -47,9 +47,12 @@ their checks.
 S3 progress `E-AUTO-023`/`E-HIL-083` reuses that exact 0.58 candidate and proves the
 real passive product path through live List→Detail→Back, generation 65→66 commit,
 cold read-only reopen, Library, and JSON export. Five TFT states are visually
-reviewed and final ownership is zero. It is deliberately not `DEMO-S3`: the
-missing-source real-TFT path, physical power-cut, LittleFS parity, and independently
-recorded demo goldens remain open.
+reviewed and final ownership is zero. Normal-path evidence has since advanced through
+0.60/0.62, and exact 0.68
+`E-AUTO-032`/`E-HIL-092` closes the missing-source real-TFT path without starting the
+source or store, writing bytes, changing the prior 68/25 Library, leaking a lease, or
+allowing a hidden Select retry. It is still deliberately not `DEMO-S3`: physical
+power-cut, LittleFS parity, and independently recorded demo goldens remain open.
 
 ## Test cadence within a stage
 
