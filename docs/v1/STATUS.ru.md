@@ -12,11 +12,11 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, exact 0.71 первого пользовательского source-plan slice S4 и host-verified source contract общей timeline 0.72 в процессе интеграции.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, exact 0.71 первого пользовательского source-plan slice S4 и exact 0.72 runtime-checkpoint общей timeline.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
-- **Главная цель текущего этапа:** подключить bounded shared-timeline contract 0.72 к
-  принятому source plan 0.71, product worker, persistent Session и Running UI, затем
-  добавить passive BLE без смены Survey setup/navigation model.
+- **Главная цель текущего этапа:** сохранять и cold-reopen bounded timeline, уже
+  подключённую exact 0.72 к source plan, product worker и Running UI, затем добавить
+  passive BLE без смены Survey setup/navigation model.
   Управляемый physical power-cut и 8 h multi-source
   endurance остаются явными gates `DEMO-S4`.
 
@@ -28,7 +28,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key input/TFT capture, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71 `E-HIL-096` принимает interactive UX-S02 source selection; work-in-progress 0.72 добавляет host-verified allocation-free streaming timeline contract с per-source duty/unavailability/drop accounting и fail-closed FIFO overflow | интегрировать/persist/show timeline, затем реализовать passive BLE, compatible scheduling и runtime degradation; закрыть controlled power-cut и 8 h multi-source endurance в `DEMO-S4` |
+| S4 | `active` | exact 0.71 `E-HIL-096` принимает interactive UX-S02 source selection; exact 0.72 `E-HIL-097` подключает allocation-free timeline к real product worker, показывает Wi-Fi state/duty на Running TFT, учитывает 34/34 observations за два scans с zero drops/overflow, commits generation 71→72 и cold-recovers с lease 0 | persist/reopen/export timeline windows за пределами runtime FIFO на 16 записей, затем реализовать passive BLE, compatible scheduling и runtime degradation; закрыть controlled power-cut и 8 h multi-source endurance в `DEMO-S4` |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -568,6 +568,9 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-072 | exact build `0.71.0-survey-source-plan` | pass: RAM 134 928 B, linked flash 1 169 012 B; app/factory 1 169 424/1 234 960 B; app `5636f3b…21e6`, factory `dea1d2ce…92a`, ELF `e35896c4…c5057`, map `82ea3089…56b2`; source commit `b0901f9` | первый пользовательский slice S4, не `DEMO-S4` и не release build |
 | E-AUTO-036 | source-plan HIL runner и retained verifier | pass: независимо перепроверяются exact candidate/source/artifact hashes, пять TFT states, 11 transitions, включение/выключение Wi-Fi, отказ unavailable BLE, block Start для пустого plan, heap/input/buzzer и final cleanup | gate намеренно не запускает radio и не открывает storage; real persistence остаётся привязана к exact 0.70 `DEMO-S3` |
 | E-HIL-096 / E-SURVEY-009 | board-01 exact 0.71 interactive source plan Survey | pass: русский UX-S02 Plan→Sources использует Up/Down для выбора, Right/OK для активации и Left Back; Wi-Fi выбран по умолчанию, BLE сообщает unavailable/driver, выключение Wi-Fi делает Start недоступным, восстановление снова разрешает Start. Пять визуально проверенных TFT captures помещаются; max incremental repaint 31,818 ms, heap остаётся 266 576/202 160/182 108 B, input errors/drops zero, buzzer LOW, final owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-survey-source-plan-0.71.json) | принимает только source-plan UX S4.1; passive BLE, shared timeline/scheduler/degradation, power-cut и endurance остаются открыты |
+| E-BUILD-073 | exact build `0.72.0-source-timeline-runtime` | pass: RAM 136 880 B, linked flash 1 174 456 B; app/factory 1 174 864/1 240 400 B; app `680a84ea…bed1`, factory `422eec57…b522`, ELF `a09c8750…13ba`, map `2a35327e…fc39`; source commit `da2b33a` | +5 444 B linked flash, +1 952 B static RAM и +5 440 B images vs 0.71 за worker boundary events, runtime accounting, telemetry и localized Running duty; exact checkpoint, не `DEMO-S4` и не release build |
+| E-AUTO-037 | source-timeline runtime HIL runner и retained verifier | pass: независимо перепроверяются exact candidate/source/artifact hashes, boot retry accounting, CID, два physical scans, per-source state/duty/accepted/drop/FIFO values, terminal close, TFT hashes, cold recovery и final cleanup | намеренно короткий checkpoint; persistence/export, FIFO draining, BLE, power-cut и endurance вне принятого scope |
+| E-HIL-097 / E-SURVEY-010 | board-01 exact 0.72 product source-timeline runtime | pass: selected mask 1 управляет real Wi-Fi worker; два scans учитывают 34/34 accepted/forwarded observations, running/terminal duty 741/639 permille, completed windows 4→5, drops/overflow zero, русский Running TFT явно показывает `WI-FI: ПАУЗА | 74% ВРЕМЯ`, Stop commits generation 71→72, оба cold boots допускают exact CID read-only с bounded retry accounting 2/1, heap invariant 264 624/199 952/180 156 B, buzzer/input safe, final Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-source-timeline-runtime-0.72.json) | принимает только runtime integration/visibility; timeline windows ещё не persisted/exported, поэтому FIFO на 16 записей остаётся fail-closed short-run bound |
 
 ## Известные неопределённости и риски
 

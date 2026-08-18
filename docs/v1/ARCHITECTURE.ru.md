@@ -254,17 +254,23 @@ Actions и incremental renderer; выход из Setup освобождает fo
 стабильная UI/domain граница для следующих shared timeline и passive BLE, а не claim
 готовности BLE driver или `DEMO-S4`.
 
-Work-in-progress `0.72.0-source-timeline-contract` добавляет первую общую модель
-radio time, не выдавая её за уже готовую storage/runtime integration. `SourceTimeline`
+Exact checkpoint `0.72.0-source-timeline-runtime` добавляет первую общую модель
+radio time и подключает её к selected plan и real product worker. `SourceTimeline`
 владеет двумя fixed source slots и потоково отдаёт завершённые окна scheduled,
 active, unavailable и fault через FIFO на 16 записей. Для каждого source сохраняются
 64-bit accepted/drop counters и накопленные durations, duty cycle выдаётся в
 permille, out-of-order transitions и неверные пары state/reason отклоняются. При
 полной FIFO текущее состояние не меняется, а overflow явно считается. Host contracts
 покрывают overlapping Wi-Fi/BLE windows, временную недоступность BLE driver,
-observation drops, terminal accounting, FIFO drain/retry и overflow-safe stop. Модель
-ещё не подключена к product worker, persistent Session format, Running UI или
-physical HIL, поэтому это source contract, а не принятая capability S4.
+observation drops, terminal accounting, FIFO drain/retry и overflow-safe stop.
+Worker events ScanStarted/Scan/terminal теперь управляют Wi-Fi windows, каждое
+accepted/dropped observation обновляет тот же monotonic ledger, а Running UI показывает
+текущее состояние Wi-Fi и долю duty. Exact `E-HIL-097` подтверждает два real scan
+cycles, 34/34 accepted/forwarded observations, 4→5 completed windows, zero
+drops/overflow, terminal close, generation 71→72, exact-CID cold recovery и final
+lease 0. Приняты только runtime integration и visibility: persistence schema v1 всё
+ещё хранит observations без timeline windows, поэтому FIFO пока не дренируется durable,
+а полная queue остаётся намеренным fail-closed short-run bound.
 
 ## 7. Модель данных
 

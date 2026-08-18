@@ -1,0 +1,83 @@
+{
+  "schema": "leshy.source_timeline_runtime_acceptance.v1",
+  "status": "pass_runtime_checkpoint",
+  "passed": true,
+  "board": "board-01",
+  "profile": "esp32-div-v2-n16",
+  "observed_cid": "FE343253440000002000000055019CB7",
+  "source_commit": "da2b33a4c3165806dde4b4f0b23955c941aaffdd",
+  "candidate": {
+    "version": "0.72.0-source-timeline-runtime",
+    "firmware_sha256": "680a84ea43111c9ccaeb383dbce3b6bab6ec19b8a412f432ee75157b652cbed1",
+    "factory_sha256": "422eec57a39085e99ef8cbc989d155f927ba0cbf86bc88b8aafaf0648eb1b522",
+    "app_elf_sha256": "a09c8750e9fc60ef18a017c73c65fb69d690d34bf36c9d79e8553e52f71613ba",
+    "map_sha256": "2a35327ed6c39c98b55002bdfb15a6b92d93e67ad77c08b5d41a5b2cd1d2fc39",
+    "firmware_bytes": 1174864,
+    "factory_bytes": 1240400,
+    "linked_flash_bytes": 1174456,
+    "linked_ram_bytes": 136880,
+    "rtc_noinit_bytes": 60
+  },
+  "physical": {
+    "run_path": "tests/hil/evidence/board-01-source-timeline-runtime-0.72/run.json",
+    "run_sha256": "8b1f8d58a13bc4f270f96b426c6127fe45e2d0369058fa6e81b0e5386e36fce1",
+    "artifact_index_path": "tests/hil/evidence/board-01-source-timeline-runtime-0.72/artifacts.sha256",
+    "artifact_index_sha256": "770a6131b31207e237328a260e6f9f6b9171ea1f4feed485aa6fb76c7fea36f1",
+    "runner_sha256": "6b208a2bd7632c20950e9fc3275691a19905954b613e3ba1804196c1a4f3c98b",
+    "run_id": "6d03a3c03aa17f53252ff5fa890b277e",
+    "generation_before": 71,
+    "generation_after": 72,
+    "scan_cycles": 2,
+    "observations": 34,
+    "forwarded": 34,
+    "wifi_duty_permille_running": 741,
+    "wifi_duty_permille_terminal": 639,
+    "timeline_windows_running": 4,
+    "timeline_windows_terminal": 5,
+    "timeline_overflow": 0,
+    "timeline_drops": 0,
+    "heap_total": 264624,
+    "heap_free_before": 199952,
+    "heap_free_after": 199952,
+    "heap_min_before": 180156,
+    "heap_min_after": 180156,
+    "screen_count": 2,
+    "running_png_sha256": "a7d958f13730d5f9c4be20be9b3ee7a5831256d4c0c5f80c21a5a8ced0c26cb7",
+    "committed_png_sha256": "3259da229ee833071c4e628f271739dd11a77a8c7a27109b40eba2decc4691a4",
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "accepted_contract": {
+    "source_plan_drives_selected_mask": true,
+    "product_worker_emits_scan_boundaries": true,
+    "monotonic_windows_accounted": true,
+    "accepted_observations_match_forwarded": true,
+    "drops_and_overflow_visible": true,
+    "wifi_duty_visible_on_running_tft": true,
+    "terminal_window_closed": true,
+    "cold_recovery_preserves_observation_session": true,
+    "exact_cid_preserved": true,
+    "heap_invariant": true,
+    "safe_cleanup": true,
+    "timeline_persisted": false,
+    "timeline_exported": false,
+    "passive_ble_active": false
+  },
+  "evidence_ids": [
+    "E-BUILD-073",
+    "E-AUTO-037",
+    "E-HIL-097",
+    "E-SURVEY-010"
+  ],
+  "requirements": [
+    "PR-003",
+    "NFR-003",
+    "NFR-004"
+  ],
+  "limitations": [
+    "This is a machine-checked S4 runtime checkpoint, not complete CAP-015, DEMO-S4, or release eligibility.",
+    "Observation persistence remains schema v1; source windows and duty summaries do not yet survive reboot or appear in export.",
+    "The runtime FIFO holds 16 completed windows and fails closed when full; the accepted physical run intentionally covers only two Wi-Fi scan cycles.",
+    "BLE remains visibly unavailable; compatible scheduling, runtime degradation, controlled power-cut, and eight-hour multi-source endurance remain open."
+  ]
+}

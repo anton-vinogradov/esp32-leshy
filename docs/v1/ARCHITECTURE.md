@@ -197,8 +197,8 @@ Actions and incremental renderer; leaving Setup releases the foreground lease. T
 is the stable UI/domain seam for the next shared timeline and passive BLE work, not a
 claim that the BLE driver or `DEMO-S4` is complete.
 
-The `0.72.0-source-timeline-contract` work-in-progress adds the first shared radio
-time model without pretending that its storage/runtime integration already exists.
+The exact `0.72.0-source-timeline-runtime` checkpoint adds the first shared radio
+time model and connects it to the selected plan and real product worker.
 `SourceTimeline` owns two fixed source slots and streams completed scheduled, active,
 unavailable, and fault windows through a 16-entry FIFO. It retains per-source
 64-bit accepted/drop counters and accumulated durations, reports duty cycle in
@@ -206,9 +206,14 @@ permille, rejects out-of-order transitions and invalid state/reason pairs, and l
 the current state unchanged when the FIFO is full while incrementing an overflow
 counter. Host contracts cover overlapping Wi-Fi/BLE windows, temporary BLE driver
 unavailability, observation drops, terminal accounting, FIFO drain/retry, and
-overflow-safe stop. The model is not yet connected to the product worker, persisted
-Session format, Running UI, or physical HIL, so this is a source contract rather than
-an accepted S4 capability.
+overflow-safe stop. Worker ScanStarted/Scan/terminal events now drive Wi-Fi windows,
+every accepted or dropped observation updates the same monotonic ledger, and Running
+UI shows the current Wi-Fi state and duty share. Exact `E-HIL-097` verifies two real
+scan cycles, 34/34 accepted/forwarded observations, 4→5 completed windows, zero
+drops/overflow, terminal close, generation 71→72, exact-CID cold recovery and final
+lease 0. This accepts runtime integration and visibility only: schema-v1 persistence
+still stores observations without timeline windows, so the FIFO is not yet drained
+durably and a full queue remains an intentional fail-closed short-run bound.
 
 ## Data model
 
