@@ -38,6 +38,7 @@ struct SelfTestFacts final {
     bool buildIdentityPresent = false;
     bool profileMatched = false;
     bool displayReady = false;
+    bool touchFrontendReady = false;
     bool inputFrontendReady = false;
     bool inputQueueHealthy = false;
     bool buzzerInactive = false;
@@ -89,8 +90,8 @@ struct SelfTestCheckResult final {
 
 struct SelfTestReport final {
     static constexpr std::uint16_t kSchemaVersion = 1;
-    static constexpr std::uint16_t kPlanVersion = 7;
-    static constexpr std::size_t kCapacity = 29;
+    static constexpr std::uint16_t kPlanVersion = 8;
+    static constexpr std::size_t kCapacity = 30;
 
     SelfTestMode mode = SelfTestMode::Quick;
     SelfTestResultStatus status = SelfTestResultStatus::NotRun;

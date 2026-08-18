@@ -25,9 +25,9 @@ enum class Tone : std::uint8_t {
 };
 
 struct Components final {
-    static constexpr std::int16_t ChoiceTop = 94;
-    static constexpr std::int16_t ChoiceHeight = 48;
-    static constexpr std::int16_t ChoiceGap = 10;
+    static constexpr std::int16_t ChoiceTop = 82;
+    static constexpr std::int16_t ChoiceHeight = 46;
+    static constexpr std::int16_t ChoiceGap = 6;
     static constexpr std::int16_t MetricTop = 84;
     static constexpr std::int16_t MetricHeight = 28;
     static constexpr std::int16_t MetricGap = 0;
@@ -134,18 +134,25 @@ constexpr bool contains(Rect outer, Rect inner) {
            inner.y + inner.height <= outer.y + outer.height;
 }
 
+constexpr bool containsPoint(Rect rect, std::int16_t x, std::int16_t y) {
+    return x >= rect.x && y >= rect.y && x < rect.x + rect.width &&
+           y < rect.y + rect.height;
+}
+
 static_assert(insideScreen(Components::header()), "header must fit the TFT");
 static_assert(insideScreen(Components::title()), "title must fit the TFT");
-static_assert(beforeFooter(Components::homeRow(4)),
-              "final Home utility must fit above the footer");
-static_assert(beforeFooter(Components::choiceRow(1)),
-              "two mode choices must fit above the footer");
+static_assert(beforeFooter(Components::homeRow(2)),
+              "three touch-sized Home rows must fit above the footer");
+static_assert(beforeFooter(Components::choiceRow(2)),
+              "three touch-sized choices must fit above the footer");
 static_assert(beforeFooter(Components::metricRow(4)),
               "five result metrics must fit above the footer");
 static_assert(beforeFooter(Components::stateCard()),
               "guided common-state card must fit above the footer");
-static_assert(!overlaps(Components::homeRow(3), Components::homeRow(4)),
-              "Home utility must be visually separated");
+static_assert(!overlaps(Components::homeRow(1), Components::homeRow(2)),
+              "touch-sized Home rows must be visually separated");
+static_assert(!overlaps(Components::choiceRow(1), Components::choiceRow(2)),
+              "touch-sized choice rows must be visually separated");
 static_assert(!overlaps(Components::footerDivider(), Components::inputStatus()),
               "footer divider and input status must not overlap");
 static_assert(!overlaps(Components::inputStatus(), Components::footerHint()),
@@ -166,5 +173,9 @@ static_assert(Components::navigationCell(2).x +
 static_assert(contains(Components::homeRow(0),
                        Components::focusMarker(Components::homeRow(0))),
               "non-color focus marker must fit its row");
+static_assert(Layout::HomeRowHeight >= 44,
+              "interactive Home rows require a finger-sized touch target");
+static_assert(Components::ChoiceHeight >= 44,
+              "interactive choice rows require a finger-sized touch target");
 
 }  // namespace leshy1::ui::visual

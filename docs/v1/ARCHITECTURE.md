@@ -84,6 +84,12 @@ and records state/revision evidence; it never owns a second navigation model. Th
 binding transport and acceptance rules are in
 [`UI_AUTOMATION.md`](UI_AUTOMATION.md).
 
+The touch adapter loads a versioned calibration from NVS and can import the legacy
+0.x `leshy/tcal` record without rewriting it. Its allocation-free frontend is
+edge-triggered with a 35 ms release debounce. A shared geometry mapper accepts only
+visible Home/choice rectangles and converts a hit into bounded selection movement
+plus `Select`; header/footer never dispatch, and touch cannot synthesize Back.
+
 ## Concurrency and memory
 
 - Core 1 owns UI/navigation; callbacks should not block for more than 10 ms.

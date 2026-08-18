@@ -26,6 +26,20 @@ ambiguous. The retained 50-press physical test proves 10 presses of each key wit
 50/50 press/release/dispatched events, zero errors/ambiguity/drops, and a 5 ms
 maximum sample gap.
 
+## Touch is supplemental, not a second navigation model
+
+The XPT2046 panel dispatches one event per calibrated press and requires a debounced
+release before another event. A tap may activate only the visible row or explicit
+control under the finger. Home exposes three 216×46 px rows with 5 px gaps; common
+choices expose up to three 216×46 px rows with 6 px gaps. Every current touch target
+is therefore at least 44 px high.
+
+The header, input-status strip, and 26 px footer are never touch targets. The footer
+remains a legend for physical keys, not a set of on-screen buttons. Touch deliberately
+has no Back gesture or Back target: physical Left is the stable Back/Cancel path.
+Row taps are translated through the same bounded Up/Down plus Select Action path as
+the keypad, so screens do not own a parallel hit-test navigation state.
+
 ## Screen action map
 
 | Context | Up/Down | Select | Right | Left/Back |

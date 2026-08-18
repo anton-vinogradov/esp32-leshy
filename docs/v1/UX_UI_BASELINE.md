@@ -98,8 +98,8 @@ tests, so a screen cannot silently move its content into the fixed footer.
 | Component | Geometry/role | Current reuse |
 |---|---|---|
 | Header + title | 240×42 brand anchor; 216 px title region | Home and every Self-Test view |
-| Home row | 216×28; five rows fit above the footer and the utility gap is explicit | capability Home, Language, and final Self-Test item |
-| Choice row | 216×48 with primary and metadata text | Quick / Full-Guided mode selection |
+| Home row | 216×46; three finger-sized rows form a scrolling visible window above the footer | capability Home, Language, and final Self-Test item |
+| Choice row | 216×46; up to three finger-sized choices fit above the footer | Quick / Full-Guided, Language, Survey plan/source/filter |
 | Metric row | five 216×28 result slots | Full preflight and Quick/Full result |
 | Footer divider | fixed at y=236 | every interactive screen |
 | Input status + spatial navigation | 216×28 input plus three 70×26 action cells | every interactive screen and HIL |
@@ -110,6 +110,11 @@ primitives; four actual TFT frames pass the pixel/trace checker; Quick passes 8/
 input has zero errors/drops, buzzer remains LOW, and Back returns owner/lease to
 `none`/`0`. This accepted the component system; at that point UX-05…07 and
 `DEMO-S2` were still open.
+
+The 0.88 touch corrective keeps the accepted component vocabulary but enlarges Home
+from five 28 px rows to a three-row 46 px visible window and standardizes choice rows
+at 46 px. Header/footer are excluded from hit testing; the footer is still only a
+physical-key legend, and physical Left remains the sole Back control.
 
 ## UX-05 EN/RU content fit
 

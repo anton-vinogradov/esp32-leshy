@@ -26,6 +26,21 @@ ambiguous. Retained физический тест 50 нажатий подтве
 кнопки, 50/50 press/release/dispatched events, zero errors/ambiguity/drops и maximum
 sample gap 5 ms.
 
+## Touch дополняет кнопки, а не создаёт вторую навигацию
+
+Панель XPT2046 выдаёт одно событие на откалиброванное нажатие и требует debounced
+release перед следующим. Касание активирует только видимую строку или явный control
+под пальцем. Home показывает три строки 216×46 px с gap 5 px; общие choices — до
+трёх строк 216×46 px с gap 6 px. Поэтому каждый текущий touch target имеет высоту
+не менее 44 px.
+
+Header, строка технического input-status и footer 26 px никогда не являются touch
+targets. Footer остаётся подсказкой физических клавиш, а не экранными кнопками.
+Touch намеренно не имеет Back-жеста или Back-target: стабильный Back/Cancel —
+физическая клавиша Влево. Касание строки проходит через тот же bounded путь
+Up/Down плюс Select, что keypad, поэтому экран не получает отдельное состояние
+hit-test-навигации.
+
 ## Карта actions экранов
 
 | Контекст | Up/Down | Select | Right | Left/Back |

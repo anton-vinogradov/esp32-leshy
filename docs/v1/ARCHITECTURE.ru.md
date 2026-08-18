@@ -112,6 +112,12 @@ public:
 а не ветка в каждом экране. Модальные диалоги и дочерние views добавятся поверх того
 же стека.
 
+Touch adapter загружает versioned calibration из NVS и умеет read-only импортировать
+legacy-запись 0.x `leshy/tcal`. Allocation-free frontend выдаёт событие по edge и
+использует release debounce 35 ms. Общий geometry mapper принимает только видимые
+rectangles Home/choice и превращает hit в bounded перемещение selection плюс
+`Select`; header/footer ничего не dispatch-ят, а touch не может синтезировать Back.
+
 ## 5. Ресурсы и coexistence
 
 `ResourceBroker` не аллоцирует память и выдаёт набор ресурсов атомарно. Имена и

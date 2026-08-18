@@ -55,6 +55,8 @@
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
+#include "ui/TouchInput.h"
+#include "ui/TouchTargets.h"
 #include "ui/LanguageController.h"
 #include "ui/UiController.h"
 #include "ui/UiStrings.h"
@@ -99,8 +101,9 @@ void testVisualThemeContract() {
     CHECK(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth);
     CHECK(Layout::ContentTop + 3 * (Layout::RowHeight + Layout::RowGap) <
           Layout::FooterDividerY);
-    CHECK(Layout::ContentTop + 5 * Layout::HomeRowHeight +
-              4 * Layout::HomeRowGap < Layout::FooterDividerY);
+    CHECK(Layout::ContentTop + 3 * Layout::HomeRowHeight +
+              2 * Layout::HomeRowGap < Layout::FooterDividerY);
+    CHECK(Layout::HomeRowHeight >= 44);
     CHECK(Palette::Canvas == rgb565(7, 16, 12));
     CHECK(Palette::Header != Palette::Canvas);
     CHECK(Palette::Surface != Palette::SurfaceFocus);
@@ -115,12 +118,13 @@ void testUiComponentGeometryContract() {
     using leshy1::ui::visual::Rect;
     using leshy1::ui::visual::beforeFooter;
     using leshy1::ui::visual::contains;
+    using leshy1::ui::visual::containsPoint;
     using leshy1::ui::visual::insideScreen;
     using leshy1::ui::visual::overlaps;
 
     CHECK(insideScreen(Components::header()));
     CHECK(insideScreen(Components::title()));
-    for (std::uint8_t index = 0; index < 5; ++index) {
+    for (std::uint8_t index = 0; index < 3; ++index) {
         const Rect row = Components::homeRow(index);
         CHECK(beforeFooter(row));
         CHECK(contains(row, Components::focusMarker(row)));
@@ -131,8 +135,19 @@ void testUiComponentGeometryContract() {
                   Layout::HomeRowHeight + Layout::HomeRowGap);
         }
     }
-    CHECK(!overlaps(Components::choiceRow(0), Components::choiceRow(1)));
-    CHECK(beforeFooter(Components::choiceRow(1)));
+    for (std::uint8_t index = 0; index < 3; ++index) {
+        const Rect row = Components::choiceRow(index);
+        CHECK(beforeFooter(row));
+        if (index != 0) {
+            CHECK(!overlaps(Components::choiceRow(index - 1), row));
+        }
+    }
+    CHECK(Components::ChoiceHeight >= 44);
+    CHECK(containsPoint(Components::homeRow(0), Layout::Edge, Layout::ContentTop));
+    CHECK(!containsPoint(Components::homeRow(0), Layout::Edge - 1,
+                         Layout::ContentTop));
+    CHECK(!containsPoint(Components::footerHint(), Layout::Edge,
+                         Layout::ContentTop));
     CHECK(beforeFooter(Components::metricRow(4)));
     CHECK(beforeFooter(Components::stateCard()));
     CHECK(!overlaps(Components::footerDivider(), Components::inputStatus()));
@@ -146,6 +161,61 @@ void testUiComponentGeometryContract() {
                             Components::navigationCell(index)));
         }
     }
+}
+
+void testTouchInputIsEdgeTriggeredAndBounded() {
+    TouchInput input;
+    TouchPoint press;
+    input.reset(100);
+    CHECK(!input.sample(false, 0, 0, 100, &press));
+    CHECK(input.sample(true, 12, 82, 110, &press));
+    CHECK(press.x == 12 && press.y == 82);
+    CHECK(input.pressed());
+    CHECK(!input.sample(true, 12, 82, 120, &press));
+    CHECK(!input.sample(false, 0, 0, 125, &press));
+    CHECK(!input.sample(true, 13, 83, 130, &press));
+    CHECK(input.pressed());
+    CHECK(!input.sample(false, 0, 0, 140, &press));
+    CHECK(!input.sample(false, 0, 0, 174, &press));
+    CHECK(input.pressed());
+    CHECK(!input.sample(false, 0, 0, 175, &press));
+    CHECK(!input.pressed());
+    CHECK(!input.sample(true, 240, 10, 180, &press));
+    CHECK(input.sample(true, 239, 319, 190, &press));
+    const TouchInputMetrics& metrics = input.metrics();
+    CHECK(metrics.pressEvents == 2);
+    CHECK(metrics.releaseEvents == 1);
+    CHECK(metrics.rejectedCoordinates == 1);
+    CHECK(metrics.lastX == 239 && metrics.lastY == 319);
+}
+
+void testTouchTargetsExposeRowsButNeverChrome() {
+    using leshy1::ui::visual::Components;
+    using leshy1::ui::visual::Layout;
+
+    const auto center = [](leshy1::ui::visual::Rect rect) {
+        return TouchPoint{
+            static_cast<std::uint16_t>(rect.x + rect.width / 2),
+            static_cast<std::uint16_t>(rect.y + rect.height / 2)};
+    };
+    TouchTarget target = hitTouchTarget(
+        TouchTargetLayout::HomeRows, center(Components::homeRow(1)), 2, 6);
+    CHECK(target.hit && target.index == 3);
+    target = hitTouchTarget(TouchTargetLayout::HomeRows,
+                            center(Components::homeRow(2)), 4, 6);
+    CHECK(!target.hit);
+    target = hitTouchTarget(TouchTargetLayout::ThreeChoices,
+                            center(Components::choiceRow(2)));
+    CHECK(target.hit && target.index == 2);
+    target = hitTouchTarget(TouchTargetLayout::TwoChoices,
+                            center(Components::choiceRow(2)));
+    CHECK(!target.hit);
+    target = hitTouchTarget(TouchTargetLayout::HomeRows,
+                            {20, static_cast<std::uint16_t>(Layout::HintY)},
+                            0, 6);
+    CHECK(!target.hit);
+    target = hitTouchTarget(TouchTargetLayout::HomeRows, {20, 20}, 0, 6);
+    CHECK(!target.hit);
 }
 
 void testLanguageCatalogAndControllerAreBounded() {
@@ -194,6 +264,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     healthy.buildIdentityPresent = true;
     healthy.profileMatched = true;
     healthy.displayReady = true;
+    healthy.touchFrontendReady = true;
     healthy.inputFrontendReady = true;
     healthy.inputQueueHealthy = true;
     healthy.buzzerInactive = true;
@@ -247,14 +318,15 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     const SelfTestReport& quick = controller.report();
     CHECK(quick.mode == SelfTestMode::Quick);
     CHECK(quick.status == SelfTestResultStatus::Pass);
-    CHECK(quick.checkCount == 8);
-    CHECK(quick.passed == 8);
+    CHECK(quick.checkCount == 9);
+    CHECK(quick.passed == 9);
     CHECK(quick.failed == 0);
     CHECK(quick.blocked == 0);
     CHECK(quick.readOnly);
     CHECK(quick.durationUs == 25);
     CHECK(std::strcmp(quick.checks[0].id, "quick.build.identity") == 0);
-    CHECK(std::strcmp(quick.checks[7].id, "quick.resource.scope") == 0);
+    CHECK(std::strcmp(quick.checks[4].id, "quick.input.touch") == 0);
+    CHECK(std::strcmp(quick.checks[8].id, "quick.resource.scope") == 0);
 
     CHECK(controller.back());
     CHECK(controller.nextMode());
@@ -288,54 +360,54 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(full.status == SelfTestResultStatus::Blocked);
     CHECK(!full.readOnly);
     CHECK(full.sequence == 2);
-    CHECK(full.checkCount == 29);
-    CHECK(full.passed == 25);
+    CHECK(full.checkCount == 30);
+    CHECK(full.passed == 26);
     CHECK(full.failed == 0);
     CHECK(full.blocked == 1);
     CHECK(full.notApplicable == 3);
-    CHECK(std::strcmp(full.checks[8].id, "full.ui.common_states") == 0);
-    CHECK(std::strcmp(full.checks[9].id,
+    CHECK(std::strcmp(full.checks[9].id, "full.ui.common_states") == 0);
+    CHECK(std::strcmp(full.checks[10].id,
                       "full.s3.survey.persistence") == 0);
-    CHECK(std::strcmp(full.checks[14].id,
+    CHECK(std::strcmp(full.checks[15].id,
                       "full.s4.capture.persistence") == 0);
-    CHECK(std::strcmp(full.checks[15].id, "full.assembly.gps") == 0);
-    CHECK(full.checks[15].status == SelfTestResultStatus::NotApplicable);
-    CHECK(std::strcmp(full.checks[18].id,
-                      "full.s4.shield.receivers") == 0);
-    CHECK(full.checks[18].status == SelfTestResultStatus::Pass);
+    CHECK(std::strcmp(full.checks[16].id, "full.assembly.gps") == 0);
+    CHECK(full.checks[16].status == SelfTestResultStatus::NotApplicable);
     CHECK(std::strcmp(full.checks[19].id,
-                      "full.s4.spectrum.nrf24.receive") == 0);
+                      "full.s4.shield.receivers") == 0);
     CHECK(full.checks[19].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[20].id,
-                      "full.s4.spectrum.cc1101.receive") == 0);
+                      "full.s4.spectrum.nrf24.receive") == 0);
     CHECK(full.checks[20].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[21].id,
-                      "full.s4.storage.recovery.audit") == 0);
+                      "full.s4.spectrum.cc1101.receive") == 0);
     CHECK(full.checks[21].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[22].id,
-                      "full.s4.library.export.audit") == 0);
+                      "full.s4.storage.recovery.audit") == 0);
     CHECK(full.checks[22].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[23].id,
-                      "full.s4.capture.pcap.audit") == 0);
+                      "full.s4.library.export.audit") == 0);
     CHECK(full.checks[23].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[24].id,
-                      "full.s4.storage.disposable.commit") == 0);
+                      "full.s4.capture.pcap.audit") == 0);
     CHECK(full.checks[24].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[25].id,
-                      "full.s4.storage.disposable.remount") == 0);
+                      "full.s4.storage.disposable.commit") == 0);
     CHECK(full.checks[25].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[26].id,
-                      "full.s4.library.disposable.export") == 0);
+                      "full.s4.storage.disposable.remount") == 0);
     CHECK(full.checks[26].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[27].id,
-                      "full.s4.storage.disposable.cleanup") == 0);
+                      "full.s4.library.disposable.export") == 0);
     CHECK(full.checks[27].status == SelfTestResultStatus::Pass);
     CHECK(std::strcmp(full.checks[28].id,
+                      "full.s4.storage.disposable.cleanup") == 0);
+    CHECK(full.checks[28].status == SelfTestResultStatus::Pass);
+    CHECK(std::strcmp(full.checks[29].id,
                       "full.capability.coverage") == 0);
     CHECK(std::strcmp(selfTestResultStatusName(
                           SelfTestResultStatus::NotApplicable),
                       "not_applicable") == 0);
-    CHECK(SelfTestReport::kPlanVersion == 7);
+    CHECK(SelfTestReport::kPlanVersion == 8);
 
     CHECK(controller.back());
     CHECK(controller.previousMode());
@@ -365,7 +437,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(coverageFailure.completeActiveChecks(incomplete, 530));
     const SelfTestReport& incompleteReport = coverageFailure.report();
     CHECK(incompleteReport.status == SelfTestResultStatus::Fail);
-    CHECK(incompleteReport.passed == 24);
+    CHECK(incompleteReport.passed == 25);
     CHECK(incompleteReport.failed == 1);
     CHECK(incompleteReport.blocked == 2);
     CHECK(incompleteReport.notApplicable == 2);
@@ -385,7 +457,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     const SelfTestReport& heapFailure = finalHeapFailure.report();
     CHECK(heapFailure.status == SelfTestResultStatus::Fail);
     CHECK(heapFailure.checks[2].status == SelfTestResultStatus::Fail);
-    CHECK(heapFailure.passed == 24);
+    CHECK(heapFailure.passed == 25);
     CHECK(heapFailure.failed == 1);
     CHECK(heapFailure.blocked == 1);
     CHECK(heapFailure.notApplicable == 3);
@@ -403,7 +475,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     }
     CHECK(blockedProbe.activate(unprobed, 620));
     CHECK(blockedProbe.completeActiveChecks(unprobed, 630));
-    CHECK(blockedProbe.report().passed == 24);
+    CHECK(blockedProbe.report().passed == 25);
     CHECK(blockedProbe.report().failed == 0);
     CHECK(blockedProbe.report().blocked == 2);
     CHECK(blockedProbe.report().notApplicable == 3);
@@ -422,7 +494,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(activeFailure.view() == SelfTestView::ActiveChecks);
     CHECK(activeFailure.completeActiveChecks(failedRf, 730));
     CHECK(activeFailure.report().status == SelfTestResultStatus::Fail);
-    CHECK(activeFailure.report().passed == 24);
+    CHECK(activeFailure.report().passed == 25);
     CHECK(activeFailure.report().failed == 1);
     CHECK(activeFailure.report().blocked == 1);
 
@@ -440,11 +512,11 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(optionalCapture.activate(missingArtifact, 760));
     CHECK(optionalCapture.completeActiveChecks(missingArtifact, 770));
     CHECK(optionalCapture.report().status == SelfTestResultStatus::Blocked);
-    CHECK(optionalCapture.report().passed == 24);
+    CHECK(optionalCapture.report().passed == 25);
     CHECK(optionalCapture.report().failed == 0);
     CHECK(optionalCapture.report().blocked == 1);
     CHECK(optionalCapture.report().notApplicable == 4);
-    CHECK(optionalCapture.report().checks[23].status ==
+    CHECK(optionalCapture.report().checks[24].status ==
           SelfTestResultStatus::NotApplicable);
 
     SelfTestFacts cancelled = healthy;
@@ -4347,6 +4419,8 @@ void testSdSector0ReadIsSingleBoundedAndParseOnly() {
 int main() {
     testVisualThemeContract();
     testUiComponentGeometryContract();
+    testTouchInputIsEdgeTriggeredAndBounded();
+    testTouchTargetsExposeRowsButNeverChrome();
     testLanguageCatalogAndControllerAreBounded();
     testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
     testDisposableScratchCleanupPermitIsExactAndFailClosed();

@@ -199,6 +199,9 @@ void SelfTestController::evaluateQuick(const SelfTestFacts& facts) {
     append("quick.display.ready",
            facts.displayReady ? SelfTestResultStatus::Pass
                               : SelfTestResultStatus::Fail);
+    append("quick.input.touch",
+           facts.touchFrontendReady ? SelfTestResultStatus::Pass
+                                    : SelfTestResultStatus::Fail);
     append("quick.input.frontend",
            facts.inputFrontendReady ? SelfTestResultStatus::Pass
                                     : SelfTestResultStatus::Fail);

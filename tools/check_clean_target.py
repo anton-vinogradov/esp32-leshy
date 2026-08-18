@@ -91,7 +91,7 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.87.0-full-guided-heap-budget\\"' not in config:
+    if 'LESHY1_VERSION=\\"0.88.0-touch-input\\"' not in config:
         errors.append(
             "clean target does not identify the 0.87 Full/Guided heap-budget slice"
         )

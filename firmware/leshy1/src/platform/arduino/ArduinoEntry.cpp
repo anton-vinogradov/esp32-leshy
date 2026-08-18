@@ -52,6 +52,7 @@
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
 #include "platform/arduino/BoardSdFilesystem.h"
 #include "platform/arduino/BoardStorageAdapter.h"
+#include "platform/arduino/BoardTouchInput.h"
 #include "platform/arduino/BoardBlePassiveScanner.h"
 #include "platform/arduino/BoardSdSpiTransport.h"
 #include "platform/arduino/BoardWifiPassiveScanner.h"
@@ -84,6 +85,7 @@
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
+#include "ui/TouchTargets.h"
 #include "ui/LanguageController.h"
 #include "ui/UiComponents.h"
 #include "ui/UiController.h"
@@ -160,6 +162,8 @@ using leshy1::platform::arduino::ArduinoFsSessionStoreWorkspace;
 using leshy1::platform::arduino::ArduinoLittleFsSessionStoreIo;
 using leshy1::platform::arduino::BoardSdFilesystem;
 using leshy1::platform::arduino::BoardStorageAdapter;
+using leshy1::platform::arduino::BoardTouchInput;
+using leshy1::platform::arduino::TouchCalibrationSource;
 using leshy1::platform::arduino::BoardBlePassiveScanner;
 using leshy1::platform::arduino::BoardBlePassiveScanResult;
 using leshy1::platform::arduino::BleRecordDisposition;
@@ -193,6 +197,9 @@ using leshy1::ui::UiTextId;
 using leshy1::ui::UiTextRole;
 using leshy1::ui::LanguageController;
 using leshy1::ui::Pcf8574ButtonInput;
+using leshy1::ui::TouchPoint;
+using leshy1::ui::TouchTarget;
+using leshy1::ui::TouchTargetLayout;
 using leshy1::ui::visual::Layout;
 using leshy1::ui::visual::Palette;
 using leshy1::ui::visual::Components;
@@ -283,6 +290,9 @@ BootMetrics bootMetrics;
 char runningAppElfSha256[65] = {};
 HilSession hilSession;
 TFT_eSPI display;
+BoardTouchInput boardTouchInput;
+bool touchCalibrationRequiredAtBoot = false;
+bool touchCalibrationSucceededAtBoot = false;
 UiController uiController;
 LanguageController languageController;
 SelfTestController selfTestController;
@@ -525,6 +535,11 @@ std::uint64_t lastPhysicalInputRenderUs = 0;
 std::uint64_t lastPhysicalInputEndToEndUs = 0;
 std::uint64_t maximumPhysicalInputEndToEndUs = 0;
 bool physicalInputTaskStarted = false;
+std::uint32_t touchHandledPresses = 0;
+std::uint32_t touchMissedPresses = 0;
+std::uint32_t syntheticTouchPresses = 0;
+TouchPoint lastTouchPoint{};
+bool lastTouchChanged = false;
 
 struct ProductBootRecoveryState final {
     const char* status = "not_started";
@@ -4175,7 +4190,7 @@ UiTextId homeNote(const AppMenuItem& item) {
     return UiTextId::Ready;
 }
 
-constexpr std::uint8_t kVisibleHomeRows = 5;
+constexpr std::uint8_t kVisibleHomeRows = 3;
 
 std::uint8_t homeFirstVisible(std::uint8_t selection) {
     return selection < kVisibleHomeRows
@@ -4251,6 +4266,7 @@ SelfTestFacts snapshotSelfTestFacts() {
     facts.profileMatched = profile != nullptr &&
                            profile->state == CapabilityState::Available;
     facts.displayReady = bootMetrics.displayReadyUs != 0;
+    facts.touchFrontendReady = boardTouchInput.ready();
     facts.inputFrontendReady = physicalInputTaskStarted &&
                                bootMetrics.inputDetected;
     facts.inputQueueHealthy = physicalInputEvents != nullptr &&
@@ -4463,7 +4479,7 @@ void renderSelfTestPage(bool clearContent) {
 
     if (selfTestController.view() == SelfTestView::Preflight) {
         renderHeader(tr(UiTextId::FullPreflight), clearContent);
-        renderMetric(0, tr(UiTextId::QuickChecks8));
+        renderMetric(0, tr(UiTextId::QuickChecks9));
         renderMetric(1, tr(UiTextId::CapabilityPlanStaged));
         renderMetric(2, tr(UiTextId::SideEffectsNone));
         renderMetric(3, tr(UiTextId::ResultBlocked), Tone::Warning);
@@ -4802,9 +4818,7 @@ UiTextId surveySourceNote(const SurveySourceOption& source) {
 }
 
 Rect surveyPlanRowBounds(std::uint8_t index) {
-    return {Layout::Edge,
-            static_cast<std::int16_t>(84 + index * 43),
-            Layout::ContentWidth, 38};
+    return Components::choiceRow(index);
 }
 
 void renderSurveyPlanRow(std::uint8_t index) {
@@ -5101,13 +5115,13 @@ void renderInventoryPage(bool clearContent) {
                 renderSurveyPlanRow(index);
             }
         }
-        display.setTextColor(Palette::Positive, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14,
-                    surveySourceController.view() == SurveySetupView::Sources
-                        ? 207 : 219);
-        display.print(surveyWorkflow.simulated()
-                          ? tr(UiTextId::FifoNoRf)
-                          : tr(UiTextId::FifoRxOnly));
+        if (surveySourceController.view() == SurveySetupView::Sources) {
+            display.setTextColor(Palette::Positive, Palette::Canvas);
+            setUiCursor(UiTextRole::Meta, 14, 207);
+            display.print(surveyWorkflow.simulated()
+                              ? tr(UiTextId::FifoNoRf)
+                              : tr(UiTextId::FifoRxOnly));
+        }
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Result) {
@@ -7690,6 +7704,173 @@ bool applyUiAction(UiAction action, bool render = true) {
         lastRuntimeEvent = "stopped";
     }
     return finish(changed);
+}
+
+struct TouchDispatchTarget final {
+    TouchTarget target{};
+    std::uint8_t current = 0;
+};
+
+TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
+    if (uiController.isRoot()) {
+        const std::uint8_t first = homeFirstVisible(uiController.selection());
+        return {
+            leshy1::ui::hitTouchTarget(
+                TouchTargetLayout::HomeRows, point, first,
+                static_cast<std::uint8_t>(appCatalog.size())),
+            uiController.selection(),
+        };
+    }
+    if (uiController.page() == 2) {
+        if (rfSpectrumView == RfSpectrumView::SourceMenu) {
+            return {leshy1::ui::hitTouchTarget(
+                        TouchTargetLayout::TwoChoices, point),
+                    rfSpectrumSelection};
+        }
+        if (rfSpectrumView == RfSpectrumView::None &&
+            surveyWorkflow.state() == SurveyWorkflowState::Setup &&
+            !productSurveySourceUnavailableVisible()) {
+            const bool sources = surveySourceController.view() ==
+                                 SurveySetupView::Sources;
+            return {leshy1::ui::hitTouchTarget(
+                        sources ? TouchTargetLayout::TwoChoices
+                                : TouchTargetLayout::ThreeChoices,
+                        point),
+                    surveySourceController.selection()};
+        }
+        if (rfSpectrumView == RfSpectrumView::None &&
+            surveyWorkflow.state() == SurveyWorkflowState::Running &&
+            surveyController.view() == SurveyView::Filter) {
+            return {leshy1::ui::hitTouchTarget(
+                        TouchTargetLayout::ThreeChoices, point),
+                    static_cast<std::uint8_t>(surveyController.draftFilter())};
+        }
+    }
+    if (uiController.page() == 5) {
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::TwoChoices, point),
+                languageController.selection()};
+    }
+    if (uiController.page() == 6 &&
+        selfTestController.view() == SelfTestView::ModeMenu) {
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::TwoChoices, point),
+                selfTestController.selection()};
+    }
+    return {};
+}
+
+bool dispatchTouchPoint(TouchPoint point, bool synthetic = false) {
+    lastTouchPoint = point;
+    lastTouchChanged = false;
+    if (synthetic) ++syntheticTouchPresses;
+    const TouchDispatchTarget dispatch = touchDispatchTarget(point);
+    if (!dispatch.target.hit) {
+        ++touchMissedPresses;
+        return false;
+    }
+
+    ++touchHandledPresses;
+    std::uint8_t current = dispatch.current;
+    bool changed = false;
+    while (current > dispatch.target.index) {
+        if (!applyUiAction(UiAction::Up, false)) break;
+        --current;
+        changed = true;
+    }
+    while (current < dispatch.target.index) {
+        if (!applyUiAction(UiAction::Down, false)) break;
+        ++current;
+        changed = true;
+    }
+    if (current == dispatch.target.index) {
+        changed = applyUiAction(UiAction::Select, false) || changed;
+    }
+    lastTouchChanged = changed;
+    if (changed) renderInteractiveScreen(true);
+    return changed;
+}
+
+void emitTouchState(Stream& reply) {
+    const auto& metrics = boardTouchInput.metrics();
+    const std::uint16_t rawPressure = boardTouchInput.rawPressure();
+    const std::uint16_t* calibration = boardTouchInput.calibration();
+    char line[640] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.touch.frontend.v1\",\"kind\":\"state\","
+        "\"status\":\"%s\",\"calibration_source\":\"%s\","
+        "\"calibration_required_at_boot\":%s,"
+        "\"calibration_succeeded_at_boot\":%s,"
+        "\"pressure_threshold\":%u,\"raw_pressure\":%u,"
+        "\"calibration\":[%u,%u,%u,%u,%u],"
+        "\"release_debounce_ms\":%lu,"
+        "\"samples\":%lu,\"touched_samples\":%lu,"
+        "\"press_events\":%lu,\"release_events\":%lu,"
+        "\"rejected_coordinates\":%lu,\"pressed\":%s,"
+        "\"last_x\":%u,\"last_y\":%u,"
+        "\"handled_presses\":%lu,\"missed_presses\":%lu,"
+        "\"synthetic_presses\":%lu,\"last_changed\":%s,"
+        "\"footer_interactive\":false,\"touch_back_enabled\":false}",
+        boardTouchInput.ready() ? "ready" : "calibration_required",
+        leshy1::platform::arduino::touchCalibrationSourceName(
+            boardTouchInput.calibrationSource()),
+        touchCalibrationRequiredAtBoot ? "true" : "false",
+        touchCalibrationSucceededAtBoot ? "true" : "false",
+        static_cast<unsigned>(BoardTouchInput::pressureThreshold()),
+        static_cast<unsigned>(rawPressure),
+        static_cast<unsigned>(calibration[0]),
+        static_cast<unsigned>(calibration[1]),
+        static_cast<unsigned>(calibration[2]),
+        static_cast<unsigned>(calibration[3]),
+        static_cast<unsigned>(calibration[4]),
+        static_cast<unsigned long>(leshy1::ui::TouchInput::kReleaseDebounceMs),
+        static_cast<unsigned long>(metrics.samples),
+        static_cast<unsigned long>(metrics.touchedSamples),
+        static_cast<unsigned long>(metrics.pressEvents),
+        static_cast<unsigned long>(metrics.releaseEvents),
+        static_cast<unsigned long>(metrics.rejectedCoordinates),
+        boardTouchInput.pressed() ? "true" : "false",
+        static_cast<unsigned>(metrics.lastX),
+        static_cast<unsigned>(metrics.lastY),
+        static_cast<unsigned long>(touchHandledPresses),
+        static_cast<unsigned long>(touchMissedPresses),
+        static_cast<unsigned long>(syntheticTouchPresses),
+        lastTouchChanged ? "true" : "false");
+    reply.println(line);
+}
+
+void handleSyntheticTouch(Stream& reply, const char* command) {
+    unsigned x = 0;
+    unsigned y = 0;
+    char trailing = '\0';
+    if (std::sscanf(command + std::strlen("ui.touch "), "%u %u %c", &x, &y,
+                    &trailing) != 2 ||
+        x >= static_cast<unsigned>(Layout::ScreenWidth) ||
+        y >= static_cast<unsigned>(Layout::ScreenHeight)) {
+        reply.println("{\"schema\":\"leshy.touch.frontend.v1\","
+                      "\"kind\":\"error\","
+                      "\"reason\":\"invalid_screen_coordinate\"}");
+        return;
+    }
+    dispatchTouchPoint(
+        {static_cast<std::uint16_t>(x), static_cast<std::uint16_t>(y)}, true);
+    emitTouchState(reply);
+}
+
+void calibrateTouch(Stream& reply) {
+    reply.println("{\"schema\":\"leshy.touch.calibration.v1\","
+                  "\"kind\":\"started\",\"points\":4}");
+    reply.flush();
+    const bool saved = boardTouchInput.calibrateAndSave(millis());
+    renderInteractiveScreen(true);
+    reply.println(saved
+        ? "{\"schema\":\"leshy.touch.calibration.v1\","
+          "\"kind\":\"result\",\"status\":\"pass\","
+          "\"stored\":true}"
+        : "{\"schema\":\"leshy.touch.calibration.v1\","
+          "\"kind\":\"result\",\"status\":\"fail\","
+          "\"stored\":false}");
 }
 
 void captureDisplay(Stream& reply) {
@@ -11392,6 +11573,7 @@ void emitSelfTestReport(Stream& reply) {
         "\"buzzer_activations\":0},"
         "\"facts\":{\"build_identity_present\":%s,"
         "\"profile_matched\":%s,\"display_ready\":%s,"
+        "\"touch_frontend_ready\":%s,"
         "\"input_frontend_ready\":%s,\"input_queue_healthy\":%s,"
         "\"buzzer_inactive\":%s,\"resource_scope_clean\":%s,"
         "\"heap_free\":%lu,\"heap_minimum\":%lu,\"heap_floor\":%lu,"
@@ -11450,6 +11632,7 @@ void emitSelfTestReport(Stream& reply) {
         report.facts.buildIdentityPresent ? "true" : "false",
         report.facts.profileMatched ? "true" : "false",
         report.facts.displayReady ? "true" : "false",
+        report.facts.touchFrontendReady ? "true" : "false",
         report.facts.inputFrontendReady ? "true" : "false",
         report.facts.inputQueueHealthy ? "true" : "false",
         report.facts.buzzerInactive ? "true" : "false",
@@ -11925,6 +12108,12 @@ void handleCommand(Stream& reply, const char* command) {
         emitWifiFrameCapturePcap(reply);
     } else if (std::strcmp(command, "input.state") == 0) {
         emitInputState(reply);
+    } else if (std::strcmp(command, "touch.state") == 0) {
+        emitTouchState(reply);
+    } else if (std::strcmp(command, "touch.calibrate confirm") == 0) {
+        calibrateTouch(reply);
+    } else if (std::strncmp(command, "ui.touch ", 9) == 0) {
+        handleSyntheticTouch(reply, command);
     } else if (std::strcmp(command, "self-test.report") == 0) {
         emitSelfTestReport(reply);
     } else if (std::strcmp(command, "self-test.active-rf") == 0) {
@@ -12267,6 +12456,11 @@ void setup() {
     ledcWrite(BoardProfile::kBacklightPin, 255);
     display.init();
     display.setRotation(2);
+    boardTouchInput.begin(display, millis());
+    touchCalibrationRequiredAtBoot =
+        boardTouchInput.calibrationSource() ==
+        leshy1::platform::arduino::TouchCalibrationSource::DefaultProfile;
+    touchCalibrationSucceededAtBoot = !touchCalibrationRequiredAtBoot;
     languageController.restore(loadUiLanguage());
     bootMetrics.displayReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
 
@@ -12316,6 +12510,18 @@ void setup() {
                                              : CapabilityState::Unknown,
                    "i2c_read_only_0x20",
                    bootMetrics.inputDetected ? "raw_byte_available" : "no_read_response"});
+    inventory.add({
+        "input.touch",
+        boardTouchInput.ready() ? CapabilityState::Available
+                                : CapabilityState::Declared,
+        leshy1::platform::arduino::touchCalibrationSourceName(
+            boardTouchInput.calibrationSource()),
+        boardTouchInput.calibrationSource() == TouchCalibrationSource::Leshy1
+            ? "v1_calibration_loaded"
+            : (boardTouchInput.calibrationSource() ==
+                       TouchCalibrationSource::Legacy0x
+                   ? "legacy_0x_calibration_loaded"
+                   : "calibration_required")});
     inventory.add({"radio.wifi", CapabilityState::Declared, "esp32_s3_builtin",
                    "passive_contract_ready_driver_not_started"});
     inventory.add({
@@ -12396,7 +12602,8 @@ void setup() {
               "\"hardware.cc1101.spectrum\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"capture.state\",\"capture.export.pcap\","
-              "\"input.state\","
+              "\"input.state\",\"touch.state\","
+              "\"ui.touch <x> <y>\",\"touch.calibrate confirm\","
               "\"self-test.report\",\"self-test.active-rf\","
               "\"self-test.active-artifact\","
               "\"ui.capture\",\"storage.contract\",\"storage.guard\","
@@ -12441,6 +12648,10 @@ void loop() {
     serviceCc1101Spectrum();
     poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
     poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
+    TouchPoint touchPress;
+    if (boardTouchInput.poll(millis(), &touchPress)) {
+        dispatchTouchPoint(touchPress);
+    }
     PhysicalInputEvent inputEvent;
     // Preserve the 0.x one-key/one-repaint order even when presses are queued.
     if (physicalInputEvents != nullptr &&

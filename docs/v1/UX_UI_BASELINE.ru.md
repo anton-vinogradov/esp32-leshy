@@ -99,8 +99,8 @@ native tests, поэтому экран не может незаметно за�
 | Компонент | Геометрия/роль | Текущее переиспользование |
 |---|---|---|
 | Header + title | brand anchor 240×42; title region 216 px | Home и все Self-Test views |
-| Home row | 216×28; пять строк помещаются над footer, utility gap задан явно | capability Home, Язык и последний Self-Test item |
-| Choice row | 216×48 с primary и metadata text | выбор Quick / Full-Guided |
+| Home row | 216×46; три finger-sized строки образуют прокручиваемое visible window над footer | capability Home, Язык и последний Self-Test item |
+| Choice row | 216×46; до трёх finger-sized choices помещаются над footer | Quick / Full-Guided, Язык, Survey plan/source/filter |
 | Metric row | пять result slots 216×28 | Full preflight и Quick/Full result |
 | Footer divider | фиксирован на y=236 | каждый interactive screen |
 | Input status + пространственная навигация | input 216×28 плюс три action cell 70×26 | каждый interactive screen и HIL |
@@ -111,6 +111,11 @@ renderer primitives; четыре actual TFT frame проходят pixel/trace 
 проходит 8/8; input имеет zero errors/drops, buzzer остаётся LOW, Back возвращает
 owner/lease в `none`/`0`. Тогда это приняло component system; UX-05…07 и `DEMO-S2`
 ещё оставались открыты.
+
+Touch corrective 0.88 сохраняет принятый component vocabulary, но заменяет пять
+Home rows 28 px на visible window из трёх строк 46 px и стандартизирует choice rows
+на 46 px. Header/footer исключены из hit testing; footer остаётся только подсказкой
+физических клавиш, а единственным Back control остаётся physical Влево.
 
 ## UX-05 — размещение EN/RU
 
