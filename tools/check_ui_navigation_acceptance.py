@@ -331,9 +331,15 @@ def main() -> int:
     for marker in ("NavigationKey::Left", "NavigationKey::UpDown",
                    "NavigationKey::RightAndSelect", "renderNavigationFooter",
                    "UiTextId::NavBack", "UiTextId::NavSelect",
-                   "UiTextId::NavEnter"):
+                   "UiTextId::NavEnter", "kNavigationInset = 6",
+                   "kNavigationGap = 4", "navigationKeyWidth(",
+                   "bounds.y + (bounds.height - textHeight) / 2"):
         require(failures, marker in renderer,
                 f"renderer navigation marker missing: {marker}")
+    require(failures, "bounds.y + 11" not in
+            renderer[renderer.find("void renderNavigationCell"):
+                     renderer.find("void renderNavigationFooter")],
+            "navigation footer still stacks the label below its key")
     for marker in ("NavigationGap = 0", "NavigationWidth = 80",
                    "navigationCell(std::uint8_t index)"):
         require(failures, marker in components,

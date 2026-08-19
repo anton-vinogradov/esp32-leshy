@@ -158,3 +158,10 @@ Exact `0.94.0-home-identity` не меняет дерево экранов. Он
 русскому product route и восстанавливает русский перед final cleanup. Четырнадцать
 retained TFT states и exact source/candidate bindings принимают результат
 (`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
+
+Candidate `0.95.0-inline-key-hints` не меняет дерево экранов или input map. Меняется
+только общая легенда физических клавиш: прежние двухэтажные cells «клавиша над
+подписью» становятся одной строкой Roboto Condensed Medium 12 в смешанном регистре:
+`◀ Назад` выровнено влево, `▲▼ Выбор` центрировано, contextual action и `OK▶`
+выровнены вправо. Footer остаётся non-interactive; touch entry по-прежнему принадлежит
+enabled content rows.

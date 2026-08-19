@@ -4190,45 +4190,77 @@ NavigationFooter navigationFooterForCurrentState() {
     return {back, {}, {}};
 }
 
-void renderNavigationKey(NavigationKey key, Rect bounds) {
-    const std::int16_t centerX = bounds.x + bounds.width / 2;
-    const std::int16_t centerY = bounds.y + 6;
+constexpr std::int16_t kNavigationInset = 6;
+constexpr std::int16_t kNavigationGap = 4;
+constexpr std::int16_t kNavigationArrowWidth = 9;
+constexpr std::int16_t kNavigationUpDownWidth = 23;
+
+std::int16_t navigationKeyWidth(NavigationKey key) {
+    if (key == NavigationKey::Left) return kNavigationArrowWidth;
+    if (key == NavigationKey::UpDown) return kNavigationUpDownWidth;
+    if (key == NavigationKey::RightAndSelect) {
+        selectUiFont(UiTextRole::Meta);
+        return display.textWidth(tr(UiTextId::NavOk)) + 3 +
+               kNavigationArrowWidth;
+    }
+    return 0;
+}
+
+void renderNavigationKey(NavigationKey key, std::int16_t x,
+                         std::int16_t centerY, std::int16_t textTop) {
     if (key == NavigationKey::Left) {
-        display.fillTriangle(centerX - 5, centerY, centerX + 3, centerY - 5,
-                             centerX + 3, centerY + 5, Palette::Focus);
+        display.fillTriangle(x, centerY, x + 8, centerY - 5,
+                             x + 8, centerY + 5, Palette::TextSecondary);
     } else if (key == NavigationKey::UpDown) {
-        display.fillTriangle(centerX - 9, centerY + 1, centerX - 4,
-                             centerY - 5, centerX + 1, centerY + 1,
-                             Palette::Focus);
-        display.fillTriangle(centerX + 3, centerY - 1, centerX + 8,
-                             centerY + 5, centerX + 13, centerY - 1,
-                             Palette::Focus);
+        display.fillTriangle(x, centerY + 2, x + 5, centerY - 4,
+                             x + 10, centerY + 2,
+                             Palette::TextSecondary);
+        display.fillTriangle(x + 12, centerY - 2, x + 17, centerY + 4,
+                             x + 22, centerY - 2,
+                             Palette::TextSecondary);
     } else if (key == NavigationKey::RightAndSelect) {
-        display.setTextColor(Palette::Focus, Palette::Canvas);
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         selectUiFont(UiTextRole::Meta);
         const char* ok = tr(UiTextId::NavOk);
         const std::int16_t okWidth = display.textWidth(ok);
-        setUiCursor(UiTextRole::Meta, centerX - okWidth - 3,
-                    bounds.y - 1);
+        setUiCursor(UiTextRole::Meta, x, textTop);
         display.print(ok);
-        display.fillTriangle(centerX + 5, centerY - 5, centerX + 5,
-                             centerY + 5, centerX + 13, centerY,
-                             Palette::Focus);
+        const std::int16_t arrowX = x + okWidth + 3;
+        display.fillTriangle(arrowX, centerY - 5, arrowX, centerY + 5,
+                             arrowX + 8, centerY,
+                             Palette::TextSecondary);
     }
 }
 
 void renderNavigationCell(std::uint8_t index, NavigationCell cell) {
     if (cell.key == NavigationKey::None || cell.label == UiTextId::Count) return;
     const Rect bounds = Components::navigationCell(index);
-    renderNavigationKey(cell.key, bounds);
     const char* label = tr(cell.label);
     selectUiFont(UiTextRole::Meta);
     const std::int16_t labelWidth = display.textWidth(label);
+    const std::int16_t keyWidth = navigationKeyWidth(cell.key);
+    const std::int16_t totalWidth = keyWidth + kNavigationGap + labelWidth;
+    const std::int16_t textHeight = kRobotoCondensedMetaAscent +
+                                    kRobotoCondensedMetaDescent;
+    const std::int16_t textTop = bounds.y + (bounds.height - textHeight) / 2;
+    const std::int16_t centerY = bounds.y + bounds.height / 2;
+    std::int16_t x = bounds.x + (bounds.width - totalWidth) / 2;
+    if (index == 0) x = bounds.x + kNavigationInset;
+    if (index == 2) {
+        x = bounds.x + bounds.width - kNavigationInset - totalWidth;
+    }
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta,
-                bounds.x + (bounds.width - labelWidth) / 2,
-                bounds.y + 11);
-    display.print(label);
+    if (cell.key == NavigationKey::RightAndSelect) {
+        setUiCursor(UiTextRole::Meta, x, textTop);
+        display.print(label);
+        renderNavigationKey(cell.key, x + labelWidth + kNavigationGap,
+                            centerY, textTop);
+    } else {
+        renderNavigationKey(cell.key, x, centerY, textTop);
+        setUiCursor(UiTextRole::Meta, x + keyWidth + kNavigationGap,
+                    textTop);
+        display.print(label);
+    }
 }
 
 void renderNavigationFooter() {

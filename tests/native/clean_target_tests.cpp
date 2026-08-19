@@ -238,11 +238,11 @@ void testLanguageCatalogAndControllerAreBounded() {
     CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::AppSelfTest),
                       u8"САМОПРОВЕРКА") == 0);
     CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::NavBack),
-                      u8"НАЗАД") == 0);
+                      u8"Назад") == 0);
     CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::NavSelect),
-                      u8"ВЫБОР") == 0);
+                      u8"Выбор") == 0);
     CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::NavEnter),
-                      u8"ВХОД") == 0);
+                      u8"Вход") == 0);
     for (std::size_t index = 0; index < kUiTextCount; ++index) {
         if (index == static_cast<std::size_t>(UiTextId::Brand)) continue;
         const UiTextSpec& spec = uiTextSpec(static_cast<UiTextId>(index));

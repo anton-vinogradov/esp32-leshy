@@ -321,6 +321,23 @@ run retains 14 real TFT states, all seven Home jobs, both populated waterfalls,
 unchanged generation 95/0 and heap, and final owner/lease `none`/`0`
 (`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
 
+## Inline physical-key legend
+
+Candidate `0.95.0-inline-key-hints` restores the successful 0.x presentation
+model without restoring its renderer. The 26 px footer is one quiet baseline,
+not three stacked pseudo-buttons. Roboto Condensed Medium 12 renders the action
+beside its physical-key symbol in mixed case and one secondary color: `◀ Back`
+is edge-aligned left, `▲▼ Select` is centered, and `Enter OK▶` is edge-aligned
+right. Empty actions leave their zone empty.
+
+The symbols keep the established 1.x semantics: Left is the parent/stop path,
+Up/Down changes the current selection or view, and Right or OK enters or performs
+the named action. The six-pixel outer anchors and optical vertical centering are
+derived from the readable 0.x footer geometry; labels remain generated EN/RU font
+text and never become touch targets. The connected-candidate gate must capture
+Home, nested menus and live RF views so the compact legend is checked in every
+combination before this checkpoint is accepted.
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog

@@ -157,3 +157,9 @@ physical candidate gate adds an English Home capture to the Russian product rout
 and restores Russian before final cleanup. Fourteen retained TFT states and exact
 source/candidate bindings accept the result (`E-BUILD-095`/`E-AUTO-059`/
 `E-HIL-119`/`E-UX-018`).
+
+Candidate `0.95.0-inline-key-hints` does not change the screen tree or input map.
+It changes only the shared physical-key legend: the former stacked key-over-label
+cells become one mixed-case Roboto Condensed Medium 12 baseline, with `◀ Back`
+left-aligned, `▲▼ Select` centered and the contextual action plus `OK▶` right-aligned.
+The footer stays non-interactive; touch entry remains on enabled content rows.
