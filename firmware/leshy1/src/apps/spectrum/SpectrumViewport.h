@@ -14,13 +14,15 @@ enum class SpectrumDisplayMode : std::uint8_t {
 const char* spectrumDisplayModeName(SpectrumDisplayMode mode);
 
 // A bounded, allocation-free history shared by mutually exclusive RF views.
-// Rows stay in their physical ring slots so the TFT can append a waterfall
-// scanline without moving or redrawing older pixels.
+// Rows stay in their physical ring slots and every stored column maps one-to-one
+// to a physical TFT pixel, so appending never stretches or redraws old samples.
 class SpectrumViewport final {
 public:
     static constexpr std::size_t kMaxBins = 83;
+    static constexpr std::size_t kDisplayColumns = 240;
     static constexpr std::size_t kHistoryRows = 224;
-    static constexpr std::size_t kPackedRowBytes = (kMaxBins + 1U) / 2U;
+    static constexpr std::size_t kPackedRowBytes =
+        (kDisplayColumns + 1U) / 2U;
     static constexpr std::size_t kHistoryStorageBytes =
         kPackedRowBytes * kHistoryRows;
     static constexpr std::uint64_t kWaterfallFillUs = 3000000ULL;
@@ -32,6 +34,9 @@ public:
     bool setMode(SpectrumDisplayMode mode);
     bool previousMode();
     bool nextMode();
+    static std::uint8_t resample(const std::uint8_t* intensity,
+                                 std::size_t bins,
+                                 std::size_t column);
 
     SpectrumDisplayMode mode() const { return mode_; }
     std::size_t binCount() const { return binCount_; }
@@ -39,11 +44,12 @@ public:
     std::size_t nextRow() const { return nextRow_; }
     std::size_t latestRow() const;
     bool rowValid(std::size_t row) const;
-    std::uint8_t intensity(std::size_t row, std::size_t bin) const;
+    std::uint8_t intensity(std::size_t row, std::size_t column) const;
 
 private:
-    // Four-bit intensity is sufficient for the 16-step display palette and doubles
-    // vertical history without doubling static RAM.
+    // The retained history is the exact 240 x 224 display raster. Four-bit
+    // intensity is sufficient for the 16-step palette and keeps the full
+    // one-pixel grid bounded without allocating at runtime.
     std::array<std::uint8_t, kHistoryStorageBytes> history_{};
     SpectrumDisplayMode mode_ = SpectrumDisplayMode::Spectrum;
     std::size_t binCount_ = 0;

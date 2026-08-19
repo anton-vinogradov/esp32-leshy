@@ -846,9 +846,10 @@ void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
 
 void testSpectrumViewportKeepsBoundedRingHistory() {
     CHECK(SpectrumViewport::kWaterfallFillUs == 3000000ULL);
+    CHECK(SpectrumViewport::kDisplayColumns == 240);
     CHECK(SpectrumViewport::kHistoryRows == 224);
-    CHECK(SpectrumViewport::kPackedRowBytes == 42);
-    CHECK(SpectrumViewport::kHistoryStorageBytes == 9408);
+    CHECK(SpectrumViewport::kPackedRowBytes == 120);
+    CHECK(SpectrumViewport::kHistoryStorageBytes == 26880);
     CHECK(SpectrumViewport::kWaterfallRowPeriodUs == 13392ULL);
     CHECK(SpectrumViewport::kWaterfallRowPeriodUs *
               SpectrumViewport::kHistoryRows <=
@@ -860,6 +861,15 @@ void testSpectrumViewportKeepsBoundedRingHistory() {
     SpectrumViewport viewport;
     CHECK(!viewport.reset(0));
     CHECK(!viewport.reset(SpectrumViewport::kMaxBins + 1));
+    const std::array<std::uint8_t, 2> edgeValues = {0, 255};
+    CHECK(SpectrumViewport::resample(edgeValues.data(), edgeValues.size(), 0) ==
+          0);
+    CHECK(SpectrumViewport::resample(edgeValues.data(), edgeValues.size(),
+                                     SpectrumViewport::kDisplayColumns - 1) ==
+          255);
+    CHECK(SpectrumViewport::resample(edgeValues.data(), edgeValues.size(),
+                                     SpectrumViewport::kDisplayColumns / 2) >=
+          127);
     CHECK(viewport.reset(83));
     CHECK(viewport.mode() == SpectrumDisplayMode::Spectrum);
     CHECK(viewport.rowsStored() == 0);

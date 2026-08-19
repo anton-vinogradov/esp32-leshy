@@ -5358,6 +5358,8 @@ constexpr std::int16_t kSpectrumGraphHeight =
     kSpectrumAxisY - kSpectrumGraphY;
 static_assert(kSpectrumGraphHeight == SpectrumViewport::kHistoryRows,
               "each waterfall sample must occupy exactly one TFT row");
+static_assert(Layout::ScreenWidth == SpectrumViewport::kDisplayColumns,
+              "each spectrum sample must occupy exactly one TFT column");
 constexpr std::uint16_t kSpectrumNoSignal =
     leshy1::ui::visual::rgb565(0, 0, 0);
 constexpr std::uint8_t kSpectrumQuietThreshold = 48;
@@ -5408,12 +5410,9 @@ bool pushActiveSpectrumHistory() {
 }
 
 void prepareWaterfallScanline(std::size_t row) {
-    const std::size_t bins = spectrumViewport.binCount();
     for (std::int16_t x = 0; x < Layout::ScreenWidth; ++x) {
-        const std::size_t bin = static_cast<std::size_t>(x) * bins /
-                                Layout::ScreenWidth;
         spectrumScanline[static_cast<std::size_t>(x)] = spectrumTone(
-            spectrumViewport.intensity(row, bin));
+            spectrumViewport.intensity(row, static_cast<std::size_t>(x)));
     }
 }
 
@@ -5458,10 +5457,12 @@ void renderSpectrumBars() {
     display.fillRect(0, kSpectrumGraphY, Layout::ScreenWidth,
                      kSpectrumGraphHeight, Palette::Surface);
     const std::size_t bins = activeSpectrumBins();
+    for (std::size_t bin = 0; bin < bins; ++bin) {
+        spectrumIntensity[bin] = activeSpectrumIntensity(bin);
+    }
     for (std::int16_t x = 0; x < Layout::ScreenWidth; ++x) {
-        const std::size_t bin = static_cast<std::size_t>(x) * bins /
-                                Layout::ScreenWidth;
-        const std::uint8_t intensity = activeSpectrumIntensity(bin);
+        const std::uint8_t intensity = SpectrumViewport::resample(
+            spectrumIntensity.data(), bins, static_cast<std::size_t>(x));
         const std::int16_t height = intensity == 0
             ? 1
             : static_cast<std::int16_t>(1 +
