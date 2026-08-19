@@ -720,7 +720,13 @@ void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
     CHECK(controller.totalHits() == 2);
     CHECK(controller.activeBins() == 2);
     CHECK(controller.intensity(10) == 64);
+    CHECK(controller.displayIntensity(10) == 64);
+    CHECK(controller.metric() == Nrf24SpectrumMetric::Signal);
     CHECK(controller.hottestChannel() == 12);
+    CHECK(controller.toggleMetric());
+    CHECK(controller.metric() == Nrf24SpectrumMetric::Traffic);
+    CHECK(controller.displayIntensity(10) == 0);
+    CHECK(controller.toggleMetric());
     CHECK(controller.togglePause());
     CHECK(controller.state() == Nrf24SpectrumViewState::Paused);
     CHECK(!controller.ingest(sweep));

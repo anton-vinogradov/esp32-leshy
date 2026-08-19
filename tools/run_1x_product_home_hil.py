@@ -300,6 +300,7 @@ def main() -> int:
                     reports["nrf_spectrum"], "nrf_waterfall_timing")
                 require_exact(reports["nrf_spectrum"], {
                     "view": "live", "display_mode": "spectrum",
+                    "metric": "signal",
                     "state": "running", "rx_only": True,
                     "volatile": True, "current_owner": "spectrum24",
                     "current_lease_mask": 9,
@@ -325,15 +326,25 @@ def main() -> int:
                 waterfall_pixel_changes["nrf"] = require_only_waterfall_changed(
                     frames, "nrf-waterfall", "nrf-waterfall-next")
                 trace.append(action(device, "right"))
-                paused_before = read_only_query(
-                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
-                time.sleep(0.35)
-                paused_after = read_only_query(
-                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
-                if paused_after.get("state") != "paused" or \
-                        paused_after.get("sweeps") != paused_before.get("sweeps"):
-                    raise RuntimeError("nRF24 pause did not freeze sweep count")
+                reports["nrf_traffic"] = wait_full_waterfall(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA)
+                require_exact(reports["nrf_traffic"], {
+                    "view": "live", "display_mode": "waterfall",
+                    "metric": "traffic",
+                    "traffic_semantics": "activity_above_baseline",
+                    "state": "running", "rx_only": True,
+                    "volatile": True, "current_owner": "spectrum24",
+                    "current_lease_mask": 9,
+                }, "nrf_traffic")
+                screens["nrf_traffic"] = capture(
+                    device, frames, "nrf-traffic-waterfall")
                 trace.append(action(device, "right"))
+                signal_again = read_only_query(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
+                require_exact(signal_again, {
+                    "display_mode": "waterfall", "metric": "signal",
+                    "state": "running",
+                }, "nrf_signal_again")
                 trace.append(action(device, "up"))
                 trace.append(action(device, "left"))
                 stopped_nrf = read_only_query(
