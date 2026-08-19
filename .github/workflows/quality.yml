@@ -21,6 +21,10 @@ jobs:
 
   native-tests:
     runs-on: ubuntu-latest
+    env:
+      # Git carries run/provenance/source/frame evidence but intentionally ignores
+      # historical firmware/map/ELF blobs. The full local gate rehashes those bytes.
+      LESHY_RETAINED_EVIDENCE_MODE: tracked
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -28,7 +32,7 @@ jobs:
           # their historical exact-candidate commits via `git show <sha>:<path>`.
           fetch-depth: 0
           persist-credentials: false
-      - name: Test hardware-independent core
+      - name: Test core and Git-retained evidence
         run: tools/test.sh
 
   firmware-build:

@@ -61,8 +61,13 @@ daemon или постоянно зарегистрированная HIL-ста
 подключает плату и запускает команду. Dirty tracked tree, неоднозначный port,
 любое несовпадение identity/hash/CID, failed action, отсутствующий screen, изменение
 heap/storage, drop, утёкшая lease или unsafe counter дают fail closed. Run output хранится в
-`work/outputs/`; принятые checkpoints с hashes копируются в `tests/hil/evidence/` и
-регистрируются в host suite.
+`work/outputs/`. Принятые run/provenance/source/frame artifacts и их полный hash
+index копируются в `tests/hil/evidence/` и регистрируются в host suite.
+Repository policy намеренно исключает тяжёлые исторические `.bin`/`.elf`/`.map`
+bytes: полный local gate перехеширует присутствующие bytes, а GitHub `quality`
+перехеширует каждый Git-retained artifact, проверяет declared opaque hashes и
+повторяет текущий source/claim contract в явном режиме `tracked`. Ни один режим
+не заявляет проверку bytes, к которым у него нет доступа.
 
 Эта local command доказывает candidate checkpoint, но не приписывает себе будущий
 signed-release gate S8. GitHub OIDC/Sigstore signing и публикация тех же immutable

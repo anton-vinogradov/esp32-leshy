@@ -61,8 +61,13 @@ No physical key presses are required by the implemented 0.93 workflow. The opera
 only connects the board and starts the command. Any dirty tracked tree, ambiguous
 port, identity/hash/CID mismatch, failed action, missing screen, changed heap/storage,
 drop, leaked lease or unsafe counter fails closed. Run output is kept under
-`work/outputs/`; accepted checkpoints are copied with hashes into
-`tests/hil/evidence/` and registered in the host suite.
+`work/outputs/`. Accepted run/provenance/source/frame artifacts and their complete
+hash index are copied into `tests/hil/evidence/` and registered in the host suite.
+Repository policy intentionally excludes bulky historical `.bin`/`.elf`/`.map`
+bytes: the full local gate rehashes those present bytes, while GitHub `quality`
+rehashes every Git-retained artifact, verifies the declared opaque hashes and repeats
+the current source/claim contract in explicit `tracked` mode. Neither mode claims to
+have verified bytes it cannot access.
 
 This local command proves the candidate checkpoint; it does not silently claim the
 future S8 signed-release gate. GitHub OIDC/Sigstore signing and publication of the

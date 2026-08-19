@@ -6,6 +6,21 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 test_tmp="$(mktemp -d "${TMPDIR:-/tmp}/leshy-tests.XXXXXX")"
 trap 'rm -rf "$test_tmp"' EXIT
 
+retained_evidence_mode="${LESHY_RETAINED_EVIDENCE_MODE:-full}"
+case "$retained_evidence_mode" in
+    full|tracked) ;;
+    *)
+        echo "invalid LESHY_RETAINED_EVIDENCE_MODE: $retained_evidence_mode" >&2
+        exit 2
+        ;;
+esac
+
+run_opaque_evidence_check() {
+    if [[ "$retained_evidence_mode" == "full" ]]; then
+        python3 "$repo_dir/$1"
+    fi
+}
+
 "${CXX:-c++}" \
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
@@ -128,36 +143,40 @@ python3 "$repo_dir/tools/check_ui_navigation_acceptance.py"
 python3 "$repo_dir/tools/check_ui_states_acceptance.py"
 python3 "$repo_dir/tools/check_stage_demo_s2_acceptance.py"
 python3 "$repo_dir/tools/check_s3_product_progress.py"
-python3 "$repo_dir/tools/check_product_survey_worker_acceptance.py"
-python3 "$repo_dir/tools/check_product_survey_terminal_ack_acceptance.py"
-python3 "$repo_dir/tools/check_product_survey_active_cancel_acceptance.py"
+run_opaque_evidence_check tools/check_product_survey_worker_acceptance.py
+run_opaque_evidence_check tools/check_product_survey_terminal_ack_acceptance.py
+run_opaque_evidence_check tools/check_product_survey_active_cancel_acceptance.py
 python3 "$repo_dir/tools/check_product_survey_missing_source_acceptance.py"
 python3 "$repo_dir/tools/check_littlefs_parity_acceptance.py"
 python3 "$repo_dir/tools/check_littlefs_reset_matrix_acceptance.py"
-python3 "$repo_dir/tools/check_stage_demo_s3_acceptance.py"
+run_opaque_evidence_check tools/check_stage_demo_s3_acceptance.py
 python3 "$repo_dir/tools/check_survey_source_plan_acceptance.py"
-python3 "$repo_dir/tools/check_source_timeline_runtime_acceptance.py"
-python3 "$repo_dir/tools/check_source_timeline_persistence_acceptance.py"
+run_opaque_evidence_check tools/check_source_timeline_runtime_acceptance.py
+run_opaque_evidence_check tools/check_source_timeline_persistence_acceptance.py
 python3 "$repo_dir/tools/check_passive_ble_acceptance.py"
-python3 "$repo_dir/tools/check_runtime_degradation_acceptance.py"
+run_opaque_evidence_check tools/check_runtime_degradation_acceptance.py
 python3 "$repo_dir/tools/check_observation_browser_acceptance.py"
 python3 "$repo_dir/tools/check_capture_export_acceptance.py"
-python3 "$repo_dir/tools/check_wifi_frame_capture_acceptance.py"
+run_opaque_evidence_check tools/check_wifi_frame_capture_acceptance.py
 python3 "$repo_dir/tools/check_persistent_wifi_capture_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_coverage_acceptance.py"
 python3 "$repo_dir/tools/check_shield_receiver_self_test_acceptance.py"
-python3 "$repo_dir/tools/check_nrf24_spectrum_acceptance.py"
-python3 "$repo_dir/tools/check_cc1101_spectrum_acceptance.py"
+run_opaque_evidence_check tools/check_nrf24_spectrum_acceptance.py
+run_opaque_evidence_check tools/check_cc1101_spectrum_acceptance.py
 python3 "$repo_dir/tools/check_full_guided_rf_acceptance.py"
-python3 "$repo_dir/tools/check_full_guided_artifact_acceptance.py"
-python3 "$repo_dir/tools/check_full_guided_disposable_acceptance.py"
-python3 "$repo_dir/tools/check_full_guided_heap_budget_acceptance.py"
-python3 "$repo_dir/tools/check_touch_input_acceptance.py"
+run_opaque_evidence_check tools/check_full_guided_artifact_acceptance.py
+run_opaque_evidence_check tools/check_full_guided_disposable_acceptance.py
+run_opaque_evidence_check tools/check_full_guided_heap_budget_acceptance.py
+run_opaque_evidence_check tools/check_touch_input_acceptance.py
 python3 "$repo_dir/tools/check_product_menu_acceptance.py"
-python3 "$repo_dir/tools/check_clean_status_acceptance.py"
-python3 "$repo_dir/tools/check_spectrum_views_acceptance.py"
-python3 "$repo_dir/tools/check_product_home_acceptance.py"
+run_opaque_evidence_check tools/check_clean_status_acceptance.py
+run_opaque_evidence_check tools/check_spectrum_views_acceptance.py
+run_opaque_evidence_check tools/check_product_home_acceptance.py
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
+if [[ "$retained_evidence_mode" == "tracked" ]]; then
+    python3 "$repo_dir/tools/check_tracked_hil_evidence.py"
+    python3 "$repo_dir/tools/check_product_home_acceptance.py" --tracked-only
+fi
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"

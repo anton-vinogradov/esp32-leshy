@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import subprocess
@@ -54,6 +55,12 @@ def git_blob(path: str) -> bytes | None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--tracked-only", action="store_true",
+        help="verify Git-retained evidence/source contracts without ignored binaries",
+    )
+    args = parser.parse_args()
     failures: list[str] = []
     require(failures, SUMMARY.is_file() and BUNDLE.is_dir(),
             "0.93 product Home evidence missing")
@@ -101,24 +108,27 @@ def main() -> int:
             digest(BUNDLE / "artifacts.sha256") == INDEX and
             digest(BUNDLE / "provenance.json") == PROVENANCE and
             digest(BUNDLE / "run.json") == RUN and
-            digest(BUNDLE / "firmware.bin") == FIRMWARE and
-            digest(BUNDLE / "firmware.factory.bin") == FACTORY and
-            digest(BUNDLE / "firmware.elf") == APP and
-            digest(BUNDLE / "firmware.map") == MAP and
-            app_elf_sha256(BUNDLE / "firmware.bin") == APP and
             digest(BUNDLE / "runner.py") == RUNNER and
             digest(BUNDLE / "checker.py") == CHECKER and
             digest(BUNDLE / "connected-candidate-gate.sh") == GATE,
-            "retained artifact binding mismatch")
+            "Git-retained artifact binding mismatch")
 
-    generic = subprocess.run(
-        [str(ROOT / "tools/check_product_home_run.py"),
-         "--run", str(BUNDLE), "--expected-version", VERSION,
-         "--expected-cid", CID, "--source-commit", SOURCE],
-        cwd=ROOT, text=True, stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, check=False)
-    require(failures, generic.returncode == 0,
-            f"independent run verification failed: {generic.stdout}")
+    if not args.tracked_only:
+        require(failures,
+                digest(BUNDLE / "firmware.bin") == FIRMWARE and
+                digest(BUNDLE / "firmware.factory.bin") == FACTORY and
+                digest(BUNDLE / "firmware.elf") == APP and
+                digest(BUNDLE / "firmware.map") == MAP and
+                app_elf_sha256(BUNDLE / "firmware.bin") == APP,
+                "local opaque candidate binding mismatch")
+        generic = subprocess.run(
+            [str(ROOT / "tools/check_product_home_run.py"),
+             "--run", str(BUNDLE), "--expected-version", VERSION,
+             "--expected-cid", CID, "--source-commit", SOURCE],
+            cwd=ROOT, text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, check=False)
+        require(failures, generic.returncode == 0,
+                f"independent run verification failed: {generic.stdout}")
 
     catalog = git_blob("firmware/leshy1/src/domain/apps/AppCatalog.cpp")
     source_controller = git_blob(
@@ -179,6 +189,7 @@ def main() -> int:
         "nrf_history_rows": 16, "cc_history_rows": 8,
         "single_flash": True, "manual_button_presses": 0,
         "final_lease_mask": 0,
+        "evidence_mode": "tracked" if args.tracked_only else "full",
     }, sort_keys=True))
     return 0
 
