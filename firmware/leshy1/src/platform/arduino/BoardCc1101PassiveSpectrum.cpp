@@ -371,6 +371,47 @@ bool BoardCc1101PassiveSpectrum::sample(
         *report_, false);
 }
 
+bool BoardCc1101PassiveSpectrum::lockReceive(std::uint32_t frequencyKHz) {
+    const bool tunable =
+        (frequencyKHz >= 300000U && frequencyKHz <= 348000U) ||
+        (frequencyKHz >= 387000U && frequencyKHz <= 464000U) ||
+        (frequencyKHz >= 779000U && frequencyKHz <= 928000U);
+    if (!active_ || report_ == nullptr || !tunable) return false;
+    for (std::uint8_t attempt = 0; attempt < 2U; ++attempt) {
+        if (command(kCommandIdle) && tune(frequencyKHz) &&
+            command(kCommandReceive)) {
+            const ReceiveWaitResult wait = waitForReceive(kReadyTimeoutUs);
+            if (wait == ReceiveWaitResult::Ready) return gpio21Safe();
+            if (wait == ReceiveWaitResult::Timeout) {
+                ++report_->receiveReadyTimeouts;
+                if (attempt == 0U) ++report_->transientRetries;
+            }
+        }
+        if (attempt == 0U && !recoverReceive()) break;
+    }
+    report_->status = Cc1101PassiveSpectrumStatus::Fault;
+    return false;
+}
+
+bool BoardCc1101PassiveSpectrum::sampleRssi(
+    std::int16_t* rssiDbm, std::uint64_t* monotonicUs) {
+    if (!active_ || report_ == nullptr || rssiDbm == nullptr ||
+        monotonicUs == nullptr) {
+        return false;
+    }
+    std::uint8_t rawRssi = 0;
+    if (!readStatus(kRegisterRssi, &rawRssi) || !gpio21Safe()) {
+        report_->status = Cc1101PassiveSpectrumStatus::Fault;
+        return false;
+    }
+    const int signedRaw = rawRssi >= 128U
+        ? static_cast<int>(rawRssi) - 256 : static_cast<int>(rawRssi);
+    *rssiDbm = static_cast<std::int16_t>(signedRaw / 2 - 74);
+    *monotonicUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    ++report_->samples;
+    return *monotonicUs != 0U;
+}
+
 bool BoardCc1101PassiveSpectrum::idle() {
     if (!active_ || report_ == nullptr) return false;
     return command(kCommandIdle);

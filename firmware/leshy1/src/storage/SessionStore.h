@@ -94,6 +94,15 @@ SessionStoreCommitResult commitNextWifiFrameCapture(
     SessionStoreIo& io, SessionStoreWorkspace& workspace,
     const services::survey::SurveySession& session,
     const domain::captures::WifiFrameSource& frames);
+SessionStoreCommitResult commitSubGhzRawCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::SubGhzRawSource& pulses,
+    std::uint32_t generation, HeadSlot publishSlot);
+SessionStoreCommitResult commitNextSubGhzRawCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::SubGhzRawSource& pulses);
 
 struct SessionStoreRecoveryResult final {
     SessionStoreStatus status = SessionStoreStatus::NoGeneration;

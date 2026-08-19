@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "domain/captures/WifiFrame.h"
+#include "domain/captures/SubGhzRaw.h"
 #include "services/survey/SurveySession.h"
 
 namespace leshy1::storage {
@@ -13,10 +14,12 @@ constexpr std::uint16_t kLegacySessionSchemaVersion = 1;
 constexpr std::uint16_t kTimelineSessionSchemaVersion = 2;
 constexpr std::uint16_t kSessionSchemaVersion = 3;
 constexpr std::uint16_t kWifiFrameSessionSchemaVersion = 4;
+constexpr std::uint16_t kSubGhzRawSessionSchemaVersion = 5;
 constexpr std::uint16_t kLegacySegmentSchemaVersion = 1;
 constexpr std::uint16_t kTimelineSegmentSchemaVersion = 2;
 constexpr std::uint16_t kSegmentSchemaVersion = 3;
 constexpr std::uint16_t kWifiFrameSegmentSchemaVersion = 4;
+constexpr std::uint16_t kSubGhzRawSegmentSchemaVersion = 5;
 constexpr std::size_t kSessionManifestMaxBytes = 256;
 constexpr std::size_t kObservationRecordMaxBytes = 128;
 constexpr std::size_t kTimelineRecordMaxBytes = 1024;
@@ -55,6 +58,10 @@ SessionCodecStatus encodeWifiFrameCaptureSegment(
     const services::survey::SurveySession& session,
     const domain::captures::WifiFrameSource& frames,
     std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
+SessionCodecStatus encodeSubGhzRawCaptureSegment(
+    const services::survey::SurveySession& session,
+    const domain::captures::SubGhzRawSource& pulses,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
 SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& session,
                                          const std::uint8_t* segment, std::size_t segmentSize,
                                          std::uint8_t* output, std::size_t capacity,
@@ -91,6 +98,30 @@ SessionCodecStatus openPersistedWifiFrameCapture(
     const services::survey::SurveySession& session,
     const std::uint8_t* segment, std::size_t segmentSize,
     PersistedWifiFrameCaptureView* output);
+
+class PersistedSubGhzRawCaptureView final
+    : public domain::captures::SubGhzRawSource {
+public:
+    static constexpr std::size_t kPulseCapacity = 512;
+
+    void reset();
+    std::size_t pulseCount() const override { return count_; }
+    bool pulseView(std::size_t index,
+                   domain::captures::SubGhzRawPulseView* output) const override;
+
+private:
+    friend SessionCodecStatus openPersistedSubGhzRawCapture(
+        const services::survey::SurveySession&, const std::uint8_t*,
+        std::size_t, PersistedSubGhzRawCaptureView*);
+    const std::uint8_t* block_ = nullptr;
+    std::size_t blockSize_ = 0;
+    std::size_t count_ = 0;
+};
+
+SessionCodecStatus openPersistedSubGhzRawCapture(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* segment, std::size_t segmentSize,
+    PersistedSubGhzRawCaptureView* output);
 bool formatSessionJsonSummary(const services::survey::SurveySession& session, char* output,
                               std::size_t capacity);
 

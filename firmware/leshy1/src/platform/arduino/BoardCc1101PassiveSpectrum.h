@@ -20,6 +20,10 @@ public:
         const drivers::radio::Cc1101PassiveSpectrumPlan& plan,
         std::size_t bin,
         drivers::radio::Cc1101PassiveSample* output);
+    // Lock the same receive-only adapter to one tunable frequency and expose
+    // bounded RSSI envelope samples. No FIFO, PA table or TX strobe exists.
+    bool lockReceive(std::uint32_t frequencyKHz);
+    bool sampleRssi(std::int16_t* rssiDbm, std::uint64_t* monotonicUs);
     bool idle();
     bool end();
 

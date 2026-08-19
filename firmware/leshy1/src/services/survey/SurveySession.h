@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "domain/observations/Observation.h"
+#include "domain/captures/SubGhzRaw.h"
 #include "services/survey/SourceTimeline.h"
 
 namespace leshy1::services::survey {
@@ -72,6 +73,7 @@ struct CaptureMetadata final {
     bool wifiShowHidden = false;
     bool locationPresent = false;
     bool framePayloadCaptured = false;
+    bool subGhzRawCaptured = false;
     std::uint8_t selectedSourceMask = 0;
     std::uint32_t wifiMaxMsPerChannel = 0;
     std::uint8_t wifiChannel = 0;
@@ -83,6 +85,14 @@ struct CaptureMetadata final {
     std::uint16_t framePayloadRecords = 0;
     std::uint16_t framePayloadSnapLength = 0;
     FramePayloadFormat framePayloadFormat = FramePayloadFormat::None;
+    std::uint32_t subGhzFrequencyKHz = 0;
+    std::int16_t subGhzThresholdDbm = 0;
+    domain::captures::SubGhzRawModulation subGhzModulation =
+        domain::captures::SubGhzRawModulation::OokEnvelope;
+    bool subGhzStartLevel = true;
+    bool subGhzTruncated = false;
+    std::uint16_t subGhzPulseRecords = 0;
+    std::uint32_t subGhzPulseBytes = 0;
     std::array<std::uint8_t, kAppIdentityBytes> appIdentity{};
     std::uint8_t appIdentityLength = 0;
 };

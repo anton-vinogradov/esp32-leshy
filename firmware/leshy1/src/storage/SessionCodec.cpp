@@ -19,17 +19,24 @@ constexpr std::uint8_t kCaptureMagic[4] = {'L', 'C', 'A', 'P'};
 constexpr std::uint8_t kCaptureWireVersion = 1;
 constexpr std::uint8_t kWifiFrameCaptureWireVersion = 2;
 constexpr std::size_t kCaptureRecordBytes = 72;
+constexpr std::uint8_t kSubGhzRawCaptureWireVersion = 3;
+constexpr std::size_t kSubGhzRawCaptureRecordBytes = 88;
 constexpr std::uint8_t kWifiFrameMagic[4] = {'L', 'W', 'F', 'C'};
 constexpr std::uint8_t kWifiFrameWireVersion = 1;
 constexpr std::size_t kWifiFrameHeaderBytes = 16;
 constexpr std::size_t kWifiFrameRecordHeaderBytes = 20;
+constexpr std::uint8_t kSubGhzRawMagic[4] = {'L', 'S', 'G', 'R'};
+constexpr std::uint8_t kSubGhzRawWireVersion = 1;
+constexpr std::size_t kSubGhzRawHeaderBytes = 16;
 constexpr std::uint8_t kCaptureFlagPassive = 1U << 0U;
 constexpr std::uint8_t kCaptureFlagWifiShowHidden = 1U << 1U;
 constexpr std::uint8_t kCaptureFlagLocation = 1U << 2U;
 constexpr std::uint8_t kCaptureFlagFramePayload = 1U << 3U;
+constexpr std::uint8_t kCaptureFlagSubGhzRaw = 1U << 4U;
 constexpr std::uint8_t kCaptureKnownFlags =
     kCaptureFlagPassive | kCaptureFlagWifiShowHidden |
-    kCaptureFlagLocation | kCaptureFlagFramePayload;
+    kCaptureFlagLocation | kCaptureFlagFramePayload |
+    kCaptureFlagSubGhzRaw;
 
 void put16(std::uint8_t* output, std::uint16_t value) {
     output[0] = static_cast<std::uint8_t>(value >> 8U);
@@ -511,19 +518,27 @@ SessionCodecStatus encodeCaptureRecord(
     const services::survey::CaptureMetadata& metadata,
     std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
     if (output == nullptr || outputSize == nullptr ||
-        capacity < kCaptureRecordBytes || !metadata.present ||
+        capacity < (metadata.subGhzRawCaptured
+                        ? kSubGhzRawCaptureRecordBytes
+                        : kCaptureRecordBytes) ||
+        !metadata.present ||
         metadata.appIdentityLength != metadata.appIdentity.size()) {
         return SessionCodecStatus::CaptureInvalid;
     }
-    std::memset(output, 0, kCaptureRecordBytes);
+    const std::size_t recordBytes = metadata.subGhzRawCaptured
+        ? kSubGhzRawCaptureRecordBytes : kCaptureRecordBytes;
+    std::memset(output, 0, recordBytes);
     std::memcpy(output, kCaptureMagic, sizeof(kCaptureMagic));
-    output[4] = metadata.framePayloadCaptured
-        ? kWifiFrameCaptureWireVersion : kCaptureWireVersion;
+    output[4] = metadata.subGhzRawCaptured
+        ? kSubGhzRawCaptureWireVersion
+        : metadata.framePayloadCaptured
+              ? kWifiFrameCaptureWireVersion : kCaptureWireVersion;
     output[5] = metadata.selectedSourceMask;
     output[6] = (metadata.passive ? kCaptureFlagPassive : 0) |
         (metadata.wifiShowHidden ? kCaptureFlagWifiShowHidden : 0) |
         (metadata.locationPresent ? kCaptureFlagLocation : 0) |
-        (metadata.framePayloadCaptured ? kCaptureFlagFramePayload : 0);
+        (metadata.framePayloadCaptured ? kCaptureFlagFramePayload : 0) |
+        (metadata.subGhzRawCaptured ? kCaptureFlagSubGhzRaw : 0);
     output[7] = metadata.appIdentityLength;
     put32(output + 8, metadata.wifiMaxMsPerChannel);
     output[12] = metadata.wifiChannel;
@@ -537,28 +552,49 @@ SessionCodecStatus encodeCaptureRecord(
     put64(output + 32, metadata.framePayloadBytes);
     std::memcpy(output + 40, metadata.appIdentity.data(),
                 metadata.appIdentity.size());
-    *outputSize = kCaptureRecordBytes;
+    if (metadata.subGhzRawCaptured) {
+        put32(output + 72, metadata.subGhzFrequencyKHz);
+        put16(output + 76, static_cast<std::uint16_t>(
+            metadata.subGhzThresholdDbm));
+        output[78] = static_cast<std::uint8_t>(metadata.subGhzModulation);
+        output[79] = metadata.subGhzStartLevel ? 1U : 0U;
+        put16(output + 80, metadata.subGhzPulseRecords);
+        output[82] = metadata.subGhzTruncated ? 1U : 0U;
+        put32(output + 84, metadata.subGhzPulseBytes);
+    }
+    *outputSize = recordBytes;
     return SessionCodecStatus::Valid;
 }
 
 SessionCodecStatus decodeCaptureRecord(
     const std::uint8_t* input, std::size_t size,
     services::survey::SurveySession* output) {
-    if (input == nullptr || output == nullptr || size != kCaptureRecordBytes ||
+    if (input == nullptr || output == nullptr ||
+        (size != kCaptureRecordBytes &&
+         size != kSubGhzRawCaptureRecordBytes) ||
         std::memcmp(input, kCaptureMagic, sizeof(kCaptureMagic)) != 0 ||
         (input[4] != kCaptureWireVersion &&
-         input[4] != kWifiFrameCaptureWireVersion) || input[7] != 32 ||
+         input[4] != kWifiFrameCaptureWireVersion &&
+         input[4] != kSubGhzRawCaptureWireVersion) || input[7] != 32 ||
         (input[6] & static_cast<std::uint8_t>(~kCaptureKnownFlags)) != 0 ||
         input[13] != 0 || input[14] != 0 || input[15] != 0 ||
         input[31] != 0) {
         return SessionCodecStatus::CaptureInvalid;
     }
     const bool payloadWire = input[4] == kWifiFrameCaptureWireVersion;
+    const bool subGhzWire = input[4] == kSubGhzRawCaptureWireVersion;
+    if ((subGhzWire && size != kSubGhzRawCaptureRecordBytes) ||
+        (!subGhzWire && size != kCaptureRecordBytes)) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
     if ((!payloadWire &&
          (input[26] != 0 || input[27] != 0 || input[28] != 0 ||
           input[29] != 0 || input[30] != 0 ||
           (input[6] & kCaptureFlagFramePayload) != 0)) ||
-        (payloadWire && (input[6] & kCaptureFlagFramePayload) == 0)) {
+        (payloadWire && (input[6] & kCaptureFlagFramePayload) == 0) ||
+        (subGhzWire && (input[6] & kCaptureFlagSubGhzRaw) == 0) ||
+        (!subGhzWire && (input[6] & kCaptureFlagSubGhzRaw) != 0) ||
+        (subGhzWire && (input[6] & kCaptureFlagFramePayload) != 0)) {
         return SessionCodecStatus::CaptureInvalid;
     }
     services::survey::CaptureMetadata metadata;
@@ -570,6 +606,8 @@ SessionCodecStatus decodeCaptureRecord(
     metadata.locationPresent = (input[6] & kCaptureFlagLocation) != 0;
     metadata.framePayloadCaptured =
         (input[6] & kCaptureFlagFramePayload) != 0;
+    metadata.subGhzRawCaptured =
+        (input[6] & kCaptureFlagSubGhzRaw) != 0;
     metadata.appIdentityLength = input[7];
     metadata.wifiMaxMsPerChannel = get32(input + 8);
     metadata.wifiChannel = input[12];
@@ -584,6 +622,22 @@ SessionCodecStatus decodeCaptureRecord(
     metadata.framePayloadBytes = get64(input + 32);
     std::memcpy(metadata.appIdentity.data(), input + 40,
                 metadata.appIdentity.size());
+    if (subGhzWire) {
+        if (input[83] != 0 || input[78] != static_cast<std::uint8_t>(
+                domain::captures::SubGhzRawModulation::OokEnvelope) ||
+            input[79] > 1U || input[82] > 1U) {
+            return SessionCodecStatus::CaptureInvalid;
+        }
+        metadata.subGhzFrequencyKHz = get32(input + 72);
+        metadata.subGhzThresholdDbm = static_cast<std::int16_t>(
+            get16(input + 76));
+        metadata.subGhzModulation = static_cast<
+            domain::captures::SubGhzRawModulation>(input[78]);
+        metadata.subGhzStartLevel = input[79] != 0;
+        metadata.subGhzPulseRecords = get16(input + 80);
+        metadata.subGhzTruncated = input[82] != 0;
+        metadata.subGhzPulseBytes = get32(input + 84);
+    }
     return output->configureCaptureMetadata(metadata) ==
             services::survey::CaptureMetadataStatus::Configured
         ? SessionCodecStatus::Valid : SessionCodecStatus::CaptureInvalid;
@@ -713,6 +767,78 @@ SessionCodecStatus decodeWifiFrameBlock(
     return SessionCodecStatus::Valid;
 }
 
+SessionCodecStatus encodeSubGhzRawBlock(
+    const services::survey::SurveySession& session,
+    const domain::captures::SubGhzRawSource& pulses,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr ||
+        pulses.pulseCount() == 0 ||
+        pulses.pulseCount() > PersistedSubGhzRawCaptureView::kPulseCapacity ||
+        capacity < kSubGhzRawHeaderBytes + pulses.pulseCount() * 2U) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::memset(output, 0, kSubGhzRawHeaderBytes);
+    std::memcpy(output, kSubGhzRawMagic, sizeof(kSubGhzRawMagic));
+    output[4] = kSubGhzRawWireVersion;
+    put16(output + 6, static_cast<std::uint16_t>(pulses.pulseCount()));
+    std::uint64_t totalDurationUs = 0;
+    std::size_t position = kSubGhzRawHeaderBytes;
+    for (std::size_t index = 0; index < pulses.pulseCount(); ++index) {
+        domain::captures::SubGhzRawPulseView pulse;
+        if (!pulses.pulseView(index, &pulse) || pulse.durationUs == 0) {
+            return SessionCodecStatus::CaptureInvalid;
+        }
+        put16(output + position, pulse.durationUs);
+        position += 2;
+        totalDurationUs += pulse.durationUs;
+    }
+    if (totalDurationUs > std::numeric_limits<std::uint32_t>::max()) {
+        return SessionCodecStatus::BoundsExceeded;
+    }
+    put32(output + 8, static_cast<std::uint32_t>(totalDurationUs));
+    const auto& metadata = session.captureMetadata();
+    if (!metadata.subGhzRawCaptured ||
+        metadata.subGhzPulseRecords != pulses.pulseCount() ||
+        metadata.subGhzPulseBytes != pulses.pulseCount() * 2U) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    *outputSize = position;
+    return SessionCodecStatus::Valid;
+}
+
+SessionCodecStatus decodeSubGhzRawBlock(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* input, std::size_t size, std::size_t* decodedCount) {
+    if (input == nullptr || size < kSubGhzRawHeaderBytes ||
+        std::memcmp(input, kSubGhzRawMagic, sizeof(kSubGhzRawMagic)) != 0 ||
+        input[4] != kSubGhzRawWireVersion || input[5] != 0 ||
+        input[12] != 0 || input[13] != 0 || input[14] != 0 ||
+        input[15] != 0) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    const std::size_t count = get16(input + 6);
+    if (count == 0 || count > PersistedSubGhzRawCaptureView::kPulseCapacity ||
+        size != kSubGhzRawHeaderBytes + count * 2U) {
+        return SessionCodecStatus::BoundsExceeded;
+    }
+    std::uint64_t totalDurationUs = 0;
+    for (std::size_t index = 0; index < count; ++index) {
+        const std::uint16_t duration =
+            get16(input + kSubGhzRawHeaderBytes + index * 2U);
+        if (duration == 0) return SessionCodecStatus::CaptureInvalid;
+        totalDurationUs += duration;
+    }
+    const auto& metadata = session.captureMetadata();
+    if (totalDurationUs != get32(input + 8) ||
+        !metadata.subGhzRawCaptured ||
+        metadata.subGhzPulseRecords != count ||
+        metadata.subGhzPulseBytes != count * 2U) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    if (decodedCount != nullptr) *decodedCount = count;
+    return SessionCodecStatus::Valid;
+}
+
 SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_t size,
                                          std::uint32_t* recordCount,
                                          std::uint32_t* bodyLength,
@@ -730,7 +856,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
     if (version != kLegacySegmentSchemaVersion &&
         version != kTimelineSegmentSchemaVersion &&
         version != kSegmentSchemaVersion &&
-        version != kWifiFrameSegmentSchemaVersion) {
+        version != kWifiFrameSegmentSchemaVersion &&
+        version != kSubGhzRawSegmentSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     if ((version == kLegacySegmentSchemaVersion &&
@@ -739,6 +866,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
          decodedAdditionalRecords != 1) ||
         (version == kSegmentSchemaVersion && decodedAdditionalRecords != 2) ||
         (version == kWifiFrameSegmentSchemaVersion &&
+         decodedAdditionalRecords != 2) ||
+        (version == kSubGhzRawSegmentSchemaVersion &&
          decodedAdditionalRecords != 2)) {
         return SessionCodecStatus::Malformed;
     }
@@ -839,6 +968,71 @@ SessionCodecStatus openPersistedWifiFrameCapture(
         session, output->block_, output->blockSize_,
         output->recordOffsets_.data(), output->recordOffsets_.size(),
         &output->count_, &output->snapLength_);
+    if (status != SessionCodecStatus::Valid) output->reset();
+    return status;
+}
+
+void PersistedSubGhzRawCaptureView::reset() {
+    block_ = nullptr;
+    blockSize_ = 0;
+    count_ = 0;
+}
+
+bool PersistedSubGhzRawCaptureView::pulseView(
+    std::size_t index, domain::captures::SubGhzRawPulseView* output) const {
+    if (output == nullptr || block_ == nullptr || index >= count_ ||
+        blockSize_ < kSubGhzRawHeaderBytes + (index + 1U) * 2U) {
+        return false;
+    }
+    output->durationUs = get16(
+        block_ + kSubGhzRawHeaderBytes + index * 2U);
+    return output->durationUs != 0;
+}
+
+SessionCodecStatus openPersistedSubGhzRawCapture(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* segment, std::size_t segmentSize,
+    PersistedSubGhzRawCaptureView* output) {
+    if (output == nullptr || segment == nullptr ||
+        session.state() != services::survey::SessionState::Stopped) {
+        return SessionCodecStatus::InvalidArgument;
+    }
+    output->reset();
+    std::uint32_t recordCount = 0;
+    std::uint32_t bodyLength = 0;
+    std::uint16_t schemaVersion = 0;
+    std::uint16_t additionalRecords = 0;
+    SessionCodecStatus status = validateSegmentFooter(
+        segment, segmentSize, &recordCount, &bodyLength, &schemaVersion,
+        &additionalRecords);
+    if (status != SessionCodecStatus::Valid) return status;
+    if (schemaVersion != kSubGhzRawSegmentSchemaVersion ||
+        recordCount != 0 || additionalRecords != 2 || bodyLength < 16) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::size_t position = 0;
+    const std::uint32_t captureLength = get32(segment + position);
+    const std::uint32_t captureCrc = get32(segment + position + 4);
+    position += 8;
+    if (captureLength != kSubGhzRawCaptureRecordBytes ||
+        captureLength > bodyLength - position ||
+        captureCrc != crc32c(segment + position, captureLength)) {
+        return SessionCodecStatus::ChecksumMismatch;
+    }
+    position += captureLength;
+    if (bodyLength - position < 8) return SessionCodecStatus::BoundsExceeded;
+    const std::uint32_t blockLength = get32(segment + position);
+    const std::uint32_t blockCrc = get32(segment + position + 4);
+    position += 8;
+    if (blockLength < kSubGhzRawHeaderBytes ||
+        blockLength != bodyLength - position ||
+        blockCrc != crc32c(segment + position, blockLength)) {
+        return SessionCodecStatus::ChecksumMismatch;
+    }
+    output->block_ = segment + position;
+    output->blockSize_ = blockLength;
+    status = decodeSubGhzRawBlock(
+        session, output->block_, output->blockSize_, &output->count_);
     if (status != SessionCodecStatus::Valid) output->reset();
     return status;
 }
@@ -982,6 +1176,59 @@ SessionCodecStatus encodeWifiFrameCaptureSegment(
     return SessionCodecStatus::Valid;
 }
 
+SessionCodecStatus encodeSubGhzRawCaptureSegment(
+    const services::survey::SurveySession& session,
+    const domain::captures::SubGhzRawSource& pulses,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr ||
+        session.state() != services::survey::SessionState::Stopped ||
+        capacity > kSessionSegmentMaxBytes || session.size() != 0 ||
+        session.timeline().present || !session.captureMetadata().present ||
+        !session.captureMetadata().subGhzRawCaptured ||
+        session.captureMetadata().framePayloadCaptured) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    CborWriter writer(output, capacity);
+    std::uint8_t captureRecord[kSubGhzRawCaptureRecordBytes] = {};
+    std::size_t captureRecordSize = 0;
+    SessionCodecStatus status = encodeCaptureRecord(
+        session.captureMetadata(), captureRecord, sizeof(captureRecord),
+        &captureRecordSize);
+    if (status != SessionCodecStatus::Valid) return status;
+    writer.be32(static_cast<std::uint32_t>(captureRecordSize));
+    writer.be32(crc32c(captureRecord, captureRecordSize));
+    writer.raw(captureRecord, captureRecordSize);
+    if (!writer.ok() || writer.size() + 8 > capacity) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    std::size_t pulseBlockSize = 0;
+    std::uint8_t* pulseBlock = output + writer.size() + 8;
+    status = encodeSubGhzRawBlock(
+        session, pulses, pulseBlock, capacity - writer.size() - 8,
+        &pulseBlockSize);
+    if (status != SessionCodecStatus::Valid) return status;
+    writer.be32(static_cast<std::uint32_t>(pulseBlockSize));
+    writer.be32(crc32c(pulseBlock, pulseBlockSize));
+    writer.raw(pulseBlock, pulseBlockSize);
+    if (!writer.ok() || kSegmentFooterBytes > capacity - writer.size()) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    const std::size_t bodySize = writer.size();
+    std::uint8_t footer[kSegmentFooterBytes] = {};
+    std::memcpy(footer, kSegmentMagic, sizeof(kSegmentMagic));
+    put16(footer + 4, kSubGhzRawSegmentSchemaVersion);
+    put16(footer + 6, 2);
+    put32(footer + 8, 0);
+    put32(footer + 12, static_cast<std::uint32_t>(bodySize));
+    put32(footer + 16, crc32c(output, bodySize));
+    put32(footer + 20, crc32c(footer, 20));
+    if (!writer.raw(footer, sizeof(footer))) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    *outputSize = writer.size();
+    return SessionCodecStatus::Valid;
+}
+
 SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& session,
                                          const std::uint8_t* segment, std::size_t segmentSize,
                                          std::uint8_t* output, std::size_t capacity,
@@ -1002,7 +1249,9 @@ SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& 
     CborWriter writer(output, capacity);
     writer.map(8);
     writer.unsignedValue(0);
-    writer.unsignedValue(segmentVersion == kWifiFrameSegmentSchemaVersion
+    writer.unsignedValue(segmentVersion == kSubGhzRawSegmentSchemaVersion
+                             ? kSubGhzRawSessionSchemaVersion
+                         : segmentVersion == kWifiFrameSegmentSchemaVersion
                              ? kWifiFrameSessionSchemaVersion
                              : segmentVersion == kSegmentSchemaVersion
                              ? kSessionSchemaVersion
@@ -1044,7 +1293,8 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
     if (value != kLegacySessionSchemaVersion &&
         value != kTimelineSessionSchemaVersion &&
         value != kSessionSchemaVersion &&
-        value != kWifiFrameSessionSchemaVersion) {
+        value != kWifiFrameSessionSchemaVersion &&
+        value != kSubGhzRawSessionSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     const std::uint16_t decodedSchemaVersion =
@@ -1108,7 +1358,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
                                    &additionalRecords);
     if (status != SessionCodecStatus::Valid) return status;
     const std::uint16_t expectedSegmentVersion =
-        manifest.schemaVersion == kWifiFrameSessionSchemaVersion
+        manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+            ? kSubGhzRawSegmentSchemaVersion
+        : manifest.schemaVersion == kWifiFrameSessionSchemaVersion
             ? kWifiFrameSegmentSchemaVersion
             : manifest.schemaVersion == kSessionSchemaVersion
             ? kSegmentSchemaVersion : kLegacySegmentSchemaVersion;
@@ -1116,7 +1368,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         manifest.schemaVersion == kTimelineSessionSchemaVersion
             ? kTimelineSegmentSchemaVersion : expectedSegmentVersion;
     const std::uint16_t expectedAdditionalRecords =
-        manifest.schemaVersion == kWifiFrameSessionSchemaVersion
+        manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+            ? 2
+        : manifest.schemaVersion == kWifiFrameSessionSchemaVersion
             ? 2 : manifest.schemaVersion == kSessionSchemaVersion
             ? 2 : manifest.schemaVersion == kTimelineSessionSchemaVersion ? 1 : 0;
     if (recordCount != manifest.observationCount ||
@@ -1134,6 +1388,7 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
     }
     std::size_t position = 0;
     if (manifest.schemaVersion == kSessionSchemaVersion ||
+        manifest.schemaVersion == kSubGhzRawSessionSchemaVersion ||
         manifest.schemaVersion == kWifiFrameSessionSchemaVersion) {
         if (bodyLength - position < 8) {
             output->reset();
@@ -1142,7 +1397,10 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         const std::uint32_t recordLength = get32(segment + position);
         const std::uint32_t recordCrc = get32(segment + position + 4);
         position += 8;
-        if (recordLength != kCaptureRecordBytes ||
+        const std::size_t expectedCaptureBytes =
+            manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+                ? kSubGhzRawCaptureRecordBytes : kCaptureRecordBytes;
+        if (recordLength != expectedCaptureBytes ||
             recordLength > bodyLength - position) {
             output->reset();
             return SessionCodecStatus::BoundsExceeded;
@@ -1188,7 +1446,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         }
         position += recordLength;
     }
-    if (manifest.schemaVersion == kWifiFrameSessionSchemaVersion) {
+    if (manifest.schemaVersion == kWifiFrameSessionSchemaVersion ||
+        manifest.schemaVersion == kSubGhzRawSessionSchemaVersion) {
         if (bodyLength - position < 8) {
             output->reset();
             return SessionCodecStatus::BoundsExceeded;
@@ -1196,7 +1455,10 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         const std::uint32_t recordLength = get32(segment + position);
         const std::uint32_t recordCrc = get32(segment + position + 4);
         position += 8;
-        if (recordLength < kWifiFrameHeaderBytes ||
+        const std::size_t minimumBlockBytes =
+            manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+                ? kSubGhzRawHeaderBytes : kWifiFrameHeaderBytes;
+        if (recordLength < minimumBlockBytes ||
             recordLength > bodyLength - position) {
             output->reset();
             return SessionCodecStatus::BoundsExceeded;
@@ -1211,8 +1473,11 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
             output->reset();
             return SessionCodecStatus::TimelineInvalid;
         }
-        status = decodeWifiFrameBlock(*output, segment + position, recordLength,
-                                      nullptr, 0, nullptr, nullptr);
+        status = manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+            ? decodeSubGhzRawBlock(*output, segment + position, recordLength,
+                                   nullptr)
+            : decodeWifiFrameBlock(*output, segment + position, recordLength,
+                                   nullptr, 0, nullptr, nullptr);
         if (status != SessionCodecStatus::Valid) {
             output->reset();
             return status;
@@ -1254,6 +1519,7 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         return SessionCodecStatus::TrailingData;
     }
     if (manifest.schemaVersion != kWifiFrameSessionSchemaVersion &&
+        manifest.schemaVersion != kSubGhzRawSessionSchemaVersion &&
         output->stop(manifest.stoppedUs) != services::survey::SessionStatus::Stopped) {
         output->reset();
         return SessionCodecStatus::TimelineInvalid;
@@ -1282,7 +1548,26 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
     }
     const services::survey::SessionTimelineSummary& timeline = session.timeline();
     int written = -1;
-    if (session.captureMetadata().framePayloadCaptured) {
+    if (session.captureMetadata().subGhzRawCaptured) {
+        const auto& capture = session.captureMetadata();
+        written = std::snprintf(
+            output, capacity,
+            "{\"schema\":\"leshy.capture.subghz_raw.v1\",\"id\":\"%s\","
+            "\"started_us\":%llu,\"stopped_us\":%llu,"
+            "\"frequency_khz\":%lu,\"threshold_dbm\":%d,"
+            "\"modulation\":\"ook_envelope\",\"pulses\":%u,"
+            "\"pulse_bytes\":%lu,\"start_level\":%s,"
+            "\"truncated\":%s,\"passive\":true,\"rx_only\":true}",
+            session.id(),
+            static_cast<unsigned long long>(session.startedUs()),
+            static_cast<unsigned long long>(session.stoppedUs()),
+            static_cast<unsigned long>(capture.subGhzFrequencyKHz),
+            static_cast<int>(capture.subGhzThresholdDbm),
+            static_cast<unsigned>(capture.subGhzPulseRecords),
+            static_cast<unsigned long>(capture.subGhzPulseBytes),
+            capture.subGhzStartLevel ? "true" : "false",
+            capture.subGhzTruncated ? "true" : "false");
+    } else if (session.captureMetadata().framePayloadCaptured) {
         const auto& capture = session.captureMetadata();
         written = std::snprintf(
             output, capacity,

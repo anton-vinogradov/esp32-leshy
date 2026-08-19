@@ -39,6 +39,8 @@ run_opaque_evidence_check() {
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/clean_target_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/capture/RadiotapPcap.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/capture/SubGhzRawCapture.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/capture/SubGhzRawCsv.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/capture/WifiFrameCapture.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/LibraryController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/library/SessionCatalog.cpp" \

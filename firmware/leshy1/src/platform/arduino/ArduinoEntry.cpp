@@ -25,6 +25,8 @@
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/capture/RadiotapPcap.h"
+#include "apps/capture/SubGhzRawCapture.h"
+#include "apps/capture/SubGhzRawCsv.h"
 #include "apps/capture/WifiFrameCapture.h"
 #include "apps/self_test/SelfTestController.h"
 #include "apps/spectrum/Cc1101SpectrumController.h"
@@ -104,6 +106,10 @@ using leshy1::apps::library::LibraryView;
 using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
 using leshy1::apps::capture::PcapExportResult;
+using leshy1::apps::capture::SubGhzRawCapture;
+using leshy1::apps::capture::SubGhzRawCapturePlan;
+using leshy1::apps::capture::SubGhzRawCaptureState;
+using leshy1::apps::capture::SubGhzRawRssiSample;
 using leshy1::apps::capture::WifiFrameCapturePlan;
 using leshy1::apps::capture::WifiFrameCaptureState;
 using leshy1::apps::self_test::SelfTestController;
@@ -469,14 +475,22 @@ enum class RfSpectrumKind : std::uint8_t {
 enum class RfSpectrumView : std::uint8_t {
     None,
     SourceMenu,
+    SubGhzMenu,
     CcBandMenu,
+    SubGhzCaptureBandMenu,
+    SubGhzCaptureLive,
     Live,
 };
 const char* rfSpectrumViewName(RfSpectrumView view) {
     switch (view) {
         case RfSpectrumView::None: return "none";
         case RfSpectrumView::SourceMenu: return "source_menu";
+        case RfSpectrumView::SubGhzMenu: return "subghz_menu";
         case RfSpectrumView::CcBandMenu: return "cc_band_menu";
+        case RfSpectrumView::SubGhzCaptureBandMenu:
+            return "subghz_capture_band_menu";
+        case RfSpectrumView::SubGhzCaptureLive:
+            return "subghz_capture_live";
         case RfSpectrumView::Live: return "live";
     }
     return "unknown";
@@ -484,9 +498,12 @@ const char* rfSpectrumViewName(RfSpectrumView view) {
 RfSpectrumView rfSpectrumView = RfSpectrumView::None;
 RfSpectrumKind rfSpectrumKind = RfSpectrumKind::Nrf24;
 std::uint8_t rfSpectrumSelection = 0;
+std::uint8_t subGhzModeSelection = 0;
 leshy1::drivers::radio::Cc1101SpectrumBand rfCcBandSelection =
     leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
 std::uint64_t nextSpectrumUiRefreshUs = 0;
+SubGhzRawCapture subGhzRawCapture;
+std::uint64_t nextSubGhzCaptureUiRefreshUs = 0;
 std::uint64_t spectrumWaterfallStartedUs = 0;
 std::uint64_t spectrumWaterfallCompletedUs = 0;
 std::uint32_t spectrumWaterfallRowsEmitted = 0;
@@ -564,6 +581,11 @@ const char* capturePersistStatus = "volatile";
 std::uint32_t capturePersistGeneration = 0;
 QueueHandle_t captureStoreEvents = nullptr;
 TaskHandle_t captureStoreTaskHandle = nullptr;
+CapturePersistState subGhzCapturePersistState = CapturePersistState::Result;
+const char* subGhzCapturePersistStatus = "volatile";
+std::uint32_t subGhzCapturePersistGeneration = 0;
+QueueHandle_t subGhzCaptureStoreEvents = nullptr;
+TaskHandle_t subGhzCaptureStoreTaskHandle = nullptr;
 const char* capturePersistStateName(CapturePersistState state) {
     switch (state) {
         case CapturePersistState::Result: return "volatile";
@@ -2279,6 +2301,24 @@ CaptureMetadata productWifiFrameCaptureMetadata() {
     return metadata;
 }
 
+CaptureMetadata productSubGhzRawCaptureMetadata() {
+    CaptureMetadata metadata = productCaptureMetadata(0);
+    const auto& plan = subGhzRawCapture.plan();
+    const auto& stats = subGhzRawCapture.stats();
+    metadata.selectedSourceMask = 0;
+    metadata.subGhzRawCaptured = true;
+    metadata.subGhzFrequencyKHz = plan.frequencyKHz;
+    metadata.subGhzThresholdDbm = plan.thresholdDbm;
+    metadata.subGhzModulation = plan.modulation;
+    metadata.subGhzStartLevel = stats.startLevel;
+    metadata.subGhzTruncated = stats.truncated;
+    metadata.subGhzPulseRecords = static_cast<std::uint16_t>(
+        subGhzRawCapture.pulseCount());
+    metadata.subGhzPulseBytes = static_cast<std::uint32_t>(
+        subGhzRawCapture.pulseCount() * 2U);
+    return metadata;
+}
+
 void runCaptureStoreWorker(void*) {
     CaptureStoreEvent event;
     event.status = "store_failed";
@@ -2509,6 +2549,254 @@ void serviceWifiFrameCapturePersist() {
     lastRuntimeEvent = admitted ? "capture_store_saved"
                                 : "capture_store_failed";
     if (uiController.page() == 4) renderInteractiveScreen();
+}
+
+void runSubGhzCaptureStoreWorker(void*) {
+    CaptureStoreEvent event;
+    event.status = "store_failed";
+    bool identityCleanupComplete = true;
+    bool filesystemAttempted = false;
+    leshy1::storage::SdTransportRunResult identity;
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+    do {
+        const auto required =
+            leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
+            leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+            leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+        const auto owned = resourceBroker.ownedBy(
+            AppRuntime::kForegroundOwner);
+        if ((owned & required) != required) {
+            event.status = "resources_missing";
+            break;
+        }
+        if (!loadProductFingerprint(expectedFingerprint,
+                                    sizeof(expectedFingerprint))) {
+            event.status = "enrollment_missing";
+            break;
+        }
+        for (std::uint8_t attempt = 1;
+             attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
+             ++attempt) {
+            BoardSdSpiTransport transport;
+            const bool begun = transport.begin();
+            identity = {};
+            if (begun) {
+                leshy1::storage::SdTransportRunPolicy policy;
+                policy.allowPhysical = true;
+                policy.explicitlySelected = true;
+                policy.identificationOnly = true;
+                policy.ownedResources = owned;
+                identity = leshy1::storage::runSdIdentificationStateMachine(
+                    leshy1::storage::defaultSdIdentificationPlan(), transport,
+                    policy);
+                transport.end();
+            }
+            identityCleanupComplete = transport.cleanupComplete();
+            formatCidFingerprint(identity.identity, observedFingerprint,
+                                 sizeof(observedFingerprint));
+            if (identityCleanupComplete &&
+                identity.status ==
+                    leshy1::storage::SdTransportRunStatus::Valid) {
+                break;
+            }
+            const leshy1::storage::ProductStartIdentityRetryEvidence evidence{
+                true, true, exactCidFingerprint(expectedFingerprint),
+                (owned & required) == required,
+                transport.physicalSpiStarted(), identity.status,
+                std::strcmp(observedFingerprint,
+                            "00000000000000000000000000000000") == 0,
+                identityCleanupComplete, filesystemAttempted,
+            };
+            if (!leshy1::storage::shouldRetryProductStartIdentity(
+                    evidence, attempt)) {
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(
+                leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+        }
+        if (!identityCleanupComplete ||
+            identity.status !=
+                leshy1::storage::SdTransportRunStatus::Valid) {
+            event.status = "identity_failed";
+            break;
+        }
+        if (std::strcmp(expectedFingerprint, observedFingerprint) != 0) {
+            event.status = "fingerprint_mismatch";
+            break;
+        }
+        filesystemAttempted = true;
+        if (!productSurveyFilesystem.begin()) {
+            event.status = "mount_failed";
+            break;
+        }
+        const std::uint64_t cardCapacity =
+            productSurveyFilesystem.cardCapacityBytes();
+        const std::uint64_t cachedFree =
+            productSurveyFilesystem.cachedFreeBytes();
+        const bool rootExists = productSurveyFilesystem.exists(
+            leshy1::storage::kProductSessionStoreRoot);
+        leshy1::storage::MediaIdentity media;
+        media.present = cardCapacity != 0 &&
+            cardCapacity == identity.identity.capacityBytes;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = observedFingerprint;
+        media.capacityBytes = cardCapacity;
+        media.freeBytes = cachedFree;
+        leshy1::storage::ProductStoreRequest request;
+        request.operation =
+            leshy1::storage::ProductStoreOperation::CommitSession;
+        request.explicitlySelected = true;
+        request.expectedFingerprint = expectedFingerprint;
+        request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        request.rootExists = rootExists;
+        request.driverWriteEnabled = true;
+        request.requiredBytes = kProductSurveyCommitBytes;
+        request.reserveBytes = kProductSurveyReserveBytes;
+        request.ownedResources = owned;
+        const leshy1::storage::ProductStorePermit permit =
+            leshy1::storage::authorizeProductStore(media, request);
+        if (!permit.allowed()) {
+            event.status =
+                leshy1::storage::productStoreAccessStatusName(permit.status);
+            break;
+        }
+        if (!productSurveyStore.selectDrive(
+                productSurveyFilesystem.driveNumber()) ||
+            !productSurveyStore.openExistingWritable(permit)) {
+            event.status = "store_open_failed";
+            break;
+        }
+
+        const auto& stats = subGhzRawCapture.stats();
+        char sessionId[SurveySession::kSessionIdCapacity + 1] = {};
+        std::snprintf(sessionId, sizeof(sessionId), "sub-raw-%08llx",
+                      static_cast<unsigned long long>(
+                          stats.signalStartedUs & 0xFFFFFFFFULL));
+        surveySession.reset();
+        if (stats.state != SubGhzRawCaptureState::Complete ||
+            subGhzRawCapture.pulseCount() == 0 ||
+            surveySession.start(sessionId, stats.startedUs) !=
+                SessionStatus::Started ||
+            surveySession.configureCaptureMetadata(
+                productSubGhzRawCaptureMetadata()) !=
+                CaptureMetadataStatus::Configured ||
+            surveySession.stop(stats.endedUs) != SessionStatus::Stopped) {
+            event.status = "artifact_invalid";
+            break;
+        }
+        const leshy1::storage::SessionStoreCommitResult commit =
+            leshy1::storage::commitNextSubGhzRawCapture(
+                productSurveyStore, sessionStoreWorkspace, surveySession,
+                subGhzRawCapture);
+        event.storeStatus = commit.status;
+        if (!commit.complete()) {
+            event.status =
+                leshy1::storage::sessionStoreStatusName(commit.status);
+            break;
+        }
+        const leshy1::storage::SessionStoreRecoveryResult recovered =
+            leshy1::storage::recoverSession(
+                productSurveyStore, sessionStoreWorkspace,
+                &sessionStoreWorkspace.validationSession);
+        if (!recovered.valid() || recovered.generation != commit.generation) {
+            event.status = "reopen_failed";
+            event.storeStatus = recovered.status;
+            break;
+        }
+        leshy1::storage::PersistedSubGhzRawCaptureView reopened;
+        if (leshy1::storage::openPersistedSubGhzRawCapture(
+                sessionStoreWorkspace.validationSession,
+                sessionStoreWorkspace.segment.data(),
+                sessionStoreWorkspace.segmentSize, &reopened) !=
+                leshy1::storage::SessionCodecStatus::Valid ||
+            reopened.pulseCount() != subGhzRawCapture.pulseCount()) {
+            event.status = "pulse_reopen_failed";
+            break;
+        }
+        event.valid = true;
+        event.generation = recovered.generation;
+        event.status = "saved";
+    } while (false);
+
+    productSurveyStore.end();
+    if (productSurveyFilesystem.mounted()) productSurveyFilesystem.end();
+    const bool filesystemCleanup = !filesystemAttempted ||
+        productSurveyFilesystem.cleanupComplete();
+    event.cleanupComplete = identityCleanupComplete && filesystemCleanup &&
+        !productSurveyFilesystem.mounted();
+    if (!event.cleanupComplete) {
+        event.valid = false;
+        event.status = "cleanup_failed";
+    }
+    if (subGhzCaptureStoreEvents != nullptr) {
+        xQueueSend(subGhzCaptureStoreEvents, &event, portMAX_DELAY);
+    }
+    vTaskDelete(nullptr);
+}
+
+bool requestSubGhzRawCapturePersist() {
+    if (subGhzCapturePersistState != CapturePersistState::Result ||
+        subGhzRawCapture.stats().state !=
+            SubGhzRawCaptureState::Complete ||
+        subGhzRawCapture.pulseCount() == 0) {
+        return false;
+    }
+    if (subGhzCaptureStoreEvents == nullptr ||
+        subGhzCaptureStoreTaskHandle != nullptr) {
+        subGhzCapturePersistState = CapturePersistState::Failed;
+        subGhzCapturePersistStatus = "worker_unavailable";
+        lastRuntimeEvent = "subghz_raw_store_worker_unavailable";
+        return true;
+    }
+    const auto storageResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage);
+    if (!resourceBroker.acquire(AppRuntime::kForegroundOwner,
+                                storageResources)) {
+        subGhzCapturePersistState = CapturePersistState::Failed;
+        subGhzCapturePersistStatus = "resources_busy";
+        lastRuntimeEvent = "subghz_raw_store_resources_busy";
+        return true;
+    }
+    subGhzCapturePersistState = CapturePersistState::Saving;
+    subGhzCapturePersistStatus = "saving";
+    const bool started = xTaskCreatePinnedToCore(
+        runSubGhzCaptureStoreWorker, "leshy-sub-store", 8192, nullptr, 1,
+        &subGhzCaptureStoreTaskHandle, 0) == pdPASS;
+    if (!started) {
+        resourceBroker.release(AppRuntime::kForegroundOwner,
+                               storageResources);
+        subGhzCaptureStoreTaskHandle = nullptr;
+        subGhzCapturePersistState = CapturePersistState::Failed;
+        subGhzCapturePersistStatus = "worker_unavailable";
+        lastRuntimeEvent = "subghz_raw_store_worker_unavailable";
+    } else {
+        lastRuntimeEvent = "subghz_raw_saving";
+    }
+    return true;
+}
+
+void serviceSubGhzRawCapturePersist() {
+    if (subGhzCaptureStoreEvents == nullptr) return;
+    CaptureStoreEvent event;
+    if (xQueueReceive(subGhzCaptureStoreEvents, &event, 0) != pdTRUE) return;
+    subGhzCaptureStoreTaskHandle = nullptr;
+    resourceBroker.release(
+        AppRuntime::kForegroundOwner,
+        leshy1::kernel::runtime::resourceMask(Resource::Storage));
+    const bool admitted = event.valid && event.cleanupComplete &&
+        libraryController.replaceWithOwnedCopy(
+            sessionStoreWorkspace.validationSession, librarySession,
+            event.generation, SessionIntegrity::Valid, true, false);
+    subGhzCapturePersistState = admitted ? CapturePersistState::Saved
+                                        : CapturePersistState::Failed;
+    subGhzCapturePersistStatus = admitted ? "saved" : event.status;
+    subGhzCapturePersistGeneration = admitted ? event.generation : 0;
+    lastRuntimeEvent = admitted ? "subghz_raw_saved"
+                                : "subghz_raw_store_failed";
+    if (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive) {
+        renderInteractiveScreen();
+    }
 }
 
 void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
@@ -4123,6 +4411,26 @@ NavigationFooter navigationFooterForCurrentState() {
         if (rfSpectrumView == RfSpectrumView::SourceMenu) {
             return {back, choose, enter};
         }
+        if (rfSpectrumView == RfSpectrumView::SubGhzMenu ||
+            rfSpectrumView == RfSpectrumView::SubGhzCaptureBandMenu) {
+            return {back, choose, enter};
+        }
+        if (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive) {
+            const auto state = subGhzRawCapture.stats().state;
+            if (state == SubGhzRawCaptureState::Waiting ||
+                state == SubGhzRawCaptureState::Capturing) {
+                return {{NavigationKey::Left, UiTextId::NavCancel}, {}, {}};
+            }
+            if (state == SubGhzRawCaptureState::Complete) {
+                return subGhzCapturePersistState ==
+                               CapturePersistState::Result
+                    ? NavigationFooter{
+                          back, {}, {NavigationKey::RightAndSelect,
+                                     UiTextId::NavSave}}
+                    : NavigationFooter{back, {}, {}};
+            }
+            return {back, {}, {}};
+        }
         if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
             return {back, choose, enter};
         }
@@ -5374,6 +5682,19 @@ void renderRfSpectrumSourceMenu(bool clearContent) {
     display.print(tr(UiTextId::SpectrumRxOnly));
 }
 
+void renderSubGhzModeMenu(bool clearContent) {
+    renderHeader(tr(UiTextId::SubGhzModes), clearContent);
+    renderMenuRow(Components::choiceRow(0), tr(UiTextId::SubGhzSpectrum),
+                  tr(UiTextId::SubGhzSpectrumNote),
+                  subGhzModeSelection == 0, true, Tone::Positive);
+    renderMenuRow(Components::choiceRow(1), tr(UiTextId::SubGhzRaw),
+                  tr(UiTextId::SubGhzRawNote),
+                  subGhzModeSelection == 1, true, Tone::Positive);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 207);
+    display.print(tr(UiTextId::SpectrumRxOnly));
+}
+
 leshy1::drivers::radio::Cc1101SpectrumBand ccBandFromIndex(
     std::uint8_t index) {
     const std::uint8_t count = static_cast<std::uint8_t>(
@@ -5411,6 +5732,85 @@ void renderRfCcBandMenu(bool clearContent) {
     for (std::uint8_t index = 0; index < 4; ++index) {
         renderRfCcBandRow(index);
     }
+}
+
+std::uint32_t subGhzCaptureFrequencyKHz(
+    leshy1::drivers::radio::Cc1101SpectrumBand band) {
+    switch (band) {
+        case leshy1::drivers::radio::Cc1101SpectrumBand::Band315:
+            return 315000;
+        case leshy1::drivers::radio::Cc1101SpectrumBand::Band433:
+            return 433920;
+        case leshy1::drivers::radio::Cc1101SpectrumBand::Band868:
+            return 868350;
+        case leshy1::drivers::radio::Cc1101SpectrumBand::Band915:
+            return 915000;
+        case leshy1::drivers::radio::Cc1101SpectrumBand::Count:
+            break;
+    }
+    return 433920;
+}
+
+void renderSubGhzCaptureBandMenu(bool clearContent) {
+    renderHeader(tr(UiTextId::SubGhzRawBands), clearContent);
+    for (std::uint8_t index = 0; index < 4; ++index) {
+        renderRfCcBandRow(index);
+    }
+}
+
+void renderSubGhzRawCapturePage(bool clearContent) {
+    const auto& stats = subGhzRawCapture.stats();
+    const UiTextId title = stats.state == SubGhzRawCaptureState::Waiting
+        ? UiTextId::SubGhzRawWaiting
+        : stats.state == SubGhzRawCaptureState::Capturing
+              ? UiTextId::SubGhzRawCapturing
+              : stats.state == SubGhzRawCaptureState::Complete
+                    ? UiTextId::SubGhzRawComplete
+                    : stats.state == SubGhzRawCaptureState::TimedOut
+                          ? UiTextId::SubGhzRawTimedOut
+                          : stats.state ==
+                                    SubGhzRawCaptureState::SignalTooLong
+                                ? UiTextId::SubGhzRawTooLong
+                          : UiTextId::SubGhzRawFailed;
+    renderHeader(tr(title), clearContent);
+    char line[96] = {};
+    const auto& plan = subGhzRawCapture.plan();
+    std::snprintf(line, sizeof(line), tr(UiTextId::SubGhzRawFrequencyFormat),
+                  static_cast<unsigned long>(plan.frequencyKHz / 1000U),
+                  static_cast<unsigned long>(plan.frequencyKHz % 1000U));
+    renderMetric(0, line, Tone::Positive);
+    std::snprintf(line, sizeof(line), tr(UiTextId::SubGhzRawThresholdFormat),
+                  static_cast<int>(plan.thresholdDbm));
+    renderMetric(1, line);
+    std::snprintf(line, sizeof(line), tr(UiTextId::SubGhzRawPulsesFormat),
+                  static_cast<unsigned long>(stats.pulsesAccepted));
+    renderMetric(2, line,
+                 stats.state == SubGhzRawCaptureState::Complete
+                     ? Tone::Positive : Tone::Warning);
+    std::snprintf(line, sizeof(line), tr(UiTextId::SubGhzRawSamplesFormat),
+                  static_cast<unsigned long>(stats.samples));
+    renderMetric(3, line);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 207);
+    display.print(tr(stats.state == SubGhzRawCaptureState::Complete
+                         ? subGhzCapturePersistState ==
+                                   CapturePersistState::Saving
+                               ? UiTextId::CaptureSavingNote
+                               : subGhzCapturePersistState ==
+                                         CapturePersistState::Saved
+                                     ? UiTextId::CaptureSavedNote
+                                     : subGhzCapturePersistState ==
+                                               CapturePersistState::Failed
+                                           ? UiTextId::CaptureSaveFailedNote
+                                           : UiTextId::SubGhzRawCompleteNote
+                         : stats.state == SubGhzRawCaptureState::TimedOut
+                               ? UiTextId::SubGhzRawNoSignalNote
+                               : stats.state ==
+                                         SubGhzRawCaptureState::SignalTooLong
+                                     ? UiTextId::SubGhzRawTooLongNote
+                               : UiTextId::SubGhzRawWaitingNote));
+    setUiCursor(UiTextRole::Meta, 14, 221);
+    display.print(tr(UiTextId::SubGhzRawFskLater));
 }
 
 constexpr std::int16_t kSpectrumOverlayY = Layout::HeaderHeight;
@@ -5731,8 +6131,20 @@ void renderInventoryPage(bool clearContent) {
         renderRfSpectrumSourceMenu(clearContent);
         return;
     }
+    if (rfSpectrumView == RfSpectrumView::SubGhzMenu) {
+        renderSubGhzModeMenu(clearContent);
+        return;
+    }
     if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
         renderRfCcBandMenu(clearContent);
+        return;
+    }
+    if (rfSpectrumView == RfSpectrumView::SubGhzCaptureBandMenu) {
+        renderSubGhzCaptureBandMenu(clearContent);
+        return;
+    }
+    if (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive) {
+        renderSubGhzRawCapturePage(clearContent);
         return;
     }
     if (rfSpectrumView == RfSpectrumView::Live) {
@@ -6002,11 +6414,16 @@ void renderLibraryListRow(std::size_t index) {
     display.setTextColor(Palette::Positive, background);
     const auto& capture = entry->session->captureMetadata();
     std::snprintf(line, sizeof(line),
-                  tr(capture.framePayloadCaptured
-                         ? UiTextId::LibraryCaptureRowFormat
-                         : UiTextId::LibraryRowFormat),
-                  static_cast<unsigned>(capture.framePayloadCaptured
-                      ? capture.framePayloadRecords : entry->session->size()),
+                  tr(capture.subGhzRawCaptured
+                         ? UiTextId::LibraryRawRowFormat
+                         : capture.framePayloadCaptured
+                               ? UiTextId::LibraryCaptureRowFormat
+                               : UiTextId::LibraryRowFormat),
+                  static_cast<unsigned>(capture.subGhzRawCaptured
+                      ? capture.subGhzPulseRecords
+                      : capture.framePayloadCaptured
+                            ? capture.framePayloadRecords
+                            : entry->session->size()),
                   static_cast<unsigned long>(entry->generation),
                   leshy1::apps::library::sessionIntegrityName(entry->integrity));
     setUiCursor(UiTextRole::Meta,
@@ -6030,12 +6447,17 @@ void renderLibraryPage(bool clearContent) {
         setUiCursor(UiTextRole::Body, 14, 132);
         display.print(tr(UiTextId::FormatSummaryReady));
         setUiCursor(UiTextRole::Body, 14, 155);
-        const bool rawFrames = selected->session->captureMetadata().framePayloadCaptured;
-        display.print(tr(rawFrames ? UiTextId::FormatCsvNoObservations
-                                   : UiTextId::FormatCsvReady));
+        const auto& capture = selected->session->captureMetadata();
+        const bool rawFrames = capture.framePayloadCaptured;
+        display.print(tr(capture.subGhzRawCaptured
+                             ? UiTextId::FormatPulseCsvReady
+                             : rawFrames ? UiTextId::FormatCsvNoObservations
+                                         : UiTextId::FormatCsvReady));
         setUiCursor(UiTextRole::Meta, 14, 180);
-        display.print(tr(rawFrames ? UiTextId::FormatPcapReady
-                                   : UiTextId::FormatPcapNoFrames));
+        display.print(tr(capture.subGhzRawCaptured
+                             ? UiTextId::FormatPcapNotApplicable
+                             : rawFrames ? UiTextId::FormatPcapReady
+                                         : UiTextId::FormatPcapNoFrames));
         setUiCursor(UiTextRole::Meta, 14, 201);
         display.print(tr(UiTextId::TransportSerial));
         display.setTextColor(Palette::Positive, Palette::Canvas);
@@ -6056,7 +6478,12 @@ void renderLibraryPage(bool clearContent) {
         setUiCursor(UiTextRole::Body, 14, 116);
         display.print(line);
         const auto& capture = selected->session->captureMetadata();
-        if (capture.framePayloadCaptured) {
+        if (capture.subGhzRawCaptured) {
+            std::snprintf(
+                line, sizeof(line), tr(UiTextId::RawPayloadFormat),
+                static_cast<unsigned>(capture.subGhzPulseRecords),
+                static_cast<unsigned long>(capture.subGhzPulseBytes));
+        } else if (capture.framePayloadCaptured) {
             std::snprintf(
                 line, sizeof(line), tr(UiTextId::CapturePayloadFormat),
                 static_cast<unsigned>(capture.framePayloadRecords),
@@ -6131,6 +6558,7 @@ struct UiRenderSnapshot final {
     std::uint8_t selfTestSelection = 0;
     std::uint8_t rfSpectrumView = 0;
     std::uint8_t rfSpectrumSelection = 0;
+    std::uint8_t subGhzModeSelection = 0;
     std::uint8_t rfCcBandSelection = 0;
     std::uint8_t rfSpectrumDisplayMode = 0;
     std::uint8_t surveyState = 0;
@@ -6162,6 +6590,7 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         selfTestController.selection(),
         static_cast<std::uint8_t>(rfSpectrumView),
         rfSpectrumSelection,
+        subGhzModeSelection,
         ccBandSelectionIndex(),
         static_cast<std::uint8_t>(spectrumViewport.mode()),
         static_cast<std::uint8_t>(surveyWorkflow.state()),
@@ -6226,9 +6655,31 @@ bool renderSelectionDelta() {
     }
 
     if (uiController.page() == 2 &&
-        rfSpectrumView == RfSpectrumView::CcBandMenu &&
+        rfSpectrumView == RfSpectrumView::SubGhzMenu &&
         renderedUi.rfSpectrumView ==
-            static_cast<std::uint8_t>(RfSpectrumView::CcBandMenu)) {
+            static_cast<std::uint8_t>(RfSpectrumView::SubGhzMenu)) {
+        const std::uint8_t current = subGhzModeSelection;
+        if (renderedUi.subGhzModeSelection == current) return false;
+        const auto renderMode = [](std::uint8_t index, bool selected) {
+            renderMenuRow(
+                Components::choiceRow(index),
+                tr(index == 0 ? UiTextId::SubGhzSpectrum
+                              : UiTextId::SubGhzRaw),
+                tr(index == 0 ? UiTextId::SubGhzSpectrumNote
+                              : UiTextId::SubGhzRawNote),
+                selected, true, Tone::Positive);
+        };
+        renderMode(renderedUi.subGhzModeSelection, false);
+        renderMode(current, true);
+        renderNavigationFooter();
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        (rfSpectrumView == RfSpectrumView::CcBandMenu ||
+         rfSpectrumView == RfSpectrumView::SubGhzCaptureBandMenu) &&
+        renderedUi.rfSpectrumView ==
+            static_cast<std::uint8_t>(rfSpectrumView)) {
         const std::uint8_t current = ccBandSelectionIndex();
         if (renderedUi.rfCcBandSelection == current) return false;
         renderRfCcBandRow(renderedUi.rfCcBandSelection);
@@ -6548,6 +6999,104 @@ void serviceCc1101Spectrum() {
     }
 }
 
+bool startSubGhzRawCapture(
+    leshy1::drivers::radio::Cc1101SpectrumBand band) {
+    subGhzRawCapture.reset();
+    subGhzCapturePersistState = CapturePersistState::Result;
+    subGhzCapturePersistStatus = "volatile";
+    subGhzCapturePersistGeneration = 0;
+    cc1101SpectrumReport = {};
+    SubGhzRawCapturePlan plan;
+    plan.frequencyKHz = subGhzCaptureFrequencyKHz(band);
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
+        AppRuntime::kForegroundOwner;
+    const bool hardwareReady = boardCc1101Spectrum.begin(
+        owned, &cc1101SpectrumReport) &&
+        boardCc1101Spectrum.lockReceive(plan.frequencyKHz);
+    const bool started = hardwareReady &&
+        subGhzRawCapture.begin(plan, startedUs);
+    if (!started) {
+        boardCc1101Spectrum.end();
+        if (subGhzRawCapture.stats().state ==
+            SubGhzRawCaptureState::Waiting) {
+            subGhzRawCapture.fail(-1, startedUs);
+        }
+    }
+    rfCcBandSelection = band;
+    rfSpectrumKind = RfSpectrumKind::Cc1101;
+    rfSpectrumView = RfSpectrumView::SubGhzCaptureLive;
+    nextSubGhzCaptureUiRefreshUs = startedUs;
+    lastRuntimeEvent = started ? "subghz_raw_waiting"
+                               : "subghz_raw_start_failed";
+    return true;
+}
+
+bool stopSubGhzRawCapture(bool returnToModes) {
+    const std::uint64_t nowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    const auto state = subGhzRawCapture.stats().state;
+    if (state == SubGhzRawCaptureState::Waiting ||
+        state == SubGhzRawCaptureState::Capturing) {
+        subGhzRawCapture.cancel(nowUs == 0U ? 1U : nowUs);
+    }
+    const bool cleanup = boardCc1101Spectrum.end();
+    nextSubGhzCaptureUiRefreshUs = 0;
+    rfSpectrumView = returnToModes ? RfSpectrumView::SubGhzMenu
+                                   : RfSpectrumView::None;
+    lastRuntimeEvent = cleanup ? "subghz_raw_stopped"
+                               : "subghz_raw_cleanup_failed";
+    return true;
+}
+
+void serviceSubGhzRawCapture() {
+    if (rfSpectrumView != RfSpectrumView::SubGhzCaptureLive) return;
+    const auto state = subGhzRawCapture.stats().state;
+    if (state != SubGhzRawCaptureState::Waiting &&
+        state != SubGhzRawCaptureState::Capturing) {
+        return;
+    }
+    std::int16_t rssiDbm = 0;
+    std::uint64_t sampleUs = 0;
+    if (!boardCc1101Spectrum.sampleRssi(&rssiDbm, &sampleUs)) {
+        const std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        subGhzRawCapture.fail(-2, nowUs == 0U ? 1U : nowUs);
+        boardCc1101Spectrum.end();
+        lastRuntimeEvent = "subghz_raw_runtime_fault";
+        renderInteractiveScreen(true);
+        return;
+    }
+    subGhzRawCapture.ingest({sampleUs, rssiDbm});
+    subGhzRawCapture.service(sampleUs);
+    const auto after = subGhzRawCapture.stats().state;
+    const bool terminal = after != SubGhzRawCaptureState::Waiting &&
+        after != SubGhzRawCaptureState::Capturing;
+    if (terminal) {
+        const bool cleanup = boardCc1101Spectrum.end();
+        lastRuntimeEvent = !cleanup
+            ? "subghz_raw_cleanup_failed"
+            : after == SubGhzRawCaptureState::Complete
+                  ? "subghz_raw_complete"
+                  : after == SubGhzRawCaptureState::TimedOut
+                        ? "subghz_raw_no_signal"
+                        : after == SubGhzRawCaptureState::SignalTooLong
+                              ? "subghz_raw_signal_too_long"
+                              : "subghz_raw_terminal";
+    }
+    // Display transfers are deliberately suspended once the first edge starts
+    // the capture.  A full TFT refresh is long enough to create false pulse
+    // widths; measurement integrity takes precedence until the terminal gap.
+    if (terminal ||
+        (after == SubGhzRawCaptureState::Waiting &&
+         sampleUs >= nextSubGhzCaptureUiRefreshUs)) {
+        nextSubGhzCaptureUiRefreshUs = sampleUs + 200000ULL;
+        renderInteractiveScreen(true);
+    }
+}
+
 bool activeSpectrumRunning() {
     if (rfSpectrumView != RfSpectrumView::Live) return false;
     return rfSpectrumKind == RfSpectrumKind::Cc1101
@@ -6555,6 +7104,14 @@ bool activeSpectrumRunning() {
               Cc1101SpectrumViewState::Running
         : nrf24SpectrumController.state() ==
               Nrf24SpectrumViewState::Running;
+}
+
+bool activeReceiveSampling() {
+    const auto rawState = subGhzRawCapture.stats().state;
+    return activeSpectrumRunning() ||
+        (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive &&
+         (rawState == SubGhzRawCaptureState::Waiting ||
+          rawState == SubGhzRawCaptureState::Capturing));
 }
 
 std::uint32_t activeSpectrumSweeps() {
@@ -7985,6 +8542,115 @@ void emitWifiFrameCapturePcap(Stream& reply) {
     reply.flush();
 }
 
+void emitSubGhzRawCaptureState(Stream& reply) {
+    const auto& stats = subGhzRawCapture.stats();
+    const auto& plan = subGhzRawCapture.plan();
+    const bool noTransmit = cc1101SpectrumReport.txStrobes == 0U &&
+        cc1101SpectrumReport.paTableWrites == 0U &&
+        cc1101SpectrumReport.fifoWrites == 0U;
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.subghz_raw.v1\",\"kind\":\"state\","
+        "\"state\":\"%s\",\"passive_only\":true,\"rx_only\":true,"
+        "\"modulation\":\"ook_envelope\",\"frequency_khz\":%lu,"
+        "\"threshold_dbm\":%d,\"wait_timeout_ms\":%lu,"
+        "\"maximum_capture_ms\":%lu,"
+        "\"debounce_us\":%u,\"end_gap_us\":%u,"
+        "\"maximum_pulses\":%u,\"started_us\":%llu,"
+        "\"signal_started_us\":%llu,\"ended_us\":%llu,"
+        "\"samples\":%lu,\"invalid_samples\":%lu,"
+        "\"short_transitions_rejected\":%lu,\"pulses\":%u,"
+        "\"start_level\":%s,\"truncated\":%s,"
+        "\"driver_error\":%ld,\"csv_available\":%s,"
+        "\"application_tx_calls\":0,\"tx_strobes\":%lu,"
+        "\"pa_table_writes\":%lu,\"fifo_writes\":%lu,"
+        "\"physical_no_tx_verified\":%s,\"cleanup_complete\":%s,"
+        "\"storage_written\":%s,\"persist_state\":\"%s\","
+        "\"persist_status\":\"%s\",\"persist_generation\":%lu,"
+        "\"lease_mask\":%lu}",
+        leshy1::apps::capture::subGhzRawCaptureStateName(stats.state),
+        static_cast<unsigned long>(plan.frequencyKHz),
+        static_cast<int>(plan.thresholdDbm),
+        static_cast<unsigned long>(plan.waitTimeoutMs),
+        static_cast<unsigned long>(plan.maximumCaptureMs),
+        static_cast<unsigned>(plan.debounceUs),
+        static_cast<unsigned>(plan.endGapUs),
+        static_cast<unsigned>(plan.maximumPulses),
+        static_cast<unsigned long long>(stats.startedUs),
+        static_cast<unsigned long long>(stats.signalStartedUs),
+        static_cast<unsigned long long>(stats.endedUs),
+        static_cast<unsigned long>(stats.samples),
+        static_cast<unsigned long>(stats.invalidSamples),
+        static_cast<unsigned long>(stats.shortTransitionsRejected),
+        static_cast<unsigned>(subGhzRawCapture.pulseCount()),
+        stats.startLevel ? "true" : "false",
+        stats.truncated ? "true" : "false",
+        static_cast<long>(stats.driverError),
+        stats.state == SubGhzRawCaptureState::Complete ? "true" : "false",
+        static_cast<unsigned long>(cc1101SpectrumReport.txStrobes),
+        static_cast<unsigned long>(cc1101SpectrumReport.paTableWrites),
+        static_cast<unsigned long>(cc1101SpectrumReport.fifoWrites),
+        noTransmit && cc1101SpectrumReport.cleanupComplete
+            ? "true" : "false",
+        cc1101SpectrumReport.cleanupComplete ? "true" : "false",
+        subGhzCapturePersistState == CapturePersistState::Saved
+            ? "true" : "false",
+        capturePersistStateName(subGhzCapturePersistState),
+        subGhzCapturePersistStatus,
+        static_cast<unsigned long>(subGhzCapturePersistGeneration),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
+void emitSubGhzRawCaptureCsv(Stream& reply) {
+    const auto& stats = subGhzRawCapture.stats();
+    if (stats.state != SubGhzRawCaptureState::Complete ||
+        subGhzRawCapture.pulseCount() == 0U) {
+        reply.println(
+            "{\"schema\":\"leshy.capture.subghz_raw.csv.v1\","
+            "\"kind\":\"error\",\"reason\":\"capture_not_complete\"}");
+        return;
+    }
+    char line[160] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.subghz_raw.csv.v1\","
+        "\"kind\":\"csv_begin\",\"pulses\":%u,"
+        "\"frequency_khz\":%lu,\"modulation\":\"ook_envelope\","
+        "\"streaming\":true}",
+        static_cast<unsigned>(subGhzRawCapture.pulseCount()),
+        static_cast<unsigned long>(subGhzRawCapture.plan().frequencyKHz));
+    reply.println(line);
+    reply.flush();
+
+    std::size_t bytes = 0;
+    const auto header = leshy1::apps::capture::formatSubGhzRawCsvHeader(
+        line, sizeof(line));
+    bool valid = header.valid &&
+        reply.write(reinterpret_cast<const std::uint8_t*>(line),
+                    header.bytes) == header.bytes;
+    bytes += valid ? header.bytes : 0U;
+    for (std::size_t index = 0;
+         valid && index < subGhzRawCapture.pulseCount(); ++index) {
+        const auto row = leshy1::apps::capture::formatSubGhzRawCsvRow(
+            subGhzRawCapture, index, stats.startLevel, line, sizeof(line));
+        valid = row.valid &&
+            reply.write(reinterpret_cast<const std::uint8_t*>(line),
+                        row.bytes) == row.bytes;
+        bytes += valid ? row.bytes : 0U;
+    }
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.subghz_raw.csv.v1\","
+        "\"kind\":\"csv_end\",\"status\":\"%s\",\"bytes\":%u,"
+        "\"pulses\":%u}",
+        valid ? "valid" : "stream_failed", static_cast<unsigned>(bytes),
+        static_cast<unsigned>(subGhzRawCapture.pulseCount()));
+    reply.println(line);
+    reply.flush();
+}
+
 void emitSurveyBrowser(Stream& reply) {
     const Observation* selected = surveyController.selected();
     const ObservationHistory history = surveyController.selectedHistory();
@@ -8025,7 +8691,9 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (uiController.page() == 2) {
         if (rfSpectrumView == RfSpectrumView::Live) return false;
         if (rfSpectrumView == RfSpectrumView::SourceMenu ||
-            rfSpectrumView == RfSpectrumView::CcBandMenu) return true;
+            rfSpectrumView == RfSpectrumView::SubGhzMenu ||
+            rfSpectrumView == RfSpectrumView::CcBandMenu ||
+            rfSpectrumView == RfSpectrumView::SubGhzCaptureBandMenu) return true;
         return surveyWorkflow.state() == SurveyWorkflowState::Setup ||
                (surveyWorkflow.state() == SurveyWorkflowState::Running &&
                 (surveyController.view() == SurveyView::List ||
@@ -8080,6 +8748,73 @@ bool applyUiAction(UiAction action, bool render = true) {
                 lastRuntimeEvent = "survey_spectrum_plan";
                 changed = true;
             }
+        } else if (rfSpectrumView == RfSpectrumView::SubGhzMenu) {
+            handled = true;
+            if (action == UiAction::Up && subGhzModeSelection != 0) {
+                subGhzModeSelection = 0;
+                changed = true;
+            } else if (action == UiAction::Down &&
+                       subGhzModeSelection != 1) {
+                subGhzModeSelection = 1;
+                changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                rfCcBandSelection =
+                    leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
+                rfSpectrumView = subGhzModeSelection == 0
+                    ? RfSpectrumView::CcBandMenu
+                    : RfSpectrumView::SubGhzCaptureBandMenu;
+                lastRuntimeEvent = subGhzModeSelection == 0
+                    ? "cc1101_spectrum_band_menu"
+                    : "subghz_raw_band_menu";
+                changed = true;
+            } else if (action == UiAction::Back ||
+                       action == UiAction::Left) {
+                rfSpectrumView = RfSpectrumView::None;
+                changed = uiController.apply(
+                    action, static_cast<std::uint8_t>(appCatalog.size()),
+                    true, 2);
+                if (changed) appRuntime.stop();
+                lastRuntimeEvent = "subghz_home";
+            }
+        } else if (rfSpectrumView ==
+                   RfSpectrumView::SubGhzCaptureBandMenu) {
+            handled = true;
+            std::uint8_t selection = ccBandSelectionIndex();
+            if (action == UiAction::Up && selection != 0) {
+                --selection;
+                rfCcBandSelection = ccBandFromIndex(selection);
+                changed = true;
+            } else if (action == UiAction::Down && selection != 3) {
+                ++selection;
+                rfCcBandSelection = ccBandFromIndex(selection);
+                changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                changed = startSubGhzRawCapture(rfCcBandSelection);
+            } else if (action == UiAction::Back ||
+                       action == UiAction::Left) {
+                rfSpectrumView = RfSpectrumView::SubGhzMenu;
+                lastRuntimeEvent = "subghz_modes";
+                changed = true;
+            }
+        } else if (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive) {
+            handled = true;
+            if (subGhzRawCapture.stats().state ==
+                    SubGhzRawCaptureState::Complete &&
+                subGhzCapturePersistState == CapturePersistState::Result &&
+                (action == UiAction::Select || action == UiAction::Right)) {
+                changed = requestSubGhzRawCapturePersist();
+            } else if (subGhzCapturePersistState ==
+                           CapturePersistState::Saving) {
+                changed = false;
+            } else if (action == UiAction::Back || action == UiAction::Left) {
+                changed = stopSubGhzRawCapture(true);
+                subGhzRawCapture.reset();
+                subGhzCapturePersistState = CapturePersistState::Result;
+                subGhzCapturePersistStatus = "volatile";
+                subGhzCapturePersistGeneration = 0;
+            }
         } else if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
             handled = true;
             std::uint8_t selection = ccBandSelectionIndex();
@@ -8098,12 +8833,9 @@ bool applyUiAction(UiAction action, bool render = true) {
                 const bool direct = std::strcmp(appRuntime.activeApp(),
                                                 "subghz") == 0;
                 if (direct) {
-                    rfSpectrumView = RfSpectrumView::None;
-                    changed = uiController.apply(
-                        action, static_cast<std::uint8_t>(appCatalog.size()),
-                        true, 2);
-                    if (changed) appRuntime.stop();
-                    lastRuntimeEvent = "subghz_home";
+                    rfSpectrumView = RfSpectrumView::SubGhzMenu;
+                    lastRuntimeEvent = "subghz_modes";
+                    changed = true;
                 } else {
                     rfSpectrumView = RfSpectrumView::SourceMenu;
                     lastRuntimeEvent = "spectrum_source_menu";
@@ -8605,6 +9337,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
             rfSpectrumKind = RfSpectrumKind::Nrf24;
             rfSpectrumSelection = 0;
+            subGhzModeSelection = 0;
             rfCcBandSelection =
                 leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
             nextSpectrumUiRefreshUs = 0;
@@ -8632,8 +9365,12 @@ bool applyUiAction(UiAction action, bool render = true) {
                 startNrf24Spectrum();
             } else {
                 rfSpectrumKind = RfSpectrumKind::Cc1101;
-                rfSpectrumView = RfSpectrumView::CcBandMenu;
-                lastRuntimeEvent = "cc1101_spectrum_band_menu";
+                rfSpectrumView = RfSpectrumView::SubGhzMenu;
+                subGhzRawCapture.reset();
+                subGhzCapturePersistState = CapturePersistState::Result;
+                subGhzCapturePersistStatus = "volatile";
+                subGhzCapturePersistGeneration = 0;
+                lastRuntimeEvent = "subghz_modes";
             }
         }
     }
@@ -8671,7 +9408,13 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         TouchTargetLayout::TwoChoices, point),
                     rfSpectrumSelection};
         }
-        if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
+        if (rfSpectrumView == RfSpectrumView::SubGhzMenu) {
+            return {leshy1::ui::hitTouchTarget(
+                        TouchTargetLayout::TwoChoices, point),
+                    subGhzModeSelection};
+        }
+        if (rfSpectrumView == RfSpectrumView::CcBandMenu ||
+            rfSpectrumView == RfSpectrumView::SubGhzCaptureBandMenu) {
             return {leshy1::ui::hitTouchTarget(
                         TouchTargetLayout::HomeRows, point, 0, 4),
                     ccBandSelectionIndex()};
@@ -12297,6 +13040,77 @@ void emitLibraryCsvExport(Stream& reply) {
             "\"status\":\"not_requested\",\"radio_touched\":false}");
         return;
     }
+    const auto& capture = entry->session->captureMetadata();
+    if (capture.subGhzRawCaptured) {
+        if (entry->generation != sessionStoreWorkspace.generation) {
+            reply.println(
+                "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"error\","
+                "\"reason\":\"generation_not_loaded\","
+                "\"radio_touched\":false}");
+            return;
+        }
+        leshy1::storage::PersistedSubGhzRawCaptureView persisted;
+        const auto opened =
+            leshy1::storage::openPersistedSubGhzRawCapture(
+                *entry->session, sessionStoreWorkspace.segment.data(),
+                sessionStoreWorkspace.segmentSize, &persisted);
+        if (opened != leshy1::storage::SessionCodecStatus::Valid) {
+            std::snprintf(
+                diagnosticJson, sizeof(diagnosticJson),
+                "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"error\","
+                "\"reason\":\"%s\",\"radio_touched\":false}",
+                leshy1::storage::sessionCodecStatusName(opened));
+            reply.println(diagnosticJson);
+            return;
+        }
+        std::snprintf(
+            diagnosticJson, sizeof(diagnosticJson),
+            "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"begin\","
+            "\"status\":\"valid\",\"format\":\"subghz_raw_pulses\","
+            "\"generation\":%lu,\"session_id\":\"%s\","
+            "\"records\":%u,\"columns\":3,\"line_endings\":\"crlf\","
+            "\"radio_touched\":false}",
+            static_cast<unsigned long>(entry->generation),
+            entry->session->id(),
+            static_cast<unsigned>(persisted.pulseCount()));
+        reply.println(diagnosticJson);
+        reply.flush();
+        char row[64] = {};
+        const auto header =
+            leshy1::apps::capture::formatSubGhzRawCsvHeader(
+                row, sizeof(row));
+        bool valid = header.valid &&
+            reply.write(reinterpret_cast<const std::uint8_t*>(row),
+                        header.bytes) == header.bytes;
+        std::size_t bytes = valid ? header.bytes : 0U;
+        std::size_t records = 0;
+        for (std::size_t index = 0;
+             valid && index < persisted.pulseCount(); ++index) {
+            const auto formatted =
+                leshy1::apps::capture::formatSubGhzRawCsvRow(
+                    persisted, index, capture.subGhzStartLevel,
+                    row, sizeof(row));
+            valid = formatted.valid &&
+                reply.write(reinterpret_cast<const std::uint8_t*>(row),
+                            formatted.bytes) == formatted.bytes;
+            if (valid) {
+                bytes += formatted.bytes;
+                ++records;
+            }
+        }
+        std::snprintf(
+            diagnosticJson, sizeof(diagnosticJson),
+            "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"end\","
+            "\"status\":\"%s\",\"format\":\"subghz_raw_pulses\","
+            "\"records\":%u,\"bytes\":%u,"
+            "\"persistent\":true,\"radio_touched\":false}",
+            valid ? "complete" : "stream_failed",
+            static_cast<unsigned>(records),
+            static_cast<unsigned>(bytes));
+        reply.println(diagnosticJson);
+        reply.flush();
+        return;
+    }
     char row[256] = {};
     const auto header = libraryController.formatSelectedCsvHeader(
         row, sizeof(row));
@@ -13201,6 +14015,11 @@ void handleCommand(Stream& reply, const char* command) {
         emitWifiFrameCaptureState(reply);
     } else if (std::strcmp(command, "capture.export.pcap") == 0) {
         emitWifiFrameCapturePcap(reply);
+    } else if (std::strcmp(command, "capture.subghz.state") == 0) {
+        emitSubGhzRawCaptureState(reply);
+    } else if (std::strcmp(command,
+                           "capture.subghz.export.csv") == 0) {
+        emitSubGhzRawCaptureCsv(reply);
     } else if (std::strcmp(command, "input.state") == 0) {
         emitInputState(reply);
     } else if (std::strcmp(command, "touch.state") == 0) {
@@ -13625,6 +14444,7 @@ void setup() {
                             leshy1::storage::MediaDiscoveryValidation::Valid;
     productSurveyWorkerReady = initializeProductSurveyWorker();
     captureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
+    subGhzCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
 
     inventory.add({"board.profile",
                    flashMatches && psramMatches ? CapabilityState::Available
@@ -13736,6 +14556,8 @@ void setup() {
               "\"hardware.cc1101.spectrum\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"capture.state\",\"capture.export.pcap\","
+              "\"capture.subghz.state\","
+              "\"capture.subghz.export.csv\","
               "\"input.state\",\"touch.state\","
               "\"ui.touch <x> <y>\",\"touch.calibrate confirm\","
               "\"self-test.report\",\"self-test.active-rf\","
@@ -13780,7 +14602,7 @@ void setup() {
 void loop() {
     const std::uint64_t loopStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
-    if (activeSpectrumRunning()) {
+    if (activeReceiveSampling()) {
         if (spectrumLoopPreviousUs != 0) {
             const std::uint64_t intervalUs =
                 loopStartedUs - spectrumLoopPreviousUs;
@@ -13795,19 +14617,34 @@ void loop() {
     serviceProductSurveyWorker();
     serviceWifiFrameCapture();
     serviceWifiFrameCapturePersist();
+    serviceSubGhzRawCapturePersist();
     serviceFullGuidedRfChecks();
     serviceNrf24Spectrum();
     serviceCc1101Spectrum();
+    serviceSubGhzRawCapture();
     serviceSpectrumWaterfallCadence();
-    poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
-    poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
+    const auto rawCaptureState = subGhzRawCapture.stats().state;
+    const bool rawPulseTimingCritical =
+        rawCaptureState == SubGhzRawCaptureState::Capturing;
+    const bool rawReceiveActive = rawPulseTimingCritical ||
+        rawCaptureState == SubGhzRawCaptureState::Waiting;
+    // Once a burst starts, even a large diagnostic response would become a
+    // fake pulse. Commands remain buffered by USB/UART and are answered after
+    // the terminal gap; no evidence path is allowed to perturb the waveform.
+    if (!rawPulseTimingCritical) {
+        poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
+        poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
+    }
     TouchPoint touchPress;
     const std::uint64_t touchStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
-    const bool touchPressed = boardTouchInput.poll(millis(), &touchPress);
+    // The RAW page has no touch action. Avoid sharing the display/touch SPI
+    // path while the receiver is waiting for or timing a burst.
+    const bool touchPressed = !rawReceiveActive &&
+        boardTouchInput.poll(millis(), &touchPress);
     const std::uint64_t touchElapsedUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - touchStartedUs;
-    if (activeSpectrumRunning()) {
+    if (activeReceiveSampling()) {
         spectrumTouchPollTotalUs += touchElapsedUs;
         if (touchElapsedUs > spectrumTouchPollMaxUs) {
             spectrumTouchPollMaxUs = touchElapsedUs;
@@ -13850,7 +14687,7 @@ void loop() {
         portEXIT_CRITICAL(&physicalInputMux);
         bootMetrics.inputRaw = lastInputRaw;
     }
-    if (activeSpectrumRunning()) {
+    if (activeReceiveSampling()) {
         // The receiver itself now clocks the waterfall: yield to the RTOS but
         // do not add an artificial per-bin delay to a physical sweep.
         yield();

@@ -145,9 +145,11 @@ CaptureMetadataStatus SurveySession::configureCaptureMetadata(
     const bool bleSelected =
         (metadata.selectedSourceMask & sourceMask(
             domain::observations::RadioKind::Ble)) != 0;
-    const bool validMask = metadata.selectedSourceMask != 0 &&
-        (metadata.selectedSourceMask &
-         static_cast<std::uint8_t>(~kSupportedSourceMask)) == 0;
+    const bool validMask = metadata.subGhzRawCaptured
+        ? metadata.selectedSourceMask == 0
+        : metadata.selectedSourceMask != 0 &&
+              (metadata.selectedSourceMask &
+               static_cast<std::uint8_t>(~kSupportedSourceMask)) == 0;
     const bool validWifi = wifiSelected
         ? metadata.wifiMaxMsPerChannel >= 20 &&
               metadata.wifiMaxMsPerChannel <= 1000 &&
@@ -174,8 +176,30 @@ CaptureMetadataStatus SurveySession::configureCaptureMetadata(
               metadata.framePayloadRecords == 0 &&
               metadata.framePayloadSnapLength == 0 &&
               metadata.framePayloadFormat == FramePayloadFormat::None;
+    const bool validSubGhzRaw = metadata.subGhzRawCaptured
+        ? !metadata.framePayloadCaptured && !wifiSelected && !bleSelected &&
+              ((metadata.subGhzFrequencyKHz >= 300000U &&
+                metadata.subGhzFrequencyKHz <= 348000U) ||
+               (metadata.subGhzFrequencyKHz >= 387000U &&
+                metadata.subGhzFrequencyKHz <= 464000U) ||
+               (metadata.subGhzFrequencyKHz >= 779000U &&
+                metadata.subGhzFrequencyKHz <= 928000U)) &&
+              metadata.subGhzThresholdDbm >= -110 &&
+              metadata.subGhzThresholdDbm <= -30 &&
+              metadata.subGhzModulation ==
+                  domain::captures::SubGhzRawModulation::OokEnvelope &&
+              metadata.subGhzPulseRecords > 0 &&
+              metadata.subGhzPulseRecords <= 512 &&
+              metadata.subGhzPulseBytes ==
+                  static_cast<std::uint32_t>(
+                      metadata.subGhzPulseRecords) * 2U
+        : metadata.subGhzFrequencyKHz == 0 &&
+              metadata.subGhzThresholdDbm == 0 &&
+              metadata.subGhzPulseRecords == 0 &&
+              metadata.subGhzPulseBytes == 0;
     if (!metadata.present || !metadata.passive || !validMask || !validWifi ||
         !validBle || metadata.locationPresent || !validFramePayload ||
+        !validSubGhzRaw ||
         metadata.appIdentityLength != metadata.appIdentity.size()) {
         return CaptureMetadataStatus::InvalidMetadata;
     }

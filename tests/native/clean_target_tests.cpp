@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "apps/capture/RadiotapPcap.h"
+#include "apps/capture/SubGhzRawCapture.h"
+#include "apps/capture/SubGhzRawCsv.h"
 #include "apps/capture/WifiFrameCapture.h"
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/ProductSurveyAdmission.h"
@@ -860,6 +862,202 @@ void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
     CHECK(!selectedBand.start(Cc1101SpectrumBand::Count, 3000));
     CHECK(!selectedBand.start(
         static_cast<Cc1101SpectrumBand>(255), 3000));
+}
+
+void testSubGhzRawCaptureIsPassiveBoundedAndNonBlocking() {
+    SubGhzRawCapturePlan plan;
+    CHECK(validateSubGhzRawCapturePlan(plan));
+    SubGhzRawCapturePlan invalid = plan;
+    invalid.frequencyKHz = 370000;
+    CHECK(!validateSubGhzRawCapturePlan(invalid));
+    invalid = plan;
+    invalid.maximumPulses = SubGhzRawCapture::kPulseCapacity + 1U;
+    CHECK(!validateSubGhzRawCapturePlan(invalid));
+    invalid = plan;
+    invalid.maximumCaptureMs = 0;
+    CHECK(!validateSubGhzRawCapturePlan(invalid));
+    invalid = plan;
+    invalid.modulation =
+        leshy1::domain::captures::SubGhzRawModulation::FskAsync;
+    CHECK(!validateSubGhzRawCapturePlan(invalid));
+
+    SubGhzRawCapture capture;
+    CHECK(capture.begin(plan, 1000000));
+    CHECK(capture.stats().state == SubGhzRawCaptureState::Waiting);
+    CHECK(!capture.begin(plan, 1000001));
+    CHECK(!capture.ingest({999999, -100}));
+    CHECK(capture.stats().invalidSamples == 1);
+
+    // Noise stays below threshold. A 30 us spike is rejected by debounce.
+    CHECK(!capture.ingest({1000100, -100}));
+    CHECK(!capture.ingest({1000200, -50}));
+    CHECK(!capture.ingest({1000230, -100}));
+    CHECK(capture.stats().shortTransitionsRejected == 1);
+    CHECK(capture.stats().state == SubGhzRawCaptureState::Waiting);
+
+    // A stable carrier starts capture, then two debounced edges retain one
+    // high and one low duration. The long final low gap terminates it.
+    CHECK(!capture.ingest({1001000, -50}));
+    CHECK(capture.ingest({1001060, -50}));
+    CHECK(capture.stats().state == SubGhzRawCaptureState::Capturing);
+    CHECK(!capture.ingest({1001500, -100}));
+    CHECK(capture.ingest({1001560, -100}));
+    CHECK(!capture.ingest({1001900, -50}));
+    CHECK(capture.ingest({1001960, -50}));
+    CHECK(!capture.ingest({1002300, -100}));
+    CHECK(capture.ingest({1002360, -100}));
+    CHECK(capture.pulseCount() == 3);
+    leshy1::domain::captures::SubGhzRawPulseView pulse;
+    CHECK(capture.pulseView(0, &pulse));
+    CHECK(pulse.durationUs == 500);
+    CHECK(capture.pulseView(1, &pulse));
+    CHECK(pulse.durationUs == 400);
+    CHECK(capture.pulseView(2, &pulse));
+    CHECK(pulse.durationUs == 400);
+    CHECK(!capture.service(1022299));
+    CHECK(capture.service(1022300));
+    CHECK(capture.stats().state == SubGhzRawCaptureState::Complete);
+    CHECK(!capture.stats().truncated);
+    CHECK(capture.stats().pulsesAccepted == 3);
+    CHECK(!capture.pulseView(3, &pulse));
+
+    capture.reset();
+    CHECK(capture.begin(plan, 2000000));
+    CHECK(!capture.service(11999999));
+    CHECK(capture.service(12000000));
+    CHECK(capture.stats().state == SubGhzRawCaptureState::TimedOut);
+    capture.reset();
+    CHECK(capture.begin(plan, 13000000));
+    CHECK(!capture.ingest({13000100, -50}));
+    CHECK(capture.ingest({13000160, -50}));
+    CHECK(capture.service(18000100));
+    CHECK(capture.stats().state ==
+          SubGhzRawCaptureState::SignalTooLong);
+    CHECK(capture.stats().endedUs == 18000100);
+    capture.reset();
+    CHECK(capture.begin(plan, 19000000));
+    CHECK(!capture.ingest({19000100, -50}));
+    CHECK(capture.ingest({19000160, -50}));
+    CHECK(!capture.ingest({19070100, -100}));
+    CHECK(capture.ingest({19070160, -100}));
+    CHECK(capture.service(19090100));
+    CHECK(capture.stats().state == SubGhzRawCaptureState::Complete);
+    CHECK(capture.stats().truncated);
+    CHECK(capture.pulseView(0, &pulse));
+    CHECK(pulse.durationUs == 65535);
+    capture.reset();
+    CHECK(capture.begin(plan, 3000000));
+    CHECK(capture.cancel(3000100));
+    CHECK(capture.stats().state == SubGhzRawCaptureState::Cancelled);
+    capture.reset();
+    CHECK(capture.begin(plan, 4000000));
+    CHECK(capture.fail(-7, 4000100));
+    CHECK(capture.stats().state == SubGhzRawCaptureState::Failed);
+    CHECK(capture.stats().driverError == -7);
+}
+
+void testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics() {
+    SubGhzRawCapture capture;
+    SubGhzRawCapturePlan plan;
+    CHECK(capture.begin(plan, 1000000));
+    CHECK(!capture.ingest({1000100, -50}));
+    CHECK(capture.ingest({1000160, -50}));
+    CHECK(!capture.ingest({1000600, -100}));
+    CHECK(capture.ingest({1000660, -100}));
+    CHECK(!capture.ingest({1001000, -50}));
+    CHECK(capture.ingest({1001060, -50}));
+    CHECK(!capture.ingest({1001400, -100}));
+    CHECK(capture.ingest({1001460, -100}));
+    CHECK(capture.service(1021400));
+    CHECK(capture.pulseCount() == 3);
+
+    SurveySession artifact;
+    CHECK(artifact.start("sub-raw-01", 1000000) == SessionStatus::Started);
+    CaptureMetadata metadata;
+    metadata.present = true;
+    metadata.passive = true;
+    metadata.subGhzRawCaptured = true;
+    metadata.subGhzFrequencyKHz = plan.frequencyKHz;
+    metadata.subGhzThresholdDbm = plan.thresholdDbm;
+    metadata.subGhzModulation = plan.modulation;
+    metadata.subGhzStartLevel = capture.stats().startLevel;
+    metadata.subGhzTruncated = capture.stats().truncated;
+    metadata.subGhzPulseRecords = static_cast<std::uint16_t>(
+        capture.pulseCount());
+    metadata.subGhzPulseBytes = static_cast<std::uint32_t>(
+        capture.pulseCount() * 2U);
+    metadata.appIdentity.fill(0x5A);
+    metadata.appIdentityLength = metadata.appIdentity.size();
+    CHECK(artifact.configureCaptureMetadata(metadata) ==
+          CaptureMetadataStatus::Configured);
+    CHECK(artifact.stop(capture.stats().endedUs) == SessionStatus::Stopped);
+
+    std::array<std::uint8_t, kSessionSegmentMaxBytes> segment{};
+    std::array<std::uint8_t, kSessionManifestMaxBytes> manifest{};
+    std::size_t segmentSize = 0;
+    std::size_t manifestSize = 0;
+    CHECK(encodeSubGhzRawCaptureSegment(
+              artifact, capture, segment.data(), segment.size(), &segmentSize) ==
+          SessionCodecStatus::Valid);
+    CHECK(encodeSessionManifest(
+              artifact, segment.data(), segmentSize, manifest.data(),
+              manifest.size(), &manifestSize) == SessionCodecStatus::Valid);
+    SessionManifest decoded;
+    CHECK(decodeSessionManifest(manifest.data(), manifestSize, &decoded) ==
+          SessionCodecStatus::Valid);
+    CHECK(decoded.schemaVersion == kSubGhzRawSessionSchemaVersion);
+
+    SurveySession reopened;
+    CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
+                        segmentSize, &reopened) == SessionCodecStatus::Valid);
+    CHECK(reopened.captureMetadata().subGhzRawCaptured);
+    CHECK(!reopened.captureMetadata().framePayloadCaptured);
+    CHECK(reopened.captureMetadata().subGhzFrequencyKHz == 433920);
+    CHECK(reopened.captureMetadata().subGhzThresholdDbm == -72);
+    CHECK(reopened.captureMetadata().subGhzPulseRecords == 3);
+
+    PersistedSubGhzRawCaptureView persisted;
+    CHECK(openPersistedSubGhzRawCapture(
+              reopened, segment.data(), segmentSize, &persisted) ==
+          SessionCodecStatus::Valid);
+    CHECK(persisted.pulseCount() == capture.pulseCount());
+    for (std::size_t index = 0; index < capture.pulseCount(); ++index) {
+        leshy1::domain::captures::SubGhzRawPulseView live;
+        leshy1::domain::captures::SubGhzRawPulseView stored;
+        CHECK(capture.pulseView(index, &live));
+        CHECK(persisted.pulseView(index, &stored));
+        CHECK(live.durationUs == stored.durationUs);
+    }
+    char csv[96] = {};
+    CHECK(formatSubGhzRawCsvHeader(csv, sizeof(csv)).valid);
+    CHECK(std::strcmp(csv, "pulse_index,level,duration_us\r\n") == 0);
+    CHECK(formatSubGhzRawCsvRow(persisted, 0, true, csv, sizeof(csv)).valid);
+    CHECK(std::strcmp(csv, "0,1,500\r\n") == 0);
+    CHECK(formatSubGhzRawCsvRow(persisted, 1, true, csv, sizeof(csv)).valid);
+    CHECK(std::strcmp(csv, "1,0,400\r\n") == 0);
+    char json[512] = {};
+    CHECK(formatSessionJsonSummary(reopened, json, sizeof(json)));
+    CHECK(std::strstr(json, "leshy.capture.subghz_raw.v1") != nullptr);
+    CHECK(std::strstr(json, "\"rx_only\":true") != nullptr);
+    CHECK(std::strstr(json, "\"pulses\":3") != nullptr);
+
+    leshy1::platform::arduino::RamSessionStoreIo store;
+    SessionStoreWorkspace workspace;
+    const SessionStoreCommitResult committed = commitNextSubGhzRawCapture(
+        store, workspace, artifact, capture);
+    CHECK(committed.complete());
+    SurveySession storeReopened;
+    const SessionStoreRecoveryResult recovered = recoverSession(
+        store, workspace, &storeReopened);
+    CHECK(recovered.valid());
+    CHECK(recovered.generation == 1);
+    CHECK(storeReopened.captureMetadata().subGhzRawCaptured);
+
+    segment[100] ^= 0x01;
+    PersistedSubGhzRawCaptureView corrupt;
+    CHECK(openPersistedSubGhzRawCapture(
+              reopened, segment.data(), segmentSize, &corrupt) !=
+          SessionCodecStatus::Valid);
 }
 
 void testSpectrumViewportKeepsBoundedRingHistory() {
@@ -2216,7 +2414,7 @@ void testSessionCodecCommitsCanonicalDataAndReopensOffline() {
 
     std::array<std::uint8_t, kSessionManifestMaxBytes> futureManifest = manifest;
     CHECK(manifestSize > 2);
-    futureManifest[2] = kWifiFrameSessionSchemaVersion + 1U;
+    futureManifest[2] = kSubGhzRawSessionSchemaVersion + 1U;
     CHECK(decodeSessionManifest(futureManifest.data(), manifestSize, &decodedManifest) ==
           SessionCodecStatus::UnsupportedSchema);
     futureManifest = manifest;
@@ -4568,6 +4766,8 @@ int main() {
     testShieldReceiverIdentityContractFailsClosed();
     testNrf24PassiveSpectrumContractAndControllerAreBounded();
     testCc1101PassiveSpectrumContractAndControllerAreBounded();
+    testSubGhzRawCaptureIsPassiveBoundedAndNonBlocking();
+    testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics();
     testSpectrumViewportKeepsBoundedRingHistory();
     testProductBootRetryIsNarrowAndBounded();
     testProductStartIdentityRetryStopsBeforeFilesystem();

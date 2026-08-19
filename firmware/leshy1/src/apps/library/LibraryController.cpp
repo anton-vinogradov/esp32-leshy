@@ -244,6 +244,37 @@ LibraryExportResult LibraryController::formatSelectedCaptureMetadata(
         services::survey::sourceMask(domain::observations::RadioKind::Wifi)) != 0;
     const bool bleSelected = (capture.selectedSourceMask &
         services::survey::sourceMask(domain::observations::RadioKind::Ble)) != 0;
+    if (capture.subGhzRawCaptured) {
+        const int written = std::snprintf(
+            output, capacity,
+            "{\"schema\":\"leshy.capture.metadata.v1\",\"kind\":\"capture\","
+            "\"status\":\"valid\",\"generation\":%lu,\"integrity\":\"%s\","
+            "\"persistent\":%s,\"immutable\":true,\"session_id\":\"%s\","
+            "\"timebase\":\"monotonic_us\",\"started_us\":%llu,"
+            "\"stopped_us\":%llu,\"build\":{\"app_elf_sha256\":\"%s\"},"
+            "\"receive\":{\"mode\":\"passive\",\"rx_only\":true,"
+            "\"source\":\"cc1101\",\"frequency_khz\":%lu,"
+            "\"threshold_dbm\":%d,\"modulation\":\"ook_envelope\"},"
+            "\"payload\":{\"status\":\"captured_subghz_raw\","
+            "\"records\":%u,\"bytes\":%lu,\"start_level\":%s,"
+            "\"truncated\":%s},\"exports\":{"
+            "\"json_summary\":\"available\","
+            "\"pulse_csv\":\"available_from_validated_segment\","
+            "\"pcap\":\"not_applicable\"},\"radio_touched\":false}",
+            static_cast<unsigned long>(entry->generation),
+            sessionIntegrityName(entry->integrity),
+            entry->persistent ? "true" : "false", entry->session->id(),
+            static_cast<unsigned long long>(entry->session->startedUs()),
+            static_cast<unsigned long long>(entry->session->stoppedUs()),
+            identity.data(),
+            static_cast<unsigned long>(capture.subGhzFrequencyKHz),
+            static_cast<int>(capture.subGhzThresholdDbm),
+            static_cast<unsigned>(capture.subGhzPulseRecords),
+            static_cast<unsigned long>(capture.subGhzPulseBytes),
+            capture.subGhzStartLevel ? "true" : "false",
+            capture.subGhzTruncated ? "true" : "false");
+        return formatResult(output, capacity, written);
+    }
     const int written = std::snprintf(
         output, capacity,
         "{\"schema\":\"leshy.capture.metadata.v1\",\"kind\":\"capture\","
