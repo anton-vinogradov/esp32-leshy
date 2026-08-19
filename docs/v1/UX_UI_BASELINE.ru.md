@@ -286,6 +286,29 @@ Waterfall — fixed allocation-free ring на 112 строк; во время ac
 стабильные pause/resume, все CC bands, invariant heap/storage и final lease 0. Это
 визуализация activity/RSSI, а не calibrated analyzer.
 
+## Home из реализованных задач и однокомандный physical checkpoint
+
+Exact candidate `0.93.0-product-menu` заменяет executable-часть Home 0.90.
+Показаны только реализованные задачи: Wi-Fi, Bluetooth, 2.4 ГГц, Sub-GHz,
+Захват, Библиотека и Устройство. Будущие Цели/Лаборатория остаются в roadmap 1.0,
+а не dead entries меню. Wi-Fi/BLE открывают свою one-source строку Start,
+2.4 ГГц запускает live screen nRF24, Sub-GHz — chooser CC, а Устройство остаётся
+последним service container.
+
+Checkpoint на подключённой плате теперь запускается одной foreground-командой:
+
+```sh
+./tools/verify_connected_candidate.sh
+```
+
+Она требует clean committed candidate и ровно одну подключённую плату, затем выполняет
+host tests, documentation checks, exact build, ровно одну прошивку, обычные public
+Actions, автоматические TFT captures и independent verifier. Принятый run потребовал
+zero ручных нажатий и сохранил 13 реальных кадров, все семь открываемых пунктов,
+source masks Wi-Fi/BLE 1/2, наполненные водопады nRF24/CC1101, stable pause/resume,
+unchanged generation 95/0, invariant heap и final owner/lease `none`/`0`
+(`E-BUILD-094`/`E-AUTO-058`/`E-HIL-118`/`E-UX-017`/`E-RADIO-006`).
+
 ## Gate
 
 **S1 UX direction accepted:** готовы UX-01/UX-02 в low-fidelity форме, все разделы

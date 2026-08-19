@@ -1,0 +1,67 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "fc06986e09e1629710c30aec40789211dea907e169c0639c09896bee27e1a460",
+    "checker_sha256": "215b90b1fa67931d678f28016622eb54a2e183ed9d18b90e0b9145b07dcd71fa",
+    "elf_bytes": 20199812,
+    "elf_file_sha256": "fc06986e09e1629710c30aec40789211dea907e169c0639c09896bee27e1a460",
+    "factory_bytes": 1571920,
+    "factory_sha256": "d3f0ef3a4ad8975910059c563430cd1a2d2947b545fed2106ba6234bc810c3ff",
+    "firmware_bytes": 1506384,
+    "firmware_sha256": "d2d134223a52cae5e6685bb83da5de8406602c5da088a76bfd394aa73f5c0ca7",
+    "gate_sha256": "990f8deb3857ae0b700c0dee7b2fc7edbaeaf3a5ea239fcdcd1e0a3c1be86caa",
+    "linked_flash_bytes": 1505972,
+    "map_bytes": 17612867,
+    "map_sha256": "256fdd76183df4746709bbc2bd3f39294f9bd4e210b0604d43dc09a17a825ee9",
+    "run_sha256": "765583240b0a0ea9f0cd344c36f0091f620b726b8397fdd2a7ae6df872bac93a",
+    "runner_commit": "c50dcccfb5f650f46666b759072fe3722a1c22f5",
+    "runner_sha256": "fb8c35e71d3a12db73ddfcffe40e42a8f9e2b8f03c38fab645f556e3e9705a37",
+    "schema": "leshy.product_home_hil.provenance.v1",
+    "source_commit": "c50dcccfb5f650f46666b759072fe3722a1c22f5",
+    "static_ram_bytes": 159856,
+    "version": "0.93.0-product-menu"
+  },
+  "evidence": {
+    "artifact_index_sha256": "6971308513144841ca8c3c55b4efced74e17a3987717474dd932bc21690e838b",
+    "files": 49,
+    "provenance_sha256": "91343d7b07313a94aaa907eee5aeb9876c2bf1df71a0f53d61a677c7c2649487",
+    "run_sha256": "765583240b0a0ea9f0cd344c36f0091f620b726b8397fdd2a7ae6df872bac93a",
+    "tft_states": 13
+  },
+  "evidence_ids": [
+    "E-BUILD-094",
+    "E-AUTO-058",
+    "E-HIL-118",
+    "E-UX-017",
+    "E-RADIO-006"
+  ],
+  "schema": "leshy.product_home_acceptance.v1",
+  "status": "pass_product_home_checkpoint",
+  "verified": {
+    "automatic_screenshots": true,
+    "cc_history_rows": 8,
+    "final_lease_mask": 0,
+    "final_owner": "none",
+    "heap": [
+      221852,
+      156892,
+      137540
+    ],
+    "home_items": [
+      "wifi",
+      "ble",
+      "spectrum24",
+      "subghz",
+      "capture",
+      "library",
+      "device"
+    ],
+    "manual_button_presses": 0,
+    "nrf_history_rows": 16,
+    "physical_rf_silence_measured": false,
+    "single_flash": true,
+    "software_rx_only": true,
+    "storage_generation": 95,
+    "storage_observations": 0
+  }
+}

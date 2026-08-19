@@ -2,7 +2,7 @@
 
 *Read in: **English** · [Русский](PRE_RELEASE_HIL.ru.md)*
 
-Document status: **accepted ADR-005 operational contract; implementation v0.4**.
+Document status: **accepted ADR-005 operational contract; implementation v0.5**.
 
 The goal is to prove automatically that one immutable release candidate runs on a
 real ESP32-DIV, renders the expected screens, and finishes workflows without leaked
@@ -34,6 +34,40 @@ the same bytes are published; rebuilding is forbidden
 This is a hybrid host-orchestrated design: a small safe evidence boundary belongs to
 firmware, while scenarios, expected values, golden images, comparison, and release
 policy remain external.
+
+## Current connected-candidate command
+
+The normal local checkpoint requires only a clean committed candidate and one
+ESP32-DIV connected by USB. It is a foreground command, not a macOS service, daemon
+or permanently enrolled HIL station:
+
+```sh
+./tools/verify_connected_candidate.sh
+```
+
+When exactly one `/dev/cu.usbmodem*` device is present, the port is selected
+automatically. An explicit `--port` remains available for fail-closed disambiguation.
+The command performs, in order:
+
+1. all host tests and source guards;
+2. bilingual documentation/link/schema checks;
+3. an exact product build and candidate hash capture;
+4. exactly one flash of that candidate;
+5. the versioned physical workflow through public Actions;
+6. actual TFT GRAM screenshots and machine-readable metrics;
+7. an independent verifier over the run directory.
+
+No physical key presses are required by the implemented 0.93 workflow. The operator
+only connects the board and starts the command. Any dirty tracked tree, ambiguous
+port, identity/hash/CID mismatch, failed action, missing screen, changed heap/storage,
+drop, leaked lease or unsafe counter fails closed. Run output is kept under
+`work/outputs/`; accepted checkpoints are copied with hashes into
+`tests/hil/evidence/` and registered in the host suite.
+
+This local command proves the candidate checkpoint; it does not silently claim the
+future S8 signed-release gate. GitHub OIDC/Sigstore signing and publication of the
+same immutable bytes remain pipeline work, while controlled power-cut or destructive
+fixtures remain separate explicitly authorized HIL.
 
 ## Firmware side
 

@@ -113,8 +113,9 @@ ordinary Back traverses the stack.
   entry → success/error/cancel → Back path.
 - WF-01 uses Home→Device→Self-Test/Diagnostics; WF-02 uses UX-S02…S05; WF-03 uses UX-S15…S17;
   WF-04 uses UX-S06…S10; WF-05 uses UX-S18…S22.
-- A primary task starts within four transitions from Home; receivers remain
-  filters/parameters rather than top-level IA.
+- A primary task starts within four transitions from Home. A receiver may be a
+  direct top-level job when that is the user's task; band/source selection remains
+  a parameter beneath it.
 - Back restores selection and never hides Stop except for the safety-first TX rule;
   Session/Capture Stop remains an explicit Action.
 - Empty, unavailable, degraded, and fault states lead to Diagnostics or a remedy,
@@ -137,3 +138,14 @@ brand while nested headers carry navigation context. The live viewport spans the
 full 240 px width and 216 px height above the key legend. Exact HIL binds all four
 CC bands, accumulated history, pause/resume and final zero ownership
 (`E-BUILD-093`/`E-AUTO-057`/`E-HIL-117`/`E-UX-016`/`E-RADIO-005`).
+
+Exact `0.93.0-product-menu` supersedes the executable Home portion of 0.90 without
+discarding the 1.0 capability map. The current Home contains only implemented jobs,
+in this order: Wi-Fi, Bluetooth, 2.4 GHz, Sub-GHz, Capture, Library, Device. Future
+Targets and Lab stay in this document and the roadmap until they are usable. Wi-Fi
+and Bluetooth open their own one-source Start row; 2.4 GHz opens live nRF24 directly;
+Sub-GHz opens the CC band chooser; Device remains last and owns all service pages.
+One connected-candidate command retains 13 actual TFT states and independently
+verifies every entry, populated waterfalls, final Home and zero ownership with zero
+manual button presses (`E-BUILD-094`/`E-AUTO-058`/`E-HIL-118`/`E-UX-017`/
+`E-RADIO-006`).

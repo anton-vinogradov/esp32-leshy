@@ -114,8 +114,9 @@ action. В активном TX `Back` никогда не открывает con
   entry → success/error/cancel → Back.
 - WF-01 использует Home→Устройство→Самопроверка/Диагностика; WF-02 — UX-S02…S05; WF-03 — UX-S15…S17;
   WF-04 — UX-S06…S10; WF-05 — UX-S18…S22.
-- Start основной задачи достигается не глубже четырёх переходов от Home; текущий
-  receiver остаётся filter/parameter, а не верхним уровнем IA.
+- Start основной задачи достигается не глубже четырёх переходов от Home. Receiver
+  может быть прямой top-level задачей, если именно это нужно пользователю;
+  выбор band/source остаётся его параметром.
 - Back восстанавливает selection и не выполняет скрытый Stop, кроме safety-first TX
   rule; Stop Session/Capture остаётся отдельным явным Action.
 - Empty, unavailable, degraded и fault состояния ведут к Diagnostics или исправлению,
@@ -138,3 +139,14 @@ CC1101 получает chooser четырёх диапазонов; brand `LESH
 240 px ширины и 216 px высоты над key legend. Exact HIL связывает все четыре CC bands,
 накопленную историю, pause/resume и final zero ownership
 (`E-BUILD-093`/`E-AUTO-057`/`E-HIL-117`/`E-UX-016`/`E-RADIO-005`).
+
+Exact `0.93.0-product-menu` заменяет executable-часть Home 0.90, не отменяя
+карту capabilities 1.0. Текущий Home содержит только реализованные задачи
+в таком порядке: Wi-Fi, Bluetooth, 2.4 ГГц, Sub-GHz, Захват, Библиотека,
+Устройство. Будущие Цели и Лаборатория остаются в этом документе и roadmap,
+пока не станут полезными. Wi-Fi и Bluetooth открывают свою single-source строку Start;
+2.4 ГГц сразу открывает live nRF24; Sub-GHz — chooser диапазонов CC; Устройство
+остаётся последним и владеет всеми service pages. Одна connected-candidate команда
+сохраняет 13 реальных TFT states и независимо проверяет каждый пункт,
+наполненные водопады, final Home и zero ownership без ручных нажатий
+(`E-BUILD-094`/`E-AUTO-058`/`E-HIL-118`/`E-UX-017`/`E-RADIO-006`).

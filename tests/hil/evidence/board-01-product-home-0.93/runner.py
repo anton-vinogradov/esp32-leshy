@@ -1,0 +1,375 @@
+#!/usr/bin/env python3
+"""Flash once and exercise the complete 0.93 product Home on board-01."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import secrets
+import shutil
+import time
+from pathlib import Path
+from typing import Any
+
+from capture_1x_ui import PassiveSerial, synchronize_console
+from esp_app_identity import app_elf_sha256
+from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
+from run_1x_product_survey_hil import (
+    action,
+    artifact_manifest,
+    best_effort_cleanup,
+    boot_failures,
+    capture,
+    expect,
+    query,
+    valid_cid,
+)
+
+
+RUN_SCHEMA = "leshy.product_home_hil.run.v1"
+NRF_SCHEMA = "leshy.nrf24.spectrum.v1"
+CC_SCHEMA = "leshy.cc1101.spectrum.v1"
+HOME_ITEMS = (
+    "wifi", "ble", "spectrum24", "subghz", "capture", "library", "device",
+)
+
+
+def home_selection(device: PassiveSerial, index: int) -> dict[str, Any]:
+    current = query(device, b"ui.state", "leshy.ui.v1", "state")
+    if current.get("page") != "home":
+        raise RuntimeError(f"Home expected before selection {index}: {current}")
+    while int(current.get("selection", -1)) > index:
+        current = action(device, "up")
+    while int(current.get("selection", -1)) < index:
+        current = action(device, "down")
+    failures = expect(current, {
+        "page": "home", "selection": index, "selected_id": HOME_ITEMS[index],
+        "selected_enabled": True, "runtime_owner": "none", "lease_mask": 0,
+    }, f"home_{HOME_ITEMS[index]}")
+    if failures:
+        raise RuntimeError("; ".join(failures))
+    return current
+
+
+def wait_report(device: PassiveSerial, command: bytes, schema: str,
+                minimum_rows: int, timeout: float = 12.0) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    report: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        report = query(device, command, schema, "state")
+        if int(report.get("history_rows", 0)) >= minimum_rows:
+            return report
+        time.sleep(0.05)
+    raise TimeoutError(
+        f"{schema} did not accumulate {minimum_rows} waterfall rows: {report}")
+
+
+def require_exact(record: dict[str, Any], expected: dict[str, Any],
+                  label: str) -> None:
+    failures = expect(record, expected, label)
+    if failures:
+        raise RuntimeError("; ".join(failures))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", required=True)
+    parser.add_argument("--firmware", required=True, type=Path)
+    parser.add_argument("--expected-version", required=True)
+    parser.add_argument("--expected-cid", required=True)
+    parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--flash", action="store_true")
+    parser.add_argument("--flash-baud", type=int, default=460800)
+    args = parser.parse_args()
+    if not args.firmware.is_file():
+        parser.error("--firmware must name an existing app image")
+    if args.output.exists():
+        parser.error("--output must not exist")
+    if not valid_cid(args.expected_cid):
+        parser.error("--expected-cid must be 32 uppercase hexadecimal characters")
+    if len(args.source_commit) != 40:
+        parser.error("--source-commit must be a full Git commit ID")
+
+    args.output.mkdir(parents=True)
+    frames = args.output / "frames"
+    frames.mkdir()
+    candidate = args.output / "firmware.bin"
+    shutil.copyfile(args.firmware, candidate)
+    firmware_sha = sha256_file(candidate)
+    app_identity = app_elf_sha256(candidate)
+    failures: list[str] = []
+    trace: list[dict[str, Any]] = []
+    screens: dict[str, Any] = {}
+    reports: dict[str, Any] = {}
+    boot: dict[str, Any] = {}
+    recovery_before: dict[str, Any] = {}
+    recovery_after: dict[str, Any] = {}
+    metrics_after: dict[str, Any] = {}
+    input_state: dict[str, Any] = {}
+    safe_outputs: dict[str, Any] = {}
+    cleanup_before: dict[str, Any] = {"attempted": False}
+    cleanup_after: dict[str, Any] = {"attempted": False}
+
+    try:
+        if args.flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            time.sleep(0.5)
+        with PassiveSerial(args.port, 115200, timeout=0.25) as device:
+            try:
+                synchronize_console(device, 30.0)
+                boot = query(device, b"metrics", "leshy.boot.v1", "ready")
+                recovery_before = query(
+                    device, b"storage.product.boot-recovery",
+                    "leshy.storage.product_boot_recovery.v1", "state")
+                failures.extend(boot_failures(
+                    boot, recovery_before, args.expected_version,
+                    app_identity, args.expected_cid))
+                if failures:
+                    raise RuntimeError("boot contract failed")
+                cleanup_before = best_effort_cleanup(device)
+                if not cleanup_before.get("complete"):
+                    raise RuntimeError("initial Home/zero-lease cleanup failed")
+                query(device, b"ui.language ru", "leshy.ui.v1", "state")
+
+                home_selection(device, 0)
+                screens["home_top"] = capture(device, frames, "home-top")
+                for index, item in enumerate(HOME_ITEMS):
+                    current = home_selection(device, index)
+                    trace.append(current)
+                screens["home_bottom"] = capture(device, frames, "home-bottom")
+
+                home_selection(device, 0)
+                wifi = action(device, "right")
+                trace.append(wifi)
+                require_exact(wifi, {
+                    "page": "survey", "selected_id": "wifi",
+                    "runtime_owner": "wifi", "lease_mask": 15,
+                    "survey_setup_view": "plan", "survey_setup_selection": 0,
+                    "survey_source_selected_mask": 1,
+                    "survey_source_selected_count": 1,
+                    "survey_source_can_start": True,
+                }, "wifi_entry")
+                screens["wifi"] = capture(device, frames, "wifi")
+                trace.append(action(device, "left"))
+                home_selection(device, 1)
+                ble = action(device, "right")
+                trace.append(ble)
+                require_exact(ble, {
+                    "page": "survey", "selected_id": "ble",
+                    "runtime_owner": "ble", "lease_mask": 15,
+                    "survey_setup_view": "plan", "survey_setup_selection": 0,
+                    "survey_source_selected_mask": 2,
+                    "survey_source_selected_count": 1,
+                    "survey_source_can_start": True,
+                }, "ble_entry")
+                screens["ble"] = capture(device, frames, "ble")
+                trace.append(action(device, "left"))
+
+                home_selection(device, 2)
+                nrf = action(device, "right")
+                trace.append(nrf)
+                require_exact(nrf, {
+                    "page": "survey", "selected_id": "spectrum24",
+                    "runtime_event": "nrf24_spectrum_running",
+                    "runtime_owner": "spectrum24", "lease_mask": 9,
+                }, "nrf_entry")
+                reports["nrf_spectrum"] = wait_report(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, 4)
+                require_exact(reports["nrf_spectrum"], {
+                    "view": "live", "display_mode": "spectrum",
+                    "state": "running", "rx_only": True,
+                    "volatile": True, "current_owner": "spectrum24",
+                    "current_lease_mask": 9,
+                }, "nrf_spectrum")
+                screens["nrf_spectrum"] = capture(
+                    device, frames, "nrf-spectrum")
+                trace.append(action(device, "down"))
+                reports["nrf_waterfall"] = wait_report(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, 16)
+                require_exact(reports["nrf_waterfall"], {
+                    "view": "live", "display_mode": "waterfall",
+                    "state": "running", "rx_only": True,
+                    "current_owner": "spectrum24", "current_lease_mask": 9,
+                }, "nrf_waterfall")
+                screens["nrf_waterfall"] = capture(
+                    device, frames, "nrf-waterfall")
+                trace.append(action(device, "right"))
+                paused_before = query(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
+                time.sleep(0.35)
+                paused_after = query(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
+                if paused_after.get("state") != "paused" or \
+                        paused_after.get("sweeps") != paused_before.get("sweeps"):
+                    raise RuntimeError("nRF24 pause did not freeze sweep count")
+                trace.append(action(device, "right"))
+                trace.append(action(device, "up"))
+                trace.append(action(device, "left"))
+                stopped_nrf = query(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
+                require_exact(stopped_nrf, {
+                    "view": "none", "state": "idle", "adapter_active": False,
+                    "cleanup_complete": True, "current_owner": "none",
+                    "current_lease_mask": 0,
+                }, "nrf_cleanup")
+                reports["nrf_stopped"] = stopped_nrf
+
+                home_selection(device, 3)
+                cc_menu = action(device, "right")
+                trace.append(cc_menu)
+                require_exact(cc_menu, {
+                    "page": "survey", "selected_id": "subghz",
+                    "runtime_event": "cc1101_spectrum_band_menu",
+                    "runtime_owner": "subghz", "lease_mask": 9,
+                }, "cc_band_menu")
+                screens["cc_band_menu"] = capture(
+                    device, frames, "cc-band-menu")
+                trace.append(action(device, "right"))
+                reports["cc_spectrum"] = wait_report(
+                    device, b"hardware.cc1101.spectrum", CC_SCHEMA, 2)
+                require_exact(reports["cc_spectrum"], {
+                    "view": "live", "display_mode": "spectrum",
+                    "state": "running", "band": "433", "rx_only": True,
+                    "volatile": True, "current_owner": "subghz",
+                    "current_lease_mask": 9,
+                }, "cc_spectrum")
+                screens["cc_spectrum"] = capture(
+                    device, frames, "cc-spectrum")
+                trace.append(action(device, "down"))
+                reports["cc_waterfall"] = wait_report(
+                    device, b"hardware.cc1101.spectrum", CC_SCHEMA, 8,
+                    timeout=24.0)
+                require_exact(reports["cc_waterfall"], {
+                    "view": "live", "display_mode": "waterfall",
+                    "state": "running", "band": "433", "rx_only": True,
+                    "current_owner": "subghz", "current_lease_mask": 9,
+                }, "cc_waterfall")
+                screens["cc_waterfall"] = capture(
+                    device, frames, "cc-waterfall")
+                trace.append(action(device, "right"))
+                cc_paused_before = query(
+                    device, b"hardware.cc1101.spectrum", CC_SCHEMA, "state")
+                time.sleep(0.35)
+                cc_paused_after = query(
+                    device, b"hardware.cc1101.spectrum", CC_SCHEMA, "state")
+                if cc_paused_after.get("state") != "paused" or \
+                        cc_paused_after.get("adapter_samples") != \
+                        cc_paused_before.get("adapter_samples"):
+                    raise RuntimeError("CC1101 pause did not freeze samples")
+                trace.append(action(device, "right"))
+                trace.append(action(device, "up"))
+                band_menu = action(device, "left")
+                trace.append(band_menu)
+                require_exact(band_menu, {
+                    "page": "survey", "selected_id": "subghz",
+                    "runtime_owner": "subghz", "lease_mask": 9,
+                }, "cc_return_to_band_menu")
+                trace.append(action(device, "left"))
+                stopped_cc = query(
+                    device, b"hardware.cc1101.spectrum", CC_SCHEMA, "state")
+                require_exact(stopped_cc, {
+                    "view": "none", "state": "idle", "adapter_active": False,
+                    "cleanup_complete": True, "current_owner": "none",
+                    "current_lease_mask": 0,
+                }, "cc_cleanup")
+                reports["cc_stopped"] = stopped_cc
+
+                for index, item, page, owner, lease in (
+                    (4, "capture", "capture", "capture", 3),
+                    (5, "library", "library", "library", 5),
+                    (6, "device", "device", "device", 1),
+                ):
+                    home_selection(device, index)
+                    opened = action(device, "right")
+                    trace.append(opened)
+                    require_exact(opened, {
+                        "page": page, "selected_id": item,
+                        "runtime_owner": owner, "lease_mask": lease,
+                    }, f"{item}_entry")
+                    screens[item] = capture(device, frames, item)
+                    trace.append(action(device, "left"))
+
+                home_selection(device, 0)
+                screens["home_final"] = capture(device, frames, "home-final")
+                input_state = query(
+                    device, b"input.state", "leshy.input.frontend.v1", "state")
+                safe_outputs = query(
+                    device, b"hardware.safe-outputs",
+                    "leshy.hardware.safe-outputs.v1", "state")
+                recovery_after = query(
+                    device, b"storage.product.boot-recovery",
+                    "leshy.storage.product_boot_recovery.v1", "state")
+                metrics_after = query(
+                    device, b"metrics", "leshy.boot.v1", "ready")
+                failures.extend(expect(input_state, {
+                    "status": "ready", "read_errors": 0, "queue_drops": 0,
+                }, "input"))
+                failures.extend(expect(safe_outputs, {
+                    "buzzer_inactive": True, "buzzer_level": "low",
+                }, "safe_outputs"))
+                for key in ("generation", "observations"):
+                    if recovery_after.get(key) != recovery_before.get(key):
+                        failures.append(f"persistent {key} changed")
+                if recovery_after.get("physical_write_calls") != 0:
+                    failures.append("physical SD write observed")
+                if metrics_after.get("heap_free") != boot.get("heap_free"):
+                    failures.append("heap free did not return to boot baseline")
+            except Exception as error:
+                failures.append(f"workflow: {type(error).__name__}: {error}")
+            finally:
+                cleanup_after = best_effort_cleanup(device)
+                if not cleanup_after.get("complete"):
+                    failures.append("cleanup_after: Home/zero lease unproven")
+    except Exception as error:
+        failures.append(f"runner: {type(error).__name__}: {error}")
+
+    result = {
+        "schema": RUN_SCHEMA,
+        "run_id": secrets.token_hex(16),
+        "runner_source_sha256": sha256_file(Path(__file__).resolve()),
+        "passed": bool(args.flash) and not failures,
+        "gate_eligible": bool(args.flash) and not failures,
+        "failures": failures,
+        "candidate": {
+            "version": args.expected_version,
+            "source_commit": args.source_commit,
+            "firmware_sha256": firmware_sha,
+            "app_elf_sha256": app_identity,
+            "flashed": args.flash,
+        },
+        "expected_cid": args.expected_cid,
+        "home_items": list(HOME_ITEMS),
+        "boot": boot,
+        "recovery_before": recovery_before,
+        "reports": reports,
+        "screens": screens,
+        "input": input_state,
+        "safe_outputs": safe_outputs,
+        "recovery_after": recovery_after,
+        "metrics_after": metrics_after,
+        "trace": trace,
+        "cleanup_before": cleanup_before,
+        "cleanup_after": cleanup_after,
+        "scope": {
+            "single_flash": True,
+            "manual_button_presses": 0,
+            "screenshots_automatic": True,
+            "software_rx_only_counters_verified": True,
+            "rf_instrument_available": False,
+            "storage_write_authorized": False,
+        },
+    }
+    write_json(args.output / "run.json", result)
+    artifact_manifest(args.output)
+    print(json.dumps({
+        "status": "pass" if result["passed"] else "failed",
+        "failures": failures,
+        "output": str(args.output),
+        "screens": sorted(screens),
+    }, sort_keys=True))
+    return 0 if result["passed"] else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

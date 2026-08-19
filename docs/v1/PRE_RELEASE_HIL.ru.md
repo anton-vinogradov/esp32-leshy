@@ -2,7 +2,7 @@
 
 *Читать на: [English](PRE_RELEASE_HIL.md) · **Русский***
 
-Статус документа: **принятый операционный контракт ADR-005; implementation v0.4**.
+Статус документа: **принятый операционный контракт ADR-005; implementation v0.5**.
 
 Цель — автоматически доказать, что конкретный неизменяемый release candidate
 работает на реальном ESP32-DIV, показывает ожидаемые экраны и завершает сценарии без
@@ -34,6 +34,40 @@ release gate проверяет suite, board, результаты и тот ж�
 Это hybrid host-orchestrated design: небольшая безопасная evidence boundary входит в
 прошивку, а сценарии, expected values, golden images, сравнение и release policy
 остаются снаружи.
+
+## Текущая команда connected-candidate
+
+Обычный локальный checkpoint требует только clean committed candidate и один
+ESP32-DIV, подключённый по USB. Это foreground-команда, а не macOS service,
+daemon или постоянно зарегистрированная HIL-станция:
+
+```sh
+./tools/verify_connected_candidate.sh
+```
+
+Если найден ровно один `/dev/cu.usbmodem*`, port выбирается автоматически.
+Явный `--port` остаётся для fail-closed разрешения неоднозначности. Команда по
+порядку выполняет:
+
+1. все host tests и source guards;
+2. bilingual documentation/link/schema checks;
+3. exact product build и фиксацию candidate hashes;
+4. ровно одну прошивку этого candidate;
+5. versioned physical workflow через public Actions;
+6. screenshots настоящего TFT GRAM и machine-readable metrics;
+7. independent verifier над run directory.
+
+Реализованный workflow 0.93 не требует нажатий физических клавиш. Оператор только
+подключает плату и запускает команду. Dirty tracked tree, неоднозначный port,
+любое несовпадение identity/hash/CID, failed action, отсутствующий screen, изменение
+heap/storage, drop, утёкшая lease или unsafe counter дают fail closed. Run output хранится в
+`work/outputs/`; принятые checkpoints с hashes копируются в `tests/hil/evidence/` и
+регистрируются в host suite.
+
+Эта local command доказывает candidate checkpoint, но не приписывает себе будущий
+signed-release gate S8. GitHub OIDC/Sigstore signing и публикация тех же immutable
+bytes остаются pipeline work, а controlled power-cut или destructive fixtures — отдельным
+явно authorized HIL.
 
 ## Часть прошивки
 

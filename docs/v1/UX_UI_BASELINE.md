@@ -282,6 +282,28 @@ screen line during acquisition. `E-BUILD-093`/`E-AUTO-057`/`E-HIL-117`/`E-UX-016
 rows, stable pause/resume, all CC bands, invariant heap/storage and final lease 0.
 It is an activity/RSSI visualization, not a calibrated analyzer.
 
+## Implemented-job Home and one-command physical checkpoint
+
+Exact candidate `0.93.0-product-menu` supersedes the executable Home part of 0.90.
+Only implemented jobs appear: Wi-Fi, Bluetooth, 2.4 GHz, Sub-GHz, Capture, Library
+and Device. Future Targets/Lab remain in the 1.0 roadmap, not as dead menu entries.
+Wi-Fi/BLE each open a one-source Start row, 2.4 GHz starts the live nRF24 screen,
+Sub-GHz opens the CC band chooser, and Device remains the final service container.
+
+The connected-board checkpoint is now one foreground command:
+
+```sh
+./tools/verify_connected_candidate.sh
+```
+
+It requires a clean committed candidate and exactly one connected board, then runs
+host tests, documentation checks, the exact build, exactly one flash, normal public
+Actions, automatic TFT captures and an independent verifier. The accepted run used
+zero manual button presses and retained 13 actual frames, all seven openable entries,
+Wi-Fi/BLE source masks 1/2, populated nRF24/CC1101 waterfalls, stable pause/resume,
+unchanged generation 95/0, invariant heap and final owner/lease `none`/`0`
+(`E-BUILD-094`/`E-AUTO-058`/`E-HIL-118`/`E-UX-017`/`E-RADIO-006`).
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog
