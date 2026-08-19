@@ -1388,18 +1388,67 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
 
     report.sourceFailureInjected =
         consumeProductSurveySourceUnavailableInjection();
-    report.sourceStartAttempted = !report.sourceFailureInjected &&
-        selectedSourceMask != 0;
+    if (report.sourceFailureInjected) {
+        report.sourceStartAttempted = false;
+        report.activeSourceMask = 0;
+        report.unavailableSourceMask = selectedSourceMask;
+        leshy1::apps::survey::ProductSurveyRequest unavailableRequest;
+        unavailableRequest.explicitStart = true;
+        unavailableRequest.sourceAvailable = false;
+        unavailableRequest.selectedSourceMask = selectedSourceMask;
+        unavailableRequest.availableSourceMask = 0;
+        unavailableRequest.scanPlan =
+            leshy1::drivers::wifi::defaultPassivePlan();
+        unavailableRequest.bleScanPlan =
+            leshy1::drivers::ble::defaultPassivePlan();
+        unavailableRequest.storePermit = storePermit;
+        unavailableRequest.ownedResources = ownedResources;
+        const auto unavailablePermit =
+            leshy1::apps::survey::authorizeProductSurvey(unavailableRequest);
+        report.admissionStatus = unavailablePermit.status;
+        report.scannerCleanupComplete = true;
+        report.status =
+            leshy1::apps::survey::productSurveyAdmissionStatusName(
+                unavailablePermit.status);
+        return report;
+    }
+
+    // Validate the writable store before starting Wi-Fi/BLE, then release the
+    // FAT/SDSPI stack completely.  The radio stacks and SDSPI both depend on
+    // scarce DMA-capable internal heap on this no-PSRAM board and must not have
+    // overlapping lifetimes.  The exact CID is checked again and the store is
+    // reopened only after both scanners have stopped, immediately before the
+    // atomic terminal commit.
+    report.storeOpenAttempted = true;
+    if (!productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
+        !productSurveyStore.openExistingWritable(storePermit)) {
+        report.status = "store_open_failed";
+        return report;
+    }
+    productSurveyStore.end();
+    productSurveyFilesystem.end();
+    surveyStoreRouter.bind(ramSessionStore);
+    report.backendOpen = false;
+    if (!productSurveyFilesystem.cleanupComplete() ||
+        productSurveyFilesystem.mounted() ||
+        !surveyStoreRouter.boundTo(ramSessionStore)) {
+        report.status = "storage_release_failed";
+        return report;
+    }
+    if (productSurveyCancelRequested()) {
+        report.status = "cancelled";
+        return report;
+    }
+
+    report.sourceStartAttempted = selectedSourceMask != 0;
     const std::uint8_t wifiMask =
         leshy1::services::survey::sourceMask(RadioKind::Wifi);
     const std::uint8_t bleMask =
         leshy1::services::survey::sourceMask(RadioKind::Ble);
     const bool wifiSelected = (selectedSourceMask & wifiMask) != 0;
     const bool bleSelected = (selectedSourceMask & bleMask) != 0;
-    const bool wifiBegun = !report.sourceFailureInjected && wifiSelected
-        ? wifiScanner->begin() : false;
-    const bool bleBegun = !report.sourceFailureInjected && bleSelected
-        ? bleScanner->begin() : false;
+    const bool wifiBegun = wifiSelected ? wifiScanner->begin() : false;
+    const bool bleBegun = bleSelected ? bleScanner->begin() : false;
     report.activeSourceMask = static_cast<std::uint8_t>(
         (wifiBegun ? wifiMask : 0U) | (bleBegun ? bleMask : 0U));
     report.unavailableSourceMask = static_cast<std::uint8_t>(
@@ -1427,14 +1476,6 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         report.status = "cancelled";
         return report;
     }
-    report.storeOpenAttempted = true;
-    if (!productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
-        !productSurveyStore.openExistingWritable(storePermit)) {
-        report.status = "store_open_failed";
-        return report;
-    }
-    surveyStoreRouter.bind(productSurveyStore);
-    report.backendOpen = true;
     report.sourceActive = true;
     report.status = "prepared";
     return report;
@@ -1766,7 +1807,133 @@ bool startProductSurvey() {
     return true;
 }
 
+bool reopenProductSurveyBackendForCommit() {
+    const auto required =
+        leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
+        leshy1::kernel::runtime::resourceMask(Resource::EspRf) |
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    const auto ownedResources = appRuntime.activeResources();
+    char enrolledFingerprint[33] = {};
+    if ((ownedResources & required) != required ||
+        !exactCidFingerprint(productSurveyRuntime.expectedFingerprint) ||
+        !loadProductFingerprint(enrolledFingerprint,
+                                sizeof(enrolledFingerprint)) ||
+        std::strcmp(enrolledFingerprint,
+                    productSurveyRuntime.expectedFingerprint) != 0) {
+        return false;
+    }
+
+    leshy1::storage::SdTransportRunResult identity;
+    for (std::uint8_t attempt = 1;
+         attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
+         ++attempt) {
+        BoardSdSpiTransport identityTransport;
+        const bool identityBegun = identityTransport.begin();
+        identity = {};
+        if (identityBegun) {
+            leshy1::storage::SdTransportRunPolicy policy;
+            policy.allowPhysical = true;
+            policy.explicitlySelected = true;
+            policy.identificationOnly = true;
+            policy.ownedResources = ownedResources;
+            identity = leshy1::storage::runSdIdentificationStateMachine(
+                leshy1::storage::defaultSdIdentificationPlan(),
+                identityTransport, policy);
+            identityTransport.end();
+        }
+        productSurveyRuntime.identityAttempts = attempt;
+        productSurveyRuntime.identityTransientRetries =
+            static_cast<std::uint8_t>(attempt - 1U);
+        productSurveyRuntime.identityStatus = identity.status;
+        productSurveyRuntime.identityCleanupComplete =
+            identityTransport.cleanupComplete();
+        formatCidFingerprint(identity.identity,
+                             productSurveyRuntime.observedFingerprint,
+                             sizeof(productSurveyRuntime.observedFingerprint));
+        if (productSurveyRuntime.identityCleanupComplete &&
+            identity.status ==
+                leshy1::storage::SdTransportRunStatus::Valid) {
+            break;
+        }
+        const leshy1::storage::ProductStartIdentityRetryEvidence retryEvidence{
+            true,
+            true,
+            true,
+            (ownedResources & required) == required,
+            identityTransport.physicalSpiStarted(),
+            identity.status,
+            std::strcmp(productSurveyRuntime.observedFingerprint,
+                        "00000000000000000000000000000000") == 0,
+            productSurveyRuntime.identityCleanupComplete,
+            false,
+        };
+        if (!leshy1::storage::shouldRetryProductStartIdentity(
+                retryEvidence, attempt)) {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(
+            leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+    }
+    if (!productSurveyRuntime.identityCleanupComplete ||
+        identity.status != leshy1::storage::SdTransportRunStatus::Valid ||
+        std::strcmp(productSurveyRuntime.expectedFingerprint,
+                    productSurveyRuntime.observedFingerprint) != 0) {
+        return false;
+    }
+
+    productSurveyRuntime.filesystemAttempted = true;
+    if (!productSurveyFilesystem.begin()) return false;
+    productSurveyRuntime.cardCapacityBytes =
+        productSurveyFilesystem.cardCapacityBytes();
+    productSurveyRuntime.cachedFreeBytes =
+        productSurveyFilesystem.cachedFreeBytes();
+    const bool capacityMatched =
+        productSurveyRuntime.cardCapacityBytes != 0 &&
+        productSurveyRuntime.cardCapacityBytes == identity.identity.capacityBytes;
+    const bool rootExists = productSurveyFilesystem.exists(
+        leshy1::storage::kProductSessionStoreRoot);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = capacityMatched;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint = productSurveyRuntime.observedFingerprint;
+    media.capacityBytes = productSurveyRuntime.cardCapacityBytes;
+    media.freeBytes = productSurveyRuntime.cachedFreeBytes;
+    leshy1::storage::ProductStoreRequest storeRequest;
+    storeRequest.operation =
+        leshy1::storage::ProductStoreOperation::CommitSession;
+    storeRequest.explicitlySelected = true;
+    storeRequest.expectedFingerprint =
+        productSurveyRuntime.expectedFingerprint;
+    storeRequest.rootPath = leshy1::storage::kProductSessionStoreRoot;
+    storeRequest.rootExists = rootExists;
+    storeRequest.driverWriteEnabled = true;
+    storeRequest.requiredBytes = kProductSurveyCommitBytes;
+    storeRequest.reserveBytes = kProductSurveyReserveBytes;
+    storeRequest.ownedResources = ownedResources;
+    const leshy1::storage::ProductStorePermit storePermit =
+        leshy1::storage::authorizeProductStore(media, storeRequest);
+    productSurveyRuntime.storeStatus = storePermit.status;
+    if (!storePermit.allowed() ||
+        !productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
+        !productSurveyStore.openExistingWritable(storePermit)) {
+        return false;
+    }
+    surveyStoreRouter.bind(productSurveyStore);
+    productSurveyRuntime.backendOpen = true;
+    productSurveyRuntime.cleanupComplete = false;
+    return true;
+}
+
 SurveyPipelineStatus stopProductSurvey() {
+    if (!reopenProductSurveyBackendForCommit()) {
+        const bool cleanup = closeProductSurveyBackend();
+        productSurveyRuntime.status = cleanup
+            ? "commit_backend_failed" : "cleanup_failed";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return SurveyPipelineStatus::WorkflowRejected;
+    }
     const SurveyPipelineStatus status = surveyPipeline.stopAndCommit(
         static_cast<std::uint64_t>(esp_timer_get_time()));
     const bool cleanup = closeProductSurveyBackend();
@@ -6785,6 +6952,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_selected\":%s,"
                       "\"survey_product_status\":\"%s\","
                       "\"survey_product_backend_open\":%s,"
+                      "\"survey_product_storage_mounted\":%s,"
                       "\"survey_product_store_status\":\"%s\","
                       "\"survey_product_admission_status\":\"%s\","
                       "\"survey_product_expected_cid\":\"%s\","
@@ -6952,6 +7120,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       productSurveyRuntime.selected ? "true" : "false",
                       productSurveyRuntime.status,
                       productSurveyRuntime.backendOpen ? "true" : "false",
+                      productSurveyFilesystem.mounted() ? "true" : "false",
                       leshy1::storage::productStoreAccessStatusName(
                           productSurveyRuntime.storeStatus),
                       leshy1::apps::survey::productSurveyAdmissionStatusName(
@@ -12423,6 +12592,13 @@ void setup() {
     BoardSafeOutputs::establishBootInvariant();
     Serial.begin(kConsoleBaud);
     Serial0.begin(kConsoleBaud);
+    // ESP-IDF lazily allocates the newlib stream and UART VFS locks on the
+    // first system log write.  A Wi-Fi scan can otherwise make that first
+    // write while the radio heaps are at their low-water mark, where the
+    // lock allocator aborts instead of returning an error.  Pre-warm the
+    // locks while the boot heap is unconstrained.
+    std::fputc('\n', stdout);
+    std::fflush(stdout);
     BoardSdSpiTransport::holdRadioTransmitPathsInactive();
 
     const bool flashMatches = ESP.getFlashChipSize() == BoardProfile::kExpectedFlashBytes;

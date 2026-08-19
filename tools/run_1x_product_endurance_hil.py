@@ -142,10 +142,19 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
     if not isinstance(observations_after, int) or observations_after < 1:
         failures.append(f"{prefix}.observations_after: invalid")
         observations_after = 0
-    for field in ("survey_scan_accepted", "survey_forwarded"):
-        if committed.get(field) != observations_after:
-            failures.append(f"{prefix}.{field}: accounting mismatch")
-    for field in ("survey_scan_rejected", "survey_scan_dropped", "survey_dropped"):
+    wifi_accepted = committed.get("survey_scan_accepted")
+    ble_accepted = committed.get("survey_ble_scan_accepted")
+    if (not isinstance(wifi_accepted, int)
+            or not isinstance(ble_accepted, int)
+            or wifi_accepted + ble_accepted != observations_after):
+        failures.append(f"{prefix}.radio_accepted: accounting mismatch")
+    if committed.get("survey_forwarded") != observations_after:
+        failures.append(f"{prefix}.survey_forwarded: accounting mismatch")
+    for field in (
+        "survey_scan_rejected", "survey_scan_dropped",
+        "survey_ble_scan_rejected", "survey_ble_scan_dropped",
+        "survey_dropped",
+    ):
         if committed.get(field) != 0:
             failures.append(f"{prefix}.{field}: expected zero")
     start_attempts = running.get("survey_product_identity_attempts")
@@ -191,18 +200,22 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
         if export.get(field) != expected:
             failures.append(f"{prefix}.library_export.{field}: mismatch")
     session = export.get("session")
-    if not isinstance(session, dict) or session.get("observations") != observations_after:
+    if (not isinstance(session, dict)
+            or session.get("id") != "product-passive-live"
+            or session.get("observations") != observations_after
+            or session.get("dropped") != 0):
         failures.append(f"{prefix}.library_export.session: accounting mismatch")
     for field, expected in {
         "page": "home", "runtime_owner": "none", "lease_mask": 0,
         "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
         "survey_product_cleanup_complete": True,
     }.items():
         if final.get(field) != expected:
             failures.append(f"{prefix}.final_state.{field}: mismatch")
     captures = run.get("captures")
     if (not isinstance(captures, dict)
-            or set(captures) != {"setup", "running", "committed", "export"}):
+            or set(captures) != {"setup", "paused", "committed", "export"}):
         failures.append(f"{prefix}.captures: require four ordered product states")
 
     heaps = (heap_tuple(before_ready), heap_tuple(after_ready))
@@ -235,8 +248,10 @@ def summarize_cycle(run: dict[str, Any], number: int, expected_firmware: str,
         "generation_after": generation_after,
         "observations_after": observations_after,
         "scan_accepted": committed.get("survey_scan_accepted"),
+        "ble_scan_accepted": committed.get("survey_ble_scan_accepted"),
         "forwarded": committed.get("survey_forwarded"),
         "scan_dropped": committed.get("survey_scan_dropped"),
+        "ble_scan_dropped": committed.get("survey_ble_scan_dropped"),
         "pipeline_dropped": committed.get("survey_dropped"),
         "heap_before": list(heaps[0]) if heaps[0] is not None else None,
         "heap_after": list(heaps[1]) if heaps[1] is not None else None,
@@ -402,6 +417,7 @@ def main() -> int:
                 "--flash-offset", args.flash_offset,
                 "--flash-baud", args.flash_baud,
                 "--boot-seconds", args.boot_seconds,
+                "--release-cycle",
             ]
             if number == 1 and args.flash:
                 command.append("--flash")

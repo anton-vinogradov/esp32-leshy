@@ -43,7 +43,8 @@ def active_scan_failures(state: dict[str, Any], expected_cid: str) -> list[str]:
         "survey_product_source_active": True,
         "survey_product_scan_active": True,
         "survey_product_cancel_requested_during_scan": False,
-        "survey_product_backend_open": True,
+        "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
         "survey_product_expected_cid": expected_cid,
         "survey_product_observed_cid": expected_cid,
         "survey_product_identity_status": "valid",
@@ -64,7 +65,8 @@ def cancel_ack_failures(state: dict[str, Any], latency_ms: float) -> list[str]:
         "survey_product_status": "cancelling",
         "survey_product_source_active": True,
         "survey_product_cancel_requested_during_scan": True,
-        "survey_product_backend_open": True,
+        "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
     }, "cancel_ack")
     if state.get("survey_product_stop_action_us", 10001) > 10000:
         failures.append("cancel_ack.stop_action exceeded 10000 us")
@@ -83,6 +85,7 @@ def cancelled_failures(state: dict[str, Any]) -> list[str]:
         "survey_product_scan_active": False,
         "survey_product_cancel_requested_during_scan": True,
         "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
         "survey_product_cleanup_complete": True,
     }, "cancelled")
 

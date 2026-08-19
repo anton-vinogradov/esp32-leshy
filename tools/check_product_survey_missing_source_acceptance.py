@@ -241,7 +241,7 @@ def main() -> int:
         "survey.product.test-source-unavailable once|clear",
         "consumeProductSurveySourceUnavailableInjection()",
         "productSurveySourceUnavailableVisible()",
-        "report.sourceStartAttempted = !report.sourceFailureInjected",
+        "report.sourceStartAttempted = false",
         "report.storeOpenAttempted = true",
         "releaseProductSurveyAfterTerminal(event.report.status, !keepVisible)",
         "source_unavailable_waiting_back",
@@ -250,9 +250,10 @@ def main() -> int:
     source_boundary = entry[entry.find("report.sourceFailureInjected ="):
                             entry.find("report.storeOpenAttempted = true")]
     require(failures,
-            "wifiScanner->begin()" in source_boundary and
-            "bleScanner->begin()" in source_boundary and
+            "if (report.sourceFailureInjected)" in source_boundary and
+            "report.sourceStartAttempted = false" in source_boundary and
             "authorizeProductSurvey" in source_boundary and
+            "return report;" in source_boundary and
             "openExistingWritable" not in source_boundary,
             "source failure is not ordered before store open")
     for marker in (

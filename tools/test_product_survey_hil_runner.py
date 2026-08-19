@@ -53,7 +53,8 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
             "survey_simulated": False, "survey_persistent": True,
             "survey_workflow_state": "running", "survey_pipeline_status": "drained",
-            "survey_product_status": "running", "survey_product_backend_open": True,
+            "survey_product_status": "running", "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_store_status": "permitted",
             "survey_product_admission_status": "permitted",
             "survey_product_expected_cid": CID,
@@ -64,7 +65,8 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             "survey_scan_status": "valid", "survey_scan_rejected": 0,
             "survey_scan_dropped": 0, "survey_dropped": 0,
             "survey_queue_depth": 0, "survey_product_cleanup_complete": False,
-            "survey_observations": 17, "survey_scan_accepted": 17,
+            "survey_observations": 17, "survey_scan_accepted": 10,
+            "survey_ble_scan_accepted": 7,
             "survey_forwarded": 17, "survey_product_cached_free_bytes": 2_000_000,
             "survey_product_capacity_bytes": 4_000_000,
             "survey_product_worker_ready": True,
@@ -83,6 +85,7 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             "survey_workflow_state": "result", "survey_workflow_status": "committed",
             "survey_pipeline_status": "committed", "survey_product_status": "committed",
             "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_cleanup_complete": True,
             "survey_product_source_active": False,
             "survey_product_stop_action_us": 300,
@@ -98,7 +101,8 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
             "survey_view": "detail", "survey_workflow_state": "running",
             "survey_running": True, "survey_observations": 17,
-            "survey_product_backend_open": True,
+            "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_cleanup_complete": False,
             "survey_product_source_active": True,
             "survey_product_scan_cycles": 2,
@@ -111,7 +115,8 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
             "survey_view": "list", "survey_workflow_state": "running",
             "survey_running": True, "survey_observations": 17,
-            "survey_product_backend_open": True,
+            "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_cleanup_complete": False,
             "survey_product_source_active": True,
         }
@@ -121,6 +126,30 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         self.assertTrue(
             RUNNER.list_after_detail_failures(list_state, 17, 150.1)
         )
+
+    def test_release_pause_is_stable_and_radio_inactive(self) -> None:
+        paused = {
+            "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
+            "survey_view": "list", "survey_filter_focused": True,
+            "survey_workflow_state": "running", "survey_running": True,
+            "survey_product_status": "paused",
+            "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
+            "survey_product_cleanup_complete": False,
+            "survey_product_source_active": False,
+            "survey_scan_rejected": 0, "survey_scan_dropped": 0,
+            "survey_ble_scan_rejected": 0, "survey_ble_scan_dropped": 0,
+            "survey_dropped": 0, "survey_queue_depth": 0,
+            "survey_observations": 17, "survey_product_scan_cycles": 1,
+        }
+        self.assertEqual([], RUNNER.paused_failures(paused, 17, 1))
+        paused["survey_view"] = "detail"
+        paused["survey_filter_focused"] = False
+        self.assertEqual(
+            [], RUNNER.paused_detail_failures(paused, 17, 1)
+        )
+        paused["survey_product_source_active"] = True
+        self.assertTrue(RUNNER.paused_detail_failures(paused, 17, 1))
 
     def test_boot_parser_ignores_noise_and_keeps_product_record(self) -> None:
         raw = (
@@ -149,18 +178,21 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             {
                 "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
                 "survey_view": "detail", "survey_product_status": "running",
-                "survey_product_backend_open": True,
+                "survey_product_backend_open": False,
+                "survey_product_storage_mounted": False,
                 "survey_product_source_active": True,
             },
             {
                 "page": "survey", "runtime_owner": "survey", "lease_mask": 15,
                 "survey_view": "list", "survey_product_status": "running",
-                "survey_product_backend_open": True,
+                "survey_product_backend_open": False,
+                "survey_product_storage_mounted": False,
                 "survey_product_source_active": True,
             },
             {
                 "page": "home", "runtime_owner": "none", "lease_mask": 0,
                 "survey_product_backend_open": False,
+                "survey_product_storage_mounted": False,
                 "survey_product_source_active": False,
             },
         ]
@@ -190,6 +222,43 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
                     object(), lambda state: state.get("page") == "home",
                     0.001, "not home"
                 )
+
+    def test_focus_start_uses_public_plan_navigation(self) -> None:
+        states = [
+            {
+                "page": "survey", "survey_workflow_state": "setup",
+                "survey_setup_view": "plan", "survey_setup_selection": 0,
+            },
+            {
+                "page": "survey", "survey_workflow_state": "setup",
+                "survey_setup_view": "plan", "survey_setup_selection": 1,
+            },
+            {
+                "page": "survey", "survey_workflow_state": "setup",
+                "survey_setup_view": "plan", "survey_setup_selection": 2,
+            },
+        ]
+        calls: list[str] = []
+
+        def fake_action(_: Any, name: str) -> dict[str, Any]:
+            calls.append(name)
+            return states[len(calls)]
+
+        with patch.object(RUNNER, "query", return_value=states[0]), \
+                patch.object(RUNNER, "action", side_effect=fake_action):
+            focused = RUNNER.focus_survey_start(object())
+        self.assertEqual(2, focused["survey_setup_selection"])
+        self.assertEqual(["down", "down"], calls)
+
+    def test_focus_start_rejects_sources_or_stuck_plan(self) -> None:
+        stuck = {
+            "page": "survey", "survey_workflow_state": "setup",
+            "survey_setup_view": "sources", "survey_setup_selection": 0,
+        }
+        with patch.object(RUNNER, "query", return_value=stuck), \
+                patch.object(RUNNER, "action", return_value=stuck):
+            with self.assertRaisesRegex(RuntimeError, "public Survey Start"):
+                RUNNER.focus_survey_start(object())
 
 
 if __name__ == "__main__":

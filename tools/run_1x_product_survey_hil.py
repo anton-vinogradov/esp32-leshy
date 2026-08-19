@@ -129,6 +129,7 @@ def setup_failures(state: dict[str, Any]) -> list[str]:
         "survey_product_selected": True,
         "survey_workflow_state": "setup",
         "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
         "survey_product_cleanup_complete": True,
         "survey_product_worker_ready": True,
         "survey_product_source_active": False,
@@ -145,7 +146,8 @@ def running_failures(state: dict[str, Any], expected_cid: str) -> list[str]:
         "survey_workflow_state": "running",
         "survey_pipeline_status": "drained",
         "survey_product_status": "running",
-        "survey_product_backend_open": True,
+        "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
         "survey_product_store_status": "permitted",
         "survey_product_admission_status": "permitted",
         "survey_product_expected_cid": expected_cid,
@@ -161,13 +163,18 @@ def running_failures(state: dict[str, Any], expected_cid: str) -> list[str]:
         "survey_product_source_active": True,
     }, "running")
     observations = state.get("survey_observations")
-    accepted = state.get("survey_scan_accepted")
+    wifi_accepted = state.get("survey_scan_accepted")
+    ble_accepted = state.get("survey_ble_scan_accepted")
     forwarded = state.get("survey_forwarded")
     if not isinstance(observations, int) or observations < 1:
         failures.append("running.survey_observations: expected >= 1")
-    if accepted != observations or forwarded != observations:
+    if (not isinstance(wifi_accepted, int) or
+            not isinstance(ble_accepted, int) or
+            wifi_accepted + ble_accepted != observations or
+            forwarded != observations):
         failures.append(
-            "running.observation_accounting: accepted/forwarded/observations differ"
+            "running.observation_accounting: "
+            "wifi+ble accepted/forwarded/observations differ"
         )
     identity_attempts = state.get("survey_product_identity_attempts")
     identity_retries = state.get("survey_product_identity_transient_retries")
@@ -210,7 +217,8 @@ def detail_failures(state: dict[str, Any], minimum_observations: int,
         "survey_view": "detail",
         "survey_workflow_state": "running",
         "survey_running": True,
-        "survey_product_backend_open": True,
+        "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
         "survey_product_cleanup_complete": False,
         "survey_product_source_active": True,
     }, "running_detail")
@@ -234,7 +242,8 @@ def list_after_detail_failures(state: dict[str, Any], minimum_observations: int,
         "survey_view": "list",
         "survey_workflow_state": "running",
         "survey_running": True,
-        "survey_product_backend_open": True,
+        "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
         "survey_product_cleanup_complete": False,
         "survey_product_source_active": True,
     }, "running_list_after_detail")
@@ -259,6 +268,7 @@ def committed_failures(state: dict[str, Any], before_generation: int) -> list[st
         "survey_pipeline_status": "committed",
         "survey_product_status": "committed",
         "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
         "survey_product_cleanup_complete": True,
         "survey_product_source_active": False,
         "library_persistent": True,
@@ -312,10 +322,60 @@ def export_failures(artifact: dict[str, Any], generation: int,
         failures.append("library_export.session: missing")
     else:
         failures.extend(expect(session, {
-            "id": "product-wifi-live",
+            "id": "product-passive-live",
             "observations": observations,
             "dropped": 0,
         }, "library_export.session"))
+    return failures
+
+
+def paused_failures(state: dict[str, Any], observations: int,
+                    scan_cycles: int) -> list[str]:
+    failures = expect(state, {
+        "page": "survey",
+        "runtime_owner": "survey",
+        "lease_mask": 15,
+        "survey_view": "list",
+        "survey_workflow_state": "running",
+        "survey_running": True,
+        "survey_product_status": "paused",
+        "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
+        "survey_product_cleanup_complete": False,
+        "survey_product_source_active": False,
+        "survey_scan_rejected": 0,
+        "survey_scan_dropped": 0,
+        "survey_ble_scan_rejected": 0,
+        "survey_ble_scan_dropped": 0,
+        "survey_dropped": 0,
+        "survey_queue_depth": 0,
+    }, "paused")
+    if state.get("survey_observations") != observations:
+        failures.append("paused.survey_observations: changed after pause")
+    if state.get("survey_product_scan_cycles") != scan_cycles:
+        failures.append("paused.survey_product_scan_cycles: changed after pause")
+    return failures
+
+
+def paused_detail_failures(state: dict[str, Any], observations: int,
+                           scan_cycles: int) -> list[str]:
+    failures = expect(state, {
+        "page": "survey",
+        "runtime_owner": "survey",
+        "lease_mask": 15,
+        "survey_view": "detail",
+        "survey_workflow_state": "running",
+        "survey_running": True,
+        "survey_product_status": "paused",
+        "survey_product_backend_open": False,
+        "survey_product_storage_mounted": False,
+        "survey_product_cleanup_complete": False,
+        "survey_product_source_active": False,
+    }, "paused_detail")
+    if state.get("survey_observations") != observations:
+        failures.append("paused_detail.survey_observations: changed")
+    if state.get("survey_product_scan_cycles") != scan_cycles:
+        failures.append("paused_detail.survey_product_scan_cycles: changed")
     return failures
 
 
@@ -325,6 +385,19 @@ def action(device: Any, name: str, timeout: float = 15.0) -> dict[str, Any]:
     device.write(f"ui.key {name}\n".encode("ascii"))
     device.flush()
     return read_json(device, "leshy.ui.v1", "state", timeout=timeout)
+
+
+def focus_survey_start(device: Any) -> dict[str, Any]:
+    """Reach the public Start row after Sources and RF spectrum."""
+    state = query(device, b"ui.state", "leshy.ui.v1", "state")
+    for _ in range(3):
+        if (state.get("page") == "survey" and
+                state.get("survey_workflow_state") == "setup" and
+                state.get("survey_setup_view") == "plan" and
+                state.get("survey_setup_selection") == 2):
+            return state
+        state = action(device, "down")
+    raise RuntimeError(f"could not focus public Survey Start row: {state!r}")
 
 
 def query(device: Any, command: bytes, schema: str, kind: str,
@@ -383,6 +456,7 @@ def best_effort_cleanup(device: Any, timeout: float = 20.0) -> dict[str, Any]:
         final.get("runtime_owner") == "none" and
         final.get("lease_mask") == 0 and
         final.get("survey_product_backend_open") is False and
+        final.get("survey_product_storage_mounted") is False and
         final.get("survey_product_source_active") is False
     )
     return cleanup
@@ -467,6 +541,13 @@ def main() -> int:
     parser.add_argument("--flash-baud", type=int, default=460800)
     parser.add_argument("--boot-seconds", type=float, default=20.0)
     parser.add_argument(
+        "--release-cycle", action="store_true",
+        help=(
+            "pause after the first complete Wi-Fi+BLE cycle, capture the stable "
+            "paused state, and commit without a second acquisition cycle"
+        ),
+    )
+    parser.add_argument(
         "--post-flash-settle", type=float, default=1.0,
         help="seconds allowed for the esptool-triggered boot to finish before cold reset",
     )
@@ -496,9 +577,12 @@ def main() -> int:
     trace: list[dict[str, Any]] = []
     captures: dict[str, Any] = {}
     setup: dict[str, Any] = {}
+    start_row: dict[str, Any] = {}
     start_ack: dict[str, Any] = {}
     start_ack_ms = 0.0
     running: dict[str, Any] = {}
+    paused: dict[str, Any] = {}
+    paused_browser: dict[str, Any] = {}
     running_detail: dict[str, Any] = {}
     running_list_after_detail: dict[str, Any] = {}
     detail_back_ack_ms = 0.0
@@ -554,6 +638,16 @@ def main() -> int:
                     failures.extend(setup_failures(setup))
                     captures["setup"] = capture(device, frames, "setup")
                 if not failures:
+                    start_row = focus_survey_start(device)
+                    trace.append(start_row)
+                    failures.extend(expect(start_row, {
+                        "page": "survey",
+                        "survey_workflow_state": "setup",
+                        "survey_setup_view": "plan",
+                        "survey_setup_selection": 2,
+                        "survey_source_can_start": True,
+                    }, "start_row"))
+                if not failures:
                     started = time.monotonic()
                     start_ack = action(device, "select")
                     start_ack_ms = (time.monotonic() - started) * 1000.0
@@ -577,8 +671,94 @@ def main() -> int:
                     )
                     trace.append(running)
                     failures.extend(running_failures(running, expected_cid))
-                    captures["running"] = capture(device, frames, "running")
-                if not failures:
+                    if not args.release_cycle:
+                        captures["running"] = capture(
+                            device, frames, "running"
+                        )
+                if not failures and args.release_cycle:
+                    observations = int(running["survey_observations"])
+                    scan_cycles = int(running["survey_product_scan_cycles"])
+                    pause_ack = action(device, "up")
+                    trace.append(pause_ack)
+                    failures.extend(expect(pause_ack, {
+                        "page": "survey",
+                        "survey_view": "list",
+                        "survey_workflow_state": "running",
+                    }, "pause_ack"))
+                    paused = wait_ui_state(
+                        device,
+                        lambda state: (
+                            state.get("survey_product_status") == "paused" and
+                            state.get("survey_product_source_active") is False
+                        ),
+                        20.0,
+                        "product Survey did not reach stable paused state",
+                    )
+                    trace.append(paused)
+                    failures.extend(paused_failures(
+                        paused, observations, scan_cycles
+                    ))
+                    paused_browser = query(
+                        device, b"survey.browser",
+                        "leshy.survey.browser.v1", "state"
+                    )
+                    failures.extend(expect(paused_browser, {
+                        "view": "list",
+                        "filter_focused": True,
+                        "total": observations,
+                        "selected": False,
+                        "radio_touched": False,
+                        "storage_touched": False,
+                    }, "paused_browser"))
+                    captures["paused"] = capture(device, frames, "paused")
+                if not failures and args.release_cycle:
+                    list_ack = action(device, "down")
+                    trace.append(list_ack)
+                    failures.extend(expect(list_ack, {
+                        "page": "survey",
+                        "survey_view": "list",
+                        "survey_product_status": "paused",
+                    }, "paused_list"))
+                    right_detail_ack = action(device, "right")
+                    trace.append(right_detail_ack)
+                    failures.extend(paused_detail_failures(
+                        right_detail_ack, observations, scan_cycles
+                    ))
+                    stop_ack = action(device, "select", timeout=40.0)
+                    trace.append(stop_ack)
+                    committed = stop_ack
+                    if not (
+                        committed.get("survey_workflow_state") == "result" and
+                        committed.get("survey_product_status") == "committed"
+                    ):
+                        committed = wait_ui_state(
+                            device,
+                            lambda state: (
+                                state.get("survey_workflow_state") == "result" and
+                                state.get("survey_product_status") == "committed"
+                            ),
+                            20.0,
+                            "paused product Survey did not commit",
+                        )
+                        trace.append(committed)
+                    failures.extend(committed_failures(
+                        committed, before_generation
+                    ))
+                    captures["committed"] = capture(
+                        device, frames, "committed"
+                    )
+                    trace.append(action(device, "back"))
+                    final = query(
+                        device, b"ui.state", "leshy.ui.v1", "state"
+                    )
+                    failures.extend(expect(final, {
+                        "page": "home", "runtime_owner": "none", "lease_mask": 0,
+                        "survey_product_backend_open": False,
+                        "survey_product_storage_mounted": False,
+                        "survey_product_cleanup_complete": True,
+                        "survey_product_source_active": False,
+                    }, "after_commit_home"))
+                if not failures and not args.release_cycle:
                     observations = int(running["survey_observations"])
                     scan_cycles = int(running["survey_product_scan_cycles"])
                     detail_ack = action(device, "select")
@@ -601,7 +781,7 @@ def main() -> int:
                         running_detail, observations, scan_cycles + 1
                     ))
                     captures["detail"] = capture(device, frames, "detail")
-                if not failures:
+                if not failures and not args.release_cycle:
                     back_started = time.monotonic()
                     running_list_after_detail = action(device, "back")
                     detail_back_ack_ms = (
@@ -613,7 +793,7 @@ def main() -> int:
                         int(running_detail["survey_observations"]),
                         detail_back_ack_ms,
                     ))
-                if not failures:
+                if not failures and not args.release_cycle:
                     right_detail_started = time.monotonic()
                     right_detail_ack = action(device, "right")
                     right_detail_ack_ms = (
@@ -630,7 +810,7 @@ def main() -> int:
                             "right_detail_ack_ms: "
                             f"{right_detail_ack_ms:.3f} not in (0, 150]"
                         )
-                if not failures:
+                if not failures and not args.release_cycle:
                     stop_started = time.monotonic()
                     stop_ack = action(device, "select")
                     stop_ack_ms = (time.monotonic() - stop_started) * 1000.0
@@ -664,6 +844,7 @@ def main() -> int:
                     failures.extend(expect(final, {
                         "page": "home", "runtime_owner": "none", "lease_mask": 0,
                         "survey_product_backend_open": False,
+                        "survey_product_storage_mounted": False,
                         "survey_product_cleanup_complete": True,
                         "survey_product_source_active": False,
                     }, "after_commit_home"))
@@ -750,9 +931,13 @@ def main() -> int:
         "boot_before": {"ready": before_ready, "recovery": before_recovery,
                         "timing": before_timing},
         "setup": setup,
+        "start_row": start_row,
         "start_ack": start_ack,
         "start_ack_ms": start_ack_ms,
         "running": running,
+        "release_cycle": args.release_cycle,
+        "paused": paused,
+        "paused_browser": paused_browser,
         "running_detail": running_detail,
         "running_list_after_detail": running_list_after_detail,
         "detail_back_ack_ms": detail_back_ack_ms,

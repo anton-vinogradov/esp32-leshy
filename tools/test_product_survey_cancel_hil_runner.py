@@ -27,7 +27,8 @@ class ProductSurveyCancelHilTests(unittest.TestCase):
             "survey_product_source_active": True,
             "survey_product_scan_active": True,
             "survey_product_cancel_requested_during_scan": False,
-            "survey_product_backend_open": True,
+            "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_expected_cid": CID,
             "survey_product_observed_cid": CID,
             "survey_product_identity_status": "valid",
@@ -43,7 +44,8 @@ class ProductSurveyCancelHilTests(unittest.TestCase):
             "survey_product_status": "cancelling",
             "survey_product_source_active": True,
             "survey_product_cancel_requested_during_scan": True,
-            "survey_product_backend_open": True,
+            "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_stop_action_us": 12,
         }
 
@@ -55,6 +57,7 @@ class ProductSurveyCancelHilTests(unittest.TestCase):
             "survey_product_scan_active": False,
             "survey_product_cancel_requested_during_scan": True,
             "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_cleanup_complete": True,
         }
 

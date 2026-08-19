@@ -49,10 +49,13 @@ def cycle(before: int, after: int, observations_before: int,
     committed = {
         "survey_generation": after,
         "survey_observations": observations_after,
-        "survey_scan_accepted": observations_after,
+        "survey_scan_accepted": observations_after // 2,
+        "survey_ble_scan_accepted": observations_after - observations_after // 2,
         "survey_forwarded": observations_after,
         "survey_scan_rejected": 0,
         "survey_scan_dropped": 0,
+        "survey_ble_scan_rejected": 0,
+        "survey_ble_scan_dropped": 0,
         "survey_dropped": 0,
     }
     return {
@@ -80,15 +83,20 @@ def cycle(before: int, after: int, observations_before: int,
         "library_export": {
             "generation": after, "persistent": True, "simulated": False,
             "integrity": "valid", "radio_touched": False,
-            "session": {"observations": observations_after},
+            "session": {
+                "id": "product-passive-live",
+                "observations": observations_after,
+                "dropped": 0,
+            },
         },
         "final_state": {
             "page": "home", "runtime_owner": "none", "lease_mask": 0,
             "survey_product_backend_open": False,
+            "survey_product_storage_mounted": False,
             "survey_product_cleanup_complete": True,
         },
         "captures": {
-            "committed": {}, "export": {}, "running": {}, "setup": {},
+            "committed": {}, "export": {}, "paused": {}, "setup": {},
         },
     }
 

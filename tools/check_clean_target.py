@@ -91,9 +91,9 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.88.0-touch-input\\"' not in config:
+    if 'LESHY1_VERSION=\\"0.89.0-touch-storage-dma\\"' not in config:
         errors.append(
-            "clean target does not identify the 0.87 Full/Guided heap-budget slice"
+            "clean target does not identify the 0.89 touch/storage DMA corrective"
         )
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
@@ -573,11 +573,27 @@ def main() -> int:
         "serviceProductSurveyWorker",
         "stopProductSurvey()",
         '\\"survey_product_cleanup_complete\\"',
+        '\\"survey_product_storage_mounted\\"',
     ):
         if marker not in entry:
             errors.append(f"Arduino entry is missing product Survey lifecycle: {marker}")
 
+    setup_start = entry.find("void setup()")
+    stdio_lock_warmup = entry.find("std::fputc('\\n', stdout);", setup_start)
+    spi_safety = entry.find(
+        "BoardSdSpiTransport::holdRadioTransmitPathsInactive();", setup_start
+    )
     product_prepare = entry.find("ProductSurveyWorkerReport prepareProductSurveyWorker(")
+    if (
+        setup_start < 0
+        or stdio_lock_warmup < setup_start
+        or spi_safety < 0
+        or stdio_lock_warmup > spi_safety
+    ):
+        errors.append(
+            "newlib/UART logging locks must be pre-warmed before product radio startup"
+        )
+
     product_worker = entry.find("void runProductSurveyWorker(", product_prepare)
     if product_prepare < 0 or product_worker <= product_prepare:
         errors.append("bounded product Survey worker preparation could not be inspected")
@@ -597,6 +613,46 @@ def main() -> int:
         ):
             if marker not in product_start_body:
                 errors.append(f"product Survey start is missing bounded identity retry: {marker}")
+        store_open = product_start_body.find(
+            "productSurveyStore.openExistingWritable(storePermit)"
+        )
+        store_release = product_start_body.find(
+            "productSurveyStore.end();", store_open
+        )
+        filesystem_release = product_start_body.find(
+            "productSurveyFilesystem.end();", store_release
+        )
+        source_start = product_start_body.find(
+            "const bool wifiBegun ="
+        )
+        if (
+            store_open < 0
+            or store_release < store_open
+            or filesystem_release < store_release
+            or source_start < filesystem_release
+        ):
+            errors.append(
+                "product Survey must validate and fully release SDSPI storage "
+                "before radio stacks consume DMA-capable heap"
+            )
+
+    commit_reopen = entry.find("bool reopenProductSurveyBackendForCommit()")
+    product_stop = entry.find("SurveyPipelineStatus stopProductSurvey()")
+    if commit_reopen < 0 or product_stop <= commit_reopen:
+        errors.append("product Survey terminal exact-media reopen is missing")
+    else:
+        commit_reopen_body = entry[commit_reopen:product_stop]
+        for marker in (
+            "runSdIdentificationStateMachine",
+            "productSurveyFilesystem.begin()",
+            "authorizeProductStore(media, storeRequest)",
+            "productSurveyStore.openExistingWritable(storePermit)",
+            "surveyStoreRouter.bind(productSurveyStore)",
+        ):
+            if marker not in commit_reopen_body:
+                errors.append(
+                    f"product Survey terminal reopen is missing: {marker}"
+                )
 
     worker_end = entry.find("bool initializeProductSurveyWorker()", product_worker)
     if product_worker < 0 or worker_end <= product_worker:
@@ -622,7 +678,13 @@ def main() -> int:
     if product_start < 0 or product_stop <= product_start:
         errors.append("non-blocking product Survey action could not be inspected")
     else:
-        product_start_action = entry[product_start:product_stop]
+        product_start_end = entry.find(
+            "bool reopenProductSurveyBackendForCommit()", product_start
+        )
+        product_start_action = entry[
+            product_start:product_start_end
+            if product_start_end > product_start else product_stop
+        ]
         for forbidden_call in ("scanner.scan(", "productSurveyFilesystem.begin("):
             if forbidden_call in product_start_action:
                 errors.append(
@@ -638,6 +700,18 @@ def main() -> int:
                 errors.append(
                     f"product Survey UI action is missing worker handoff: {marker}"
                 )
+        product_stop_action = entry[
+            product_stop:entry.find("void releaseProductSurveyAfterTerminal(",
+                                    product_stop)
+        ]
+        reopen_call = product_stop_action.find(
+            "reopenProductSurveyBackendForCommit()"
+        )
+        commit_call = product_stop_action.find("surveyPipeline.stopAndCommit(")
+        if reopen_call < 0 or commit_call < reopen_call:
+            errors.append(
+                "product Survey must re-identify/reopen exact media before commit"
+            )
 
     for marker in (
         "setProductSurveyScanActive(true);",
@@ -657,7 +731,7 @@ def main() -> int:
         "survey.product.test-source-unavailable once|clear",
         "consumeProductSurveySourceUnavailableInjection()",
         "productSurveySourceUnavailableVisible()",
-        "report.sourceStartAttempted = !report.sourceFailureInjected",
+        "report.sourceStartAttempted = false",
         "report.storeOpenAttempted = true",
         "releaseProductSurveyAfterTerminal(event.report.status, !keepVisible)",
         "source_unavailable_waiting_back",
@@ -676,9 +750,10 @@ def main() -> int:
     else:
         source_boundary = entry[source_failure:store_open]
         for marker in (
-            "wifiScanner->begin()",
-            "bleScanner->begin()",
+            "if (report.sourceFailureInjected)",
+            "report.sourceStartAttempted = false",
             "authorizeProductSurvey",
+            "return report;",
         ):
             if marker not in source_boundary:
                 errors.append(
