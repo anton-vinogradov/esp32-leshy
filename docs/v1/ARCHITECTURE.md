@@ -365,6 +365,19 @@ display metrics. Only the newest graph row is updated after initial chrome rende
 states, unchanged storage and final lease 0. This is still software receive-only
 evidence, not calibrated RF or instrumented physical-silence evidence.
 
+The accepted `0.100.0-spectrum-source-history` refinement separates physical
+display resolution from retained receiver resolution without changing that timing
+contract. Each of the 224 history rows now owns 83 bytes, the maximum real source
+width, rather than 240 already-expanded display bytes. nRF stores all 83 bins and
+CC stores its 64 bins plus a cleared tail; `intensity(row, column)` selects the
+nearest real source bin only while the 240-pixel scanline is rendered. There is no
+horizontal interpolation, averaging or extra measurement, and the physical result
+remains one completed sweep per one-pixel row. This reduces the fixed history from
+53,760 to 18,592 bytes and static RAM from 205,296 to 170,128 bytes. `E-HIL-125`
+binds six zero-skip paths, maximum 611 us row rendering, all three nRF slots, zero
+CC retries/recoveries, stabilized heap 211,580/146,472/127,120 B, unchanged storage
+and final lease 0.
+
 Exact `0.84.0-full-guided-rf` makes those two receiver contracts executable from
 plan-v5 Full/Guided without making boot or Quick active. The orchestration shows a
 500 ms cancellable boundary, acquires `RadioSpi` once, completes one bounded dual-

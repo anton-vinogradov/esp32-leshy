@@ -176,6 +176,7 @@ run_opaque_evidence_check tools/check_home_identity_acceptance.py
 run_opaque_evidence_check tools/check_inline_key_hints_acceptance.py
 run_opaque_evidence_check tools/check_compact_ui_waterfall_acceptance.py
 run_opaque_evidence_check tools/check_receiver_paced_waterfall_acceptance.py
+run_opaque_evidence_check tools/check_source_history_waterfall_acceptance.py
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 if [[ "$retained_evidence_mode" == "tracked" ]]; then
     python3 "$repo_dir/tools/check_tracked_hil_evidence.py"
@@ -184,6 +185,7 @@ if [[ "$retained_evidence_mode" == "tracked" ]]; then
     python3 "$repo_dir/tools/check_inline_key_hints_acceptance.py" --tracked-only
     python3 "$repo_dir/tools/check_compact_ui_waterfall_acceptance.py" --tracked-only
     python3 "$repo_dir/tools/check_receiver_paced_waterfall_acceptance.py" --tracked-only
+    python3 "$repo_dir/tools/check_source_history_waterfall_acceptance.py" --tracked-only
 fi
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"

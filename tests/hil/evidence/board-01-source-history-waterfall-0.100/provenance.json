@@ -1,0 +1,14 @@
+{
+  "app_elf_sha256": "6be7cc0336509c8b3968c375664c4a4355c4e2221d912d379a172487130cce76",
+  "checker_sha256": "953104a99c0df70849dfcf5f9178c90483b94614efa39c56f133291a933d94ca",
+  "firmware_bytes": 1511312,
+  "firmware_sha256": "14b872f59ae7c43044e260985818e4e374545f728bf66049bb98c0dc8bae9c72",
+  "gate_sha256": "990f8deb3857ae0b700c0dee7b2fc7edbaeaf3a5ea239fcdcd1e0a3c1be86caa",
+  "linked_flash_bytes": 1510900,
+  "run_sha256": "731b9bb8dd7b7cbb8d838a088e470bbe879f73b7d193f244da5b82945ed99b0b",
+  "runner_sha256": "387aca38519942b0196b8208de46870664dc34a00590f985dcc2e522247344e0",
+  "schema": "leshy.source_history_waterfall.provenance.v1",
+  "source_commit": "c18edde393c25f61cce7676b8819822c79e38ec9",
+  "static_ram_bytes": 170128,
+  "version": "0.100.0-spectrum-source-history"
+}

@@ -420,6 +420,18 @@ display metrics. После начального chrome render обновляе�
 skipped, 17 TFT states, unchanged storage и final lease 0. Это по-прежнему software
 receive-only evidence, не calibrated RF и не instrumented physical-silence evidence.
 
+Принятый refinement `0.100.0-spectrum-source-history` разделяет физическое
+разрешение display и сохраняемое разрешение приёмника, не меняя timing contract.
+Каждая из 224 строк history теперь занимает 83 bytes — максимальную реальную ширину
+source — вместо 240 уже развёрнутых display bytes. nRF хранит все 83 bin, CC — свои
+64 bin и очищенный хвост; `intensity(row, column)` выбирает ближайший реальный source
+bin только при render scanline 240 px. Горизонтальной interpolation, averaging или
+дополнительного измерения нет, а физический результат остаётся одним законченным
+sweep на строку 1 px. Fixed history уменьшается с 53 760 до 18 592 bytes, static RAM
+— с 205 296 до 170 128 bytes. `E-HIL-125` связывает шесть paths с zero skipped,
+максимальный render строки 611 us, все три nRF slot, zero retry/recovery CC,
+stabilized heap 211 580/146 472/127 120 B, unchanged storage и final lease 0.
+
 Exact `0.84.0-full-guided-rf` делает эти два receiver contract исполняемыми из
 plan-v5 Full/Guided, не превращая boot или Quick в active. Orchestration показывает
 cancellable boundary 500 ms, один раз получает `RadioSpi`, завершает bounded sweep
