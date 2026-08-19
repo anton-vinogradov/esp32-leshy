@@ -1,0 +1,14 @@
+{
+  "app_elf_sha256": "8aea18ed91079f773c8999e25ee2be5fc322d4893c048718a5f8bf450c159cda",
+  "checker_sha256": "953104a99c0df70849dfcf5f9178c90483b94614efa39c56f133291a933d94ca",
+  "firmware_bytes": 1511360,
+  "firmware_sha256": "461aa64ae8f5d3e420ed8768e6a2dfa7ba238b1f9715c71f68489c4bd10f6876",
+  "gate_sha256": "990f8deb3857ae0b700c0dee7b2fc7edbaeaf3a5ea239fcdcd1e0a3c1be86caa",
+  "linked_flash_bytes": 1510960,
+  "run_sha256": "128e27e37daae7784f41fcda5001218990a5629ce3e21680c6ea1aef004eb021",
+  "runner_sha256": "387aca38519942b0196b8208de46870664dc34a00590f985dcc2e522247344e0",
+  "schema": "leshy.receiver_paced_waterfall.provenance.v1",
+  "source_commit": "9d8fbca486eef3df1885c1ff036400db9db9d388",
+  "static_ram_bytes": 205296,
+  "version": "0.99.0-wifi-spectrum-modes"
+}

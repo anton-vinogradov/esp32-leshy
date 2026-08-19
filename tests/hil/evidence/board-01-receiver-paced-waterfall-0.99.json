@@ -1,0 +1,181 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "8aea18ed91079f773c8999e25ee2be5fc322d4893c048718a5f8bf450c159cda",
+    "checker_sha256": "953104a99c0df70849dfcf5f9178c90483b94614efa39c56f133291a933d94ca",
+    "firmware_bytes": 1511360,
+    "firmware_sha256": "461aa64ae8f5d3e420ed8768e6a2dfa7ba238b1f9715c71f68489c4bd10f6876",
+    "gate_sha256": "990f8deb3857ae0b700c0dee7b2fc7edbaeaf3a5ea239fcdcd1e0a3c1be86caa",
+    "linked_flash_bytes": 1510960,
+    "run_sha256": "128e27e37daae7784f41fcda5001218990a5629ce3e21680c6ea1aef004eb021",
+    "runner_sha256": "387aca38519942b0196b8208de46870664dc34a00590f985dcc2e522247344e0",
+    "schema": "leshy.receiver_paced_waterfall.provenance.v1",
+    "source_commit": "9d8fbca486eef3df1885c1ff036400db9db9d388",
+    "static_ram_bytes": 205296,
+    "version": "0.99.0-wifi-spectrum-modes"
+  },
+  "evidence": {
+    "artifact_index_sha256": "4e244091103de56241ad863cc61112b04f1fef34f7f36c6c450140ffd8f08235",
+    "files": 58,
+    "provenance_sha256": "58492624e29cd415036d47da8d0227368aae6c24f2f83b7b0a6ceb43e26a9012",
+    "run_sha256": "128e27e37daae7784f41fcda5001218990a5629ce3e21680c6ea1aef004eb021",
+    "tft_states": 17
+  },
+  "evidence_ids": [
+    "E-BUILD-100",
+    "E-AUTO-064",
+    "E-HIL-124",
+    "E-UX-023",
+    "E-RADIO-010"
+  ],
+  "schema": "leshy.receiver_paced_waterfall_acceptance.v1",
+  "status": "pass_receiver_paced_waterfall_checkpoint",
+  "verified": {
+    "all_available_nrf_antennas": true,
+    "automatic_screenshots": true,
+    "cadence": "one_complete_receiver_sweep_per_physical_row",
+    "cc_source_bins": 64,
+    "diagnostic_heap_stabilized": true,
+    "final_lease_mask": 0,
+    "final_owner": "none",
+    "graph_width_px": 240,
+    "heap": [
+      176412,
+      111372,
+      92020
+    ],
+    "history_rows": 224,
+    "horizontal_interpolation": false,
+    "manual_button_presses": 0,
+    "nrf_active_slot_mask": 7,
+    "nrf_metrics": [
+      "signal",
+      "traffic"
+    ],
+    "nrf_modules": 3,
+    "nrf_source_bins": 83,
+    "physical_rf_silence_measured": false,
+    "physical_row_height_px": 1,
+    "software_rx_only": true,
+    "storage_generation": 95,
+    "storage_observations": 0,
+    "waterfall_pixel_changes": {
+      "cc": {
+        "chrome_changed_pixels": 0,
+        "graph_changed_pixels": 480
+      },
+      "nrf": {
+        "chrome_changed_pixels": 0,
+        "graph_changed_pixels": 2621
+      }
+    },
+    "waterfall_timings": {
+      "cc315": {
+        "device_us": 32496186,
+        "host_ms": 32792.584,
+        "measurements": 225,
+        "skipped": 0
+      },
+      "cc433": {
+        "device_us": 22607448,
+        "host_ms": 22857.467,
+        "measurements": 226,
+        "skipped": 0
+      },
+      "cc868": {
+        "device_us": 31314400,
+        "host_ms": 31437.712,
+        "measurements": 224,
+        "skipped": 0
+      },
+      "cc915": {
+        "device_us": 31334452,
+        "host_ms": 31594.741,
+        "measurements": 225,
+        "skipped": 0
+      },
+      "nrf_signal": {
+        "device_us": 2058240,
+        "host_ms": 2344.311,
+        "measurements": 250,
+        "skipped": 0
+      },
+      "nrf_traffic": {
+        "device_us": 2135513,
+        "host_ms": 2373.235,
+        "measurements": 247,
+        "skipped": 0
+      }
+    },
+    "wire": {
+      "cc315": {
+        "command_strobes": 43216,
+        "idle_strobes": 28810,
+        "receive_ready_timeouts": 0,
+        "receive_strobes": 14405,
+        "recoveries": 0,
+        "recovery_attempts": 0,
+        "register_reads": 962295,
+        "register_writes": 43231,
+        "reset_strobes": 1,
+        "select_ready_timeouts": 0,
+        "spi_bytes_clocked": 2025458,
+        "transient_retries": 0
+      },
+      "cc433": {
+        "command_strobes": 43789,
+        "idle_strobes": 29192,
+        "receive_ready_timeouts": 0,
+        "receive_strobes": 14596,
+        "recoveries": 0,
+        "recovery_attempts": 0,
+        "register_reads": 974893,
+        "register_writes": 43804,
+        "reset_strobes": 1,
+        "select_ready_timeouts": 0,
+        "spi_bytes_clocked": 2051991,
+        "transient_retries": 0
+      },
+      "cc868": {
+        "command_strobes": 43009,
+        "idle_strobes": 28672,
+        "receive_ready_timeouts": 0,
+        "receive_strobes": 14336,
+        "recoveries": 0,
+        "recovery_attempts": 0,
+        "register_reads": 957822,
+        "register_writes": 43024,
+        "reset_strobes": 1,
+        "select_ready_timeouts": 0,
+        "spi_bytes_clocked": 2016029,
+        "transient_retries": 0
+      },
+      "cc915": {
+        "command_strobes": 43201,
+        "idle_strobes": 28800,
+        "receive_ready_timeouts": 0,
+        "receive_strobes": 14400,
+        "recoveries": 0,
+        "recovery_attempts": 0,
+        "register_reads": 962163,
+        "register_writes": 43216,
+        "reset_strobes": 1,
+        "select_ready_timeouts": 0,
+        "spi_bytes_clocked": 2025159,
+        "transient_retries": 0
+      },
+      "nrf_signal": {
+        "receive_ce_high_events": 21320,
+        "register_reads": 21335,
+        "register_writes": 21335,
+        "spi_bytes_clocked": 85340
+      },
+      "nrf_traffic": {
+        "receive_ce_high_events": 43836,
+        "register_reads": 43851,
+        "register_writes": 43851,
+        "spi_bytes_clocked": 175404
+      }
+    }
+  }
+}

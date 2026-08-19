@@ -405,6 +405,21 @@ sample за проход main loop, разрешает strobes reset/RX/idle, ж
 effects, invariant heap/storage и final lease 0. Значения — некалиброванный RSSI,
 physical RF silence не измерен.
 
+Принятый display contract `0.99.0-wifi-spectrum-modes` использует clock завершённых
+измерений, а не wall-clock UI timer. Active pure controller публикует монотонный
+counter законченных sweep; Arduino layer потребляет каждое новое значение один раз и
+сохраняет текущий полный spectrum как одну физическую строку fixed eight-bit raster
+240×224. Jump counter больше единицы сохраняется как failure skipped measurement,
+поэтому renderer не может незаметно повторить stale/partial snapshot ради визуальной
+скорости. Raster имеет разрешение экрана, а не приёмника: 83 bin nRF и 64 bin CC
+попадают в соседние columns без interpolation вымышленных измерений. Поэтому time
+axis определяется возможностями приёмника. По умолчанию выбраны все найденные nRF
+slot; header показывает активный receive set, а Сигнал и Трафик остаются отдельными
+display metrics. После начального chrome render обновляется только новая строка
+графика. `E-HIL-124` связывает source/candidate, шесть full-history paths с zero
+skipped, 17 TFT states, unchanged storage и final lease 0. Это по-прежнему software
+receive-only evidence, не calibrated RF и не instrumented physical-silence evidence.
+
 Exact `0.84.0-full-guided-rf` делает эти два receiver contract исполняемыми из
 plan-v5 Full/Guided, не превращая boot или Quick в active. Orchestration показывает
 cancellable boundary 500 ms, один раз получает `RadioSpi`, завершает bounded sweep

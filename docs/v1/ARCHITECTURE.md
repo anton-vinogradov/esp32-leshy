@@ -349,6 +349,22 @@ four bands, a stable 400 ms pause, exact wire accounting, zero TX/storage side
 effects, invariant heap/storage and final lease 0. Values are uncalibrated RSSI and
 physical RF silence remains unmeasured.
 
+The accepted `0.99.0-wifi-spectrum-modes` display contract makes measurement
+completion, not a wall-clock UI timer, the waterfall row clock. The active pure
+controller exposes a monotonically increasing completed-sweep counter; the Arduino
+layer consumes each new value once and stores the current complete spectrum as one
+physical row in a fixed 240×224 eight-bit raster. A counter jump greater than one is
+retained as a skipped-measurement failure, so the renderer cannot silently duplicate
+a stale/partial snapshot to satisfy a visual speed target. The raster is the screen
+resolution, not the receiver resolution: the 83 nRF bins and 64 CC bins map to
+adjacent columns without interpolating invented measurements. Receiver capability
+therefore determines the time axis. All detected nRF slots are selected by default;
+the header reports the active receive set, while Signal and Traffic remain distinct
+display metrics. Only the newest graph row is updated after initial chrome render.
+`E-HIL-124` binds the source/candidate, six zero-skip full-history paths, 17 TFT
+states, unchanged storage and final lease 0. This is still software receive-only
+evidence, not calibrated RF or instrumented physical-silence evidence.
+
 Exact `0.84.0-full-guided-rf` makes those two receiver contracts executable from
 plan-v5 Full/Guided without making boot or Quick active. The orchestration shows a
 500 ms cancellable boundary, acquires `RadioSpi` once, completes one bounded dual-
