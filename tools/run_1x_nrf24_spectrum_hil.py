@@ -149,8 +149,6 @@ def main() -> int:
                     state = action(device, "up")
                     trace.append(state)
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
-                state = action(device, "down")
-                trace.append(state)
                 state = action(device, "right")
                 trace.append(state)
                 failures.extend(expect(state, {
