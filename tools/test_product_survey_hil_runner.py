@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
@@ -259,6 +260,26 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
                 patch.object(RUNNER, "action", return_value=stuck):
             with self.assertRaisesRegex(RuntimeError, "public Survey Start"):
                 RUNNER.focus_survey_start(object())
+
+    def test_capture_retries_one_transient_usb_timeout(self) -> None:
+        class Device:
+            resets = 0
+
+            def reset_input_buffer(self) -> None:
+                self.resets += 1
+
+        device = Device()
+        completed = {"frame_begin": {}, "frame_end": {}, "state": {}}
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+                RUNNER, "_capture_once",
+                side_effect=[TimeoutError("short frame"), completed]), patch.object(
+                    RUNNER, "synchronize_capture_console") as synchronize:
+            record = RUNNER.capture(device, Path(directory), "screen")
+        self.assertEqual(2, record["transport_attempts"])
+        self.assertEqual(1, record["transport_transient_retries"])
+        self.assertEqual(["short frame"], record["transport_transient_errors"])
+        self.assertEqual(1, device.resets)
+        synchronize.assert_called_once_with(device)
 
 
 if __name__ == "__main__":

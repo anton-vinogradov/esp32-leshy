@@ -462,7 +462,7 @@ def best_effort_cleanup(device: Any, timeout: float = 20.0) -> dict[str, Any]:
     return cleanup
 
 
-def capture(device: Any, output: Path, name: str) -> dict[str, Any]:
+def _capture_once(device: Any, output: Path, name: str) -> dict[str, Any]:
     from capture_1x_ui import read_json, rgb565be_to_png
 
     device.write(b"ui.capture\n")
@@ -494,6 +494,35 @@ def capture(device: Any, output: Path, name: str) -> dict[str, Any]:
     }
     write_json(output / f"{name}.json", record)
     return record
+
+
+def synchronize_capture_console(device: Any) -> None:
+    from capture_1x_ui import synchronize_console
+
+    synchronize_console(device, 10.0)
+
+
+def capture(device: Any, output: Path, name: str,
+            maximum_attempts: int = 2) -> dict[str, Any]:
+    """Capture one framebuffer with one bounded USB transport retry."""
+    if maximum_attempts < 1:
+        raise ValueError("maximum_attempts must be positive")
+    transient_errors: list[str] = []
+    for attempt in range(1, maximum_attempts + 1):
+        try:
+            record = _capture_once(device, output, name)
+            record["transport_attempts"] = attempt
+            record["transport_transient_retries"] = attempt - 1
+            record["transport_transient_errors"] = transient_errors
+            write_json(output / f"{name}.json", record)
+            return record
+        except TimeoutError as error:
+            if attempt == maximum_attempts:
+                raise
+            transient_errors.append(str(error))
+            device.reset_input_buffer()
+            synchronize_capture_console(device)
+    raise RuntimeError("unreachable framebuffer capture state")
 
 
 def reset_capture(port: str, output: Path, name: str,
