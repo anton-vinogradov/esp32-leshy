@@ -146,6 +146,12 @@ exact CID, фиксируют zero drops/timeouts и завершают кажд
 Lifecycles radio и SD не пересекаются. Controlled physical power-cut recovery теперь
 единственный оставшийся gate `DEMO-S4`; сам этап ещё не завершён.
 
+Exact 0.90 затем принимает финальную product-first иерархию меню без изменения
+gate: Обзор/Захват/Библиотека — прямые рабочие entries, planned Цели/Лаборатория
+fail closed, а Настройки/Самопроверка/Диагностика/О системе находятся в Устройстве.
+Восемь real TFT states доказывают key/touch traversal и final zero ownership.
+Controlled physical power-cut recovery остаётся единственным gate `DEMO-S4`.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases.

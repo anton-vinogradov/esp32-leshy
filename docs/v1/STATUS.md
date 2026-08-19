@@ -12,16 +12,18 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.89 S4 checkpoints through persistent Wi-Fi Capture, both user-facing spectrum workflows, receive-only RF checks, read-only artifact audit, guarded disposable write/remount/export/cleanup, calibrated touch navigation, and the cross-radio release-endurance gate.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.90 S4 checkpoints through persistent Wi-Fi Capture, both user-facing spectrum workflows, receive-only RF checks, read-only artifact audit, guarded disposable write/remount/export/cleanup, calibrated touch navigation, the cross-radio release-endurance gate, and the product-first final menu hierarchy.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** exercise controlled physical power-cut recovery, the only
   remaining `DEMO-S4` gate.
-- **Latest accepted checkpoint:** exact 0.89 passes the release-endurance gate in
-  2,799.845 s over 8/8 complete Wi-Fi+BLE product cycles. It advances the persistent
-  generation 86→94, forwards 367 observations (111 Wi-Fi + 256 BLE), performs 16
-  cold boots, preserves heap 231,772/166,812/147,460 B, records zero radio/pipeline
-  drops, and ends every cycle at Home with owner `none` and lease 0. Radio and SD
-  lifecycles are non-overlapping; controlled physical power cut remains open.
+- **Latest accepted checkpoint:** exact 0.90 makes Home product-first:
+  `Survey / Capture / Library / Targets / Lab / Device`. The working first three
+  domains remain direct entries; planned Targets/Lab are visible but fail closed;
+  Settings, Self-Test, Diagnostics and About move under the final Device entry.
+  Eight real 240×320 TFT states prove nested key/touch navigation, one-level Left
+  return, non-interactive header/footer and final owner/lease `none`/`0`. Exact 0.89
+  remains the accepted 2,799.845 s release-endurance result; controlled physical
+  power cut remains open.
 
 ## Stage state
 
@@ -31,7 +33,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key plus calibrated touch input/TFT capture, finger-sized common rows, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71…0.88 accept passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement and calibrated touch; exact 0.89 passes the ≥45-minute/≥8-cycle multi-source release-endurance gate within one hour | exercise controlled physical power-cut recovery |
+| S4 | `active` | exact 0.71…0.90 accept passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance and the product-first final menu hierarchy | exercise controlled physical power-cut recovery |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -45,7 +47,7 @@ items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 
 | Product block | Now | Next qualitative transition |
 |---|---|---|
-| Device foundation and UX | `done / S2` — boot, board profile, five keys plus calibrated touch, finger-sized common rows, EN/RU UI, ResourceBroker, Diagnostics, Quick Self-Test and automated TFT capture; plan-v7 Full/Guided executes declared receive-only RF, artifact and isolated disposable-storage checks | retain the shared plan while adding later hardware checks |
+| Device foundation and UX | `done / S2`, refined in S4 — boot, board profile, five keys plus calibrated touch, finger-sized common rows, EN/RU UI, ResourceBroker and automated TFT capture; exact 0.90 presents user jobs directly on Home and groups Settings, Self-Test, Diagnostics and About under Device; plan-v7 Full/Guided executes declared receive-only RF, artifact and isolated disposable-storage checks | retain this hierarchy and shared plan while adding later capabilities |
 | Survey and Library | `done / S3` — real passive Wi-Fi, atomic Session, List/Detail, offline reopen and export | reuse this accepted foundation rather than fork a new data path |
 | Passive multi-radio and Capture | `active / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV and privacy-confirmed persistent Wi-Fi PCAP work; two nRF24 receivers provide a live 2,402…2,484 MHz activity map and CC1101 provides live 315/433/868/915 MHz RSSI maps; Self-Test repeats both receive paths, audits the latest SD artifact and proves an isolated disposable commit/remount/export/cleanup cycle; exact 0.89 passes the release-endurance gate | controlled physical power cut |
 | Complete standard ESP32-DIV hardware | `ahead / S5` — scope and fail-closed hardware envelope exist, but complete IR/PN532/GPS/power workflows do not | probe → capture/observe → Library → inspect/export for every applicable module |
@@ -648,6 +650,8 @@ endurance are explicit `DEMO-S4` criteria.
 | E-BUILD-090 | exact build `0.89.0-touch-storage-dma` | pass: RAM 149,936 B, linked flash 1,498,576 B; app/factory 1,498,832/1,564,512 B; app `db6378ae…4b8`, factory `30186764…cb0`, ELF `2f62f982…493`; source commit `450d5d8` | +1,520 B linked flash and zero static-RAM growth vs 0.88 for explicit SD release before radio work, RAM-only scans and exact-CID storage reopen after every source stops |
 | E-AUTO-054 | retained release-endurance verifier | pass: independently rehashes the exact candidate, source-bound runners, aggregate, all eight child runs, 32 TFT captures and exact 160-file inventory; re-derives generation/observation continuity, Wi-Fi/BLE accounting, retries, boot bounds, heap, CID, zero drops and final ownership | unsigned local evidence on one board and one enrolled card; controlled physical power cut remains separate |
 | E-HIL-114 / E-SURVEY-016 / E-GATE-004 | board-01 exact 0.89 cross-radio release endurance | pass: 8/8 complete product cycles in 2,799.845 s advance generation 86→94 and forward 367 observations (111 Wi-Fi + 256 BLE) through 16 cold boots. All radio, pipeline and persistence drops are zero; Product Start needs eight attempts/zero retries, boot recovery needs 17 attempts/one bounded transient retry/zero timeout restarts, heap stays exactly 231,772/166,812/147,460 B, and every cycle ends at Home with owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-product-endurance-0.89.json) | closes the ≥45-minute/≥8-cycle release-endurance gate within the one-hour budget and proves non-overlapping radio/SD lifecycles; controlled physical power cut is the only remaining `DEMO-S4` gate |
+| E-BUILD-091 | exact build `0.90.0-product-menu` | pass: RAM 149,936 B, linked flash 1,500,384 B; app/factory 1,500,784/1,566,320 B; app `d166634a…1e4a`, factory `55510037…8fad`, ELF/app identity `dbc8234c…0575`; source commit `1181619` | +1,808 B linked flash, zero static-RAM growth and +1,952/+1,808 B app/factory images vs 0.89 for the six-domain product Home, nested four-item Device menu, About and one-level parent navigation |
+| E-AUTO-055 / E-HIL-115 / E-UX-014 | board-01 exact 0.90 product-first final menu | pass: Home exposes enabled Survey/Capture/Library, disabled planned Targets/Lab and final enabled Device. Device owns Settings/Self-Test/Diagnostics/About; shared touch rows open Self-Test, header/footer miss, touch Back remains absent, Left returns child→Device→Home, eight actual 240×320 TFT states bind the route, and final owner/lease is none/0 with heap 231,772/166,812/147,460 B in the [machine-checked artifact](../../tests/hil/evidence/board-01-product-menu-0.90.json). The first run is retained as a runner-only revision expectation failure; the same already-flashed candidate passed without reflash | accepts the final top-level information architecture and keeps unfinished domains honestly disabled; it does not implement Targets/Lab or close controlled physical power cut |
 
 ## Known uncertainties and risks
 

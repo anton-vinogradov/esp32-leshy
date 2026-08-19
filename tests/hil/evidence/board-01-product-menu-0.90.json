@@ -1,0 +1,76 @@
+{
+  "schema": "leshy.product_menu_acceptance.v1",
+  "status": "pass_product_menu_checkpoint",
+  "board": "board-01",
+  "evidence_ids": [
+    "E-BUILD-091",
+    "E-AUTO-055",
+    "E-HIL-115",
+    "E-UX-014"
+  ],
+  "candidate": {
+    "version": "0.90.0-product-menu",
+    "source_commit": "1181619c9435346bce1d3e8d710737d5460e702f",
+    "runner_commit": "fbeb93e814bd069c2dfae738ec1c5a5dea771248",
+    "firmware_sha256": "d166634abb48c461a2566929c4ef3ed3bdc406ff197bc02b16463c608e141e4a",
+    "factory_sha256": "555100379df462c8c8d5fe56627b9027f48d761b632b124569077061c1a38fad",
+    "app_elf_sha256": "dbc8234cb4c206191d10cd83ba166f5acd6eb1f2b4ab8156cff61608c5160575",
+    "runner_sha256": "db9ff0e8cff8368e104e55527fa495d00b83422b67814a9134a4d4da17640237",
+    "firmware_bytes": 1500784,
+    "factory_bytes": 1566320,
+    "static_ram_bytes": 149936,
+    "linked_flash_bytes": 1500384
+  },
+  "evidence": {
+    "bundle": "tests/hil/evidence/board-01-product-menu-0.90",
+    "files": 33,
+    "tft_states": 8,
+    "original_run_sha256": "845e0be9739a842367576bfdaf979161270f4450b47b292e7ab8da6b6fa37d5d",
+    "canonical_run_sha256": "6c31ca13df9bfdfd646e7c0e9b07a780a7e00beeaf12e273c4f85a339cb49cb2",
+    "failed_run_sha256": "708a1830ce41eebfc8368605933c9fd492819977d6eeb767607d5b4a11dee724",
+    "provenance_sha256": "5717e9278cdf059cd0136a78ac97e9614af919044b4e44b3dbdbd7ada7d395b7",
+    "artifact_index_sha256": "d603c34e05e6d0329450fb3ddbafbaba906d48da821c87c61c2f01d3880f0356"
+  },
+  "verified": {
+    "home": [
+      {"id": "survey", "enabled": true},
+      {"id": "capture", "enabled": true},
+      {"id": "library", "enabled": true},
+      {"id": "targets", "enabled": false},
+      {"id": "lab", "enabled": false},
+      {"id": "device", "enabled": true}
+    ],
+    "device": ["settings", "self_test", "diagnostics", "about"],
+    "navigation": {
+      "home_to_device": true,
+      "device_to_child": true,
+      "child_left_to_device": true,
+      "device_left_to_home": true,
+      "disabled_items_rejected": true
+    },
+    "touch": {
+      "shared_row_target_opens_self_test": true,
+      "header_interactive": false,
+      "footer_interactive": false,
+      "touch_back_enabled": false
+    },
+    "final_owner": "none",
+    "final_lease_mask": 0,
+    "heap": [231772, 166812, 147460],
+    "buzzer_inactive": true,
+    "input_detected": true
+  },
+  "regression": {
+    "initial_status": "failed",
+    "product_defect": false,
+    "reason": "runner expected a rejected known Action not to increment the UI revision",
+    "candidate_was_reflashed_for_retry": false
+  },
+  "limits": {
+    "product_menu_complete": true,
+    "targets_implemented": false,
+    "lab_implemented": false,
+    "controlled_power_cut_complete": false,
+    "demo_s4_complete": false
+  }
+}

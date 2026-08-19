@@ -228,6 +228,22 @@ zero, GPIO2 is LOW, and final owner/lease is `none`/`0`. This closes the real-TF
 common-state artifact, not the full capability plan or release gate. The combined
 platform gate is closed by the subsequent exact 0.58 `DEMO-S2` evidence.
 
+## Product-first menu refinement
+
+Exact candidate `0.90.0-product-menu` realizes the final top-level information
+architecture without reopening the S2 baseline. Home now contains
+`Survey / Capture / Library / Targets / Lab / Device`; the unfinished Targets and
+Lab entries are visibly disabled, while Device contains Settings, Self-Test,
+Diagnostics and About. Shared 216×46 px rows serve both the physical navigator and
+touch. The 26 px footer remains a physical-key legend and is not a touch target;
+Left alone restores child→Device→Home.
+
+`E-BUILD-091`/`E-AUTO-055`/`E-HIL-115`/`E-UX-014` retain eight actual 240×320 TFT
+states, exact candidate/runner bytes, touch chrome misses, nested parent state,
+heap 231,772/166,812/147,460 B and final owner/lease `none`/`0`. The first HIL run is
+also retained as a runner-only revision expectation error; the candidate was not
+reflashed for the passing retry.
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog

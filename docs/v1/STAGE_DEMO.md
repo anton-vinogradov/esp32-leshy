@@ -145,6 +145,12 @@ record zero drops/timeouts, and finish each cycle with no owner or lease. Radio 
 SD lifecycles do not overlap. Controlled physical power-cut recovery is now the only
 remaining `DEMO-S4` gate; the stage itself is not yet complete.
 
+Exact 0.90 then accepts the final product-first menu hierarchy without changing the
+gate: Survey/Capture/Library are direct working entries, planned Targets/Lab fail
+closed, and Settings/Self-Test/Diagnostics/About live under Device. Eight real TFT
+states prove key/touch traversal and final zero ownership. Controlled physical
+power-cut recovery remains the only `DEMO-S4` gate.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

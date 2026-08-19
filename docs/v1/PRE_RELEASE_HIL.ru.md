@@ -795,3 +795,12 @@ observations через 16 cold boots, сохраняет heap точно 231 77
 фиксирует zero drops/timeouts и завершает каждый цикл с owner/lease `none`/`0`.
 Independent verifier `E-AUTO-054` заново выводит каждый claim. Это закрывает release
 endurance; controlled physical power cut остаётся отдельным gate S4.
+
+Exact 0.90 добавляет product-menu lane до любой последующей release promotion.
+Runner проходит каждый домен Home, отклоняет disabled Цели/Лабораторию, открывает
+вложенные пункты Устройства обычными Actions и общей touch row, сохраняет восемь
+TFT states, проверяет non-interactive chrome и заканчивает Home с zero ownership.
+Retained bundle `E-HIL-115` содержит exact bytes firmware/factory/ELF/runner и
+первый runner-only failure ожидания revision; `E-AUTO-055` независимо проверяет все
+hashes, source contracts, screenshots и final cleanup. Это принимает IA, но не
+оставшийся gate controlled physical power cut.

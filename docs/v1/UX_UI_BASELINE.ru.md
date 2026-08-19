@@ -231,6 +231,22 @@ LOW, final owner/lease — `none`/`0`. Это закрывает real-TFT common
 но не полный capability plan или release gate. Combined platform gate закрывает
 последующее exact 0.58 evidence `DEMO-S2`.
 
+## Уточнение product-first меню
+
+Exact candidate `0.90.0-product-menu` реализует финальную верхнеуровневую
+information architecture, не переоткрывая baseline S2. Home теперь содержит
+`Обзор / Захват / Библиотека / Цели / Лаборатория / Устройство`; незавершённые
+Цели и Лаборатория явно disabled, а Устройство содержит Настройки, Самопроверку,
+Диагностику и О системе. Общие строки 216×46 px работают и с physical navigator,
+и с touch. Footer 26 px остаётся легендой физических клавиш и не является touch
+target; только Left возвращает child→Устройство→Home.
+
+`E-BUILD-091`/`E-AUTO-055`/`E-HIL-115`/`E-UX-014` сохраняют восемь actual TFT
+states 240×320, exact bytes candidate/runner, touch chrome misses, nested parent
+state, heap 231 772/166 812/147 460 B и final owner/lease `none`/`0`. Первый HIL run
+тоже сохранён как runner-only ошибка ожидания revision; для проходящего retry
+candidate не перепрошивался.
+
 ## Gate
 
 **S1 UX direction accepted:** готовы UX-01/UX-02 в low-fidelity форме, все разделы

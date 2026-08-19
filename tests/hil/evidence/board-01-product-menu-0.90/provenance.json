@@ -1,0 +1,14 @@
+{
+  "app_elf_sha256": "dbc8234cb4c206191d10cd83ba166f5acd6eb1f2b4ab8156cff61608c5160575",
+  "elf_bytes": 20157192,
+  "elf_file_sha256": "dbc8234cb4c206191d10cd83ba166f5acd6eb1f2b4ab8156cff61608c5160575",
+  "factory_bytes": 1566320,
+  "factory_sha256": "555100379df462c8c8d5fe56627b9027f48d761b632b124569077061c1a38fad",
+  "firmware_bytes": 1500784,
+  "firmware_sha256": "d166634abb48c461a2566929c4ef3ed3bdc406ff197bc02b16463c608e141e4a",
+  "runner_commit": "fbeb93e814bd069c2dfae738ec1c5a5dea771248",
+  "runner_sha256": "db9ff0e8cff8368e104e55527fa495d00b83422b67814a9134a4d4da17640237",
+  "schema": "leshy.product_menu_hil.provenance.v1",
+  "source_commit": "1181619c9435346bce1d3e8d710737d5460e702f",
+  "version": "0.90.0-product-menu"
+}

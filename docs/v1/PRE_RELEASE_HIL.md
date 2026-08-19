@@ -802,3 +802,12 @@ bundle. The run lasts 2,799.845 s, advances generation 86→94, forwards 111 Wi-
 owner/lease `none`/`0`. The independent `E-AUTO-054` verifier re-derives every claim.
 This closes release endurance; controlled physical power cut remains a separate S4
 gate.
+
+Exact 0.90 adds the product-menu lane before any later release promotion. The
+runner traverses every Home domain, rejects disabled Targets/Lab, opens the nested
+Device entries by ordinary Actions and a shared touch row, captures eight TFT
+states, verifies non-interactive chrome and finishes Home with zero ownership. The
+retained `E-HIL-115` bundle includes exact firmware/factory/ELF/runner bytes and the
+initial runner-only revision-expectation failure; `E-AUTO-055` independently checks
+all hashes, source contracts, screenshots and final cleanup. This accepts IA, not
+the remaining controlled physical power-cut gate.

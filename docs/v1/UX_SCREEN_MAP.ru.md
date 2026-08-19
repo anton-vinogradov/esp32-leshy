@@ -80,7 +80,7 @@ controllers и Actions, что вход из Home.
 |---|---|---|
 | `Navigate` | переместить focus/selection без side effect | Up/Down; tap focus |
 | `Open` | открыть выбранный item/detail | Right или Select согласно видимой footer label; tap item |
-| `Back` | закрыть верхний view/dialog и восстановить selection | Left; видимая Back area |
+| `Back` | закрыть верхний view/dialog и восстановить selection | физическая Left; touch target или footer-кнопка Back отсутствуют |
 | `Context` | показать вторичные действия текущей сущности | Right при явной label; touch context button |
 | `Start` | запустить уже просмотренный passive/configured workflow | Select на labelled Start |
 | `Stop` | остановить текущую Session/Capture/TX, затем показать результат | Select/Left согласно постоянной Stop label |
@@ -119,3 +119,9 @@ action. В активном TX `Back` никогда не открывает con
   rule; Stop Session/Capture остаётся отдельным явным Action.
 - Empty, unavailable, degraded и fault состояния ведут к Diagnostics или исправлению,
   а не в неработающий экран.
+
+Exact `0.90.0-product-menu` реализует эту верхнеуровневую карту на board-01.
+Восемь retained TFT states и machine checker связывают Home, Устройство,
+Самопроверку, Диагностику и О системе, включая disabled будущие домены, вход по
+touch row, non-interactive chrome, восстановление parent клавишей Left и final zero
+ownership (`E-BUILD-091`/`E-AUTO-055`/`E-HIL-115`/`E-UX-014`).

@@ -79,7 +79,7 @@ Library→Compare use the same controllers and Actions as Home entry.
 |---|---|---|
 | `Navigate` | move focus/selection without side effects | Up/Down; tap focus |
 | `Open` | open selected item/detail | Right or Select per visible footer label; tap item |
-| `Back` | close top view/dialog and restore selection | Left; visible Back area |
+| `Back` | close top view/dialog and restore selection | physical Left; no touch Back target or footer button |
 | `Context` | show secondary actions for the current entity | Right with an explicit label; touch context button |
 | `Start` | start the reviewed passive/configured workflow | Select on labelled Start |
 | `Stop` | stop current Session/Capture/TX, then show result | Select/Left per permanent Stop label |
@@ -118,3 +118,9 @@ ordinary Back traverses the stack.
   Session/Capture Stop remains an explicit Action.
 - Empty, unavailable, degraded, and fault states lead to Diagnostics or a remedy,
   never a knowingly broken screen.
+
+Exact `0.90.0-product-menu` realizes this top-level map on board-01. Eight retained
+TFT states and the machine checker bind Home, Device, Self-Test, Diagnostics and
+About, including disabled future domains, touch-row entry, non-interactive chrome,
+Left parent restoration and final zero ownership (`E-BUILD-091`/`E-AUTO-055`/
+`E-HIL-115`/`E-UX-014`).
