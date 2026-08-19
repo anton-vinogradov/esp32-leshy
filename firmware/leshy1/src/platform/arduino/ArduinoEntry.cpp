@@ -5360,9 +5360,10 @@ static_assert(kSpectrumGraphHeight == SpectrumViewport::kHistoryRows,
               "each waterfall sample must occupy exactly one TFT row");
 constexpr std::uint16_t kSpectrumNoSignal =
     leshy1::ui::visual::rgb565(0, 0, 0);
+constexpr std::uint8_t kSpectrumQuietThreshold = 48;
 
 std::uint16_t spectrumTone(std::uint8_t intensity) {
-    if (intensity == 0) return kSpectrumNoSignal;
+    if (intensity < kSpectrumQuietThreshold) return kSpectrumNoSignal;
     if (intensity < 64U) {
         return leshy1::ui::visual::rgb565(
             0, static_cast<std::uint8_t>(intensity * 2U), 196);
