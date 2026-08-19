@@ -210,7 +210,7 @@ def main() -> int:
                     require(rejected, {
                         "page": "home", "selected_id": selected_id,
                         "selected_enabled": False, "changed": False,
-                        "revision": revision, "runtime_owner": "none",
+                        "revision": revision + 1, "runtime_owner": "none",
                         "lease_mask": 0,
                     }, f"disabled Home item {selected_id}")
             run["screens"]["home_product_bottom"] = capture(
