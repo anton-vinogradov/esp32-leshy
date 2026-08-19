@@ -103,6 +103,7 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
+    parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0),
                         default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
@@ -115,6 +116,10 @@ def main() -> int:
         parser.error("--expected-cid must be 32 uppercase hexadecimal characters")
     if len(args.source_commit) != 40:
         parser.error("--source-commit must be a full commit ID")
+    if args.flash and args.reuse_exact_flash:
+        parser.error("--flash and --reuse-exact-flash are mutually exclusive")
+    if not args.flash and not args.reuse_exact_flash:
+        parser.error("use --flash or explicitly acknowledge --reuse-exact-flash")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -246,7 +251,8 @@ def main() -> int:
                     device, b"storage.product.boot-recovery",
                     "leshy.storage.product_boot_recovery.v1", "state")
                 metrics_after = query(device, b"metrics", "leshy.boot.v1", "ready")
-                input_state = query(device, b"input.state", "leshy.input.v1", "state")
+                input_state = query(
+                    device, b"input.state", "leshy.input.frontend.v1", "state")
                 safe_outputs = query(
                     device, b"hardware.safe-outputs",
                     "leshy.hardware.safe_outputs.v1", "state")
@@ -275,7 +281,7 @@ def main() -> int:
         "schema": RUN_SCHEMA,
         "run_id": secrets.token_hex(16),
         "runner_source_sha256": sha256_file(Path(__file__).resolve()),
-        "passed": bool(args.flash) and not failures,
+        "passed": bool(args.flash or args.reuse_exact_flash) and not failures,
         "gate_eligible": False,
         "checkpoint": "physical_receive_path",
         "failures": failures,
@@ -285,6 +291,7 @@ def main() -> int:
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
             "flashed": args.flash,
+            "exact_flash_reused": args.reuse_exact_flash,
         },
         "expected_cid": args.expected_cid,
         "boot": boot,
