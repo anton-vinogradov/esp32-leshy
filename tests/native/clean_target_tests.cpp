@@ -771,6 +771,8 @@ void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
     report.resetStrobes = 1;
     report.receiveStrobes = 2;
     report.idleStrobes = 4;
+    report.receiveReadyTimeouts = 1;
+    report.transientRetries = 1;
     report.cleanupComplete = false;
     CHECK(validateCc1101PassiveSpectrumReport(report, false));
     CHECK(!validateCc1101PassiveSpectrumReport(report, true));
@@ -784,6 +786,9 @@ void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
     CHECK(!validateCc1101PassiveSpectrumReport(unsafe, true));
     unsafe = report;
     unsafe.commandStrobes = 8;
+    CHECK(!validateCc1101PassiveSpectrumReport(unsafe, true));
+    unsafe = report;
+    unsafe.transientRetries = 2;
     CHECK(!validateCc1101PassiveSpectrumReport(unsafe, true));
 
     Cc1101SpectrumController controller;

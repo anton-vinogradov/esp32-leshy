@@ -123,6 +123,19 @@ def require_waterfall_timing(record: dict[str, Any], label: str) -> None:
                 "2700..3100 ms")
 
 
+def require_cc_retry_accounting(record: dict[str, Any], label: str) -> None:
+    wire = record.get("wire", {})
+    timeouts = wire.get("receive_ready_timeouts")
+    retries = wire.get("transient_retries")
+    samples = record.get("adapter_samples")
+    if not all(isinstance(value, int)
+               for value in (timeouts, retries, samples)) or \
+            retries != timeouts or not 0 <= retries <= samples:
+        raise RuntimeError(
+            f"{label}: invalid bounded RX-ready retry accounting "
+            f"{timeouts!r}/{retries!r}/{samples!r}")
+
+
 def wait_full_waterfall(
         device: PassiveSerial, command: bytes, schema: str,
         timeout: float = 12.0) -> dict[str, Any]:
@@ -324,6 +337,8 @@ def main() -> int:
                     device, b"hardware.cc1101.spectrum", CC_SCHEMA)
                 require_waterfall_timing(
                     reports["cc_spectrum"], "cc_433_waterfall_timing")
+                require_cc_retry_accounting(
+                    reports["cc_spectrum"], "cc_433_retry_accounting")
                 require_exact(reports["cc_spectrum"], {
                     "view": "live", "display_mode": "spectrum",
                     "state": "running", "band": "433", "rx_only": True,
@@ -339,6 +354,8 @@ def main() -> int:
                     timeout=24.0)
                 require_waterfall_timing(
                     reports["cc_waterfall"], "cc_433_waterfall_view_timing")
+                require_cc_retry_accounting(
+                    reports["cc_waterfall"], "cc_433_view_retry_accounting")
                 require_exact(reports["cc_waterfall"], {
                     "view": "live", "display_mode": "waterfall",
                     "state": "running", "band": "433", "rx_only": True,
@@ -388,6 +405,8 @@ def main() -> int:
                     }, f"cc_{band}_spectrum")
                     require_waterfall_timing(
                         fill, f"cc_{band}_waterfall_timing")
+                    require_cc_retry_accounting(
+                        fill, f"cc_{band}_retry_accounting")
                     reports[f"cc_fill_{band}"] = fill
                     returned = action(device, "left")
                     trace.append(returned)

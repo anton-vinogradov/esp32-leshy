@@ -170,17 +170,22 @@ bool BoardCc1101PassiveSpectrum::tune(std::uint32_t frequencyKHz) {
            writeRegister(0x0F, static_cast<std::uint8_t>(word));
 }
 
-bool BoardCc1101PassiveSpectrum::waitForReceive(
+BoardCc1101PassiveSpectrum::ReceiveWaitResult
+BoardCc1101PassiveSpectrum::waitForReceive(
     std::uint16_t timeoutUs) {
     const std::uint64_t started =
         static_cast<std::uint64_t>(esp_timer_get_time());
     for (;;) {
         std::uint8_t state = 0;
-        if (!readStatus(kRegisterMarcState, &state)) return false;
-        if ((state & 0x1FU) == kMarcStateReceive) return true;
+        if (!readStatus(kRegisterMarcState, &state)) {
+            return ReceiveWaitResult::Fault;
+        }
+        if ((state & 0x1FU) == kMarcStateReceive) {
+            return ReceiveWaitResult::Ready;
+        }
         const std::uint64_t now =
             static_cast<std::uint64_t>(esp_timer_get_time());
-        if (now - started > timeoutUs) return false;
+        if (now - started > timeoutUs) return ReceiveWaitResult::Timeout;
     }
 }
 
@@ -302,9 +307,22 @@ bool BoardCc1101PassiveSpectrum::sample(
         drivers::radio::cc1101SpectrumFrequencyKHz(plan, bin);
     output->startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     std::uint8_t rawRssi = 0;
-    const bool sampled = command(kCommandIdle) &&
-        tune(output->frequencyKHz) && command(kCommandReceive) &&
-        waitForReceive(plan.readyTimeoutUs);
+    bool sampled = false;
+    for (std::uint8_t attempt = 0; attempt < 2U && !sampled; ++attempt) {
+        if (!command(kCommandIdle) || !tune(output->frequencyKHz) ||
+            !command(kCommandReceive)) {
+            break;
+        }
+        const ReceiveWaitResult wait = waitForReceive(plan.readyTimeoutUs);
+        if (wait == ReceiveWaitResult::Ready) {
+            sampled = true;
+        } else if (wait == ReceiveWaitResult::Timeout) {
+            ++report_->receiveReadyTimeouts;
+            if (attempt == 0U) ++report_->transientRetries;
+        } else {
+            break;
+        }
+    }
     if (sampled) {
         delayMicroseconds(plan.settleUs);
     }
@@ -339,8 +357,12 @@ bool BoardCc1101PassiveSpectrum::end() {
     if (spiStarted_ && transactionOpen_) idled = command(kCommandIdle);
     active_ = false;
     cleanupPinsAndSpi();
-    const bool complete = idled &&
-        drivers::radio::validateCc1101PassiveSpectrumReport(*report_, true);
+    const bool complete = idled && report_->cleanupComplete &&
+        report_->gpio21StableHigh && report_->rejectedStrobes == 0U &&
+        report_->txStrobes == 0U && report_->paTableWrites == 0U &&
+        report_->fifoWrites == 0U &&
+        report_->commandStrobes == report_->resetStrobes +
+            report_->receiveStrobes + report_->idleStrobes;
     if (!complete) {
         report_->status = Cc1101PassiveSpectrumStatus::CleanupFailed;
     }

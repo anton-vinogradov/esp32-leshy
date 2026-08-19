@@ -205,6 +205,18 @@ def main() -> int:
         require(failures,
                 all(side_effects.get(key, 0) == 0 for key in forbidden),
                 f"{prefix} receive-only side effects mismatch")
+        if prefix == "cc" and pixel_contract:
+            for label, report in (("spectrum", spectrum),
+                                  ("waterfall", waterfall)):
+                wire = report.get("wire", {})
+                timeouts = wire.get("receive_ready_timeouts")
+                retries = wire.get("transient_retries")
+                samples = report.get("adapter_samples")
+                require(failures,
+                        all(isinstance(value, int)
+                            for value in (timeouts, retries, samples)) and
+                        retries == timeouts and 0 <= retries <= samples,
+                        f"CC1101 {label} bounded retry mismatch")
         if "waterfall_fill_target_us" in spectrum or \
                 "waterfall_fill_target_us" in waterfall:
             for label, report in (("spectrum", spectrum),
@@ -236,6 +248,15 @@ def main() -> int:
                         report.get("waterfall_fill_elapsed_us", 0) <=
                         3_000_000,
                     f"CC1101 {band} three-second waterfall mismatch")
+            if pixel_contract:
+                wire = report.get("wire", {})
+                require(failures,
+                        wire.get("receive_ready_timeouts") ==
+                            wire.get("transient_retries") and
+                        isinstance(wire.get("transient_retries"), int) and
+                        0 <= wire.get("transient_retries") <=
+                            report.get("adapter_samples", -1),
+                        f"CC1101 {band} bounded retry mismatch")
             host_elapsed = report.get("host_fill_elapsed_ms", 0)
             require(failures, 2700 <= host_elapsed <= 3100,
                     f"CC1101 {band} host-observed fill mismatch")

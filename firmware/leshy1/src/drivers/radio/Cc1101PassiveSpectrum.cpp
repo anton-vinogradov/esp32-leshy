@@ -92,6 +92,7 @@ bool validateCc1101PassiveSpectrumReport(
         report.fifoWrites != 0U) {
         return false;
     }
+    if (report.transientRetries > report.receiveReadyTimeouts) return false;
     if (report.commandStrobes != report.resetStrobes +
             report.receiveStrobes + report.idleStrobes) {
         return false;

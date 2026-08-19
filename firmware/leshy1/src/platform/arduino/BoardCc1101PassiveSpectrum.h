@@ -26,6 +26,12 @@ public:
     bool active() const { return active_; }
 
 private:
+    enum class ReceiveWaitResult : std::uint8_t {
+        Ready,
+        Timeout,
+        Fault,
+    };
+
     std::uint8_t transfer(std::uint8_t value);
     bool selectCc();
     void deselectCc();
@@ -35,7 +41,7 @@ private:
     bool resetReceiver();
     bool configureReceive();
     bool tune(std::uint32_t frequencyKHz);
-    bool waitForReceive(std::uint16_t timeoutUs);
+    ReceiveWaitResult waitForReceive(std::uint16_t timeoutUs);
     bool gpio21Safe() const;
     void holdTransmitPathsInactive();
     void cleanupPinsAndSpi();

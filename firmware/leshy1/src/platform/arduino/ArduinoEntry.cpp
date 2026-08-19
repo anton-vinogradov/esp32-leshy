@@ -12853,7 +12853,8 @@ void emitCc1101SpectrumReport(Stream& reply) {
         "\"wire\":{\"register_reads\":%lu,\"register_writes\":%lu,"
         "\"spi_bytes_clocked\":%lu,\"command_strobes\":%lu,"
         "\"reset_strobes\":%lu,\"receive_strobes\":%lu,"
-        "\"idle_strobes\":%lu},"
+        "\"idle_strobes\":%lu,\"receive_ready_timeouts\":%lu,"
+        "\"transient_retries\":%lu},"
         "\"side_effects\":{\"rejected_strobes\":%lu,"
         "\"tx_strobes\":%lu,\"pa_table_writes\":%lu,"
         "\"fifo_writes\":%lu,\"storage_writes\":0},"
@@ -12903,6 +12904,8 @@ void emitCc1101SpectrumReport(Stream& reply) {
         static_cast<unsigned long>(report.resetStrobes),
         static_cast<unsigned long>(report.receiveStrobes),
         static_cast<unsigned long>(report.idleStrobes),
+        static_cast<unsigned long>(report.receiveReadyTimeouts),
+        static_cast<unsigned long>(report.transientRetries),
         static_cast<unsigned long>(report.rejectedStrobes),
         static_cast<unsigned long>(report.txStrobes),
         static_cast<unsigned long>(report.paTableWrites),

@@ -95,6 +95,17 @@ def spectrum_failures(
     wire = report.get("wire", {})
     side_effects = report.get("side_effects", {})
     if isinstance(adapter_samples, int):
+        ready_timeouts = wire.get("receive_ready_timeouts")
+        transient_retries = wire.get("transient_retries")
+        if not isinstance(ready_timeouts, int) or \
+                not isinstance(transient_retries, int) or \
+                transient_retries != ready_timeouts or \
+                not 0 <= transient_retries <= adapter_samples:
+            failures.append(
+                "CC1101 bounded RX-ready retry accounting differs: "
+                f"{ready_timeouts!r}/{transient_retries!r}"
+            )
+            transient_retries = 0
         writes = wire.get("register_writes")
         reads = wire.get("register_reads")
         strobes = wire.get("command_strobes")
@@ -102,7 +113,7 @@ def spectrum_failures(
         receive_strobes = wire.get("receive_strobes")
         idle_strobes = wire.get("idle_strobes")
         spi_bytes = wire.get("spi_bytes_clocked")
-        if writes != 16 + 3 * adapter_samples:
+        if writes != 16 + 3 * (adapter_samples + transient_retries):
             failures.append(
                 f"CC1101 write bound differs: {writes!r} for {adapter_samples} samples"
             )
@@ -110,7 +121,8 @@ def spectrum_failures(
             failures.append(
                 f"CC1101 read lower bound differs: {reads!r} for {adapter_samples}"
             )
-        if reset_strobes != 1 or receive_strobes != adapter_samples:
+        if reset_strobes != 1 or \
+                receive_strobes != adapter_samples + transient_retries:
             failures.append(
                 "CC1101 reset/receive strobe accounting differs: "
                 f"{reset_strobes!r}/{receive_strobes!r}"
