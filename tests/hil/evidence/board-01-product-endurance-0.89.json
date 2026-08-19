@@ -1,0 +1,104 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "2f62f98279ec38fe96a23f9337ba7335a507105ac0b8f94b40eaa8a79e7d0493",
+    "elf_bytes": 20150272,
+    "endurance_runner_sha256": "a14d527b3506e987fef6c5570989e4284c281f6bbdb4a679925a4ade36575c66",
+    "factory_bytes": 1564512,
+    "factory_sha256": "30186764716ab510cbb10d0b2ddb7a8fd6505c37c5595a4aebb454f352172cb0",
+    "firmware_bytes": 1498976,
+    "firmware_sha256": "db6378aef217cc2d8d413b3915b9c1a4350e6236503283db652e1cb0ca5042b8",
+    "source_commit": "450d5d886e517c3d12576d9e0fa425898e682535",
+    "survey_runner_sha256": "cad284eff80953d0ee5c7e897a87109ca637e79e8325513147d08b1b1b080dd0",
+    "version": "0.89.0-touch-storage-dma"
+  },
+  "evidence": {
+    "aggregate_original_sha256": "995c1f99b9797e6f60ffe94e3327cc2d8670c516f6270251458b2cab1fe46074",
+    "aggregate_run_sha256": "995c1f99b9797e6f60ffe94e3327cc2d8670c516f6270251458b2cab1fe46074",
+    "artifact_index_sha256": "f5bc777d08bb6d190b147957384ab1a4516c67b7b07c9a75a0fabacf4a8fb342",
+    "bundle": "tests/hil/evidence/board-01-product-endurance-0.89",
+    "cycle_artifact_index_sha256": [
+      "bec1681b558190fefc79c5b894e37801595e93d1af3621b86f8365068234561c",
+      "6d359286375ff4b5084a74cdfb9d077014f4ebcb9a8afd40f05fae8699a099e8",
+      "0e3b15a2d0b17fcb3915bc15ae33694fd276df3e6c3721d766311da99910b932",
+      "34b8632641e3c5f03fe5e4f9b41adf8511c5a29373c88d960ef8ae03c698e41d",
+      "289bc6b81ef290fd999a18e111822fc89a431eec8fe6cad4bdb68d6121051d19",
+      "dc86ea2a6a71fe2db60112d5a1a970c4590e5179fca8351defc82d31f537eb9f",
+      "f366acd649521c2b0de06cb0410b0dcb034305460d999a1279acfc5fb6d210c6",
+      "01455f5e3c226dcb09c0c3aa581bab946e5763076e6c1aba8496c8a4ab1a90b4"
+    ],
+    "cycle_run_sha256": [
+      "d696e098d592d0e20e65fc452ff7fb2d4cfa6f619060101f78d41ba7866593c5",
+      "1f6cc0c9b78c1af80183c40be3f3f3155899c989b60e24cb23fe3eff006ab825",
+      "035ab41b325b899ef555393b0ca53399e0b6de40a75e0914df787d832e1575ff",
+      "4b2fac4fc2307700ccd9fbcd28866cc006dafe4372eadb60c3855a650af7d47a",
+      "4768c53b9ce1a31735eec38ad1efe1ac72c44c7a197a7f30d33b0cec937fbaff",
+      "f96ab002f6d836d525ff24628acc5d7ab4cb86a37109b0129122a1f0a3e934b3",
+      "cf404e29fcb349ecee7e7f4e8a10fcbcbed2e825dbad5942ce6623f484ccb444",
+      "4229b0a2775c7d8ff432212c463872744572690979af4b7f6988ffdb89f5d9c7"
+    ],
+    "files": 160
+  },
+  "gate_eligible": true,
+  "limits": {
+    "controlled_physical_power_cut_complete": false,
+    "demo_s4_complete": false,
+    "release_1_0_complete": false,
+    "release_endurance_complete": true,
+    "rf_instrumented_no_tx_complete": false,
+    "second_board_complete": false
+  },
+  "media": {
+    "cid": "FE343253440000002000000055019CB7",
+    "disposable_test_card": true,
+    "product_root": "/leshy/sessions/v1"
+  },
+  "policy": {
+    "duration_seconds": 2700.0,
+    "interval_seconds": 340.0,
+    "maximum_cycles": 12,
+    "maximum_release_elapsed_seconds": 3600,
+    "measured_elapsed_within_budget": true,
+    "minimum_cycles": 8,
+    "release_endurance_requested": true,
+    "release_policy_failures": [],
+    "release_policy_satisfied": true,
+    "required_release_duration_seconds": 2700,
+    "required_release_minimum_cycles": 8
+  },
+  "profile": "esp32-div-v2-n16",
+  "schema": "leshy.product_endurance_acceptance.v1",
+  "status": "pass_release_endurance",
+  "summary": {
+    "ble_observations": 256,
+    "ble_scan_dropped": 0,
+    "boot_attempts": 17,
+    "boot_timeout_restarts": 0,
+    "boot_transient_retries": 1,
+    "captures": 32,
+    "cold_boots": 16,
+    "cycles_completed": 8,
+    "elapsed_seconds": 2799.845075,
+    "final_generation": 94,
+    "final_lease_mask": 0,
+    "final_observations": 49,
+    "final_owner": "none",
+    "forwarded_observations": 367,
+    "generation_after": 94,
+    "generation_before": 86,
+    "heap": [
+      231772,
+      166812,
+      147460
+    ],
+    "heap_drift_bytes": 0,
+    "maximum_ready_marker_ms": 2050.4165831953287,
+    "pipeline_dropped": 0,
+    "product_start_identity_attempts": 8,
+    "product_start_identity_transient_retries": 0,
+    "scan_dropped": 0,
+    "total_observations": 367,
+    "wifi_observations": 111
+  },
+  "trust_status": "unsigned_local_result"
+}

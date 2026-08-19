@@ -138,6 +138,14 @@ workspace возвращает 4 608 B static RAM. Тот же physical plan-v7 
 minimum 133 884 B против floor 131 072 B при неизменном functional/cleanup evidence.
 Это закрывает heap issue, но не два оставшихся gate `DEMO-S4`.
 
+Exact 0.88 принимает calibrated XPT2046 touch как второй неблокирующий input path
+поверх того же Navigator и finger-sized rows. Exact 0.89 затем закрывает
+release-endurance gate: 8/8 полных Wi-Fi+BLE product cycles за 2 799,845 s продвигают
+generation 86→94, передают 367 observations через 16 cold boots, сохраняют heap и
+exact CID, фиксируют zero drops/timeouts и завершают каждый цикл без owner/lease.
+Lifecycles radio и SD не пересекаются. Controlled physical power-cut recovery теперь
+единственный оставшийся gate `DEMO-S4`; сам этап ещё не завершён.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases.

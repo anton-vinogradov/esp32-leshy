@@ -539,6 +539,12 @@ python tools/run_1x_product_endurance_hil.py \
 `gate_eligible=false`. Обычный release gate ожидаемо занимает около 47–50 минут;
 двухцикловый regression имеет execution budget десять минут.
 
+Release cycles сохраняют ровно `setup`, `paused`, `committed` и `export`: `paused` —
+стабильное RF-off состояние browser после одного Wi-Fi и одного BLE scan. Firmware
+собирает observations в RAM, полностью останавливает оба radio adapter, повторно
+идентифицирует exact CID и только затем открывает SD для atomic commit, поэтому
+release evidence fail closed при пересечении lifecycles radio и storage.
+
 `E-HIL-059` — первый сохранённый smoke runner: три цикла, шесть cold boots,
 generation 12→15, 51/51 observations, zero drops/heap drift и final lease 0. Он
 намеренно не считается endurance evidence и предшествует текущей policy
@@ -781,3 +787,11 @@ slice, а не release promotion. 18 августа 2026 года критери
 на готовом exact cross-radio passive candidate. Прежний run 8 h остаётся только
 необязательной extended qualification после крупных storage/runtime/radio changes и
 никогда не блокирует обычный release.
+
+Exact 0.89 — первый принятый результат по этой policy. `E-HIL-114` сохраняет exact
+source/binaries, восемь child runs и 32 TFT captures в indexed bundle из 160 файлов.
+Run длится 2 799,845 s, продвигает generation 86→94, передаёт 111 Wi-Fi плюс 256 BLE
+observations через 16 cold boots, сохраняет heap точно 231 772/166 812/147 460 B,
+фиксирует zero drops/timeouts и завершает каждый цикл с owner/lease `none`/`0`.
+Independent verifier `E-AUTO-054` заново выводит каждый claim. Это закрывает release
+endurance; controlled physical power cut остаётся отдельным gate S4.

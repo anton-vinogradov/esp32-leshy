@@ -137,6 +137,14 @@ workspace recovers 4,608 B static RAM. The same physical plan-v7 run passes at a
 133,884 B minimum against the 131,072 B floor with unchanged functional/cleanup
 evidence. This closes the heap issue, not either remaining `DEMO-S4` gate.
 
+Exact 0.88 accepts calibrated XPT2046 touch as a second non-blocking input path over
+the same Navigator and finger-sized rows. Exact 0.89 then closes the release-endurance
+gate: 8/8 complete Wi-Fi+BLE product cycles over 2,799.845 s advance generation
+86→94, forward 367 observations through 16 cold boots, preserve heap and exact CID,
+record zero drops/timeouts, and finish each cycle with no owner or lease. Radio and
+SD lifecycles do not overlap. Controlled physical power-cut recovery is now the only
+remaining `DEMO-S4` gate; the stage itself is not yet complete.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

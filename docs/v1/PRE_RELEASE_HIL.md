@@ -539,6 +539,12 @@ operational budget. Short development runs remain `gate_eligible=false` even whe
 they pass. A normal release gate is expected to finish in roughly 47–50 minutes;
 a two-cycle regression has a ten-minute execution budget.
 
+Release cycles retain exactly `setup`, `paused`, `committed`, and `export`: `paused`
+is the stable RF-off browser state after one Wi-Fi and one BLE scan. The firmware
+collects observations in RAM, tears down both radio adapters, re-identifies the exact
+CID, and only then opens SD for atomic commit, so release evidence fails if radio and
+storage lifecycles overlap.
+
 `E-HIL-059` is the first retained runner smoke: three cycles, six cold boots,
 generation 12→15, 51/51 observations, zero drops/heap drift, and final lease 0. It is
 deliberately not endurance evidence. It also predates the current
@@ -787,3 +793,12 @@ measured elapsed time bounded by one operational hour, on the completed exact
 cross-radio passive candidate. The prior 8 h run remains available only as optional
 extended qualification after major storage/runtime/radio changes and never blocks an
 ordinary release.
+
+Exact 0.89 is the first accepted result under that policy. `E-HIL-114` retains the
+exact source/binaries, eight child runs and 32 TFT captures in a 160-file indexed
+bundle. The run lasts 2,799.845 s, advances generation 86→94, forwards 111 Wi-Fi plus
+256 BLE observations through 16 cold boots, keeps heap exactly
+231,772/166,812/147,460 B, records zero drops/timeouts and ends every cycle with
+owner/lease `none`/`0`. The independent `E-AUTO-054` verifier re-derives every claim.
+This closes release endurance; controlled physical power cut remains a separate S4
+gate.
