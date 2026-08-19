@@ -24,6 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
+          # Retained acceptance checkers intentionally bind runner/source blobs to
+          # their historical exact-candidate commits via `git show <sha>:<path>`.
+          fetch-depth: 0
           persist-credentials: false
       - name: Test hardware-independent core
         run: tools/test.sh
