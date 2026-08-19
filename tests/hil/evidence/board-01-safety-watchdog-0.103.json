@@ -1,0 +1,72 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "145c35089f0496c7b50540e9d94f81d45048716cf7a0532ab1fd3dcb3374310a",
+    "factory_bytes": 1600608,
+    "factory_sha256": "d8b49f4b5ee84c18fa18b01814f7ab0f2fc35aa76bd77147de699492ed06766f",
+    "firmware_bytes": 1535072,
+    "firmware_sha256": "569a72e3bfae79e353a03e65865c4c58a3c498e3411d6fb1a7905bbf2e0183d5",
+    "iram_total_bytes": 16384,
+    "iram_used_bytes": 16384,
+    "linked_flash_bytes": 1534668,
+    "map_sha256": "637037076c88ceabb0dde657303ce3a55a2528317c32fee7038fc9fd35f625af",
+    "rtc_noinit_bytes": 108,
+    "run_sha256": "47aa60d3af0101b75d806d50d858c177ae31e367acc2a9012a824259b76bdc58",
+    "runner_commit": "28630901cf84fb6df11956d2ddbb3d75924886fa",
+    "runner_sha256": "f368a6eae604f318cdfb799a9a85398093ece8637501d4f2e4e194c1653540d8",
+    "schema": "leshy.safety_watchdog.provenance.v1",
+    "source_commit": "28630901cf84fb6df11956d2ddbb3d75924886fa",
+    "static_ram_bytes": 171496,
+    "version": "0.103.0-safety-supervisor"
+  },
+  "coverage": {
+    "cc1101_independent_hard_kill": false,
+    "full_power_cycle_latch_retention": false,
+    "main_loop_watchdog": true,
+    "physical_rail_kill": false,
+    "physical_rf_stop_instrumented": false,
+    "software_controlled_outputs_quiesced": true,
+    "software_restart_latch_retention": true,
+    "thermal_voltage_current_fault_detection": false,
+    "worker_heartbeat_supervision": false
+  },
+  "evidence": {
+    "artifact_index_sha256": "af221226cdc1590be76b53fe5f09144606496ee1f9a7ae4a9866720f0f0ae0ae",
+    "files": 19,
+    "provenance_sha256": "2432d8037c711026fc29a7b36b9cc570c346384fa544333aa93154683628c548",
+    "run_sha256": "47aa60d3af0101b75d806d50d858c177ae31e367acc2a9012a824259b76bdc58",
+    "tft_states": 3
+  },
+  "evidence_ids": [
+    "E-BUILD-104",
+    "E-AUTO-068",
+    "E-HIL-128",
+    "E-SAFETY-001"
+  ],
+  "schema": "leshy.safety_watchdog_acceptance.v1",
+  "status": "pass_main_loop_watchdog_checkpoint",
+  "verified": {
+    "automatic_clear": false,
+    "automatic_screenshots": true,
+    "buzzer_inactive": true,
+    "catalog_generation": 95,
+    "catalog_observations": 0,
+    "cc1101_hard_kill_available": false,
+    "clear_reset_reason_code": 3,
+    "emergency_quiesce_count": 1,
+    "exact_cid": "FE343253440000002000000055019CB7",
+    "final_lease_mask": 0,
+    "final_owner": "none",
+    "latched_restart_reset_reason_code": 3,
+    "manual_button_presses": 0,
+    "nrf_ce_inactive": true,
+    "physical_rail_kill_available": false,
+    "software_only": true,
+    "storage_physical_write_calls": 0,
+    "thermal_sensor_available": false,
+    "trip_count": 1,
+    "watchdog_observed_reset_ms": 5810.775,
+    "watchdog_reset_reason_code": 6,
+    "watchdog_timeout_ms": 5000
+  }
+}

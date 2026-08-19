@@ -12,7 +12,7 @@
 
 - **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, exact checkpoints функций/endurance S4 0.71…0.100, exact 0.101 с шестью controlled physical power cuts по всем границам commit, закрывающим `DEMO-S4`, и первым checkpoint S5 exact 0.102 для Sub-GHz RAW receive.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, exact checkpoints функций/endurance S4 0.71…0.100, exact 0.101 с шестью controlled physical power cuts по всем границам commit, закрывающим `DEMO-S4`, первым checkpoint S5 exact 0.102 для Sub-GHz RAW receive и cross-cutting runtime safety supervision exact 0.103.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
@@ -65,6 +65,17 @@
   lease 0. Это доказывает физический receive/no-signal path, но не capture известного
   burst: successful physical pulses, persistence, offline Library CSV и FSK/GDO0
   остаются открыты, CAP-030 не завершён.
+  Exact 0.103 добавляет первый cross-cutting safety checkpoint, не объявляя S5
+  завершённым: permanent panic Task-WDT 5 s контролирует main loop; его IRAM ISR
+  переводит active-high buzzer и все объявленные nRF CE pads в inactive, публикует
+  exact-app torn-write-resistant RTC latch и загружает blocking Safe Mode без product
+  workers и automatic clear. Board-01 реально сбрасывается watchdog через
+  5 810,775 ms с reason 6, сохраняет тот же latch one-trip/one-quiesce после явного
+  software restart с reason 3, снимает оба состояния Safe Mode, очищает latch только
+  двумя Right/OK actions, сохраняет exact CID и catalog 95/0 с zero storage writes и
+  завершает на Home с owner/lease `none`/`0`. Это software safety layer, а не
+  physical power или CC1101 hard kill; worker heartbeats, thermal/current/voltage
+  sensing и independent physical-stop evidence остаются открыты.
 
 ## Состояние этапов
 
@@ -75,7 +86,7 @@
 | S2 | `done` | независимая target, unified five-key плюс calibrated touch input/TFT capture, finger-sized common rows, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
 | S4 | `done` | exact 0.71…0.101 принимают passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, финальный Home из реализованных задач, компактный status, полноэкранные RF views, all-available receiver-paced водопады и шесть реальных power cuts по всем границам SessionStore commit с read-only recovery и zero product mutation | — (`E-GATE-005`) |
-| S5 | `active` | exact 0.102 добавляет bounded receive-only Sub-GHz RAW OOK capture, интеграцию SessionStore v5/Library CSV в host tests и физический CC1101 no-signal checkpoint; принятая platform S4 для storage/radio/UI переиспользуется | доказать known physical burst → atomic save → offline Library CSV, добавить FSK/GDO0, затем завершить IR/PN532/GPS/power workflows и проверить PR-014 |
+| S5 | `active` | exact 0.102 добавляет bounded receive-only Sub-GHz RAW OOK capture и physical CC1101 no-signal checkpoint; exact 0.103 добавляет cross-cutting main-loop watchdog, retained Safe Mode и explicit clear, принятая platform S4 переиспользуется | доказать known physical burst → atomic save → offline Library CSV, добавить worker heartbeat supervision и physical-stop evidence, затем завершить FSK/GDO0, IR/PN532/GPS/power workflows и проверить PR-014 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
 | S8 | `planned` | release gates определены | требуется gate S7 |
@@ -105,7 +116,7 @@
 | Всё штатное железо ESP32-DIV | `в работе / S5` — exact 0.102 начинает CAP-030 bounded user path CC1101 OOK RAW, host-proven v5 persistence/CSV и physical no-signal RX evidence; known-burst persistence, FSK, IR, PN532, GPS и power workflows остаются открыты | завершить реальный Sub-GHz capture round trip, затем probe → capture/observe → Library → inspect/export для остальных применимых модулей |
 | Targets, compare и companion | `впереди / S6` — product model и границы определены, пользовательские сценарии ещё не реализованы | две Survey сравниваются через evidence-backed Targets и тот же локальный Web/USB companion |
 | Safe Lab и расширения | `впереди / S7` — safety/resource boundaries приняты, active workflows и SDK ещё не реализованы | feature-complete каталог, permissioned extensions и доказанный panic/timeout stop |
-| Надёжность и доставка 1.0 | `впереди / S8` — release HIL концепт и часть инфраструктуры существуют, но это не release evidence | signed OTA/rollback/recovery, полный HIL/Self-Test, mixed workload с часовым бюджетом и два зелёных RC |
+| Надёжность и доставка 1.0 | `впереди / S8` — exact 0.103 доказывает первый software safety checkpoint (main-loop watchdog, retained Safe Mode и explicit clear), но worker supervision, physical hard-stop evidence и release qualification остаются открыты | worker deadlines, signed OTA/rollback/recovery, полный HIL/Self-Test, mixed workload с часовым бюджетом и два зелёных RC |
 
 Итого по этапам: S0–S4 закрыты, S5 активен, S6–S8 впереди. По пользовательской
 ценности уже существуют законченный Survey→Library путь, настоящий packet Capture
@@ -723,6 +734,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-AUTO-066 / E-HIL-126 / E-STORAGE-028 / E-GATE-005 | board-01 exact 0.101 physical power-cut по шести boundaries и `DEMO-S4` | pass: один exact flashed candidate сначала проходит Home/RF regression на 17 states с unchanged product generation 95/0 и heap 211 580/146 472/127 120 B. Software-reset preflight затем проверяет boundary 1. Physical matrix наблюдает шесть реальных USB disconnect длительностью 5,216…6,589 s на write/sync boundaries payload, manifest и head; каждый раз возвращается та же USB identity с `ESP_RST_POWERON`. Read-only recovery даёт generations 1/1/1/1/1/2 и три observations, неизменные prior CRC, zero recovery bytes/file/directory syncs, zero TX, отсутствие чтения user names/data, полный cleanup и lease 0 в [machine-checked artifact](../../tests/hil/evidence/board-01-sd-power-cut-0.101.json) | закрывает ST-HIL-A08 и единственный оставшийся gate `DEMO-S4` вместе с принятым endurance 0.89. S4 закрыт, S5 активен; это evidence одной пары board/card, не release promotion и не claim совместимости всех носителей |
 | E-BUILD-103 | exact build `0.102.0-subghz-raw-rx` | pass: static RAM 171 400 B, linked flash 1 527 836 B; app/factory 1 528 092/1 593 372 B; app `6e5b858d…1ed8`, factory `bb1de521…33c6`, ELF/app identity `a8792b4b…d88`; exact source commit `d8c52f7` | +15 136 B linked flash и +1 272 B static RAM против 0.101 за bounded RAW capture, schema-v5 pulse storage, Library CSV и пользовательский four-band flow; exact checkpoint S5, не release build |
 | E-AUTO-067 / E-HIL-127 / E-RADIO-012 / E-STORAGE-029 | board-01 exact 0.102, первый slice Sub-GHz RAW receive | pass checkpoint: public Actions открывают Sub-GHz→Захват RAW→433 МГц; реальный CC1101 receive path делает 171 434 RSSI samples за 10 000 007 us и честно заканчивается `timed_out` без выдуманных pulses или CSV. Counters TX/PATABLE/FIFO/storage-write равны нулю; exact CID и generation 95/0, heap 210 308/145 076/125 848 B, input zero-drop/error, buzzer inactive, семь TFT states и final Home lease 0 связаны в [machine-checked artifact](../../tests/hil/evidence/board-01-subghz-raw-0.102.json). Native tests независимо покрывают successful/truncated pulse capture, v5 codec/store, corrupt rejection и CSV | доказывает только physical receive/no-signal path и software persistence contract. Known transmitter не использовался; successful physical burst, explicit atomic save, cold Library CSV и FSK/GDO0 остаются открыты, RF payload не сохраняется, TX/replay относится к S7, CAP-030 не завершён |
+| E-BUILD-104 | exact build `0.103.0-safety-supervisor` | pass: static RAM 171 496 B, linked flash 1 534 668 B; app/factory 1 535 072/1 600 608 B; app `569a72e3…83d5`, factory `d8b49f4b…766f`, ELF/app identity `145c3508…10a`; exact source/runner commit `2863090` | +6 832 B linked flash, +96 B static RAM и +6 980/+7 236 B images против 0.102 за pure safety core, permanent panic WDT, IRAM emergency GPIO path, exact-app RTC latch, Safe Mode и connected runner. RTC no-init занимает 108 B; dedicated IRAM region 16 384 B использован ровно на 100% и не имеет запаса роста |
+| E-AUTO-068 / E-HIL-128 / E-SAFETY-001 | board-01 exact 0.103 main-loop safety supervisor | pass checkpoint: exact flashed candidate взводится на Home, настоящий Task-WDT сбрасывает его через 5 810,775 ms с reason 6, retained latch one-trip/one-quiesce `runtime_watchdog` входит в Safe Mode с inactive buzzer GPIO2 и nRF CE GPIO14/15/47, без owner/lease и product recovery writes. Отдельный output-quiesced software restart возвращается с reason 3 и тем же latch; две публичные Right/OK Actions показывают и подтверждают clear, затем exact CID/catalog 95/0 открывается неизменным, final Home имеет owner/lease none/0. Три реальных TFT states, binaries, transcripts и source-bound runner сохранены в [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json) | снижает R-018 только для main-loop hangs и software-controlled buzzer/nRF CE. Не предоставляет worker heartbeats, retention latch при полном снятии питания, thermal/current/voltage detection, physical rail/PA kill, CC1101 hard kill или instrumented RF-stop proof; это safety checkpoint S5, не release promotion |
 
 ## Известные неопределённости и риски
 

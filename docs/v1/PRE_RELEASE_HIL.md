@@ -126,6 +126,12 @@ product recovery, two-step public UI clear, unchanged catalog/CID, final Home, a
 lease zero. The runner does not use native-USB DTR/RTS as evidence for latch
 persistence.
 
+Exact 0.103 board-01 acceptance is retained under `E-AUTO-068`/`E-HIL-128`/
+`E-SAFETY-001` in the
+[machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json).
+It is a feature checkpoint for the software main-loop stop path, not an S8 release
+qualification or a hardware hard-stop claim.
+
 ## Host-runner side
 
 The suite is a versioned declarative manifest. Each scenario declares:

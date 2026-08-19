@@ -126,6 +126,12 @@ python tools/run_1x_safety_watchdog_hil.py \
 recovery, двухшаговый clear через публичный UI, неизменные catalog/CID, final Home и
 lease zero. Runner не использует native-USB DTR/RTS как evidence persistence latch.
 
+Acceptance exact 0.103 на board-01 сохранён как `E-AUTO-068`/`E-HIL-128`/
+`E-SAFETY-001` в
+[machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json).
+Это feature checkpoint software main-loop stop path, а не release qualification S8
+или claim hardware hard-stop.
+
 ## Часть host-runner
 
 Suite хранится как versioned declarative manifest. Каждый scenario задаёт:

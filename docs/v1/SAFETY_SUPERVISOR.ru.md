@@ -105,6 +105,14 @@ Arduino adapter и не выполняет SPI/filesystem cleanup. Task-context 
 automatic recovery, запись storage, неожиданный owner или недоступный final Home —
 terminal failure.
 
+Принятый checkpoint board-01: exact `0.103.0-safety-supervisor`, source/runner commit
+`2863090`, `E-BUILD-104`/`E-AUTO-068`/`E-HIL-128`/`E-SAFETY-001`. Настоящий panic
+Task-WDT reset произошёл через 5 810,775 ms с reason 6; один retained trip/quiesce
+пережил software restart с reason 3, сняты три TFT states, catalog 95/0 и exact CID
+не изменились, explicit clear завершился на Home с lease zero. В
+[machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json)
+также связаны все negative hardware claims ниже.
+
 ## Открытая safety-работа
 
 - добавить heartbeat/deadline supervision worker tasks и будущих transmit leases;

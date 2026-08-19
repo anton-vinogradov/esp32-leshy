@@ -1,0 +1,19 @@
+{
+  "app_elf_sha256": "145c35089f0496c7b50540e9d94f81d45048716cf7a0532ab1fd3dcb3374310a",
+  "factory_bytes": 1600608,
+  "factory_sha256": "d8b49f4b5ee84c18fa18b01814f7ab0f2fc35aa76bd77147de699492ed06766f",
+  "firmware_bytes": 1535072,
+  "firmware_sha256": "569a72e3bfae79e353a03e65865c4c58a3c498e3411d6fb1a7905bbf2e0183d5",
+  "iram_total_bytes": 16384,
+  "iram_used_bytes": 16384,
+  "linked_flash_bytes": 1534668,
+  "map_sha256": "637037076c88ceabb0dde657303ce3a55a2528317c32fee7038fc9fd35f625af",
+  "rtc_noinit_bytes": 108,
+  "run_sha256": "47aa60d3af0101b75d806d50d858c177ae31e367acc2a9012a824259b76bdc58",
+  "runner_commit": "28630901cf84fb6df11956d2ddbb3d75924886fa",
+  "runner_sha256": "f368a6eae604f318cdfb799a9a85398093ece8637501d4f2e4e194c1653540d8",
+  "schema": "leshy.safety_watchdog.provenance.v1",
+  "source_commit": "28630901cf84fb6df11956d2ddbb3d75924886fa",
+  "static_ram_bytes": 171496,
+  "version": "0.103.0-safety-supervisor"
+}

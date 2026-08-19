@@ -1,0 +1,50 @@
+E (52107) task_wdt: Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:
+E (52107) task_wdt:  - loopTask (CPU 1)
+E (52107) task_wdt: Tasks currently running:
+E (52107) task_wdt: CPU 0: IDLE0
+E (52107) task_wdt: CPU 1: IDLE1
+E (52107) task_wdt: Aborting.
+E (52107) task_wdt: Print CPU 1 backtrace
+
+
+
+
+Backtrace: 0x4037f4df:0x3fccbbe0 0x420f6631:0x3fccbc00 0x40383d4b:0x3fccbc20 0x40382bf5:0x3fccbc40
+
+
+
+
+ELF file SHA256: 145c35089
+
+Rebooting...
+ESP-ROM:esp32s3-20210327
+Build:Mar 27 2021
+rst:0xc (RTC_SW_CPU_RST),boot:0x8 (SPI_FAST_FLASH_BOOT)
+Saved PC:0x4203e2dc
+SPIWP:0xee
+mode:DIO, clock div:1
+load:0x3fce2820,len:0x10cc
+load:0x403c8700,len:0xc2c
+load:0x403cb700,len:0x30c0
+entry 0x403c88b8
+
+{"schema":"leshy.boot.v1","kind":"ready","target":"clean_1x_measure","version":"0.103.0-safety-supervisor","profile":"esp32-div-v2-n16","profile_revision":"S1-2026-08-16","app_elf_sha256":"145c35089f0496c7b50540e9d94f81d45048716cf7a0532ab1fd3dcb3374310a","legacy_sources":false,"setup_enter_us":26850,"runtime_ready_us":28070,"display_ready_us":300986,"input_ready_us":301913,"interactive_ready_us":381587,"reset_reason_code":6,"flash_bytes":16777216,"psram_found":false,"psram_bytes":0,"heap_total":209956,"heap_free":161296,"heap_min_free":160256,"buzzer_safety_configured":true,"buzzer_inactive":true,"input_detected":true,"input_raw":255,"input_probe_attempts":1,"input_probe_transient_retries":0}
+{"schema":"leshy.boot.v1","kind":"capability","key":"board.profile","state":"available","evidence":"runtime_flash_psram","reason":"profile_match"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"display.tft","state":"declared","evidence":"render_attempted","reason":"awaiting_visual_observation"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"output.buzzer.safe","state":"available","evidence":"gpio2_output_low_runtime_check","reason":"inactive_boot_invariant"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"safety.supervisor","state":"available","evidence":"panic_task_wdt_plus_rtc_latch","reason":"latched_safe_mode"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"input.pcf8574","state":"detected","evidence":"i2c_read_only_0x20","reason":"raw_byte_available"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"input.touch","state":"available","evidence":"leshy1","reason":"v1_calibration_loaded"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"radio.wifi","state":"declared","evidence":"esp32_s3_builtin","reason":"passive_contract_ready_driver_not_started"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"capture.wifi_passive","state":"available","evidence":"explicit_promiscuous_rx_only_adapter","reason":"bounded_ram_capture_ready"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"capture.wifi_persistent","state":"fault","evidence":"schema_v4_exact_media_background_commit","reason":"capture_worker_or_exact_media_unavailable"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"radio.ble","state":"declared","evidence":"esp32_s3_builtin_receive_only","reason":"product_worker_or_media_unavailable"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"survey.simulated","state":"fault","evidence":"E-SURVEY-001_golden_trace","reason":"golden_data_invalid"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"library.simulated","state":"fault","evidence":"E-STORAGE-005_ram_reopen","reason":"ram_fixture_invalid"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"storage.sd","state":"unknown","evidence":"E-STORAGE-006_gpio38_non_authoritative","reason":"invalid_discovery_record"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"storage.atomicity","state":"declared","evidence":"E-STORAGE-001+guard_policy","reason":"filesystem_backend_not_started"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"assembly.gps","state":"unknown","evidence":"default_profile","reason":"not_declared_no_autodetect"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"assembly.pn532","state":"unknown","evidence":"default_profile","reason":"not_declared_no_autodetect"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"shield.ir","state":"unknown","evidence":"HW-U09","reason":"explicit_profile_required"}
+{"schema":"leshy.boot.v1","kind":"capability","key":"shield.receivers","state":"declared","evidence":"board_profile_full_guided_identity_probe","reason":"nrf1_nrf2_cc1101_read_only_probe_available"}
+{"schema":"leshy.boot.v1","kind":"help","commands":["hil.begin <session-id> <app-elf-sha256>","hil.end <session-id>","metrics","inventory","hardware.safe-outputs","ping","safety.state","safety.watchdog-test confirm","safety.clear confirm","hardware.shield.receivers","hardware.nrf24.spectrum","hardware.cc1101.spectrum","ui.state","ui.key <action>","survey.browser","capture.state","capture.export.pcap","capture.subghz.state","capture.subghz.export.csv","input.state","touch.state","ui.touch <x> <y>","touch.calibrate confirm","self-test.report","self-test.active-rf","self-test.active-artifact","ui.capture","storage.contract","storage.guard","storage.discovery","storage.mount.policy","storage.product.boot-recovery","storage.product.boot-watchdog-test confirm","storage.product.unenroll confirm","survey.product.admission","survey.product.test-source-unavailable once|clear","survey.product.test-runtime-unavailable wifi|ble|clear","storage.littlefs.parity disposable-ota1 <OTA1-SHA256> <run-id>","storage.littlefs.reset disposable-ota1 <OTA1-SHA256> <run-id> <1..6>","storage.littlefs.reset recover read-only <OTA1-SHA256> <run-id> <1..6>","storage.sd.protocol","storage.sd.identification.fixture","storage.sd.transport.fixture","storage.sd.wire","storage.sd.identify disposable-read-only","storage.sd.inspect-lba0 disposable-read-only","storage.sd.inspect-boot disposable-read-only","storage.sd.inspect-fsinfo disposable-read-only","storage.sd.inspect-fat-reserved disposable-read-only","storage.sd.inspect-root-cluster disposable-read-only","storage.sd.readonly-mount disposable-read-only <CID32>","storage.product.enroll disposable-read-only <CID32>","storage.product.bootstrap disposable-write <CID32>","storage.sd.session-store disposable-write <CID32> <run-id>","storage.sd.session-store throughput disposable-write <CID32> <run-id>","storage.sd.session-store batch-throughput disposable-write <CID32> <run-id>","storage.sd.session-store reset disposable-write <CID32> <run-id> <1..6>","storage.sd.session-store recover disposable-read-only <CID32> <run-id> <1..6>","storage.sd.session-store power-cut disposable-write <CID32> <run-id> <1..6>","storage.sd.session-store power-cut-recover disposable-read-only <CID32> <run-id> <1..6>","survey.wifi.passive-persist disposable-write <CID32> <run-id> <1..8>","survey.wifi.passive-ingress measure passive-only <1..32>","survey.contract","session.fixture","session.store.fixture","library.fixture","library.export","library.capture","library.export.csv","library.export.pcap"]}

@@ -105,6 +105,14 @@ The test is not a simulation and must retain the reset transcript. A missing res
 invalid record, automatic recovery, writable storage activity, unexpected owner,
 or unavailable final Home is a terminal failure.
 
+Accepted board-01 checkpoint: exact `0.103.0-safety-supervisor`, source/runner commit
+`2863090`, `E-BUILD-104`/`E-AUTO-068`/`E-HIL-128`/`E-SAFETY-001`. The real panic
+Task-WDT reset occurred after 5,810.775 ms with reason 6; one retained trip/quiesce
+survived a reason-3 software restart, three TFT states were captured, catalog 95/0
+and exact CID remained unchanged, and explicit clear ended at Home with lease zero.
+The [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json)
+also binds all negative hardware claims below.
+
 ## Open safety work
 
 - add heartbeat/deadline supervision for worker tasks and future transmit leases;

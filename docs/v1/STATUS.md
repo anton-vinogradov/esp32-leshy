@@ -12,7 +12,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S5 — Complete ESP32-DIV hardware`.
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3`, exact 0.71…0.100 S4 feature/endurance checkpoints, exact 0.101 six-boundary controlled physical power-cut recovery closing `DEMO-S4`, and the first exact 0.102 S5 Sub-GHz RAW receive checkpoint.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3`, exact 0.71…0.100 S4 feature/endurance checkpoints, exact 0.101 six-boundary controlled physical power-cut recovery closing `DEMO-S4`, the first exact 0.102 S5 Sub-GHz RAW receive checkpoint, and exact 0.103 cross-cutting runtime safety supervision.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** establish the S5 stock-hardware completeness baseline and
   advance each present module through probe → observe/capture → Library → inspect/export.
@@ -63,6 +63,17 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   lease 0. This proves the physical receive/no-signal path, not a known-burst capture:
   successful physical pulses, persistence, offline Library CSV and FSK/GDO0 remain
   open and CAP-030 is not complete.
+  Exact 0.103 adds the first cross-cutting safety checkpoint without claiming S5
+  completion: a permanent 5 s panic Task-WDT supervises the main loop; its IRAM ISR
+  drives the active-high buzzer and all declared nRF CE pads inactive, publishes an
+  exact-app torn-write-resistant RTC latch, and boots into a blocking Safe Mode with
+  no product workers or automatic clear. Board-01 resets from the real watchdog in
+  5,810.775 ms with reason 6, retains the same one-trip/one-quiesce latch across an
+  explicit software restart with reason 3, captures both Safe Mode states, clears
+  only through two Right/OK actions, preserves exact CID and catalog 95/0 with zero
+  storage writes, and ends at Home with owner/lease `none`/`0`. The result is a
+  software safety layer, not a physical power or CC1101 hard kill; worker heartbeats,
+  thermal/current/voltage sensing and independent physical-stop evidence remain open.
 
 ## Stage state
 
@@ -73,7 +84,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S2 | `done` | independent target, capability Home, unified five-key plus calibrated touch input/TFT capture, finger-sized common rows, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
 | S4 | `done` | exact 0.71…0.101 accept passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, implemented-only final Home, compact truthful status, full-width RF views, all-available receiver-paced waterfalls, and six real power cuts across every SessionStore commit boundary with read-only recovery and zero product mutation | — (`E-GATE-005`) |
-| S5 | `active` | exact 0.102 adds bounded receive-only Sub-GHz RAW OOK capture, SessionStore v5/Library CSV integration in host tests, and a physical CC1101 no-signal checkpoint; the accepted S4 storage/radio/UI platform remains reusable | prove a known physical burst → atomic save → offline Library CSV, add FSK/GDO0, then complete IR/PN532/GPS/power workflows and verify PR-014 |
+| S5 | `active` | exact 0.102 adds bounded receive-only Sub-GHz RAW OOK capture and a physical CC1101 no-signal checkpoint; exact 0.103 adds a cross-cutting main-loop watchdog, retained Safe Mode and explicit clear while the accepted S4 platform remains reusable | prove a known physical burst → atomic save → offline Library CSV, add worker heartbeat supervision and physical-stop evidence, then complete FSK/GDO0, IR/PN532/GPS/power workflows and verify PR-014 |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
 | S8 | `planned` | release gates are defined | requires S7 gate |
@@ -103,7 +114,7 @@ items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 | Complete standard ESP32-DIV hardware | `active / S5` — exact 0.102 starts CAP-030 with a bounded CC1101 OOK RAW user path, host-proven v5 persistence/CSV and physical no-signal RX evidence; known-burst persistence plus FSK, IR, PN532, GPS and power workflows remain open | complete the real Sub-GHz capture round trip, then probe → capture/observe → Library → inspect/export for every remaining applicable module |
 | Targets, compare and companion | `ahead / S6` — product model and boundaries exist, user workflows are not implemented | compare two Surveys through evidence-backed Targets and the same local Web/USB companion |
 | Safe Lab and extensions | `ahead / S7` — safety/resource boundaries are accepted, active workflows and SDK are not implemented | feature-complete catalog, permissioned extensions and proven panic/timeout stop |
-| Reliability and 1.0 delivery | `ahead / S8` — release-HIL concept and some infrastructure exist, but this is not release evidence | signed OTA/rollback/recovery, full HIL/Self-Test, one-hour-budget mixed workload and two green RCs |
+| Reliability and 1.0 delivery | `ahead / S8` — exact 0.103 proves the first software safety checkpoint (main-loop watchdog, retained Safe Mode and explicit clear), but worker supervision, physical hard-stop evidence and release qualification remain open | worker deadlines, signed OTA/rollback/recovery, full HIL/Self-Test, one-hour-budget mixed workload and two green RCs |
 
 In stage terms S0–S4 are closed, S5 is active and S6–S8 are ahead. In user value,
 the complete Survey→Library path, a real packet Capture and live nRF24/CC1101
@@ -724,6 +735,8 @@ endurance are explicit `DEMO-S4` criteria.
 | E-AUTO-066 / E-HIL-126 / E-STORAGE-028 / E-GATE-005 | board-01 exact 0.101 six-boundary physical power-cut and `DEMO-S4` | pass: one exact flashed candidate first passes 17-state Home/RF regression with unchanged product generation 95/0 and heap 211,580/146,472/127,120 B. A software-reset preflight then validates boundary 1. The physical matrix observes six real USB disconnects of 5.216…6.589 s across write/sync payload, manifest and head boundaries; the same USB identity returns with `ESP_RST_POWERON` every time. Read-only recovery yields generations 1/1/1/1/1/2 with three observations, unchanged prior CRCs, zero recovery bytes/file/directory syncs, zero TX, no user-name/data reads, complete cleanup and lease 0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-sd-power-cut-0.101.json) | closes ST-HIL-A08 and the only remaining `DEMO-S4` gate together with accepted 0.89 endurance. S4 is done and S5 is active; this is one board/card pair, not release promotion or a media-compatibility claim |
 | E-BUILD-103 | exact `0.102.0-subghz-raw-rx` build | pass: static RAM 171,400 B, linked flash 1,527,836 B; app/factory 1,528,092/1,593,372 B; app `6e5b858d…1ed8`, factory `bb1de521…33c6`, ELF/app identity `a8792b4b…d88`; exact source commit `d8c52f7` | +15,136 B linked flash and +1,272 B static RAM vs 0.101 for bounded RAW capture, schema-v5 pulse storage, Library CSV and the user-facing four-band flow; exact S5 checkpoint, not a release build |
 | E-AUTO-067 / E-HIL-127 / E-RADIO-012 / E-STORAGE-029 | board-01 exact 0.102 first Sub-GHz RAW receive slice | pass checkpoint: public Actions open Sub-GHz→RAW Capture→433 MHz; the real CC1101 receive path takes 171,434 RSSI samples in 10,000,007 us and honestly terminates `timed_out` with no invented pulses or CSV. TX/PATABLE/FIFO/storage-write counters remain zero; exact CID and generation 95/0, heap 210,308/145,076/125,848 B, input zero-drop/error, buzzer inactive, seven TFT states and final Home lease 0 are bound in the [machine-checked artifact](../../tests/hil/evidence/board-01-subghz-raw-0.102.json). Native tests independently cover successful/truncated pulse capture, v5 codec/store, corrupt rejection and CSV | proves the physical receive/no-signal path and software persistence contract only. No known transmitter was used; a successful physical burst, explicit atomic save, cold Library CSV and FSK/GDO0 remain open, no RF payload is retained, TX/replay belongs to S7, and CAP-030 is not complete |
+| E-BUILD-104 | exact `0.103.0-safety-supervisor` build | pass: static RAM 171,496 B, linked flash 1,534,668 B; app/factory 1,535,072/1,600,608 B; app `569a72e3…83d5`, factory `d8b49f4b…766f`, ELF/app identity `145c3508…10a`; exact source/runner commit `2863090` | +6,832 B linked flash, +96 B static RAM and +6,980/+7,236 B images vs 0.102 for the pure safety core, permanent panic WDT, IRAM emergency GPIO path, exact-app RTC latch, Safe Mode and connected runner. RTC no-init is 108 B; the dedicated 16,384 B IRAM region is exactly 100% used and has zero growth margin |
+| E-AUTO-068 / E-HIL-128 / E-SAFETY-001 | board-01 exact 0.103 main-loop safety supervisor | pass checkpoint: the exact flashed candidate arms from Home, a real Task-WDT resets it after 5,810.775 ms with reason 6, and the retained one-trip/one-quiesce `runtime_watchdog` latch enters Safe Mode with buzzer GPIO2 plus nRF CE GPIO14/15/47 inactive, no owner/lease and no product recovery writes. A separate output-quiesced software restart returns with reason 3 and the identical latch; two public Right/OK Actions expose and confirm clear, then exact CID/catalog 95/0 reopen unchanged and final Home has owner/lease none/0. Three real TFT states, binaries, transcripts and source-bound runner are retained in the [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json) | reduces R-018 for main-loop hangs and software-controlled buzzer/nRF CE only. It does not provide worker heartbeats, full-power latch retention, thermal/current/voltage detection, a physical rail/PA kill, CC1101 hard kill or instrumented RF-stop proof; it is an S5 safety checkpoint, not release promotion |
 
 ## Known uncertainties and risks
 
