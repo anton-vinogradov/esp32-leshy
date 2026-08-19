@@ -165,3 +165,13 @@ left-aligned, `▲▼ Select` centered and the contextual action plus `OK▶` ri
 The footer stays non-interactive; touch entry remains on enabled content rows.
 Fourteen exact TFT states accept this refinement with `E-BUILD-096`/`E-AUTO-060`/
 `E-HIL-120`/`E-UX-019`.
+
+Exact `0.96.0-compact-ui-waterfall` also leaves the screen tree and normalized input
+map unchanged. It compacts the shared shell instead: Home identity occupies one
+line, nested page titles move into the 26 px header, and four 216×60 content rows
+fill the viewport from y=32 with a 12 px inset. The RF leaves keep Spectrum and
+Waterfall as sibling views, but the existing 112-row ring now advances on a fixed
+26,785 us cadence independent of receiver sweep duration. Fourteen exact EN/RU
+Home/menu/RF states and host timings 2.905…2.927 s across nRF24 and all four CC bands
+accept the result (`E-BUILD-097`/`E-AUTO-061`/`E-HIL-121`/`E-UX-020`/
+`E-RADIO-007`).

@@ -285,8 +285,12 @@ It is an activity/RSSI visualization, not a calibrated analyzer.
 Candidate `0.96.0-compact-ui-waterfall` decouples this visual time axis from each
 receiver's hardware sweep duration. nRF24 and every CC1101 band now snapshot the
 latest receive-only spectrum on one fixed 26,785 us cadence: 112 rows span at most
-3,000,000 us and fill the complete graph area. The exact physical gate must prove
-the timing on nRF24 plus 315/433/868/915 MHz rather than infer it from constants.
+3,000,000 us and fill the complete graph area. Exact physical acceptance proves,
+rather than infers, the timing on nRF24 plus 315/433/868/915 MHz: host-observed
+fill is 2.905/2.927/2.918/2.916/2.924 s respectively, while device telemetry stays
+at 2.814…2.857 s. All paths reach 112 rows with zero TX/storage side effects,
+unchanged storage, stabilized invariant heap and final lease 0
+(`E-BUILD-097`/`E-AUTO-061`/`E-HIL-121`/`E-UX-020`/`E-RADIO-007`).
 
 ## Implemented-job Home and one-command physical checkpoint
 
@@ -335,7 +339,9 @@ page title moves into that information bar, eliminating a duplicate body title;
 the bar shrinks from 34 to 26 px and content starts at y=32. Four enlarged 216×60
 menu targets now fill the available viewport. Interactive menu/list rows use one
 shared 12 px horizontal inset and vertically centered two-line text. Exact bilingual
-physical acceptance is required before promotion.
+physical acceptance retains 14 Home/menu/RF states from one flash with zero manual
+presses, exact CID, unchanged generation 95/0, stabilized invariant heap and final
+owner/lease `none`/`0` (`E-BUILD-097`/`E-AUTO-061`/`E-HIL-121`/`E-UX-020`).
 
 ## Inline physical-key legend
 

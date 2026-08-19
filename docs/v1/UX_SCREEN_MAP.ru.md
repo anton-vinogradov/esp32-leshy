@@ -167,3 +167,12 @@ Candidate `0.95.0-inline-key-hints` не меняет дерево экрано�
 enabled content rows.
 Четырнадцать exact TFT states принимают это refinement как `E-BUILD-096`/
 `E-AUTO-060`/`E-HIL-120`/`E-UX-019`.
+
+Exact `0.96.0-compact-ui-waterfall` также не меняет дерево экранов или normalized
+input map. Вместо этого compact-ится общий shell: identity Home занимает одну строку,
+вложенные titles переносятся в header 26 px, а четыре content row 216×60 заполняют
+viewport от y=32 с inset 12 px. RF leaves сохраняют Спектр и Водопад как соседние
+views, но существующий ring на 112 строк теперь движется по fixed cadence 26 785 мкс,
+не зависящему от sweep duration приёмника. Четырнадцать exact EN/RU states
+Home/menu/RF и host timings 2,905…2,927 s на nRF24 и всех четырёх CC bands принимают
+результат (`E-BUILD-097`/`E-AUTO-061`/`E-HIL-121`/`E-UX-020`/`E-RADIO-007`).

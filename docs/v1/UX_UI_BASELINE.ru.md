@@ -290,8 +290,11 @@ Candidate `0.96.0-compact-ui-waterfall` отделяет визуальную в
 длительности hardware sweep конкретного приёмника. nRF24 и каждый диапазон CC1101
 теперь делают snapshot последнего receive-only spectrum по единому cadence 26 785
 мкс: 112 строк занимают не более 3 000 000 мкс и заполняют всю область graph. Exact
-physical gate обязан измерить это на nRF24 и 315/433/868/915 МГц, а не вывести из
-констант.
+physical acceptance измеряет, а не выводит из констант, timing на nRF24 и
+315/433/868/915 МГц: host-observed fill равен 2,905/2,927/2,918/2,916/2,924 s,
+device telemetry остаётся в диапазоне 2,814…2,857 s. Все paths достигают 112 строк
+с zero TX/storage side effects, unchanged storage, stabilized invariant heap и
+final lease 0 (`E-BUILD-097`/`E-AUTO-061`/`E-HIL-121`/`E-UX-020`/`E-RADIO-007`).
 
 ## Home из реализованных задач и однокомандный physical checkpoint
 
@@ -342,7 +345,10 @@ Candidate `0.96.0-compact-ui-waterfall` сохраняет root-only identity co
 исчезает; панель уменьшается с 34 до 26 px, а content начинается на y=32. Четыре
 увеличенных menu target 216×60 заполняют доступный viewport. Interactive menu/list
 rows используют единый horizontal inset 12 px и вертикально центрированный
-двухстрочный текст. До promotion требуется exact bilingual physical acceptance.
+двухстрочный текст. Exact bilingual physical acceptance сохраняет 14 Home/menu/RF
+states после одной прошивки с zero ручных нажатий, exact CID, unchanged generation
+95/0, stabilized invariant heap и final owner/lease `none`/`0`
+(`E-BUILD-097`/`E-AUTO-061`/`E-HIL-121`/`E-UX-020`).
 
 ## Строчная легенда физических клавиш
 
