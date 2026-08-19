@@ -21,7 +21,7 @@ from capture_1x_ui import (
 
 ROOT = Path(__file__).resolve().parents[1]
 HOME_X = 120
-HOME_ROW_Y = (105, 156, 207)
+HOME_ROW_Y = (89, 140, 191, 242)
 CHOICE_ROW_Y = (105, 157, 209)
 
 

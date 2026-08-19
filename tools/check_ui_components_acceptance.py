@@ -90,7 +90,7 @@ def main() -> int:
     component_source = COMPONENTS.read_text(encoding="utf-8")
     for token in ("struct Rect", "enum class Tone", "struct Components",
                   "homeRow", "choiceRow", "metricRow", "footerDivider",
-                  "inputStatus", "footerHint", "insideScreen", "overlaps",
+                  "footerHint", "insideScreen", "overlaps",
                   "static_assert"):
         require(failures, token in component_source, f"component source missing: {token}")
     renderer = RENDERER.read_text(encoding="utf-8")
@@ -103,7 +103,7 @@ def main() -> int:
     for token in ("Components::header()", "Components::title()",
                   "Components::homeRow", "Components::choiceRow",
                   "Components::metricRow", "Components::footerDivider()",
-                  "Components::inputStatus()", "Components::footerHint()"):
+                  "Components::footerHint()", "renderHeaderStatus()"):
         require(failures, token in renderer, f"renderer missing contract use: {token}")
     require(failures, "testUiComponentGeometryContract" in
             TESTS.read_text(encoding="utf-8"), "native component geometry test missing")

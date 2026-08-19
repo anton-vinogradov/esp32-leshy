@@ -101,8 +101,8 @@ void testVisualThemeContract() {
     CHECK(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth);
     CHECK(Layout::ContentTop + 3 * (Layout::RowHeight + Layout::RowGap) <
           Layout::FooterDividerY);
-    CHECK(Layout::ContentTop + 3 * Layout::HomeRowHeight +
-              2 * Layout::HomeRowGap < Layout::FooterDividerY);
+    CHECK(Layout::ContentTop + 4 * Layout::HomeRowHeight +
+              3 * Layout::HomeRowGap < Layout::FooterDividerY);
     CHECK(Layout::HomeRowHeight >= 44);
     CHECK(Palette::Canvas == rgb565(7, 16, 12));
     CHECK(Palette::Header != Palette::Canvas);
@@ -124,7 +124,7 @@ void testUiComponentGeometryContract() {
 
     CHECK(insideScreen(Components::header()));
     CHECK(insideScreen(Components::title()));
-    for (std::uint8_t index = 0; index < 3; ++index) {
+    for (std::uint8_t index = 0; index < 4; ++index) {
         const Rect row = Components::homeRow(index);
         CHECK(beforeFooter(row));
         CHECK(contains(row, Components::focusMarker(row)));
@@ -150,8 +150,7 @@ void testUiComponentGeometryContract() {
                          Layout::ContentTop));
     CHECK(beforeFooter(Components::metricRow(4)));
     CHECK(beforeFooter(Components::stateCard()));
-    CHECK(!overlaps(Components::footerDivider(), Components::inputStatus()));
-    CHECK(!overlaps(Components::inputStatus(), Components::footerHint()));
+    CHECK(!overlaps(Components::footerDivider(), Components::footerHint()));
     for (std::uint8_t index = 0; index < 3; ++index) {
         CHECK(insideScreen(Components::navigationCell(index)));
         CHECK(contains(Components::footerHint(),
@@ -200,6 +199,9 @@ void testTouchTargetsExposeRowsButNeverChrome() {
     };
     TouchTarget target = hitTouchTarget(
         TouchTargetLayout::HomeRows, center(Components::homeRow(1)), 2, 6);
+    CHECK(target.hit && target.index == 3);
+    target = hitTouchTarget(
+        TouchTargetLayout::HomeRows, center(Components::homeRow(3)), 0, 6);
     CHECK(target.hit && target.index == 3);
     target = hitTouchTarget(TouchTargetLayout::HomeRows,
                             center(Components::homeRow(2)), 4, 6);

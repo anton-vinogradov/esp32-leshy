@@ -91,9 +91,9 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.90.0-product-menu\\"' not in config:
+    if 'LESHY1_VERSION=\\"0.91.0-clean-status\\"' not in config:
         errors.append(
-            "clean target does not identify the 0.89 touch/storage DMA corrective"
+            "clean target does not identify the 0.91 clean-status corrective"
         )
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")

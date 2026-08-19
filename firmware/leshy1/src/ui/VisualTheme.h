@@ -31,24 +31,22 @@ struct Palette final {
     static constexpr std::uint16_t Danger = rgb565(240, 93, 94);
 };
 
-// UX-03 240x320 geometry. Values intentionally preserve a fixed footer for input
-// diagnostics and contextual button hints without overlapping product content.
+// UX-03 240x320 geometry. The compact header carries truthful system status;
+// the footer is reserved for physical-key hints and never shows diagnostics.
 struct Layout final {
     static constexpr std::int16_t ScreenWidth = 240;
     static constexpr std::int16_t ScreenHeight = 320;
     static constexpr std::int16_t Edge = 12;
     static constexpr std::int16_t ContentWidth = 216;
-    static constexpr std::int16_t HeaderHeight = 42;
-    static constexpr std::int16_t TitleY = 58;
-    static constexpr std::int16_t ContentTop = 82;
+    static constexpr std::int16_t HeaderHeight = 34;
+    static constexpr std::int16_t TitleY = 42;
+    static constexpr std::int16_t ContentTop = 66;
     static constexpr std::int16_t RowHeight = 40;
     static constexpr std::int16_t RowGap = 7;
     static constexpr std::int16_t HomeRowHeight = 46;
     static constexpr std::int16_t HomeRowGap = 5;
     static constexpr std::int16_t Radius = 4;
-    static constexpr std::int16_t FooterDividerY = 236;
-    static constexpr std::int16_t InputY = 244;
-    static constexpr std::int16_t InputHeight = 28;
+    static constexpr std::int16_t FooterDividerY = 282;
     static constexpr std::int16_t HintY = 294;
     static constexpr std::int16_t HintHeight = 26;
 };
@@ -57,9 +55,9 @@ static_assert(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth,
               "content must fit the 240 px screen exactly");
 static_assert(Layout::FooterDividerY > Layout::ContentTop,
               "footer must remain below product content");
-static_assert(Layout::ContentTop + 3 * Layout::HomeRowHeight +
-                  2 * Layout::HomeRowGap < Layout::FooterDividerY,
-              "three touch-sized Home rows must fit above the footer");
+static_assert(Layout::ContentTop + 4 * Layout::HomeRowHeight +
+                  3 * Layout::HomeRowGap < Layout::FooterDividerY,
+              "four touch-sized Home rows must fit above the footer");
 static_assert(Layout::HintY < Layout::ScreenHeight,
               "button hint must remain visible");
 static_assert(Layout::HintY + Layout::HintHeight == Layout::ScreenHeight,

@@ -24,7 +24,7 @@ from run_1x_prerelease_hil import flash_candidate
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "leshy.product_menu_hil.run.v1"
 HOME_X = 120
-HOME_ROW_Y = (105, 156, 207)
+HOME_ROW_Y = (89, 140, 191, 242)
 
 
 def digest(path: Path) -> str:

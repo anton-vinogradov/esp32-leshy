@@ -4022,17 +4022,6 @@ void setUiCursor(UiTextRole role, std::int16_t x, std::int16_t top) {
     display.setCursor(x, top + uiFontAscent(role));
 }
 
-void renderInput(std::uint8_t value) {
-    char line[48] = {};
-    std::snprintf(line, sizeof(line), tr(UiTextId::InputRawFormat), value);
-    const Rect bounds = Components::inputStatus();
-    display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                     Palette::Canvas);
-    display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, bounds.x + 4, bounds.y + 1);
-    display.print(line);
-}
-
 enum class NavigationKey : std::uint8_t {
     None,
     Left,
@@ -4252,6 +4241,48 @@ std::uint16_t toneColor(Tone tone) {
     }
 }
 
+bool headerStorageReady() {
+    return productBootRecovery.enrolled &&
+           productBootRecovery.fingerprintMatched &&
+           productBootRecovery.readOnlyGuaranteed &&
+           productBootRecovery.cleanupComplete;
+}
+
+bool headerRadioReceiving() {
+    return productSurveyRuntime.sourceActive ||
+           wifiFrameCapture.stats().state == WifiFrameCaptureState::Running ||
+           nrf24SpectrumController.state() ==
+               Nrf24SpectrumViewState::Running ||
+           cc1101SpectrumController.state() ==
+               Cc1101SpectrumViewState::Running;
+}
+
+void renderHeaderStatus() {
+    const bool storageReady = headerStorageReady();
+    const bool storageFault = productBootRecovery.enrolled && !storageReady;
+    const bool radioReceiving = headerRadioReceiving();
+    const char* storage = storageReady ? "SD OK" :
+                          (storageFault ? "SD !" : "SD --");
+    const char* radio = radioReceiving ? "RF RX" : "RF --";
+    const std::uint16_t storageTone = storageReady
+        ? Palette::Positive
+        : (storageFault ? Palette::Danger : Palette::TextMuted);
+    const std::uint16_t radioTone = radioReceiving
+        ? Palette::Positive : Palette::TextMuted;
+
+    selectUiFont(UiTextRole::Meta);
+    const std::int16_t radioWidth = display.textWidth(radio);
+    const std::int16_t storageWidth = display.textWidth(storage);
+    const std::int16_t radioX = Layout::ScreenWidth - 10 - radioWidth;
+    const std::int16_t storageX = radioX - 10 - storageWidth;
+    display.setTextColor(storageTone, Palette::Header);
+    setUiCursor(UiTextRole::Meta, storageX, 10);
+    display.print(storage);
+    display.setTextColor(radioTone, Palette::Header);
+    setUiCursor(UiTextRole::Meta, radioX, 10);
+    display.print(radio);
+}
+
 void renderHeader(const char* title, bool clearContent) {
     const Rect header = Components::header();
     display.fillRect(header.x, header.y, header.width, header.height,
@@ -4262,10 +4293,9 @@ void renderHeader(const char* title, bool clearContent) {
                          Palette::Canvas);
     }
     display.setTextColor(Palette::TextPrimary, Palette::Header);
-    display.setTextFont(4);
-    activeDisplayFont = ActiveDisplayFont::None;
-    display.setCursor(10, 9);
-    display.print("LESHY 1.x");
+    setUiCursor(UiTextRole::Body, 10, 6);
+    display.print("LESHY");
+    renderHeaderStatus();
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
     const Rect titleBounds = Components::title();
     setUiCursor(UiTextRole::Body, titleBounds.x + 2, titleBounds.y);
@@ -4363,7 +4393,7 @@ UiTextId homeNote(const AppMenuItem& item) {
     return UiTextId::Ready;
 }
 
-constexpr std::uint8_t kVisibleHomeRows = 3;
+constexpr std::uint8_t kVisibleHomeRows = 4;
 
 std::uint8_t homeFirstVisible(std::uint8_t selection) {
     return selection < kVisibleHomeRows
@@ -5937,7 +5967,6 @@ void renderInteractiveScreen(bool clearContent) {
                               Palette::Divider);
         renderNavigationFooter();
         // As in 0.x MenuScreen::repaint, focus movement leaves chrome untouched.
-        renderInput(lastInputRaw);
     }
     display.endWrite();
     renderedUi = captureUiRenderSnapshot();

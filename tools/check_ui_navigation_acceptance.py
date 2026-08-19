@@ -368,10 +368,10 @@ def main() -> int:
     full_render_body = render_body[full_render_start:full_render_end]
     require(failures, render_start >= 0 and render_end > render_start and
             full_render_start >= 0 and full_render_end > full_render_start and
-            render_body.count("renderInput(lastInputRaw)") == 1 and
+            "renderInput(lastInputRaw)" not in render_body and
             "renderNavigationFooter();" in full_render_body and
-            "renderInput(lastInputRaw);" in full_render_body,
-            "incremental selection still repaints footer/input status")
+            "renderHeaderStatus();" in renderer,
+            "incremental selection or full render violates clean chrome")
     require(failures, "fillScreen(" not in renderer,
             "interactive renderer reintroduced full-screen fill")
     for identifier in ("NavOk", "NavBack", "NavCancel", "NavSelect",

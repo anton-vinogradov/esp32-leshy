@@ -14,7 +14,7 @@ TouchTarget hitTouchTarget(TouchTargetLayout layout, TouchPoint point,
     bool home = false;
     switch (layout) {
         case TouchTargetLayout::HomeRows:
-            rows = 3;
+            rows = 4;
             home = true;
             break;
         case TouchTargetLayout::TwoChoices: rows = 2; break;

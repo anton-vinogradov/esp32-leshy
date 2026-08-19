@@ -39,7 +39,7 @@ struct Components final {
     }
 
     static constexpr Rect title() {
-        return {Layout::Edge, 52, Layout::ContentWidth, 20};
+        return {Layout::Edge, Layout::TitleY, Layout::ContentWidth, 20};
     }
 
     static constexpr Rect homeRow(std::uint8_t index) {
@@ -82,11 +82,6 @@ struct Components final {
 
     static constexpr Rect footerDivider() {
         return {Layout::Edge, Layout::FooterDividerY, Layout::ContentWidth, 1};
-    }
-
-    static constexpr Rect inputStatus() {
-        return {Layout::Edge, Layout::InputY, Layout::ContentWidth,
-                Layout::InputHeight};
     }
 
     static constexpr Rect footerHint() {
@@ -141,8 +136,8 @@ constexpr bool containsPoint(Rect rect, std::int16_t x, std::int16_t y) {
 
 static_assert(insideScreen(Components::header()), "header must fit the TFT");
 static_assert(insideScreen(Components::title()), "title must fit the TFT");
-static_assert(beforeFooter(Components::homeRow(2)),
-              "three touch-sized Home rows must fit above the footer");
+static_assert(beforeFooter(Components::homeRow(3)),
+              "four touch-sized Home rows must fit above the footer");
 static_assert(beforeFooter(Components::choiceRow(2)),
               "three touch-sized choices must fit above the footer");
 static_assert(beforeFooter(Components::metricRow(4)),
@@ -153,10 +148,6 @@ static_assert(!overlaps(Components::homeRow(1), Components::homeRow(2)),
               "touch-sized Home rows must be visually separated");
 static_assert(!overlaps(Components::choiceRow(1), Components::choiceRow(2)),
               "touch-sized choice rows must be visually separated");
-static_assert(!overlaps(Components::footerDivider(), Components::inputStatus()),
-              "footer divider and input status must not overlap");
-static_assert(!overlaps(Components::inputStatus(), Components::footerHint()),
-              "input status and button hint must not overlap");
 static_assert(insideScreen(Components::navigationCell(0)) &&
                   insideScreen(Components::navigationCell(1)) &&
                   insideScreen(Components::navigationCell(2)),
