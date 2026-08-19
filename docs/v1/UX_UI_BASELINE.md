@@ -306,7 +306,7 @@ unchanged generation 95/0, invariant heap and final owner/lease `none`/`0`
 
 ## Localized Home identity and visible version
 
-The `0.94.0-home-identity` candidate makes the root identity explicit and keeps it
+Exact `0.94.0-home-identity` makes the root identity explicit and keeps it
 out of navigation context. Home alone renders `LESHY` in English or `Леший` in
 Russian. No About or nested-screen string repeats either brand spelling; nested
 headers continue to name the current section or task.
@@ -316,7 +316,10 @@ The same 34 px Home header renders the SemVer core derived from the build identi
 (`0.94.0-home-identity`) remains available in About and diagnostics. SD/RF status
 tokens stay right-aligned and unchanged. The connected-candidate workflow must
 capture both English and Russian Home automatically, restore Russian, and bind the
-screens to the exact flashed candidate without manual button presses.
+screens to the exact flashed candidate without manual button presses. The accepted
+run retains 14 real TFT states, all seven Home jobs, both populated waterfalls,
+unchanged generation 95/0 and heap, and final owner/lease `none`/`0`
+(`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
 
 ## Gate
 

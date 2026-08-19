@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Canonicalize a passing 0.93 one-command board gate into retained evidence."""
+"""Canonicalize the current passing one-command Home gate as evidence."""
 
 from __future__ import annotations
 
@@ -15,7 +15,8 @@ from esp_app_identity import app_elf_sha256
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.93.0-product-menu"
+VERSION = "0.94.0-home-identity"
+EVIDENCE_IDS = ["E-BUILD-095", "E-AUTO-059", "E-HIL-119", "E-UX-018"]
 
 
 def digest(path: Path) -> str:
@@ -133,10 +134,9 @@ def main() -> int:
     }
     result = {
         "schema": "leshy.product_home_acceptance.v1",
-        "status": "pass_product_home_checkpoint",
+        "status": "pass_home_identity_checkpoint",
         "board": "board-01",
-        "evidence_ids": ["E-BUILD-094", "E-AUTO-058", "E-HIL-118",
-                         "E-UX-017", "E-RADIO-006"],
+        "evidence_ids": EVIDENCE_IDS,
         "candidate": provenance,
         "evidence": evidence,
         "verified": {
@@ -144,6 +144,14 @@ def main() -> int:
             "single_flash": True,
             "manual_button_presses": 0,
             "automatic_screenshots": True,
+            "languages": ["en", "ru"],
+            "home_identity": {
+                "english": "LESHY",
+                "russian": "Леший",
+                "displayed_semver": "v0.94.0",
+                "full_version": VERSION,
+                "nested_brand_mentions": 0,
+            },
             "nrf_history_rows": reports["nrf_waterfall"]["history_rows"],
             "cc_history_rows": reports["cc_waterfall"]["history_rows"],
             "storage_generation": before["generation"],

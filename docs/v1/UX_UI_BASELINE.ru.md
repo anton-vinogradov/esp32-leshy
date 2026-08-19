@@ -311,7 +311,7 @@ unchanged generation 95/0, invariant heap и final owner/lease `none`/`0`
 
 ## Локализованный Home и видимая версия
 
-Candidate `0.94.0-home-identity` делает identity корневого экрана явной и не
+Exact `0.94.0-home-identity` делает identity корневого экрана явной и не
 смешивает её с навигационным контекстом. Только Home показывает `LESHY` на
 английском или `Леший` на русском. Ни About, ни строки вложенных экранов не
 повторяют эти варианты бренда; вложенные headers по-прежнему называют текущий
@@ -322,7 +322,10 @@ SemVer core, полученный из build identity (`v0.94.0`). Полный 
 `0.94.0-home-identity` остаётся доступен в «О системе» и диагностике. Индикаторы
 SD/RF остаются справа и не меняют семантику. Connected-candidate workflow обязан
 автоматически снять английский и русский Home, восстановить русский язык и связать
-кадры с exact flashed candidate без ручных нажатий.
+кадры с exact flashed candidate без ручных нажатий. Принятый run сохраняет 14 real
+TFT states, все семь jobs Home, оба наполненных водопада, unchanged generation 95/0
+и heap, final owner/lease `none`/`0`
+(`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
 
 ## Gate
 

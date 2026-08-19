@@ -151,8 +151,10 @@ Exact `0.93.0-product-menu` заменяет executable-часть Home 0.90, н
 наполненные водопады, final Home и zero ownership без ручных нажатий
 (`E-BUILD-094`/`E-AUTO-058`/`E-HIL-118`/`E-UX-017`/`E-RADIO-006`).
 
-Contract `0.94.0-home-identity` не меняет дерево экранов. Он локализует brand,
+Exact `0.94.0-home-identity` не меняет дерево экранов. Он локализует brand,
 существующий только на корне, как `LESHY`/`Леший`, показывает SemVer core сборки
 на Home и убирает brand из текста «О системе». Вложенные headers остаются
 навигационным контекстом. Physical candidate gate добавляет английский Home к
-русскому product route и восстанавливает русский перед final cleanup.
+русскому product route и восстанавливает русский перед final cleanup. Четырнадцать
+retained TFT states и exact source/candidate bindings принимают результат
+(`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).

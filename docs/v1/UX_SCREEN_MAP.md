@@ -150,8 +150,10 @@ verifies every entry, populated waterfalls, final Home and zero ownership with z
 manual button presses (`E-BUILD-094`/`E-AUTO-058`/`E-HIL-118`/`E-UX-017`/
 `E-RADIO-006`).
 
-The `0.94.0-home-identity` contract does not change the screen tree. It localizes
+Exact `0.94.0-home-identity` does not change the screen tree. It localizes
 the root-only brand to `LESHY`/`Леший`, shows the build SemVer core on Home, and
 removes the brand from About copy. Nested headers remain navigation context. The
 physical candidate gate adds an English Home capture to the Russian product route
-and restores Russian before final cleanup.
+and restores Russian before final cleanup. Fourteen retained TFT states and exact
+source/candidate bindings accept the result (`E-BUILD-095`/`E-AUTO-059`/
+`E-HIL-119`/`E-UX-018`).
