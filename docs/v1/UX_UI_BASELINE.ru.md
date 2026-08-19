@@ -270,6 +270,22 @@ capability. `E-BUILD-092`/`E-AUTO-056`/`E-HIL-116`/`E-UX-015` связывают
 pause/Home; тот же run доказывает zero TX/storage side effects, invariant heap и
 final lease 0.
 
+## Full-width RF views и контекстный header
+
+Exact candidate `0.92.0-spectrum-views` заменяет повторяющийся brand из shell 0.91:
+`LESHY` виден только на Home; на каждом вложенном экране левая часть header показывает
+текущий раздел или задачу. Оба receiver workflow дают режимы Спектр и Водопад.
+Up/Down меняет вид, Right/OK ставит на паузу или продолжает, Left останавливает и
+возвращает. Live graph использует x=0…239 и y=62…277, компактный metrics overlay и
+axis без декоративной рамки. Диапазон CC1101 выбирается обычным четырёхстрочным меню
+315/433/868/915 МГц.
+
+Waterfall — fixed allocation-free ring на 112 строк; во время acquisition добавляется
+только новейшая экранная строка. `E-BUILD-093`/`E-AUTO-057`/`E-HIL-117`/`E-UX-016`/
+`E-RADIO-005` связывают 22 TFT states, 32 накопленные строки nRF24, 16 строк CC1101,
+стабильные pause/resume, все CC bands, invariant heap/storage и final lease 0. Это
+визуализация activity/RSSI, а не calibrated analyzer.
+
 ## Gate
 
 **S1 UX direction accepted:** готовы UX-01/UX-02 в low-fidelity форме, все разделы

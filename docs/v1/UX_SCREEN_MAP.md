@@ -130,3 +130,10 @@ Exact `0.91.0-clean-status` refines the shell without changing this map: visible
 raw-input diagnostics are removed, four Home rows fit at once, and exact real-TFT
 evidence proves idle `RF --` versus active receive `RF RX` with final zero ownership
 (`E-BUILD-092`/`E-AUTO-056`/`E-HIL-116`/`E-UX-015`).
+
+Exact `0.92.0-spectrum-views` refines the two RF leaves: each has Spectrum and
+Waterfall views; CC1101 adds a four-band chooser; Home alone carries the `LESHY`
+brand while nested headers carry navigation context. The live viewport spans the
+full 240 px width and 216 px height above the key legend. Exact HIL binds all four
+CC bands, accumulated history, pause/resume and final zero ownership
+(`E-BUILD-093`/`E-AUTO-057`/`E-HIL-117`/`E-UX-016`/`E-RADIO-005`).

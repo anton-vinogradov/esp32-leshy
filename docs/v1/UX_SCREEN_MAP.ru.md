@@ -131,3 +131,10 @@ Exact `0.91.0-clean-status` уточняет shell, не меняя эту ка�
 diagnostics удалены, одновременно помещаются четыре Home row, а exact real-TFT
 evidence доказывает idle `RF --` и active receive `RF RX` с final zero ownership
 (`E-BUILD-092`/`E-AUTO-056`/`E-HIL-116`/`E-UX-015`).
+
+Exact `0.92.0-spectrum-views` уточняет два RF leaf: каждый даёт Спектр и Водопад,
+CC1101 получает chooser четырёх диапазонов; brand `LESHY` остаётся только на Home,
+а вложенный header показывает навигационный контекст. Live viewport занимает полные
+240 px ширины и 216 px высоты над key legend. Exact HIL связывает все четыре CC bands,
+накопленную историю, pause/resume и final zero ownership
+(`E-BUILD-093`/`E-AUTO-057`/`E-HIL-117`/`E-UX-016`/`E-RADIO-005`).

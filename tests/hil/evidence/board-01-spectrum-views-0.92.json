@@ -1,0 +1,68 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "99982fa6f3b2adc25fbe24d2d13d7fe9a390f51f918d2061c192c8262601b4d4",
+    "cc_run_sha256": "069bb89c82a01b969f290d7f816927a7191bcbe7e9db30a375bd0309a2834aa1",
+    "cc_runner_sha256": "cb1e06d1d3128245b01e0cd63e2b66cafae63c2080614fd21ea65aa6a46acf54",
+    "elf_bytes": 20192852,
+    "elf_file_sha256": "99982fa6f3b2adc25fbe24d2d13d7fe9a390f51f918d2061c192c8262601b4d4",
+    "factory_bytes": 1570448,
+    "factory_sha256": "a2fdd200363f139cd79e58b14fb08be6fa2860c95f343f6ffa65cb0d9d650446",
+    "firmware_bytes": 1504912,
+    "firmware_sha256": "e5fded9b4bf7781bb8424d34fd1af874db242d3c13c33446785387e6557f5e62",
+    "linked_flash_bytes": 1504500,
+    "nrf_run_sha256": "81d6b46f8558826b8195345b792bbbe350e48cfb0b0974e1f4d8cd0ad6a4be81",
+    "nrf_runner_sha256": "496eff33eb8b9bf0fc6feb6a219e5ad949c8678777e5d359bde4fba216f4740e",
+    "runner_commit": "9499a1978a0bddb0b4cae8e5d28f03222299bf00",
+    "schema": "leshy.spectrum_views_hil.provenance.v1",
+    "source_commit": "89f185f5309495d27918eaeb16490cfa8f8ce9ac",
+    "static_ram_bytes": 159832,
+    "version": "0.92.0-spectrum-views"
+  },
+  "evidence": {
+    "artifact_index_sha256": "26746ac656288aad0cfba5fb2a901704dfe0c6c7a500ac39ab74a5938c432789",
+    "cc_run_sha256": "069bb89c82a01b969f290d7f816927a7191bcbe7e9db30a375bd0309a2834aa1",
+    "cc_tft_states": 14,
+    "files": 79,
+    "nrf_run_sha256": "81d6b46f8558826b8195345b792bbbe350e48cfb0b0974e1f4d8cd0ad6a4be81",
+    "nrf_tft_states": 8,
+    "provenance_sha256": "d5d84e9471207a0cf3d574c3c8f5ac55554ab52224301f517c656abe183dca22"
+  },
+  "evidence_ids": [
+    "E-BUILD-093",
+    "E-AUTO-057",
+    "E-HIL-117",
+    "E-UX-016",
+    "E-RADIO-005"
+  ],
+  "schema": "leshy.spectrum_views_acceptance.v1",
+  "status": "pass_spectrum_views_checkpoint",
+  "verified": {
+    "cc_bands": [
+      "315",
+      "433",
+      "868",
+      "915"
+    ],
+    "cc_history_rows": 16,
+    "final_lease_mask": 0,
+    "final_owner": "none",
+    "footer_divider_y": 293,
+    "heap": [
+      221876,
+      156916,
+      137564
+    ],
+    "nrf_history_rows": 32,
+    "physical_rf_silence_measured": false,
+    "software_rx_only": true,
+    "storage_generation": 95,
+    "storage_observations": 0,
+    "viewport": [
+      0,
+      62,
+      240,
+      216
+    ]
+  }
+}

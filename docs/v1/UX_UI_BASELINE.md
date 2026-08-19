@@ -266,6 +266,22 @@ exists. `E-BUILD-092`/`E-AUTO-056`/`E-HIL-116`/`E-UX-015` bind eight menu and si
 TFT states. Exact framebuffer crops distinguish real nRF24 receive from pause/Home;
 the same run proves zero TX/storage side effects, invariant heap and final lease 0.
 
+## Full-width RF views and contextual header
+
+Exact candidate `0.92.0-spectrum-views` supersedes the repeated-brand part of the
+0.91 shell: `LESHY` is visible on Home only; every nested screen uses that left-hand
+header space for its current section or task. Both receiver workflows now provide
+Spectrum and Waterfall. Up/Down switches the view, Right/OK pauses or resumes, and
+Left stops and returns. The live graph uses x=0…239 and y=62…277, with a compact
+metrics overlay and axis but no decorative plot frame. CC1101 selection is an
+ordinary four-row 315/433/868/915 MHz menu.
+
+The waterfall is a fixed, allocation-free 112-row ring and appends only the newest
+screen line during acquisition. `E-BUILD-093`/`E-AUTO-057`/`E-HIL-117`/`E-UX-016`/
+`E-RADIO-005` bind 22 TFT states, 32 accumulated nRF24 rows, 16 accumulated CC1101
+rows, stable pause/resume, all CC bands, invariant heap/storage and final lease 0.
+It is an activity/RSSI visualization, not a calibrated analyzer.
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog
