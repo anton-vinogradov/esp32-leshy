@@ -244,6 +244,10 @@ constexpr const char* kSdSessionResetPrefix =
     "storage.sd.session-store reset disposable-write ";
 constexpr const char* kSdSessionRecoverPrefix =
     "storage.sd.session-store recover disposable-read-only ";
+constexpr const char* kSdSessionPowerCutPrefix =
+    "storage.sd.session-store power-cut disposable-write ";
+constexpr const char* kSdSessionPowerCutRecoverPrefix =
+    "storage.sd.session-store power-cut-recover disposable-read-only ";
 constexpr const char* kSdReadOnlyMountPrefix =
     "storage.sd.readonly-mount disposable-read-only ";
 constexpr const char* kWifiIngressPrefix =
@@ -10290,6 +10294,32 @@ void restartAtSessionStoreBoundary(void* rawContext,
     esp_restart();
 }
 
+[[noreturn]] void waitForPowerCutAtSessionStoreBoundary(
+    void* rawContext, leshy1::storage::CommitStage boundary) {
+    auto* context = static_cast<ResetBoundaryHookContext*>(rawContext);
+    if (context != nullptr && context->reply != nullptr) {
+        std::snprintf(
+            sdPhysicalEvidence.line, sizeof(sdPhysicalEvidence.line),
+            "{\"schema\":\"leshy.storage.sd.session_store_reset.v1\","
+            "\"kind\":\"reset_trigger\",\"status\":\"boundary_reached\","
+            "\"run_id\":\"%s\",\"boundary\":%u,\"boundary_name\":\"%s\","
+            "\"reset_injection\":false,\"physical_power_cut\":true}",
+            context->runId != nullptr ? context->runId : "invalid",
+            context->boundaryNumber,
+            leshy1::storage::sessionStoreBoundaryName(boundary));
+        context->reply->println(sdPhysicalEvidence.line);
+        context->reply->flush();
+    }
+    Serial.flush();
+    Serial0.flush();
+    while (true) {
+        if (esp_task_wdt_status(nullptr) == ESP_OK) {
+            esp_task_wdt_reset();
+        }
+        delay(50);
+    }
+}
+
 void restartAtLittleFsSessionStoreBoundary(
     void* rawContext, leshy1::storage::CommitStage boundary) {
     auto* context = static_cast<ResetBoundaryHookContext*>(rawContext);
@@ -10514,7 +10544,8 @@ bool parseSdSessionResetCommand(const char* command, const char* prefix,
 void emitPhysicalSdSessionResetArm(Stream& reply,
                                    const char* expectedFingerprint,
                                    const char* runId,
-                                   unsigned boundaryNumber) {
+                                   unsigned boundaryNumber,
+                                   bool physicalPowerCut) {
     auto& line = sdPhysicalEvidence.line;
     auto& cidHex = sdPhysicalEvidence.cidHex;
     cidHex[0] = '\0';
@@ -10526,6 +10557,7 @@ void emitPhysicalSdSessionResetArm(Stream& reply,
     const std::uint32_t ownedDuring =
         resourceBroker.ownedBy(kSdIdentificationOwner);
     const char* status = "resource_unavailable";
+    const bool fixtureReady = idleUi && prepareLittleFsResetFixture();
 
     BoardSdSpiTransport identityTransport;
     const bool identityAdapterBegun = resourcesAcquired && identityTransport.begin();
@@ -10605,6 +10637,8 @@ void emitPhysicalSdSessionResetArm(Stream& reply,
         status = "invalid_boundary";
     } else if (!idleUi) {
         status = "ui_not_idle";
+    } else if (!fixtureReady) {
+        status = "fixture_failed";
     } else if (!resourcesAcquired) {
         status = "resources_unavailable";
     } else if (!identityAdapterBegun) {
@@ -10628,15 +10662,15 @@ void emitPhysicalSdSessionResetArm(Stream& reply,
             status = "scratch_prepare_failed";
         } else {
             initialCommit = leshy1::storage::commitNextSession(
-                io, sessionStoreWorkspace, librarySession);
+                io, sessionStoreWorkspace, littleFsResetSession);
             initialRecovery = leshy1::storage::recoverSession(
                 io, sessionStoreWorkspace,
                 &sessionStoreWorkspace.validationSession);
             priorUnchanged = initialCommit.complete() &&
                 initialCommit.generation == 1 && initialRecovery.valid() &&
                 initialRecovery.generation == 1 &&
-                inspectStoredGeneration(io, sessionStoreWorkspace, librarySession,
-                                        1, &priorEvidence);
+                inspectStoredGeneration(io, sessionStoreWorkspace,
+                                        littleFsResetSession, 1, &priorEvidence);
             if (!priorUnchanged) {
                 status = "initial_generation_failed";
             } else {
@@ -10655,7 +10689,7 @@ void emitPhysicalSdSessionResetArm(Stream& reply,
                     "\"filesystem_driver\":\"esp_idf_sdspi\","
                     "\"filesystem_spi_hz\":%lu,\"format_allowed\":false,"
                     "\"writes_bounded_to_scratch\":true,"
-                    "\"reset_injection\":true,\"physical_power_cut\":false,"
+                    "\"reset_injection\":%s,\"physical_power_cut\":%s,"
                     "\"radio_tx_commands\":0}",
                     runId, boundaryNumber,
                     leshy1::storage::sessionStoreBoundaryName(boundary),
@@ -10666,19 +10700,26 @@ void emitPhysicalSdSessionResetArm(Stream& reply,
                     static_cast<unsigned long>(priorEvidence.observedSegmentCrc),
                     static_cast<unsigned>(priorEvidence.observedManifestSize),
                     static_cast<unsigned long>(priorEvidence.observedManifestCrc),
-                    static_cast<unsigned long>(filesystem.realFrequencyHz()));
+                    static_cast<unsigned long>(filesystem.realFrequencyHz()),
+                    physicalPowerCut ? "false" : "true",
+                    physicalPowerCut ? "true" : "false");
                 reply.println(line);
                 reply.flush();
                 ResetBoundaryHookContext hookContext{
                     &reply, runId, boundaryNumber};
+                const leshy1::storage::SessionStoreBoundaryHook boundaryHook =
+                    physicalPowerCut
+                        ? waitForPowerCutAtSessionStoreBoundary
+                        : restartAtSessionStoreBoundary;
                 leshy1::storage::SessionStoreBoundaryIo injecting(
-                    io, boundary, restartAtSessionStoreBoundary, &hookContext);
+                    io, boundary, boundaryHook, &hookContext);
                 interruptedCommit = leshy1::storage::commitNextSession(
-                    injecting, sessionStoreWorkspace, librarySession);
+                    injecting, sessionStoreWorkspace, littleFsResetSession);
                 boundaryStopped = injecting.stopped();
                 sequenceValid = injecting.sequenceValid();
                 boundariesReached = injecting.boundariesReached();
-                status = "reset_not_triggered";
+                status = physicalPowerCut
+                    ? "power_cut_not_triggered" : "reset_not_triggered";
             }
         }
         bytesWritten = io.bytesWritten();
@@ -10718,8 +10759,8 @@ void emitPhysicalSdSessionResetArm(Stream& reply,
         "\"mounted\":%s,\"resource_acquired\":%s,"
         "\"owned_during\":%lu,\"owned_after\":%lu,"
         "\"cleanup_complete\":%s,\"format_allowed\":false,"
-        "\"existing_paths_deleted\":false,\"reset_injection\":true,"
-        "\"physical_power_cut\":false,\"radio_tx_commands\":0}",
+        "\"existing_paths_deleted\":false,\"reset_injection\":%s,"
+        "\"physical_power_cut\":%s,\"radio_tx_commands\":0}",
         status, runId, boundaryNumber,
         leshy1::storage::sessionStoreBoundaryName(boundary),
         resetExpectedRecovery(boundaryNumber),
@@ -10745,14 +10786,17 @@ void emitPhysicalSdSessionResetArm(Stream& reply,
         mounted ? "true" : "false", resourcesAcquired ? "true" : "false",
         static_cast<unsigned long>(ownedDuring),
         static_cast<unsigned long>(ownedAfter),
-        cleanupComplete ? "true" : "false");
+        cleanupComplete ? "true" : "false",
+        physicalPowerCut ? "false" : "true",
+        physicalPowerCut ? "true" : "false");
     reply.println(line);
 }
 
 void emitPhysicalSdSessionResetRecovery(Stream& reply,
                                         const char* expectedFingerprint,
                                         const char* runId,
-                                        unsigned boundaryNumber) {
+                                        unsigned boundaryNumber,
+                                        bool physicalPowerCut) {
     auto& line = sdPhysicalEvidence.line;
     auto& cidHex = sdPhysicalEvidence.cidHex;
     cidHex[0] = '\0';
@@ -10760,7 +10804,10 @@ void emitPhysicalSdSessionResetRecovery(Stream& reply,
         resetBoundaryStage(boundaryNumber);
     const esp_reset_reason_t resetReason = esp_reset_reason();
     const bool softwareReset = resetReason == ESP_RST_SW;
+    const bool powerOnReset = resetReason == ESP_RST_POWERON;
+    const bool expectedReset = physicalPowerCut ? powerOnReset : softwareReset;
     const bool idleUi = uiController.isRoot() && !appRuntime.running();
+    const bool fixtureReady = idleUi && prepareLittleFsResetFixture();
     const bool resourcesAcquired = idleUi && resourceBroker.acquire(
         kSdIdentificationOwner, leshy1::storage::kSdIdentificationResources);
     const std::uint32_t ownedDuring =
@@ -10837,7 +10884,8 @@ void emitPhysicalSdSessionResetRecovery(Stream& reply,
         openedReadOnly = io.openExistingReadOnly(permit);
         if (openedReadOnly) {
             priorUnchanged = inspectStoredGeneration(
-                io, sessionStoreWorkspace, librarySession, 1, &priorEvidence);
+                io, sessionStoreWorkspace, littleFsResetSession, 1,
+                &priorEvidence);
             recovery = leshy1::storage::recoverSession(
                 io, sessionStoreWorkspace,
                 &sessionStoreWorkspace.validationSession);
@@ -10860,7 +10908,8 @@ void emitPhysicalSdSessionResetRecovery(Stream& reply,
     const bool generationAllowed = recovery.valid() &&
         resetRecoveredGenerationAllowed(boundaryNumber, recovery.generation);
     const bool valid = leshy1::storage::isSessionStoreBoundary(boundary) &&
-        softwareReset && identityAdapterBegun && fingerprintMatched && mounted &&
+        expectedReset && fixtureReady && identityAdapterBegun &&
+        fingerprintMatched && mounted &&
         capacityMatched && permit.allowed() && openedReadOnly &&
         generationAllowed && recovery.observations == 3 && priorUnchanged &&
         bytesWritten == 0 && fileSyncs == 0 && directorySyncs == 0 &&
@@ -10873,6 +10922,7 @@ void emitPhysicalSdSessionResetRecovery(Stream& reply,
         "\"status\":\"%s\",\"run_id\":\"%s\",\"boundary\":%u,"
         "\"boundary_name\":\"%s\",\"expected_recovery\":\"%s\","
         "\"reset_reason_code\":%u,\"software_reset\":%s,"
+        "\"power_on_reset\":%s,"
         "\"identity_status\":\"%s\",\"cid_hex\":\"%s\","
         "\"fingerprint_matched\":%s,\"read_permit_status\":\"%s\","
         "\"scratch_path\":\"%s\",\"scratch_exists\":%s,"
@@ -10892,12 +10942,13 @@ void emitPhysicalSdSessionResetRecovery(Stream& reply,
         "\"cleanup_complete\":%s,\"mount_on_boot\":false,"
         "\"format_allowed\":false,\"existing_paths_deleted\":false,"
         "\"user_file_names_listed\":false,\"user_file_data_read\":false,"
-        "\"reset_injection\":true,\"physical_power_cut\":false,"
+        "\"reset_injection\":%s,\"physical_power_cut\":%s,"
         "\"radio_tx_commands\":0}",
         valid ? "valid" : "failed", runId, boundaryNumber,
         leshy1::storage::sessionStoreBoundaryName(boundary),
         resetExpectedRecovery(boundaryNumber),
         static_cast<unsigned>(resetReason), softwareReset ? "true" : "false",
+        powerOnReset ? "true" : "false",
         leshy1::storage::sdTransportRunStatusName(identity.status), cidHex,
         fingerprintMatched ? "true" : "false",
         leshy1::storage::readPermitStatusName(permit.status),
@@ -10922,7 +10973,9 @@ void emitPhysicalSdSessionResetRecovery(Stream& reply,
         static_cast<unsigned long long>(filesystemCapacity),
         mounted ? "true" : "false", static_cast<unsigned long>(ownedDuring),
         static_cast<unsigned long>(ownedAfter),
-        cleanupComplete ? "true" : "false");
+        cleanupComplete ? "true" : "false",
+        physicalPowerCut ? "false" : "true",
+        physicalPowerCut ? "true" : "false");
     reply.println(line);
 }
 
@@ -13321,6 +13374,38 @@ void handleCommand(Stream& reply, const char* command) {
                 "\"kind\":\"error\",\"mode\":\"enroll\","
                 "\"reason\":\"invalid_explicit_scope\"}");
         }
+    } else if (std::strncmp(command, kSdSessionPowerCutPrefix,
+                            std::strlen(kSdSessionPowerCutPrefix)) == 0) {
+        char fingerprint[33] = {};
+        char runId[33] = {};
+        unsigned boundaryNumber = 0;
+        if (parseSdSessionResetCommand(
+                command, kSdSessionPowerCutPrefix, fingerprint,
+                sizeof(fingerprint), runId, sizeof(runId), &boundaryNumber)) {
+            emitPhysicalSdSessionResetArm(reply, fingerprint, runId,
+                                          boundaryNumber, true);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.storage.sd.session_store_reset.v1\","
+                "\"kind\":\"error\",\"mode\":\"power_cut_arm\","
+                "\"reason\":\"invalid_explicit_scope\"}");
+        }
+    } else if (std::strncmp(command, kSdSessionPowerCutRecoverPrefix,
+                            std::strlen(kSdSessionPowerCutRecoverPrefix)) == 0) {
+        char fingerprint[33] = {};
+        char runId[33] = {};
+        unsigned boundaryNumber = 0;
+        if (parseSdSessionResetCommand(
+                command, kSdSessionPowerCutRecoverPrefix, fingerprint,
+                sizeof(fingerprint), runId, sizeof(runId), &boundaryNumber)) {
+            emitPhysicalSdSessionResetRecovery(reply, fingerprint, runId,
+                                               boundaryNumber, true);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.storage.sd.session_store_reset.v1\","
+                "\"kind\":\"error\",\"mode\":\"power_cut_recovery\","
+                "\"reason\":\"invalid_explicit_scope\"}");
+        }
     } else if (std::strncmp(command, kSdSessionResetPrefix,
                             std::strlen(kSdSessionResetPrefix)) == 0) {
         char fingerprint[33] = {};
@@ -13330,7 +13415,7 @@ void handleCommand(Stream& reply, const char* command) {
                 command, kSdSessionResetPrefix, fingerprint,
                 sizeof(fingerprint), runId, sizeof(runId), &boundaryNumber)) {
             emitPhysicalSdSessionResetArm(reply, fingerprint, runId,
-                                          boundaryNumber);
+                                          boundaryNumber, false);
         } else {
             reply.println(
                 "{\"schema\":\"leshy.storage.sd.session_store_reset.v1\","
@@ -13346,7 +13431,7 @@ void handleCommand(Stream& reply, const char* command) {
                 command, kSdSessionRecoverPrefix, fingerprint,
                 sizeof(fingerprint), runId, sizeof(runId), &boundaryNumber)) {
             emitPhysicalSdSessionResetRecovery(reply, fingerprint, runId,
-                                               boundaryNumber);
+                                               boundaryNumber, false);
         } else {
             reply.println(
                 "{\"schema\":\"leshy.storage.sd.session_store_reset.v1\","
@@ -13681,6 +13766,10 @@ void setup() {
               "\"storage.sd.session-store disposable-write <CID32> <run-id>\","
               "\"storage.sd.session-store throughput disposable-write <CID32> <run-id>\","
               "\"storage.sd.session-store batch-throughput disposable-write <CID32> <run-id>\","
+              "\"storage.sd.session-store reset disposable-write <CID32> <run-id> <1..6>\","
+              "\"storage.sd.session-store recover disposable-read-only <CID32> <run-id> <1..6>\","
+              "\"storage.sd.session-store power-cut disposable-write <CID32> <run-id> <1..6>\","
+              "\"storage.sd.session-store power-cut-recover disposable-read-only <CID32> <run-id> <1..6>\","
               "\"survey.wifi.passive-persist disposable-write <CID32> <run-id> <1..8>\","
               "\"survey.wifi.passive-ingress measure passive-only <1..32>\","
               "\"survey.contract\",\"session.fixture\",\"session.store.fixture\","

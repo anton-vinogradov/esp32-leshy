@@ -188,6 +188,7 @@ if [[ "$retained_evidence_mode" == "tracked" ]]; then
     python3 "$repo_dir/tools/check_source_history_waterfall_acceptance.py" --tracked-only
 fi
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
+python3 "$repo_dir/tools/test_sd_power_cut_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"
 python3 "$repo_dir/tools/test_product_home_hil_runner.py"
