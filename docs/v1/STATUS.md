@@ -12,11 +12,11 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S5 — Complete ESP32-DIV hardware`.
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3`, exact 0.71…0.100 S4 feature/endurance checkpoints, and exact 0.101 six-boundary controlled physical power-cut recovery closing `DEMO-S4`.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3`, exact 0.71…0.100 S4 feature/endurance checkpoints, exact 0.101 six-boundary controlled physical power-cut recovery closing `DEMO-S4`, and the first exact 0.102 S5 Sub-GHz RAW receive checkpoint.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** establish the S5 stock-hardware completeness baseline and
   advance each present module through probe → observe/capture → Library → inspect/export.
-- **Latest accepted checkpoint:** exact 0.101 retains the 0.100 user jobs on
+- **Latest accepted checkpoint:** exact 0.102 builds on the accepted 0.101 platform. Exact 0.101 retains the 0.100 user jobs on
   Home: Wi-Fi, Bluetooth, 2.4 GHz, Sub-GHz, Capture, Library and Device. Home alone
   shows `LESHY` in English or `Леший` in Russian plus build-derived `v0.101.0`;
   nested headers contain navigation context and About retains the full version. Wi-Fi/BLE
@@ -50,6 +50,19 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   hashes, perform zero recovery writes/syncs or TX commands, clean the exact-CID
   scratch paths and end with lease 0. Product generation 95/0 is unchanged. This
   closes `ST-HIL-A08`, `E-GATE-005`, and `DEMO-S4`; it does not promote a release.
+  Exact 0.102 adds the first S5 user slice at
+  `Home → Sub-GHz → RAW Capture → 315/433/868/915 MHz`: a bounded OOK RSSI-envelope
+  receiver accepts at most 512 pulses, waits 10 s for a signal, limits a burst to
+  5 s, remains RX-only, and uses the common atomic SessionStore v5 plus Library CSV
+  path. Host tests pass the exact pulse state machine, saturation/truncation,
+  codec, corrupt-read rejection, atomic store and CSV. Board-01 then executes the
+  public 433.920 MHz route and takes 171,434 physical RSSI samples in 10,000,007 us,
+  honestly reaches `no signal`, performs zero TX/PATABLE/FIFO/storage writes,
+  preserves exact CID and product generation 95/0, keeps heap
+  210,308/145,076/125,848 B, captures seven real TFT states and returns to Home with
+  lease 0. This proves the physical receive/no-signal path, not a known-burst capture:
+  successful physical pulses, persistence, offline Library CSV and FSK/GDO0 remain
+  open and CAP-030 is not complete.
 
 ## Stage state
 
@@ -60,10 +73,21 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S2 | `done` | independent target, capability Home, unified five-key plus calibrated touch input/TFT capture, finger-sized common rows, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
 | S4 | `done` | exact 0.71…0.101 accept passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, implemented-only final Home, compact truthful status, full-width RF views, all-available receiver-paced waterfalls, and six real power cuts across every SessionStore commit boundary with read-only recovery and zero product mutation | — (`E-GATE-005`) |
-| S5 | `active` | standard hardware scope and fail-closed envelope are listed; the accepted S4 storage/radio/UI platform is reusable | complete probe → observe/capture → Library → inspect/export for every applicable stock module and verify PR-014 |
+| S5 | `active` | exact 0.102 adds bounded receive-only Sub-GHz RAW OOK capture, SessionStore v5/Library CSV integration in host tests, and a physical CC1101 no-signal checkpoint; the accepted S4 storage/radio/UI platform remains reusable | prove a known physical burst → atomic save → offline Library CSV, add FSK/GDO0, then complete IR/PN532/GPS/power workflows and verify PR-014 |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
 | S8 | `planned` | release gates are defined | requires S7 gate |
+
+### S5 stock-hardware progress
+
+| Module path | State now | Next evidence boundary |
+|---|---|---|
+| CC1101 spectrum/activity | `accepted foundation / S4` | retain while completing capture workflows |
+| CC1101 RAW OOK capture | `active / S5, first slice` — UI, bounded capture, v5 codec/store and CSV exist; physical receiver/no-signal checkpoint passes | known owned transmitter: successful pulses → explicit save → cold offline Library inspect/CSV; then FSK via GDO0 |
+| IR capture/library | `planned / S5` | probe → capture → immutable save → inspect/export |
+| GPS session source | `conditional / S5` | explicit assembly probe → fix/time/track → Session evidence |
+| PN532 read/dump | `conditional / S5` | conflict-safe assembly probe → read/NDEF/dump → Library |
+| Power/charging/sleep | `planned / S5` | truthful state → low-voltage safe-write → sleep/resume/reset evidence |
 
 ## Where we are in the functionality map
 
@@ -76,7 +100,7 @@ items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 | Device foundation and UX | `done / S2`, refined in S4 — boot, board profile, five keys plus calibrated touch, finger-sized common rows, EN/RU UI, ResourceBroker and automated TFT capture; exact 0.100 presents seven implemented jobs directly on Home, keeps future Targets/Lab out of the executable menu, groups Settings, Self-Test, Diagnostics and About under the final Device item, fits four 216×60 rows beneath a 26 px contextual header, and proves the result through a one-command build/flash/HIL/screenshot/check gate; plan-v7 Full/Guided executes declared receive-only RF, artifact and isolated disposable-storage checks | retain this hierarchy and shared plan while adding later capabilities |
 | Survey and Library | `done / S3` — real passive Wi-Fi, atomic Session, List/Detail, offline reopen and export | reuse this accepted foundation rather than fork a new data path |
 | Passive multi-radio and Capture | `done / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV, persistent Wi-Fi PCAP, all-available nRF24 and CC1101 live maps, one-sweep-per-pixel source-bin waterfalls, Full/Guided receiver/artifact/disposable checks, the 2,799.845 s endurance gate, and exact 0.101 six-boundary physical power-cut recovery are accepted | retain as the common S5 observation/storage foundation |
-| Complete standard ESP32-DIV hardware | `active / S5` — scope and fail-closed hardware envelope exist, but complete IR/PN532/GPS/power workflows do not | probe → capture/observe → Library → inspect/export for every applicable module |
+| Complete standard ESP32-DIV hardware | `active / S5` — exact 0.102 starts CAP-030 with a bounded CC1101 OOK RAW user path, host-proven v5 persistence/CSV and physical no-signal RX evidence; known-burst persistence plus FSK, IR, PN532, GPS and power workflows remain open | complete the real Sub-GHz capture round trip, then probe → capture/observe → Library → inspect/export for every remaining applicable module |
 | Targets, compare and companion | `ahead / S6` — product model and boundaries exist, user workflows are not implemented | compare two Surveys through evidence-backed Targets and the same local Web/USB companion |
 | Safe Lab and extensions | `ahead / S7` — safety/resource boundaries are accepted, active workflows and SDK are not implemented | feature-complete catalog, permissioned extensions and proven panic/timeout stop |
 | Reliability and 1.0 delivery | `ahead / S8` — release-HIL concept and some infrastructure exist, but this is not release evidence | signed OTA/rollback/recovery, full HIL/Self-Test, one-hour-budget mixed workload and two green RCs |
@@ -698,6 +722,8 @@ endurance are explicit `DEMO-S4` criteria.
 | E-AUTO-065 / E-HIL-125 / E-UX-024 / E-RADIO-011 | board-01 exact 0.100 source-bin waterfall history | pass: the physical display remains 240×224 and one completed receiver sweep still produces one physical 1 px row, but nearest-source-bin expansion now occurs only while rendering, with no interpolation. Six full paths consume 230/244/225/224/224/225 sweeps with zero skipped measurements; host fill is 2.083/2.346 s for nRF Signal/Traffic and 32.977/22.488/31.699/31.874 s for CC315/433/868/915. Maximum measured row render is 611 us. All three nRF slots remain active, exact chrome changes stay zero, CC retries/recoveries and TX/storage side effects stay zero, generation remains 95/0, stabilized heap recovers to 211,580/146,472/127,120 B and final owner/lease is none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-source-history-waterfall-0.100.json) | preserves the accepted measurement and display semantics while removing the accidental screen-width multiplier from retained history. Values remain uncalibrated; instrumented RF silence and controlled power cut remain open |
 | E-BUILD-102 | exact `0.101.0-power-cut-harness` build | pass: RAM 170,128 B, linked flash 1,512,700 B; app/factory 1,512,848/1,578,384 B; app `beee8ab4…0fe7`, ELF/app identity `f5d34349…db90`; exact source commit `aa188ba` | +1,800 B linked flash, zero static-RAM growth and +1,536/+1,536 B images vs 0.100 for isolated SD power-cut arm/recovery commands and the identity-bound host runner |
 | E-AUTO-066 / E-HIL-126 / E-STORAGE-028 / E-GATE-005 | board-01 exact 0.101 six-boundary physical power-cut and `DEMO-S4` | pass: one exact flashed candidate first passes 17-state Home/RF regression with unchanged product generation 95/0 and heap 211,580/146,472/127,120 B. A software-reset preflight then validates boundary 1. The physical matrix observes six real USB disconnects of 5.216…6.589 s across write/sync payload, manifest and head boundaries; the same USB identity returns with `ESP_RST_POWERON` every time. Read-only recovery yields generations 1/1/1/1/1/2 with three observations, unchanged prior CRCs, zero recovery bytes/file/directory syncs, zero TX, no user-name/data reads, complete cleanup and lease 0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-sd-power-cut-0.101.json) | closes ST-HIL-A08 and the only remaining `DEMO-S4` gate together with accepted 0.89 endurance. S4 is done and S5 is active; this is one board/card pair, not release promotion or a media-compatibility claim |
+| E-BUILD-103 | exact `0.102.0-subghz-raw-rx` build | pass: static RAM 171,400 B, linked flash 1,527,836 B; app/factory 1,528,092/1,593,372 B; app `6e5b858d…1ed8`, factory `bb1de521…33c6`, ELF/app identity `a8792b4b…d88`; exact source commit `d8c52f7` | +15,136 B linked flash and +1,272 B static RAM vs 0.101 for bounded RAW capture, schema-v5 pulse storage, Library CSV and the user-facing four-band flow; exact S5 checkpoint, not a release build |
+| E-AUTO-067 / E-HIL-127 / E-RADIO-012 / E-STORAGE-029 | board-01 exact 0.102 first Sub-GHz RAW receive slice | pass checkpoint: public Actions open Sub-GHz→RAW Capture→433 MHz; the real CC1101 receive path takes 171,434 RSSI samples in 10,000,007 us and honestly terminates `timed_out` with no invented pulses or CSV. TX/PATABLE/FIFO/storage-write counters remain zero; exact CID and generation 95/0, heap 210,308/145,076/125,848 B, input zero-drop/error, buzzer inactive, seven TFT states and final Home lease 0 are bound in the [machine-checked artifact](../../tests/hil/evidence/board-01-subghz-raw-0.102.json). Native tests independently cover successful/truncated pulse capture, v5 codec/store, corrupt rejection and CSV | proves the physical receive/no-signal path and software persistence contract only. No known transmitter was used; a successful physical burst, explicit atomic save, cold Library CSV and FSK/GDO0 remain open, no RF payload is retained, TX/replay belongs to S7, and CAP-030 is not complete |
 
 ## Known uncertainties and risks
 
@@ -730,7 +756,22 @@ endurance are explicit `DEMO-S4` criteria.
 - No microphone/scope evidence exists for the buzzer: exact boot/runtime pad state is
   proven, while absence of audible hum remains an operator observation and HW-T09.
 
-## Blockers
+## Current S5 boundary
+
+No instrument or external module blocks the next software work. The immediate open
+boundary is a positive physical Sub-GHz fixture: without a known owned OOK
+transmitter, exact 0.102 can prove real receive sampling and honest no-signal timeout,
+but cannot claim successful pulse capture, persistence or offline Library export.
+That gap stays visible and does not turn the passing no-signal checkpoint into a
+completed CAP-030.
+
+FSK capture requires the declared GDO0 path and remains the next receiver design
+slice. IR can then use the same immutable Capture→Library pattern. GPS and PN532 stay
+conditional on an explicitly selected compatible assembly; missing modules are N/A,
+never simulated pass. Power/thermal and shared-bus electrical measurements remain
+limited by the unavailable instruments already recorded in the hardware envelope.
+
+## Historical blockers (superseded status)
 
 S4 implementation is unblocked; source selection, bounded Wi-Fi/BLE scheduling,
 durable dual-source persistence and compatible runtime degradation are accepted

@@ -1,0 +1,72 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "a8792b4b13ff1b6e364dcd049f79f4e9398bec845d8aff6ab63ac8edd77cfd88",
+    "factory_bytes": 1593776,
+    "factory_sha256": "bb1de521040302dfc0fb9651e0b4f6eaa25995d2068144e7dbe5af31b4bd33c6",
+    "firmware_bytes": 1528240,
+    "firmware_sha256": "6e5b858df967b93f8a534a90237a33a88eeb37405f88bf7996d35a8924813ed8",
+    "linked_flash_bytes": 1527836,
+    "map_sha256": "3e6979dc3c7dda68728b4ed5f6ef401bdbc3bb81aae78c2c6c412f1f1e7acb53",
+    "run_sha256": "b829e3e1957186365bba9cbb007ef288799050e988c903882b5b6df54b9b1fa7",
+    "runner_commit": "a553640e42f9568262e4082ac443020b4257bffb",
+    "runner_sha256": "fd0c35dacd36b4be647cb4738c4c99189f1af9f5f0fe1f0771a1d82032f25989",
+    "schema": "leshy.subghz_raw.provenance.v1",
+    "source_commit": "d8c52f78ce3df81985b568e4f89ae74e098286e4",
+    "static_ram_bytes": 171400,
+    "version": "0.102.0-subghz-raw-rx"
+  },
+  "coverage": {
+    "cap_030_complete": false,
+    "host_capture_codec_store_csv": true,
+    "physical_known_transmitter_used": false,
+    "physical_persistence_and_library_export": false,
+    "physical_receive_and_no_signal_timeout": true,
+    "physical_successful_burst": false,
+    "raw_rf_payload_retained": false,
+    "tx_or_replay_in_scope": false
+  },
+  "evidence": {
+    "artifact_index_sha256": "a43eae59f08b2eb1c78ca6b99f0785de392c0a22492d1d69bb245e967396bd28",
+    "files": 27,
+    "provenance_sha256": "000bb21e373b6513232e0a562b927a0ee39879b22b0366cffc82da86f86bb5cf",
+    "run_sha256": "b829e3e1957186365bba9cbb007ef288799050e988c903882b5b6df54b9b1fa7",
+    "tft_states": 7
+  },
+  "evidence_ids": [
+    "E-BUILD-103",
+    "E-AUTO-067",
+    "E-HIL-127",
+    "E-RADIO-012",
+    "E-STORAGE-029"
+  ],
+  "schema": "leshy.subghz_raw_acceptance.v1",
+  "status": "pass_physical_receive_no_signal_checkpoint",
+  "verified": {
+    "application_tx_calls": 0,
+    "automatic_screenshots": true,
+    "buzzer_inactive": true,
+    "checkpoint": "physical_receive_path",
+    "fifo_writes": 0,
+    "final_lease_mask": 0,
+    "final_owner": "none",
+    "frequency_khz": 433920,
+    "heap": [
+      210308,
+      145076,
+      125848
+    ],
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "manual_button_presses": 0,
+    "modulation": "ook_envelope",
+    "pa_table_writes": 0,
+    "physical_rssi_samples": 171434,
+    "storage_generation": 95,
+    "storage_observations": 0,
+    "storage_physical_write_calls": 0,
+    "terminal_state": "timed_out",
+    "tx_strobes": 0,
+    "wait_elapsed_us": 10000007
+  }
+}
