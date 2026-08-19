@@ -8059,6 +8059,18 @@ bool applyUiAction(UiAction action, bool render = true) {
                          ? spectrumViewport.previousMode()
                          : spectrumViewport.nextMode());
                 if (changed) {
+                    if (spectrumViewport.mode() ==
+                        SpectrumDisplayMode::Waterfall) {
+                        const std::size_t bins = activeSpectrumBins();
+                        spectrumViewport.reset(bins);
+                        spectrumViewport.setMode(
+                            SpectrumDisplayMode::Waterfall);
+                        spectrumWaterfallStartedUs = 0;
+                        spectrumWaterfallCompletedUs = 0;
+                        spectrumWaterfallRowsEmitted = 0;
+                        nextSpectrumWaterfallRowUs =
+                            static_cast<std::uint64_t>(esp_timer_get_time());
+                    }
                     nextSpectrumUiRefreshUs = 0;
                     lastRuntimeEvent = spectrumViewport.mode() ==
                         SpectrumDisplayMode::Waterfall

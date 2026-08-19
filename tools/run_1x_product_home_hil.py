@@ -294,10 +294,8 @@ def main() -> int:
                     "runtime_event": "nrf24_spectrum_running",
                     "runtime_owner": "spectrum24", "lease_mask": 9,
                 }, "nrf_entry")
-                reports["nrf_spectrum"] = wait_full_waterfall(
-                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA)
-                require_waterfall_timing(
-                    reports["nrf_spectrum"], "nrf_waterfall_timing")
+                reports["nrf_spectrum"] = read_only_query(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
                 require_exact(reports["nrf_spectrum"], {
                     "view": "live", "display_mode": "spectrum",
                     "metric": "signal",
@@ -309,9 +307,8 @@ def main() -> int:
                 screens["nrf_spectrum"] = capture(
                     device, frames, "nrf-spectrum")
                 trace.append(action(device, "down"))
-                reports["nrf_waterfall"] = wait_report(
-                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA,
-                    WATERFALL_ROWS)
+                reports["nrf_waterfall"] = wait_full_waterfall(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA)
                 require_waterfall_timing(
                     reports["nrf_waterfall"], "nrf_waterfall_view_timing")
                 require_exact(reports["nrf_waterfall"], {
