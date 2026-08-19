@@ -32,6 +32,10 @@ SCREENS = {
     "device": "device",
     "home_final": "home-final",
 }
+PIXEL_WATERFALL_SCREENS = {
+    "nrf_waterfall_next": "nrf-waterfall-next",
+    "cc_waterfall_next": "cc-waterfall-next",
+}
 IDENTITY_SCREENS = {"home_en": "home-en"}
 
 
@@ -164,6 +168,10 @@ def main() -> int:
             before.get("observations") == after.get("observations"),
             "persistent product continuity mismatch")
 
+    scope = run.get("scope", {})
+    pixel_contract = scope.get("waterfall_chrome_static_verified") is True
+    expected_rows = 224 if pixel_contract else 112
+    expected_period_us = 13_392 if pixel_contract else 26_785
     reports = run.get("reports", {})
     for prefix, owner in (("nrf", "spectrum24"), ("cc", "subghz")):
         spectrum = reports.get(f"{prefix}_spectrum", {})
@@ -202,9 +210,10 @@ def main() -> int:
             for label, report in (("spectrum", spectrum),
                                   ("waterfall", waterfall)):
                 require(failures,
-                        report.get("history_rows") == 112 and
+                        report.get("history_rows") == expected_rows and
                         report.get("waterfall_fill_target_us") == 3_000_000 and
-                        report.get("waterfall_row_period_us") == 26_785 and
+                        report.get("waterfall_row_period_us") ==
+                            expected_period_us and
                         report.get("waterfall_full") is True and
                         2_700_000 <=
                             report.get("waterfall_fill_elapsed_us", 0) <=
@@ -220,7 +229,7 @@ def main() -> int:
             report = reports.get(f"cc_fill_{band}", {})
             require(failures,
                     report.get("band") == band and
-                    report.get("history_rows") == 112 and
+                    report.get("history_rows") == expected_rows and
                     report.get("waterfall_fill_target_us") == 3_000_000 and
                     report.get("waterfall_full") is True and
                     2_700_000 <=
@@ -236,11 +245,21 @@ def main() -> int:
             require(failures, 2700 <= host_elapsed <= 3100,
                     f"{key} host-observed fill mismatch")
 
+    if pixel_contract:
+        pixel_changes = run.get("waterfall_pixel_changes", {})
+        for receiver in ("nrf", "cc"):
+            change = pixel_changes.get(receiver, {})
+            require(failures,
+                    change.get("graph_changed_pixels", 0) > 0 and
+                    change.get("chrome_changed_pixels") == 0,
+                    f"{receiver} waterfall-only pixel update mismatch")
+
     screens = run.get("screens", {})
-    scope = run.get("scope", {})
     identity_contract = scope.get("home_identity") == \
         "bilingual_brand_and_version"
     expected_screens = dict(SCREENS)
+    if pixel_contract:
+        expected_screens.update(PIXEL_WATERFALL_SCREENS)
     if identity_contract:
         expected_screens.update(IDENTITY_SCREENS)
     require(failures, set(screens) == set(expected_screens),
@@ -289,6 +308,8 @@ def main() -> int:
         "rf_instrument_available": False,
         "storage_write_authorized": False,
     }
+    if pixel_contract:
+        expected_scope["waterfall_chrome_static_verified"] = True
     if identity_contract:
         expected_scope["home_identity"] = "bilingual_brand_and_version"
         require(failures,

@@ -23,12 +23,16 @@ bool SpectrumViewport::reset(std::size_t bins) {
 bool SpectrumViewport::push(const std::uint8_t* intensity,
                             std::size_t bins) {
     if (intensity == nullptr || bins == 0 || bins != binCount_) return false;
-    const std::size_t offset = nextRow_ * kMaxBins;
-    for (std::size_t bin = 0; bin < bins; ++bin) {
-        history_[offset + bin] = intensity[bin];
+    const std::size_t offset = nextRow_ * kPackedRowBytes;
+    for (std::size_t byte = 0; byte < kPackedRowBytes; ++byte) {
+        history_[offset + byte] = 0;
     }
-    for (std::size_t bin = bins; bin < kMaxBins; ++bin) {
-        history_[offset + bin] = 0;
+    for (std::size_t bin = 0; bin < bins; ++bin) {
+        const std::uint8_t packed =
+            static_cast<std::uint8_t>(intensity[bin] >> 4U);
+        std::uint8_t& destination = history_[offset + bin / 2U];
+        destination = static_cast<std::uint8_t>(
+            destination | (bin % 2U == 0 ? packed : packed << 4U));
     }
     nextRow_ = (nextRow_ + 1U) % kHistoryRows;
     if (rowsStored_ < kHistoryRows) ++rowsStored_;
@@ -62,7 +66,11 @@ bool SpectrumViewport::rowValid(std::size_t row) const {
 std::uint8_t SpectrumViewport::intensity(std::size_t row,
                                          std::size_t bin) const {
     if (!rowValid(row) || bin >= binCount_) return 0;
-    return history_[row * kMaxBins + bin];
+    const std::uint8_t packed =
+        history_[row * kPackedRowBytes + bin / 2U];
+    const std::uint8_t nibble = static_cast<std::uint8_t>(
+        bin % 2U == 0 ? packed & 0x0FU : packed >> 4U);
+    return static_cast<std::uint8_t>(nibble * 17U);
 }
 
 }  // namespace leshy1::apps::spectrum

@@ -4298,46 +4298,52 @@ std::uint16_t toneColor(Tone tone) {
     }
 }
 
-bool headerStorageReady() {
-    return productBootRecovery.enrolled &&
-           productBootRecovery.fingerprintMatched &&
-           productBootRecovery.readOnlyGuaranteed &&
-           productBootRecovery.cleanupComplete;
-}
-
-bool headerRadioReceiving() {
-    return productSurveyRuntime.sourceActive ||
-           wifiFrameCapture.stats().state == WifiFrameCaptureState::Running ||
-           nrf24SpectrumController.state() ==
-               Nrf24SpectrumViewState::Running ||
-           cc1101SpectrumController.state() ==
-               Cc1101SpectrumViewState::Running;
+const char* headerReceiverStatus() {
+    if (nrf24SpectrumController.state() ==
+        Nrf24SpectrumViewState::Running) {
+        return "RX1+2";
+    }
+    if (cc1101SpectrumController.state() ==
+        Cc1101SpectrumViewState::Running) {
+        return "RX CC";
+    }
+    if (wifiFrameCapture.stats().state == WifiFrameCaptureState::Running) {
+        return "RX WIFI";
+    }
+    if (productSurveyRuntime.sourceActive) {
+        const std::uint8_t wifiMask = leshy1::services::survey::sourceMask(
+            RadioKind::Wifi);
+        const std::uint8_t bleMask = leshy1::services::survey::sourceMask(
+            RadioKind::Ble);
+        const bool wifi =
+            (productSurveyRuntime.activeSourceMask & wifiMask) != 0;
+        const bool ble =
+            (productSurveyRuntime.activeSourceMask & bleMask) != 0;
+        if (wifi && ble) return "RX W+B";
+        if (wifi) return "RX WIFI";
+        if (ble) return "RX BLE";
+    }
+    return "RX --";
 }
 
 void renderHeaderStatus() {
-    const bool storageReady = headerStorageReady();
-    const bool storageFault = productBootRecovery.enrolled && !storageReady;
-    const bool radioReceiving = headerRadioReceiving();
-    const char* storage = storageReady ? "SD OK" :
-                          (storageFault ? "SD !" : "SD --");
-    const char* radio = radioReceiving ? "RF RX" : "RF --";
-    const std::uint16_t storageTone = storageReady
-        ? Palette::Positive
-        : (storageFault ? Palette::Danger : Palette::TextMuted);
-    const std::uint16_t radioTone = radioReceiving
-        ? Palette::Positive : Palette::TextMuted;
+    const char* receiver = headerReceiverStatus();
+    constexpr const char* transmitter = "TX --";
+    const bool receiving = receiver[3] != '-';
 
     selectUiFont(UiTextRole::Meta);
-    const std::int16_t radioWidth = display.textWidth(radio);
-    const std::int16_t storageWidth = display.textWidth(storage);
-    const std::int16_t radioX = Layout::ScreenWidth - 10 - radioWidth;
-    const std::int16_t storageX = radioX - 10 - storageWidth;
-    display.setTextColor(storageTone, Palette::Header);
-    setUiCursor(UiTextRole::Meta, storageX, 5);
-    display.print(storage);
-    display.setTextColor(radioTone, Palette::Header);
-    setUiCursor(UiTextRole::Meta, radioX, 5);
-    display.print(radio);
+    const std::int16_t transmitterWidth = display.textWidth(transmitter);
+    const std::int16_t receiverWidth = display.textWidth(receiver);
+    const std::int16_t transmitterX =
+        Layout::ScreenWidth - 6 - transmitterWidth;
+    const std::int16_t receiverX = transmitterX - 6 - receiverWidth;
+    display.setTextColor(receiving ? Palette::Positive : Palette::TextMuted,
+                         Palette::Header);
+    setUiCursor(UiTextRole::Meta, receiverX, 5);
+    display.print(receiver);
+    display.setTextColor(Palette::TextMuted, Palette::Header);
+    setUiCursor(UiTextRole::Meta, transmitterX, 5);
+    display.print(transmitter);
 }
 
 void formatHomeVersion(char* output, std::size_t capacity) {
@@ -5350,9 +5356,13 @@ constexpr std::int16_t kSpectrumGraphY =
     kSpectrumOverlayY + kSpectrumOverlayHeight;
 constexpr std::int16_t kSpectrumGraphHeight =
     kSpectrumAxisY - kSpectrumGraphY;
+static_assert(kSpectrumGraphHeight == SpectrumViewport::kHistoryRows,
+              "each waterfall sample must occupy exactly one TFT row");
+constexpr std::uint16_t kSpectrumNoSignal =
+    leshy1::ui::visual::rgb565(0, 0, 0);
 
 std::uint16_t spectrumTone(std::uint8_t intensity) {
-    if (intensity == 0) return Palette::Surface;
+    if (intensity == 0) return kSpectrumNoSignal;
     if (intensity < 64U) {
         return leshy1::ui::visual::rgb565(
             0, static_cast<std::uint8_t>(intensity * 2U), 196);
@@ -5431,7 +5441,7 @@ void renderWaterfallCursor() {
 
 void renderSpectrumWaterfall() {
     display.fillRect(0, kSpectrumGraphY, Layout::ScreenWidth,
-                     kSpectrumGraphHeight, Palette::Surface);
+                     kSpectrumGraphHeight, kSpectrumNoSignal);
     for (std::size_t row = 0; row < SpectrumViewport::kHistoryRows; ++row) {
         renderWaterfallSlot(row);
     }
@@ -5479,29 +5489,50 @@ void renderSpectrumModeAtRight() {
     display.print(mode);
 }
 
-void renderNrf24SpectrumMetrics() {
-    char line[64] = {};
+void renderSpectrumLegend(UiTextId receiverState, Tone tone) {
     display.fillRect(0, kSpectrumOverlayY, Layout::ScreenWidth,
                      kSpectrumOverlayHeight, Palette::Surface);
-    const Nrf24SpectrumViewState state = nrf24SpectrumController.state();
-    const UiTextId stateText = state == Nrf24SpectrumViewState::Running
-        ? UiTextId::SpectrumOverlayRunning
-        : (state == Nrf24SpectrumViewState::Paused
-               ? UiTextId::SpectrumOverlayPaused : UiTextId::SpectrumFault);
-    display.setTextColor(state == Nrf24SpectrumViewState::Fault
-                             ? Palette::Danger : Palette::Positive,
+    display.setTextColor(tone == Tone::Danger ? Palette::Danger
+                                              : Palette::Positive,
                          Palette::Surface);
     setUiCursor(UiTextRole::Meta, 4, kSpectrumOverlayY);
-    display.print(tr(stateText));
+    display.print(tr(receiverState));
     renderSpectrumModeAtRight();
-    std::snprintf(line, sizeof(line), tr(UiTextId::SpectrumCompactFormat),
-                  static_cast<unsigned long>(nrf24SpectrumController.sweeps()),
-                  static_cast<unsigned>(2400U +
-                      nrf24SpectrumController.hottestChannel()),
-                  static_cast<unsigned>(nrf24SpectrumController.activeBins()));
+
+    constexpr std::int16_t kLegendGap = 5;
+    constexpr std::int16_t kLegendTop = kSpectrumOverlayY + 14;
+    constexpr std::int16_t kLegendBarTop = kLegendTop + 3;
+    constexpr std::int16_t kLegendBarHeight = 7;
+    const char* quiet = tr(UiTextId::SpectrumLegendQuiet);
+    const char* strong = tr(UiTextId::SpectrumLegendStrong);
+    selectUiFont(UiTextRole::Meta);
+    const std::int16_t quietWidth = display.textWidth(quiet);
+    const std::int16_t strongWidth = display.textWidth(strong);
+    const std::int16_t strongX = Layout::ScreenWidth - 4 - strongWidth;
+    const std::int16_t barX = 4 + quietWidth + kLegendGap;
+    const std::int16_t barWidth = strongX - kLegendGap - barX;
     display.setTextColor(Palette::TextSecondary, Palette::Surface);
-    setUiCursor(UiTextRole::Meta, 4, kSpectrumOverlayY + 14);
-    display.print(line);
+    setUiCursor(UiTextRole::Meta, 4, kLegendTop);
+    display.print(quiet);
+    setUiCursor(UiTextRole::Meta, strongX, kLegendTop);
+    display.print(strong);
+    for (std::int16_t x = 0; x < barWidth; ++x) {
+        const std::uint8_t intensity = static_cast<std::uint8_t>(
+            static_cast<std::uint32_t>(x) * 255U /
+            static_cast<std::uint32_t>(barWidth - 1));
+        display.drawFastVLine(barX + x, kLegendBarTop, kLegendBarHeight,
+                              spectrumTone(intensity));
+    }
+}
+
+void renderNrf24SpectrumLegend() {
+    const Nrf24SpectrumViewState state = nrf24SpectrumController.state();
+    renderSpectrumLegend(
+        state == Nrf24SpectrumViewState::Running
+            ? UiTextId::SpectrumOverlayRunning
+            : (state == Nrf24SpectrumViewState::Paused
+                   ? UiTextId::SpectrumOverlayPaused : UiTextId::SpectrumFault),
+        state == Nrf24SpectrumViewState::Fault ? Tone::Danger : Tone::Positive);
 }
 
 void renderNrf24SpectrumAxis() {
@@ -5527,7 +5558,7 @@ void renderNrf24SpectrumAxis() {
 void renderNrf24SpectrumPage(bool clearContent) {
     renderHeader(tr(UiTextId::SpectrumTitle), clearContent);
     renderActiveSpectrumData();
-    renderNrf24SpectrumMetrics();
+    renderNrf24SpectrumLegend();
     renderNrf24SpectrumAxis();
 }
 
@@ -5564,34 +5595,20 @@ void renderCc1101SpectrumAxis() {
     display.print(last);
 }
 
-void renderCc1101SpectrumMetrics() {
-    char line[64] = {};
-    display.fillRect(0, kSpectrumOverlayY, Layout::ScreenWidth,
-                     kSpectrumOverlayHeight, Palette::Surface);
+void renderCc1101SpectrumLegend() {
     const Cc1101SpectrumViewState state = cc1101SpectrumController.state();
-    const UiTextId stateText = state == Cc1101SpectrumViewState::Running
-        ? UiTextId::CcSpectrumOverlayRunning
-        : (state == Cc1101SpectrumViewState::Paused
-               ? UiTextId::CcSpectrumOverlayPaused : UiTextId::SpectrumFault);
-    display.setTextColor(state == Cc1101SpectrumViewState::Fault
-                             ? Palette::Danger : Palette::Positive,
-                         Palette::Surface);
-    setUiCursor(UiTextRole::Meta, 4, kSpectrumOverlayY);
-    display.print(tr(stateText));
-    renderSpectrumModeAtRight();
-    std::snprintf(line, sizeof(line), tr(UiTextId::CcSpectrumCompactFormat),
-        static_cast<unsigned long>(cc1101SpectrumController.sweeps()),
-        static_cast<unsigned long>(cc1101SpectrumController.peakKHz()),
-        static_cast<int>(cc1101SpectrumController.peakRssiDbm()));
-    display.setTextColor(Palette::TextSecondary, Palette::Surface);
-    setUiCursor(UiTextRole::Meta, 4, kSpectrumOverlayY + 14);
-    display.print(line);
+    renderSpectrumLegend(
+        state == Cc1101SpectrumViewState::Running
+            ? UiTextId::CcSpectrumOverlayRunning
+            : (state == Cc1101SpectrumViewState::Paused
+                   ? UiTextId::CcSpectrumOverlayPaused : UiTextId::SpectrumFault),
+        state == Cc1101SpectrumViewState::Fault ? Tone::Danger : Tone::Positive);
 }
 
 void renderCc1101SpectrumPage(bool clearContent) {
     renderHeader(tr(UiTextId::CcSpectrumTitle), clearContent);
     renderActiveSpectrumData();
-    renderCc1101SpectrumMetrics();
+    renderCc1101SpectrumLegend();
     renderCc1101SpectrumAxis();
 }
 
@@ -6331,18 +6348,15 @@ void serviceNrf24Spectrum() {
     }
     nextNrf24SpectrumSweepUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) + 40000ULL;
-    if (!uiController.isRoot() && uiController.page() == 2) {
+    const std::uint64_t refreshUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (!uiController.isRoot() && uiController.page() == 2 &&
+        spectrumViewport.mode() == SpectrumDisplayMode::Spectrum &&
+        refreshUs >= nextSpectrumUiRefreshUs) {
         display.startWrite();
-        const std::uint64_t refreshUs =
-            static_cast<std::uint64_t>(esp_timer_get_time());
-        if (refreshUs >= nextSpectrumUiRefreshUs) {
-            if (spectrumViewport.mode() == SpectrumDisplayMode::Spectrum) {
-                renderSpectrumBars();
-            }
-            renderNrf24SpectrumMetrics();
-            nextSpectrumUiRefreshUs = refreshUs + 100000ULL;
-        }
+        renderSpectrumBars();
         display.endWrite();
+        nextSpectrumUiRefreshUs = refreshUs + 100000ULL;
     }
 }
 
@@ -6416,19 +6430,16 @@ void serviceCc1101Spectrum() {
         renderInteractiveScreen(true);
         return;
     }
+    const std::uint64_t refreshUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
     if (cc1101SpectrumController.nextBin() == 0 &&
-        !uiController.isRoot() && uiController.page() == 2) {
+        !uiController.isRoot() && uiController.page() == 2 &&
+        spectrumViewport.mode() == SpectrumDisplayMode::Spectrum &&
+        refreshUs >= nextSpectrumUiRefreshUs) {
         display.startWrite();
-        const std::uint64_t refreshUs =
-            static_cast<std::uint64_t>(esp_timer_get_time());
-        if (refreshUs >= nextSpectrumUiRefreshUs) {
-            if (spectrumViewport.mode() == SpectrumDisplayMode::Spectrum) {
-                renderSpectrumBars();
-            }
-            renderCc1101SpectrumMetrics();
-            nextSpectrumUiRefreshUs = refreshUs + 100000ULL;
-        }
+        renderSpectrumBars();
         display.endWrite();
+        nextSpectrumUiRefreshUs = refreshUs + 100000ULL;
     }
 }
 
@@ -6450,8 +6461,9 @@ void serviceSpectrumWaterfallCadence() {
     }
     if (nowUs < nextSpectrumWaterfallRowUs) return;
 
-    constexpr std::uint8_t kMaximumCatchUpRows = 112;
-    std::uint8_t appended = 0;
+    constexpr std::size_t kMaximumCatchUpRows =
+        SpectrumViewport::kHistoryRows;
+    std::size_t appended = 0;
     const bool renderRows = !uiController.isRoot() &&
         uiController.page() == 2 &&
         spectrumViewport.mode() == SpectrumDisplayMode::Waterfall;

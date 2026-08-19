@@ -19,7 +19,10 @@ const char* spectrumDisplayModeName(SpectrumDisplayMode mode);
 class SpectrumViewport final {
 public:
     static constexpr std::size_t kMaxBins = 83;
-    static constexpr std::size_t kHistoryRows = 112;
+    static constexpr std::size_t kHistoryRows = 224;
+    static constexpr std::size_t kPackedRowBytes = (kMaxBins + 1U) / 2U;
+    static constexpr std::size_t kHistoryStorageBytes =
+        kPackedRowBytes * kHistoryRows;
     static constexpr std::uint64_t kWaterfallFillUs = 3000000ULL;
     static constexpr std::uint64_t kWaterfallRowPeriodUs =
         kWaterfallFillUs / kHistoryRows;
@@ -39,7 +42,9 @@ public:
     std::uint8_t intensity(std::size_t row, std::size_t bin) const;
 
 private:
-    std::array<std::uint8_t, kMaxBins * kHistoryRows> history_{};
+    // Four-bit intensity is sufficient for the 16-step display palette and doubles
+    // vertical history without doubling static RAM.
+    std::array<std::uint8_t, kHistoryStorageBytes> history_{};
     SpectrumDisplayMode mode_ = SpectrumDisplayMode::Spectrum;
     std::size_t binCount_ = 0;
     std::size_t rowsStored_ = 0;

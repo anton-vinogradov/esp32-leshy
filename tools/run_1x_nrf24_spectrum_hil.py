@@ -56,7 +56,7 @@ def spectrum_failures(
     }, f"spectrum_{state}")
     sweeps = report.get("sweeps")
     history_rows = report.get("history_rows")
-    if not isinstance(history_rows, int) or history_rows < 1 or history_rows > 112:
+    if not isinstance(history_rows, int) or history_rows < 1 or history_rows > 224:
         failures.append(f"bounded waterfall history differs: {history_rows!r}")
     wire = report.get("wire", {})
     side_effects = report.get("side_effects", {})

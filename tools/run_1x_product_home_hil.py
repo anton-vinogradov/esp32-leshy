@@ -32,8 +32,37 @@ CC_SCHEMA = "leshy.cc1101.spectrum.v1"
 HOME_ITEMS = (
     "wifi", "ble", "spectrum24", "subghz", "capture", "library", "device",
 )
-WATERFALL_ROWS = 112
+WATERFALL_ROWS = 224
 WATERFALL_FILL_US = 3_000_000
+WATERFALL_GRAPH_Y = 54
+WATERFALL_GRAPH_BOTTOM = 278
+
+
+def require_only_waterfall_changed(
+        frames: Path, first: str, second: str) -> dict[str, int]:
+    before = (frames / f"{first}.rgb565").read_bytes()
+    after = (frames / f"{second}.rgb565").read_bytes()
+    expected = 240 * 320 * 2
+    if len(before) != expected or len(after) != expected:
+        raise RuntimeError("waterfall comparison requires two complete TFT frames")
+    graph_changed = 0
+    chrome_changed = 0
+    for y in range(320):
+        for x in range(240):
+            offset = (y * 240 + x) * 2
+            if before[offset:offset + 2] == after[offset:offset + 2]:
+                continue
+            if WATERFALL_GRAPH_Y <= y < WATERFALL_GRAPH_BOTTOM:
+                graph_changed += 1
+            else:
+                chrome_changed += 1
+    if graph_changed == 0:
+        raise RuntimeError(f"{first}: waterfall pixels did not advance")
+    if chrome_changed != 0:
+        raise RuntimeError(
+            f"{first}: {chrome_changed} pixels changed outside the waterfall")
+    return {"graph_changed_pixels": graph_changed,
+            "chrome_changed_pixels": chrome_changed}
 
 
 def home_selection(device: PassiveSerial, index: int) -> dict[str, Any]:
@@ -155,6 +184,7 @@ def main() -> int:
     trace: list[dict[str, Any]] = []
     screens: dict[str, Any] = {}
     reports: dict[str, Any] = {}
+    waterfall_pixel_changes: dict[str, Any] = {}
     boot: dict[str, Any] = {}
     boot_metrics_samples: list[dict[str, Any]] = []
     recovery_before: dict[str, Any] = {}
@@ -253,6 +283,11 @@ def main() -> int:
                 }, "nrf_waterfall")
                 screens["nrf_waterfall"] = capture(
                     device, frames, "nrf-waterfall")
+                time.sleep(0.08)
+                screens["nrf_waterfall_next"] = capture(
+                    device, frames, "nrf-waterfall-next")
+                waterfall_pixel_changes["nrf"] = require_only_waterfall_changed(
+                    frames, "nrf-waterfall", "nrf-waterfall-next")
                 trace.append(action(device, "right"))
                 paused_before = query(
                     device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
@@ -311,6 +346,11 @@ def main() -> int:
                 }, "cc_waterfall")
                 screens["cc_waterfall"] = capture(
                     device, frames, "cc-waterfall")
+                time.sleep(0.08)
+                screens["cc_waterfall_next"] = capture(
+                    device, frames, "cc-waterfall-next")
+                waterfall_pixel_changes["cc"] = require_only_waterfall_changed(
+                    frames, "cc-waterfall", "cc-waterfall-next")
                 trace.append(action(device, "right"))
                 cc_paused_before = query(
                     device, b"hardware.cc1101.spectrum", CC_SCHEMA, "state")
@@ -439,6 +479,7 @@ def main() -> int:
             len(boot_metrics_samples) >= 2,
         "recovery_before": recovery_before,
         "reports": reports,
+        "waterfall_pixel_changes": waterfall_pixel_changes,
         "screens": screens,
         "input": input_state,
         "safe_outputs": safe_outputs,
@@ -451,6 +492,7 @@ def main() -> int:
             "single_flash": True,
             "manual_button_presses": 0,
             "screenshots_automatic": True,
+            "waterfall_chrome_static_verified": True,
             "software_rx_only_counters_verified": True,
             "rf_instrument_available": False,
             "storage_write_authorized": False,
