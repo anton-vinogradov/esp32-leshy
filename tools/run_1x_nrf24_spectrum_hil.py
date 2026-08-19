@@ -28,6 +28,7 @@ from run_1x_product_survey_hil import (
 
 RUN_SCHEMA = "leshy.nrf24_spectrum_hil.run.v1"
 SPECTRUM_SCHEMA = "leshy.nrf24.spectrum.v1"
+MIN_WATERFALL_ROWS = 32
 
 
 def spectrum_failures(
@@ -82,6 +83,22 @@ def spectrum_failures(
     if not isinstance(peak_mhz, int) or not 2402 <= peak_mhz <= 2484:
         failures.append(f"peak is outside plan: {peak_mhz!r}")
     return failures
+
+
+def wait_for_history(
+    device: PassiveSerial, minimum_rows: int, timeout: float = 8.0,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    report: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        report = query(
+            device, b"hardware.nrf24.spectrum", SPECTRUM_SCHEMA, "state")
+        if int(report.get("history_rows", 0)) >= minimum_rows:
+            return report
+        time.sleep(0.05)
+    raise RuntimeError(
+        f"nRF24 waterfall did not accumulate {minimum_rows} rows: {report}"
+    )
 
 
 def main() -> int:
@@ -200,10 +217,8 @@ def main() -> int:
                     "runtime_event": "spectrum_waterfall_view",
                     "changed": True,
                 }, "waterfall_view"))
-                time.sleep(0.3)
-                reports["waterfall"] = query(
-                    device, b"hardware.nrf24.spectrum",
-                    SPECTRUM_SCHEMA, "state")
+                reports["waterfall"] = wait_for_history(
+                    device, MIN_WATERFALL_ROWS)
                 failures.extend(spectrum_failures(
                     reports["waterfall"], state="running", active=True,
                     cleanup=False, display_mode="waterfall"))

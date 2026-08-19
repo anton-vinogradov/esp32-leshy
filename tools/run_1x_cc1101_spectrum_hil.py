@@ -34,6 +34,7 @@ BANDS = {
     "868": [863000, 870000],
     "915": [902000, 928000],
 }
+MIN_WATERFALL_ROWS = 16
 
 
 def spectrum_failures(
@@ -134,17 +135,22 @@ def spectrum_failures(
 
 
 def wait_for_sweep(
-    device: PassiveSerial, band: str, timeout: float = 3.0,
+    device: PassiveSerial, band: str, minimum_sweeps: int = 1,
+    timeout: float = 24.0,
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     report: dict[str, Any] = {}
     while time.monotonic() < deadline:
         report = query(
             device, b"hardware.cc1101.spectrum", SPECTRUM_SCHEMA, "state")
-        if report.get("band") == band and int(report.get("sweeps", 0)) >= 1:
+        if report.get("band") == band and \
+                int(report.get("sweeps", 0)) >= minimum_sweeps and \
+                int(report.get("history_rows", 0)) >= minimum_sweeps:
             return report
-        time.sleep(0.05)
-    raise RuntimeError(f"CC1101 band {band} did not complete a sweep: {report}")
+        time.sleep(0.25)
+    raise RuntimeError(
+        f"CC1101 band {band} did not complete {minimum_sweeps} sweeps: {report}"
+    )
 
 
 def main() -> int:
@@ -271,7 +277,8 @@ def main() -> int:
                     "runtime_event": "spectrum_waterfall_view",
                     "changed": True,
                 }, "cc1101_waterfall_view"))
-                reports["waterfall_433"] = wait_for_sweep(device, "433")
+                reports["waterfall_433"] = wait_for_sweep(
+                    device, "433", MIN_WATERFALL_ROWS)
                 failures.extend(spectrum_failures(
                     reports["waterfall_433"], state="running", active=True,
                     cleanup=False, band="433", display_mode="waterfall"))
