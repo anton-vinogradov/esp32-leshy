@@ -28,9 +28,12 @@ bool validateNrf24PassiveSpectrumPlan(
 struct Nrf24PassiveSweep final {
     std::array<std::uint8_t,
                Nrf24PassiveSpectrumPlan::kChannelCount> hits{};
+    std::array<std::uint8_t,
+               Nrf24PassiveSpectrumPlan::kChannelCount> sampled{};
     std::uint64_t startedUs = 0;
     std::uint64_t endedUs = 0;
     std::uint8_t modules = 0;
+    bool sweepComplete = false;
     bool valid = false;
 };
 
@@ -62,6 +65,7 @@ struct Nrf24PassiveSpectrumReport final {
     std::uint8_t detectedModules = 0;
     std::uint8_t activeSlotMask = 0;
     std::uint32_t sweeps = 0;
+    std::uint32_t chunks = 0;
     std::uint32_t registerReads = 0;
     std::uint32_t registerWrites = 0;
     std::uint32_t spiBytesClocked = 0;

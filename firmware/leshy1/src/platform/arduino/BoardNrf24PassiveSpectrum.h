@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 #include "drivers/radio/Nrf24PassiveSpectrum.h"
@@ -19,6 +20,7 @@ public:
         const drivers::radio::Nrf24PassiveSpectrumPlan& plan,
         drivers::radio::Nrf24PassiveSpectrumReport* report);
     bool sweep(drivers::radio::Nrf24PassiveSweep* output);
+    bool sampleChunk(drivers::radio::Nrf24PassiveSweep* output);
     bool end();
 
     bool active() const { return active_; }
@@ -43,6 +45,7 @@ private:
     bool transactionOpen_ = false;
     bool active_ = false;
     std::uint8_t activeSlots_[3] = {0, 0, 0};
+    std::size_t nextChannelIndex_ = 0;
 };
 
 }  // namespace leshy1::platform::arduino

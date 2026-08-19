@@ -121,6 +121,7 @@ bool BoardNrf24PassiveSpectrum::begin(
     *report = {};
     report_ = report;
     plan_ = plan;
+    nextChannelIndex_ = 0;
     report_->profileDeclared = BoardProfile::kRfShieldDeclared;
     report_->gpsExcludedByProfile = !BoardProfile::kGpsDeclared;
     report_->pn532ExcludedByProfile = !BoardProfile::kPn532Declared;
@@ -229,6 +230,28 @@ bool BoardNrf24PassiveSpectrum::begin(
 
 bool BoardNrf24PassiveSpectrum::sweep(
     drivers::radio::Nrf24PassiveSweep* output) {
+    if (output == nullptr || nextChannelIndex_ != 0) return false;
+    *output = {};
+    for (;;) {
+        drivers::radio::Nrf24PassiveSweep chunk;
+        if (!sampleChunk(&chunk)) return false;
+        if (output->startedUs == 0) output->startedUs = chunk.startedUs;
+        output->modules = chunk.modules;
+        output->endedUs = chunk.endedUs;
+        for (std::size_t index = 0; index < output->hits.size(); ++index) {
+            if (chunk.sampled[index] == 0) continue;
+            output->sampled[index] = 1;
+            output->hits[index] = chunk.hits[index];
+        }
+        if (!chunk.sweepComplete) continue;
+        output->sweepComplete = true;
+        output->valid = true;
+        return true;
+    }
+}
+
+bool BoardNrf24PassiveSpectrum::sampleChunk(
+    drivers::radio::Nrf24PassiveSweep* output) {
     if (!active_ || report_ == nullptr || output == nullptr ||
         report_->status != Nrf24PassiveSpectrumStatus::Ready) {
         return false;
@@ -236,8 +259,10 @@ bool BoardNrf24PassiveSpectrum::sweep(
     *output = {};
     output->modules = report_->detectedModules;
     output->startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
-    std::size_t index = 0;
-    while (index < output->hits.size()) {
+    std::size_t index = nextChannelIndex_;
+    std::uint8_t groups = 0;
+    constexpr std::uint8_t kGroupsPerChunk = 7;
+    while (index < output->hits.size() && groups < kGroupsPerChunk) {
         std::uint8_t armed = 0;
         for (std::uint8_t module = 0;
              module < report_->detectedModules && index + module < output->hits.size();
@@ -256,17 +281,25 @@ bool BoardNrf24PassiveSpectrum::sweep(
                 BoardProfile::kNrfCePins[activeSlots_[module]], LOW);
             output->hits[index + module] =
                 static_cast<std::uint8_t>(readRegister(module, kRegRpd) & 0x01U);
+            output->sampled[index + module] = 1;
         }
         index += armed;
+        ++groups;
         if (armed == 0 || !gpio21Safe()) {
             report_->status = Nrf24PassiveSpectrumStatus::Fault;
             output->endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
             return false;
         }
     }
+    nextChannelIndex_ = index;
+    output->sweepComplete = nextChannelIndex_ >= output->hits.size();
+    if (output->sweepComplete) {
+        nextChannelIndex_ = 0;
+        ++report_->sweeps;
+    }
     output->endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     output->valid = true;
-    ++report_->sweeps;
+    ++report_->chunks;
     report_->gpio21StableHigh = gpio21Safe();
     return drivers::radio::validateNrf24PassiveSpectrumReport(*report_, false);
 }
@@ -284,6 +317,7 @@ bool BoardNrf24PassiveSpectrum::end() {
         }
     }
     active_ = false;
+    nextChannelIndex_ = 0;
     cleanupPinsAndSpi();
     const bool complete =
         drivers::radio::validateNrf24PassiveSpectrumReport(*report_, true);

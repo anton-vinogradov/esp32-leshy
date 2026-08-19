@@ -713,6 +713,8 @@ void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
     sweep.modules = 2;
     sweep.startedUs = 1000;
     sweep.endedUs = 2000;
+    sweep.sampled.fill(1);
+    sweep.sweepComplete = true;
     sweep.valid = true;
     sweep.hits[10] = 1;
     sweep.hits[40] = 1;

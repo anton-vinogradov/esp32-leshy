@@ -6401,7 +6401,7 @@ void serviceNrf24Spectrum() {
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (nowUs < nextNrf24SpectrumSweepUs) return;
     Nrf24PassiveSweep sweep;
-    const bool valid = boardNrf24Spectrum.sweep(&sweep) &&
+    const bool valid = boardNrf24Spectrum.sampleChunk(&sweep) &&
                        nrf24SpectrumController.ingest(sweep);
     if (!valid) {
         boardNrf24Spectrum.end();
@@ -12856,7 +12856,7 @@ void emitNrf24SpectrumReport(Stream& reply) {
         "\"waterfall_rows_emitted\":%lu,"
         "\"state\":\"%s\",\"status\":\"%s\","
         "\"range_mhz\":[2402,2484],\"channels\":%u,\"dwell_us\":%u,"
-        "\"modules\":%u,\"active_slot_mask\":%u,"
+        "\"modules\":%u,\"active_slot_mask\":%u,\"chunks\":%lu,"
         "\"all_available_antennas\":true,"
         "\"slot3_receive_enabled\":%s,"
         "\"sweeps\":%lu,\"total_hits\":%llu,"
@@ -12890,6 +12890,7 @@ void emitNrf24SpectrumReport(Stream& reply) {
             leshy1::drivers::radio::defaultNrf24PassiveSpectrumPlan().dwellUs),
         static_cast<unsigned>(nrf24SpectrumController.modules()),
         static_cast<unsigned>(report.activeSlotMask),
+        static_cast<unsigned long>(report.chunks),
         (report.activeSlotMask & 0x04U) != 0 ? "true" : "false",
         static_cast<unsigned long>(nrf24SpectrumController.sweeps()),
         static_cast<unsigned long long>(nrf24SpectrumController.totalHits()),

@@ -71,8 +71,8 @@ bool Nrf24SpectrumController::ingest(
         return false;
     }
     activeBins_ = 0;
-    std::uint8_t hottestIntensity = 0;
     for (std::size_t index = 0; index < intensity_.size(); ++index) {
+        if (sweep.sampled[index] == 0) continue;
         const bool hit = sweep.hits[index] != 0;
         if (hit && totalHits_ != std::numeric_limits<std::uint64_t>::max()) {
             ++totalHits_;
@@ -100,6 +100,9 @@ bool Nrf24SpectrumController::ingest(
             trafficIntensity_[index] =
                 static_cast<std::uint8_t>(activity);
         }
+    }
+    std::uint8_t hottestIntensity = 0;
+    for (std::size_t index = 0; index < intensity_.size(); ++index) {
         if (intensity_[index] >= 24U) ++activeBins_;
         if (intensity_[index] > hottestIntensity) {
             hottestIntensity = intensity_[index];
@@ -108,8 +111,10 @@ bool Nrf24SpectrumController::ingest(
                 index);
         }
     }
-    if (trafficPrimeSweeps_ != 0) --trafficPrimeSweeps_;
-    if (sweeps_ != std::numeric_limits<std::uint32_t>::max()) ++sweeps_;
+    if (sweep.sweepComplete) {
+        if (trafficPrimeSweeps_ != 0) --trafficPrimeSweeps_;
+        if (sweeps_ != std::numeric_limits<std::uint32_t>::max()) ++sweeps_;
+    }
     updatedUs_ = sweep.endedUs;
     return true;
 }
