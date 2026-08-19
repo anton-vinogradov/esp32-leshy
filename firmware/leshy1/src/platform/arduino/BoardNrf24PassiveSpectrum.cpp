@@ -261,7 +261,7 @@ bool BoardNrf24PassiveSpectrum::sampleChunk(
     output->startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     std::size_t index = nextChannelIndex_;
     std::uint8_t groups = 0;
-    constexpr std::uint8_t kGroupsPerChunk = 7;
+    constexpr std::uint8_t kGroupsPerChunk = 4;
     while (index < output->hits.size() && groups < kGroupsPerChunk) {
         std::uint8_t armed = 0;
         for (std::uint8_t module = 0;
