@@ -257,3 +257,10 @@ release debounce 35 ms затем приняли одну real point `(76,91)` �
 явные misses header/footer; touch Back отсутствует. Quick plan v8 проходит 9/9,
 сохранены четыре actual TFT frames, heap не изменился, final owner/lease `none`/`0`
 (`E-AUTO-053`/`E-HIL-113`/`E-UX-013`).
+
+Candidate 0.90 затем связывает product-first Home и nested меню Устройство через
+восемь exact TFT states. Candidate 0.91 повторяет этот путь с четырьмя видимыми Home
+row, без raw-input chrome и с компактным честным header. Второй physical lane
+запускает, ставит на паузу, возобновляет и останавливает оба nRF24 receiver; exact
+framebuffer crops различают idle `RF --` и running `RF RX`, generation/heap остаются
+неизменными, final lease равен нулю (`E-AUTO-056`/`E-HIL-116`/`E-UX-015`).

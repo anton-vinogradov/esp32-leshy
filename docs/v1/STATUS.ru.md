@@ -12,19 +12,20 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.90 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact, guarded disposable write/remount/export/cleanup, calibrated touch navigation, cross-radio release-endurance gate и финальной product-first иерархии меню.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.91 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact, guarded disposable write/remount/export/cleanup, calibrated touch navigation, cross-radio release-endurance gate, финальной product-first иерархии меню и компактной честной строки статуса.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** проверить controlled physical power-cut recovery —
   единственный оставшийся gate `DEMO-S4`.
-- **Последний принятый checkpoint:** exact 0.90 делает Home product-first:
-  `Обзор / Захват / Библиотека / Цели / Лаборатория / Устройство`. Первые три
-  рабочих домена остаются прямыми входами; будущие Цели/Лаборатория видимы, но
-  fail closed; Настройки, Самопроверка, Диагностика и О системе перенесены в
-  последний пункт Устройство. Восемь реальных TFT states 240×320 доказывают
-  вложенную навигацию кнопками/touch, одноуровневый возврат Left,
-  non-interactive header/footer и final owner/lease `none`/`0`. Exact 0.89 остаётся
-  принятым release-endurance результатом 2 799,845 s; controlled physical power cut
-  открыт.
+- **Последний принятый checkpoint:** exact 0.91 убирает с экрана raw diagnostic
+  ввода, сокращает header до полосы brand/status высотой 34 px, показывает четыре
+  product row 216×46 px одновременно и оставляет footer 26 px только для подсказок
+  физических клавиш. Header показывает только измеряемое состояние:
+  `SD OK`/`SD !`/`SD --` и `RF RX`/`RF --`; вымышленного battery status нет.
+  Четырнадцать реальных TFT states 240×320 связывают меню и настоящий lifecycle
+  nRF24 running→pause→resume→stop: `RF RX` виден только во время приёма и возвращается
+  в `RF --` на pause/Home, storage/heap неизменны, final owner/lease — `none`/`0`.
+  Exact 0.89 остаётся принятым release-endurance результатом 2 799,845 s;
+  controlled physical power cut открыт.
 
 ## Состояние этапов
 
@@ -34,7 +35,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key плюс calibrated touch input/TFT capture, finger-sized common rows, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.90 принимают passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance и финальную product-first иерархию меню | проверить controlled physical power-cut recovery |
+| S4 | `active` | exact 0.71…0.91 принимают passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, финальную product-first иерархию меню и компактный честный status | проверить controlled physical power-cut recovery |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -48,7 +49,7 @@
 
 | Блок продукта | Сейчас | Ближайший качественный переход |
 |---|---|---|
-| Основа устройства и UX | `готово / S2`, уточнено в S4 — boot, board profile, пять клавиш плюс calibrated touch, finger-sized common rows, EN/RU UI, ResourceBroker и автоматический TFT capture; exact 0.90 оставляет пользовательские задачи непосредственно на Home, а Настройки, Самопроверку, Диагностику и О системе группирует в Устройстве; plan-v7 Full/Guided выполняет declared receive-only RF, artifact и изолированные disposable-storage checks | сохранять эту иерархию и общий plan при добавлении следующих capabilities |
+| Основа устройства и UX | `готово / S2`, уточнено в S4 — boot, board profile, пять клавиш плюс calibrated touch, finger-sized common rows, EN/RU UI, ResourceBroker и автоматический TFT capture; exact 0.90 оставляет пользовательские задачи непосредственно на Home, а Настройки, Самопроверку, Диагностику и О системе группирует в Устройстве; exact 0.91 убирает visible input diagnostics, показывает четыре строки и даёт SD/RF компактный честный header; plan-v7 Full/Guided выполняет declared receive-only RF, artifact и изолированные disposable-storage checks | сохранять эту иерархию и общий plan при добавлении следующих capabilities |
 | Survey и Library | `готово / S3` — реальный passive Wi-Fi, atomic Session, List/Detail, offline reopen и export | используется как принятый фундамент, не переписывается отдельной веткой |
 | Passive multi-radio и Capture | `в работе / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV и privacy-confirmed persistent Wi-Fi PCAP работают; два nRF24 дают живую карту 2 402…2 484 МГц, CC1101 — RSSI-карты 315/433/868/915 МГц; Self-Test повторяет оба receive path, проверяет последний SD artifact и доказывает изолированный disposable commit/remount/export/cleanup cycle; exact 0.89 проходит release-endurance gate | controlled physical power cut |
 | Всё штатное железо ESP32-DIV | `впереди / S5` — scope и fail-closed hardware envelope описаны, но законченных IR/PN532/GPS/power workflows ещё нет | probe → capture/observe → Library → inspect/export для каждого применимого модуля |
@@ -650,6 +651,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-HIL-114 / E-SURVEY-016 / E-GATE-004 | board-01 exact 0.89 cross-radio release endurance | pass: 8/8 полных product cycles за 2 799,845 s продвигают generation 86→94 и передают 367 observations (111 Wi-Fi + 256 BLE) через 16 cold boots. Все radio, pipeline и persistence drops равны нулю; Product Start требует восемь attempts/zero retries, boot recovery — 17 attempts/один bounded transient retry/zero timeout restarts, heap остаётся точно 231 772/166 812/147 460 B, каждый цикл заканчивается на Home с owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-product-endurance-0.89.json) | закрывает release-endurance gate ≥45 минут/≥8 циклов в часовом бюджете и доказывает непересекающиеся lifecycles radio/SD; controlled physical power cut — единственный оставшийся gate `DEMO-S4` |
 | E-BUILD-091 | exact build `0.90.0-product-menu` | pass: RAM 149 936 B, linked flash 1 500 384 B; app/factory 1 500 784/1 566 320 B; app `d166634a…1e4a`, factory `55510037…8fad`, ELF/app identity `dbc8234c…0575`; source commit `1181619` | +1 808 B linked flash, zero static-RAM growth и +1 952/+1 808 B app/factory images против 0.89 за product Home из шести доменов, вложенное меню Устройство из четырёх пунктов, О системе и одноуровневую parent-навигацию |
 | E-AUTO-055 / E-HIL-115 / E-UX-014 | board-01 exact 0.90 финальное product-first меню | pass: Home содержит enabled Обзор/Захват/Библиотека, disabled planned Цели/Лабораторию и последний enabled пункт Устройство. Устройство содержит Настройки/Самопроверку/Диагностику/О системе; общие touch rows открывают Самопроверку, header/footer дают miss, touch Back отсутствует, Left возвращает child→Устройство→Home, восемь actual TFT states 240×320 связывают маршрут, final owner/lease none/0 при heap 231 772/166 812/147 460 B в [machine-checked artifact](../../tests/hil/evidence/board-01-product-menu-0.90.json). Первый run сохранён как runner-only failure ожидания revision; тот же уже прошитый candidate прошёл без перепрошивки | принимает финальную верхнеуровневую IA и честно оставляет незавершённые домены disabled; не реализует Цели/Лабораторию и не закрывает controlled physical power cut |
+| E-BUILD-092 | exact build `0.91.0-clean-status` | pass: RAM 149 936 B, linked flash 1 500 508 B; app/factory 1 500 912/1 566 448 B; app `f8634f0c…38e0`, factory `9ac4a6ba…68d8`, ELF/app identity `ab8096df…3830`; source commit `1826e13` | +124 B linked flash, zero static-RAM growth и +128/+128 B app/factory images против 0.90 за compact status renderer, viewport из четырёх строк и удаление visible raw-input diagnostics |
+| E-AUTO-056 / E-HIL-116 / E-UX-015 | board-01 exact 0.91 компактный честный status | pass: header 34 px показывает `SD OK` и idle `RF --`, переключаясь в `RF RX` только во время настоящего receive sweep двух nRF24 и обратно в `RF --` на pause/Home. Четыре строки 216×46 px теперь помещаются над divider y=282; footer 26 px остаётся key legend без touch target, raw input line отсутствует. Восемь menu плюс шесть RF TFT states, exact header crops, 21×83-channel sweeps, zero TX/storage side effects, неизменные generation 95/0 и heap 231 772/166 812/147 460 B, final owner/lease none/0 связаны в [machine-checked artifact](../../tests/hil/evidence/board-01-clean-status-0.91.json) | принимает очищенный chrome и честный status SD/RF; battery state не заявлен, physical RF silence не измерена прибором, controlled physical power cut остаётся открытым |
 
 ## Известные неопределённости и риски
 

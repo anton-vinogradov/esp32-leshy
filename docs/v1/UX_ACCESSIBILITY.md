@@ -30,7 +30,7 @@ maximum sample gap.
 
 The XPT2046 panel dispatches one event per calibrated press and requires a debounced
 release before another event. A tap may activate only the visible row or explicit
-control under the finger. Home exposes three 216×46 px rows with 5 px gaps; common
+control under the finger. Home exposes four 216×46 px rows with 5 px gaps; common
 choices expose up to three 216×46 px rows with 6 px gaps. Every current touch target
 is therefore at least 44 px high.
 

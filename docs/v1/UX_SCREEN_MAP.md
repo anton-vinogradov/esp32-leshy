@@ -23,10 +23,11 @@ Device
   About
 ```
 
-Every screen retains context title, storage/power state, active Session or TX,
-visible button roles, and a Back path. The status bar never invents battery
-percentage without an authoritative capability. Touch, physical buttons, and
-diagnostic automation emit the same typed Actions.
+Every screen retains a context title, truthful storage/receiver state, visible
+button roles, and a Back path. Exact 0.91 uses `SD OK`/`SD !`/`SD --` and
+`RF RX`/`RF --`; the status bar never invents battery percentage without an
+authoritative capability. Touch, physical buttons, and diagnostic automation emit
+the same typed Actions.
 
 ## Navigation tree
 
@@ -124,3 +125,8 @@ TFT states and the machine checker bind Home, Device, Self-Test, Diagnostics and
 About, including disabled future domains, touch-row entry, non-interactive chrome,
 Left parent restoration and final zero ownership (`E-BUILD-091`/`E-AUTO-055`/
 `E-HIL-115`/`E-UX-014`).
+
+Exact `0.91.0-clean-status` refines the shell without changing this map: visible
+raw-input diagnostics are removed, four Home rows fit at once, and exact real-TFT
+evidence proves idle `RF --` versus active receive `RF RX` with final zero ownership
+(`E-BUILD-092`/`E-AUTO-056`/`E-HIL-116`/`E-UX-015`).

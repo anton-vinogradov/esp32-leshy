@@ -24,10 +24,11 @@ S2 на реальном TFT; эта карта уже задаёт структ
   О системе
 ```
 
-На каждом экране остаются видимыми: название контекста, состояние storage/power,
-активная Session или TX, назначение доступных кнопок и путь Back. Status bar не
-рисует battery percentage без достоверной capability. Touch, physical buttons и
-diagnostic automation создают одни и те же typed Actions.
+На каждом экране остаются видимыми: название контекста, честное состояние
+storage/receiver, назначение доступных кнопок и путь Back. Exact 0.91 использует
+`SD OK`/`SD !`/`SD --` и `RF RX`/`RF --`; status bar не рисует battery percentage
+без достоверной capability. Touch, physical buttons и diagnostic automation создают
+одни и те же typed Actions.
 
 ## Дерево навигации
 
@@ -125,3 +126,8 @@ Exact `0.90.0-product-menu` реализует эту верхнеуровнев
 Самопроверку, Диагностику и О системе, включая disabled будущие домены, вход по
 touch row, non-interactive chrome, восстановление parent клавишей Left и final zero
 ownership (`E-BUILD-091`/`E-AUTO-055`/`E-HIL-115`/`E-UX-014`).
+
+Exact `0.91.0-clean-status` уточняет shell, не меняя эту карту: visible raw-input
+diagnostics удалены, одновременно помещаются четыре Home row, а exact real-TFT
+evidence доказывает idle `RF --` и active receive `RF RX` с final zero ownership
+(`E-BUILD-092`/`E-AUTO-056`/`E-HIL-116`/`E-UX-015`).

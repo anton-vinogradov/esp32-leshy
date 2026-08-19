@@ -1,0 +1,18 @@
+{
+  "app_elf_sha256": "ab8096df7cf67a0e61bcbc4cbf00717896b6d47c128a685fd5ae9d7fd7733830",
+  "elf_bytes": 20158552,
+  "elf_file_sha256": "ab8096df7cf67a0e61bcbc4cbf00717896b6d47c128a685fd5ae9d7fd7733830",
+  "factory_bytes": 1566448,
+  "factory_sha256": "9ac4a6bafe19edde9106089e5223c16f4433e6203a99dc3f79597ab05da768d8",
+  "firmware_bytes": 1500912,
+  "firmware_sha256": "f8634f0c3d98d55bc92773e8f67f22d59b50ff5f29e266ff4bbbd3d5adf738e0",
+  "menu_run_sha256": "307f866a3f85ed21d9ee52eb93562134ffe4b48583d0cbf73ea9a39864f6b1be",
+  "menu_runner_commit": "1826e135158f5e5a525177e0e7a9205fd1b92996",
+  "menu_runner_sha256": "d7ec116ab666ad9cc1cad1c2a3b7b0180258b7444a22cfd8b83a511ad095d9cd",
+  "radio_run_sha256": "4bd06c47042d56ce33fed76ba6b0a794c839e1b449c8881e5a06f0a97bcf88d2",
+  "radio_runner_commit": "a59670cf2d63b8e9b40bc96cb9f7607b08ced3ed",
+  "radio_runner_sha256": "c4dcf471493cbdc3d5bb0365ceff641c483b3ce6048100e417e59fdbda9ca22c",
+  "schema": "leshy.clean_status_hil.provenance.v1",
+  "source_commit": "1826e135158f5e5a525177e0e7a9205fd1b92996",
+  "version": "0.91.0-clean-status"
+}

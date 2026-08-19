@@ -262,3 +262,10 @@ and opened Diagnostics exactly once. Synthetic points subsequently cover three
 216×46 px Home targets and explicit header/footer misses; there is no touch Back.
 Quick plan v8 passes 9/9, four actual TFT frames are retained, heap is unchanged and
 final owner/lease is `none`/`0` (`E-AUTO-053`/`E-HIL-113`/`E-UX-013`).
+
+Candidate 0.90 then binds the product-first Home and nested Device menu through
+eight exact TFT states. Candidate 0.91 reuses that path with four visible Home rows,
+no raw-input chrome and a compact truthful header. A second physical lane starts,
+pauses, resumes and stops both nRF24 receivers; exact framebuffer crops distinguish
+idle `RF --` from running `RF RX`, while generation/heap remain invariant and the
+final lease is zero (`E-AUTO-056`/`E-HIL-116`/`E-UX-015`).

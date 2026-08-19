@@ -78,11 +78,13 @@ Full/Guided используют обычные Actions и компоненты.
 | Focus | `#F5C542` | выбранный объект или primary Action, не warning |
 | Positive / Warning / Danger | `#55D98A` / `#F7A641` / `#F05D5E` | состояние всегда дублируется текстом/формой |
 
-Geometry фиксирует 240×320, edge 12 px, content width 216 px, header 42 px,
-row 40 px, gap 7 px, radius 4 px и отдельный footer ниже y=236. Footer не может
-перекрывать product content; три list rows обязаны помещаться до него.
+Текущая geometry фиксирует 240×320, edge 12 px, content width 216 px, compact header
+34 px, radius 4 px, четыре Home row 216×46 px с gap 5 px, divider y=282 и footer
+physical-key hints высотой 26 px. Footer не может перекрывать product content;
+header/footer никогда не являются touch targets.
 
-Exact candidate 0.52 принимает UX-03 как implementation evidence: шесть retained
+Exact candidate 0.52 принял historical geometry с header 42 px,
+y=236 и input status как implementation evidence: шесть retained
 TFT frames 240×320 связаны с candidate, а standard-library pixel audit проверяет
 полную geometry brand/divider/input и пустые bottom guard rows. Audit обнаружил
 wrapped Library footer за пределами его region; текст сокращён, image пересобран,
@@ -98,12 +100,12 @@ native tests, поэтому экран не может незаметно за�
 
 | Компонент | Геометрия/роль | Текущее переиспользование |
 |---|---|---|
-| Header + title | brand anchor 240×42; title region 216 px | Home и все Self-Test views |
-| Home row | 216×46; три finger-sized строки образуют прокручиваемое visible window над footer | Home из шести доменов и меню «Устройство» из четырёх пунктов |
+| Header + title | brand/status anchor 240×34; title region 216 px под ним | Home и все Self-Test views |
+| Home row | 216×46; четыре finger-sized строки образуют прокручиваемое visible window над footer | Home из шести доменов и меню «Устройство» из четырёх пунктов |
 | Choice row | 216×46; до трёх finger-sized choices помещаются над footer | Quick / Full-Guided, Язык, Survey plan/source/filter |
 | Metric row | пять result slots 216×28 | Full preflight и Quick/Full result |
-| Footer divider | фиксирован на y=236 | каждый interactive screen |
-| Input status + пространственная навигация | input 216×28 плюс три action cell 70×26 | каждый interactive screen и HIL |
+| Footer divider | фиксирован на y=282 | каждый interactive screen |
+| Пространственная навигация | три action cell 70×26 для физических клавиш; visible raw-input diagnostic отсутствует | каждый interactive screen и HIL |
 
 Exact candidate `0.54.0-ui-components-measure` принимает UX-04 через
 `E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home и Self-Test используют одинаковые
@@ -120,7 +122,8 @@ Home rows 28 px на visible window из трёх строк 46 px и станд
 ## UX-05 — размещение EN/RU
 
 `ui/UiStrings.def` — единый allocation-free каталог всех текущих строк S2 renderer,
-кроме неизменяемого бренда `LESHY 1.x`. Сейчас он задаёт 134 стабильных ID, варианты
+кроме неизменяемого бренда `LESHY` и компактных protocol-status tokens. Сейчас он
+задаёт 134 стабильных ID, варианты
 EN и RU (всего 268 строк) и пиксельный budget каждого места использования. Exact
 0.63 измерил прежний каталог prose-footer из 127 ID; 0.64 заменяет его 19 context
 sentences на 15 компактных labels пространственных actions.
@@ -246,6 +249,26 @@ states 240×320, exact bytes candidate/runner, touch chrome misses, nested paren
 state, heap 231 772/166 812/147 460 B и final owner/lease `none`/`0`. Первый HIL run
 тоже сохранён как runner-only ошибка ожидания revision; для проходящего retry
 candidate не перепрошивался.
+
+## Компактный status и уточнение content
+
+Exact candidate `0.91.0-clean-status` удаляет visible input diagnostic `RAW 0xFF`
+из product shell. Освободившееся место меняет viewport Home с трёх на четыре строки
+216×46 px и переносит footer divider на y=282; последние 26 px остаются только
+пространственной легендой физических клавиш. Header 34 px сохраняет короткий anchor
+`LESHY` и два текстовых состояния:
+
+- `SD OK` означает, что enrolled medium совпал, read-only recovery гарантирован и
+  cleanup завершён; `SD !` обозначает fault enrolled media, `SD --` — отсутствие
+  заявления о готовом enrolled medium;
+- `RF RX` означает, что реально работает receiver product Survey, Wi-Fi Capture,
+  spectrum nRF24 или spectrum CC1101; `RF --` — receive path не активен.
+
+Battery percentage или power state не показываются до появления надёжной measured
+capability. `E-BUILD-092`/`E-AUTO-056`/`E-HIL-116`/`E-UX-015` связывают восемь menu
+и шесть RF TFT states. Exact framebuffer crops различают настоящий receive nRF24 и
+pause/Home; тот же run доказывает zero TX/storage side effects, invariant heap и
+final lease 0.
 
 ## Gate
 

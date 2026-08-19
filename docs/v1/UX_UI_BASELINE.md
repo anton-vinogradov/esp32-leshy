@@ -78,11 +78,13 @@ an artifact; the complete S2 visual baseline still requires UX-04…07.
 | Focus | `#F5C542` | selected object or primary Action, not a warning |
 | Positive / Warning / Danger | `#55D98A` / `#F7A641` / `#F05D5E` | state is always duplicated by text/shape |
 
-Geometry fixes 240×320, 12 px edge, 216 px content width, 42 px header, 40 px row,
-7 px gap, 4 px radius, and a dedicated footer below y=236. The footer cannot overlap
-product content; three list rows must fit above it.
+Current geometry fixes 240×320, a 12 px edge, 216 px content width, a compact 34 px
+header, 4 px radius, four 216×46 px Home rows with 5 px gaps, a divider at y=282,
+and a 26 px physical-key footer. The footer cannot overlap product content and the
+header/footer are never touch targets.
 
-Exact candidate 0.52 accepts UX-03 as implementation evidence: six retained
+Exact candidate 0.52 accepted the historical 42 px header/y=236/input-status
+geometry as implementation evidence: six retained
 240×320 TFT frames are bound to the candidate and a standard-library pixel audit
 checks the complete brand/divider/input geometry and empty bottom guard rows. The
 audit found a wrapped Library footer outside its region; the copy was shortened,
@@ -98,12 +100,12 @@ tests, so a screen cannot silently move its content into the fixed footer.
 
 | Component | Geometry/role | Current reuse |
 |---|---|---|
-| Header + title | 240×42 brand anchor; 216 px title region | Home and every Self-Test view |
-| Home row | 216×46; three finger-sized rows form a scrolling visible window above the footer | six-domain Home and the four-item Device menu |
+| Header + title | 240×34 brand/status anchor; 216 px title region below it | Home and every Self-Test view |
+| Home row | 216×46; four finger-sized rows form a scrolling visible window above the footer | six-domain Home and the four-item Device menu |
 | Choice row | 216×46; up to three finger-sized choices fit above the footer | Quick / Full-Guided, Language, Survey plan/source/filter |
 | Metric row | five 216×28 result slots | Full preflight and Quick/Full result |
-| Footer divider | fixed at y=236 | every interactive screen |
-| Input status + spatial navigation | 216×28 input plus three 70×26 action cells | every interactive screen and HIL |
+| Footer divider | fixed at y=282 | every interactive screen |
+| Spatial navigation | three 70×26 physical-key action cells; no visible raw-input diagnostic | every interactive screen and HIL |
 
 Exact candidate `0.54.0-ui-components-measure` accepts UX-04 through
 `E-BUILD-056`/`E-HIL-078`/`E-UX-004`: Home and Self-Test consume the same renderer
@@ -120,7 +122,8 @@ physical-key legend, and physical Left remains the sole Back control.
 ## UX-05 EN/RU content fit
 
 `ui/UiStrings.def` is the single allocation-free catalog for every current S2
-renderer string except the invariant `LESHY 1.x` brand. It currently defines 134
+renderer string except the invariant `LESHY` brand and compact protocol-status
+tokens. It currently defines 134
 stable IDs, both EN and RU variants (268 strings total), and the pixel budget of
 every use. Exact 0.63 measured the former 127-ID prose-footer catalog; 0.64 replaces
 its 19 context sentences with 15 compact spatial-action labels.
@@ -243,6 +246,25 @@ states, exact candidate/runner bytes, touch chrome misses, nested parent state,
 heap 231,772/166,812/147,460 B and final owner/lease `none`/`0`. The first HIL run is
 also retained as a runner-only revision expectation error; the candidate was not
 reflashed for the passing retry.
+
+## Compact status and content refinement
+
+Exact candidate `0.91.0-clean-status` removes the visible `RAW 0xFF` input
+diagnostic from the product shell. The recovered space changes the Home viewport
+from three to four 216×46 px rows and moves the footer divider to y=282; the final
+26 px remain only the spatial legend for physical keys. The 34 px header keeps the
+short `LESHY` anchor and two textual states:
+
+- `SD OK` means the enrolled medium matches, read-only recovery is guaranteed and
+  cleanup is complete; `SD !` is an enrolled-media fault and `SD --` means no
+  enrolled ready medium is claimed;
+- `RF RX` means a product Survey, Wi-Fi Capture, nRF24 spectrum or CC1101 spectrum
+  receiver is actually running; `RF --` means no receive path is active.
+
+No battery percentage or power state appears until a reliable measured capability
+exists. `E-BUILD-092`/`E-AUTO-056`/`E-HIL-116`/`E-UX-015` bind eight menu and six RF
+TFT states. Exact framebuffer crops distinguish real nRF24 receive from pause/Home;
+the same run proves zero TX/storage side effects, invariant heap and final lease 0.
 
 ## Gate
 
