@@ -52,6 +52,15 @@ const char* surveySourceKindName(SurveySourceKind kind) {
     return "unknown";
 }
 
+const char* surveySourceScopeName(SurveySourceScope scope) {
+    switch (scope) {
+        case SurveySourceScope::All: return "all";
+        case SurveySourceScope::WifiOnly: return "wifi";
+        case SurveySourceScope::BleOnly: return "ble";
+    }
+    return "unknown";
+}
+
 const char* surveySourceStateName(SurveySourceState state) {
     switch (state) {
         case SurveySourceState::Available: return "available";
@@ -77,7 +86,8 @@ const char* surveySetupActivationName(SurveySetupActivation activation) {
 }
 
 void SurveySourceController::rebuild(const HardwareInventory& inventory,
-                                     bool simulatedPreview) {
+                                     bool simulatedPreview,
+                                     SurveySourceScope scope) {
     const CapabilityRecord* wifi = inventory.find("radio.wifi");
     const CapabilityRecord* persistent =
         inventory.find("survey.persistent_passive");
@@ -88,6 +98,17 @@ void SurveySourceController::rebuild(const HardwareInventory& inventory,
     sources_[0] = option("wifi", SurveySourceKind::Wifi, wifi);
     sources_[1] = option("ble", SurveySourceKind::Ble,
                          inventory.find("radio.ble"));
+    scope_ = scope;
+    if (scope_ != SurveySourceScope::All) {
+        for (SurveySourceOption& source : sources_) {
+            const bool inScope =
+                (scope_ == SurveySourceScope::WifiOnly &&
+                 source.kind == SurveySourceKind::Wifi) ||
+                (scope_ == SurveySourceScope::BleOnly &&
+                 source.kind == SurveySourceKind::Ble);
+            source.selected = inScope && source.available();
+        }
+    }
     view_ = SurveySetupView::Plan;
     selection_ = 0;
     simulatedPreview_ = simulatedPreview;
@@ -101,7 +122,7 @@ bool SurveySourceController::previous() {
 
 bool SurveySourceController::next() {
     const std::size_t count = view_ == SurveySetupView::Plan
-        ? kPlanItemCount : sources_.size();
+        ? planItemCount() : sources_.size();
     if (selection_ + 1U >= count) return false;
     ++selection_;
     return true;
@@ -109,6 +130,10 @@ bool SurveySourceController::next() {
 
 SurveySetupActivation SurveySourceController::activate() {
     if (view_ == SurveySetupView::Plan) {
+        if (scope_ != SurveySourceScope::All) {
+            return canStart() ? SurveySetupActivation::StartRequested
+                              : SurveySetupActivation::StartBlocked;
+        }
         if (selection_ == 0) {
             view_ = SurveySetupView::Sources;
             selection_ = 0;

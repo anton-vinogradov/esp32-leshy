@@ -152,8 +152,8 @@ def main() -> int:
         require(failures, token in renderer, f"renderer contract missing: {token}")
 
     catalog = CATALOG.read_text(encoding="utf-8")
-    require(failures, "kCapacity = 6" in CATALOG_HEADER.read_text(encoding="utf-8"),
-            "Home must expose the six final product domains")
+    require(failures, "kCapacity = 7" in CATALOG_HEADER.read_text(encoding="utf-8"),
+            "Home must expose seven implemented user tasks")
     require(failures,
             '"device", "DEVICE"' in catalog and
             '"language", "LANGUAGE"' not in catalog and

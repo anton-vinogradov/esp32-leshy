@@ -202,7 +202,7 @@ def main() -> int:
         require(failures, f'"{check_id}"' in source, f"source check missing: {check_id}")
     for forbidden in ("WiFi", "SD.", "digitalWrite", "tone(", "SPI.begin"):
         require(failures, forbidden not in source, f"Self-Test starts forbidden path: {forbidden}")
-    require(failures, "kCapacity = 6" in CATALOG_HEADER.read_text(encoding="utf-8") and
+    require(failures, "kCapacity = 7" in CATALOG_HEADER.read_text(encoding="utf-8") and
             '"device", "DEVICE"' in catalog and
             '"self-test", "SELF-TEST"' not in catalog and
             "uiController.openChild" in ui,

@@ -129,6 +129,7 @@ using leshy1::apps::survey::SurveySetupView;
 using leshy1::apps::survey::SurveySourceController;
 using leshy1::apps::survey::SurveySourceKind;
 using leshy1::apps::survey::SurveySourceOption;
+using leshy1::apps::survey::SurveySourceScope;
 using leshy1::apps::survey::SurveySourceState;
 using leshy1::apps::survey::SurveyView;
 using leshy1::apps::survey::SurveyWorkflow;
@@ -4097,6 +4098,11 @@ NavigationFooter navigationFooterForCurrentState() {
                         {NavigationKey::RightAndSelect,
                          UiTextId::NavToggle}};
             }
+            if (surveySourceController.scope() != SurveySourceScope::All) {
+                return {back, {},
+                        {NavigationKey::RightAndSelect,
+                         UiTextId::NavStart}};
+            }
             return {back, choose,
                     {NavigationKey::RightAndSelect,
                      surveySourceController.selection() < 2
@@ -4300,7 +4306,24 @@ const char* headerNavigationTitle(const char* currentTitle,
     if (!showBodyTitle) return currentTitle;
     switch (uiController.page()) {
         case 1: return tr(UiTextId::DeviceTitle);
-        case 2: return tr(UiTextId::AppSurvey);
+        case 2: {
+            const AppMenuItem* item = appCatalog.get(uiController.selection());
+            if (item != nullptr) {
+                if (std::strcmp(item->id, "wifi") == 0) {
+                    return tr(UiTextId::AppWifi);
+                }
+                if (std::strcmp(item->id, "ble") == 0) {
+                    return tr(UiTextId::AppBle);
+                }
+                if (std::strcmp(item->id, "spectrum24") == 0) {
+                    return tr(UiTextId::AppSpectrum24);
+                }
+                if (std::strcmp(item->id, "subghz") == 0) {
+                    return tr(UiTextId::AppSubGhz);
+                }
+            }
+            return tr(UiTextId::AppSurvey);
+        }
         case 3: return tr(UiTextId::AppLibrary);
         case 4: return tr(UiTextId::AppCapture);
         case 5: return tr(UiTextId::DeviceSettings);
@@ -4395,6 +4418,12 @@ void renderStateCard(const char* state, const char* detail, Tone tone,
 }
 
 UiTextId homeLabel(const AppMenuItem& item) {
+    if (std::strcmp(item.id, "wifi") == 0) return UiTextId::AppWifi;
+    if (std::strcmp(item.id, "ble") == 0) return UiTextId::AppBle;
+    if (std::strcmp(item.id, "spectrum24") == 0) {
+        return UiTextId::AppSpectrum24;
+    }
+    if (std::strcmp(item.id, "subghz") == 0) return UiTextId::AppSubGhz;
     if (std::strcmp(item.id, "survey") == 0) return UiTextId::AppSurvey;
     if (std::strcmp(item.id, "library") == 0) return UiTextId::AppLibrary;
     if (std::strcmp(item.id, "capture") == 0) return UiTextId::AppCapture;
@@ -4404,6 +4433,20 @@ UiTextId homeLabel(const AppMenuItem& item) {
 }
 
 UiTextId homeNote(const AppMenuItem& item) {
+    if (std::strcmp(item.id, "wifi") == 0) {
+        return item.enabled ? UiTextId::NoteWifiReady
+                            : UiTextId::NoteSurveyUnavailable;
+    }
+    if (std::strcmp(item.id, "ble") == 0) {
+        return item.enabled ? UiTextId::NoteBleReady
+                            : UiTextId::NoteSurveyUnavailable;
+    }
+    if (std::strcmp(item.id, "spectrum24") == 0) {
+        return UiTextId::NoteSpectrum24;
+    }
+    if (std::strcmp(item.id, "subghz") == 0) {
+        return UiTextId::NoteSubGhz;
+    }
     if (std::strcmp(item.id, "survey") == 0) {
         if (item.simulated) return UiTextId::NoteSurveySimulated;
         if (!item.enabled) return UiTextId::NoteSurveyUnavailable;
@@ -5120,9 +5163,22 @@ Rect surveyPlanRowBounds(std::uint8_t index) {
 }
 
 void renderSurveyPlanRow(std::uint8_t index) {
-    if (index >= SurveySourceController::kPlanItemCount) return;
+    if (index >= surveySourceController.planItemCount()) return;
     char note[48] = {};
     const bool selected = surveySourceController.selection() == index;
+    if (surveySourceController.scope() != SurveySourceScope::All) {
+        const bool wifi = surveySourceController.scope() ==
+                          SurveySourceScope::WifiOnly;
+        const bool ready = surveySourceController.canStart();
+        renderMenuRow(surveyPlanRowBounds(index),
+                      tr(wifi ? UiTextId::WifiScanStart
+                              : UiTextId::BleScanStart),
+                      tr(ready ? UiTextId::StartReady
+                               : UiTextId::StartNeedsSource),
+                      selected, ready,
+                      ready ? Tone::Positive : Tone::Warning);
+        return;
+    }
     if (index == 0) {
         if (surveySourceController.simulatedPreview() &&
             surveySourceController.selectedCount() == 0) {
@@ -5535,9 +5591,16 @@ void renderInventoryPage(bool clearContent) {
                 renderSurveySourceRow(index);
             }
         } else {
-            renderHeader(tr(UiTextId::SurveySetup), clearContent);
+            const UiTextId title = surveySourceController.scope() ==
+                    SurveySourceScope::WifiOnly
+                ? UiTextId::WifiScanSetup
+                : (surveySourceController.scope() ==
+                           SurveySourceScope::BleOnly
+                       ? UiTextId::BleScanSetup
+                       : UiTextId::SurveySetup);
+            renderHeader(tr(title), clearContent);
             for (std::uint8_t index = 0;
-                 index < SurveySourceController::kPlanItemCount; ++index) {
+                 index < surveySourceController.planItemCount(); ++index) {
                 renderSurveyPlanRow(index);
             }
         }
@@ -7780,14 +7843,34 @@ bool applyUiAction(UiAction action, bool render = true) {
                        action == UiAction::Right) {
                 changed = startCc1101Spectrum(rfCcBandSelection);
             } else if (action == UiAction::Back || action == UiAction::Left) {
-                rfSpectrumView = RfSpectrumView::SourceMenu;
-                lastRuntimeEvent = "spectrum_source_menu";
-                changed = true;
+                const bool direct = std::strcmp(appRuntime.activeApp(),
+                                                "subghz") == 0;
+                if (direct) {
+                    rfSpectrumView = RfSpectrumView::None;
+                    changed = uiController.apply(
+                        action, static_cast<std::uint8_t>(appCatalog.size()),
+                        true, 2);
+                    if (changed) appRuntime.stop();
+                    lastRuntimeEvent = "subghz_home";
+                } else {
+                    rfSpectrumView = RfSpectrumView::SourceMenu;
+                    lastRuntimeEvent = "spectrum_source_menu";
+                    changed = true;
+                }
             }
         } else if (rfSpectrumView == RfSpectrumView::Live) {
             handled = true;
             if (action == UiAction::Back || action == UiAction::Left) {
-                changed = stopCurrentSpectrum(true);
+                const bool directNrf =
+                    rfSpectrumKind == RfSpectrumKind::Nrf24 &&
+                    std::strcmp(appRuntime.activeApp(), "spectrum24") == 0;
+                changed = stopCurrentSpectrum(!directNrf);
+                if (changed && directNrf) {
+                    changed = uiController.apply(
+                        action, static_cast<std::uint8_t>(appCatalog.size()),
+                        true, 2);
+                    if (changed) appRuntime.stop();
+                }
             } else if (action == UiAction::Up || action == UiAction::Down) {
                 const bool fault = rfSpectrumKind == RfSpectrumKind::Cc1101
                     ? cc1101SpectrumController.state() ==
@@ -8237,8 +8320,13 @@ bool applyUiAction(UiAction action, bool render = true) {
             capturePersistGeneration = 0;
             nextCaptureUiRefreshUs = 0;
         }
-        if (openable && selected != nullptr &&
-            std::strcmp(selected->id, "survey") == 0) {
+        const bool surveyApp = selected != nullptr &&
+            (std::strcmp(selected->id, "wifi") == 0 ||
+             std::strcmp(selected->id, "ble") == 0);
+        const bool spectrumApp = selected != nullptr &&
+            (std::strcmp(selected->id, "spectrum24") == 0 ||
+             std::strcmp(selected->id, "subghz") == 0);
+        if (openable && selected != nullptr && (surveyApp || spectrumApp)) {
             if (rfSpectrumView != RfSpectrumView::None ||
                 boardNrf24Spectrum.active() ||
                 boardCc1101Spectrum.active()) {
@@ -8254,19 +8342,32 @@ bool applyUiAction(UiAction action, bool render = true) {
             rfCcBandSelection =
                 leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
             nextSpectrumUiRefreshUs = 0;
-            if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
-                surveyPipeline.resetToSetup();
-            }
-            closeProductSurveyBackend();
-            productSurveyRuntime = {};
-            productSurveyRuntime.selected = !selected->simulated;
-            productSurveyRuntime.workerReady = productSurveyWorkerReady;
-            surveySourceController.rebuild(inventory, selected->simulated);
-            const SurveyWorkflowStatus configured = surveyWorkflow.configure(
-                productSurveyRuntime.selected, selected->simulated);
-            if (configured != SurveyWorkflowStatus::Ready) {
-                openable = false;
-                lastRuntimeEvent = "survey_config_rejected";
+            if (surveyApp) {
+                if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
+                    surveyPipeline.resetToSetup();
+                }
+                closeProductSurveyBackend();
+                productSurveyRuntime = {};
+                productSurveyRuntime.selected = !selected->simulated;
+                productSurveyRuntime.workerReady = productSurveyWorkerReady;
+                surveySourceController.rebuild(
+                    inventory, selected->simulated,
+                    std::strcmp(selected->id, "wifi") == 0
+                        ? SurveySourceScope::WifiOnly
+                        : SurveySourceScope::BleOnly);
+                const SurveyWorkflowStatus configured =
+                    surveyWorkflow.configure(productSurveyRuntime.selected,
+                                             selected->simulated);
+                if (configured != SurveyWorkflowStatus::Ready) {
+                    openable = false;
+                    lastRuntimeEvent = "survey_config_rejected";
+                }
+            } else if (std::strcmp(selected->id, "spectrum24") == 0) {
+                startNrf24Spectrum();
+            } else {
+                rfSpectrumKind = RfSpectrumKind::Cc1101;
+                rfSpectrumView = RfSpectrumView::CcBandMenu;
+                lastRuntimeEvent = "cc1101_spectrum_band_menu";
             }
         }
     }
@@ -8317,7 +8418,11 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
             return {leshy1::ui::hitTouchTarget(
                         sources ? TouchTargetLayout::TwoChoices
                                 : TouchTargetLayout::ThreeChoices,
-                        point),
+                        point, 0,
+                        sources
+                            ? static_cast<std::uint8_t>(
+                                  SurveySourceController::kSourceCount)
+                            : surveySourceController.planItemCount()),
                     surveySourceController.selection()};
         }
         if (rfSpectrumView == RfSpectrumView::None &&

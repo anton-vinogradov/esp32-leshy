@@ -1329,30 +1329,33 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(constrained.add({"storage.sd", CapabilityState::Unknown, "probe", "not_mounted"}));
     AppCatalog catalog;
     catalog.rebuild(constrained);
-    CHECK(catalog.size() == 6);
+    CHECK(catalog.size() == 7);
     CHECK(catalog.get(0) != nullptr && !catalog.get(0)->enabled);
-    CHECK(std::strcmp(catalog.get(0)->id, "survey") == 0);
+    CHECK(std::strcmp(catalog.get(0)->id, "wifi") == 0);
     CHECK(!catalog.get(0)->simulated);
     CHECK(std::strcmp(catalog.get(0)->reason, "passive source unavailable") == 0);
     CHECK(catalog.get(1) != nullptr && !catalog.get(1)->enabled);
-    CHECK(std::strcmp(catalog.get(1)->id, "capture") == 0);
-    CHECK(catalog.get(1)->page == 4);
-    CHECK(catalog.get(2) != nullptr && !catalog.get(2)->enabled);
-    CHECK(std::strcmp(catalog.get(2)->reason, "storage unavailable") == 0);
+    CHECK(std::strcmp(catalog.get(1)->id, "ble") == 0);
+    CHECK(catalog.get(2) != nullptr && catalog.get(2)->enabled);
+    CHECK(std::strcmp(catalog.get(2)->id, "spectrum24") == 0);
+    CHECK(catalog.get(3) != nullptr && catalog.get(3)->enabled);
+    CHECK(std::strcmp(catalog.get(3)->id, "subghz") == 0);
     CHECK((catalog.get(0)->resources & resourceMask(Resource::EspRf)) != 0);
-    CHECK((catalog.get(1)->resources & resourceMask(Resource::EspRf)) != 0);
-    CHECK((catalog.get(2)->resources & resourceMask(Resource::Storage)) != 0);
-    CHECK(catalog.get(3) != nullptr && !catalog.get(3)->enabled);
-    CHECK(std::strcmp(catalog.get(3)->id, "targets") == 0);
-    CHECK(catalog.get(3)->page == 7);
+    CHECK(catalog.get(2)->resources ==
+          (resourceMask(Resource::UiForeground) |
+           resourceMask(Resource::RadioSpi)));
     CHECK(catalog.get(4) != nullptr && !catalog.get(4)->enabled);
-    CHECK(std::strcmp(catalog.get(4)->id, "lab") == 0);
-    CHECK(catalog.get(4)->page == 8);
-    CHECK(catalog.get(5) != nullptr && catalog.get(5)->enabled);
-    CHECK(std::strcmp(catalog.get(5)->id, "device") == 0);
-    CHECK(std::strcmp(catalog.get(5)->label, "DEVICE") == 0);
-    CHECK(catalog.get(5)->page == 9);
-    CHECK(catalog.get(5)->resources == resourceMask(Resource::UiForeground));
+    CHECK(std::strcmp(catalog.get(4)->id, "capture") == 0);
+    CHECK(catalog.get(4)->page == 4);
+    CHECK((catalog.get(4)->resources & resourceMask(Resource::EspRf)) != 0);
+    CHECK(catalog.get(5) != nullptr && !catalog.get(5)->enabled);
+    CHECK(std::strcmp(catalog.get(5)->reason, "storage unavailable") == 0);
+    CHECK((catalog.get(5)->resources & resourceMask(Resource::Storage)) != 0);
+    CHECK(catalog.get(6) != nullptr && catalog.get(6)->enabled);
+    CHECK(std::strcmp(catalog.get(6)->id, "device") == 0);
+    CHECK(std::strcmp(catalog.get(6)->label, "DEVICE") == 0);
+    CHECK(catalog.get(6)->page == 9);
+    CHECK(catalog.get(6)->resources == resourceMask(Resource::UiForeground));
 
     HardwareInventory availableInventory;
     CHECK(availableInventory.add(
@@ -1364,10 +1367,12 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(availableInventory.add({"storage.sd", CapabilityState::Available, "probe", "ready"}));
     catalog.rebuild(availableInventory);
     CHECK(catalog.get(0)->enabled);
-    CHECK(catalog.get(1)->enabled);
+    CHECK(!catalog.get(1)->enabled);
     CHECK(catalog.get(2)->enabled);
-    CHECK(!catalog.get(3)->enabled);
-    CHECK((catalog.get(1)->resources & resourceMask(Resource::EspRf)) != 0);
+    CHECK(catalog.get(3)->enabled);
+    CHECK(catalog.get(4)->enabled);
+    CHECK(catalog.get(5)->enabled);
+    CHECK((catalog.get(4)->resources & resourceMask(Resource::EspRf)) != 0);
 
     HardwareInventory simulatedInventory;
     CHECK(simulatedInventory.add(
@@ -1409,10 +1414,10 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(simulatedLibraryInventory.add(
         {"library.simulated", CapabilityState::Available, "ram", "volatile"}));
     catalog.rebuild(simulatedLibraryInventory);
-    CHECK(catalog.get(2)->enabled);
-    CHECK(catalog.get(2)->simulated);
-    CHECK(std::strcmp(catalog.get(2)->reason, "simulated / ram only") == 0);
-    CHECK(catalog.get(2)->resources == resourceMask(Resource::UiForeground));
+    CHECK(catalog.get(5)->enabled);
+    CHECK(catalog.get(5)->simulated);
+    CHECK(std::strcmp(catalog.get(5)->reason, "simulated / ram only") == 0);
+    CHECK(catalog.get(5)->resources == resourceMask(Resource::UiForeground));
 
     HardwareInventory recoveredLibraryInventory;
     CHECK(recoveredLibraryInventory.add(
@@ -1423,12 +1428,12 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
         {"library.persistent_session", CapabilityState::Available,
          "recovery", "validated_session_open"}));
     catalog.rebuild(recoveredLibraryInventory);
-    CHECK(catalog.get(2)->enabled);
-    CHECK(!catalog.get(2)->simulated);
-    CHECK(std::strcmp(catalog.get(2)->reason, "ready") == 0);
-    CHECK((catalog.get(2)->resources & resourceMask(Resource::Storage)) != 0);
-    CHECK(!catalog.get(1)->enabled);
     CHECK(catalog.get(5)->enabled);
+    CHECK(!catalog.get(5)->simulated);
+    CHECK(std::strcmp(catalog.get(5)->reason, "ready") == 0);
+    CHECK((catalog.get(5)->resources & resourceMask(Resource::Storage)) != 0);
+    CHECK(!catalog.get(4)->enabled);
+    CHECK(catalog.get(6)->enabled);
 }
 
 void testRuntimeAcquiresAtomicallyAndBackReleasesEverything() {
@@ -2957,6 +2962,21 @@ void testSurveySourcePlanProjectsAvailabilityAndRequiresSelection() {
     CHECK(preview.activate() == SurveySetupActivation::OpenedSpectrum);
     CHECK(preview.next());
     CHECK(preview.activate() == SurveySetupActivation::StartRequested);
+
+    SurveySourceController wifiOnly;
+    wifiOnly.rebuild(inventory, false, SurveySourceScope::WifiOnly);
+    CHECK(wifiOnly.scope() == SurveySourceScope::WifiOnly);
+    CHECK(wifiOnly.planItemCount() == 1);
+    CHECK(wifiOnly.selectedMask() == 1);
+    CHECK(!wifiOnly.next());
+    CHECK(wifiOnly.activate() == SurveySetupActivation::StartRequested);
+    CHECK(std::strcmp(surveySourceScopeName(wifiOnly.scope()), "wifi") == 0);
+
+    SurveySourceController bleScoped;
+    bleScoped.rebuild(bleOnly, false, SurveySourceScope::BleOnly);
+    CHECK(bleScoped.planItemCount() == 1);
+    CHECK(bleScoped.selectedMask() == 2);
+    CHECK(bleScoped.activate() == SurveySetupActivation::StartRequested);
 }
 
 void testSurveyWorkflowCommitsOnceAndPreservesPriorLibraryOnFailure() {

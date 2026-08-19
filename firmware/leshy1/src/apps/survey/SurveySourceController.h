@@ -18,6 +18,12 @@ enum class SurveySourceKind : std::uint8_t {
     Ble,
 };
 
+enum class SurveySourceScope : std::uint8_t {
+    All,
+    WifiOnly,
+    BleOnly,
+};
+
 enum class SurveySourceState : std::uint8_t {
     Available,
     Unavailable,
@@ -37,6 +43,7 @@ enum class SurveySetupActivation : std::uint8_t {
 
 const char* surveySetupViewName(SurveySetupView view);
 const char* surveySourceKindName(SurveySourceKind kind);
+const char* surveySourceScopeName(SurveySourceScope scope);
 const char* surveySourceStateName(SurveySourceState state);
 const char* surveySetupActivationName(SurveySetupActivation activation);
 
@@ -59,7 +66,8 @@ public:
     static constexpr std::uint8_t kPlanItemCount = 3;
 
     void rebuild(const domain::hardware::HardwareInventory& inventory,
-                 bool simulatedPreview = false);
+                 bool simulatedPreview = false,
+                 SurveySourceScope scope = SurveySourceScope::All);
 
     bool previous();
     bool next();
@@ -74,12 +82,17 @@ public:
     std::uint8_t selectedMask() const;
     bool canStart() const { return selectedCount() != 0 || simulatedPreview_; }
     bool simulatedPreview() const { return simulatedPreview_; }
+    SurveySourceScope scope() const { return scope_; }
+    std::uint8_t planItemCount() const {
+        return scope_ == SurveySourceScope::All ? kPlanItemCount : 1U;
+    }
 
 private:
     std::array<SurveySourceOption, kSourceCount> sources_{};
     SurveySetupView view_ = SurveySetupView::Plan;
     std::uint8_t selection_ = 0;
     bool simulatedPreview_ = false;
+    SurveySourceScope scope_ = SurveySourceScope::All;
 };
 
 }  // namespace leshy1::apps::survey

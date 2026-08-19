@@ -17,8 +17,22 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
     const bool wifiSurvey = available(inventory, "radio.wifi");
     const bool simulatedSurvey = available(inventory, "survey.simulated");
     const bool realSurvey = persistentSurvey || wifiSurvey;
-    const bool survey = realSurvey || simulatedSurvey;
-    items_[size_++] = {"survey", "SURVEY",
+    const bool wifi = realSurvey || simulatedSurvey;
+    const auto surveyResources = persistentSurvey
+        ? kernel::runtime::resourceMask(
+              kernel::runtime::Resource::UiForeground) |
+              kernel::runtime::resourceMask(
+                  kernel::runtime::Resource::EspRf) |
+              kernel::runtime::resourceMask(
+                  kernel::runtime::Resource::Storage) |
+              kernel::runtime::resourceMask(
+                  kernel::runtime::Resource::RadioSpi)
+        : (simulatedSurvey && !realSurvey)
+              ? kernel::runtime::resourceMask(
+                    kernel::runtime::Resource::UiForeground)
+              : kernel::runtime::Resource::UiForeground |
+                    kernel::runtime::Resource::EspRf;
+    items_[size_++] = {"wifi", "WI-FI",
                        persistentSurvey
                            ? "passive / persistent"
                            : (realSurvey
@@ -26,20 +40,28 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
                                   : (simulatedSurvey
                                          ? "simulated / rf off"
                                          : "passive source unavailable")),
-                       2, survey, !realSurvey && simulatedSurvey,
-                       persistentSurvey
-                           ? kernel::runtime::resourceMask(
-                                 kernel::runtime::Resource::UiForeground) |
-                                 kernel::runtime::resourceMask(
-                                     kernel::runtime::Resource::EspRf) |
-                                 kernel::runtime::resourceMask(
-                                     kernel::runtime::Resource::Storage) |
-                                 kernel::runtime::resourceMask(
-                                     kernel::runtime::Resource::RadioSpi)
-                           : (simulatedSurvey && !realSurvey)
-                           ? kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)
-                           : kernel::runtime::Resource::UiForeground |
-                                 kernel::runtime::Resource::EspRf};
+                       2, wifi, !realSurvey && simulatedSurvey,
+                       surveyResources};
+
+    const bool ble = available(inventory, "radio.ble");
+    items_[size_++] = {
+        "ble", "BLUETOOTH", ble ? "passive / persistent"
+                                    : "passive source unavailable",
+        2, ble, false, surveyResources};
+
+    // The fitted receiver shield is part of the exact board profile. Expose
+    // its two user-facing receive-only jobs directly instead of hiding them
+    // behind the internal Survey workflow.
+    const bool spectrum = available(inventory, "board.profile");
+    const auto spectrumResources =
+        kernel::runtime::resourceMask(
+            kernel::runtime::Resource::UiForeground) |
+        kernel::runtime::resourceMask(
+            kernel::runtime::Resource::RadioSpi);
+    items_[size_++] = {"spectrum24", "2.4 GHZ", "spectrum / waterfall",
+                       2, spectrum, false, spectrumResources};
+    items_[size_++] = {"subghz", "SUB-GHZ", "315 / 433 / 868 / 915",
+                       2, spectrum, false, spectrumResources};
 
     const bool frameCapture = available(inventory, "capture.wifi_passive");
     items_[size_++] = {
@@ -65,15 +87,8 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
                            : kernel::runtime::Resource::UiForeground |
                                  kernel::runtime::Resource::Storage};
 
-    items_[size_++] = {
-        "targets", "TARGETS", "planned product capability", 7, false, false, 0};
-
-    items_[size_++] = {
-        "lab", "LAB", "planned authorized workspace", 8, false, false, 0};
-
-    // Service functions live below the final product-level Device entry rather
-    // than competing with user jobs on Home. Device remains available on a
-    // degraded profile because diagnostics and an honest Self-Test are remedies.
+    // Service functions remain the final entry. Planned Targets and Lab work
+    // stays in the documented roadmap until there is a usable screen behind it.
     items_[size_++] = {
         "device", "DEVICE", "settings / checks / information", 9, true, false,
         kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
