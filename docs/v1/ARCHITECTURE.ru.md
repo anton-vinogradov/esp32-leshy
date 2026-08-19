@@ -36,7 +36,7 @@ coexistence и serial QA. Модули сканирования уже отде�
 apps/              Survey · Targets · Wi-Fi · BLE · Sub-GHz · IR · NFC · GPS · Lab
 sdk/               Application · events · views · capture API · safety API
 services/          observations · sessions · library · settings · OTA · diagnostics
-kernel/            AppRuntime · Navigator · ResourceBroker · scheduler · event bus
+kernel/            SafetySupervisor · AppRuntime · Navigator · ResourceBroker · scheduler
 drivers/           Wi-Fi/BLE · NRF24 · CC1101 · PN532 · GPS · IR · SD · display/input
 boards/             pin map · electrical conflicts · build flags · capability probes
 platform/           Arduino-ESP32 / FreeRTOS adapters
@@ -117,6 +117,18 @@ legacy-запись 0.x `leshy/tcal`. Allocation-free frontend выдаёт со
 использует release debounce 35 ms. Общий geometry mapper принимает только видимые
 rectangles Home/choice и превращает hit в bounded перемещение selection плюс
 `Select`; header/footer ничего не dispatch-ят, а touch не может синтезировать Back.
+
+### Safety Supervisor
+
+`SafetySupervisor` — kernel boundary ниже apps, UI, drivers и product recovery.
+Panic-enabled Task WDT следит за каждым завершённым оборотом main loop. Его IRAM
+handler может только опустить известные pads buzzer/nRF CE и опубликовать exact-app,
+torn-write-resistant RTC record; он не пишет log, не выделяет память, не ждёт и не
+трогает SPI. Watchdog reset входит в защёлкнутый Safe Mode, пропускающий product
+workers и normal Actions. Второй reset сохраняет уже подтверждённую защёлку. Снять
+её можно только явным двухшаговым user clear с restart. Heartbeats workers и
+physical rail/radio shutdown остаются отдельной открытой работой. Обязательный
+контракт — [`SAFETY_SUPERVISOR.ru.md`](SAFETY_SUPERVISOR.ru.md).
 
 ## 5. Ресурсы и coexistence
 

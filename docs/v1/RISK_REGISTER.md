@@ -36,6 +36,7 @@ owns durable risks, controls, triggers, and closure evidence.
 | R-015 | One board and missing continuity/logic/RF/power instruments create false confidence | H | H | label evidence partial; unknown stays unknown; hardware-dependent scope is constrained | hardware QA; second board and named HW-T evidence | accepted constraint |
 | R-016 | Schema or Action API changes make stored evidence or companion clients incompatible | M | H | version every boundary, forward migrate or reject clearly, immutable source data | services/SDK; schema/Action ADRs + migration contract tests | open |
 | R-017 | EN/RU or color-only UI hides safety/error meaning or truncates critical controls | M | M | one string catalog/build, snapshot fixtures, standard-button coverage, no color-only state | UI/product; WF snapshots + NFR-010 matrix | open |
+| R-018 | A fatal loop/worker fault leaves software-controlled outputs active or silently reboots into the same unsafe operation | M | critical | permanent panic Task WDT on the main loop; IRAM GPIO2/14/15/47 quiesce; exact-app torn-write-resistant RTC latch; no automatic clear; Safe Mode blocks product workers and normal Actions | safety/platform; runtime-watchdog injection, retained Safe Mode TFT/RTC/pad evidence, then worker heartbeats and independent physical-stop HIL | reduced/open |
 
 `critical` is reserved for a safety failure whose prevention takes priority over
 feature delivery; it is intentionally stronger than `high`.

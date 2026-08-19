@@ -44,6 +44,8 @@
   захват реального TFT и проход по меню без оператора
 - [Встроенный Self-Test](SELF_TEST.ru.md) — явные Quick и Full/Guided modes для
   пользователя и release HIL на одном test engine
+- [Программный Safety Supervisor](SAFETY_SUPERVISOR.ru.md) — runtime watchdog,
+  retained Safe Mode, emergency quiesce outputs и явные hardware limits
 - [Автоматический предрелизный HIL](PRE_RELEASE_HIL.ru.md) — proposed build-once,
   physical-test и promote-same-bytes pipeline с screenshots и attestation
 - [HIL атомарности storage](STORAGE_HIL.ru.md) — dual-head recovery, fault boundaries

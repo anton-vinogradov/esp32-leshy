@@ -31,6 +31,7 @@
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
+#include "kernel/safety/SafetySupervisor.h"
 #include "platform/arduino/RamSessionStoreIo.h"
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
@@ -1194,6 +1195,56 @@ void testProductBootRetryIsNarrowAndBounded() {
     mutated = evidence;
     mutated.cleanupComplete = false;
     CHECK(!shouldRetryProductBootRecovery(mutated, 1));
+}
+
+void testSafetySupervisorLatchesOnlyExactUntornEvidence() {
+    using namespace leshy1::kernel::safety;
+    constexpr std::uint32_t app = 0x10203040U;
+    const SafetyRetainedRecord retained = makeSafetyRetainedRecord(
+        app, SafetyReason::RuntimeWatchdog, 2, 2, false);
+    CHECK(validateSafetyRetainedRecord(retained, app));
+    CHECK(!validateSafetyRetainedRecord(retained, app + 1U));
+    CHECK(shouldLatchSafetyStop(retained, app, true));
+    CHECK(!shouldLatchSafetyStop(retained, app, false));
+
+    const SafetyRetainedRecord confirmed = makeSafetyRetainedRecord(
+        app, SafetyReason::RuntimeWatchdog, 2, 2, true);
+    CHECK(shouldLatchSafetyStop(confirmed, app, false));
+
+    SafetyRetainedRecord torn = retained;
+    ++torn.tripCount;
+    CHECK(!validateSafetyRetainedRecord(torn, app));
+    torn = retained;
+    torn.reasonInverse = retained.reason;
+    CHECK(!validateSafetyRetainedRecord(torn, app));
+    torn = retained;
+    torn.latchConfirmed = 1;
+    CHECK(validateSafetyRetainedRecord(torn, app));
+    CHECK(shouldLatchSafetyStop(torn, app, false));
+    torn = retained;
+    torn.latchConfirmedInverse = ~0U;
+    CHECK(!validateSafetyRetainedRecord(torn, app));
+
+    SafetySupervisor supervisor;
+    supervisor.restore(retained, app, true);
+    CHECK(supervisor.latched());
+    CHECK(supervisor.reason() == SafetyReason::RuntimeWatchdog);
+    CHECK(supervisor.tripCount() == 2);
+    CHECK(supervisor.quiesceCount() == 2);
+    CHECK(supervisor.requestClear());
+    CHECK(supervisor.clearPending());
+    CHECK(!supervisor.confirmClear(false));
+    CHECK(supervisor.cancelClear());
+    CHECK(supervisor.requestClear());
+    CHECK(supervisor.confirmClear(true));
+    CHECK(!supervisor.latched());
+    CHECK(supervisor.arm());
+    CHECK(supervisor.armed());
+
+    const SafetyRetainedRecord unavailable = makeSafetyRetainedRecord(
+        app, SafetyReason::SupervisorUnavailable, 1, 1);
+    supervisor.restore(unavailable, app, false);
+    CHECK(supervisor.latched());
 }
 
 void testProductStartIdentityRetryStopsBeforeFilesystem() {
@@ -4770,6 +4821,7 @@ int main() {
     testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics();
     testSpectrumViewportKeepsBoundedRingHistory();
     testProductBootRetryIsNarrowAndBounded();
+    testSafetySupervisorLatchesOnlyExactUntornEvidence();
     testProductStartIdentityRetryStopsBeforeFilesystem();
     testStorageTimingSummaryUsesNearestRank();
     testIngressRateSummaryUsesNearestRankAndRejectsZero();

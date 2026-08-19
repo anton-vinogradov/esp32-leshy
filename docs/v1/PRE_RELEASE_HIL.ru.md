@@ -91,11 +91,15 @@ Release candidate предоставляет по локальному USB ст�
 успешным. Она сообщает факты. Runner обязан прийти к экрану через Home/Actions,
 проверить state, pixels и cleanup независимо.
 
-В release binary разрешены только read-only evidence, обычные пользовательские
-Actions и безопасные штатные операции. Fault injection, произвольные GPIO/RF
-команды, raw memory и обход permissions туда не входят. Разрушительные storage/
-power-cut/radio HIL выполняются отдельной diagnostic image или внешним оборудованием;
-их evidence дополняет, но не заменяет smoke на точных release bytes.
+Обычно в release binary разрешены только read-only evidence, обычные пользовательские
+Actions и безопасные штатные операции. Единственное узкое исключение — versioned
+watchdog recovery diagnostic с exact confirmation: `safety.watchdog-test confirm`
+разрешён только для armed supervisor на idle Home, без owner/lease и при уже
+неактивных controllable output pads. Он не активирует GPIO/RF, не пишет storage и не
+обходит permissions, а только прекращает feed watchdog main loop, чтобы проверить
+recovery exact release bytes. Произвольные fault injection, GPIO/RF commands, raw
+memory и обход permissions остаются запрещены. Разрушительные storage/power-cut/
+radio HIL по-прежнему требуют отдельной diagnostic image или внешнего оборудования.
 
 Приложение `Home → Устройство →` [Self-Test](SELF_TEST.ru.md) — пользовательский клиент того же
 versioned check registry. Quick выбирает bounded read-only subset; Full/Guided после
@@ -103,6 +107,23 @@ versioned check registry. Quick выбирает bounded read-only subset; Full/
 на exact release bytes, при разрешении добавляет fixtures/endurance и остаётся
 независимым release oracle. Boot-time Quick detour и второго release-only определения
 здоровья устройства нет.
+
+Обязательное safety-поведение и hardware limits описаны в
+[`SAFETY_SUPERVISOR.ru.md`](SAFETY_SUPERVISOR.ru.md). Connected safety runner:
+
+```bash
+python tools/run_1x_safety_watchdog_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.103.0-safety-supervisor \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --source-commit <full-commit-id> \
+  --output work/outputs/safety-watchdog-0.103-<commit> --flash
+```
+
+Он требует настоящий panic Task-WDT reset, matching app identity, inactive pads,
+защёлкнутый Safe Mode после второго reset, пропуск product recovery, двухшаговый
+clear через публичный UI, неизменные catalog/CID, final Home и lease zero.
 
 ## Часть host-runner
 

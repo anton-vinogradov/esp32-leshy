@@ -8,7 +8,9 @@ namespace leshy1::platform::arduino {
 class BoardSafeOutputs final {
 public:
     static void establishBootInvariant();
+    static void emergencyQuiesce();
     static bool buzzerHeldInactive();
+    static bool radioTransmitPathsHeldInactive();
 };
 
 }  // namespace leshy1::platform::arduino

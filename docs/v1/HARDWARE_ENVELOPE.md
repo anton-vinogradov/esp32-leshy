@@ -130,6 +130,12 @@ rail peak current, USB+cell behavior, multi-radio brownout margin, and useful VB
 accuracy with the buzzer circuit attached. Simultaneous TX stress modes remain out of
 scope before these measurements.
 
+The [software Safety Supervisor](SAFETY_SUPERVISOR.md) can immediately force the
+active-high buzzer and all declared nRF CE paths LOW, then latch the exact firmware
+in Safe Mode. The confirmed board has no independent rail kill, temperature/current
+sensor, or CC1101 reset/power gate, so this control does not close `HW-U04`,
+`HW-U09`, `HW-U10`, `R-009`, or `R-018` as a physical-safety claim.
+
 ## Capability states and safe probes
 
 Capabilities use `declared`, `detected`, `available`, `conflicted`, `fault`, or
@@ -263,8 +269,9 @@ flag or a successful unrelated probe.
   outputs.
 - ResourceBroker adds `spi_display`, `spi_radio`, `mux_5_6`, `mux_nrf3_ir`,
   `gpio2_battery_buzzer`, `i2c_control`, `storage`, and `esp_rf`.
-- BoardSafeOutputs establishes GPIO2 OUTPUT LOW before console/display, and a static
-  check prevents apps/drivers from changing the buzzer pin directly.
+- BoardSafeOutputs establishes GPIO2 plus nRF CE GPIO14/15/47 OUTPUT LOW before
+  console/display. The panic Task-WDT ISR reasserts those levels with direct GPIO
+  registers, while static checks prevent apps/drivers from bypassing the safe path.
 - 1.x has no OPI-PSRAM dependency until `HW-U01` proves a compatible variant that
   does not collide with the display pins.
 - Passive Wi-Fi remains the provisional first Survey source because it bypasses all

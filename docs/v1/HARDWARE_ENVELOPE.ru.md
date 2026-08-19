@@ -154,6 +154,12 @@ Design-confirmed topology:
 VBAT divider с подключённым buzzer transistor. До измерений запрещены одновременные
 TX stress modes; они не нужны для S1–S6.
 
+[Программный Safety Supervisor](SAFETY_SUPERVISOR.ru.md) может немедленно опустить
+active-high buzzer и все объявленные nRF CE, а затем защёлкнуть exact firmware в
+Safe Mode. На подтверждённой плате нет независимого rail kill, датчика
+температуры/тока или reset/power gate CC1101, поэтому этот control не закрывает
+`HW-U04`, `HW-U09`, `HW-U10`, `R-009` или `R-018` как physical-safety claim.
+
 ## Capability model
 
 Capability имеет не `bool`, а состояние:
@@ -313,8 +319,9 @@ Software evidence для GPIO2: авторское описание root cause �
   имеет права перебирать конфликтующие output modes.
 - ResourceBroker получает domains `spi_display`, `spi_radio`, `mux_5_6`,
   `mux_nrf3_ir`, `gpio2_battery_buzzer`, `i2c_control`, `storage` и `esp_rf`.
-- BoardSafeOutputs устанавливает GPIO2 OUTPUT LOW до console/display и статическая
-  проверка запрещает apps/drivers менять buzzer pin напрямую.
+- BoardSafeOutputs устанавливает GPIO2 и nRF CE GPIO14/15/47 OUTPUT LOW до
+  console/display. ISR panic Task WDT повторно устанавливает эти уровни прямыми GPIO
+  registers, а static checks запрещают apps/drivers обходить безопасный path.
 - Release 1.x не включает OPI-PSRAM dependency, пока `HW-U01` не доказал совместимый
   hardware variant, не конфликтующий с display pins.
 - Первый Survey source остаётся предварительно Wi-Fi: он обходит все внешние mux и

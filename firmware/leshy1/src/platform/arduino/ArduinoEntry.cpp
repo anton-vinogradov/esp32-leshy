@@ -16,6 +16,7 @@
 #include <esp_app_desc.h>
 #include <esp_attr.h>
 #include <esp_private/system_internal.h>
+#include <soc/gpio_struct.h>
 #include <mbedtls/sha256.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -48,6 +49,7 @@
 #include "drivers/wifi/WifiPassiveContract.h"
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
+#include "kernel/safety/SafetySupervisor.h"
 #include "platform/arduino/BoardSafeOutputs.h"
 #include "platform/arduino/BoardCc1101PassiveSpectrum.h"
 #include "platform/arduino/BoardNrf24PassiveSpectrum.h"
@@ -165,6 +167,10 @@ using leshy1::kernel::runtime::AppRuntime;
 using leshy1::kernel::runtime::LaunchStatus;
 using leshy1::kernel::runtime::Resource;
 using leshy1::kernel::runtime::ResourceBroker;
+using leshy1::kernel::safety::SafetyReason;
+using leshy1::kernel::safety::SafetyRetainedRecord;
+using leshy1::kernel::safety::SafetyState;
+using leshy1::kernel::safety::SafetySupervisor;
 using leshy1::platform::arduino::BoardSafeOutputs;
 using leshy1::platform::arduino::BoardCc1101PassiveSpectrum;
 using leshy1::platform::arduino::BoardNrf24PassiveSpectrum;
@@ -669,6 +675,14 @@ RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryRestarts;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryAppIdentity;
 RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryTimeouts;
 RTC_NOINIT_ATTR std::uint32_t productBootWatchdogTestRtcState;
+RTC_NOINIT_ATTR volatile SafetyRetainedRecord safetyRetainedRtc;
+volatile std::uint32_t runtimeSafetyWatchdogArmed = 0;
+volatile std::uint32_t runtimeSafetyAppIdentity = 0;
+volatile std::uint32_t runtimeSafetyNextTripCount = 1;
+volatile std::uint32_t runtimeSafetyNextQuiesceCount = 1;
+SafetySupervisor safetySupervisor;
+std::uint32_t runningAppIdentity = 0;
+bool runtimeSafetyWatchdogReady = false;
 constexpr std::uint32_t kLittleFsResetRtcMagic = 0x4C465231U;
 struct LittleFsResetRtcState final {
     std::uint32_t magic;
@@ -3192,11 +3206,57 @@ bool IRAM_ATTR recordProductBootRecoveryTimeout() {
     return true;
 }
 
+static_assert(BoardProfile::kBuzzerPin == 2 &&
+                  BoardProfile::kNrfCePins[0] == 15 &&
+                  BoardProfile::kNrfCePins[1] == 47 &&
+                  BoardProfile::kNrfCePins[2] == 14,
+              "Task-WDT emergency GPIO masks must match the board profile");
+
+void IRAM_ATTR quiesceEmergencyGpioFromIsr() {
+    // GPIO2 is the active-high buzzer. GPIO14/15/47 are every declared nRF CE
+    // path. Write-one-to-clear is peripheral-local, allocation-free, and does
+    // not depend on a healthy scheduler or flash-resident Arduino code.
+    GPIO.out_w1tc = (1U << 2U) | (1U << 14U) | (1U << 15U);
+    GPIO.out1_w1tc.val = (1U << (47U - 32U));
+}
+
+bool IRAM_ATTR recordRuntimeSafetyWatchdogTrip() {
+    if (__atomic_exchange_n(&runtimeSafetyWatchdogArmed, 0,
+                            __ATOMIC_ACQ_REL) == 0) {
+        return false;
+    }
+    quiesceEmergencyGpioFromIsr();
+    const std::uint32_t appIdentity = runtimeSafetyAppIdentity;
+    const std::uint32_t reason =
+        static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog);
+    const std::uint32_t tripCount = runtimeSafetyNextTripCount;
+    const std::uint32_t quiesceCount = runtimeSafetyNextQuiesceCount;
+    // Invalidate first and publish magic last. Complements reject a reset in
+    // the middle of this bounded RTC write sequence.
+    safetyRetainedRtc.magic = 0;
+    safetyRetainedRtc.schema = leshy1::kernel::safety::kSafetyRetainedSchema;
+    safetyRetainedRtc.appIdentity = appIdentity;
+    safetyRetainedRtc.appIdentityInverse = ~appIdentity;
+    safetyRetainedRtc.reason = reason;
+    safetyRetainedRtc.reasonInverse = ~reason;
+    safetyRetainedRtc.tripCount = tripCount;
+    safetyRetainedRtc.tripCountInverse = ~tripCount;
+    safetyRetainedRtc.quiesceCount = quiesceCount;
+    safetyRetainedRtc.quiesceCountInverse = ~quiesceCount;
+    safetyRetainedRtc.latchConfirmed = 0;
+    safetyRetainedRtc.latchConfirmedInverse = ~1U;
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    safetyRetainedRtc.magic = leshy1::kernel::safety::kSafetyRetainedMagic;
+    return true;
+}
+
 extern "C" void IRAM_ATTR esp_task_wdt_isr_user_handler() {
     // The Task WDT ISR is the last-resort path when the scheduler-based
     // watchdog cannot run. Only claim the already armed recovery attempt and
     // retain its reason; the configured panic path performs the reset.
-    recordProductBootRecoveryTimeout();
+    if (!recordProductBootRecoveryTimeout()) {
+        recordRuntimeSafetyWatchdogTrip();
+    }
 }
 
 void watchProductBootRecovery(void*) {
@@ -3253,6 +3313,128 @@ bool disarmProductBootRecoveryWatchdog() {
     if (!productBootRecoveryTaskWatchdogAdded) return true;
     productBootRecoveryTaskWatchdogAdded = false;
     return esp_task_wdt_delete(nullptr) == ESP_OK;
+}
+
+bool safetyWatchdogResetReason(std::uint32_t reason) {
+    return reason == static_cast<std::uint32_t>(ESP_RST_PANIC) ||
+           reason == static_cast<std::uint32_t>(ESP_RST_INT_WDT) ||
+           reason == static_cast<std::uint32_t>(ESP_RST_TASK_WDT) ||
+           reason == static_cast<std::uint32_t>(ESP_RST_WDT);
+}
+
+SafetyRetainedRecord snapshotSafetyRetainedRecord() {
+    SafetyRetainedRecord record{};
+    record.magic = safetyRetainedRtc.magic;
+    record.schema = safetyRetainedRtc.schema;
+    record.appIdentity = safetyRetainedRtc.appIdentity;
+    record.appIdentityInverse = safetyRetainedRtc.appIdentityInverse;
+    record.reason = safetyRetainedRtc.reason;
+    record.reasonInverse = safetyRetainedRtc.reasonInverse;
+    record.tripCount = safetyRetainedRtc.tripCount;
+    record.tripCountInverse = safetyRetainedRtc.tripCountInverse;
+    record.quiesceCount = safetyRetainedRtc.quiesceCount;
+    record.quiesceCountInverse = safetyRetainedRtc.quiesceCountInverse;
+    record.latchConfirmed = safetyRetainedRtc.latchConfirmed;
+    record.latchConfirmedInverse = safetyRetainedRtc.latchConfirmedInverse;
+    return record;
+}
+
+void clearSafetyRetainedRecord() {
+    safetyRetainedRtc.magic = 0;
+    safetyRetainedRtc.schema = 0;
+    safetyRetainedRtc.appIdentity = 0;
+    safetyRetainedRtc.appIdentityInverse = 0;
+    safetyRetainedRtc.reason = 0;
+    safetyRetainedRtc.reasonInverse = 0;
+    safetyRetainedRtc.tripCount = 0;
+    safetyRetainedRtc.tripCountInverse = 0;
+    safetyRetainedRtc.quiesceCount = 0;
+    safetyRetainedRtc.quiesceCountInverse = 0;
+    safetyRetainedRtc.latchConfirmed = 0;
+    safetyRetainedRtc.latchConfirmedInverse = 0;
+}
+
+void persistSafetyStop(SafetyReason reason, std::uint32_t tripCount,
+                       std::uint32_t quiesceCount) {
+    const SafetyRetainedRecord record =
+        leshy1::kernel::safety::makeSafetyRetainedRecord(
+            runningAppIdentity, reason, tripCount, quiesceCount);
+    safetyRetainedRtc.magic = 0;
+    safetyRetainedRtc.schema = record.schema;
+    safetyRetainedRtc.appIdentity = record.appIdentity;
+    safetyRetainedRtc.appIdentityInverse = record.appIdentityInverse;
+    safetyRetainedRtc.reason = record.reason;
+    safetyRetainedRtc.reasonInverse = record.reasonInverse;
+    safetyRetainedRtc.tripCount = record.tripCount;
+    safetyRetainedRtc.tripCountInverse = record.tripCountInverse;
+    safetyRetainedRtc.quiesceCount = record.quiesceCount;
+    safetyRetainedRtc.quiesceCountInverse = record.quiesceCountInverse;
+    safetyRetainedRtc.latchConfirmed = record.latchConfirmed;
+    safetyRetainedRtc.latchConfirmedInverse = record.latchConfirmedInverse;
+    safetyRetainedRtc.magic = record.magic;
+}
+
+void confirmRetainedSafetyLatch(const SafetyRetainedRecord& record) {
+    if (record.latchConfirmed == 1U) return;
+    // The ISR already published the target inverse (~1). One aligned store
+    // confirms the latch without creating a reset window in which the otherwise
+    // valid watchdog record would be rejected.
+    safetyRetainedRtc.latchConfirmed = 1U;
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+}
+
+void latchSafetyStopInTask(SafetyReason reason) {
+    BoardSafeOutputs::emergencyQuiesce();
+    BoardSdSpiTransport::holdRadioTransmitPathsInactive();
+    const std::uint32_t tripCount = safetySupervisor.tripCount() + 1U;
+    const std::uint32_t quiesceCount = safetySupervisor.quiesceCount() + 1U;
+    persistSafetyStop(reason, tripCount, quiesceCount);
+    safetySupervisor.latch(reason, tripCount, quiesceCount);
+    runtimeSafetyWatchdogReady = false;
+    __atomic_store_n(&runtimeSafetyWatchdogArmed, 0, __ATOMIC_RELEASE);
+}
+
+bool armRuntimeSafetyWatchdog() {
+    const esp_err_t status = esp_task_wdt_status(nullptr);
+    if (status == ESP_ERR_NOT_FOUND) {
+        if (esp_task_wdt_add(nullptr) != ESP_OK) return false;
+    } else if (status != ESP_OK) {
+        return false;
+    }
+    if (esp_task_wdt_reset() != ESP_OK) return false;
+    runtimeSafetyAppIdentity = runningAppIdentity;
+    runtimeSafetyNextTripCount = safetySupervisor.tripCount() + 1U;
+    runtimeSafetyNextQuiesceCount = safetySupervisor.quiesceCount() + 1U;
+    __atomic_store_n(&runtimeSafetyWatchdogArmed, 1, __ATOMIC_RELEASE);
+    if (safetySupervisor.state() == SafetyState::Startup) {
+        safetySupervisor.arm();
+    }
+    runtimeSafetyWatchdogReady = true;
+    return true;
+}
+
+void feedRuntimeSafetyWatchdog() {
+    if (!runtimeSafetyWatchdogReady) return;
+    if (esp_task_wdt_reset() != ESP_OK) {
+        latchSafetyStopInTask(SafetyReason::SupervisorUnavailable);
+        renderInteractiveScreen(true);
+    }
+}
+
+[[noreturn]] void clearSafetyStopAndRestart() {
+    BoardSafeOutputs::emergencyQuiesce();
+    BoardSdSpiTransport::holdRadioTransmitPathsInactive();
+    __atomic_store_n(&runtimeSafetyWatchdogArmed, 0, __ATOMIC_RELEASE);
+    clearSafetyRetainedRecord();
+    safetySupervisor.confirmClear(true);
+    broadcast(
+        "{\"schema\":\"leshy.safety.v1\",\"kind\":\"cleared\","
+        "\"restart_required\":true,\"outputs_inactive\":true}");
+    Serial.flush();
+    Serial0.flush();
+    delay(20);
+    esp_restart();
+    for (;;) {}
 }
 
 void recoverProductCatalogAtBoot() {
@@ -4282,16 +4464,96 @@ void emitInventory() {
 
 void emitSafeOutputs(Stream& reply) {
     const bool buzzerInactive = BoardSafeOutputs::buzzerHeldInactive();
-    char line[256] = {};
+    const bool radioCeInactive =
+        BoardSafeOutputs::radioTransmitPathsHeldInactive();
+    char line[512] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.hardware.safe-outputs.v1\",\"kind\":\"state\","
         "\"buzzer_pin\":%d,\"buzzer_active_level\":\"high\","
         "\"buzzer_mode\":\"output\",\"buzzer_level\":\"%s\","
-        "\"buzzer_inactive\":%s}",
+        "\"buzzer_inactive\":%s,\"nrf_ce_inactive\":%s,"
+        "\"software_quiesce_complete\":%s,"
+        "\"physical_rail_kill_available\":false,"
+        "\"cc1101_hard_kill_available\":false}",
         BoardProfile::kBuzzerPin, buzzerInactive ? "low" : "high",
-        buzzerInactive ? "true" : "false");
+        buzzerInactive ? "true" : "false",
+        radioCeInactive ? "true" : "false",
+        buzzerInactive && radioCeInactive ? "true" : "false");
     reply.println(line);
+}
+
+void emitSafetyState(Stream& reply) {
+    const bool watchdogArmed = runtimeSafetyWatchdogReady &&
+        __atomic_load_n(&runtimeSafetyWatchdogArmed, __ATOMIC_ACQUIRE) != 0;
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.safety.v1\",\"kind\":\"state\","
+        "\"state\":\"%s\",\"reason\":\"%s\",\"armed\":%s,"
+        "\"latched\":%s,\"clear_pending\":%s,"
+        "\"watchdog_timeout_ms\":%lu,\"trip_count\":%lu,"
+        "\"emergency_quiesce_count\":%lu,\"reset_reason_code\":%lu,"
+        "\"buzzer_inactive\":%s,\"nrf_ce_inactive\":%s,"
+        "\"runtime_owner\":\"%s\",\"lease_mask\":%lu,"
+        "\"software_only\":true,\"physical_rail_kill_available\":false,"
+        "\"thermal_sensor_available\":false,"
+        "\"cc1101_hard_kill_available\":false,"
+        "\"automatic_clear\":false}",
+        leshy1::kernel::safety::safetyStateName(safetySupervisor.state()),
+        leshy1::kernel::safety::safetyReasonName(safetySupervisor.reason()),
+        watchdogArmed ? "true" : "false",
+        safetySupervisor.latched() ? "true" : "false",
+        safetySupervisor.clearPending() ? "true" : "false",
+        static_cast<unsigned long>(
+            leshy1::storage::kProductBootRecoveryHardwareWatchdogMs),
+        static_cast<unsigned long>(safetySupervisor.tripCount()),
+        static_cast<unsigned long>(safetySupervisor.quiesceCount()),
+        static_cast<unsigned long>(bootMetrics.resetReason),
+        BoardSafeOutputs::buzzerHeldInactive() ? "true" : "false",
+        BoardSafeOutputs::radioTransmitPathsHeldInactive() ? "true" : "false",
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
+void triggerRuntimeSafetyWatchdogTest(Stream& reply) {
+    const bool outputsInactive = BoardSafeOutputs::buzzerHeldInactive() &&
+        BoardSafeOutputs::radioTransmitPathsHeldInactive();
+    const bool eligible = safetySupervisor.state() == SafetyState::Armed &&
+        runtimeSafetyWatchdogReady && outputsInactive &&
+        !appRuntime.running() && appRuntime.activeResources() == 0;
+    if (!eligible) {
+        reply.println(
+            "{\"schema\":\"leshy.safety.watchdog_test.v1\","
+            "\"kind\":\"error\",\"reason\":\"unsafe_precondition\"}");
+        return;
+    }
+    reply.println(
+        "{\"schema\":\"leshy.safety.watchdog_test.v1\","
+        "\"kind\":\"armed\",\"status\":\"ready\","
+        "\"watchdog_timeout_ms\":5000,\"outputs_inactive\":true,"
+        "\"filesystem_write_attempted\":false,"
+        "\"physical_write_calls\":0}");
+    reply.flush();
+    // Deliberately stop feeding the loop task. The independent panic Task WDT
+    // must take the ISR quiesce path, retain the reason, and reset the MCU.
+    for (;;) delay(1000);
+}
+
+void clearSafetyStopFromConsole(Stream& reply) {
+    if (!safetySupervisor.latched()) {
+        reply.println(
+            "{\"schema\":\"leshy.safety.v1\",\"kind\":\"error\","
+            "\"reason\":\"not_latched\"}");
+        return;
+    }
+    if (!safetySupervisor.clearPending()) safetySupervisor.requestClear();
+    reply.println(
+        "{\"schema\":\"leshy.safety.v1\",\"kind\":\"clear_confirmed\","
+        "\"restart_required\":true}");
+    reply.flush();
+    clearSafetyStopAndRestart();
 }
 
 bool readInputRaw(std::uint8_t* value) {
@@ -4404,6 +4666,15 @@ NavigationFooter navigationFooterForCurrentState() {
     const NavigationCell choose = {NavigationKey::UpDown, UiTextId::NavSelect};
     const NavigationCell enter = {NavigationKey::RightAndSelect,
                                   UiTextId::NavEnter};
+    if (safetySupervisor.latched()) {
+        return safetySupervisor.clearPending()
+            ? NavigationFooter{
+                  {NavigationKey::Left, UiTextId::NavCancel}, {},
+                  {NavigationKey::RightAndSelect, UiTextId::NavConfirm}}
+            : NavigationFooter{
+                  {}, {},
+                  {NavigationKey::RightAndSelect, UiTextId::NavUnlock}};
+    }
     if (uiController.isRoot()) return {{}, choose, enter};
     if (uiController.page() == 1) return {back, {}, {}};
 
@@ -4701,6 +4972,16 @@ const char* headerReceiverStatus() {
 }
 
 void renderHeaderStatus() {
+    if (safetySupervisor.latched()) {
+        constexpr const char* stopped = "STOP";
+        selectUiFont(UiTextRole::Meta);
+        const std::int16_t x = Layout::ScreenWidth - 6 -
+                               display.textWidth(stopped);
+        display.setTextColor(Palette::Danger, Palette::Header);
+        setUiCursor(UiTextRole::Meta, x, 5);
+        display.print(stopped);
+        return;
+    }
     const char* receiver = headerReceiverStatus();
     constexpr const char* transmitter = "TX --";
     const bool receiving = receiver[3] != '-';
@@ -4741,7 +5022,7 @@ void renderHeader(const char* title, bool clearContent) {
                          Palette::Canvas);
     }
     display.setTextColor(Palette::TextPrimary, Palette::Header);
-    const bool home = uiController.isRoot();
+    const bool home = uiController.isRoot() && !safetySupervisor.latched();
     if (home) {
         const char* brand = tr(UiTextId::Brand);
         selectUiFont(UiTextRole::Body);
@@ -5420,6 +5701,45 @@ void renderOverview(bool clearContent) {
     setUiCursor(UiTextRole::Body, 14, 168);
     display.print(line);
 
+}
+
+UiTextId safetyReasonTextId() {
+    switch (safetySupervisor.reason()) {
+        case SafetyReason::RuntimeWatchdog:
+            return UiTextId::SafetyWatchdogReason;
+        case SafetyReason::SupervisorUnavailable:
+            return UiTextId::SafetySupervisorReason;
+        case SafetyReason::OutputInvariant:
+        default:
+            return UiTextId::SafetyOutputReason;
+    }
+}
+
+void renderSafetyStop(bool clearContent) {
+    renderHeader(tr(UiTextId::SafetyStopTitle), clearContent);
+    display.setTextColor(Palette::Danger, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 52);
+    display.print(tr(safetyReasonTextId()));
+
+    display.fillRoundRect(Layout::Edge, 88, Layout::ContentWidth, 82,
+                          Layout::Radius, Palette::Surface);
+    display.setTextColor(Palette::Positive, Palette::Surface);
+    setUiCursor(UiTextRole::Body, 20, 101);
+    display.print(tr(UiTextId::SafetyOutputsStopped));
+    display.setTextColor(Palette::Warning, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, 20, 137);
+    display.print(tr(UiTextId::SafetyPowerWarning));
+
+    display.setTextColor(Palette::TextPrimary, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 202);
+    display.print(tr(safetySupervisor.clearPending()
+                         ? UiTextId::SafetyClearConfirm
+                         : UiTextId::SafetyClearPrompt));
+    if (safetySupervisor.clearPending()) {
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 240);
+        display.print(tr(UiTextId::SafetyClearCancel));
+    }
 }
 
 constexpr std::size_t kVisibleSurveyRows = 2;
@@ -6807,10 +7127,13 @@ void renderInteractiveScreen(bool clearContent) {
     std::uint64_t startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     if (startedUs == 0) startedUs = 1;
     display.startWrite();
-    const bool incremental = !clearContent && renderSelectionDelta();
+    const bool incremental = !safetySupervisor.latched() && !clearContent &&
+                             renderSelectionDelta();
     if (!incremental) {
         clearContent = true;
-        if (uiController.isRoot()) {
+        if (safetySupervisor.latched()) {
+            renderSafetyStop(clearContent);
+        } else if (uiController.isRoot()) {
             renderHome(clearContent);
         } else if (uiController.page() == 1) {
             renderOverview(clearContent);
@@ -8076,10 +8399,14 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "\"selection\":%u,\"selected_id\":\"%s\","
                   "\"selected_enabled\":%s,\"reason\":\"%s\","
                   "\"language\":\"%s\",\"language_selection\":%u,"
-                  "\"revision\":%lu,\"render_mode\":\"%s\","
+                  "\"revision\":%lu,\"safety_state\":\"%s\","
+                  "\"safety_reason\":\"%s\",\"safety_latched\":%s,"
+                  "\"safety_clear_pending\":%s,\"render_mode\":\"%s\","
                   "\"render_us\":%llu}",
                   leshy1::ui::uiActionName(action), changed ? "true" : "false",
-                  leshy1::ui::probePageName(uiController.page()),
+                  safetySupervisor.latched()
+                      ? "safe_mode"
+                      : leshy1::ui::probePageName(uiController.page()),
                   leshy1::ui::probePageName(uiController.parentPage()),
                   static_cast<unsigned>(deviceSelection),
                   static_cast<unsigned>(uiController.selection()),
@@ -8089,6 +8416,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   leshy1::ui::uiLanguageName(languageController.active()),
                   static_cast<unsigned>(languageController.selection()),
                   static_cast<unsigned long>(uiController.revision()),
+                  leshy1::kernel::safety::safetyStateName(
+                      safetySupervisor.state()),
+                  leshy1::kernel::safety::safetyReasonName(
+                      safetySupervisor.reason()),
+                  safetySupervisor.latched() ? "true" : "false",
+                  safetySupervisor.clearPending() ? "true" : "false",
                   lastUiRenderWasIncremental ? "incremental" : "full",
                   static_cast<unsigned long long>(lastUiRenderUs));
     const std::size_t length = std::strlen(line);
@@ -8718,6 +9051,22 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
         return changed;
     };
+    if (safetySupervisor.latched()) {
+        bool changed = false;
+        if (action == UiAction::Select || action == UiAction::Right) {
+            if (safetySupervisor.clearPending()) {
+                clearSafetyStopAndRestart();
+            }
+            changed = safetySupervisor.requestClear();
+        } else if ((action == UiAction::Back || action == UiAction::Left) &&
+                   safetySupervisor.clearPending()) {
+            changed = safetySupervisor.cancelClear();
+        }
+        if (action != UiAction::Unknown) {
+            uiController.recordHandledAction(action);
+        }
+        return finish(changed);
+    }
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const bool wasRoot = uiController.isRoot();
     if (!wasRoot && uiController.page() == 2) {
@@ -13988,7 +14337,32 @@ void emitCc1101SpectrumReport(Stream& reply) {
     reply.println(line);
 }
 
+bool commandAllowedDuringSafetyStop(const char* command) {
+    if (command == nullptr) return false;
+    return std::strncmp(command, "hil.begin ", 10) == 0 ||
+           std::strncmp(command, "hil.end ", 8) == 0 ||
+           std::strcmp(command, "metrics") == 0 ||
+           std::strcmp(command, "inventory") == 0 ||
+           std::strcmp(command, "ping") == 0 ||
+           std::strcmp(command, "hardware.safe-outputs") == 0 ||
+           std::strcmp(command, "safety.state") == 0 ||
+           std::strcmp(command, "safety.clear confirm") == 0 ||
+           std::strcmp(command, "ui.state") == 0 ||
+           std::strncmp(command, "ui.key ", 7) == 0 ||
+           std::strcmp(command, "ui.capture") == 0 ||
+           std::strcmp(command, "input.state") == 0 ||
+           std::strcmp(command, "touch.state") == 0 ||
+           std::strcmp(command, "storage.product.boot-recovery") == 0;
+}
+
 void handleCommand(Stream& reply, const char* command) {
+    if (safetySupervisor.latched() &&
+        !commandAllowedDuringSafetyStop(command)) {
+        reply.println(
+            "{\"schema\":\"leshy.safety.v1\",\"kind\":\"blocked\","
+            "\"reason\":\"safety_latched\"}");
+        return;
+    }
     if (std::strncmp(command, "hil.begin ", 10) == 0) {
         emitHilSessionBegin(reply, command);
     } else if (std::strncmp(command, "hil.end ", 8) == 0) {
@@ -13999,6 +14373,13 @@ void handleCommand(Stream& reply, const char* command) {
         emitInventory();
     } else if (std::strcmp(command, "hardware.safe-outputs") == 0) {
         emitSafeOutputs(reply);
+    } else if (std::strcmp(command, "safety.state") == 0) {
+        emitSafetyState(reply);
+    } else if (std::strcmp(command,
+                           "safety.watchdog-test confirm") == 0) {
+        triggerRuntimeSafetyWatchdogTest(reply);
+    } else if (std::strcmp(command, "safety.clear confirm") == 0) {
+        clearSafetyStopFromConsole(reply);
     } else if (std::strcmp(command, "hardware.shield.receivers") == 0) {
         emitShieldReceiverProbeReport(reply);
     } else if (std::strcmp(command, "hardware.nrf24.spectrum") == 0) {
@@ -14394,9 +14775,20 @@ void setup() {
             runningAppElfSha256[i * 2 + 1] = kHex[value & 0x0FU];
         }
         runningAppElfSha256[64] = '\0';
+        std::memcpy(&runningAppIdentity, appDescription->app_elf_sha256,
+                    sizeof(runningAppIdentity));
     }
     bootMetrics.appElfSha256 = runningAppElfSha256;
     bootMetrics.resetReason = static_cast<std::uint32_t>(esp_reset_reason());
+    const SafetyRetainedRecord retainedSafety = snapshotSafetyRetainedRecord();
+    safetySupervisor.restore(
+        retainedSafety, runningAppIdentity,
+        safetyWatchdogResetReason(bootMetrics.resetReason));
+    if (safetySupervisor.latched()) {
+        confirmRetainedSafetyLatch(retainedSafety);
+    } else {
+        clearSafetyRetainedRecord();
+    }
     bootMetrics.flashBytes = ESP.getFlashChipSize();
     bootMetrics.psramFound = psramFound();
     bootMetrics.psramBytes = ESP.getPsramSize();
@@ -14436,15 +14828,29 @@ void setup() {
     bootMetrics.inputDetected =
         bootMetrics.inputDetected && physicalInputTaskStarted;
     bootMetrics.inputReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
-    surveyDemoReady = prepareSurveyDemo();
-    libraryDemoReady = prepareLibraryDemo();
-    recoverProductCatalogAtBoot();
-    storageDiscovery = boardStorageAdapter.discoverReadOnly();
-    storageDiscoveryReady = leshy1::storage::validateMediaDiscovery(storageDiscovery) ==
-                            leshy1::storage::MediaDiscoveryValidation::Valid;
-    productSurveyWorkerReady = initializeProductSurveyWorker();
-    captureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
-    subGhzCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
+    if (!safetySupervisor.latched()) {
+        surveyDemoReady = prepareSurveyDemo();
+        libraryDemoReady = prepareLibraryDemo();
+        recoverProductCatalogAtBoot();
+        storageDiscovery = boardStorageAdapter.discoverReadOnly();
+        storageDiscoveryReady =
+            leshy1::storage::validateMediaDiscovery(storageDiscovery) ==
+            leshy1::storage::MediaDiscoveryValidation::Valid;
+        productSurveyWorkerReady = initializeProductSurveyWorker();
+        captureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
+        subGhzCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
+    } else {
+        productBootRecovery.status = "safety_latched";
+        productBootRecovery.cleanupComplete = true;
+    }
+
+    if (!armRuntimeSafetyWatchdog()) {
+        latchSafetyStopInTask(SafetyReason::SupervisorUnavailable);
+    }
+    if (!BoardSafeOutputs::buzzerHeldInactive() ||
+        !BoardSafeOutputs::radioTransmitPathsHeldInactive()) {
+        latchSafetyStopInTask(SafetyReason::OutputInvariant);
+    }
 
     inventory.add({"board.profile",
                    flashMatches && psramMatches ? CapabilityState::Available
@@ -14459,6 +14865,13 @@ void setup() {
                    "gpio2_output_low_runtime_check",
                    bootMetrics.buzzerInactive ? "inactive_boot_invariant"
                                               : "unsafe_level_or_mode"});
+    inventory.add({
+        "safety.supervisor",
+        safetySupervisor.latched() || runtimeSafetyWatchdogReady
+            ? CapabilityState::Available : CapabilityState::Declared,
+        "panic_task_wdt_plus_rtc_latch",
+        safetySupervisor.latched() ? "latched_safe_mode"
+                                   : "runtime_watchdog_armed"});
     inventory.add({"input.pcf8574",
                    bootMetrics.inputDetected ? CapabilityState::Detected
                                              : CapabilityState::Unknown,
@@ -14551,6 +14964,8 @@ void setup() {
               "\"hil.begin <session-id> <app-elf-sha256>\","
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
+              "\"safety.state\",\"safety.watchdog-test confirm\","
+              "\"safety.clear confirm\","
               "\"hardware.shield.receivers\","
               "\"hardware.nrf24.spectrum\","
               "\"hardware.cc1101.spectrum\","
@@ -14614,15 +15029,17 @@ void loop() {
         spectrumLoopPreviousUs = loopStartedUs;
         ++spectrumLoopCount;
     }
-    serviceProductSurveyWorker();
-    serviceWifiFrameCapture();
-    serviceWifiFrameCapturePersist();
-    serviceSubGhzRawCapturePersist();
-    serviceFullGuidedRfChecks();
-    serviceNrf24Spectrum();
-    serviceCc1101Spectrum();
-    serviceSubGhzRawCapture();
-    serviceSpectrumWaterfallCadence();
+    if (!safetySupervisor.latched()) {
+        serviceProductSurveyWorker();
+        serviceWifiFrameCapture();
+        serviceWifiFrameCapturePersist();
+        serviceSubGhzRawCapturePersist();
+        serviceFullGuidedRfChecks();
+        serviceNrf24Spectrum();
+        serviceCc1101Spectrum();
+        serviceSubGhzRawCapture();
+        serviceSpectrumWaterfallCadence();
+    }
     const auto rawCaptureState = subGhzRawCapture.stats().state;
     const bool rawPulseTimingCritical =
         rawCaptureState == SubGhzRawCaptureState::Capturing;
@@ -14640,10 +15057,12 @@ void loop() {
         static_cast<std::uint64_t>(esp_timer_get_time());
     // The RAW page has no touch action. Avoid sharing the display/touch SPI
     // path while the receiver is waiting for or timing a burst.
-    const bool touchPressed = !rawReceiveActive &&
+    const bool touchPressed = !safetySupervisor.latched() &&
+        !rawReceiveActive &&
         boardTouchInput.poll(millis(), &touchPress);
     const std::uint64_t touchElapsedUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - touchStartedUs;
+    feedRuntimeSafetyWatchdog();
     if (activeReceiveSampling()) {
         spectrumTouchPollTotalUs += touchElapsedUs;
         if (touchElapsedUs > spectrumTouchPollMaxUs) {

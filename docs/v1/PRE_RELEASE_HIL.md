@@ -90,11 +90,15 @@ Firmware does not contain expected screenshot hashes or declare its own behavior
 successful. It reports facts. The runner must reach each screen through Home/Actions
 and independently verify state, pixels, and cleanup.
 
-Only read-only evidence, normal user Actions, and safe product operations belong in
-release bytes. Fault injection, arbitrary GPIO/RF commands, raw memory, and permission
-bypasses do not. Destructive storage/power-cut/radio HIL uses a separate diagnostic
-image or external equipment; its evidence complements but never replaces smoke on
-the exact release bytes.
+Only read-only evidence, normal user Actions, and safe product operations normally
+belong in release bytes. One narrow exception is a versioned, exact-confirmation
+watchdog recovery diagnostic: `safety.watchdog-test confirm` is admitted only while
+the supervisor is armed at idle Home, with no owner/lease and all controllable output
+pads already inactive. It performs no GPIO activation, RF, storage, or permission
+bypass; it stops only the main-loop watchdog feed so the exact release recovery path
+can be proven. Arbitrary fault injection, GPIO/RF commands, raw memory, and permission
+bypasses remain forbidden. Destructive storage/power-cut/radio HIL still uses a
+separate diagnostic image or external equipment.
 
 The `Home → Device →` [Self-Test](SELF_TEST.md) app is the user-facing client of this same
 versioned check registry. Quick selects the bounded read-only subset; Full/Guided
@@ -102,6 +106,23 @@ selects every applicable check after explicit preflight. The host runner invokes
 same check IDs on exact release bytes, adds fixtures and endurance where authorized,
 and remains the independent release oracle. There is no boot-time Quick detour and no
 second, release-only definition of device health.
+
+The binding safety behavior and hardware limits are in
+[`SAFETY_SUPERVISOR.md`](SAFETY_SUPERVISOR.md). The connected safety runner is:
+
+```bash
+python tools/run_1x_safety_watchdog_hil.py \
+  --port /dev/cu.usbmodem2101 \
+  --firmware firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin \
+  --expected-version 0.103.0-safety-supervisor \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --source-commit <full-commit-id> \
+  --output work/outputs/safety-watchdog-0.103-<commit> --flash
+```
+
+It requires the real panic Task-WDT reset, matching app identity, inactive pads,
+latched Safe Mode across a second reset, skipped product recovery, two-step public UI
+clear, unchanged catalog/CID, final Home, and lease zero.
 
 ## Host-runner side
 

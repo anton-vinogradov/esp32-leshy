@@ -36,6 +36,7 @@
 | R-015 | Одна плата и отсутствие continuity/logic/RF/power instruments создают ложную уверенность | H | H | evidence маркируется partial; unknown остаётся unknown; hardware scope ограничивается | hardware QA; вторая плата и named HW-T evidence | accepted constraint |
 | R-016 | Изменение schema или Action API ломает stored evidence/companion clients | M | H | version every boundary, forward migrate или clear reject, immutable source data | services/SDK; schema/Action ADRs + migration contract tests | open |
 | R-017 | EN/RU или color-only UI скрывает safety/error meaning или обрезает control | M | M | один string catalog/build, snapshot fixtures, standard-button coverage, no color-only state | UI/product; WF snapshots + NFR-010 matrix | open |
+| R-018 | Fatal fault main loop/worker оставляет software-controlled outputs активными или тихо перезагружается в то же unsafe operation | M | critical | permanent panic Task WDT main loop; IRAM quiesce GPIO2/14/15/47; exact-app torn-write-resistant RTC latch; no automatic clear; Safe Mode блокирует product workers и normal Actions | safety/platform; runtime-watchdog injection, retained Safe Mode TFT/RTC/pad evidence, затем worker heartbeats и independent physical-stop HIL | reduced/open |
 
 `critical` используется только для safety failure, предотвращение которого важнее
 feature delivery; это намеренно сильнее `high`.

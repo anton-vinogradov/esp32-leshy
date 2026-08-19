@@ -62,6 +62,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/drivers/wifi/WifiPassiveContract.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/AppRuntime.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/ResourceBroker.cpp" \
+    "$repo_dir/firmware/leshy1/src/kernel/safety/SafetySupervisor.cpp" \
     "$repo_dir/firmware/leshy1/src/platform/arduino/RamSessionStoreIo.cpp" \
     "$repo_dir/firmware/leshy1/src/services/diagnostics/BootReport.cpp" \
     "$repo_dir/firmware/leshy1/src/services/diagnostics/HilSession.cpp" \

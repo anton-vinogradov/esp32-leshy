@@ -29,7 +29,7 @@ satisfy a new driver contract and its tests.
 apps/       Survey · Targets · Wi-Fi · BLE · Sub-GHz · IR · NFC · GPS · Lab
 sdk/        Application · events · views · capture API · safety API
 services/   observations · sessions · library · settings · OTA · diagnostics
-kernel/     AppRuntime · Navigator · ResourceBroker · scheduler · event bus
+kernel/     SafetySupervisor · AppRuntime · Navigator · ResourceBroker · scheduler
 drivers/    Wi-Fi/BLE · NRF24 · CC1101 · PN532 · GPS · IR · SD · display/input
 boards/     pin map · electrical conflicts · build flags · capability probes
 platform/   Arduino-ESP32 / FreeRTOS adapters
@@ -89,6 +89,18 @@ The touch adapter loads a versioned calibration from NVS and can import the lega
 edge-triggered with a 35 ms release debounce. A shared geometry mapper accepts only
 visible Home/choice rectangles and converts a hit into bounded selection movement
 plus `Select`; header/footer never dispatch, and touch cannot synthesize Back.
+
+### Safety supervisor
+
+`SafetySupervisor` is a kernel boundary below apps, UI, drivers, and product
+recovery. A panic-enabled Task WDT monitors every completed main-loop turn. Its IRAM
+handler can only lower the known buzzer/nRF CE pads and publish an exact-app,
+torn-write-resistant RTC record; it never logs, allocates, waits, or touches SPI.
+The watchdog reset enters a latched Safe Mode that skips product workers and normal
+Actions. A second reset preserves an already confirmed latch. Only an explicit
+two-step user clear removes it and restarts. Worker heartbeats and physical rail/
+radio shutdown remain separate open work. The binding contract is
+[`SAFETY_SUPERVISOR.md`](SAFETY_SUPERVISOR.md).
 
 ## Concurrency and memory
 

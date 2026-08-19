@@ -42,6 +42,8 @@ accepted decisions change.
   capture, and operator-free menu traversal
 - [On-device Self-Test](SELF_TEST.md) — explicit Quick and Full/Guided modes shared
   by the user workflow and release HIL
+- [Software Safety Supervisor](SAFETY_SUPERVISOR.md) — runtime watchdog, retained
+  Safe Mode, emergency output quiesce, and explicit hardware limits
 - [Automated pre-release HIL](PRE_RELEASE_HIL.md) — proposed build-once,
   physical-test, promote-same-bytes pipeline with screenshots and attestation
 - [Storage atomicity HIL](STORAGE_HIL.md) — dual-head recovery, fault boundaries,
