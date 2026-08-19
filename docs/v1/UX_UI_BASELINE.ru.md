@@ -78,10 +78,10 @@ Full/Guided используют обычные Actions и компоненты.
 | Focus | `#F5C542` | выбранный объект или primary Action, не warning |
 | Positive / Warning / Danger | `#55D98A` / `#F7A641` / `#F05D5E` | состояние всегда дублируется текстом/формой |
 
-Текущая geometry фиксирует 240×320, edge 12 px, content width 216 px, compact header
-34 px, radius 4 px, четыре Home row 216×46 px с gap 5 px, divider y=282 и footer
-physical-key hints высотой 26 px. Footer не может перекрывать product content;
-header/footer никогда не являются touch targets.
+Текущая geometry фиксирует 240×320, edge 12 px, content width 216 px, компактный
+information/navigation header 26 px, radius 4 px, четыре Home row 216×60 px с gap
+5 px, divider y=293 и footer physical-key hints высотой 26 px. Footer не может
+перекрывать product content; header/footer никогда не являются touch targets.
 
 Exact candidate 0.52 принял historical geometry с header 42 px,
 y=236 и input status как implementation evidence: шесть retained
@@ -100,11 +100,11 @@ native tests, поэтому экран не может незаметно за�
 
 | Компонент | Геометрия/роль | Текущее переиспользование |
 |---|---|---|
-| Header + title | brand/status anchor 240×34; title region 216 px под ним | Home и все Self-Test views |
-| Home row | 216×46; четыре finger-sized строки образуют прокручиваемое visible window над footer | Home из шести доменов и меню «Устройство» из четырёх пунктов |
-| Choice row | 216×46; до трёх finger-sized choices помещаются над footer | Quick / Full-Guided, Язык, Survey plan/source/filter |
+| Header + title | information/status bar 240×26; на Home — локализованные brand/version, на вложенных экранах — название текущей страницы в той же панели | все product views |
+| Home row | 216×60; четыре увеличенных touch target образуют прокручиваемое visible window над footer | Home из семи jobs и меню «Устройство» из четырёх пунктов |
+| Choice row | 216×52; до трёх увеличенных choices помещаются над footer | Quick / Full-Guided, Язык, Survey plan/source/filter |
 | Metric row | пять result slots 216×28 | Full preflight и Quick/Full result |
-| Footer divider | фиксирован на y=282 | каждый interactive screen |
+| Footer divider | фиксирован на y=293 | каждый interactive screen |
 | Пространственная навигация | три action cell 70×26 для физических клавиш; visible raw-input diagnostic отсутствует | каждый interactive screen и HIL |
 
 Exact candidate `0.54.0-ui-components-measure` принимает UX-04 через
@@ -327,13 +327,15 @@ TFT states, все семь jobs Home, оба наполненных водоп�
 и heap, final owner/lease `none`/`0`
 (`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
 
-Candidate `0.96.0-inline-home-version` сохраняет root-only identity contract и
-заменяет только этот placement: Home теперь читается как `LESHY v0.96.0` или
-`Леший v0.96.0` в одну строку. Brand 16 px и SemVer 12 px имеют общую baseline и
-fixed gap 5 px; measured text widths не затрагивают right-aligned область SD/RF
-status. Interactive menu/list rows также используют единый text inset 12 px от
-вертикального края, оставляя видимый зазор после focus chevron. До promotion
-требуется exact bilingual physical acceptance.
+Candidate `0.96.0-compact-navigation` сохраняет root-only identity contract и
+показывает на Home `LESHY v0.96.0` или `Леший v0.96.0` в одну строку. Brand 16 px
+и SemVer 12 px имеют общую baseline и fixed gap 5 px; measured text widths не
+затрагивают right-aligned область SD/RF status. На вложенных экранах название
+текущей страницы переносится в ту же information bar, поэтому отдельный body-title
+исчезает; панель уменьшается с 34 до 26 px, а content начинается на y=32. Четыре
+увеличенных menu target 216×60 заполняют доступный viewport. Interactive menu/list
+rows используют единый horizontal inset 12 px и вертикально центрированный
+двухстрочный текст. До promotion требуется exact bilingual physical acceptance.
 
 ## Строчная легенда физических клавиш
 

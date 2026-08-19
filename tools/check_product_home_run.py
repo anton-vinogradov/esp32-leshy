@@ -126,6 +126,7 @@ def main() -> int:
             "exact CID mismatch")
 
     boot = run.get("boot", {})
+    boot_samples = run.get("boot_metrics_samples", [])
     before = run.get("recovery_before", {})
     after = run.get("recovery_after", {})
     require(failures, boot.get("version") == args.expected_version and
@@ -133,6 +134,23 @@ def main() -> int:
             boot.get("buzzer_inactive") is True and
             boot.get("input_detected") is True,
             "boot identity/health mismatch")
+    stabilized_metrics_present = "boot_metrics_stabilized" in run or \
+        "boot_metrics_samples" in run
+    if stabilized_metrics_present:
+        require(failures,
+                run.get("boot_metrics_stabilized") is True and
+                isinstance(boot_samples, list) and
+                2 <= len(boot_samples) <= 4,
+                "diagnostic heap baseline stabilization missing")
+    if stabilized_metrics_present and isinstance(boot_samples, list) and \
+            len(boot_samples) >= 2:
+        heap_keys = ("heap_total", "heap_free", "heap_min_free")
+        require(failures,
+                all(boot_samples[-1].get(key) ==
+                    boot_samples[-2].get(key) for key in heap_keys),
+                "final diagnostic heap samples are not stable")
+        require(failures, boot_samples[-1] == boot,
+                "boot baseline is not the final stabilized sample")
     for label, recovery in (("before", before), ("after", after)):
         require(failures,
                 recovery.get("status") == "admitted" and

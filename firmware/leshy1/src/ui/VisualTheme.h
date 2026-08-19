@@ -38,12 +38,12 @@ struct Layout final {
     static constexpr std::int16_t ScreenHeight = 320;
     static constexpr std::int16_t Edge = 12;
     static constexpr std::int16_t ContentWidth = 216;
-    static constexpr std::int16_t HeaderHeight = 34;
-    static constexpr std::int16_t TitleY = 42;
-    static constexpr std::int16_t ContentTop = 66;
+    static constexpr std::int16_t HeaderHeight = 26;
+    static constexpr std::int16_t TitleY = 5;
+    static constexpr std::int16_t ContentTop = 32;
     static constexpr std::int16_t RowHeight = 40;
     static constexpr std::int16_t RowGap = 7;
-    static constexpr std::int16_t HomeRowHeight = 46;
+    static constexpr std::int16_t HomeRowHeight = 60;
     static constexpr std::int16_t HomeRowGap = 5;
     static constexpr std::int16_t Radius = 4;
     static constexpr std::int16_t FooterDividerY = 293;

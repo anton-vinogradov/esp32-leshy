@@ -78,10 +78,10 @@ an artifact; the complete S2 visual baseline still requires UX-04…07.
 | Focus | `#F5C542` | selected object or primary Action, not a warning |
 | Positive / Warning / Danger | `#55D98A` / `#F7A641` / `#F05D5E` | state is always duplicated by text/shape |
 
-Current geometry fixes 240×320, a 12 px edge, 216 px content width, a compact 34 px
-header, 4 px radius, four 216×46 px Home rows with 5 px gaps, a divider at y=282,
-and a 26 px physical-key footer. The footer cannot overlap product content and the
-header/footer are never touch targets.
+Current geometry fixes 240×320, a 12 px edge, 216 px content width, a compact 26 px
+information/navigation header, 4 px radius, four 216×60 px Home rows with 5 px
+gaps, a divider at y=293, and a 26 px physical-key footer. The footer cannot
+overlap product content and the header/footer are never touch targets.
 
 Exact candidate 0.52 accepted the historical 42 px header/y=236/input-status
 geometry as implementation evidence: six retained
@@ -100,11 +100,11 @@ tests, so a screen cannot silently move its content into the fixed footer.
 
 | Component | Geometry/role | Current reuse |
 |---|---|---|
-| Header + title | 240×34 brand/status anchor; 216 px title region below it | Home and every Self-Test view |
-| Home row | 216×46; four finger-sized rows form a scrolling visible window above the footer | six-domain Home and the four-item Device menu |
-| Choice row | 216×46; up to three finger-sized choices fit above the footer | Quick / Full-Guided, Language, Survey plan/source/filter |
+| Header + title | 240×26 information/status bar; Home owns localized brand/version, nested screens put the current page title inside the same bar | every product view |
+| Home row | 216×60; four enlarged touch targets form a scrolling visible window above the footer | seven-job Home and the four-item Device menu |
+| Choice row | 216×52; up to three enlarged choices fit above the footer | Quick / Full-Guided, Language, Survey plan/source/filter |
 | Metric row | five 216×28 result slots | Full preflight and Quick/Full result |
-| Footer divider | fixed at y=282 | every interactive screen |
+| Footer divider | fixed at y=293 | every interactive screen |
 | Spatial navigation | three 70×26 physical-key action cells; no visible raw-input diagnostic | every interactive screen and HIL |
 
 Exact candidate `0.54.0-ui-components-measure` accepts UX-04 through
@@ -321,13 +321,15 @@ run retains 14 real TFT states, all seven Home jobs, both populated waterfalls,
 unchanged generation 95/0 and heap, and final owner/lease `none`/`0`
 (`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
 
-Candidate `0.96.0-inline-home-version` keeps the root-only identity contract and
-supersedes only this placement: Home now reads `LESHY v0.96.0` or
-`Леший v0.96.0` on one line. The 16 px brand and 12 px SemVer use a shared baseline
-with a fixed 5 px gap; measured text widths leave the right-aligned SD/RF status
-region untouched. Interactive menu/list rows also use one shared 12 px text inset
-from their vertical edge, leaving a visible gap after the focus chevron. Exact
-bilingual physical acceptance is required before promotion.
+Candidate `0.96.0-compact-navigation` keeps the root-only identity contract and
+makes Home read `LESHY v0.96.0` or `Леший v0.96.0` on one line. The 16 px brand
+and 12 px SemVer use a shared baseline with a fixed 5 px gap; measured text widths
+leave the right-aligned SD/RF status region untouched. On nested screens the actual
+page title moves into that information bar, eliminating a duplicate body title;
+the bar shrinks from 34 to 26 px and content starts at y=32. Four enlarged 216×60
+menu targets now fill the available viewport. Interactive menu/list rows use one
+shared 12 px horizontal inset and vertically centered two-line text. Exact bilingual
+physical acceptance is required before promotion.
 
 ## Inline physical-key legend
 

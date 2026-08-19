@@ -71,6 +71,25 @@ def require_exact(record: dict[str, Any], expected: dict[str, Any],
         raise RuntimeError("; ".join(failures))
 
 
+def stabilized_boot_metrics(
+        device: PassiveSerial,
+        maximum_attempts: int = 4) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Warm the diagnostic channel and return a proven steady heap baseline."""
+    samples: list[dict[str, Any]] = []
+    heap_keys = ("heap_total", "heap_free", "heap_min_free")
+    for _ in range(maximum_attempts):
+        sample = query(device, b"metrics", "leshy.boot.v1", "ready")
+        samples.append(sample)
+        if len(samples) < 2:
+            continue
+        previous = samples[-2]
+        if all(sample.get(key) == previous.get(key) for key in heap_keys):
+            return sample, samples
+    raise RuntimeError(
+        f"diagnostic heap baseline did not stabilize in {maximum_attempts} "
+        f"attempts: {samples}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -103,6 +122,7 @@ def main() -> int:
     screens: dict[str, Any] = {}
     reports: dict[str, Any] = {}
     boot: dict[str, Any] = {}
+    boot_metrics_samples: list[dict[str, Any]] = []
     recovery_before: dict[str, Any] = {}
     recovery_after: dict[str, Any] = {}
     metrics_after: dict[str, Any] = {}
@@ -118,7 +138,7 @@ def main() -> int:
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             try:
                 synchronize_console(device, 30.0)
-                boot = query(device, b"metrics", "leshy.boot.v1", "ready")
+                boot, boot_metrics_samples = stabilized_boot_metrics(device)
                 recovery_before = query(
                     device, b"storage.product.boot-recovery",
                     "leshy.storage.product_boot_recovery.v1", "state")
@@ -344,6 +364,9 @@ def main() -> int:
         "expected_cid": args.expected_cid,
         "home_items": list(HOME_ITEMS),
         "boot": boot,
+        "boot_metrics_samples": boot_metrics_samples,
+        "boot_metrics_stabilized": bool(boot_metrics_samples) and
+            len(boot_metrics_samples) >= 2,
         "recovery_before": recovery_before,
         "reports": reports,
         "screens": screens,

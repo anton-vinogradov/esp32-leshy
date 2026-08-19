@@ -125,6 +125,10 @@ void testUiComponentGeometryContract() {
 
     CHECK(insideScreen(Components::header()));
     CHECK(insideScreen(Components::title()));
+    CHECK(contains(Components::header(), Components::title()));
+    CHECK(Layout::HeaderHeight == 26);
+    CHECK(Layout::ContentTop == 32);
+    CHECK(Layout::HomeRowHeight == 60);
     for (std::uint8_t index = 0; index < 4; ++index) {
         const Rect row = Components::homeRow(index);
         CHECK(beforeFooter(row));

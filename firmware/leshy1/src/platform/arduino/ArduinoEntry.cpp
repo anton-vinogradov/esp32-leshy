@@ -4325,45 +4325,11 @@ void renderHeaderStatus() {
     const std::int16_t radioX = Layout::ScreenWidth - 10 - radioWidth;
     const std::int16_t storageX = radioX - 10 - storageWidth;
     display.setTextColor(storageTone, Palette::Header);
-    setUiCursor(UiTextRole::Meta, storageX, 10);
+    setUiCursor(UiTextRole::Meta, storageX, 5);
     display.print(storage);
     display.setTextColor(radioTone, Palette::Header);
-    setUiCursor(UiTextRole::Meta, radioX, 10);
+    setUiCursor(UiTextRole::Meta, radioX, 5);
     display.print(radio);
-}
-
-const char* headerNavigationTitle(const char* currentTitle,
-                                  bool showBodyTitle) {
-    if (uiController.isRoot()) return tr(UiTextId::Brand);
-    if (!showBodyTitle) return currentTitle;
-    switch (uiController.page()) {
-        case 1: return tr(UiTextId::DeviceTitle);
-        case 2: {
-            const AppMenuItem* item = appCatalog.get(uiController.selection());
-            if (item != nullptr) {
-                if (std::strcmp(item->id, "wifi") == 0) {
-                    return tr(UiTextId::AppWifi);
-                }
-                if (std::strcmp(item->id, "ble") == 0) {
-                    return tr(UiTextId::AppBle);
-                }
-                if (std::strcmp(item->id, "spectrum24") == 0) {
-                    return tr(UiTextId::AppSpectrum24);
-                }
-                if (std::strcmp(item->id, "subghz") == 0) {
-                    return tr(UiTextId::AppSubGhz);
-                }
-            }
-            return tr(UiTextId::AppSurvey);
-        }
-        case 3: return tr(UiTextId::AppLibrary);
-        case 4: return tr(UiTextId::AppCapture);
-        case 5: return tr(UiTextId::DeviceSettings);
-        case 6: return tr(UiTextId::AppSelfTest);
-        case kDevicePage: return tr(UiTextId::HeaderHome);
-        case kAboutPage: return tr(UiTextId::DeviceTitle);
-        default: return currentTitle;
-    }
 }
 
 void formatHomeVersion(char* output, std::size_t capacity) {
@@ -4377,8 +4343,7 @@ void formatHomeVersion(char* output, std::size_t capacity) {
     output[written] = '\0';
 }
 
-void renderHeader(const char* title, bool clearContent,
-                  bool showBodyTitle = true) {
+void renderHeader(const char* title, bool clearContent) {
     const Rect header = Components::header();
     display.fillRect(header.x, header.y, header.width, header.height,
                      Palette::Header);
@@ -4390,28 +4355,24 @@ void renderHeader(const char* title, bool clearContent,
     display.setTextColor(Palette::TextPrimary, Palette::Header);
     const bool home = uiController.isRoot();
     if (home) {
-        const char* brand = headerNavigationTitle(title, showBodyTitle);
+        const char* brand = tr(UiTextId::Brand);
         selectUiFont(UiTextRole::Body);
         const std::int16_t brandWidth = display.textWidth(brand);
-        setUiCursor(UiTextRole::Body, 10, 0);
+        setUiCursor(UiTextRole::Body, 10, 2);
         display.print(brand);
         char version[24] = {};
         formatHomeVersion(version, sizeof(version));
         display.setTextColor(Palette::TextMuted, Palette::Header);
-        const std::int16_t versionTop = kRobotoCondensedBodyAscent -
+        const std::int16_t versionTop = 2 + kRobotoCondensedBodyAscent -
                                         kRobotoCondensedMetaAscent;
         setUiCursor(UiTextRole::Meta, 10 + brandWidth + 5, versionTop);
         display.print(version);
     } else {
-        setUiCursor(UiTextRole::Meta, 10, 10);
-        display.print(headerNavigationTitle(title, showBodyTitle));
+        const Rect titleBounds = Components::title();
+        setUiCursor(UiTextRole::Meta, titleBounds.x, titleBounds.y);
+        display.print(title);
     }
     renderHeaderStatus();
-    if (!showBodyTitle) return;
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    const Rect titleBounds = Components::title();
-    setUiCursor(UiTextRole::Body, titleBounds.x + 2, titleBounds.y);
-    display.print(title);
 }
 
 void renderFocusCue(Rect bounds, bool selected) {
@@ -4428,6 +4389,15 @@ void renderFocusCue(Rect bounds, bool selected) {
 
 constexpr std::int16_t kInteractiveRowTextInset = 12;
 
+std::int16_t menuRowTextTop(Rect bounds) {
+    constexpr std::int16_t kLineGap = 1;
+    constexpr std::int16_t kTextBlockHeight =
+        kRobotoCondensedBodyAscent + kRobotoCondensedBodyDescent +
+        kLineGap + kRobotoCondensedMetaAscent + kRobotoCondensedMetaDescent;
+    return static_cast<std::int16_t>(
+        bounds.y + (bounds.height - kTextBlockHeight) / 2);
+}
+
 void renderMenuRow(Rect bounds, const char* label, const char* note,
                    bool selected, bool enabled, Tone noteTone) {
     const std::uint16_t background = selected
@@ -4438,13 +4408,16 @@ void renderMenuRow(Rect bounds, const char* label, const char* note,
     renderFocusCue(bounds, selected);
     display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                          background);
+    const std::int16_t labelTop = menuRowTextTop(bounds);
     setUiCursor(UiTextRole::Body,
-                bounds.x + kInteractiveRowTextInset, bounds.y - 3);
+                bounds.x + kInteractiveRowTextInset, labelTop);
     display.print(label);
     display.setTextColor(enabled ? toneColor(noteTone) : Palette::TextMuted,
                          background);
-    setUiCursor(UiTextRole::Meta,
-                bounds.x + kInteractiveRowTextInset, bounds.y + 11);
+    setUiCursor(
+        UiTextRole::Meta, bounds.x + kInteractiveRowTextInset,
+        labelTop + kRobotoCondensedBodyAscent +
+            kRobotoCondensedBodyDescent + 1);
     display.print(note);
 }
 
@@ -5544,7 +5517,7 @@ void renderNrf24SpectrumAxis() {
 }
 
 void renderNrf24SpectrumPage(bool clearContent) {
-    renderHeader(tr(UiTextId::SpectrumTitle), clearContent, false);
+    renderHeader(tr(UiTextId::SpectrumTitle), clearContent);
     renderActiveSpectrumData();
     renderNrf24SpectrumMetrics();
     renderNrf24SpectrumAxis();
@@ -5608,7 +5581,7 @@ void renderCc1101SpectrumMetrics() {
 }
 
 void renderCc1101SpectrumPage(bool clearContent) {
-    renderHeader(tr(UiTextId::CcSpectrumTitle), clearContent, false);
+    renderHeader(tr(UiTextId::CcSpectrumTitle), clearContent);
     renderActiveSpectrumData();
     renderCc1101SpectrumMetrics();
     renderCc1101SpectrumAxis();

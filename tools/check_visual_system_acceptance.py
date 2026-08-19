@@ -134,7 +134,9 @@ def main() -> int:
 
     theme = THEME.read_text(encoding="utf-8")
     for token in ("struct Palette", "struct Layout", "ContentWidth = 216",
-                  "HeaderHeight = 34", "FooterDividerY = 293", "static_assert"):
+                  "HeaderHeight = 26", "ContentTop = 32",
+                  "HomeRowHeight = 60", "FooterDividerY = 293",
+                  "static_assert"):
         require(failures, token in theme, f"VisualTheme.h: missing {token!r}")
     renderer = RENDERER.read_text(encoding="utf-8")
     require(failures, '#include "ui/VisualTheme.h"' in renderer,

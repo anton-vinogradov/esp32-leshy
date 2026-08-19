@@ -25,10 +25,10 @@ enum class Tone : std::uint8_t {
 };
 
 struct Components final {
-    static constexpr std::int16_t ChoiceTop = 82;
-    static constexpr std::int16_t ChoiceHeight = 46;
+    static constexpr std::int16_t ChoiceTop = 42;
+    static constexpr std::int16_t ChoiceHeight = 52;
     static constexpr std::int16_t ChoiceGap = 6;
-    static constexpr std::int16_t MetricTop = 84;
+    static constexpr std::int16_t MetricTop = 46;
     static constexpr std::int16_t MetricHeight = 28;
     static constexpr std::int16_t MetricGap = 0;
     static constexpr std::int16_t NavigationGap = 0;
@@ -39,7 +39,7 @@ struct Components final {
     }
 
     static constexpr Rect title() {
-        return {Layout::Edge, Layout::TitleY, Layout::ContentWidth, 20};
+        return {10, Layout::TitleY, 126, 15};
     }
 
     static constexpr Rect homeRow(std::uint8_t index) {
@@ -77,7 +77,7 @@ struct Components final {
     }
 
     static constexpr Rect stateCard() {
-        return {Layout::Edge, 92, Layout::ContentWidth, 112};
+        return {Layout::Edge, 58, Layout::ContentWidth, 112};
     }
 
     static constexpr Rect footerDivider() {
@@ -136,6 +136,8 @@ constexpr bool containsPoint(Rect rect, std::int16_t x, std::int16_t y) {
 
 static_assert(insideScreen(Components::header()), "header must fit the TFT");
 static_assert(insideScreen(Components::title()), "title must fit the TFT");
+static_assert(contains(Components::header(), Components::title()),
+              "page title must live inside the information header");
 static_assert(beforeFooter(Components::homeRow(3)),
               "four touch-sized Home rows must fit above the footer");
 static_assert(beforeFooter(Components::choiceRow(2)),

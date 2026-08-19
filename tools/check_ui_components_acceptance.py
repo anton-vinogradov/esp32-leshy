@@ -101,6 +101,8 @@ def main() -> int:
     require(failures, "kInteractiveRowTextInset = 12" in renderer and
             renderer.count("+ kInteractiveRowTextInset") >= 6,
             "interactive rows do not share the 12 px text inset")
+    require(failures, "menuRowTextTop" in renderer,
+            "interactive row text is not vertically centered")
     require(failures, renderer.count("renderMetric(") >= 9,
             "metric primitive is not reused across preflight and result")
     for token in ("Components::header()", "Components::title()",
