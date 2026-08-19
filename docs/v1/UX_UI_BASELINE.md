@@ -304,6 +304,20 @@ Wi-Fi/BLE source masks 1/2, populated nRF24/CC1101 waterfalls, stable pause/resu
 unchanged generation 95/0, invariant heap and final owner/lease `none`/`0`
 (`E-BUILD-094`/`E-AUTO-058`/`E-HIL-118`/`E-UX-017`/`E-RADIO-006`).
 
+## Localized Home identity and visible version
+
+The `0.94.0-home-identity` candidate makes the root identity explicit and keeps it
+out of navigation context. Home alone renders `LESHY` in English or `Леший` in
+Russian. No About or nested-screen string repeats either brand spelling; nested
+headers continue to name the current section or task.
+
+The same 34 px Home header renders the SemVer core derived from the build identity
+(`v0.94.0`) immediately below the localized brand. The complete build identity
+(`0.94.0-home-identity`) remains available in About and diagnostics. SD/RF status
+tokens stay right-aligned and unchanged. The connected-candidate workflow must
+capture both English and Russian Home automatically, restore Russian, and bind the
+screens to the exact flashed candidate without manual button presses.
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog

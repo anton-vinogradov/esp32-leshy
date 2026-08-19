@@ -32,6 +32,7 @@ SCREENS = {
     "device": "device",
     "home_final": "home-final",
 }
+IDENTITY_SCREENS = {"home_en": "home-en"}
 
 
 def digest(path: Path) -> str:
@@ -180,8 +181,15 @@ def main() -> int:
                 f"{prefix} receive-only side effects mismatch")
 
     screens = run.get("screens", {})
-    require(failures, set(screens) == set(SCREENS), "screen set mismatch")
-    for key, stem in SCREENS.items():
+    scope = run.get("scope", {})
+    identity_contract = scope.get("home_identity") == \
+        "bilingual_brand_and_version"
+    expected_screens = dict(SCREENS)
+    if identity_contract:
+        expected_screens.update(IDENTITY_SCREENS)
+    require(failures, set(screens) == set(expected_screens),
+            "screen set mismatch")
+    for key, stem in expected_screens.items():
         record = screens.get(key, {})
         raw = root / "frames" / f"{stem}.rgb565"
         png = root / "frames" / f"{stem}.png"
@@ -217,15 +225,23 @@ def main() -> int:
                 final.get("runtime_owner") == "none" and
                 final.get("lease_mask") == 0,
                 f"{label} terminal state mismatch")
-    scope = run.get("scope", {})
-    require(failures, scope == {
+    expected_scope = {
         "single_flash": True,
         "manual_button_presses": 0,
         "screenshots_automatic": True,
         "software_rx_only_counters_verified": True,
         "rf_instrument_available": False,
         "storage_write_authorized": False,
-    }, "automation scope mismatch")
+    }
+    if identity_contract:
+        expected_scope["home_identity"] = "bilingual_brand_and_version"
+        require(failures,
+                screens.get("home_en", {}).get("state", {}).get("language") ==
+                    "en" and
+                screens.get("home_final", {}).get("state", {}).get("language") ==
+                    "ru",
+                "bilingual Home capture state mismatch")
+    require(failures, scope == expected_scope, "automation scope mismatch")
     verify_manifest(failures, root)
 
     if failures:
@@ -234,7 +250,7 @@ def main() -> int:
         return 1
     print(json.dumps({
         "status": "pass", "version": args.expected_version,
-        "home_items": HOME_ITEMS, "screens": len(SCREENS),
+        "home_items": HOME_ITEMS, "screens": len(expected_screens),
         "nrf_history_rows": reports["nrf_waterfall"]["history_rows"],
         "cc_history_rows": reports["cc_waterfall"]["history_rows"],
         "final_lease_mask": run["cleanup_after"]["final_state"]["lease_mask"],

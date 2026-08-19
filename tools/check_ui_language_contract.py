@@ -118,6 +118,17 @@ def main() -> int:
     identifiers = [entry[0] for entry in entries]
     require(failures, len(identifiers) == len(set(identifiers)),
             "duplicate UI text identifier")
+    by_identifier = {entry[0]: entry for entry in entries}
+    require(failures,
+            by_identifier.get("Brand", (None, None, None, None, None))[3:] ==
+                ("LESHY", "Леший"),
+            "Home brand must be LESHY in English and Леший in Russian")
+    brand_mentions = [
+        identifier for identifier, _, _, english, russian in entries
+        if "LESHY" in english or "Леший" in russian
+    ]
+    require(failures, brand_mentions == ["Brand"],
+            f"brand must appear only on Home: {brand_mentions}")
     for identifier, role, maximum, english, russian in entries:
         require(failures, bool(english) and bool(russian),
                 f"{identifier}: empty translation")
@@ -150,6 +161,14 @@ def main() -> int:
                   '"ui.language "',
                   '"language\\\":\\\"%s'):
         require(failures, token in renderer, f"renderer contract missing: {token}")
+    for token in ("void formatHomeVersion(", "const char* source = LESHY1_VERSION",
+                  "*source != '-'", "char version[24]", "if (home)"):
+        require(failures, token in renderer,
+                f"Home identity/version renderer missing: {token}")
+    require(failures,
+            "std::snprintf(line, sizeof(line), tr(UiTextId::AboutVersionFormat),\n"
+            "                  LESHY1_VERSION);" in renderer,
+            "About must retain the full firmware version")
 
     catalog = CATALOG.read_text(encoding="utf-8")
     require(failures, "kCapacity = 7" in CATALOG_HEADER.read_text(encoding="utf-8"),
@@ -168,6 +187,10 @@ def main() -> int:
     platformio = PLATFORMIO.read_text(encoding="utf-8")
     require(failures, "-D LOAD_GFXFF=1" in platformio,
             "UTF-8 firmware font build contract missing")
+    require(failures,
+            re.search(r'LESHY1_VERSION=\\"\d+\.\d+\.\d+[-\w.]*\\"',
+                      platformio) is not None,
+            "firmware version must provide a SemVer core for Home")
 
     if failures:
         for failure in failures:

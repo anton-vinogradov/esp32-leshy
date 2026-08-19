@@ -4334,6 +4334,17 @@ const char* headerNavigationTitle(const char* currentTitle,
     }
 }
 
+void formatHomeVersion(char* output, std::size_t capacity) {
+    if (output == nullptr || capacity == 0) return;
+    std::size_t written = 0;
+    if (capacity > 1) output[written++] = 'v';
+    const char* source = LESHY1_VERSION;
+    while (*source != '\0' && *source != '-' && written + 1 < capacity) {
+        output[written++] = *source++;
+    }
+    output[written] = '\0';
+}
+
 void renderHeader(const char* title, bool clearContent,
                   bool showBodyTitle = true) {
     const Rect header = Components::header();
@@ -4346,9 +4357,18 @@ void renderHeader(const char* title, bool clearContent,
     }
     display.setTextColor(Palette::TextPrimary, Palette::Header);
     const bool home = uiController.isRoot();
-    setUiCursor(home ? UiTextRole::Body : UiTextRole::Meta, 10,
-                home ? 6 : 10);
-    display.print(headerNavigationTitle(title, showBodyTitle));
+    if (home) {
+        setUiCursor(UiTextRole::Body, 10, 0);
+        display.print(headerNavigationTitle(title, showBodyTitle));
+        char version[24] = {};
+        formatHomeVersion(version, sizeof(version));
+        display.setTextColor(Palette::TextMuted, Palette::Header);
+        setUiCursor(UiTextRole::Meta, 10, 18);
+        display.print(version);
+    } else {
+        setUiCursor(UiTextRole::Meta, 10, 10);
+        display.print(headerNavigationTitle(title, showBodyTitle));
+    }
     renderHeaderStatus();
     if (!showBodyTitle) return;
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);

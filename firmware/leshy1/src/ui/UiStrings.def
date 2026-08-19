@@ -1,5 +1,5 @@
 // id, role, maximum rendered width in pixels, English, Russian
-LESHY_UI_TEXT(Brand, Body, 64, "LESHY", u8"LESHY")
+LESHY_UI_TEXT(Brand, Body, 64, "LESHY", u8"Леший")
 LESHY_UI_TEXT(HeaderHome, Meta, 64, "HOME", u8"ГЛАВНАЯ")
 LESHY_UI_TEXT(HomeTitle, Body, 206, "CAPABILITY HOME", u8"ГЛАВНОЕ МЕНЮ")
 LESHY_UI_TEXT(Ready, Meta, 196, "READY", u8"ГОТОВО")
@@ -39,10 +39,10 @@ LESHY_UI_TEXT(DeviceSettingsNote, Meta, 196, "LANGUAGE / INTERFACE", u8"ЯЗЫК
 LESHY_UI_TEXT(DeviceDiagnosticsNote, Meta, 196, "BOARD / HARDWARE", u8"ПЛАТА / ОБОРУДОВАНИЕ")
 LESHY_UI_TEXT(DeviceAbout, Body, 196, "ABOUT", u8"О СИСТЕМЕ")
 LESHY_UI_TEXT(DeviceAboutNote, Meta, 196, "VERSION / PROFILE", u8"ВЕРСИЯ / ПРОФИЛЬ")
-LESHY_UI_TEXT(AboutTitle, Body, 206, "ABOUT LESHY", u8"О LESHY")
+LESHY_UI_TEXT(AboutTitle, Body, 206, "ABOUT", u8"О СИСТЕМЕ")
 LESHY_UI_TEXT(AboutVersionFormat, Body, 212, "VERSION  %s", u8"ВЕРСИЯ  %s")
 LESHY_UI_TEXT(AboutProfileFormat, Body, 212, "PROFILE  %s", u8"ПРОФИЛЬ  %s")
-LESHY_UI_TEXT(AboutOpenSource, Meta, 212, "ESP32-LESHY / OPEN SOURCE", u8"ESP32-LESHY / OPEN SOURCE")
+LESHY_UI_TEXT(AboutOpenSource, Meta, 212, "OPEN SOURCE FIRMWARE", u8"ОТКРЫТАЯ ПРОШИВКА")
 
 LESHY_UI_TEXT(LanguageTitle, Body, 206, "LANGUAGE", u8"ЯЗЫК")
 LESHY_UI_TEXT(LanguageEnglish, Body, 196, "ENGLISH", u8"АНГЛИЙСКИЙ")

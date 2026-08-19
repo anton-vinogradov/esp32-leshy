@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Flash once and exercise the complete 0.93 product Home on board-01."""
+"""Flash once and exercise the complete product Home on board-01."""
 
 from __future__ import annotations
 
@@ -291,6 +291,9 @@ def main() -> int:
                     trace.append(action(device, "left"))
 
                 home_selection(device, 0)
+                query(device, b"ui.language en", "leshy.ui.v1", "state")
+                screens["home_en"] = capture(device, frames, "home-en")
+                query(device, b"ui.language ru", "leshy.ui.v1", "state")
                 screens["home_final"] = capture(device, frames, "home-final")
                 input_state = query(
                     device, b"input.state", "leshy.input.frontend.v1", "state")
@@ -358,6 +361,7 @@ def main() -> int:
             "software_rx_only_counters_verified": True,
             "rf_instrument_available": False,
             "storage_write_authorized": False,
+            "home_identity": "bilingual_brand_and_version",
         },
     }
     write_json(args.output / "run.json", result)

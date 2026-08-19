@@ -231,6 +231,10 @@ void testLanguageCatalogAndControllerAreBounded() {
     }
     CHECK(std::strcmp(uiText(UiLanguage::English, UiTextId::AppSelfTest),
                       "SELF-TEST") == 0);
+    CHECK(std::strcmp(uiText(UiLanguage::English, UiTextId::Brand),
+                      "LESHY") == 0);
+    CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::Brand),
+                      u8"Леший") == 0);
     CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::AppSelfTest),
                       u8"САМОПРОВЕРКА") == 0);
     CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::NavBack),
@@ -239,6 +243,12 @@ void testLanguageCatalogAndControllerAreBounded() {
                       u8"ВЫБОР") == 0);
     CHECK(std::strcmp(uiText(UiLanguage::Russian, UiTextId::NavEnter),
                       u8"ВХОД") == 0);
+    for (std::size_t index = 0; index < kUiTextCount; ++index) {
+        if (index == static_cast<std::size_t>(UiTextId::Brand)) continue;
+        const UiTextSpec& spec = uiTextSpec(static_cast<UiTextId>(index));
+        CHECK(std::strstr(spec.english, "LESHY") == nullptr);
+        CHECK(std::strstr(spec.russian, u8"Леший") == nullptr);
+    }
 
     UiLanguage parsed = UiLanguage::English;
     CHECK(uiLanguageFromName("ru", &parsed));

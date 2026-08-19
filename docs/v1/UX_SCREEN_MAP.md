@@ -149,3 +149,9 @@ One connected-candidate command retains 13 actual TFT states and independently
 verifies every entry, populated waterfalls, final Home and zero ownership with zero
 manual button presses (`E-BUILD-094`/`E-AUTO-058`/`E-HIL-118`/`E-UX-017`/
 `E-RADIO-006`).
+
+The `0.94.0-home-identity` contract does not change the screen tree. It localizes
+the root-only brand to `LESHY`/`Леший`, shows the build SemVer core on Home, and
+removes the brand from About copy. Nested headers remain navigation context. The
+physical candidate gate adds an English Home capture to the Russian product route
+and restores Russian before final cleanup.
