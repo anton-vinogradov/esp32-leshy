@@ -329,8 +329,13 @@ def main() -> int:
                     "page": "survey", "selected_id": "subghz",
                     "runtime_owner": "subghz", "lease_mask": 9,
                 }, "cc_return_to_band_menu")
-                for band in ("868", "915", "315"):
-                    trace.append(action(device, "down"))
+                for band, moves in (
+                    ("868", ("down",)),
+                    ("915", ("down",)),
+                    ("315", ("up", "up", "up")),
+                ):
+                    for move in moves:
+                        trace.append(action(device, move))
                     trace.append(action(device, "right"))
                     fill = wait_full_waterfall(
                         device, b"hardware.cc1101.spectrum", CC_SCHEMA,
