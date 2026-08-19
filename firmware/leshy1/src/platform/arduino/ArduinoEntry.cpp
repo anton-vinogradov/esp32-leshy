@@ -4390,12 +4390,17 @@ void renderHeader(const char* title, bool clearContent,
     display.setTextColor(Palette::TextPrimary, Palette::Header);
     const bool home = uiController.isRoot();
     if (home) {
+        const char* brand = headerNavigationTitle(title, showBodyTitle);
+        selectUiFont(UiTextRole::Body);
+        const std::int16_t brandWidth = display.textWidth(brand);
         setUiCursor(UiTextRole::Body, 10, 0);
-        display.print(headerNavigationTitle(title, showBodyTitle));
+        display.print(brand);
         char version[24] = {};
         formatHomeVersion(version, sizeof(version));
         display.setTextColor(Palette::TextMuted, Palette::Header);
-        setUiCursor(UiTextRole::Meta, 10, 18);
+        const std::int16_t versionTop = kRobotoCondensedBodyAscent -
+                                        kRobotoCondensedMetaAscent;
+        setUiCursor(UiTextRole::Meta, 10 + brandWidth + 5, versionTop);
         display.print(version);
     } else {
         setUiCursor(UiTextRole::Meta, 10, 10);
@@ -4421,6 +4426,8 @@ void renderFocusCue(Rect bounds, bool selected) {
                          Palette::Focus);
 }
 
+constexpr std::int16_t kInteractiveRowTextInset = 12;
+
 void renderMenuRow(Rect bounds, const char* label, const char* note,
                    bool selected, bool enabled, Tone noteTone) {
     const std::uint16_t background = selected
@@ -4431,11 +4438,13 @@ void renderMenuRow(Rect bounds, const char* label, const char* note,
     renderFocusCue(bounds, selected);
     display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                          background);
-    setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y - 3);
+    setUiCursor(UiTextRole::Body,
+                bounds.x + kInteractiveRowTextInset, bounds.y - 3);
     display.print(label);
     display.setTextColor(enabled ? toneColor(noteTone) : Palette::TextMuted,
                          background);
-    setUiCursor(UiTextRole::Meta, bounds.x + 10, bounds.y + 11);
+    setUiCursor(UiTextRole::Meta,
+                bounds.x + kInteractiveRowTextInset, bounds.y + 11);
     display.print(note);
 }
 
@@ -5077,7 +5086,8 @@ void renderSurveyListRow(std::size_t index, std::size_t firstVisible) {
                     Layout::ContentWidth, 36}, selected);
     display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                          background);
-    setUiCursor(UiTextRole::Body, 20, y - 2);
+    setUiCursor(UiTextRole::Body,
+                Layout::Edge + kInteractiveRowTextInset, y - 2);
     char visibleLabel[24] = {};
     const std::size_t visibleLength = observation->labelLength < 15U
         ? observation->labelLength : 15U;
@@ -5136,7 +5146,9 @@ void renderSurveyFilterBar() {
     std::snprintf(line, sizeof(line), tr(surveyFilterBarFormat(
                       surveyController.filter())),
                   static_cast<unsigned>(surveyController.visibleSize()));
-    setUiCursor(UiTextRole::Body, 20, kSurveyFilterY + 3);
+    setUiCursor(UiTextRole::Body,
+                Layout::Edge + kInteractiveRowTextInset,
+                kSurveyFilterY + 3);
     display.print(line);
 }
 
@@ -5872,7 +5884,8 @@ void renderLibraryListRow(std::size_t index) {
                     Layout::ContentWidth, Layout::RowHeight}, selected);
     display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                          background);
-    setUiCursor(UiTextRole::Body, 20, y - 1);
+    setUiCursor(UiTextRole::Body,
+                Layout::Edge + kInteractiveRowTextInset, y - 1);
     display.print(entry->session->id());
     char line[96] = {};
     display.setTextColor(Palette::Positive, background);
@@ -5885,7 +5898,8 @@ void renderLibraryListRow(std::size_t index) {
                       ? capture.framePayloadRecords : entry->session->size()),
                   static_cast<unsigned long>(entry->generation),
                   leshy1::apps::library::sessionIntegrityName(entry->integrity));
-    setUiCursor(UiTextRole::Meta, 20, y + 23);
+    setUiCursor(UiTextRole::Meta,
+                Layout::Edge + kInteractiveRowTextInset, y + 23);
     display.print(line);
 }
 

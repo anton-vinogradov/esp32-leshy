@@ -327,6 +327,14 @@ TFT states, все семь jobs Home, оба наполненных водоп�
 и heap, final owner/lease `none`/`0`
 (`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
 
+Candidate `0.96.0-inline-home-version` сохраняет root-only identity contract и
+заменяет только этот placement: Home теперь читается как `LESHY v0.96.0` или
+`Леший v0.96.0` в одну строку. Brand 16 px и SemVer 12 px имеют общую baseline и
+fixed gap 5 px; measured text widths не затрагивают right-aligned область SD/RF
+status. Interactive menu/list rows также используют единый text inset 12 px от
+вертикального края, оставляя видимый зазор после focus chevron. До promotion
+требуется exact bilingual physical acceptance.
+
 ## Строчная легенда физических клавиш
 
 Candidate `0.95.0-inline-key-hints` возвращает удачную модель представления 0.x,

@@ -98,6 +98,9 @@ def main() -> int:
             "renderer does not consume component contract")
     require(failures, renderer.count("renderMenuRow(") >= 3,
             "menu row primitive is not reused across Home and Self-Test")
+    require(failures, "kInteractiveRowTextInset = 12" in renderer and
+            renderer.count("+ kInteractiveRowTextInset") >= 6,
+            "interactive rows do not share the 12 px text inset")
     require(failures, renderer.count("renderMetric(") >= 9,
             "metric primitive is not reused across preflight and result")
     for token in ("Components::header()", "Components::title()",

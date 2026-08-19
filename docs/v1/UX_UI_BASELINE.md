@@ -321,6 +321,14 @@ run retains 14 real TFT states, all seven Home jobs, both populated waterfalls,
 unchanged generation 95/0 and heap, and final owner/lease `none`/`0`
 (`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
 
+Candidate `0.96.0-inline-home-version` keeps the root-only identity contract and
+supersedes only this placement: Home now reads `LESHY v0.96.0` or
+`Леший v0.96.0` on one line. The 16 px brand and 12 px SemVer use a shared baseline
+with a fixed 5 px gap; measured text widths leave the right-aligned SD/RF status
+region untouched. Interactive menu/list rows also use one shared 12 px text inset
+from their vertical edge, leaving a visible gap after the focus chevron. Exact
+bilingual physical acceptance is required before promotion.
+
 ## Inline physical-key legend
 
 Candidate `0.95.0-inline-key-hints` restores the successful 0.x presentation
