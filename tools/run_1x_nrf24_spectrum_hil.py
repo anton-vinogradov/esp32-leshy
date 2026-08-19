@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the 0.82 user-started receive-only nRF24 spectrum workflow."""
+"""Exercise the 0.92 full-width nRF24 spectrum and waterfall workflow."""
 
 from __future__ import annotations
 
@@ -31,10 +31,12 @@ SPECTRUM_SCHEMA = "leshy.nrf24.spectrum.v1"
 
 
 def spectrum_failures(
-    report: dict[str, Any], *, state: str, active: bool, cleanup: bool
+    report: dict[str, Any], *, state: str, active: bool, cleanup: bool,
+    display_mode: str,
 ) -> list[str]:
     failures = expect(report, {
         "view": "live" if active else "source_menu",
+        "display_mode": display_mode,
         "state": state,
         "status": "ready",
         "range_mhz": [2402, 2484],
@@ -52,6 +54,9 @@ def spectrum_failures(
         "current_lease_mask": 15,
     }, f"spectrum_{state}")
     sweeps = report.get("sweeps")
+    history_rows = report.get("history_rows")
+    if not isinstance(history_rows, int) or history_rows < 1 or history_rows > 112:
+        failures.append(f"bounded waterfall history differs: {history_rows!r}")
     wire = report.get("wire", {})
     side_effects = report.get("side_effects", {})
     if not isinstance(sweeps, int) or sweeps < 1:
@@ -186,8 +191,23 @@ def main() -> int:
                     SPECTRUM_SCHEMA, "state")
                 failures.extend(spectrum_failures(
                     reports["running"], state="running", active=True,
-                    cleanup=False))
-                captures["running"] = capture(device, frames, "running")
+                    cleanup=False, display_mode="spectrum"))
+                captures["spectrum"] = capture(device, frames, "spectrum")
+
+                state = action(device, "down")
+                trace.append(state)
+                failures.extend(expect(state, {
+                    "runtime_event": "spectrum_waterfall_view",
+                    "changed": True,
+                }, "waterfall_view"))
+                time.sleep(0.3)
+                reports["waterfall"] = query(
+                    device, b"hardware.nrf24.spectrum",
+                    SPECTRUM_SCHEMA, "state")
+                failures.extend(spectrum_failures(
+                    reports["waterfall"], state="running", active=True,
+                    cleanup=False, display_mode="waterfall"))
+                captures["waterfall"] = capture(device, frames, "waterfall")
 
                 state = action(device, "right")
                 trace.append(state)
@@ -204,7 +224,7 @@ def main() -> int:
                     SPECTRUM_SCHEMA, "state")
                 failures.extend(spectrum_failures(
                     reports["paused_after"], state="paused", active=True,
-                    cleanup=False))
+                    cleanup=False, display_mode="waterfall"))
                 if reports["paused_after"].get("sweeps") != \
                         reports["paused_before"].get("sweeps"):
                     failures.append("paused spectrum continued sweeping")
@@ -218,10 +238,24 @@ def main() -> int:
                     SPECTRUM_SCHEMA, "state")
                 failures.extend(spectrum_failures(
                     reports["resumed"], state="running", active=True,
-                    cleanup=False))
+                    cleanup=False, display_mode="waterfall"))
                 if int(reports["resumed"].get("sweeps", 0)) <= int(
                         reports["paused_after"].get("sweeps", 0)):
                     failures.append("resume did not restart sweeping")
+
+                state = action(device, "up")
+                trace.append(state)
+                failures.extend(expect(state, {
+                    "runtime_event": "spectrum_bar_view", "changed": True,
+                }, "spectrum_view_restored"))
+                reports["spectrum_restored"] = query(
+                    device, b"hardware.nrf24.spectrum",
+                    SPECTRUM_SCHEMA, "state")
+                failures.extend(spectrum_failures(
+                    reports["spectrum_restored"], state="running", active=True,
+                    cleanup=False, display_mode="spectrum"))
+                captures["spectrum_restored"] = capture(
+                    device, frames, "spectrum-restored")
 
                 state = action(device, "left")
                 trace.append(state)
@@ -234,7 +268,7 @@ def main() -> int:
                     SPECTRUM_SCHEMA, "state")
                 failures.extend(spectrum_failures(
                     reports["stopped"], state="idle", active=False,
-                    cleanup=True))
+                    cleanup=True, display_mode="spectrum"))
                 captures["stopped"] = capture(device, frames, "stopped")
 
                 trace.append(action(device, "left"))

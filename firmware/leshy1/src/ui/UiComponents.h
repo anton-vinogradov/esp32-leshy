@@ -31,8 +31,8 @@ struct Components final {
     static constexpr std::int16_t MetricTop = 84;
     static constexpr std::int16_t MetricHeight = 28;
     static constexpr std::int16_t MetricGap = 0;
-    static constexpr std::int16_t NavigationGap = 3;
-    static constexpr std::int16_t NavigationWidth = 70;
+    static constexpr std::int16_t NavigationGap = 0;
+    static constexpr std::int16_t NavigationWidth = 80;
 
     static constexpr Rect header() {
         return {0, 0, Layout::ScreenWidth, Layout::HeaderHeight};
@@ -81,18 +81,18 @@ struct Components final {
     }
 
     static constexpr Rect footerDivider() {
-        return {Layout::Edge, Layout::FooterDividerY, Layout::ContentWidth, 1};
+        return {0, Layout::FooterDividerY, Layout::ScreenWidth, 1};
     }
 
     static constexpr Rect footerHint() {
-        return {Layout::Edge, Layout::HintY, Layout::ContentWidth,
+        return {0, Layout::HintY, Layout::ScreenWidth,
                 Layout::HintHeight};
     }
 
     static constexpr Rect navigationCell(std::uint8_t index) {
         return {
             static_cast<std::int16_t>(
-                Layout::Edge + static_cast<std::int16_t>(index) *
+                static_cast<std::int16_t>(index) *
                     (NavigationWidth + NavigationGap)),
             Layout::HintY,
             NavigationWidth,
@@ -159,7 +159,7 @@ static_assert(!overlaps(Components::navigationCell(0),
               "navigation cells must remain spatially distinct");
 static_assert(Components::navigationCell(2).x +
                       Components::navigationCell(2).width ==
-                  Layout::Edge + Layout::ContentWidth,
+                  Layout::ScreenWidth,
               "navigation cells must span the content width");
 static_assert(contains(Components::homeRow(0),
                        Components::focusMarker(Components::homeRow(0))),

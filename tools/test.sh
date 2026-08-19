@@ -30,6 +30,7 @@ trap 'rm -rf "$test_tmp"' EXIT
     "$repo_dir/firmware/leshy1/src/apps/self_test/SelfTestController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/spectrum/Cc1101SpectrumController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/spectrum/Nrf24SpectrumController.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/spectrum/SpectrumViewport.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/ProductSurveyAdmission.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyPipeline.cpp" \

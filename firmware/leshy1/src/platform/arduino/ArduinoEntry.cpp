@@ -4,6 +4,7 @@
 #include <TFT_eSPI.h>
 #include <Wire.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -28,6 +29,7 @@
 #include "apps/self_test/SelfTestController.h"
 #include "apps/spectrum/Cc1101SpectrumController.h"
 #include "apps/spectrum/Nrf24SpectrumController.h"
+#include "apps/spectrum/SpectrumViewport.h"
 #include "apps/survey/ProductSurveyAdmission.h"
 #include "apps/survey/SurveyController.h"
 #include "apps/survey/SurveyPipeline.h"
@@ -114,6 +116,8 @@ using leshy1::apps::spectrum::Cc1101SpectrumController;
 using leshy1::apps::spectrum::Cc1101SpectrumViewState;
 using leshy1::apps::spectrum::Nrf24SpectrumController;
 using leshy1::apps::spectrum::Nrf24SpectrumViewState;
+using leshy1::apps::spectrum::SpectrumDisplayMode;
+using leshy1::apps::spectrum::SpectrumViewport;
 using leshy1::apps::survey::SurveyController;
 using leshy1::apps::survey::ObservationHistory;
 using leshy1::apps::survey::SurveyFilter;
@@ -307,6 +311,9 @@ BoardNrf24PassiveSpectrum boardNrf24Spectrum;
 Cc1101SpectrumController cc1101SpectrumController;
 Cc1101PassiveSpectrumReport cc1101SpectrumReport;
 BoardCc1101PassiveSpectrum boardCc1101Spectrum;
+SpectrumViewport spectrumViewport;
+std::array<std::uint8_t, SpectrumViewport::kMaxBins> spectrumIntensity{};
+std::array<std::uint16_t, Layout::ScreenWidth> spectrumScanline{};
 enum class FullGuidedRfStep : std::uint8_t {
     Idle,
     Nrf24Sweep,
@@ -456,12 +463,14 @@ enum class RfSpectrumKind : std::uint8_t {
 enum class RfSpectrumView : std::uint8_t {
     None,
     SourceMenu,
+    CcBandMenu,
     Live,
 };
 const char* rfSpectrumViewName(RfSpectrumView view) {
     switch (view) {
         case RfSpectrumView::None: return "none";
         case RfSpectrumView::SourceMenu: return "source_menu";
+        case RfSpectrumView::CcBandMenu: return "cc_band_menu";
         case RfSpectrumView::Live: return "live";
     }
     return "unknown";
@@ -469,7 +478,10 @@ const char* rfSpectrumViewName(RfSpectrumView view) {
 RfSpectrumView rfSpectrumView = RfSpectrumView::None;
 RfSpectrumKind rfSpectrumKind = RfSpectrumKind::Nrf24;
 std::uint8_t rfSpectrumSelection = 0;
+leshy1::drivers::radio::Cc1101SpectrumBand rfCcBandSelection =
+    leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
 std::uint64_t nextNrf24SpectrumSweepUs = 0;
+std::uint64_t nextSpectrumUiRefreshUs = 0;
 BoardWifiPassiveCapture wifiFrameCapture;
 constexpr WifiFrameCapturePlan kProductWifiFrameCapturePlan{};
 std::uint64_t nextCaptureUiRefreshUs = 0;
@@ -4052,6 +4064,9 @@ NavigationFooter navigationFooterForCurrentState() {
         if (rfSpectrumView == RfSpectrumView::SourceMenu) {
             return {back, choose, enter};
         }
+        if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
+            return {back, choose, enter};
+        }
         if (rfSpectrumView == RfSpectrumView::Live) {
             const bool cc = rfSpectrumKind == RfSpectrumKind::Cc1101;
             const bool fault = cc
@@ -4068,9 +4083,7 @@ NavigationFooter navigationFooterForCurrentState() {
                 return {back, {}, {}};
             }
             return {back,
-                    cc ? NavigationCell{NavigationKey::UpDown,
-                                        UiTextId::NavBand}
-                       : NavigationCell{},
+                    {NavigationKey::UpDown, UiTextId::NavView},
                     {NavigationKey::RightAndSelect,
                      paused
                          ? UiTextId::NavResume : UiTextId::NavPause}};
@@ -4185,7 +4198,7 @@ void renderNavigationKey(NavigationKey key, Rect bounds) {
                              centerY + 5, centerX + 13, centerY - 1,
                              Palette::Focus);
     } else if (key == NavigationKey::RightAndSelect) {
-        display.setTextColor(Palette::Focus, Palette::Surface);
+        display.setTextColor(Palette::Focus, Palette::Canvas);
         selectUiFont(UiTextRole::Meta);
         const char* ok = tr(UiTextId::NavOk);
         const std::int16_t okWidth = display.textWidth(ok);
@@ -4201,13 +4214,11 @@ void renderNavigationKey(NavigationKey key, Rect bounds) {
 void renderNavigationCell(std::uint8_t index, NavigationCell cell) {
     if (cell.key == NavigationKey::None || cell.label == UiTextId::Count) return;
     const Rect bounds = Components::navigationCell(index);
-    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                          Layout::Radius, Palette::Surface);
     renderNavigationKey(cell.key, bounds);
     const char* label = tr(cell.label);
     selectUiFont(UiTextRole::Meta);
     const std::int16_t labelWidth = display.textWidth(label);
-    display.setTextColor(Palette::TextSecondary, Palette::Surface);
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
     setUiCursor(UiTextRole::Meta,
                 bounds.x + (bounds.width - labelWidth) / 2,
                 bounds.y + 11);
@@ -4283,7 +4294,25 @@ void renderHeaderStatus() {
     display.print(radio);
 }
 
-void renderHeader(const char* title, bool clearContent) {
+const char* headerNavigationTitle(const char* currentTitle,
+                                  bool showBodyTitle) {
+    if (uiController.isRoot()) return tr(UiTextId::Brand);
+    if (!showBodyTitle) return currentTitle;
+    switch (uiController.page()) {
+        case 1: return tr(UiTextId::DeviceTitle);
+        case 2: return tr(UiTextId::AppSurvey);
+        case 3: return tr(UiTextId::AppLibrary);
+        case 4: return tr(UiTextId::AppCapture);
+        case 5: return tr(UiTextId::DeviceSettings);
+        case 6: return tr(UiTextId::AppSelfTest);
+        case kDevicePage: return tr(UiTextId::HeaderHome);
+        case kAboutPage: return tr(UiTextId::DeviceTitle);
+        default: return currentTitle;
+    }
+}
+
+void renderHeader(const char* title, bool clearContent,
+                  bool showBodyTitle = true) {
     const Rect header = Components::header();
     display.fillRect(header.x, header.y, header.width, header.height,
                      Palette::Header);
@@ -4293,9 +4322,12 @@ void renderHeader(const char* title, bool clearContent) {
                          Palette::Canvas);
     }
     display.setTextColor(Palette::TextPrimary, Palette::Header);
-    setUiCursor(UiTextRole::Body, 10, 6);
-    display.print("LESHY");
+    const bool home = uiController.isRoot();
+    setUiCursor(home ? UiTextRole::Body : UiTextRole::Meta, 10,
+                home ? 6 : 10);
+    display.print(headerNavigationTitle(title, showBodyTitle));
     renderHeaderStatus();
+    if (!showBodyTitle) return;
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
     const Rect titleBounds = Components::title();
     setUiCursor(UiTextRole::Body, titleBounds.x + 2, titleBounds.y);
@@ -5169,83 +5201,233 @@ void renderRfSpectrumSourceMenu(bool clearContent) {
     display.print(tr(UiTextId::SpectrumRxOnly));
 }
 
-std::uint16_t spectrumTone(std::uint8_t intensity) {
-    if (intensity < 24U) return Palette::TextMuted;
-    if (intensity < 96U) return Palette::Positive;
-    if (intensity < 176U) return Palette::Focus;
-    if (intensity < 232U) return Palette::Warning;
-    return Palette::Danger;
+leshy1::drivers::radio::Cc1101SpectrumBand ccBandFromIndex(
+    std::uint8_t index) {
+    const std::uint8_t count = static_cast<std::uint8_t>(
+        leshy1::drivers::radio::Cc1101SpectrumBand::Count);
+    return static_cast<leshy1::drivers::radio::Cc1101SpectrumBand>(
+        index < count ? index : 0);
 }
 
-void renderNrf24SpectrumPlot() {
-    constexpr std::int16_t kPlotX = Layout::Edge;
-    constexpr std::int16_t kPlotY = 94;
-    constexpr std::int16_t kPlotWidth = Layout::ContentWidth;
-    constexpr std::int16_t kPlotHeight = 80;
-    display.fillRect(kPlotX, kPlotY, kPlotWidth, kPlotHeight,
-                     Palette::Surface);
-    for (std::int16_t x = 0; x < kPlotWidth; ++x) {
-        const std::size_t bin = static_cast<std::size_t>(x) *
-            Nrf24SpectrumController::kChannelCount / kPlotWidth;
-        const std::uint8_t intensity = nrf24SpectrumController.intensity(bin);
+std::uint8_t ccBandSelectionIndex() {
+    return static_cast<std::uint8_t>(rfCcBandSelection);
+}
+
+void renderRfCcBandRow(std::uint8_t index) {
+    if (index >= static_cast<std::uint8_t>(
+            leshy1::drivers::radio::Cc1101SpectrumBand::Count)) return;
+    const auto band = ccBandFromIndex(index);
+    const auto plan = leshy1::drivers::radio::cc1101PassiveSpectrumPlan(band);
+    char label[40] = {};
+    char note[48] = {};
+    std::snprintf(label, sizeof(label),
+                  tr(UiTextId::CcSpectrumBandChoiceFormat),
+                  leshy1::drivers::radio::cc1101SpectrumBandName(band));
+    std::snprintf(note, sizeof(note),
+                  tr(UiTextId::CcSpectrumBandRangeFormat),
+                  static_cast<unsigned long>(plan.firstKHz / 1000U),
+                  static_cast<unsigned long>(plan.firstKHz % 1000U),
+                  static_cast<unsigned long>(plan.lastKHz / 1000U),
+                  static_cast<unsigned long>(plan.lastKHz % 1000U));
+    renderMenuRow(Components::homeRow(index), label, note,
+                  rfCcBandSelection == band, true, Tone::Positive);
+}
+
+void renderRfCcBandMenu(bool clearContent) {
+    renderHeader(tr(UiTextId::CcSpectrumBands), clearContent);
+    for (std::uint8_t index = 0; index < 4; ++index) {
+        renderRfCcBandRow(index);
+    }
+}
+
+constexpr std::int16_t kSpectrumOverlayY = Layout::HeaderHeight;
+constexpr std::int16_t kSpectrumOverlayHeight = 28;
+constexpr std::int16_t kSpectrumAxisHeight = 15;
+constexpr std::int16_t kSpectrumAxisY =
+    Layout::FooterDividerY - kSpectrumAxisHeight;
+constexpr std::int16_t kSpectrumGraphY =
+    kSpectrumOverlayY + kSpectrumOverlayHeight;
+constexpr std::int16_t kSpectrumGraphHeight =
+    kSpectrumAxisY - kSpectrumGraphY;
+
+std::uint16_t spectrumTone(std::uint8_t intensity) {
+    if (intensity == 0) return Palette::Surface;
+    if (intensity < 64U) {
+        return leshy1::ui::visual::rgb565(
+            0, static_cast<std::uint8_t>(intensity * 2U), 196);
+    }
+    if (intensity < 128U) {
+        return leshy1::ui::visual::rgb565(
+            0, static_cast<std::uint8_t>(128U + intensity),
+            static_cast<std::uint8_t>(255U - (intensity - 64U) * 3U));
+    }
+    if (intensity < 192U) {
+        return leshy1::ui::visual::rgb565(
+            static_cast<std::uint8_t>((intensity - 128U) * 4U), 255, 0);
+    }
+    return leshy1::ui::visual::rgb565(
+        255, static_cast<std::uint8_t>(255U - (intensity - 192U) * 4U), 0);
+}
+
+const char* spectrumDisplayModeText() {
+    return tr(spectrumViewport.mode() == SpectrumDisplayMode::Spectrum
+                  ? UiTextId::SpectrumDisplaySpectrum
+                  : UiTextId::SpectrumDisplayWaterfall);
+}
+
+std::size_t activeSpectrumBins() {
+    return rfSpectrumKind == RfSpectrumKind::Cc1101
+        ? Cc1101SpectrumController::kBinCount
+        : Nrf24SpectrumController::kChannelCount;
+}
+
+std::uint8_t activeSpectrumIntensity(std::size_t bin) {
+    return rfSpectrumKind == RfSpectrumKind::Cc1101
+        ? cc1101SpectrumController.intensity(bin)
+        : nrf24SpectrumController.intensity(bin);
+}
+
+bool pushActiveSpectrumHistory() {
+    const std::size_t bins = activeSpectrumBins();
+    for (std::size_t bin = 0; bin < bins; ++bin) {
+        spectrumIntensity[bin] = activeSpectrumIntensity(bin);
+    }
+    return spectrumViewport.push(spectrumIntensity.data(), bins);
+}
+
+void prepareWaterfallScanline(std::size_t row) {
+    const std::size_t bins = spectrumViewport.binCount();
+    for (std::int16_t x = 0; x < Layout::ScreenWidth; ++x) {
+        const std::size_t bin = static_cast<std::size_t>(x) * bins /
+                                Layout::ScreenWidth;
+        spectrumScanline[static_cast<std::size_t>(x)] = spectrumTone(
+            spectrumViewport.intensity(row, bin));
+    }
+}
+
+void renderWaterfallSlot(std::size_t row) {
+    if (!spectrumViewport.rowValid(row)) return;
+    prepareWaterfallScanline(row);
+    const std::int16_t firstY = kSpectrumGraphY +
+        static_cast<std::int32_t>(row) * kSpectrumGraphHeight /
+            SpectrumViewport::kHistoryRows;
+    const std::int16_t nextY = kSpectrumGraphY +
+        static_cast<std::int32_t>(row + 1U) * kSpectrumGraphHeight /
+            SpectrumViewport::kHistoryRows;
+    for (std::int16_t y = firstY; y < nextY; ++y) {
+        display.pushImage(0, y, Layout::ScreenWidth, 1,
+                          spectrumScanline.data());
+    }
+}
+
+void renderWaterfallCursor() {
+    const std::int16_t y = kSpectrumGraphY +
+        static_cast<std::int32_t>(spectrumViewport.nextRow()) *
+            kSpectrumGraphHeight / SpectrumViewport::kHistoryRows;
+    display.drawFastHLine(0, y < kSpectrumAxisY ? y : kSpectrumGraphY,
+                          Layout::ScreenWidth, Palette::Divider);
+}
+
+void renderSpectrumWaterfall() {
+    display.fillRect(0, kSpectrumGraphY, Layout::ScreenWidth,
+                     kSpectrumGraphHeight, Palette::Surface);
+    for (std::size_t row = 0; row < SpectrumViewport::kHistoryRows; ++row) {
+        renderWaterfallSlot(row);
+    }
+    renderWaterfallCursor();
+}
+
+void renderLatestWaterfallRow() {
+    renderWaterfallSlot(spectrumViewport.latestRow());
+    renderWaterfallCursor();
+}
+
+void renderSpectrumBars() {
+    display.fillRect(0, kSpectrumGraphY, Layout::ScreenWidth,
+                     kSpectrumGraphHeight, Palette::Surface);
+    const std::size_t bins = activeSpectrumBins();
+    for (std::int16_t x = 0; x < Layout::ScreenWidth; ++x) {
+        const std::size_t bin = static_cast<std::size_t>(x) * bins /
+                                Layout::ScreenWidth;
+        const std::uint8_t intensity = activeSpectrumIntensity(bin);
         const std::int16_t height = intensity == 0
             ? 1
             : static_cast<std::int16_t>(1 +
                   static_cast<std::uint32_t>(intensity) *
-                      (kPlotHeight - 2) / 255U);
-        display.drawFastVLine(kPlotX + x, kPlotY + kPlotHeight - height,
-                              height, spectrumTone(intensity));
+                      (kSpectrumGraphHeight - 1) / 255U);
+        display.drawFastVLine(x, kSpectrumAxisY - height, height,
+                              spectrumTone(intensity));
     }
-    display.drawRect(kPlotX, kPlotY, kPlotWidth, kPlotHeight,
-                     Palette::Divider);
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, kPlotX, 177);
-    display.print(tr(UiTextId::SpectrumAxisFirst));
-    setUiCursor(UiTextRole::Meta, 105, 177);
-    display.print(tr(UiTextId::SpectrumAxisMiddle));
-    setUiCursor(UiTextRole::Meta, 202, 177);
-    display.print(tr(UiTextId::SpectrumAxisLast));
+}
+
+void renderActiveSpectrumData() {
+    if (spectrumViewport.mode() == SpectrumDisplayMode::Waterfall) {
+        renderSpectrumWaterfall();
+    } else {
+        renderSpectrumBars();
+    }
+}
+
+void renderSpectrumModeAtRight() {
+    const char* mode = spectrumDisplayModeText();
+    selectUiFont(UiTextRole::Meta);
+    const std::int16_t width = display.textWidth(mode);
+    display.setTextColor(Palette::Focus, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, Layout::ScreenWidth - 4 - width,
+                kSpectrumOverlayY);
+    display.print(mode);
 }
 
 void renderNrf24SpectrumMetrics() {
     char line[64] = {};
-    display.fillRect(Layout::Edge, 78, Layout::ContentWidth, 15,
-                     Palette::Canvas);
+    display.fillRect(0, kSpectrumOverlayY, Layout::ScreenWidth,
+                     kSpectrumOverlayHeight, Palette::Surface);
     const Nrf24SpectrumViewState state = nrf24SpectrumController.state();
     const UiTextId stateText = state == Nrf24SpectrumViewState::Running
-        ? UiTextId::SpectrumRunning
+        ? UiTextId::SpectrumOverlayRunning
         : (state == Nrf24SpectrumViewState::Paused
-               ? UiTextId::SpectrumPaused : UiTextId::SpectrumFault);
+               ? UiTextId::SpectrumOverlayPaused : UiTextId::SpectrumFault);
     display.setTextColor(state == Nrf24SpectrumViewState::Fault
                              ? Palette::Danger : Palette::Positive,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 78);
+                         Palette::Surface);
+    setUiCursor(UiTextRole::Meta, 4, kSpectrumOverlayY);
     display.print(tr(stateText));
-
-    display.fillRect(Layout::Edge, 193, Layout::ContentWidth, 41,
-                     Palette::Canvas);
-    std::snprintf(line, sizeof(line), tr(UiTextId::SpectrumSweepsFormat),
+    renderSpectrumModeAtRight();
+    std::snprintf(line, sizeof(line), tr(UiTextId::SpectrumCompactFormat),
                   static_cast<unsigned long>(nrf24SpectrumController.sweeps()),
-                  static_cast<unsigned long long>(
-                      nrf24SpectrumController.totalHits()));
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 193);
-    display.print(line);
-    std::snprintf(line, sizeof(line), tr(UiTextId::SpectrumPeakFormat),
                   static_cast<unsigned>(2400U +
                       nrf24SpectrumController.hottestChannel()),
                   static_cast<unsigned>(nrf24SpectrumController.activeBins()));
-    setUiCursor(UiTextRole::Meta, 14, 207);
+    display.setTextColor(Palette::TextSecondary, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, 4, kSpectrumOverlayY + 14);
     display.print(line);
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 221);
-    display.print(tr(UiTextId::SpectrumRxOnly));
+}
+
+void renderNrf24SpectrumAxis() {
+    display.fillRect(0, kSpectrumAxisY, Layout::ScreenWidth,
+                     kSpectrumAxisHeight, Palette::Canvas);
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    const char* first = tr(UiTextId::SpectrumAxisFirst);
+    const char* middle = tr(UiTextId::SpectrumAxisMiddle);
+    const char* last = tr(UiTextId::SpectrumAxisLast);
+    selectUiFont(UiTextRole::Meta);
+    setUiCursor(UiTextRole::Meta, 2, kSpectrumAxisY);
+    display.print(first);
+    setUiCursor(UiTextRole::Meta,
+                (Layout::ScreenWidth - display.textWidth(middle)) / 2,
+                kSpectrumAxisY);
+    display.print(middle);
+    setUiCursor(UiTextRole::Meta,
+                Layout::ScreenWidth - 2 - display.textWidth(last),
+                kSpectrumAxisY);
+    display.print(last);
 }
 
 void renderNrf24SpectrumPage(bool clearContent) {
-    renderHeader(tr(UiTextId::SpectrumTitle), clearContent);
-    renderNrf24SpectrumPlot();
+    renderHeader(tr(UiTextId::SpectrumTitle), clearContent, false);
+    renderActiveSpectrumData();
     renderNrf24SpectrumMetrics();
+    renderNrf24SpectrumAxis();
 }
 
 void formatCcFrequency(std::uint32_t frequencyKHz, char* output,
@@ -5256,27 +5438,9 @@ void formatCcFrequency(std::uint32_t frequencyKHz, char* output,
                   static_cast<unsigned long>(frequencyKHz % 1000U));
 }
 
-void renderCc1101SpectrumPlot() {
-    constexpr std::int16_t kPlotX = Layout::Edge;
-    constexpr std::int16_t kPlotY = 94;
-    constexpr std::int16_t kPlotWidth = Layout::ContentWidth;
-    constexpr std::int16_t kPlotHeight = 80;
-    display.fillRect(kPlotX, kPlotY, kPlotWidth, kPlotHeight,
-                     Palette::Surface);
-    for (std::int16_t x = 0; x < kPlotWidth; ++x) {
-        const std::size_t bin = static_cast<std::size_t>(x) *
-            Cc1101SpectrumController::kBinCount / kPlotWidth;
-        const std::uint8_t intensity = cc1101SpectrumController.intensity(bin);
-        const std::int16_t height = intensity == 0
-            ? 1
-            : static_cast<std::int16_t>(1 +
-                  static_cast<std::uint32_t>(intensity) *
-                      (kPlotHeight - 2) / 255U);
-        display.drawFastVLine(kPlotX + x, kPlotY + kPlotHeight - height,
-                              height, spectrumTone(intensity));
-    }
-    display.drawRect(kPlotX, kPlotY, kPlotWidth, kPlotHeight,
-                     Palette::Divider);
+void renderCc1101SpectrumAxis() {
+    display.fillRect(0, kSpectrumAxisY, Layout::ScreenWidth,
+                     kSpectrumAxisHeight, Palette::Canvas);
     const Cc1101PassiveSpectrumPlan plan = cc1101SpectrumController.plan();
     char first[16] = {};
     char middle[16] = {};
@@ -5286,62 +5450,58 @@ void renderCc1101SpectrumPlot() {
                       middle, sizeof(middle));
     formatCcFrequency(plan.lastKHz, last, sizeof(last));
     display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, kPlotX, 177);
+    selectUiFont(UiTextRole::Meta);
+    setUiCursor(UiTextRole::Meta, 2, kSpectrumAxisY);
     display.print(first);
-    setUiCursor(UiTextRole::Meta, 96, 177);
+    setUiCursor(UiTextRole::Meta,
+                (Layout::ScreenWidth - display.textWidth(middle)) / 2,
+                kSpectrumAxisY);
     display.print(middle);
-    setUiCursor(UiTextRole::Meta, 185, 177);
+    setUiCursor(UiTextRole::Meta,
+                Layout::ScreenWidth - 2 - display.textWidth(last),
+                kSpectrumAxisY);
     display.print(last);
 }
 
 void renderCc1101SpectrumMetrics() {
     char line[64] = {};
-    display.fillRect(Layout::Edge, 78, Layout::ContentWidth, 15,
-                     Palette::Canvas);
+    display.fillRect(0, kSpectrumOverlayY, Layout::ScreenWidth,
+                     kSpectrumOverlayHeight, Palette::Surface);
     const Cc1101SpectrumViewState state = cc1101SpectrumController.state();
     const UiTextId stateText = state == Cc1101SpectrumViewState::Running
-        ? UiTextId::CcSpectrumRunning
+        ? UiTextId::CcSpectrumOverlayRunning
         : (state == Cc1101SpectrumViewState::Paused
-               ? UiTextId::CcSpectrumPaused : UiTextId::SpectrumFault);
+               ? UiTextId::CcSpectrumOverlayPaused : UiTextId::SpectrumFault);
     display.setTextColor(state == Cc1101SpectrumViewState::Fault
                              ? Palette::Danger : Palette::Positive,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 78);
+                         Palette::Surface);
+    setUiCursor(UiTextRole::Meta, 4, kSpectrumOverlayY);
     display.print(tr(stateText));
-
-    display.fillRect(Layout::Edge, 193, Layout::ContentWidth, 41,
-                     Palette::Canvas);
-    std::snprintf(
-        line, sizeof(line), tr(UiTextId::CcSpectrumBandFormat),
-        leshy1::drivers::radio::cc1101SpectrumBandName(
-            cc1101SpectrumController.band()));
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 193);
-    display.print(line);
-    std::snprintf(
-        line, sizeof(line), tr(UiTextId::CcSpectrumSweepsFormat),
+    renderSpectrumModeAtRight();
+    std::snprintf(line, sizeof(line), tr(UiTextId::CcSpectrumCompactFormat),
         static_cast<unsigned long>(cc1101SpectrumController.sweeps()),
-        static_cast<unsigned long long>(cc1101SpectrumController.samples()));
-    setUiCursor(UiTextRole::Meta, 14, 207);
-    display.print(line);
-    std::snprintf(
-        line, sizeof(line), tr(UiTextId::CcSpectrumPeakFormat),
         static_cast<unsigned long>(cc1101SpectrumController.peakKHz()),
         static_cast<int>(cc1101SpectrumController.peakRssiDbm()));
-    setUiCursor(UiTextRole::Meta, 14, 221);
+    display.setTextColor(Palette::TextSecondary, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, 4, kSpectrumOverlayY + 14);
     display.print(line);
 }
 
 void renderCc1101SpectrumPage(bool clearContent) {
-    renderHeader(tr(UiTextId::CcSpectrumTitle), clearContent);
-    renderCc1101SpectrumPlot();
+    renderHeader(tr(UiTextId::CcSpectrumTitle), clearContent, false);
+    renderActiveSpectrumData();
     renderCc1101SpectrumMetrics();
+    renderCc1101SpectrumAxis();
 }
 
 void renderInventoryPage(bool clearContent) {
     char line[96] = {};
     if (rfSpectrumView == RfSpectrumView::SourceMenu) {
         renderRfSpectrumSourceMenu(clearContent);
+        return;
+    }
+    if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
+        renderRfCcBandMenu(clearContent);
         return;
     }
     if (rfSpectrumView == RfSpectrumView::Live) {
@@ -5731,6 +5891,8 @@ struct UiRenderSnapshot final {
     std::uint8_t selfTestSelection = 0;
     std::uint8_t rfSpectrumView = 0;
     std::uint8_t rfSpectrumSelection = 0;
+    std::uint8_t rfCcBandSelection = 0;
+    std::uint8_t rfSpectrumDisplayMode = 0;
     std::uint8_t surveyState = 0;
     std::uint8_t surveySetupView = 0;
     std::uint8_t surveySetupSelection = 0;
@@ -5760,6 +5922,8 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         selfTestController.selection(),
         static_cast<std::uint8_t>(rfSpectrumView),
         rfSpectrumSelection,
+        ccBandSelectionIndex(),
+        static_cast<std::uint8_t>(spectrumViewport.mode()),
         static_cast<std::uint8_t>(surveyWorkflow.state()),
         static_cast<std::uint8_t>(surveySourceController.view()),
         surveySourceController.selection(),
@@ -5817,6 +5981,18 @@ bool renderSelectionDelta() {
         if (renderedUi.rfSpectrumSelection == current) return false;
         renderRfSpectrumSourceRow(renderedUi.rfSpectrumSelection);
         renderRfSpectrumSourceRow(current);
+        renderNavigationFooter();
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        rfSpectrumView == RfSpectrumView::CcBandMenu &&
+        renderedUi.rfSpectrumView ==
+            static_cast<std::uint8_t>(RfSpectrumView::CcBandMenu)) {
+        const std::uint8_t current = ccBandSelectionIndex();
+        if (renderedUi.rfCcBandSelection == current) return false;
+        renderRfCcBandRow(renderedUi.rfCcBandSelection);
+        renderRfCcBandRow(current);
         renderNavigationFooter();
         return true;
     }
@@ -5978,6 +6154,7 @@ void renderInteractiveScreen(bool clearContent) {
 
 bool startNrf24Spectrum() {
     nrf24SpectrumController.reset();
+    spectrumViewport.reset(Nrf24SpectrumController::kChannelCount);
     nrf24SpectrumReport = {};
     std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -5997,6 +6174,7 @@ bool startNrf24Spectrum() {
     rfSpectrumKind = RfSpectrumKind::Nrf24;
     rfSpectrumView = RfSpectrumView::Live;
     nextNrf24SpectrumSweepUs = startedUs;
+    nextSpectrumUiRefreshUs = startedUs;
     lastRuntimeEvent = started ? "nrf24_spectrum_running"
                                : "nrf24_spectrum_start_failed";
     return true;
@@ -6010,6 +6188,7 @@ bool stopNrf24Spectrum(bool returnToSourceMenu) {
     rfSpectrumView = returnToSourceMenu ? RfSpectrumView::SourceMenu
                                         : RfSpectrumView::None;
     nextNrf24SpectrumSweepUs = 0;
+    nextSpectrumUiRefreshUs = 0;
     lastRuntimeEvent = cleanup ? "nrf24_spectrum_stopped"
                                : "nrf24_spectrum_cleanup_failed";
     return true;
@@ -6037,16 +6216,35 @@ void serviceNrf24Spectrum() {
     }
     nextNrf24SpectrumSweepUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) + 40000ULL;
+    if (!pushActiveSpectrumHistory()) {
+        boardNrf24Spectrum.end();
+        nrf24SpectrumController.fail();
+        lastRuntimeEvent = "nrf24_spectrum_history_fault";
+        renderInteractiveScreen(true);
+        return;
+    }
     if (!uiController.isRoot() && uiController.page() == 2) {
         display.startWrite();
-        renderNrf24SpectrumPlot();
-        renderNrf24SpectrumMetrics();
+        if (spectrumViewport.mode() == SpectrumDisplayMode::Waterfall) {
+            renderLatestWaterfallRow();
+        }
+        const std::uint64_t refreshUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (refreshUs >= nextSpectrumUiRefreshUs) {
+            if (spectrumViewport.mode() == SpectrumDisplayMode::Spectrum) {
+                renderSpectrumBars();
+            }
+            renderNrf24SpectrumMetrics();
+            nextSpectrumUiRefreshUs = refreshUs + 100000ULL;
+        }
         display.endWrite();
     }
 }
 
-bool startCc1101Spectrum() {
+bool startCc1101Spectrum(
+    leshy1::drivers::radio::Cc1101SpectrumBand band) {
     cc1101SpectrumController.reset();
+    spectrumViewport.reset(Cc1101SpectrumController::kBinCount);
     cc1101SpectrumReport = {};
     std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -6056,13 +6254,14 @@ bool startCc1101Spectrum() {
     const bool hardwareReady = boardCc1101Spectrum.begin(
         owned, &cc1101SpectrumReport);
     const bool started = hardwareReady &&
-        cc1101SpectrumController.start(startedUs);
+        cc1101SpectrumController.start(band, startedUs);
     if (!started) {
         boardCc1101Spectrum.end();
         cc1101SpectrumController.fail();
     }
     rfSpectrumKind = RfSpectrumKind::Cc1101;
     rfSpectrumView = RfSpectrumView::Live;
+    nextSpectrumUiRefreshUs = startedUs;
     lastRuntimeEvent = started ? "cc1101_spectrum_running"
                                : "cc1101_spectrum_start_failed";
     return true;
@@ -6074,8 +6273,9 @@ bool stopCc1101Spectrum(bool returnToSourceMenu) {
         Cc1101SpectrumViewState::Idle) {
         cc1101SpectrumController.stop();
     }
-    rfSpectrumView = returnToSourceMenu ? RfSpectrumView::SourceMenu
+    rfSpectrumView = returnToSourceMenu ? RfSpectrumView::CcBandMenu
                                         : RfSpectrumView::None;
+    nextSpectrumUiRefreshUs = 0;
     lastRuntimeEvent = cleanup ? "cc1101_spectrum_stopped"
                                : "cc1101_spectrum_cleanup_failed";
     return true;
@@ -6108,9 +6308,26 @@ void serviceCc1101Spectrum() {
     }
     if (cc1101SpectrumController.nextBin() == 0 &&
         !uiController.isRoot() && uiController.page() == 2) {
+        if (!pushActiveSpectrumHistory()) {
+            boardCc1101Spectrum.end();
+            cc1101SpectrumController.fail();
+            lastRuntimeEvent = "cc1101_spectrum_history_fault";
+            renderInteractiveScreen(true);
+            return;
+        }
         display.startWrite();
-        renderCc1101SpectrumPlot();
-        renderCc1101SpectrumMetrics();
+        if (spectrumViewport.mode() == SpectrumDisplayMode::Waterfall) {
+            renderLatestWaterfallRow();
+        }
+        const std::uint64_t refreshUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (refreshUs >= nextSpectrumUiRefreshUs) {
+            if (spectrumViewport.mode() == SpectrumDisplayMode::Spectrum) {
+                renderSpectrumBars();
+            }
+            renderCc1101SpectrumMetrics();
+            nextSpectrumUiRefreshUs = refreshUs + 100000ULL;
+        }
         display.endWrite();
     }
 }
@@ -7492,7 +7709,8 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (uiController.isRoot()) return true;
     if (uiController.page() == 2) {
         if (rfSpectrumView == RfSpectrumView::Live) return false;
-        if (rfSpectrumView == RfSpectrumView::SourceMenu) return true;
+        if (rfSpectrumView == RfSpectrumView::SourceMenu ||
+            rfSpectrumView == RfSpectrumView::CcBandMenu) return true;
         return surveyWorkflow.state() == SurveyWorkflowState::Setup ||
                (surveyWorkflow.state() == SurveyWorkflowState::Running &&
                 (surveyController.view() == SurveyView::List ||
@@ -7537,29 +7755,60 @@ bool applyUiAction(UiAction action, bool render = true) {
             } else if ((action == UiAction::Select ||
                         action == UiAction::Right) &&
                        rfSpectrumSelection == 1) {
-                changed = startCc1101Spectrum();
+                rfCcBandSelection =
+                    leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
+                rfSpectrumView = RfSpectrumView::CcBandMenu;
+                lastRuntimeEvent = "cc1101_spectrum_band_menu";
+                changed = true;
             } else if (action == UiAction::Back || action == UiAction::Left) {
                 rfSpectrumView = RfSpectrumView::None;
                 lastRuntimeEvent = "survey_spectrum_plan";
+                changed = true;
+            }
+        } else if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
+            handled = true;
+            std::uint8_t selection = ccBandSelectionIndex();
+            if (action == UiAction::Up && selection != 0) {
+                --selection;
+                rfCcBandSelection = ccBandFromIndex(selection);
+                changed = true;
+            } else if (action == UiAction::Down && selection != 3) {
+                ++selection;
+                rfCcBandSelection = ccBandFromIndex(selection);
+                changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                changed = startCc1101Spectrum(rfCcBandSelection);
+            } else if (action == UiAction::Back || action == UiAction::Left) {
+                rfSpectrumView = RfSpectrumView::SourceMenu;
+                lastRuntimeEvent = "spectrum_source_menu";
                 changed = true;
             }
         } else if (rfSpectrumView == RfSpectrumView::Live) {
             handled = true;
             if (action == UiAction::Back || action == UiAction::Left) {
                 changed = stopCurrentSpectrum(true);
+            } else if (action == UiAction::Up || action == UiAction::Down) {
+                const bool fault = rfSpectrumKind == RfSpectrumKind::Cc1101
+                    ? cc1101SpectrumController.state() ==
+                          Cc1101SpectrumViewState::Fault
+                    : nrf24SpectrumController.state() ==
+                          Nrf24SpectrumViewState::Fault;
+                changed = !fault &&
+                    (action == UiAction::Up
+                         ? spectrumViewport.previousMode()
+                         : spectrumViewport.nextMode());
+                if (changed) {
+                    nextSpectrumUiRefreshUs = 0;
+                    lastRuntimeEvent = spectrumViewport.mode() ==
+                        SpectrumDisplayMode::Waterfall
+                            ? "spectrum_waterfall_view"
+                            : "spectrum_bar_view";
+                }
             } else if (rfSpectrumKind == RfSpectrumKind::Cc1101) {
-                if (action == UiAction::Up || action == UiAction::Down) {
-                    const bool idled = boardCc1101Spectrum.idle();
-                    changed = idled &&
-                        (action == UiAction::Up
-                             ? cc1101SpectrumController.previousBand()
-                             : cc1101SpectrumController.nextBand());
-                    lastRuntimeEvent = changed
-                        ? "cc1101_spectrum_band_changed"
-                        : "cc1101_spectrum_band_failed";
-                } else if ((action == UiAction::Select ||
-                            action == UiAction::Right) &&
-                           cc1101SpectrumController.togglePause()) {
+                if ((action == UiAction::Select ||
+                     action == UiAction::Right) &&
+                    cc1101SpectrumController.togglePause()) {
                     changed = true;
                     if (cc1101SpectrumController.state() ==
                         Cc1101SpectrumViewState::Paused) {
@@ -8002,6 +8251,9 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
             rfSpectrumKind = RfSpectrumKind::Nrf24;
             rfSpectrumSelection = 0;
+            rfCcBandSelection =
+                leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
+            nextSpectrumUiRefreshUs = 0;
             if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
                 surveyPipeline.resetToSetup();
             }
@@ -8051,6 +8303,11 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
             return {leshy1::ui::hitTouchTarget(
                         TouchTargetLayout::TwoChoices, point),
                     rfSpectrumSelection};
+        }
+        if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
+            return {leshy1::ui::hitTouchTarget(
+                        TouchTargetLayout::HomeRows, point, 0, 4),
+                    ccBandSelectionIndex()};
         }
         if (rfSpectrumView == RfSpectrumView::None &&
             surveyWorkflow.state() == SurveyWorkflowState::Setup &&
@@ -12297,7 +12554,8 @@ void emitNrf24SpectrumReport(Stream& reply) {
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.nrf24.spectrum.v1\",\"kind\":\"state\","
-        "\"view\":\"%s\",\"state\":\"%s\",\"status\":\"%s\","
+        "\"view\":\"%s\",\"display_mode\":\"%s\",\"history_rows\":%u,"
+        "\"state\":\"%s\",\"status\":\"%s\","
         "\"range_mhz\":[2402,2484],\"channels\":%u,\"dwell_us\":%u,"
         "\"modules\":%u,\"sweeps\":%lu,\"total_hits\":%llu,"
         "\"active_bins\":%u,\"peak_channel\":%u,\"peak_mhz\":%u,"
@@ -12311,6 +12569,9 @@ void emitNrf24SpectrumReport(Stream& reply) {
         "\"storage_writes\":0},\"read_only_query\":true,"
         "\"current_owner\":\"%s\",\"current_lease_mask\":%lu}",
         rfSpectrumViewName(rfSpectrumView),
+        leshy1::apps::spectrum::spectrumDisplayModeName(
+            spectrumViewport.mode()),
+        static_cast<unsigned>(spectrumViewport.rowsStored()),
         leshy1::apps::spectrum::nrf24SpectrumViewStateName(
             nrf24SpectrumController.state()),
         leshy1::drivers::radio::nrf24PassiveSpectrumStatusName(report.status),
@@ -12349,7 +12610,8 @@ void emitCc1101SpectrumReport(Stream& reply) {
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.cc1101.spectrum.v1\",\"kind\":\"state\","
-        "\"view\":\"%s\",\"state\":\"%s\",\"status\":\"%s\","
+        "\"view\":\"%s\",\"display_mode\":\"%s\",\"history_rows\":%u,"
+        "\"state\":\"%s\",\"status\":\"%s\","
         "\"band\":\"%s\",\"range_khz\":[%lu,%lu],\"bins\":%u,"
         "\"settle_us\":%u,\"ready_timeout_us\":%u,"
         "\"partnum\":%u,\"version\":%u,\"sweeps\":%lu,"
@@ -12370,6 +12632,9 @@ void emitCc1101SpectrumReport(Stream& reply) {
         "\"current_lease_mask\":%lu}",
         rfSpectrumKind == RfSpectrumKind::Cc1101
             ? rfSpectrumViewName(rfSpectrumView) : "none",
+        leshy1::apps::spectrum::spectrumDisplayModeName(
+            spectrumViewport.mode()),
+        static_cast<unsigned>(spectrumViewport.rowsStored()),
         leshy1::apps::spectrum::cc1101SpectrumViewStateName(
             cc1101SpectrumController.state()),
         leshy1::drivers::radio::cc1101PassiveSpectrumStatusName(

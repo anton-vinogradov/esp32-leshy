@@ -46,7 +46,7 @@ struct Layout final {
     static constexpr std::int16_t HomeRowHeight = 46;
     static constexpr std::int16_t HomeRowGap = 5;
     static constexpr std::int16_t Radius = 4;
-    static constexpr std::int16_t FooterDividerY = 282;
+    static constexpr std::int16_t FooterDividerY = 293;
     static constexpr std::int16_t HintY = 294;
     static constexpr std::int16_t HintHeight = 26;
 };

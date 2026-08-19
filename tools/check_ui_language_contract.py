@@ -138,7 +138,7 @@ def main() -> int:
     require(failures, renderer.count("tr(UiTextId::") >= 80,
             "renderer bypasses the single UI string catalog")
     literal_prints = re.findall(r'display\.print\("([^"]*)"\)', renderer)
-    require(failures, literal_prints == ["LESHY"],
+    require(failures, literal_prints == [],
             f"uncatalogued display literals: {literal_prints}")
     for marker in ('"SD OK"', '"SD !"', '"SD --"', '"RF RX"', '"RF --"'):
         require(failures, marker in renderer,

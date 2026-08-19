@@ -35,10 +35,17 @@ void Cc1101SpectrumController::reset() {
 }
 
 bool Cc1101SpectrumController::start(std::uint64_t monotonicUs) {
-    if (state_ != Cc1101SpectrumViewState::Idle || monotonicUs == 0) {
+    return start(drivers::radio::Cc1101SpectrumBand::Band433, monotonicUs);
+}
+
+bool Cc1101SpectrumController::start(
+    drivers::radio::Cc1101SpectrumBand band, std::uint64_t monotonicUs) {
+    if (state_ != Cc1101SpectrumViewState::Idle || monotonicUs == 0 ||
+        static_cast<std::uint8_t>(band) >= static_cast<std::uint8_t>(
+            drivers::radio::Cc1101SpectrumBand::Count)) {
         return false;
     }
-    band_ = drivers::radio::Cc1101SpectrumBand::Band433;
+    band_ = band;
     clearBandData();
     startedUs_ = monotonicUs;
     updatedUs_ = monotonicUs;

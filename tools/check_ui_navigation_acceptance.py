@@ -334,7 +334,7 @@ def main() -> int:
                    "UiTextId::NavEnter"):
         require(failures, marker in renderer,
                 f"renderer navigation marker missing: {marker}")
-    for marker in ("NavigationGap = 3", "NavigationWidth = 70",
+    for marker in ("NavigationGap = 0", "NavigationWidth = 80",
                    "navigationCell(std::uint8_t index)"):
         require(failures, marker in components,
                 f"navigation geometry marker missing: {marker}")

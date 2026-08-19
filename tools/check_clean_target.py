@@ -91,9 +91,12 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.91.0-clean-status\\"' not in config:
+    version = re.search(
+        r'LESHY1_VERSION=\\"(\d+)\.(\d+)\.[^\\"]+\\"', config
+    )
+    if version is None or tuple(map(int, version.groups())) < (0, 91):
         errors.append(
-            "clean target does not identify the 0.91 clean-status corrective"
+            "clean target predates the accepted 0.91 clean-status corrective"
         )
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")

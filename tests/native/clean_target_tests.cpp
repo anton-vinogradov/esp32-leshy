@@ -19,6 +19,7 @@
 #include "apps/self_test/SelfTestController.h"
 #include "apps/spectrum/Cc1101SpectrumController.h"
 #include "apps/spectrum/Nrf24SpectrumController.h"
+#include "apps/spectrum/SpectrumViewport.h"
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
 #include "drivers/ble/BlePassiveContract.h"
@@ -813,6 +814,46 @@ void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
     CHECK(controller.togglePause());
     CHECK(controller.stop());
     CHECK(controller.state() == Cc1101SpectrumViewState::Idle);
+
+    Cc1101SpectrumController selectedBand;
+    CHECK(selectedBand.start(Cc1101SpectrumBand::Band915, 2000));
+    CHECK(selectedBand.band() == Cc1101SpectrumBand::Band915);
+    CHECK(selectedBand.plan().firstKHz == plan915.firstKHz);
+    CHECK(selectedBand.stop());
+    CHECK(!selectedBand.start(Cc1101SpectrumBand::Count, 3000));
+    CHECK(!selectedBand.start(
+        static_cast<Cc1101SpectrumBand>(255), 3000));
+}
+
+void testSpectrumViewportKeepsBoundedRingHistory() {
+    SpectrumViewport viewport;
+    CHECK(!viewport.reset(0));
+    CHECK(!viewport.reset(SpectrumViewport::kMaxBins + 1));
+    CHECK(viewport.reset(83));
+    CHECK(viewport.mode() == SpectrumDisplayMode::Spectrum);
+    CHECK(viewport.rowsStored() == 0);
+
+    std::array<std::uint8_t, 83> row{};
+    for (std::size_t index = 0;
+         index < SpectrumViewport::kHistoryRows; ++index) {
+        row.fill(static_cast<std::uint8_t>(index));
+        CHECK(viewport.push(row.data(), row.size()));
+    }
+    CHECK(viewport.rowsStored() == SpectrumViewport::kHistoryRows);
+    CHECK(viewport.nextRow() == 0);
+    CHECK(viewport.latestRow() == SpectrumViewport::kHistoryRows - 1);
+    CHECK(viewport.intensity(17, 82) == 17);
+
+    row.fill(201);
+    CHECK(viewport.push(row.data(), row.size()));
+    CHECK(viewport.nextRow() == 1);
+    CHECK(viewport.latestRow() == 0);
+    CHECK(viewport.intensity(0, 82) == 201);
+    CHECK(!viewport.push(row.data(), 64));
+    CHECK(viewport.nextMode());
+    CHECK(viewport.mode() == SpectrumDisplayMode::Waterfall);
+    CHECK(viewport.previousMode());
+    CHECK(viewport.mode() == SpectrumDisplayMode::Spectrum);
 }
 
 void testProductBootRetryIsNarrowAndBounded() {
@@ -4442,6 +4483,7 @@ int main() {
     testShieldReceiverIdentityContractFailsClosed();
     testNrf24PassiveSpectrumContractAndControllerAreBounded();
     testCc1101PassiveSpectrumContractAndControllerAreBounded();
+    testSpectrumViewportKeepsBoundedRingHistory();
     testProductBootRetryIsNarrowAndBounded();
     testProductStartIdentityRetryStopsBeforeFilesystem();
     testStorageTimingSummaryUsesNearestRank();

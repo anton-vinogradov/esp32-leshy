@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the 0.83 user-started receive-only CC1101 RSSI spectrum."""
+"""Exercise the 0.92 full-width CC1101 spectrum and waterfall workflow."""
 
 from __future__ import annotations
 
@@ -38,10 +38,11 @@ BANDS = {
 
 def spectrum_failures(
     report: dict[str, Any], *, state: str, active: bool, cleanup: bool,
-    band: str,
+    band: str, display_mode: str,
 ) -> list[str]:
     failures = expect(report, {
-        "view": "live" if active else "source_menu",
+        "view": "live" if active else "cc_band_menu",
+        "display_mode": display_mode,
         "state": state,
         "status": "ready",
         "band": band,
@@ -62,6 +63,9 @@ def spectrum_failures(
         "current_lease_mask": 15,
     }, f"cc1101_{band}_{state}")
     sweeps = report.get("sweeps")
+    history_rows = report.get("history_rows")
+    if not isinstance(history_rows, int) or history_rows < 1 or history_rows > 112:
+        failures.append(f"bounded waterfall history differs: {history_rows!r}")
     samples = report.get("samples")
     adapter_samples = report.get("adapter_samples")
     next_bin = report.get("next_bin")
@@ -213,7 +217,6 @@ def main() -> int:
                     state = action(device, "up")
                     trace.append(state)
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
-                trace.append(action(device, "down"))
                 state = action(device, "right")
                 trace.append(state)
                 failures.extend(expect(state, {
@@ -241,29 +244,39 @@ def main() -> int:
                 state = action(device, "right")
                 trace.append(state)
                 failures.extend(expect(state, {
+                    "runtime_event": "cc1101_spectrum_band_menu",
+                    "page": "survey", "changed": True,
+                    "runtime_owner": "survey", "lease_mask": 15,
+                }, "cc1101_band_menu"))
+                captures["band_menu_433"] = capture(
+                    device, frames, "band-menu-433")
+
+                state = action(device, "right")
+                trace.append(state)
+                failures.extend(expect(state, {
                     "runtime_event": "cc1101_spectrum_running",
                     "page": "survey", "changed": True,
                     "runtime_owner": "survey", "lease_mask": 15,
-                }, "cc1101_start"))
+                }, "cc1101_start_433"))
                 reports["band_433"] = wait_for_sweep(device, "433")
                 failures.extend(spectrum_failures(
                     reports["band_433"], state="running", active=True,
-                    cleanup=False, band="433"))
-                captures["band_433"] = capture(device, frames, "band-433")
+                    cleanup=False, band="433", display_mode="spectrum"))
+                captures["spectrum_433"] = capture(
+                    device, frames, "spectrum-433")
 
-                for band in ("868", "915", "315"):
-                    state = action(device, "down")
-                    trace.append(state)
-                    failures.extend(expect(state, {
-                        "runtime_event": "cc1101_spectrum_band_changed",
-                        "changed": True,
-                    }, f"band_{band}_selected"))
-                    reports[f"band_{band}"] = wait_for_sweep(device, band)
-                    failures.extend(spectrum_failures(
-                        reports[f"band_{band}"], state="running", active=True,
-                        cleanup=False, band=band))
-                    captures[f"band_{band}"] = capture(
-                        device, frames, f"band-{band}")
+                state = action(device, "down")
+                trace.append(state)
+                failures.extend(expect(state, {
+                    "runtime_event": "spectrum_waterfall_view",
+                    "changed": True,
+                }, "cc1101_waterfall_view"))
+                reports["waterfall_433"] = wait_for_sweep(device, "433")
+                failures.extend(spectrum_failures(
+                    reports["waterfall_433"], state="running", active=True,
+                    cleanup=False, band="433", display_mode="waterfall"))
+                captures["waterfall_433"] = capture(
+                    device, frames, "waterfall-433")
 
                 state = action(device, "right")
                 trace.append(state)
@@ -280,7 +293,7 @@ def main() -> int:
                     SPECTRUM_SCHEMA, "state")
                 failures.extend(spectrum_failures(
                     reports["paused_after"], state="paused", active=True,
-                    cleanup=False, band="315"))
+                    cleanup=False, band="433", display_mode="waterfall"))
                 if reports["paused_after"].get("adapter_samples") != \
                         reports["paused_before"].get("adapter_samples"):
                     failures.append("paused CC1101 spectrum continued sampling")
@@ -305,10 +318,16 @@ def main() -> int:
                     time.sleep(0.05)
                 failures.extend(spectrum_failures(
                     reports["resumed"], state="running", active=True,
-                    cleanup=False, band="315"))
+                    cleanup=False, band="433", display_mode="waterfall"))
                 if int(reports["resumed"].get("adapter_samples", 0)) <= \
                         before_resume:
                     failures.append("resume did not restart CC1101 sampling")
+
+                state = action(device, "up")
+                trace.append(state)
+                failures.extend(expect(state, {
+                    "runtime_event": "spectrum_bar_view", "changed": True,
+                }, "cc1101_spectrum_view_restored"))
 
                 state = action(device, "left")
                 trace.append(state)
@@ -316,14 +335,51 @@ def main() -> int:
                     "runtime_event": "cc1101_spectrum_stopped",
                     "page": "survey", "changed": True,
                 }, "cc1101_stop"))
-                reports["stopped"] = query(
+                reports["stopped_433"] = query(
                     device, b"hardware.cc1101.spectrum",
                     SPECTRUM_SCHEMA, "state")
                 failures.extend(spectrum_failures(
-                    reports["stopped"], state="idle", active=False,
-                    cleanup=True, band="315"))
+                    reports["stopped_433"], state="idle", active=False,
+                    cleanup=True, band="433", display_mode="spectrum"))
+
+                band_index = 1
+                for target_index, band in ((2, "868"), (3, "915"), (0, "315")):
+                    while band_index < target_index:
+                        trace.append(action(device, "down"))
+                        band_index += 1
+                    while band_index > target_index:
+                        trace.append(action(device, "up"))
+                        band_index -= 1
+                    captures[f"band_menu_{band}"] = capture(
+                        device, frames, f"band-menu-{band}")
+                    state = action(device, "right")
+                    trace.append(state)
+                    failures.extend(expect(state, {
+                        "runtime_event": "cc1101_spectrum_running",
+                        "page": "survey", "changed": True,
+                    }, f"cc1101_start_{band}"))
+                    reports[f"band_{band}"] = wait_for_sweep(device, band)
+                    failures.extend(spectrum_failures(
+                        reports[f"band_{band}"], state="running", active=True,
+                        cleanup=False, band=band, display_mode="spectrum"))
+                    captures[f"spectrum_{band}"] = capture(
+                        device, frames, f"spectrum-{band}")
+                    state = action(device, "left")
+                    trace.append(state)
+                    failures.extend(expect(state, {
+                        "runtime_event": "cc1101_spectrum_stopped",
+                        "page": "survey", "changed": True,
+                    }, f"cc1101_stop_{band}"))
+                    reports[f"stopped_{band}"] = query(
+                        device, b"hardware.cc1101.spectrum",
+                        SPECTRUM_SCHEMA, "state")
+                    failures.extend(spectrum_failures(
+                        reports[f"stopped_{band}"], state="idle", active=False,
+                        cleanup=True, band=band, display_mode="spectrum"))
+
                 captures["stopped"] = capture(device, frames, "stopped")
 
+                trace.append(action(device, "left"))
                 trace.append(action(device, "left"))
                 state = action(device, "left")
                 trace.append(state)

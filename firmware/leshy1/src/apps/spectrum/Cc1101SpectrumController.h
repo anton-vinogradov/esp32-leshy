@@ -24,6 +24,8 @@ public:
 
     void reset();
     bool start(std::uint64_t monotonicUs);
+    bool start(drivers::radio::Cc1101SpectrumBand band,
+               std::uint64_t monotonicUs);
     bool ingest(const drivers::radio::Cc1101PassiveSample& sample);
     bool togglePause();
     bool nextBand();
