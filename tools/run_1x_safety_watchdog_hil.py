@@ -83,6 +83,7 @@ def main() -> int:
                 device, b"storage.product.boot-recovery",
                 "leshy.storage.product_boot_recovery.v1", "state"
             )
+            records["boot_before"]["recovery"] = before_recovery
             expected_cid = resolve_expected_cid(
                 args.expected_cid, before_recovery
             )
