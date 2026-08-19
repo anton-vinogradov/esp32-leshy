@@ -4541,6 +4541,32 @@ void triggerRuntimeSafetyWatchdogTest(Stream& reply) {
     for (;;) delay(1000);
 }
 
+void restartLatchedSafetyStopForTest(Stream& reply) {
+    const bool eligible = safetySupervisor.latched() &&
+        !safetySupervisor.clearPending() && !appRuntime.running() &&
+        appRuntime.activeResources() == 0;
+    if (!eligible) {
+        reply.println(
+            "{\"schema\":\"leshy.safety.restart_test.v1\","
+            "\"kind\":\"error\",\"reason\":\"unsafe_precondition\"}");
+        return;
+    }
+    BoardSafeOutputs::emergencyQuiesce();
+    BoardSdSpiTransport::holdRadioTransmitPathsInactive();
+    __atomic_store_n(&runtimeSafetyWatchdogArmed, 0, __ATOMIC_RELEASE);
+    reply.println(
+        "{\"schema\":\"leshy.safety.restart_test.v1\","
+        "\"kind\":\"restart\",\"latch_preserved\":true,"
+        "\"outputs_inactive\":true,\"filesystem_write_attempted\":false,"
+        "\"physical_write_calls\":0}");
+    reply.flush();
+    Serial.flush();
+    Serial0.flush();
+    delay(20);
+    esp_restart();
+    for (;;) {}
+}
+
 void clearSafetyStopFromConsole(Stream& reply) {
     if (!safetySupervisor.latched()) {
         reply.println(
@@ -14346,6 +14372,7 @@ bool commandAllowedDuringSafetyStop(const char* command) {
            std::strcmp(command, "ping") == 0 ||
            std::strcmp(command, "hardware.safe-outputs") == 0 ||
            std::strcmp(command, "safety.state") == 0 ||
+           std::strcmp(command, "safety.restart-test confirm") == 0 ||
            std::strcmp(command, "safety.clear confirm") == 0 ||
            std::strcmp(command, "ui.state") == 0 ||
            std::strncmp(command, "ui.key ", 7) == 0 ||
@@ -14378,6 +14405,9 @@ void handleCommand(Stream& reply, const char* command) {
     } else if (std::strcmp(command,
                            "safety.watchdog-test confirm") == 0) {
         triggerRuntimeSafetyWatchdogTest(reply);
+    } else if (std::strcmp(command,
+                           "safety.restart-test confirm") == 0) {
+        restartLatchedSafetyStopForTest(reply);
     } else if (std::strcmp(command, "safety.clear confirm") == 0) {
         clearSafetyStopFromConsole(reply);
     } else if (std::strcmp(command, "hardware.shield.receivers") == 0) {

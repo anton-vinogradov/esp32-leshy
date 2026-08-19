@@ -30,6 +30,7 @@ from run_1x_product_survey_hil import (
 
 RUN_SCHEMA = "leshy.safety_watchdog_hil.run.v1"
 WATCHDOG_RESET_REASONS = {4, 5, 6, 7}
+SOFTWARE_RESET_REASON = 3
 
 
 def main() -> int:
@@ -77,6 +78,7 @@ def main() -> int:
     failures: list[str] = []
     records: dict[str, Any] = {}
     watchdog_raw = b""
+    restart_raw = b""
     clear_raw = b""
 
     try:
@@ -193,43 +195,54 @@ def main() -> int:
                 "status": "safety_latched", "cleanup_complete": True,
                 "physical_write_calls": 0, "owned_after": 0,
             }, "recovery_latched"))
-
-        # A later reset must not silently turn an accepted watchdog latch back
-        # into normal operation. The first watchdog-class boot confirms the
-        # exact retained record; this separate EN reset proves persistence.
-        latched_reset_ready, _, latched_reset_timing = reset_capture(
-            args.port, args.output, "latched-reset",
-            min(args.boot_seconds, 8.0)
-        )
-        records["latched_reset_ready"] = latched_reset_ready
-        records["latched_reset_timing"] = latched_reset_timing
-        failures.extend(expect(latched_reset_ready, {
+            # A later reset must not silently turn an accepted watchdog latch
+            # back into normal operation. Use the firmware's explicit,
+            # output-quiesced software restart so native USB control-line
+            # behavior cannot become part of the safety claim.
+            device.write(b"safety.restart-test confirm\n")
+            device.flush()
+            records["latched_restart_request"] = read_json(
+                device, "leshy.safety.restart_test.v1", "restart", 5.0
+            )
+            restart_raw, restart_ready_ms = capture_until_ready(
+                device, args.boot_seconds
+            )
+            records["latched_restart_ready_marker_ms"] = restart_ready_ms
+        (args.output / "latched-restart.ndjson").write_bytes(restart_raw)
+        latched_restart_ready = parse_ready(restart_raw)
+        records["latched_restart_ready"] = latched_restart_ready
+        failures.extend(expect(records["latched_restart_request"], {
+            "latch_preserved": True, "outputs_inactive": True,
+            "filesystem_write_attempted": False, "physical_write_calls": 0,
+        }, "latched_restart_request"))
+        failures.extend(expect(latched_restart_ready, {
             "version": args.expected_version,
             "app_elf_sha256": app_identity,
-        }, "latched_reset_ready"))
+            "reset_reason_code": SOFTWARE_RESET_REASON,
+        }, "latched_restart_ready"))
 
         with PassiveSerial(args.port, 115200, timeout=0.05) as device:
             synchronize_console(device, 15.0)
-            records["safety_after_latched_reset"] = query(
+            records["safety_after_latched_restart"] = query(
                 device, b"safety.state", "leshy.safety.v1", "state"
             )
-            records["recovery_after_latched_reset"] = query(
+            records["recovery_after_latched_restart"] = query(
                 device, b"storage.product.boot-recovery",
                 "leshy.storage.product_boot_recovery.v1", "state"
             )
-            failures.extend(expect(records["safety_after_latched_reset"], {
+            failures.extend(expect(records["safety_after_latched_restart"], {
                 "state": "latched", "reason": "runtime_watchdog",
                 "armed": True, "latched": True, "clear_pending": False,
                 "trip_count": 1, "emergency_quiesce_count": 1,
                 "buzzer_inactive": True, "nrf_ce_inactive": True,
                 "runtime_owner": "none", "lease_mask": 0,
                 "automatic_clear": False,
-            }, "safety_after_latched_reset"))
+            }, "safety_after_latched_restart"))
             failures.extend(expect(
-                records["recovery_after_latched_reset"], {
+                records["recovery_after_latched_restart"], {
                     "status": "safety_latched", "cleanup_complete": True,
                     "physical_write_calls": 0, "owned_after": 0,
-                }, "recovery_after_latched_reset"
+                }, "recovery_after_latched_restart"
             ))
             records["ui_clear_pending"] = action(device, "right")
             failures.extend(expect(records["ui_clear_pending"], {
@@ -305,6 +318,10 @@ def main() -> int:
         "watchdog_raw": {
             "bytes": len(watchdog_raw),
             "sha256": hashlib.sha256(watchdog_raw).hexdigest(),
+        },
+        "restart_raw": {
+            "bytes": len(restart_raw),
+            "sha256": hashlib.sha256(restart_raw).hexdigest(),
         },
         "clear_raw": {
             "bytes": len(clear_raw),

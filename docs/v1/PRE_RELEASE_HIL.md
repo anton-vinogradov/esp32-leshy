@@ -121,8 +121,10 @@ python tools/run_1x_safety_watchdog_hil.py \
 ```
 
 It requires the real panic Task-WDT reset, matching app identity, inactive pads,
-latched Safe Mode across a second reset, skipped product recovery, two-step public UI
-clear, unchanged catalog/CID, final Home, and lease zero.
+latched Safe Mode across an explicit output-quiesced software restart, skipped
+product recovery, two-step public UI clear, unchanged catalog/CID, final Home, and
+lease zero. The runner does not use native-USB DTR/RTS as evidence for latch
+persistence.
 
 ## Host-runner side
 

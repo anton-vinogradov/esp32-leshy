@@ -91,11 +91,15 @@ Arduino adapter и не выполняет SPI/filesystem cleanup. Task-context 
 - `safety.watchdog-test confirm` — bounded destructive diagnostic. Он разрешён
   только из нормального `armed` Home без runtime owner/lease и при inactive pads,
   выдаёт flushed arm record и намеренно прекращает feed main-loop WDT.
+- `safety.restart-test confirm` разрешён только из защёлкнутого и quiescent Safe
+  Mode; он выдаёт flushed proof record и выполняет software reset, не очищая
+  retained latch. Это автоматическая проверка persistence, а не пользовательский
+  clear path.
 - `tools/run_1x_safety_watchdog_hil.py` прошивает один exact candidate, проверяет
   normal arm, вызывает настоящий Task-WDT reset, проверяет retained Safe Mode и
-  inactive pads, делает второй EN reset и требует сохранения latch, снимает оба TFT
-  state, очищает latch через публичный Right/OK Action path и доказывает continuity
-  exact CID/catalog плюс final Home lease zero.
+  inactive pads, делает явный output-quiesced software restart и требует сохранения
+  latch, снимает оба TFT state, очищает latch через публичный Right/OK Action path и
+  доказывает continuity exact CID/catalog плюс final Home lease zero.
 
 Это не simulation: reset transcript обязателен. Отсутствующий reset, invalid record,
 automatic recovery, запись storage, неожиданный owner или недоступный final Home —

@@ -92,11 +92,14 @@ does not depend on it.
 - `safety.watchdog-test confirm` is a bounded destructive diagnostic: it is accepted
   only from normal `armed` Home with no runtime owner/lease and inactive output pads,
   emits a flushed arm record, then deliberately stops feeding the main-loop WDT.
+- `safety.restart-test confirm` is accepted only from a latched, quiescent Safe Mode;
+  it emits a flushed proof record and performs a software reset without clearing the
+  retained latch. It is an automated persistence diagnostic, not a user clear path.
 - `tools/run_1x_safety_watchdog_hil.py` flashes one exact candidate, proves normal
   arm, causes the real Task-WDT reset, checks retained Safe Mode and inactive pads,
-  performs a second EN reset and requires the latch to remain, captures both Safe
-  Mode TFT states, clears through the public Right/OK Action path, and proves exact
-  CID/catalog continuity plus final Home lease zero.
+  performs an explicit output-quiesced software restart and requires the latch to
+  remain, captures both Safe Mode TFT states, clears through the public Right/OK
+  Action path, and proves exact CID/catalog continuity plus final Home lease zero.
 
 The test is not a simulation and must retain the reset transcript. A missing reset,
 invalid record, automatic recovery, writable storage activity, unexpected owner,

@@ -122,8 +122,9 @@ python tools/run_1x_safety_watchdog_hil.py \
 ```
 
 Он требует настоящий panic Task-WDT reset, matching app identity, inactive pads,
-защёлкнутый Safe Mode после второго reset, пропуск product recovery, двухшаговый
-clear через публичный UI, неизменные catalog/CID, final Home и lease zero.
+защёлкнутый Safe Mode после явного output-quiesced software restart, пропуск product
+recovery, двухшаговый clear через публичный UI, неизменные catalog/CID, final Home и
+lease zero. Runner не использует native-USB DTR/RTS как evidence persistence latch.
 
 ## Часть host-runner
 
