@@ -186,6 +186,7 @@ fi
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"
+python3 "$repo_dir/tools/test_product_home_hil_runner.py"
 python3 "$repo_dir/tools/test_source_timeline_hil_runner.py"
 python3 "$repo_dir/tools/test_passive_ble_hil_runner.py"
 python3 "$repo_dir/tools/test_runtime_degradation_hil_runner.py"

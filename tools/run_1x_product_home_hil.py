@@ -38,6 +38,27 @@ WATERFALL_GRAPH_Y = 54
 WATERFALL_GRAPH_BOTTOM = 278
 
 
+def read_only_query(device: PassiveSerial, command: bytes, schema: str,
+                    kind: str, timeout: float = 5.0,
+                    maximum_attempts: int = 2) -> dict[str, Any]:
+    """Retry a state query once without ever replaying an action command."""
+    errors: list[str] = []
+    for attempt in range(1, maximum_attempts + 1):
+        try:
+            record = query(device, command, schema, kind, timeout=timeout)
+            record["host_transport_attempts"] = attempt
+            record["host_transport_transient_retries"] = attempt - 1
+            record["host_transport_transient_errors"] = errors
+            return record
+        except TimeoutError as error:
+            if attempt == maximum_attempts:
+                raise
+            errors.append(str(error))
+            device.reset_input_buffer()
+            synchronize_console(device, 10.0)
+    raise RuntimeError("unreachable state-query retry state")
+
+
 def require_only_waterfall_changed(
         frames: Path, first: str, second: str) -> dict[str, int]:
     before = (frames / f"{first}.rgb565").read_bytes()
@@ -66,7 +87,8 @@ def require_only_waterfall_changed(
 
 
 def home_selection(device: PassiveSerial, index: int) -> dict[str, Any]:
-    current = query(device, b"ui.state", "leshy.ui.v1", "state")
+    current = read_only_query(
+        device, b"ui.state", "leshy.ui.v1", "state")
     if current.get("page") != "home":
         raise RuntimeError(f"Home expected before selection {index}: {current}")
     while int(current.get("selection", -1)) > index:
@@ -87,7 +109,7 @@ def wait_report(device: PassiveSerial, command: bytes, schema: str,
     deadline = time.monotonic() + timeout
     report: dict[str, Any] = {}
     while time.monotonic() < deadline:
-        report = query(device, command, schema, "state")
+        report = read_only_query(device, command, schema, "state")
         if int(report.get("history_rows", 0)) >= minimum_rows:
             return report
         time.sleep(0.05)
@@ -154,7 +176,8 @@ def stabilized_boot_metrics(
     samples: list[dict[str, Any]] = []
     heap_keys = ("heap_total", "heap_free", "heap_min_free")
     for _ in range(maximum_attempts):
-        sample = query(device, b"metrics", "leshy.boot.v1", "ready")
+        sample = read_only_query(
+            device, b"metrics", "leshy.boot.v1", "ready")
         samples.append(sample)
         if len(samples) < 2:
             continue
@@ -216,7 +239,7 @@ def main() -> int:
             try:
                 synchronize_console(device, 30.0)
                 boot, boot_metrics_samples = stabilized_boot_metrics(device)
-                recovery_before = query(
+                recovery_before = read_only_query(
                     device, b"storage.product.boot-recovery",
                     "leshy.storage.product_boot_recovery.v1", "state")
                 failures.extend(boot_failures(
@@ -302,10 +325,10 @@ def main() -> int:
                 waterfall_pixel_changes["nrf"] = require_only_waterfall_changed(
                     frames, "nrf-waterfall", "nrf-waterfall-next")
                 trace.append(action(device, "right"))
-                paused_before = query(
+                paused_before = read_only_query(
                     device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
                 time.sleep(0.35)
-                paused_after = query(
+                paused_after = read_only_query(
                     device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
                 if paused_after.get("state") != "paused" or \
                         paused_after.get("sweeps") != paused_before.get("sweeps"):
@@ -313,7 +336,7 @@ def main() -> int:
                 trace.append(action(device, "right"))
                 trace.append(action(device, "up"))
                 trace.append(action(device, "left"))
-                stopped_nrf = query(
+                stopped_nrf = read_only_query(
                     device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
                 require_exact(stopped_nrf, {
                     "view": "none", "state": "idle", "adapter_active": False,
@@ -369,10 +392,10 @@ def main() -> int:
                 waterfall_pixel_changes["cc"] = require_only_waterfall_changed(
                     frames, "cc-waterfall", "cc-waterfall-next")
                 trace.append(action(device, "right"))
-                cc_paused_before = query(
+                cc_paused_before = read_only_query(
                     device, b"hardware.cc1101.spectrum", CC_SCHEMA, "state")
                 time.sleep(0.35)
-                cc_paused_after = query(
+                cc_paused_after = read_only_query(
                     device, b"hardware.cc1101.spectrum", CC_SCHEMA, "state")
                 if cc_paused_after.get("state") != "paused" or \
                         cc_paused_after.get("adapter_samples") != \
@@ -415,7 +438,7 @@ def main() -> int:
                         "runtime_owner": "subghz", "lease_mask": 9,
                     }, f"cc_{band}_return_to_band_menu")
                 trace.append(action(device, "left"))
-                stopped_cc = query(
+                stopped_cc = read_only_query(
                     device, b"hardware.cc1101.spectrum", CC_SCHEMA, "state")
                 require_exact(stopped_cc, {
                     "view": "none", "state": "idle", "adapter_active": False,
@@ -444,15 +467,15 @@ def main() -> int:
                 screens["home_en"] = capture(device, frames, "home-en")
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
                 screens["home_final"] = capture(device, frames, "home-final")
-                input_state = query(
+                input_state = read_only_query(
                     device, b"input.state", "leshy.input.frontend.v1", "state")
-                safe_outputs = query(
+                safe_outputs = read_only_query(
                     device, b"hardware.safe-outputs",
                     "leshy.hardware.safe-outputs.v1", "state")
-                recovery_after = query(
+                recovery_after = read_only_query(
                     device, b"storage.product.boot-recovery",
                     "leshy.storage.product_boot_recovery.v1", "state")
-                metrics_after = query(
+                metrics_after = read_only_query(
                     device, b"metrics", "leshy.boot.v1", "ready")
                 failures.extend(expect(input_state, {
                     "status": "ready", "read_errors": 0, "queue_drops": 0,
