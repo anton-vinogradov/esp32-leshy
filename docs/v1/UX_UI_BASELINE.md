@@ -282,6 +282,12 @@ screen line during acquisition. `E-BUILD-093`/`E-AUTO-057`/`E-HIL-117`/`E-UX-016
 rows, stable pause/resume, all CC bands, invariant heap/storage and final lease 0.
 It is an activity/RSSI visualization, not a calibrated analyzer.
 
+Candidate `0.96.0-compact-ui-waterfall` decouples this visual time axis from each
+receiver's hardware sweep duration. nRF24 and every CC1101 band now snapshot the
+latest receive-only spectrum on one fixed 26,785 us cadence: 112 rows span at most
+3,000,000 us and fill the complete graph area. The exact physical gate must prove
+the timing on nRF24 plus 315/433/868/915 MHz rather than infer it from constants.
+
 ## Implemented-job Home and one-command physical checkpoint
 
 Exact candidate `0.93.0-product-menu` supersedes the executable Home part of 0.90.
@@ -321,7 +327,7 @@ run retains 14 real TFT states, all seven Home jobs, both populated waterfalls,
 unchanged generation 95/0 and heap, and final owner/lease `none`/`0`
 (`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
 
-Candidate `0.96.0-compact-navigation` keeps the root-only identity contract and
+Candidate `0.96.0-compact-ui-waterfall` keeps the root-only identity contract and
 makes Home read `LESHY v0.96.0` or `Леший v0.96.0` on one line. The 16 px brand
 and 12 px SemVer use a shared baseline with a fixed 5 px gap; measured text widths
 leave the right-aligned SD/RF status region untouched. On nested screens the actual

@@ -840,6 +840,15 @@ void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
 }
 
 void testSpectrumViewportKeepsBoundedRingHistory() {
+    CHECK(SpectrumViewport::kWaterfallFillUs == 3000000ULL);
+    CHECK(SpectrumViewport::kWaterfallRowPeriodUs == 26785ULL);
+    CHECK(SpectrumViewport::kWaterfallRowPeriodUs *
+              SpectrumViewport::kHistoryRows <=
+          SpectrumViewport::kWaterfallFillUs);
+    CHECK(SpectrumViewport::kWaterfallFillUs -
+              SpectrumViewport::kWaterfallRowPeriodUs *
+                  SpectrumViewport::kHistoryRows <
+          SpectrumViewport::kHistoryRows);
     SpectrumViewport viewport;
     CHECK(!viewport.reset(0));
     CHECK(!viewport.reset(SpectrumViewport::kMaxBins + 1));

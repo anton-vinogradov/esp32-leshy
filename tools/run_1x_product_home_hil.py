@@ -32,6 +32,8 @@ CC_SCHEMA = "leshy.cc1101.spectrum.v1"
 HOME_ITEMS = (
     "wifi", "ble", "spectrum24", "subghz", "capture", "library", "device",
 )
+WATERFALL_ROWS = 112
+WATERFALL_FILL_US = 3_000_000
 
 
 def home_selection(device: PassiveSerial, index: int) -> dict[str, Any]:
@@ -69,6 +71,38 @@ def require_exact(record: dict[str, Any], expected: dict[str, Any],
     failures = expect(record, expected, label)
     if failures:
         raise RuntimeError("; ".join(failures))
+
+
+def require_waterfall_timing(record: dict[str, Any], label: str) -> None:
+    require_exact(record, {
+        "history_rows": WATERFALL_ROWS,
+        "waterfall_fill_target_us": WATERFALL_FILL_US,
+        "waterfall_row_period_us": WATERFALL_FILL_US // WATERFALL_ROWS,
+        "waterfall_full": True,
+    }, label)
+    elapsed = int(record.get("waterfall_fill_elapsed_us", 0))
+    minimum = 2_700_000
+    if elapsed < minimum or elapsed > WATERFALL_FILL_US:
+        raise RuntimeError(
+            f"{label}: waterfall fill {elapsed} us outside "
+            f"{minimum}..{WATERFALL_FILL_US} us")
+    if "host_fill_elapsed_ms" in record:
+        host_elapsed = float(record["host_fill_elapsed_ms"])
+        if host_elapsed < 2700.0 or host_elapsed > 3100.0:
+            raise RuntimeError(
+                f"{label}: host-observed fill {host_elapsed} ms outside "
+                "2700..3100 ms")
+
+
+def wait_full_waterfall(
+        device: PassiveSerial, command: bytes, schema: str,
+        timeout: float = 12.0) -> dict[str, Any]:
+    started = time.monotonic()
+    report = wait_report(
+        device, command, schema, WATERFALL_ROWS, timeout=timeout)
+    report["host_fill_elapsed_ms"] = round(
+        (time.monotonic() - started) * 1000.0, 3)
+    return report
 
 
 def stabilized_boot_metrics(
@@ -194,8 +228,10 @@ def main() -> int:
                     "runtime_event": "nrf24_spectrum_running",
                     "runtime_owner": "spectrum24", "lease_mask": 9,
                 }, "nrf_entry")
-                reports["nrf_spectrum"] = wait_report(
-                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, 4)
+                reports["nrf_spectrum"] = wait_full_waterfall(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA)
+                require_waterfall_timing(
+                    reports["nrf_spectrum"], "nrf_waterfall_timing")
                 require_exact(reports["nrf_spectrum"], {
                     "view": "live", "display_mode": "spectrum",
                     "state": "running", "rx_only": True,
@@ -206,7 +242,10 @@ def main() -> int:
                     device, frames, "nrf-spectrum")
                 trace.append(action(device, "down"))
                 reports["nrf_waterfall"] = wait_report(
-                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, 16)
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA,
+                    WATERFALL_ROWS)
+                require_waterfall_timing(
+                    reports["nrf_waterfall"], "nrf_waterfall_view_timing")
                 require_exact(reports["nrf_waterfall"], {
                     "view": "live", "display_mode": "waterfall",
                     "state": "running", "rx_only": True,
@@ -246,8 +285,10 @@ def main() -> int:
                 screens["cc_band_menu"] = capture(
                     device, frames, "cc-band-menu")
                 trace.append(action(device, "right"))
-                reports["cc_spectrum"] = wait_report(
-                    device, b"hardware.cc1101.spectrum", CC_SCHEMA, 2)
+                reports["cc_spectrum"] = wait_full_waterfall(
+                    device, b"hardware.cc1101.spectrum", CC_SCHEMA)
+                require_waterfall_timing(
+                    reports["cc_spectrum"], "cc_433_waterfall_timing")
                 require_exact(reports["cc_spectrum"], {
                     "view": "live", "display_mode": "spectrum",
                     "state": "running", "band": "433", "rx_only": True,
@@ -258,8 +299,11 @@ def main() -> int:
                     device, frames, "cc-spectrum")
                 trace.append(action(device, "down"))
                 reports["cc_waterfall"] = wait_report(
-                    device, b"hardware.cc1101.spectrum", CC_SCHEMA, 8,
+                    device, b"hardware.cc1101.spectrum", CC_SCHEMA,
+                    WATERFALL_ROWS,
                     timeout=24.0)
+                require_waterfall_timing(
+                    reports["cc_waterfall"], "cc_433_waterfall_view_timing")
                 require_exact(reports["cc_waterfall"], {
                     "view": "live", "display_mode": "waterfall",
                     "state": "running", "band": "433", "rx_only": True,
@@ -285,6 +329,27 @@ def main() -> int:
                     "page": "survey", "selected_id": "subghz",
                     "runtime_owner": "subghz", "lease_mask": 9,
                 }, "cc_return_to_band_menu")
+                for band in ("868", "915", "315"):
+                    trace.append(action(device, "down"))
+                    trace.append(action(device, "right"))
+                    fill = wait_full_waterfall(
+                        device, b"hardware.cc1101.spectrum", CC_SCHEMA,
+                        timeout=24.0)
+                    require_exact(fill, {
+                        "view": "live", "display_mode": "spectrum",
+                        "state": "running", "band": band,
+                        "rx_only": True, "volatile": True,
+                        "current_owner": "subghz", "current_lease_mask": 9,
+                    }, f"cc_{band}_spectrum")
+                    require_waterfall_timing(
+                        fill, f"cc_{band}_waterfall_timing")
+                    reports[f"cc_fill_{band}"] = fill
+                    returned = action(device, "left")
+                    trace.append(returned)
+                    require_exact(returned, {
+                        "page": "survey", "selected_id": "subghz",
+                        "runtime_owner": "subghz", "lease_mask": 9,
+                    }, f"cc_{band}_return_to_band_menu")
                 trace.append(action(device, "left"))
                 stopped_cc = query(
                     device, b"hardware.cc1101.spectrum", CC_SCHEMA, "state")

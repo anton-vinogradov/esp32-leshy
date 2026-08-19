@@ -20,6 +20,9 @@ class SpectrumViewport final {
 public:
     static constexpr std::size_t kMaxBins = 83;
     static constexpr std::size_t kHistoryRows = 112;
+    static constexpr std::uint64_t kWaterfallFillUs = 3000000ULL;
+    static constexpr std::uint64_t kWaterfallRowPeriodUs =
+        kWaterfallFillUs / kHistoryRows;
 
     bool reset(std::size_t bins);
     bool push(const std::uint8_t* intensity, std::size_t bins);

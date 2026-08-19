@@ -286,6 +286,13 @@ Waterfall — fixed allocation-free ring на 112 строк; во время ac
 стабильные pause/resume, все CC bands, invariant heap/storage и final lease 0. Это
 визуализация activity/RSSI, а не calibrated analyzer.
 
+Candidate `0.96.0-compact-ui-waterfall` отделяет визуальную временную шкалу от
+длительности hardware sweep конкретного приёмника. nRF24 и каждый диапазон CC1101
+теперь делают snapshot последнего receive-only spectrum по единому cadence 26 785
+мкс: 112 строк занимают не более 3 000 000 мкс и заполняют всю область graph. Exact
+physical gate обязан измерить это на nRF24 и 315/433/868/915 МГц, а не вывести из
+констант.
+
 ## Home из реализованных задач и однокомандный physical checkpoint
 
 Exact candidate `0.93.0-product-menu` заменяет executable-часть Home 0.90.
@@ -327,7 +334,7 @@ TFT states, все семь jobs Home, оба наполненных водоп�
 и heap, final owner/lease `none`/`0`
 (`E-BUILD-095`/`E-AUTO-059`/`E-HIL-119`/`E-UX-018`).
 
-Candidate `0.96.0-compact-navigation` сохраняет root-only identity contract и
+Candidate `0.96.0-compact-ui-waterfall` сохраняет root-only identity contract и
 показывает на Home `LESHY v0.96.0` или `Леший v0.96.0` в одну строку. Brand 16 px
 и SemVer 12 px имеют общую baseline и fixed gap 5 px; measured text widths не
 затрагивают right-aligned область SD/RF status. На вложенных экранах название

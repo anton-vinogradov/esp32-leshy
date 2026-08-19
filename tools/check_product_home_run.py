@@ -197,6 +197,44 @@ def main() -> int:
         require(failures,
                 all(side_effects.get(key, 0) == 0 for key in forbidden),
                 f"{prefix} receive-only side effects mismatch")
+        if "waterfall_fill_target_us" in spectrum or \
+                "waterfall_fill_target_us" in waterfall:
+            for label, report in (("spectrum", spectrum),
+                                  ("waterfall", waterfall)):
+                require(failures,
+                        report.get("history_rows") == 112 and
+                        report.get("waterfall_fill_target_us") == 3_000_000 and
+                        report.get("waterfall_row_period_us") == 26_785 and
+                        report.get("waterfall_full") is True and
+                        2_700_000 <=
+                            report.get("waterfall_fill_elapsed_us", 0) <=
+                            3_000_000,
+                        f"{prefix} {label} three-second waterfall mismatch")
+
+    cc_fill_keys = {key for key in reports if key.startswith("cc_fill_")}
+    if cc_fill_keys:
+        require(failures, cc_fill_keys ==
+                {"cc_fill_315", "cc_fill_868", "cc_fill_915"},
+                "CC1101 waterfall timing band coverage mismatch")
+        for band in ("315", "868", "915"):
+            report = reports.get(f"cc_fill_{band}", {})
+            require(failures,
+                    report.get("band") == band and
+                    report.get("history_rows") == 112 and
+                    report.get("waterfall_fill_target_us") == 3_000_000 and
+                    report.get("waterfall_full") is True and
+                    2_700_000 <=
+                        report.get("waterfall_fill_elapsed_us", 0) <=
+                        3_000_000,
+                    f"CC1101 {band} three-second waterfall mismatch")
+            host_elapsed = report.get("host_fill_elapsed_ms", 0)
+            require(failures, 2700 <= host_elapsed <= 3100,
+                    f"CC1101 {band} host-observed fill mismatch")
+        for key in ("nrf_spectrum", "cc_spectrum"):
+            host_elapsed = reports.get(key, {}).get(
+                "host_fill_elapsed_ms", 0)
+            require(failures, 2700 <= host_elapsed <= 3100,
+                    f"{key} host-observed fill mismatch")
 
     screens = run.get("screens", {})
     scope = run.get("scope", {})

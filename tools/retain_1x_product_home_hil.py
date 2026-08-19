@@ -15,8 +15,11 @@ from esp_app_identity import app_elf_sha256
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.95.0-inline-key-hints"
-EVIDENCE_IDS = ["E-BUILD-096", "E-AUTO-060", "E-HIL-120", "E-UX-019"]
+VERSION = "0.96.0-compact-ui-waterfall"
+EVIDENCE_IDS = [
+    "E-BUILD-097", "E-AUTO-061", "E-HIL-121", "E-UX-020",
+    "E-RADIO-007",
+]
 
 
 def digest(path: Path) -> str:
@@ -134,7 +137,7 @@ def main() -> int:
     }
     result = {
         "schema": "leshy.product_home_acceptance.v1",
-        "status": "pass_inline_key_hints_checkpoint",
+        "status": "pass_compact_ui_waterfall_checkpoint",
         "board": "board-01",
         "evidence_ids": EVIDENCE_IDS,
         "candidate": provenance,
@@ -145,17 +148,56 @@ def main() -> int:
             "manual_button_presses": 0,
             "automatic_screenshots": True,
             "languages": ["en", "ru"],
-            "navigation_legend": {
+            "home_identity": {
                 "layout": "single_baseline",
-                "font": "Roboto Condensed Medium 12",
-                "color": "text_secondary",
-                "left_order": "key_then_label",
-                "middle_order": "key_then_label",
-                "right_order": "label_then_ok_right",
-                "outer_inset_px": 6,
-                "gap_px": 4,
-                "footer_height_px": 26,
-                "touch_target": False,
+                "english": "LESHY v0.96.0",
+                "russian": "Леший v0.96.0",
+                "brand_font_px": 16,
+                "version_font_px": 12,
+                "gap_px": 5,
+            },
+            "compact_navigation": {
+                "header_height_px": 26,
+                "content_top_px": 32,
+                "nested_title_inside_header": True,
+                "visible_menu_rows": 4,
+                "menu_row_width_px": 216,
+                "menu_row_height_px": 60,
+                "menu_row_gap_px": 5,
+                "row_text_inset_px": 12,
+                "row_text_vertically_centered": True,
+                "touch_geometry_shared": True,
+            },
+            "diagnostic_heap_samples": len(run["boot_metrics_samples"]),
+            "diagnostic_heap_stabilized":
+                run["boot_metrics_stabilized"],
+            "waterfall_timing": {
+                "fill_target_us": 3000000,
+                "history_rows": 112,
+                "row_period_us": 26785,
+                "nrf_fill_elapsed_us":
+                    reports["nrf_waterfall"]["waterfall_fill_elapsed_us"],
+                "host_fill_elapsed_ms": {
+                    "nrf24": reports["nrf_spectrum"][
+                        "host_fill_elapsed_ms"],
+                    "315": reports["cc_fill_315"][
+                        "host_fill_elapsed_ms"],
+                    "433": reports["cc_spectrum"][
+                        "host_fill_elapsed_ms"],
+                    "868": reports["cc_fill_868"][
+                        "host_fill_elapsed_ms"],
+                    "915": reports["cc_fill_915"][
+                        "host_fill_elapsed_ms"],
+                },
+                "cc_fill_elapsed_us": {
+                    band: reports[key]["waterfall_fill_elapsed_us"]
+                    for band, key in (
+                        ("315", "cc_fill_315"),
+                        ("433", "cc_waterfall"),
+                        ("868", "cc_fill_868"),
+                        ("915", "cc_fill_915"),
+                    )
+                },
             },
             "nrf_history_rows": reports["nrf_waterfall"]["history_rows"],
             "cc_history_rows": reports["cc_waterfall"]["history_rows"],
