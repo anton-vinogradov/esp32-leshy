@@ -162,8 +162,13 @@ def wait_full_waterfall(
         device: PassiveSerial, command: bytes, schema: str,
         timeout: float = 12.0) -> dict[str, Any]:
     started = time.monotonic()
+    # A state report is large enough to back-pressure the 115200-baud console.
+    # Let the real-time renderer run undisturbed for most of its 3 s contract;
+    # polling every 50 ms would measure the test harness, not the product UI.
+    time.sleep(2.7)
     report = wait_report(
-        device, command, schema, WATERFALL_ROWS, timeout=timeout)
+        device, command, schema, WATERFALL_ROWS,
+        timeout=max(0.1, timeout - 2.7))
     report["host_fill_elapsed_ms"] = round(
         (time.monotonic() - started) * 1000.0, 3)
     return report
