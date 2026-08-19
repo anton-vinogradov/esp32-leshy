@@ -166,9 +166,10 @@ def main() -> int:
             "kWriteRegister = 0x20",
             "kReceiveConfig = 0x03",
             "kRegRpd = 0x09",
-            "kSpectrumSpiHz = 1000000",
-            "pinMode(BoardProfile::kNrfCsPins[2], INPUT)",
-            "digitalWrite(BoardProfile::kNrfCePins[module], HIGH)",
+            "kSpectrumSpiHz = 8000000",
+            "pinMode(BoardProfile::kNrfCsPins[2], OUTPUT)",
+            "BoardProfile::kIrDeclared",
+            "activeSlots_[module]",
             "writeRegister(module, kRegConfig, kReceiveConfig)",
             "validateNrf24PassiveSpectrumReport",
         ):
@@ -179,8 +180,6 @@ def main() -> int:
         for pattern in (
             r"\b0xA0\b", r"\b0xB0\b", r"\b0xE1\b",
             r"\bCONT_WAVE\b", r"\bPLL_LOCK\b",
-            r"digitalWrite\s*\(\s*BoardProfile::kNrfCsPins\[2\]",
-            r"pinMode\s*\(\s*BoardProfile::kNrfCsPins\[2\]\s*,\s*OUTPUT",
             r"digitalWrite\s*\(\s*BoardProfile::kCc1101CsPin\s*,\s*LOW",
         ):
             if re.search(pattern, spectrum_adapter):

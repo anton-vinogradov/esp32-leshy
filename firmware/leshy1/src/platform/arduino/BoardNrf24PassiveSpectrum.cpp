@@ -14,7 +14,9 @@ using boards::esp32_div_v2::BoardProfile;
 using drivers::radio::NrfReceiverIdentity;
 using drivers::radio::Nrf24PassiveSpectrumStatus;
 
-constexpr std::uint32_t kSpectrumSpiHz = 1000000;
+// 0.x used 8 MHz reliably on this exact shield. The faster clock leaves enough
+// time for a complete two-receiver sweep per 13.4 ms waterfall row.
+constexpr std::uint32_t kSpectrumSpiHz = 8000000;
 constexpr std::uint8_t kReadRegister = 0x00;
 constexpr std::uint8_t kWriteRegister = 0x20;
 constexpr std::uint8_t kRegConfig = 0x00;
@@ -47,12 +49,13 @@ void BoardNrf24PassiveSpectrum::holdAllCeLow() {
 
 std::uint8_t BoardNrf24PassiveSpectrum::readRegister(
     std::uint8_t module, std::uint8_t reg, std::uint8_t* status) {
-    if (module >= 2 || !gpio21Safe()) return 0xFF;
-    digitalWrite(BoardProfile::kNrfCsPins[module], LOW);
+    if (module >= 3 || !gpio21Safe()) return 0xFF;
+    const std::uint8_t slot = activeSlots_[module];
+    digitalWrite(BoardProfile::kNrfCsPins[slot], LOW);
     const std::uint8_t commandStatus =
         transfer(kReadRegister | (reg & 0x1FU));
     const std::uint8_t value = transfer(0xFF);
-    digitalWrite(BoardProfile::kNrfCsPins[module], HIGH);
+    digitalWrite(BoardProfile::kNrfCsPins[slot], HIGH);
     if (status != nullptr) *status = commandStatus;
     if (report_ != nullptr) ++report_->registerReads;
     return gpio21Safe() ? value : 0xFF;
@@ -60,11 +63,12 @@ std::uint8_t BoardNrf24PassiveSpectrum::readRegister(
 
 void BoardNrf24PassiveSpectrum::writeRegister(
     std::uint8_t module, std::uint8_t reg, std::uint8_t value) {
-    if (module >= 2 || !gpio21Safe()) return;
-    digitalWrite(BoardProfile::kNrfCsPins[module], LOW);
+    if (module >= 3 || !gpio21Safe()) return;
+    const std::uint8_t slot = activeSlots_[module];
+    digitalWrite(BoardProfile::kNrfCsPins[slot], LOW);
     transfer(kWriteRegister | (reg & 0x1FU));
     transfer(value);
-    digitalWrite(BoardProfile::kNrfCsPins[module], HIGH);
+    digitalWrite(BoardProfile::kNrfCsPins[slot], HIGH);
     if (report_ != nullptr) ++report_->registerWrites;
 }
 
@@ -145,11 +149,12 @@ bool BoardNrf24PassiveSpectrum::begin(
     holdAllCeLow();
     pinMode(BoardProfile::kNrfCsPins[0], OUTPUT);
     pinMode(BoardProfile::kNrfCsPins[1], OUTPUT);
-    pinMode(BoardProfile::kNrfCsPins[2], INPUT);
+    pinMode(BoardProfile::kNrfCsPins[2], OUTPUT);
     pinMode(BoardProfile::kCc1101CsPin, OUTPUT);
     pinMode(BoardProfile::kSdCsPin, OUTPUT);
     digitalWrite(BoardProfile::kNrfCsPins[0], HIGH);
     digitalWrite(BoardProfile::kNrfCsPins[1], HIGH);
+    digitalWrite(BoardProfile::kNrfCsPins[2], HIGH);
     digitalWrite(BoardProfile::kCc1101CsPin, HIGH);
     digitalWrite(BoardProfile::kSdCsPin, HIGH);
     if (!gpio21Safe()) {
@@ -165,7 +170,15 @@ bool BoardNrf24PassiveSpectrum::begin(
     SPI.beginTransaction(SPISettings(kSpectrumSpiHz, MSBFIRST, SPI_MODE0));
     transactionOpen_ = true;
 
-    for (std::uint8_t module = 0; module < 2; ++module) {
+    if (BoardProfile::kIrDeclared) {
+        report_->status = Nrf24PassiveSpectrumStatus::RefusedProfile;
+        cleanupPinsAndSpi();
+        report_ = nullptr;
+        return false;
+    }
+    for (std::uint8_t slot = 0; slot < plan_.maximumModules; ++slot) {
+        const std::uint8_t module = report_->detectedModules;
+        activeSlots_[module] = slot;
         NrfReceiverIdentity identity;
         identity.config = readRegister(module, kRegConfig, &identity.status);
         identity.channel = readRegister(module, kRegRfChannel);
@@ -173,15 +186,18 @@ bool BoardNrf24PassiveSpectrum::begin(
         identity.feature = readRegister(module, kRegFeature);
         if (drivers::radio::plausibleNrfReceiverIdentity(identity)) {
             ++report_->detectedModules;
+            report_->activeSlotMask = static_cast<std::uint8_t>(
+                report_->activeSlotMask | (1U << slot));
         }
     }
-    if (report_->detectedModules != 2 || !gpio21Safe()) {
+    if (report_->detectedModules == 0 || !gpio21Safe()) {
         report_->status = Nrf24PassiveSpectrumStatus::Fault;
         cleanupPinsAndSpi();
         report_ = nullptr;
         return false;
     }
-    for (std::uint8_t module = 0; module < 2; ++module) {
+    for (std::uint8_t module = 0;
+         module < report_->detectedModules; ++module) {
         if (!configureReceive(module)) {
             report_->status = Nrf24PassiveSpectrumStatus::Fault;
             cleanupPinsAndSpi();
@@ -190,7 +206,8 @@ bool BoardNrf24PassiveSpectrum::begin(
         }
     }
     delayMicroseconds(2000);
-    for (std::uint8_t module = 0; module < 2; ++module) {
+    for (std::uint8_t module = 0;
+         module < report_->detectedModules; ++module) {
         if ((readRegister(module, kRegConfig) & 0x03U) != kReceiveConfig) {
             report_->status = Nrf24PassiveSpectrumStatus::Fault;
             cleanupPinsAndSpi();
@@ -228,13 +245,15 @@ bool BoardNrf24PassiveSpectrum::sweep(
             const std::uint8_t channel = static_cast<std::uint8_t>(
                 plan_.firstChannel + index + module);
             writeRegister(module, kRegRfChannel, channel);
-            digitalWrite(BoardProfile::kNrfCePins[module], HIGH);
+            digitalWrite(
+                BoardProfile::kNrfCePins[activeSlots_[module]], HIGH);
             ++report_->receiveCeHighEvents;
             ++armed;
         }
         delayMicroseconds(plan_.dwellUs);
         for (std::uint8_t module = 0; module < armed; ++module) {
-            digitalWrite(BoardProfile::kNrfCePins[module], LOW);
+            digitalWrite(
+                BoardProfile::kNrfCePins[activeSlots_[module]], LOW);
             output->hits[index + module] =
                 static_cast<std::uint8_t>(readRegister(module, kRegRpd) & 0x01U);
         }

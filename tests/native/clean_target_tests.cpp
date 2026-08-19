@@ -673,7 +673,7 @@ void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
     CHECK(plan.lastChannel == 84);
     CHECK(plan.dwellUs == 200);
     Nrf24PassiveSpectrumPlan unsafePlan = plan;
-    unsafePlan.maximumModules = 3;
+    unsafePlan.maximumModules = 4;
     CHECK(!validateNrf24PassiveSpectrumPlan(unsafePlan));
     unsafePlan = plan;
     unsafePlan.dwellUs = 100;
@@ -687,6 +687,7 @@ void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
     report.resourceOwned = true;
     report.gpio21StableHigh = true;
     report.detectedModules = 2;
+    report.activeSlotMask = 0x06;
     report.cleanupComplete = false;
     CHECK(validateNrf24PassiveSpectrumReport(report, false));
     CHECK(!validateNrf24PassiveSpectrumReport(report, true));
@@ -699,7 +700,7 @@ void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
     unsafe.txPayloadCommands = 1;
     CHECK(!validateNrf24PassiveSpectrumReport(unsafe, true));
     unsafe = report;
-    unsafe.nrfSlot3Gated = false;
+    unsafe.activeSlotMask = 0x07;
     CHECK(!validateNrf24PassiveSpectrumReport(unsafe, true));
     unsafe = report;
     unsafe.status = Nrf24PassiveSpectrumStatus::Fault;
@@ -719,8 +720,8 @@ void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
     CHECK(controller.sweeps() == 1);
     CHECK(controller.totalHits() == 2);
     CHECK(controller.activeBins() == 2);
-    CHECK(controller.intensity(10) == 64);
-    CHECK(controller.displayIntensity(10) == 64);
+    CHECK(controller.intensity(10) == 31);
+    CHECK(controller.displayIntensity(10) == 31);
     CHECK(controller.metric() == Nrf24SpectrumMetric::Signal);
     CHECK(controller.hottestChannel() == 12);
     CHECK(controller.toggleMetric());
@@ -735,10 +736,12 @@ void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
     sweep.endedUs = 3000;
     sweep.hits.fill(0);
     CHECK(controller.ingest(sweep));
-    CHECK(controller.intensity(10) == 56);
+    CHECK(controller.intensity(10) == 28);
     CHECK(controller.stop());
     CHECK(controller.state() == Nrf24SpectrumViewState::Idle);
-    CHECK(!controller.start(3, 4000));
+    CHECK(controller.start(3, 4000));
+    CHECK(controller.stop());
+    CHECK(!controller.start(4, 5000));
 }
 
 void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
@@ -854,8 +857,8 @@ void testSpectrumViewportKeepsBoundedRingHistory() {
     CHECK(SpectrumViewport::kWaterfallFillUs == 3000000ULL);
     CHECK(SpectrumViewport::kDisplayColumns == 240);
     CHECK(SpectrumViewport::kHistoryRows == 224);
-    CHECK(SpectrumViewport::kPackedRowBytes == 120);
-    CHECK(SpectrumViewport::kHistoryStorageBytes == 26880);
+    CHECK(SpectrumViewport::kRowBytes == 240);
+    CHECK(SpectrumViewport::kHistoryStorageBytes == 53760);
     CHECK(SpectrumViewport::kWaterfallRowPeriodUs == 13392ULL);
     CHECK(SpectrumViewport::kWaterfallRowPeriodUs *
               SpectrumViewport::kHistoryRows <=
@@ -874,8 +877,8 @@ void testSpectrumViewportKeepsBoundedRingHistory() {
                                      SpectrumViewport::kDisplayColumns - 1) ==
           255);
     CHECK(SpectrumViewport::resample(edgeValues.data(), edgeValues.size(),
-                                     SpectrumViewport::kDisplayColumns / 2) >=
-          127);
+                                     SpectrumViewport::kDisplayColumns / 2) ==
+          255);
     CHECK(viewport.reset(83));
     CHECK(viewport.mode() == SpectrumDisplayMode::Spectrum);
     CHECK(viewport.rowsStored() == 0);
@@ -895,7 +898,7 @@ void testSpectrumViewportKeepsBoundedRingHistory() {
     CHECK(viewport.push(row.data(), row.size()));
     CHECK(viewport.nextRow() == 1);
     CHECK(viewport.latestRow() == 0);
-    CHECK(viewport.intensity(0, 82) == 204);
+    CHECK(viewport.intensity(0, 82) == 201);
     CHECK(!viewport.push(row.data(), 64));
     CHECK(viewport.nextMode());
     CHECK(viewport.mode() == SpectrumDisplayMode::Waterfall);

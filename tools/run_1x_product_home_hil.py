@@ -302,6 +302,7 @@ def main() -> int:
                     "view": "live", "display_mode": "spectrum",
                     "metric": "signal",
                     "state": "running", "rx_only": True,
+                    "all_available_antennas": True,
                     "volatile": True, "current_owner": "spectrum24",
                     "current_lease_mask": 9,
                 }, "nrf_spectrum")
@@ -333,6 +334,7 @@ def main() -> int:
                     "metric": "traffic",
                     "traffic_semantics": "activity_above_baseline",
                     "state": "running", "rx_only": True,
+                    "all_available_antennas": True,
                     "volatile": True, "current_owner": "spectrum24",
                     "current_lease_mask": 9,
                 }, "nrf_traffic")

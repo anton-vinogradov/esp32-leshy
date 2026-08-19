@@ -43,7 +43,7 @@ void Nrf24SpectrumController::reset() {
 bool Nrf24SpectrumController::start(std::uint8_t modules,
                                     std::uint64_t monotonicUs) {
     if (state_ != Nrf24SpectrumViewState::Idle || modules == 0 ||
-        modules > 2 || monotonicUs == 0) {
+        modules > 3 || monotonicUs == 0) {
         return false;
     }
     intensity_.fill(0);
@@ -77,11 +77,10 @@ bool Nrf24SpectrumController::ingest(
         if (hit && totalHits_ != std::numeric_limits<std::uint64_t>::max()) {
             ++totalHits_;
         }
-        const std::uint16_t target = hit ? 255U : 0U;
-        const std::uint16_t current = intensity_[index];
+        const std::int16_t target = hit ? 255 : 0;
+        const std::int16_t current = intensity_[index];
         intensity_[index] = static_cast<std::uint8_t>(
-            hit ? current + (target - current + 3U) / 4U
-                : current - (current + 7U) / 8U);
+            current + (target - current) / 8);
         const std::int32_t signalFixed =
             static_cast<std::int32_t>(intensity_[index]) << 10;
         if (trafficPrimeSweeps_ != 0) {

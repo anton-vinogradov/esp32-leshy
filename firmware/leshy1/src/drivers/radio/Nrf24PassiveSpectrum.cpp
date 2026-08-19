@@ -7,7 +7,7 @@ bool validateNrf24PassiveSpectrumPlan(
     return plan.firstChannel == Nrf24PassiveSpectrumPlan::kFirstChannel &&
            plan.lastChannel == Nrf24PassiveSpectrumPlan::kLastChannel &&
            plan.dwellUs >= 130U && plan.dwellUs <= 500U &&
-           plan.maximumModules >= 1U && plan.maximumModules <= 2U;
+           plan.maximumModules >= 1U && plan.maximumModules <= 3U;
 }
 
 const char* nrf24PassiveSpectrumStatusName(
@@ -32,7 +32,13 @@ bool validateNrf24PassiveSpectrumReport(
         !report.pn532ExcludedByProfile || !report.resourceOwned ||
         !report.nrfSlot3Gated || !report.gpio21StableHigh ||
         !report.rxOnly || report.detectedModules == 0 ||
-        report.detectedModules > 2 || report.txModeEntries != 0 ||
+        report.detectedModules > 3 || report.activeSlotMask == 0 ||
+        report.activeSlotMask > 0x07U ||
+        static_cast<std::uint8_t>(
+            ((report.activeSlotMask >> 0U) & 1U) +
+            ((report.activeSlotMask >> 1U) & 1U) +
+            ((report.activeSlotMask >> 2U) & 1U)) != report.detectedModules ||
+        report.txModeEntries != 0 ||
         report.txPayloadCommands != 0 || report.ccCommandStrobes != 0) {
         return false;
     }

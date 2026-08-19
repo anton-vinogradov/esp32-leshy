@@ -151,7 +151,7 @@ def main() -> int:
     literal_prints = re.findall(r'display\.print\("([^"]*)"\)', renderer)
     require(failures, literal_prints == [],
             f"uncatalogued display literals: {literal_prints}")
-    for marker in ('"RX --"', '"RX1+2"', '"RX CC"', '"RX WIFI"',
+    for marker in ('"RX --"', '"RX N"', '"RX CC"', '"RX WIFI"',
                    '"RX BLE"', '"RX W+B"', '"TX --"'):
         require(failures, marker in renderer,
                 f"language-neutral status label missing: {marker}")

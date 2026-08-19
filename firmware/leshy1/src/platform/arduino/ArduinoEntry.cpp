@@ -4303,7 +4303,22 @@ std::uint16_t toneColor(Tone tone) {
 const char* headerReceiverStatus() {
     if (nrf24SpectrumController.state() ==
         Nrf24SpectrumViewState::Running) {
-        return "RX1+2";
+        static char nrfReceivers[12] = {};
+        std::size_t at = 0;
+        at += static_cast<std::size_t>(std::snprintf(
+            nrfReceivers, sizeof(nrfReceivers), "RX N"));
+        bool first = true;
+        for (std::uint8_t slot = 0; slot < 3 && at + 2 < sizeof(nrfReceivers);
+             ++slot) {
+            if ((nrf24SpectrumReport.activeSlotMask & (1U << slot)) == 0) {
+                continue;
+            }
+            at += static_cast<std::size_t>(std::snprintf(
+                nrfReceivers + at, sizeof(nrfReceivers) - at,
+                first ? "%u" : "+%u", static_cast<unsigned>(slot + 1U)));
+            first = false;
+        }
+        return nrfReceivers;
     }
     if (cc1101SpectrumController.state() ==
         Cc1101SpectrumViewState::Running) {
@@ -5368,7 +5383,7 @@ constexpr std::uint16_t kWifiChannelDivider =
     leshy1::ui::visual::rgb565(24, 44, 40);
 constexpr std::uint16_t kWifiPrimaryChannelDivider =
     leshy1::ui::visual::rgb565(104, 84, 16);
-constexpr std::uint8_t kSpectrumQuietThreshold = 48;
+constexpr std::uint8_t kSpectrumQuietThreshold = 8;
 
 std::int16_t wifiChannelCenterX(std::uint8_t channel) {
     const std::uint16_t frequencyMhz = static_cast<std::uint16_t>(
@@ -6395,8 +6410,11 @@ void serviceNrf24Spectrum() {
         renderInteractiveScreen(true);
         return;
     }
-    nextNrf24SpectrumSweepUs =
-        static_cast<std::uint64_t>(esp_timer_get_time()) + 40000ULL;
+    nextNrf24SpectrumSweepUs = sweep.startedUs +
+        SpectrumViewport::kWaterfallRowPeriodUs;
+    if (nextNrf24SpectrumSweepUs < sweep.endedUs) {
+        nextNrf24SpectrumSweepUs = sweep.endedUs;
+    }
     const std::uint64_t refreshUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (!uiController.isRoot() && uiController.page() == 2 &&
@@ -6510,8 +6528,8 @@ void serviceSpectrumWaterfallCadence() {
     }
     if (nowUs < nextSpectrumWaterfallRowUs) return;
 
-    constexpr std::size_t kMaximumCatchUpRows =
-        SpectrumViewport::kHistoryRows;
+    // Never manufacture temporal resolution by replaying the same RF snapshot.
+    constexpr std::size_t kMaximumCatchUpRows = 1;
     std::size_t appended = 0;
     const bool renderRows = !uiController.isRoot() &&
         uiController.page() == 2 &&
@@ -6546,6 +6564,10 @@ void serviceSpectrumWaterfallCadence() {
         nextSpectrumWaterfallRowUs +=
             SpectrumViewport::kWaterfallRowPeriodUs;
         ++appended;
+    }
+    if (nextSpectrumWaterfallRowUs <= nowUs) {
+        nextSpectrumWaterfallRowUs =
+            nowUs + SpectrumViewport::kWaterfallRowPeriodUs;
     }
     if (renderRows) display.endWrite();
 }
@@ -12834,7 +12856,10 @@ void emitNrf24SpectrumReport(Stream& reply) {
         "\"waterfall_rows_emitted\":%lu,"
         "\"state\":\"%s\",\"status\":\"%s\","
         "\"range_mhz\":[2402,2484],\"channels\":%u,\"dwell_us\":%u,"
-        "\"modules\":%u,\"sweeps\":%lu,\"total_hits\":%llu,"
+        "\"modules\":%u,\"active_slot_mask\":%u,"
+        "\"all_available_antennas\":true,"
+        "\"slot3_receive_enabled\":%s,"
+        "\"sweeps\":%lu,\"total_hits\":%llu,"
         "\"active_bins\":%u,\"peak_channel\":%u,\"peak_mhz\":%u,"
         "\"rx_only\":%s,\"volatile\":true,\"adapter_active\":%s,"
         "\"profile_declared\":%s,\"nrf_slot3_gated\":%s,"
@@ -12864,6 +12889,8 @@ void emitNrf24SpectrumReport(Stream& reply) {
         static_cast<unsigned>(
             leshy1::drivers::radio::defaultNrf24PassiveSpectrumPlan().dwellUs),
         static_cast<unsigned>(nrf24SpectrumController.modules()),
+        static_cast<unsigned>(report.activeSlotMask),
+        (report.activeSlotMask & 0x04U) != 0 ? "true" : "false",
         static_cast<unsigned long>(nrf24SpectrumController.sweeps()),
         static_cast<unsigned long long>(nrf24SpectrumController.totalHits()),
         static_cast<unsigned>(nrf24SpectrumController.activeBins()),

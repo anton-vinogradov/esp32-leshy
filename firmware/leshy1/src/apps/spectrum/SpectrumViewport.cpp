@@ -23,16 +23,9 @@ bool SpectrumViewport::reset(std::size_t bins) {
 bool SpectrumViewport::push(const std::uint8_t* intensity,
                             std::size_t bins) {
     if (intensity == nullptr || bins == 0 || bins != binCount_) return false;
-    const std::size_t offset = nextRow_ * kPackedRowBytes;
-    for (std::size_t byte = 0; byte < kPackedRowBytes; ++byte) {
-        history_[offset + byte] = 0;
-    }
+    const std::size_t offset = nextRow_ * kRowBytes;
     for (std::size_t column = 0; column < kDisplayColumns; ++column) {
-        const std::uint8_t packed =
-            static_cast<std::uint8_t>(resample(intensity, bins, column) >> 4U);
-        std::uint8_t& destination = history_[offset + column / 2U];
-        destination = static_cast<std::uint8_t>(
-            destination | (column % 2U == 0 ? packed : packed << 4U));
+        history_[offset + column] = resample(intensity, bins, column);
     }
     nextRow_ = (nextRow_ + 1U) % kHistoryRows;
     if (rowsStored_ < kHistoryRows) ++rowsStored_;
@@ -60,16 +53,8 @@ std::uint8_t SpectrumViewport::resample(const std::uint8_t* intensity,
         column >= kDisplayColumns) {
         return 0;
     }
-    if (bins == 1) return intensity[0];
-    const std::size_t span = kDisplayColumns - 1U;
-    const std::size_t position = column * (bins - 1U);
-    const std::size_t left = position / span;
-    const std::size_t remainder = position % span;
-    const std::size_t right = left + (left + 1U < bins ? 1U : 0U);
-    const std::uint32_t blended =
-        static_cast<std::uint32_t>(intensity[left]) * (span - remainder) +
-        static_cast<std::uint32_t>(intensity[right]) * remainder;
-    return static_cast<std::uint8_t>((blended + span / 2U) / span);
+    const std::size_t source = column * bins / kDisplayColumns;
+    return intensity[source < bins ? source : bins - 1U];
 }
 
 std::size_t SpectrumViewport::latestRow() const {
@@ -85,11 +70,7 @@ bool SpectrumViewport::rowValid(std::size_t row) const {
 std::uint8_t SpectrumViewport::intensity(std::size_t row,
                                          std::size_t column) const {
     if (!rowValid(row) || column >= kDisplayColumns) return 0;
-    const std::uint8_t packed =
-        history_[row * kPackedRowBytes + column / 2U];
-    const std::uint8_t nibble = static_cast<std::uint8_t>(
-        column % 2U == 0 ? packed & 0x0FU : packed >> 4U);
-    return static_cast<std::uint8_t>(nibble * 17U);
+    return history_[row * kRowBytes + column];
 }
 
 }  // namespace leshy1::apps::spectrum

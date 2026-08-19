@@ -6,8 +6,9 @@
 
 namespace leshy1::platform::arduino {
 
-// Explicit user-started receive-only nRF24 spectrum adapter. Slot 3 stays gated,
-// every CE-high interval follows a verified PWR_UP|PRIM_RX configuration, and
+// Explicit user-started receive-only nRF24 spectrum adapter. Every populated
+// slot is auto-detected when the board profile excludes an IR extension on the
+// shared GPIO21 line. Every CE-high interval follows verified PWR_UP|PRIM_RX;
 // no payload/TX opcode is exposed by this type.
 class BoardNrf24PassiveSpectrum final {
 public:
@@ -41,6 +42,7 @@ private:
     bool spiStarted_ = false;
     bool transactionOpen_ = false;
     bool active_ = false;
+    std::uint8_t activeSlots_[3] = {0, 0, 0};
 };
 
 }  // namespace leshy1::platform::arduino

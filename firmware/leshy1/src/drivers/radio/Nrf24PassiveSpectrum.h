@@ -15,7 +15,7 @@ struct Nrf24PassiveSpectrumPlan final {
     std::uint8_t firstChannel = kFirstChannel;
     std::uint8_t lastChannel = kLastChannel;
     std::uint16_t dwellUs = 200;
-    std::uint8_t maximumModules = 2;
+    std::uint8_t maximumModules = 3;
 };
 
 constexpr Nrf24PassiveSpectrumPlan defaultNrf24PassiveSpectrumPlan() {
@@ -60,6 +60,7 @@ struct Nrf24PassiveSpectrumReport final {
     bool rxOnly = true;
     bool cleanupComplete = true;
     std::uint8_t detectedModules = 0;
+    std::uint8_t activeSlotMask = 0;
     std::uint32_t sweeps = 0;
     std::uint32_t registerReads = 0;
     std::uint32_t registerWrites = 0;
