@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -50,6 +51,19 @@ def main() -> int:
         parser.error("--output must not exist")
     if len(args.source_commit) != 40:
         parser.error("--source-commit must be a full Git commit ID")
+    source_root = Path(__file__).resolve().parents[1]
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=source_root, check=True,
+        stdout=subprocess.PIPE, text=True
+    ).stdout.strip()
+    if args.source_commit != head:
+        parser.error(
+            f"--source-commit {args.source_commit} does not match HEAD {head}"
+        )
+    for diff_args in (["git", "diff", "--quiet"],
+                      ["git", "diff", "--cached", "--quiet"]):
+        if subprocess.run(diff_args, cwd=source_root, check=False).returncode != 0:
+            parser.error("tracked source changes must be committed before exact HIL")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -58,6 +72,7 @@ def main() -> int:
     shutil.copyfile(args.firmware, candidate)
     firmware_sha = sha256_file(candidate)
     app_identity = app_elf_sha256(candidate)
+    runner_sha = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
     expected_cid = args.expected_cid or ""
     failures: list[str] = []
     records: dict[str, Any] = {}
@@ -283,6 +298,7 @@ def main() -> int:
             "app_elf_sha256": app_identity,
             "version": args.expected_version,
             "source_commit": args.source_commit,
+            "runner_sha256": runner_sha,
             "flashed": args.flash,
         },
         "expected_cid": expected_cid,
