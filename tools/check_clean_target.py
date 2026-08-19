@@ -91,7 +91,7 @@ def main() -> int:
         if value not in config:
             errors.append(f"missing pinned clean-target setting: {value}")
 
-    if 'LESHY1_VERSION=\\"0.89.0-touch-storage-dma\\"' not in config:
+    if 'LESHY1_VERSION=\\"0.90.0-product-menu\\"' not in config:
         errors.append(
             "clean target does not identify the 0.89 touch/storage DMA corrective"
         )

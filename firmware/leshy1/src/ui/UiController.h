@@ -21,16 +21,20 @@ class UiController final {
 public:
     static constexpr std::uint8_t kRootPage = 0;
 
-    bool apply(UiAction action, std::uint8_t itemCount, bool selectedOpenable);
+    bool apply(UiAction action, std::uint8_t itemCount, bool selectedOpenable,
+               std::uint8_t selectedPage = kRootPage);
+    bool openChild(std::uint8_t page);
     void recordHandledAction(UiAction action);
 
     std::uint8_t page() const { return page_; }
+    std::uint8_t parentPage() const { return parentPage_; }
     std::uint8_t selection() const { return selection_; }
     std::uint32_t revision() const { return revision_; }
     bool isRoot() const { return page_ == kRootPage; }
 
 private:
     std::uint8_t page_ = kRootPage;
+    std::uint8_t parentPage_ = kRootPage;
     std::uint8_t selection_ = 0;
     std::uint32_t revision_ = 0;
 };

@@ -1186,7 +1186,7 @@ void testPhysicalAndDiagnosticActionsShareNavigation() {
     CHECK(!controller.apply(uiActionFromName("select"), 3, false));
     CHECK(controller.isRoot());
     CHECK(controller.revision() == 2);
-    CHECK(controller.apply(uiActionFromName("select"), 3, true));
+    CHECK(controller.apply(uiActionFromName("select"), 3, true, 2));
     CHECK(controller.page() == 2);
     CHECK(std::strcmp(probePageName(controller.page()), "survey") == 0);
     CHECK(controller.apply(uiActionFromName("back"), 3, true));
@@ -1197,6 +1197,18 @@ void testPhysicalAndDiagnosticActionsShareNavigation() {
     CHECK(controller.revision() == 5);
     controller.recordHandledAction(UiAction::Unknown);
     CHECK(controller.revision() == 5);
+
+    UiController nested;
+    CHECK(nested.apply(UiAction::Select, 1, true, 9));
+    CHECK(nested.page() == 9);
+    CHECK(nested.openChild(5));
+    CHECK(nested.page() == 5);
+    CHECK(nested.parentPage() == 9);
+    CHECK(nested.apply(UiAction::Left, 1, true));
+    CHECK(nested.page() == 9);
+    CHECK(nested.parentPage() == UiController::kRootPage);
+    CHECK(nested.apply(UiAction::Back, 1, true));
+    CHECK(nested.isRoot());
 }
 
 void testPhysicalButtonFrontendDebouncesAndMapsEveryKey() {
@@ -1275,27 +1287,28 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     AppCatalog catalog;
     catalog.rebuild(constrained);
     CHECK(catalog.size() == 6);
-    CHECK(catalog.get(0) != nullptr && catalog.get(0)->enabled);
-    CHECK(std::strcmp(catalog.get(0)->id, "diagnostics") == 0);
+    CHECK(catalog.get(0) != nullptr && !catalog.get(0)->enabled);
+    CHECK(std::strcmp(catalog.get(0)->id, "survey") == 0);
+    CHECK(!catalog.get(0)->simulated);
+    CHECK(std::strcmp(catalog.get(0)->reason, "passive source unavailable") == 0);
     CHECK(catalog.get(1) != nullptr && !catalog.get(1)->enabled);
-    CHECK(!catalog.get(1)->simulated);
-    CHECK(std::strcmp(catalog.get(1)->reason, "passive source unavailable") == 0);
+    CHECK(std::strcmp(catalog.get(1)->id, "capture") == 0);
+    CHECK(catalog.get(1)->page == 4);
     CHECK(catalog.get(2) != nullptr && !catalog.get(2)->enabled);
     CHECK(std::strcmp(catalog.get(2)->reason, "storage unavailable") == 0);
-    CHECK(catalog.get(0)->resources == resourceMask(Resource::UiForeground));
+    CHECK((catalog.get(0)->resources & resourceMask(Resource::EspRf)) != 0);
     CHECK((catalog.get(1)->resources & resourceMask(Resource::EspRf)) != 0);
     CHECK((catalog.get(2)->resources & resourceMask(Resource::Storage)) != 0);
     CHECK(catalog.get(3) != nullptr && !catalog.get(3)->enabled);
-    CHECK(std::strcmp(catalog.get(3)->id, "capture") == 0);
-    CHECK(catalog.get(3)->page == 4);
-    CHECK(catalog.get(4) != nullptr && catalog.get(4)->enabled);
-    CHECK(std::strcmp(catalog.get(4)->id, "language") == 0);
-    CHECK(catalog.get(4)->page == 5);
-    CHECK(catalog.get(4)->resources == resourceMask(Resource::UiForeground));
+    CHECK(std::strcmp(catalog.get(3)->id, "targets") == 0);
+    CHECK(catalog.get(3)->page == 7);
+    CHECK(catalog.get(4) != nullptr && !catalog.get(4)->enabled);
+    CHECK(std::strcmp(catalog.get(4)->id, "lab") == 0);
+    CHECK(catalog.get(4)->page == 8);
     CHECK(catalog.get(5) != nullptr && catalog.get(5)->enabled);
-    CHECK(std::strcmp(catalog.get(5)->id, "self-test") == 0);
-    CHECK(std::strcmp(catalog.get(5)->label, "SELF-TEST") == 0);
-    CHECK(catalog.get(5)->page == 6);
+    CHECK(std::strcmp(catalog.get(5)->id, "device") == 0);
+    CHECK(std::strcmp(catalog.get(5)->label, "DEVICE") == 0);
+    CHECK(catalog.get(5)->page == 9);
     CHECK(catalog.get(5)->resources == resourceMask(Resource::UiForeground));
 
     HardwareInventory availableInventory;
@@ -1310,8 +1323,8 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(catalog.get(0)->enabled);
     CHECK(catalog.get(1)->enabled);
     CHECK(catalog.get(2)->enabled);
-    CHECK(catalog.get(3)->enabled);
-    CHECK((catalog.get(3)->resources & resourceMask(Resource::EspRf)) != 0);
+    CHECK(!catalog.get(3)->enabled);
+    CHECK((catalog.get(1)->resources & resourceMask(Resource::EspRf)) != 0);
 
     HardwareInventory simulatedInventory;
     CHECK(simulatedInventory.add(
@@ -1321,10 +1334,10 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(simulatedInventory.add(
         {"survey.simulated", CapabilityState::Available, "golden", "rf_off"}));
     catalog.rebuild(simulatedInventory);
-    CHECK(catalog.get(1)->enabled);
-    CHECK(catalog.get(1)->simulated);
-    CHECK(std::strcmp(catalog.get(1)->reason, "simulated / rf off") == 0);
-    CHECK(catalog.get(1)->resources == resourceMask(Resource::UiForeground));
+    CHECK(catalog.get(0)->enabled);
+    CHECK(catalog.get(0)->simulated);
+    CHECK(std::strcmp(catalog.get(0)->reason, "simulated / rf off") == 0);
+    CHECK(catalog.get(0)->resources == resourceMask(Resource::UiForeground));
 
     HardwareInventory persistentSurveyInventory;
     CHECK(persistentSurveyInventory.add(
@@ -1337,11 +1350,11 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
         {"survey.persistent_passive", CapabilityState::Available,
          "product_catalog", "exact_media"}));
     catalog.rebuild(persistentSurveyInventory);
-    CHECK(catalog.get(1)->enabled);
-    CHECK(!catalog.get(1)->simulated);
-    CHECK(std::strcmp(catalog.get(1)->reason,
+    CHECK(catalog.get(0)->enabled);
+    CHECK(!catalog.get(0)->simulated);
+    CHECK(std::strcmp(catalog.get(0)->reason,
                       "passive / persistent") == 0);
-    CHECK(catalog.get(1)->resources ==
+    CHECK(catalog.get(0)->resources ==
           (resourceMask(Resource::UiForeground) |
            resourceMask(Resource::EspRf) |
            resourceMask(Resource::Storage) |
@@ -1371,8 +1384,8 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(!catalog.get(2)->simulated);
     CHECK(std::strcmp(catalog.get(2)->reason, "ready") == 0);
     CHECK((catalog.get(2)->resources & resourceMask(Resource::Storage)) != 0);
-    CHECK(!catalog.get(3)->enabled);
-    CHECK(catalog.get(4)->enabled);
+    CHECK(!catalog.get(1)->enabled);
+    CHECK(catalog.get(5)->enabled);
 }
 
 void testRuntimeAcquiresAtomicallyAndBackReleasesEverything() {

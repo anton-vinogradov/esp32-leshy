@@ -632,7 +632,6 @@ def main() -> int:
                 ))
                 before_generation = int(before_recovery.get("generation", 0))
                 if not failures:
-                    trace.append(action(device, "down"))
                     setup = action(device, "select")
                     trace.append(setup)
                     failures.extend(setup_failures(setup))

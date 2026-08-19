@@ -4,7 +4,8 @@
 
 namespace leshy1::ui {
 
-bool UiController::apply(UiAction action, std::uint8_t itemCount, bool selectedOpenable) {
+bool UiController::apply(UiAction action, std::uint8_t itemCount,
+                         bool selectedOpenable, std::uint8_t selectedPage) {
     bool changed = false;
     if (isRoot()) {
         if (action == UiAction::Up && selection_ > 0) {
@@ -15,16 +16,28 @@ bool UiController::apply(UiAction action, std::uint8_t itemCount, bool selectedO
             changed = true;
         } else if ((action == UiAction::Select || action == UiAction::Right) &&
                    itemCount > 0 && selection_ < itemCount && selectedOpenable) {
-            page_ = static_cast<std::uint8_t>(selection_ + 1);
+            page_ = selectedPage == kRootPage
+                ? static_cast<std::uint8_t>(selection_ + 1)
+                : selectedPage;
+            parentPage_ = kRootPage;
             changed = true;
         }
     } else if (action == UiAction::Back || action == UiAction::Left) {
-        page_ = kRootPage;
+        page_ = parentPage_;
+        parentPage_ = kRootPage;
         changed = true;
     }
 
     if (action != UiAction::Unknown) ++revision_;
     return changed;
+}
+
+bool UiController::openChild(std::uint8_t page) {
+    if (isRoot() || page == kRootPage || parentPage_ != kRootPage) return false;
+    parentPage_ = page_;
+    page_ = page;
+    ++revision_;
+    return true;
 }
 
 void UiController::recordHandledAction(UiAction action) {
@@ -64,6 +77,10 @@ const char* probePageName(std::uint8_t page) {
         case 4: return "capture";
         case 5: return "language";
         case 6: return "self_test";
+        case 7: return "targets";
+        case 8: return "lab";
+        case 9: return "device";
+        case 10: return "about";
         default: return "unknown";
     }
 }

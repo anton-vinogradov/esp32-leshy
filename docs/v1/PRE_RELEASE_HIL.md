@@ -57,7 +57,7 @@ bypasses do not. Destructive storage/power-cut/radio HIL uses a separate diagnos
 image or external equipment; its evidence complements but never replaces smoke on
 the exact release bytes.
 
-The bottom-of-Home [Self-Test](SELF_TEST.md) is the user-facing client of this same
+The `Home → Device →` [Self-Test](SELF_TEST.md) app is the user-facing client of this same
 versioned check registry. Quick selects the bounded read-only subset; Full/Guided
 selects every applicable check after explicit preflight. The host runner invokes the
 same check IDs on exact release bytes, adds fixtures and endurance where authorized,

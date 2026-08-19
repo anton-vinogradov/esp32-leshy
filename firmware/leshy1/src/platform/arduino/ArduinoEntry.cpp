@@ -296,6 +296,10 @@ bool touchCalibrationSucceededAtBoot = false;
 UiController uiController;
 LanguageController languageController;
 SelfTestController selfTestController;
+constexpr std::uint8_t kDevicePage = 9;
+constexpr std::uint8_t kAboutPage = 10;
+constexpr std::uint8_t kDeviceItemCount = 4;
+std::uint8_t deviceSelection = 0;
 ShieldReceiverProbeReport shieldReceiverProbeReport;
 Nrf24SpectrumController nrf24SpectrumController;
 Nrf24PassiveSpectrumReport nrf24SpectrumReport;
@@ -4174,6 +4178,7 @@ NavigationFooter navigationFooterForCurrentState() {
         }
         return {{NavigationKey::Left, UiTextId::NavModes}, {}, {}};
     }
+    if (uiController.page() == kDevicePage) return {back, choose, enter};
     return {back, {}, {}};
 }
 
@@ -4328,12 +4333,12 @@ void renderStateCard(const char* state, const char* detail, Tone tone,
 }
 
 UiTextId homeLabel(const AppMenuItem& item) {
-    if (std::strcmp(item.id, "diagnostics") == 0) return UiTextId::AppDiagnostics;
     if (std::strcmp(item.id, "survey") == 0) return UiTextId::AppSurvey;
     if (std::strcmp(item.id, "library") == 0) return UiTextId::AppLibrary;
     if (std::strcmp(item.id, "capture") == 0) return UiTextId::AppCapture;
-    if (std::strcmp(item.id, "language") == 0) return UiTextId::AppLanguage;
-    return UiTextId::AppSelfTest;
+    if (std::strcmp(item.id, "targets") == 0) return UiTextId::AppTargets;
+    if (std::strcmp(item.id, "lab") == 0) return UiTextId::AppLab;
+    return UiTextId::AppDevice;
 }
 
 UiTextId homeNote(const AppMenuItem& item) {
@@ -4352,8 +4357,9 @@ UiTextId homeNote(const AppMenuItem& item) {
         return item.enabled ? UiTextId::NoteCaptureReady
                             : UiTextId::NoteCaptureUnavailable;
     }
-    if (std::strcmp(item.id, "language") == 0) return UiTextId::NoteLanguage;
-    if (std::strcmp(item.id, "self-test") == 0) return UiTextId::NoteSelfTest;
+    if (std::strcmp(item.id, "targets") == 0) return UiTextId::NoteTargetsPlanned;
+    if (std::strcmp(item.id, "lab") == 0) return UiTextId::NoteLabPlanned;
+    if (std::strcmp(item.id, "device") == 0) return UiTextId::NoteDevice;
     return UiTextId::Ready;
 }
 
@@ -4387,6 +4393,69 @@ void renderHome(bool clearContent) {
     for (std::uint8_t i = first; i < end; ++i) {
         renderHomeRow(i, first);
     }
+}
+
+std::uint8_t deviceFirstVisible(std::uint8_t selection) {
+    return selection < kVisibleHomeRows
+               ? 0U
+               : static_cast<std::uint8_t>(selection -
+                                           (kVisibleHomeRows - 1U));
+}
+
+UiTextId deviceLabel(std::uint8_t index) {
+    switch (index) {
+        case 0: return UiTextId::DeviceSettings;
+        case 1: return UiTextId::AppSelfTest;
+        case 2: return UiTextId::AppDiagnostics;
+        default: return UiTextId::DeviceAbout;
+    }
+}
+
+UiTextId deviceNote(std::uint8_t index) {
+    switch (index) {
+        case 0: return UiTextId::DeviceSettingsNote;
+        case 1: return UiTextId::NoteSelfTest;
+        case 2: return UiTextId::DeviceDiagnosticsNote;
+        default: return UiTextId::DeviceAboutNote;
+    }
+}
+
+void renderDeviceRow(std::uint8_t index, std::uint8_t firstVisible) {
+    if (index < firstVisible ||
+        index >= firstVisible + kVisibleHomeRows ||
+        index >= kDeviceItemCount) return;
+    const Rect bounds = Components::homeRow(
+        static_cast<std::uint8_t>(index - firstVisible));
+    renderMenuRow(bounds, tr(deviceLabel(index)), tr(deviceNote(index)),
+                  deviceSelection == index, true, Tone::Positive);
+}
+
+void renderDevicePage(bool clearContent) {
+    renderHeader(tr(UiTextId::DeviceTitle), clearContent);
+    const std::uint8_t first = deviceFirstVisible(deviceSelection);
+    const std::uint8_t end = static_cast<std::uint8_t>(
+        kDeviceItemCount < first + kVisibleHomeRows
+            ? kDeviceItemCount : first + kVisibleHomeRows);
+    for (std::uint8_t index = first; index < end; ++index) {
+        renderDeviceRow(index, first);
+    }
+}
+
+void renderAboutPage(bool clearContent) {
+    renderHeader(tr(UiTextId::AboutTitle), clearContent);
+    char line[96] = {};
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    std::snprintf(line, sizeof(line), tr(UiTextId::AboutVersionFormat),
+                  LESHY1_VERSION);
+    setUiCursor(UiTextRole::Body, 14, 82);
+    display.print(line);
+    std::snprintf(line, sizeof(line), tr(UiTextId::AboutProfileFormat),
+                  BoardProfile::kId);
+    setUiCursor(UiTextRole::Body, 14, 116);
+    display.print(line);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 168);
+    display.print(tr(UiTextId::AboutOpenSource));
 }
 
 void runShieldReceiverSelfTestProbe() {
@@ -5626,6 +5695,7 @@ struct UiRenderSnapshot final {
     bool valid = false;
     std::uint8_t page = 0;
     std::uint8_t rootSelection = 0;
+    std::uint8_t deviceSelection = 0;
     std::uint8_t languageSelection = 0;
     std::uint8_t selfTestView = 0;
     std::uint8_t selfTestSelection = 0;
@@ -5654,6 +5724,7 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         true,
         uiController.page(),
         uiController.selection(),
+        deviceSelection,
         languageController.selection(),
         static_cast<std::uint8_t>(selfTestController.view()),
         selfTestController.selection(),
@@ -5691,6 +5762,20 @@ bool renderSelectionDelta() {
         }
         renderHomeRow(renderedUi.rootSelection, currentFirst);
         renderHomeRow(current, currentFirst);
+        return true;
+    }
+
+    if (uiController.page() == kDevicePage) {
+        if (renderedUi.deviceSelection == deviceSelection) return false;
+        const std::uint8_t oldFirst =
+            deviceFirstVisible(renderedUi.deviceSelection);
+        const std::uint8_t currentFirst = deviceFirstVisible(deviceSelection);
+        if (oldFirst != currentFirst) {
+            renderDevicePage(false);
+            return true;
+        }
+        renderDeviceRow(renderedUi.deviceSelection, currentFirst);
+        renderDeviceRow(deviceSelection, currentFirst);
         return true;
     }
 
@@ -5840,8 +5925,12 @@ void renderInteractiveScreen(bool clearContent) {
             renderCapturePage(clearContent);
         } else if (uiController.page() == 5) {
             renderLanguagePage(clearContent);
-        } else {
+        } else if (uiController.page() == 6) {
             renderSelfTestPage(clearContent);
+        } else if (uiController.page() == kDevicePage) {
+            renderDevicePage(clearContent);
+        } else {
+            renderAboutPage(clearContent);
         }
         const Rect divider = Components::footerDivider();
         display.drawFastHLine(divider.x, divider.y, divider.width,
@@ -6865,6 +6954,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     std::snprintf(line, sizeof(line),
                   "{\"schema\":\"leshy.ui.v1\",\"kind\":\"state\","
                   "\"action\":\"%s\",\"changed\":%s,\"page\":\"%s\","
+                  "\"parent_page\":\"%s\",\"device_selection\":%u,"
                   "\"selection\":%u,\"selected_id\":\"%s\","
                   "\"selected_enabled\":%s,\"reason\":\"%s\","
                   "\"language\":\"%s\",\"language_selection\":%u,"
@@ -6872,6 +6962,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "\"render_us\":%llu}",
                   leshy1::ui::uiActionName(action), changed ? "true" : "false",
                   leshy1::ui::probePageName(uiController.page()),
+                  leshy1::ui::probePageName(uiController.parentPage()),
+                  static_cast<unsigned>(deviceSelection),
                   static_cast<unsigned>(uiController.selection()),
                   selected == nullptr ? "none" : selected->id,
                   selected != nullptr && selected->enabled ? "true" : "false",
@@ -7381,6 +7473,7 @@ bool selectionCanRepaintInPlace(UiAction action) {
         return libraryController.view() == LibraryView::SessionList;
     }
     if (uiController.page() == 5) return true;
+    if (uiController.page() == kDevicePage) return true;
     return uiController.page() == 6 &&
            selfTestController.view() == SelfTestView::ModeMenu;
 }
@@ -7726,6 +7819,35 @@ bool applyUiAction(UiAction action, bool render = true) {
             nextCaptureUiRefreshUs = 0;
         }
     }
+    if (!wasRoot && uiController.page() == kDevicePage) {
+        bool handled = false;
+        bool changed = false;
+        if (action == UiAction::Up && deviceSelection > 0) {
+            handled = true;
+            --deviceSelection;
+            changed = true;
+        } else if (action == UiAction::Down &&
+                   deviceSelection + 1U < kDeviceItemCount) {
+            handled = true;
+            ++deviceSelection;
+            changed = true;
+        } else if (action == UiAction::Select || action == UiAction::Right) {
+            handled = true;
+            constexpr std::uint8_t pages[kDeviceItemCount] = {
+                5, 6, 1, kAboutPage,
+            };
+            changed = uiController.openChild(pages[deviceSelection]);
+            if (changed && deviceSelection == 0) languageController.enter();
+            lastRuntimeEvent = changed ? "device_item_opened"
+                                       : "device_item_rejected";
+        }
+        if (handled) {
+            if (action == UiAction::Up || action == UiAction::Down) {
+                uiController.recordHandledAction(action);
+            }
+            return finish(changed);
+        }
+    }
     if (!wasRoot && uiController.page() == 5) {
         bool handled = false;
         bool changed = false;
@@ -7826,6 +7948,10 @@ bool applyUiAction(UiAction action, bool render = true) {
             languageController.enter();
         }
         if (openable && selected != nullptr &&
+            std::strcmp(selected->id, "device") == 0) {
+            deviceSelection = 0;
+        }
+        if (openable && selected != nullptr &&
             std::strcmp(selected->id, "capture") == 0) {
             wifiFrameCapture.reset();
             capturePersistState = CapturePersistState::Result;
@@ -7864,7 +7990,8 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
     }
     const bool changed = uiController.apply(
-        action, static_cast<std::uint8_t>(appCatalog.size()), openable);
+        action, static_cast<std::uint8_t>(appCatalog.size()), openable,
+        selected == nullptr ? UiController::kRootPage : selected->page);
     if (wantsLaunch && launchStatus == LaunchStatus::Started && !changed) {
         appRuntime.stop();
         lastRuntimeEvent = "launch_rolled_back";
@@ -7919,6 +8046,14 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
         return {leshy1::ui::hitTouchTarget(
                     TouchTargetLayout::TwoChoices, point),
                 languageController.selection()};
+    }
+    if (uiController.page() == kDevicePage) {
+        const std::uint8_t first = deviceFirstVisible(deviceSelection);
+        return {
+            leshy1::ui::hitTouchTarget(
+                TouchTargetLayout::HomeRows, point, first, kDeviceItemCount),
+            deviceSelection,
+        };
     }
     if (uiController.page() == 6 &&
         selfTestController.view() == SelfTestView::ModeMenu) {

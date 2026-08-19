@@ -73,7 +73,7 @@ companion дополняет экран устройства, но не явля
 | PR-006 | Сохранённую Session можно открыть офлайн после reboot | Список, детали и исходные capture доступны без активного радио | P0 |
 | PR-007 | Есть экспорт переносимых данных | PCAP для совместимых сетевых захватов; JSON/CSV summary; совместимые IR/NFC/Sub-GHz форматы где возможно | P0/P1 |
 | PR-008 | Target хранит историю, заметки, теги и связи identity | Merge/split обратимы; автоматическое объединение показывает confidence и признаки | P1 |
-| PR-009 | Явное приложение Self-Test проверяет ресурсы, firmware workflows и установленное hardware | Последний пункт Home предлагает read-only Quick и scoped Full/Guided; оба режима используют те же versioned checks, что release HIL, честно показывают `not_applicable/blocked`, оставляют zero leases и сохраняют экспортируемый отчёт; при boot Self-Test автоматически не запускается | P0 |
+| PR-009 | Явное приложение Self-Test проверяет ресурсы, firmware workflows и установленное hardware | Home→Устройство→Самопроверка предлагает read-only Quick и scoped Full/Guided; оба режима используют те же versioned checks, что release HIL, честно показывают `not_applicable/blocked`, оставляют zero leases и сохраняют экспортируемый отчёт; при boot Self-Test автоматически не запускается | P0 |
 | PR-010 | Установка, update и recovery документированы | Browser install, stable/beta OTA, проверка подписи, rollback и recovery проходят HIL | P0 |
 | PR-011 | Базовые сценарии работают на EN/RU | Переключение языка не требует другой сборки и не обрезает критические сообщения | P1 |
 | PR-012 | Локальный companion использует те же Actions и schema | Просмотр/экспорт не требует облака; права не шире, чем у локальной сессии | P1 |

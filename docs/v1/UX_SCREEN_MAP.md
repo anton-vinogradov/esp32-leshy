@@ -7,14 +7,20 @@ S2 on the real TFT; this map already binds task structure and Back/Stop behavior
 
 ## Global shell
 
-`UX-S01 Home` exposes six jobs rather than a radio-module list, followed by direct
-Language access and the always-addressable Self-Test utility as the final item:
+`UX-S01 Home` exposes six product domains rather than a radio-module or service list.
+The final `Device` domain contains settings, checks and system information:
 
 ```text
-Survey      Targets     Capture
-Lab         Library     Device
-LANGUAGE
-SELF-TEST   (QUICK / FULL-GUIDED)
+Survey
+Capture
+Library
+Targets       (planned until S6)
+Lab           (planned until S7)
+Device
+  Settings
+  Self-Test   (Quick / Full-Guided)
+  Diagnostics
+  About
 ```
 
 Every screen retains context title, storage/power state, active Session or TX,
@@ -52,16 +58,13 @@ UX-S01 Home
 │  ├─ UX-S15 Sessions / Captures / Exports / Screenshots
 │  ├─ UX-S16 Item Detail: integrity, provenance, source/derived data
 │  └─ UX-S17 Import / Export / Compare / Open in Lab
-├─ Device
-   ├─ UX-S23 Device Dashboard
-   ├─ UX-S24 Diagnostics / Capability / Module Detail / Report
-   ├─ UX-S25 Language / Display / Input / Feedback / Connectivity
-   ├─ UX-S26 Storage / Backup-Restore / Factory Reset
-   └─ UX-S27 Install / Update / Rollback / Recovery / About
-├─ Language → UX-S25 language context
-└─ Self-Test → UX-S24 test context
-   ├─ Quick: bounded read-only automatic plan
-   └─ Full / Guided: scoped preflight → applicable checks → report
+└─ Device
+   ├─ Settings → UX-S25 Language / Display / Input / Feedback / Connectivity
+   ├─ Self-Test → UX-S24 test context
+   │  ├─ Quick: bounded read-only automatic plan
+   │  └─ Full / Guided: scoped preflight → applicable checks → report
+   ├─ Diagnostics → UX-S24 Capability / Module Detail / Report
+   └─ About → UX-S27 Version / Profile / Update / Rollback / Recovery
 
 UX-S28 Global dialog layer: unavailable reason, progress, confirm, error, panic.
 ```
@@ -100,14 +103,14 @@ ordinary Back traverses the stack.
 | Lab | CAP-032…CAP-037 | accepts only a saved immutable Capture; Result links back to source |
 | Library | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import never bypasses parsers |
 | Device | CAP-001…CAP-008, CAP-045…CAP-047 | Diagnostics explains unavailability before task entry |
-| Language | PR-011, NFR-010 | direct EN/RU switch; immediate application and persistent selection |
-| Self-Test | CAP-001…CAP-047 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
+| Device → Settings | PR-011, NFR-010 | EN/RU switch; immediate application and persistent selection |
+| Device → Self-Test | CAP-001…CAP-047 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
 
 ## UX-01 acceptance
 
 - Every `CAP-001…CAP-047` has one primary owner and a measurable
   entry → success/error/cancel → Back path.
-- WF-01 uses Home→Self-Test/UX-S23/S24; WF-02 uses UX-S02…S05; WF-03 uses UX-S15…S17;
+- WF-01 uses Home→Device→Self-Test/Diagnostics; WF-02 uses UX-S02…S05; WF-03 uses UX-S15…S17;
   WF-04 uses UX-S06…S10; WF-05 uses UX-S18…S22.
 - A primary task starts within four transitions from Home; receivers remain
   filters/parameters rather than top-level IA.

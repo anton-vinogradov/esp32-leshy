@@ -7,7 +7,7 @@ capabilities S3/S4, conditional identity check RF shield и первый active 
 RF execution физически приняты; остальные workflows Full/Guided продолжаются через
 S4…S8**.
 
-Self-Test — отдельное приложение в самом низу Home. Оно никогда не перехватывает
+Self-Test — отдельное приложение внутри последнего пункта Home `Устройство`. Оно никогда не перехватывает
 обычную загрузку. Один test engine используется владельцем устройства, полным
 guided-прогоном и release HIL station; меняются invoker и доступные fixtures, но не
 смысл проверки.
@@ -16,9 +16,10 @@ guided-прогоном и release HIL station; меняются invoker и до
 
 ```text
 Home
-└─ SELF-TEST
-   ├─ QUICK
-   └─ FULL / GUIDED
+└─ УСТРОЙСТВО
+   └─ САМОПРОВЕРКА
+      ├─ QUICK
+      └─ FULL / GUIDED
 ```
 
 | Режим | Цель | Side effects по умолчанию | Завершение |
@@ -258,8 +259,8 @@ Full/Guided plan-v7 остаётся принятой по exact 0.87; focused c
 
 ## Приёмка
 
-1. `SELF-TEST` доступен штатными кнопками последним пунктом Home; serial-only Action
-   не требуется.
+1. `SELF-TEST` доступен штатными кнопками через последний пункт Home `УСТРОЙСТВО`;
+   serial-only Action не требуется.
 2. Quick — read-only, bounded, cancellable, без TX и с zero final leases.
 3. Full показывает scope до side effects, покрывает все применимые capability checks
    и честно фиксирует `not_applicable/blocked`.

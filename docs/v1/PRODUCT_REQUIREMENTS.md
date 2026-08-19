@@ -49,7 +49,7 @@ phone, account, or internet connection.
 | PR-006 | Reopen a Session offline after reboot | Lists, details, and source captures work with radios inactive | P0 |
 | PR-007 | Export portable data | PCAP where compatible, JSON/CSV summaries, and compatible IR/NFC/Sub-GHz formats where feasible | P0/P1 |
 | PR-008 | Preserve Target history, notes, tags, and identity links | Merge/split is reversible; automatic links expose confidence/evidence | P1 |
-| PR-009 | Diagnose resources, firmware workflows, and installed hardware through an explicit Self-Test app | The last Home item offers read-only Quick and scoped Full/Guided modes; both use the same versioned checks as release HIL, report `not_applicable/blocked` honestly, leave zero leases, and save an exportable report; no Self-Test runs automatically at boot | P0 |
+| PR-009 | Diagnose resources, firmware workflows, and installed hardware through an explicit Self-Test app | Home→Device→Self-Test offers read-only Quick and scoped Full/Guided modes; both use the same versioned checks as release HIL, report `not_applicable/blocked` honestly, leave zero leases, and save an exportable report; no Self-Test runs automatically at boot | P0 |
 | PR-010 | Document install, update, and recovery | Browser install, signed stable/beta OTA, rollback, and recovery pass HIL | P0 |
 | PR-011 | Provide the core experience in EN/RU | One build switches language without truncating critical copy | P1 |
 | PR-012 | Use the same Actions/schema in the local companion | Offline viewing/export; permissions are no broader than the local session | P1 |

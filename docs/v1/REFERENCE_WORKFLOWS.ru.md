@@ -46,7 +46,7 @@
 3. Каждая capability имеет `declared`, `detected`, `available`, `conflicted`, `fault`
    или `unknown`, evidence и причину.
 4. Меню разрешает только совместимые действия; diagnostic report экспортируется.
-5. Последний пункт Home открывает Self-Test: Quick выполняет безопасный read-only
+5. Последний пункт Home открывает Устройство, затем Self-Test: Quick выполняет безопасный read-only
    plan, а Full/Guided до старта показывает applicable checks/fixtures/side effects.
 
 **Error path:** неоднозначная GPIO5/6 или GPIO14/21 assembly остаётся `conflicted`

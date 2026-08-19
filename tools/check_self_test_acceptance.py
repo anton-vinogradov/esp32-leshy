@@ -203,11 +203,14 @@ def main() -> int:
     for forbidden in ("WiFi", "SD.", "digitalWrite", "tone(", "SPI.begin"):
         require(failures, forbidden not in source, f"Self-Test starts forbidden path: {forbidden}")
     require(failures, "kCapacity = 6" in CATALOG_HEADER.read_text(encoding="utf-8") and
-            '"self-test", "SELF-TEST"' in catalog and
-            catalog.index('"self-test", "SELF-TEST"') > catalog.index('"language", "LANGUAGE"'),
-            "Self-Test is not the final catalog item")
-    require(failures, 'case 6: return "self_test"' in
-            UI_CONTROLLER.read_text(encoding="utf-8"), "Self-Test page mapping missing")
+            '"device", "DEVICE"' in catalog and
+            '"self-test", "SELF-TEST"' not in catalog and
+            "uiController.openChild" in ui,
+            "Self-Test is not nested under the final Device catalog item")
+    controller_source = UI_CONTROLLER.read_text(encoding="utf-8")
+    require(failures, 'case 6: return "self_test"' in controller_source and
+            'case 9: return "device"' in controller_source,
+            "nested Device/Self-Test page mapping missing")
     diagnostic_workspace = re.search(r"char diagnosticJson\[(\d+)\] = \{\};", ui)
     shared_workspace = re.search(
         r"struct SdPhysicalEvidenceWorkspace final \{.*?"

@@ -17,9 +17,9 @@ Stage Demo.
 
 До закрытия S1 согласуются:
 
-- информационная архитектура `Обзор / Цели / Захват / Лаборатория / Библиотека /
-  Устройство`, прямой доступ к `Язык` и постоянный utility-пункт `Self-Test` в
-  самом низу Home;
+- product-first архитектура `Обзор / Захват / Библиотека / Цели / Лаборатория /
+  Устройство`; служебные функции находятся под последним пунктом `Устройство` как
+  `Настройки / Самопроверка / Диагностика / О системе`, а не конкурируют на Home;
 - основные пути J-01…J-06 и место каждого `CAP-*`;
 - единая семантика Start/Stop, Select, Back, confirm, cancel и panic;
 - обязательные состояния каждого пути: unavailable, empty, loading, running,
@@ -48,8 +48,8 @@ Stage Demo.
 baseline, TFT evidence и затронутых acceptance tests.
 
 Self-Test следует отдельному [product contract](SELF_TEST.ru.md): явные Quick и
-Full/Guided используют обычные Actions и компоненты. Это не boot screen, не скрытое
-service menu и не release-only serial path.
+Full/Guided используют обычные Actions и компоненты. Это второй видимый пункт внутри
+`Устройство`, а не boot screen, скрытое service menu или release-only serial path.
 
 ## Обязательные артефакты baseline
 
@@ -99,7 +99,7 @@ native tests, поэтому экран не может незаметно за�
 | Компонент | Геометрия/роль | Текущее переиспользование |
 |---|---|---|
 | Header + title | brand anchor 240×42; title region 216 px | Home и все Self-Test views |
-| Home row | 216×46; три finger-sized строки образуют прокручиваемое visible window над footer | capability Home, Язык и последний Self-Test item |
+| Home row | 216×46; три finger-sized строки образуют прокручиваемое visible window над footer | Home из шести доменов и меню «Устройство» из четырёх пунктов |
 | Choice row | 216×46; до трёх finger-sized choices помещаются над footer | Quick / Full-Guided, Язык, Survey plan/source/filter |
 | Metric row | пять result slots 216×28 | Full preflight и Quick/Full result |
 | Footer divider | фиксирован на y=236 | каждый interactive screen |
@@ -120,8 +120,8 @@ Home rows 28 px на visible window из трёх строк 46 px и станд
 ## UX-05 — размещение EN/RU
 
 `ui/UiStrings.def` — единый allocation-free каталог всех текущих строк S2 renderer,
-кроме неизменяемого бренда `LESHY 1.x`. Сейчас он задаёт 123 стабильных ID, варианты
-EN и RU (всего 246 строк) и пиксельный budget каждого места использования. Exact
+кроме неизменяемого бренда `LESHY 1.x`. Сейчас он задаёт 134 стабильных ID, варианты
+EN и RU (всего 268 строк) и пиксельный budget каждого места использования. Exact
 0.63 измерил прежний каталог prose-footer из 127 ID; 0.64 заменяет его 19 context
 sentences на 15 компактных labels пространственных actions.
 `tools/generate_ui_gfx_font.py` воспроизводимо генерирует faces, а
@@ -132,8 +132,8 @@ user-facing literals.
 Оба языка теперь используют официальный vendored variable source Roboto Condensed с
 лицензией OFL и pinned SHA-256. Генератор выбирает named instance Medium (weight 500)
 и создаёт body 16 px и metadata 12 px для нужного ASCII/Cyrillic range без
-runtime-загрузки шрифта или heap allocation. `Язык` — предпоследний пункт Home,
-выбор EN/RU применяется сразу и сохраняется в NVS namespace `leshy1-ui`, key
+runtime-загрузки шрифта или heap allocation. `Устройство → Настройки` открывает
+`Язык`; выбор EN/RU применяется сразу и сохраняется в NVS namespace `leshy1-ui`, key
 `lang.v1`; команда `ui.language en|ru` проходит через ту же controller boundary,
 что и экран. Прежний source PT Sans Narrow и exact evidence 0.55 остаются historical
 provenance, а не текущим face.

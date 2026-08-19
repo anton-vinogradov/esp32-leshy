@@ -16,9 +16,9 @@ becomes an implementation constraint. It does not replace the
 
 Before S1 closes, the project agrees:
 
-- the `Survey / Targets / Capture / Lab / Library / Device` information
-  architecture plus direct `Language` access and a persistent bottom-of-Home
-  `Self-Test` utility entry;
+- the product-first `Survey / Capture / Library / Targets / Lab / Device`
+  information architecture; service functions live below the final `Device` entry
+  as `Settings / Self-Test / Diagnostics / About` rather than competing on Home;
 - primary J-01…J-06 paths and the home of every `CAP-*`;
 - common Start/Stop, Select, Back, confirm, cancel, and panic semantics;
 - mandatory path states: unavailable, empty, loading, running, partial/degraded,
@@ -47,8 +47,9 @@ After the gate, a base component or interaction-pattern change requires a baseli
 update, TFT evidence, and affected acceptance tests.
 
 Self-Test follows the dedicated [product contract](SELF_TEST.md): its explicit
-Quick and Full/Guided modes reuse ordinary Actions and components. It is not a boot
-screen, hidden service menu, or release-only serial path.
+Quick and Full/Guided modes reuse ordinary Actions and components. It is the second
+visible item under `Device`, not a boot screen, hidden service menu, or release-only
+serial path.
 
 ## Required baseline artifacts
 
@@ -98,7 +99,7 @@ tests, so a screen cannot silently move its content into the fixed footer.
 | Component | Geometry/role | Current reuse |
 |---|---|---|
 | Header + title | 240×42 brand anchor; 216 px title region | Home and every Self-Test view |
-| Home row | 216×46; three finger-sized rows form a scrolling visible window above the footer | capability Home, Language, and final Self-Test item |
+| Home row | 216×46; three finger-sized rows form a scrolling visible window above the footer | six-domain Home and the four-item Device menu |
 | Choice row | 216×46; up to three finger-sized choices fit above the footer | Quick / Full-Guided, Language, Survey plan/source/filter |
 | Metric row | five 216×28 result slots | Full preflight and Quick/Full result |
 | Footer divider | fixed at y=236 | every interactive screen |
@@ -119,8 +120,8 @@ physical-key legend, and physical Left remains the sole Back control.
 ## UX-05 EN/RU content fit
 
 `ui/UiStrings.def` is the single allocation-free catalog for every current S2
-renderer string except the invariant `LESHY 1.x` brand. It currently defines 123
-stable IDs, both EN and RU variants (246 strings total), and the pixel budget of
+renderer string except the invariant `LESHY 1.x` brand. It currently defines 134
+stable IDs, both EN and RU variants (268 strings total), and the pixel budget of
 every use. Exact 0.63 measured the former 127-ID prose-footer catalog; 0.64 replaces
 its 19 context sentences with 15 compact spatial-action labels.
 `tools/generate_ui_gfx_font.py` reproducibly generates the faces, while
@@ -131,8 +132,8 @@ reintroduce local user-facing literals.
 Both languages now use the official vendored OFL-licensed Roboto Condensed variable
 source pinned by SHA-256. Generation selects its Medium named instance (weight 500)
 and emits 16 px body plus 12 px metadata faces over the required ASCII and Cyrillic
-range without runtime font loading or heap allocation. `Language` is the next-to-last
-Home item, applies EN/RU immediately, and persists the selection in NVS namespace
+range without runtime font loading or heap allocation. `Device → Settings` opens
+Language, applies EN/RU immediately, and persists the selection in NVS namespace
 `leshy1-ui`, key `lang.v1`; `ui.language en|ru` exercises the same controller boundary
 used by the screen. The earlier PT Sans Narrow source and exact 0.55 evidence remain
 historical provenance, not the current face.

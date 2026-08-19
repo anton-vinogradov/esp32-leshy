@@ -12,12 +12,6 @@ bool available(const hardware::HardwareInventory& inventory, const char* key) {
 
 void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
     size_ = 0;
-    const bool diagnostics = available(inventory, "board.profile");
-    items_[size_++] = {"diagnostics", "DIAGNOSTICS",
-                       diagnostics ? "ready" : "board profile unavailable", 1, diagnostics,
-                       false,
-                       kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
-
     const bool persistentSurvey =
         available(inventory, "survey.persistent_passive");
     const bool wifiSurvey = available(inventory, "radio.wifi");
@@ -47,6 +41,15 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
                            : kernel::runtime::Resource::UiForeground |
                                  kernel::runtime::Resource::EspRf};
 
+    const bool frameCapture = available(inventory, "capture.wifi_passive");
+    items_[size_++] = {
+        "capture", "CAPTURE",
+        frameCapture ? "wifi frames / explicit sd save" : "passive capture unavailable",
+        4, frameCapture, false,
+        kernel::runtime::resourceMask(
+            kernel::runtime::Resource::UiForeground) |
+            kernel::runtime::resourceMask(kernel::runtime::Resource::EspRf)};
+
     const bool persistentLibrary = available(inventory, "storage.sd") ||
                                    available(inventory, "library.persistent_session");
     const bool simulatedLibrary =
@@ -62,24 +65,17 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
                            : kernel::runtime::Resource::UiForeground |
                                  kernel::runtime::Resource::Storage};
 
-    const bool frameCapture = available(inventory, "capture.wifi_passive");
     items_[size_++] = {
-        "capture", "CAPTURE",
-        frameCapture ? "wifi frames / explicit sd save" : "passive capture unavailable",
-        4, frameCapture, false,
-        kernel::runtime::resourceMask(
-            kernel::runtime::Resource::UiForeground) |
-            kernel::runtime::resourceMask(kernel::runtime::Resource::EspRf)};
+        "targets", "TARGETS", "planned product capability", 7, false, false, 0};
 
     items_[size_++] = {
-        "language", "LANGUAGE", "interface language", 5, true, false,
-        kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
+        "lab", "LAB", "planned authorized workspace", 8, false, false, 0};
 
-    // Self-Test remains the final utility item even when the profile is
-    // degraded: explaining a failed check is part of its purpose. Opening it
-    // owns only the UI; Quick starts no hardware or storage resource.
+    // Service functions live below the final product-level Device entry rather
+    // than competing with user jobs on Home. Device remains available on a
+    // degraded profile because diagnostics and an honest Self-Test are remedies.
     items_[size_++] = {
-        "self-test", "SELF-TEST", "quick / full guided", 6, true, false,
+        "device", "DEVICE", "settings / checks / information", 9, true, false,
         kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
 }
 

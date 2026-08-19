@@ -150,14 +150,18 @@ def main() -> int:
 
     catalog = CATALOG.read_text(encoding="utf-8")
     require(failures, "kCapacity = 6" in CATALOG_HEADER.read_text(encoding="utf-8"),
-            "Home capacity must include Language and final Self-Test")
-    require(failures, catalog.index('"language", "LANGUAGE"') <
-            catalog.index('"self-test", "SELF-TEST"'),
-            "Language must precede final Self-Test")
+            "Home must expose the six final product domains")
+    require(failures,
+            '"device", "DEVICE"' in catalog and
+            '"language", "LANGUAGE"' not in catalog and
+            '"self-test", "SELF-TEST"' not in catalog and
+            "uiController.openChild" in renderer,
+            "Language/Self-Test must live below the final Device domain")
     controller = CONTROLLER.read_text(encoding="utf-8")
     require(failures, 'case 5: return "language"' in controller and
-            'case 6: return "self_test"' in controller,
-            "Language/Self-Test page mapping mismatch")
+            'case 6: return "self_test"' in controller and
+            'case 9: return "device"' in controller,
+            "Device/Language/Self-Test page mapping mismatch")
     platformio = PLATFORMIO.read_text(encoding="utf-8")
     require(failures, "-D LOAD_GFXFF=1" in platformio,
             "UTF-8 firmware font build contract missing")

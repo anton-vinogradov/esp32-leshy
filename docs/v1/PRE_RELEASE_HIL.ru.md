@@ -58,7 +58,7 @@ Actions и безопасные штатные операции. Fault injection
 power-cut/radio HIL выполняются отдельной diagnostic image или внешним оборудованием;
 их evidence дополняет, но не заменяет smoke на точных release bytes.
 
-[Self-Test](SELF_TEST.ru.md) последним пунктом Home — пользовательский клиент того же
+Приложение `Home → Устройство →` [Self-Test](SELF_TEST.ru.md) — пользовательский клиент того же
 versioned check registry. Quick выбирает bounded read-only subset; Full/Guided после
 явного preflight выбирает все применимые checks. Host runner вызывает те же check IDs
 на exact release bytes, при разрешении добавляет fixtures/endurance и остаётся

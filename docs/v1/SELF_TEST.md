@@ -7,8 +7,8 @@ registration, the conditional RF-shield identity check, and the first active
 receive-only RF execution are physically accepted; remaining Full/Guided workflow
 execution continues through S4…S8**.
 
-Self-Test is an explicit application at the bottom of Home. It is never an automatic
-boot detour. The same test engine serves a device owner, a guided field check, and
+Self-Test is an explicit application under the final `Device` Home entry. It is never
+an automatic boot detour. The same test engine serves a device owner, a guided field check, and
 the release HIL station; the invoker and available fixtures change, not the meaning
 of a check.
 
@@ -16,9 +16,10 @@ of a check.
 
 ```text
 Home
-└─ SELF-TEST
-   ├─ QUICK
-   └─ FULL / GUIDED
+└─ DEVICE
+   └─ SELF-TEST
+      ├─ QUICK
+      └─ FULL / GUIDED
 ```
 
 | Mode | Purpose | Default side effects | Completion |
@@ -259,8 +260,8 @@ unchanged and final lease is zero (`E-BUILD-089`/`E-AUTO-053`/`E-HIL-113`/
 
 ## Acceptance
 
-1. `SELF-TEST` is reachable by normal buttons as the last Home item; no serial-only
-   action is required.
+1. `SELF-TEST` is reachable by normal buttons through the final Home item
+   `DEVICE`; no serial-only action is required.
 2. Quick is read-only, bounded, cancellable, emits no TX, and leaves zero leases.
 3. Full shows scope before side effects, supports all applicable capability checks,
    and records `not_applicable/blocked` honestly.

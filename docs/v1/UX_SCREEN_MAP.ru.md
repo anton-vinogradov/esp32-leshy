@@ -7,14 +7,21 @@ S2 на реальном TFT; эта карта уже задаёт структ
 
 ## Глобальная оболочка
 
-`UX-S01 Home` содержит шесть задач, а не список радиомодулей, затем прямой доступ к
-языку и всегда доступный utility Self-Test последним пунктом:
+`UX-S01 Home` содержит шесть продуктовых доменов, а не список радиомодулей или
+служебных функций. Последний домен `Устройство` содержит настройки, проверки и
+информацию о системе:
 
 ```text
-Обзор       Цели        Захват
-Лаборатория Библиотека  Устройство
-ЯЗЫК
-SELF-TEST   (QUICK / FULL-GUIDED)
+Обзор
+Захват
+Библиотека
+Цели          (planned до S6)
+Лаборатория   (planned до S7)
+Устройство
+  Настройки
+  Самопроверка (Quick / Full-Guided)
+  Диагностика
+  О системе
 ```
 
 На каждом экране остаются видимыми: название контекста, состояние storage/power,
@@ -52,16 +59,13 @@ UX-S01 Home
 │  ├─ UX-S15 Sessions / Captures / Exports / Screenshots
 │  ├─ UX-S16 Item Detail: integrity, provenance, source/derived data
 │  └─ UX-S17 Import / Export / Compare / Open in Lab
-├─ Устройство
-   ├─ UX-S23 Device Dashboard
-   ├─ UX-S24 Diagnostics / Capability / Module Detail / Report
-   ├─ UX-S25 Language / Display / Input / Feedback / Connectivity
-   ├─ UX-S26 Storage / Backup-Restore / Factory Reset
-   └─ UX-S27 Install / Update / Rollback / Recovery / About
-├─ Язык → language context UX-S25
-└─ Self-Test → test context UX-S24
-   ├─ Quick: bounded read-only automatic plan
-   └─ Full / Guided: scoped preflight → applicable checks → report
+└─ Устройство
+   ├─ Настройки → UX-S25 Language / Display / Input / Feedback / Connectivity
+   ├─ Самопроверка → test context UX-S24
+   │  ├─ Quick: bounded read-only automatic plan
+   │  └─ Full / Guided: scoped preflight → applicable checks → report
+   ├─ Диагностика → UX-S24 Capability / Module Detail / Report
+   └─ О системе → UX-S27 Version / Profile / Update / Rollback / Recovery
 
 UX-S28 Global dialog layer: unavailable reason, progress, confirm, error, panic.
 ```
@@ -100,14 +104,14 @@ action. В активном TX `Back` никогда не открывает con
 | Лаборатория | CAP-032…CAP-037 | принимает только saved immutable Capture; Result возвращает source link |
 | Библиотека | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import никогда не обходит parser |
 | Устройство | CAP-001…CAP-008, CAP-045…CAP-047 | Diagnostics объясняет недоступность до входа в task |
-| Язык | PR-011, NFR-010 | прямое переключение EN/RU; немедленное применение и persistent selection |
-| Self-Test | применимые CAP-001…CAP-047, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
+| Устройство → Настройки | PR-011, NFR-010 | переключение EN/RU; немедленное применение и persistent selection |
+| Устройство → Самопроверка | применимые CAP-001…CAP-047, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
 
 ## Acceptance UX-01
 
 - Каждая `CAP-001…CAP-047` имеет один primary owner и измеримый путь
   entry → success/error/cancel → Back.
-- WF-01 использует Home→Self-Test/UX-S23/S24; WF-02 — UX-S02…S05; WF-03 — UX-S15…S17;
+- WF-01 использует Home→Устройство→Самопроверка/Диагностика; WF-02 — UX-S02…S05; WF-03 — UX-S15…S17;
   WF-04 — UX-S06…S10; WF-05 — UX-S18…S22.
 - Start основной задачи достигается не глубже четырёх переходов от Home; текущий
   receiver остаётся filter/parameter, а не верхним уровнем IA.

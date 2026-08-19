@@ -45,7 +45,7 @@ assembly is inferred from legacy flags.
 3. Each capability is `declared`, `detected`, `available`, `conflicted`, `fault`, or
    `unknown`, with evidence and a reason.
 4. Menus enable only compatible actions; the user can export the diagnostic report.
-5. The final Home item opens Self-Test: Quick runs a safe read-only plan, while
+5. The final Home item opens Device, then Self-Test: Quick runs a safe read-only plan, while
    Full/Guided previews applicable checks/fixtures/side effects before it starts.
 
 **Error path:** an ambiguous GPIO5/6 or GPIO14/21 assembly remains `conflicted` or
