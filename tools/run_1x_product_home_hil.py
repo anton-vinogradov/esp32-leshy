@@ -33,7 +33,6 @@ HOME_ITEMS = (
     "wifi", "ble", "spectrum24", "subghz", "capture", "library", "device",
 )
 WATERFALL_ROWS = 224
-WATERFALL_FILL_US = 3_000_000
 WATERFALL_GRAPH_Y = 54
 WATERFALL_GRAPH_BOTTOM = 278
 
@@ -105,14 +104,14 @@ def home_selection(device: PassiveSerial, index: int) -> dict[str, Any]:
 
 
 def wait_report(device: PassiveSerial, command: bytes, schema: str,
-                minimum_rows: int, timeout: float = 12.0) -> dict[str, Any]:
+                minimum_rows: int, timeout: float = 120.0) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     report: dict[str, Any] = {}
     while time.monotonic() < deadline:
         report = read_only_query(device, command, schema, "state")
         if int(report.get("history_rows", 0)) >= minimum_rows:
             return report
-        time.sleep(0.05)
+        time.sleep(0.25)
     raise TimeoutError(
         f"{schema} did not accumulate {minimum_rows} waterfall rows: {report}")
 
@@ -124,51 +123,65 @@ def require_exact(record: dict[str, Any], expected: dict[str, Any],
         raise RuntimeError("; ".join(failures))
 
 
-def require_waterfall_timing(record: dict[str, Any], label: str) -> None:
+def require_receiver_paced_waterfall(record: dict[str, Any],
+                                     label: str,
+                                     minimum_rows: int = WATERFALL_ROWS) -> None:
     require_exact(record, {
-        "history_rows": WATERFALL_ROWS,
-        "waterfall_fill_target_us": WATERFALL_FILL_US,
-        "waterfall_row_period_us": WATERFALL_FILL_US // WATERFALL_ROWS,
-        "waterfall_full": True,
+        "waterfall_cadence": "receiver_sweep",
+        "waterfall_fill_target_us": 0,
+        "waterfall_row_period_us": 0,
+        "waterfall_measurements_skipped": 0,
     }, label)
-    elapsed = int(record.get("waterfall_fill_elapsed_us", 0))
-    minimum = 2_700_000
-    if elapsed < minimum or elapsed > WATERFALL_FILL_US:
+    rows = int(record.get("history_rows", 0))
+    consumed = int(record.get("waterfall_measurements_consumed", -1))
+    source_sweeps = int(record.get("waterfall_source_sweeps", -1))
+    if rows < minimum_rows or consumed < minimum_rows or \
+            source_sweeps != consumed:
         raise RuntimeError(
-            f"{label}: waterfall fill {elapsed} us outside "
-            f"{minimum}..{WATERFALL_FILL_US} us")
-    if "host_fill_elapsed_ms" in record:
-        host_elapsed = float(record["host_fill_elapsed_ms"])
-        if host_elapsed < 2700.0 or host_elapsed > 3100.0:
-            raise RuntimeError(
-                f"{label}: host-observed fill {host_elapsed} ms outside "
-                "2700..3100 ms")
+            f"{label}: receiver/screen one-to-one mismatch "
+            f"rows={rows} consumed={consumed} sweeps={source_sweeps}")
+    if minimum_rows == WATERFALL_ROWS and \
+            record.get("waterfall_full") is not True:
+        raise RuntimeError(f"{label}: full pixel history not reached")
+    elapsed = int(record.get("waterfall_fill_elapsed_us", 0))
+    if minimum_rows == WATERFALL_ROWS and elapsed <= 0:
+        raise RuntimeError(
+            f"{label}: receiver-paced fill duration was not measured")
 
 
 def require_cc_retry_accounting(record: dict[str, Any], label: str) -> None:
     wire = record.get("wire", {})
     timeouts = wire.get("receive_ready_timeouts")
     retries = wire.get("transient_retries")
+    select_timeouts = wire.get("select_ready_timeouts")
+    recovery_attempts = wire.get("recovery_attempts")
+    recoveries = wire.get("recoveries")
     samples = record.get("adapter_samples")
     if not all(isinstance(value, int)
-               for value in (timeouts, retries, samples)) or \
-            retries != timeouts or not 0 <= retries <= samples:
+               for value in (timeouts, retries, select_timeouts,
+                              recovery_attempts, recoveries, samples)) or \
+            retries != timeouts or not 0 <= retries <= samples or \
+            not 0 <= recoveries <= recovery_attempts <= \
+                select_timeouts <= samples:
         raise RuntimeError(
-            f"{label}: invalid bounded RX-ready retry accounting "
-            f"{timeouts!r}/{retries!r}/{samples!r}")
+            f"{label}: invalid bounded retry/recovery accounting "
+            f"rx={timeouts!r}/{retries!r} "
+            f"select={select_timeouts!r} "
+            f"recovery={recoveries!r}/{recovery_attempts!r} "
+            f"samples={samples!r}")
 
 
 def wait_full_waterfall(
         device: PassiveSerial, command: bytes, schema: str,
-        timeout: float = 12.0) -> dict[str, Any]:
+        timeout: float = 120.0) -> dict[str, Any]:
     started = time.monotonic()
-    # A state report is large enough to back-pressure the 115200-baud console.
-    # Let the real-time renderer run undisturbed for most of its 3 s contract;
-    # polling every 50 ms would measure the test harness, not the product UI.
-    time.sleep(2.7)
+    # Let the receiver establish its own measured sweep cadence before the
+    # diagnostic console asks for a large state report.
+    quiet_seconds = 1.0 if schema == NRF_SCHEMA else 5.0
+    time.sleep(quiet_seconds)
     report = wait_report(
         device, command, schema, WATERFALL_ROWS,
-        timeout=max(0.1, timeout - 2.7))
+        timeout=max(0.1, timeout - quiet_seconds))
     report["host_fill_elapsed_ms"] = round(
         (time.monotonic() - started) * 1000.0, 3)
     return report
@@ -314,7 +327,7 @@ def main() -> int:
                 trace.append(action(device, "down"))
                 reports["nrf_waterfall"] = wait_full_waterfall(
                     device, b"hardware.nrf24.spectrum", NRF_SCHEMA)
-                require_waterfall_timing(
+                require_receiver_paced_waterfall(
                     reports["nrf_waterfall"], "nrf_waterfall_view_timing")
                 require_exact(reports["nrf_waterfall"], {
                     "view": "live", "display_mode": "waterfall",
@@ -371,10 +384,11 @@ def main() -> int:
                 screens["cc_band_menu"] = capture(
                     device, frames, "cc-band-menu")
                 trace.append(action(device, "right"))
-                reports["cc_spectrum"] = wait_full_waterfall(
-                    device, b"hardware.cc1101.spectrum", CC_SCHEMA)
-                require_waterfall_timing(
-                    reports["cc_spectrum"], "cc_433_waterfall_timing")
+                reports["cc_spectrum"] = wait_report(
+                    device, b"hardware.cc1101.spectrum", CC_SCHEMA, 1,
+                    timeout=20.0)
+                require_receiver_paced_waterfall(
+                    reports["cc_spectrum"], "cc_433_sweep_cadence", 1)
                 require_cc_retry_accounting(
                     reports["cc_spectrum"], "cc_433_retry_accounting")
                 require_exact(reports["cc_spectrum"], {
@@ -386,11 +400,9 @@ def main() -> int:
                 screens["cc_spectrum"] = capture(
                     device, frames, "cc-spectrum")
                 trace.append(action(device, "down"))
-                reports["cc_waterfall"] = wait_report(
-                    device, b"hardware.cc1101.spectrum", CC_SCHEMA,
-                    WATERFALL_ROWS,
-                    timeout=24.0)
-                require_waterfall_timing(
+                reports["cc_waterfall"] = wait_full_waterfall(
+                    device, b"hardware.cc1101.spectrum", CC_SCHEMA)
+                require_receiver_paced_waterfall(
                     reports["cc_waterfall"], "cc_433_waterfall_view_timing")
                 require_cc_retry_accounting(
                     reports["cc_waterfall"], "cc_433_view_retry_accounting")
@@ -433,15 +445,14 @@ def main() -> int:
                         trace.append(action(device, move))
                     trace.append(action(device, "right"))
                     fill = wait_full_waterfall(
-                        device, b"hardware.cc1101.spectrum", CC_SCHEMA,
-                        timeout=24.0)
+                        device, b"hardware.cc1101.spectrum", CC_SCHEMA)
                     require_exact(fill, {
                         "view": "live", "display_mode": "spectrum",
                         "state": "running", "band": band,
                         "rx_only": True, "volatile": True,
                         "current_owner": "subghz", "current_lease_mask": 9,
                     }, f"cc_{band}_spectrum")
-                    require_waterfall_timing(
+                    require_receiver_paced_waterfall(
                         fill, f"cc_{band}_waterfall_timing")
                     require_cc_retry_accounting(
                         fill, f"cc_{band}_retry_accounting")

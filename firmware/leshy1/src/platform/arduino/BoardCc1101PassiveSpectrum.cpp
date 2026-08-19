@@ -12,10 +12,14 @@ namespace {
 using boards::esp32_div_v2::BoardProfile;
 using drivers::radio::Cc1101PassiveSpectrumStatus;
 
-constexpr std::uint32_t kSpectrumSpiHz = 1000000;
+// The 0.x driver used 4 MHz reliably on this exact board and receiver.  This
+// remains below the CC1101's specified SPI ceiling while avoiding needless
+// transfer time in the MARCSTATE readiness loop.
+constexpr std::uint32_t kSpectrumSpiHz = 4000000;
 constexpr std::uint32_t kCrystalKHz = 26000;
 constexpr std::uint32_t kReadyTimeoutUs = 2000;
 constexpr std::uint8_t kReadStatus = 0xC0;
+constexpr std::uint8_t kWriteBurst = 0x40;
 constexpr std::uint8_t kRegisterPartNumber = 0x30;
 constexpr std::uint8_t kRegisterVersion = 0x31;
 constexpr std::uint8_t kRegisterRssi = 0x34;
@@ -80,6 +84,7 @@ bool BoardCc1101PassiveSpectrum::selectCc() {
         const std::uint64_t now =
             static_cast<std::uint64_t>(esp_timer_get_time());
         if (now - started > kReadyTimeoutUs) {
+            if (report_ != nullptr) ++report_->selectReadyTimeouts;
             digitalWrite(BoardProfile::kCc1101CsPin, HIGH);
             return false;
         }
@@ -165,9 +170,49 @@ bool BoardCc1101PassiveSpectrum::configureReceive() {
 bool BoardCc1101PassiveSpectrum::tune(std::uint32_t frequencyKHz) {
     const std::uint32_t word = static_cast<std::uint32_t>(
         (static_cast<std::uint64_t>(frequencyKHz) << 16U) / kCrystalKHz);
-    return writeRegister(0x0D, static_cast<std::uint8_t>(word >> 16U)) &&
-           writeRegister(0x0E, static_cast<std::uint8_t>(word >> 8U)) &&
-           writeRegister(0x0F, static_cast<std::uint8_t>(word));
+    if (report_ == nullptr || !selectCc()) return false;
+    transfer(static_cast<std::uint8_t>(kWriteBurst | 0x0DU));
+    transfer(static_cast<std::uint8_t>(word >> 16U));
+    transfer(static_cast<std::uint8_t>(word >> 8U));
+    transfer(static_cast<std::uint8_t>(word));
+    deselectCc();
+    report_->registerWrites += 3U;
+    return gpio21Safe();
+}
+
+bool BoardCc1101PassiveSpectrum::sampleAtFrequency(
+    const drivers::radio::Cc1101PassiveSpectrumPlan& plan,
+    std::uint32_t frequencyKHz, std::uint8_t* rawRssi) {
+    if (rawRssi == nullptr) return false;
+    bool sampled = false;
+    for (std::uint8_t attempt = 0; attempt < 2U && !sampled; ++attempt) {
+        if (!command(kCommandIdle) || !tune(frequencyKHz) ||
+            !command(kCommandReceive)) {
+            break;
+        }
+        const ReceiveWaitResult wait = waitForReceive(plan.readyTimeoutUs);
+        if (wait == ReceiveWaitResult::Ready) {
+            sampled = true;
+        } else if (wait == ReceiveWaitResult::Timeout) {
+            ++report_->receiveReadyTimeouts;
+            if (attempt == 0U) ++report_->transientRetries;
+        } else {
+            break;
+        }
+    }
+    if (sampled) delayMicroseconds(plan.settleUs);
+    const bool read = sampled && readStatus(kRegisterRssi, rawRssi);
+    const bool idled = command(kCommandIdle);
+    return read && idled && gpio21Safe();
+}
+
+bool BoardCc1101PassiveSpectrum::recoverReceive() {
+    if (report_ == nullptr || !spiStarted_ || !transactionOpen_) return false;
+    ++report_->recoveryAttempts;
+    deselectCc();
+    const bool recovered = resetReceiver() && configureReceive();
+    if (recovered) ++report_->recoveries;
+    return recovered;
 }
 
 BoardCc1101PassiveSpectrum::ReceiveWaitResult
@@ -307,29 +352,12 @@ bool BoardCc1101PassiveSpectrum::sample(
         drivers::radio::cc1101SpectrumFrequencyKHz(plan, bin);
     output->startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     std::uint8_t rawRssi = 0;
-    bool sampled = false;
-    for (std::uint8_t attempt = 0; attempt < 2U && !sampled; ++attempt) {
-        if (!command(kCommandIdle) || !tune(output->frequencyKHz) ||
-            !command(kCommandReceive)) {
-            break;
-        }
-        const ReceiveWaitResult wait = waitForReceive(plan.readyTimeoutUs);
-        if (wait == ReceiveWaitResult::Ready) {
-            sampled = true;
-        } else if (wait == ReceiveWaitResult::Timeout) {
-            ++report_->receiveReadyTimeouts;
-            if (attempt == 0U) ++report_->transientRetries;
-        } else {
-            break;
-        }
+    bool read = sampleAtFrequency(plan, output->frequencyKHz, &rawRssi);
+    if (!read && recoverReceive()) {
+        read = sampleAtFrequency(plan, output->frequencyKHz, &rawRssi);
     }
-    if (sampled) {
-        delayMicroseconds(plan.settleUs);
-    }
-    const bool read = sampled && readStatus(kRegisterRssi, &rawRssi);
-    const bool idled = command(kCommandIdle);
     output->endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
-    if (!read || !idled || !gpio21Safe()) {
+    if (!read || !gpio21Safe()) {
         report_->status = Cc1101PassiveSpectrumStatus::Fault;
         return false;
     }

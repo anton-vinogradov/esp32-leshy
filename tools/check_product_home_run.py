@@ -34,6 +34,7 @@ SCREENS = {
 }
 PIXEL_WATERFALL_SCREENS = {
     "nrf_waterfall_next": "nrf-waterfall-next",
+    "nrf_traffic": "nrf-traffic-waterfall",
     "cc_waterfall_next": "cc-waterfall-next",
 }
 IDENTITY_SCREENS = {"home_en": "home-en"}
@@ -50,6 +51,48 @@ def load(path: Path) -> dict[str, Any]:
 def require(failures: list[str], condition: bool, message: str) -> None:
     if not condition:
         failures.append(message)
+
+
+def verify_receiver_paced_waterfall(
+        failures: list[str], label: str, report: dict[str, Any],
+        expected_rows: int, require_full: bool) -> None:
+    rows = report.get("history_rows")
+    consumed = report.get("waterfall_measurements_consumed")
+    source_sweeps = report.get("waterfall_source_sweeps")
+    require(failures,
+            report.get("waterfall_cadence") == "receiver_sweep" and
+            report.get("waterfall_fill_target_us") == 0 and
+            report.get("waterfall_row_period_us") == 0 and
+            report.get("waterfall_measurements_skipped") == 0 and
+            all(isinstance(value, int)
+                for value in (rows, consumed, source_sweeps)) and
+            consumed == source_sweeps and consumed >= rows,
+            f"{label} receiver-paced one-to-one mismatch")
+    if require_full:
+        require(failures,
+                rows == expected_rows and consumed >= expected_rows and
+                report.get("waterfall_full") is True and
+                report.get("waterfall_fill_elapsed_us", 0) > 0,
+                f"{label} receiver-paced full history mismatch")
+
+
+def verify_cc_retries(failures: list[str], label: str,
+                      report: dict[str, Any]) -> None:
+    wire = report.get("wire", {})
+    timeouts = wire.get("receive_ready_timeouts")
+    retries = wire.get("transient_retries")
+    select_timeouts = wire.get("select_ready_timeouts")
+    recovery_attempts = wire.get("recovery_attempts")
+    recoveries = wire.get("recoveries")
+    samples = report.get("adapter_samples")
+    require(failures,
+            all(isinstance(value, int) for value in (
+                timeouts, retries, select_timeouts, recovery_attempts,
+                recoveries, samples)) and
+            retries == timeouts and 0 <= retries <= samples and
+            0 <= recoveries <= recovery_attempts <=
+                select_timeouts <= samples,
+            f"{label} bounded retry/recovery mismatch")
 
 
 def png_size(path: Path) -> tuple[int, int] | None:
@@ -208,16 +251,26 @@ def main() -> int:
         if prefix == "cc" and pixel_contract:
             for label, report in (("spectrum", spectrum),
                                   ("waterfall", waterfall)):
-                wire = report.get("wire", {})
-                timeouts = wire.get("receive_ready_timeouts")
-                retries = wire.get("transient_retries")
-                samples = report.get("adapter_samples")
-                require(failures,
-                        all(isinstance(value, int)
-                            for value in (timeouts, retries, samples)) and
-                        retries == timeouts and 0 <= retries <= samples,
-                        f"CC1101 {label} bounded retry mismatch")
-        if "waterfall_fill_target_us" in spectrum or \
+                if report.get("waterfall_cadence") == "receiver_sweep":
+                    verify_cc_retries(failures, f"CC1101 {label}", report)
+                else:
+                    wire = report.get("wire", {})
+                    timeouts = wire.get("receive_ready_timeouts")
+                    retries = wire.get("transient_retries")
+                    samples = report.get("adapter_samples")
+                    require(failures,
+                            all(isinstance(value, int)
+                                for value in (timeouts, retries, samples)) and
+                            retries == timeouts and 0 <= retries <= samples,
+                            f"CC1101 {label} bounded retry mismatch")
+        if waterfall.get("waterfall_cadence") == "receiver_sweep":
+            verify_receiver_paced_waterfall(
+                failures, f"{prefix} spectrum", spectrum,
+                expected_rows, False)
+            verify_receiver_paced_waterfall(
+                failures, f"{prefix} waterfall", waterfall,
+                expected_rows, True)
+        elif "waterfall_fill_target_us" in spectrum or \
                 "waterfall_fill_target_us" in waterfall:
             for label, report in (("spectrum", spectrum),
                                   ("waterfall", waterfall)):
@@ -239,32 +292,50 @@ def main() -> int:
                 "CC1101 waterfall timing band coverage mismatch")
         for band in ("315", "868", "915"):
             report = reports.get(f"cc_fill_{band}", {})
-            require(failures,
-                    report.get("band") == band and
-                    report.get("history_rows") == expected_rows and
-                    report.get("waterfall_fill_target_us") == 3_000_000 and
-                    report.get("waterfall_full") is True and
-                    2_700_000 <=
-                        report.get("waterfall_fill_elapsed_us", 0) <=
-                        3_000_000,
-                    f"CC1101 {band} three-second waterfall mismatch")
-            if pixel_contract:
-                wire = report.get("wire", {})
+            require(failures, report.get("band") == band,
+                    f"CC1101 {band} band mismatch")
+            receiver_paced = report.get("waterfall_cadence") == \
+                "receiver_sweep"
+            if receiver_paced:
+                verify_receiver_paced_waterfall(
+                    failures, f"CC1101 {band}", report,
+                    expected_rows, True)
+            else:
                 require(failures,
-                        wire.get("receive_ready_timeouts") ==
-                            wire.get("transient_retries") and
-                        isinstance(wire.get("transient_retries"), int) and
-                        0 <= wire.get("transient_retries") <=
-                            report.get("adapter_samples", -1),
-                        f"CC1101 {band} bounded retry mismatch")
+                        report.get("history_rows") == expected_rows and
+                        report.get("waterfall_fill_target_us") == 3_000_000 and
+                        report.get("waterfall_full") is True and
+                        2_700_000 <=
+                            report.get("waterfall_fill_elapsed_us", 0) <=
+                            3_000_000,
+                        f"CC1101 {band} three-second waterfall mismatch")
+            if pixel_contract:
+                if receiver_paced:
+                    verify_cc_retries(
+                        failures, f"CC1101 {band}", report)
+                else:
+                    wire = report.get("wire", {})
+                    require(failures,
+                            wire.get("receive_ready_timeouts") ==
+                                wire.get("transient_retries") and
+                            isinstance(wire.get("transient_retries"), int) and
+                            0 <= wire.get("transient_retries") <=
+                                report.get("adapter_samples", -1),
+                            f"CC1101 {band} bounded retry mismatch")
             host_elapsed = report.get("host_fill_elapsed_ms", 0)
-            require(failures, 2700 <= host_elapsed <= 3100,
-                    f"CC1101 {band} host-observed fill mismatch")
-        for key in ("nrf_spectrum", "cc_spectrum"):
-            host_elapsed = reports.get(key, {}).get(
-                "host_fill_elapsed_ms", 0)
-            require(failures, 2700 <= host_elapsed <= 3100,
-                    f"{key} host-observed fill mismatch")
+            if receiver_paced:
+                require(failures, host_elapsed > 0,
+                        f"CC1101 {band} host-observed fill missing")
+            else:
+                require(failures, 2700 <= host_elapsed <= 3100,
+                        f"CC1101 {band} host-observed fill mismatch")
+        if reports.get("nrf_waterfall", {}).get(
+                "waterfall_cadence") != "receiver_sweep":
+            for key in ("nrf_spectrum", "cc_spectrum"):
+                host_elapsed = reports.get(key, {}).get(
+                    "host_fill_elapsed_ms", 0)
+                require(failures, 2700 <= host_elapsed <= 3100,
+                        f"{key} host-observed fill mismatch")
 
     if pixel_contract:
         pixel_changes = run.get("waterfall_pixel_changes", {})

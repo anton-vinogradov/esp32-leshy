@@ -801,6 +801,13 @@ void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
     unsafe = report;
     unsafe.transientRetries = 2;
     CHECK(!validateCc1101PassiveSpectrumReport(unsafe, true));
+    unsafe = report;
+    unsafe.recoveries = 1;
+    CHECK(!validateCc1101PassiveSpectrumReport(unsafe, true));
+    report.selectReadyTimeouts = 1;
+    report.recoveryAttempts = 1;
+    report.recoveries = 1;
+    CHECK(validateCc1101PassiveSpectrumReport(report, true));
 
     Cc1101SpectrumController controller;
     CHECK(controller.start(1000));
@@ -856,19 +863,10 @@ void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
 }
 
 void testSpectrumViewportKeepsBoundedRingHistory() {
-    CHECK(SpectrumViewport::kWaterfallFillUs == 3000000ULL);
     CHECK(SpectrumViewport::kDisplayColumns == 240);
     CHECK(SpectrumViewport::kHistoryRows == 224);
     CHECK(SpectrumViewport::kRowBytes == 240);
     CHECK(SpectrumViewport::kHistoryStorageBytes == 53760);
-    CHECK(SpectrumViewport::kWaterfallRowPeriodUs == 13392ULL);
-    CHECK(SpectrumViewport::kWaterfallRowPeriodUs *
-              SpectrumViewport::kHistoryRows <=
-          SpectrumViewport::kWaterfallFillUs);
-    CHECK(SpectrumViewport::kWaterfallFillUs -
-              SpectrumViewport::kWaterfallRowPeriodUs *
-                  SpectrumViewport::kHistoryRows <
-          SpectrumViewport::kHistoryRows);
     SpectrumViewport viewport;
     CHECK(!viewport.reset(0));
     CHECK(!viewport.reset(SpectrumViewport::kMaxBins + 1));

@@ -80,6 +80,9 @@ struct Cc1101PassiveSpectrumReport final {
     std::uint32_t idleStrobes = 0;
     std::uint32_t receiveReadyTimeouts = 0;
     std::uint32_t transientRetries = 0;
+    std::uint32_t selectReadyTimeouts = 0;
+    std::uint32_t recoveryAttempts = 0;
+    std::uint32_t recoveries = 0;
     std::uint32_t rejectedStrobes = 0;
     std::uint32_t txStrobes = 0;
     std::uint32_t paTableWrites = 0;

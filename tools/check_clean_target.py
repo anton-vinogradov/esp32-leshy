@@ -196,7 +196,7 @@ def main() -> int:
             "kCommandReceive = 0x34",
             "kCommandIdle = 0x36",
             "allowedReceiveRegister",
-            "kSpectrumSpiHz = 1000000",
+            "kSpectrumSpiHz = 4000000",
             "pinMode(BoardProfile::kNrfCsPins[2], INPUT)",
             "report_->rejectedStrobes",
             "validateCc1101PassiveSpectrumReport",

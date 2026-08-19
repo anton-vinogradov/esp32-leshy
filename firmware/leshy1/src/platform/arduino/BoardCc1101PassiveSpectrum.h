@@ -41,6 +41,10 @@ private:
     bool resetReceiver();
     bool configureReceive();
     bool tune(std::uint32_t frequencyKHz);
+    bool sampleAtFrequency(
+        const drivers::radio::Cc1101PassiveSpectrumPlan& plan,
+        std::uint32_t frequencyKHz, std::uint8_t* rawRssi);
+    bool recoverReceive();
     ReceiveWaitResult waitForReceive(std::uint16_t timeoutUs);
     bool gpio21Safe() const;
     void holdTransmitPathsInactive();

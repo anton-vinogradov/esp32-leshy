@@ -93,6 +93,7 @@ bool validateCc1101PassiveSpectrumReport(
         return false;
     }
     if (report.transientRetries > report.receiveReadyTimeouts) return false;
+    if (report.recoveries > report.recoveryAttempts) return false;
     if (report.commandStrobes != report.resetStrobes +
             report.receiveStrobes + report.idleStrobes) {
         return false;

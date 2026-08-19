@@ -482,16 +482,61 @@ RfSpectrumKind rfSpectrumKind = RfSpectrumKind::Nrf24;
 std::uint8_t rfSpectrumSelection = 0;
 leshy1::drivers::radio::Cc1101SpectrumBand rfCcBandSelection =
     leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
-std::uint64_t nextNrf24SpectrumSweepUs = 0;
 std::uint64_t nextSpectrumUiRefreshUs = 0;
-std::uint64_t nextSpectrumWaterfallRowUs = 0;
 std::uint64_t spectrumWaterfallStartedUs = 0;
 std::uint64_t spectrumWaterfallCompletedUs = 0;
 std::uint32_t spectrumWaterfallRowsEmitted = 0;
+std::uint64_t spectrumWaterfallPreviousRowUs = 0;
+std::uint64_t spectrumWaterfallRowIntervalTotalUs = 0;
+std::uint64_t spectrumWaterfallRowIntervalMaxUs = 0;
+std::uint64_t spectrumWaterfallPushTotalUs = 0;
+std::uint64_t spectrumWaterfallPushMaxUs = 0;
+std::uint64_t spectrumWaterfallRenderTotalUs = 0;
+std::uint64_t spectrumWaterfallRenderMaxUs = 0;
+std::uint64_t spectrumWaterfallServiceMaxUs = 0;
+std::uint64_t nrf24SpectrumChunkMaxUs = 0;
+std::uint64_t spectrumLoopPreviousUs = 0;
+std::uint64_t spectrumLoopIntervalTotalUs = 0;
+std::uint64_t spectrumLoopIntervalMaxUs = 0;
+std::uint64_t spectrumLoopCount = 0;
+std::uint64_t spectrumTouchPollTotalUs = 0;
+std::uint64_t spectrumTouchPollMaxUs = 0;
+std::uint64_t spectrumTouchPollCount = 0;
+std::uint32_t spectrumWaterfallSourceSweepBaseline = 0;
+std::uint32_t spectrumWaterfallLastSourceSweep = 0;
+std::uint32_t spectrumWaterfallMeasurementsConsumed = 0;
+std::uint32_t spectrumWaterfallMeasurementsSkipped = 0;
 std::uint64_t spectrumWaterfallFillElapsedUs() {
     return spectrumWaterfallCompletedUs >= spectrumWaterfallStartedUs
         ? spectrumWaterfallCompletedUs - spectrumWaterfallStartedUs : 0;
 }
+
+void resetSpectrumWaterfallTiming() {
+    spectrumWaterfallStartedUs = 0;
+    spectrumWaterfallCompletedUs = 0;
+    spectrumWaterfallRowsEmitted = 0;
+    spectrumWaterfallPreviousRowUs = 0;
+    spectrumWaterfallRowIntervalTotalUs = 0;
+    spectrumWaterfallRowIntervalMaxUs = 0;
+    spectrumWaterfallPushTotalUs = 0;
+    spectrumWaterfallPushMaxUs = 0;
+    spectrumWaterfallRenderTotalUs = 0;
+    spectrumWaterfallRenderMaxUs = 0;
+    spectrumWaterfallServiceMaxUs = 0;
+    spectrumLoopPreviousUs = 0;
+    spectrumLoopIntervalTotalUs = 0;
+    spectrumLoopIntervalMaxUs = 0;
+    spectrumLoopCount = 0;
+    spectrumTouchPollTotalUs = 0;
+    spectrumTouchPollMaxUs = 0;
+    spectrumTouchPollCount = 0;
+    spectrumWaterfallSourceSweepBaseline = 0;
+    spectrumWaterfallLastSourceSweep = 0;
+    spectrumWaterfallMeasurementsConsumed = 0;
+    spectrumWaterfallMeasurementsSkipped = 0;
+}
+
+void armSpectrumWaterfallForCurrentReceiver();
 BoardWifiPassiveCapture wifiFrameCapture;
 constexpr WifiFrameCapturePlan kProductWifiFrameCapturePlan{};
 std::uint64_t nextCaptureUiRefreshUs = 0;
@@ -6364,12 +6409,10 @@ bool startNrf24Spectrum() {
     }
     rfSpectrumKind = RfSpectrumKind::Nrf24;
     rfSpectrumView = RfSpectrumView::Live;
-    nextNrf24SpectrumSweepUs = startedUs;
     nextSpectrumUiRefreshUs = startedUs;
-    nextSpectrumWaterfallRowUs = startedUs;
-    spectrumWaterfallStartedUs = 0;
-    spectrumWaterfallCompletedUs = 0;
-    spectrumWaterfallRowsEmitted = 0;
+    resetSpectrumWaterfallTiming();
+    armSpectrumWaterfallForCurrentReceiver();
+    nrf24SpectrumChunkMaxUs = 0;
     lastRuntimeEvent = started ? "nrf24_spectrum_running"
                                : "nrf24_spectrum_start_failed";
     return true;
@@ -6382,9 +6425,7 @@ bool stopNrf24Spectrum(bool returnToSourceMenu) {
     }
     rfSpectrumView = returnToSourceMenu ? RfSpectrumView::SourceMenu
                                         : RfSpectrumView::None;
-    nextNrf24SpectrumSweepUs = 0;
     nextSpectrumUiRefreshUs = 0;
-    nextSpectrumWaterfallRowUs = 0;
     lastRuntimeEvent = cleanup ? "nrf24_spectrum_stopped"
                                : "nrf24_spectrum_cleanup_failed";
     return true;
@@ -6397,9 +6438,6 @@ void serviceNrf24Spectrum() {
             Nrf24SpectrumViewState::Running) {
         return;
     }
-    const std::uint64_t nowUs =
-        static_cast<std::uint64_t>(esp_timer_get_time());
-    if (nowUs < nextNrf24SpectrumSweepUs) return;
     Nrf24PassiveSweep sweep;
     const bool valid = boardNrf24Spectrum.sampleChunk(&sweep) &&
                        nrf24SpectrumController.ingest(sweep);
@@ -6410,10 +6448,9 @@ void serviceNrf24Spectrum() {
         renderInteractiveScreen(true);
         return;
     }
-    nextNrf24SpectrumSweepUs = sweep.startedUs +
-        SpectrumViewport::kWaterfallRowPeriodUs;
-    if (nextNrf24SpectrumSweepUs < sweep.endedUs) {
-        nextNrf24SpectrumSweepUs = sweep.endedUs;
+    const std::uint64_t chunkUs = sweep.endedUs - sweep.startedUs;
+    if (chunkUs > nrf24SpectrumChunkMaxUs) {
+        nrf24SpectrumChunkMaxUs = chunkUs;
     }
     const std::uint64_t refreshUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -6448,10 +6485,8 @@ bool startCc1101Spectrum(
     rfSpectrumKind = RfSpectrumKind::Cc1101;
     rfSpectrumView = RfSpectrumView::Live;
     nextSpectrumUiRefreshUs = startedUs;
-    nextSpectrumWaterfallRowUs = startedUs;
-    spectrumWaterfallStartedUs = 0;
-    spectrumWaterfallCompletedUs = 0;
-    spectrumWaterfallRowsEmitted = 0;
+    resetSpectrumWaterfallTiming();
+    armSpectrumWaterfallForCurrentReceiver();
     lastRuntimeEvent = started ? "cc1101_spectrum_running"
                                : "cc1101_spectrum_start_failed";
     return true;
@@ -6466,7 +6501,6 @@ bool stopCc1101Spectrum(bool returnToSourceMenu) {
     rfSpectrumView = returnToSourceMenu ? RfSpectrumView::CcBandMenu
                                         : RfSpectrumView::None;
     nextSpectrumUiRefreshUs = 0;
-    nextSpectrumWaterfallRowUs = 0;
     lastRuntimeEvent = cleanup ? "cc1101_spectrum_stopped"
                                : "cc1101_spectrum_cleanup_failed";
     return true;
@@ -6519,55 +6553,92 @@ bool activeSpectrumRunning() {
               Nrf24SpectrumViewState::Running;
 }
 
+std::uint32_t activeSpectrumSweeps() {
+    return rfSpectrumKind == RfSpectrumKind::Cc1101
+        ? cc1101SpectrumController.sweeps()
+        : nrf24SpectrumController.sweeps();
+}
+
+void armSpectrumWaterfallForCurrentReceiver() {
+    const std::uint32_t sweeps = activeSpectrumSweeps();
+    spectrumWaterfallSourceSweepBaseline = sweeps;
+    spectrumWaterfallLastSourceSweep = sweeps;
+}
+
 void serviceSpectrumWaterfallCadence() {
     if (!activeSpectrumRunning()) return;
-    const std::uint64_t nowUs =
-        static_cast<std::uint64_t>(esp_timer_get_time());
-    if (nextSpectrumWaterfallRowUs == 0) {
-        nextSpectrumWaterfallRowUs = nowUs;
+    const std::uint32_t sourceSweeps = activeSpectrumSweeps();
+    if (sourceSweeps == spectrumWaterfallLastSourceSweep) return;
+    if (sourceSweeps < spectrumWaterfallLastSourceSweep) {
+        armSpectrumWaterfallForCurrentReceiver();
+        return;
     }
-    if (nowUs < nextSpectrumWaterfallRowUs) return;
+    const std::uint32_t newlyCompleted =
+        sourceSweeps - spectrumWaterfallLastSourceSweep;
+    if (newlyCompleted > 1U) {
+        spectrumWaterfallMeasurementsSkipped += newlyCompleted - 1U;
+    }
+    spectrumWaterfallLastSourceSweep = sourceSweeps;
 
-    // Never manufacture temporal resolution by replaying the same RF snapshot.
-    constexpr std::size_t kMaximumCatchUpRows = 1;
-    std::size_t appended = 0;
+    // One complete receiver sweep becomes exactly one physical TFT row.  No
+    // fixed display timer can replay a partial or stale receiver snapshot.
     const bool renderRows = !uiController.isRoot() &&
         uiController.page() == 2 &&
         spectrumViewport.mode() == SpectrumDisplayMode::Waterfall;
     if (renderRows) display.startWrite();
-    while (nowUs >= nextSpectrumWaterfallRowUs &&
-           appended < kMaximumCatchUpRows) {
-        if (!pushActiveSpectrumHistory()) {
-            if (rfSpectrumKind == RfSpectrumKind::Cc1101) {
-                boardCc1101Spectrum.end();
-                cc1101SpectrumController.fail();
-            } else {
-                boardNrf24Spectrum.end();
-                nrf24SpectrumController.fail();
-            }
-            lastRuntimeEvent = "spectrum_history_fault";
-            if (renderRows) display.endWrite();
-            renderInteractiveScreen(true);
-            return;
+    const std::uint64_t rowStartedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (spectrumWaterfallPreviousRowUs != 0) {
+        const std::uint64_t intervalUs =
+            rowStartedUs - spectrumWaterfallPreviousRowUs;
+        spectrumWaterfallRowIntervalTotalUs += intervalUs;
+        if (intervalUs > spectrumWaterfallRowIntervalMaxUs) {
+            spectrumWaterfallRowIntervalMaxUs = intervalUs;
         }
-        if (spectrumWaterfallStartedUs == 0) {
-            spectrumWaterfallStartedUs = nowUs;
-        }
-        ++spectrumWaterfallRowsEmitted;
-        if (spectrumWaterfallCompletedUs == 0 &&
-            spectrumViewport.rowsStored() == SpectrumViewport::kHistoryRows) {
-            spectrumWaterfallCompletedUs = nowUs;
-        }
-        if (renderRows) {
-            renderLatestWaterfallRow();
-        }
-        nextSpectrumWaterfallRowUs +=
-            SpectrumViewport::kWaterfallRowPeriodUs;
-        ++appended;
     }
-    if (nextSpectrumWaterfallRowUs <= nowUs) {
-        nextSpectrumWaterfallRowUs =
-            nowUs + SpectrumViewport::kWaterfallRowPeriodUs;
+    spectrumWaterfallPreviousRowUs = rowStartedUs;
+    if (!pushActiveSpectrumHistory()) {
+        if (rfSpectrumKind == RfSpectrumKind::Cc1101) {
+            boardCc1101Spectrum.end();
+            cc1101SpectrumController.fail();
+        } else {
+            boardNrf24Spectrum.end();
+            nrf24SpectrumController.fail();
+        }
+        lastRuntimeEvent = "spectrum_history_fault";
+        if (renderRows) display.endWrite();
+        renderInteractiveScreen(true);
+        return;
+    }
+    const std::uint64_t pushedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    const std::uint64_t pushUs = pushedUs - rowStartedUs;
+    spectrumWaterfallPushTotalUs += pushUs;
+    if (pushUs > spectrumWaterfallPushMaxUs) {
+        spectrumWaterfallPushMaxUs = pushUs;
+    }
+    if (spectrumWaterfallStartedUs == 0) {
+        spectrumWaterfallStartedUs = rowStartedUs;
+    }
+    ++spectrumWaterfallRowsEmitted;
+    ++spectrumWaterfallMeasurementsConsumed;
+    if (spectrumWaterfallCompletedUs == 0 &&
+        spectrumViewport.rowsStored() == SpectrumViewport::kHistoryRows) {
+        spectrumWaterfallCompletedUs = rowStartedUs;
+    }
+    if (renderRows) {
+        renderLatestWaterfallRow();
+    }
+    const std::uint64_t renderedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    const std::uint64_t renderUs = renderedUs - pushedUs;
+    spectrumWaterfallRenderTotalUs += renderUs;
+    if (renderUs > spectrumWaterfallRenderMaxUs) {
+        spectrumWaterfallRenderMaxUs = renderUs;
+    }
+    const std::uint64_t serviceUs = renderedUs - rowStartedUs;
+    if (serviceUs > spectrumWaterfallServiceMaxUs) {
+        spectrumWaterfallServiceMaxUs = serviceUs;
     }
     if (renderRows) display.endWrite();
 }
@@ -8065,11 +8136,8 @@ bool applyUiAction(UiAction action, bool render = true) {
                         spectrumViewport.reset(bins);
                         spectrumViewport.setMode(
                             SpectrumDisplayMode::Waterfall);
-                        spectrumWaterfallStartedUs = 0;
-                        spectrumWaterfallCompletedUs = 0;
-                        spectrumWaterfallRowsEmitted = 0;
-                        nextSpectrumWaterfallRowUs =
-                            static_cast<std::uint64_t>(esp_timer_get_time());
+                        resetSpectrumWaterfallTiming();
+                        armSpectrumWaterfallForCurrentReceiver();
                     }
                     nextSpectrumUiRefreshUs = 0;
                     lastRuntimeEvent = spectrumViewport.mode() ==
@@ -8093,8 +8161,6 @@ bool applyUiAction(UiAction action, bool render = true) {
                             lastRuntimeEvent = "cc1101_spectrum_paused";
                         }
                     } else {
-                        nextSpectrumWaterfallRowUs =
-                            static_cast<std::uint64_t>(esp_timer_get_time());
                         lastRuntimeEvent = "cc1101_spectrum_running";
                     }
                 }
@@ -8109,12 +8175,8 @@ bool applyUiAction(UiAction action, bool render = true) {
                         SpectrumDisplayMode::Waterfall) {
                     changed = spectrumViewport.nextMode();
                 }
-                spectrumWaterfallStartedUs = 0;
-                spectrumWaterfallCompletedUs = 0;
-                spectrumWaterfallRowsEmitted = 0;
-                const std::uint64_t changedUs =
-                    static_cast<std::uint64_t>(esp_timer_get_time());
-                nextSpectrumWaterfallRowUs = changedUs;
+                resetSpectrumWaterfallTiming();
+                armSpectrumWaterfallForCurrentReceiver();
                 nextSpectrumUiRefreshUs = 0;
                 lastRuntimeEvent = nrf24SpectrumController.metric() ==
                     Nrf24SpectrumMetric::Traffic
@@ -12862,10 +12924,22 @@ void emitNrf24SpectrumReport(Stream& reply) {
         "\"view\":\"%s\",\"display_mode\":\"%s\",\"metric\":\"%s\","
         "\"traffic_semantics\":\"activity_above_baseline\","
         "\"history_rows\":%u,"
-        "\"waterfall_fill_target_us\":%llu,"
-        "\"waterfall_row_period_us\":%llu,\"waterfall_full\":%s,"
+        "\"waterfall_cadence\":\"receiver_sweep\","
+        "\"waterfall_fill_target_us\":0,"
+        "\"waterfall_row_period_us\":0,\"waterfall_full\":%s,"
         "\"waterfall_fill_elapsed_us\":%llu,"
         "\"waterfall_rows_emitted\":%lu,"
+        "\"waterfall_measurements_consumed\":%lu,"
+        "\"waterfall_measurements_skipped\":%lu,"
+        "\"waterfall_source_sweeps\":%lu,"
+        "\"timing\":{\"row_interval_total_us\":%llu,"
+        "\"row_interval_max_us\":%llu,\"row_push_total_us\":%llu,"
+        "\"row_push_max_us\":%llu,\"row_render_total_us\":%llu,"
+        "\"row_render_max_us\":%llu,\"row_service_max_us\":%llu,"
+        "\"nrf_chunk_max_us\":%llu,\"loop_interval_total_us\":%llu,"
+        "\"loop_interval_max_us\":%llu,\"loop_count\":%llu,"
+        "\"touch_poll_total_us\":%llu,\"touch_poll_max_us\":%llu,"
+        "\"touch_poll_count\":%llu},"
         "\"state\":\"%s\",\"status\":\"%s\","
         "\"range_mhz\":[2402,2484],\"channels\":%u,\"dwell_us\":%u,"
         "\"modules\":%u,\"active_slot_mask\":%u,\"chunks\":%lu,"
@@ -12888,12 +12962,31 @@ void emitNrf24SpectrumReport(Stream& reply) {
         leshy1::apps::spectrum::nrf24SpectrumMetricName(
             nrf24SpectrumController.metric()),
         static_cast<unsigned>(spectrumViewport.rowsStored()),
-        static_cast<unsigned long long>(SpectrumViewport::kWaterfallFillUs),
-        static_cast<unsigned long long>(
-            SpectrumViewport::kWaterfallRowPeriodUs),
         spectrumWaterfallCompletedUs != 0 ? "true" : "false",
         static_cast<unsigned long long>(spectrumWaterfallFillElapsedUs()),
         static_cast<unsigned long>(spectrumWaterfallRowsEmitted),
+        static_cast<unsigned long>(spectrumWaterfallMeasurementsConsumed),
+        static_cast<unsigned long>(spectrumWaterfallMeasurementsSkipped),
+        static_cast<unsigned long>(
+            nrf24SpectrumController.sweeps() >=
+                    spectrumWaterfallSourceSweepBaseline
+                ? nrf24SpectrumController.sweeps() -
+                      spectrumWaterfallSourceSweepBaseline
+                : 0U),
+        static_cast<unsigned long long>(spectrumWaterfallRowIntervalTotalUs),
+        static_cast<unsigned long long>(spectrumWaterfallRowIntervalMaxUs),
+        static_cast<unsigned long long>(spectrumWaterfallPushTotalUs),
+        static_cast<unsigned long long>(spectrumWaterfallPushMaxUs),
+        static_cast<unsigned long long>(spectrumWaterfallRenderTotalUs),
+        static_cast<unsigned long long>(spectrumWaterfallRenderMaxUs),
+        static_cast<unsigned long long>(spectrumWaterfallServiceMaxUs),
+        static_cast<unsigned long long>(nrf24SpectrumChunkMaxUs),
+        static_cast<unsigned long long>(spectrumLoopIntervalTotalUs),
+        static_cast<unsigned long long>(spectrumLoopIntervalMaxUs),
+        static_cast<unsigned long long>(spectrumLoopCount),
+        static_cast<unsigned long long>(spectrumTouchPollTotalUs),
+        static_cast<unsigned long long>(spectrumTouchPollMaxUs),
+        static_cast<unsigned long long>(spectrumTouchPollCount),
         leshy1::apps::spectrum::nrf24SpectrumViewStateName(
             nrf24SpectrumController.state()),
         leshy1::drivers::radio::nrf24PassiveSpectrumStatusName(report.status),
@@ -12936,10 +13029,14 @@ void emitCc1101SpectrumReport(Stream& reply) {
         line, sizeof(line),
         "{\"schema\":\"leshy.cc1101.spectrum.v1\",\"kind\":\"state\","
         "\"view\":\"%s\",\"display_mode\":\"%s\",\"history_rows\":%u,"
-        "\"waterfall_fill_target_us\":%llu,"
-        "\"waterfall_row_period_us\":%llu,\"waterfall_full\":%s,"
+        "\"waterfall_cadence\":\"receiver_sweep\","
+        "\"waterfall_fill_target_us\":0,"
+        "\"waterfall_row_period_us\":0,\"waterfall_full\":%s,"
         "\"waterfall_fill_elapsed_us\":%llu,"
         "\"waterfall_rows_emitted\":%lu,"
+        "\"waterfall_measurements_consumed\":%lu,"
+        "\"waterfall_measurements_skipped\":%lu,"
+        "\"waterfall_source_sweeps\":%lu,"
         "\"state\":\"%s\",\"status\":\"%s\","
         "\"band\":\"%s\",\"range_khz\":[%lu,%lu],\"bins\":%u,"
         "\"settle_us\":%u,\"ready_timeout_us\":%u,"
@@ -12954,7 +13051,8 @@ void emitCc1101SpectrumReport(Stream& reply) {
         "\"spi_bytes_clocked\":%lu,\"command_strobes\":%lu,"
         "\"reset_strobes\":%lu,\"receive_strobes\":%lu,"
         "\"idle_strobes\":%lu,\"receive_ready_timeouts\":%lu,"
-        "\"transient_retries\":%lu},"
+        "\"transient_retries\":%lu,\"select_ready_timeouts\":%lu,"
+        "\"recovery_attempts\":%lu,\"recoveries\":%lu},"
         "\"side_effects\":{\"rejected_strobes\":%lu,"
         "\"tx_strobes\":%lu,\"pa_table_writes\":%lu,"
         "\"fifo_writes\":%lu,\"storage_writes\":0},"
@@ -12965,12 +13063,17 @@ void emitCc1101SpectrumReport(Stream& reply) {
         leshy1::apps::spectrum::spectrumDisplayModeName(
             spectrumViewport.mode()),
         static_cast<unsigned>(spectrumViewport.rowsStored()),
-        static_cast<unsigned long long>(SpectrumViewport::kWaterfallFillUs),
-        static_cast<unsigned long long>(
-            SpectrumViewport::kWaterfallRowPeriodUs),
         spectrumWaterfallCompletedUs != 0 ? "true" : "false",
         static_cast<unsigned long long>(spectrumWaterfallFillElapsedUs()),
         static_cast<unsigned long>(spectrumWaterfallRowsEmitted),
+        static_cast<unsigned long>(spectrumWaterfallMeasurementsConsumed),
+        static_cast<unsigned long>(spectrumWaterfallMeasurementsSkipped),
+        static_cast<unsigned long>(
+            cc1101SpectrumController.sweeps() >=
+                    spectrumWaterfallSourceSweepBaseline
+                ? cc1101SpectrumController.sweeps() -
+                      spectrumWaterfallSourceSweepBaseline
+                : 0U),
         leshy1::apps::spectrum::cc1101SpectrumViewStateName(
             cc1101SpectrumController.state()),
         leshy1::drivers::radio::cc1101PassiveSpectrumStatusName(
@@ -13006,6 +13109,9 @@ void emitCc1101SpectrumReport(Stream& reply) {
         static_cast<unsigned long>(report.idleStrobes),
         static_cast<unsigned long>(report.receiveReadyTimeouts),
         static_cast<unsigned long>(report.transientRetries),
+        static_cast<unsigned long>(report.selectReadyTimeouts),
+        static_cast<unsigned long>(report.recoveryAttempts),
+        static_cast<unsigned long>(report.recoveries),
         static_cast<unsigned long>(report.rejectedStrobes),
         static_cast<unsigned long>(report.txStrobes),
         static_cast<unsigned long>(report.paTableWrites),
@@ -13583,6 +13689,20 @@ void setup() {
 }
 
 void loop() {
+    const std::uint64_t loopStartedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (activeSpectrumRunning()) {
+        if (spectrumLoopPreviousUs != 0) {
+            const std::uint64_t intervalUs =
+                loopStartedUs - spectrumLoopPreviousUs;
+            spectrumLoopIntervalTotalUs += intervalUs;
+            if (intervalUs > spectrumLoopIntervalMaxUs) {
+                spectrumLoopIntervalMaxUs = intervalUs;
+            }
+        }
+        spectrumLoopPreviousUs = loopStartedUs;
+        ++spectrumLoopCount;
+    }
     serviceProductSurveyWorker();
     serviceWifiFrameCapture();
     serviceWifiFrameCapturePersist();
@@ -13593,7 +13713,19 @@ void loop() {
     poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
     poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
     TouchPoint touchPress;
-    if (boardTouchInput.poll(millis(), &touchPress)) {
+    const std::uint64_t touchStartedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    const bool touchPressed = boardTouchInput.poll(millis(), &touchPress);
+    const std::uint64_t touchElapsedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) - touchStartedUs;
+    if (activeSpectrumRunning()) {
+        spectrumTouchPollTotalUs += touchElapsedUs;
+        if (touchElapsedUs > spectrumTouchPollMaxUs) {
+            spectrumTouchPollMaxUs = touchElapsedUs;
+        }
+        ++spectrumTouchPollCount;
+    }
+    if (touchPressed) {
         dispatchTouchPoint(touchPress);
     }
     PhysicalInputEvent inputEvent;
@@ -13629,5 +13761,11 @@ void loop() {
         portEXIT_CRITICAL(&physicalInputMux);
         bootMetrics.inputRaw = lastInputRaw;
     }
-    delay(2);
+    if (activeSpectrumRunning()) {
+        // The receiver itself now clocks the waterfall: yield to the RTOS but
+        // do not add an artificial per-bin delay to a physical sweep.
+        yield();
+    } else {
+        delay(2);
+    }
 }
