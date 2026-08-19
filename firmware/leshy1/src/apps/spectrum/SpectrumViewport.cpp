@@ -24,8 +24,11 @@ bool SpectrumViewport::push(const std::uint8_t* intensity,
                             std::size_t bins) {
     if (intensity == nullptr || bins == 0 || bins != binCount_) return false;
     const std::size_t offset = nextRow_ * kRowBytes;
-    for (std::size_t column = 0; column < kDisplayColumns; ++column) {
-        history_[offset + column] = resample(intensity, bins, column);
+    for (std::size_t bin = 0; bin < bins; ++bin) {
+        history_[offset + bin] = intensity[bin];
+    }
+    for (std::size_t bin = bins; bin < kRowBytes; ++bin) {
+        history_[offset + bin] = 0;
     }
     nextRow_ = (nextRow_ + 1U) % kHistoryRows;
     if (rowsStored_ < kHistoryRows) ++rowsStored_;
@@ -70,7 +73,7 @@ bool SpectrumViewport::rowValid(std::size_t row) const {
 std::uint8_t SpectrumViewport::intensity(std::size_t row,
                                          std::size_t column) const {
     if (!rowValid(row) || column >= kDisplayColumns) return 0;
-    return history_[row * kRowBytes + column];
+    return resample(&history_[row * kRowBytes], binCount_, column);
 }
 
 }  // namespace leshy1::apps::spectrum

@@ -14,14 +14,15 @@ enum class SpectrumDisplayMode : std::uint8_t {
 const char* spectrumDisplayModeName(SpectrumDisplayMode mode);
 
 // A bounded, allocation-free history shared by mutually exclusive RF views.
-// Rows stay in their physical ring slots and every stored column maps one-to-one
-// to a physical TFT pixel, so appending never stretches or redraws old samples.
+// Every completed receiver sweep stays in its physical one-pixel row slot.  The
+// history preserves real receiver bins; expansion to TFT columns happens only
+// while rendering and never invents intermediate measurements.
 class SpectrumViewport final {
 public:
     static constexpr std::size_t kMaxBins = 83;
     static constexpr std::size_t kDisplayColumns = 240;
     static constexpr std::size_t kHistoryRows = 224;
-    static constexpr std::size_t kRowBytes = kDisplayColumns;
+    static constexpr std::size_t kRowBytes = kMaxBins;
     static constexpr std::size_t kHistoryStorageBytes =
         kRowBytes * kHistoryRows;
     bool reset(std::size_t bins);
@@ -42,9 +43,9 @@ public:
     std::uint8_t intensity(std::size_t row, std::size_t column) const;
 
 private:
-    // The retained history is the exact 240 x 224, eight-bit display raster.
-    // Keeping all 256 levels avoids the false block boundaries caused by the
-    // earlier four-bit storage while remaining allocation-free.
+    // Eight-bit source bins preserve all 256 intensity levels without the false
+    // boundaries of the earlier four-bit storage.  A row reserves kMaxBins so
+    // nRF24 (83) and CC1101 (64) share one fixed ring without heap allocation.
     std::array<std::uint8_t, kHistoryStorageBytes> history_{};
     SpectrumDisplayMode mode_ = SpectrumDisplayMode::Spectrum;
     std::size_t binCount_ = 0;

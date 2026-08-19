@@ -5421,7 +5421,7 @@ constexpr std::int16_t kSpectrumGraphHeight =
 static_assert(kSpectrumGraphHeight == SpectrumViewport::kHistoryRows,
               "each waterfall sample must occupy exactly one TFT row");
 static_assert(Layout::ScreenWidth == SpectrumViewport::kDisplayColumns,
-              "each spectrum sample must occupy exactly one TFT column");
+              "the expanded spectrum scanline must span the TFT width");
 constexpr std::uint16_t kSpectrumNoSignal =
     leshy1::ui::visual::rgb565(0, 0, 0);
 constexpr std::uint16_t kWifiChannelDivider =

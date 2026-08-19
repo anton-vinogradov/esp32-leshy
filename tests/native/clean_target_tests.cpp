@@ -865,8 +865,8 @@ void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
 void testSpectrumViewportKeepsBoundedRingHistory() {
     CHECK(SpectrumViewport::kDisplayColumns == 240);
     CHECK(SpectrumViewport::kHistoryRows == 224);
-    CHECK(SpectrumViewport::kRowBytes == 240);
-    CHECK(SpectrumViewport::kHistoryStorageBytes == 53760);
+    CHECK(SpectrumViewport::kRowBytes == 83);
+    CHECK(SpectrumViewport::kHistoryStorageBytes == 18592);
     SpectrumViewport viewport;
     CHECK(!viewport.reset(0));
     CHECK(!viewport.reset(SpectrumViewport::kMaxBins + 1));
@@ -884,6 +884,14 @@ void testSpectrumViewportKeepsBoundedRingHistory() {
     CHECK(viewport.rowsStored() == 0);
 
     std::array<std::uint8_t, 83> row{};
+    for (std::size_t index = 0; index < row.size(); ++index) {
+        row[index] = static_cast<std::uint8_t>(index);
+    }
+    CHECK(viewport.push(row.data(), row.size()));
+    CHECK(viewport.intensity(0, 0) == 0);
+    CHECK(viewport.intensity(0, 120) == 41);
+    CHECK(viewport.intensity(0, 239) == 82);
+    CHECK(viewport.reset(83));
     for (std::size_t index = 0;
          index < SpectrumViewport::kHistoryRows; ++index) {
         row.fill(static_cast<std::uint8_t>(index));
@@ -900,6 +908,13 @@ void testSpectrumViewportKeepsBoundedRingHistory() {
     CHECK(viewport.latestRow() == 0);
     CHECK(viewport.intensity(0, 82) == 201);
     CHECK(!viewport.push(row.data(), 64));
+    std::array<std::uint8_t, 64> ccRow{};
+    for (std::size_t index = 0; index < ccRow.size(); ++index) {
+        ccRow[index] = static_cast<std::uint8_t>(index);
+    }
+    CHECK(viewport.reset(ccRow.size()));
+    CHECK(viewport.push(ccRow.data(), ccRow.size()));
+    CHECK(viewport.intensity(0, 239) == 63);
     CHECK(viewport.nextMode());
     CHECK(viewport.mode() == SpectrumDisplayMode::Waterfall);
     CHECK(viewport.previousMode());
