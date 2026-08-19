@@ -177,6 +177,7 @@ run_opaque_evidence_check tools/check_inline_key_hints_acceptance.py
 run_opaque_evidence_check tools/check_compact_ui_waterfall_acceptance.py
 run_opaque_evidence_check tools/check_receiver_paced_waterfall_acceptance.py
 run_opaque_evidence_check tools/check_source_history_waterfall_acceptance.py
+python3 "$repo_dir/tools/check_sd_power_cut_acceptance.py"
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 if [[ "$retained_evidence_mode" == "tracked" ]]; then
     python3 "$repo_dir/tools/check_tracked_hil_evidence.py"

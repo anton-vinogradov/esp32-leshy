@@ -184,6 +184,11 @@ observations, cold-reopens/exports её и возвращает Home с zero lea
 physical power-cut без утечки heap и повреждения данных. Это расширяет baseline S3,
 принятый `E-HIL-095`/`E-GATE-003`.
 
+Gate закрыт endurance exact 0.89 плюс exact 0.101
+`E-AUTO-066`/`E-HIL-126`/`E-STORAGE-028`/`E-GATE-005`: восемь cross-radio cycles
+работают 2 799,845 s, затем общий SessionStore read-only восстанавливается на всех
+шести реальных power-cut boundaries с unchanged product data и zero final lease.
+
 ## S5 — Полнота железа ESP32-DIV
 
 **Цель:** дать каждому штатному модулю законченный полезный сценарий и достичь

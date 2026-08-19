@@ -422,6 +422,20 @@ serves both. Full/Guided also clears and rebuilds its ordered report from final 
 an end-of-run heap drop can no longer retain the healthy preflight result. Native
 below-floor injection fails, while board-01 passes at 133,884 B against 131,072 B.
 
+Exact `0.101.0-power-cut-harness` closes the remaining S4 durability boundary with a
+separate protocol, not a hidden boot behavior. `power-cut disposable-write` prepares
+only a typed exact-CID scratch Session, reaches one of the same six SessionStore
+boundaries, emits a flushed arm record and waits while feeding the watchdog. It does
+not call `esp_restart`. The host proves a real USB disappearance for at least three
+seconds, tracks the same serial/VID/PID across re-enumeration, and then issues a
+separate `power-cut-recover disposable-read-only` command. Firmware accepts that path
+only for `ESP_RST_POWERON`; recovery cannot write, format, list product names or read
+product data. Board-01 completes all six boundaries as generations 1/1/1/1/1/2 with
+unchanged prior CRCs, zero recovery writes/syncs and lease 0. The fixture reuses the
+dedicated diagnostic Session workspace, so static RAM remains 170,128 B and product
+generation 95/0 is unaffected. Combined with exact 0.89 endurance, this closes S4;
+S5 now extends the same broker/storage/observation contracts to every stock module.
+
 ## Data model
 
 Raw observation is separate from interpretation:

@@ -850,3 +850,16 @@ retained `E-HIL-115` bundle includes exact firmware/factory/ELF/runner bytes and
 initial runner-only revision-expectation failure; `E-AUTO-055` independently checks
 all hashes, source contracts, screenshots and final cleanup. This accepts IA, not
 the remaining controlled physical power-cut gate.
+
+Exact 0.101 closes that S4 gate without introducing an always-on workstation
+service. `tools/run_1x_sd_power_cut_matrix.py` is invoked only while the device is
+connected for a candidate check. It binds version, source commit, firmware/app hash,
+exact CID and USB serial/VID/PID, checkpoints each of six boundaries, and refuses to
+continue unless it observes a real disconnect, at least three seconds without the
+USB endpoint, the same identity on reconnect and a `POWERON` read-only recovery.
+`E-HIL-126` records six 5.216…6.589 s blackouts, generations 1/1/1/1/1/2, zero
+recovery writes/syncs, complete cleanup and lease 0. The preceding exact candidate
+regression passes 17 TFT states and preserves product 95/0. `E-AUTO-066` checks the
+retained summary and exact source/tool hashes. Together with exact 0.89 endurance,
+`E-GATE-005` closes `DEMO-S4`; S5 is active. This remains stage evidence, not a
+signed release-candidate promotion.

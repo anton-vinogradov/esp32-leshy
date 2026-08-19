@@ -479,6 +479,21 @@ diagnostics, обнаруженный 0.86. Storage line 4 608 bytes и diagnost
 сохранить healthy result preflight. Native injection ниже floor даёт fail, board-01
 проходит с 133 884 B против 131 072 B.
 
+Exact `0.101.0-power-cut-harness` закрывает последнюю durability boundary S4
+отдельным protocol, а не скрытым boot behavior. `power-cut disposable-write`
+готовит только typed exact-CID scratch Session, достигает одной из тех же шести
+boundaries SessionStore, выдаёт flushed arm record и ждёт, подкармливая watchdog.
+`esp_restart` не вызывается. Host доказывает реальное исчезновение USB минимум на
+три секунды, отслеживает те же serial/VID/PID через re-enumeration и затем вызывает
+отдельный `power-cut-recover disposable-read-only`. Firmware допускает этот path
+только для `ESP_RST_POWERON`; recovery не может писать, форматировать, перечислять
+product names или читать product data. Board-01 проходит все шесть boundaries как
+generations 1/1/1/1/1/2 с unchanged prior CRC, zero recovery writes/syncs и lease 0.
+Fixture переиспользует отдельный diagnostic Session workspace, поэтому static RAM
+остаётся 170 128 B, product generation 95/0 не меняется. Вместе с endurance exact
+0.89 это закрывает S4; теперь S5 расширяет те же broker/storage/observation contracts
+на каждый штатный модуль.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

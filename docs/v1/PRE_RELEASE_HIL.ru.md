@@ -843,3 +843,16 @@ Retained bundle `E-HIL-115` содержит exact bytes firmware/factory/ELF/ru
 первый runner-only failure ожидания revision; `E-AUTO-055` независимо проверяет все
 hashes, source contracts, screenshots и final cleanup. Это принимает IA, но не
 оставшийся gate controlled physical power cut.
+
+Exact 0.101 закрывает этот gate S4 без always-on workstation service.
+`tools/run_1x_sd_power_cut_matrix.py` запускается только при подключённом устройстве
+для проверки candidate. Он связывает version, source commit, firmware/app hash,
+exact CID и USB serial/VID/PID, сохраняет checkpoint каждой из шести boundaries и
+отказывается продолжать без реального disconnect, отсутствия USB endpoint минимум
+три секунды, той же identity после reconnect и read-only recovery с `POWERON`.
+`E-HIL-126` фиксирует шесть blackout 5,216…6,589 s, generations 1/1/1/1/1/2, zero
+recovery writes/syncs, полный cleanup и lease 0. Предыдущий exact candidate
+regression проходит 17 TFT states и сохраняет product 95/0. `E-AUTO-066` проверяет
+retained summary и exact source/tool hashes. Вместе с endurance exact 0.89
+`E-GATE-005` закрывает `DEMO-S4`; S5 активен. Это stage evidence, а не signed
+promotion release candidate.

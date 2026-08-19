@@ -7,8 +7,8 @@ fixture, guarded physical FAT commit/remount, per-generation и batched 32-sampl
 throughput, real-source queue/persistence и host/static six-boundary software-reset
 matrix реализованы; exact product UI/reboot/export и missing-source
 real-TFT/zero-lease path плюс normal/remount и six-boundary software-reset
-LittleFS parity проверены; управляемый physical power-cut остаётся отдельной
-fixture lane `DEMO-S4`**.
+LittleFS parity проверены; exact 0.101 проверяет physical power-cut по всем шести
+boundaries и закрывает `ST-HIL-A08`/`DEMO-S4`**.
 
 Протокол проверяет ADR-003 без риска для неизвестной SD card или сохранённых данных
 во flash. Обычная diagnostic image никогда не форматирует и не записывает storage
@@ -536,6 +536,20 @@ generation 48→51 с 37/37 forwarded, шестью cold boots, zero drops/heap 
 final lease 0. Retained summary:
 [`board-01-product-hardware-watchdog-0.51.json`](../../tests/hil/evidence/board-01-product-hardware-watchdog-0.51.json).
 
+Exact `0.101.0-power-cut-harness` добавляет отдельную physical lane без ослабления
+software-reset protocol. Arm command создаёт только deterministic Session из трёх
+observations в exact-CID `/leshy-hil/s4pc101-b<1..6>`, достигает одной typed
+write/sync boundary, flush-ит serial prompt и ждёт без software reset. Host runner
+связывает firmware/app hashes, source commit, CID и USB serial/VID/PID; требует
+исчезновения endpoint, blackout минимум три секунды и ту же USB identity после
+возврата. Recovery допускается только после `ESP_RST_POWERON`, открывает existing
+scratch store read-only и требует разрешённую generation, unchanged prior CRC, zero
+bytes/file/directory syncs, полный cleanup и lease 0. Шесть реальных отключений на
+5,216…6,589 s восстанавливают generations 1/1/1/1/1/2 с тремя observations без
+mismatch или retry. Product generation 95/0 неизменна до и после exact regression
+на 17 states. Retained evidence:
+[`board-01-sd-power-cut-0.101.json`](../../tests/hil/evidence/board-01-sd-power-cut-0.101.json).
+
 ## Приёмка
 
 | ID | Обязательный результат |
@@ -568,13 +582,14 @@ E-HIL-073/074 подтверждают hardware fallback 0.51 и three-cycle pro
 E-HIL-075 добавляет 12 последовательных cycles, generation 51→63, 144/144 records,
 24 cold boots, invariant heap и zero drops при final lease 0; операторская остановка
 сохранена как `interrupted`, поэтому это engineering checkpoint, не release-pass.
-NFR-004 ≥45 минут/≥8 циклов с часовым бюджетом остаётся `DEMO-S4`. E-HIL-092
+NFR-004 ≥45 минут/≥8 циклов с часовым бюджетом закрыт exact 0.89. E-HIL-092
 закрывает ST-HIL-A11 на
 той же board/card с localized real-TFT failure, zero source/store start, неизменной
 generation 68/25 и final lease 0. E-HIL-093 закрывает normal/remount половину
-ST-HIL-A07 на изолированном и полностью восстановленном inactive OTA1 target. Те же
-шесть commit boundaries всё ещё требуют отдельной LittleFS reset matrix, а physical
-power-cut — controller.
+ST-HIL-A07 на изолированном и полностью восстановленном inactive OTA1 target. Для
+его шести boundaries есть отдельная software-reset matrix LittleFS. E-HIL-126 затем
+закрывает physical SD половину ST-HIL-A08 шестью наблюдавшимися ручными отключениями
+USB; постоянно работающий controller или macOS-служба не нужны.
 E-HIL-111 закрывает ST-HIL-A12 на enrolled board-01: три exact scratch writes/504 B,
 read-only recovery/export generation 1, cleanup трёх files, unchanged product 83/0 и
 final lease 0. Сохранённый первый attempt останавливается до любой write, потому что

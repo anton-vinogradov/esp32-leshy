@@ -149,6 +149,11 @@ unavailability, survives reboot/export and controlled physical power-cut, and ha
 heap growth or data corruption. This extends the S3 baseline accepted by
 `E-HIL-095`/`E-GATE-003`.
 
+Closed by exact 0.89 endurance plus exact 0.101
+`E-AUTO-066`/`E-HIL-126`/`E-STORAGE-028`/`E-GATE-005`: eight cross-radio cycles run
+for 2,799.845 s, and the common SessionStore then recovers read-only across all six
+real power-cut boundaries with unchanged product data and zero final leases.
+
 ## S5 — Complete ESP32-DIV hardware
 
 **Goal:** give every standard module a complete useful workflow and reach meaningful

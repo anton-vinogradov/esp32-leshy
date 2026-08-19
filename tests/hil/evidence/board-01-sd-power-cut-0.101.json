@@ -1,0 +1,147 @@
+{
+  "schema": "leshy.storage.sd.physical_power_cut_acceptance.v1",
+  "status": "pass_demo_s4_gate",
+  "board": "board-01",
+  "date": "2026-08-19",
+  "evidence_ids": [
+    "E-BUILD-102",
+    "E-AUTO-066",
+    "E-HIL-126",
+    "E-STORAGE-028",
+    "E-GATE-005"
+  ],
+  "candidate": {
+    "version": "0.101.0-power-cut-harness",
+    "source_commit": "aa188baa1d055f15de2a14a027d09de5766a77b7",
+    "firmware_sha256": "beee8ab472412ad0cec135a887236bb6094f3a89b4da0144e77b241614310fe7",
+    "app_elf_sha256": "f5d343497b12b8fdb98c1b69bd1ce731958cc8663a078d3f495137304e1adb90",
+    "firmware_bytes": 1512848,
+    "factory_bytes": 1578384,
+    "linked_flash_bytes": 1512700,
+    "static_ram_bytes": 170128
+  },
+  "tool_binding": {
+    "runner_sha256": "fe2d1511dec458772009d2ab19056d5548e8c4a35fdb801a83f42815e891dd3d",
+    "runner_tests_sha256": "d922bbcadd66033fc7b7a3ef387750d47d9e84ca771d79f55636601489defe18",
+    "firmware_protocol_source_sha256": "99ac744681eb65c1fcb5cec388595c09f01a218babffa41d6acf856b0dcc642a",
+    "platformio_sha256": "b84aa8538949c1e1c46c301136f10bc67a3c04c11d7ffef050c04db5486aacef"
+  },
+  "raw_run_binding": {
+    "product_home_run_sha256": "4ddff13baa486a8f395f52a2368abec3709e5fd4d80b3acc87f0af71ef4be87e",
+    "software_reset_preflight_sha256": "8d6997811a6694863eaa14aed77e0d091db838e684f8874c75f0f6af443104ee",
+    "physical_power_cut_run_sha256": "8764a73ec59b6aa428b8b3bc3660d109957b67b93f8ce91f36552f8e8d787861"
+  },
+  "media": {
+    "cid": "FE343253440000002000000055019CB7",
+    "usb_serial": "1C:DB:D4:87:90:D4",
+    "usb_vid": 12346,
+    "usb_pid": 4097,
+    "usb_location": "2-1",
+    "same_usb_identity_all_cycles": true,
+    "format_allowed": false,
+    "scratch_prefix": "/leshy-hil/s4pc101-b"
+  },
+  "software_reset_preflight": {
+    "boundaries_completed": 1,
+    "boundary": 1,
+    "status": "valid",
+    "software_reset": true,
+    "physical_power_cut": false,
+    "opened_read_only": true,
+    "recovered_generation": 1,
+    "reopened_observations": 3,
+    "prior_unchanged": true,
+    "recovery_bytes_written": 0,
+    "recovery_file_syncs": 0,
+    "recovery_directory_syncs": 0,
+    "cleanup_complete": true,
+    "final_lease_mask": 0
+  },
+  "physical_matrix": {
+    "status": "valid",
+    "physical_power_cut": true,
+    "manual_power_cycles": 6,
+    "boundaries": [1, 2, 3, 4, 5, 6],
+    "boundary_names": [
+      "write_payloads",
+      "sync_payloads",
+      "write_manifest",
+      "sync_manifest",
+      "write_head",
+      "sync_head"
+    ],
+    "expected_recovery": [
+      "prior_generation",
+      "prior_generation",
+      "prior_generation",
+      "prior_generation",
+      "prior_or_new_generation",
+      "new_generation"
+    ],
+    "blackout_seconds": [
+      5.447109667118639,
+      5.241812916006893,
+      5.23020354192704,
+      6.085397709161043,
+      5.215977625455707,
+      6.588875833898783
+    ],
+    "minimum_blackout_seconds": 3.0,
+    "disconnect_observed": [true, true, true, true, true, true],
+    "reconnect_observed": [true, true, true, true, true, true],
+    "same_usb_identity": [true, true, true, true, true, true],
+    "power_on_reset": [true, true, true, true, true, true],
+    "reset_reason_codes": [1, 1, 1, 1, 1, 1],
+    "software_reset": [false, false, false, false, false, false],
+    "reset_injection": [false, false, false, false, false, false],
+    "opened_read_only": [true, true, true, true, true, true],
+    "session_store_io_writable": [false, false, false, false, false, false],
+    "initial_generations": [1, 1, 1, 1, 1, 1],
+    "recovered_generations": [1, 1, 1, 1, 1, 2],
+    "reopened_observations": [3, 3, 3, 3, 3, 3],
+    "prior_unchanged": [true, true, true, true, true, true],
+    "recovery_attempt_counts": [1, 1, 1, 1, 1, 1],
+    "recovery_bytes_written": [0, 0, 0, 0, 0, 0],
+    "recovery_file_syncs": [0, 0, 0, 0, 0, 0],
+    "recovery_directory_syncs": [0, 0, 0, 0, 0, 0],
+    "cleanup_complete": [true, true, true, true, true, true],
+    "final_lease_masks": [0, 0, 0, 0, 0, 0],
+    "radio_tx_commands": [0, 0, 0, 0, 0, 0],
+    "user_file_names_listed": [false, false, false, false, false, false],
+    "user_file_data_read": [false, false, false, false, false, false],
+    "mismatches": [{}, {}, {}, {}, {}, {}]
+  },
+  "product_regression": {
+    "status": "pass",
+    "flashed_exact_candidate": true,
+    "tft_states": 17,
+    "failures": [],
+    "generation_before": 95,
+    "observations_before": 0,
+    "generation_after": 95,
+    "observations_after": 0,
+    "physical_write_calls_before": 0,
+    "physical_write_calls_after": 0,
+    "heap_total": 211580,
+    "heap_free": 146472,
+    "heap_min_free": 127120,
+    "final_page": "home",
+    "final_owner": "none",
+    "final_lease_mask": 0
+  },
+  "gate": {
+    "st_hil_a08": "verified",
+    "pr_005_power_loss_recovery": "verified_for_common_session_store_on_board_01",
+    "release_endurance_evidence": "board-01-product-endurance-0.89.json",
+    "release_endurance_seconds": 2799.845,
+    "release_endurance_cycles": 8,
+    "demo_s4": "pass",
+    "s4_status": "done",
+    "next_stage": "S5"
+  },
+  "limitations": [
+    "The controlled cut matrix validates the common SessionStore on one enrolled board/card pair; it is not a statistical media-compatibility claim.",
+    "RF values remain uncalibrated and instrumented physical RF silence remains unavailable.",
+    "No 1.x release is promoted by this stage-gate evidence; S5 through S8 remain required."
+  ]
+}

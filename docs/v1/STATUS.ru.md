@@ -2,7 +2,7 @@
 
 *Читать на: [English](STATUS.md) · **Русский***
 
-Последнее обновление: **19 августа 2026 года**.
+Последнее обновление: **20 августа 2026 года**.
 
 Это единственный документ с живым состоянием проекта. Границы этапов находятся в
 [DELIVERY_PLAN.ru.md](DELIVERY_PLAN.ru.md), а правила обновления — в
@@ -10,16 +10,16 @@
 
 ## Сейчас
 
-- **Активный этап:** `S4 — Cross-radio passive platform`.
-- **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.100 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact, guarded disposable write/remount/export/cleanup, calibrated touch navigation, cross-radio release-endurance gate, финального меню из реализованных задач, полноэкранных однопиксельных Спектр/Водопад, однокомандного connected-candidate gate, локализованного root-only Home с видимой версией, строчной легенды физических клавиш на основе геометрии 0.x, компактных page headers/четырёхстрочных targets, Wi-Fi channel/Сигнал/Трафик presentation, приёма всеми доступными nRF, receiver-paced history водопада и хранения source bins.
+- **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
+- **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, exact checkpoints функций/endurance S4 0.71…0.100 и exact 0.101 с шестью controlled physical power cuts по всем границам commit, закрывающим `DEMO-S4`.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
-- **Главная цель текущего этапа:** проверить controlled physical power-cut recovery —
-  единственный оставшийся gate `DEMO-S4`.
-- **Последний принятый checkpoint:** exact 0.100 сохраняет на Home только
+- **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
+  и провести каждый present module через probe → observe/capture → Library → inspect/export.
+- **Последний принятый checkpoint:** exact 0.101 сохраняет принятые в 0.100 Home-задачи:
   реализованные задачи: Wi-Fi, Bluetooth, 2.4 ГГц, Sub-GHz, Захват,
   Библиотеку и Устройство. Только Home показывает `LESHY` на английском или
-  `Леший` на русском плюс полученный из build identity `v0.100.0`; вложенные headers
+  `Леший` на русском плюс полученный из build identity `v0.101.0`; вложенные headers
   содержат навигационный контекст, а «О системе» — полную версию. Wi-Fi/BLE открывают свой одноисточниковый Start;
   2.4 ГГц — сразу live view nRF24; Sub-GHz — chooser четырёх диапазонов
   CC1101; все service functions остаются в последнем пункте Устройство.
@@ -44,8 +44,14 @@
   Меняется только raster водопада, static chrome остаётся неизменным. Все 17 TFT
   states связывают Home/menu/RF presentation. Значения остаются uncalibrated, а
   83/64 реальных source bins повторяются по 240 горизонтальным pixels без создания
-  вымышленных промежуточных samples. Exact 0.89 остаётся принятым endurance результатом 2 799,845 s;
-  controlled physical power cut открыт.
+  вымышленных промежуточных samples. Exact 0.89 остаётся принятым endurance
+  результатом 2 799,845 s/восемь циклов. Exact 0.101 затем физически снимает USB-
+  питание минимум на три секунды на всех шести границах SessionStore commit. Все
+  шесть раз возвращается то же USB-устройство с `ESP_RST_POWERON`, read-only
+  восстанавливаются generations 1/1/1/1/1/2 и три observations, prior hashes не
+  меняются, recovery writes/syncs и TX commands равны нулю, exact-CID scratch очищен,
+  final lease равен 0. Product generation 95/0 неизменна. Это закрывает
+  `ST-HIL-A08`, `E-GATE-005` и `DEMO-S4`, но не выпускает релиз.
 
 ## Состояние этапов
 
@@ -55,8 +61,8 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key плюс calibrated touch input/TFT capture, finger-sized common rows, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.100 принимают passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, финальный Home из реализованных задач, компактный status, полноэкранные RF views, автоматический connected-candidate gate, локализованный root-only Home с версией, строчные подсказки физических клавиш, compact navigation на четыре строки, Wi-Fi channel/Сигнал/Трафик views и receiver-paced водопады «один sweep — один pixel» со всеми тремя найденными nRF receivers и source-bin history | проверить controlled physical power-cut recovery |
-| S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
+| S4 | `done` | exact 0.71…0.101 принимают passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, финальный Home из реализованных задач, компактный status, полноэкранные RF views, all-available receiver-paced водопады и шесть реальных power cuts по всем границам SessionStore commit с read-only recovery и zero product mutation | — (`E-GATE-005`) |
+| S5 | `active` | scope штатного hardware и fail-closed envelope определены; принятая platform S4 для storage/radio/UI переиспользуется | закончить probe → observe/capture → Library → inspect/export для каждого применимого штатного модуля и проверить PR-014 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
 | S8 | `planned` | release gates определены | требуется gate S7 |
@@ -71,15 +77,15 @@
 |---|---|---|
 | Основа устройства и UX | `готово / S2`, уточнено в S4 — boot, board profile, пять клавиш плюс calibrated touch, finger-sized common rows, EN/RU UI, ResourceBroker и автоматический TFT capture; exact 0.100 показывает на Home семь реализованных задач, не включает будущие Цели/Лабораторию в executable menu, группирует Настройки, Самопроверку, Диагностику и О системе в последнем пункте Устройство, помещает четыре строки 216×60 под contextual header 26 px и доказывает результат однокомандным build/flash/HIL/screenshot/check gate; plan-v7 Full/Guided выполняет declared receive-only RF, artifact и изолированные disposable-storage checks | сохранять эту иерархию и общий plan при добавлении следующих capabilities |
 | Survey и Library | `готово / S3` — реальный passive Wi-Fi, atomic Session, List/Detail, offline reopen и export | используется как принятый фундамент, не переписывается отдельной веткой |
-| Passive multi-radio и Capture | `в работе / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV и privacy-confirmed persistent Wi-Fi PCAP работают; все три найденных nRF24 дают живую карту 2 402…2 484 МГц с режимами Сигнал/Трафик и сеткой Wi-Fi channels, CC1101 — RSSI-карты 315/433/868/915 МГц; exact 0.100 сохраняет один законченный hardware sweep в одну физическую строку 1 px, хранит только 83/64 реальных receiver bins и разворачивает их в display 240×224 при render, не повторяет stale/partial данные и оставляет скорость обновления зависимой от приёмника; Self-Test повторяет оба receive path, проверяет последний SD artifact и доказывает изолированный disposable commit/remount/export/cleanup cycle; exact 0.89 проходит release-endurance gate | controlled physical power cut |
-| Всё штатное железо ESP32-DIV | `впереди / S5` — scope и fail-closed hardware envelope описаны, но законченных IR/PN532/GPS/power workflows ещё нет | probe → capture/observe → Library → inspect/export для каждого применимого модуля |
+| Passive multi-radio и Capture | `готово / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV, persistent Wi-Fi PCAP, all-available live-карты nRF24 и CC1101, source-bin водопады «один sweep — один pixel», Full/Guided receiver/artifact/disposable checks, endurance 2 799,845 s и six-boundary physical power-cut recovery exact 0.101 приняты | сохранить как общий observation/storage фундамент S5 |
+| Всё штатное железо ESP32-DIV | `в работе / S5` — scope и fail-closed hardware envelope описаны, но законченных IR/PN532/GPS/power workflows ещё нет | probe → capture/observe → Library → inspect/export для каждого применимого модуля |
 | Targets, compare и companion | `впереди / S6` — product model и границы определены, пользовательские сценарии ещё не реализованы | две Survey сравниваются через evidence-backed Targets и тот же локальный Web/USB companion |
 | Safe Lab и расширения | `впереди / S7` — safety/resource boundaries приняты, active workflows и SDK ещё не реализованы | feature-complete каталог, permissioned extensions и доказанный panic/timeout stop |
 | Надёжность и доставка 1.0 | `впереди / S8` — release HIL концепт и часть инфраструктуры существуют, но это не release evidence | signed OTA/rollback/recovery, полный HIL/Self-Test, mixed workload с часовым бюджетом и два зелёных RC |
 
-Итого по этапам: S0–S3 закрыты, S4 активен, S5–S8 впереди. По пользовательской
+Итого по этапам: S0–S4 закрыты, S5 активен, S6–S8 впереди. По пользовательской
 ценности уже существуют законченный Survey→Library путь, настоящий packet Capture
-и живые spectrum-карты nRF24/CC1101; полнота штатного железа начинается после gate S4, а основные отличия
+и живые spectrum-карты nRF24/CC1101; полнота штатного железа теперь является активной работой, а основные отличия
 Targets/compare/companion — на S6.
 
 ## S1 — закрыто
@@ -689,6 +695,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-AUTO-064 / E-HIL-124 / E-UX-023 / E-RADIO-010 | board-01 exact 0.99 receiver-paced однопиксельные водопады | pass: режимы nRF24 Сигнал и Трафик показывают деления Wi-Fi channels, чёрный quiet background, крайние частоты и все три найденных receive slots (`mask=7`); каждый водопад nRF/CC сохраняет один полный hardware sweep как одну физическую строку 1 px. Шесть полных paths на 224 строки принимают 250/247/225/226/224/225 measurements с zero skipped. Host fill следует возможностям приёмника: 2,344/2,373 s для nRF Сигнал/Трафик и 32,793/22,857/31,438/31,595 s для CC315/433/868/915. Exact screenshots доказывают, что меняется только graph (`chrome=0`), а zero TX/storage side effects, unchanged generation 95/0, invariant stabilized heap 176 412/111 372/92 020 B и final owner/lease none/0 связаны в [machine-checked artifact](../../tests/hil/evidence/board-01-receiver-paced-waterfall-0.99.json) | заменяет fixed-time visual cadence 0.96 на правду измерений: partial/stale row не повторяется, горизонтальная interpolation не создаёт вымышленных samples. 83 bin nRF или 64 bin CC неизбежно повторяются в соседних columns по ширине 240 px. Значения остаются uncalibrated; instrumented RF silence и controlled power cut открыты |
 | E-BUILD-101 | exact build `0.100.0-spectrum-source-history` | pass: RAM 170 128 B, linked flash 1 510 900 B; app/factory 1 511 312/1 576 848 B; app `14b872f5…9c72`, factory `b0a5bcd3…6140`, ELF/app identity `6be7cc03…ce76`; exact source commit `c18edde` | −60 B linked flash, −35 168 B static RAM и −48/−48 B images против 0.99. Ring на 224 строки хранит по одному byte для каждого из максимум 83 реальных receiver bins (18 592 B), а не 240 развёрнутых display columns (53 760 B) |
 | E-AUTO-065 / E-HIL-125 / E-UX-024 / E-RADIO-011 | board-01 exact 0.100 source-bin history водопада | pass: физический display остаётся 240×224, один законченный receiver sweep по-прежнему создаёт одну физическую строку 1 px, но nearest-source-bin expansion выполняется только при render и без interpolation. Шесть полных paths принимают 230/244/225/224/224/225 sweeps с zero skipped; host fill равен 2,083/2,346 s для nRF Сигнал/Трафик и 32,977/22,488/31,699/31,874 s для CC315/433/868/915. Максимальный измеренный render строки — 611 us. Все три nRF slot активны, exact chrome changes остаются zero, retries/recoveries CC и TX/storage side effects равны нулю, generation остаётся 95/0, stabilized heap восстанавливается до 211 580/146 472/127 120 B, final owner/lease — none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-source-history-waterfall-0.100.json) | сохраняет принятые semantics измерений и display, убирая случайный множитель ширины экрана из retained history. Значения остаются uncalibrated; instrumented RF silence и controlled power cut открыты |
+| E-BUILD-102 | exact build `0.101.0-power-cut-harness` | pass: RAM 170 128 B, linked flash 1 512 700 B; app/factory 1 512 848/1 578 384 B; app `beee8ab4…0fe7`, ELF/app identity `f5d34349…db90`; exact source commit `aa188ba` | +1 800 B linked flash, zero static-RAM growth и +1 536/+1 536 B images против 0.100 за изолированные SD power-cut arm/recovery commands и identity-bound host runner |
+| E-AUTO-066 / E-HIL-126 / E-STORAGE-028 / E-GATE-005 | board-01 exact 0.101 physical power-cut по шести boundaries и `DEMO-S4` | pass: один exact flashed candidate сначала проходит Home/RF regression на 17 states с unchanged product generation 95/0 и heap 211 580/146 472/127 120 B. Software-reset preflight затем проверяет boundary 1. Physical matrix наблюдает шесть реальных USB disconnect длительностью 5,216…6,589 s на write/sync boundaries payload, manifest и head; каждый раз возвращается та же USB identity с `ESP_RST_POWERON`. Read-only recovery даёт generations 1/1/1/1/1/2 и три observations, неизменные prior CRC, zero recovery bytes/file/directory syncs, zero TX, отсутствие чтения user names/data, полный cleanup и lease 0 в [machine-checked artifact](../../tests/hil/evidence/board-01-sd-power-cut-0.101.json) | закрывает ST-HIL-A08 и единственный оставшийся gate `DEMO-S4` вместе с принятым endurance 0.89. S4 закрыт, S5 активен; это evidence одной пары board/card, не release promotion и не claim совместимости всех носителей |
 
 ## Известные неопределённости и риски
 

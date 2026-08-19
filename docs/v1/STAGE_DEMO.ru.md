@@ -152,6 +152,17 @@ fail closed, а Настройки/Самопроверка/Диагностик
 Восемь real TFT states доказывают key/touch traversal и final zero ownership.
 Controlled physical power-cut recovery остаётся единственным gate `DEMO-S4`.
 
+`DEMO-S4` принят `E-AUTO-066`/`E-HIL-126`/`E-STORAGE-028`/`E-GATE-005`. Exact 0.101
+сначала проходит автоматический product regression на 17 states с unchanged product
+generation 95/0, затем выполняет все шесть boundaries SessionStore при реальном
+снятии USB-питания. Host наблюдает каждый blackout длительностью 5,216…6,589 s;
+возвращается та же USB identity с `ESP_RST_POWERON`; read-only recovery выбирает
+generations 1/1/1/1/1/2 с тремя observations, неизменными prior CRC, zero recovery
+writes/syncs, полным cleanup scratch и lease 0. Вместе с принятым endurance exact
+0.89 на 2 799,845 s/восемь циклов это выполняет стабильный exit gate S4. S4 закрыт,
+S5 активен. Результат покрывает одну пару board/card, не выпускает релиз и не
+заявляет instrumented RF silence.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases.

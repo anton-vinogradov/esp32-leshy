@@ -151,6 +151,17 @@ closed, and Settings/Self-Test/Diagnostics/About live under Device. Eight real T
 states prove key/touch traversal and final zero ownership. Controlled physical
 power-cut recovery remains the only `DEMO-S4` gate.
 
+`DEMO-S4` is accepted by `E-AUTO-066`/`E-HIL-126`/`E-STORAGE-028`/`E-GATE-005`.
+Exact 0.101 first passes the automated 17-state product regression with product
+generation 95/0 unchanged, then executes all six SessionStore boundaries under real
+USB power removal. Each 5.216…6.589 s blackout is observed by the host; the same USB
+identity returns with `ESP_RST_POWERON`; read-only recovery selects generations
+1/1/1/1/1/2 with three observations, unchanged prior CRCs, zero recovery writes or
+syncs, complete scratch cleanup and lease 0. Together with the accepted 2,799.845 s/
+eight-cycle exact 0.89 endurance result, this satisfies the stable S4 exit gate.
+S4 is closed and S5 is active. The result covers one board/card pair and does not
+promote a release or claim instrumented RF silence.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases.

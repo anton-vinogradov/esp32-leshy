@@ -7,8 +7,8 @@ fixture, guarded physical FAT commit/remount, per-generation and batched 32-samp
 SD throughput, real-source queue/persistence, and the six-boundary software-reset
 matrix are implemented; exact product UI/reboot/export and the missing-source
 real-TFT/zero-lease path plus normal/remount and six-boundary software-reset
-LittleFS parity are exercised; controlled physical power-cut remains a separate
-`DEMO-S4` fixture lane**.
+LittleFS parity are exercised; exact 0.101 verifies controlled physical power-cut
+at all six boundaries and closes `ST-HIL-A08`/`DEMO-S4`**.
 
 This protocol verifies ADR-003 without risking an unknown SD card or retained flash
 data. The ordinary diagnostic image never formats or writes storage during boot or
@@ -545,6 +545,20 @@ lease 0. E-HIL-074 then advances generation 48→51 with 37/37 forwarded, six co
 boots, zero drops/heap drift, and final lease 0. Retained summary:
 [`board-01-product-hardware-watchdog-0.51.json`](../../tests/hil/evidence/board-01-product-hardware-watchdog-0.51.json).
 
+Exact `0.101.0-power-cut-harness` adds a separate physical lane without weakening
+the software-reset protocol. The arm command creates only a deterministic
+three-observation Session under exact-CID `/leshy-hil/s4pc101-b<1..6>`, reaches one
+typed write/sync boundary, flushes the serial prompt and waits without issuing a
+software reset. The host runner binds firmware/app hashes, source commit, CID and
+USB serial/VID/PID; it requires endpoint disappearance, at least three seconds of
+blackout, and the same USB identity on return. Recovery is admitted only after
+`ESP_RST_POWERON`, opens the existing scratch store read-only and requires an allowed
+generation, unchanged prior CRCs, zero bytes/file/directory syncs, complete cleanup
+and lease 0. Six real 5.216…6.589 s cuts recover generations 1/1/1/1/1/2 with three
+observations and zero mismatches or retries. Product generation 95/0 remains
+unchanged before and after the exact 17-state regression. Retained evidence:
+[`board-01-sd-power-cut-0.101.json`](../../tests/hil/evidence/board-01-sd-power-cut-0.101.json).
+
 ## Acceptance
 
 | ID | Required result |
@@ -578,12 +592,14 @@ and three-cycle product regression. E-HIL-075 adds 12 consecutive cycles,
 generation 51→63, 144/144 records, 24 cold boots, invariant heap, and zero drops with
 final lease 0; the operator stop remains `interrupted`, so this is an engineering
 checkpoint rather than a release pass. The ≥45-minute/≥8-cycle NFR-004 release
-gate, bounded by one operational hour, remains in
-`DEMO-S4`. E-HIL-092 closes ST-HIL-A11 on the same board/card with a localized
+gate, bounded by one operational hour, is closed by exact 0.89. E-HIL-092 closes
+ST-HIL-A11 on the same board/card with a localized
 real-TFT failure, zero source/store start, unchanged generation 68/25, and final lease
 0. E-HIL-093 closes the normal/remount LittleFS half of ST-HIL-A07 on the isolated,
-fully restored inactive OTA1 target. The same six commit boundaries still require a
-dedicated LittleFS reset matrix, and physical power-cut still needs a controller.
+fully restored inactive OTA1 target. Its six boundaries have a dedicated LittleFS
+software-reset matrix. E-HIL-126 then closes the physical SD half of ST-HIL-A08 with
+six observed manual USB power cuts; no always-on controller or macOS service is
+required.
 E-HIL-111 closes ST-HIL-A12 on enrolled board-01: three exact scratch writes/504 B,
 read-only generation-1 recovery/export, three-file cleanup, unchanged product 83/0
 and final lease 0. Its retained first attempt stops before any write because capture
