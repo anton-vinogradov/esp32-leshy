@@ -334,9 +334,11 @@ The symbols keep the established 1.x semantics: Left is the parent/stop path,
 Up/Down changes the current selection or view, and Right or OK enters or performs
 the named action. The six-pixel outer anchors and optical vertical centering are
 derived from the readable 0.x footer geometry; labels remain generated EN/RU font
-text and never become touch targets. The connected-candidate gate must capture
-Home, nested menus and live RF views so the compact legend is checked in every
-combination before this checkpoint is accepted.
+text and never become touch targets. The connected-candidate gate captures Home,
+nested menus and live RF views so the compact legend is checked in every
+combination. Exact physical checkpoint 0.95 retains 14 TFT states with one flash,
+zero manual presses, unchanged heap/storage and final lease 0 (`E-BUILD-096`/
+`E-AUTO-060`/`E-HIL-120`/`E-UX-019`).
 
 ## Gate
 

@@ -163,3 +163,5 @@ It changes only the shared physical-key legend: the former stacked key-over-labe
 cells become one mixed-case Roboto Condensed Medium 12 baseline, with `◀ Back`
 left-aligned, `▲▼ Select` centered and the contextual action plus `OK▶` right-aligned.
 The footer stays non-interactive; touch entry remains on enabled content rows.
+Fourteen exact TFT states accept this refinement with `E-BUILD-096`/`E-AUTO-060`/
+`E-HIL-120`/`E-UX-019`.

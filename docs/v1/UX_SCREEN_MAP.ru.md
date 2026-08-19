@@ -165,3 +165,5 @@ Candidate `0.95.0-inline-key-hints` не меняет дерево экрано�
 `◀ Назад` выровнено влево, `▲▼ Выбор` центрировано, contextual action и `OK▶`
 выровнены вправо. Footer остаётся non-interactive; touch entry по-прежнему принадлежит
 enabled content rows.
+Четырнадцать exact TFT states принимают это refinement как `E-BUILD-096`/
+`E-AUTO-060`/`E-HIL-120`/`E-UX-019`.

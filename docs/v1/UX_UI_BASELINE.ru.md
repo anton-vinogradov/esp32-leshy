@@ -340,9 +340,10 @@ Candidate `0.95.0-inline-key-hints` возвращает удачную моде
 selection или вид, Right либо OK входит внутрь или выполняет названное действие.
 Внешние anchors по шесть пикселей и оптическая вертикальная центровка получены из
 читаемой геометрии footer 0.x; подписи остаются текстом generated EN/RU font и не
-становятся touch targets. Connected-candidate gate обязан снять Home, вложенные меню
-и live RF views, чтобы compact legend была проверена во всех сочетаниях до принятия
-checkpoint.
+становятся touch targets. Connected-candidate gate снимает Home, вложенные меню и
+live RF views, проверяя compact legend во всех сочетаниях. Exact physical checkpoint
+0.95 сохраняет 14 TFT states после одной прошивки и zero ручных нажатий при unchanged
+heap/storage и final lease 0 (`E-BUILD-096`/`E-AUTO-060`/`E-HIL-120`/`E-UX-019`).
 
 ## Gate
 

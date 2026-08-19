@@ -12,14 +12,14 @@
 
 - **Активный этап:** `S4 — Cross-radio passive platform`.
 - **Последний закрытый этап:** `S3 — Первая сохраняемая Survey Session`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.94 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact, guarded disposable write/remount/export/cleanup, calibrated touch navigation, cross-radio release-endurance gate, финального меню из реализованных задач, полноэкранных Спектр/Водопад, однокомандного connected-candidate gate и локализованного root-only Home с видимой версией.
+- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3` и exact checkpoints S4 0.71…0.95 вплоть до persistent Wi-Fi Capture, обеих пользовательских spectrum workflows, receive-only RF checks, read-only audit artifact, guarded disposable write/remount/export/cleanup, calibrated touch navigation, cross-radio release-endurance gate, финального меню из реализованных задач, полноэкранных Спектр/Водопад, однокомандного connected-candidate gate, локализованного root-only Home с видимой версией и строчной легенды физических клавиш на основе геометрии 0.x.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** проверить controlled physical power-cut recovery —
   единственный оставшийся gate `DEMO-S4`.
-- **Последний принятый checkpoint:** exact 0.94 сохраняет на Home только
+- **Последний принятый checkpoint:** exact 0.95 сохраняет на Home только
   реализованные задачи: Wi-Fi, Bluetooth, 2.4 ГГц, Sub-GHz, Захват,
   Библиотеку и Устройство. Только Home показывает `LESHY` на английском или
-  `Леший` на русском плюс полученный из build identity `v0.94.0`; вложенные headers
+  `Леший` на русском плюс полученный из build identity `v0.95.0`; вложенные headers
   содержат навигационный контекст, а «О системе» — полную версию. Wi-Fi/BLE открывают свой одноисточниковый Start;
   2.4 ГГц — сразу live view nRF24; Sub-GHz — chooser четырёх диапазонов
   CC1101; все service functions остаются в последнем пункте Устройство.
@@ -28,7 +28,11 @@
   240×320 и independent verifier без ручных нажатий. Сохранены наполненные
   водопады nRF24/CC1101, stable pause/resume, unchanged generation 95/0, invariant
   heap 221 852/156 892/137 540 B, zero TX/storage side effects и final owner/lease
-  `none`/`0`. Exact 0.89 остаётся принятым endurance результатом 2 799,845 s;
+  `none`/`0`. Общий footer 26 px теперь использует одну вертикально центрированную
+  строку Roboto Condensed Medium 12: слева/в центре клавиша перед действием, справа
+  действие перед `OK▶`, anchors по шесть пикселей, смешанный регистр и один secondary
+  color. Exact edge-aligned geometry 0.x source-bound, а все 14 real TFT states
+  связывают новое представление Home/menu/RF. Exact 0.89 остаётся принятым endurance результатом 2 799,845 s;
   controlled physical power cut открыт.
 
 ## Состояние этапов
@@ -39,7 +43,7 @@
 | S1 | `done` | принят PRD 1.0 baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, измеренные budgets, risk register и пять ADR; недоступные приборы/assemblies получили fail-closed dispositions и перенесены в применимые S4/S5/S8 gates | — |
 | S2 | `done` | независимая target, unified five-key плюс calibrated touch input/TFT capture, finger-sized common rows, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
-| S4 | `active` | exact 0.71…0.94 принимают passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, финальный Home из реализованных задач, компактный status, полноэкранные RF views, автоматический connected-candidate gate и локализованный root-only Home с версией | проверить controlled physical power-cut recovery |
+| S4 | `active` | exact 0.71…0.95 принимают passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, финальный Home из реализованных задач, компактный status, полноэкранные RF views, автоматический connected-candidate gate, локализованный root-only Home с версией и строчные подсказки физических клавиш | проверить controlled physical power-cut recovery |
 | S5 | `planned` | список штатного hardware scope определён | требуется gate S4 |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
@@ -665,6 +669,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-AUTO-058 / E-HIL-118 / E-UX-017 / E-RADIO-006 | board-01 exact 0.93 Home из реализованных задач и connected-candidate gate | pass: `verify_connected_candidate.sh` выполняет host tests, documentation checks, exact build, ровно одну прошивку, public-Action HIL, автоматические screenshots и independent verification. Home показывает Wi-Fi/Bluetooth/2.4 ГГц/Sub-GHz/Захват/Библиотеку/Устройство; все семь открываются, будущих Цели/Лаборатории нет, Wi-Fi/BLE сохраняют exact source masks 1/2, а прямые nRF24 и CC433 Спектр/Водопад накапливают 16/8 строк. Тринадцать TFT states, stable pause/resume, exact CID, unchanged generation 95/0, zero TX/storage/input-drop side effects, invariant heap 221 852/156 892/137 540 B, zero ручных нажатий и final Home owner/lease none/0 связаны в [machine-checked artifact](../../tests/hil/evidence/board-01-product-home-0.93.json) | принимает локальный connected candidate checkpoint и automation boundary; это unsigned evidence одной платы, physical RF silence и controlled power cut остаются uninstrumented/open |
 | E-BUILD-095 | exact build `0.94.0-home-identity` | pass: RAM 159 856 B, linked flash 1 506 228 B; app/factory 1 506 640/1 572 176 B; app `9eaa20de…7792`, factory `047b57c8…c2c`, ELF/app identity `94f93698…dc6`; source и runner commit `569fd51` | +256 B linked flash, zero static-RAM growth и +256/+256 B images против 0.93 за allocation-free форматирование build version и локализованный root identity; exact checkpoint, не release build |
 | E-AUTO-059 / E-HIL-119 / E-UX-018 | board-01 exact 0.94 локализованный root-only Home | pass: Home показывает `LESHY`/`Леший` по persistent EN/RU language и `v0.94.0`, полученный из полного build ID `0.94.0-home-identity`. «О системе» и все вложенные UI strings не содержат brand; полная версия остаётся в About/diagnostics. One-command gate автоматически снимает оба языка, восстанавливает русский, проходит все семь entries и оба наполненных водопада, сохраняет 14 actual TFT states с exact CID, unchanged generation 95/0, invariant heap 221 852/156 892/137 540 B, zero ручных нажатий и final owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-home-identity-0.94.json) | принимает локализованный Home identity/version и его автоматический bilingual physical regression; controlled power cut и instrumented RF silence остаются открыты |
+| E-BUILD-096 | exact build `0.95.0-inline-key-hints` | pass: RAM 159 856 B, linked flash 1 506 428 B; app/factory 1 506 832/1 572 368 B; app `dfaad4bd…ace5e`, factory `98fed128…3ace`, ELF/app identity `ee5aaed8…c261`; source и runner commit `d277468` | +200 B linked flash, zero static-RAM growth и +192/+192 B images против 0.94 для measured single-line layout подсказок и mixed-case EN/RU labels; exact checkpoint, не release build |
+| E-AUTO-060 / E-HIL-120 / E-UX-019 | board-01 exact 0.95 строчная легенда физических клавиш | pass: footer 26 px выводит одну вертикально центрированную строку Roboto Condensed Medium 12 одним secondary color. Слева и в центре действует порядок клавиша→подпись, справа — подпись→`OK▶`; outer anchors равны 6 px, самый длинный русский right compound занимает exact budget 74 px. Одна прошивка и zero ручных нажатий сохраняют 14 exact TFT states для EN/RU Home, вложенных меню и наполненных RF views, exact CID, unchanged generation 95/0, invariant heap 221 852/156 892/137 540 B и final owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-inline-key-hints-0.95.json) | принимает presentation geometry из 0.x без возврата legacy renderer и без превращения footer в touch target; controlled power cut и instrumented RF silence остаются открыты |
 
 ## Известные неопределённости и риски
 

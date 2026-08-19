@@ -15,8 +15,8 @@ from esp_app_identity import app_elf_sha256
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.94.0-home-identity"
-EVIDENCE_IDS = ["E-BUILD-095", "E-AUTO-059", "E-HIL-119", "E-UX-018"]
+VERSION = "0.95.0-inline-key-hints"
+EVIDENCE_IDS = ["E-BUILD-096", "E-AUTO-060", "E-HIL-120", "E-UX-019"]
 
 
 def digest(path: Path) -> str:
@@ -134,7 +134,7 @@ def main() -> int:
     }
     result = {
         "schema": "leshy.product_home_acceptance.v1",
-        "status": "pass_home_identity_checkpoint",
+        "status": "pass_inline_key_hints_checkpoint",
         "board": "board-01",
         "evidence_ids": EVIDENCE_IDS,
         "candidate": provenance,
@@ -145,12 +145,17 @@ def main() -> int:
             "manual_button_presses": 0,
             "automatic_screenshots": True,
             "languages": ["en", "ru"],
-            "home_identity": {
-                "english": "LESHY",
-                "russian": "Леший",
-                "displayed_semver": "v0.94.0",
-                "full_version": VERSION,
-                "nested_brand_mentions": 0,
+            "navigation_legend": {
+                "layout": "single_baseline",
+                "font": "Roboto Condensed Medium 12",
+                "color": "text_secondary",
+                "left_order": "key_then_label",
+                "middle_order": "key_then_label",
+                "right_order": "label_then_ok_right",
+                "outer_inset_px": 6,
+                "gap_px": 4,
+                "footer_height_px": 26,
+                "touch_target": False,
             },
             "nrf_history_rows": reports["nrf_waterfall"]["history_rows"],
             "cc_history_rows": reports["cc_waterfall"]["history_rows"],

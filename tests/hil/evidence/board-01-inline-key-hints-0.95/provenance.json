@@ -1,0 +1,21 @@
+{
+  "app_elf_sha256": "ee5aaed813c9f5a4c8a253d2d144ffaaa6499b5f327a7f7ceb49e6f2825bc261",
+  "checker_sha256": "1724c45300acd7f36c00df214693d93dfa9a06a88bcedfd5452dac333a143b01",
+  "elf_bytes": 20202420,
+  "elf_file_sha256": "ee5aaed813c9f5a4c8a253d2d144ffaaa6499b5f327a7f7ceb49e6f2825bc261",
+  "factory_bytes": 1572368,
+  "factory_sha256": "98fed12859c708892df39e23d8062384ee592e89a672f2e4146995cc50bc3ace",
+  "firmware_bytes": 1506832,
+  "firmware_sha256": "dfaad4bd396567a3612e88bc74b4dcab4e0a28a99bd278b0e2cbf01b79aace5e",
+  "gate_sha256": "990f8deb3857ae0b700c0dee7b2fc7edbaeaf3a5ea239fcdcd1e0a3c1be86caa",
+  "linked_flash_bytes": 1506428,
+  "map_bytes": 17613518,
+  "map_sha256": "64f5262ed3bf07aeb1e734e5cbc79ebc2b527da11ce8f193fbc40fcbf40cd756",
+  "run_sha256": "9a6d9a506a336c4a9378f85288b346c4644188558f527ca189c2a2859839f279",
+  "runner_commit": "d277468ddc3feb912d214c3802c890df52071d66",
+  "runner_sha256": "68a7c84066207cd1b5f860f0c8f3135dd589513ebb3297521ebc9ae86b3a1229",
+  "schema": "leshy.product_home_hil.provenance.v1",
+  "source_commit": "d277468ddc3feb912d214c3802c890df52071d66",
+  "static_ram_bytes": 159856,
+  "version": "0.95.0-inline-key-hints"
+}

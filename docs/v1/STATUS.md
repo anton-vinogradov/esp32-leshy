@@ -12,13 +12,13 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S4 — Cross-radio passive platform`.
 - **Last completed stage:** `S3 — First persistent Survey Session`.
-- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.94 S4 checkpoints through persistent Wi-Fi Capture, both user-facing spectrum workflows, receive-only RF checks, read-only artifact audit, guarded disposable write/remount/export/cleanup, calibrated touch navigation, the cross-radio release-endurance gate, the implemented-job final menu hierarchy, full-width Spectrum/Waterfall views, the one-command connected-candidate gate, and localized root-only Home identity with a visible version.
+- **Repository baseline:** `main` with retained exact-candidate 0.70 `DEMO-S3` and exact 0.71…0.95 S4 checkpoints through persistent Wi-Fi Capture, both user-facing spectrum workflows, receive-only RF checks, read-only artifact audit, guarded disposable write/remount/export/cleanup, calibrated touch navigation, the cross-radio release-endurance gate, the implemented-job final menu hierarchy, full-width Spectrum/Waterfall views, the one-command connected-candidate gate, localized root-only Home identity/version, and an inline 0.x-derived physical-key legend.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** exercise controlled physical power-cut recovery, the only
   remaining `DEMO-S4` gate.
-- **Latest accepted checkpoint:** exact 0.94 keeps the implemented user jobs on
+- **Latest accepted checkpoint:** exact 0.95 keeps the implemented user jobs on
   Home: Wi-Fi, Bluetooth, 2.4 GHz, Sub-GHz, Capture, Library and Device. Home alone
-  shows `LESHY` in English or `Леший` in Russian plus build-derived `v0.94.0`;
+  shows `LESHY` in English or `Леший` in Russian plus build-derived `v0.95.0`;
   nested headers contain navigation context and About retains the full version. Wi-Fi/BLE
   open their own one-source Start flow; 2.4 GHz opens the nRF24 live view directly;
   Sub-GHz opens the four-band CC1101 chooser; all service functions remain under the
@@ -27,7 +27,11 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   captures and an independent verifier with zero manual button presses. It retained
   populated nRF24/CC1101 waterfalls, stable pause/resume, unchanged generation 95/0,
   invariant heap 221,852/156,892/137,540 B, zero TX/storage side effects and final
-  owner/lease `none`/`0`. Exact 0.89 remains the accepted 2,799.845 s endurance
+  owner/lease `none`/`0`. Its shared 26 px footer now uses one vertically centered
+  Roboto Condensed Medium 12 line: key then action at left/center, action then
+  `OK▶` at right, six-pixel edge anchors, mixed case and one secondary color. The
+  exact 0.x edge-aligned geometry is source-bound, while all 14 real TFT states bind
+  the new Home/menu/RF presentation. Exact 0.89 remains the accepted 2,799.845 s endurance
   result; controlled physical power cut remains open.
 
 ## Stage state
@@ -38,7 +42,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S1 | `done` | accepted 1.0 PRD baseline, product-reviewed `CAP-001…047`, UX-01/02, workflows, constrained hardware envelope, measured budgets, risk register, and five ADRs; unavailable instruments/assemblies have fail-closed dispositions and applicable S4/S5/S8 gates | — |
 | S2 | `done` | independent target, capability Home, unified five-key plus calibrated touch input/TFT capture, finger-sized common rows, non-color focus, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, shared components, persistent EN/RU with Roboto Condensed Medium 16/12, UX-03…UX-07, and exact-candidate `DEMO-S2` on board-01 | — |
 | S3 | `done` | all nine criteria pass; exact 0.70 `E-GATE-003`/`E-HIL-095` runs passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 with 29/29 observations and zero drops, cold-reopens/exports it, matches five independently recorded TFT goldens with zero unmasked mismatch, preserves heap and ends Home with lease 0 | — |
-| S4 | `active` | exact 0.71…0.94 accept passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, implemented-only final Home, compact truthful status, full-width RF views, an automated connected-candidate gate and localized root-only Home identity/version | exercise controlled physical power-cut recovery |
+| S4 | `active` | exact 0.71…0.95 accept passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, implemented-only final Home, compact truthful status, full-width RF views, an automated connected-candidate gate, localized root-only Home identity/version and inline physical-key hints | exercise controlled physical power-cut recovery |
 | S5 | `planned` | standard hardware scope is listed | requires S4 gate |
 | S6 | `planned` | Targets/comparison/companion are conceptual | requires S5 gate |
 | S7 | `planned` | Lab/SDK boundaries are conceptual | requires S6 gate |
@@ -667,6 +671,8 @@ endurance are explicit `DEMO-S4` criteria.
 | E-AUTO-058 / E-HIL-118 / E-UX-017 / E-RADIO-006 | board-01 exact 0.93 implemented-only Home and connected-candidate gate | pass: `verify_connected_candidate.sh` performs host tests, documentation checks, exact build, exactly one flash, public-Action HIL, automatic screenshots and independent verification. Home exposes Wi-Fi/Bluetooth/2.4 GHz/Sub-GHz/Capture/Library/Device; all seven open, future Targets/Lab are absent, Wi-Fi/BLE retain exact source masks 1/2, and direct nRF24 plus CC433 Spectrum/Waterfall paths accumulate 16/8 rows. Thirteen TFT states, stable pause/resume, exact CID, unchanged generation 95/0, zero TX/storage/input-drop side effects, invariant heap 221,852/156,892/137,540 B, zero manual presses and final Home owner/lease none/0 are bound in the [machine-checked artifact](../../tests/hil/evidence/board-01-product-home-0.93.json) | accepts the connected local candidate checkpoint and automation boundary; it is unsigned one-board evidence, and physical RF silence plus controlled power cut remain uninstrumented/open |
 | E-BUILD-095 | exact `0.94.0-home-identity` build | pass: RAM 159,856 B, linked flash 1,506,228 B; app/factory 1,506,640/1,572,176 B; app `9eaa20de…7792`, factory `047b57c8…c2c`, ELF/app identity `94f93698…dc6`; source and runner commit `569fd51` | +256 B linked flash, zero static-RAM growth and +256/+256 B images vs 0.93 for allocation-free build-version formatting and localized root identity; exact checkpoint, not a release build |
 | E-AUTO-059 / E-HIL-119 / E-UX-018 | board-01 exact 0.94 localized root-only Home identity | pass: Home renders `LESHY`/`Леший` according to persistent EN/RU language and `v0.94.0` derived from the full `0.94.0-home-identity` build ID. About and every nested UI string contain no brand; the full version remains in About/diagnostics. The one-command gate automatically captures both language variants, restores Russian, exercises all seven entries and both populated waterfalls, and retains 14 actual TFT states with exact CID, unchanged generation 95/0, invariant heap 221,852/156,892/137,540 B, zero manual presses and final owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-home-identity-0.94.json) | accepts localized Home identity/version and its automated bilingual physical regression; controlled power cut and instrumented RF silence remain open |
+| E-BUILD-096 | exact `0.95.0-inline-key-hints` build | pass: RAM 159,856 B, linked flash 1,506,428 B; app/factory 1,506,832/1,572,368 B; app `dfaad4bd…ace5e`, factory `98fed128…3ace`, ELF/app identity `ee5aaed8…c261`; source and runner commit `d277468` | +200 B linked flash, zero static-RAM growth and +192/+192 B images vs 0.94 for measured single-line hint layout and mixed-case EN/RU labels; exact checkpoint, not a release build |
+| E-AUTO-060 / E-HIL-120 / E-UX-019 | board-01 exact 0.95 inline physical-key legend | pass: the 26 px footer renders one vertically centered Roboto Condensed Medium 12 baseline in a single secondary color. Left and center use key→label, right uses label→`OK▶`; outer anchors are 6 px and the longest Russian right compound occupies the exact 74 px budget. One flash and zero manual presses retain 14 exact TFT states across EN/RU Home, nested menus and populated RF views, exact CID, unchanged generation 95/0, invariant heap 221,852/156,892/137,540 B and final owner/lease none/0 in the [machine-checked artifact](../../tests/hil/evidence/board-01-inline-key-hints-0.95.json) | accepts the 0.x-derived presentation geometry without restoring the legacy renderer or making the footer touchable; controlled power cut and instrumented RF silence remain open |
 
 ## Known uncertainties and risks
 
