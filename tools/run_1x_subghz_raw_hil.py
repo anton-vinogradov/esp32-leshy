@@ -255,7 +255,7 @@ def main() -> int:
                     device, b"input.state", "leshy.input.frontend.v1", "state")
                 safe_outputs = query(
                     device, b"hardware.safe-outputs",
-                    "leshy.hardware.safe_outputs.v1", "state")
+                    "leshy.hardware.safe-outputs.v1", "state")
                 if recovery_after.get("generation") != recovery_before.get("generation") or \
                         recovery_after.get("observations") != \
                         recovery_before.get("observations") or \
