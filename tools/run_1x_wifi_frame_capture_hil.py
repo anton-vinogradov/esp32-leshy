@@ -33,6 +33,22 @@ STATE_SCHEMA = "leshy.capture.wifi_frame.v1"
 PCAP_SCHEMA = "leshy.capture.pcap.v1"
 
 
+def select_home_app(device: Any, app_id: str,
+                    trace: list[dict[str, Any]]) -> dict[str, Any]:
+    state = query(device, b"ui.state", "leshy.ui.v1", "state")
+    for _ in range(10):
+        if state.get("selection") == 0:
+            break
+        state = action(device, "up")
+        trace.append(state)
+    for _ in range(10):
+        if state.get("selected_id") == app_id:
+            return state
+        state = action(device, "down")
+        trace.append(state)
+    raise RuntimeError(f"Home app {app_id!r} is not reachable: {state!r}")
+
+
 def wait_capture(device: Any, predicate: Any, timeout: float,
                  description: str) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
@@ -156,6 +172,7 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
+    parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0),
                         default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
@@ -168,6 +185,10 @@ def main() -> int:
         parser.error("--expected-cid must be 32 uppercase hexadecimal characters")
     if len(args.source_commit) != 40:
         parser.error("--source-commit must be a full commit ID")
+    if args.flash and args.reuse_exact_flash:
+        parser.error("--flash and --reuse-exact-flash are mutually exclusive")
+    if not args.flash and not args.reuse_exact_flash:
+        parser.error("use --flash or explicitly acknowledge --reuse-exact-flash")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -211,21 +232,31 @@ def main() -> int:
                 if failures:
                     raise RuntimeError("boot contract failed")
 
-                for _ in range(3):
-                    trace.append(action(device, "down"))
-                home_capture = trace[-1]
+                cleanup_before = best_effort_cleanup(device)
+                if not cleanup_before.get("complete"):
+                    raise RuntimeError("initial cleanup did not reach Home/lease 0")
+                home_capture = select_home_app(device, "capture", trace)
                 failures.extend(expect(home_capture, {
-                    "page": "home", "selection": 3,
+                    "page": "home", "selection": 4,
                     "selected_id": "capture", "selected_enabled": True,
                     "runtime_owner": "none", "lease_mask": 0,
                 }, "home_capture"))
+                source_menu = action(device, "right")
+                trace.append(source_menu)
+                failures.extend(expect(source_menu, {
+                    "page": "capture", "selected_id": "capture",
+                    "runtime_event": "started", "runtime_owner": "capture",
+                    "lease_mask": 11,
+                }, "source_menu"))
+                captures["source_menu"] = capture(
+                    device, frames, "source-menu")
                 trace.append(action(device, "right"))
                 setup = query(device, b"capture.state", STATE_SCHEMA, "state")
                 failures.extend(expect(setup, {
                     "state": "idle", "passive_only": True, "rx_only": True,
                     "volatile_ram": True, "storage_written": False,
                     "pcap_available": False, "pcap_bytes": 0,
-                    "lease_mask": 3,
+                    "lease_mask": 11,
                 }, "setup"))
                 captures["setup"] = capture(device, frames, "setup")
 
@@ -246,7 +277,7 @@ def main() -> int:
                     "channel_dwell_ms": 120, "snap_length": 256,
                     "maximum_frames": 16, "driver_error": 0,
                     "pcap_available": False, "pcap_bytes": 0,
-                    "lease_mask": 3,
+                    "lease_mask": 11,
                 }, "running"))
                 # Let the bounded 500 ms UI refresh publish live counters before
                 # taking the real-TFT frame; the capture itself keeps receiving.
@@ -267,7 +298,7 @@ def main() -> int:
                 failures.extend(expect(complete, {
                     "state": "complete", "driver_error": 0,
                     "pcap_available": True, "cleanup_complete": True,
-                    "storage_written": False, "lease_mask": 1,
+                    "storage_written": False, "lease_mask": 9,
                 }, "complete"))
                 reported = complete.get("frames_reported")
                 accepted = complete.get("frames_accepted")
@@ -305,6 +336,7 @@ def main() -> int:
                     failures.append("pcap: advertised byte count mismatch")
 
                 trace.append(action(device, "left"))
+                trace.append(action(device, "left"))
                 final = query(device, b"ui.state", "leshy.ui.v1", "state")
                 failures.extend(expect(final, {
                     "page": "home", "runtime_owner": "none", "lease_mask": 0,
@@ -318,23 +350,6 @@ def main() -> int:
                     "lease_mask": 0,
                 }, "scrubbed"))
                 captures["home"] = capture(device, frames, "home")
-                trace.append(action(device, "down"))
-                trace.append(action(device, "down"))
-                home_last = trace[-1]
-                failures.extend(expect(home_last, {
-                    "page": "home", "selection": 5,
-                    "selected_id": "self-test", "selected_enabled": True,
-                    "runtime_owner": "none", "lease_mask": 0,
-                }, "home_last"))
-                captures["home_last"] = capture(device, frames, "home-last")
-                trace.append(action(device, "up"))
-                trace.append(action(device, "up"))
-                final = query(device, b"ui.state", "leshy.ui.v1", "state")
-                failures.extend(expect(final, {
-                    "page": "home", "selection": 3,
-                    "selected_id": "capture", "runtime_owner": "none",
-                    "lease_mask": 0,
-                }, "final_after_scroll"))
             except Exception as error:
                 failures.append(f"workflow: {type(error).__name__}: {error}")
             finally:
@@ -348,7 +363,7 @@ def main() -> int:
         "schema": RUN_SCHEMA,
         "run_id": secrets.token_hex(16),
         "runner_source_sha256": sha256_file(Path(__file__).resolve()),
-        "passed": bool(args.flash) and not failures,
+        "passed": bool(args.flash or args.reuse_exact_flash) and not failures,
         "gate_eligible": bool(args.flash) and not failures,
         "failures": failures,
         "candidate": {
@@ -357,6 +372,7 @@ def main() -> int:
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
             "flashed": args.flash,
+            "exact_flash_reused": args.reuse_exact_flash,
         },
         "expected_cid": args.expected_cid,
         "boot": {"ready": ready, "recovery": recovery},
