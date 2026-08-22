@@ -110,7 +110,7 @@ def open_product_capture(device: PassiveSerial) -> list[dict[str, Any]]:
     require_exact(setup, {
         "state": "idle", "passive_only": True, "rx_only": True,
         "volatile_ram": True, "storage_written": False,
-        "persist_state": "result", "pcap_available": False,
+        "persist_state": "volatile", "pcap_available": False,
         "frames_accepted": 0, "payload_bytes": 0, "lease_mask": 15,
     }, "wifi_capture_setup")
     return trace
@@ -206,7 +206,7 @@ def run_lifecycle(device: PassiveSerial, trace: list[dict[str, Any]],
     require_exact(complete, {
         "state": "complete", "driver_error": 0, "pcap_available": True,
         "cleanup_complete": True, "storage_written": False,
-        "persist_state": "result", "lease_mask": 15,
+        "persist_state": "volatile", "lease_mask": 15,
     }, "capture_complete")
     reported = int(complete.get("frames_reported", -1))
     accepted = int(complete.get("frames_accepted", -1))
@@ -337,7 +337,7 @@ def main() -> int:
                 cancelled = query(
                     device, b"capture.state", CAPTURE_SCHEMA, "state")
                 require_exact(cancelled, {
-                    "state": "complete", "persist_state": "result",
+                    "state": "complete", "persist_state": "volatile",
                     "persist_status": "volatile", "storage_written": False,
                     "lease_mask": 15,
                 }, "privacy_cancelled")
