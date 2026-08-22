@@ -1,0 +1,62 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "f02f5f85891db0bc90add6a03bed32de914906957eb251b8ef22bb9a89b57f6d",
+    "checker_sha256": "e25370294edfd3293ec52c6171fb82985299f4b10836c05e99b398544dd3b7aa",
+    "cid": "FE343253440000002000000055019CB7",
+    "elf_file_sha256": "f02f5f85891db0bc90add6a03bed32de914906957eb251b8ef22bb9a89b57f6d",
+    "factory_sha256": "3c42bcbd2e26121b397fc64dd265b29b352dfacf399b68057f63e036fffedc33",
+    "firmware_sha256": "f2c8cfc37234103d8519fcaaafc9e4a5df5ee900cb1afa87b6ee31044e92b430",
+    "firmware_source_commit": "14b03c67ac38bb6129f6668e98ae39b835df3b5f",
+    "linked_flash_bytes": 1571740,
+    "map_sha256": "1216f207cc4bb0c3e92a51eb65a7a7d347e4693c8a594a346680d568720113bc",
+    "run_sha256": "4eb8d2fa6c76fec17acdcc593683d4716586477a03e31acb2506fccb812a52a8",
+    "runner_commit": "1b3c64cc8d15e680a145fe33d5c94c2b8062f63b",
+    "runner_sha256": "c5403609978273a323dd74abd640ab0ae28f587d04f52a60507f63319fb571ca",
+    "schema": "leshy.wifi_capture_product_hil.provenance.v1",
+    "static_ram_bytes": 179680,
+    "tft_states": 7,
+    "version": "0.110.0-wifi-capture"
+  },
+  "evidence": {
+    "artifact_index_sha256": "228acefa23446b9e294227ab0fffe63cc2507ce966fa7e109ab7ced0e26f8069",
+    "files": 23,
+    "tft_states": 7
+  },
+  "evidence_ids": [
+    "E-BUILD-110",
+    "E-AUTO-074",
+    "E-HIL-134",
+    "E-UX-029",
+    "E-CAPTURE-004"
+  ],
+  "schema": "leshy.wifi_capture_product.acceptance.v1",
+  "status": "pass_wifi_capture_product_checkpoint",
+  "verified": {
+    "bounded_ram_capture": true,
+    "buzzer_inactive": true,
+    "final_lease_mask": 0,
+    "final_safety_latched": false,
+    "first_capacity_drops": 78,
+    "first_frames_reported": 94,
+    "first_frames_retained": 16,
+    "first_pcap_bytes": 3710,
+    "first_pcap_records": 16,
+    "fresh_exact_flash_pass": true,
+    "heap_minimum_floor_bytes": 73824,
+    "invalid_frames": 0,
+    "live_changed_pixels": 67,
+    "manual_button_presses": 0,
+    "passive_receive_only": true,
+    "persistent_generation_unchanged": true,
+    "physical_sd_write_calls": 0,
+    "privacy_confirmation_and_cancel": true,
+    "raw_payload_retained_in_repository": false,
+    "second_frames_reported": 2,
+    "second_frames_retained": 2,
+    "second_pcap_records": 2,
+    "static_changed_pixels": 0,
+    "two_complete_wifi_lifecycles": true,
+    "zero_post_warm_heap_drift": true
+  }
+}

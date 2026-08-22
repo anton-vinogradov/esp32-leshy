@@ -1,0 +1,18 @@
+{
+  "app_elf_sha256": "f02f5f85891db0bc90add6a03bed32de914906957eb251b8ef22bb9a89b57f6d",
+  "checker_sha256": "e25370294edfd3293ec52c6171fb82985299f4b10836c05e99b398544dd3b7aa",
+  "cid": "FE343253440000002000000055019CB7",
+  "elf_file_sha256": "f02f5f85891db0bc90add6a03bed32de914906957eb251b8ef22bb9a89b57f6d",
+  "factory_sha256": "3c42bcbd2e26121b397fc64dd265b29b352dfacf399b68057f63e036fffedc33",
+  "firmware_sha256": "f2c8cfc37234103d8519fcaaafc9e4a5df5ee900cb1afa87b6ee31044e92b430",
+  "firmware_source_commit": "14b03c67ac38bb6129f6668e98ae39b835df3b5f",
+  "linked_flash_bytes": 1571740,
+  "map_sha256": "1216f207cc4bb0c3e92a51eb65a7a7d347e4693c8a594a346680d568720113bc",
+  "run_sha256": "4eb8d2fa6c76fec17acdcc593683d4716586477a03e31acb2506fccb812a52a8",
+  "runner_commit": "1b3c64cc8d15e680a145fe33d5c94c2b8062f63b",
+  "runner_sha256": "c5403609978273a323dd74abd640ab0ae28f587d04f52a60507f63319fb571ca",
+  "schema": "leshy.wifi_capture_product_hil.provenance.v1",
+  "static_ram_bytes": 179680,
+  "tft_states": 7,
+  "version": "0.110.0-wifi-capture"
+}
