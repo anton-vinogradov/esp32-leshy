@@ -1,0 +1,147 @@
+{
+  "schema": "leshy.hil.scenario.v1",
+  "id": "infrared-passive-no-signal",
+  "checkpoint": "physical_receive_no_signal",
+  "gate_eligible": false,
+  "devices": {
+    "candidate": {"required": true},
+    "fixture": {"required": false}
+  },
+  "steps": [
+    {
+      "id": "home_capture",
+      "op": "select_home_app",
+      "app_id": "capture",
+      "expect": {
+        "page": "home",
+        "selected_id": "capture",
+        "selected_enabled": true,
+        "runtime_owner": "none",
+        "lease_mask": 0
+      }
+    },
+    {"id": "home", "op": "capture", "name": "home"},
+    {
+      "id": "open_sources",
+      "op": "action",
+      "name": "right",
+      "expect": {
+        "page": "capture",
+        "runtime_owner": "capture",
+        "lease_mask": 11
+      }
+    },
+    {"id": "source_menu", "op": "capture", "name": "source-menu"},
+    {"id": "choose_ir", "op": "action", "name": "down"},
+    {"id": "source_ir", "op": "capture", "name": "source-ir"},
+    {"id": "open_ir", "op": "action", "name": "right"},
+    {
+      "id": "setup",
+      "op": "query",
+      "command": "capture.ir.state",
+      "response_schema": "leshy.capture.infrared_raw.v1",
+      "expect": {
+        "state": "idle",
+        "passive_only": true,
+        "rx_only": true,
+        "gpio_rx": 21,
+        "gpio_tx": 14,
+        "tx_level": "low",
+        "application_tx_calls": 0,
+        "storage_written": false,
+        "persist_state": "volatile",
+        "cleanup_complete": true,
+        "lease_mask": 11
+      }
+    },
+    {"id": "setup_screen", "op": "capture", "name": "setup"},
+    {"id": "start", "op": "action", "name": "right"},
+    {
+      "id": "waiting",
+      "op": "query",
+      "command": "capture.ir.state",
+      "response_schema": "leshy.capture.infrared_raw.v1",
+      "expect": {
+        "state": "waiting",
+        "passive_only": true,
+        "rx_only": true,
+        "gpio_rx": 21,
+        "gpio_tx": 14,
+        "tx_level": "low",
+        "application_tx_calls": 0,
+        "wait_timeout_ms": 10000,
+        "maximum_capture_ms": 1000,
+        "minimum_pulse_us": 80,
+        "end_gap_us": 20000,
+        "maximum_sample_gap_us": 250,
+        "maximum_pulses": 512,
+        "cleanup_complete": false,
+        "storage_written": false,
+        "persist_state": "volatile",
+        "lease_mask": 11
+      },
+      "checks": [{"path": "samples", "op": "gte", "value": 1}]
+    },
+    {"id": "waiting_screen", "op": "capture", "name": "waiting"},
+    {"id": "quiet_wait", "op": "sleep", "seconds": 11.5},
+    {
+      "id": "terminal",
+      "op": "query",
+      "command": "capture.ir.state",
+      "response_schema": "leshy.capture.infrared_raw.v1",
+      "expect": {
+        "state": "timed_out",
+        "passive_only": true,
+        "rx_only": true,
+        "gpio_rx": 21,
+        "gpio_tx": 14,
+        "tx_level": "low",
+        "application_tx_calls": 0,
+        "signal_started_us": 0,
+        "transitions": 0,
+        "pulses": 0,
+        "protocol": "unknown",
+        "decode_integrity_valid": false,
+        "csv_available": false,
+        "cleanup_complete": true,
+        "storage_written": false,
+        "persist_state": "volatile",
+        "persist_generation": 0,
+        "driver_error": 0,
+        "lease_mask": 11
+      },
+      "checks": [{"path": "samples", "op": "gte", "value": 100000}]
+    },
+    {"id": "terminal_screen", "op": "capture", "name": "terminal"},
+    {"id": "back_to_sources", "op": "action", "name": "left"},
+    {"id": "back_home", "op": "action", "name": "left"},
+    {
+      "id": "final",
+      "op": "query",
+      "command": "ui.state",
+      "response_schema": "leshy.ui.v1",
+      "expect": {
+        "page": "home",
+        "runtime_owner": "none",
+        "lease_mask": 0
+      }
+    },
+    {"id": "final_home", "op": "capture", "name": "final-home"}
+  ],
+  "invariants": {
+    "final_home_zero_lease": true,
+    "storage_unchanged": true,
+    "heap_free_unchanged": true,
+    "input_clean": true,
+    "safe_outputs": true
+  },
+  "limits": {
+    "physical_known_transmitter_used": false,
+    "successful_physical_signal_required": false,
+    "physical_persistence_exercised": false,
+    "host_nec_codec_store_csv_tests": true,
+    "raw_ir_payload_retained": false,
+    "ir_tx_or_replay_in_product_scope": false,
+    "second_board_fixture_connected": false
+  }
+}
