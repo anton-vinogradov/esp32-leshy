@@ -113,6 +113,7 @@ def main() -> int:
     boot_metrics_samples: list[dict[str, Any]] = []
     recovery_before: dict[str, Any] = {}
     recovery_after: dict[str, Any] = {}
+    metrics_after_first: dict[str, Any] = {}
     metrics_after: dict[str, Any] = {}
     input_state: dict[str, Any] = {}
     safe_outputs: dict[str, Any] = {}
@@ -256,6 +257,40 @@ def main() -> int:
                     "page": "home", "runtime_owner": "none", "lease_mask": 0,
                 }, "wifi_home")
 
+                # ESP-IDF may retain a bounded one-time Wi-Fi initialization
+                # allocation. A second complete open/scan/close cycle in the
+                # same boot must prove that this plateau does not grow.
+                metrics_after_first = query(
+                    device, b"metrics", "leshy.boot.v1", "ready")
+                home_wifi(device)
+                warm_menu = action(device, "right")
+                trace.append(warm_menu)
+                warm_preparing = action(device, "right")
+                trace.append(warm_preparing)
+                warm_live = wait_ui_state(
+                    device,
+                    lambda state: (
+                        state.get("wifi_product_view") == "networks" and
+                        state.get("survey_workflow_state") == "running" and
+                        int(state.get("wifi_networks_unique", 0)) >= 1 and
+                        int(state.get("survey_product_wifi_scan_cycles", 0)) >= 1
+                    ), 45.0, "warm Wi-Fi cycle did not produce networks")
+                trace.append(warm_live)
+                trace.append(action(device, "left"))
+                warm_menu_after = wait_ui_state(
+                    device,
+                    lambda state: (
+                        state.get("wifi_product_view") == "menu" and
+                        state.get("survey_product_source_active") is False and
+                        state.get("survey_product_cleanup_complete") is True
+                    ), 30.0, "warm Wi-Fi cycle did not clean up")
+                trace.append(warm_menu_after)
+                warm_home = action(device, "left")
+                trace.append(warm_home)
+                require_exact(warm_home, {
+                    "page": "home", "runtime_owner": "none", "lease_mask": 0,
+                }, "wifi_warm_home")
+
                 input_state = query(
                     device, b"input.state",
                     "leshy.input.frontend.v1", "state")
@@ -278,8 +313,24 @@ def main() -> int:
                         failures.append(f"persistent {key} changed")
                 if recovery_after.get("physical_write_calls") != 0:
                     failures.append("physical SD write observed")
-                if metrics_after.get("heap_free") != boot.get("heap_free"):
-                    failures.append("heap free did not return to boot baseline")
+                boot_free = boot.get("heap_free")
+                first_free = metrics_after_first.get("heap_free")
+                final_free = metrics_after.get("heap_free")
+                if not all(isinstance(value, int)
+                           for value in (boot_free, first_free, final_free)):
+                    failures.append("heap measurements are incomplete")
+                else:
+                    warmup_bytes = boot_free - first_free
+                    if warmup_bytes < 0 or warmup_bytes > 2048:
+                        failures.append(
+                            f"Wi-Fi one-time heap warm-up is unbounded: "
+                            f"{warmup_bytes} bytes")
+                    if final_free != first_free:
+                        failures.append(
+                            "heap changed after the second complete Wi-Fi cycle")
+                if metrics_after.get("heap_total") != \
+                        metrics_after_first.get("heap_total"):
+                    failures.append("heap total changed between Wi-Fi cycles")
             except Exception as error:
                 failures.append(f"workflow: {type(error).__name__}: {error}")
             finally:
@@ -310,6 +361,7 @@ def main() -> int:
         "boot_metrics_samples": boot_metrics_samples,
         "recovery_before": recovery_before,
         "recovery_after": recovery_after,
+        "metrics_after_first": metrics_after_first,
         "metrics_after": metrics_after,
         "input": input_state,
         "safe_outputs": safe_outputs,
@@ -331,6 +383,15 @@ def main() -> int:
             "unique_bssid_rows": True,
             "live_redraw_data_rows_only": True,
             "detail_screen_stable_during_background_scan": True,
+            "two_complete_wifi_lifecycles": True,
+            "bounded_one_time_heap_warmup_bytes": (
+                boot.get("heap_free", 0) -
+                metrics_after_first.get("heap_free", 0)
+            ),
+            "zero_heap_drift_after_warmup": (
+                metrics_after.get("heap_free") ==
+                metrics_after_first.get("heap_free")
+            ),
             "storage_write_authorized": False,
         },
     }
