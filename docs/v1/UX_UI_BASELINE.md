@@ -392,6 +392,13 @@ guard `tools/check_product_ui_content.py`, called by `tools/test.sh`, rejects a
 product renderer that reintroduces the listed developer-facing fields and requires
 the outcome-oriented Home, scan, Capture and Library strings to remain wired.
 
+Exact candidate 0.106 physically exercises the contract after one fresh flash and
+three exact-hash reuse runs. Its retained 37 TFT states cover every Home entry,
+populated RF views, Wi-Fi Capture and honest no-signal IR/Sub-GHz results. The
+privacy-safe Capture review exports no wireless payload and writes no SD data;
+machine checks bind exact firmware identity, CID/catalog/heap, graph-only waterfall
+updates and final lease 0 (`E-BUILD-106`/`E-AUTO-070`/`E-HIL-130`/`E-UX-025`).
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog

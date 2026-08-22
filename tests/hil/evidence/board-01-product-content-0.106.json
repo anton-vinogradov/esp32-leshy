@@ -1,0 +1,55 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "c6cde5b9e158588aa423d068a6e29222010b50e30d05d49e102dad9e118addaa",
+    "cid": "FE343253440000002000000055019CB7",
+    "firmware_sha256": "8e74bea6bf30fd5fdd17c1ba8b3d6d360ee8d118c96a004b6dae36a82fd1f8d0",
+    "firmware_source_commit": "05a7e6548c7b7aa9ccdd6357a1cf53c91df8a332",
+    "linked_flash_bytes": 1551752,
+    "run_sha256": {
+      "infrared": "39992e8990a2773b6f7a736acd3f17f81dc2f325feae4da1a7baadc3df7dcd0d",
+      "main": "1c8e3c72bd143206556cbd4d7ca1ee5a6f3d31e13eea9d0e32569d15e857235d",
+      "subghz": "5fc36b8db3719d2bffa5267efca16e8b828448edf752ab084e601ef3d65495b1",
+      "wifi_capture": "7d114753361038d0c7a2d328d198ca78fac701f95f320c0e48180890be64bf7b"
+    },
+    "schema": "leshy.product_content.provenance.v1",
+    "static_ram_bytes": 172760,
+    "supplementary_source_commit": "d0e6aeccb99fb382529b9c3fdbbdcc43262cabc8",
+    "tft_states": {
+      "infrared": 7,
+      "main": 18,
+      "subghz": 7,
+      "wifi_capture": 5
+    },
+    "tool_sha256": {
+      "check_product_home_run.py": "315055a9490fa471566258ce87a0b1c91c833c637b1c7d830f3e2fedf189b22b",
+      "run_1x_infrared_capture_hil.py": "3d096d6a54036419f5ad3515616eb20e4994c8895b1b912b98c77e100b16190a",
+      "run_1x_product_home_hil.py": "86629c43489a103bf1cb23582fb59e6f7dc6d4afb9d4c5b92cb80fe99d5843c6",
+      "run_1x_subghz_raw_hil.py": "cfe6afd19ba7993335444454b29719f3d7d0516614f60051109734092cc966f2",
+      "run_1x_wifi_frame_capture_hil.py": "b76f15abc6355e8106142179eac66e9179f9e734527a69d6a60471d3429ac789"
+    },
+    "version": "0.106.0-product-content"
+  },
+  "evidence": {
+    "artifact_index_sha256": "e45440f81b6e89f94e31cadc59547741ef9897f25ef9662381ba26fc48f8f124",
+    "files": 48,
+    "tft_states": 37
+  },
+  "evidence_ids": [
+    "E-BUILD-106",
+    "E-AUTO-070",
+    "E-HIL-130",
+    "E-UX-025"
+  ],
+  "schema": "leshy.product_content.acceptance.v1",
+  "status": "pass_outcome_first_product_content",
+  "verified": {
+    "developer_telemetry_on_product_screens": false,
+    "exact_flash_reuse_runs": 3,
+    "final_lease_mask": 0,
+    "manual_button_presses": 0,
+    "one_fresh_flash": true,
+    "pcap_exported_to_host": false,
+    "storage_written": false
+  }
+}

@@ -398,6 +398,14 @@ engineering details; удаление их с TFT не уменьшает observ
 возвращение перечисленных developer-facing fields в product renderer и требует,
 чтобы outcome-oriented строки Home, scan, Capture и Library оставались подключены.
 
+Exact candidate 0.106 физически проверяет контракт после одной fresh flash и трёх
+exact-hash reuse runs. Его 37 retained TFT states охватывают каждый Home entry,
+наполненные RF views, Захват Wi-Fi и честные no-signal результаты IR/Sub-GHz.
+Privacy-safe review Захвата не экспортирует wireless payload и не пишет на SD;
+machine checks связывают exact firmware identity, CID/catalog/heap, graph-only
+обновления водопада и final lease 0 (`E-BUILD-106`/`E-AUTO-070`/`E-HIL-130`/
+`E-UX-025`).
+
 ## Gate
 
 **S1 UX direction accepted:** готовы UX-01/UX-02 в low-fidelity форме, все разделы
