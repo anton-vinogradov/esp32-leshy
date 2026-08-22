@@ -417,6 +417,14 @@ deliberately frozen. Physical comparison records 12,940 changed list-content pix
 zero changed header/footer pixels and zero changed detail pixels while accepted
 frames and channel hops advance (`E-BUILD-108`/`E-AUTO-072`/`E-HIL-132`/`E-UX-027`).
 
+Exact 0.109 extends the rule to `Wi-Fi→Channels`. The screen uses the full
+content width for thirteen labelled channel bars on a black idle background and
+shows only an honest lower-bound `airtime ~0–8%` scale plus the least-busy
+measured primary among 1/6/11. A live refresh paints only a changed bar and, when
+needed, the recommendation. Header, scale, channel axis and footer stay untouched;
+the physical two-sweep comparison records 1,074 dynamic and zero static changed
+pixels (`E-BUILD-109`/`E-AUTO-073`/`E-HIL-133`/`E-UX-028`).
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog

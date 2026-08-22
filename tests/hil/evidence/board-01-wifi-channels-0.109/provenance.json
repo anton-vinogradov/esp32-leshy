@@ -1,0 +1,18 @@
+{
+  "app_elf_sha256": "8150b0a0fb13c7e44437b5315c1e463ebe822723757a5c63a6933bdaf9091962",
+  "checker_sha256": "f6a902dc3bf2be7665a5ed741cc6ce9a9224979a0a084f5cceff2db563302409",
+  "cid": "FE343253440000002000000055019CB7",
+  "elf_file_sha256": "8150b0a0fb13c7e44437b5315c1e463ebe822723757a5c63a6933bdaf9091962",
+  "factory_sha256": "9d56b33a46858f60c1f51e9a1f9e1a302b8895394abc05bb172bb789fb3f9546",
+  "firmware_sha256": "2470fd822bc48d4949a9ba02c6f0145a61981fa1699af80a11cb1ec142d12bd9",
+  "firmware_source_commit": "6c61703c7127ff0fe55ee665a78feade130cd1a7",
+  "linked_flash_bytes": 1570480,
+  "map_sha256": "f3c502f1d8ecffd3344ff4009c11d2b1273238fc2500934523f779262c620684",
+  "run_sha256": "ff538e0e2754efce670f787de9f4e1339371fa673f3d26f06a76ddb92d045411",
+  "runner_commit": "e5cb50dbdf950da93204da1331337bb727d6689f",
+  "runner_sha256": "117349cd9e9d20b60687e43d37cbce977d035d957529ff3c267ae2cb473a6858",
+  "schema": "leshy.wifi_channels_hil.provenance.v1",
+  "static_ram_bytes": 179680,
+  "tft_states": 4,
+  "version": "0.109.0-wifi-channels"
+}
