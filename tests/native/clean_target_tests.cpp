@@ -19,6 +19,7 @@
 #include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
 #include "apps/wifi/WifiNetworkCatalog.h"
+#include "apps/wifi/WifiDeviceCatalog.h"
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/self_test/SelfTestController.h"
@@ -2032,6 +2033,59 @@ void testWifiNetworkCatalogKeepsStableUniqueRows() {
     catalog.reset();
     CHECK(catalog.size() == 0);
     CHECK(catalog.at(0) == nullptr);
+}
+
+void testWifiDeviceCatalogDecodesOnlyClientActivity() {
+    std::array<std::uint8_t, 32> frame{};
+    const std::array<std::uint8_t, 6> client =
+        {0x02, 0xaa, 0xbb, 0xcc, 0xdd, 0x01};
+    const std::array<std::uint8_t, 6> bssid =
+        {0x02, 0x10, 0x20, 0x30, 0x40, 0x50};
+    std::memcpy(frame.data() + 10, client.data(), client.size());
+    std::memcpy(frame.data() + 16, bssid.data(), bssid.size());
+
+    WifiDeviceObservation observation;
+    frame[0] = 0x80;  // Beacon: belongs to Nearby Networks, not Devices.
+    CHECK(!decodeWifiClientFrame(frame.data(), frame.size(), -50, 6, 1000,
+                                 &observation));
+
+    frame[0] = 0x40;  // Probe request from a client searching for networks.
+    CHECK(decodeWifiClientFrame(frame.data(), frame.size(), -70, 6, 2000,
+                                &observation));
+    CHECK(observation.address == client);
+    CHECK(observation.state == WifiDeviceState::Searching);
+    CHECK(!observation.bssidKnown);
+
+    WifiDeviceCatalog catalog;
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.size() == 1);
+
+    frame[0] = 0x08;  // Data frame To DS: the transmitter is a client.
+    frame[1] = 0x01;
+    std::memcpy(frame.data() + 4, bssid.data(), bssid.size());
+    CHECK(decodeWifiClientFrame(frame.data(), frame.size(), -53, 11, 3000,
+                                &observation));
+    CHECK(observation.state == WifiDeviceState::Connected);
+    CHECK(observation.bssidKnown);
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.size() == 1);
+    CHECK(catalog.at(0)->state == WifiDeviceState::Connected);
+    CHECK(catalog.at(0)->channel == 11);
+    CHECK(catalog.at(0)->rssiDbm == -53);
+    CHECK(catalog.at(0)->framesSeen == 2);
+
+    // A later probe does not downgrade an already observed connected client.
+    frame[0] = 0x40;
+    frame[1] = 0x00;
+    CHECK(decodeWifiClientFrame(frame.data(), frame.size(), -60, 1, 4000,
+                                &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.at(0)->state == WifiDeviceState::Connected);
+    CHECK(catalog.at(0)->framesSeen == 3);
+
+    frame[10] = 0xff;  // Multicast/broadcast transmitter is never a device row.
+    CHECK(!decodeWifiClientFrame(frame.data(), frame.size(), -60, 1, 5000,
+                                 &observation));
 }
 
 void testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations() {
@@ -5041,6 +5095,7 @@ int main() {
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testWifiNetworkCatalogKeepsStableUniqueRows();
+    testWifiDeviceCatalogDecodesOnlyClientActivity();
     testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations();
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
     testSourceDegradationKeepsOnlyCompatibleSourcesRunning();
