@@ -8,6 +8,7 @@
 #include <freertos/FreeRTOS.h>
 
 #include "apps/capture/WifiFrameCapture.h"
+#include "apps/wifi/WifiChannelLoad.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
 
 namespace leshy1::platform::arduino {
@@ -24,18 +25,31 @@ public:
         bool cleanupComplete = true;
     };
 
+    struct ChannelMonitorStats final {
+        std::uint32_t framesReported = 0;
+        std::uint32_t invalidFrames = 0;
+        std::uint32_t channelHops = 0;
+        bool active = false;
+        bool cleanupComplete = true;
+    };
+
     ~BoardWifiPassiveCapture() { stop(0); }
 
     bool begin(const apps::capture::WifiFrameCapturePlan& plan,
                std::uint64_t startedUs);
     bool beginDeviceMonitor(std::uint64_t startedUs,
                             std::uint16_t channelDwellMs = 120U);
+    bool beginChannelMonitor(std::uint64_t startedUs,
+                             std::uint16_t channelDwellMs = 120U);
     bool service(std::uint64_t nowUs);
     bool stop(std::uint64_t endedUs);
     void reset();
 
     apps::capture::WifiFrameCaptureStats stats() const;
     DeviceMonitorStats deviceMonitorStats() const;
+    ChannelMonitorStats channelMonitorStats() const;
+    apps::wifi::WifiChannelLoadSnapshot channelLoadSnapshot() const;
+    std::uint8_t bestPrimaryChannel() const;
     bool pollDevice(apps::wifi::WifiDeviceObservation* output);
     const apps::capture::WifiFrameCapture& capture() const { return capture_; }
     std::uint8_t currentChannel() const { return currentChannel_; }
@@ -57,10 +71,13 @@ private:
     std::array<apps::wifi::WifiDeviceObservation,
                kDeviceQueueCapacity> deviceQueue_{};
     DeviceMonitorStats deviceStats_{};
+    ChannelMonitorStats channelStats_{};
+    apps::wifi::WifiChannelLoad channelLoad_{};
     std::size_t deviceQueueHead_ = 0;
     std::size_t deviceQueueTail_ = 0;
     std::size_t deviceQueueSize_ = 0;
     bool deviceMonitor_ = false;
+    bool channelMonitor_ = false;
     bool initialized_ = false;
     bool started_ = false;
     bool promiscuous_ = false;
@@ -70,6 +87,7 @@ private:
     bool volatileStorageOnly_ = false;
     std::uint8_t currentChannel_ = 0;
     std::uint64_t nextChannelUs_ = 0;
+    std::uint64_t channelLandedUs_ = 0;
     std::uint16_t channelDwellMs_ = 0;
     int lastError_ = 0;
 };

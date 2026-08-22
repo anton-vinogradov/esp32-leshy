@@ -20,6 +20,7 @@
 #include "apps/survey/SurveyWorkflow.h"
 #include "apps/wifi/WifiNetworkCatalog.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
+#include "apps/wifi/WifiChannelLoad.h"
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/self_test/SelfTestController.h"
@@ -2086,6 +2087,47 @@ void testWifiDeviceCatalogDecodesOnlyClientActivity() {
     frame[10] = 0xff;  // Multicast/broadcast transmitter is never a device row.
     CHECK(!decodeWifiClientFrame(frame.data(), frame.size(), -60, 1, 5000,
                                  &observation));
+}
+
+void testWifiChannelLoadIsBoundedAndTruthful() {
+    WifiChannelLoad load;
+    load.reset();
+    CHECK(!load.observe(0, 100, -50));
+    CHECK(!load.observe(14, 100, -50));
+    CHECK(!load.observe(1, 0, -50));
+    CHECK(load.bestPrimaryChannel() == 0);
+
+    CHECK(load.observe(1, 1000, -70));
+    CHECK(load.observe(1, 2000, -40));
+    CHECK(load.completeDwell(1, 120000));
+    auto snapshot = load.snapshot();
+    CHECK(snapshot.channels[0].measured);
+    CHECK(snapshot.channels[0].busyPermille == 25);
+    CHECK(snapshot.channels[0].frames == 2);
+    CHECK(snapshot.channels[0].peakRssiDbm == -40);
+    CHECK(snapshot.framesObserved == 2);
+    CHECK(snapshot.completedDwells == 1);
+    CHECK(load.bestPrimaryChannel() == 0);
+
+    CHECK(load.observe(6, 1000, -65));
+    CHECK(load.completeDwell(6, 120000));
+    CHECK(load.observe(11, 2000, -55));
+    CHECK(load.completeDwell(11, 120000));
+    CHECK(load.bestPrimaryChannel() == 6);
+
+    CHECK(load.observe(13, 200000, -30));
+    CHECK(load.completeDwell(13, 120000));
+    snapshot = load.snapshot();
+    CHECK(snapshot.channels[12].busyPermille == 1000);
+    CHECK(snapshot.completedSweeps == 1);
+    CHECK(snapshot.revision == 4);
+
+    load.reset();
+    snapshot = load.snapshot();
+    CHECK(snapshot.revision == 0);
+    CHECK(snapshot.completedDwells == 0);
+    CHECK(snapshot.framesObserved == 0);
+    CHECK(load.bestPrimaryChannel() == 0);
 }
 
 void testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations() {
@@ -5096,6 +5138,7 @@ int main() {
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testWifiNetworkCatalogKeepsStableUniqueRows();
     testWifiDeviceCatalogDecodesOnlyClientActivity();
+    testWifiChannelLoadIsBoundedAndTruthful();
     testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations();
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
     testSourceDegradationKeepsOnlyCompatibleSourcesRunning();

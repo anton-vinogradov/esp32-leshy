@@ -6,6 +6,24 @@
 
 namespace leshy1::platform::arduino {
 
+namespace {
+
+std::uint32_t estimatedFrameAirtimeUs(const wifi_pkt_rx_ctrl_t& control) {
+    std::uint32_t bytes = control.sig_len;
+    if (bytes < 14U) bytes = 14U;
+    if (control.sig_mode == 1U) {
+        constexpr std::uint16_t htMbps10[8] = {
+            65, 130, 195, 260, 390, 520, 585, 650,
+        };
+        const std::uint16_t rate = htMbps10[control.mcs & 7U];
+        return 40U + static_cast<std::uint32_t>(
+            static_cast<std::uint64_t>(bytes) * 8ULL * 10ULL / rate);
+    }
+    return 30U + bytes * 8U / 12U;
+}
+
+}  // namespace
+
 using apps::capture::WifiFrameCaptureState;
 using apps::capture::WifiFrameKind;
 
@@ -21,6 +39,7 @@ bool BoardWifiPassiveCapture::begin(
     capture_.reset();
     if (!capture_.begin(plan, startedUs)) return false;
     deviceMonitor_ = false;
+    channelMonitor_ = false;
     cleanupComplete_ = false;
     lastError_ = 0;
 
@@ -104,6 +123,7 @@ bool BoardWifiPassiveCapture::beginDeviceMonitor(
     deviceStats_ = {};
     deviceStats_.cleanupComplete = false;
     deviceMonitor_ = true;
+    channelMonitor_ = false;
     cleanupComplete_ = false;
     lastError_ = 0;
 
@@ -172,22 +192,116 @@ bool BoardWifiPassiveCapture::beginDeviceMonitor(
     channelDwellMs_ = channelDwellMs;
     nextChannelUs_ = startedUs +
         static_cast<std::uint64_t>(channelDwellMs_) * 1000ULL;
+    channelLandedUs_ = startedUs;
     deviceStats_.active = true;
     return true;
 }
 
+bool BoardWifiPassiveCapture::beginChannelMonitor(
+    std::uint64_t startedUs, std::uint16_t channelDwellMs) {
+    if (initialized_ || started_ || promiscuous_ || active_ != nullptr ||
+        startedUs == 0U || channelDwellMs < 50U || channelDwellMs > 1000U) {
+        return false;
+    }
+    capture_.reset();
+    channelLoad_.reset();
+    channelStats_ = {};
+    channelStats_.cleanupComplete = false;
+    deviceMonitor_ = false;
+    channelMonitor_ = true;
+    cleanupComplete_ = false;
+    lastError_ = 0;
+
+    esp_err_t error = esp_event_loop_create_default();
+    if (error == ESP_OK) {
+        eventLoopOwned_ = true;
+    } else if (error != ESP_ERR_INVALID_STATE) {
+        lastError_ = error;
+        cleanupComplete_ = true;
+        channelMonitor_ = false;
+        channelStats_.cleanupComplete = true;
+        return false;
+    }
+    wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
+    init.nvs_enable = 0;
+    error = esp_wifi_init(&init);
+    if (error != ESP_OK) {
+        lastError_ = error;
+        endWifi();
+        channelMonitor_ = false;
+        channelStats_.cleanupComplete = cleanupComplete_;
+        return false;
+    }
+    initialized_ = true;
+    nvsDisabled_ = true;
+    error = esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    if (error == ESP_OK) volatileStorageOnly_ = true;
+    if (error == ESP_OK) error = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (error == ESP_OK) error = esp_wifi_start();
+    if (error != ESP_OK) {
+        lastError_ = error;
+        endWifi();
+        channelMonitor_ = false;
+        channelStats_.cleanupComplete = cleanupComplete_;
+        return false;
+    }
+    started_ = true;
+    currentChannel_ = 1U;
+    error = esp_wifi_set_channel(currentChannel_, WIFI_SECOND_CHAN_NONE);
+    wifi_promiscuous_filter_t filter{};
+    filter.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT |
+                         WIFI_PROMIS_FILTER_MASK_CTRL |
+                         WIFI_PROMIS_FILTER_MASK_DATA;
+    if (error == ESP_OK) error = esp_wifi_set_promiscuous_filter(&filter);
+    if (error == ESP_OK) error = esp_wifi_set_promiscuous_rx_cb(&receive);
+    if (error != ESP_OK) {
+        lastError_ = error;
+        endWifi();
+        channelMonitor_ = false;
+        channelStats_.cleanupComplete = cleanupComplete_;
+        return false;
+    }
+    active_ = this;
+    error = esp_wifi_set_promiscuous(true);
+    if (error != ESP_OK) {
+        active_ = nullptr;
+        lastError_ = error;
+        endWifi();
+        channelMonitor_ = false;
+        channelStats_.cleanupComplete = cleanupComplete_;
+        return false;
+    }
+    promiscuous_ = true;
+    channelDwellMs_ = channelDwellMs;
+    channelLandedUs_ = startedUs;
+    nextChannelUs_ = startedUs +
+        static_cast<std::uint64_t>(channelDwellMs_) * 1000ULL;
+    channelStats_.active = true;
+    return true;
+}
+
 bool BoardWifiPassiveCapture::service(std::uint64_t nowUs) {
-    if (deviceMonitor_) {
+    if (deviceMonitor_ || channelMonitor_) {
         if (!promiscuous_) return false;
         if (nowUs >= nextChannelUs_) {
+            if (channelMonitor_) {
+                const std::uint64_t elapsed = nowUs - channelLandedUs_;
+                portENTER_CRITICAL(&mux_);
+                channelLoad_.completeDwell(
+                    currentChannel_, static_cast<std::uint32_t>(
+                        elapsed > UINT32_MAX ? UINT32_MAX : elapsed));
+                portEXIT_CRITICAL(&mux_);
+            }
             const std::uint8_t next = currentChannel_ >= 13U
                 ? 1U : static_cast<std::uint8_t>(currentChannel_ + 1U);
             const bool changed = changeChannel(next, nowUs);
             if (changed) {
                 portENTER_CRITICAL(&mux_);
-                ++deviceStats_.channelHops;
+                if (deviceMonitor_) ++deviceStats_.channelHops;
+                if (channelMonitor_) ++channelStats_.channelHops;
                 portEXIT_CRITICAL(&mux_);
             }
+            channelLandedUs_ = nowUs;
             return changed;
         }
         return false;
@@ -218,6 +332,7 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
     }
     active_ = nullptr;
     const bool wasDeviceMonitor = deviceMonitor_;
+    const bool wasChannelMonitor = channelMonitor_;
     bool complete = true;
     if (promiscuous_) {
         const esp_err_t error = esp_wifi_set_promiscuous(false);
@@ -239,10 +354,17 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
     portEXIT_CRITICAL(&mux_);
     const bool wifiCleanup = endWifi();
     deviceMonitor_ = false;
+    channelMonitor_ = false;
     if (wasDeviceMonitor) {
         portENTER_CRITICAL(&mux_);
         deviceStats_.active = false;
         deviceStats_.cleanupComplete = wifiCleanup && complete;
+        portEXIT_CRITICAL(&mux_);
+    }
+    if (wasChannelMonitor) {
+        portENTER_CRITICAL(&mux_);
+        channelStats_.active = false;
+        channelStats_.cleanupComplete = wifiCleanup && complete;
         portEXIT_CRITICAL(&mux_);
     }
     return wifiCleanup && complete;
@@ -257,10 +379,14 @@ void BoardWifiPassiveCapture::reset() {
     deviceQueueTail_ = 0;
     deviceQueueSize_ = 0;
     deviceStats_ = {};
+    channelStats_ = {};
+    channelLoad_.reset();
     portEXIT_CRITICAL(&mux_);
     deviceMonitor_ = false;
+    channelMonitor_ = false;
     currentChannel_ = 0;
     nextChannelUs_ = 0;
+    channelLandedUs_ = 0;
     channelDwellMs_ = 0;
     lastError_ = 0;
 }
@@ -278,6 +404,31 @@ BoardWifiPassiveCapture::deviceMonitorStats() const {
     DeviceMonitorStats result = deviceStats_;
     result.active = deviceMonitor_ && promiscuous_;
     result.cleanupComplete = cleanupComplete_;
+    portEXIT_CRITICAL(&mux_);
+    return result;
+}
+
+BoardWifiPassiveCapture::ChannelMonitorStats
+BoardWifiPassiveCapture::channelMonitorStats() const {
+    portENTER_CRITICAL(&mux_);
+    ChannelMonitorStats result = channelStats_;
+    result.active = channelMonitor_ && promiscuous_;
+    result.cleanupComplete = cleanupComplete_;
+    portEXIT_CRITICAL(&mux_);
+    return result;
+}
+
+apps::wifi::WifiChannelLoadSnapshot
+BoardWifiPassiveCapture::channelLoadSnapshot() const {
+    portENTER_CRITICAL(&mux_);
+    const auto result = channelLoad_.snapshot();
+    portEXIT_CRITICAL(&mux_);
+    return result;
+}
+
+std::uint8_t BoardWifiPassiveCapture::bestPrimaryChannel() const {
+    portENTER_CRITICAL(&mux_);
+    const std::uint8_t result = channelLoad_.bestPrimaryChannel();
     portEXIT_CRITICAL(&mux_);
     return result;
 }
@@ -317,6 +468,20 @@ void BoardWifiPassiveCapture::accept(void* buffer,
         return;
     }
     const bool receiveValid = packet->rx_ctrl.rx_state == 0U;
+    if (channelMonitor_) {
+        portENTER_CRITICAL(&mux_);
+        ++channelStats_.framesReported;
+        if (!receiveValid || packet->rx_ctrl.channel < 1U ||
+            packet->rx_ctrl.channel > 13U) {
+            ++channelStats_.invalidFrames;
+        } else {
+            channelLoad_.observe(packet->rx_ctrl.channel,
+                                 estimatedFrameAirtimeUs(packet->rx_ctrl),
+                                 packet->rx_ctrl.rssi);
+        }
+        portEXIT_CRITICAL(&mux_);
+        return;
+    }
     if (deviceMonitor_) {
         apps::wifi::WifiDeviceObservation observation{};
         const bool decoded = receiveValid &&
@@ -354,7 +519,7 @@ bool BoardWifiPassiveCapture::changeChannel(std::uint8_t channel,
         esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     if (error != ESP_OK) {
         lastError_ = error;
-        if (!deviceMonitor_) {
+        if (!deviceMonitor_ && !channelMonitor_) {
             portENTER_CRITICAL(&mux_);
             capture_.fail(error, nowUs);
             portEXIT_CRITICAL(&mux_);
