@@ -9386,6 +9386,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"wifi_devices_unique\":%u,"
                       "\"wifi_device_catalog_revision\":%lu,"
                       "\"wifi_device_monitor_active\":%s,"
+                      "\"wifi_device_monitor_cleanup_complete\":%s,"
+                      "\"wifi_device_nvs_disabled\":%s,"
+                      "\"wifi_device_volatile_storage_only\":%s,"
                       "\"wifi_device_frames_reported\":%lu,"
                       "\"wifi_device_clients_accepted\":%lu,"
                       "\"wifi_device_clients_dropped\":%lu,"
@@ -9596,6 +9599,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(wifiDeviceCatalog.size()),
                       static_cast<unsigned long>(wifiDeviceCatalog.revision()),
                       wifiDeviceStats.active ? "true" : "false",
+                      wifiDeviceStats.cleanupComplete ? "true" : "false",
+                      wifiFrameCapture.nvsDisabled() ? "true" : "false",
+                      wifiFrameCapture.volatileStorageOnly() ? "true" : "false",
                       static_cast<unsigned long>(wifiDeviceStats.framesReported),
                       static_cast<unsigned long>(wifiDeviceStats.clientsAccepted),
                       static_cast<unsigned long>(wifiDeviceStats.clientsDropped),
