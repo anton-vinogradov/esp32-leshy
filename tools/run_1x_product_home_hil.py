@@ -216,6 +216,7 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
+    parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     if not args.firmware.is_file():
@@ -226,6 +227,8 @@ def main() -> int:
         parser.error("--expected-cid must be 32 uppercase hexadecimal characters")
     if len(args.source_commit) != 40:
         parser.error("--source-commit must be a full Git commit ID")
+    if args.flash == args.reuse_exact_flash:
+        parser.error("choose exactly one of --flash or --reuse-exact-flash")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -374,6 +377,15 @@ def main() -> int:
                 reports["nrf_stopped"] = stopped_nrf
 
                 home_selection(device, 3)
+                subghz_modes = action(device, "right")
+                trace.append(subghz_modes)
+                require_exact(subghz_modes, {
+                    "page": "survey", "selected_id": "subghz",
+                    "runtime_event": "subghz_modes",
+                    "runtime_owner": "subghz", "lease_mask": 9,
+                }, "subghz_modes")
+                screens["subghz_modes"] = capture(
+                    device, frames, "subghz-modes")
                 cc_menu = action(device, "right")
                 trace.append(cc_menu)
                 require_exact(cc_menu, {
@@ -529,15 +541,17 @@ def main() -> int:
         "schema": RUN_SCHEMA,
         "run_id": secrets.token_hex(16),
         "runner_source_sha256": sha256_file(Path(__file__).resolve()),
-        "passed": bool(args.flash) and not failures,
-        "gate_eligible": bool(args.flash) and not failures,
+        "passed": bool(args.flash or args.reuse_exact_flash) and not failures,
+        "gate_eligible": bool(args.flash or args.reuse_exact_flash) and
+            not failures,
         "failures": failures,
         "candidate": {
             "version": args.expected_version,
             "source_commit": args.source_commit,
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
-            "flashed": args.flash,
+            "flashed": bool(args.flash or args.reuse_exact_flash),
+            "flash_mode": "fresh" if args.flash else "reuse_exact",
         },
         "expected_cid": args.expected_cid,
         "home_items": list(HOME_ITEMS),
@@ -558,6 +572,7 @@ def main() -> int:
         "cleanup_after": cleanup_after,
         "scope": {
             "single_flash": True,
+            "exact_flash_reused": args.reuse_exact_flash,
             "manual_button_presses": 0,
             "screenshots_automatic": True,
             "waterfall_chrome_static_verified": True,
