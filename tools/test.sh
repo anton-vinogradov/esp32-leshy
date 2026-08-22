@@ -55,6 +55,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyPipeline.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveySourceController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyWorkflow.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/wifi/WifiNetworkCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/apps/AppCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/hardware/HardwareInventory.cpp" \
     "$repo_dir/firmware/leshy1/src/drivers/ble/BlePassiveContract.cpp" \
@@ -141,6 +142,7 @@ python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_ui_components_acceptance.py"
 python3 "$repo_dir/tools/check_ui_language_contract.py"
 python3 "$repo_dir/tools/check_product_ui_content.py"
+python3 "$repo_dir/tools/check_wifi_networks_contract.py"
 python3 "$repo_dir/tools/check_product_content_acceptance.py"
 python3 "$repo_dir/tools/check_ui_language_acceptance.py"
 python3 "$repo_dir/tools/check_ui_typography_acceptance.py"

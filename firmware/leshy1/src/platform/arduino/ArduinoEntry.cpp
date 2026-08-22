@@ -40,6 +40,7 @@
 #include "apps/survey/SurveyPipeline.h"
 #include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
+#include "apps/wifi/WifiNetworkCatalog.h"
 #include "boards/esp32_div_v2/BoardProfile.h"
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
@@ -150,6 +151,7 @@ using leshy1::apps::survey::SurveyView;
 using leshy1::apps::survey::SurveyWorkflow;
 using leshy1::apps::survey::SurveyWorkflowState;
 using leshy1::apps::survey::SurveyWorkflowStatus;
+using leshy1::apps::wifi::WifiNetworkCatalog;
 using leshy1::domain::apps::AppCatalog;
 using leshy1::domain::apps::AppMenuItem;
 using leshy1::domain::hardware::CapabilityRecord;
@@ -513,6 +515,27 @@ RfSpectrumView rfSpectrumView = RfSpectrumView::None;
 RfSpectrumKind rfSpectrumKind = RfSpectrumKind::Nrf24;
 std::uint8_t rfSpectrumSelection = 0;
 std::uint8_t subGhzModeSelection = 0;
+enum class WifiProductView : std::uint8_t {
+    None,
+    Menu,
+    Networks,
+    NetworkDetail,
+};
+
+const char* wifiProductViewName(WifiProductView view) {
+    switch (view) {
+        case WifiProductView::Menu: return "menu";
+        case WifiProductView::Networks: return "networks";
+        case WifiProductView::NetworkDetail: return "network_detail";
+        case WifiProductView::None:
+        default: return "none";
+    }
+}
+WifiProductView wifiProductView = WifiProductView::None;
+std::uint8_t wifiProductSelection = 0;
+WifiNetworkCatalog wifiNetworkCatalog;
+std::size_t wifiNetworkSelection = 0;
+Observation wifiNetworkDetail;
 leshy1::drivers::radio::Cc1101SpectrumBand rfCcBandSelection =
     leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
 std::uint64_t nextSpectrumUiRefreshUs = 0;
@@ -862,6 +885,7 @@ bool productSurveyWorkerReady = false;
 bool productSurveyWorkerScanActive = false;
 bool productSurveySourceUnavailableOnce = false;
 std::uint8_t productSurveyRuntimeUnavailableOnceMask = 0;
+bool productSurveyIncrementalRefreshPending = false;
 
 void renderInteractiveScreen(bool clearContent = true);
 void broadcast(const char* line);
@@ -2227,6 +2251,10 @@ bool drainProductSurveyWorkerObservations() {
     bool changed = false;
     Observation observation;
     while (xQueueReceive(productSurveyObservations, &observation, 0) == pdTRUE) {
+        const bool wifiCatalogChanged =
+            (wifiProductView == WifiProductView::Networks ||
+             wifiProductView == WifiProductView::NetworkDetail) &&
+            wifiNetworkCatalog.upsert(observation);
         const SurveyPipelineStatus queued = surveyPipeline.enqueue(observation);
         const bool accepted = queued == SurveyPipelineStatus::Queued;
         const SourceTimelineStatus timelineStatus =
@@ -2238,7 +2266,8 @@ bool drainProductSurveyWorkerObservations() {
             productSurveyRuntime.status = "timeline_record_failed";
             lastRuntimeEvent = productSurveyRuntime.status;
         }
-        changed = queued == SurveyPipelineStatus::Queued || changed;
+        changed = queued == SurveyPipelineStatus::Queued ||
+                  wifiCatalogChanged || changed;
         observation = {};
     }
     if (changed) {
@@ -2969,11 +2998,21 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
                                       ? status
                                       : "cleanup_failed";
     lastRuntimeEvent = productSurveyRuntime.status;
-    if (returnHome && !uiController.isRoot() && uiController.page() == 2) {
+    const bool returnToWifiMenu = returnHome && !uiController.isRoot() &&
+        uiController.page() == 2 &&
+        wifiProductView == WifiProductView::Networks &&
+        std::strcmp(appRuntime.activeApp(), "wifi") == 0;
+    if (returnToWifiMenu) {
+        surveyPipeline.resetToSetup();
+        wifiProductView = WifiProductView::Menu;
+        wifiProductSelection = 0;
+        lastRuntimeEvent = "wifi_menu";
+    } else if (returnHome && !uiController.isRoot() &&
+               uiController.page() == 2) {
         uiController.apply(UiAction::Back,
                            static_cast<std::uint8_t>(appCatalog.size()), false);
     }
-    if (appRuntime.running()) appRuntime.stop();
+    if (!returnToWifiMenu && appRuntime.running()) appRuntime.stop();
     setProductSurveyControl(ProductSurveyWorkerControl::Idle);
     renderInteractiveScreen();
 }
@@ -3210,7 +3249,13 @@ void serviceProductSurveyWorker() {
         }
     }
     if (drainProductSurveyWorkerObservations()) render = true;
-    if (render) renderInteractiveScreen();
+    // Keep a detail page visually stable while the worker continues updating
+    // the backing catalog. Returning to the list reveals the latest values.
+    if (render && wifiProductView != WifiProductView::NetworkDetail) {
+        productSurveyIncrementalRefreshPending = true;
+        renderInteractiveScreen(false);
+        productSurveyIncrementalRefreshPending = false;
+    }
 }
 
 void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
@@ -4851,6 +4896,12 @@ NavigationFooter navigationFooterForCurrentState() {
     if (uiController.page() == 1) return {back, {}, {}};
 
     if (uiController.page() == 2) {
+        if (wifiProductView == WifiProductView::Menu) {
+            return {back, choose, enter};
+        }
+        if (wifiProductView == WifiProductView::NetworkDetail) {
+            return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
+        }
         if (rfSpectrumView == RfSpectrumView::SourceMenu) {
             return {back, choose, enter};
         }
@@ -6041,6 +6092,7 @@ void renderSafetyStop(bool clearContent) {
 constexpr std::size_t kVisibleSurveyRows = 2;
 constexpr std::int16_t kSurveyFilterY = 101;
 constexpr std::int16_t kSurveyRowsY = 132;
+constexpr std::size_t kVisibleWifiNetworkRows = 4;
 
 std::size_t surveyFirstVisible(std::size_t selection) {
     return selection < kVisibleSurveyRows
@@ -6088,6 +6140,153 @@ void renderSurveyListRow(std::size_t index, std::size_t firstVisible) {
                       static_cast<int>(observation->rssiDbm));
     }
     setUiCursor(UiTextRole::Meta, 146, y + 13);
+    display.print(line);
+}
+
+std::size_t wifiNetworkFirstVisible(std::size_t selection) {
+    return selection < kVisibleWifiNetworkRows
+        ? 0
+        : selection - kVisibleWifiNetworkRows + 1U;
+}
+
+std::uint8_t wifiSignalLevel(std::int16_t rssiDbm) {
+    if (rssiDbm >= -55) return 4;
+    if (rssiDbm >= -67) return 3;
+    if (rssiDbm >= -78) return 2;
+    return 1;
+}
+
+void renderWifiSignalBars(Rect bounds, std::int16_t rssiDbm,
+                          std::uint16_t background) {
+    constexpr std::int16_t kBarWidth = 4;
+    constexpr std::int16_t kBarGap = 2;
+    constexpr std::int16_t kBarCount = 4;
+    const std::int16_t x = bounds.x + bounds.width - 30;
+    const std::int16_t baseline = bounds.y + bounds.height - 12;
+    const std::uint8_t level = wifiSignalLevel(rssiDbm);
+    for (std::int16_t index = 0; index < kBarCount; ++index) {
+        const std::int16_t height = 4 + index * 3;
+        display.fillRect(x + index * (kBarWidth + kBarGap), baseline - height,
+                         kBarWidth, height,
+                         index < level ? Palette::Positive
+                                       : Palette::TextMuted);
+        display.drawFastHLine(
+            x + index * (kBarWidth + kBarGap), baseline, kBarWidth,
+            background);
+    }
+}
+
+void renderWifiNetworkRow(std::size_t index, std::size_t firstVisible) {
+    const Observation* observation = wifiNetworkCatalog.at(index);
+    if (observation == nullptr || index < firstVisible ||
+        index >= firstVisible + kVisibleWifiNetworkRows) {
+        return;
+    }
+    const Rect bounds = Components::homeRow(
+        static_cast<std::uint8_t>(index - firstVisible));
+    const bool selected = wifiNetworkSelection == index;
+    const std::uint16_t background = selected ? Palette::SurfaceFocus
+                                               : Palette::Surface;
+    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, background);
+    renderFocusCue(bounds, selected);
+    char label[24] = {};
+    const std::size_t visibleLength = observation->labelLength < 18U
+        ? observation->labelLength : 18U;
+    if (visibleLength == 0) {
+        std::snprintf(label, sizeof(label), "%s", tr(UiTextId::Hidden));
+    } else {
+        std::memcpy(label, observation->label.data(), visibleLength);
+        if (observation->labelLength > visibleLength) {
+            label[visibleLength - 1U] = '~';
+        }
+    }
+    const std::int16_t labelTop = menuRowTextTop(bounds);
+    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
+                         background);
+    setUiCursor(UiTextRole::Body,
+                bounds.x + kInteractiveRowTextInset, labelTop);
+    display.print(label);
+    char note[48] = {};
+    std::snprintf(note, sizeof(note), tr(UiTextId::ChannelRssiFormat),
+                  static_cast<unsigned>(observation->channel),
+                  static_cast<int>(observation->rssiDbm));
+    display.setTextColor(Palette::Positive, background);
+    setUiCursor(UiTextRole::Meta,
+                bounds.x + kInteractiveRowTextInset,
+                labelTop + kRobotoCondensedBodyAscent +
+                    kRobotoCondensedBodyDescent + 1);
+    display.print(note);
+    renderWifiSignalBars(bounds, observation->rssiDbm, background);
+}
+
+void renderWifiNetworksData() {
+    if (wifiNetworkCatalog.size() == 0) {
+        display.setTextColor(Palette::Positive, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 70);
+        display.print(tr(UiTextId::WifiNetworksSearching));
+        return;
+    }
+    const std::size_t first = wifiNetworkFirstVisible(wifiNetworkSelection);
+    const std::size_t end = wifiNetworkCatalog.size() <
+            first + kVisibleWifiNetworkRows
+        ? wifiNetworkCatalog.size() : first + kVisibleWifiNetworkRows;
+    for (std::size_t index = first; index < end; ++index) {
+        renderWifiNetworkRow(index, first);
+    }
+}
+
+void renderWifiNetworks(bool clearContent) {
+    renderHeader(tr(UiTextId::WifiMenuNetworks), clearContent);
+    renderWifiNetworksData();
+}
+
+std::size_t wifiNetworkDetailSamples() {
+    std::size_t samples = 0;
+    for (std::size_t index = 0; index < surveySession.size(); ++index) {
+        const Observation* observation = surveySession.get(index);
+        if (observation == nullptr ||
+            observation->radio != RadioKind::Wifi ||
+            observation->identityLength != wifiNetworkDetail.identityLength ||
+            std::memcmp(observation->identity.data(),
+                        wifiNetworkDetail.identity.data(),
+                        observation->identityLength) != 0) {
+            continue;
+        }
+        ++samples;
+    }
+    return samples;
+}
+
+void renderWifiNetworkDetail(bool clearContent) {
+    renderHeader(tr(UiTextId::WifiNetworkDetailTitle), clearContent);
+    const char* label = wifiNetworkDetail.labelLength == 0
+        ? tr(UiTextId::Hidden) : wifiNetworkDetail.label.data();
+    display.setTextColor(Palette::Focus, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 48);
+    display.print(label);
+    char line[96] = {};
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::WifiNetworkBssidFormat),
+        static_cast<unsigned>(wifiNetworkDetail.identity[0]),
+        static_cast<unsigned>(wifiNetworkDetail.identity[1]),
+        static_cast<unsigned>(wifiNetworkDetail.identity[2]),
+        static_cast<unsigned>(wifiNetworkDetail.identity[3]),
+        static_cast<unsigned>(wifiNetworkDetail.identity[4]),
+        static_cast<unsigned>(wifiNetworkDetail.identity[5]));
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 88);
+    display.print(line);
+    std::snprintf(line, sizeof(line), tr(UiTextId::ChannelFormat),
+                  static_cast<unsigned>(wifiNetworkDetail.channel));
+    renderMetric(3, line, Tone::Positive);
+    std::snprintf(line, sizeof(line), tr(UiTextId::RssiFormat),
+                  static_cast<int>(wifiNetworkDetail.rssiDbm));
+    renderMetric(4, line, Tone::Positive);
+    std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkSamplesFormat),
+                  static_cast<unsigned>(wifiNetworkDetailSamples()));
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 202);
     display.print(line);
 }
 
@@ -6272,6 +6471,50 @@ void renderSurveySourceRow(std::uint8_t index) {
                   tr(surveySourceNote(*source)), selected,
                   source->available(),
                   source->selected ? Tone::Positive : Tone::Muted);
+}
+
+constexpr std::uint8_t kWifiProductTaskCount = 4;
+
+UiTextId wifiProductLabel(std::uint8_t index) {
+    constexpr UiTextId labels[kWifiProductTaskCount] = {
+        UiTextId::WifiMenuNetworks,
+        UiTextId::WifiMenuDevices,
+        UiTextId::WifiMenuChannels,
+        UiTextId::WifiMenuCapture,
+    };
+    return labels[index < kWifiProductTaskCount ? index : 0];
+}
+
+UiTextId wifiProductNote(std::uint8_t index) {
+    constexpr UiTextId notes[kWifiProductTaskCount] = {
+        UiTextId::WifiMenuNetworksNote,
+        UiTextId::WifiMenuDevicesNote,
+        UiTextId::WifiMenuChannelsNote,
+        UiTextId::WifiMenuCaptureNote,
+    };
+    return notes[index < kWifiProductTaskCount ? index : 0];
+}
+
+bool wifiProductTaskReady(std::uint8_t index) {
+    // Functions are admitted one at a time. The menu stays truthful while the
+    // remaining radio workflows are being implemented and measured.
+    return index == 0;
+}
+
+void renderWifiProductRow(std::uint8_t index) {
+    if (index >= kWifiProductTaskCount) return;
+    const bool ready = wifiProductTaskReady(index);
+    renderMenuRow(Components::homeRow(index), tr(wifiProductLabel(index)),
+                  tr(ready ? wifiProductNote(index) : UiTextId::WifiMenuNext),
+                  wifiProductSelection == index, ready,
+                  ready ? Tone::Positive : Tone::Muted);
+}
+
+void renderWifiProductMenu(bool clearContent) {
+    renderHeader(tr(UiTextId::WifiMenuTitle), clearContent);
+    for (std::uint8_t index = 0; index < kWifiProductTaskCount; ++index) {
+        renderWifiProductRow(index);
+    }
 }
 
 void renderRfSpectrumSourceRow(std::uint8_t index) {
@@ -6744,6 +6987,14 @@ void renderCc1101SpectrumPage(bool clearContent) {
 
 void renderInventoryPage(bool clearContent) {
     char line[96] = {};
+    if (wifiProductView == WifiProductView::Menu) {
+        renderWifiProductMenu(clearContent);
+        return;
+    }
+    if (wifiProductView == WifiProductView::NetworkDetail) {
+        renderWifiNetworkDetail(clearContent);
+        return;
+    }
     if (rfSpectrumView == RfSpectrumView::SourceMenu) {
         renderRfSpectrumSourceMenu(clearContent);
         return;
@@ -6770,6 +7021,18 @@ void renderInventoryPage(bool clearContent) {
         } else {
             renderNrf24SpectrumPage(clearContent);
         }
+        return;
+    }
+    if (wifiProductView == WifiProductView::Networks &&
+        surveyWorkflow.state() == SurveyWorkflowState::Setup &&
+        std::strcmp(productSurveyRuntime.status, "preparing") == 0) {
+        renderHeader(tr(UiTextId::WifiMenuNetworks), clearContent);
+        renderMetric(0, tr(UiTextId::SurveySearchWifi), Tone::Positive);
+        return;
+    }
+    if (wifiProductView == WifiProductView::Networks &&
+        surveyWorkflow.state() == SurveyWorkflowState::Running) {
+        renderWifiNetworks(clearContent);
         return;
     }
     if (productSurveySourceUnavailableVisible()) {
@@ -7102,6 +7365,11 @@ struct UiRenderSnapshot final {
     std::uint8_t languageSelection = 0;
     std::uint8_t selfTestView = 0;
     std::uint8_t selfTestSelection = 0;
+    std::uint8_t wifiProductView = 0;
+    std::uint8_t wifiProductSelection = 0;
+    std::size_t wifiNetworkSelection = 0;
+    std::size_t wifiNetworkSize = 0;
+    std::uint32_t wifiNetworkRevision = 0;
     std::uint8_t rfSpectrumView = 0;
     std::uint8_t rfSpectrumSelection = 0;
     std::uint8_t subGhzModeSelection = 0;
@@ -7134,6 +7402,11 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         languageController.selection(),
         static_cast<std::uint8_t>(selfTestController.view()),
         selfTestController.selection(),
+        static_cast<std::uint8_t>(wifiProductView),
+        wifiProductSelection,
+        wifiNetworkSelection,
+        wifiNetworkCatalog.size(),
+        wifiNetworkCatalog.revision(),
         static_cast<std::uint8_t>(rfSpectrumView),
         rfSpectrumSelection,
         subGhzModeSelection,
@@ -7185,6 +7458,65 @@ bool renderSelectionDelta() {
         }
         renderDeviceRow(renderedUi.deviceSelection, currentFirst);
         renderDeviceRow(deviceSelection, currentFirst);
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::Menu &&
+        renderedUi.wifiProductView ==
+            static_cast<std::uint8_t>(WifiProductView::Menu)) {
+        if (renderedUi.wifiProductSelection == wifiProductSelection) {
+            return false;
+        }
+        renderWifiProductRow(renderedUi.wifiProductSelection);
+        renderWifiProductRow(wifiProductSelection);
+        renderNavigationFooter();
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::Networks &&
+        surveyWorkflow.state() == SurveyWorkflowState::Running &&
+        renderedUi.wifiProductView ==
+            static_cast<std::uint8_t>(WifiProductView::Networks)) {
+        const std::size_t current = wifiNetworkSelection;
+        const std::size_t oldFirst =
+            wifiNetworkFirstVisible(renderedUi.wifiNetworkSelection);
+        const std::size_t currentFirst = wifiNetworkFirstVisible(current);
+        const bool dataChanged = productSurveyIncrementalRefreshPending ||
+            renderedUi.wifiNetworkSize != wifiNetworkCatalog.size() ||
+            renderedUi.wifiNetworkRevision != wifiNetworkCatalog.revision();
+        if (dataChanged || oldFirst != currentFirst) {
+            const bool clearRows = oldFirst != currentFirst ||
+                renderedUi.wifiNetworkSize == 0 ||
+                wifiNetworkCatalog.size() == 0;
+            if (clearRows) {
+                display.fillRect(
+                    Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
+                    Layout::FooterDividerY - Layout::ContentTop,
+                    Palette::Canvas);
+                renderWifiNetworksData();
+            } else {
+                const std::size_t end = wifiNetworkCatalog.size() <
+                        currentFirst + kVisibleWifiNetworkRows
+                    ? wifiNetworkCatalog.size()
+                    : currentFirst + kVisibleWifiNetworkRows;
+                for (std::size_t index = currentFirst; index < end; ++index) {
+                    renderWifiNetworkRow(index, currentFirst);
+                }
+            }
+            if (renderedUi.surveyState !=
+                static_cast<std::uint8_t>(SurveyWorkflowState::Running)) {
+                display.fillRect(128, 0, Layout::ScreenWidth - 128,
+                                 Layout::HeaderHeight, Palette::Header);
+                renderHeaderStatus();
+                renderNavigationFooter();
+            }
+            return true;
+        }
+        if (renderedUi.wifiNetworkSelection == current) return false;
+        renderWifiNetworkRow(renderedUi.wifiNetworkSelection, currentFirst);
+        renderWifiNetworkRow(current, currentFirst);
         return true;
     }
 
@@ -7277,11 +7609,23 @@ bool renderSelectionDelta() {
             static_cast<std::uint8_t>(SurveyWorkflowState::Running) &&
         renderedUi.surveyView == static_cast<std::uint8_t>(SurveyView::List) &&
         renderedUi.surveyFilter ==
-            static_cast<std::uint8_t>(surveyController.filter()) &&
-        renderedUi.surveySize == surveySession.size() &&
-        renderedUi.surveyVisibleSize == surveyController.visibleSize()) {
+            static_cast<std::uint8_t>(surveyController.filter())) {
         const std::size_t current = surveyController.selection();
         const bool currentFilterFocused = surveyController.filterFocused();
+        if (productSurveyIncrementalRefreshPending) {
+            renderSurveyFilterBar();
+            display.fillRect(Layout::Edge, kSurveyRowsY, Layout::ContentWidth,
+                             92, Palette::Canvas);
+            const std::size_t first = surveyFirstVisible(current);
+            const std::size_t end =
+                surveyController.visibleSize() < first + kVisibleSurveyRows
+                    ? surveyController.visibleSize()
+                    : first + kVisibleSurveyRows;
+            for (std::size_t index = first; index < end; ++index) {
+                renderSurveyListRow(index, first);
+            }
+            return true;
+        }
         if (renderedUi.surveySelection == current &&
             renderedUi.surveyFilterFocused == currentFilterFocused) return false;
         if (renderedUi.surveyFilterFocused != currentFilterFocused) {
@@ -8850,6 +9194,11 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_ble_scan_cycles\":%lu,"
                       "\"survey_product_start_action_us\":%llu,"
                       "\"survey_product_stop_action_us\":%llu,"
+                      "\"wifi_product_view\":\"%s\","
+                      "\"wifi_product_selection\":%u,"
+                      "\"wifi_network_selection\":%u,"
+                      "\"wifi_networks_unique\":%u,"
+                      "\"wifi_network_catalog_revision\":%lu,"
                       "\"library_simulated\":%s,\"library_view\":\"%s\","
                       "\"library_entries\":%u,\"library_generation\":%lu,"
                       "\"library_persistent\":%s,"
@@ -9045,6 +9394,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.startActionUs),
                       static_cast<unsigned long long>(
                           productSurveyRuntime.stopActionUs),
+                      wifiProductViewName(wifiProductView),
+                      static_cast<unsigned>(wifiProductSelection),
+                      static_cast<unsigned>(wifiNetworkSelection),
+                      static_cast<unsigned>(wifiNetworkCatalog.size()),
+                      static_cast<unsigned long>(
+                          wifiNetworkCatalog.revision()),
                       selectedLibrary != nullptr && selectedLibrary->simulated
                           ? "true" : "false",
                       libraryController.view() == LibraryView::ExportReady
@@ -9442,10 +9797,44 @@ void emitSurveyBrowser(Stream& reply) {
     reply.println(line);
 }
 
+bool startWifiNetworksProduct() {
+    if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
+        surveyPipeline.resetToSetup();
+    }
+    closeProductSurveyBackend();
+    wifiNetworkCatalog.reset();
+    wifiNetworkSelection = 0;
+    wifiNetworkDetail = {};
+    productSurveyRuntime = {};
+    productSurveyRuntime.selected = true;
+    productSurveyRuntime.workerReady = productSurveyWorkerReady;
+    surveySourceController.rebuild(inventory, false,
+                                   SurveySourceScope::WifiOnly);
+    const SurveyWorkflowStatus configured =
+        surveyWorkflow.configure(true, false);
+    if (configured != SurveyWorkflowStatus::Ready) {
+        productSurveyRuntime.status = "workflow_config_failed";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return false;
+    }
+    wifiProductView = WifiProductView::Networks;
+    if (!startProductSurvey()) {
+        wifiProductView = WifiProductView::Menu;
+        return false;
+    }
+    lastRuntimeEvent = "wifi_networks_preparing";
+    return true;
+}
+
 bool selectionCanRepaintInPlace(UiAction action) {
     if (action != UiAction::Up && action != UiAction::Down) return false;
     if (uiController.isRoot()) return true;
     if (uiController.page() == 2) {
+        if (wifiProductView == WifiProductView::Menu) return true;
+        if (wifiProductView == WifiProductView::Networks &&
+            surveyWorkflow.state() == SurveyWorkflowState::Running) {
+            return true;
+        }
         if (rfSpectrumView == RfSpectrumView::Live) return false;
         if (rfSpectrumView == RfSpectrumView::SourceMenu ||
             rfSpectrumView == RfSpectrumView::SubGhzMenu ||
@@ -9499,7 +9888,37 @@ bool applyUiAction(UiAction action, bool render = true) {
     if (!wasRoot && uiController.page() == 2) {
         bool handled = false;
         bool changed = false;
-        if (rfSpectrumView == RfSpectrumView::SourceMenu) {
+        if (wifiProductView == WifiProductView::Menu) {
+            if (action == UiAction::Up && wifiProductSelection > 0) {
+                handled = true;
+                --wifiProductSelection;
+                changed = true;
+            } else if (action == UiAction::Down &&
+                       wifiProductSelection + 1U < kWifiProductTaskCount) {
+                handled = true;
+                ++wifiProductSelection;
+                changed = true;
+            } else if ((action == UiAction::Select ||
+                        action == UiAction::Right) &&
+                       wifiProductTaskReady(wifiProductSelection)) {
+                handled = true;
+                if (wifiProductSelection == 0) {
+                    changed = startWifiNetworksProduct();
+                }
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                handled = true;
+                lastRuntimeEvent = "wifi_task_not_ready";
+            } else if (action == UiAction::Back || action == UiAction::Left) {
+                handled = true;
+                wifiProductView = WifiProductView::None;
+                changed = uiController.apply(
+                    action, static_cast<std::uint8_t>(appCatalog.size()),
+                    true, 2);
+                if (changed) appRuntime.stop();
+                lastRuntimeEvent = "wifi_home";
+            }
+        } else if (rfSpectrumView == RfSpectrumView::SourceMenu) {
             handled = true;
             if (action == UiAction::Up && rfSpectrumSelection != 0) {
                 rfSpectrumSelection = 0;
@@ -9701,6 +10120,49 @@ bool applyUiAction(UiAction action, bool render = true) {
                     Nrf24SpectrumMetric::Traffic
                         ? "nrf24_spectrum_traffic"
                         : "nrf24_spectrum_signal";
+            }
+        } else if (wifiProductView == WifiProductView::Networks &&
+                   surveyWorkflow.state() != SurveyWorkflowState::Running &&
+                   productSurveyControl() == ProductSurveyWorkerControl::Idle &&
+                   (action == UiAction::Back || action == UiAction::Left)) {
+            handled = true;
+            closeProductSurveyBackend();
+            surveyPipeline.resetToSetup();
+            wifiProductView = WifiProductView::Menu;
+            wifiProductSelection = 0;
+            lastRuntimeEvent = "wifi_menu";
+            changed = true;
+        } else if (wifiProductView == WifiProductView::NetworkDetail) {
+            handled = true;
+            if (action == UiAction::Back || action == UiAction::Left) {
+                wifiProductView = WifiProductView::Networks;
+                lastRuntimeEvent = "wifi_networks";
+                changed = true;
+            }
+        } else if (wifiProductView == WifiProductView::Networks &&
+                   surveyWorkflow.state() == SurveyWorkflowState::Running) {
+            handled = true;
+            if (action == UiAction::Up && wifiNetworkSelection > 0) {
+                --wifiNetworkSelection;
+                changed = true;
+            } else if (action == UiAction::Down &&
+                       wifiNetworkSelection + 1U <
+                           wifiNetworkCatalog.size()) {
+                ++wifiNetworkSelection;
+                changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                const Observation* observation =
+                    wifiNetworkCatalog.at(wifiNetworkSelection);
+                if (observation != nullptr) {
+                    wifiNetworkDetail = *observation;
+                    wifiProductView = WifiProductView::NetworkDetail;
+                    lastRuntimeEvent = "wifi_network_detail";
+                    changed = true;
+                }
+            } else if (action == UiAction::Back ||
+                       action == UiAction::Left) {
+                changed = requestProductSurveyWorkerStop(true);
             }
         } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
             productSurveySourceUnavailableVisible() &&
@@ -10206,28 +10668,37 @@ bool applyUiAction(UiAction action, bool render = true) {
                 leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
             nextSpectrumUiRefreshUs = 0;
             if (surveyApp) {
-                if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
-                    surveyPipeline.resetToSetup();
-                }
-                closeProductSurveyBackend();
-                productSurveyRuntime = {};
-                productSurveyRuntime.selected = !selected->simulated;
-                productSurveyRuntime.workerReady = productSurveyWorkerReady;
-                surveySourceController.rebuild(
-                    inventory, selected->simulated,
-                    std::strcmp(selected->id, "wifi") == 0
-                        ? SurveySourceScope::WifiOnly
-                        : SurveySourceScope::BleOnly);
-                const SurveyWorkflowStatus configured =
-                    surveyWorkflow.configure(productSurveyRuntime.selected,
-                                             selected->simulated);
-                if (configured != SurveyWorkflowStatus::Ready) {
-                    openable = false;
-                    lastRuntimeEvent = "survey_config_rejected";
+                const bool wifiApp = std::strcmp(selected->id, "wifi") == 0;
+                wifiProductView = wifiApp ? WifiProductView::Menu
+                                          : WifiProductView::None;
+                wifiProductSelection = 0;
+                if (!wifiApp) {
+                    if (surveyWorkflow.state() !=
+                        SurveyWorkflowState::Setup) {
+                        surveyPipeline.resetToSetup();
+                    }
+                    closeProductSurveyBackend();
+                    productSurveyRuntime = {};
+                    productSurveyRuntime.selected = !selected->simulated;
+                    productSurveyRuntime.workerReady =
+                        productSurveyWorkerReady;
+                    surveySourceController.rebuild(
+                        inventory, selected->simulated,
+                        SurveySourceScope::BleOnly);
+                    const SurveyWorkflowStatus configured =
+                        surveyWorkflow.configure(
+                            productSurveyRuntime.selected,
+                            selected->simulated);
+                    if (configured != SurveyWorkflowStatus::Ready) {
+                        openable = false;
+                        lastRuntimeEvent = "survey_config_rejected";
+                    }
                 }
             } else if (std::strcmp(selected->id, "spectrum24") == 0) {
+                wifiProductView = WifiProductView::None;
                 startNrf24Spectrum();
             } else {
+                wifiProductView = WifiProductView::None;
                 rfSpectrumKind = RfSpectrumKind::Cc1101;
                 rfSpectrumView = RfSpectrumView::SubGhzMenu;
                 subGhzRawCapture.reset();
@@ -10267,6 +10738,22 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
         };
     }
     if (uiController.page() == 2) {
+        if (wifiProductView == WifiProductView::Menu) {
+            return {leshy1::ui::hitTouchTarget(
+                        TouchTargetLayout::HomeRows, point, 0,
+                        kWifiProductTaskCount),
+                    wifiProductSelection};
+        }
+        if (wifiProductView == WifiProductView::Networks &&
+            surveyWorkflow.state() == SurveyWorkflowState::Running) {
+            const std::size_t first =
+                wifiNetworkFirstVisible(wifiNetworkSelection);
+            return {leshy1::ui::hitTouchTarget(
+                        TouchTargetLayout::HomeRows, point,
+                        static_cast<std::uint8_t>(first),
+                        static_cast<std::uint8_t>(wifiNetworkCatalog.size())),
+                    static_cast<std::uint8_t>(wifiNetworkSelection)};
+        }
         if (rfSpectrumView == RfSpectrumView::SourceMenu) {
             return {leshy1::ui::hitTouchTarget(
                         TouchTargetLayout::TwoChoices, point),

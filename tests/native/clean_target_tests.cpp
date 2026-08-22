@@ -18,6 +18,7 @@
 #include "apps/survey/SurveyPipeline.h"
 #include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
+#include "apps/wifi/WifiNetworkCatalog.h"
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/self_test/SelfTestController.h"
@@ -84,6 +85,7 @@ using namespace leshy1::apps::library;
 using namespace leshy1::apps::self_test;
 using namespace leshy1::apps::capture;
 using namespace leshy1::apps::spectrum;
+using namespace leshy1::apps::wifi;
 
 namespace {
 
@@ -1984,6 +1986,52 @@ void testWifiIngressIsPassiveOnlyAndNormalizesObservations() {
     record.rssiDbm = -67;
     record.bssid = {};
     CHECK(!normalizePassiveRecord(record, 2000, &observation));
+}
+
+void testWifiNetworkCatalogKeepsStableUniqueRows() {
+    WifiNetworkCatalog catalog;
+    WifiScanRecord record;
+    record.bssid = {0x02, 0x11, 0x22, 0x33, 0x44, 0x55};
+    record.channel = 6;
+    record.rssiDbm = -67;
+    record.ssid = "field-ap";
+    record.ssidLength = 8;
+    Observation observation;
+    CHECK(normalizePassiveRecord(record, 2000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.size() == 1);
+    const std::uint32_t insertedRevision = catalog.revision();
+
+    // Timestamp-only updates do not repaint the live screen.
+    CHECK(normalizePassiveRecord(record, 3000, &observation));
+    CHECK(!catalog.upsert(observation));
+    CHECK(catalog.revision() == insertedRevision);
+    CHECK(catalog.size() == 1);
+
+    // Signal changes update the same stable BSSID row.
+    record.rssiDbm = -51;
+    CHECK(normalizePassiveRecord(record, 4000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.size() == 1);
+    CHECK(catalog.at(0) != nullptr);
+    CHECK(catalog.at(0)->rssiDbm == -51);
+
+    record.bssid[5] = 0x56;
+    record.channel = 11;
+    record.ssid = "second-ap";
+    record.ssidLength = 9;
+    CHECK(normalizePassiveRecord(record, 5000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.size() == 2);
+    CHECK(std::strcmp(catalog.at(0)->label.data(), "field-ap") == 0);
+    CHECK(std::strcmp(catalog.at(1)->label.data(), "second-ap") == 0);
+
+    observation.radio = RadioKind::Ble;
+    CHECK(!catalog.upsert(observation));
+    CHECK(catalog.size() == 2);
+    catalog.reset();
+    CHECK(catalog.size() == 0);
+    CHECK(catalog.at(0) == nullptr);
 }
 
 void testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations() {
@@ -4992,6 +5040,7 @@ int main() {
     testAppCatalogProjectsCapabilityStatesBeforeLaunch();
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
+    testWifiNetworkCatalogKeepsStableUniqueRows();
     testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations();
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();
     testSourceDegradationKeepsOnlyCompatibleSourcesRunning();
