@@ -4870,9 +4870,16 @@ NavigationFooter navigationFooterForCurrentState() {
                     ? NavigationFooter{
                           back, {}, {NavigationKey::RightAndSelect,
                                      UiTextId::NavSave}}
-                    : NavigationFooter{back, {}, {}};
+                    : subGhzCapturePersistState ==
+                              CapturePersistState::Saving
+                          ? NavigationFooter{}
+                          : NavigationFooter{
+                                back, {},
+                                {NavigationKey::RightAndSelect,
+                                 UiTextId::NavStart}};
             }
-            return {back, {}, {}};
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavStart}};
         }
         if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
             return {back, choose, enter};
@@ -5364,6 +5371,7 @@ UiTextId homeNote(const AppMenuItem& item) {
     if (std::strcmp(item.id, "library") == 0) {
         if (item.simulated) return UiTextId::NoteLibrarySimulated;
         if (!item.enabled) return UiTextId::NoteLibraryUnavailable;
+        return UiTextId::NoteLibraryReady;
     }
     if (std::strcmp(item.id, "capture") == 0) {
         return item.enabled ? UiTextId::NoteCaptureReady
@@ -5623,13 +5631,9 @@ void renderWifiCapturePage(bool clearContent) {
     char line[64] = {};
     if (stats.state == WifiFrameCaptureState::Idle) {
         renderHeader(tr(UiTextId::CaptureSetup), clearContent);
-        renderMetric(0, tr(UiTextId::CaptureSource), Tone::Positive);
-        renderMetric(1, tr(UiTextId::CaptureChannels));
-        renderMetric(2, tr(UiTextId::CaptureLimit));
-        renderMetric(3, tr(UiTextId::CaptureSnaplen));
-        display.setTextColor(Palette::TextMuted, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 207);
-        display.print(tr(UiTextId::CaptureStartNote));
+        renderMetric(0, tr(UiTextId::CaptureWifiPurpose), Tone::Positive);
+        renderMetric(1, tr(UiTextId::CaptureDurationUser));
+        renderMetric(2, tr(UiTextId::CaptureAutoChannelsUser));
         return;
     }
 
@@ -5650,55 +5654,51 @@ void renderWifiCapturePage(bool clearContent) {
     } else {
         renderHeader(tr(UiTextId::CaptureError), clearContent);
     }
-    std::snprintf(line, sizeof(line), tr(UiTextId::CaptureFramesFormat),
-                  static_cast<unsigned long>(stats.framesAccepted),
-                  static_cast<unsigned>(kProductWifiFrameCapturePlan.maximumFrames));
-    renderMetric(0, line,
-                 stats.state == WifiFrameCaptureState::Failed
-                     ? Tone::Danger : Tone::Positive);
-    std::snprintf(line, sizeof(line), tr(UiTextId::CaptureBytesFormat),
-                  static_cast<unsigned long>(stats.payloadBytes));
-    renderMetric(1, line);
-    std::snprintf(line, sizeof(line), tr(UiTextId::CaptureDropsFormat),
-                  static_cast<unsigned long>(stats.framesDroppedCapacity +
-                                             stats.framesDroppedInvalid));
-    renderMetric(2, line,
-                 stats.framesDroppedCapacity + stats.framesDroppedInvalid == 0
-                     ? Tone::Positive : Tone::Warning);
+    if (stats.state == WifiFrameCaptureState::Failed) {
+        renderMetric(0, tr(UiTextId::CaptureRecordFailedUser), Tone::Danger);
+        renderMetric(1, tr(UiTextId::CaptureTryAgainUser));
+        return;
+    }
+
+    if (stats.framesAccepted == 0U &&
+        stats.state == WifiFrameCaptureState::Complete) {
+        renderMetric(0, tr(UiTextId::CaptureNoPackets), Tone::Warning);
+    } else {
+        std::snprintf(line, sizeof(line), tr(UiTextId::CapturePacketsFormat),
+                      static_cast<unsigned long>(stats.framesAccepted));
+        renderMetric(0, line, Tone::Positive);
+    }
     std::snprintf(line, sizeof(line), tr(UiTextId::CaptureChannelFormat),
                   static_cast<unsigned>(wifiFrameCapture.currentChannel()));
-    renderMetric(3, line);
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 207);
+    renderMetric(1, line);
     if (stats.state == WifiFrameCaptureState::Running) {
-        display.print(tr(UiTextId::CaptureStopNote));
-    } else if (stats.state == WifiFrameCaptureState::Complete) {
-        const UiTextId firstNote =
-            capturePersistState == CapturePersistState::Confirm
-                ? UiTextId::CapturePrivacyNote
-                : capturePersistState == CapturePersistState::Saving
-                      ? UiTextId::CaptureSavingNote
-                      : capturePersistState == CapturePersistState::Saved
-                            ? UiTextId::CaptureSavedNote
-                            : capturePersistState == CapturePersistState::Failed
-                                  ? UiTextId::CaptureSaveFailedNote
-                                  : UiTextId::CapturePcapNote;
-        display.print(tr(firstNote));
-        setUiCursor(UiTextRole::Meta, 14, 222);
-        if (capturePersistState == CapturePersistState::Confirm) {
-            display.print(tr(UiTextId::CaptureConfirmNote));
-        } else if (capturePersistState == CapturePersistState::Saved) {
-            std::snprintf(line, sizeof(line), "GEN %lu | %s",
-                          static_cast<unsigned long>(capturePersistGeneration),
-                          capturePersistStatus);
-            display.print(line);
-        } else if (capturePersistState == CapturePersistState::Failed) {
-            display.print(capturePersistStatus);
-        } else if (capturePersistState == CapturePersistState::Result) {
-            display.print(tr(UiTextId::CaptureScrubNote));
-        }
+        renderMetric(2, tr(UiTextId::CaptureRecordingUser), Tone::Positive);
     } else {
-        display.print(tr(UiTextId::CaptureFailureNote));
+        renderMetric(2, tr(UiTextId::CapturePcapReadyUser), Tone::Positive);
+        const UiTextId storageMessage =
+            capturePersistState == CapturePersistState::Confirm
+                ? UiTextId::CaptureIdentifiersWarning
+                : capturePersistState == CapturePersistState::Saving
+                      ? UiTextId::CaptureSavingUser
+                      : capturePersistState == CapturePersistState::Saved
+                            ? UiTextId::CaptureSavedUser
+                            : capturePersistState == CapturePersistState::Failed
+                                  ? UiTextId::CaptureSaveFailedUser
+                                  : UiTextId::CaptureReadyToSave;
+        renderMetric(3, tr(storageMessage),
+                     capturePersistState == CapturePersistState::Failed
+                         ? Tone::Danger
+                         : capturePersistState == CapturePersistState::Confirm
+                               ? Tone::Warning
+                               : Tone::Positive);
+    }
+    const std::uint32_t dropped = stats.framesDroppedCapacity +
+                                  stats.framesDroppedInvalid;
+    if (dropped != 0U) {
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::CaptureLossWarningFormat),
+                      static_cast<unsigned long>(dropped));
+        renderMetric(4, line, Tone::Warning);
     }
 }
 
@@ -5711,9 +5711,6 @@ void renderCaptureSourceMenu(bool clearContent) {
                   tr(UiTextId::CaptureIrSourceNote),
                   captureSourceSelection == 1, BoardProfile::kIrDeclared,
                   BoardProfile::kIrDeclared ? Tone::Positive : Tone::Muted);
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 207);
-    display.print(tr(UiTextId::CaptureChooseSource));
 }
 
 void renderInfraredCapturePage(bool clearContent) {
@@ -5721,13 +5718,9 @@ void renderInfraredCapturePage(bool clearContent) {
     char line[64] = {};
     if (stats.state == InfraredCaptureState::Idle) {
         renderHeader(tr(UiTextId::CaptureIrSource), clearContent);
-        renderMetric(0, tr(UiTextId::IrReceiver), Tone::Positive);
-        renderMetric(1, tr(UiTextId::IrTimeout));
-        renderMetric(2, tr(UiTextId::IrMode));
-        renderMetric(3, tr(UiTextId::IrSafety), Tone::Positive);
-        display.setTextColor(Palette::TextMuted, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 207);
-        display.print(tr(UiTextId::CaptureStartNote));
+        renderMetric(0, tr(UiTextId::IrAimDevice), Tone::Positive);
+        renderMetric(1, tr(UiTextId::IrPressButton));
+        renderMetric(2, tr(UiTextId::IrWaitUser));
         return;
     }
 
@@ -5744,60 +5737,49 @@ void renderInfraredCapturePage(bool clearContent) {
         title = UiTextId::IrUnreliable;
     }
     renderHeader(tr(title), clearContent);
-    std::snprintf(line, sizeof(line), tr(UiTextId::IrPulsesFormat),
-                  static_cast<unsigned>(infraredCapture.pulseCount()));
-    renderMetric(0, line, stats.state == InfraredCaptureState::Complete
-                              ? Tone::Positive : Tone::Neutral);
-    std::snprintf(line, sizeof(line), tr(UiTextId::IrProtocolFormat),
-                  leshy1::domain::captures::infraredProtocolName(
-                      infraredCapture.decode().protocol));
-    renderMetric(1, line, infraredCapture.decode().integrityValid
-                              ? Tone::Positive : Tone::Neutral);
-    std::snprintf(line, sizeof(line), tr(UiTextId::IrCodeFormat),
-                  static_cast<unsigned long>(infraredCapture.decode().rawCode));
-    renderMetric(2, line);
-    std::snprintf(line, sizeof(line), tr(UiTextId::IrSamplingFormat),
-                  static_cast<unsigned long>(
-                      stats.signalStartedUs == 0U
-                          ? 0U : stats.maximumObservedSampleGapUs));
-    renderMetric(3, line,
-                 stats.state == InfraredCaptureState::Unreliable
-                     ? Tone::Danger : Tone::Positive);
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 207);
     if (stats.state == InfraredCaptureState::Waiting) {
-        display.print(tr(UiTextId::IrWaitingNote));
+        renderMetric(0, tr(UiTextId::IrAimDevice), Tone::Positive);
+        renderMetric(1, tr(UiTextId::IrPressButton));
+        renderMetric(2, tr(UiTextId::IrWaitUser));
     } else if (stats.state == InfraredCaptureState::Capturing) {
-        display.print(tr(UiTextId::IrCaptureNote));
+        renderMetric(0, tr(UiTextId::IrSignalDetected), Tone::Positive);
+        renderMetric(1, tr(UiTextId::IrKeepPressed));
     } else if (stats.state == InfraredCaptureState::Complete) {
-        display.print(tr(infraredCapturePersistState == CapturePersistState::Saved
-                             ? UiTextId::CaptureSavedNote
-                             : infraredCapturePersistState ==
-                                       CapturePersistState::Saving
-                                   ? UiTextId::CaptureSavingNote
-                                   : infraredCapturePersistState ==
-                                             CapturePersistState::Failed
-                                         ? UiTextId::CaptureSaveFailedNote
-                                         : UiTextId::IrResultNote));
-        if (infraredCapturePersistState == CapturePersistState::Saved ||
-            infraredCapturePersistState == CapturePersistState::Failed) {
-            setUiCursor(UiTextRole::Meta, 14, 222);
-            if (infraredCapturePersistState == CapturePersistState::Saved) {
-                std::snprintf(line, sizeof(line), "GEN %lu | %s",
-                              static_cast<unsigned long>(
-                                  infraredCapturePersistGeneration),
-                              infraredCapturePersistStatus);
-                display.print(line);
-            } else {
-                display.print(infraredCapturePersistStatus);
-            }
+        renderMetric(0, tr(UiTextId::IrSignalDetected), Tone::Positive);
+        if (infraredCapture.decode().integrityValid) {
+            std::snprintf(line, sizeof(line), tr(UiTextId::IrProtocolFormat),
+                          leshy1::domain::captures::infraredProtocolName(
+                              infraredCapture.decode().protocol));
+            renderMetric(1, line, Tone::Positive);
+            std::snprintf(line, sizeof(line), tr(UiTextId::IrCodeFormat),
+                          static_cast<unsigned long>(
+                              infraredCapture.decode().rawCode));
+            renderMetric(2, line);
+        } else {
+            renderMetric(1, tr(UiTextId::IrUnknownFormat), Tone::Warning);
         }
+        const UiTextId storageMessage =
+            infraredCapturePersistState == CapturePersistState::Saving
+                ? UiTextId::CaptureSavingUser
+                : infraredCapturePersistState == CapturePersistState::Saved
+                      ? UiTextId::CaptureSavedUser
+                      : infraredCapturePersistState == CapturePersistState::Failed
+                            ? UiTextId::CaptureSaveFailedUser
+                            : UiTextId::CaptureReadyToSave;
+        renderMetric(3, tr(storageMessage),
+                     infraredCapturePersistState == CapturePersistState::Failed
+                         ? Tone::Danger : Tone::Positive);
     } else if (stats.state == InfraredCaptureState::TimedOut) {
-        display.print(tr(UiTextId::IrNoSignalNote));
+        renderMetric(0, tr(UiTextId::IrNoSignalDetected), Tone::Warning);
+        renderMetric(1, tr(UiTextId::IrTryCloser));
+        renderMetric(2, tr(UiTextId::CaptureTryAgainUser));
     } else if (stats.state == InfraredCaptureState::Unreliable) {
-        display.print(tr(UiTextId::IrUnreliableNote));
+        renderMetric(0, tr(UiTextId::IrSignalDetected), Tone::Warning);
+        renderMetric(1, tr(UiTextId::IrReadUnreliable), Tone::Danger);
+        renderMetric(2, tr(UiTextId::CaptureTryAgainUser));
     } else {
-        display.print(tr(UiTextId::IrRetryNote));
+        renderMetric(0, tr(UiTextId::CaptureRecordFailedUser), Tone::Danger);
+        renderMetric(1, tr(UiTextId::CaptureTryAgainUser));
     }
 }
 
@@ -6161,8 +6143,7 @@ void renderSurveyFilterOption(std::uint8_t index) {
 void renderRssiHistory(const ObservationHistory& history) {
     if (!history.valid || history.retainedSamples == 0) return;
     char line[64] = {};
-    std::snprintf(line, sizeof(line), tr(UiTextId::RssiHistoryFormat),
-                  static_cast<unsigned>(history.sampleCount),
+    std::snprintf(line, sizeof(line), tr(UiTextId::SignalRangeFormat),
                   static_cast<int>(history.minimumRssiDbm),
                   static_cast<int>(history.maximumRssiDbm));
     display.setTextColor(Palette::Positive, Palette::Canvas);
@@ -6310,9 +6291,6 @@ void renderRfSpectrumSourceMenu(bool clearContent) {
     renderHeader(tr(UiTextId::SpectrumSources), clearContent);
     renderRfSpectrumSourceRow(0);
     renderRfSpectrumSourceRow(1);
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 207);
-    display.print(tr(UiTextId::SpectrumRxOnly));
 }
 
 void renderSubGhzModeMenu(bool clearContent) {
@@ -6323,9 +6301,6 @@ void renderSubGhzModeMenu(bool clearContent) {
     renderMenuRow(Components::choiceRow(1), tr(UiTextId::SubGhzRaw),
                   tr(UiTextId::SubGhzRawNote),
                   subGhzModeSelection == 1, true, Tone::Positive);
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 207);
-    display.print(tr(UiTextId::SpectrumRxOnly));
 }
 
 leshy1::drivers::radio::Cc1101SpectrumBand ccBandFromIndex(
@@ -6411,39 +6386,47 @@ void renderSubGhzRawCapturePage(bool clearContent) {
     std::snprintf(line, sizeof(line), tr(UiTextId::SubGhzRawFrequencyFormat),
                   static_cast<unsigned long>(plan.frequencyKHz / 1000U),
                   static_cast<unsigned long>(plan.frequencyKHz % 1000U));
-    renderMetric(0, line, Tone::Positive);
-    std::snprintf(line, sizeof(line), tr(UiTextId::SubGhzRawThresholdFormat),
-                  static_cast<int>(plan.thresholdDbm));
-    renderMetric(1, line);
-    std::snprintf(line, sizeof(line), tr(UiTextId::SubGhzRawPulsesFormat),
-                  static_cast<unsigned long>(stats.pulsesAccepted));
-    renderMetric(2, line,
-                 stats.state == SubGhzRawCaptureState::Complete
-                     ? Tone::Positive : Tone::Warning);
-    std::snprintf(line, sizeof(line), tr(UiTextId::SubGhzRawSamplesFormat),
-                  static_cast<unsigned long>(stats.samples));
-    renderMetric(3, line);
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 207);
-    display.print(tr(stats.state == SubGhzRawCaptureState::Complete
-                         ? subGhzCapturePersistState ==
-                                   CapturePersistState::Saving
-                               ? UiTextId::CaptureSavingNote
-                               : subGhzCapturePersistState ==
-                                         CapturePersistState::Saved
-                                     ? UiTextId::CaptureSavedNote
-                                     : subGhzCapturePersistState ==
-                                               CapturePersistState::Failed
-                                           ? UiTextId::CaptureSaveFailedNote
-                                           : UiTextId::SubGhzRawCompleteNote
-                         : stats.state == SubGhzRawCaptureState::TimedOut
-                               ? UiTextId::SubGhzRawNoSignalNote
-                               : stats.state ==
-                                         SubGhzRawCaptureState::SignalTooLong
-                                     ? UiTextId::SubGhzRawTooLongNote
-                               : UiTextId::SubGhzRawWaitingNote));
-    setUiCursor(UiTextRole::Meta, 14, 221);
-    display.print(tr(UiTextId::SubGhzRawFskLater));
+    if (stats.state == SubGhzRawCaptureState::Waiting) {
+        renderMetric(0, line, Tone::Positive);
+        renderMetric(1, tr(UiTextId::SubGhzPressButton));
+        renderMetric(2, tr(UiTextId::SubGhzWaitUser));
+        return;
+    }
+    if (stats.state == SubGhzRawCaptureState::Capturing) {
+        renderMetric(0, tr(UiTextId::SubGhzSignalDetected), Tone::Positive);
+        renderMetric(1, tr(UiTextId::SubGhzKeepPressed));
+        renderMetric(2, line);
+        return;
+    }
+    if (stats.state == SubGhzRawCaptureState::Complete) {
+        renderMetric(0, tr(UiTextId::SubGhzSignalRecorded), Tone::Positive);
+        renderMetric(1, line);
+        const UiTextId storageMessage =
+            subGhzCapturePersistState == CapturePersistState::Saving
+                ? UiTextId::CaptureSavingUser
+                : subGhzCapturePersistState == CapturePersistState::Saved
+                      ? UiTextId::CaptureSavedUser
+                      : subGhzCapturePersistState == CapturePersistState::Failed
+                            ? UiTextId::CaptureSaveFailedUser
+                            : UiTextId::CaptureReadyToSave;
+        renderMetric(2, tr(storageMessage),
+                     subGhzCapturePersistState == CapturePersistState::Failed
+                         ? Tone::Danger : Tone::Positive);
+        return;
+    }
+    if (stats.state == SubGhzRawCaptureState::TimedOut) {
+        renderMetric(0, line);
+        renderMetric(1, tr(UiTextId::SubGhzTryCloser), Tone::Warning);
+        renderMetric(2, tr(UiTextId::CaptureTryAgainUser));
+        return;
+    }
+    if (stats.state == SubGhzRawCaptureState::SignalTooLong) {
+        renderMetric(0, tr(UiTextId::SubGhzSignalDetected), Tone::Warning);
+        renderMetric(1, tr(UiTextId::SubGhzReleaseButton), Tone::Danger);
+        return;
+    }
+    renderMetric(0, tr(UiTextId::SubGhzReceiverFailed), Tone::Danger);
+    renderMetric(1, tr(UiTextId::CaptureTryAgainUser));
 }
 
 constexpr std::int16_t kSpectrumOverlayY = Layout::HeaderHeight;
@@ -6827,53 +6810,27 @@ void renderInventoryPage(bool clearContent) {
         if (surveySourceController.view() == SurveySetupView::Sources) {
             display.setTextColor(Palette::Positive, Palette::Canvas);
             setUiCursor(UiTextRole::Meta, 14, 207);
-            display.print(surveyWorkflow.simulated()
-                              ? tr(UiTextId::FifoNoRf)
-                              : tr(UiTextId::FifoRxOnly));
+            display.print(tr(UiTextId::SurveyChooseSources));
         }
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Result) {
         renderHeader(tr(UiTextId::SurveyCommitted), clearContent);
-        display.setTextColor(Palette::Focus, Palette::Canvas);
-        setUiCursor(UiTextRole::Body, 14, 80);
-        display.print(surveySession.id());
-        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        std::snprintf(line, sizeof(line), tr(UiTextId::ObservationsFormat),
+        std::snprintf(line, sizeof(line), tr(UiTextId::SurveyFoundFormat),
                       static_cast<unsigned>(surveySession.size()));
-        setUiCursor(UiTextRole::Body, 14, 120);
-        display.print(line);
-        std::snprintf(line, sizeof(line), tr(UiTextId::GenerationFormat),
-                      static_cast<unsigned long>(surveyWorkflow.generation()));
-        setUiCursor(UiTextRole::Body, 14, 148);
-        display.print(line);
-        setUiCursor(UiTextRole::Body, 14, 176);
-        display.print(surveyWorkflow.persistent()
-                          ? tr(UiTextId::StorageProduct)
-                          : tr(UiTextId::StorageRamOnly));
-        const SurveyPipelineProgress progress = surveyPipeline.progress();
-        std::snprintf(line, sizeof(line), tr(UiTextId::PipelineFormat),
-                      static_cast<unsigned>(progress.queueHighWater),
-                      static_cast<unsigned long long>(progress.dropped));
-        setUiCursor(UiTextRole::Meta, 14, 196);
-        display.print(line);
-        display.setTextColor(Palette::Positive, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 211);
-        display.print(tr(UiTextId::OneCommit));
+        renderMetric(0, line, Tone::Positive);
+        renderMetric(1, tr(surveyWorkflow.persistent()
+                               ? UiTextId::SurveyResultsSaved
+                               : UiTextId::SurveyResultsTemporary),
+                     surveyWorkflow.persistent() ? Tone::Positive
+                                                 : Tone::Warning);
         return;
     }
     if (surveyWorkflow.state() == SurveyWorkflowState::Error) {
         renderHeader(tr(UiTextId::SurveyError), clearContent);
-        display.setTextColor(Palette::Danger, Palette::Canvas);
-        setUiCursor(UiTextRole::Body, 14, 82);
-        display.print(leshy1::apps::survey::surveyWorkflowStatusName(
-            surveyWorkflow.lastStatus()));
-        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Body, 14, 122);
-        display.print(tr(UiTextId::PriorLibraryPreserved));
-        display.setTextColor(Palette::Positive, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 207);
-        display.print(tr(UiTextId::BackNoRetry));
+        renderMetric(0, tr(UiTextId::SurveyCouldNotStart), Tone::Danger);
+        renderMetric(1, tr(UiTextId::SurveyPreviousSafe));
+        renderMetric(2, tr(UiTextId::CaptureTryAgainUser));
         return;
     }
     if (surveyController.view() == SurveyView::Filter) {
@@ -6896,7 +6853,7 @@ void renderInventoryPage(bool clearContent) {
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
         if (observation->radio == RadioKind::Ble) {
             setUiCursor(UiTextRole::Body, 14, 122);
-            display.print(tr(UiTextId::BleSource));
+            display.print(tr(UiTextId::BluetoothDevice));
             std::snprintf(
                 line, sizeof(line), tr(UiTextId::BleAddressFormat),
                 static_cast<unsigned>(observation->identity[0]),
@@ -6927,9 +6884,7 @@ void renderInventoryPage(bool clearContent) {
         } else {
             display.setTextColor(Palette::Positive, Palette::Canvas);
             setUiCursor(UiTextRole::Meta, 14, 203);
-            display.print(surveyWorkflow.simulated()
-                              ? tr(UiTextId::SimulatedData)
-                              : tr(UiTextId::RealPassive));
+            display.print(tr(UiTextId::NoSignalHistory));
         }
         return;
     }
@@ -6945,76 +6900,34 @@ void renderInventoryPage(bool clearContent) {
         display.print(tr(UiTextId::SurveyStopping));
     } else if (std::strcmp(productSurveyRuntime.status, "cancelling") == 0) {
         display.print(tr(UiTextId::SurveyCancelling));
-    } else if (!surveyWorkflow.simulated() &&
-               productSurveyTimeline.state() == SourceTimelineState::Running) {
-        const std::uint64_t nowUs =
-            static_cast<std::uint64_t>(esp_timer_get_time());
+    } else {
+        const std::uint8_t selectedMask = productSurveyTimeline.selectedMask();
+        display.print(tr(selectedMask == 1U
+                             ? UiTextId::SurveySearchWifi
+                             : selectedMask == 2U
+                                   ? UiTextId::SurveySearchBle
+                                   : UiTextId::SurveySearchBoth));
+    }
+    if (productSurveyTimeline.state() == SourceTimelineState::Running) {
         const auto* wifi = productSurveyTimeline.source(RadioKind::Wifi);
         const auto* ble = productSurveyTimeline.source(RadioKind::Ble);
-        const bool both = wifi != nullptr && wifi->selected &&
-                          ble != nullptr && ble->selected;
-        std::int16_t sourceY = both ? 63 : 70;
-        if (wifi != nullptr && wifi->selected) {
-            const bool unavailable =
-                wifi->state == SourceWindowState::Unavailable ||
-                wifi->state == SourceWindowState::Fault;
-            display.setTextColor(
-                unavailable ? Palette::Warning : Palette::Positive,
-                Palette::Canvas);
-            if (unavailable) {
-                std::snprintf(line, sizeof(line), "%s",
-                              tr(UiTextId::TimelineWifiUnavailable));
-            } else {
-                const UiTextId stateFormat =
-                    wifi->state == SourceWindowState::Active
-                        ? UiTextId::TimelineWifiActiveFormat
-                        : UiTextId::TimelineWifiWaitingFormat;
-                std::snprintf(
-                    line, sizeof(line), tr(stateFormat),
-                    static_cast<unsigned>(productSurveyTimeline.dutyPermille(
-                        RadioKind::Wifi, nowUs) / 10U));
-            }
-            setUiCursor(UiTextRole::Meta, 14, sourceY);
-            display.print(line);
-            sourceY += 13;
+        const bool wifiUnavailable =
+            wifi != nullptr && wifi->selected &&
+            (wifi->state == SourceWindowState::Unavailable ||
+             wifi->state == SourceWindowState::Fault);
+        const bool bleUnavailable =
+            ble != nullptr && ble->selected &&
+            (ble->state == SourceWindowState::Unavailable ||
+             ble->state == SourceWindowState::Fault);
+        if (wifiUnavailable || bleUnavailable) {
+            display.setTextColor(Palette::Warning, Palette::Canvas);
+            setUiCursor(UiTextRole::Meta, 14, 84);
+            const char* unavailable = wifiUnavailable
+                ? tr(UiTextId::TimelineWifiUnavailable)
+                : tr(UiTextId::TimelineBleUnavailable);
+            display.print(unavailable);
         }
-        if (ble != nullptr && ble->selected) {
-            const bool unavailable =
-                ble->state == SourceWindowState::Unavailable ||
-                ble->state == SourceWindowState::Fault;
-            display.setTextColor(
-                unavailable ? Palette::Warning : Palette::Positive,
-                Palette::Canvas);
-            if (unavailable) {
-                std::snprintf(line, sizeof(line), "%s",
-                              tr(UiTextId::TimelineBleUnavailable));
-            } else {
-                const UiTextId stateFormat =
-                    ble->state == SourceWindowState::Active
-                        ? UiTextId::TimelineBleActiveFormat
-                        : UiTextId::TimelineBleWaitingFormat;
-                std::snprintf(
-                    line, sizeof(line), tr(stateFormat),
-                    static_cast<unsigned>(productSurveyTimeline.dutyPermille(
-                        RadioKind::Ble, nowUs) / 10U));
-            }
-            setUiCursor(UiTextRole::Meta, 14, sourceY);
-            display.print(line);
-        }
-    } else {
-        display.print(surveyWorkflow.simulated()
-                          ? tr(UiTextId::RunningSimulated)
-                          : tr(UiTextId::RunningPassive));
     }
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    const SurveyPipelineProgress progress = surveyPipeline.progress();
-    std::snprintf(line, sizeof(line), tr(UiTextId::FifoFormat),
-                  static_cast<unsigned>(progress.queueDepth),
-                  static_cast<unsigned>(progress.queueHighWater),
-                  static_cast<unsigned long long>(progress.dropped));
-    setUiCursor(UiTextRole::Meta, 14,
-                productSurveyTimeline.selectedMask() == 3 ? 89 : 82);
-    display.print(line);
     renderSurveyFilterBar();
     const std::size_t selection = surveyController.selection();
     const std::size_t firstVisible = surveyFirstVisible(selection);
@@ -7024,6 +6937,44 @@ void renderInventoryPage(bool clearContent) {
             : firstVisible + kVisibleSurveyRows;
     for (std::size_t index = firstVisible; index < endVisible; ++index) {
         renderSurveyListRow(index, firstVisible);
+    }
+}
+
+UiTextId libraryEntryTitle(const LibraryEntry& entry) {
+    if (entry.session == nullptr) return UiTextId::LibraryRecord;
+    const auto& capture = entry.session->captureMetadata();
+    if (capture.infraredRawCaptured) return UiTextId::LibraryInfraredCapture;
+    if (capture.subGhzRawCaptured) return UiTextId::LibrarySubGhzCapture;
+    if (capture.framePayloadCaptured) return UiTextId::LibraryWifiCapture;
+    if (capture.selectedSourceMask == 1U) return UiTextId::LibraryWifiScan;
+    if (capture.selectedSourceMask == 2U) return UiTextId::LibraryBleScan;
+    if (capture.selectedSourceMask == 3U) return UiTextId::LibraryCombinedScan;
+    return UiTextId::LibraryRecord;
+}
+
+UiTextId libraryEntryState(const LibraryEntry& entry) {
+    if (entry.integrity ==
+        leshy1::apps::library::SessionIntegrity::RecoveredFallback) {
+        return UiTextId::LibraryRecovered;
+    }
+    return entry.persistent ? UiTextId::LibrarySaved
+                            : UiTextId::LibraryTemporary;
+}
+
+void libraryObservationCounts(const LibraryEntry& entry,
+                              std::size_t* wifiCount,
+                              std::size_t* bleCount) {
+    if (wifiCount != nullptr) *wifiCount = 0;
+    if (bleCount != nullptr) *bleCount = 0;
+    if (entry.session == nullptr) return;
+    for (std::size_t index = 0; index < entry.session->size(); ++index) {
+        const Observation* observation = entry.session->get(index);
+        if (observation == nullptr) continue;
+        if (observation->radio == RadioKind::Wifi) {
+            if (wifiCount != nullptr) ++(*wifiCount);
+        } else if (bleCount != nullptr) {
+            ++(*bleCount);
+        }
     }
 }
 
@@ -7042,29 +6993,17 @@ void renderLibraryListRow(std::size_t index) {
                          background);
     setUiCursor(UiTextRole::Body,
                 Layout::Edge + kInteractiveRowTextInset, y - 1);
-    display.print(entry->session->id());
-    char line[96] = {};
-    display.setTextColor(Palette::Positive, background);
-    const auto& capture = entry->session->captureMetadata();
-    std::snprintf(line, sizeof(line),
-                  tr(capture.subGhzRawCaptured || capture.infraredRawCaptured
-                         ? UiTextId::LibraryRawRowFormat
-                         : capture.framePayloadCaptured
-                               ? UiTextId::LibraryCaptureRowFormat
-                               : UiTextId::LibraryRowFormat),
-                  static_cast<unsigned>(capture.subGhzRawCaptured ||
-                                                 capture.infraredRawCaptured
-                      ? (capture.subGhzRawCaptured
-                             ? capture.subGhzPulseRecords
-                             : capture.infraredPulseRecords)
-                      : capture.framePayloadCaptured
-                            ? capture.framePayloadRecords
-                            : entry->session->size()),
-                  static_cast<unsigned long>(entry->generation),
-                  leshy1::apps::library::sessionIntegrityName(entry->integrity));
+    display.print(tr(libraryEntryTitle(*entry)));
+    display.setTextColor(
+        entry->integrity ==
+                leshy1::apps::library::SessionIntegrity::RecoveredFallback ||
+                !entry->persistent
+            ? Palette::Warning
+            : Palette::Positive,
+        background);
     setUiCursor(UiTextRole::Meta,
                 Layout::Edge + kInteractiveRowTextInset, y + 23);
-    display.print(line);
+    display.print(tr(libraryEntryState(*entry)));
 }
 
 void renderLibraryPage(bool clearContent) {
@@ -7074,117 +7013,84 @@ void renderLibraryPage(bool clearContent) {
     if (libraryController.view() == LibraryView::ExportReady) {
         renderHeader(tr(UiTextId::ExportReady), clearContent);
         if (selected == nullptr || selected->session == nullptr) return;
-        display.setTextColor(Palette::Focus, Palette::Canvas);
-        setUiCursor(UiTextRole::Body, 14, 80);
-        display.print(selected->session->id());
-        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 111);
-        display.print(tr(UiTextId::CaptureImmutable));
-        setUiCursor(UiTextRole::Body, 14, 132);
-        display.print(tr(UiTextId::FormatSummaryReady));
-        setUiCursor(UiTextRole::Body, 14, 155);
+        renderMetric(0, tr(libraryEntryTitle(*selected)), Tone::Positive);
+        renderMetric(1, tr(UiTextId::FormatSummaryReady));
         const auto& capture = selected->session->captureMetadata();
         const bool rawFrames = capture.framePayloadCaptured;
-        display.print(tr(capture.subGhzRawCaptured ||
-                                 capture.infraredRawCaptured
-                             ? UiTextId::FormatPulseCsvReady
-                             : rawFrames ? UiTextId::FormatCsvNoObservations
-                                         : UiTextId::FormatCsvReady));
-        setUiCursor(UiTextRole::Meta, 14, 180);
-        display.print(tr(capture.subGhzRawCaptured ||
-                                 capture.infraredRawCaptured
-                             ? UiTextId::FormatPcapNotApplicable
-                             : rawFrames ? UiTextId::FormatPcapReady
-                                         : UiTextId::FormatPcapNoFrames));
-        setUiCursor(UiTextRole::Meta, 14, 201);
-        display.print(tr(UiTextId::TransportSerial));
-        display.setTextColor(Palette::Positive, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 219);
-        display.print(persistent ? tr(UiTextId::PersistentMedia)
-                                 : tr(UiTextId::BoundedRamSource));
+        if (capture.subGhzRawCaptured || capture.infraredRawCaptured) {
+            renderMetric(2, tr(UiTextId::FormatPulseCsvReady));
+        } else if (rawFrames) {
+            renderMetric(2, tr(UiTextId::FormatPcapReady));
+        } else {
+            renderMetric(2, tr(UiTextId::FormatCsvReady));
+        }
+        renderMetric(3, tr(UiTextId::ExportUsbRequired), Tone::Positive);
         return;
     }
     if (libraryController.view() == LibraryView::SessionDetail) {
         renderHeader(tr(UiTextId::SessionDetail), clearContent);
         if (selected == nullptr || selected->session == nullptr) return;
-        display.setTextColor(Palette::Focus, Palette::Canvas);
-        setUiCursor(UiTextRole::Body, 14, 80);
-        display.print(selected->session->id());
-        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        std::snprintf(line, sizeof(line), tr(UiTextId::GenerationFormat),
-                      static_cast<unsigned long>(selected->generation));
-        setUiCursor(UiTextRole::Body, 14, 116);
-        display.print(line);
+        renderMetric(0, tr(libraryEntryTitle(*selected)), Tone::Positive);
         const auto& capture = selected->session->captureMetadata();
-        if (capture.subGhzRawCaptured || capture.infraredRawCaptured) {
+        if (capture.infraredRawCaptured) {
+            if (capture.infraredDecode.integrityValid) {
+                std::snprintf(
+                    line, sizeof(line), tr(UiTextId::IrProtocolFormat),
+                    leshy1::domain::captures::infraredProtocolName(
+                        capture.infraredDecode.protocol));
+                renderMetric(1, line, Tone::Positive);
+                std::snprintf(
+                    line, sizeof(line), tr(UiTextId::IrCodeFormat),
+                    static_cast<unsigned long>(capture.infraredDecode.rawCode));
+                renderMetric(2, line);
+            } else {
+                renderMetric(1, tr(UiTextId::IrUnknownFormat), Tone::Warning);
+            }
+        } else if (capture.subGhzRawCaptured) {
             std::snprintf(
-                line, sizeof(line), tr(UiTextId::RawPayloadFormat),
-                static_cast<unsigned>(capture.subGhzRawCaptured
-                    ? capture.subGhzPulseRecords
-                    : capture.infraredPulseRecords),
-                static_cast<unsigned long>(capture.subGhzRawCaptured
-                    ? capture.subGhzPulseBytes
-                    : capture.infraredPulseBytes));
+                line, sizeof(line), tr(UiTextId::SubGhzRawFrequencyFormat),
+                static_cast<unsigned long>(capture.subGhzFrequencyKHz / 1000U),
+                static_cast<unsigned long>(capture.subGhzFrequencyKHz % 1000U));
+            renderMetric(1, line);
+            renderMetric(2, tr(UiTextId::SubGhzSignalRecorded), Tone::Positive);
         } else if (capture.framePayloadCaptured) {
-            std::snprintf(
-                line, sizeof(line), tr(UiTextId::CapturePayloadFormat),
-                static_cast<unsigned>(capture.framePayloadRecords),
-                static_cast<unsigned long long>(capture.framePayloadBytes));
+            std::snprintf(line, sizeof(line),
+                          tr(UiTextId::CapturePacketsFormat),
+                          static_cast<unsigned long>(
+                              capture.framePayloadRecords));
+            renderMetric(1, line);
+            renderMetric(2, tr(UiTextId::CapturePcapReadyUser), Tone::Positive);
         } else {
-            std::snprintf(line, sizeof(line), tr(UiTextId::ObservationsFormat),
-                          static_cast<unsigned>(selected->session->size()));
+            std::size_t wifiCount = 0;
+            std::size_t bleCount = 0;
+            libraryObservationCounts(*selected, &wifiCount, &bleCount);
+            std::snprintf(line, sizeof(line),
+                          tr(UiTextId::LibraryWifiBleCountFormat),
+                          static_cast<unsigned>(wifiCount),
+                          static_cast<unsigned>(bleCount));
+            renderMetric(1, line);
         }
-        setUiCursor(UiTextRole::Body, 14, 142);
-        display.print(line);
-        std::snprintf(line, sizeof(line), tr(UiTextId::IntegrityFormat),
-                      leshy1::apps::library::sessionIntegrityName(selected->integrity));
-        setUiCursor(UiTextRole::Body, 14, 168);
-        display.print(line);
-        const auto& timeline = selected->session->timeline();
-        if (timeline.present && timeline.finalized) {
-            const std::uint64_t elapsed = timeline.stoppedUs - timeline.startedUs;
-            const std::uint16_t wifiDuty = elapsed == 0
-                ? 0
-                : static_cast<std::uint16_t>(
-                      timeline.sources[0].activeUs >= elapsed
-                          ? 100
-                          : (timeline.sources[0].activeUs * 100U) / elapsed);
-            const std::uint16_t bleDuty = elapsed == 0
-                ? 0
-                : static_cast<std::uint16_t>(
-                      timeline.sources[1].activeUs >= elapsed
-                          ? 100
-                          : (timeline.sources[1].activeUs * 100U) / elapsed);
-            std::snprintf(
-                line, sizeof(line), tr(UiTextId::TimelineStoredFormat),
-                static_cast<unsigned long>(timeline.totalWindows),
-                static_cast<unsigned>(selected->session->timelineWindowCount()));
-            setUiCursor(UiTextRole::Body, 14, 188);
-            display.print(line);
-            std::snprintf(line, sizeof(line), tr(UiTextId::TimelineDutyFormat),
-                          static_cast<unsigned>(wifiDuty),
-                          static_cast<unsigned>(bleDuty));
-            setUiCursor(UiTextRole::Meta, 14, 207);
-            display.print(line);
-        }
-        display.setTextColor(Palette::Positive, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14,
-                    timeline.present && timeline.finalized ? 222 : 199);
-        display.print(
-            !persistent
-                ? tr(UiTextId::RamVolatile)
-                : (selected->integrity ==
-                           leshy1::apps::library::SessionIntegrity::Valid
-                       ? tr(UiTextId::PersistentValid)
-                       : tr(UiTextId::PersistentRecovered)));
+        renderMetric(3,
+                     tr(selected->integrity ==
+                                leshy1::apps::library::SessionIntegrity::
+                                    RecoveredFallback
+                            ? UiTextId::LibraryRecoveredWarning
+                            : persistent ? UiTextId::LibraryStoredOnSd
+                                         : UiTextId::LibraryNotStored),
+                     selected->integrity ==
+                             leshy1::apps::library::SessionIntegrity::
+                                 RecoveredFallback
+                         ? Tone::Warning
+                         : persistent ? Tone::Positive : Tone::Warning);
         return;
     }
 
-    renderHeader(tr(UiTextId::LibraryOffline), clearContent);
+    renderHeader(tr(UiTextId::AppLibrary), clearContent);
     display.setTextColor(Palette::Positive, Palette::Canvas);
+    std::snprintf(line, sizeof(line), tr(UiTextId::LibraryCountFormat),
+                  static_cast<unsigned>(libraryController.size()));
     setUiCursor(UiTextRole::Meta, 14, 70);
-    display.print(persistent ? tr(UiTextId::PersistentSession)
-                             : tr(UiTextId::SimulatedRam));
+    display.print(line);
     for (std::size_t index = 0; index < libraryController.size(); ++index) {
         renderLibraryListRow(index);
     }
@@ -9680,6 +9586,13 @@ bool applyUiAction(UiAction action, bool render = true) {
             } else if (subGhzCapturePersistState ==
                            CapturePersistState::Saving) {
                 changed = false;
+            } else if (subGhzRawCapture.stats().state !=
+                           SubGhzRawCaptureState::Waiting &&
+                       subGhzRawCapture.stats().state !=
+                           SubGhzRawCaptureState::Capturing &&
+                       (action == UiAction::Select ||
+                        action == UiAction::Right)) {
+                changed = startSubGhzRawCapture(rfCcBandSelection);
             } else if (action == UiAction::Back || action == UiAction::Left) {
                 changed = stopSubGhzRawCapture(true);
                 subGhzRawCapture.reset();

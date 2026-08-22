@@ -368,6 +368,36 @@ live RF views, проверяя compact legend во всех сочетания�
 0.95 сохраняет 14 TFT states после одной прошивки и zero ручных нажатий при unchanged
 heap/storage и final lease 0 (`E-BUILD-096`/`E-AUTO-060`/`E-HIL-120`/`E-UX-019`).
 
+## Product content от ожидаемого результата
+
+Candidate 0.105 делает документацию источником истины для содержимого product
+screen. Перед добавлением поля экран обязан ответить: **какого результата ждёт
+пользователь от функции, что нужно для понимания результата и что можно сделать
+дальше?** Видимый content идёт в таком порядке:
+
+1. текущая страница/задача в header;
+2. результат или значимое live-состояние;
+3. параметры, нужные для понимания или изменения результата;
+4. важное пользователю предупреждение или способ исправления — только когда нужно;
+5. доступные действия физических клавиш в фиксированном footer.
+
+| Экран | Ожидание пользователя | Показываем | Оставляем в диагностике/evidence, не на product screen |
+|---|---|---|---|
+| Home | выбрать задачу по результату | название задачи и понятный ожидаемый результат | протокол, модуль, storage и термины реализации |
+| Wi-Fi / Bluetooth | найти сети или устройства рядом | имя, сигнал, полезный channel/address, число найденных, фильтр и доступность | FIFO, duty cycle, generation, queue/drop telemetry при штатной работе |
+| Спектр 2.4 ГГц / Sub-GHz | увидеть тихие и занятые части диапазона | активные RX-антенны, режим, понятная легенда цвета, данные по одному пикселю, ось каналов/частот | sweep/sample counters, peaks, internal cadence и состояние buffer |
+| Захват Wi-Fi | получить ограниченную запись PCAP | назначение, длительность, live-число пакетов/текущий канал, предупреждение о потерях только при ненулевом значении, privacy-confirm и итог сохранения | snap length, payload bytes, жизненный цикл RAW в памяти, внутренний persist status/generation |
+| Захват ИК | считать кнопку пульта | куда направить и что нажать, результат detected/no signal, protocol/code только при успешном decode, итог сохранения | GPIO, sample gaps, нулевой code, число RAW pulses и safety invariants приёмника |
+| Захват Sub-GHz | записать сигнал своего пульта/датчика | выбранная частота, простое действие, detected/recorded/no-signal, способ исправления и итог сохранения | threshold, samples, pulse capacity, реализация OOK и будущая работа FSK/GDO0 |
+| Библиотека | узнать и снова открыть сохранённый результат | понятный тип записи, saved/temporary/recovered, полезный decoded content и доступные export formats | session ID, generation, token целостности `valid`, history duty и RAW byte counts |
+| Устройство | настроить или проверить продукт | понятные назначения Settings/Self-Test/Diagnostics/About | technical data допустимы внутри явно открытых Diagnostics, Self-Test и About, потому что это и есть выбранная задача |
+
+USB diagnostic API, retained HIL artifacts и storage metadata сохраняют полные
+engineering details; удаление их с TFT не уменьшает observability. Host guard
+`tools/check_product_ui_content.py`, вызываемый из `tools/test.sh`, отклоняет
+возвращение перечисленных developer-facing fields в product renderer и требует,
+чтобы outcome-oriented строки Home, scan, Capture и Library оставались подключены.
+
 ## Gate
 
 **S1 UX direction accepted:** готовы UX-01/UX-02 в low-fidelity форме, все разделы

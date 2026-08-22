@@ -362,6 +362,36 @@ combination. Exact physical checkpoint 0.95 retains 14 TFT states with one flash
 zero manual presses, unchanged heap/storage and final lease 0 (`E-BUILD-096`/
 `E-AUTO-060`/`E-HIL-120`/`E-UX-019`).
 
+## Outcome-first product content contract
+
+Candidate 0.105 treats documentation as the source of truth for what belongs on a
+product screen. Before adding a field, the screen must answer: **what result does
+the user expect from this feature, what do they need to understand that result,
+and what can they do next?** Visible content follows this order:
+
+1. current page/task in the header;
+2. result or meaningful live state;
+3. parameters needed to interpret or change that result;
+4. a user-relevant warning or remedy, only when applicable;
+5. available physical-key actions in the fixed footer.
+
+| Surface | Expected user outcome | Show | Keep in diagnostics/evidence, not the product screen |
+|---|---|---|---|
+| Home | choose a task by its result | job name plus a plain-language outcome | protocol, module, storage and implementation terminology |
+| Wi-Fi / Bluetooth | find nearby networks or devices | name, signal, channel/address where useful, found count, filter and availability | FIFO, duty cycle, generation, queue/drop telemetry when healthy |
+| 2.4 GHz / Sub-GHz spectrum | identify quiet and busy parts of the band | active RX antennas, mode, clear color legend, one-pixel data, channel/frequency axis | sweep/sample counters, peaks, internal cadence and buffer state |
+| Wi-Fi Capture | obtain a bounded PCAP recording | purpose, duration, live packet count/current channel, loss warning only if non-zero, privacy confirmation and save outcome | snap length, payload bytes, raw-memory lifecycle, internal persist status/generation |
+| Infrared Capture | read a remote-control key | where to point/what to press, detected/no-signal result, protocol and code only when decoded, save outcome | GPIO, sample gaps, zero-valued code, raw pulse count and receiver safety invariants |
+| Sub-GHz signal Capture | record a signal from the user's remote/sensor | chosen frequency, simple action, detected/recorded/no-signal result, remedy and save outcome | threshold, samples, pulse capacity, OOK implementation and future FSK/GDO0 work |
+| Library | recognize and reopen a saved result | friendly record type, saved/temporary/recovered state, useful decoded content and available export formats | session ID, generation, `valid` integrity token, history duty and raw byte counts |
+| Device | configure or check the product | plain Settings/Self-Test/Diagnostics/About entry outcomes | technical data is allowed inside explicitly opened Diagnostics, Self-Test and About because it is the requested task |
+
+The USB diagnostic API, retained HIL artifacts and storage metadata keep the full
+engineering detail; hiding it from the TFT does not remove observability. The host
+guard `tools/check_product_ui_content.py`, called by `tools/test.sh`, rejects a
+product renderer that reintroduces the listed developer-facing fields and requires
+the outcome-oriented Home, scan, Capture and Library strings to remain wired.
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog

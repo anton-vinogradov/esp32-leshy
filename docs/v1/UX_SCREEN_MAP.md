@@ -7,15 +7,16 @@ S2 on the real TFT; this map already binds task structure and Back/Stop behavior
 
 ## Global shell
 
-`UX-S01 Home` exposes six product domains rather than a radio-module or service list.
-The final `Device` domain contains settings, checks and system information:
+The current `UX-S01 Home` exposes seven implemented user jobs. The final `Device`
+entry contains settings, checks and system information:
 
 ```text
-Survey
-Capture
-Library
-Targets       (planned until S6)
-Lab           (planned until S7)
+Wi-Fi          find nearby networks
+Bluetooth      find nearby devices
+2.4 GHz        see busy channels
+Sub-GHz        see air / record a signal
+Capture        record Wi-Fi or infrared
+Library        open saved records
 Device
   Settings
   Self-Test   (Quick / Full-Guided)
@@ -23,11 +24,12 @@ Device
   About
 ```
 
-Every screen retains a context title, truthful storage/receiver state, visible
-button roles, and a Back path. Exact 0.91 uses `SD OK`/`SD !`/`SD --` and
-`RF RX`/`RF --`; the status bar never invents battery percentage without an
-authoritative capability. Touch, physical buttons, and diagnostic automation emit
-the same typed Actions.
+Every screen retains a context title, the truthful active receive/transmit antenna
+summary, visible button roles, and a Back path. Storage state is shown only when it
+changes the current result or action; it does not consume the global header. The
+status bar never invents battery or power state without an authoritative
+capability. Touch, physical buttons, and diagnostic automation emit the same typed
+Actions.
 
 ## Navigation tree
 
