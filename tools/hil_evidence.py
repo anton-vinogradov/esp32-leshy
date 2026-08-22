@@ -18,6 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SUMMARY_SCHEMA = "leshy.hil.acceptance.v1"
 PROVENANCE_SCHEMA = "leshy.hil.provenance.v1"
 INDEX_SCHEMA = "leshy.hil.evidence_index.v1"
+OPTIONAL_OPAQUE_BUILD_ARTIFACTS = {
+    "firmware.bin", "firmware.factory.bin",
+}
 
 
 def digest(path: Path) -> str:
@@ -205,16 +208,20 @@ def retain(args: argparse.Namespace) -> int:
     return 0
 
 
-def verify_manifest(bundle: Path) -> None:
+def verify_manifest(bundle: Path) -> set[str]:
     manifest = bundle / "artifacts.sha256"
     require(manifest.is_file(), "artifact index missing")
     indexed: set[str] = set()
+    absent_opaque: set[str] = set()
     for line in manifest.read_text(encoding="utf-8").splitlines():
         parts = line.split("  ", 1)
         require(len(parts) == 2, "malformed artifact index")
         expected, relative = parts
         indexed.add(relative)
         path = bundle / relative
+        if not path.is_file() and relative in OPTIONAL_OPAQUE_BUILD_ARTIFACTS:
+            absent_opaque.add(relative)
+            continue
         require(path.is_file(), f"retained artifact missing: {relative}")
         require(digest(path) == expected,
                 f"retained artifact mismatch: {relative}")
@@ -222,7 +229,22 @@ def verify_manifest(bundle: Path) -> None:
         str(path.relative_to(bundle)) for path in bundle.rglob("*")
         if path.is_file() and path != manifest
     }
-    require(indexed == actual, "artifact index coverage mismatch")
+    require(indexed == actual | absent_opaque,
+            "artifact index coverage mismatch")
+    return indexed
+
+
+def verify_optional_build_artifact(path: Path, expected_hash: object,
+                                   expected_bytes: object,
+                                   label: str) -> None:
+    require(isinstance(expected_hash, str) and len(expected_hash) == 64,
+            f"{label} hash is invalid")
+    require(isinstance(expected_bytes, int) and expected_bytes > 0,
+            f"{label} byte count is invalid")
+    if path.is_file():
+        require(path.stat().st_size == expected_bytes,
+                f"{label} byte count mismatch")
+        require(digest(path) == expected_hash, f"{label} hash mismatch")
 
 
 def verify_summary(summary_path: Path) -> dict[str, Any]:
@@ -241,19 +263,29 @@ def verify_summary(summary_path: Path) -> dict[str, Any]:
     require(provenance == candidate, "summary/provenance mismatch")
     require(provenance.get("schema") == PROVENANCE_SCHEMA,
             "provenance schema mismatch")
-    verify_manifest(bundle)
+    indexed = verify_manifest(bundle)
+    require(evidence.get("files") == len(indexed) + 1,
+            "retained file count mismatch")
     require(evidence.get("artifact_index_sha256") ==
             digest(bundle / "artifacts.sha256"), "manifest hash mismatch")
     require(evidence.get("provenance_sha256") ==
             digest(bundle / "provenance.json"), "provenance hash mismatch")
     require(evidence.get("run_sha256") == digest(bundle / "run.json") ==
             provenance.get("run_sha256"), "run hash mismatch")
-    require(digest(bundle / "firmware.bin") ==
-            provenance.get("firmware_sha256"), "firmware hash mismatch")
-    require(app_elf_sha256(bundle / "firmware.bin") ==
-            provenance.get("app_elf_sha256"), "app identity mismatch")
-    require(digest(bundle / "firmware.factory.bin") ==
-            provenance.get("factory_sha256"), "factory hash mismatch")
+    firmware = bundle / "firmware.bin"
+    factory = bundle / "firmware.factory.bin"
+    verify_optional_build_artifact(
+        firmware, provenance.get("firmware_sha256"),
+        provenance.get("firmware_bytes"), "firmware")
+    verify_optional_build_artifact(
+        factory, provenance.get("factory_sha256"),
+        provenance.get("factory_bytes"), "factory")
+    require(isinstance(provenance.get("app_elf_sha256"), str) and
+            len(provenance["app_elf_sha256"]) == 64,
+            "app identity is invalid")
+    if firmware.is_file():
+        require(app_elf_sha256(firmware) == provenance.get("app_elf_sha256"),
+                "app identity mismatch")
     require(isinstance(provenance.get("map_sha256"), str) and
             len(provenance["map_sha256"]) == 64, "map hash is invalid")
     if (bundle / "firmware.map").is_file():

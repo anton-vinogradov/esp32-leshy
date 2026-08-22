@@ -892,3 +892,16 @@ regression passes 17 TFT states and preserves product 95/0. `E-AUTO-066` checks 
 retained summary and exact source/tool hashes. Together with exact 0.89 endurance,
 `E-GATE-005` closes `DEMO-S4`; S5 is active. This remains stage evidence, not a
 signed release-candidate promotion.
+
+Exact 0.104 starts replacing one-off feature scripts with the common declarative
+scenario engine. `tools/run_hil_scenario.py` executes role-bound JSON steps against
+one candidate or a candidate plus fixture, binds the exact source/binary/map/CID
+identity, enforces standard boot, recovery, heap, input, safe-output and final-lease
+invariants, and registers cleanup while the serial port is still open so every
+failure path is fail-closed. `tools/hil_evidence.py` packs and independently verifies
+the indexed retained result. The first migrated 19-step IR no-signal scenario records
+345,272 GPIO samples, zero TX/writes, seven TFT states and final lease 0 in
+`E-HIL-129`; `E-AUTO-069` verifies it. New non-destructive product slices should add
+a scenario manifest instead of another runner/packer/verifier trio. Cross-device
+stimulus follows the bounded [two-board HIL roles](TWO_BOARD_HIL.md); board-02 must be
+profiled read-only before it is admitted as a fixture.

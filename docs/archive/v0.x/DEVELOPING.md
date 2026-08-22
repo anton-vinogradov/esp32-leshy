@@ -20,8 +20,8 @@ and the working directory for you.
 
 | Button | Script | What it does |
 |--------|--------|--------------|
-| **Build** | `tools/build.sh` | Compile only (`pio run`). |
-| **Deploy to device** | `tools/deploy.sh` | Build + flash over USB. **Upload only** — the serial port is released the instant flashing ends. |
+| **Build** | `tools/build_0x_legacy.sh` | Compile only (`pio run`). |
+| **Deploy to device** | `tools/deploy_0x_legacy.sh` | Build + flash over USB. **Upload only** — the serial port is released the instant flashing ends. |
 | **Monitor (serial)** | `tools/monitor.sh` | Serial monitor at 115200. Holds the port until you stop it (red ■). |
 | **Release (tag + CI)** | `tools/release.sh` | Tag `HEAD` and push → CI builds and publishes (see [Releasing](#releasing)). |
 
@@ -36,8 +36,8 @@ One-time, for code completion / navigation (does not affect the buttons):
 The scripts are usable straight from a terminal, and so are the raw commands:
 
 ```bash
-tools/build.sh        # or: pio run
-tools/deploy.sh       # or: pio run -t upload
+tools/build_0x_legacy.sh        # or: pio run
+tools/deploy_0x_legacy.sh       # or: pio run -t upload
 tools/monitor.sh      # or: pio device monitor -b 115200
 ```
 

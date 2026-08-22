@@ -2,7 +2,7 @@
 
 *Читать на: [English](STATUS.md) · **Русский***
 
-Последнее обновление: **20 августа 2026 года**.
+Последнее обновление: **22 августа 2026 года**.
 
 Это единственный документ с живым состоянием проекта. Границы этапов находятся в
 [DELIVERY_PLAN.ru.md](DELIVERY_PLAN.ru.md), а правила обновления — в
@@ -12,11 +12,11 @@
 
 - **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
-- **Рабочая база репозитория:** `main` с retained exact-candidate 0.70 `DEMO-S3`, exact checkpoints функций/endurance S4 0.71…0.100, exact 0.101 с шестью controlled physical power cuts по всем границам commit, закрывающим `DEMO-S4`, первым checkpoint S5 exact 0.102 для Sub-GHz RAW receive и cross-cutting runtime safety supervision exact 0.103.
+- **Рабочая база репозитория:** `main` до exact 0.104: S4 закрыт exact 0.101, exact 0.102 начинает Sub-GHz RAW receive, exact 0.103 добавляет runtime safety supervision, exact 0.104 — passive IR Capture и первый декларативный HIL-сценарий.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
-- **Последний принятый checkpoint:** exact 0.102 развивает принятую platform 0.101. Exact 0.101 сохраняет принятые в 0.100 Home-задачи:
+- **Последний принятый checkpoint:** exact 0.104 развивает принятую platform 0.101. Exact 0.101 сохраняет принятые в 0.100 Home-задачи:
   реализованные задачи: Wi-Fi, Bluetooth, 2.4 ГГц, Sub-GHz, Захват,
   Библиотеку и Устройство. Только Home показывает `LESHY` на английском или
   `Леший` на русском плюс полученный из build identity `v0.101.0`; вложенные headers
@@ -76,6 +76,17 @@
   завершает на Home с owner/lease `none`/`0`. Это software safety layer, а не
   physical power или CC1101 hard kill; worker heartbeats, thermal/current/voltage
   sensing и independent physical-stop evidence остаются открыты.
+  Exact 0.104 добавляет `Home → Захват → Инфракрасный`: bounded allocation-free
+  receiver GPIO21 принимает максимум 512 длительностей импульсов, ждёт 10 с,
+  fail-closed отклоняет sampling gaps больше 250 us после первого фронта, декодирует
+  NEC/extended/repeat и направляет успешный capture в SessionStore schema v6 и
+  offline Library CSV. GPIO14 и все nRF CE удерживаются LOW; GPIO21 остаётся input
+  при exclusive lease mux IR/nRF3. Board-01 делает 345 272 физических samples за
+  10 000 018 us, не выдумывает transitions/artifact, выполняет zero TX/storage
+  writes, сохраняет CID/catalog 95/0 и heap 208 692/143 256/124 160 B, снимает семь
+  TFT states и заканчивает Home lease 0. Его 19 шагов — первый принятый общий
+  declarative HIL scenario. Successful signal/save/cold-Library остаётся открытым до
+  подключения и профилирования board-02.
 
 ## Состояние этапов
 
@@ -86,7 +97,7 @@
 | S2 | `done` | независимая target, unified five-key плюс calibrated touch input/TFT capture, finger-sized common rows, non-color focus, capability Home, BoardProfile/Diagnostics, AppRuntime/ResourceBroker, bounded storage contracts, общие components, persistent EN/RU с Roboto Condensed Medium 16/12, UX-03…UX-07 и exact-candidate `DEMO-S2` работают на board-01 | — |
 | S3 | `done` | все девять criteria проходят; exact 0.70 `E-GATE-003`/`E-HIL-095` выполняет passive Wi-Fi Setup→Running→Detail→Stop, commits generation 69→70 с 29/29 observations и zero drops, cold-reopens/exports её, совпадает с пятью independently recorded TFT goldens при zero unmasked mismatch, сохраняет heap и заканчивает Home с lease 0 | — |
 | S4 | `done` | exact 0.71…0.101 принимают passive multi-source, browser/export, persistent Capture, receiver/artifact Self-Test, disposable media, heap enforcement, calibrated touch, release endurance, финальный Home из реализованных задач, компактный status, полноэкранные RF views, all-available receiver-paced водопады и шесть реальных power cuts по всем границам SessionStore commit с read-only recovery и zero product mutation | — (`E-GATE-005`) |
-| S5 | `active` | exact 0.102 добавляет bounded receive-only Sub-GHz RAW OOK capture и physical CC1101 no-signal checkpoint; exact 0.103 добавляет cross-cutting main-loop watchdog, retained Safe Mode и explicit clear, принятая platform S4 переиспользуется | доказать known physical burst → atomic save → offline Library CSV, добавить worker heartbeat supervision и physical-stop evidence, затем завершить FSK/GDO0, IR/PN532/GPS/power workflows и проверить PR-014 |
+| S5 | `active` | exact 0.102 добавляет Sub-GHz RAW RX, exact 0.103 — retained runtime safety, exact 0.104 — passive IR capture/schema-v6/Library CSV с physical no-signal HIL | подключить/профилировать board-02 и доказать известные IR/Sub-GHz signals → atomic save → cold Library export; завершить FSK/GDO0, worker supervision, power/sleep и применимые conditional modules |
 | S6 | `planned` | Targets/compare/companion определены концептуально | требуется gate S5 |
 | S7 | `planned` | Lab/SDK boundaries описаны концептуально | требуется gate S6 |
 | S8 | `planned` | release gates определены | требуется gate S7 |
@@ -97,7 +108,7 @@
 |---|---|---|
 | CC1101 spectrum/activity | `принятый фундамент / S4` | сохранить при завершении capture workflows |
 | CC1101 RAW OOK capture | `в работе / S5, первый slice` — существуют UI, bounded capture, v5 codec/store и CSV; проходит physical receiver/no-signal checkpoint | известный собственный transmitter: successful pulses → explicit save → cold offline Library inspect/CSV; затем FSK через GDO0 |
-| IR capture/library | `запланировано / S5` | probe → capture → immutable save → inspect/export |
+| IR capture/library | `в работе / S5, первый slice` — source menu, bounded raw/NEC receiver, schema-v6 store/CSV и physical GPIO no-signal path проходят; IR TX удерживается LOW | fixed NEC stimulus от board-02 → successful decode → explicit save → cold offline Library inspect/CSV |
 | GPS session source | `conditional / S5` | explicit assembly probe → fix/time/track → Session evidence |
 | PN532 read/dump | `conditional / S5` | conflict-safe assembly probe → read/NDEF/dump → Library |
 | Power/charging/sleep | `запланировано / S5` | truthful state → low-voltage safe-write → sleep/resume/reset evidence |
@@ -113,7 +124,7 @@
 | Основа устройства и UX | `готово / S2`, уточнено в S4 — boot, board profile, пять клавиш плюс calibrated touch, finger-sized common rows, EN/RU UI, ResourceBroker и автоматический TFT capture; exact 0.100 показывает на Home семь реализованных задач, не включает будущие Цели/Лабораторию в executable menu, группирует Настройки, Самопроверку, Диагностику и О системе в последнем пункте Устройство, помещает четыре строки 216×60 под contextual header 26 px и доказывает результат однокомандным build/flash/HIL/screenshot/check gate; plan-v7 Full/Guided выполняет declared receive-only RF, artifact и изолированные disposable-storage checks | сохранять эту иерархию и общий plan при добавлении следующих capabilities |
 | Survey и Library | `готово / S3` — реальный passive Wi-Fi, atomic Session, List/Detail, offline reopen и export | используется как принятый фундамент, не переписывается отдельной веткой |
 | Passive multi-radio и Capture | `готово / S4` — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV, persistent Wi-Fi PCAP, all-available live-карты nRF24 и CC1101, source-bin водопады «один sweep — один pixel», Full/Guided receiver/artifact/disposable checks, endurance 2 799,845 s и six-boundary physical power-cut recovery exact 0.101 приняты | сохранить как общий observation/storage фундамент S5 |
-| Всё штатное железо ESP32-DIV | `в работе / S5` — exact 0.102 начинает CAP-030 bounded user path CC1101 OOK RAW, host-proven v5 persistence/CSV и physical no-signal RX evidence; known-burst persistence, FSK, IR, PN532, GPS и power workflows остаются открыты | завершить реальный Sub-GHz capture round trip, затем probe → capture/observe → Library → inspect/export для остальных применимых модулей |
+| Всё штатное железо ESP32-DIV | `в работе / S5` — exact 0.102 и 0.104 дают bounded Sub-GHz OOK и IR RAW user paths, host-proven v5/v6 persistence/CSV и physical no-signal RX evidence; exact 0.103 контролирует main loop | использовать профилированную board-02 для positive IR/Sub-GHz round trips, затем завершить FSK/GDO0, power/sleep и применимые conditional modules |
 | Targets, compare и companion | `впереди / S6` — product model и границы определены, пользовательские сценарии ещё не реализованы | две Survey сравниваются через evidence-backed Targets и тот же локальный Web/USB companion |
 | Safe Lab и расширения | `впереди / S7` — safety/resource boundaries приняты, active workflows и SDK ещё не реализованы | feature-complete каталог, permissioned extensions и доказанный panic/timeout stop |
 | Надёжность и доставка 1.0 | `впереди / S8` — exact 0.103 доказывает первый software safety checkpoint (main-loop watchdog, retained Safe Mode и explicit clear), но worker supervision, physical hard-stop evidence и release qualification остаются открыты | worker deadlines, signed OTA/rollback/recovery, полный HIL/Self-Test, mixed workload с часовым бюджетом и два зелёных RC |
@@ -736,6 +747,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-AUTO-067 / E-HIL-127 / E-RADIO-012 / E-STORAGE-029 | board-01 exact 0.102, первый slice Sub-GHz RAW receive | pass checkpoint: public Actions открывают Sub-GHz→Захват RAW→433 МГц; реальный CC1101 receive path делает 171 434 RSSI samples за 10 000 007 us и честно заканчивается `timed_out` без выдуманных pulses или CSV. Counters TX/PATABLE/FIFO/storage-write равны нулю; exact CID и generation 95/0, heap 210 308/145 076/125 848 B, input zero-drop/error, buzzer inactive, семь TFT states и final Home lease 0 связаны в [machine-checked artifact](../../tests/hil/evidence/board-01-subghz-raw-0.102.json). Native tests независимо покрывают successful/truncated pulse capture, v5 codec/store, corrupt rejection и CSV | доказывает только physical receive/no-signal path и software persistence contract. Known transmitter не использовался; successful physical burst, explicit atomic save, cold Library CSV и FSK/GDO0 остаются открыты, RF payload не сохраняется, TX/replay относится к S7, CAP-030 не завершён |
 | E-BUILD-104 | exact build `0.103.0-safety-supervisor` | pass: static RAM 171 496 B, linked flash 1 534 668 B; app/factory 1 535 072/1 600 608 B; app `569a72e3…83d5`, factory `d8b49f4b…766f`, ELF/app identity `145c3508…10a`; exact source/runner commit `2863090` | +6 832 B linked flash, +96 B static RAM и +6 980/+7 236 B images против 0.102 за pure safety core, permanent panic WDT, IRAM emergency GPIO path, exact-app RTC latch, Safe Mode и connected runner. RTC no-init занимает 108 B; dedicated IRAM region 16 384 B использован ровно на 100% и не имеет запаса роста |
 | E-AUTO-068 / E-HIL-128 / E-SAFETY-001 | board-01 exact 0.103 main-loop safety supervisor | pass checkpoint: exact flashed candidate взводится на Home, настоящий Task-WDT сбрасывает его через 5 810,775 ms с reason 6, retained latch one-trip/one-quiesce `runtime_watchdog` входит в Safe Mode с inactive buzzer GPIO2 и nRF CE GPIO14/15/47, без owner/lease и product recovery writes. Отдельный output-quiesced software restart возвращается с reason 3 и тем же latch; две публичные Right/OK Actions показывают и подтверждают clear, затем exact CID/catalog 95/0 открывается неизменным, final Home имеет owner/lease none/0. Три реальных TFT states, binaries, transcripts и source-bound runner сохранены в [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json) | снижает R-018 только для main-loop hangs и software-controlled buzzer/nRF CE. Не предоставляет worker heartbeats, retention latch при полном снятии питания, thermal/current/voltage detection, physical rail/PA kill, CC1101 hard kill или instrumented RF-stop proof; это safety checkpoint S5, не release promotion |
+| E-BUILD-105 | exact build `0.104.0-infrared-capture` | pass: static RAM 172 760 B, linked flash 1 549 056 B; app/factory 1 549 456/1 614 992 B; app `581da70a…e5c0`, factory `397cf2b6…a7c`, ELF/app identity `0cd3e336…15d2`, map `9730fb71…9c9`; firmware source `b391e5d`, common runner/scenario `f489362` | +14 388 B linked flash и +1 264 B static RAM против 0.103 за bounded IR RAW/NEC, schema-v6 storage/CSV, UI source chooser и receive-only board adapter; dedicated IRAM остаётся ровно 16 384 B/100% без роста |
+| E-AUTO-069 / E-HIL-129 / E-RADIO-013 / E-STORAGE-030 | board-01 exact 0.104, первый slice passive infrared | pass checkpoint: declarative scenario из 19 шагов использует public Actions, делает 345 272 samples GPIO21 за 10 000 018 us, приходит к честному `timed_out` с zero transitions/pulses/CSV, удерживает GPIO14 и все nRF CE inactive, выполняет zero storage writes, сохраняет exact CID/catalog 95/0 и heap 208 692/143 256/124 160 B, снимает семь TFT states и возвращает Home owner/lease none/0 в [machine-checked artifact](../../tests/hil/evidence/board-01-infrared-capture-0.104.json). Host tests независимо проходят NEC/extended/repeat, bounded capture, schema-v6 codec/store/corrupt rejection и CSV | доказывает physical receive/no-signal и software persistence contracts, но не successful IR frame. Board-02 куплена, но не подключена/профилирована; positive decode, save и cold Library CSV открыты |
 
 ## Известные неопределённости и риски
 
@@ -763,22 +776,20 @@ goldens. Управляемый physical power-cut и восьмичасовой
   evidence до собственных gates `DEMO-S3…S8`.
 - PRD принят как baseline 1.0, но `accepted` не означает `verified`: verification
   каждого P0 остаётся за соответствующими S2…S8 gates.
-- Один экземпляр доступен, но `HW-T01` требует второй v2 board; continuity, logic/RF,
-  storage и power evidence всё ещё отсутствуют.
+- Второй v2 unit куплен, но подключена/профилирована только board-01. Board-02 должна
+  пройти read-only bring-up до роли bounded HIL fixture.
 - Для buzzer нет microphone/scope evidence: exact boot/runtime pad state подтверждён,
   но отсутствие слышимого фона остаётся операторским наблюдением и HW-T09.
 
 ## Текущая граница S5
 
 Отсутствие прибора или внешнего модуля не блокирует следующую software-работу.
-Ближайшая открытая граница — positive physical fixture Sub-GHz: без известного
-собственного OOK transmitter exact 0.102 доказывает real receive sampling и честный
-no-signal timeout, но не может заявить successful pulse capture, persistence или
-offline Library export. Этот gap остаётся видимым и не превращает прошедший
-no-signal checkpoint в завершённый CAP-030.
+Exact 0.102 и 0.104 доказывают честные Sub-GHz и IR receive/no-signal paths, но не
+successful physical signal или persistence round trip. Board-02 станет bounded
+fixture для обоих gaps после read-only профилирования; роли и safety contract
+зафиксированы в [TWO_BOARD_HIL.ru.md](TWO_BOARD_HIL.ru.md).
 
-FSK capture требует declared path GDO0 и остаётся следующим receiver design slice.
-Затем IR может использовать тот же immutable pattern Capture→Library. GPS и PN532
+FSK capture всё ещё требует declared path GDO0. GPS и PN532
 остаются conditional до явного выбора совместимой assembly; отсутствующие modules
 дают N/A, а не simulated pass. Электрические power/thermal и shared-bus measurements
 по-прежнему ограничены отсутствующими приборами из hardware envelope.

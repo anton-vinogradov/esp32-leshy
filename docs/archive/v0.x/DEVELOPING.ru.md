@@ -20,8 +20,8 @@
 
 | Кнопка | Скрипт | Что делает |
 |--------|--------|------------|
-| **Build** | `tools/build.sh` | Только сборка (`pio run`). |
-| **Deploy to device** | `tools/deploy.sh` | Сборка + заливка по USB. **Только заливка** — порт освобождается сразу после прошивки. |
+| **Build** | `tools/build_0x_legacy.sh` | Только сборка (`pio run`). |
+| **Deploy to device** | `tools/deploy_0x_legacy.sh` | Сборка + заливка по USB. **Только заливка** — порт освобождается сразу после прошивки. |
 | **Monitor (serial)** | `tools/monitor.sh` | Монитор порта на 115200. Держит порт, пока не остановишь (красный ■). |
 | **Release (tag + CI)** | `tools/release.sh` | Ставит тег на `HEAD` и пушит → CI собирает и публикует (см. [Релиз](#релиз)). |
 
@@ -36,8 +36,8 @@
 Скрипты работают и прямо из терминала, как и «сырые» команды:
 
 ```bash
-tools/build.sh        # или: pio run
-tools/deploy.sh       # или: pio run -t upload
+tools/build_0x_legacy.sh        # или: pio run
+tools/deploy_0x_legacy.sh       # или: pio run -t upload
 tools/monitor.sh      # или: pio device monitor -b 115200
 ```
 

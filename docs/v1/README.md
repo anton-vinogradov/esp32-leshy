@@ -46,6 +46,8 @@ accepted decisions change.
   Safe Mode, emergency output quiesce, and explicit hardware limits
 - [Automated pre-release HIL](PRE_RELEASE_HIL.md) — proposed build-once,
   physical-test, promote-same-bytes pipeline with screenshots and attestation
+- [Two-board HIL and declarative scenarios](TWO_BOARD_HIL.md) — candidate/fixture
+  roles, common scenario/evidence engine, and bounded stimulus safety
 - [Storage atomicity HIL](STORAGE_HIL.md) — dual-head recovery, fault boundaries,
   and disposable-media safety
 

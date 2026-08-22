@@ -1,0 +1,6 @@
+{
+  "schema": "leshy.hil.evidence_index.v1",
+  "summaries": [
+    "tests/hil/evidence/board-01-infrared-capture-0.104.json"
+  ]
+}

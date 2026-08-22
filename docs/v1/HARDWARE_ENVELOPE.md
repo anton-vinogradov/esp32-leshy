@@ -150,7 +150,7 @@ Capabilities use `declared`, `detected`, `available`, `conflicted`, `fault`, or
 | Power manager | known-address/register read only | unknown on no response |
 | LEDs/buzzer | LEDs have no automatic identity; buzzer is output LOW from the first setup instruction and Diagnostics checks pad level; no sound is generated | buzzer silent invariant available/fault; sound capability not declared |
 | SD | card-detect read, then read-only mount last | slot declared, media detected |
-| NRF #1/#2/#3 | CE LOW; #1/#2 stable register/status read; #3 only after GPIO21/IR contention is characterized | #1/#2 independently detected; #3 unknown until HW-T08 |
+| NRF #1/#2/#3 | CE LOW; stable register/status read per selected CS; #3 only inside the exclusive nRF side of the GPIO14/21 mux | all three independently detected in nRF mode; physical mux contention remains constrained by HW-T08 |
 | CC1101 | only after GPS exclusion; reset→IDLE, PARTNUM/VERSION read | detected/conflicted |
 | GPS | GPIO5 high-Z; passively observe valid 9600-baud NMEA first | detected |
 | PN532 | explicit NFC assembly only; firmware-version command, no RF field | detected |
@@ -175,6 +175,15 @@ read bounds 8/2/20, nRF #3 remains gated, GPIO21 remains HIGH, and all CE-high,
 strobe and TX counters remain zero (`E-HIL-106`/`E-RADIO-001`). This is software and
 register-identity evidence only. HW-T06 remains partial because no RF detector was
 available to prove physical silence.
+
+The boot paragraph above is the conservative automatic-probe policy; it is not the
+current explicit runtime result. Exact 0.100 supersedes the older 0.81 software
+gating after the user selects nRF reception: all three independently addressed nRF
+slots are active with mask `7`. Exact 0.104 adds the mutually exclusive IR side of
+the same mux: nRF #3 is fully stopped, GPIO14 and every CE remain LOW, and GPIO21 is
+input-only while 345,272 passive samples are taken. nRF and IR are never active
+simultaneously. This closes the software ownership/direction part of HW-T08; a known
+physical IR stimulus and instrumented electrical trace remain open.
 
 Exact `0.82.0-nrf24-spectrum` adds an explicit user-started receive path, never a
 boot probe. It acquires the same exclusive `RadioSpi` domain, verifies both declared
@@ -235,7 +244,7 @@ links the verified
 | HW-T05 | SD CD, read-only mount, radio↔SD recovery, power-cut write | trace + recovered filesystem |
 | HW-T06 | Read identities of NRF #1/#2 and CC with no RF event | register log + RF detector silence |
 | HW-T07 | Test separate GPS and PN532 assemblies | NMEA/version log, no contention |
-| HW-T08 | Characterize GPIO21 contention, then NRF3 identity/switch, directions, and physical stop | logic trace + NRF register log + IR test |
+| HW-T08 | Partial: exact nRF mask 7 plus exclusive IR switch/directions/stop are proven in software; characterize GPIO21 electrically and apply a known IR signal | logic trace + NRF register log + IR test |
 | HW-T09 | Characterize GPIO2 buzzer/VBAT coupling | scope/ADC series |
 | HW-T10 | Measure rails for idle, display, SD, passive radios, combined Survey | min/avg/peak, temperature, margin |
 | HW-T11 | Verify native USB and CP2102 reset/download/recovery | port IDs + recovery transcript |
@@ -257,7 +266,7 @@ flag or a successful unrelated probe.
 | HW-U06 | partial: GPIO38 reads LOW with one inserted/identified card; polarity/batch consistency remain unmeasured | GPIO38 is not authoritative in S2; storage state comes from a bounded explicit operation and remains fault/absent on failure | HW-T05 across media and board batch |
 | HW-U07 | partial: three guarded SD identity runs and the exact 0.81 sequential receiver probe complete with exclusive RadioSpi, GPIO21 HIGH, stable CID/CSD/generation and cleanup; instrumented coexistence remains unmeasured | `spi_radio` is an exclusive operation lease; SD and shield receivers never overlap | HW-T03/HW-T05 + radio→SD→radio recovery + RB-07 endurance |
 | HW-U08 | electrical/ADC behavior is unmeasured; the false-sound software root cause is confirmed by 0.x and upstream issue #117 | battery percentage is unavailable; GPIO2 is never ADC-sampled and is held OUTPUT LOW from the first setup instruction; HIGH belongs only to a future bounded sound service | HW-T09 for ADC/sound characterization; silent invariant closes through boot/runtime state plus audible observation |
-| HW-U09 | no safe passive digital identity | IR is available only from an explicit RF-shield profile; no autodetect; IR TX additionally requires Lab/ADR-002 evidence | assembly manifest/detector + HW-T08 |
+| HW-U09 | partial: exact 0.104 proves the explicit-profile passive input path and safe no-signal behavior; no physical signal identity has succeeded yet | IR RX is available only from the explicit RF-shield profile and is mutually exclusive with nRF #3; no autodetect; IR TX additionally requires Lab/ADR-002 evidence | known NEC fixture/second board + instrumented HW-T08 |
 | HW-U10 | no rail peak/thermal measurement | first slice is Wi-Fi-only; shield operations are one receiver at a time after per-module HIL; combined modes unavailable | HW-T10 and RB-08 endurance |
 
 ## Architecture consequences

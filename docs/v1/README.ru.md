@@ -48,6 +48,8 @@
   retained Safe Mode, emergency quiesce outputs и явные hardware limits
 - [Автоматический предрелизный HIL](PRE_RELEASE_HIL.ru.md) — proposed build-once,
   physical-test и promote-same-bytes pipeline с screenshots и attestation
+- [Двухплатный HIL и декларативные сценарии](TWO_BOARD_HIL.ru.md) — роли
+  candidate/fixture, общий scenario/evidence engine и bounded stimulus safety
 - [HIL атомарности storage](STORAGE_HIL.ru.md) — dual-head recovery, fault boundaries
   и безопасность disposable media
 

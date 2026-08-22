@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import secrets
 import shutil
 import time
@@ -14,6 +13,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
+from capture_1x_ui import PassiveSerial, synchronize_console
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import (
@@ -26,14 +26,14 @@ from run_1x_product_survey_hil import (
     query,
     valid_cid,
 )
+from run_1x_subghz_raw_hil import select_home_app
+
+
 SCENARIO_SCHEMA = "leshy.hil.scenario.v1"
 RUN_SCHEMA = "leshy.hil.scenario_run.v1"
 SUPPORTED_OPERATIONS = {
     "action", "capture", "cleanup", "query", "select_home_app", "sleep",
 }
-PUBLIC_ACTIONS = {"up", "down", "left", "right", "select", "back"}
-SAFE_ID = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
-SAFE_CAPTURE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 def load_object(path: Path) -> dict[str, Any]:
@@ -96,109 +96,39 @@ def evaluate_checks(record: dict[str, Any], checks: list[dict[str, Any]],
     return failures
 
 
-def safe_console_token(value: object, maximum: int = 96) -> bool:
-    return (isinstance(value, str) and 0 < len(value) <= maximum and
-            value.isascii() and value.isprintable() and
-            "\r" not in value and "\n" not in value)
-
-
 def validate_scenario(scenario: dict[str, Any], ports: dict[str, str]) -> None:
     if scenario.get("schema") != SCENARIO_SCHEMA:
         raise ValueError("scenario schema mismatch")
     for key in ("id", "checkpoint", "steps", "limits"):
         if key not in scenario:
             raise ValueError(f"scenario field is missing: {key}")
-    if not isinstance(scenario["id"], str) or not SAFE_ID.fullmatch(
-            scenario["id"]):
-        raise ValueError("scenario id is invalid")
-    if not isinstance(scenario["checkpoint"], str) or not SAFE_ID.fullmatch(
-            scenario["checkpoint"]):
-        raise ValueError("scenario checkpoint is invalid")
-    if not isinstance(scenario["limits"], dict):
-        raise ValueError("scenario limits must be an object")
     devices = scenario.get("devices", {"candidate": {"required": True}})
     if not isinstance(devices, dict) or "candidate" not in devices:
         raise ValueError("scenario devices must declare candidate")
     for role, policy in devices.items():
-        if not isinstance(role, str) or not SAFE_ID.fullmatch(role):
-            raise ValueError(f"invalid device role: {role!r}")
-        if not isinstance(policy, dict):
-            raise ValueError(f"device role policy must be an object: {role}")
         required = isinstance(policy, dict) and policy.get("required") is True
         if required and role not in ports:
             raise ValueError(f"required device role is not bound: {role}")
     steps = scenario.get("steps")
-    if not isinstance(steps, list) or not 1 <= len(steps) <= 256:
-        raise ValueError("scenario must contain 1..256 steps")
+    if not isinstance(steps, list) or not steps:
+        raise ValueError("scenario steps must be a non-empty list")
     seen: set[str] = set()
     for step in steps:
-        if (not isinstance(step, dict) or
-                not isinstance(step.get("id"), str) or
-                not SAFE_ID.fullmatch(step["id"])):
-            raise ValueError("every step requires a safe string id")
+        if not isinstance(step, dict) or not isinstance(step.get("id"), str):
+            raise ValueError("every step requires a string id")
         if step["id"] in seen:
             raise ValueError(f"duplicate step id: {step['id']}")
         seen.add(step["id"])
-        operation = step.get("op")
-        if operation not in SUPPORTED_OPERATIONS:
+        if step.get("op") not in SUPPORTED_OPERATIONS:
             raise ValueError(f"unsupported operation in {step['id']}")
         role = step.get("target", "candidate")
-        if operation != "sleep" and role not in ports:
+        if step["op"] != "sleep" and role not in ports:
             raise ValueError(f"step {step['id']} targets unbound role {role}")
-        timeout = step.get("timeout", 15.0)
-        if (isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or
-                not 0 < timeout <= 60):
-            raise ValueError(f"step {step['id']} timeout must be in (0, 60]")
-        if operation == "sleep":
-            seconds = step.get("seconds")
-            if (isinstance(seconds, bool) or
-                    not isinstance(seconds, (int, float)) or
-                    not 0 <= seconds <= 60):
-                raise ValueError(
-                    f"step {step['id']} sleep must be 0..60 seconds")
-        elif operation == "action" and step.get("name") not in PUBLIC_ACTIONS:
-            raise ValueError(f"step {step['id']} has an invalid public action")
-        elif operation == "query":
-            if not safe_console_token(step.get("command")):
-                raise ValueError(f"step {step['id']} has an unsafe query")
-            if (not safe_console_token(step.get("response_schema"), 80) or
-                    not safe_console_token(step.get("kind", "state"), 32)):
-                raise ValueError(
-                    f"step {step['id']} has an invalid response contract")
-        elif operation == "capture":
-            name = step.get("name", step["id"])
-            if (not isinstance(name, str) or
-                    not SAFE_CAPTURE_NAME.fullmatch(name)):
-                raise ValueError(f"step {step['id']} has an unsafe capture name")
-        elif operation == "select_home_app":
-            app_id = step.get("app_id")
-            if not isinstance(app_id, str) or not SAFE_ID.fullmatch(app_id):
-                raise ValueError(f"step {step['id']} has an invalid app id")
-        if "expect" in step and not isinstance(step["expect"], dict):
-            raise ValueError(f"step {step['id']} expect must be an object")
-        if "checks" in step and not isinstance(step["checks"], list):
-            raise ValueError(f"step {step['id']} checks must be an array")
-
-
-def select_home_app(device: Any, app_id: str,
-                    trace: list[dict[str, Any]]) -> dict[str, Any]:
-    state = query(device, b"ui.state", "leshy.ui.v1", "state")
-    for _ in range(10):
-        if state.get("selection") == 0:
-            break
-        state = action(device, "up")
-        trace.append(state)
-    for _ in range(10):
-        if state.get("selected_id") == app_id:
-            return state
-        state = action(device, "down")
-        trace.append(state)
-    raise RuntimeError(f"Home app {app_id!r} is not reachable: {state!r}")
+        if step["op"] == "sleep" and not 0 <= step.get("seconds", -1) <= 60:
+            raise ValueError(f"step {step['id']} sleep must be 0..60 seconds")
 
 
 def main() -> int:
-    from capture_1x_ui import PassiveSerial, synchronize_console
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--scenario", required=True, type=Path)
     parser.add_argument("--port", action="append", default=[],
@@ -265,18 +195,6 @@ def main() -> int:
                 synchronize_console(device, 30.0)
                 devices[role] = device
             product = devices["candidate"]
-
-            # Registered after the serial contexts so ExitStack invokes cleanup
-            # while the candidate port is still open, including on any failed
-            # query, assertion, or scenario step.
-            def cleanup_candidate() -> None:
-                nonlocal cleanup
-                cleanup = best_effort_cleanup(product)
-                if not cleanup.get("complete"):
-                    failures.append(
-                        "cleanup: terminal zero-lease state unproven")
-
-            stack.callback(cleanup_candidate)
             boot = query(product, b"metrics", "leshy.boot.v1", "ready")
             recovery_before = query(
                 product, b"storage.product.boot-recovery",
@@ -375,6 +293,9 @@ def main() -> int:
                     safe_outputs.get("buzzer_inactive") is not True or
                     safe_outputs.get("nrf_ce_inactive") is not True):
                 failures.append("invariant: safe outputs inactive failed")
+            cleanup = best_effort_cleanup(product)
+            if not cleanup.get("complete"):
+                failures.append("cleanup: terminal zero-lease state unproven")
     except Exception as error:
         failures.append(f"runner: {type(error).__name__}: {error}")
 

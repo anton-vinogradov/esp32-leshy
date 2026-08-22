@@ -884,3 +884,16 @@ regression проходит 17 TFT states и сохраняет product 95/0. `E
 retained summary и exact source/tool hashes. Вместе с endurance exact 0.89
 `E-GATE-005` закрывает `DEMO-S4`; S5 активен. Это stage evidence, а не signed
 promotion release candidate.
+
+Exact 0.104 начинает заменять одноразовые feature scripts общим declarative scenario
+engine. `tools/run_hil_scenario.py` выполняет role-bound JSON steps для одного
+candidate либо candidate+fixture, связывает exact source/binary/map/CID identity,
+проверяет стандартные boot, recovery, heap, input, safe-output и final-lease
+invariants и регистрирует cleanup, пока serial port ещё открыт, поэтому каждый
+failure path остаётся fail-closed. `tools/hil_evidence.py` упаковывает и независимо
+проверяет indexed retained result. Первый перенесённый 19-step IR no-signal scenario
+фиксирует 345 272 samples GPIO, zero TX/writes, семь TFT states и final lease 0 в
+`E-HIL-129`; его проверяет `E-AUTO-069`. Для новых non-destructive product slices
+нужно добавлять manifest сценария вместо ещё одной тройки runner/packer/verifier.
+Cross-device stimulus следует bounded [ролям HIL на двух платах](TWO_BOARD_HIL.ru.md);
+board-02 до допуска как fixture обязательно проходит read-only profiling.

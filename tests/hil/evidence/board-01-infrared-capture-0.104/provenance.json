@@ -1,0 +1,22 @@
+{
+  "app_elf_sha256": "0cd3e336257f10400f84f31ec493d0a7cdd69f59bdf885cf1a606306913915d2",
+  "checkpoint": "physical_receive_no_signal",
+  "factory_bytes": 1614992,
+  "factory_sha256": "397cf2b6e1025f6bea80cbc2df43f52e556b8fbe721ca59133b51f1eb966ba7c",
+  "firmware_bytes": 1549456,
+  "firmware_sha256": "581da70abe69851ab6e825e9d10856ae8646e0f285802d30b73879f50dcce5c0",
+  "linked_flash_bytes": 1549056,
+  "map_sha256": "9730fb71f142f5dc575915e9da72b44e9ec762cb542a8d8732642fdb3cdca9c9",
+  "run_schema": "leshy.hil.scenario_run.v1",
+  "run_sha256": "8bdc39518fda458cfd5165dd6b47dde51879af3a187b61c21cd5c19b3cf124e5",
+  "runner_commit": "f4893626b3eef8be0326704575ee97c787dcaf66",
+  "runner_path": "tools/run_hil_scenario.py",
+  "runner_sha256": "3d8bb6362fe200afa9f36e77ff49ddd514bd77e21078cbe2cf47129b09a80bde",
+  "scenario_id": "infrared-passive-no-signal",
+  "scenario_path": "tests/hil/scenarios/infrared-passive-no-signal.json",
+  "scenario_sha256": "c1fbeba72d7663b996ee8b30d1d88cab747ff2172c4a994cfda1e0f2036e2379",
+  "schema": "leshy.hil.provenance.v1",
+  "source_commit": "b391e5dd80838bf3b46d2e6de0a72051e708e0b0",
+  "static_ram_bytes": 172760,
+  "version": "0.104.0-infrared-capture"
+}

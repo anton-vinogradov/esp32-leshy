@@ -183,7 +183,7 @@ unknown     — universal safe probe невозможен
 | Status LEDs | main-board profile | no automatic electrical identity | `declared` |
 | Buzzer | main-board profile | output LOW с первой инструкции setup; pad level проверяется в Diagnostics, звук не генерируется | silent invariant `available` либо `fault`; sound capability отдельно не заявлена |
 | SD slot/card | main board + removable media | card-detect read, then read-only mount last | slot `declared`, card `detected` |
-| NRF24 #1/#2/#3 | RF shield | CE LOW; #1/#2 read stable register/status per CS; #3 только после characterizing GPIO21/IR contention | #1/#2 independently `detected`; #3 `unknown` до HW-T08 |
+| NRF24 #1/#2/#3 | RF shield | CE LOW; stable register/status read на каждом выбранном CS; #3 только внутри exclusive nRF-стороны mux GPIO14/21 | все три independently `detected` в nRF mode; physical mux contention остаётся constrained по HW-T08 |
 | CC1101 | RF shield/assembly | only after GPS exclusion; reset→IDLE, read PARTNUM/VERSION, no RX/TX | `detected` or `conflicted` |
 | GPS | external assembly | GPIO5 high-Z input; passively observe valid 9600-baud NMEA before any CC/PN532 drive | `detected` |
 | PN532 | external assembly | only explicit NFC assembly and CC/GPS absence; firmware-version command, no RF field | `detected` |
@@ -220,6 +220,15 @@ exact read bounds 8/2/20, nRF #3 остаётся gated, GPIO21 остаётся
 CE-high/strobe/TX равны нулю (`E-HIL-106`/`E-RADIO-001`). Это только software и
 register-identity evidence. HW-T06 остаётся partial: RF detector для доказательства
 physical silence недоступен.
+
+Абзац boot policy выше описывает консервативный автоматический probe, а не текущий
+результат explicit runtime. Exact 0.100 заменяет старое software gating 0.81 после
+выбора nRF reception пользователем: все три независимо адресуемых nRF slot активны с
+mask `7`. Exact 0.104 добавляет взаимоисключающую IR-сторону того же mux: nRF #3
+полностью остановлен, GPIO14 и все CE остаются LOW, GPIO21 — только input во время
+345 272 passive samples. nRF и IR никогда не активны одновременно. Это закрывает
+software ownership/direction часть HW-T08; known physical IR stimulus и
+instrumented electrical trace остаются открыты.
 
 Exact `0.82.0-nrf24-spectrum` добавляет явный запускаемый пользователем receive path,
 но не boot probe. Он получает тот же exclusive domain `RadioSpi`, проверяет оба
@@ -285,7 +294,7 @@ Software evidence для GPIO2: авторское описание root cause �
 | HW-T05 | SD CD polarity, read-only mount, radio→SD→radio recovery, power-cut write | trace + recovered filesystem |
 | HW-T06 | Read-only identity NRF #1/#2 и CC; verify no CE/TX event | register log + RF detector silence |
 | HW-T07 | Отдельно подключить GPS assembly и PN532 assembly; проверить safe selection | NMEA/PN532 version logs, no pin contention |
-| HW-T08 | NRF3↔IR: characterize electrical contention GPIO21, затем identity/switch, pin directions, idle levels и physical stop | logic trace + NRF register log + IR receiver test |
+| HW-T08 | Partial: exact nRF mask 7 и exclusive IR switch/directions/stop доказаны software; осталось электрически охарактеризовать GPIO21 и подать known IR signal | logic trace + NRF register log + IR receiver test |
 | HW-T09 | GPIO2 buzzer/VBAT: voltage, ADC loading, silent boot | scope/ADC series; decision on battery capability |
 | HW-T10 | Rail current/voltage: idle, full backlight, SD, each passive radio, combined Survey | min/avg/peak, brownout margin, temperature |
 | HW-T11 | Native USB and CP2102 paths, reset/download/recovery | port IDs + recovery transcript |
@@ -306,7 +315,7 @@ Software evidence для GPIO2: авторское описание root cause �
 | HW-U06 | partial: GPIO38 LOW с одной inserted/identified card; polarity и batch consistency не измерены | GPIO38 не authoritative в S2; storage state определяется bounded explicit operation и остаётся fault/absent при failure | HW-T05 на разных media/batch |
 | HW-U07 | partial: три guarded SD identity runs и exact 0.81 sequential receiver probe завершаются с exclusive RadioSpi, GPIO21 HIGH, stable CID/CSD/generation и cleanup; instrumented coexistence не измерен | `spi_radio` — exclusive operation lease; SD и shield receivers не пересекаются | HW-T03/HW-T05 + radio→SD→radio recovery + endurance RB-07 |
 | HW-U08 | electrical/ADC behavior не измерен; software root cause ложного звука подтверждён 0.x и upstream issue #117 | battery percentage unavailable; GPIO2 никогда не sampled как ADC и с первой инструкции setup удерживается OUTPUT LOW; HIGH разрешён только будущему bounded sound service | HW-T09 для ADC/sound characterization; silent invariant закрывается boot/runtime state + audible observation |
-| HW-U09 | нет безопасного passive digital identity | IR available только из explicit RF-shield profile; autodetect отсутствует; IR TX дополнительно требует Lab/ADR-002 evidence | assembly manifest/detector + HW-T08 |
+| HW-U09 | partial: exact 0.104 доказывает passive input path explicit profile и безопасное no-signal поведение; успешного physical signal identity пока нет | IR RX available только из explicit RF-shield profile и mutually exclusive с nRF #3; autodetect отсутствует; IR TX дополнительно требует Lab/ADR-002 evidence | known NEC fixture/вторая плата + instrumented HW-T08 |
 | HW-U10 | нет rail peak/thermal measurements | первый slice только Wi-Fi; shield по одному receiver после per-module HIL; combined modes unavailable | HW-T10 и endurance RB-08 |
 
 ## Решения для архитектуры

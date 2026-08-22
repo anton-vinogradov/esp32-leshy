@@ -188,6 +188,8 @@ python3 "$repo_dir/tools/check_sd_power_cut_acceptance.py"
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 if [[ "$retained_evidence_mode" == "tracked" ]]; then
     python3 "$repo_dir/tools/check_tracked_hil_evidence.py"
+    python3 "$repo_dir/tools/hil_evidence.py" verify \
+        --index "$repo_dir/tests/hil/evidence/declarative-hil-index.json"
     python3 "$repo_dir/tools/check_product_home_acceptance.py" --tracked-only
     python3 "$repo_dir/tools/check_home_identity_acceptance.py" --tracked-only
     python3 "$repo_dir/tools/check_inline_key_hints_acceptance.py" --tracked-only
@@ -196,6 +198,7 @@ if [[ "$retained_evidence_mode" == "tracked" ]]; then
     python3 "$repo_dir/tools/check_source_history_waterfall_acceptance.py" --tracked-only
 fi
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
+python3 "$repo_dir/tools/test_hil_scenario_runner.py"
 python3 "$repo_dir/tools/test_sd_power_cut_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"
