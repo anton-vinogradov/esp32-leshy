@@ -232,6 +232,7 @@ LESHY_UI_TEXT(WifiChannelsScale, Meta, 112, "AIRTIME ~ 0-8%", u8"ЗАНЯТОС�
 LESHY_UI_TEXT(WifiChannelsBestFormat, Meta, 112, "BEST 1/6/11: %u", u8"СВОБОДНЕЕ: %u")
 LESHY_UI_TEXT(WifiChannelsMeasuring, Meta, 112, "MEASURING...", u8"ИЗМЕРЯЮ...")
 LESHY_UI_TEXT(WifiChannelsFailed, Meta, 196, "WI-FI RECEIVER UNAVAILABLE", u8"ПРИЁМНИК WI-FI НЕДОСТУПЕН")
+LESHY_UI_TEXT(WifiCaptureTitle, Meta, 196, "WI-FI / PACKETS", u8"WI-FI / ПАКЕТЫ")
 LESHY_UI_TEXT(SurveySources, Body, 206, "SURVEY / SOURCES", u8"СКАНЕР / ИСТОЧНИКИ")
 LESHY_UI_TEXT(PlanSources, Body, 196, "SOURCES", u8"ИСТОЧНИКИ")
 LESHY_UI_TEXT(SourcesCountFormat, Meta, 196, "%u OF %u ENABLED", u8"ВКЛЮЧЕНО %u ИЗ %u")

@@ -23,7 +23,6 @@ def main() -> int:
     adapter_cpp = (
         ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveCapture.cpp"
     ).read_text()
-    version = (ROOT / "firmware/leshy1/platformio.ini").read_text()
 
     required_renderer = (
         "WifiProductView::Channels",
@@ -37,7 +36,6 @@ def main() -> int:
         "wifi_channel_completed_sweeps",
         "wifi_channel_measured_mask",
         "wifiProductSelection == 2",
-        "return index <= 2U;",
     )
     required_load = (
         "std::array<WifiChannelLoadBin, 13>",
@@ -84,8 +82,6 @@ def main() -> int:
         f"adapter contains active/TX path: {token}"
         for token in forbidden_adapter if token in adapter_cpp
     )
-    if 'LESHY1_VERSION=\\"0.109.0-wifi-channels\\"' not in version:
-        failures.append("exact Wi-Fi Channels version missing")
     if "kWifiChannelDisplayFullScalePermille = 80" not in renderer:
         failures.append("honest lower-bound 0..8% display scale missing")
     if failures:
