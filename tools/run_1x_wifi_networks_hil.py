@@ -154,7 +154,6 @@ def main() -> int:
                     "page": "survey", "selected_id": "wifi",
                     "runtime_owner": "wifi", "lease_mask": 15,
                     "wifi_product_view": "menu", "wifi_product_selection": 0,
-                    "wifi_networks_unique": 0,
                 }, "wifi_menu")
                 screens["wifi_menu"] = capture(device, frames, "wifi-menu")
 
