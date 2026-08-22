@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "domain/captures/WifiFrame.h"
+#include "domain/captures/InfraredRaw.h"
 #include "domain/captures/SubGhzRaw.h"
 #include "services/survey/SurveySession.h"
 
@@ -15,11 +16,13 @@ constexpr std::uint16_t kTimelineSessionSchemaVersion = 2;
 constexpr std::uint16_t kSessionSchemaVersion = 3;
 constexpr std::uint16_t kWifiFrameSessionSchemaVersion = 4;
 constexpr std::uint16_t kSubGhzRawSessionSchemaVersion = 5;
+constexpr std::uint16_t kInfraredRawSessionSchemaVersion = 6;
 constexpr std::uint16_t kLegacySegmentSchemaVersion = 1;
 constexpr std::uint16_t kTimelineSegmentSchemaVersion = 2;
 constexpr std::uint16_t kSegmentSchemaVersion = 3;
 constexpr std::uint16_t kWifiFrameSegmentSchemaVersion = 4;
 constexpr std::uint16_t kSubGhzRawSegmentSchemaVersion = 5;
+constexpr std::uint16_t kInfraredRawSegmentSchemaVersion = 6;
 constexpr std::size_t kSessionManifestMaxBytes = 256;
 constexpr std::size_t kObservationRecordMaxBytes = 128;
 constexpr std::size_t kTimelineRecordMaxBytes = 1024;
@@ -61,6 +64,10 @@ SessionCodecStatus encodeWifiFrameCaptureSegment(
 SessionCodecStatus encodeSubGhzRawCaptureSegment(
     const services::survey::SurveySession& session,
     const domain::captures::SubGhzRawSource& pulses,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
+SessionCodecStatus encodeInfraredRawCaptureSegment(
+    const services::survey::SurveySession& session,
+    const domain::captures::InfraredRawSource& pulses,
     std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
 SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& session,
                                          const std::uint8_t* segment, std::size_t segmentSize,
@@ -122,6 +129,30 @@ SessionCodecStatus openPersistedSubGhzRawCapture(
     const services::survey::SurveySession& session,
     const std::uint8_t* segment, std::size_t segmentSize,
     PersistedSubGhzRawCaptureView* output);
+
+class PersistedInfraredRawCaptureView final
+    : public domain::captures::InfraredRawSource {
+public:
+    static constexpr std::size_t kPulseCapacity = 512;
+
+    void reset();
+    std::size_t pulseCount() const override { return count_; }
+    bool pulseView(std::size_t index,
+                   domain::captures::InfraredRawPulseView* output) const override;
+
+private:
+    friend SessionCodecStatus openPersistedInfraredRawCapture(
+        const services::survey::SurveySession&, const std::uint8_t*,
+        std::size_t, PersistedInfraredRawCaptureView*);
+    const std::uint8_t* block_ = nullptr;
+    std::size_t blockSize_ = 0;
+    std::size_t count_ = 0;
+};
+
+SessionCodecStatus openPersistedInfraredRawCapture(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* segment, std::size_t segmentSize,
+    PersistedInfraredRawCaptureView* output);
 bool formatSessionJsonSummary(const services::survey::SurveySession& session, char* output,
                               std::size_t capacity);
 

@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "domain/observations/Observation.h"
+#include "domain/captures/InfraredRaw.h"
 #include "domain/captures/SubGhzRaw.h"
 #include "services/survey/SourceTimeline.h"
 
@@ -74,6 +75,7 @@ struct CaptureMetadata final {
     bool locationPresent = false;
     bool framePayloadCaptured = false;
     bool subGhzRawCaptured = false;
+    bool infraredRawCaptured = false;
     std::uint8_t selectedSourceMask = 0;
     std::uint32_t wifiMaxMsPerChannel = 0;
     std::uint8_t wifiChannel = 0;
@@ -93,6 +95,11 @@ struct CaptureMetadata final {
     bool subGhzTruncated = false;
     std::uint16_t subGhzPulseRecords = 0;
     std::uint32_t subGhzPulseBytes = 0;
+    bool infraredStartLevel = false;
+    bool infraredTruncated = false;
+    std::uint16_t infraredPulseRecords = 0;
+    std::uint32_t infraredPulseBytes = 0;
+    domain::captures::InfraredDecode infraredDecode{};
     std::array<std::uint8_t, kAppIdentityBytes> appIdentity{};
     std::uint8_t appIdentityLength = 0;
 };

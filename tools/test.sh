@@ -38,6 +38,8 @@ run_opaque_evidence_check() {
     -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/clean_target_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/capture/InfraredCapture.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/capture/InfraredCsv.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/capture/RadiotapPcap.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/capture/SubGhzRawCapture.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/capture/SubGhzRawCsv.cpp" \

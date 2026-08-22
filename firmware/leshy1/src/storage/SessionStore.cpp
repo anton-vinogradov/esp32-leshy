@@ -318,6 +318,48 @@ SessionStoreCommitResult commitSubGhzRawCapture(
     return result;
 }
 
+SessionStoreCommitResult commitInfraredRawCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::InfraredRawSource& pulses,
+    std::uint32_t generation, HeadSlot publishSlot) {
+    SessionStoreCommitResult result;
+    result.generation = generation;
+    result.publishedSlot = publishSlot;
+    if (session.state() != services::survey::SessionState::Stopped) {
+        result.status = SessionStoreStatus::SessionNotStopped;
+        return result;
+    }
+    std::size_t segmentSize = 0;
+    std::size_t manifestSize = 0;
+    if (encodeInfraredRawCaptureSegment(
+            session, pulses, workspace.segment.data(), workspace.segment.size(),
+            &segmentSize) != SessionCodecStatus::Valid ||
+        encodeSessionManifest(
+            session, workspace.segment.data(), segmentSize,
+            workspace.manifest.data(), workspace.manifest.size(),
+            &manifestSize) != SessionCodecStatus::Valid) {
+        result.status = SessionStoreStatus::EncodeFailed;
+        return result;
+    }
+    workspace.segmentSize = segmentSize;
+    workspace.manifestSize = manifestSize;
+    StoreCommitBackend backend(io, workspace, segmentSize, manifestSize,
+                               generation, publishSlot);
+    if (!backend.pathsReady()) {
+        result.status = SessionStoreStatus::PathError;
+        return result;
+    }
+    const HeadRecord head{generation, static_cast<std::uint32_t>(manifestSize),
+                          crc32c(workspace.manifest.data(), manifestSize)};
+    const CommitResult committed = commitGeneration(backend, head);
+    result.stage = committed.stage;
+    result.status = committed.complete ? SessionStoreStatus::Valid
+                                       : commitFailureStatus(committed.stage);
+    if (result.complete()) workspace.generation = generation;
+    return result;
+}
+
 SessionStoreCommitResult commitNextSession(SessionStoreIo& io,
                                            SessionStoreWorkspace& workspace,
                                            const services::survey::SurveySession& session) {
@@ -388,6 +430,31 @@ SessionStoreCommitResult commitNextSubGhzRawCapture(
         current.choice == RecoveryChoice::A ? HeadSlot::B : HeadSlot::A;
     return commitSubGhzRawCapture(io, workspace, session, pulses,
                                  current.generation + 1U, publish);
+}
+
+SessionStoreCommitResult commitNextInfraredRawCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::InfraredRawSource& pulses) {
+    SessionStoreCommitResult result;
+    if (session.state() != services::survey::SessionState::Stopped) {
+        result.status = SessionStoreStatus::SessionNotStopped;
+        return result;
+    }
+    const SessionStoreRecoveryResult current =
+        recoverSession(io, workspace, &workspace.validationSession);
+    if (current.status == SessionStoreStatus::Empty) {
+        return commitInfraredRawCapture(io, workspace, session, pulses, 1,
+                                        HeadSlot::A);
+    }
+    if (!current.valid()) {
+        result.status = current.status;
+        return result;
+    }
+    const HeadSlot publish =
+        current.choice == RecoveryChoice::A ? HeadSlot::B : HeadSlot::A;
+    return commitInfraredRawCapture(io, workspace, session, pulses,
+                                    current.generation + 1U, publish);
 }
 
 SessionStoreRecoveryResult recoverSession(SessionStoreIo& io,

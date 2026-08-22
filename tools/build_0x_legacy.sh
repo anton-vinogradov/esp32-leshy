@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Compile the active clean 1.x firmware (no flashing).
+# Compile the archived 0.x line. Never used by active 1.x automation.
 set -euo pipefail
 export PATH="$HOME/.platformio/penv/bin:$PATH"
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
-exec pio run -d "$repo_dir/firmware/leshy1" -e esp32-div-v2-clean
+exec pio run -d "$repo_dir" -e esp32-div

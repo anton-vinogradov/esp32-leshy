@@ -103,6 +103,15 @@ SessionStoreCommitResult commitNextSubGhzRawCapture(
     SessionStoreIo& io, SessionStoreWorkspace& workspace,
     const services::survey::SurveySession& session,
     const domain::captures::SubGhzRawSource& pulses);
+SessionStoreCommitResult commitInfraredRawCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::InfraredRawSource& pulses,
+    std::uint32_t generation, HeadSlot publishSlot);
+SessionStoreCommitResult commitNextInfraredRawCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const domain::captures::InfraredRawSource& pulses);
 
 struct SessionStoreRecoveryResult final {
     SessionStoreStatus status = SessionStoreStatus::NoGeneration;

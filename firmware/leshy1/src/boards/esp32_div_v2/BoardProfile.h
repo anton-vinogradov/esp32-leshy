@@ -34,6 +34,8 @@ struct BoardProfile final {
     static constexpr int kSdCsPin = 10;
     static constexpr int kNrfCePins[3] = {15, 47, 14};
     static constexpr int kNrfCsPins[3] = {4, 48, 21};
+    static constexpr int kIrTxPin = 14;
+    static constexpr int kIrRxPin = 21;
     static constexpr int kCc1101CsPin = 5;
     static constexpr std::uint32_t kSdIdentificationSpiHz = 100000;
 
@@ -42,10 +44,12 @@ struct BoardProfile final {
     // explicit Full/Guided Self-Test, never automatically during boot.
     static constexpr bool kRfShieldDeclared = true;
 
-    // HW-U05/U09: external assemblies and IR are never autodetected.
+    // HW-U05: external assemblies are never autodetected. IR RX/TX belongs to
+    // the declared stock RF shield and is time-multiplexed with nRF slot 3;
+    // availability still requires a user-started HIL signal, never boot probing.
     static constexpr bool kGpsDeclared = false;
     static constexpr bool kPn532Declared = false;
-    static constexpr bool kIrDeclared = false;
+    static constexpr bool kIrDeclared = true;
 };
 
 }  // namespace leshy1::boards::esp32_div_v2

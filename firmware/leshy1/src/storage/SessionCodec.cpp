@@ -21,6 +21,8 @@ constexpr std::uint8_t kWifiFrameCaptureWireVersion = 2;
 constexpr std::size_t kCaptureRecordBytes = 72;
 constexpr std::uint8_t kSubGhzRawCaptureWireVersion = 3;
 constexpr std::size_t kSubGhzRawCaptureRecordBytes = 88;
+constexpr std::uint8_t kInfraredRawCaptureWireVersion = 4;
+constexpr std::size_t kInfraredRawCaptureRecordBytes = 96;
 constexpr std::uint8_t kWifiFrameMagic[4] = {'L', 'W', 'F', 'C'};
 constexpr std::uint8_t kWifiFrameWireVersion = 1;
 constexpr std::size_t kWifiFrameHeaderBytes = 16;
@@ -28,15 +30,19 @@ constexpr std::size_t kWifiFrameRecordHeaderBytes = 20;
 constexpr std::uint8_t kSubGhzRawMagic[4] = {'L', 'S', 'G', 'R'};
 constexpr std::uint8_t kSubGhzRawWireVersion = 1;
 constexpr std::size_t kSubGhzRawHeaderBytes = 16;
+constexpr std::uint8_t kInfraredRawMagic[4] = {'L', 'I', 'R', 'R'};
+constexpr std::uint8_t kInfraredRawWireVersion = 1;
+constexpr std::size_t kInfraredRawHeaderBytes = 16;
 constexpr std::uint8_t kCaptureFlagPassive = 1U << 0U;
 constexpr std::uint8_t kCaptureFlagWifiShowHidden = 1U << 1U;
 constexpr std::uint8_t kCaptureFlagLocation = 1U << 2U;
 constexpr std::uint8_t kCaptureFlagFramePayload = 1U << 3U;
 constexpr std::uint8_t kCaptureFlagSubGhzRaw = 1U << 4U;
+constexpr std::uint8_t kCaptureFlagInfraredRaw = 1U << 5U;
 constexpr std::uint8_t kCaptureKnownFlags =
     kCaptureFlagPassive | kCaptureFlagWifiShowHidden |
     kCaptureFlagLocation | kCaptureFlagFramePayload |
-    kCaptureFlagSubGhzRaw;
+    kCaptureFlagSubGhzRaw | kCaptureFlagInfraredRaw;
 
 void put16(std::uint8_t* output, std::uint16_t value) {
     output[0] = static_cast<std::uint8_t>(value >> 8U);
@@ -518,19 +524,25 @@ SessionCodecStatus encodeCaptureRecord(
     const services::survey::CaptureMetadata& metadata,
     std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
     if (output == nullptr || outputSize == nullptr ||
-        capacity < (metadata.subGhzRawCaptured
-                        ? kSubGhzRawCaptureRecordBytes
-                        : kCaptureRecordBytes) ||
+        capacity < (metadata.infraredRawCaptured
+                        ? kInfraredRawCaptureRecordBytes
+                        : metadata.subGhzRawCaptured
+                              ? kSubGhzRawCaptureRecordBytes
+                              : kCaptureRecordBytes) ||
         !metadata.present ||
         metadata.appIdentityLength != metadata.appIdentity.size()) {
         return SessionCodecStatus::CaptureInvalid;
     }
-    const std::size_t recordBytes = metadata.subGhzRawCaptured
-        ? kSubGhzRawCaptureRecordBytes : kCaptureRecordBytes;
+    const std::size_t recordBytes = metadata.infraredRawCaptured
+        ? kInfraredRawCaptureRecordBytes
+        : metadata.subGhzRawCaptured
+              ? kSubGhzRawCaptureRecordBytes : kCaptureRecordBytes;
     std::memset(output, 0, recordBytes);
     std::memcpy(output, kCaptureMagic, sizeof(kCaptureMagic));
-    output[4] = metadata.subGhzRawCaptured
-        ? kSubGhzRawCaptureWireVersion
+    output[4] = metadata.infraredRawCaptured
+        ? kInfraredRawCaptureWireVersion
+        : metadata.subGhzRawCaptured
+              ? kSubGhzRawCaptureWireVersion
         : metadata.framePayloadCaptured
               ? kWifiFrameCaptureWireVersion : kCaptureWireVersion;
     output[5] = metadata.selectedSourceMask;
@@ -538,7 +550,8 @@ SessionCodecStatus encodeCaptureRecord(
         (metadata.wifiShowHidden ? kCaptureFlagWifiShowHidden : 0) |
         (metadata.locationPresent ? kCaptureFlagLocation : 0) |
         (metadata.framePayloadCaptured ? kCaptureFlagFramePayload : 0) |
-        (metadata.subGhzRawCaptured ? kCaptureFlagSubGhzRaw : 0);
+        (metadata.subGhzRawCaptured ? kCaptureFlagSubGhzRaw : 0) |
+        (metadata.infraredRawCaptured ? kCaptureFlagInfraredRaw : 0);
     output[7] = metadata.appIdentityLength;
     put32(output + 8, metadata.wifiMaxMsPerChannel);
     output[12] = metadata.wifiChannel;
@@ -561,6 +574,17 @@ SessionCodecStatus encodeCaptureRecord(
         put16(output + 80, metadata.subGhzPulseRecords);
         output[82] = metadata.subGhzTruncated ? 1U : 0U;
         put32(output + 84, metadata.subGhzPulseBytes);
+    } else if (metadata.infraredRawCaptured) {
+        output[72] = static_cast<std::uint8_t>(
+            metadata.infraredDecode.protocol);
+        output[73] = metadata.infraredStartLevel ? 1U : 0U;
+        output[74] = metadata.infraredTruncated ? 1U : 0U;
+        output[75] = metadata.infraredDecode.integrityValid ? 1U : 0U;
+        put16(output + 76, metadata.infraredPulseRecords);
+        put32(output + 80, metadata.infraredPulseBytes);
+        put16(output + 84, metadata.infraredDecode.address);
+        output[86] = metadata.infraredDecode.command;
+        put32(output + 88, metadata.infraredDecode.rawCode);
     }
     *outputSize = recordBytes;
     return SessionCodecStatus::Valid;
@@ -571,11 +595,13 @@ SessionCodecStatus decodeCaptureRecord(
     services::survey::SurveySession* output) {
     if (input == nullptr || output == nullptr ||
         (size != kCaptureRecordBytes &&
-         size != kSubGhzRawCaptureRecordBytes) ||
+         size != kSubGhzRawCaptureRecordBytes &&
+         size != kInfraredRawCaptureRecordBytes) ||
         std::memcmp(input, kCaptureMagic, sizeof(kCaptureMagic)) != 0 ||
         (input[4] != kCaptureWireVersion &&
          input[4] != kWifiFrameCaptureWireVersion &&
-         input[4] != kSubGhzRawCaptureWireVersion) || input[7] != 32 ||
+         input[4] != kSubGhzRawCaptureWireVersion &&
+         input[4] != kInfraredRawCaptureWireVersion) || input[7] != 32 ||
         (input[6] & static_cast<std::uint8_t>(~kCaptureKnownFlags)) != 0 ||
         input[13] != 0 || input[14] != 0 || input[15] != 0 ||
         input[31] != 0) {
@@ -583,8 +609,11 @@ SessionCodecStatus decodeCaptureRecord(
     }
     const bool payloadWire = input[4] == kWifiFrameCaptureWireVersion;
     const bool subGhzWire = input[4] == kSubGhzRawCaptureWireVersion;
+    const bool infraredWire =
+        input[4] == kInfraredRawCaptureWireVersion;
     if ((subGhzWire && size != kSubGhzRawCaptureRecordBytes) ||
-        (!subGhzWire && size != kCaptureRecordBytes)) {
+        (infraredWire && size != kInfraredRawCaptureRecordBytes) ||
+        (!subGhzWire && !infraredWire && size != kCaptureRecordBytes)) {
         return SessionCodecStatus::CaptureInvalid;
     }
     if ((!payloadWire &&
@@ -594,7 +623,11 @@ SessionCodecStatus decodeCaptureRecord(
         (payloadWire && (input[6] & kCaptureFlagFramePayload) == 0) ||
         (subGhzWire && (input[6] & kCaptureFlagSubGhzRaw) == 0) ||
         (!subGhzWire && (input[6] & kCaptureFlagSubGhzRaw) != 0) ||
-        (subGhzWire && (input[6] & kCaptureFlagFramePayload) != 0)) {
+        (infraredWire && (input[6] & kCaptureFlagInfraredRaw) == 0) ||
+        (!infraredWire && (input[6] & kCaptureFlagInfraredRaw) != 0) ||
+        ((subGhzWire || infraredWire) &&
+         (input[6] & kCaptureFlagFramePayload) != 0) ||
+        (subGhzWire && infraredWire)) {
         return SessionCodecStatus::CaptureInvalid;
     }
     services::survey::CaptureMetadata metadata;
@@ -608,6 +641,8 @@ SessionCodecStatus decodeCaptureRecord(
         (input[6] & kCaptureFlagFramePayload) != 0;
     metadata.subGhzRawCaptured =
         (input[6] & kCaptureFlagSubGhzRaw) != 0;
+    metadata.infraredRawCaptured =
+        (input[6] & kCaptureFlagInfraredRaw) != 0;
     metadata.appIdentityLength = input[7];
     metadata.wifiMaxMsPerChannel = get32(input + 8);
     metadata.wifiChannel = input[12];
@@ -637,6 +672,25 @@ SessionCodecStatus decodeCaptureRecord(
         metadata.subGhzPulseRecords = get16(input + 80);
         metadata.subGhzTruncated = input[82] != 0;
         metadata.subGhzPulseBytes = get32(input + 84);
+    } else if (infraredWire) {
+        if (input[72] > static_cast<std::uint8_t>(
+                domain::captures::InfraredProtocol::NecRepeat) ||
+            input[73] > 1U || input[74] > 1U || input[75] > 1U ||
+            input[78] != 0 || input[79] != 0 || input[87] != 0 ||
+            input[92] != 0 || input[93] != 0 || input[94] != 0 ||
+            input[95] != 0) {
+            return SessionCodecStatus::CaptureInvalid;
+        }
+        metadata.infraredDecode.protocol = static_cast<
+            domain::captures::InfraredProtocol>(input[72]);
+        metadata.infraredStartLevel = input[73] != 0;
+        metadata.infraredTruncated = input[74] != 0;
+        metadata.infraredDecode.integrityValid = input[75] != 0;
+        metadata.infraredPulseRecords = get16(input + 76);
+        metadata.infraredPulseBytes = get32(input + 80);
+        metadata.infraredDecode.address = get16(input + 84);
+        metadata.infraredDecode.command = input[86];
+        metadata.infraredDecode.rawCode = get32(input + 88);
     }
     return output->configureCaptureMetadata(metadata) ==
             services::survey::CaptureMetadataStatus::Configured
@@ -839,6 +893,79 @@ SessionCodecStatus decodeSubGhzRawBlock(
     return SessionCodecStatus::Valid;
 }
 
+SessionCodecStatus encodeInfraredRawBlock(
+    const services::survey::SurveySession& session,
+    const domain::captures::InfraredRawSource& pulses,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr ||
+        pulses.pulseCount() == 0 ||
+        pulses.pulseCount() > PersistedInfraredRawCaptureView::kPulseCapacity ||
+        capacity < kInfraredRawHeaderBytes + pulses.pulseCount() * 2U) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::memset(output, 0, kInfraredRawHeaderBytes);
+    std::memcpy(output, kInfraredRawMagic, sizeof(kInfraredRawMagic));
+    output[4] = kInfraredRawWireVersion;
+    put16(output + 6, static_cast<std::uint16_t>(pulses.pulseCount()));
+    std::uint64_t totalDurationUs = 0;
+    std::size_t position = kInfraredRawHeaderBytes;
+    for (std::size_t index = 0; index < pulses.pulseCount(); ++index) {
+        domain::captures::InfraredRawPulseView pulse;
+        if (!pulses.pulseView(index, &pulse) || pulse.durationUs == 0) {
+            return SessionCodecStatus::CaptureInvalid;
+        }
+        put16(output + position, pulse.durationUs);
+        position += 2;
+        totalDurationUs += pulse.durationUs;
+    }
+    if (totalDurationUs > std::numeric_limits<std::uint32_t>::max()) {
+        return SessionCodecStatus::BoundsExceeded;
+    }
+    put32(output + 8, static_cast<std::uint32_t>(totalDurationUs));
+    const auto& metadata = session.captureMetadata();
+    if (!metadata.infraredRawCaptured ||
+        metadata.infraredPulseRecords != pulses.pulseCount() ||
+        metadata.infraredPulseBytes != pulses.pulseCount() * 2U) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    *outputSize = position;
+    return SessionCodecStatus::Valid;
+}
+
+SessionCodecStatus decodeInfraredRawBlock(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* input, std::size_t size, std::size_t* decodedCount) {
+    if (input == nullptr || size < kInfraredRawHeaderBytes ||
+        std::memcmp(input, kInfraredRawMagic, sizeof(kInfraredRawMagic)) != 0 ||
+        input[4] != kInfraredRawWireVersion || input[5] != 0 ||
+        input[12] != 0 || input[13] != 0 || input[14] != 0 ||
+        input[15] != 0) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    const std::size_t count = get16(input + 6);
+    if (count == 0 ||
+        count > PersistedInfraredRawCaptureView::kPulseCapacity ||
+        size != kInfraredRawHeaderBytes + count * 2U) {
+        return SessionCodecStatus::BoundsExceeded;
+    }
+    std::uint64_t totalDurationUs = 0;
+    for (std::size_t index = 0; index < count; ++index) {
+        const std::uint16_t duration =
+            get16(input + kInfraredRawHeaderBytes + index * 2U);
+        if (duration == 0) return SessionCodecStatus::CaptureInvalid;
+        totalDurationUs += duration;
+    }
+    const auto& metadata = session.captureMetadata();
+    if (totalDurationUs != get32(input + 8) ||
+        !metadata.infraredRawCaptured ||
+        metadata.infraredPulseRecords != count ||
+        metadata.infraredPulseBytes != count * 2U) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    if (decodedCount != nullptr) *decodedCount = count;
+    return SessionCodecStatus::Valid;
+}
+
 SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_t size,
                                          std::uint32_t* recordCount,
                                          std::uint32_t* bodyLength,
@@ -857,7 +984,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
         version != kTimelineSegmentSchemaVersion &&
         version != kSegmentSchemaVersion &&
         version != kWifiFrameSegmentSchemaVersion &&
-        version != kSubGhzRawSegmentSchemaVersion) {
+        version != kSubGhzRawSegmentSchemaVersion &&
+        version != kInfraredRawSegmentSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     if ((version == kLegacySegmentSchemaVersion &&
@@ -868,6 +996,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
         (version == kWifiFrameSegmentSchemaVersion &&
          decodedAdditionalRecords != 2) ||
         (version == kSubGhzRawSegmentSchemaVersion &&
+         decodedAdditionalRecords != 2) ||
+        (version == kInfraredRawSegmentSchemaVersion &&
          decodedAdditionalRecords != 2)) {
         return SessionCodecStatus::Malformed;
     }
@@ -1032,6 +1162,72 @@ SessionCodecStatus openPersistedSubGhzRawCapture(
     output->block_ = segment + position;
     output->blockSize_ = blockLength;
     status = decodeSubGhzRawBlock(
+        session, output->block_, output->blockSize_, &output->count_);
+    if (status != SessionCodecStatus::Valid) output->reset();
+    return status;
+}
+
+void PersistedInfraredRawCaptureView::reset() {
+    block_ = nullptr;
+    blockSize_ = 0;
+    count_ = 0;
+}
+
+bool PersistedInfraredRawCaptureView::pulseView(
+    std::size_t index,
+    domain::captures::InfraredRawPulseView* output) const {
+    if (output == nullptr || block_ == nullptr || index >= count_ ||
+        blockSize_ < kInfraredRawHeaderBytes + (index + 1U) * 2U) {
+        return false;
+    }
+    output->durationUs = get16(
+        block_ + kInfraredRawHeaderBytes + index * 2U);
+    return output->durationUs != 0;
+}
+
+SessionCodecStatus openPersistedInfraredRawCapture(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* segment, std::size_t segmentSize,
+    PersistedInfraredRawCaptureView* output) {
+    if (output == nullptr || segment == nullptr ||
+        session.state() != services::survey::SessionState::Stopped) {
+        return SessionCodecStatus::InvalidArgument;
+    }
+    output->reset();
+    std::uint32_t recordCount = 0;
+    std::uint32_t bodyLength = 0;
+    std::uint16_t schemaVersion = 0;
+    std::uint16_t additionalRecords = 0;
+    SessionCodecStatus status = validateSegmentFooter(
+        segment, segmentSize, &recordCount, &bodyLength, &schemaVersion,
+        &additionalRecords);
+    if (status != SessionCodecStatus::Valid) return status;
+    if (schemaVersion != kInfraredRawSegmentSchemaVersion ||
+        recordCount != 0 || additionalRecords != 2 || bodyLength < 16) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::size_t position = 0;
+    const std::uint32_t captureLength = get32(segment + position);
+    const std::uint32_t captureCrc = get32(segment + position + 4);
+    position += 8;
+    if (captureLength != kInfraredRawCaptureRecordBytes ||
+        captureLength > bodyLength - position ||
+        captureCrc != crc32c(segment + position, captureLength)) {
+        return SessionCodecStatus::ChecksumMismatch;
+    }
+    position += captureLength;
+    if (bodyLength - position < 8) return SessionCodecStatus::BoundsExceeded;
+    const std::uint32_t blockLength = get32(segment + position);
+    const std::uint32_t blockCrc = get32(segment + position + 4);
+    position += 8;
+    if (blockLength < kInfraredRawHeaderBytes ||
+        blockLength != bodyLength - position ||
+        blockCrc != crc32c(segment + position, blockLength)) {
+        return SessionCodecStatus::ChecksumMismatch;
+    }
+    output->block_ = segment + position;
+    output->blockSize_ = blockLength;
+    status = decodeInfraredRawBlock(
         session, output->block_, output->blockSize_, &output->count_);
     if (status != SessionCodecStatus::Valid) output->reset();
     return status;
@@ -1229,6 +1425,60 @@ SessionCodecStatus encodeSubGhzRawCaptureSegment(
     return SessionCodecStatus::Valid;
 }
 
+SessionCodecStatus encodeInfraredRawCaptureSegment(
+    const services::survey::SurveySession& session,
+    const domain::captures::InfraredRawSource& pulses,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr ||
+        session.state() != services::survey::SessionState::Stopped ||
+        capacity > kSessionSegmentMaxBytes || session.size() != 0 ||
+        session.timeline().present || !session.captureMetadata().present ||
+        !session.captureMetadata().infraredRawCaptured ||
+        session.captureMetadata().subGhzRawCaptured ||
+        session.captureMetadata().framePayloadCaptured) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    CborWriter writer(output, capacity);
+    std::uint8_t captureRecord[kInfraredRawCaptureRecordBytes] = {};
+    std::size_t captureRecordSize = 0;
+    SessionCodecStatus status = encodeCaptureRecord(
+        session.captureMetadata(), captureRecord, sizeof(captureRecord),
+        &captureRecordSize);
+    if (status != SessionCodecStatus::Valid) return status;
+    writer.be32(static_cast<std::uint32_t>(captureRecordSize));
+    writer.be32(crc32c(captureRecord, captureRecordSize));
+    writer.raw(captureRecord, captureRecordSize);
+    if (!writer.ok() || writer.size() + 8 > capacity) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    std::size_t pulseBlockSize = 0;
+    std::uint8_t* pulseBlock = output + writer.size() + 8;
+    status = encodeInfraredRawBlock(
+        session, pulses, pulseBlock, capacity - writer.size() - 8,
+        &pulseBlockSize);
+    if (status != SessionCodecStatus::Valid) return status;
+    writer.be32(static_cast<std::uint32_t>(pulseBlockSize));
+    writer.be32(crc32c(pulseBlock, pulseBlockSize));
+    writer.raw(pulseBlock, pulseBlockSize);
+    if (!writer.ok() || kSegmentFooterBytes > capacity - writer.size()) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    const std::size_t bodySize = writer.size();
+    std::uint8_t footer[kSegmentFooterBytes] = {};
+    std::memcpy(footer, kSegmentMagic, sizeof(kSegmentMagic));
+    put16(footer + 4, kInfraredRawSegmentSchemaVersion);
+    put16(footer + 6, 2);
+    put32(footer + 8, 0);
+    put32(footer + 12, static_cast<std::uint32_t>(bodySize));
+    put32(footer + 16, crc32c(output, bodySize));
+    put32(footer + 20, crc32c(footer, 20));
+    if (!writer.raw(footer, sizeof(footer))) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    *outputSize = writer.size();
+    return SessionCodecStatus::Valid;
+}
+
 SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& session,
                                          const std::uint8_t* segment, std::size_t segmentSize,
                                          std::uint8_t* output, std::size_t capacity,
@@ -1249,7 +1499,9 @@ SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& 
     CborWriter writer(output, capacity);
     writer.map(8);
     writer.unsignedValue(0);
-    writer.unsignedValue(segmentVersion == kSubGhzRawSegmentSchemaVersion
+    writer.unsignedValue(segmentVersion == kInfraredRawSegmentSchemaVersion
+                             ? kInfraredRawSessionSchemaVersion
+                         : segmentVersion == kSubGhzRawSegmentSchemaVersion
                              ? kSubGhzRawSessionSchemaVersion
                          : segmentVersion == kWifiFrameSegmentSchemaVersion
                              ? kWifiFrameSessionSchemaVersion
@@ -1294,7 +1546,8 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
         value != kTimelineSessionSchemaVersion &&
         value != kSessionSchemaVersion &&
         value != kWifiFrameSessionSchemaVersion &&
-        value != kSubGhzRawSessionSchemaVersion) {
+        value != kSubGhzRawSessionSchemaVersion &&
+        value != kInfraredRawSessionSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     const std::uint16_t decodedSchemaVersion =
@@ -1358,7 +1611,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
                                    &additionalRecords);
     if (status != SessionCodecStatus::Valid) return status;
     const std::uint16_t expectedSegmentVersion =
-        manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+        manifest.schemaVersion == kInfraredRawSessionSchemaVersion
+            ? kInfraredRawSegmentSchemaVersion
+        : manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
             ? kSubGhzRawSegmentSchemaVersion
         : manifest.schemaVersion == kWifiFrameSessionSchemaVersion
             ? kWifiFrameSegmentSchemaVersion
@@ -1368,7 +1623,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         manifest.schemaVersion == kTimelineSessionSchemaVersion
             ? kTimelineSegmentSchemaVersion : expectedSegmentVersion;
     const std::uint16_t expectedAdditionalRecords =
-        manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+        manifest.schemaVersion == kInfraredRawSessionSchemaVersion
+            ? 2
+        : manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
             ? 2
         : manifest.schemaVersion == kWifiFrameSessionSchemaVersion
             ? 2 : manifest.schemaVersion == kSessionSchemaVersion
@@ -1388,6 +1645,7 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
     }
     std::size_t position = 0;
     if (manifest.schemaVersion == kSessionSchemaVersion ||
+        manifest.schemaVersion == kInfraredRawSessionSchemaVersion ||
         manifest.schemaVersion == kSubGhzRawSessionSchemaVersion ||
         manifest.schemaVersion == kWifiFrameSessionSchemaVersion) {
         if (bodyLength - position < 8) {
@@ -1398,7 +1656,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         const std::uint32_t recordCrc = get32(segment + position + 4);
         position += 8;
         const std::size_t expectedCaptureBytes =
-            manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+            manifest.schemaVersion == kInfraredRawSessionSchemaVersion
+                ? kInfraredRawCaptureRecordBytes
+            : manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
                 ? kSubGhzRawCaptureRecordBytes : kCaptureRecordBytes;
         if (recordLength != expectedCaptureBytes ||
             recordLength > bodyLength - position) {
@@ -1446,7 +1706,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         }
         position += recordLength;
     }
-    if (manifest.schemaVersion == kWifiFrameSessionSchemaVersion ||
+    if (manifest.schemaVersion == kInfraredRawSessionSchemaVersion ||
+        manifest.schemaVersion == kWifiFrameSessionSchemaVersion ||
         manifest.schemaVersion == kSubGhzRawSessionSchemaVersion) {
         if (bodyLength - position < 8) {
             output->reset();
@@ -1456,7 +1717,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         const std::uint32_t recordCrc = get32(segment + position + 4);
         position += 8;
         const std::size_t minimumBlockBytes =
-            manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+            manifest.schemaVersion == kInfraredRawSessionSchemaVersion
+                ? kInfraredRawHeaderBytes
+            : manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
                 ? kSubGhzRawHeaderBytes : kWifiFrameHeaderBytes;
         if (recordLength < minimumBlockBytes ||
             recordLength > bodyLength - position) {
@@ -1473,11 +1736,15 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
             output->reset();
             return SessionCodecStatus::TimelineInvalid;
         }
-        status = manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
-            ? decodeSubGhzRawBlock(*output, segment + position, recordLength,
-                                   nullptr)
-            : decodeWifiFrameBlock(*output, segment + position, recordLength,
-                                   nullptr, 0, nullptr, nullptr);
+        status = manifest.schemaVersion == kInfraredRawSessionSchemaVersion
+            ? decodeInfraredRawBlock(*output, segment + position,
+                                     recordLength, nullptr)
+            : manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
+                  ? decodeSubGhzRawBlock(*output, segment + position,
+                                         recordLength, nullptr)
+                  : decodeWifiFrameBlock(*output, segment + position,
+                                         recordLength, nullptr, 0, nullptr,
+                                         nullptr);
         if (status != SessionCodecStatus::Valid) {
             output->reset();
             return status;
@@ -1520,6 +1787,7 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
     }
     if (manifest.schemaVersion != kWifiFrameSessionSchemaVersion &&
         manifest.schemaVersion != kSubGhzRawSessionSchemaVersion &&
+        manifest.schemaVersion != kInfraredRawSessionSchemaVersion &&
         output->stop(manifest.stoppedUs) != services::survey::SessionStatus::Stopped) {
         output->reset();
         return SessionCodecStatus::TimelineInvalid;
@@ -1548,7 +1816,30 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
     }
     const services::survey::SessionTimelineSummary& timeline = session.timeline();
     int written = -1;
-    if (session.captureMetadata().subGhzRawCaptured) {
+    if (session.captureMetadata().infraredRawCaptured) {
+        const auto& capture = session.captureMetadata();
+        written = std::snprintf(
+            output, capacity,
+            "{\"schema\":\"leshy.capture.infrared_raw.v1\",\"id\":\"%s\","
+            "\"started_us\":%llu,\"stopped_us\":%llu,"
+            "\"protocol\":\"%s\",\"raw_code\":%lu,"
+            "\"address\":%u,\"command\":%u,\"integrity_valid\":%s,"
+            "\"pulses\":%u,\"pulse_bytes\":%lu,\"start_level\":%s,"
+            "\"truncated\":%s,\"passive\":true,\"rx_only\":true}",
+            session.id(),
+            static_cast<unsigned long long>(session.startedUs()),
+            static_cast<unsigned long long>(session.stoppedUs()),
+            domain::captures::infraredProtocolName(
+                capture.infraredDecode.protocol),
+            static_cast<unsigned long>(capture.infraredDecode.rawCode),
+            static_cast<unsigned>(capture.infraredDecode.address),
+            static_cast<unsigned>(capture.infraredDecode.command),
+            capture.infraredDecode.integrityValid ? "true" : "false",
+            static_cast<unsigned>(capture.infraredPulseRecords),
+            static_cast<unsigned long>(capture.infraredPulseBytes),
+            capture.infraredStartLevel ? "true" : "false",
+            capture.infraredTruncated ? "true" : "false");
+    } else if (session.captureMetadata().subGhzRawCaptured) {
         const auto& capture = session.captureMetadata();
         written = std::snprintf(
             output, capacity,

@@ -26,6 +26,8 @@
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/capture/RadiotapPcap.h"
+#include "apps/capture/InfraredCapture.h"
+#include "apps/capture/InfraredCsv.h"
 #include "apps/capture/SubGhzRawCapture.h"
 #include "apps/capture/SubGhzRawCsv.h"
 #include "apps/capture/WifiFrameCapture.h"
@@ -51,6 +53,7 @@
 #include "kernel/runtime/ResourceBroker.h"
 #include "kernel/safety/SafetySupervisor.h"
 #include "platform/arduino/BoardSafeOutputs.h"
+#include "platform/arduino/BoardInfraredReceiver.h"
 #include "platform/arduino/BoardCc1101PassiveSpectrum.h"
 #include "platform/arduino/BoardNrf24PassiveSpectrum.h"
 #include "platform/arduino/BoardShieldReceiverProbe.h"
@@ -108,6 +111,9 @@ using leshy1::apps::library::LibraryView;
 using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
 using leshy1::apps::capture::PcapExportResult;
+using leshy1::apps::capture::InfraredCapture;
+using leshy1::apps::capture::InfraredCapturePlan;
+using leshy1::apps::capture::InfraredCaptureState;
 using leshy1::apps::capture::SubGhzRawCapture;
 using leshy1::apps::capture::SubGhzRawCapturePlan;
 using leshy1::apps::capture::SubGhzRawCaptureState;
@@ -172,6 +178,8 @@ using leshy1::kernel::safety::SafetyRetainedRecord;
 using leshy1::kernel::safety::SafetyState;
 using leshy1::kernel::safety::SafetySupervisor;
 using leshy1::platform::arduino::BoardSafeOutputs;
+using leshy1::platform::arduino::BoardInfraredReceiver;
+using leshy1::platform::arduino::InfraredReceiverReport;
 using leshy1::platform::arduino::BoardCc1101PassiveSpectrum;
 using leshy1::platform::arduino::BoardNrf24PassiveSpectrum;
 using leshy1::platform::arduino::BoardShieldReceiverProbe;
@@ -567,6 +575,17 @@ void armSpectrumWaterfallForCurrentReceiver();
 BoardWifiPassiveCapture wifiFrameCapture;
 constexpr WifiFrameCapturePlan kProductWifiFrameCapturePlan{};
 std::uint64_t nextCaptureUiRefreshUs = 0;
+enum class CaptureView : std::uint8_t {
+    SourceMenu,
+    Wifi,
+    Infrared,
+};
+CaptureView captureView = CaptureView::SourceMenu;
+std::uint8_t captureSourceSelection = 0;
+InfraredCapture infraredCapture;
+constexpr InfraredCapturePlan kProductInfraredCapturePlan{};
+BoardInfraredReceiver boardInfraredReceiver;
+InfraredReceiverReport infraredReceiverReport;
 enum class CapturePersistState : std::uint8_t {
     Result,
     Confirm,
@@ -592,6 +611,11 @@ const char* subGhzCapturePersistStatus = "volatile";
 std::uint32_t subGhzCapturePersistGeneration = 0;
 QueueHandle_t subGhzCaptureStoreEvents = nullptr;
 TaskHandle_t subGhzCaptureStoreTaskHandle = nullptr;
+CapturePersistState infraredCapturePersistState = CapturePersistState::Result;
+const char* infraredCapturePersistStatus = "volatile";
+std::uint32_t infraredCapturePersistGeneration = 0;
+QueueHandle_t infraredCaptureStoreEvents = nullptr;
+TaskHandle_t infraredCaptureStoreTaskHandle = nullptr;
 const char* capturePersistStateName(CapturePersistState state) {
     switch (state) {
         case CapturePersistState::Result: return "volatile";
@@ -2333,6 +2357,21 @@ CaptureMetadata productSubGhzRawCaptureMetadata() {
     return metadata;
 }
 
+CaptureMetadata productInfraredRawCaptureMetadata() {
+    CaptureMetadata metadata = productCaptureMetadata(0);
+    const auto& stats = infraredCapture.stats();
+    metadata.selectedSourceMask = 0;
+    metadata.infraredRawCaptured = true;
+    metadata.infraredStartLevel = stats.startLevel;
+    metadata.infraredTruncated = stats.truncated;
+    metadata.infraredPulseRecords = static_cast<std::uint16_t>(
+        infraredCapture.pulseCount());
+    metadata.infraredPulseBytes = static_cast<std::uint32_t>(
+        infraredCapture.pulseCount() * 2U);
+    metadata.infraredDecode = infraredCapture.decode();
+    return metadata;
+}
+
 void runCaptureStoreWorker(void*) {
     CaptureStoreEvent event;
     event.status = "store_failed";
@@ -2565,7 +2604,7 @@ void serviceWifiFrameCapturePersist() {
     if (uiController.page() == 4) renderInteractiveScreen();
 }
 
-void runSubGhzCaptureStoreWorker(void*) {
+void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
     CaptureStoreEvent event;
     event.status = "store_failed";
     bool identityCleanupComplete = true;
@@ -2682,27 +2721,51 @@ void runSubGhzCaptureStoreWorker(void*) {
             break;
         }
 
-        const auto& stats = subGhzRawCapture.stats();
         char sessionId[SurveySession::kSessionIdCapacity + 1] = {};
-        std::snprintf(sessionId, sizeof(sessionId), "sub-raw-%08llx",
-                      static_cast<unsigned long long>(
-                          stats.signalStartedUs & 0xFFFFFFFFULL));
         surveySession.reset();
-        if (stats.state != SubGhzRawCaptureState::Complete ||
-            subGhzRawCapture.pulseCount() == 0 ||
-            surveySession.start(sessionId, stats.startedUs) !=
-                SessionStatus::Started ||
-            surveySession.configureCaptureMetadata(
-                productSubGhzRawCaptureMetadata()) !=
-                CaptureMetadataStatus::Configured ||
-            surveySession.stop(stats.endedUs) != SessionStatus::Stopped) {
-            event.status = "artifact_invalid";
-            break;
-        }
-        const leshy1::storage::SessionStoreCommitResult commit =
-            leshy1::storage::commitNextSubGhzRawCapture(
+        leshy1::storage::SessionStoreCommitResult commit;
+        std::size_t expectedPulses = 0;
+        if (infrared) {
+            const auto& stats = infraredCapture.stats();
+            std::snprintf(sessionId, sizeof(sessionId), "ir-raw-%08llx",
+                          static_cast<unsigned long long>(
+                              stats.signalStartedUs & 0xFFFFFFFFULL));
+            expectedPulses = infraredCapture.pulseCount();
+            if (stats.state != InfraredCaptureState::Complete ||
+                expectedPulses == 0 ||
+                surveySession.start(sessionId, stats.startedUs) !=
+                    SessionStatus::Started ||
+                surveySession.configureCaptureMetadata(
+                    productInfraredRawCaptureMetadata()) !=
+                    CaptureMetadataStatus::Configured ||
+                surveySession.stop(stats.endedUs) != SessionStatus::Stopped) {
+                event.status = "artifact_invalid";
+                break;
+            }
+            commit = leshy1::storage::commitNextInfraredRawCapture(
+                productSurveyStore, sessionStoreWorkspace, surveySession,
+                infraredCapture);
+        } else {
+            const auto& stats = subGhzRawCapture.stats();
+            std::snprintf(sessionId, sizeof(sessionId), "sub-raw-%08llx",
+                          static_cast<unsigned long long>(
+                              stats.signalStartedUs & 0xFFFFFFFFULL));
+            expectedPulses = subGhzRawCapture.pulseCount();
+            if (stats.state != SubGhzRawCaptureState::Complete ||
+                expectedPulses == 0 ||
+                surveySession.start(sessionId, stats.startedUs) !=
+                    SessionStatus::Started ||
+                surveySession.configureCaptureMetadata(
+                    productSubGhzRawCaptureMetadata()) !=
+                    CaptureMetadataStatus::Configured ||
+                surveySession.stop(stats.endedUs) != SessionStatus::Stopped) {
+                event.status = "artifact_invalid";
+                break;
+            }
+            commit = leshy1::storage::commitNextSubGhzRawCapture(
                 productSurveyStore, sessionStoreWorkspace, surveySession,
                 subGhzRawCapture);
+        }
         event.storeStatus = commit.status;
         if (!commit.complete()) {
             event.status =
@@ -2718,13 +2781,25 @@ void runSubGhzCaptureStoreWorker(void*) {
             event.storeStatus = recovered.status;
             break;
         }
-        leshy1::storage::PersistedSubGhzRawCaptureView reopened;
-        if (leshy1::storage::openPersistedSubGhzRawCapture(
+        bool pulseReopened = false;
+        if (infrared) {
+            leshy1::storage::PersistedInfraredRawCaptureView reopened;
+            pulseReopened = leshy1::storage::openPersistedInfraredRawCapture(
                 sessionStoreWorkspace.validationSession,
                 sessionStoreWorkspace.segment.data(),
-                sessionStoreWorkspace.segmentSize, &reopened) !=
-                leshy1::storage::SessionCodecStatus::Valid ||
-            reopened.pulseCount() != subGhzRawCapture.pulseCount()) {
+                sessionStoreWorkspace.segmentSize, &reopened) ==
+                    leshy1::storage::SessionCodecStatus::Valid &&
+                reopened.pulseCount() == expectedPulses;
+        } else {
+            leshy1::storage::PersistedSubGhzRawCaptureView reopened;
+            pulseReopened = leshy1::storage::openPersistedSubGhzRawCapture(
+                sessionStoreWorkspace.validationSession,
+                sessionStoreWorkspace.segment.data(),
+                sessionStoreWorkspace.segmentSize, &reopened) ==
+                    leshy1::storage::SessionCodecStatus::Valid &&
+                reopened.pulseCount() == expectedPulses;
+        }
+        if (!pulseReopened) {
             event.status = "pulse_reopen_failed";
             break;
         }
@@ -2743,10 +2818,18 @@ void runSubGhzCaptureStoreWorker(void*) {
         event.valid = false;
         event.status = "cleanup_failed";
     }
-    if (subGhzCaptureStoreEvents != nullptr) {
-        xQueueSend(subGhzCaptureStoreEvents, &event, portMAX_DELAY);
+    if (events != nullptr) {
+        xQueueSend(events, &event, portMAX_DELAY);
     }
     vTaskDelete(nullptr);
+}
+
+void runSubGhzCaptureStoreWorker(void*) {
+    runPulseCaptureStoreWorker(false, subGhzCaptureStoreEvents);
+}
+
+void runInfraredCaptureStoreWorker(void*) {
+    runPulseCaptureStoreWorker(true, infraredCaptureStoreEvents);
 }
 
 bool requestSubGhzRawCapturePersist() {
@@ -2809,6 +2892,69 @@ void serviceSubGhzRawCapturePersist() {
     lastRuntimeEvent = admitted ? "subghz_raw_saved"
                                 : "subghz_raw_store_failed";
     if (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive) {
+        renderInteractiveScreen();
+    }
+}
+
+bool requestInfraredRawCapturePersist() {
+    if (infraredCapturePersistState != CapturePersistState::Result ||
+        infraredCapture.stats().state != InfraredCaptureState::Complete ||
+        infraredCapture.pulseCount() == 0) {
+        return false;
+    }
+    if (infraredCaptureStoreEvents == nullptr ||
+        infraredCaptureStoreTaskHandle != nullptr) {
+        infraredCapturePersistState = CapturePersistState::Failed;
+        infraredCapturePersistStatus = "worker_unavailable";
+        lastRuntimeEvent = "infrared_raw_store_worker_unavailable";
+        return true;
+    }
+    const auto storageResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage);
+    if (!resourceBroker.acquire(AppRuntime::kForegroundOwner,
+                                storageResources)) {
+        infraredCapturePersistState = CapturePersistState::Failed;
+        infraredCapturePersistStatus = "resources_busy";
+        lastRuntimeEvent = "infrared_raw_store_resources_busy";
+        return true;
+    }
+    infraredCapturePersistState = CapturePersistState::Saving;
+    infraredCapturePersistStatus = "saving";
+    const bool started = xTaskCreatePinnedToCore(
+        runInfraredCaptureStoreWorker, "leshy-ir-store", 8192, nullptr, 1,
+        &infraredCaptureStoreTaskHandle, 0) == pdPASS;
+    if (!started) {
+        resourceBroker.release(AppRuntime::kForegroundOwner,
+                               storageResources);
+        infraredCaptureStoreTaskHandle = nullptr;
+        infraredCapturePersistState = CapturePersistState::Failed;
+        infraredCapturePersistStatus = "worker_unavailable";
+        lastRuntimeEvent = "infrared_raw_store_worker_unavailable";
+    } else {
+        lastRuntimeEvent = "infrared_raw_saving";
+    }
+    return true;
+}
+
+void serviceInfraredRawCapturePersist() {
+    if (infraredCaptureStoreEvents == nullptr) return;
+    CaptureStoreEvent event;
+    if (xQueueReceive(infraredCaptureStoreEvents, &event, 0) != pdTRUE) return;
+    infraredCaptureStoreTaskHandle = nullptr;
+    resourceBroker.release(
+        AppRuntime::kForegroundOwner,
+        leshy1::kernel::runtime::resourceMask(Resource::Storage));
+    const bool admitted = event.valid && event.cleanupComplete &&
+        libraryController.replaceWithOwnedCopy(
+            sessionStoreWorkspace.validationSession, librarySession,
+            event.generation, SessionIntegrity::Valid, true, false);
+    infraredCapturePersistState = admitted ? CapturePersistState::Saved
+                                          : CapturePersistState::Failed;
+    infraredCapturePersistStatus = admitted ? "saved" : event.status;
+    infraredCapturePersistGeneration = admitted ? event.generation : 0;
+    lastRuntimeEvent = admitted ? "infrared_raw_saved"
+                                : "infrared_raw_store_failed";
+    if (uiController.page() == 4 && captureView == CaptureView::Infrared) {
         renderInteractiveScreen();
     }
 }
@@ -4806,6 +4952,34 @@ NavigationFooter navigationFooterForCurrentState() {
     }
 
     if (uiController.page() == 4) {
+        if (captureView == CaptureView::SourceMenu) {
+            return {back, choose, enter};
+        }
+        if (captureView == CaptureView::Infrared) {
+            const auto state = infraredCapture.stats().state;
+            if (state == InfraredCaptureState::Idle) {
+                return {back, {},
+                        {NavigationKey::RightAndSelect, UiTextId::NavStart}};
+            }
+            if (state == InfraredCaptureState::Waiting ||
+                state == InfraredCaptureState::Capturing) {
+                return {{NavigationKey::Left, UiTextId::NavCancel}, {}, {}};
+            }
+            if (state == InfraredCaptureState::Complete &&
+                infraredCapturePersistState == CapturePersistState::Result) {
+                return {back, {},
+                        {NavigationKey::RightAndSelect, UiTextId::NavSave}};
+            }
+            if (infraredCapturePersistState == CapturePersistState::Saving) {
+                return {{}, {}, {}};
+            }
+            if (state == InfraredCaptureState::Complete) {
+                return {back, {},
+                        {NavigationKey::RightAndSelect, UiTextId::NavStart}};
+            }
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavStart}};
+        }
         const auto state = wifiFrameCapture.stats().state;
         if (state == WifiFrameCaptureState::Idle) {
             return {back, {},
@@ -4817,7 +4991,7 @@ NavigationFooter navigationFooterForCurrentState() {
         }
         if (state == WifiFrameCaptureState::Complete &&
             capturePersistState == CapturePersistState::Result) {
-            return {{NavigationKey::Left, UiTextId::NavHome}, {},
+            return {back, {},
                     {NavigationKey::RightAndSelect, UiTextId::NavSave}};
         }
         if (state == WifiFrameCaptureState::Complete &&
@@ -4825,7 +4999,7 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{NavigationKey::Left, UiTextId::NavBack}, {},
                     {NavigationKey::RightAndSelect, UiTextId::NavSave}};
         }
-        return {{NavigationKey::Left, UiTextId::NavHome}, {}, {}};
+        return {back, {}, {}};
     }
 
     if (uiController.page() == 5) {
@@ -4980,6 +5154,10 @@ const char* headerReceiverStatus() {
     }
     if (wifiFrameCapture.stats().state == WifiFrameCaptureState::Running) {
         return "RX WIFI";
+    }
+    if (infraredCapture.stats().state == InfraredCaptureState::Waiting ||
+        infraredCapture.stats().state == InfraredCaptureState::Capturing) {
+        return "RX IR";
     }
     if (productSurveyRuntime.sourceActive) {
         const std::uint8_t wifiMask = leshy1::services::survey::sourceMask(
@@ -5440,7 +5618,7 @@ void renderLanguagePage(bool clearContent) {
     display.print(tr(UiTextId::LanguagePersisted));
 }
 
-void renderCapturePage(bool clearContent) {
+void renderWifiCapturePage(bool clearContent) {
     const auto stats = wifiFrameCapture.stats();
     char line[64] = {};
     if (stats.state == WifiFrameCaptureState::Idle) {
@@ -5521,6 +5699,115 @@ void renderCapturePage(bool clearContent) {
         }
     } else {
         display.print(tr(UiTextId::CaptureFailureNote));
+    }
+}
+
+void renderCaptureSourceMenu(bool clearContent) {
+    renderHeader(tr(UiTextId::CaptureSources), clearContent);
+    renderMenuRow(Components::choiceRow(0), tr(UiTextId::CaptureWifiSource),
+                  tr(UiTextId::CaptureWifiSourceNote),
+                  captureSourceSelection == 0, true, Tone::Positive);
+    renderMenuRow(Components::choiceRow(1), tr(UiTextId::CaptureIrSource),
+                  tr(UiTextId::CaptureIrSourceNote),
+                  captureSourceSelection == 1, BoardProfile::kIrDeclared,
+                  BoardProfile::kIrDeclared ? Tone::Positive : Tone::Muted);
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 207);
+    display.print(tr(UiTextId::CaptureChooseSource));
+}
+
+void renderInfraredCapturePage(bool clearContent) {
+    const auto& stats = infraredCapture.stats();
+    char line[64] = {};
+    if (stats.state == InfraredCaptureState::Idle) {
+        renderHeader(tr(UiTextId::CaptureIrSource), clearContent);
+        renderMetric(0, tr(UiTextId::IrReceiver), Tone::Positive);
+        renderMetric(1, tr(UiTextId::IrTimeout));
+        renderMetric(2, tr(UiTextId::IrMode));
+        renderMetric(3, tr(UiTextId::IrSafety), Tone::Positive);
+        display.setTextColor(Palette::TextMuted, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 207);
+        display.print(tr(UiTextId::CaptureStartNote));
+        return;
+    }
+
+    UiTextId title = UiTextId::IrError;
+    if (stats.state == InfraredCaptureState::Waiting) {
+        title = UiTextId::IrWaiting;
+    } else if (stats.state == InfraredCaptureState::Capturing) {
+        title = UiTextId::IrCapturing;
+    } else if (stats.state == InfraredCaptureState::Complete) {
+        title = UiTextId::IrResult;
+    } else if (stats.state == InfraredCaptureState::TimedOut) {
+        title = UiTextId::IrNoSignal;
+    } else if (stats.state == InfraredCaptureState::Unreliable) {
+        title = UiTextId::IrUnreliable;
+    }
+    renderHeader(tr(title), clearContent);
+    std::snprintf(line, sizeof(line), tr(UiTextId::IrPulsesFormat),
+                  static_cast<unsigned>(infraredCapture.pulseCount()));
+    renderMetric(0, line, stats.state == InfraredCaptureState::Complete
+                              ? Tone::Positive : Tone::Neutral);
+    std::snprintf(line, sizeof(line), tr(UiTextId::IrProtocolFormat),
+                  leshy1::domain::captures::infraredProtocolName(
+                      infraredCapture.decode().protocol));
+    renderMetric(1, line, infraredCapture.decode().integrityValid
+                              ? Tone::Positive : Tone::Neutral);
+    std::snprintf(line, sizeof(line), tr(UiTextId::IrCodeFormat),
+                  static_cast<unsigned long>(infraredCapture.decode().rawCode));
+    renderMetric(2, line);
+    std::snprintf(line, sizeof(line), tr(UiTextId::IrSamplingFormat),
+                  static_cast<unsigned long>(
+                      stats.signalStartedUs == 0U
+                          ? 0U : stats.maximumObservedSampleGapUs));
+    renderMetric(3, line,
+                 stats.state == InfraredCaptureState::Unreliable
+                     ? Tone::Danger : Tone::Positive);
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 207);
+    if (stats.state == InfraredCaptureState::Waiting) {
+        display.print(tr(UiTextId::IrWaitingNote));
+    } else if (stats.state == InfraredCaptureState::Capturing) {
+        display.print(tr(UiTextId::IrCaptureNote));
+    } else if (stats.state == InfraredCaptureState::Complete) {
+        display.print(tr(infraredCapturePersistState == CapturePersistState::Saved
+                             ? UiTextId::CaptureSavedNote
+                             : infraredCapturePersistState ==
+                                       CapturePersistState::Saving
+                                   ? UiTextId::CaptureSavingNote
+                                   : infraredCapturePersistState ==
+                                             CapturePersistState::Failed
+                                         ? UiTextId::CaptureSaveFailedNote
+                                         : UiTextId::IrResultNote));
+        if (infraredCapturePersistState == CapturePersistState::Saved ||
+            infraredCapturePersistState == CapturePersistState::Failed) {
+            setUiCursor(UiTextRole::Meta, 14, 222);
+            if (infraredCapturePersistState == CapturePersistState::Saved) {
+                std::snprintf(line, sizeof(line), "GEN %lu | %s",
+                              static_cast<unsigned long>(
+                                  infraredCapturePersistGeneration),
+                              infraredCapturePersistStatus);
+                display.print(line);
+            } else {
+                display.print(infraredCapturePersistStatus);
+            }
+        }
+    } else if (stats.state == InfraredCaptureState::TimedOut) {
+        display.print(tr(UiTextId::IrNoSignalNote));
+    } else if (stats.state == InfraredCaptureState::Unreliable) {
+        display.print(tr(UiTextId::IrUnreliableNote));
+    } else {
+        display.print(tr(UiTextId::IrRetryNote));
+    }
+}
+
+void renderCapturePage(bool clearContent) {
+    if (captureView == CaptureView::SourceMenu) {
+        renderCaptureSourceMenu(clearContent);
+    } else if (captureView == CaptureView::Infrared) {
+        renderInfraredCapturePage(clearContent);
+    } else {
+        renderWifiCapturePage(clearContent);
     }
 }
 
@@ -6760,13 +7047,16 @@ void renderLibraryListRow(std::size_t index) {
     display.setTextColor(Palette::Positive, background);
     const auto& capture = entry->session->captureMetadata();
     std::snprintf(line, sizeof(line),
-                  tr(capture.subGhzRawCaptured
+                  tr(capture.subGhzRawCaptured || capture.infraredRawCaptured
                          ? UiTextId::LibraryRawRowFormat
                          : capture.framePayloadCaptured
                                ? UiTextId::LibraryCaptureRowFormat
                                : UiTextId::LibraryRowFormat),
-                  static_cast<unsigned>(capture.subGhzRawCaptured
-                      ? capture.subGhzPulseRecords
+                  static_cast<unsigned>(capture.subGhzRawCaptured ||
+                                                 capture.infraredRawCaptured
+                      ? (capture.subGhzRawCaptured
+                             ? capture.subGhzPulseRecords
+                             : capture.infraredPulseRecords)
                       : capture.framePayloadCaptured
                             ? capture.framePayloadRecords
                             : entry->session->size()),
@@ -6795,12 +7085,14 @@ void renderLibraryPage(bool clearContent) {
         setUiCursor(UiTextRole::Body, 14, 155);
         const auto& capture = selected->session->captureMetadata();
         const bool rawFrames = capture.framePayloadCaptured;
-        display.print(tr(capture.subGhzRawCaptured
+        display.print(tr(capture.subGhzRawCaptured ||
+                                 capture.infraredRawCaptured
                              ? UiTextId::FormatPulseCsvReady
                              : rawFrames ? UiTextId::FormatCsvNoObservations
                                          : UiTextId::FormatCsvReady));
         setUiCursor(UiTextRole::Meta, 14, 180);
-        display.print(tr(capture.subGhzRawCaptured
+        display.print(tr(capture.subGhzRawCaptured ||
+                                 capture.infraredRawCaptured
                              ? UiTextId::FormatPcapNotApplicable
                              : rawFrames ? UiTextId::FormatPcapReady
                                          : UiTextId::FormatPcapNoFrames));
@@ -6824,11 +7116,15 @@ void renderLibraryPage(bool clearContent) {
         setUiCursor(UiTextRole::Body, 14, 116);
         display.print(line);
         const auto& capture = selected->session->captureMetadata();
-        if (capture.subGhzRawCaptured) {
+        if (capture.subGhzRawCaptured || capture.infraredRawCaptured) {
             std::snprintf(
                 line, sizeof(line), tr(UiTextId::RawPayloadFormat),
-                static_cast<unsigned>(capture.subGhzPulseRecords),
-                static_cast<unsigned long>(capture.subGhzPulseBytes));
+                static_cast<unsigned>(capture.subGhzRawCaptured
+                    ? capture.subGhzPulseRecords
+                    : capture.infraredPulseRecords),
+                static_cast<unsigned long>(capture.subGhzRawCaptured
+                    ? capture.subGhzPulseBytes
+                    : capture.infraredPulseBytes));
         } else if (capture.framePayloadCaptured) {
             std::snprintf(
                 line, sizeof(line), tr(UiTextId::CapturePayloadFormat),
@@ -7457,10 +7753,14 @@ bool activeSpectrumRunning() {
 
 bool activeReceiveSampling() {
     const auto rawState = subGhzRawCapture.stats().state;
+    const auto irState = infraredCapture.stats().state;
     return activeSpectrumRunning() ||
         (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive &&
          (rawState == SubGhzRawCaptureState::Waiting ||
-          rawState == SubGhzRawCaptureState::Capturing));
+          rawState == SubGhzRawCaptureState::Capturing)) ||
+        (uiController.page() == 4 && captureView == CaptureView::Infrared &&
+         (irState == InfraredCaptureState::Waiting ||
+          irState == InfraredCaptureState::Capturing));
 }
 
 std::uint32_t activeSpectrumSweeps() {
@@ -8413,6 +8713,91 @@ void serviceWifiFrameCapture() {
     }
 }
 
+bool startInfraredCapture() {
+    infraredCapture.reset();
+    infraredCapturePersistState = CapturePersistState::Result;
+    infraredCapturePersistStatus = "volatile";
+    infraredCapturePersistGeneration = 0;
+    infraredReceiverReport = {};
+    bool initialLevel = true;
+    std::uint64_t startedUs = 0;
+    const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
+        AppRuntime::kForegroundOwner;
+    const bool hardwareReady = boardInfraredReceiver.begin(
+        owned, &infraredReceiverReport, &initialLevel, &startedUs);
+    const bool started = hardwareReady && infraredCapture.begin(
+        kProductInfraredCapturePlan, startedUs, initialLevel);
+    if (!started) {
+        boardInfraredReceiver.end();
+        if (infraredCapture.stats().state == InfraredCaptureState::Waiting) {
+            infraredCapture.fail(-1, startedUs == 0U ? 1U : startedUs);
+        }
+    }
+    nextCaptureUiRefreshUs = startedUs + 200000ULL;
+    lastRuntimeEvent = started ? "infrared_raw_waiting"
+                               : "infrared_raw_start_failed";
+    return true;
+}
+
+bool stopInfraredCapture() {
+    std::uint64_t endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (endedUs == 0U) endedUs = 1U;
+    const auto state = infraredCapture.stats().state;
+    if (state == InfraredCaptureState::Waiting ||
+        state == InfraredCaptureState::Capturing) {
+        infraredCapture.cancel(endedUs);
+    }
+    const bool cleanup = boardInfraredReceiver.end();
+    nextCaptureUiRefreshUs = 0;
+    lastRuntimeEvent = cleanup ? "infrared_raw_stopped"
+                               : "infrared_raw_cleanup_failed";
+    return true;
+}
+
+void serviceInfraredCapture() {
+    if (uiController.page() != 4 || captureView != CaptureView::Infrared) {
+        return;
+    }
+    const auto before = infraredCapture.stats().state;
+    if (before != InfraredCaptureState::Waiting &&
+        before != InfraredCaptureState::Capturing) {
+        return;
+    }
+    bool level = true;
+    std::uint64_t sampleUs = 0;
+    if (!boardInfraredReceiver.sample(&level, &sampleUs)) {
+        const std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        infraredCapture.fail(-2, nowUs == 0U ? 1U : nowUs);
+        boardInfraredReceiver.end();
+        lastRuntimeEvent = "infrared_raw_runtime_fault";
+        renderInteractiveScreen(true);
+        return;
+    }
+    infraredCapture.ingest({sampleUs, level});
+    const auto after = infraredCapture.stats().state;
+    const bool terminal = after != InfraredCaptureState::Waiting &&
+        after != InfraredCaptureState::Capturing;
+    if (terminal) {
+        const bool cleanup = boardInfraredReceiver.end();
+        lastRuntimeEvent = !cleanup
+            ? "infrared_raw_cleanup_failed"
+            : after == InfraredCaptureState::Complete
+                  ? "infrared_raw_complete"
+                  : after == InfraredCaptureState::TimedOut
+                        ? "infrared_raw_no_signal"
+                        : after == InfraredCaptureState::Unreliable
+                              ? "infrared_raw_unreliable"
+                              : "infrared_raw_terminal";
+    }
+    // The TFT and touch controller share long transactions with GPIO timing.
+    // Once the first IR edge is observed, keep the hot path measurement-only.
+    if (terminal) {
+        nextCaptureUiRefreshUs = 0;
+        renderInteractiveScreen(true);
+    }
+}
+
 void emitUiState(Stream& reply, UiAction action, bool changed) {
     auto& line = diagnosticJson;
     line[0] = '\0';
@@ -9010,6 +9395,115 @@ void emitSubGhzRawCaptureCsv(Stream& reply) {
     reply.flush();
 }
 
+void emitInfraredRawCaptureState(Stream& reply) {
+    const auto& stats = infraredCapture.stats();
+    const auto& plan = infraredCapture.plan();
+    const auto& decode = infraredCapture.decode();
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.infrared_raw.v1\",\"kind\":\"state\","
+        "\"state\":\"%s\",\"passive_only\":true,\"rx_only\":true,"
+        "\"gpio_rx\":%d,\"gpio_tx\":%d,\"tx_level\":\"low\","
+        "\"application_tx_calls\":0,\"wait_timeout_ms\":%lu,"
+        "\"maximum_capture_ms\":%lu,\"minimum_pulse_us\":%u,"
+        "\"end_gap_us\":%u,\"maximum_sample_gap_us\":%u,"
+        "\"maximum_pulses\":%u,\"started_us\":%llu,"
+        "\"signal_started_us\":%llu,\"ended_us\":%llu,"
+        "\"samples\":%lu,\"transitions\":%lu,"
+        "\"invalid_samples\":%lu,\"short_pulses_rejected\":%lu,"
+        "\"maximum_observed_sample_gap_us\":%lu,\"pulses\":%u,"
+        "\"start_level\":%s,\"truncated\":%s,\"driver_error\":%ld,"
+        "\"protocol\":\"%s\",\"raw_code\":%lu,\"address\":%u,"
+        "\"command\":%u,\"decode_integrity_valid\":%s,"
+        "\"csv_available\":%s,\"cleanup_complete\":%s,"
+        "\"storage_written\":%s,\"persist_state\":\"%s\","
+        "\"persist_status\":\"%s\",\"persist_generation\":%lu,"
+        "\"lease_mask\":%lu}",
+        leshy1::apps::capture::infraredCaptureStateName(stats.state),
+        BoardProfile::kIrRxPin, BoardProfile::kIrTxPin,
+        static_cast<unsigned long>(plan.waitTimeoutMs),
+        static_cast<unsigned long>(plan.maximumCaptureMs),
+        static_cast<unsigned>(plan.minimumPulseUs),
+        static_cast<unsigned>(plan.endGapUs),
+        static_cast<unsigned>(plan.maximumSampleGapUs),
+        static_cast<unsigned>(plan.maximumPulses),
+        static_cast<unsigned long long>(stats.startedUs),
+        static_cast<unsigned long long>(stats.signalStartedUs),
+        static_cast<unsigned long long>(stats.endedUs),
+        static_cast<unsigned long>(stats.samples),
+        static_cast<unsigned long>(infraredReceiverReport.transitions),
+        static_cast<unsigned long>(stats.invalidSamples),
+        static_cast<unsigned long>(stats.shortPulsesRejected),
+        static_cast<unsigned long>(stats.maximumObservedSampleGapUs),
+        static_cast<unsigned>(infraredCapture.pulseCount()),
+        stats.startLevel ? "true" : "false",
+        stats.truncated ? "true" : "false",
+        static_cast<long>(stats.driverError),
+        leshy1::domain::captures::infraredProtocolName(decode.protocol),
+        static_cast<unsigned long>(decode.rawCode),
+        static_cast<unsigned>(decode.address),
+        static_cast<unsigned>(decode.command),
+        decode.integrityValid ? "true" : "false",
+        stats.state == InfraredCaptureState::Complete ? "true" : "false",
+        infraredReceiverReport.cleanupComplete ? "true" : "false",
+        infraredCapturePersistState == CapturePersistState::Saved
+            ? "true" : "false",
+        capturePersistStateName(infraredCapturePersistState),
+        infraredCapturePersistStatus,
+        static_cast<unsigned long>(infraredCapturePersistGeneration),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
+void emitInfraredRawCaptureCsv(Stream& reply) {
+    const auto& stats = infraredCapture.stats();
+    if (stats.state != InfraredCaptureState::Complete ||
+        infraredCapture.pulseCount() == 0U) {
+        reply.println(
+            "{\"schema\":\"leshy.capture.infrared_raw.csv.v1\","
+            "\"kind\":\"error\",\"reason\":\"capture_not_complete\"}");
+        return;
+    }
+    char line[192] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.infrared_raw.csv.v1\","
+        "\"kind\":\"csv_begin\",\"pulses\":%u,"
+        "\"protocol\":\"%s\",\"streaming\":true}",
+        static_cast<unsigned>(infraredCapture.pulseCount()),
+        leshy1::domain::captures::infraredProtocolName(
+            infraredCapture.decode().protocol));
+    reply.println(line);
+    reply.flush();
+
+    std::size_t bytes = 0;
+    const auto header = leshy1::apps::capture::formatInfraredCsvHeader(
+        line, sizeof(line));
+    bool valid = header.valid &&
+        reply.write(reinterpret_cast<const std::uint8_t*>(line),
+                    header.bytes) == header.bytes;
+    bytes += valid ? header.bytes : 0U;
+    for (std::size_t index = 0;
+         valid && index < infraredCapture.pulseCount(); ++index) {
+        const auto row = leshy1::apps::capture::formatInfraredCsvRow(
+            infraredCapture, index, stats.startLevel, line, sizeof(line));
+        valid = row.valid &&
+            reply.write(reinterpret_cast<const std::uint8_t*>(line),
+                        row.bytes) == row.bytes;
+        bytes += valid ? row.bytes : 0U;
+    }
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.infrared_raw.csv.v1\","
+        "\"kind\":\"csv_end\",\"status\":\"%s\",\"bytes\":%u,"
+        "\"pulses\":%u}",
+        valid ? "valid" : "stream_failed", static_cast<unsigned>(bytes),
+        static_cast<unsigned>(infraredCapture.pulseCount()));
+    reply.println(line);
+    reply.flush();
+}
+
 void emitSurveyBrowser(Stream& reply) {
     const Observation* selected = surveyController.selected();
     const ObservationHistory history = surveyController.selectedHistory();
@@ -9060,6 +9554,9 @@ bool selectionCanRepaintInPlace(UiAction action) {
     }
     if (uiController.page() == 3) {
         return libraryController.view() == LibraryView::SessionList;
+    }
+    if (uiController.page() == 4) {
+        return captureView == CaptureView::SourceMenu;
     }
     if (uiController.page() == 5) return true;
     if (uiController.page() == kDevicePage) return true;
@@ -9502,6 +9999,75 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
     }
     if (!wasRoot && uiController.page() == 4) {
+        if (captureView == CaptureView::SourceMenu) {
+            bool handled = false;
+            bool changed = false;
+            if (action == UiAction::Up && captureSourceSelection != 0) {
+                captureSourceSelection = 0;
+                handled = changed = true;
+            } else if (action == UiAction::Down &&
+                       captureSourceSelection != 1) {
+                captureSourceSelection = 1;
+                handled = changed = true;
+            } else if ((action == UiAction::Select ||
+                        action == UiAction::Right) &&
+                       (captureSourceSelection == 0 ||
+                        BoardProfile::kIrDeclared)) {
+                captureView = captureSourceSelection == 0
+                    ? CaptureView::Wifi : CaptureView::Infrared;
+                lastRuntimeEvent = captureSourceSelection == 0
+                    ? "capture_wifi_setup" : "capture_infrared_setup";
+                handled = changed = true;
+            }
+            if (handled) {
+                uiController.recordHandledAction(action);
+                return finish(changed);
+            }
+        } else if (captureView == CaptureView::Infrared) {
+            const auto state = infraredCapture.stats().state;
+            if (state == InfraredCaptureState::Idle &&
+                (action == UiAction::Select || action == UiAction::Right)) {
+                uiController.recordHandledAction(action);
+                return finish(startInfraredCapture());
+            }
+            if (state == InfraredCaptureState::Complete &&
+                infraredCapturePersistState == CapturePersistState::Result &&
+                (action == UiAction::Select || action == UiAction::Right)) {
+                uiController.recordHandledAction(action);
+                return finish(requestInfraredRawCapturePersist());
+            }
+            if (infraredCapturePersistState == CapturePersistState::Saving) {
+                uiController.recordHandledAction(action);
+                return finish(false);
+            }
+            if (state == InfraredCaptureState::Complete &&
+                infraredCapturePersistState != CapturePersistState::Result &&
+                (action == UiAction::Select || action == UiAction::Right)) {
+                uiController.recordHandledAction(action);
+                return finish(startInfraredCapture());
+            }
+            if (state != InfraredCaptureState::Waiting &&
+                state != InfraredCaptureState::Capturing &&
+                state != InfraredCaptureState::Complete &&
+                (action == UiAction::Select || action == UiAction::Right)) {
+                uiController.recordHandledAction(action);
+                return finish(startInfraredCapture());
+            }
+            if (action == UiAction::Back || action == UiAction::Left) {
+                if (state == InfraredCaptureState::Waiting ||
+                    state == InfraredCaptureState::Capturing) {
+                    stopInfraredCapture();
+                }
+                infraredCapture.reset();
+                infraredCapturePersistState = CapturePersistState::Result;
+                infraredCapturePersistStatus = "volatile";
+                infraredCapturePersistGeneration = 0;
+                captureView = CaptureView::SourceMenu;
+                lastRuntimeEvent = "capture_source_menu";
+                uiController.recordHandledAction(action);
+                return finish(true);
+            }
+        } else {
         const auto state = wifiFrameCapture.stats().state;
         if (state == WifiFrameCaptureState::Idle &&
             (action == UiAction::Select || action == UiAction::Right)) {
@@ -9551,6 +10117,11 @@ bool applyUiAction(UiAction action, bool render = true) {
             capturePersistStatus = "volatile";
             capturePersistGeneration = 0;
             nextCaptureUiRefreshUs = 0;
+            captureView = CaptureView::SourceMenu;
+            lastRuntimeEvent = "capture_source_menu";
+            uiController.recordHandledAction(action);
+            return finish(true);
+        }
         }
     }
     if (!wasRoot && uiController.page() == kDevicePage) {
@@ -9687,10 +10258,17 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
         if (openable && selected != nullptr &&
             std::strcmp(selected->id, "capture") == 0) {
+            captureView = CaptureView::SourceMenu;
+            captureSourceSelection = 0;
             wifiFrameCapture.reset();
             capturePersistState = CapturePersistState::Result;
             capturePersistStatus = "volatile";
             capturePersistGeneration = 0;
+            infraredCapture.reset();
+            infraredReceiverReport = {};
+            infraredCapturePersistState = CapturePersistState::Result;
+            infraredCapturePersistStatus = "volatile";
+            infraredCapturePersistGeneration = 0;
             nextCaptureUiRefreshUs = 0;
         }
         const bool surveyApp = selected != nullptr &&
@@ -9816,6 +10394,12 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         TouchTargetLayout::ThreeChoices, point),
                     static_cast<std::uint8_t>(surveyController.draftFilter())};
         }
+    }
+    if (uiController.page() == 4 &&
+        captureView == CaptureView::SourceMenu) {
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::TwoChoices, point),
+                captureSourceSelection};
     }
     if (uiController.page() == 5) {
         return {leshy1::ui::hitTouchTarget(
@@ -13486,6 +14070,73 @@ void emitLibraryCsvExport(Stream& reply) {
         reply.flush();
         return;
     }
+    if (capture.infraredRawCaptured) {
+        if (entry->generation != sessionStoreWorkspace.generation) {
+            reply.println(
+                "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"error\","
+                "\"reason\":\"generation_not_loaded\","
+                "\"radio_touched\":false}");
+            return;
+        }
+        leshy1::storage::PersistedInfraredRawCaptureView persisted;
+        const auto opened = leshy1::storage::openPersistedInfraredRawCapture(
+            *entry->session, sessionStoreWorkspace.segment.data(),
+            sessionStoreWorkspace.segmentSize, &persisted);
+        if (opened != leshy1::storage::SessionCodecStatus::Valid) {
+            std::snprintf(
+                diagnosticJson, sizeof(diagnosticJson),
+                "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"error\","
+                "\"reason\":\"%s\",\"radio_touched\":false}",
+                leshy1::storage::sessionCodecStatusName(opened));
+            reply.println(diagnosticJson);
+            return;
+        }
+        std::snprintf(
+            diagnosticJson, sizeof(diagnosticJson),
+            "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"begin\","
+            "\"status\":\"valid\",\"format\":\"infrared_raw_pulses\","
+            "\"generation\":%lu,\"session_id\":\"%s\","
+            "\"records\":%u,\"columns\":3,\"line_endings\":\"crlf\","
+            "\"radio_touched\":false}",
+            static_cast<unsigned long>(entry->generation),
+            entry->session->id(),
+            static_cast<unsigned>(persisted.pulseCount()));
+        reply.println(diagnosticJson);
+        reply.flush();
+        char row[64] = {};
+        const auto header = leshy1::apps::capture::formatInfraredCsvHeader(
+            row, sizeof(row));
+        bool valid = header.valid &&
+            reply.write(reinterpret_cast<const std::uint8_t*>(row),
+                        header.bytes) == header.bytes;
+        std::size_t bytes = valid ? header.bytes : 0U;
+        std::size_t records = 0;
+        for (std::size_t index = 0;
+             valid && index < persisted.pulseCount(); ++index) {
+            const auto formatted =
+                leshy1::apps::capture::formatInfraredCsvRow(
+                    persisted, index, capture.infraredStartLevel,
+                    row, sizeof(row));
+            valid = formatted.valid &&
+                reply.write(reinterpret_cast<const std::uint8_t*>(row),
+                            formatted.bytes) == formatted.bytes;
+            if (valid) {
+                bytes += formatted.bytes;
+                ++records;
+            }
+        }
+        std::snprintf(
+            diagnosticJson, sizeof(diagnosticJson),
+            "{\"schema\":\"leshy.library.csv.v1\",\"kind\":\"end\","
+            "\"status\":\"%s\",\"format\":\"infrared_raw_pulses\","
+            "\"records\":%u,\"bytes\":%u,"
+            "\"persistent\":true,\"radio_touched\":false}",
+            valid ? "complete" : "stream_failed",
+            static_cast<unsigned>(records), static_cast<unsigned>(bytes));
+        reply.println(diagnosticJson);
+        reply.flush();
+        return;
+    }
     char row[256] = {};
     const auto header = libraryController.formatSelectedCsvHeader(
         row, sizeof(row));
@@ -14431,6 +15082,10 @@ void handleCommand(Stream& reply, const char* command) {
     } else if (std::strcmp(command,
                            "capture.subghz.export.csv") == 0) {
         emitSubGhzRawCaptureCsv(reply);
+    } else if (std::strcmp(command, "capture.ir.state") == 0) {
+        emitInfraredRawCaptureState(reply);
+    } else if (std::strcmp(command, "capture.ir.export.csv") == 0) {
+        emitInfraredRawCaptureCsv(reply);
     } else if (std::strcmp(command, "input.state") == 0) {
         emitInputState(reply);
     } else if (std::strcmp(command, "touch.state") == 0) {
@@ -14869,6 +15524,7 @@ void setup() {
         productSurveyWorkerReady = initializeProductSurveyWorker();
         captureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
         subGhzCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
+        infraredCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
     } else {
         productBootRecovery.status = "safety_latched";
         productBootRecovery.cleanupComplete = true;
@@ -14974,8 +15630,24 @@ void setup() {
                    "not_declared_no_autodetect"});
     inventory.add({"assembly.pn532", CapabilityState::Unknown, "default_profile",
                    "not_declared_no_autodetect"});
-    inventory.add({"shield.ir", CapabilityState::Unknown, "HW-U09",
-                   "explicit_profile_required"});
+    inventory.add({
+        "shield.ir",
+        BoardProfile::kRfShieldDeclared && BoardProfile::kIrDeclared
+            ? CapabilityState::Declared : CapabilityState::Unknown,
+        "explicit_board_profile_rx_only_gpio21",
+        BoardProfile::kRfShieldDeclared && BoardProfile::kIrDeclared
+            ? "raw_capture_ready_awaiting_physical_signal"
+            : "explicit_profile_required"});
+    inventory.add({
+        "capture.ir_passive",
+        BoardProfile::kRfShieldDeclared && BoardProfile::kIrDeclared &&
+                infraredCaptureStoreEvents != nullptr
+            ? CapabilityState::Declared : CapabilityState::Unknown,
+        "bounded_polling_raw_nec_schema_v6",
+        BoardProfile::kRfShieldDeclared && BoardProfile::kIrDeclared &&
+                infraredCaptureStoreEvents != nullptr
+            ? "rx_only_runtime_ready_awaiting_physical_signal"
+            : "profile_or_worker_unavailable"});
     inventory.add({"shield.receivers",
                    BoardProfile::kRfShieldDeclared ? CapabilityState::Declared
                                                    : CapabilityState::Unknown,
@@ -15003,6 +15675,7 @@ void setup() {
               "\"capture.state\",\"capture.export.pcap\","
               "\"capture.subghz.state\","
               "\"capture.subghz.export.csv\","
+              "\"capture.ir.state\",\"capture.ir.export.csv\","
               "\"input.state\",\"touch.state\","
               "\"ui.touch <x> <y>\",\"touch.calibrate confirm\","
               "\"self-test.report\",\"self-test.active-rf\","
@@ -15064,17 +15737,22 @@ void loop() {
         serviceWifiFrameCapture();
         serviceWifiFrameCapturePersist();
         serviceSubGhzRawCapturePersist();
+        serviceInfraredRawCapturePersist();
         serviceFullGuidedRfChecks();
         serviceNrf24Spectrum();
         serviceCc1101Spectrum();
         serviceSubGhzRawCapture();
+        serviceInfraredCapture();
         serviceSpectrumWaterfallCadence();
     }
     const auto rawCaptureState = subGhzRawCapture.stats().state;
+    const auto infraredState = infraredCapture.stats().state;
     const bool rawPulseTimingCritical =
-        rawCaptureState == SubGhzRawCaptureState::Capturing;
+        rawCaptureState == SubGhzRawCaptureState::Capturing ||
+        infraredState == InfraredCaptureState::Capturing;
     const bool rawReceiveActive = rawPulseTimingCritical ||
-        rawCaptureState == SubGhzRawCaptureState::Waiting;
+        rawCaptureState == SubGhzRawCaptureState::Waiting ||
+        infraredState == InfraredCaptureState::Waiting;
     // Once a burst starts, even a large diagnostic response would become a
     // fake pulse. Commands remain buffered by USB/UART and are answered after
     // the terminal gap; no evidence path is allowed to perturb the waveform.
@@ -15105,7 +15783,7 @@ void loop() {
     }
     PhysicalInputEvent inputEvent;
     // Preserve the 0.x one-key/one-repaint order even when presses are queued.
-    if (physicalInputEvents != nullptr &&
+    if (!rawPulseTimingCritical && physicalInputEvents != nullptr &&
         xQueueReceive(physicalInputEvents, &inputEvent, 0) == pdTRUE) {
         const std::uint64_t dequeuedUs =
             static_cast<std::uint64_t>(esp_timer_get_time());

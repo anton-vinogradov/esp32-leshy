@@ -38,6 +38,10 @@ def main() -> int:
         TARGET / "src" / "platform" / "arduino" /
         "BoardCc1101PassiveSpectrum.cpp"
     )
+    infrared_receiver_adapter = (
+        TARGET / "src" / "platform" / "arduino" /
+        "BoardInfraredReceiver.cpp"
+    )
     safe_outputs_adapter = TARGET / "src" / "platform" / "arduino" / "BoardSafeOutputs.cpp"
     keypad_frontend_path = TARGET / "src" / "ui" / "Pcf8574ButtonInput.cpp"
     arduino_entry = TARGET / "src" / "platform" / "arduino" / "ArduinoEntry.cpp"
@@ -75,6 +79,7 @@ def main() -> int:
             shield_receiver_adapter,
             nrf24_spectrum_adapter,
             cc1101_spectrum_adapter,
+            infrared_receiver_adapter,
             safe_outputs_adapter,
         )
     )
@@ -98,6 +103,24 @@ def main() -> int:
         errors.append(
             "clean target predates the accepted 0.91 clean-status corrective"
         )
+
+    # The unqualified developer entry points must never silently select the
+    # archived root PlatformIO environment. Legacy flashing is explicit only.
+    for script_name in ("build.sh", "deploy.sh"):
+        script = (ROOT / "tools" / script_name).read_text(encoding="utf-8")
+        for marker in ("firmware/leshy1", "esp32-div-v2-clean"):
+            if marker not in script:
+                errors.append(
+                    f"active {script_name} is not pinned to clean 1.x: {marker}"
+                )
+        if "-e esp32-div " in script:
+            errors.append(f"active {script_name} selects archived 0.x")
+    for script_name in ("build_0x_legacy.sh", "deploy_0x_legacy.sh"):
+        script_path = ROOT / "tools" / script_name
+        if not script_path.is_file() or "-e esp32-div" not in script_path.read_text(
+            encoding="utf-8"
+        ):
+            errors.append(f"explicit archived helper is invalid: {script_name}")
 
     forbidden_config = ("../src", "../../src", "TFT_RST=0")
     for value in forbidden_config:
@@ -218,6 +241,32 @@ def main() -> int:
             if re.search(pattern, cc_spectrum):
                 errors.append(
                     f"CC1101 passive-spectrum adapter contains TX/select path: {pattern}"
+                )
+
+    if not infrared_receiver_adapter.is_file():
+        errors.append("guarded IR receive-only adapter is missing")
+    else:
+        infrared_receiver = infrared_receiver_adapter.read_text(encoding="utf-8")
+        for marker in (
+            "BoardProfile::kIrDeclared",
+            "BoardProfile::kIrRxPin, INPUT",
+            "digitalWrite(BoardProfile::kIrTxPin, LOW)",
+            "BoardSafeOutputs::emergencyQuiesce()",
+            "BoardSafeOutputs::radioTransmitPathsHeldInactive()",
+        ):
+            if marker not in infrared_receiver:
+                errors.append(
+                    f"IR receiver adapter is missing invariant: {marker}"
+                )
+        for pattern in (
+            r"digitalWrite\s*\(\s*BoardProfile::kIrTxPin\s*,\s*HIGH",
+            r"pinMode\s*\(\s*BoardProfile::kIrRxPin\s*,\s*OUTPUT",
+            r"\btone\s*\(",
+            r"\bledcAttach\s*\(",
+        ):
+            if re.search(pattern, infrared_receiver):
+                errors.append(
+                    f"IR receiver adapter contains TX/contention path: {pattern}"
                 )
 
     entry = arduino_entry.read_text(encoding="utf-8")

@@ -145,7 +145,9 @@ CaptureMetadataStatus SurveySession::configureCaptureMetadata(
     const bool bleSelected =
         (metadata.selectedSourceMask & sourceMask(
             domain::observations::RadioKind::Ble)) != 0;
-    const bool validMask = metadata.subGhzRawCaptured
+    const bool pulseCapture = metadata.subGhzRawCaptured ||
+                              metadata.infraredRawCaptured;
+    const bool validMask = pulseCapture
         ? metadata.selectedSourceMask == 0
         : metadata.selectedSourceMask != 0 &&
               (metadata.selectedSourceMask &
@@ -177,7 +179,8 @@ CaptureMetadataStatus SurveySession::configureCaptureMetadata(
               metadata.framePayloadSnapLength == 0 &&
               metadata.framePayloadFormat == FramePayloadFormat::None;
     const bool validSubGhzRaw = metadata.subGhzRawCaptured
-        ? !metadata.framePayloadCaptured && !wifiSelected && !bleSelected &&
+        ? !metadata.infraredRawCaptured && !metadata.framePayloadCaptured &&
+              !wifiSelected && !bleSelected &&
               ((metadata.subGhzFrequencyKHz >= 300000U &&
                 metadata.subGhzFrequencyKHz <= 348000U) ||
                (metadata.subGhzFrequencyKHz >= 387000U &&
@@ -197,9 +200,34 @@ CaptureMetadataStatus SurveySession::configureCaptureMetadata(
               metadata.subGhzThresholdDbm == 0 &&
               metadata.subGhzPulseRecords == 0 &&
               metadata.subGhzPulseBytes == 0;
+    const bool validInfraredRaw = metadata.infraredRawCaptured
+        ? !metadata.subGhzRawCaptured && !metadata.framePayloadCaptured &&
+              !wifiSelected && !bleSelected &&
+              metadata.infraredPulseRecords > 0 &&
+              metadata.infraredPulseRecords <= 512 &&
+              metadata.infraredPulseBytes ==
+                  static_cast<std::uint32_t>(
+                      metadata.infraredPulseRecords) * 2U &&
+              static_cast<std::uint8_t>(
+                  metadata.infraredDecode.protocol) <=
+                  static_cast<std::uint8_t>(
+                      domain::captures::InfraredProtocol::NecRepeat) &&
+              (metadata.infraredDecode.protocol ==
+                   domain::captures::InfraredProtocol::Unknown ||
+               metadata.infraredDecode.integrityValid)
+        : !metadata.infraredStartLevel &&
+              !metadata.infraredTruncated &&
+              metadata.infraredPulseRecords == 0 &&
+              metadata.infraredPulseBytes == 0 &&
+              metadata.infraredDecode.protocol ==
+                  domain::captures::InfraredProtocol::Unknown &&
+              metadata.infraredDecode.rawCode == 0 &&
+              metadata.infraredDecode.address == 0 &&
+              metadata.infraredDecode.command == 0 &&
+              !metadata.infraredDecode.integrityValid;
     if (!metadata.present || !metadata.passive || !validMask || !validWifi ||
         !validBle || metadata.locationPresent || !validFramePayload ||
-        !validSubGhzRaw ||
+        !validSubGhzRaw || !validInfraredRaw ||
         metadata.appIdentityLength != metadata.appIdentity.size()) {
         return CaptureMetadataStatus::InvalidMetadata;
     }

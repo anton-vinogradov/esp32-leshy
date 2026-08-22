@@ -171,12 +171,11 @@ bool BoardNrf24PassiveSpectrum::begin(
     SPI.beginTransaction(SPISettings(kSpectrumSpiHz, MSBFIRST, SPI_MODE0));
     transactionOpen_ = true;
 
-    if (BoardProfile::kIrDeclared) {
-        report_->status = Nrf24PassiveSpectrumStatus::RefusedProfile;
-        cleanupPinsAndSpi();
-        report_ = nullptr;
-        return false;
-    }
+    // The stock IR receiver and nRF slot 3 share GPIO21. This adapter owns the
+    // mux exclusively while active; the IR adapter first stops/tri-states this
+    // path before changing GPIO21 back to input mode.
+    const bool sharedIrMuxDeclared = BoardProfile::kIrDeclared;
+    (void)sharedIrMuxDeclared;
     for (std::uint8_t slot = 0; slot < plan_.maximumModules; ++slot) {
         const std::uint8_t module = report_->detectedModules;
         activeSlots_[module] = slot;

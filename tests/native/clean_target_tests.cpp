@@ -8,6 +8,8 @@
 #include <vector>
 
 #include "apps/capture/RadiotapPcap.h"
+#include "apps/capture/InfraredCapture.h"
+#include "apps/capture/InfraredCsv.h"
 #include "apps/capture/SubGhzRawCapture.h"
 #include "apps/capture/SubGhzRawCsv.h"
 #include "apps/capture/WifiFrameCapture.h"
@@ -1059,6 +1061,159 @@ void testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics() {
     CHECK(openPersistedSubGhzRawCapture(
               reopened, segment.data(), segmentSize, &corrupt) !=
           SessionCodecStatus::Valid);
+}
+
+void testInfraredCaptureIsBoundedAndDecodesNecWithoutTxSemantics() {
+    InfraredCapturePlan plan;
+    CHECK(validateInfraredCapturePlan(plan));
+    InfraredCapturePlan invalid = plan;
+    invalid.maximumPulses = InfraredCapture::kPulseCapacity + 1U;
+    CHECK(!validateInfraredCapturePlan(invalid));
+    invalid = plan;
+    invalid.maximumSampleGapUs = 10;
+    CHECK(!validateInfraredCapturePlan(invalid));
+
+    InfraredCapture capture;
+    std::uint64_t now = 1000000;
+    CHECK(capture.begin(plan, now, true));
+    CHECK(capture.stats().state == InfraredCaptureState::Waiting);
+    CHECK(capture.ingest({now + 100, false}));
+    now += 100;
+    CHECK(capture.stats().state == InfraredCaptureState::Capturing);
+
+    const auto pulse = [&](bool level, std::uint16_t durationUs,
+                           bool nextLevel) {
+        const std::uint64_t ended = now + durationUs;
+        while (now + 100U < ended) {
+            now += 100U;
+            CHECK(!capture.ingest({now, level}));
+        }
+        now = ended;
+        CHECK(capture.ingest({now, nextLevel}));
+    };
+
+    // NEC: address 0x10, inverted address 0xEF, command 0x34,
+    // inverted command 0xCB. Bytes and bits are transmitted LSB first.
+    constexpr std::uint32_t code = 0xCB34EF10U;
+    pulse(false, 9000, true);
+    pulse(true, 4500, false);
+    for (std::uint8_t bit = 0; bit < 32U; ++bit) {
+        pulse(false, 560, true);
+        pulse(true, (code & (1U << bit)) != 0 ? 1690 : 560, false);
+    }
+    pulse(false, 560, true);
+    CHECK(capture.service(now + plan.endGapUs));
+    CHECK(capture.stats().state == InfraredCaptureState::Complete);
+    CHECK(capture.pulseCount() == 67);
+    CHECK(capture.decode().protocol ==
+          leshy1::domain::captures::InfraredProtocol::Nec);
+    CHECK(capture.decode().rawCode == code);
+    CHECK(capture.decode().address == 0x10);
+    CHECK(capture.decode().command == 0x34);
+    CHECK(capture.decode().integrityValid);
+    CHECK(!capture.stats().truncated);
+
+    leshy1::domain::captures::InfraredRawPulseView raw;
+    CHECK(capture.pulseView(0, &raw));
+    CHECK(raw.durationUs == 9000);
+    char csv[96] = {};
+    CHECK(formatInfraredCsvHeader(csv, sizeof(csv)).valid);
+    CHECK(std::strcmp(csv, "pulse_index,level,duration_us\r\n") == 0);
+    CHECK(formatInfraredCsvRow(capture, 0, false, csv, sizeof(csv)).valid);
+    CHECK(std::strcmp(csv, "0,0,9000\r\n") == 0);
+
+    SurveySession artifact;
+    CHECK(artifact.start("ir-raw-01", capture.stats().startedUs) ==
+          SessionStatus::Started);
+    CaptureMetadata metadata;
+    metadata.present = true;
+    metadata.passive = true;
+    metadata.infraredRawCaptured = true;
+    metadata.infraredStartLevel = capture.stats().startLevel;
+    metadata.infraredTruncated = capture.stats().truncated;
+    metadata.infraredPulseRecords = static_cast<std::uint16_t>(
+        capture.pulseCount());
+    metadata.infraredPulseBytes = static_cast<std::uint32_t>(
+        capture.pulseCount() * 2U);
+    metadata.infraredDecode = capture.decode();
+    metadata.appIdentity.fill(0x6B);
+    metadata.appIdentityLength = metadata.appIdentity.size();
+    CHECK(artifact.configureCaptureMetadata(metadata) ==
+          CaptureMetadataStatus::Configured);
+    CHECK(artifact.stop(capture.stats().endedUs) == SessionStatus::Stopped);
+
+    std::array<std::uint8_t, kSessionSegmentMaxBytes> segment{};
+    std::array<std::uint8_t, kSessionManifestMaxBytes> manifest{};
+    std::size_t segmentSize = 0;
+    std::size_t manifestSize = 0;
+    CHECK(encodeInfraredRawCaptureSegment(
+              artifact, capture, segment.data(), segment.size(), &segmentSize) ==
+          SessionCodecStatus::Valid);
+    CHECK(encodeSessionManifest(
+              artifact, segment.data(), segmentSize, manifest.data(),
+              manifest.size(), &manifestSize) == SessionCodecStatus::Valid);
+    SessionManifest decodedManifest;
+    CHECK(decodeSessionManifest(manifest.data(), manifestSize,
+                                &decodedManifest) == SessionCodecStatus::Valid);
+    CHECK(decodedManifest.schemaVersion == kInfraredRawSessionSchemaVersion);
+    SurveySession reopened;
+    CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
+                        segmentSize, &reopened) == SessionCodecStatus::Valid);
+    CHECK(reopened.captureMetadata().infraredRawCaptured);
+    CHECK(!reopened.captureMetadata().subGhzRawCaptured);
+    CHECK(reopened.captureMetadata().infraredDecode.protocol ==
+          leshy1::domain::captures::InfraredProtocol::Nec);
+    CHECK(reopened.captureMetadata().infraredDecode.rawCode == code);
+    PersistedInfraredRawCaptureView persisted;
+    CHECK(openPersistedInfraredRawCapture(
+              reopened, segment.data(), segmentSize, &persisted) ==
+          SessionCodecStatus::Valid);
+    CHECK(persisted.pulseCount() == capture.pulseCount());
+    CHECK(persisted.pulseView(0, &raw));
+    CHECK(raw.durationUs == 9000);
+    char json[640] = {};
+    CHECK(formatSessionJsonSummary(reopened, json, sizeof(json)));
+    CHECK(std::strstr(json, "leshy.capture.infrared_raw.v1") != nullptr);
+    CHECK(std::strstr(json, "\"protocol\":\"nec\"") != nullptr);
+    CHECK(std::strstr(json, "\"rx_only\":true") != nullptr);
+
+    leshy1::platform::arduino::RamSessionStoreIo store;
+    SessionStoreWorkspace workspace;
+    const SessionStoreCommitResult committed = commitNextInfraredRawCapture(
+        store, workspace, artifact, capture);
+    CHECK(committed.complete());
+    SurveySession storeReopened;
+    const SessionStoreRecoveryResult recovered = recoverSession(
+        store, workspace, &storeReopened);
+    CHECK(recovered.valid());
+    CHECK(storeReopened.captureMetadata().infraredRawCaptured);
+
+    segment[116] ^= 0x01;
+    PersistedInfraredRawCaptureView corrupt;
+    CHECK(openPersistedInfraredRawCapture(
+              reopened, segment.data(), segmentSize, &corrupt) !=
+          SessionCodecStatus::Valid);
+
+    capture.reset();
+    CHECK(capture.begin(plan, 2000000, true));
+    CHECK(capture.service(12000000));
+    CHECK(capture.stats().state == InfraredCaptureState::TimedOut);
+
+    capture.reset();
+    CHECK(capture.begin(plan, 13000000, true));
+    CHECK(capture.ingest({13000100, false}));
+    CHECK(capture.ingest({13001000, false}));
+    CHECK(capture.stats().state == InfraredCaptureState::Unreliable);
+    CHECK(capture.stats().maximumObservedSampleGapUs == 900);
+
+    capture.reset();
+    CHECK(capture.begin(plan, 14000000, true));
+    CHECK(capture.cancel(14000100));
+    CHECK(capture.stats().state == InfraredCaptureState::Cancelled);
+    capture.reset();
+    CHECK(capture.begin(plan, 15000000, true));
+    CHECK(capture.fail(-9, 15000100));
+    CHECK(capture.stats().state == InfraredCaptureState::Failed);
 }
 
 void testSpectrumViewportKeepsBoundedRingHistory() {
@@ -2465,7 +2620,7 @@ void testSessionCodecCommitsCanonicalDataAndReopensOffline() {
 
     std::array<std::uint8_t, kSessionManifestMaxBytes> futureManifest = manifest;
     CHECK(manifestSize > 2);
-    futureManifest[2] = kSubGhzRawSessionSchemaVersion + 1U;
+    futureManifest[2] = kInfraredRawSessionSchemaVersion + 1U;
     CHECK(decodeSessionManifest(futureManifest.data(), manifestSize, &decodedManifest) ==
           SessionCodecStatus::UnsupportedSchema);
     futureManifest = manifest;
@@ -4819,6 +4974,7 @@ int main() {
     testCc1101PassiveSpectrumContractAndControllerAreBounded();
     testSubGhzRawCaptureIsPassiveBoundedAndNonBlocking();
     testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics();
+    testInfraredCaptureIsBoundedAndDecodesNecWithoutTxSemantics();
     testSpectrumViewportKeepsBoundedRingHistory();
     testProductBootRetryIsNarrowAndBounded();
     testSafetySupervisorLatchesOnlyExactUntornEvidence();

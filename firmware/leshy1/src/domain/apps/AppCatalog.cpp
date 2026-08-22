@@ -66,11 +66,12 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
     const bool frameCapture = available(inventory, "capture.wifi_passive");
     items_[size_++] = {
         "capture", "CAPTURE",
-        frameCapture ? "wifi frames / explicit sd save" : "passive capture unavailable",
+        frameCapture ? "wifi / infrared / explicit sd save" : "passive capture unavailable",
         4, frameCapture, false,
         kernel::runtime::resourceMask(
             kernel::runtime::Resource::UiForeground) |
-            kernel::runtime::resourceMask(kernel::runtime::Resource::EspRf)};
+            kernel::runtime::resourceMask(kernel::runtime::Resource::EspRf) |
+            kernel::runtime::resourceMask(kernel::runtime::Resource::RadioSpi)};
 
     const bool persistentLibrary = available(inventory, "storage.sd") ||
                                    available(inventory, "library.persistent_session");
