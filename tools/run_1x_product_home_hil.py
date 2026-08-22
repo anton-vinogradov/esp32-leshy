@@ -476,6 +476,7 @@ def main() -> int:
                         "runtime_owner": "subghz", "lease_mask": 9,
                     }, f"cc_{band}_return_to_band_menu")
                 trace.append(action(device, "left"))
+                trace.append(action(device, "left"))
                 stopped_cc = read_only_query(
                     device, b"hardware.cc1101.spectrum", CC_SCHEMA, "state")
                 require_exact(stopped_cc, {
