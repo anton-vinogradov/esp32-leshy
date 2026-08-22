@@ -409,6 +409,14 @@ background collection continues. Physical evidence records 42 changed content
 pixels, zero changed chrome pixels and zero changed detail pixels
 (`E-BUILD-107`/`E-AUTO-071`/`E-HIL-131`/`E-UX-026`).
 
+Exact 0.108 applies the same rule to `Wi-Fi→Wi-Fi Devices`. The list uses four
+full-width touch rows and exposes only MAC, evidence-backed activity state, channel
+and RSSI; passive reception cannot truthfully supply a human name or vendor. A
+bounded 1…13 channel monitor continues behind detail, but the detail framebuffer is
+deliberately frozen. Physical comparison records 12,940 changed list-content pixels,
+zero changed header/footer pixels and zero changed detail pixels while accepted
+frames and channel hops advance (`E-BUILD-108`/`E-AUTO-072`/`E-HIL-132`/`E-UX-027`).
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog

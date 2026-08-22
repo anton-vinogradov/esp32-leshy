@@ -416,6 +416,15 @@ rows: header/footer 26 px остаются byte-identical, а открытый d
 42 changed content pixels, zero changed chrome pixels и zero changed detail pixels
 (`E-BUILD-107`/`E-AUTO-071`/`E-HIL-131`/`E-UX-026`).
 
+Exact 0.108 применяет то же правило к `Wi-Fi→Устройства Wi-Fi`. Список использует
+четыре полноразмерные touch row и показывает только MAC, подтверждённое кадрами
+состояние активности, канал и RSSI; passive reception не может честно получить
+человеческое имя или производителя. Bounded monitor каналов 1…13 продолжает работу
+за detail, но framebuffer detail намеренно заморожен. Physical comparison фиксирует
+12 940 изменившихся pixels содержимого списка, zero pixels header/footer и zero
+pixels detail, пока accepted frames и channel hops продолжают расти
+(`E-BUILD-108`/`E-AUTO-072`/`E-HIL-132`/`E-UX-027`).
+
 ## Gate
 
 **S1 UX direction accepted:** готовы UX-01/UX-02 в low-fidelity форме, все разделы

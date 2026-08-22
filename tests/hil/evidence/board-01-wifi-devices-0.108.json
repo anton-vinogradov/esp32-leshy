@@ -1,0 +1,54 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "9bea2f6cc30c3c0ca64cdb2e784565c373e0bb31f47af3a1f0970a3062f2f4ec",
+    "checker_sha256": "f25341fcf00382ad5376e29ed267913cb26092499522229237e62e058c0c8a06",
+    "cid": "FE343253440000002000000055019CB7",
+    "elf_file_sha256": "9bea2f6cc30c3c0ca64cdb2e784565c373e0bb31f47af3a1f0970a3062f2f4ec",
+    "factory_sha256": "c749495d93b09bc5f4d41149ab5e3f336d452c2a40e52976c7813cad0c539b76",
+    "firmware_sha256": "954428d820c51d9bf81a4789243156a35ea8266f431bd30bf53723ddac23217e",
+    "firmware_source_commit": "5478a8b7fc79d62f9e14b4455c4cfd1983d73ba8",
+    "linked_flash_bytes": 1566368,
+    "map_sha256": "f3628691cbce4be90f059d24567f3b8cacfc90828e182aa838431fc6984bdcf7",
+    "run_sha256": "50ed375b6cd1582a0bf86ad84332de09a6e61b47765af4f414bc2582a7fc6ae2",
+    "runner_commit": "75e635745da43f4ee863757130bcd821348cc8c9",
+    "runner_sha256": "16d22ea392d52a970540d56c44e653512b7d584b9c0061fdb4147ff42075d79f",
+    "schema": "leshy.wifi_devices_hil.provenance.v1",
+    "static_ram_bytes": 178360,
+    "tft_states": 6,
+    "version": "0.108.0-wifi-devices"
+  },
+  "evidence": {
+    "artifact_index_sha256": "afda314f1c0a49a866952bba1938b70ba812666478274f7f3878386fb9fa15b8",
+    "files": 21,
+    "tft_states": 6
+  },
+  "evidence_ids": [
+    "E-BUILD-108",
+    "E-AUTO-072",
+    "E-HIL-132",
+    "E-UX-027"
+  ],
+  "schema": "leshy.wifi_devices.acceptance.v1",
+  "status": "pass_wifi_devices_checkpoint",
+  "verified": {
+    "access_point_beacons_excluded": true,
+    "buzzer_inactive": true,
+    "channel_hops_second": 14,
+    "client_frames_accepted_second": 4,
+    "client_frames_dropped": 0,
+    "detail_changed_pixels": 0,
+    "final_lease_mask": 0,
+    "fresh_exact_flash_pass": true,
+    "live_chrome_changed_pixels": 0,
+    "live_content_changed_pixels": 12940,
+    "manual_button_presses": 0,
+    "passive_client_inference_only": true,
+    "persistent_generation_unchanged": true,
+    "physical_sd_write_calls": 0,
+    "two_complete_wifi_lifecycles": true,
+    "unique_devices_first": 1,
+    "unique_devices_second": 2,
+    "zero_heap_drift_after_warmup": true
+  }
+}
