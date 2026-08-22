@@ -40,6 +40,25 @@ def require_exact(record: dict[str, Any], expected: dict[str, Any],
         raise RuntimeError("; ".join(failures))
 
 
+def robust_cleanup(device: PassiveSerial) -> dict[str, Any]:
+    """Tolerate a transient native-USB reply loss, never a dirty final state."""
+    attempts: list[dict[str, Any]] = []
+    for _ in range(3):
+        result = best_effort_cleanup(device, timeout=8.0)
+        attempts.append(result)
+        if result.get("complete"):
+            result["transport_attempts"] = len(attempts)
+            result["transport_history"] = attempts[:-1]
+            return result
+        synchronize_console(device, 5.0)
+    return {
+        "attempted": True,
+        "complete": False,
+        "transport_attempts": len(attempts),
+        "transport_history": attempts,
+    }
+
+
 def home_wifi(device: PassiveSerial) -> dict[str, Any]:
     state = query(device, b"ui.state", "leshy.ui.v1", "state")
     if state.get("page") != "home":
@@ -179,7 +198,7 @@ def main() -> int:
                     app_identity, args.expected_cid))
                 if failures:
                     raise RuntimeError("boot contract failed")
-                cleanup_before = best_effort_cleanup(device)
+                cleanup_before = robust_cleanup(device)
                 if not cleanup_before.get("complete"):
                     raise RuntimeError("initial Home/zero-lease cleanup failed")
                 query(device, b"ui.language ru", "leshy.ui.v1", "state")
@@ -295,7 +314,7 @@ def main() -> int:
             except Exception as error:
                 failures.append(f"workflow: {type(error).__name__}: {error}")
             finally:
-                cleanup_after = best_effort_cleanup(device)
+                cleanup_after = robust_cleanup(device)
                 if not cleanup_after.get("complete"):
                     failures.append("cleanup_after: Home/zero lease unproven")
     except Exception as error:
