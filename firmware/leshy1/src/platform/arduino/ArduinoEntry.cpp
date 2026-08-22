@@ -913,7 +913,7 @@ bool lastUiRenderWasIncremental = false;
 std::uint64_t lastUiRenderUs = 0;
 
 struct SdPhysicalEvidenceWorkspace final {
-    char line[5120] = {};
+    char line[6144] = {};
     char summaryA[512] = {};
     char summaryB[512] = {};
     char summaryC[512] = {};
@@ -9451,7 +9451,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   lastUiRenderWasIncremental ? "incremental" : "full",
                   static_cast<unsigned long long>(lastUiRenderUs));
     const std::size_t length = std::strlen(line);
-    if (length > 0 && length + 3500 < sizeof(line)) {
+    if (length > 0 && length < sizeof(line)) {
         const SurveyPipelineProgress pipelineProgress = surveyPipeline.progress();
         const auto* wifiTimeline =
             productSurveyTimeline.source(RadioKind::Wifi);
@@ -9474,7 +9474,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
         const auto wifiChannelStats = wifiFrameCapture.channelMonitorStats();
         const auto wifiChannelSnapshot = wifiFrameCapture.channelLoadSnapshot();
         line[length - 1] = '\0';
-        std::snprintf(line + length - 1, sizeof(line) - length + 1,
+        const std::size_t detailCapacity = sizeof(line) - length + 1;
+        const int detailLength = std::snprintf(
+                      line + length - 1, detailCapacity,
                       ",\"runtime_event\":\"%s\",\"runtime_owner\":\"%s\","
                       "\"lease_mask\":%lu,\"survey_simulated\":%s,"
                       "\"survey_view\":\"%s\",\"survey_workflow_state\":\"%s\","
@@ -9862,6 +9864,13 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           ? "true" : "false",
                       static_cast<unsigned>(
                           fullGuidedArtifactState.pcapFrames));
+        if (detailLength < 0 ||
+            static_cast<std::size_t>(detailLength) >= detailCapacity) {
+            std::snprintf(
+                line, sizeof(line),
+                "{\"schema\":\"leshy.ui.v1\",\"kind\":\"error\","
+                "\"error\":\"state_overflow\"}");
+        }
     }
     reply.println(line);
 }
