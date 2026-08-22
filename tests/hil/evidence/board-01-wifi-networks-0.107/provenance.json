@@ -1,0 +1,19 @@
+{
+  "app_elf_sha256": "d4890c89f856f4af778150ba51f49b70859c2af82d0ccc7889cf56a1365c9b3d",
+  "checker_sha256": "f580a44b52d18da6c5656b87f9171326c876fbb5ffe0f9ab9675149d03d2a3e5",
+  "cid": "FE343253440000002000000055019CB7",
+  "elf_file_sha256": "d4890c89f856f4af778150ba51f49b70859c2af82d0ccc7889cf56a1365c9b3d",
+  "factory_sha256": "c0fe5366307b201bc70a45596700649667dc74ee183fdb38ac83be44a0cc61fb",
+  "firmware_sha256": "3bcae4b105270440c172f2b80f52970be4bd5ad0a62d33ae9df82fac956d0da0",
+  "firmware_source_commit": "481ee19c2d9827a839b3ac4eed50b54f4f8b7124",
+  "fresh_diagnostic_run_sha256": "16ad52531e0707520a07d4b17a0fac5cd795e23daeb05e4231c8ff44d0163710",
+  "linked_flash_bytes": 1558808,
+  "map_sha256": "ca4f1f07626e064172758c8bae825aeb1ced84b1d04144305dcb779cf93c85a2",
+  "run_sha256": "262049a2132b96ea1ba9a05208bf90b64ed8c7655bf1ca7c5544e3ae4c7e776e",
+  "runner_commit": "8af93425d8d814676e12e167393497436fc6e3db",
+  "runner_sha256": "429fd8e560cca51588df317ee312475a82cb9b9530a16a1197b88ed27fac5ef6",
+  "schema": "leshy.wifi_networks_hil.provenance.v1",
+  "static_ram_bytes": 175168,
+  "tft_states": 6,
+  "version": "0.107.0-wifi-networks"
+}

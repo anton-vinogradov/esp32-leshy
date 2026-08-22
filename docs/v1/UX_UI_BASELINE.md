@@ -399,6 +399,16 @@ privacy-safe Capture review exports no wireless payload and writes no SD data;
 machine checks bind exact firmware identity, CID/catalog/heap, graph-only waterfall
 updates and final lease 0 (`E-BUILD-106`/`E-AUTO-070`/`E-HIL-130`/`E-UX-025`).
 
+Exact 0.107 applies the baseline to the first final Wi-Fi job. `Wi-Fi→Nearby
+Networks` starts collection directly and uses the whole content area for four stable,
+finger-sized network rows; selection opens BSSID/channel/RSSI/sample detail. The
+bounded catalog deduplicates real results by BSSID and never invents security data.
+During live collection only changed data rows may repaint: the 26 px header and
+footer remain byte-identical, and an open detail screen stays visually frozen while
+background collection continues. Physical evidence records 42 changed content
+pixels, zero changed chrome pixels and zero changed detail pixels
+(`E-BUILD-107`/`E-AUTO-071`/`E-HIL-131`/`E-UX-026`).
+
 ## Gate
 
 **S1 UX direction accepted:** UX-01/UX-02 exist in low fidelity, every catalog

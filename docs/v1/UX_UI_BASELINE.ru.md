@@ -406,6 +406,16 @@ machine checks связывают exact firmware identity, CID/catalog/heap, gra
 обновления водопада и final lease 0 (`E-BUILD-106`/`E-AUTO-070`/`E-HIL-130`/
 `E-UX-025`).
 
+Exact 0.107 применяет baseline к первой финальной Wi-Fi-задаче. `Wi-Fi→Сети
+рядом` запускает collection напрямую и использует всю content area для четырёх
+стабильных finger-sized строк сетей; выбор открывает detail BSSID/channel/RSSI/
+samples. Bounded catalog deduplicates реальные результаты по BSSID и не выдумывает
+security data. Во время live collection перерисовываются только изменившиеся data
+rows: header/footer 26 px остаются byte-identical, а открытый detail визуально
+заморожен при продолжающемся background collection. Physical evidence фиксирует
+42 changed content pixels, zero changed chrome pixels и zero changed detail pixels
+(`E-BUILD-107`/`E-AUTO-071`/`E-HIL-131`/`E-UX-026`).
+
 ## Gate
 
 **S1 UX direction accepted:** готовы UX-01/UX-02 в low-fidelity форме, все разделы
