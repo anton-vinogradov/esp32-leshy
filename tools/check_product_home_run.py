@@ -38,6 +38,7 @@ PIXEL_WATERFALL_SCREENS = {
     "cc_waterfall_next": "cc-waterfall-next",
 }
 IDENTITY_SCREENS = {"home_en": "home-en"}
+SUBGHZ_MODE_SCREENS = {"subghz_modes": "subghz-modes"}
 
 
 def digest(path: Path) -> str:
@@ -350,6 +351,8 @@ def main() -> int:
     identity_contract = scope.get("home_identity") == \
         "bilingual_brand_and_version"
     expected_screens = dict(SCREENS)
+    if "subghz_modes" in screens:
+        expected_screens.update(SUBGHZ_MODE_SCREENS)
     if pixel_contract:
         expected_screens.update(PIXEL_WATERFALL_SCREENS)
     if identity_contract:
@@ -410,6 +413,12 @@ def main() -> int:
                 screens.get("home_final", {}).get("state", {}).get("language") ==
                     "ru",
                 "bilingual Home capture state mismatch")
+    if scope.get("exact_flash_reused") is True:
+        expected_scope["exact_flash_reused"] = True
+        require(failures,
+                candidate.get("flash_mode") == "reuse_exact" and
+                candidate.get("flashed") is True,
+                "exact reused flash binding mismatch")
     require(failures, scope == expected_scope, "automation scope mismatch")
     verify_manifest(failures, root)
 
