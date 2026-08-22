@@ -487,7 +487,7 @@ def main() -> int:
                 reports["cc_stopped"] = stopped_cc
 
                 for index, item, page, owner, lease in (
-                    (4, "capture", "capture", "capture", 3),
+                    (4, "capture", "capture", "capture", 11),
                     (5, "library", "library", "library", 5),
                     (6, "device", "device", "device", 1),
                 ):
