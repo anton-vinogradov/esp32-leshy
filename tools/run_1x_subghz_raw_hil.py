@@ -171,14 +171,37 @@ def main() -> int:
                 }, "home_subghz"))
                 captures["home"] = capture(device, frames, "home")
 
-                trace.append(action(device, "right"))
+                # A physical input edge may arrive while the relatively slow
+                # screenshot is transferred. Re-confirm the intended Home row
+                # before launching so the unattended run cannot exercise the
+                # neighbouring 2.4 GHz application by accident.
+                select_home_app(device, "subghz", trace)
+                entered = action(device, "right")
+                trace.append(entered)
+                entry_failures = expect(entered, {
+                    "page": "survey", "selected_id": "subghz",
+                    "runtime_event": "subghz_modes",
+                    "runtime_owner": "subghz", "lease_mask": 9,
+                }, "subghz_modes")
+                failures.extend(entry_failures)
+                if entry_failures:
+                    raise RuntimeError("Sub-GHz mode menu was not entered")
                 reports["mode_spectrum"] = query(
                     device, b"capture.subghz.state", STATE_SCHEMA, "state")
                 captures["modes_spectrum"] = capture(
                     device, frames, "modes-spectrum")
                 trace.append(action(device, "down"))
                 captures["modes_raw"] = capture(device, frames, "modes-raw")
-                trace.append(action(device, "right"))
+                raw_menu = action(device, "right")
+                trace.append(raw_menu)
+                raw_menu_failures = expect(raw_menu, {
+                    "page": "survey", "selected_id": "subghz",
+                    "runtime_event": "subghz_raw_band_menu",
+                    "runtime_owner": "subghz", "lease_mask": 9,
+                }, "subghz_raw_band_menu")
+                failures.extend(raw_menu_failures)
+                if raw_menu_failures:
+                    raise RuntimeError("Sub-GHz record band menu was not entered")
                 captures["bands"] = capture(device, frames, "bands")
 
                 trace.append(action(device, "right"))
@@ -239,6 +262,7 @@ def main() -> int:
                         failures.append("no-signal timeout invented a RAW artifact")
                 captures["terminal"] = capture(device, frames, "terminal")
 
+                trace.append(action(device, "left"))
                 trace.append(action(device, "left"))
                 trace.append(action(device, "left"))
                 final = query(device, b"ui.state", "leshy.ui.v1", "state")
