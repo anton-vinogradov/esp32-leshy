@@ -98,7 +98,7 @@ LESHY_UI_TEXT(CaptureSavedUser, Body, 212, "SAVED TO LIBRARY", u8"СОХРАНЕ
 LESHY_UI_TEXT(CaptureSaveFailedUser, Body, 212, "COULD NOT SAVE", u8"НЕ УДАЛОСЬ СОХРАНИТЬ")
 LESHY_UI_TEXT(CaptureRecordFailedUser, Body, 212, "COULD NOT RECORD", u8"НЕ УДАЛОСЬ ЗАПИСАТЬ")
 LESHY_UI_TEXT(CaptureTryAgainUser, Body, 212, "TRY AGAIN", u8"ПОПРОБУЙТЕ ЕЩЕ РАЗ")
-LESHY_UI_TEXT(CaptureLossWarningFormat, Body, 212, "NOT SAVED: %lu PACKETS", u8"НЕ СОХРАНЕНО ПАКЕТОВ: %lu")
+LESHY_UI_TEXT(CaptureLossWarningFormat, Body, 212, "PACKETS LOST: %lu", u8"ПОТЕРЯНО ПАКЕТОВ: %lu")
 LESHY_UI_TEXT(IrWaiting, Body, 206, "INFRARED / WAITING", u8"ИК / ОЖИДАНИЕ")
 LESHY_UI_TEXT(IrCapturing, Body, 206, "INFRARED / RECEIVING", u8"ИК / ПРИЕМ")
 LESHY_UI_TEXT(IrResult, Body, 206, "INFRARED / RESULT", u8"ИК / РЕЗУЛЬТАТ")

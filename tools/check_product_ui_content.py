@@ -65,6 +65,7 @@ FORBIDDEN_RENDER_IDS = {
     "FifoFormat",
     "PipelineFormat",
     "GenerationFormat",
+    "FrequencyFormat",
     "LibraryRowFormat",
     "LibraryCaptureRowFormat",
     "LibraryRawRowFormat",

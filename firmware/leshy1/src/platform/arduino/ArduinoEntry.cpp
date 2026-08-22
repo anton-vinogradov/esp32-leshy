@@ -5668,13 +5668,14 @@ void renderWifiCapturePage(bool clearContent) {
                       static_cast<unsigned long>(stats.framesAccepted));
         renderMetric(0, line, Tone::Positive);
     }
-    std::snprintf(line, sizeof(line), tr(UiTextId::CaptureChannelFormat),
-                  static_cast<unsigned>(wifiFrameCapture.currentChannel()));
-    renderMetric(1, line);
     if (stats.state == WifiFrameCaptureState::Running) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::CaptureChannelFormat),
+                      static_cast<unsigned>(
+                          wifiFrameCapture.currentChannel()));
+        renderMetric(1, line);
         renderMetric(2, tr(UiTextId::CaptureRecordingUser), Tone::Positive);
     } else {
-        renderMetric(2, tr(UiTextId::CapturePcapReadyUser), Tone::Positive);
+        renderMetric(1, tr(UiTextId::CapturePcapReadyUser), Tone::Positive);
         const UiTextId storageMessage =
             capturePersistState == CapturePersistState::Confirm
                 ? UiTextId::CaptureIdentifiersWarning
@@ -5685,7 +5686,7 @@ void renderWifiCapturePage(bool clearContent) {
                             : capturePersistState == CapturePersistState::Failed
                                   ? UiTextId::CaptureSaveFailedUser
                                   : UiTextId::CaptureReadyToSave;
-        renderMetric(3, tr(storageMessage),
+        renderMetric(2, tr(storageMessage),
                      capturePersistState == CapturePersistState::Failed
                          ? Tone::Danger
                          : capturePersistState == CapturePersistState::Confirm
@@ -5698,7 +5699,7 @@ void renderWifiCapturePage(bool clearContent) {
         std::snprintf(line, sizeof(line),
                       tr(UiTextId::CaptureLossWarningFormat),
                       static_cast<unsigned long>(dropped));
-        renderMetric(4, line, Tone::Warning);
+        renderMetric(3, line, Tone::Warning);
     }
 }
 
@@ -6869,14 +6870,11 @@ void renderInventoryPage(bool clearContent) {
                           static_cast<unsigned>(observation->channel));
             setUiCursor(UiTextRole::Body, 14, 122);
             display.print(line);
-            std::snprintf(line, sizeof(line), tr(UiTextId::FrequencyFormat),
-                          static_cast<unsigned long>(observation->frequencyKhz));
-            setUiCursor(UiTextRole::Body, 14, 148);
-            display.print(line);
         }
         std::snprintf(line, sizeof(line), tr(UiTextId::RssiFormat),
                       static_cast<int>(observation->rssiDbm));
-        setUiCursor(UiTextRole::Body, 14, 174);
+        setUiCursor(UiTextRole::Body, 14,
+                    observation->radio == RadioKind::Ble ? 174 : 148);
         display.print(line);
         const ObservationHistory history = surveyController.selectedHistory();
         if (history.valid) {
