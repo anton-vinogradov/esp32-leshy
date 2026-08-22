@@ -413,12 +413,14 @@ def main() -> int:
                 screens.get("home_final", {}).get("state", {}).get("language") ==
                     "ru",
                 "bilingual Home capture state mismatch")
-    if scope.get("exact_flash_reused") is True:
-        expected_scope["exact_flash_reused"] = True
+    if "exact_flash_reused" in scope:
+        reused = scope.get("exact_flash_reused") is True
+        expected_scope["exact_flash_reused"] = reused
         require(failures,
-                candidate.get("flash_mode") == "reuse_exact" and
+                candidate.get("flash_mode") ==
+                    ("reuse_exact" if reused else "fresh") and
                 candidate.get("flashed") is True,
-                "exact reused flash binding mismatch")
+                "candidate flash-mode binding mismatch")
     require(failures, scope == expected_scope, "automation scope mismatch")
     verify_manifest(failures, root)
 
