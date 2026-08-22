@@ -173,6 +173,10 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--reuse-exact-flash", action="store_true")
+    parser.add_argument(
+        "--visual-only", action="store_true",
+        help="verify the TFT flow without exporting captured 802.11 payload",
+    )
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0),
                         default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
@@ -316,24 +320,34 @@ def main() -> int:
                     failures.append("complete: monotonic bounds invalid")
                 captures["result"] = capture(device, frames, "result")
 
-                pcap_begin, pcap_payload, pcap_end = read_pcap(device)
-                pcap_summary, pcap_failures = parse_pcap(pcap_payload)
-                failures.extend(pcap_failures)
-                failures.extend(expect(pcap_begin, {
-                    "bytes": len(pcap_payload), "frames": accepted,
-                    "linktype": 127, "timebase": "monotonic_us",
-                    "streaming": True, "storage_written": False,
-                }, "pcap_begin"))
-                failures.extend(expect(pcap_end, {
-                    "status": "valid", "bytes": len(pcap_payload),
-                    "frames": accepted, "storage_written": False,
-                }, "pcap_end"))
-                if pcap_summary.get("records") != accepted:
-                    failures.append("pcap: record count differs from Capture")
-                if pcap_summary.get("captured_frame_bytes") != payload_bytes:
-                    failures.append("pcap: captured byte count differs from Capture")
-                if complete.get("pcap_bytes") != len(pcap_payload):
-                    failures.append("pcap: advertised byte count mismatch")
+                if args.visual_only:
+                    pcap_summary = {
+                        "exported_to_host": False,
+                        "reason": "visual_only_product_content_review",
+                        "advertised_bytes": complete.get("pcap_bytes"),
+                        "advertised_frames": accepted,
+                    }
+                else:
+                    pcap_begin, pcap_payload, pcap_end = read_pcap(device)
+                    pcap_summary, pcap_failures = parse_pcap(pcap_payload)
+                    failures.extend(pcap_failures)
+                    failures.extend(expect(pcap_begin, {
+                        "bytes": len(pcap_payload), "frames": accepted,
+                        "linktype": 127, "timebase": "monotonic_us",
+                        "streaming": True, "storage_written": False,
+                    }, "pcap_begin"))
+                    failures.extend(expect(pcap_end, {
+                        "status": "valid", "bytes": len(pcap_payload),
+                        "frames": accepted, "storage_written": False,
+                    }, "pcap_end"))
+                    if pcap_summary.get("records") != accepted:
+                        failures.append(
+                            "pcap: record count differs from Capture")
+                    if pcap_summary.get("captured_frame_bytes") != payload_bytes:
+                        failures.append(
+                            "pcap: captured byte count differs from Capture")
+                    if complete.get("pcap_bytes") != len(pcap_payload):
+                        failures.append("pcap: advertised byte count mismatch")
 
                 trace.append(action(device, "left"))
                 trace.append(action(device, "left"))
@@ -387,6 +401,8 @@ def main() -> int:
         "captures": captures,
         "trace": trace,
         "privacy": {
+            "visual_only": args.visual_only,
+            "pcap_exported_to_host": not args.visual_only,
             "raw_80211_payload_retained_in_evidence": False,
             "pcap_retained_in_evidence": False,
             "retained_pcap_summary": "hash_counts_tuning_rssi_range_only",
