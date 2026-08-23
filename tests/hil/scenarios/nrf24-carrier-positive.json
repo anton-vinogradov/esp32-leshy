@@ -1,0 +1,202 @@
+{
+  "schema": "leshy.hil.scenario.v1",
+  "id": "nrf24-carrier-positive",
+  "checkpoint": "physical_nrf24_known_signal_finder",
+  "gate_eligible": true,
+  "devices": {
+    "candidate": {"required": true},
+    "fixture": {"required": true, "kind": "bounded_signal_fixture"}
+  },
+  "steps": [
+    {
+      "id": "home_24ghz",
+      "op": "select_home_app",
+      "app_id": "spectrum24",
+      "expect": {
+        "page": "home",
+        "selected_id": "spectrum24",
+        "selected_enabled": true,
+        "runtime_owner": "none",
+        "lease_mask": 0
+      }
+    },
+    {
+      "id": "open_modes",
+      "op": "action",
+      "name": "right",
+      "expect": {
+        "runtime_event": "nrf24_modes",
+        "runtime_owner": "spectrum24",
+        "lease_mask": 9
+      }
+    },
+    {"id": "choose_finder", "op": "action", "name": "down"},
+    {"id": "open_finder", "op": "action", "name": "right"},
+    {
+      "id": "ambient_calibrated",
+      "op": "poll_query",
+      "command": "hardware.nrf24.finder",
+      "response_schema": "leshy.nrf24.signal-finder.v1",
+      "until": {"calibrated": true, "found": false},
+      "timeout": 10,
+      "expect": {
+        "view": "nrf24_finder",
+        "state": "searching",
+        "calibrated": true,
+        "found": false,
+        "modules": 3,
+        "active_slot_mask": 7,
+        "all_available_antennas": true,
+        "rx_only": true,
+        "adapter_active": true,
+        "volatile": true,
+        "side_effects": {
+          "tx_mode_entries": 0,
+          "tx_payload_commands": 0,
+          "cc_command_strobes": 0,
+          "storage_writes": 0
+        },
+        "current_owner": "spectrum24",
+        "current_lease_mask": 9
+      },
+      "checks": [
+        {"path": "calibration_windows", "op": "eq", "value": 2},
+        {"path": "windows", "op": "gte", "value": 2}
+      ]
+    },
+    {"id": "ambient_screen", "op": "capture", "name": "nrf24-ambient"},
+    {
+      "id": "start_known_signal",
+      "op": "query",
+      "target": "fixture",
+      "command": "fixture.nrf24.carrier.start ${session_id} nrf24-ch42-min-2s",
+      "response_schema": "leshy.hil.fixture.signal.v1",
+      "kind": "running",
+      "timeout": 3,
+      "expect": {
+        "state": "running",
+        "role": "bounded_signal_fixture",
+        "signal": "nrf24_carrier",
+        "vector_id": "nrf24-ch42-min-2s",
+        "fixed_vector_only": true,
+        "auto_arm": false,
+        "nrf_module_slot": 1,
+        "nrf_channel": 42,
+        "nrf_frequency_mhz": 2442,
+        "nrf_power_dbm": -18,
+        "nrf_rf_setup": 144,
+        "nrf_carrier_duration_us": 2000000,
+        "maximum_nrf_carrier_us": 2500000,
+        "ir_tx_inactive": true,
+        "buzzer_inactive": true
+      }
+    },
+    {
+      "id": "signal_found",
+      "op": "poll_query",
+      "command": "hardware.nrf24.finder",
+      "response_schema": "leshy.nrf24.signal-finder.v1",
+      "until": {"found": true, "nrf_channel": 42},
+      "timeout": 4,
+      "interval": 0.05,
+      "expect": {
+        "view": "nrf24_finder",
+        "state": "searching",
+        "calibrated": true,
+        "found": true,
+        "frequency_mhz": 2442,
+        "nrf_channel": 42,
+        "nearest_wifi_channel": 7,
+        "response_threshold": 8,
+        "modules": 3,
+        "active_slot_mask": 7,
+        "all_available_antennas": true,
+        "rx_only": true,
+        "adapter_active": true,
+        "side_effects": {
+          "tx_mode_entries": 0,
+          "tx_payload_commands": 0,
+          "cc_command_strobes": 0,
+          "storage_writes": 0
+        },
+        "current_owner": "spectrum24",
+        "current_lease_mask": 9
+      },
+      "checks": [
+        {"path": "response", "op": "gte", "value": 8},
+        {"path": "response_bins", "op": "gte", "value": 1}
+      ]
+    },
+    {"id": "found_screen", "op": "capture", "name": "nrf24-found"},
+    {
+      "id": "fixture_complete",
+      "op": "poll_query",
+      "target": "fixture",
+      "command": "fixture.state",
+      "response_schema": "leshy.hil.fixture.signal.v1",
+      "until": {"state": "complete"},
+      "timeout": 4,
+      "interval": 0.05,
+      "expect": {
+        "state": "complete",
+        "signal": "nrf24_carrier",
+        "vector_id": "nrf24-ch42-min-2s",
+        "nrf_ce_inactive": true,
+        "nrf_powered_down": true,
+        "nrf_carrier_active": false,
+        "ir_tx_inactive": true,
+        "buzzer_inactive": true
+      }
+    },
+    {"id": "back_to_modes", "op": "action", "name": "left"},
+    {
+      "id": "receiver_stopped",
+      "op": "query",
+      "command": "hardware.nrf24.finder",
+      "response_schema": "leshy.nrf24.signal-finder.v1",
+      "expect": {
+        "view": "nrf24_menu",
+        "state": "idle",
+        "adapter_active": false,
+        "rx_only": true,
+        "side_effects": {
+          "tx_mode_entries": 0,
+          "tx_payload_commands": 0,
+          "cc_command_strobes": 0,
+          "storage_writes": 0
+        }
+      }
+    },
+    {"id": "back_home", "op": "action", "name": "left"},
+    {
+      "id": "final",
+      "op": "query",
+      "command": "ui.state",
+      "response_schema": "leshy.ui.v1",
+      "expect": {"page": "home", "runtime_owner": "none", "lease_mask": 0}
+    },
+    {"id": "final_home", "op": "capture", "name": "final-home"}
+  ],
+  "invariants": {
+    "final_home_zero_lease": true,
+    "storage_unchanged": true,
+    "heap_free_unchanged": true,
+    "input_clean": true,
+    "safe_outputs": true
+  },
+  "limits": {
+    "fixed_nrf24_vector": "nrf24-ch42-min-2s",
+    "fixture_source_bound": true,
+    "fixture_single_bounded_emission": true,
+    "fixture_minimum_chip_tx_power_dbm": -18,
+    "fixture_channel": 42,
+    "fixture_frequency_mhz": 2442,
+    "fixture_duration_us": 2000000,
+    "product_rx_only": true,
+    "product_all_available_antennas": true,
+    "successful_physical_signal_required": true,
+    "calibrated_power_or_distance": false,
+    "physical_rf_silence_instrumented": false,
+    "gate_eligible_only_after_all_declared_checks": true
+  }
+}

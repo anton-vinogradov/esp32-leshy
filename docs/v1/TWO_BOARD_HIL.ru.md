@@ -2,20 +2,22 @@
 
 *Читать на: [English](TWO_BOARD_HIL.md) · **Русский***
 
-Статус: **принятый physical IR checkpoint S5; exact 0.129 закрывает source-bound
-двухплатную цепочку NEC receive, persistence, cold export и safe cleanup**.
+Статус: **принятый physical IR checkpoint S5; bounded positive path nRF24 реализован
+и ожидает exact two-board run**.
 
 ## Роли и граница доверия
 
 | Роль | Прошивка | Полномочия |
 |---|---|---|
-| `candidate` / board-01 | exact product candidate | проверяемое устройство; product IR path остаётся RX-only и не имеет replay/TX authority |
-| `fixture` / board-02 | отдельный image `leshy_fixture` | выдаёт один fixed NEC vector только после exact host admission |
-| host | `run_ir_two_board_hil.py` → `run_hil_scenario.py` | связывает physical roles, exact commits/images/ID, выполняет scenario, снимает TFT/CSV и fail-closed отвергает отклонения |
+| `candidate` / board-01 | exact product candidate | проверяемое устройство; product radio paths остаются RX-only и не имеют replay/TX authority |
+| `fixture` / board-02 | отдельный image `leshy_fixture` | выдаёт один admitted fixed NEC либо minimum-power/time-bounded nRF24 vector |
+| host | signal-specific wrapper → `run_hil_scenario.py` | связывает physical roles, exact commits/images/ID, выполняет scenario, снимает TFT/data и fail-closed отвергает отклонения |
 
 Исходники fixture находятся вне product project. Source guards запрещают fixture
-code внутри `firmware/leshy1`, а fixture build не содержит Wi-Fi, BLE, RF-radio,
-SPI, SD или user-replay path.
+code внутри `firmware/leshy1`. Fixture build не содержит Wi-Fi, BLE, SD,
+произвольного payload/replay или product-side transmitter path. SPI существует
+только для проверенного fixed nRF24 register vector из
+[ADR-006](adr/ADR-006-bounded-signal-fixture.ru.md).
 
 ## Реализованный первый positive scenario
 
@@ -57,6 +59,31 @@ NEC emitter намеренно allocation-free и blocking примерно на
 inactive. Эта software boundary не заменяет независимый physical rail kill или
 oscilloscope/RF proof.
 
+Source `0.2.0-bounded-signals` сохраняет NEC contract и добавляет ровно один RF
+vector `nrf24-ch42-min-2s`. Он использует module slot 1, nRF channel 42 / 2 442 МГц,
+`RF_SETUP=0x90` (continuous carrier + PLL lock + минимальная настройка чипа −18 dBm)
+и duration 2 секунды при hard ceiling 2,5 секунды. Boot, completion, stop, panic,
+parser failure и Task-WDT удерживают CE всех трёх модулей inactive и переводят
+адресованный radio в power-down. Payload command и произвольных channel, power или
+duration нет. Это доказывает configured settings и functional reception, но не
+radiated power, sensitivity, range, calibrated frequency или instrumented RF silence.
+
+## Реализованный positive scenario nRF24
+
+`tests/hil/scenarios/nrf24-carrier-positive.json`:
+
+1. открывает `Home → 2.4 ГГц → Найти сигнал` через public Actions;
+2. доказывает ambient calibrated `not found`, пока все три product nRF24 active и
+   RX-only;
+3. допускает board-02 к fixed channel-42 carrier и требует от product найти
+   2 442 МГц / ближайший Wi-Fi channel 7 выше существующего response threshold;
+4. снимает ambient, found и final TFT states;
+5. требует automatic fixture completion/power-down, останавливает receiver и
+   возвращает product на Home/lease 0 с zero TX/storage side effects.
+
+Scenario становится gate-eligible только после сохранения physical результата. До
+этого это реализованный test contract, а не принятое RF evidence.
+
 ## Read-only admission board-02
 
 До любой fixture flash `profile_hil_board.py` запускает ROM esptool с `--no-stub` и
@@ -87,6 +114,17 @@ tools/run_ir_two_board_hil.py \
   --declare-antennas-attached
 ```
 
+Соответствующий bounded nRF24 run использует тот же admission и cleanup path:
+
+```sh
+tools/run_nrf24_two_board_hil.py \
+  --candidate-port /dev/cu.CANDIDATE \
+  --fixture-port /dev/cu.FIXTURE \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output work/outputs/nrf24-carrier-positive-0.129 \
+  --fixture-profile work/fixture-profile.json
+```
+
 Ранее принятый profile можно передать через `--fixture-profile`. Уже прошитые exact
 bytes разрешено переиспользовать только явными options
 `--reuse-exact-candidate-flash` и `--reuse-exact-fixture-flash`; normal path прошивает
@@ -105,6 +143,7 @@ board-01, продвигает catalog generation 97→98 после явног�
 и побайтно сравнивает live/Library CSV. Обе платы заканчивают inactive, product
 owner/lease — `none`/`0`.
 
-Это закрывает только объявленную IR positive boundary. Fixture TX Sub-GHz и 2.4 ГГц
-остаётся запрещён до отдельных контрактов region/band, minimum-power, separation и
-vector; разрешение IR не распространяется на RF.
+Это закрывает только объявленную IR positive boundary. ADR-006 разрешает единственный
+bounded nRF24 vector в committed fixture source, но physical nRF24 claim не
+принимается до зелёного и сохранённого exact two-board evidence. Fixture TX Sub-GHz
+остаётся запрещён до отдельного region/band и vector contract.

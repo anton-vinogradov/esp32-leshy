@@ -14,9 +14,22 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
 
-- **Current phase:** `S5.2 — controlled nRF24 positive fixture`.
+- **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
 - **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 automated steps.
 - **Next gate:** define the bounded minimum-power nRF24 fixture contract, then prove a known physical signal through the three-receiver finder with safe two-board cleanup.
+
+### Current stage phases
+
+| Phase | Outcome / exit gate | Status |
+|---|---|---|
+| S5.1 | Stock-radio passive product slices: all-antenna nRF24 overview/finder, robust CC1101 finder, bounded RAW/IR capture foundations | ✅ complete |
+| S5.2 | First physical two-board loop: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ complete |
+| S5.3 | Known nRF24 signal: source-bound 2,442 MHz minimum-power fixture → three-receiver finder result → safe cleanup | 🟡 in progress |
+| S5.4 | Known Sub-GHz signal: frequency find plus OOK capture/save/cold export; declare and verify the FSK/GDO0 path | ⬜ later |
+| S5.5 | Runtime completeness: worker supervision, low-voltage safe-write, sleep/resume and applicable explicit GPS/PN532 assembly profiles | ⬜ later |
+| S5.6 | Integrated S5 hardware gate: on-device Full check plus automated two-board regression with zero leaked leases/outputs | ⬜ later |
+
+### Roadmap
 
 - ✅ **S0 — Governance and generation boundary** · complete
 - ✅ **S1 — Evidence baseline: users, competitors, and hardware** · complete

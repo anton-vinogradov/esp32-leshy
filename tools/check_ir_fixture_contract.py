@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed if the separate IR fixture image drifts outside its safety contract."""
+"""Fail closed if the bounded signal fixture drifts outside its safety contract."""
 
 from __future__ import annotations
 
@@ -30,17 +30,20 @@ def main() -> int:
     scenario = json.loads((
         ROOT / "tests/hil/scenarios/infrared-nec-positive.json"
     ).read_text(encoding="utf-8"))
+    nrf_scenario = json.loads((
+        ROOT / "tests/hil/scenarios/nrf24-carrier-positive.json"
+    ).read_text(encoding="utf-8"))
     product_sources = "\n".join(
         path.read_text(encoding="utf-8", errors="replace")
         for path in (PRODUCT / "src").rglob("*") if path.is_file())
 
     required_config = (
         "55.03.39/platform-espressif32.zip",
-        "esp32-div-v2-ir-fixture",
+        "esp32-div-v2-signal-fixture",
         "board_build.flash_size = 16MB",
         "-std=gnu++17",
         "ARDUINO_USB_CDC_ON_BOOT=1",
-        "LESHY_FIXTURE_VERSION=\\\"0.1.0-ir-nec\\\"",
+        "LESHY_FIXTURE_VERSION=\\\"0.2.0-bounded-signals\\\"",
     )
     for marker in required_config:
         if marker not in config:
@@ -53,16 +56,24 @@ def main() -> int:
         "identity_ready\\\":%s",
         'std::strcmp(command, "fixture.begin")',
         'std::strcmp(command, "fixture.ir.nec.once")',
+        'std::strcmp(command, "fixture.nrf24.carrier.start")',
         'std::strcmp(command, "fixture.stop")',
         'std::strcmp(command, "fixture.panic")',
         "esp_task_wdt_isr_user_handler", "fixed_vector_only\\\":true",
-        "auto_arm\\\":false", "maximum_emission_us\\\":100000",
+        "auto_arm\\\":false", "maximum_duration_us\\\":",
+        "nrf_powered_down\\\":%s", "nrf_carrier_active\\\":%s",
+        "kNrfChannel = 42", "kNrfFrequencyMhz = 2400U + kNrfChannel",
+        "kNrfPowerDbm = -18", "kNrfMinimumPowerCarrierSetup = 0x90",
+        "startFixedNrf24Carrier", "serviceFixtureHardware",
     ):
         if marker not in entry:
             errors.append(f"fixture entry missing safety marker: {marker}")
     for marker in (
-        "kSessionLifetimeMs = 5000", "kMaximumEmissionUs = 100000",
+        "kSessionLifetimeMs = 5000", "kMaximumIrEmissionUs = 100000",
+        "kNrf24CarrierDurationUs = 2000000",
+        "kMaximumNrf24CarrierUs = 2500000",
         'kNecVectorId = "nec-10-34"', "app_identity_mismatch",
+        'kNrf24VectorId = "nrf24-ch42-min-2s"',
         "fixture_identity_mismatch", "vector_not_allowed",
         "session_expired", "duration_out_of_bounds",
     ):
@@ -76,7 +87,7 @@ def main() -> int:
     if entry.find("establishBootInvariant();") > entry.find("Serial.begin"):
         errors.append("fixture console starts before safe outputs")
     for forbidden in (
-        "WiFi.h", "BLEDevice", "SPI.h", "SD.h", "Preferences.h",
+        "WiFi.h", "BLEDevice", "SD.h", "Preferences.h",
         "RadioLib", "ELECHOUSE", "user-replay", "sendRaw",
     ):
         if forbidden in entry or forbidden in config:
@@ -91,7 +102,7 @@ def main() -> int:
         errors.append("test-only fixture leaked into product sources")
     if any(value in build for value in ("upload", "esptool", "--port", "write_flash")):
         errors.append("fixture build helper can flash a device")
-    for marker in ("firmware/leshy_fixture", "esp32-div-v2-ir-fixture"):
+    for marker in ("firmware/leshy_fixture", "esp32-div-v2-signal-fixture"):
         if marker not in build:
             errors.append(f"fixture build helper is not pinned: {marker}")
     for marker in (
@@ -110,7 +121,7 @@ def main() -> int:
     step_by_id = {
         step.get("id"): step for step in steps if isinstance(step, dict)
     }
-    if fixture_policy != {"required": True, "kind": "ir_nec_fixture"}:
+    if fixture_policy != {"required": True, "kind": "bounded_signal_fixture"}:
         errors.append("positive scenario does not require the exact fixture kind")
     emission = step_by_id.get("emit_nec", {})
     if emission.get("command") != \
@@ -128,6 +139,31 @@ def main() -> int:
         errors.append("positive scenario lacks byte-exact live/Library CSV")
     if scenario.get("gate_eligible") is not True:
         errors.append("complete positive scenario is not gate eligible")
+    nrf_devices = nrf_scenario.get("devices", {})
+    nrf_fixture_policy = nrf_devices.get("fixture", {})
+    nrf_steps = nrf_scenario.get("steps", [])
+    nrf_step_by_id = {
+        step.get("id"): step for step in nrf_steps if isinstance(step, dict)
+    }
+    if nrf_fixture_policy != {
+            "required": True, "kind": "bounded_signal_fixture"}:
+        errors.append("nRF scenario does not require the bounded fixture")
+    carrier = nrf_step_by_id.get("start_known_signal", {})
+    if carrier.get("command") != (
+            "fixture.nrf24.carrier.start ${session_id} "
+            "nrf24-ch42-min-2s"):
+        errors.append("nRF scenario does not use the fixed session vector")
+    limits = nrf_scenario.get("limits", {})
+    for required_limit, expected in (
+            ("calibrated_power_or_distance", False),
+            ("physical_rf_silence_instrumented", False),
+            ("product_rx_only", True),
+            ("product_all_available_antennas", True)):
+        if limits.get(required_limit) is not expected:
+            errors.append(
+                f"nRF scenario limit {required_limit} is not {expected}")
+    if nrf_scenario.get("gate_eligible") is not True:
+        errors.append("complete nRF scenario is not gate eligible")
     if '\\"source\\":\\"infrared\\"' not in product_sources or \
             '\\"captured_infrared_raw\\"' not in product_sources:
         errors.append("product Library lacks explicit IR capture metadata")
@@ -159,8 +195,9 @@ def main() -> int:
         for error in errors:
             print(f"FAIL: {error}")
         return 1
-    print("IR fixture contract passed: separate image, inactive boot, exact "
-          "identity/session, one fixed NEC vector, bounded timeout and panic stop")
+    print("Bounded signal fixture contract passed: separate image, inactive "
+          "boot, exact identity/session, fixed NEC and minimum-power nRF24 "
+          "vectors, bounded timeout and panic stop")
     return 0
 
 

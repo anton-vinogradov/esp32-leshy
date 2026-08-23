@@ -13,6 +13,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 START_MARKER = "<!-- LESHY-ROADMAP:START -->"
 END_MARKER = "<!-- LESHY-ROADMAP:END -->"
+PHASES_START_MARKER = "<!-- LESHY-ACTIVE-PHASES:START -->"
+PHASES_END_MARKER = "<!-- LESHY-ACTIVE-PHASES:END -->"
 EXPECTED_STAGES = tuple(f"S{index}" for index in range(9))
 
 
@@ -30,6 +32,8 @@ class LanguageConfig:
     functionality_map: str
     status_labels: dict[str, str]
     snapshot_fields: tuple[tuple[str, str], ...]
+    phases_heading: str
+    phase_columns: tuple[str, str, str]
 
 
 CONFIGS = (
@@ -53,6 +57,8 @@ CONFIGS = (
             ("Verified checkpoint", "Verified checkpoint"),
             ("Next evidence gate", "Next gate"),
         ),
+        phases_heading="Current stage phases",
+        phase_columns=("Phase", "Outcome / exit gate", "Status"),
     ),
     LanguageConfig(
         readme=ROOT / "README.ru.md",
@@ -74,6 +80,8 @@ CONFIGS = (
             ("Проверенный checkpoint", "Проверенный checkpoint"),
             ("Следующий evidence gate", "Следующий gate"),
         ),
+        phases_heading="Фазы текущего этапа",
+        phase_columns=("Фаза", "Результат / exit gate", "Статус"),
     ),
 )
 
@@ -110,7 +118,41 @@ def parse_stage_states(path: Path) -> dict[str, str]:
     return states
 
 
-def parse_snapshot(config: LanguageConfig, active_stage: str) -> list[tuple[str, str]]:
+def parse_active_phases(config: LanguageConfig,
+                        active_stage: str) -> list[tuple[str, str, str]]:
+    text = config.status.read_text(encoding="utf-8")
+    pattern = re.compile(
+        rf"{re.escape(PHASES_START_MARKER)}(.*?){re.escape(PHASES_END_MARKER)}",
+        re.DOTALL,
+    )
+    blocks = pattern.findall(text)
+    if len(blocks) != 1:
+        raise ValueError(
+            f"{config.status}: expected exactly one active-phase table")
+    rows = re.findall(
+        rf"^\| ({re.escape(active_stage)}\.\d+) \| (.+?) \| `([^`]+)` \|$",
+        blocks[0], re.MULTILINE)
+    if not rows:
+        raise ValueError(f"{config.status}: active-phase table is empty")
+    expected_ids = [
+        f"{active_stage}.{index}" for index in range(1, len(rows) + 1)]
+    actual_ids = [row[0] for row in rows]
+    if actual_ids != expected_ids:
+        raise ValueError(
+            f"{config.status}: expected sequential phases {expected_ids}, "
+            f"got {actual_ids}")
+    unknown = sorted({row[2] for row in rows} - {"done", "active", "planned"})
+    if unknown:
+        raise ValueError(f"{config.status}: unsupported phase states {unknown}")
+    active = [row[0] for row in rows if row[2] == "active"]
+    if len(active) != 1:
+        raise ValueError(
+            f"{config.status}: expected one active phase, got {active}")
+    return rows
+
+
+def parse_snapshot(config: LanguageConfig,
+                   active_phase: str) -> list[tuple[str, str]]:
     text = config.status.read_text(encoding="utf-8")
     snapshot: list[tuple[str, str]] = []
     for source_label, display_label in config.snapshot_fields:
@@ -129,9 +171,9 @@ def parse_snapshot(config: LanguageConfig, active_stage: str) -> list[tuple[str,
                 f"{config.status}: front-page field must not contain relative links"
             )
         snapshot.append((display_label, value))
-    if active_stage not in snapshot[0][1]:
+    if active_phase not in snapshot[0][1]:
         raise ValueError(
-            f"{config.status}: current phase must belong to active {active_stage}"
+            f"{config.status}: current phase must match active {active_phase}"
         )
     return snapshot
 
@@ -140,7 +182,9 @@ def render(config: LanguageConfig) -> str:
     names = parse_stage_names(config.delivery_plan)
     states = parse_stage_states(config.status)
     active = next(stage for stage in EXPECTED_STAGES if states[stage] == "active")
-    snapshot = parse_snapshot(config, active)
+    phases = parse_active_phases(config, active)
+    active_phase = next(row[0] for row in phases if row[2] == "active")
+    snapshot = parse_snapshot(config, active_phase)
     done = sum(state == "done" for state in states.values())
     icon = {"done": "✅", "active": "🟡", "planned": "⬜"}
 
@@ -157,7 +201,20 @@ def render(config: LanguageConfig) -> str:
     ]
     for label, value in snapshot:
         lines.append(f"- **{label}:** {value}")
-    lines.append("")
+    phase, outcome, status = config.phase_columns
+    lines.extend((
+        "",
+        f"### {config.phases_heading}",
+        "",
+        f"| {phase} | {outcome} | {status} |",
+        "|---|---|---|",
+    ))
+    for phase_id, phase_outcome, phase_state in phases:
+        lines.append(
+            f"| {phase_id} | {phase_outcome} | "
+            f"{icon[phase_state]} {config.status_labels[phase_state]} |")
+    lines.extend(("", "### Roadmap" if config.readme.name == "README.md"
+                  else "### Роадмап", ""))
     for stage in EXPECTED_STAGES:
         state = states[stage]
         lines.append(
@@ -189,6 +246,22 @@ def replace_block(text: str, block: str, path: Path) -> str:
 
 def drift_errors() -> list[str]:
     errors: list[str] = []
+    try:
+        phase_shapes = []
+        for config in CONFIGS:
+            states = parse_stage_states(config.status)
+            active = next(
+                stage for stage in EXPECTED_STAGES
+                if states[stage] == "active")
+            phase_shapes.append([
+                (phase_id, state) for phase_id, _outcome, state
+                in parse_active_phases(config, active)
+            ])
+        if phase_shapes[0] != phase_shapes[1]:
+            errors.append(
+                "EN/RU active-phase IDs or states differ in canonical STATUS")
+    except (OSError, ValueError) as error:
+        errors.append(str(error))
     for config in CONFIGS:
         try:
             current = config.readme.read_text(encoding="utf-8")

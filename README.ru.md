@@ -14,9 +14,22 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
-- **Текущая фаза:** `S5.2 — controlled positive fixture nRF24`.
+- **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
 - **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 автоматических шага.
 - **Следующий gate:** определить bounded nRF24 fixture с минимальной мощностью и доказать известный физический сигнал через finder трёх приёмников с безопасной очисткой обеих плат.
+
+### Фазы текущего этапа
+
+| Фаза | Результат / exit gate | Статус |
+|---|---|---|
+| S5.1 | Пассивные product slices штатных радио: all-antenna overview/finder nRF24, robust finder CC1101, основы bounded RAW/IR capture | ✅ готово |
+| S5.2 | Первый physical loop двух плат: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ готово |
+| S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup | 🟡 в работе |
+| S5.4 | Известный Sub-GHz signal: поиск частоты плюс OOK capture/save/cold export; объявленный и проверенный FSK/GDO0 path | ⬜ дальше |
+| S5.5 | Полнота runtime: worker supervision, low-voltage safe-write, sleep/resume и применимые явные assembly profiles GPS/PN532 | ⬜ дальше |
+| S5.6 | Интегральный hardware gate S5: on-device Full check плюс автоматический two-board regression без утечки leases/outputs | ⬜ дальше |
+
+### Роадмап
 
 - ✅ **S0 — Governance и граница поколений** · готово
 - ✅ **S1 — Evidence baseline: пользователи, конкуренты и железо** · готово

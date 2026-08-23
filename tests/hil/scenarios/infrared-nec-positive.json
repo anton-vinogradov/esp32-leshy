@@ -5,7 +5,7 @@
   "gate_eligible": true,
   "devices": {
     "candidate": {"required": true},
-    "fixture": {"required": true, "kind": "ir_nec_fixture"}
+    "fixture": {"required": true, "kind": "bounded_signal_fixture"}
   },
   "steps": [
     {
@@ -71,17 +71,17 @@
       "op": "query",
       "target": "fixture",
       "command": "fixture.ir.nec.once ${session_id} nec-10-34",
-      "response_schema": "leshy.hil.fixture.ir.v1",
+      "response_schema": "leshy.hil.fixture.signal.v1",
       "kind": "result",
       "timeout": 3,
       "expect": {
         "state": "complete",
-        "role": "ir_nec_fixture",
+        "role": "bounded_signal_fixture",
         "vector_id": "nec-10-34",
         "fixed_vector_only": true,
         "auto_arm": false,
         "carrier_hz": 38000,
-        "maximum_emission_us": 100000
+        "maximum_ir_emission_us": 100000
       }
     },
     {

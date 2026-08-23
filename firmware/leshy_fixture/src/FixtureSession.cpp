@@ -4,6 +4,15 @@
 
 namespace leshy::hil::fixture {
 
+const char* fixtureSignalName(FixtureSignal signal) {
+    switch (signal) {
+        case FixtureSignal::None: return "none";
+        case FixtureSignal::InfraredNec: return "infrared_nec";
+        case FixtureSignal::Nrf24Carrier: return "nrf24_carrier";
+    }
+    return "none";
+}
+
 const char* fixtureStateName(FixtureState state) {
     switch (state) {
         case FixtureState::Idle: return "idle";
@@ -73,6 +82,8 @@ bool FixtureSession::begin(const char* sessionId,
     report_.state = FixtureState::Armed;
     report_.deadlineMs = nowMs + kSessionLifetimeMs;
     report_.lastDurationUs = 0;
+    report_.maximumDurationUs = 0;
+    report_.signal = FixtureSignal::None;
     report_.outputInactive = true;
     report_.lastError = "none";
     return true;
@@ -81,6 +92,25 @@ bool FixtureSession::begin(const char* sessionId,
 bool FixtureSession::authorizeNecOnce(const char* sessionId,
                                       const char* vectorId,
                                       std::uint32_t nowMs) {
+    return authorizeFixedOnce(sessionId, vectorId, kNecVectorId,
+                              FixtureSignal::InfraredNec,
+                              kMaximumIrEmissionUs, nowMs);
+}
+
+bool FixtureSession::authorizeNrf24CarrierOnce(const char* sessionId,
+                                               const char* vectorId,
+                                               std::uint32_t nowMs) {
+    return authorizeFixedOnce(sessionId, vectorId, kNrf24VectorId,
+                              FixtureSignal::Nrf24Carrier,
+                              kMaximumNrf24CarrierUs, nowMs);
+}
+
+bool FixtureSession::authorizeFixedOnce(const char* sessionId,
+                                        const char* vectorId,
+                                        const char* allowedVectorId,
+                                        FixtureSignal signal,
+                                        std::uint32_t maximumDurationUs,
+                                        std::uint32_t nowMs) {
     if (report_.state != FixtureState::Armed) {
         reject("not_armed");
         return false;
@@ -89,7 +119,7 @@ bool FixtureSession::authorizeNecOnce(const char* sessionId,
         reject("session_mismatch");
         return false;
     }
-    if (!same(vectorId, kNecVectorId)) {
+    if (!same(vectorId, allowedVectorId)) {
         reject("vector_not_allowed");
         return false;
     }
@@ -100,6 +130,8 @@ bool FixtureSession::authorizeNecOnce(const char* sessionId,
         return false;
     }
     report_.state = FixtureState::Running;
+    report_.signal = signal;
+    report_.maximumDurationUs = maximumDurationUs;
     report_.outputInactive = false;
     report_.lastError = "none";
     ++report_.startCount;
@@ -114,7 +146,9 @@ bool FixtureSession::complete(std::uint32_t durationUs, bool outputInactive) {
     report_.lastDurationUs = durationUs;
     report_.outputInactive = outputInactive;
     ++report_.stopCount;
-    if (!outputInactive || durationUs == 0 || durationUs > kMaximumEmissionUs) {
+    if (!outputInactive || durationUs == 0 ||
+        report_.maximumDurationUs == 0 ||
+        durationUs > report_.maximumDurationUs) {
         report_.state = FixtureState::Fault;
         reject(!outputInactive ? "output_not_inactive" : "duration_out_of_bounds");
         return false;
@@ -123,6 +157,15 @@ bool FixtureSession::complete(std::uint32_t durationUs, bool outputInactive) {
     report_.lastError = "none";
     ++report_.emissionCount;
     return true;
+}
+
+const char* FixtureSession::vectorId() const {
+    switch (report_.signal) {
+        case FixtureSignal::InfraredNec: return kNecVectorId;
+        case FixtureSignal::Nrf24Carrier: return kNrf24VectorId;
+        case FixtureSignal::None: return "none";
+    }
+    return "none";
 }
 
 bool FixtureSession::stop(const char* sessionId, bool outputInactive) {

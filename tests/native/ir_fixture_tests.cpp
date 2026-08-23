@@ -81,12 +81,39 @@ void panicAndFaultFailClosed() {
     CHECK(duration.authorizeNecOnce(
         kSession, leshy::hil::fixture::kNecVectorId, 2));
     CHECK(!duration.complete(
-        leshy::hil::fixture::kMaximumEmissionUs + 1, true));
+        leshy::hil::fixture::kMaximumIrEmissionUs + 1, true));
     CHECK(duration.report().state == FixtureState::Fault);
 
     FixtureSession output;
     CHECK(!output.begin(kSession, kApp, kApp, kFixture, kFixture, 1, false));
     CHECK(output.report().state == FixtureState::Fault);
+}
+
+void acceptsOneExactMinimumPowerNrf24Window() {
+    FixtureSession session;
+    CHECK(session.begin(kSession, kApp, kApp, kFixture, kFixture, 10, true));
+    CHECK(session.authorizeNrf24CarrierOnce(
+        kSession, leshy::hil::fixture::kNrf24VectorId, 11));
+    CHECK(session.report().signal ==
+          leshy::hil::fixture::FixtureSignal::Nrf24Carrier);
+    CHECK(session.report().maximumDurationUs ==
+          leshy::hil::fixture::kMaximumNrf24CarrierUs);
+    CHECK(std::strcmp(session.vectorId(),
+                      leshy::hil::fixture::kNrf24VectorId) == 0);
+    CHECK(session.complete(
+        leshy::hil::fixture::kNrf24CarrierDurationUs, true));
+    CHECK(session.report().state == FixtureState::Complete);
+    CHECK(!session.authorizeNrf24CarrierOnce(
+        kSession, leshy::hil::fixture::kNrf24VectorId, 12));
+
+    FixtureSession excessive;
+    CHECK(excessive.begin(
+        kSession, kApp, kApp, kFixture, kFixture, 10, true));
+    CHECK(excessive.authorizeNrf24CarrierOnce(
+        kSession, leshy::hil::fixture::kNrf24VectorId, 11));
+    CHECK(!excessive.complete(
+        leshy::hil::fixture::kMaximumNrf24CarrierUs + 1U, true));
+    CHECK(excessive.report().state == FixtureState::Fault);
 }
 
 void supportsExplicitStopAndFreshSession() {
@@ -107,7 +134,8 @@ int main() {
     expiresWithoutEmission();
     panicAndFaultFailClosed();
     supportsExplicitStopAndFreshSession();
+    acceptsOneExactMinimumPowerNrf24Window();
     if (failures != 0) return 1;
-    std::cout << "IR fixture controller tests passed\n";
+    std::cout << "Bounded signal fixture controller tests passed\n";
     return 0;
 }

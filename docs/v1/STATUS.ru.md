@@ -12,7 +12,7 @@
 
 - **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
-- **Текущая фаза:** `S5.2 — controlled positive fixture nRF24`.
+- **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
 - **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 автоматических шага.
 - **Следующий evidence gate:** определить bounded nRF24 fixture с минимальной мощностью и доказать известный физический сигнал через finder трёх приёмников с безопасной очисткой обеих плат.
 - **Принятая physical baseline:** exact `0.129.0-pre-app-watchdog`; все прежние принятые checkpoints сохранены ниже.
@@ -22,6 +22,20 @@
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
 - **Ближайшая граница:** реализовать source-bound nRF24 vector на минимальной
   поддерживаемой мощности и доказать на нём уже реализованный passive finder.
+
+### План фаз S5
+
+<!-- LESHY-ACTIVE-PHASES:START -->
+| Фаза | Результат | Статус |
+|---|---|---|
+| S5.1 | Пассивные product slices штатных радио: all-antenna overview/finder nRF24, robust finder CC1101, основы bounded RAW/IR capture | `done` |
+| S5.2 | Первый physical loop двух плат: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | `done` |
+| S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup | `active` |
+| S5.4 | Известный Sub-GHz signal: поиск частоты плюс OOK capture/save/cold export; объявленный и проверенный FSK/GDO0 path | `planned` |
+| S5.5 | Полнота runtime: worker supervision, low-voltage safe-write, sleep/resume и применимые явные assembly profiles GPS/PN532 | `planned` |
+| S5.6 | Интегральный hardware gate S5: on-device Full check плюс автоматический two-board regression без утечки leases/outputs | `planned` |
+<!-- LESHY-ACTIVE-PHASES:END -->
+
 - **Последний принятый checkpoint:** exact `0.129.0-pre-app-watchdog` переиспользует exact product/fixture images в первом зелёном closed-loop scenario двух плат. Board-02 один раз передаёт fixed NEC `0x10/0x34` за bounded 68,424 ms; board-01 принимает 67 pulses, декодирует non-repeat NEC frame, явно сохраняет его, продвигает generation exact-CID catalog 97→98, cold-reopen-ит IR item и выдаёт byte-exact live/Library CSV. Автоматически сняты шесть TFT states; heap неизменен 148 164/77 932/63 700 B, input errors/drops равны нулю, product IR TX не используется, обе платы заканчивают с inactive outputs и product owner/lease `none`/`0`. 30-файловый, привязанный к source/images/profile [machine-checked evidence](../../tests/hil/evidence/board-01-infrared-nec-0.129.json) закрывает physical IR positive path, но не этап S5.
 - **Предыдущий принятый checkpoint:** exact `0.124.1-cc1101-frequency-finder` превращает Home→Sub-GHz в **Обзор эфира**, **Найти частоту** и **Захват RAW**. Поиск частоты пассивно снимает 1 099 bins с шагом 250 кГц за четыре полных окна приёмника (три ambient calibration sweep плюс search), использует per-bin median-of-three floor, убирает common drift и исключает окрестности гармоник тактовой частоты платы. Product screen показывает только калибровку/действие/результат, точную частоту с ближайшей подсказкой диапазона 315/433/868/915 МГц при находке и чёрный полноширинный график отклика; перерисовывается только dynamic graph/result region. Два независимых ambient run board-01 честно остаются ниже threshold: 13 и 15 dB против 18 dB, с zero TX/PATABLE/FIFO/storage side effects, неизменным exact-CID generation 95/0, invariant heap и final Home lease 0 в [machine-checked evidence](../../tests/hil/evidence/board-01-cc1101-signal-finder-0.124.json). Bundle также сохраняет оба ложных результата 0.124.0 (335 000 кГц/21 dB и 346 250 кГц/19 dB); после robust calibration fix та же среда больше не даёт found. Deterministic native injection доказывает обнаружение 433 250 кГц и mapping диапазона. Для physical positive result всё ещё нужен controlled source board-02; 250 кГц — разрешение поиска, не calibrated instrument accuracy.
 - **Более ранний принятый checkpoint:** exact `0.123.0-nrf24-signal-finder` превращает Home→2.4 ГГц в понятный выбор **Обзор эфира** / **Найти сигнал**. Finder пассивно слушает все три обнаруженных nRF24, запоминает минимум двух фоновых окон по 48 sweep, вычитает общую широкополосную смену и сообщает только локальный рост не меньше восьми hit над фоном. Product screen показывает калибровку/действие/результат, точный график 2 402…2 484 МГц и ближайший канал Wi-Fi, когда это применимо; counters и implementation telemetry остаются только в read-only diagnostics. Fresh automated HIL board-01 калибруется и проходит physical windows 2→3 при ambient response 3 ниже threshold 8, меняет 720 пикселей графика и ноль пикселей header/legend/axis/footer, выполняет zero TX/storage side effects, сохраняет exact-CID generation 95/0 и heap 152 004/81 772/67 540 B, сбрасывается через **Заново** и заканчивает Home с lease 0 в [machine-checked evidence](../../tests/hil/evidence/board-01-nrf24-signal-finder-0.123.json). Детерминированная native injection связывает локальный рост с nRF channel 42 / 2 442 МГц / Wi-Fi channel 7. В physical run не было известного передатчика, поэтому physical found-state, calibrated power/distance и instrumented RF silence честно не заявляются до использования board-02 как controlled source.

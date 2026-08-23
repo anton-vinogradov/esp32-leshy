@@ -30,12 +30,12 @@ class HilScenarioTests(unittest.TestCase):
     def test_required_fixture_is_fail_closed_until_bound(self) -> None:
         scenario = copy.deepcopy(self.scenario)
         scenario["devices"]["fixture"] = {
-            "required": True, "kind": "ir_nec_fixture",
+            "required": True, "kind": "bounded_signal_fixture",
         }
         scenario["steps"].insert(1, {
             "id": "fixture-once", "op": "query", "target": "fixture",
             "command": "fixture.ir.nec.once ${session_id} nec-10-34",
-            "response_schema": "leshy.hil.fixture.ir.v1", "kind": "result",
+            "response_schema": "leshy.hil.fixture.signal.v1", "kind": "result",
         })
         with self.assertRaisesRegex(ValueError, "fixture"):
             hil.validate_scenario(scenario, self.ports)
@@ -95,20 +95,26 @@ class HilScenarioTests(unittest.TestCase):
 
     def test_fixture_admission_is_exact_and_inactive(self) -> None:
         identity = {
-            "version": "0.1.0-ir-nec", "role": "ir_nec_fixture",
+            "version": "0.2.0-bounded-signals",
+            "role": "bounded_signal_fixture",
             "fixture_id": "0011223344556677",
             "app_elf_sha256": "a" * 64,
             "identity_ready": True,
             "ir_tx_inactive": True, "nrf_ce_inactive": True,
+            "nrf_powered_down": True,
             "buzzer_inactive": True, "fixed_vector_only": True,
             "auto_arm": False, "watchdog_armed": True,
-            "maximum_emission_us": 100000, "session_lifetime_ms": 5000,
+            "maximum_ir_emission_us": 100000,
+            "maximum_nrf_carrier_us": 2500000,
+            "session_lifetime_ms": 5000,
         }
         self.assertEqual([], hil.fixture_admission_failures(
-            identity, "0.1.0-ir-nec", "0011223344556677", "a" * 64))
+            identity, "0.2.0-bounded-signals",
+            "0011223344556677", "a" * 64))
         identity["ir_tx_inactive"] = False
         self.assertEqual(1, len(hil.fixture_admission_failures(
-            identity, "0.1.0-ir-nec", "0011223344556677", "a" * 64)))
+            identity, "0.2.0-bounded-signals",
+            "0011223344556677", "a" * 64)))
 
     def test_fixture_profile_requires_read_only_accepted_board(self) -> None:
         fixture_id = "0011223344556677"
@@ -158,6 +164,14 @@ class HilScenarioTests(unittest.TestCase):
     def test_repository_positive_fixture_scenario_is_valid(self) -> None:
         scenario = json.loads((
             ROOT / "tests/hil/scenarios/infrared-nec-positive.json"
+        ).read_text(encoding="utf-8"))
+        hil.validate_scenario(scenario, {
+            "candidate": "/dev/candidate", "fixture": "/dev/fixture",
+        })
+
+    def test_repository_nrf24_fixture_scenario_is_valid(self) -> None:
+        scenario = json.loads((
+            ROOT / "tests/hil/scenarios/nrf24-carrier-positive.json"
         ).read_text(encoding="utf-8"))
         hil.validate_scenario(scenario, {
             "candidate": "/dev/candidate", "fixture": "/dev/fixture",

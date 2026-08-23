@@ -20,13 +20,19 @@ from run_hil_scenario import validate_fixture_profile  # noqa: E402
 
 
 PRODUCT_ENV = "esp32-div-v2-clean"
-FIXTURE_ENV = "esp32-div-v2-ir-fixture"
+FIXTURE_ENV = "esp32-div-v2-signal-fixture"
 PRODUCT_FIRMWARE = (
     ROOT / "firmware/leshy1/.pio/build" / PRODUCT_ENV / "firmware.bin")
 FIXTURE_FIRMWARE = (
     ROOT / "firmware/leshy_fixture/.pio/build" / FIXTURE_ENV /
     "firmware.bin")
-SCENARIO = ROOT / "tests/hil/scenarios/infrared-nec-positive.json"
+SCENARIOS = {
+    "infrared-nec-positive": (
+        ROOT / "tests/hil/scenarios/infrared-nec-positive.json"),
+    "nrf24-carrier-positive": (
+        ROOT / "tests/hil/scenarios/nrf24-carrier-positive.json"),
+}
+SCENARIO = SCENARIOS["infrared-nec-positive"]
 VERSION_VALUE = re.compile(
     r"-D\s+{symbol}=\\\"([^\"\r\n]+)\\\"")
 
@@ -88,10 +94,11 @@ def runner_command(*, candidate_port: str, fixture_port: str,
                    output: Path, source_commit: str,
                    product_version: str, fixture_version: str,
                    reuse_candidate: bool,
-                   reuse_fixture: bool) -> list[str]:
+                   reuse_fixture: bool,
+                   scenario: Path = SCENARIO) -> list[str]:
     command = [
         str(esptool_python()), str(ROOT / "tools/run_hil_scenario.py"),
-        "--scenario", str(SCENARIO),
+        "--scenario", str(scenario),
         "--port", f"candidate={candidate_port}",
         "--port", f"fixture={fixture_port}",
         "--firmware", str(PRODUCT_FIRMWARE),
@@ -118,6 +125,9 @@ def main() -> int:
     parser.add_argument("--fixture-port", required=True)
     parser.add_argument("--expected-cid", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--scenario", choices=tuple(SCENARIOS),
+        default="infrared-nec-positive")
     profile = parser.add_mutually_exclusive_group(required=True)
     profile.add_argument("--fixture-profile", type=Path)
     profile.add_argument("--profile-fixture-read-only", action="store_true")
@@ -179,6 +189,7 @@ def main() -> int:
             fixture_version=fixture_version,
             reuse_candidate=args.reuse_exact_candidate_flash,
             reuse_fixture=args.reuse_exact_fixture_flash,
+            scenario=SCENARIOS[args.scenario],
         ), cwd=ROOT, check=True)
     except (OSError, ValueError, json.JSONDecodeError,
             subprocess.CalledProcessError) as error:

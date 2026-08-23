@@ -163,17 +163,19 @@ def fixture_admission_failures(record: dict[str, Any], version: str,
                                app_identity: str) -> list[str]:
     expected = {
         "version": version,
-        "role": "ir_nec_fixture",
+        "role": "bounded_signal_fixture",
         "fixture_id": fixture_id,
         "app_elf_sha256": app_identity,
         "identity_ready": True,
         "ir_tx_inactive": True,
         "nrf_ce_inactive": True,
+        "nrf_powered_down": True,
         "buzzer_inactive": True,
         "fixed_vector_only": True,
         "auto_arm": False,
         "watchdog_armed": True,
-        "maximum_emission_us": 100000,
+        "maximum_ir_emission_us": 100000,
+        "maximum_nrf_carrier_us": 2500000,
         "session_lifetime_ms": 5000,
     }
     return expect(record, expected, "fixture_admission")
@@ -220,6 +222,7 @@ def fixture_inactive_failures(record: dict[str, Any],
     return expect(record, {
         "ir_tx_inactive": True,
         "nrf_ce_inactive": True,
+        "nrf_powered_down": True,
         "buzzer_inactive": True,
     }, label)
 
@@ -293,9 +296,9 @@ def validate_scenario(scenario: dict[str, Any], ports: dict[str, str]) -> None:
         if required and role not in ports:
             raise ValueError(f"required device role is not bound: {role}")
         if role == "fixture" and required and policy.get("kind") != \
-                "ir_nec_fixture":
+                "bounded_signal_fixture":
             raise ValueError(
-                "required fixture must declare kind ir_nec_fixture")
+                "required fixture must declare kind bounded_signal_fixture")
     steps = scenario.get("steps")
     if not isinstance(steps, list) or not 1 <= len(steps) <= 256:
         raise ValueError("scenario must contain 1..256 steps")
@@ -532,7 +535,7 @@ def main() -> int:
     fixture_cleanup: dict[str, Any] = {"attempted": False}
     stream_payloads: dict[str, bytes] = {}
     fixture_armed = False
-    fixture_vector_executed = False
+    fixture_vector_executed = ""
     scenario_completed = False
 
     try:
@@ -591,7 +594,7 @@ def main() -> int:
                     try:
                         fixture_cleanup = query(
                             fixture, command.encode("ascii"),
-                            "leshy.hil.fixture.ir.v1", "state", timeout=5.0)
+                            "leshy.hil.fixture.signal.v1", "state", timeout=5.0)
                         fixture_cleanup["attempted"] = True
                         fixture_cleanup["command"] = command.split()[0]
                         failures.extend(fixture_inactive_failures(
@@ -606,7 +609,7 @@ def main() -> int:
                         try:
                             fixture_cleanup = query(
                                 fixture, b"fixture.panic",
-                                "leshy.hil.fixture.ir.v1", "state",
+                                "leshy.hil.fixture.signal.v1", "state",
                                 timeout=5.0)
                             fixture_cleanup["attempted"] = True
                             fixture_cleanup["command"] = "fixture.panic"
@@ -621,7 +624,7 @@ def main() -> int:
 
                 fixture_identity = query(
                     fixture, b"fixture.identity",
-                    "leshy.hil.fixture.ir.v1", "ready", timeout=5.0)
+                    "leshy.hil.fixture.signal.v1", "ready", timeout=5.0)
                 failures.extend(fixture_admission_failures(
                     fixture_identity, args.expected_fixture_version,
                     args.expected_fixture_id, fixture_app_identity))
@@ -634,7 +637,7 @@ def main() -> int:
                     raise RuntimeError("fixture identity contract failed")
                 fixture_reset = query(
                     fixture, b"fixture.panic",
-                    "leshy.hil.fixture.ir.v1", "state", timeout=5.0)
+                    "leshy.hil.fixture.signal.v1", "state", timeout=5.0)
                 reset_failures = fixture_inactive_failures(
                     fixture_reset, "fixture_reset")
                 reset_failures.extend(expect(
@@ -687,7 +690,7 @@ def main() -> int:
                     if needs_fixture:
                         fixture_before_reboot = query(
                             devices["fixture"], b"fixture.state",
-                            "leshy.hil.fixture.ir.v1", "state", timeout=5.0)
+                            "leshy.hil.fixture.signal.v1", "state", timeout=5.0)
                         operation_failures.extend(fixture_inactive_failures(
                             fixture_before_reboot,
                             f"{step_id}.fixture"))
@@ -739,7 +742,7 @@ def main() -> int:
                             f"{args.expected_fixture_id}")
                         fixture_admission = query(
                             devices[role], admission_command.encode("ascii"),
-                            "leshy.hil.fixture.ir.v1", "armed", timeout=5.0)
+                            "leshy.hil.fixture.signal.v1", "armed", timeout=5.0)
                         admission_failures = fixture_admission_failures(
                             fixture_admission,
                             args.expected_fixture_version,
@@ -808,8 +811,11 @@ def main() -> int:
                     captures[step_id] = record
                 step_failures = list(operation_failures)
                 if role == "fixture":
-                    step_failures.extend(fixture_inactive_failures(
-                        record, step_id))
+                    nrf_start = command.startswith(
+                        "fixture.nrf24.carrier.start ")
+                    if not nrf_start:
+                        step_failures.extend(fixture_inactive_failures(
+                            record, step_id))
                     step_failures.extend(expect(
                         record, {"session_id": run_id}, step_id))
                     if command.startswith("fixture.ir.nec.once "):
@@ -834,7 +840,53 @@ def main() -> int:
                         if fixture_vector_executed:
                             step_failures.append(
                                 f"{step_id}: fixture vector repeated")
-                        fixture_vector_executed = True
+                        fixture_vector_executed = "infrared_nec"
+                    elif nrf_start:
+                        step_failures.extend(expect(record, {
+                            "state": "running",
+                            "signal": "nrf24_carrier",
+                            "vector_id": "nrf24-ch42-min-2s",
+                            "armed": False,
+                            "start_count": int(
+                                fixture_identity.get("start_count", 0)) + 1,
+                            "stop_count": int(
+                                fixture_identity.get("stop_count", 0)),
+                            "emission_count": int(
+                                fixture_identity.get("emission_count", 0)),
+                            "last_duration_us": 0,
+                            "ir_tx_inactive": True,
+                            "nrf_ce_inactive": False,
+                            "nrf_powered_down": False,
+                            "nrf_carrier_active": True,
+                            "buzzer_inactive": True,
+                            "nrf_channel": 42,
+                            "nrf_frequency_mhz": 2442,
+                            "nrf_power_dbm": -18,
+                        }, step_id))
+                        if fixture_vector_executed:
+                            step_failures.append(
+                                f"{step_id}: fixture vector repeated")
+                        fixture_vector_executed = "nrf24_carrier"
+                    elif (fixture_vector_executed == "nrf24_carrier" and
+                          record.get("state") == "complete"):
+                        step_failures.extend(expect(record, {
+                            "signal": "nrf24_carrier",
+                            "vector_id": "nrf24-ch42-min-2s",
+                            "start_count": int(
+                                fixture_identity.get("start_count", 0)) + 1,
+                            "stop_count": int(
+                                fixture_identity.get("stop_count", 0)) + 1,
+                            "emission_count": int(
+                                fixture_identity.get("emission_count", 0)) + 1,
+                            "nrf_carrier_active": False,
+                        }, step_id))
+                        step_failures.extend(evaluate_checks(record, [{
+                            "path": "last_duration_us", "op": "gte",
+                            "value": 2000000,
+                        }, {
+                            "path": "last_duration_us", "op": "lte",
+                            "value": 2500000,
+                        }], step_id))
                 if isinstance(step.get("expect"), dict):
                     step_failures.extend(evaluate_expectations(
                         record, step["expect"], step_id))

@@ -94,9 +94,10 @@ README — только навигация. Исследования объяс�
 - `STATUS` обновляется при смене active stage, gate, blocker или подтверждённого
   результата; именно его дата считается датой актуальности проекта.
 - Каждый переход фазы/checkpoint обновляет в `STATUS` поля snapshot `Текущая фаза`,
-  `Проверенный checkpoint` и `Следующий evidence gate`, после чего публичный roadmap
-  README регенерируется командой `python3 tools/readme_roadmap.py --write`.
-  `check_docs.py` отклоняет рассинхронизацию roadmap.
+  `Проверенный checkpoint`, `Следующий evidence gate` и таблицу фаз active stage,
+  после чего публичный roadmap README регенерируется командой
+  `python3 tools/readme_roadmap.py --write`. `check_docs.py` отклоняет рассинхронизацию
+  roadmap, состояний фаз и структуры EN/RU.
 - `DELIVERY_PLAN` меняется только при изменении границ/порядка этапов, но не для
   ежедневного прогресса.
 - Requirement не удаляется: он получает `rejected` или `deferred`, чтобы решения

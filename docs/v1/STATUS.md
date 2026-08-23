@@ -12,7 +12,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 - **Active stage:** `S5 — Complete ESP32-DIV hardware`.
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
-- **Current phase:** `S5.2 — controlled nRF24 positive fixture`.
+- **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
 - **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 automated steps.
 - **Next evidence gate:** define the bounded minimum-power nRF24 fixture contract, then prove a known physical signal through the three-receiver finder with safe two-board cleanup.
 - **Accepted physical baseline:** exact `0.129.0-pre-app-watchdog`; earlier accepted checkpoints remain retained below.
@@ -22,6 +22,20 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   advance each present module through probe → observe/capture → Library → inspect/export.
 - **Immediate boundary:** implement the fixture-side, source-bound nRF24 vector at the
   minimum supported power and prove the already implemented passive finder against it.
+
+### S5 phase plan
+
+<!-- LESHY-ACTIVE-PHASES:START -->
+| Phase | Outcome | Status |
+|---|---|---|
+| S5.1 | Stock-radio passive product slices: all-antenna nRF24 overview/finder, robust CC1101 finder, bounded RAW/IR capture foundations | `done` |
+| S5.2 | First physical two-board loop: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | `done` |
+| S5.3 | Known nRF24 signal: source-bound 2,442 MHz minimum-power fixture → three-receiver finder result → safe cleanup | `active` |
+| S5.4 | Known Sub-GHz signal: frequency find plus OOK capture/save/cold export; declare and verify the FSK/GDO0 path | `planned` |
+| S5.5 | Runtime completeness: worker supervision, low-voltage safe-write, sleep/resume and applicable explicit GPS/PN532 assembly profiles | `planned` |
+| S5.6 | Integrated S5 hardware gate: on-device Full check plus automated two-board regression with zero leaked leases/outputs | `planned` |
+<!-- LESHY-ACTIVE-PHASES:END -->
+
 - **Latest accepted checkpoint:** exact `0.129.0-pre-app-watchdog` reuses exact product and fixture images for the first passing closed-loop two-board scenario. Board-02 emits the fixed NEC `0x10/0x34` vector in one bounded 68.424 ms operation; board-01 captures 67 pulses, decodes the non-repeat NEC frame, explicitly saves it, advances the exact-CID catalog generation 97→98, cold-reopens the IR item and produces byte-exact live and Library CSV. Six TFT states are captured automatically; heap is invariant at 148,164/77,932/63,700 B, input errors/drops are zero, product IR TX is unused, and both boards finish with inactive outputs and product owner/lease `none`/`0`. The 30-file source/image/profile-bound [machine-checked evidence](../../tests/hil/evidence/board-01-infrared-nec-0.129.json) closes the physical IR positive path but does not close S5.
 - **Previous accepted checkpoint:** exact `0.124.1-cc1101-frequency-finder` changes Home→Sub-GHz into **Air overview**, **Find frequency**, and **RAW Capture**. Find frequency passively samples 1,099 bins at 250 kHz spacing over four complete receiver windows (three ambient calibration sweeps plus search), uses a per-bin median-of-three floor, removes common drift and excludes board-clock harmonic neighborhoods. The product screen shows only calibration/action/result, exact frequency plus nearest 315/433/868/915 MHz band hint when found, and a black full-width response graph; only the dynamic graph/result region redraws. Two independent ambient board-01 runs remain honestly below threshold at 13 and 15 dB versus 18 dB, with zero TX/PATABLE/FIFO/storage side effects, unchanged exact-CID generation 95/0, invariant heap and final Home lease 0 in [machine-checked evidence](../../tests/hil/evidence/board-01-cc1101-signal-finder-0.124.json). The bundle also retains both 0.124.0 false positives (335,000 kHz/21 dB and 346,250 kHz/19 dB); the same environment no longer produces a found result after the robust calibration fix. Deterministic native injection proves 433,250 kHz detection and band mapping. A controlled board-02 source is still required for a physical positive result; 250 kHz is discovery resolution, not calibrated instrument accuracy.
 - **Earlier accepted checkpoint:** exact `0.123.0-nrf24-signal-finder` changes Home→2.4 GHz into a clear choice between **Air overview** and **Find a signal**. The finder listens passively through all three detected nRF24 antennas, learns the minimum of two 48-sweep ambient windows, subtracts common wide-band change and reports only a local rise of at least eight hits above that floor. The product screen shows calibration/action/result, an exact 2,402…2,484 MHz response graph and nearest Wi-Fi channel when applicable; counters and implementation telemetry stay in read-only diagnostics. A fresh automated board-01 run calibrates and advances 2→3 physical windows with ambient response 3 below threshold 8, changes 720 graph and zero header/legend/axis/footer pixels, performs zero TX/storage side effects, preserves exact-CID generation 95/0 and heap 152,004/81,772/67,540 B, resets through **Again**, and ends Home with lease 0 in [machine-checked evidence](../../tests/hil/evidence/board-01-nrf24-signal-finder-0.123.json). A deterministic native injection maps a local rise to nRF channel 42 / 2,442 MHz / Wi-Fi channel 7. No known transmitter was present in the physical run, so the physical found-state, calibrated power/distance and instrumented RF silence remain explicitly unclaimed until board-02 is used as a controlled source.

@@ -23,7 +23,7 @@ class IrTwoBoardHilTests(unittest.TestCase):
             flow.read_version(
                 ROOT / "firmware/leshy1/platformio.ini", "LESHY1_VERSION"))
         self.assertEqual(
-            "0.1.0-ir-nec",
+            "0.2.0-bounded-signals",
             flow.read_version(
                 ROOT / "firmware/leshy_fixture/platformio.ini",
                 "LESHY_FIXTURE_VERSION"))
