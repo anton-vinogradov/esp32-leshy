@@ -6350,6 +6350,63 @@ void renderWifiSignalBars(Rect bounds, std::int16_t rssiDbm,
     }
 }
 
+UiTextId radioSignalQualityText(std::int16_t rssiDbm) {
+    switch (wifiSignalLevel(rssiDbm)) {
+        case 4: return UiTextId::RadioSignalExcellent;
+        case 3: return UiTextId::RadioSignalGood;
+        case 2: return UiTextId::RadioSignalWeak;
+        default: return UiTextId::RadioSignalVeryWeak;
+    }
+}
+
+void renderRadioSignalCard(std::int16_t rssiDbm) {
+    constexpr Rect bounds{Layout::Edge, 128, Layout::ContentWidth, 104};
+    constexpr std::int16_t kTrackInset = 10;
+    constexpr std::int16_t kTrackY = bounds.y + 59;
+    constexpr std::int16_t kTrackWidth = bounds.width - 2 * kTrackInset;
+    constexpr std::int16_t kTrackHeight = 14;
+    const std::uint8_t level = wifiSignalLevel(rssiDbm);
+    const std::uint16_t tone = level >= 3U
+        ? Palette::Positive : (level == 2U ? Palette::Warning
+                                           : Palette::Danger);
+    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, Palette::Surface);
+    display.setTextColor(Palette::TextSecondary, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, bounds.x + 10, bounds.y + 9);
+    display.print(tr(UiTextId::RadioSignalLabel));
+    display.setTextColor(tone, Palette::Surface);
+    setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
+    display.print(tr(radioSignalQualityText(rssiDbm)));
+    char value[24] = {};
+    std::snprintf(value, sizeof(value), tr(UiTextId::RadioSignalDbmFormat),
+                  static_cast<int>(rssiDbm));
+    setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
+    const std::int16_t valueX = bounds.x + bounds.width - 10 -
+                                display.textWidth(value);
+    setUiCursor(UiTextRole::Body, valueX, bounds.y + 29);
+    display.print(value);
+    display.fillRect(bounds.x + kTrackInset, kTrackY, kTrackWidth,
+                     kTrackHeight, Palette::Canvas);
+    display.drawRect(bounds.x + kTrackInset, kTrackY, kTrackWidth,
+                     kTrackHeight, Palette::Divider);
+    const std::int16_t clamped = rssiDbm < -100
+        ? -100 : (rssiDbm > -40 ? -40 : rssiDbm);
+    const std::int16_t fillWidth = static_cast<std::int16_t>(
+        (static_cast<std::int32_t>(clamped + 100) * (kTrackWidth - 2)) / 60);
+    if (fillWidth > 0) {
+        display.fillRect(bounds.x + kTrackInset + 1, kTrackY + 1,
+                         fillWidth, kTrackHeight - 2, tone);
+    }
+    display.setTextColor(Palette::TextMuted, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, bounds.x + kTrackInset, bounds.y + 79);
+    display.print(tr(UiTextId::RadioSignalScaleWeak));
+    const char* strong = tr(UiTextId::RadioSignalScaleStrong);
+    const std::int16_t strongX = bounds.x + bounds.width - kTrackInset -
+                                 display.textWidth(strong);
+    setUiCursor(UiTextRole::Meta, strongX, bounds.y + 79);
+    display.print(strong);
+}
+
 void renderWifiNetworkRow(std::size_t index, std::size_t firstVisible) {
     const Observation* observation = wifiNetworkCatalog.at(index);
     if (observation == nullptr || index < firstVisible ||
@@ -6415,29 +6472,12 @@ void renderWifiNetworks(bool clearContent) {
     renderWifiNetworksData();
 }
 
-std::size_t wifiNetworkDetailSamples() {
-    std::size_t samples = 0;
-    for (std::size_t index = 0; index < surveySession.size(); ++index) {
-        const Observation* observation = surveySession.get(index);
-        if (observation == nullptr ||
-            observation->radio != RadioKind::Wifi ||
-            observation->identityLength != wifiNetworkDetail.identityLength ||
-            std::memcmp(observation->identity.data(),
-                        wifiNetworkDetail.identity.data(),
-                        observation->identityLength) != 0) {
-            continue;
-        }
-        ++samples;
-    }
-    return samples;
-}
-
 void renderWifiNetworkDetail(bool clearContent) {
     renderHeader(tr(UiTextId::WifiNetworkDetailTitle), clearContent);
     const char* label = wifiNetworkDetail.labelLength == 0
         ? tr(UiTextId::Hidden) : wifiNetworkDetail.label.data();
     display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 48);
+    setUiCursor(UiTextRole::Body, 14, 42);
     display.print(label);
     char line[96] = {};
     std::snprintf(
@@ -6449,19 +6489,14 @@ void renderWifiNetworkDetail(bool clearContent) {
         static_cast<unsigned>(wifiNetworkDetail.identity[4]),
         static_cast<unsigned>(wifiNetworkDetail.identity[5]));
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 88);
+    setUiCursor(UiTextRole::Meta, 14, 72);
     display.print(line);
-    std::snprintf(line, sizeof(line), tr(UiTextId::ChannelFormat),
+    std::snprintf(line, sizeof(line), tr(UiTextId::RadioChannelFormat),
                   static_cast<unsigned>(wifiNetworkDetail.channel));
-    renderMetric(3, line, Tone::Positive);
-    std::snprintf(line, sizeof(line), tr(UiTextId::RssiFormat),
-                  static_cast<int>(wifiNetworkDetail.rssiDbm));
-    renderMetric(4, line, Tone::Positive);
-    std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkSamplesFormat),
-                  static_cast<unsigned>(wifiNetworkDetailSamples()));
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 202);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 98);
     display.print(line);
+    renderRadioSignalCard(wifiNetworkDetail.rssiDbm);
 }
 
 std::size_t bleDeviceFirstVisible(std::size_t selection) {
@@ -6552,43 +6587,22 @@ void renderBleDevices(bool clearContent) {
     renderBleDevicesData();
 }
 
-std::size_t bleDeviceDetailSamples() {
-    std::size_t samples = 0;
-    for (std::size_t index = 0; index < surveySession.size(); ++index) {
-        const Observation* observation = surveySession.get(index);
-        if (observation == nullptr || observation->radio != RadioKind::Ble ||
-            observation->identityLength != bleDeviceDetail.identityLength ||
-            std::memcmp(observation->identity.data(),
-                        bleDeviceDetail.identity.data(),
-                        observation->identityLength) != 0) {
-            continue;
-        }
-        ++samples;
-    }
-    return samples;
-}
-
 void renderBleDeviceDetail(bool clearContent) {
     renderHeader(tr(UiTextId::BleDeviceDetailTitle), clearContent);
     const char* label = bleDeviceDetail.labelLength == 0U
         ? tr(UiTextId::BleDeviceUnnamed) : bleDeviceDetail.label.data();
     display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 48);
+    setUiCursor(UiTextRole::Body, 14, 42);
     display.print(label);
     char line[96] = {};
     formatBleAddress(bleDeviceDetail, line, sizeof(line));
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 88);
+    setUiCursor(UiTextRole::Meta, 14, 72);
     display.print(line);
-    std::snprintf(line, sizeof(line), tr(UiTextId::RssiFormat),
-                  static_cast<int>(bleDeviceDetail.rssiDbm));
-    renderMetric(3, line, Tone::Positive);
-    renderMetric(4, tr(UiTextId::BlePassiveOnly), Tone::Positive);
-    std::snprintf(line, sizeof(line), tr(UiTextId::BleDeviceSeenFormat),
-                  static_cast<unsigned>(bleDeviceDetailSamples()));
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 202);
-    display.print(line);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 101);
+    display.print(tr(UiTextId::BlePassiveOnly));
+    renderRadioSignalCard(bleDeviceDetail.rssiDbm);
 }
 
 std::size_t wifiDeviceFirstVisible(std::size_t selection) {
@@ -6681,21 +6695,29 @@ void renderWifiDeviceDetail(bool clearContent) {
     char line[96] = {};
     formatWifiAddress(wifiDeviceDetail.address, line, sizeof(line));
     display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 48);
+    setUiCursor(UiTextRole::Body, 14, 42);
     display.print(line);
-    renderMetric(2, tr(wifiDeviceStateText(wifiDeviceDetail.state)),
-                 Tone::Positive);
-    std::snprintf(line, sizeof(line), tr(UiTextId::ChannelFormat),
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 70);
+    display.print(tr(wifiDeviceStateText(wifiDeviceDetail.state)));
+    std::snprintf(line, sizeof(line), tr(UiTextId::RadioChannelFormat),
                   static_cast<unsigned>(wifiDeviceDetail.channel));
-    renderMetric(3, line, Tone::Positive);
-    std::snprintf(line, sizeof(line), tr(UiTextId::RssiFormat),
-                  static_cast<int>(wifiDeviceDetail.rssiDbm));
-    renderMetric(4, line, Tone::Positive);
-    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceFramesFormat),
-                  static_cast<unsigned>(wifiDeviceDetail.framesSeen));
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 202);
+    setUiCursor(UiTextRole::Body, 14, 98);
     display.print(line);
+    renderRadioSignalCard(wifiDeviceDetail.rssiDbm);
+    if (wifiDeviceDetail.bssidKnown) {
+        std::snprintf(
+            line, sizeof(line), tr(UiTextId::WifiNetworkBssidFormat),
+            static_cast<unsigned>(wifiDeviceDetail.bssid[0]),
+            static_cast<unsigned>(wifiDeviceDetail.bssid[1]),
+            static_cast<unsigned>(wifiDeviceDetail.bssid[2]),
+            static_cast<unsigned>(wifiDeviceDetail.bssid[3]),
+            static_cast<unsigned>(wifiDeviceDetail.bssid[4]),
+            static_cast<unsigned>(wifiDeviceDetail.bssid[5]));
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 247);
+        display.print(line);
+    }
 }
 
 constexpr std::int16_t kWifiChannelInfoY = Layout::ContentTop;

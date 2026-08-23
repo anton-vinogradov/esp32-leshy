@@ -74,6 +74,21 @@ FORBIDDEN_RENDER_IDS = {
     "TimelineDutyFormat",
     "TransportSerial",
     "CaptureImmutable",
+    "BleDeviceSeenFormat",
+    "WifiNetworkSamplesFormat",
+    "WifiDeviceFramesFormat",
+}
+
+REQUIRED_DENSE_DETAIL_IDS = {
+    "RadioSignalLabel",
+    "RadioSignalExcellent",
+    "RadioSignalGood",
+    "RadioSignalWeak",
+    "RadioSignalVeryWeak",
+    "RadioSignalDbmFormat",
+    "RadioSignalScaleWeak",
+    "RadioSignalScaleStrong",
+    "RadioChannelFormat",
 }
 
 
@@ -91,6 +106,17 @@ def main() -> int:
     for identifier in sorted(FORBIDDEN_RENDER_IDS):
         if re.search(rf"UiTextId::{re.escape(identifier)}\b", renderer):
             failures.append(f"developer-facing field rendered: {identifier}")
+
+    for identifier in sorted(REQUIRED_DENSE_DETAIL_IDS):
+        if f"LESHY_UI_TEXT({identifier}," not in strings:
+            failures.append(f"missing dense detail string: {identifier}")
+        if f"UiTextId::{identifier}" not in renderer:
+            failures.append(f"dense detail string is not rendered: {identifier}")
+
+    if renderer.count("renderRadioSignalCard(") != 4:
+        failures.append(
+            "shared signal card must have one definition and exactly three detail uses"
+        )
 
     for internal in (
         "capturePersistStatus",
@@ -111,7 +137,8 @@ def main() -> int:
 
     print(
         "product UI content contract passed: outcomes/actions visible; "
-        "developer telemetry kept off product screens"
+        "developer telemetry kept off product screens; radio details use the "
+        "shared user-facing signal card"
     )
     return 0
 

@@ -28,6 +28,7 @@ def main() -> int:
         "wifi_device_clients_dropped",
         "wifiDeviceCatalog.indexOfAddress(selectionAnchor)",
         "nextWifiDeviceUiRefreshUs = nowUs + 250000ULL",
+        "renderRadioSignalCard(wifiDeviceDetail.rssiDbm)",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -63,6 +64,8 @@ def main() -> int:
         "WifiDeviceSearching",
         "WifiDeviceConnected",
         "WifiDeviceDetailTitle",
+        "RadioChannelFormat",
+        "RadioSignalLabel",
     )
 
     failures = [
@@ -95,7 +98,7 @@ def main() -> int:
         return 1
     print(
         "Wi-Fi devices contract passed: passive client-only inference, bounded "
-        "queue/strongest-first catalog, data-only redraw, frozen detail and no TX/config path"
+        "queue/strongest-first catalog, data-only redraw, dense frozen detail and no TX/config path"
     )
     return 0
 

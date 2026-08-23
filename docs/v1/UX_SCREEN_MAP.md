@@ -36,6 +36,14 @@ strongest current RSSI is first and weaker entries follow. Equal RSSI keeps its
 existing relative order, and a refresh anchors selection to the same identity so
 resorting never silently changes the object under the user's cursor.
 
+Screen space is budgeted by user value. A non-interactive one-line fact occupies
+one compact line. A large row is reserved for a touch target and carries both its
+task name and a useful outcome or explanation. A spacious result/detail region
+must add useful context or a readable visualization, not an ornamental empty
+frame. Healthy product screens do not expose implementation counters such as
+sample, frame or redraw totals. Radio-object details therefore use compact identity
+and channel/mode facts plus one shared qualitative and numeric signal meter.
+
 ## Navigation tree
 
 ```text

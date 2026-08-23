@@ -40,6 +40,7 @@ def main() -> int:
         "ble_devices_strongest_first",
         "ble_device_catalog_revision",
         "bleDeviceCatalog.indexOfIdentity(bleSelectionAnchor)",
+        "renderRadioSignalCard(bleDeviceDetail.rssiDbm)",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -67,6 +68,7 @@ def main() -> int:
         "BleDevicesSearching",
         "BleDeviceDetailTitle",
         "BlePassiveOnly",
+        "RadioSignalLabel",
     )
 
     failures = [
@@ -97,7 +99,7 @@ def main() -> int:
         return 1
     print(
         "Bluetooth nearby contract passed: direct passive BLE list, "
-        "strongest-first bounded catalog, frozen detail and row-only refresh"
+        "strongest-first bounded catalog, dense frozen detail and row-only refresh"
     )
     return 0
 

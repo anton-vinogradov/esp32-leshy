@@ -37,6 +37,7 @@ def main() -> int:
         "wifi_networks_strongest_first",
         "wifi_network_catalog_revision",
         "wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor)",
+        "renderRadioSignalCard(wifiNetworkDetail.rssiDbm)",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -53,6 +54,8 @@ def main() -> int:
         "WifiNetworksSearching",
         "WifiNetworkDetailTitle",
         "WifiNetworkBssidFormat",
+        "RadioChannelFormat",
+        "RadioSignalLabel",
     )
     failures = [
         f"renderer token missing: {token}"
@@ -73,7 +76,7 @@ def main() -> int:
         return 1
     print(
         "Wi-Fi networks contract passed: unique strongest-first BSSID rows, four-row "
-        "touch UI, data-only live redraw and frozen detail chrome"
+        "touch UI, data-only live redraw and dense frozen detail chrome"
     )
     return 0
 
