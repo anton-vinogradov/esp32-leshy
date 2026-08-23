@@ -214,3 +214,12 @@ Network и Wi-Fi Device компактно показывают identity/channel
 Штатные sample/frame counters удалены. Один fresh flash и два same-hash reuse run
 сохраняют 17 TFT states; все три открытых detail остаются pixel-identical при
 background reception (`E-BUILD-113`/`E-AUTO-077`/`E-HIL-137`/`E-UX-032`).
+
+Exact `0.114.0-stable-network-nav` конкретизирует это правило live list для
+Wi-Fi→«Сети рядом». До взаимодействия текущий RSSI задаёт порядок по убыванию.
+Первое Up/Down/Open фиксирует видимую последовательность BSSID; RSSI и channel
+продолжают обновляться на месте, но cursor, identity строк и выбранная сеть не
+прыгают. Сети, впервые найденные после фиксации, появляются при повторном входе в
+задачу. Fresh physical run выполняет восемь actions и ещё два scan на 23
+зафиксированных строках без изменения selection, visible size, BSSID-order hash или
+selected-BSSID hash (`E-BUILD-114`/`E-AUTO-078`/`E-HIL-138`/`E-UX-033`).

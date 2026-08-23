@@ -213,3 +213,12 @@ card containing qualitative strength, numeric dBm and a weak-to-strong meter.
 Healthy sample/frame counters are removed. One fresh flash and two same-hash reuse
 runs retain 17 TFT states; all three open details remain pixel-identical during
 background reception (`E-BUILD-113`/`E-AUTO-077`/`E-HIL-137`/`E-UX-032`).
+
+Exact `0.114.0-stable-network-nav` makes this live-list rule concrete for
+Wi-Fi→Nearby Networks. Before interaction, current RSSI determines descending order.
+The first Up/Down/Open action freezes the visible BSSID sequence; RSSI and channel
+continue updating in place, but the cursor, row identities and selected network do
+not jump. Networks first discovered after the lock appear on task re-entry. A fresh
+physical run exercises eight actions and two further scans across 23 locked rows
+without changing selection, visible size, BSSID-order hash or selected-BSSID hash
+(`E-BUILD-114`/`E-AUTO-078`/`E-HIL-138`/`E-UX-033`).

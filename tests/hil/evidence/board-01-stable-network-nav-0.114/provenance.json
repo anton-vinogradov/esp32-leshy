@@ -1,0 +1,28 @@
+{
+  "app_elf_sha256": "59f70c3b802ff2184dbebfc385e1d6d8c306d6820829de7d9013d7ebbe78ec65",
+  "app_image_bytes": 1579904,
+  "checker_sha256": "3d9528d7c006830d5a2f0d417fcaee055680827f9ba19ed5f488bb722da9195d",
+  "cid": "FE343253440000002000000055019CB7",
+  "elf_file_sha256": "59f70c3b802ff2184dbebfc385e1d6d8c306d6820829de7d9013d7ebbe78ec65",
+  "factory_image_bytes": 1645440,
+  "factory_sha256": "87ebe3e91e05d6afbef2462436d63c48acd9209c6b94b9a3a1dcb278975473a4",
+  "firmware_sha256": "913b17dbb231a0586ec86e2bb75869420eb4fbcdfd215633921fd878debfae3c",
+  "firmware_source_commit": "8ec3d36906eba766f5652d807d1c556d66755eea",
+  "linked_flash_bytes": 1579500,
+  "map_sha256": "1069ee2f5047f2c22738035a7ff58f52ea0305e12fa04629f1d0ca91173ead62",
+  "run_sha256": "84ebb3254b267b4b6eafd5cf1acbadf8d8db3c60f19ba725ac89044522bdb3b2",
+  "runner_commit": "8ec3d36906eba766f5652d807d1c556d66755eea",
+  "runner_sha256": "8b840b3aa0f9ca051d310e3bdb8843909a8e79ad18f2132f2fc2561c56a624ba",
+  "schema": "leshy.stable_network_nav_hil.provenance.v1",
+  "source_sha256": {
+    "catalog_cpp": "e51799c33d670a8709b92b7ca23f5972d1d93ffb80b44b92dd2bad28bd1fc606",
+    "catalog_h": "1c97cf7db7dbc1538bd128a14bab13a4cb6f9acc384d6afc08d1950433b138dd",
+    "contract": "9f76e50c6bf7cb86aafd6acebc445e34f839743cad1ba30925fc61d1b4ab236c",
+    "native_tests": "cc41f4cef740db8d333d1412a8ec8774576a510b81de91539737234acd7712b4",
+    "navigation": "314f9c3939d9175460af88b91bb28d7aa8bb0aae554e22962e4b6874764ce499",
+    "renderer": "1ed6b97dd4520dc3568e95c6257b4a9704efd8aa1394f5236adb0c3d5ac75b17"
+  },
+  "static_ram_bytes": 182312,
+  "tft_states": 6,
+  "version": "0.114.0-stable-network-nav"
+}
