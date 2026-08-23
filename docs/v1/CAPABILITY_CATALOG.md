@@ -80,6 +80,13 @@ name; enrichment is monotonic and keeps navigation identity fixed. This is passi
 discovery only, not directed probing, association, decryption, device-type certainty
 or persistent network tracking.
 
+Exact `0.119.0-wifi-network-live-radar` completes the baseline CAP-010/016 network
+detail presentation with current RSSI, qualitative strength, a meter, volatile
+minimum/maximum and latest trend for the selected fixed BSSID on the same screen.
+The samples come from continued all-channel passive discovery and reset on task
+entry. This is useful relative proximity feedback, not a selected-channel direct
+receiver, calibrated range, historical Target tracking or proof of packet traffic.
+
 ## Targets and comparison
 
 | ID | 1.0 capability | Commitment | Requirements | Ready stage |

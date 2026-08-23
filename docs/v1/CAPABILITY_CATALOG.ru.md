@@ -81,6 +81,13 @@ country/channel constraints. Пустой SSID остаётся явно скр�
 association, decryption, уверенное определение типа устройства или persistent
 tracking сети.
 
+Exact `0.119.0-wifi-network-live-radar` завершает baseline presentation detail
+CAP-010/016 текущим RSSI, качественной силой, шкалой, volatile минимумом/максимумом и
+последним trend выбранного fixed BSSID на том же экране. Samples приходят из
+продолжающегося all-channel passive discovery и сбрасываются при входе в задачу.
+Это полезная относительная proximity feedback, но не selected-channel direct receiver,
+calibrated range, исторический Target tracking или доказательство packet traffic.
+
 ## Цели и сравнение
 
 | ID | Возможность 1.0 | Обязательство | Требования | Этап готовности |

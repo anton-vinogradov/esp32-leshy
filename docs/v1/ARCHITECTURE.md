@@ -497,6 +497,17 @@ rather than cursor position. The detail renderer compares static facts separatel
 from RSSI; routine updates touch only the signal line. No directed probe,
 association, decryption or persistent identity write is introduced.
 
+Exact `0.119.0-wifi-network-live-radar` adds an allocation-free
+`WifiNetworkSignalStats` alongside every one of the catalog's 32 fixed BSSID slots.
+Insertion sort moves observations and statistics together; an update increments a
+saturating sample count and maintains minimum, maximum and latest RSSI delta. Sample
+count alone does not advance the UI revision. A visible RSSI/range/trend change does,
+and `renderSelectionDelta()` repaints only the selected network's bounded radar card.
+The shared survey service therefore refreshes NetworkDetail but still freezes BLE
+detail. HIL binds telemetry, exact BSSID facts and framebuffer pixels. The source
+remains the ordinary all-channel passive ESP-IDF scan: no channel lock, active probe,
+association, calibrated distance or persistent signal history is added.
+
 ## Data model
 
 Raw observation is separate from interpretation:

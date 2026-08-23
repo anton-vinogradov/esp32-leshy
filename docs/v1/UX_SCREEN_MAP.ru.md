@@ -265,3 +265,13 @@ unknown. Hidden SSID подписан `Скрытая`; пассивный пр�
 только при обогащении, обычный live refresh ограничен строкой RSSI. Шесть physical
 TFT states доказывают zero changed pixels вне этой строки, native suite — монотонный
 merge hidden→known (`E-BUILD-118`/`E-AUTO-082`/`E-HIL-142`/`E-UX-037`).
+
+Exact `0.119.0-wifi-network-live-radar` сохраняет этот паспорт и использует оставшийся
+нижний viewport для live-сигнала выбранного BSSID. Одна компактная карточка показывает
+качественное состояние, числовой dBm, шкалу, минимум/максимум с момента входа и
+последний trend; отдельного route и технического sample counter нет. Passive scan
+продолжает обходить все каналы, сохраняя полезность списка и hidden-name enrichment.
+При видимом изменении сигнала перерисовывается только карточка; identity, facts, header
+и footer не мерцают. Шесть physical TFT states доказывают 86 changed pixels внутри
+карточки и zero outside/chrome pixels (`E-BUILD-119`/`E-AUTO-083`/`E-HIL-143`/
+`E-UX-038`).

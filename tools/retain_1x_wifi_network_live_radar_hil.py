@@ -254,7 +254,7 @@ def main() -> int:
             "fresh_flashes": 1,
             "manual_button_presses": 0,
             "network_identity_hash": second["identity_hash"],
-            "ssid": second["ssid"],
+            "ssid_known": second["ssid_known"],
             "vendor": second["vendor"],
             "channel": second["channel"],
             "passive_only": True,
@@ -290,7 +290,7 @@ def main() -> int:
     print(json.dumps({
         "status": "retained", "files": len(indexed) + 1,
         "tft_states": provenance["tft_states"],
-        "ssid": second["ssid"], "vendor": second["vendor"],
+        "ssid_known": second["ssid_known"], "vendor": second["vendor"],
         "signal_samples": second["signal_samples"],
     }, sort_keys=True))
     return 0

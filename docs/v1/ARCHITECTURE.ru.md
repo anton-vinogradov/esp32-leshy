@@ -557,6 +557,17 @@ content на месте, а не позицию курсора. Detail renderer 
 facts и RSSI; обычные updates затрагивают только signal line. Directed probe,
 association, decryption или persistent identity write не добавлены.
 
+Exact `0.119.0-wifi-network-live-radar` добавляет allocation-free
+`WifiNetworkSignalStats` рядом с каждым из 32 fixed BSSID slots каталога. Insertion
+sort переносит observation и statistics вместе; update увеличивает saturating sample
+count и поддерживает minimum, maximum и последний RSSI delta. Один sample count не
+продвигает UI revision. Видимое изменение RSSI/range/trend продвигает его, а
+`renderSelectionDelta()` перерисовывает только bounded radar card выбранной сети.
+Shared survey service поэтому обновляет NetworkDetail, но по-прежнему замораживает
+BLE detail. HIL связывает telemetry, exact BSSID facts и framebuffer pixels. Источник
+остаётся обычным all-channel passive scan ESP-IDF: channel lock, active probe,
+association, calibrated distance или persistent signal history не добавлены.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

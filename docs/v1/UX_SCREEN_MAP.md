@@ -264,3 +264,12 @@ facts. The firmware sends no directed probe. Static passport content redraws onl
 when it is enriched; normal live refresh is confined to the RSSI line. Six physical
 TFT states prove zero changed pixels outside that line while the native suite proves
 hidden→known monotonic merge (`E-BUILD-118`/`E-AUTO-082`/`E-HIL-142`/`E-UX-037`).
+
+Exact `0.119.0-wifi-network-live-radar` keeps that passport and uses its remaining
+lower viewport for the selected BSSID's live signal. One compact card shows the
+qualitative state, numeric dBm, meter, minimum/maximum since entry and latest trend;
+there is no extra route or technical sample counter. Passive scans continue across
+all channels so the network list and hidden-name enrichment remain useful. Only the
+card redraws on a visible signal change; the identity, facts, header and footer do
+not flash. Six physical TFT states prove 86 changed pixels inside the card and zero
+outside/chrome pixels (`E-BUILD-119`/`E-AUTO-083`/`E-HIL-143`/`E-UX-038`).
