@@ -18,6 +18,7 @@
 #include "apps/survey/SurveyPipeline.h"
 #include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
+#include "apps/ble/BleDeviceCatalog.h"
 #include "apps/wifi/WifiNetworkCatalog.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
 #include "apps/wifi/WifiChannelLoad.h"
@@ -2034,6 +2035,53 @@ void testWifiNetworkCatalogKeepsStableUniqueRows() {
     catalog.reset();
     CHECK(catalog.size() == 0);
     CHECK(catalog.at(0) == nullptr);
+}
+
+void testBleDeviceCatalogKeepsStrongestUniqueRows() {
+    leshy1::apps::ble::BleDeviceCatalog catalog;
+    leshy1::drivers::ble::BleAdvertisementRecord record;
+    record.address = {0x02, 0x11, 0x22, 0x33, 0x44, 0x55};
+    record.rssiDbm = -67;
+    record.name = "headphones";
+    record.nameLength = 10;
+    Observation observation;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 2000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.size() == 1);
+    const std::uint32_t insertedRevision = catalog.revision();
+
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 3000, &observation));
+    CHECK(!catalog.upsert(observation));
+    CHECK(catalog.revision() == insertedRevision);
+
+    record.address[5] = 0x56;
+    record.rssiDbm = -42;
+    record.name = nullptr;
+    record.nameLength = 0;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 4000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.size() == 2);
+    CHECK(catalog.at(0) != nullptr);
+    CHECK(catalog.at(0)->identity[5] == 0x56);
+    CHECK(catalog.at(1)->identity[5] == 0x55);
+
+    record.address[5] = 0x55;
+    record.rssiDbm = -30;
+    record.name = "headphones";
+    record.nameLength = 10;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 5000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.size() == 2);
+    CHECK(catalog.at(0)->identity[5] == 0x55);
+
+    observation.radio = RadioKind::Wifi;
+    CHECK(!catalog.upsert(observation));
+    catalog.reset();
+    CHECK(catalog.size() == 0);
 }
 
 void testWifiDeviceCatalogDecodesOnlyClientActivity() {
@@ -5137,6 +5185,7 @@ int main() {
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testWifiNetworkCatalogKeepsStableUniqueRows();
+    testBleDeviceCatalogKeepsStrongestUniqueRows();
     testWifiDeviceCatalogDecodesOnlyClientActivity();
     testWifiChannelLoadIsBoundedAndTruthful();
     testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations();
