@@ -165,6 +165,7 @@ using leshy1::apps::survey::SurveyWorkflowStatus;
 using leshy1::apps::ble::BleDeviceCatalog;
 using leshy1::apps::wifi::WifiNetworkCatalog;
 using leshy1::apps::wifi::WifiNetworkNavigationOrder;
+using leshy1::apps::wifi::WifiNetworkSignalStats;
 using leshy1::apps::wifi::WifiDeviceCatalog;
 using leshy1::apps::wifi::WifiDeviceObservation;
 using leshy1::apps::wifi::WifiDeviceRecord;
@@ -567,6 +568,7 @@ WifiNetworkNavigationOrder wifiNetworkNavigationOrder;
 std::size_t wifiNetworkSelection = 0;
 Observation wifiNetworkDetail;
 Observation wifiNetworkRenderedDetail;
+WifiNetworkSignalStats wifiNetworkDetailSignal;
 
 std::size_t wifiNetworkVisibleSize() {
     return wifiNetworkNavigationOrder.size(wifiNetworkCatalog);
@@ -581,6 +583,13 @@ const Observation* liveWifiNetworkDetail() {
         wifiNetworkCatalog.indexOfIdentity(wifiNetworkDetail);
     const Observation* live = wifiNetworkCatalog.at(index);
     return live == nullptr ? &wifiNetworkDetail : live;
+}
+
+const WifiNetworkSignalStats* liveWifiNetworkSignal() {
+    const std::size_t index =
+        wifiNetworkCatalog.indexOfIdentity(wifiNetworkDetail);
+    const WifiNetworkSignalStats* live = wifiNetworkCatalog.signalAt(index);
+    return live == nullptr ? &wifiNetworkDetailSignal : live;
 }
 WifiDeviceCatalog wifiDeviceCatalog;
 WifiDeviceNavigationOrder wifiDeviceNavigationOrder;
@@ -6536,23 +6545,76 @@ bool wifiNetworkDetailStaticFieldsDiffer(const Observation& left,
             left.wifiNetwork, right.wifiNetwork);
 }
 
-void renderWifiNetworkSignalLine(const Observation& network) {
-    constexpr std::int16_t kSignalTop = 270;
-    display.fillRect(Layout::Edge, kSignalTop, Layout::ContentWidth, 20,
+UiTextId wifiNetworkTrendText(std::int16_t trendDb) {
+    if (trendDb >= 4) return UiTextId::WifiNetworkTrendStronger;
+    if (trendDb <= -4) return UiTextId::WifiNetworkTrendWeaker;
+    return UiTextId::WifiNetworkTrendStable;
+}
+
+void renderWifiNetworkRadar(const Observation& network,
+                            const WifiNetworkSignalStats& signal) {
+    constexpr Rect kRadar = {
+        Layout::Edge, 222, Layout::ContentWidth, 67};
+    constexpr std::int16_t kInset = 10;
+    constexpr std::int16_t kTrackY = 258;
+    constexpr std::int16_t kTrackHeight = 12;
+    const std::int16_t trackWidth = kRadar.width - 2 * kInset;
+    const std::uint8_t level = wifiSignalLevel(network.rssiDbm);
+    const std::uint16_t tone = level >= 3U
+        ? Palette::Positive : (level == 2U ? Palette::Warning
+                                           : Palette::Danger);
+    display.fillRect(kRadar.x, kRadar.y, kRadar.width, kRadar.height,
                      Palette::Canvas);
-    char line[64] = {};
-    std::snprintf(line, sizeof(line),
-                  tr(UiTextId::WifiNetworkSignalFormat),
-                  static_cast<int>(network.rssiDbm),
-                  tr(radioSignalQualityText(network.rssiDbm)));
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, kSignalTop);
+    display.fillRoundRect(kRadar.x, kRadar.y, kRadar.width, kRadar.height,
+                          Layout::Radius, Palette::Surface);
+    display.setTextColor(Palette::TextSecondary, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, kRadar.x + kInset, 228);
+    display.print(tr(UiTextId::RadioSignalLabel));
+    char line[32] = {};
+    std::snprintf(line, sizeof(line), tr(UiTextId::RadioSignalDbmFormat),
+                  static_cast<int>(network.rssiDbm));
+    display.setTextColor(tone, Palette::Surface);
+    const std::int16_t valueX = kRadar.x + kRadar.width - kInset -
+                                display.textWidth(line);
+    setUiCursor(UiTextRole::Meta, valueX, 228);
     display.print(line);
+    setUiCursor(UiTextRole::Body, kRadar.x + kInset, 243);
+    display.print(tr(radioSignalQualityText(network.rssiDbm)));
+
+    display.fillRect(kRadar.x + kInset, kTrackY, trackWidth,
+                     kTrackHeight, Palette::Canvas);
+    display.drawRect(kRadar.x + kInset, kTrackY, trackWidth,
+                     kTrackHeight, Palette::Divider);
+    const std::int16_t clamped = network.rssiDbm < -100
+        ? -100 : (network.rssiDbm > -40 ? -40 : network.rssiDbm);
+    const std::int16_t fillWidth = static_cast<std::int16_t>(
+        (static_cast<std::int32_t>(clamped + 100) * (trackWidth - 2)) / 60);
+    if (fillWidth > 0) {
+        display.fillRect(kRadar.x + kInset + 1, kTrackY + 1,
+                         fillWidth, kTrackHeight - 2, tone);
+    }
+    std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkRangeFormat),
+                  static_cast<int>(signal.minimumRssiDbm),
+                  static_cast<int>(signal.maximumRssiDbm));
+    display.setTextColor(Palette::TextMuted, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, kRadar.x + kInset, 274);
+    display.print(line);
+    const char* trend = tr(wifiNetworkTrendText(signal.rssiTrendDb));
+    const std::int16_t trendX = kRadar.x + kRadar.width - kInset -
+                                display.textWidth(trend);
+    const std::uint16_t trendTone = signal.rssiTrendDb >= 4
+        ? Palette::Positive : (signal.rssiTrendDb <= -4
+            ? Palette::Danger : Palette::TextMuted);
+    display.setTextColor(trendTone, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, trendX, 274);
+    display.print(trend);
 }
 
 void renderWifiNetworkDetailData() {
     const Observation& network = *liveWifiNetworkDetail();
+    const WifiNetworkSignalStats& signal = *liveWifiNetworkSignal();
     wifiNetworkDetail = network;
+    wifiNetworkDetailSignal = signal;
     display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
                      Layout::FooterDividerY - Layout::ContentTop,
                      Palette::Canvas);
@@ -6570,7 +6632,7 @@ void renderWifiNetworkDetailData() {
         }
     }
     display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 36);
+    setUiCursor(UiTextRole::Body, 14, 34);
     display.print(primary);
 
     char line[96] = {};
@@ -6583,7 +6645,7 @@ void renderWifiNetworkDetailData() {
         static_cast<unsigned>(network.identity[4]),
         static_cast<unsigned>(network.identity[5]));
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 62);
+    setUiCursor(UiTextRole::Meta, 14, 57);
     display.print(line);
 
     char vendor[24] = {};
@@ -6599,13 +6661,13 @@ void renderWifiNetworkDetailData() {
     display.setTextColor(vendorKnown ? Palette::TextSecondary
                                      : Palette::TextMuted,
                          Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 81);
+    setUiCursor(UiTextRole::Meta, 14, 76);
     display.print(line);
 
     display.setTextColor(network.labelLength == 0U ? Palette::Warning
                                                    : Palette::TextMuted,
                          Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 101);
+    setUiCursor(UiTextRole::Meta, 14, 95);
     display.print(tr(network.labelLength == 0U
                          ? UiTextId::WifiNetworkListeningForName
                          : UiTextId::BlePassiveOnly));
@@ -6618,14 +6680,14 @@ void renderWifiNetworkDetailData() {
     std::snprintf(line, sizeof(line),
                   tr(UiTextId::WifiNetworkSecurityFormat), authentication);
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 122);
+    setUiCursor(UiTextRole::Meta, 14, 114);
     display.print(line);
 
     std::snprintf(
         line, sizeof(line), tr(UiTextId::WifiNetworkCipherFormat),
         leshy1::drivers::wifi::wifiCipherName(facts.pairwiseCipher),
         leshy1::drivers::wifi::wifiCipherName(facts.groupCipher));
-    setUiCursor(UiTextRole::Meta, 14, 143);
+    setUiCursor(UiTextRole::Meta, 14, 133);
     display.print(line);
 
     char width[20] = {};
@@ -6640,7 +6702,7 @@ void renderWifiNetworkDetailData() {
         static_cast<unsigned long>(network.frequencyKhz / 1000U),
         width);
     display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 164);
+    setUiCursor(UiTextRole::Meta, 14, 152);
     display.print(line);
 
     char phy[28] = {};
@@ -6648,11 +6710,6 @@ void renderWifiNetworkDetailData() {
             facts.phyMask, phy, sizeof(phy))) {
         std::snprintf(phy, sizeof(phy), "UNKNOWN");
     }
-    std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkPhyFormat), phy);
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 185);
-    display.print(line);
-
     const char* ftm = facts.ftmResponder && facts.ftmInitiator
         ? "R+I" : (facts.ftmResponder ? "R" :
                      (facts.ftmInitiator ? "I" : "--"));
@@ -6662,9 +6719,10 @@ void renderWifiNetworkDetailData() {
                       static_cast<unsigned>(facts.receiveAntenna));
     }
     std::snprintf(line, sizeof(line),
-                  tr(UiTextId::WifiNetworkFeaturesFormat),
+                  tr(UiTextId::WifiNetworkPhyFeaturesFormat), phy,
                   facts.wps ? "+" : "--", ftm, antenna);
-    setUiCursor(UiTextRole::Meta, 14, 206);
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 171);
     display.print(line);
 
     const bool countryKnown = facts.countryCode[0] >= 'A' &&
@@ -6675,25 +6733,28 @@ void renderWifiNetworkDetailData() {
         const unsigned lastChannel = static_cast<unsigned>(
             facts.countryStartChannel + facts.countryChannelCount - 1U);
         std::snprintf(line, sizeof(line),
-                      tr(UiTextId::WifiNetworkCountryFormat), country,
+                      tr(UiTextId::WifiNetworkCountryCompactFormat), country,
                       static_cast<unsigned>(facts.countryStartChannel),
                       lastChannel,
                       static_cast<int>(facts.countryMaximumTxPowerDbm));
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 227);
+        setUiCursor(UiTextRole::Meta, 14, 190);
         display.print(line);
     }
     if (facts.bssColorKnown || facts.vhtCenterChannel1 != 0U ||
         facts.vhtCenterChannel2 != 0U) {
-        std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkHeFormat),
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::WifiNetworkHeCompactFormat),
                       static_cast<unsigned>(facts.bssColor),
                       static_cast<unsigned>(facts.vhtCenterChannel1),
                       static_cast<unsigned>(facts.vhtCenterChannel2));
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 248);
+        const std::int16_t advancedX = Layout::ScreenWidth - Layout::Edge -
+                                       display.textWidth(line);
+        setUiCursor(UiTextRole::Meta, advancedX, 207);
         display.print(line);
     }
-    renderWifiNetworkSignalLine(network);
+    renderWifiNetworkRadar(network, signal);
     wifiNetworkRenderedDetail = network;
 }
 
@@ -8586,12 +8647,14 @@ bool renderSelectionDelta() {
             return false;
         }
         const Observation& live = *liveWifiNetworkDetail();
+        const WifiNetworkSignalStats& signal = *liveWifiNetworkSignal();
         if (wifiNetworkDetailStaticFieldsDiffer(
                 wifiNetworkRenderedDetail, live)) {
             renderWifiNetworkDetailData();
         } else {
-            renderWifiNetworkSignalLine(live);
+            renderWifiNetworkRadar(live, signal);
             wifiNetworkDetail = live;
+            wifiNetworkDetailSignal = signal;
             wifiNetworkRenderedDetail = live;
         }
         return true;
@@ -11082,6 +11145,7 @@ bool startWifiNetworksProduct() {
     wifiNetworkSelection = 0;
     wifiNetworkDetail = {};
     wifiNetworkRenderedDetail = {};
+    wifiNetworkDetailSignal = {};
     productSurveyRuntime = {};
     productSurveyRuntime.selected = true;
     productSurveyRuntime.workerReady = productSurveyWorkerReady;
@@ -11780,6 +11844,15 @@ bool applyUiAction(UiAction action, bool render = true) {
                     wifiNetworkSelection);
                 if (observation != nullptr) {
                     wifiNetworkDetail = *observation;
+                    const std::size_t catalogIndex =
+                        wifiNetworkCatalog.indexOfIdentity(*observation);
+                    const WifiNetworkSignalStats* signal =
+                        wifiNetworkCatalog.signalAt(catalogIndex);
+                    wifiNetworkDetailSignal = signal == nullptr
+                        ? WifiNetworkSignalStats{
+                            1U, observation->rssiDbm,
+                            observation->rssiDbm, 0}
+                        : *signal;
                     wifiProductView = WifiProductView::NetworkDetail;
                     lastRuntimeEvent = "wifi_network_detail";
                     changed = true;
@@ -17052,6 +17125,7 @@ void emitWifiNetworkDetailState(Stream& reply) {
     const bool live = wifiProductView == WifiProductView::NetworkDetail &&
         catalogIndex < wifiNetworkCatalog.size();
     const Observation& network = *liveWifiNetworkDetail();
+    const WifiNetworkSignalStats& signal = *liveWifiNetworkSignal();
     const auto& facts = network.wifiNetwork;
     char vendor[WifiOuiDatabase::kNameSize + 1U] = {};
     const bool vendorKnown = network.identityLength == 6U &&
@@ -17090,6 +17164,8 @@ void emitWifiNetworkDetailState(Stream& reply) {
         "\"bss_color\":%u,\"vht_center_channel_1\":%u,"
         "\"vht_center_channel_2\":%u,\"channel\":%u,"
         "\"frequency_khz\":%lu,\"rssi_dbm\":%d,"
+        "\"signal_samples\":%u,\"minimum_rssi_dbm\":%d,"
+        "\"maximum_rssi_dbm\":%d,\"rssi_trend_db\":%d,"
         "\"catalog_revision\":%lu}",
         live ? "true" : "false",
         static_cast<unsigned long>(wifiNetworkNavigationOrder.identityHash(
@@ -17116,6 +17192,10 @@ void emitWifiNetworkDetailState(Stream& reply) {
         static_cast<unsigned>(network.channel),
         static_cast<unsigned long>(network.frequencyKhz),
         static_cast<int>(network.rssiDbm),
+        static_cast<unsigned>(signal.samples),
+        static_cast<int>(signal.minimumRssiDbm),
+        static_cast<int>(signal.maximumRssiDbm),
+        static_cast<int>(signal.rssiTrendDb),
         static_cast<unsigned long>(wifiNetworkCatalog.revision()));
     reply.println(line);
 }

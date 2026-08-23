@@ -6,6 +6,7 @@ namespace leshy1::apps::wifi {
 
 void WifiNetworkCatalog::reset() {
     entries_.fill(domain::observations::Observation{});
+    signals_.fill(WifiNetworkSignalStats{});
     size_ = 0;
     hiddenResolutions_ = 0;
     ++revision_;
@@ -37,13 +38,16 @@ void WifiNetworkCatalog::sortStrongestFirst() {
     // Stable insertion sort keeps the fixed-capacity catalog allocation-free.
     for (std::size_t index = 1; index < size_; ++index) {
         const auto current = entries_[index];
+        const auto currentSignal = signals_[index];
         std::size_t position = index;
         while (position > 0U &&
                entries_[position - 1U].rssiDbm < current.rssiDbm) {
             entries_[position] = entries_[position - 1U];
+            signals_[position] = signals_[position - 1U];
             --position;
         }
         entries_[position] = current;
+        signals_[position] = currentSignal;
     }
 }
 
@@ -81,8 +85,28 @@ bool WifiNetworkCatalog::upsert(
             entries_[index].wifiNetwork.present) {
             merged.wifiNetwork = entries_[index].wifiNetwork;
         }
-        const bool changed = visibleFieldsDiffer(entries_[index], merged);
+        auto signal = signals_[index];
+        if (signal.samples == 0U) {
+            signal.samples = 1U;
+            signal.minimumRssiDbm = observation.rssiDbm;
+            signal.maximumRssiDbm = observation.rssiDbm;
+        } else {
+            if (signal.samples != 0xffffU) ++signal.samples;
+            signal.rssiTrendDb = static_cast<std::int16_t>(
+                observation.rssiDbm - entries_[index].rssiDbm);
+            if (observation.rssiDbm < signal.minimumRssiDbm) {
+                signal.minimumRssiDbm = observation.rssiDbm;
+            }
+            if (observation.rssiDbm > signal.maximumRssiDbm) {
+                signal.maximumRssiDbm = observation.rssiDbm;
+            }
+        }
+        const bool changed = visibleFieldsDiffer(entries_[index], merged) ||
+            signal.minimumRssiDbm != signals_[index].minimumRssiDbm ||
+            signal.maximumRssiDbm != signals_[index].maximumRssiDbm ||
+            signal.rssiTrendDb != signals_[index].rssiTrendDb;
         entries_[index] = merged;
+        signals_[index] = signal;
         if (resolvedHidden) ++hiddenResolutions_;
         if (changed) {
             sortStrongestFirst();
@@ -91,7 +115,9 @@ bool WifiNetworkCatalog::upsert(
         return changed;
     }
     if (size_ < entries_.size()) {
-        entries_[size_++] = observation;
+        entries_[size_] = observation;
+        signals_[size_] = {1U, observation.rssiDbm, observation.rssiDbm, 0};
+        ++size_;
         sortStrongestFirst();
         ++revision_;
         return true;
@@ -99,6 +125,8 @@ bool WifiNetworkCatalog::upsert(
     if (!allowReplacement ||
         observation.rssiDbm <= entries_[size_ - 1U].rssiDbm) return false;
     entries_[size_ - 1U] = observation;
+    signals_[size_ - 1U] = {
+        1U, observation.rssiDbm, observation.rssiDbm, 0};
     sortStrongestFirst();
     ++revision_;
     return true;
@@ -107,6 +135,11 @@ bool WifiNetworkCatalog::upsert(
 const domain::observations::Observation* WifiNetworkCatalog::at(
     std::size_t index) const {
     return index < size_ ? &entries_[index] : nullptr;
+}
+
+const WifiNetworkSignalStats* WifiNetworkCatalog::signalAt(
+    std::size_t index) const {
+    return index < size_ ? &signals_[index] : nullptr;
 }
 
 std::size_t WifiNetworkCatalog::indexOfIdentity(

@@ -8,6 +8,13 @@
 
 namespace leshy1::apps::wifi {
 
+struct WifiNetworkSignalStats final {
+    std::uint16_t samples = 0;
+    std::int16_t minimumRssiDbm = 0;
+    std::int16_t maximumRssiDbm = 0;
+    std::int16_t rssiTrendDb = 0;
+};
+
 // A bounded, allocation-free live view of nearby access points. Survey
 // sessions deliberately retain every observation; this catalog instead keeps
 // one row per BSSID, ordered by descending RSSI, so the strongest nearby
@@ -27,6 +34,7 @@ public:
     std::uint32_t hiddenResolutions() const { return hiddenResolutions_; }
     bool strongestFirst() const;
     const domain::observations::Observation* at(std::size_t index) const;
+    const WifiNetworkSignalStats* signalAt(std::size_t index) const;
     std::size_t indexOfIdentity(
         const domain::observations::Observation& observation) const;
 
@@ -40,6 +48,7 @@ private:
     void sortStrongestFirst();
 
     std::array<domain::observations::Observation, kCapacity> entries_{};
+    std::array<WifiNetworkSignalStats, kCapacity> signals_{};
     std::size_t size_ = 0;
     std::uint32_t revision_ = 0;
     std::uint32_t hiddenResolutions_ = 0;

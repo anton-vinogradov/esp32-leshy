@@ -2065,6 +2065,12 @@ void testWifiNetworkCatalogResolvesHiddenSsidMonotonically() {
     CHECK(live->wifiNetwork.present);
     CHECK(live->wifiNetwork.authentication == WifiAuthentication::Wpa3Psk);
     CHECK(catalog.hiddenResolutions() == 1U);
+    const auto* signal = catalog.signalAt(0);
+    CHECK(signal != nullptr);
+    CHECK(signal->samples == 3U);
+    CHECK(signal->minimumRssiDbm == -64);
+    CHECK(signal->maximumRssiDbm == -59);
+    CHECK(signal->rssiTrendDb == 2);
 }
 
 void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
@@ -2079,6 +2085,11 @@ void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     CHECK(normalizePassiveRecord(record, 2000, &observation));
     CHECK(catalog.upsert(observation));
     CHECK(catalog.size() == 1);
+    CHECK(catalog.signalAt(0) != nullptr);
+    CHECK(catalog.signalAt(0)->samples == 1U);
+    CHECK(catalog.signalAt(0)->minimumRssiDbm == -67);
+    CHECK(catalog.signalAt(0)->maximumRssiDbm == -67);
+    CHECK(catalog.signalAt(0)->rssiTrendDb == 0);
     const std::uint32_t insertedRevision = catalog.revision();
 
     // Timestamp-only updates do not repaint the live screen.
@@ -2086,6 +2097,7 @@ void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     CHECK(!catalog.upsert(observation));
     CHECK(catalog.revision() == insertedRevision);
     CHECK(catalog.size() == 1);
+    CHECK(catalog.signalAt(0)->samples == 2U);
 
     // Signal changes update the same BSSID row.
     record.rssiDbm = -51;
@@ -2094,6 +2106,10 @@ void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     CHECK(catalog.size() == 1);
     CHECK(catalog.at(0) != nullptr);
     CHECK(catalog.at(0)->rssiDbm == -51);
+    CHECK(catalog.signalAt(0)->samples == 3U);
+    CHECK(catalog.signalAt(0)->minimumRssiDbm == -67);
+    CHECK(catalog.signalAt(0)->maximumRssiDbm == -51);
+    CHECK(catalog.signalAt(0)->rssiTrendDb == 16);
 
     record.bssid[5] = 0x56;
     record.channel = 11;
@@ -2120,6 +2136,9 @@ void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     CHECK(catalog.at(1)->identity[5] == 0x56);
     CHECK(catalog.strongestFirst());
     CHECK(catalog.indexOfIdentity(observation) == 0);
+    CHECK(catalog.signalAt(0)->minimumRssiDbm == -67);
+    CHECK(catalog.signalAt(0)->maximumRssiDbm == -30);
+    CHECK(catalog.signalAt(0)->rssiTrendDb == 21);
 
     record.rssiDbm = -42;
     CHECK(normalizePassiveRecord(record, 7000, &observation));
@@ -2127,6 +2146,10 @@ void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     CHECK(catalog.at(0)->identity[5] == 0x55);
     CHECK(catalog.at(1)->identity[5] == 0x56);
     CHECK(catalog.strongestFirst());
+    CHECK(catalog.signalAt(0)->samples == 5U);
+    CHECK(catalog.signalAt(0)->minimumRssiDbm == -67);
+    CHECK(catalog.signalAt(0)->maximumRssiDbm == -30);
+    CHECK(catalog.signalAt(0)->rssiTrendDb == -12);
 
     observation.radio = RadioKind::Ble;
     CHECK(!catalog.upsert(observation));
@@ -2134,6 +2157,7 @@ void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     catalog.reset();
     CHECK(catalog.size() == 0);
     CHECK(catalog.at(0) == nullptr);
+    CHECK(catalog.signalAt(0) == nullptr);
 }
 
 void testWifiNetworkNavigationLocksIdentityOrder() {

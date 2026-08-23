@@ -41,7 +41,8 @@ def main() -> int:
         "wifi_network_catalog_revision",
         "wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor)",
         "renderWifiNetworkDetailData()",
-        "renderWifiNetworkSignalLine(live)",
+        "renderWifiNetworkRadar(live, signal)",
+        "liveWifiNetworkSignal()",
         "wifiNetworkDetailStaticFieldsDiffer(",
         "wifiOuiDatabase.lookup(",
         "liveWifiNetworkDetail()",
@@ -71,6 +72,11 @@ def main() -> int:
         "observation.labelLength == 0U",
         "hiddenResolutions_",
         "wifiNetworkFactsEqual",
+        "struct WifiNetworkSignalStats final",
+        "signal.minimumRssiDbm",
+        "signal.maximumRssiDbm",
+        "signal.rssiTrendDb",
+        "signalAt",
     )
     required_navigation = (
         "class WifiNetworkNavigationOrder final",
@@ -91,6 +97,10 @@ def main() -> int:
         "WifiNetworkCipherFormat",
         "WifiNetworkVendorFormat",
         "WifiNetworkListeningForName",
+        "WifiNetworkRangeFormat",
+        "WifiNetworkTrendStronger",
+        "WifiNetworkTrendWeaker",
+        "WifiNetworkTrendStable",
     )
     failures = [
         f"renderer token missing: {token}"
@@ -116,8 +126,8 @@ def main() -> int:
     print(
         "Wi-Fi networks contract passed: unique strongest-first BSSID rows, four-row "
         "touch UI, strongest-first discovery with identity-stable navigation, "
-        "data-only live redraw, OUI/security/PHY detail and monotonic hidden-SSID "
-        "resolution without cursor movement"
+        "data-only live redraw, OUI/security/PHY detail, monotonic hidden-SSID "
+        "resolution and bounded live BSSID radar without cursor movement"
     )
     return 0
 

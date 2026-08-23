@@ -76,8 +76,8 @@ def changed_pixels(frames: Path, before_name: str,
     return {"content_changed_pixels": content, "chrome_changed_pixels": chrome}
 
 
-def changed_outside_signal_line(frames: Path, before_name: str,
-                                after_name: str) -> int:
+def changed_outside_region(frames: Path, before_name: str, after_name: str,
+                           x0: int, y0: int, x1: int, y1: int) -> int:
     before = (frames / f"{before_name}.rgb565").read_bytes()
     after = (frames / f"{after_name}.rgb565").read_bytes()
     outside = 0
@@ -86,7 +86,7 @@ def changed_outside_signal_line(frames: Path, before_name: str,
             offset = (y * 240 + x) * 2
             if before[offset:offset + 2] == after[offset:offset + 2]:
                 continue
-            if not (CONTENT_X0 <= x < CONTENT_X1 and 270 <= y < 290):
+            if not (x0 <= x < x1 and y0 <= y < y1):
                 outside += 1
     return outside
 
@@ -102,6 +102,7 @@ def main() -> int:
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--network-intelligence", action="store_true")
+    parser.add_argument("--network-live-radar", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     if not args.firmware.is_file():
@@ -114,6 +115,8 @@ def main() -> int:
         parser.error("--source-commit must be a full Git commit ID")
     if args.flash == args.reuse_exact_flash:
         parser.error("choose exactly one of --flash or --reuse-exact-flash")
+    if args.network_live_radar and not args.network_intelligence:
+        parser.error("--network-live-radar requires --network-intelligence")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -147,6 +150,7 @@ def main() -> int:
     detail_facts_first: dict[str, Any] = {}
     detail_facts_second: dict[str, Any] = {}
     detail_outside_signal_pixels = 0
+    detail_outside_radar_pixels = 0
 
     try:
         if args.flash:
@@ -332,19 +336,70 @@ def main() -> int:
                     device, frames, "wifi-network-detail-first")
                 detail_cycle = int(
                     detail_first.get("survey_product_wifi_scan_cycles", 0))
-                detail_second = wait_ui_state(
-                    device,
-                    lambda state: (
-                        state.get("wifi_product_view") == "network_detail" and
-                        int(state.get("survey_product_wifi_scan_cycles", 0)) >
-                            detail_cycle
-                    ), 45.0, "background scan did not progress on detail")
+                if args.network_live_radar:
+                    radar_deadline = time.monotonic() + 120.0
+                    current_cycle = detail_cycle
+                    first_samples = int(
+                        detail_facts_first.get("signal_samples", 0))
+                    display_fields = (
+                        "rssi_dbm", "minimum_rssi_dbm",
+                        "maximum_rssi_dbm", "rssi_trend_db")
+                    while time.monotonic() < radar_deadline:
+                        detail_second = wait_ui_state(
+                            device,
+                            lambda state, cycle=current_cycle: (
+                                state.get("wifi_product_view") ==
+                                    "network_detail" and
+                                int(state.get(
+                                    "survey_product_wifi_scan_cycles", 0)) >
+                                    cycle
+                            ), min(35.0, radar_deadline - time.monotonic()),
+                            "background scan did not progress on radar")
+                        trace.append(detail_second)
+                        current_cycle = int(detail_second.get(
+                            "survey_product_wifi_scan_cycles", current_cycle))
+                        detail_facts_second = query(
+                            device, b"wifi.network.detail",
+                            "leshy.wifi.network_detail.v1", "state")
+                        for field in (
+                                "identity_hash", "vendor", "authentication",
+                                "pairwise_cipher", "group_cipher",
+                                "channel_width", "phy_mask", "channel",
+                                "frequency_khz"):
+                            if detail_facts_second.get(field) != \
+                                    detail_facts_first.get(field):
+                                raise RuntimeError(
+                                    "network radar moved identity/fact: "
+                                    f"{field}")
+                        if (int(detail_facts_second.get(
+                                "signal_samples", 0)) > first_samples and
+                                any(detail_facts_second.get(field) !=
+                                    detail_facts_first.get(field)
+                                    for field in display_fields)):
+                            break
+                    else:
+                        raise RuntimeError(
+                            "live network radar did not expose a changed "
+                            "physical RSSI/range/trend sample")
+                else:
+                    detail_second = wait_ui_state(
+                        device,
+                        lambda state: (
+                            state.get("wifi_product_view") ==
+                                "network_detail" and
+                            int(state.get(
+                                "survey_product_wifi_scan_cycles", 0)) >
+                                detail_cycle
+                        ), 45.0,
+                        "background scan did not progress on detail")
+                    trace.append(detail_second)
+                    if args.network_intelligence:
+                        detail_facts_second = query(
+                            device, b"wifi.network.detail",
+                            "leshy.wifi.network_detail.v1", "state")
                 screens["wifi_network_detail_second"] = capture(
                     device, frames, "wifi-network-detail-second")
                 if args.network_intelligence:
-                    detail_facts_second = query(
-                        device, b"wifi.network.detail",
-                        "leshy.wifi.network_detail.v1", "state")
                     for field in (
                             "identity_hash", "vendor", "authentication",
                             "pairwise_cipher", "group_cipher",
@@ -357,12 +412,26 @@ def main() -> int:
                 detail_pixel_changes = changed_pixels(
                     frames, "wifi-network-detail-first",
                     "wifi-network-detail-second")
-                detail_outside_signal_pixels = changed_outside_signal_line(
+                detail_outside_signal_pixels = changed_outside_region(
                     frames, "wifi-network-detail-first",
-                    "wifi-network-detail-second")
-                if args.network_intelligence and (
+                    "wifi-network-detail-second", CONTENT_X0, 270,
+                    CONTENT_X1, 290)
+                detail_outside_radar_pixels = changed_outside_region(
+                    frames, "wifi-network-detail-first",
+                    "wifi-network-detail-second", CONTENT_X0, 222,
+                    CONTENT_X1, 290)
+                if args.network_live_radar and (
+                        detail_pixel_changes["content_changed_pixels"] <= 0 or
                         detail_pixel_changes["chrome_changed_pixels"] != 0 or
-                        detail_outside_signal_pixels != 0):
+                        detail_outside_radar_pixels != 0):
+                    raise RuntimeError(
+                        "live network radar redrew outside its card: "
+                        f"{detail_pixel_changes}, outside="
+                        f"{detail_outside_radar_pixels}")
+                if (args.network_intelligence and
+                        not args.network_live_radar and (
+                        detail_pixel_changes["chrome_changed_pixels"] != 0 or
+                        detail_outside_signal_pixels != 0)):
                     raise RuntimeError(
                         "live network passport redrew outside the RSSI line: "
                         f"{detail_pixel_changes}, outside="
@@ -517,6 +586,7 @@ def main() -> int:
         "list_pixel_changes": list_pixel_changes,
         "detail_pixel_changes": detail_pixel_changes,
         "detail_outside_signal_pixels": detail_outside_signal_pixels,
+        "detail_outside_radar_pixels": detail_outside_radar_pixels,
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
@@ -533,7 +603,10 @@ def main() -> int:
             "network_intelligence": args.network_intelligence,
             "network_vendor_lookup": args.network_intelligence,
             "network_driver_facts": args.network_intelligence,
-            "detail_live_rssi_line_only": args.network_intelligence,
+            "network_live_radar": args.network_live_radar,
+            "detail_live_rssi_line_only": (
+                args.network_intelligence and not args.network_live_radar),
+            "detail_live_radar_only": args.network_live_radar,
             "two_complete_wifi_lifecycles": True,
             "navigation_press_count": navigation_press_count,
             "identity_order_locked_during_navigation": True,

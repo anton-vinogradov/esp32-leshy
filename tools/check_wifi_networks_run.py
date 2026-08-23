@@ -126,14 +126,47 @@ def main() -> int:
             "live redraw escaped the data region")
     scope = run.get("scope", {})
     intelligence = scope.get("network_intelligence") is True
+    live_radar = scope.get("network_live_radar") is True
     if intelligence:
-        require(failures,
-                run.get("detail_pixel_changes", {}).get(
-                    "chrome_changed_pixels") == 0 and
-                run.get("detail_outside_signal_pixels") == 0,
-                "network passport redraw escaped the live RSSI line")
         facts_first = run.get("detail_facts_first", {})
         facts_second = run.get("detail_facts_second", {})
+        if live_radar:
+            require(failures,
+                    run.get("detail_pixel_changes", {}).get(
+                        "content_changed_pixels", 0) > 0 and
+                    run.get("detail_pixel_changes", {}).get(
+                        "chrome_changed_pixels") == 0 and
+                    run.get("detail_outside_radar_pixels") == 0,
+                    "network radar redraw escaped its bounded card")
+            for name, facts in (("first", facts_first),
+                                ("second", facts_second)):
+                require(failures,
+                        isinstance(facts.get("signal_samples"), int) and
+                        isinstance(facts.get("minimum_rssi_dbm"), int) and
+                        isinstance(facts.get("maximum_rssi_dbm"), int) and
+                        isinstance(facts.get("rssi_trend_db"), int) and
+                        facts.get("minimum_rssi_dbm", 1) <=
+                            facts.get("rssi_dbm", 0) <=
+                            facts.get("maximum_rssi_dbm", -1),
+                        f"{name} network radar telemetry is invalid")
+            require(failures,
+                    facts_second.get("signal_samples", 0) >
+                        facts_first.get("signal_samples", 0) and
+                    facts_second.get("minimum_rssi_dbm", 0) <=
+                        facts_first.get("minimum_rssi_dbm", 0) and
+                    facts_second.get("maximum_rssi_dbm", 0) >=
+                        facts_first.get("maximum_rssi_dbm", 0) and
+                    any(facts_second.get(field) != facts_first.get(field)
+                        for field in (
+                            "rssi_dbm", "minimum_rssi_dbm",
+                            "maximum_rssi_dbm", "rssi_trend_db")),
+                    "network radar did not advance on a physical sample")
+        else:
+            require(failures,
+                    run.get("detail_pixel_changes", {}).get(
+                        "chrome_changed_pixels") == 0 and
+                    run.get("detail_outside_signal_pixels") == 0,
+                    "network passport redraw escaped the live RSSI line")
         require(failures,
                 facts_first.get("active") is True and
                 facts_first.get("passive") is True and
@@ -205,11 +238,18 @@ def main() -> int:
             scope.get("live_rssi_updates_in_place") is True,
             "automation/passive scope mismatch")
     if intelligence:
-        require(failures,
-                scope.get("network_vendor_lookup") is True and
-                scope.get("network_driver_facts") is True and
-                scope.get("detail_live_rssi_line_only") is True,
+        require(failures, scope.get("network_vendor_lookup") is True and
+                scope.get("network_driver_facts") is True,
                 "network intelligence scope mismatch")
+        if live_radar:
+            require(failures,
+                    scope.get("detail_live_radar_only") is True and
+                    scope.get("detail_live_rssi_line_only") is False,
+                    "network live-radar scope mismatch")
+        else:
+            require(failures,
+                    scope.get("detail_live_rssi_line_only") is True,
+                    "network RSSI-line scope mismatch")
 
     before = run.get("recovery_before", {})
     after = run.get("recovery_after", {})
@@ -251,6 +291,7 @@ def main() -> int:
         "detail_changed_pixels": run.get(
             "detail_pixel_changes", {}).get("content_changed_pixels"),
         "network_intelligence": intelligence,
+        "network_live_radar": live_radar,
         "final_lease_mask": 0,
     }, sort_keys=True))
     return 0
