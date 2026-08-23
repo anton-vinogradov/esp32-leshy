@@ -71,6 +71,15 @@ plus the live RSSI meter/range/trend on one screen. Left unlocks the channel and
 returns directly to the stable list. This removes a navigation-only intermediate
 state; it does not add active probing, calibrated distance or retained history.
 
+Exact `0.118.0-wifi-network-intelligence` deepens CAP-010/016 for Nearby Networks.
+Each BSSID may expose its IEEE MA-L vendor and every normalized fact available from
+the passive ESP-IDF scan record: auth/ciphers, channel/frequency/width, PHY,
+WPS/FTM/RX antenna and country/channel constraints. Empty SSIDs stay visibly hidden
+until a later passively received beacon or probe response for that BSSID supplies a
+name; enrichment is monotonic and keeps navigation identity fixed. This is passive
+discovery only, not directed probing, association, decryption, device-type certainty
+or persistent network tracking.
+
 ## Targets and comparison
 
 | ID | 1.0 capability | Commitment | Requirements | Ready stage |

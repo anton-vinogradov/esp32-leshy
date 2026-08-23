@@ -72,6 +72,15 @@ Wi-Fi-клиента сразу фиксирует его наблюдавший
 возвращает прямо к стабильному списку. Удалено промежуточное navigation-only state;
 active probing, calibrated distance или retained history не добавлены.
 
+Exact `0.118.0-wifi-network-intelligence` углубляет CAP-010/016 для «Сетей рядом».
+Каждый BSSID может показать вендора IEEE MA-L и все нормализованные факты из passive
+scan record ESP-IDF: auth/ciphers, channel/frequency/width, PHY, WPS/FTM/RX antenna и
+country/channel constraints. Пустой SSID остаётся явно скрытым, пока поздний пассивно
+принятый beacon или probe response этого BSSID не сообщит имя; enrichment монотонен
+и сохраняет navigation identity. Это только passive discovery, не directed probing,
+association, decryption, уверенное определение типа устройства или persistent
+tracking сети.
+
 ## Цели и сравнение
 
 | ID | Возможность 1.0 | Обязательство | Требования | Этап готовности |

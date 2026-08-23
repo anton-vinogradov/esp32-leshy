@@ -252,3 +252,15 @@ network or observed state, signal meter, range and trend update below it. Left
 unlocks and returns directly to the list. Six physical TFT states prove 2,120
 live-region and zero identity/chrome changed pixels (`E-BUILD-117`/`E-AUTO-081`/
 `E-HIL-141`/`E-UX-036`).
+
+Exact `0.118.0-wifi-network-intelligence` makes Nearby Networks answer “what is this
+network?” rather than expose scan telemetry. The detail uses the viewport for
+SSID/BSSID and maker, security/ciphers, radio channel/frequency/width/PHY,
+WPS/FTM/RX antenna and country/channel limits when broadcast. Missing facts remain
+honestly unknown. A hidden SSID reads `Hidden`; passive reception keeps listening,
+and a later beacon or probe response for the same BSSID replaces it in place without
+moving the cursor. A later empty record cannot erase the learned name or richer
+facts. The firmware sends no directed probe. Static passport content redraws only
+when it is enriched; normal live refresh is confined to the RSSI line. Six physical
+TFT states prove zero changed pixels outside that line while the native suite proves
+hidden→known monotonic merge (`E-BUILD-118`/`E-AUTO-082`/`E-HIL-142`/`E-UX-037`).

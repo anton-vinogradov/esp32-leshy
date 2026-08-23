@@ -253,3 +253,15 @@ generation/channel, network или состояние наблюдения, sign
 Left снимает фиксацию и возвращает прямо к списку. Шесть physical TFT states
 доказывают 2 120 changed pixels live-области и zero identity/chrome changes
 (`E-BUILD-117`/`E-AUTO-081`/`E-HIL-141`/`E-UX-036`).
+
+Exact `0.118.0-wifi-network-intelligence` заставляет «Сети рядом» отвечать «что это
+за сеть?», а не показывать scan telemetry. Detail использует viewport для SSID/BSSID
+и вендора, защиты/шифров, channel/frequency/width/PHY, WPS/FTM/RX antenna и
+country/channel limits, когда они объявлены. Отсутствующие факты честно остаются
+unknown. Hidden SSID подписан `Скрытая`; пассивный приём продолжает слушать, а более
+поздний beacon или probe response того же BSSID заменяет имя на месте, не сдвигая
+курсор. Следующая пустая запись не может стереть уже известное имя или более полные
+факты. Прошивка не отправляет directed probe. Static passport перерисовывается
+только при обогащении, обычный live refresh ограничен строкой RSSI. Шесть physical
+TFT states доказывают zero changed pixels вне этой строки, native suite — монотонный
+merge hidden→known (`E-BUILD-118`/`E-AUTO-082`/`E-HIL-142`/`E-UX-037`).

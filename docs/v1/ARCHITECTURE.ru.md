@@ -544,6 +544,19 @@ bounded нижняя область содержит состояние набл
 trend. HIL oracle отдельно считает identity, live и chrome pixels и допускает
 неизменный frame, если новый принятый пакет не изменил ни одного показанного значения.
 
+Exact `0.118.0-wifi-network-intelligence` обогащает scan path, не делая его active.
+`BoardWifiPassiveScanner` по-прежнему использует passive scan ESP-IDF с
+`show_hidden=true`; возвращённые auth/cipher, channel-width/secondary, PHY, WPS/FTM,
+RX-antenna, country, BSS-color и VHT-center fields нормализуются в fixed
+`WifiNetworkFacts`. `WifiNetworkCatalog` остаётся bounded на 32 BSSID и монотонно
+сливает sparse records: пустой SSID становится известным, когда поздний beacon или
+probe response несёт тот же BSSID, а следующая пустая record уже не может стереть
+имя или прежние факты. Vendor lookup переиспользует flash-resident IEEE MA-L table.
+Navigation по-прежнему snapshot-ит BSSID identities, поэтому enrichment меняет
+content на месте, а не позицию курсора. Detail renderer отдельно сравнивает static
+facts и RSSI; обычные updates затрагивают только signal line. Directed probe,
+association, decryption или persistent identity write не добавлены.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

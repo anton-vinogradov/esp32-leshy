@@ -484,6 +484,19 @@ rectangle contains observation state and the existing signal card/range/trend. T
 HIL oracle separates identity, live and chrome pixels and accepts an unchanged frame
 when a newly received packet leaves every displayed value unchanged.
 
+Exact `0.118.0-wifi-network-intelligence` enriches the scan path without turning it
+active. `BoardWifiPassiveScanner` still uses passive ESP-IDF scans with
+`show_hidden=true`; it normalizes the returned auth/cipher, channel-width/secondary,
+PHY, WPS/FTM, RX-antenna, country, BSS-color and VHT-center fields into fixed
+`WifiNetworkFacts`. `WifiNetworkCatalog` remains bounded at 32 BSSIDs and merges
+sparse records monotonically: an empty SSID may become known when a later beacon or
+probe response carries the same BSSID, while an empty later record cannot erase that
+name or earlier facts. Vendor lookup reuses the flash-resident IEEE MA-L table.
+Navigation still snapshots BSSID identities, so enrichment changes content in place
+rather than cursor position. The detail renderer compares static facts separately
+from RSSI; routine updates touch only the signal line. No directed probe,
+association, decryption or persistent identity write is introduced.
+
 ## Data model
 
 Raw observation is separate from interpretation:
