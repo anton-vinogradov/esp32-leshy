@@ -167,12 +167,14 @@ def main() -> int:
     records: dict[str, Any] = {}
     watchdog_raw = b""
     clear_raw = b""
+    flash_completed = False
 
     try:
         if args.flash:
             flash_candidate(
                 args.port, candidate, args.flash_offset, args.flash_baud
             )
+            flash_completed = True
             time.sleep(0.5)
 
         ready, recovery, timing = reset_capture(
@@ -302,7 +304,9 @@ def main() -> int:
     result = {
         "schema": RUN_SCHEMA,
         "passed": not failures,
-        "gate_eligible": (args.flash or args.reuse_exact_flash) and not failures,
+        "gate_eligible": (
+            flash_completed or args.reuse_exact_flash
+        ) and not failures,
         "failures": failures,
         "candidate": {
             "firmware_sha256": firmware_sha,
@@ -310,7 +314,8 @@ def main() -> int:
             "version": args.expected_version,
             "source_commit": args.source_commit,
             "runner_sha256": runner_sha,
-            "flashed": args.flash,
+            "flash_requested": args.flash,
+            "flashed": flash_completed,
             "reused_exact_flash": args.reuse_exact_flash,
         },
         "expected_cid": expected_cid,
