@@ -341,9 +341,14 @@ def main() -> int:
                     current_cycle = detail_cycle
                     first_samples = int(
                         detail_facts_first.get("signal_samples", 0))
-                    display_fields = (
+                    visible_signal_fields = (
                         "rssi_dbm", "minimum_rssi_dbm",
-                        "maximum_rssi_dbm", "rssi_trend_db")
+                        "maximum_rssi_dbm")
+                    first_trend = int(
+                        detail_facts_first.get("rssi_trend_db", 0))
+                    first_trend_class = (
+                        1 if first_trend >= 4 else
+                        (-1 if first_trend <= -4 else 0))
                     while time.monotonic() < radar_deadline:
                         detail_second = wait_ui_state(
                             device,
@@ -373,9 +378,14 @@ def main() -> int:
                                     f"{field}")
                         if (int(detail_facts_second.get(
                                 "signal_samples", 0)) > first_samples and
-                                any(detail_facts_second.get(field) !=
+                                (any(detail_facts_second.get(field) !=
                                     detail_facts_first.get(field)
-                                    for field in display_fields)):
+                                    for field in visible_signal_fields) or
+                                 (1 if int(detail_facts_second.get(
+                                    "rssi_trend_db", 0)) >= 4 else
+                                  (-1 if int(detail_facts_second.get(
+                                    "rssi_trend_db", 0)) <= -4 else 0)) !=
+                                    first_trend_class)):
                             break
                     else:
                         raise RuntimeError(

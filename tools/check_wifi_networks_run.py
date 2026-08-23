@@ -156,10 +156,16 @@ def main() -> int:
                         facts_first.get("minimum_rssi_dbm", 0) and
                     facts_second.get("maximum_rssi_dbm", 0) >=
                         facts_first.get("maximum_rssi_dbm", 0) and
-                    any(facts_second.get(field) != facts_first.get(field)
-                        for field in (
+                    (any(facts_second.get(field) != facts_first.get(field)
+                         for field in (
                             "rssi_dbm", "minimum_rssi_dbm",
-                            "maximum_rssi_dbm", "rssi_trend_db")),
+                            "maximum_rssi_dbm")) or
+                     (1 if facts_second.get("rssi_trend_db", 0) >= 4 else
+                      (-1 if facts_second.get("rssi_trend_db", 0) <= -4
+                       else 0)) !=
+                     (1 if facts_first.get("rssi_trend_db", 0) >= 4 else
+                      (-1 if facts_first.get("rssi_trend_db", 0) <= -4
+                       else 0))),
                     "network radar did not advance on a physical sample")
         else:
             require(failures,

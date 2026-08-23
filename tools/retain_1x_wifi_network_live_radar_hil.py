@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.119.0-wifi-network-live-radar"
 CID = "FE343253440000002000000055019CB7"
 EVIDENCE_IDS = ["E-BUILD-119", "E-AUTO-083", "E-HIL-143", "E-UX-038"]
+FAILED_SOURCE_COMMIT = "c6947120f2adf8862e49ac5c6aaef96309e89c57"
 SOURCE_FILES = {
     "renderer": "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp",
     "strings": "firmware/leshy1/src/ui/UiStrings.def",
@@ -83,9 +84,12 @@ def verify_live_radar(run: dict[str, Any]) -> None:
                 first.get("minimum_rssi_dbm", 0) and
             second.get("maximum_rssi_dbm", 0) >=
                 first.get("maximum_rssi_dbm", 0) and
-            any(second.get(field) != first.get(field) for field in (
-                "rssi_dbm", "minimum_rssi_dbm", "maximum_rssi_dbm",
-                "rssi_trend_db")),
+            (any(second.get(field) != first.get(field) for field in (
+                "rssi_dbm", "minimum_rssi_dbm", "maximum_rssi_dbm")) or
+             (1 if second.get("rssi_trend_db", 0) >= 4 else
+              (-1 if second.get("rssi_trend_db", 0) <= -4 else 0)) !=
+             (1 if first.get("rssi_trend_db", 0) >= 4 else
+              (-1 if first.get("rssi_trend_db", 0) <= -4 else 0))),
             "physical radar sample did not advance")
     require(run.get("detail_pixel_changes", {}).get(
                 "content_changed_pixels", 0) > 0 and
@@ -106,6 +110,7 @@ def run_check(command: list[str], message: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, type=Path)
+    parser.add_argument("--failed-source", required=True, type=Path)
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument("--summary", required=True, type=Path)
     parser.add_argument("--factory", required=True, type=Path)
@@ -118,6 +123,7 @@ def main() -> int:
     args = parser.parse_args()
 
     source = args.source.resolve()
+    failed_source = args.failed_source.resolve()
     destination = args.destination.resolve()
     summary = args.summary.resolve()
     runner = ROOT / "tools/run_1x_wifi_networks_hil.py"
@@ -129,11 +135,14 @@ def main() -> int:
             len(args.runner_commit) == 40, "commits must be full IDs")
     for artifact in (
             source / "run.json", source / "firmware.bin",
-            source / "artifacts.sha256", runner, checker, source_guard,
+            source / "artifacts.sha256", failed_source / "run.json",
+            failed_source / "firmware.bin",
+            failed_source / "artifacts.sha256", runner, checker, source_guard,
             args.factory.resolve(), args.elf.resolve(), args.map.resolve()):
         require(artifact.is_file(), f"artifact missing: {artifact}")
 
     run = load(source / "run.json")
+    failed_run = load(failed_source / "run.json")
     candidate = run.get("candidate", {})
     require(run.get("schema") == "leshy.wifi_networks_hil.run.v1" and
             run.get("passed") is True and run.get("gate_eligible") is True and
@@ -146,6 +155,18 @@ def main() -> int:
     require(run.get("runner_source_sha256") == digest(runner),
             "runner source hash mismatch")
     verify_live_radar(run)
+    failed_candidate = failed_run.get("candidate", {})
+    failed_messages = "\n".join(failed_run.get("failures", []))
+    require(failed_run.get("schema") ==
+                "leshy.wifi_networks_hil.run.v1" and
+            failed_run.get("passed") is False and
+            failed_run.get("gate_eligible") is False and
+            failed_candidate.get("version") == VERSION and
+            failed_candidate.get("source_commit") == FAILED_SOURCE_COMMIT and
+            failed_candidate.get("flash_mode") == "fresh" and
+            "redrew outside its card" in failed_messages and
+            failed_run.get("cleanup_after", {}).get("complete") is True,
+            "fail-closed frozen-detail predecessor binding mismatch")
     run_check([
         sys.executable, str(checker), "--run", str(source),
         "--expected-version", VERSION, "--expected-cid", CID,
@@ -156,6 +177,7 @@ def main() -> int:
 
     destination.mkdir(parents=True)
     shutil.copytree(source, destination / "run")
+    shutil.copytree(failed_source, destination / "failed-predecessor")
     tools_dir = destination / "tools"
     tools_dir.mkdir()
     for tool in (runner, checker, source_guard):
@@ -195,6 +217,8 @@ def main() -> int:
         "source_guard_sha256": digest(tools_dir / source_guard.name),
         "source_sha256": source_hashes,
         "run_sha256": digest(destination / "run/run.json"),
+        "failed_predecessor_run_sha256": digest(
+            destination / "failed-predecessor/run.json"),
         "tft_states": len(run.get("screens", {})),
     }
     write(destination / "provenance.json", provenance)
@@ -215,6 +239,12 @@ def main() -> int:
         "board": "board-01",
         "evidence_ids": EVIDENCE_IDS,
         "candidate": provenance,
+        "failed_predecessor": {
+            "source_commit": FAILED_SOURCE_COMMIT,
+            "failure": "frozen_detail_zero_pixel_change",
+            "cleanup_complete": True,
+            "retained": True,
+        },
         "evidence": {
             "artifact_index_sha256": digest(manifest),
             "files": len(indexed) + 1,

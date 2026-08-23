@@ -3387,10 +3387,10 @@ void serviceProductSurveyWorker() {
         }
     }
     if (drainProductSurveyWorkerObservations()) render = true;
-    // Keep a detail page visually stable while the worker continues updating
-    // the backing catalog. Returning to the list reveals the latest values.
-    if (render && wifiProductView != WifiProductView::NetworkDetail &&
-        bleProductView != BleProductView::DeviceDetail) {
+    // BLE detail is intentionally a frozen discovery snapshot. Wi-Fi network
+    // detail is different: its integrated radar must follow passive scan
+    // samples while renderSelectionDelta() confines redraw to the radar card.
+    if (render && bleProductView != BleProductView::DeviceDetail) {
         productSurveyIncrementalRefreshPending = true;
         renderInteractiveScreen(false);
         productSurveyIncrementalRefreshPending = false;
