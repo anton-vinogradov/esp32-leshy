@@ -50,6 +50,14 @@ explicit release-boundary change.
 | CAP-017 | Radar/localize shows RSSI history and honest proximity limits | P1 | PR-004 | S4/S6 |
 | CAP-042 | Passive Wi-Fi channel/packet monitor creates a bounded Capture and compatible PCAP with drop counters and no hidden TX | P0 | PR-003, PR-007, PR-015 | S4 |
 
+Implementation checkpoint: exact `0.115.0-wifi-device-intelligence` deepens the
+current CAP-016 Wi-Fi Devices detail with passive management/data-frame facts, a
+pinned 39,984-entry IEEE MA-L lookup, explicit private-MAC handling and a
+selected-channel current-signal radar. This is the first useful slice of CAP-017 and
+CAP-044, but it does not close either: retained RSSI history, localization semantics,
+BLE/services/protocol profiles, Target correlation and persistent identity history
+remain owned by S6.
+
 ## Targets and comparison
 
 | ID | 1.0 capability | Commitment | Requirements | Ready stage |

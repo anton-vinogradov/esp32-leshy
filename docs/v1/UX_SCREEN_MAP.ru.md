@@ -223,3 +223,15 @@ Wi-Fi→«Сети рядом». До взаимодействия текущи�
 задачу. Fresh physical run выполняет восемь actions и ещё два scan на 23
 зафиксированных строках без изменения selection, visible size, BSSID-order hash или
 selected-BSSID hash (`E-BUILD-114`/`E-AUTO-078`/`E-HIL-138`/`E-UX-033`).
+
+Exact `0.115.0-wifi-device-intelligence` превращает Wi-Fi→«Устройства» в
+трёхуровневый пользовательский flow: strongest-first live list → стабильный паспорт
+устройства → live signal radar. Primary label строки предпочитает пассивно
+объявленные WPS device name/model/maker, затем embedded IEEE OUI maker, затем MAC.
+Паспорт использует весь viewport для типа MAC, maker, model, поколения/channel Wi-Fi,
+directed SSID, BSSID, длительности/state наблюдения и явной пометки passive evidence;
+недоступные факты показываются как unknown, а не угадываются. Right или OK ведёт
+вперёд, Left возвращает. Первое взаимодействие фиксирует identity строк, а radar
+закрепляет приём на канале выбранного устройства и обновляет только RSSI state/range
+card. Восемь exact TFT states проверяют zero static-chrome repaint и pixel-stable
+паспорт при background traffic (`E-BUILD-115`/`E-AUTO-079`/`E-HIL-139`/`E-UX-034`).

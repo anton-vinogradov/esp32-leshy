@@ -1,0 +1,9 @@
+{
+  "schema": "leshy.wifi_oui_asset.v1",
+  "source": "https://standards-oui.ieee.org/oui/oui.csv",
+  "source_sha256": "cf207eefcf9a8f3c9a5ebb92808a148d556966a8597d488ebae17bada31bb3ad",
+  "asset_sha256": "ccff7d969be26a35a90f64b1e3f89fa6cff8a07144a74b747d296ec5480b0db1",
+  "records": 39984,
+  "record_bytes": 32,
+  "asset_bytes": 1279488
+}

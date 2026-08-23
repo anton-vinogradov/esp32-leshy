@@ -51,6 +51,14 @@
 | CAP-017 | Radar/localize показывает историю RSSI и понятные пределы оценки близости | P1 | PR-004 | S4/S6 |
 | CAP-042 | Пассивный Wi-Fi channel/packet monitor создаёт bounded Capture и совместимый PCAP с drop counters без скрытого TX | P0 | PR-003, PR-007, PR-015 | S4 |
 
+Implementation checkpoint: exact `0.115.0-wifi-device-intelligence` углубляет
+текущий detail CAP-016 «Устройства Wi-Fi» пассивными фактами management/data frames,
+закреплённой lookup IEEE MA-L на 39 984 записи, явной обработкой private MAC и
+selected-channel радаром текущего сигнала. Это первый полезный срез CAP-017 и
+CAP-044, но он не закрывает ни один из них: retained RSSI history, localization
+semantics, BLE/services/protocol profiles, Target correlation и persistent identity
+history остаются в S6.
+
 ## Цели и сравнение
 
 | ID | Возможность 1.0 | Обязательство | Требования | Этап готовности |

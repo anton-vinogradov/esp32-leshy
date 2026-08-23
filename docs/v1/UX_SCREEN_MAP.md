@@ -222,3 +222,15 @@ not jump. Networks first discovered after the lock appear on task re-entry. A fr
 physical run exercises eight actions and two further scans across 23 locked rows
 without changing selection, visible size, BSSID-order hash or selected-BSSID hash
 (`E-BUILD-114`/`E-AUTO-078`/`E-HIL-138`/`E-UX-033`).
+
+Exact `0.115.0-wifi-device-intelligence` turns Wi-Fi→Devices into a three-level
+user flow: strongest-first live list → stable device passport → live signal radar.
+The primary row label prefers passively advertised WPS device name/model/maker, then
+the embedded IEEE OUI maker, then MAC. The passport uses the full viewport for MAC
+type, maker, model, Wi-Fi generation/channel, directed SSID, BSSID, observation
+duration/state and an explicit passive-evidence note; unavailable facts read as
+unknown rather than being guessed. Right or OK advances, Left returns. First
+interaction freezes row identities, and radar pins reception to the selected channel
+while updating only its RSSI state/range card. Eight exact TFT states verify zero
+static-chrome repaint and a pixel-stable passport during background traffic
+(`E-BUILD-115`/`E-AUTO-079`/`E-HIL-139`/`E-UX-034`).

@@ -448,6 +448,22 @@ dedicated diagnostic Session workspace, so static RAM remains 170,128 B and prod
 generation 95/0 is unaffected. Combined with exact 0.89 endurance, this closes S4;
 S5 now extends the same broker/storage/observation contracts to every stock module.
 
+Exact `0.115.0-wifi-device-intelligence` keeps the Wi-Fi Devices path passive and
+bounded while separating raw evidence, inferred facts and presentation. The
+promiscuous adapter admits only client Probe Request, Association/Reassociation
+Request and to-DS Data frames into the existing fixed queue. `WifiDeviceCatalog`
+merges directed SSID, BSSID/state/channel, supported rates, HT/VHT/HE generation and
+WPS device/manufacturer/model into 32 fixed records; later sparse frames cannot erase
+richer earlier evidence. `WifiOuiDatabase` binary-searches a build-pinned official
+IEEE MA-L snapshot of 39,984 fixed 32-byte records directly from flash. Multicast and
+locally administered MACs bypass OUI attribution, and optional fields stay unknown
+unless broadcast. `WifiDeviceNavigationOrder` snapshots MAC identity on first user
+interaction. The passport is frozen presentation; the following radar pins the
+receiver to the selected observed channel and redraws only live RSSI/range/trend
+content. Neither screen sends probes, associates, decrypts or writes persistent
+identity. Exact HIL binds the source/OUI provenance, eight TFT states, two stable
+lifecycles, zero drops/writes/chrome repaint and final lease 0.
+
 ## Data model
 
 Raw observation is separate from interpretation:

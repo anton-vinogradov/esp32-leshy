@@ -506,6 +506,23 @@ Fixture переиспользует отдельный diagnostic Session works
 0.89 это закрывает S4; теперь S5 расширяет те же broker/storage/observation contracts
 на каждый штатный модуль.
 
+Exact `0.115.0-wifi-device-intelligence` сохраняет path «Устройства Wi-Fi» пассивным
+и bounded, разделяя raw evidence, inferred facts и presentation. Promiscuous adapter
+принимает в существующую fixed queue только client Probe Request,
+Association/Reassociation Request и to-DS Data frames. `WifiDeviceCatalog` объединяет
+directed SSID, BSSID/state/channel, supported rates, поколение HT/VHT/HE и WPS
+device/manufacturer/model в 32 fixed records; поздние sparse frames не стирают более
+богатое раннее evidence. `WifiOuiDatabase` binary-searches закреплённый при сборке
+официальный snapshot IEEE MA-L из 39 984 fixed records по 32 B прямо во flash.
+Multicast и locally administered MAC пропускают OUI attribution, optional fields
+остаются unknown, пока клиент их не объявил. `WifiDeviceNavigationOrder` фиксирует
+MAC identity при первом пользовательском взаимодействии. Passport — frozen
+presentation; следующий radar закрепляет приёмник на наблюдавшемся канале выбранного
+устройства и перерисовывает только live RSSI/range/trend content. Ни один экран не
+посылает probe, не associate/decrypt и не сохраняет persistent identity. Exact HIL
+связывает source/OUI provenance, восемь TFT states, два стабильных lifecycle, zero
+drops/writes/chrome repaint и final lease 0.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

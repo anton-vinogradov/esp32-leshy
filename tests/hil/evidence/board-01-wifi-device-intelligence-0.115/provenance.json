@@ -1,0 +1,33 @@
+{
+  "app_elf_sha256": "8c6928d2574ef3a98ee06f1211eb3307dc42da0b2491e2fcffd96775f097c236",
+  "app_image_bytes": 2875280,
+  "checker_sha256": "3ab5ea23cbace1e5d18e244a70a2fe5528d02d8f98676619dd27c1b99a85134f",
+  "cid": "FE343253440000002000000055019CB7",
+  "elf_file_sha256": "8c6928d2574ef3a98ee06f1211eb3307dc42da0b2491e2fcffd96775f097c236",
+  "factory_image_bytes": 2940816,
+  "factory_sha256": "dda0513137fd4841a21533099e9705995301f375c0acea534a86e7971b3de5c1",
+  "firmware_sha256": "1ee8fe748d7ca455df2f7495effc244ba0968907cb5bf8283cbceccbfb98c2d9",
+  "firmware_source_commit": "b2ea80493ecc17f96f735f159306e6711b753654",
+  "linked_flash_bytes": 2874880,
+  "map_sha256": "26f41dc2f7ca4a196613a5cd404161267aae7e1390d9ffb17cc5dc13c5ef1290",
+  "oui_records": 39984,
+  "run_sha256": "c2f3f63fd658c1390b42cd1344f7b70cea57a2b26834675c0eeef832643d2af9",
+  "runner_commit": "b2ea80493ecc17f96f735f159306e6711b753654",
+  "runner_sha256": "721825e30386ef6d081edfa79403ee6edee249475238384875230a0172d76f0a",
+  "schema": "leshy.wifi_device_intelligence_hil.provenance.v1",
+  "source_sha256": {
+    "catalog_cpp": "0c447616d152a1c9ff796056951b3af5edb7c2228262559a9682ca274b9ffbb3",
+    "catalog_h": "5e3187284b31274f3cb2eb6bb7eedaefce0fea0c2ce25cce3efc0f46d53aebb0",
+    "contract": "9e5163d7b6e9619dff1e9f30daf882abd36d1ffe1de42e900c1cee2317e7c277",
+    "native_tests": "7635749c3562d36166071c769457d75eca7374146329a2c395004d8197c7f31e",
+    "navigation": "cd0d3590bce967c1026906f303f2361455594f83ba911bc2e1099e25d37788e3",
+    "oui_cpp": "943e239aa500925390126b8ab8b1af8b985e0daa9f072dd0d14f563d31e609e2",
+    "oui_generator": "e4365ccb563e9fc80495321d28230a3a467fb4cd4cabb879dbc44089409bfea5",
+    "oui_h": "69818478f8c04a790bc077560f5252b6f620c1594113d1d04ab72d2d50551a79",
+    "oui_metadata": "0d40537e73261a4c02a0eb4301f0ca249311d355f57f2498d78c9ff3e8925e2c",
+    "renderer": "5d4b9dace145b06d5b8667a10192650c3474656a46557ae0e49e59083e2ab7ea"
+  },
+  "static_ram_bytes": 198568,
+  "tft_states": 8,
+  "version": "0.115.0-wifi-device-intelligence"
+}
