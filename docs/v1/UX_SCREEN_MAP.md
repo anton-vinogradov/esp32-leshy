@@ -234,3 +234,12 @@ interaction freezes row identities, and radar pins reception to the selected cha
 while updating only its RSSI state/range card. Eight exact TFT states verify zero
 static-chrome repaint and a pixel-stable passport during background traffic
 (`E-BUILD-115`/`E-AUTO-079`/`E-HIL-139`/`E-UX-034`).
+
+Exact `0.116.0-wifi-channel-average` refines Wi-Fi→Channels without adding another
+screen. The full 1…13 axis remains visible on a black graph. Each channel overlays a
+narrow colored latest-dwell bar on a wider gray session-mean bar; a gray swatch and
+`AVG`/`СРЕД` label explain the encoding. `BEST`/`СВОБОДНЕЕ` compares the session
+means of 1/6/11, so one short burst cannot alone flip the recommendation. Only a
+changed bar or recommendation is redrawn. Four exact TFT states prove visible gray
+means and zero changes outside live regions (`E-BUILD-116`/`E-AUTO-080`/
+`E-HIL-140`/`E-UX-035`).

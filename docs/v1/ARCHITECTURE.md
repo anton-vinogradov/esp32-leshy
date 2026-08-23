@@ -464,6 +464,17 @@ content. Neither screen sends probes, associates, decrypts or writes persistent
 identity. Exact HIL binds the source/OUI provenance, eight TFT states, two stable
 lifecycles, zero drops/writes/chrome repaint and final lease 0.
 
+Exact `0.116.0-wifi-channel-average` keeps the Wi-Fi Channels aggregation bounded
+and separates two time scales. Each completed 120 ms dwell publishes the existing
+current lower-bound airtime permille and adds it to a per-channel 64-bit cumulative
+sum with a bounded dwell count. The snapshot exposes the arithmetic mean; reset on
+task entry clears both. `bestPrimaryChannel()` compares only means for 1/6/11.
+Rendering uses a wide gray mean bar behind a narrow colored current bar and clears
+only that bar's previous extent, so the axis, legend, header and footer do not flash.
+Native tests deliberately make the instantaneous winner differ from the mean winner;
+physical HIL waits for at least two samples per channel and verifies exact gray TFT
+pixels, data-only redraw, two clean lifecycles and final lease 0.
+
 ## Data model
 
 Raw observation is separate from interpretation:

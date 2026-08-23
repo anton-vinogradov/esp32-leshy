@@ -59,6 +59,13 @@ CAP-044, но он не закрывает ни один из них: retained R
 semantics, BLE/services/protocol profiles, Target correlation и persistent identity
 history остаются в S6.
 
+Exact `0.116.0-wifi-channel-average` уточняет presentation и decision rule «Каналов»
+CAP-042. Последний passive airtime dwell остаётся виден узким цветным столбцом,
+широкий серый столбец показывает арифметическое среднее с момента входа для каждого
+канала 1…13, а наименее занятый основной канал 1/6/11 выбирается по этим средним.
+Среднее bounded, allocation-free и volatile; это не calibrated CCA utilization и не
+постоянный site survey.
+
 ## Цели и сравнение
 
 | ID | Возможность 1.0 | Обязательство | Требования | Этап готовности |

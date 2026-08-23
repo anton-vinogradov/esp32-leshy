@@ -523,6 +523,18 @@ presentation; следующий radar закрепляет приёмник н�
 связывает source/OUI provenance, восемь TFT states, два стабильных lifecycle, zero
 drops/writes/chrome repaint и final lease 0.
 
+Exact `0.116.0-wifi-channel-average` сохраняет aggregation Wi-Fi «Каналов» bounded и
+разделяет два масштаба времени. Каждый завершённый dwell 120 мс публикует прежнюю
+текущую нижнюю оценку airtime permille и добавляет её в 64-bit cumulative sum канала
+с bounded dwell count. Snapshot публикует арифметическое среднее; reset при входе в
+задачу очищает оба значения. `bestPrimaryChannel()` сравнивает только средние
+1/6/11. Renderer рисует широкий серый столбец среднего за узким цветным столбцом
+текущего уровня и очищает только прежнюю область этого канала, поэтому axis, legend,
+header и footer не мерцают. Native regression намеренно разводит мгновенного и
+среднего победителей; physical HIL ждёт минимум два измерения каждого канала и
+проверяет точные серые TFT pixels, data-only redraw, два чистых lifecycle и final
+lease 0.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

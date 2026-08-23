@@ -58,6 +58,13 @@ CAP-044, but it does not close either: retained RSSI history, localization seman
 BLE/services/protocol profiles, Target correlation and persistent identity history
 remain owned by S6.
 
+Exact `0.116.0-wifi-channel-average` refines the CAP-042 Channels presentation and
+decision rule. It keeps the latest passive airtime dwell visible as a narrow colored
+bar, adds a wide gray arithmetic mean since task entry for every channel 1…13, and
+chooses the least-busy primary among 1/6/11 from those means. The mean is bounded,
+allocation-free and volatile; it is neither calibrated CCA utilization nor a
+persistent site survey.
+
 ## Targets and comparison
 
 | ID | 1.0 capability | Commitment | Requirements | Ready stage |
