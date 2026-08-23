@@ -13,7 +13,7 @@
 #include "FixtureSession.h"
 
 #ifndef LESHY_FIXTURE_VERSION
-#define LESHY_FIXTURE_VERSION "0.2.3-bounded-signals"
+#define LESHY_FIXTURE_VERSION "0.2.4-bounded-signals"
 #endif
 
 namespace {
@@ -57,6 +57,9 @@ constexpr std::uint8_t kNrfChannel = 42;
 constexpr std::uint16_t kNrfFrequencyMhz = 2400U + kNrfChannel;
 constexpr std::int8_t kNrfPowerDbm = -18;
 constexpr std::uint8_t kNrfMinimumPowerCarrierSetup = 0x90;
+constexpr std::uint8_t kCcReadPartNumber = 0xF0;
+constexpr std::uint8_t kCcReadVersion = 0xF1;
+constexpr std::uint32_t kCcReadyTimeoutUs = 2000;
 constexpr int kNrfCsnPins[3] = {
     kNrfCsn1Pin, kNrfCsn2Pin, kNrfCsn3Pin};
 
@@ -66,6 +69,11 @@ struct NrfInventoryReadback {
     std::uint8_t channel[3]{};
     std::uint8_t rfSetup[3]{};
     std::uint8_t plausibleMask = 0;
+    std::uint8_t ccStatus = 0xFF;
+    std::uint8_t ccPartNumber = 0xFF;
+    std::uint8_t ccVersion = 0xFF;
+    bool ccReadComplete = false;
+    bool ccPlausible = false;
 };
 
 FixtureSession session;
@@ -195,6 +203,22 @@ bool plausibleNrfIdentity(std::uint8_t status, std::uint8_t config,
            (config & 0x80U) == 0 && channel <= 125U;
 }
 
+bool readCcIdentityRegister(int miso, std::uint8_t command,
+                            std::uint8_t* status, std::uint8_t* value) {
+    digitalWrite(kCc1101CsPin, LOW);
+    const std::uint32_t started = micros();
+    while (digitalRead(miso) != LOW) {
+        if (micros() - started > kCcReadyTimeoutUs) {
+            digitalWrite(kCc1101CsPin, HIGH);
+            return false;
+        }
+    }
+    *status = SPI.transfer(command);
+    *value = SPI.transfer(0xFF);
+    digitalWrite(kCc1101CsPin, HIGH);
+    return true;
+}
+
 NrfInventoryReadback probeNrfOrientation(int miso, int mosi) {
     NrfInventoryReadback result;
     holdNrfCeLow();
@@ -220,6 +244,18 @@ NrfInventoryReadback probeNrfOrientation(int miso, int mosi) {
                 result.plausibleMask | (1U << slot));
         }
     }
+    std::uint8_t partStatus = 0xFF;
+    std::uint8_t versionStatus = 0xFF;
+    result.ccReadComplete = readCcIdentityRegister(
+        miso, kCcReadPartNumber, &partStatus, &result.ccPartNumber) &&
+        readCcIdentityRegister(
+            miso, kCcReadVersion, &versionStatus, &result.ccVersion);
+    result.ccStatus = versionStatus;
+    result.ccPlausible = result.ccReadComplete &&
+        result.ccStatus != 0xFFU &&
+        !(result.ccPartNumber == 0xFFU && result.ccVersion == 0xFFU) &&
+        !(result.ccPartNumber == 0x00U &&
+          (result.ccVersion == 0x00U || result.ccVersion == 0xFFU));
     SPI.endTransaction();
     SPI.end();
     holdNrfCeLow();
@@ -386,21 +422,29 @@ void emitNrfInventory() {
         "{\"schema\":\"leshy.hil.fixture.signal.v1\","
         "\"kind\":\"nrf24_inventory\",\"version\":\"%s\","
         "\"role\":\"bounded_signal_fixture\",\"fixture_id\":\"%s\","
+        "\"session_id\":\"%s\",\"nrf_powered_down\":%s,"
         "\"read_only\":true,\"spi_hz\":2000000,\"ce_high_events\":0,"
         "\"primary_miso\":13,\"primary_mosi\":11,"
         "\"primary_status\":[%u,%u,%u],"
         "\"primary_config\":[%u,%u,%u],"
         "\"primary_channel\":[%u,%u,%u],"
         "\"primary_rf_setup\":[%u,%u,%u],\"primary_mask\":%u,"
+        "\"primary_cc_status\":%u,\"primary_cc_part\":%u,"
+        "\"primary_cc_version\":%u,\"primary_cc_read_complete\":%s,"
+        "\"primary_cc_plausible\":%s,"
         "\"swapped_miso\":11,\"swapped_mosi\":13,"
         "\"swapped_status\":[%u,%u,%u],"
         "\"swapped_config\":[%u,%u,%u],"
         "\"swapped_channel\":[%u,%u,%u],"
         "\"swapped_rf_setup\":[%u,%u,%u],\"swapped_mask\":%u,"
+        "\"swapped_cc_status\":%u,\"swapped_cc_part\":%u,"
+        "\"swapped_cc_version\":%u,\"swapped_cc_read_complete\":%s,"
+        "\"swapped_cc_plausible\":%s,\"cc_identity_attempted\":true,"
         "\"ir_tx_inactive\":%s,\"nrf_ce_inactive\":%s,"
         "\"nrf_carrier_active\":%s,\"buzzer_inactive\":%s,"
         "\"output_inactive\":%s}\n",
-        LESHY_FIXTURE_VERSION, runningFixtureId,
+        LESHY_FIXTURE_VERSION, runningFixtureId, session.sessionId(),
+        nrfPoweredDown ? "true" : "false",
         static_cast<unsigned>(nrfPrimaryInventory.status[0]),
         static_cast<unsigned>(nrfPrimaryInventory.status[1]),
         static_cast<unsigned>(nrfPrimaryInventory.status[2]),
@@ -414,6 +458,11 @@ void emitNrfInventory() {
         static_cast<unsigned>(nrfPrimaryInventory.rfSetup[1]),
         static_cast<unsigned>(nrfPrimaryInventory.rfSetup[2]),
         static_cast<unsigned>(nrfPrimaryInventory.plausibleMask),
+        static_cast<unsigned>(nrfPrimaryInventory.ccStatus),
+        static_cast<unsigned>(nrfPrimaryInventory.ccPartNumber),
+        static_cast<unsigned>(nrfPrimaryInventory.ccVersion),
+        nrfPrimaryInventory.ccReadComplete ? "true" : "false",
+        nrfPrimaryInventory.ccPlausible ? "true" : "false",
         static_cast<unsigned>(nrfSwappedInventory.status[0]),
         static_cast<unsigned>(nrfSwappedInventory.status[1]),
         static_cast<unsigned>(nrfSwappedInventory.status[2]),
@@ -427,6 +476,11 @@ void emitNrfInventory() {
         static_cast<unsigned>(nrfSwappedInventory.rfSetup[1]),
         static_cast<unsigned>(nrfSwappedInventory.rfSetup[2]),
         static_cast<unsigned>(nrfSwappedInventory.plausibleMask),
+        static_cast<unsigned>(nrfSwappedInventory.ccStatus),
+        static_cast<unsigned>(nrfSwappedInventory.ccPartNumber),
+        static_cast<unsigned>(nrfSwappedInventory.ccVersion),
+        nrfSwappedInventory.ccReadComplete ? "true" : "false",
+        nrfSwappedInventory.ccPlausible ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0
             ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&

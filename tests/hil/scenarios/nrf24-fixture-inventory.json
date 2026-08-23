@@ -21,6 +21,7 @@
         "read_only": true,
         "spi_hz": 2000000,
         "ce_high_events": 0,
+        "cc_identity_attempted": true,
         "ir_tx_inactive": true,
         "nrf_ce_inactive": true,
         "nrf_carrier_active": false,

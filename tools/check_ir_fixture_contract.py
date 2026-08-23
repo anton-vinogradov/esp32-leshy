@@ -49,7 +49,7 @@ def main() -> int:
         "board_build.flash_size = 16MB",
         "-std=gnu++17",
         "ARDUINO_USB_CDC_ON_BOOT=1",
-        "LESHY_FIXTURE_VERSION=\\\"0.2.3-bounded-signals\\\"",
+        "LESHY_FIXTURE_VERSION=\\\"0.2.4-bounded-signals\\\"",
     )
     for marker in required_config:
         if marker not in config:
@@ -80,6 +80,8 @@ def main() -> int:
         "kNrfProbeSpiHz = 2000000", "probeNrfOrientation",
         "ce_high_events\\\":0", "primary_mask\\\":%u",
         "swapped_mask\\\":%u",
+        "cc_identity_attempted\\\":true", "kCcReadPartNumber = 0xF0",
+        "kCcReadVersion = 0xF1", "readCcIdentityRegister",
     ):
         if marker not in entry:
             errors.append(f"fixture entry missing safety marker: {marker}")
@@ -203,6 +205,7 @@ def main() -> int:
         errors.append("nRF fixture inventory lacks the diagnostic command")
     for field, expected in (
             ("read_only", True), ("ce_high_events", 0),
+            ("cc_identity_attempted", True),
             ("nrf_ce_inactive", True), ("nrf_carrier_active", False),
             ("output_inactive", True)):
         if inventory_expect.get(field) != expected:
