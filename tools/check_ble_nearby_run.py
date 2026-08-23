@@ -12,7 +12,7 @@ from typing import Any
 from esp_app_identity import app_elf_sha256
 
 
-SCHEMA = "leshy.ble_nearby_hil.run.v1"
+SCHEMA = "leshy.ble_nearby_hil.run.v2"
 SCREENS = {
     "ble_devices_first": "ble-devices-first",
     "ble_devices_second": "ble-devices-second",
@@ -29,6 +29,23 @@ def digest(path: Path) -> str:
 def require(failures: list[str], condition: bool, message: str) -> None:
     if not condition:
         failures.append(message)
+
+
+def fact_signature(state: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(state.get(field) for field in (
+        "identity_hash", "label_known", "vendor_known", "vendor",
+        "company_known", "company_id", "device_kind", "subtype", "tracker",
+        "address_type", "advertisement_type", "legacy", "scannable",
+        "connectable", "tx_power_known", "tx_power_dbm",
+        "appearance_known", "appearance", "service", "known_service_mask",
+        "service_uuid_hash",
+        "service_uuid_count", "service_data_count",
+        "manufacturer_data_length", "payload_length"))
+
+
+def signal_signature(state: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(state.get(field) for field in (
+        "rssi_dbm", "minimum_rssi_dbm", "maximum_rssi_dbm", "rssi_trend_db"))
 
 
 def verify_manifest(failures: list[str], root: Path) -> None:
@@ -122,9 +139,30 @@ def main() -> int:
             run.get("list_pixel_changes", {}).get(
                 "chrome_changed_pixels") == 0,
             "live redraw escaped content rows")
-    require(failures, run.get("detail_pixel_changes") == {
-                "content_changed_pixels": 0, "chrome_changed_pixels": 0},
-            "BLE detail changed during background scan")
+    detail_changes = run.get("detail_pixel_changes", {})
+    require(failures,
+            detail_changes.get("radar_changed_pixels", 0) > 0 and
+            detail_changes.get("static_changed_pixels") == 0 and
+            detail_changes.get("chrome_changed_pixels") == 0,
+            "BLE live redraw escaped the integrated radar")
+    detail_first = run.get("detail_oracle_first", {})
+    detail_second = run.get("detail_oracle_second", {})
+    require(failures,
+            detail_first.get("active") is True and
+            detail_first.get("passive") is True and
+            detail_first.get("active_probe_allowed") is False and
+            detail_first.get("facts_known") is True and
+            detail_first.get("company_database_available") is True and
+            detail_first.get("company_database_records") == 4012 and
+            detail_first.get("payload_length", 0) > 0 and
+            detail_first.get("signal_samples", 0) >= 1,
+            "BLE passive advertisement intelligence missing")
+    require(failures,
+            detail_second.get("identity_hash") ==
+                detail_first.get("identity_hash") and
+            fact_signature(detail_second) == fact_signature(detail_first) and
+            signal_signature(detail_second) != signal_signature(detail_first),
+            "BLE detail was not identity-stable with a live signal update")
 
     first_heap = run.get("metrics_after_first", {})
     final_heap = run.get("metrics_after", {})
@@ -140,6 +178,9 @@ def main() -> int:
             scope.get("screenshots_automatic") is True and
             scope.get("passive_ble_only") is True and
             scope.get("active_scan") is False and
+            scope.get("detail_live_radar_only") is True and
+            scope.get("advertisement_facts_visible") is True and
+            scope.get("offline_company_database") is True and
             scope.get("storage_write_authorized") is False,
             "automation/passive scope mismatch")
     before = run.get("recovery_before", {})
@@ -182,7 +223,8 @@ def main() -> int:
         "status": "pass", "version": args.expected_version,
         "unique_devices": second.get("ble_devices_unique"),
         "list_chrome_changed_pixels": 0,
-        "detail_changed_pixels": 0, "final_lease_mask": 0,
+        "radar_changed_pixels": detail_changes.get("radar_changed_pixels"),
+        "detail_static_changed_pixels": 0, "final_lease_mask": 0,
     }, sort_keys=True))
     return 0
 

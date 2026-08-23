@@ -18,7 +18,10 @@
 #include "apps/survey/SurveyPipeline.h"
 #include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
+#include "apps/ble/BleCompanyDatabase.h"
 #include "apps/ble/BleDeviceCatalog.h"
+#include "apps/ble/BleDeviceIntelligence.h"
+#include "apps/ble/BleDeviceNavigationOrder.h"
 #include "apps/wifi/WifiNetworkCatalog.h"
 #include "apps/wifi/WifiNetworkNavigationOrder.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
@@ -2286,6 +2289,134 @@ void testBleDeviceCatalogKeepsStrongestUniqueRows() {
     CHECK(catalog.size() == 0);
 }
 
+void testBleDeviceIntelligenceAccumulatesPassiveFactsAndSignal() {
+    using Facts = leshy1::domain::observations::BleAdvertisementFacts;
+    using leshy1::apps::ble::BleDeviceKind;
+    using leshy1::apps::ble::BleSubtype;
+    using leshy1::apps::ble::BleTrackerKind;
+
+    leshy1::drivers::ble::BleAdvertisementRecord record;
+    record.address = {0x44, 0x33, 0x22, 0x11, 0x00, 0xaa};
+    record.addressType = 1;
+    record.rssiDbm = -72;
+    record.advertisement.present = true;
+    record.advertisement.companyKnown = true;
+    record.advertisement.companyId = 0x004c;
+    record.advertisement.appleContinuityType = 0x12;
+    record.advertisement.txPowerKnown = true;
+    record.advertisement.txPowerDbm = -8;
+
+    Observation observation;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 1000, &observation));
+    leshy1::apps::ble::BleDeviceCatalog catalog;
+    CHECK(catalog.upsert(observation));
+    CHECK(leshy1::apps::ble::classifyBleSubtype(observation) ==
+          BleSubtype::FindMy);
+    CHECK(leshy1::apps::ble::classifyBleTracker(observation) ==
+          BleTrackerKind::FindMy);
+
+    // Later packets can disclose more while omitting earlier facts. The live
+    // catalog enriches monotonically instead of erasing useful information.
+    record.rssiDbm = -54;
+    record.name = "owner tag";
+    record.nameLength = 9;
+    record.advertisement = {};
+    record.advertisement.present = true;
+    record.advertisement.companyKnown = true;
+    record.advertisement.companyId = 0x004c;
+    record.advertisement.knownServiceMask = Facts::kServiceBattery;
+    record.advertisement.appearanceKnown = true;
+    record.advertisement.appearance = 0x0200;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 2000, &observation));
+    CHECK(catalog.upsert(observation));
+    const Observation* enriched = catalog.at(0);
+    const auto* signal = catalog.signalAt(0);
+    CHECK(enriched != nullptr);
+    CHECK(enriched->bleAdvertisement.companyId == 0x004c);
+    CHECK(enriched->bleAdvertisement.appleContinuityType == 0x12);
+    CHECK(enriched->bleAdvertisement.txPowerKnown);
+    CHECK(enriched->bleAdvertisement.txPowerDbm == -8);
+    CHECK(enriched->bleAdvertisement.appearance == 0x0200);
+    CHECK((enriched->bleAdvertisement.knownServiceMask &
+           Facts::kServiceBattery) != 0U);
+    CHECK(std::strcmp(enriched->label.data(), "owner tag") == 0);
+    CHECK(signal != nullptr);
+    CHECK(signal->samples == 2);
+    CHECK(signal->minimumRssiDbm == -72);
+    CHECK(signal->maximumRssiDbm == -54);
+    CHECK(signal->rssiTrendDb == 18);
+    CHECK(leshy1::apps::ble::classifyBleTracker(*enriched) ==
+          BleTrackerKind::FindMy);
+
+    Observation keyboard;
+    keyboard.radio = RadioKind::Ble;
+    keyboard.bleAdvertisement.present = true;
+    keyboard.bleAdvertisement.appearanceKnown = true;
+    keyboard.bleAdvertisement.appearance = 0x03c1;
+    CHECK(leshy1::apps::ble::classifyBleDevice(keyboard) ==
+          BleDeviceKind::Keyboard);
+    keyboard.bleAdvertisement.appearanceKnown = false;
+    keyboard.bleAdvertisement.knownServiceMask = Facts::kServiceSmartTag;
+    CHECK(leshy1::apps::ble::classifyBleSubtype(keyboard) ==
+          BleSubtype::SmartTag);
+    CHECK(leshy1::apps::ble::classifyBleTracker(keyboard) ==
+          BleTrackerKind::SmartTag);
+
+    record.advertisement = {};
+    record.name = nullptr;
+    record.nameLength = 0U;
+    record.address[5] = 0xbb;
+    record.rssiDbm = -60;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 3000, &observation));
+    CHECK(catalog.upsert(observation));
+    record.address[5] = 0xcc;
+    record.rssiDbm = -70;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 4000, &observation));
+    CHECK(catalog.upsert(observation));
+    leshy1::apps::ble::BleDeviceNavigationOrder navigation;
+    CHECK(navigation.lock(catalog));
+    const std::uint32_t lockedOrder = navigation.orderHash(catalog);
+    CHECK(navigation.at(catalog, 0)->identity[5] == 0xaa);
+    CHECK(navigation.at(catalog, 2)->identity[5] == 0xcc);
+    record.rssiDbm = -20;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 5000, &observation));
+    CHECK(catalog.upsert(observation, false));
+    CHECK(catalog.at(0)->identity[5] == 0xcc);
+    CHECK(navigation.at(catalog, 0)->identity[5] == 0xaa);
+    CHECK(navigation.at(catalog, 2)->identity[5] == 0xcc);
+    CHECK(navigation.at(catalog, 2)->rssiDbm == -20);
+    CHECK(navigation.orderHash(catalog) == lockedOrder);
+}
+
+void testBleCompanyDatabaseIsBoundedAndExact() {
+    using leshy1::apps::ble::BleCompanyDatabase;
+    std::array<std::uint8_t, BleCompanyDatabase::kRecordSize * 2U> asset{};
+    asset[0] = 0x4c;
+    asset[1] = 0x00;
+    std::memcpy(asset.data() + 2U, "Apple", 5U);
+    asset[BleCompanyDatabase::kRecordSize] = 0x75;
+    asset[BleCompanyDatabase::kRecordSize + 1U] = 0x00;
+    std::memcpy(asset.data() + BleCompanyDatabase::kRecordSize + 2U,
+                "Samsung", 7U);
+    BleCompanyDatabase database(asset.data(), asset.size());
+    CHECK(database.available());
+    CHECK(database.records() == 2);
+    char maker[8] = {};
+    CHECK(database.lookup(0x004c, maker, sizeof(maker)));
+    CHECK(std::strcmp(maker, "Apple") == 0);
+    CHECK(database.lookup(0x0075, maker, sizeof(maker)));
+    CHECK(std::strcmp(maker, "Samsung") == 0);
+    CHECK(!database.lookup(0x1234, maker, sizeof(maker)));
+    CHECK(maker[0] == '\0');
+    CHECK(!database.reset(asset.data(), asset.size() - 1U));
+    CHECK(!database.available());
+}
+
 void testWifiDeviceCatalogDecodesOnlyClientActivity() {
     std::array<std::uint8_t, 32> frame{};
     const std::array<std::uint8_t, 6> client =
@@ -2582,6 +2713,18 @@ void testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations() {
     CHECK(observation.identityLength == 6);
     CHECK(observation.identity == record.address);
     CHECK(std::strcmp(observation.label.data(), "field-tag") == 0);
+    CHECK(observation.bleAdvertisement.present);
+    CHECK(observation.bleAdvertisement.addressType == 1);
+
+    record.advertisement.companyKnown = true;
+    record.advertisement.companyId = 0x0075;
+    record.advertisement.knownServiceMask =
+        leshy1::domain::observations::BleAdvertisementFacts::kServiceSmartTag;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 3001, &observation));
+    CHECK(observation.bleAdvertisement.companyKnown);
+    CHECK(observation.bleAdvertisement.companyId == 0x0075);
+    CHECK(observation.bleAdvertisement.knownServiceMask != 0U);
 
     record.address = {};
     CHECK(!leshy1::drivers::ble::normalizePassiveRecord(
@@ -5555,6 +5698,8 @@ int main() {
     testWifiNetworkCatalogResolvesHiddenSsidMonotonically();
     testWifiNetworkNavigationLocksIdentityOrder();
     testBleDeviceCatalogKeepsStrongestUniqueRows();
+    testBleDeviceIntelligenceAccumulatesPassiveFactsAndSignal();
+    testBleCompanyDatabaseIsBoundedAndExact();
     testWifiDeviceCatalogDecodesOnlyClientActivity();
     testWifiDevicePassiveFingerprintAndOuiLookup();
     testWifiChannelLoadIsBoundedAndTruthful();

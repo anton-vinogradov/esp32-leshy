@@ -22,6 +22,7 @@ struct BleAdvertisementRecord final {
     std::int16_t rssiDbm = 0;
     const char* name = nullptr;
     std::size_t nameLength = 0;
+    domain::observations::BleAdvertisementFacts advertisement{};
 };
 
 constexpr BleScanPlan defaultPassivePlan() { return {}; }

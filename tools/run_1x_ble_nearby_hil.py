@@ -28,7 +28,7 @@ from run_1x_product_survey_hil import (
 )
 
 
-RUN_SCHEMA = "leshy.ble_nearby_hil.run.v1"
+RUN_SCHEMA = "leshy.ble_nearby_hil.run.v2"
 CONTENT_X0 = 12
 CONTENT_X1 = 228
 CONTENT_Y0 = 32
@@ -76,6 +76,52 @@ def changed_pixels(frames: Path, before_name: str,
             else:
                 chrome += 1
     return {"content_changed_pixels": content, "chrome_changed_pixels": chrome}
+
+
+def detail_changed_pixels(frames: Path, before_name: str,
+                          after_name: str) -> dict[str, int]:
+    before = (frames / f"{before_name}.rgb565").read_bytes()
+    after = (frames / f"{after_name}.rgb565").read_bytes()
+    if len(before) != 240 * 320 * 2 or len(after) != 240 * 320 * 2:
+        raise RuntimeError("BLE detail comparison requires complete TFT frames")
+    changes = {"radar_changed_pixels": 0, "static_changed_pixels": 0,
+               "chrome_changed_pixels": 0}
+    for y in range(320):
+        for x in range(240):
+            offset = (y * 240 + x) * 2
+            if before[offset:offset + 2] == after[offset:offset + 2]:
+                continue
+            if CONTENT_X0 <= x < CONTENT_X1 and 170 <= y < CONTENT_Y1:
+                changes["radar_changed_pixels"] += 1
+            elif CONTENT_Y0 <= y < CONTENT_Y1:
+                changes["static_changed_pixels"] += 1
+            else:
+                changes["chrome_changed_pixels"] += 1
+    return changes
+
+
+def ble_detail(device: PassiveSerial) -> dict[str, Any]:
+    return query(device, b"ble.device.detail",
+                 "leshy.ble.device_detail.v1", "state")
+
+
+def fact_signature(state: dict[str, Any]) -> tuple[Any, ...]:
+    fields = (
+        "identity_hash", "label_known", "vendor_known", "vendor",
+        "company_known", "company_id", "device_kind", "subtype", "tracker",
+        "address_type", "advertisement_type", "legacy", "scannable",
+        "connectable", "tx_power_known", "tx_power_dbm",
+        "appearance_known", "appearance", "service", "known_service_mask",
+        "service_uuid_hash",
+        "service_uuid_count", "service_data_count",
+        "manufacturer_data_length", "payload_length",
+    )
+    return tuple(state.get(field) for field in fields)
+
+
+def signal_signature(state: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(state.get(field) for field in (
+        "rssi_dbm", "minimum_rssi_dbm", "maximum_rssi_dbm", "rssi_trend_db"))
 
 
 def wait_live(device: PassiveSerial, minimum_cycle: int = 1,
@@ -143,6 +189,8 @@ def main() -> int:
     live_second: dict[str, Any] = {}
     detail_first: dict[str, Any] = {}
     detail_second: dict[str, Any] = {}
+    detail_oracle_first: dict[str, Any] = {}
+    detail_oracle_second: dict[str, Any] = {}
 
     try:
         if args.flash:
@@ -210,25 +258,55 @@ def main() -> int:
                 }, "ble_device_detail")
                 screens["ble_detail_first"] = capture(
                     device, frames, "ble-detail-first")
-                detail_cycle = int(
-                    detail_first.get("survey_product_ble_scan_cycles", 0))
-                detail_second = wait_ui_state(
-                    device,
-                    lambda state: (
-                        state.get("ble_product_view") == "device_detail" and
-                        int(state.get("survey_product_ble_scan_cycles", 0)) >
-                            detail_cycle
-                    ), 60.0, "BLE scan did not continue behind detail")
+                detail_oracle_first = ble_detail(device)
+                require_exact(detail_oracle_first, {
+                    "active": True, "passive": True,
+                    "active_probe_allowed": False, "facts_known": True,
+                    "company_database_available": True,
+                    "company_database_records": 4012,
+                }, "ble_device_detail_oracle")
+                if int(detail_oracle_first.get("signal_samples", 0)) < 1 or \
+                        int(detail_oracle_first.get("payload_length", 0)) < 1:
+                    raise RuntimeError(
+                        f"BLE advertisement facts/signal missing: "
+                        f"{detail_oracle_first!r}")
+                deadline = time.monotonic() + 90.0
+                baseline_facts = fact_signature(detail_oracle_first)
+                baseline_signal = signal_signature(detail_oracle_first)
+                while time.monotonic() < deadline:
+                    current = ble_detail(device)
+                    if current.get("identity_hash") != \
+                            detail_oracle_first.get("identity_hash"):
+                        raise RuntimeError("BLE detail identity moved")
+                    current_facts = fact_signature(current)
+                    if current_facts != baseline_facts:
+                        # Enrichment is useful static data, not flicker. Make it
+                        # the new baseline and prove the next update is radar-only.
+                        baseline_facts = current_facts
+                        detail_oracle_first = current
+                        time.sleep(0.2)
+                        screens["ble_detail_first"] = capture(
+                            device, frames, "ble-detail-first")
+                        baseline_signal = signal_signature(current)
+                    elif signal_signature(current) != baseline_signal:
+                        detail_oracle_second = current
+                        break
+                    time.sleep(0.25)
+                if not detail_oracle_second:
+                    raise RuntimeError(
+                        "selected BLE device produced no live RSSI update")
+                detail_second = query(
+                    device, b"ui.state", "leshy.ui.v1", "state")
                 trace.append(detail_second)
                 screens["ble_detail_second"] = capture(
                     device, frames, "ble-detail-second")
-                detail_pixel_changes = changed_pixels(
+                detail_pixel_changes = detail_changed_pixels(
                     frames, "ble-detail-first", "ble-detail-second")
-                if detail_pixel_changes != {
-                        "content_changed_pixels": 0,
-                        "chrome_changed_pixels": 0}:
+                if detail_pixel_changes["radar_changed_pixels"] <= 0 or \
+                        detail_pixel_changes["static_changed_pixels"] != 0 or \
+                        detail_pixel_changes["chrome_changed_pixels"] != 0:
                     raise RuntimeError(
-                        f"stable detail changed: {detail_pixel_changes}")
+                        f"BLE live redraw escaped radar: {detail_pixel_changes}")
 
                 back_to_list = action(device, "left")
                 trace.append(back_to_list)
@@ -330,6 +408,8 @@ def main() -> int:
         "live_second": live_second,
         "detail_first": detail_first,
         "detail_second": detail_second,
+        "detail_oracle_first": detail_oracle_first,
+        "detail_oracle_second": detail_oracle_second,
         "list_pixel_changes": list_pixel_changes,
         "detail_pixel_changes": detail_pixel_changes,
         "screens": screens,
@@ -344,7 +424,9 @@ def main() -> int:
             "active_scan": False,
             "strongest_first_unique_rows": True,
             "live_redraw_data_rows_only": True,
-            "detail_screen_stable_during_background_scan": True,
+            "detail_live_radar_only": True,
+            "advertisement_facts_visible": True,
+            "offline_company_database": True,
             "two_complete_ble_lifecycles": True,
             "zero_heap_drift_after_warmup": (
                 metrics_after.get("heap_free") ==

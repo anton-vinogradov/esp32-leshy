@@ -12,6 +12,7 @@ __pycache__/
 *.py[cod]
 *.bin
 !firmware/leshy1/assets/oui.bin
+!firmware/leshy1/assets/bluetooth_companies.bin
 *.elf
 *.map
 *.o

@@ -1,10 +1,13 @@
 #include "BoardBlePassiveScanner.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstring>
 
 #include <BLEAdvertisedDevice.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
+#include <BLEUUID.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -12,6 +15,107 @@
 namespace leshy1::platform::arduino {
 
 namespace {
+
+bool advertisesUuid(BLEAdvertisedDevice& source, std::uint16_t value) {
+    const BLEUUID expected(value);
+    for (int index = 0; index < source.getServiceUUIDCount(); ++index) {
+        if (source.getServiceUUID(index).equals(expected)) return true;
+    }
+    for (int index = 0; index < source.getServiceDataUUIDCount(); ++index) {
+        if (source.getServiceDataUUID(index).equals(expected)) return true;
+    }
+    return false;
+}
+
+std::uint16_t knownServiceMask(BLEAdvertisedDevice& source) {
+    using Facts = domain::observations::BleAdvertisementFacts;
+    struct Known final {
+        std::uint16_t uuid;
+        std::uint16_t mask;
+    };
+    static constexpr Known kKnown[] = {
+        {0x1812, Facts::kServiceHid},
+        {0x180f, Facts::kServiceBattery},
+        {0x180d, Facts::kServiceHeartRate},
+        {0x1809, Facts::kServiceThermometer},
+        {0x1826, Facts::kServiceFitness},
+        {0xfeaa, Facts::kServiceEddystone},
+        {0xfe95, Facts::kServiceXiaomi},
+        {0xfd5a, Facts::kServiceSmartTag},
+        {0xfeed, Facts::kServiceTile},
+        {0xfe9f, Facts::kServiceFastPair},
+        {0xfd6f, Facts::kServiceExposure},
+    };
+    std::uint16_t mask = 0U;
+    for (const Known& known : kKnown) {
+        if (advertisesUuid(source, known.uuid)) mask |= known.mask;
+    }
+    return mask;
+}
+
+void populateAdvertisementFacts(
+        BLEAdvertisedDevice& source,
+        domain::observations::BleAdvertisementFacts* facts) {
+    if (facts == nullptr) return;
+    *facts = {};
+    facts->present = true;
+    facts->addressType = source.getAddressType();
+    facts->advertisementType = source.getAdvType();
+    facts->legacy = source.isLegacyAdvertisement();
+    facts->scannable = source.isScannable();
+    facts->connectable = source.isConnectable();
+    facts->txPowerKnown = source.haveTXPower();
+    if (facts->txPowerKnown) facts->txPowerDbm = source.getTXPower();
+    facts->appearanceKnown = source.haveAppearance();
+    if (facts->appearanceKnown) facts->appearance = source.getAppearance();
+    const String manufacturer = source.haveManufacturerData()
+        ? source.getManufacturerData() : String();
+    facts->manufacturerDataLength = static_cast<std::uint8_t>(
+        std::min<std::size_t>(manufacturer.length(), UINT8_MAX));
+    if (manufacturer.length() >= 2U) {
+        facts->companyKnown = true;
+        facts->companyId = static_cast<std::uint16_t>(
+            static_cast<std::uint8_t>(manufacturer[0]) |
+            (static_cast<std::uint16_t>(
+                static_cast<std::uint8_t>(manufacturer[1])) << 8U));
+        if (facts->companyId == 0x004cU && manufacturer.length() >= 3U) {
+            facts->appleContinuityType =
+                static_cast<std::uint8_t>(manufacturer[2]);
+        }
+    }
+    facts->knownServiceMask = knownServiceMask(source);
+    const int advertised = source.getServiceUUIDCount();
+    const int serviceData = source.getServiceDataUUIDCount();
+    facts->serviceUuidCount = static_cast<std::uint8_t>(
+        std::min(advertised + serviceData, static_cast<int>(UINT8_MAX)));
+    facts->serviceDataCount = static_cast<std::uint8_t>(
+        std::min(source.getServiceDataCount(), static_cast<int>(UINT8_MAX)));
+    if (advertised > 0 || serviceData > 0) {
+        const String uuid = advertised > 0
+            ? source.getServiceUUID(0).toString()
+            : source.getServiceDataUUID(0).toString();
+        std::uint32_t hash = 2166136261UL;
+        for (std::size_t index = 0; index < uuid.length(); ++index) {
+            hash ^= static_cast<std::uint8_t>(uuid[index]);
+            hash *= 16777619UL;
+        }
+        facts->firstServiceUuidHash = hash;
+        const char* visible = uuid.c_str();
+        char compact[7] = {};
+        if (uuid.length() > 10U) {
+            std::snprintf(compact, sizeof(compact), "0x%.4s", uuid.c_str() + 4);
+            visible = compact;
+        }
+        const std::size_t length = std::min<std::size_t>(
+            std::strlen(visible), facts->firstServiceUuid.size() - 1U);
+        std::copy_n(visible, length, facts->firstServiceUuid.begin());
+        facts->firstServiceUuid[length] = '\0';
+        facts->firstServiceUuidLength =
+            static_cast<std::uint8_t>(length);
+    }
+    facts->payloadLength = static_cast<std::uint8_t>(
+        std::min<std::size_t>(source.getPayloadLength(), UINT8_MAX));
+}
 
 class BoundedAdvertisementCallbacks final
     : public BLEAdvertisedDeviceCallbacks {
@@ -48,6 +152,7 @@ public:
             record.nameLength = std::min<std::size_t>(
                 name.length(),
                 domain::observations::Observation::kLabelCapacity);
+            populateAdvertisementFacts(source, &record.advertisement);
             ++result_->recordsRead;
             switch (visitor_(
                 record, static_cast<std::uint64_t>(esp_timer_get_time()),

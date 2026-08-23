@@ -55,7 +55,9 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyPipeline.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveySourceController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/survey/SurveyWorkflow.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/ble/BleCompanyDatabase.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/ble/BleDeviceCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/ble/BleDeviceIntelligence.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/wifi/WifiNetworkCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/wifi/WifiDeviceCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/wifi/WifiOuiDatabase.cpp" \

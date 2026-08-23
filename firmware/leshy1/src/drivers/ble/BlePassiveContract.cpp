@@ -45,6 +45,9 @@ bool normalizePassiveRecord(
         std::copy_n(record.name, record.nameLength, observation->label.begin());
     }
     observation->label[record.nameLength] = '\0';
+    observation->bleAdvertisement = record.advertisement;
+    observation->bleAdvertisement.present = true;
+    observation->bleAdvertisement.addressType = record.addressType;
     return true;
 }
 

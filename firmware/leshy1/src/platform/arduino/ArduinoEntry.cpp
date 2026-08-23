@@ -41,7 +41,10 @@
 #include "apps/survey/SurveyPipeline.h"
 #include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
+#include "apps/ble/BleCompanyDatabase.h"
 #include "apps/ble/BleDeviceCatalog.h"
+#include "apps/ble/BleDeviceIntelligence.h"
+#include "apps/ble/BleDeviceNavigationOrder.h"
 #include "apps/wifi/WifiNetworkCatalog.h"
 #include "apps/wifi/WifiNetworkNavigationOrder.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
@@ -115,6 +118,10 @@ extern const std::uint8_t wifiOuiAssetStart[]
     asm("_binary_assets_oui_bin_start");
 extern const std::uint8_t wifiOuiAssetEnd[]
     asm("_binary_assets_oui_bin_end");
+extern const std::uint8_t bleCompanyAssetStart[]
+    asm("_binary_assets_bluetooth_companies_bin_start");
+extern const std::uint8_t bleCompanyAssetEnd[]
+    asm("_binary_assets_bluetooth_companies_bin_end");
 
 using leshy1::boards::esp32_div_v2::BoardProfile;
 using leshy1::apps::library::LibraryController;
@@ -163,6 +170,12 @@ using leshy1::apps::survey::SurveyWorkflow;
 using leshy1::apps::survey::SurveyWorkflowState;
 using leshy1::apps::survey::SurveyWorkflowStatus;
 using leshy1::apps::ble::BleDeviceCatalog;
+using leshy1::apps::ble::BleCompanyDatabase;
+using leshy1::apps::ble::BleDeviceKind;
+using leshy1::apps::ble::BleDeviceNavigationOrder;
+using leshy1::apps::ble::BleDeviceSignalStats;
+using leshy1::apps::ble::BleSubtype;
+using leshy1::apps::ble::BleTrackerKind;
 using leshy1::apps::wifi::WifiNetworkCatalog;
 using leshy1::apps::wifi::WifiNetworkNavigationOrder;
 using leshy1::apps::wifi::WifiNetworkSignalStats;
@@ -622,8 +635,36 @@ const char* bleProductViewName(BleProductView view) {
 }
 BleProductView bleProductView = BleProductView::None;
 BleDeviceCatalog bleDeviceCatalog;
+BleDeviceNavigationOrder bleDeviceNavigationOrder;
+BleCompanyDatabase bleCompanyDatabase(
+    bleCompanyAssetStart,
+    static_cast<std::size_t>(bleCompanyAssetEnd - bleCompanyAssetStart));
 std::size_t bleDeviceSelection = 0;
 Observation bleDeviceDetail;
+Observation bleDeviceRenderedDetail;
+BleDeviceSignalStats bleDeviceDetailSignal;
+
+std::size_t bleDeviceVisibleSize() {
+    return bleDeviceNavigationOrder.size(bleDeviceCatalog);
+}
+
+const Observation* bleDeviceAt(std::size_t index) {
+    return bleDeviceNavigationOrder.at(bleDeviceCatalog, index);
+}
+
+const Observation* liveBleDeviceDetail() {
+    const std::size_t index =
+        bleDeviceCatalog.indexOfIdentity(bleDeviceDetail);
+    const Observation* live = bleDeviceCatalog.at(index);
+    return live == nullptr ? &bleDeviceDetail : live;
+}
+
+const BleDeviceSignalStats* liveBleDeviceSignal() {
+    const std::size_t index =
+        bleDeviceCatalog.indexOfIdentity(bleDeviceDetail);
+    const BleDeviceSignalStats* live = bleDeviceCatalog.signalAt(index);
+    return live == nullptr ? &bleDeviceDetailSignal : live;
+}
 std::array<std::uint16_t, 13> wifiChannelRenderedLoads{};
 std::array<std::uint16_t, 13> wifiChannelRenderedAverages{};
 std::uint8_t wifiChannelRenderedBest = 0xffU;
@@ -2365,16 +2406,17 @@ bool drainProductSurveyWorkerObservations() {
             wifiNetworkSelection = anchored < wifiNetworkCatalog.size()
                 ? anchored : wifiNetworkCatalog.size() - 1U;
         }
-        const Observation* selectedBle =
-            bleDeviceCatalog.at(bleDeviceSelection);
+        const Observation* selectedBle = bleDeviceAt(bleDeviceSelection);
         const Observation bleSelectionAnchor = selectedBle == nullptr
             ? Observation{} : *selectedBle;
         const bool bleSelectionAnchored = selectedBle != nullptr;
         const bool bleCatalogChanged =
             (bleProductView == BleProductView::Devices ||
              bleProductView == BleProductView::DeviceDetail) &&
-            bleDeviceCatalog.upsert(observation);
-        if (bleCatalogChanged && bleSelectionAnchored) {
+            bleDeviceCatalog.upsert(
+                observation, !bleDeviceNavigationOrder.locked());
+        if (bleCatalogChanged && bleSelectionAnchored &&
+            !bleDeviceNavigationOrder.locked()) {
             const std::size_t anchored =
                 bleDeviceCatalog.indexOfIdentity(bleSelectionAnchor);
             bleDeviceSelection = anchored < bleDeviceCatalog.size()
@@ -3387,10 +3429,10 @@ void serviceProductSurveyWorker() {
         }
     }
     if (drainProductSurveyWorkerObservations()) render = true;
-    // BLE detail is intentionally a frozen discovery snapshot. Wi-Fi network
-    // detail is different: its integrated radar must follow passive scan
-    // samples while renderSelectionDelta() confines redraw to the radar card.
-    if (render && bleProductView != BleProductView::DeviceDetail) {
+    // Detail views keep receiving passive samples. renderSelectionDelta()
+    // confines routine changes to their radar cards and repaints static facts
+    // only when a later advertisement actually enriches them.
+    if (render) {
         productSurveyIncrementalRefreshPending = true;
         renderInteractiveScreen(false);
         productSurveyIncrementalRefreshPending = false;
@@ -6780,8 +6822,119 @@ void formatBleAddress(const Observation& device, char* output,
                   static_cast<unsigned>(device.identity[5]));
 }
 
+UiTextId wifiDeviceTrendText(std::int16_t trendDb);
+
+UiTextId bleDeviceKindText(BleDeviceKind kind) {
+    switch (kind) {
+        case BleDeviceKind::Phone: return UiTextId::BleKindPhone;
+        case BleDeviceKind::Computer: return UiTextId::BleKindComputer;
+        case BleDeviceKind::Watch: return UiTextId::BleKindWatch;
+        case BleDeviceKind::Audio: return UiTextId::BleKindAudio;
+        case BleDeviceKind::Keyboard: return UiTextId::BleKindKeyboard;
+        case BleDeviceKind::Mouse: return UiTextId::BleKindMouse;
+        case BleDeviceKind::Input: return UiTextId::BleKindInput;
+        case BleDeviceKind::Heart: return UiTextId::BleKindHeart;
+        case BleDeviceKind::Thermometer: return UiTextId::BleKindThermometer;
+        case BleDeviceKind::Tag: return UiTextId::BleKindTag;
+        case BleDeviceKind::Display: return UiTextId::BleKindDisplay;
+        case BleDeviceKind::Fitness: return UiTextId::BleKindFitness;
+        case BleDeviceKind::Unknown:
+        default: return UiTextId::BleKindUnknown;
+    }
+}
+
+UiTextId bleAddressTypeText(std::uint8_t type) {
+    switch (type) {
+        case 0U: return UiTextId::BleAddressPublic;
+        case 2U: return UiTextId::BleAddressPublicIdentity;
+        case 3U: return UiTextId::BleAddressRandomIdentity;
+        case 1U:
+        default: return UiTextId::BleAddressRandom;
+    }
+}
+
+UiTextId bleAdvertisementModeText(
+        const leshy1::domain::observations::BleAdvertisementFacts& facts) {
+    if (facts.connectable) return UiTextId::BleAdvertisementConnectable;
+    if (facts.scannable) return UiTextId::BleAdvertisementScannable;
+    return UiTextId::BleAdvertisementBroadcast;
+}
+
+bool bleDeviceVendor(const Observation& device, char* output,
+                     std::size_t capacity) {
+    if (output == nullptr || capacity == 0U) return false;
+    output[0] = '\0';
+    const auto& facts = device.bleAdvertisement;
+    if (facts.companyKnown &&
+        bleCompanyDatabase.lookup(facts.companyId, output, capacity)) {
+        return true;
+    }
+    if ((facts.knownServiceMask &
+         leshy1::domain::observations::BleAdvertisementFacts::kServiceXiaomi)
+        != 0U) {
+        std::snprintf(output, capacity, "Xiaomi");
+        return true;
+    }
+    return false;
+}
+
+void compactBlePrimary(const Observation& device, char* output,
+                       std::size_t capacity) {
+    if (output == nullptr || capacity == 0U) return;
+    output[0] = '\0';
+    const char* source = nullptr;
+    if (device.labelLength != 0U) {
+        source = device.label.data();
+    } else {
+        const char* subtype = leshy1::apps::ble::bleSubtypeName(
+            leshy1::apps::ble::classifyBleSubtype(device));
+        if (subtype[0] != '\0') source = subtype;
+    }
+    char vendor[BleCompanyDatabase::kNameSize + 1U] = {};
+    if (source == nullptr && bleDeviceVendor(device, vendor, sizeof(vendor))) {
+        source = vendor;
+    }
+    if (source == nullptr) {
+        source = tr(bleDeviceKindText(
+            leshy1::apps::ble::classifyBleDevice(device)));
+    }
+    std::snprintf(output, capacity, "%s", source);
+    if (std::strlen(source) >= capacity && capacity > 2U) {
+        output[capacity - 2U] = '~';
+    }
+}
+
+const char* bleDeviceDescriptor(const Observation& device, char* vendor,
+                                std::size_t vendorCapacity) {
+    const BleSubtype subtype =
+        leshy1::apps::ble::classifyBleSubtype(device);
+    const char* subtypeName = leshy1::apps::ble::bleSubtypeName(subtype);
+    if (subtypeName[0] != '\0') return subtypeName;
+    const BleDeviceKind kind =
+        leshy1::apps::ble::classifyBleDevice(device);
+    if (kind != BleDeviceKind::Unknown) return tr(bleDeviceKindText(kind));
+    if (bleDeviceVendor(device, vendor, vendorCapacity)) return vendor;
+    return tr(UiTextId::BleKindUnknown);
+}
+
+const char* compactBleService(const Observation& device, char* output,
+                              std::size_t capacity) {
+    if (output == nullptr || capacity == 0U) return "";
+    output[0] = '\0';
+    const auto& facts = device.bleAdvertisement;
+    const char* friendly =
+        leshy1::apps::ble::bleServiceName(facts.knownServiceMask);
+    if (friendly[0] != '\0') {
+        std::snprintf(output, capacity, "%s", friendly);
+        return output;
+    }
+    if (facts.firstServiceUuidLength == 0U) return output;
+    std::snprintf(output, capacity, "%s", facts.firstServiceUuid.data());
+    return output;
+}
+
 void renderBleDeviceRow(std::size_t index, std::size_t firstVisible) {
-    const Observation* device = bleDeviceCatalog.at(index);
+    const Observation* device = bleDeviceAt(index);
     if (device == nullptr || index < firstVisible ||
         index >= firstVisible + kVisibleWifiNetworkRows) {
         return;
@@ -6794,18 +6947,8 @@ void renderBleDeviceRow(std::size_t index, std::size_t firstVisible) {
     display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
                           Layout::Radius, background);
     renderFocusCue(bounds, selected);
-    char label[24] = {};
-    const std::size_t visibleLength = device->labelLength < 18U
-        ? device->labelLength : 18U;
-    if (visibleLength == 0U) {
-        std::snprintf(label, sizeof(label), "%s",
-                      tr(UiTextId::BleDeviceUnnamed));
-    } else {
-        std::memcpy(label, device->label.data(), visibleLength);
-        if (device->labelLength > visibleLength) {
-            label[visibleLength - 1U] = '~';
-        }
-    }
+    char label[22] = {};
+    compactBlePrimary(*device, label, sizeof(label));
     const std::int16_t labelTop = menuRowTextTop(bounds);
     display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                          background);
@@ -6813,12 +6956,16 @@ void renderBleDeviceRow(std::size_t index, std::size_t firstVisible) {
                 bounds.x + kInteractiveRowTextInset, labelTop);
     display.print(label);
     char note[64] = {};
+    char vendor[BleCompanyDatabase::kNameSize + 1U] = {};
+    const char* descriptor =
+        bleDeviceDescriptor(*device, vendor, sizeof(vendor));
     std::snprintf(note, sizeof(note), tr(UiTextId::BleDeviceRowFormat),
-                  static_cast<int>(device->rssiDbm),
-                  static_cast<unsigned>(device->identity[3]),
-                  static_cast<unsigned>(device->identity[4]),
-                  static_cast<unsigned>(device->identity[5]));
-    display.setTextColor(Palette::Positive, background);
+                  descriptor, static_cast<int>(device->rssiDbm));
+    display.setTextColor(
+        leshy1::apps::ble::classifyBleTracker(*device) !=
+                BleTrackerKind::None
+            ? Palette::Warning : Palette::Positive,
+        background);
     setUiCursor(UiTextRole::Meta,
                 bounds.x + kInteractiveRowTextInset,
                 labelTop + kRobotoCondensedBodyAscent +
@@ -6838,9 +6985,9 @@ void renderBleDevicesData() {
         return;
     }
     const std::size_t first = bleDeviceFirstVisible(bleDeviceSelection);
-    const std::size_t end = bleDeviceCatalog.size() <
+    const std::size_t end = bleDeviceVisibleSize() <
             first + kVisibleWifiNetworkRows
-        ? bleDeviceCatalog.size() : first + kVisibleWifiNetworkRows;
+        ? bleDeviceVisibleSize() : first + kVisibleWifiNetworkRows;
     for (std::size_t index = first; index < end; ++index) {
         renderBleDeviceRow(index, first);
     }
@@ -6851,22 +6998,140 @@ void renderBleDevices(bool clearContent) {
     renderBleDevicesData();
 }
 
+bool bleDeviceDetailStaticFieldsDiffer(const Observation& left,
+                                       const Observation& right) {
+    return left.identity != right.identity ||
+        left.labelLength != right.labelLength ||
+        std::memcmp(left.label.data(), right.label.data(), left.labelLength) != 0 ||
+        !leshy1::domain::observations::bleAdvertisementFactsEqual(
+            left.bleAdvertisement, right.bleAdvertisement);
+}
+
+void renderBleDeviceRadar(const Observation& device,
+                          const BleDeviceSignalStats& signal) {
+    constexpr std::int16_t kRadarTop = 170;
+    display.fillRect(Layout::Edge, kRadarTop, Layout::ContentWidth,
+                     Layout::FooterDividerY - kRadarTop, Palette::Canvas);
+    renderRadioSignalCard(
+        device.rssiDbm,
+        {Layout::Edge, kRadarTop, Layout::ContentWidth, 68});
+    char line[64] = {};
+    std::snprintf(line, sizeof(line),
+                  tr(UiTextId::WifiDeviceRssiRangeFormat),
+                  static_cast<int>(signal.minimumRssiDbm),
+                  static_cast<int>(signal.maximumRssiDbm));
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 246);
+    display.print(line);
+    display.setTextColor(
+        signal.rssiTrendDb >= 4 ? Palette::Positive :
+        (signal.rssiTrendDb <= -4 ? Palette::Danger : Palette::TextMuted),
+        Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 269);
+    display.print(tr(wifiDeviceTrendText(signal.rssiTrendDb)));
+}
+
+void renderBleDeviceDetailData() {
+    const Observation& device = *liveBleDeviceDetail();
+    const BleDeviceSignalStats& signal = *liveBleDeviceSignal();
+    bleDeviceDetail = device;
+    bleDeviceDetailSignal = signal;
+    display.fillRect(0, Layout::ContentTop, Layout::ScreenWidth,
+                     Layout::FooterDividerY - Layout::ContentTop,
+                     Palette::Canvas);
+    char primary[24] = {};
+    compactBlePrimary(device, primary, sizeof(primary));
+    display.setTextColor(Palette::Focus, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 34);
+    display.print(primary);
+    char line[96] = {};
+    char vendor[BleCompanyDatabase::kNameSize + 1U] = {};
+    const BleTrackerKind tracker =
+        leshy1::apps::ble::classifyBleTracker(device);
+    const char* descriptor =
+        bleDeviceDescriptor(device, vendor, sizeof(vendor));
+    if (tracker != BleTrackerKind::None) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::BleTrackerFormat),
+                      descriptor);
+    } else {
+        std::snprintf(line, sizeof(line), "%s", descriptor);
+    }
+    display.setTextColor(tracker != BleTrackerKind::None
+                             ? Palette::Warning : Palette::TextSecondary,
+                         Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 57);
+    display.print(line);
+
+    formatBleAddress(device, line, sizeof(line));
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 76);
+    display.print(line);
+
+    const auto& facts = device.bleAdvertisement;
+    std::snprintf(line, sizeof(line), tr(UiTextId::BleAddressModeFormat),
+                  tr(bleAddressTypeText(facts.addressType)),
+                  tr(bleAdvertisementModeText(facts)));
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 95);
+    display.print(line);
+
+    const bool vendorKnown = bleDeviceVendor(device, vendor, sizeof(vendor));
+    if (vendorKnown) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::BleVendorFormat), vendor);
+    } else if (facts.companyKnown) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::BleCompanyFormat),
+                      static_cast<unsigned>(facts.companyId));
+    } else {
+        std::snprintf(line, sizeof(line), "%s",
+                      tr(UiTextId::BleVendorUnknown));
+    }
+    display.setTextColor(vendorKnown ? Palette::TextSecondary
+                                     : Palette::TextMuted,
+                         Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 114);
+    display.print(line);
+
+    char serviceText[24] = {};
+    const char* service =
+        compactBleService(device, serviceText, sizeof(serviceText));
+    if (service[0] != '\0') {
+        std::snprintf(line, sizeof(line), tr(UiTextId::BleServiceFormat),
+                      service);
+    } else {
+        std::snprintf(line, sizeof(line), "%s",
+                      tr(UiTextId::BleServiceUnknown));
+    }
+    display.setTextColor(service[0] == '\0' ? Palette::TextMuted
+                                             : Palette::Positive,
+                         Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 133);
+    display.print(line);
+
+    line[0] = '\0';
+    if (facts.txPowerKnown && facts.appearanceKnown) {
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::BleTxAppearanceFormat),
+                      static_cast<int>(facts.txPowerDbm),
+                      static_cast<unsigned>(facts.appearance));
+    } else if (facts.txPowerKnown) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::BleTxFormat),
+                      static_cast<int>(facts.txPowerDbm));
+    } else if (facts.appearanceKnown) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::BleAppearanceFormat),
+                      static_cast<unsigned>(facts.appearance));
+    } else {
+        std::snprintf(line, sizeof(line), "%s", tr(UiTextId::BlePassiveOnly));
+    }
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 152);
+    display.print(line);
+    renderBleDeviceRadar(device, signal);
+    bleDeviceRenderedDetail = device;
+}
+
 void renderBleDeviceDetail(bool clearContent) {
     renderHeader(tr(UiTextId::BleDeviceDetailTitle), clearContent);
-    const char* label = bleDeviceDetail.labelLength == 0U
-        ? tr(UiTextId::BleDeviceUnnamed) : bleDeviceDetail.label.data();
-    display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 42);
-    display.print(label);
-    char line[96] = {};
-    formatBleAddress(bleDeviceDetail, line, sizeof(line));
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 72);
-    display.print(line);
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 101);
-    display.print(tr(UiTextId::BlePassiveOnly));
-    renderRadioSignalCard(bleDeviceDetail.rssiDbm);
+    renderBleDeviceDetailData();
 }
 
 std::size_t wifiDeviceFirstVisible(std::size_t selection) {
@@ -7005,7 +7270,6 @@ void renderWifiDevices(bool clearContent) {
     renderWifiDevicesData();
 }
 
-UiTextId wifiDeviceTrendText(std::int16_t trendDb);
 void renderWifiDeviceDetailLiveData();
 
 void renderWifiDeviceDetail(bool clearContent) {
@@ -8475,7 +8739,7 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         wifiFrameCapture.deviceMonitorStats().active,
         static_cast<std::uint8_t>(bleProductView),
         bleDeviceSelection,
-        bleDeviceCatalog.size(),
+        bleDeviceVisibleSize(),
         bleDeviceCatalog.revision(),
         wifiFrameCapture.channelLoadSnapshot().revision,
         wifiFrameCapture.channelMonitorStats().active,
@@ -8534,6 +8798,27 @@ bool renderSelectionDelta() {
     }
 
     if (uiController.page() == 2 &&
+        bleProductView == BleProductView::DeviceDetail &&
+        renderedUi.bleProductView ==
+            static_cast<std::uint8_t>(BleProductView::DeviceDetail)) {
+        if (renderedUi.bleDeviceRevision == bleDeviceCatalog.revision()) {
+            return false;
+        }
+        const Observation& live = *liveBleDeviceDetail();
+        const BleDeviceSignalStats& signal = *liveBleDeviceSignal();
+        if (bleDeviceDetailStaticFieldsDiffer(
+                bleDeviceRenderedDetail, live)) {
+            renderBleDeviceDetailData();
+        } else {
+            renderBleDeviceRadar(live, signal);
+            bleDeviceDetail = live;
+            bleDeviceDetailSignal = signal;
+            bleDeviceRenderedDetail = live;
+        }
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
         bleProductView == BleProductView::Devices &&
         renderedUi.bleProductView ==
             static_cast<std::uint8_t>(BleProductView::Devices)) {
@@ -8542,14 +8827,14 @@ bool renderSelectionDelta() {
             bleDeviceFirstVisible(renderedUi.bleDeviceSelection);
         const std::size_t currentFirst = bleDeviceFirstVisible(current);
         const bool dataChanged =
-            renderedUi.bleDeviceSize != bleDeviceCatalog.size() ||
+            renderedUi.bleDeviceSize != bleDeviceVisibleSize() ||
             renderedUi.bleDeviceRevision != bleDeviceCatalog.revision();
         const bool stateChanged = renderedUi.surveyState !=
             static_cast<std::uint8_t>(surveyWorkflow.state());
         if (dataChanged || oldFirst != currentFirst) {
             const bool clearRows = oldFirst != currentFirst ||
                 renderedUi.bleDeviceSize == 0U ||
-                bleDeviceCatalog.size() == 0U;
+                bleDeviceVisibleSize() == 0U;
             if (clearRows) {
                 display.fillRect(
                     Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
@@ -8557,9 +8842,9 @@ bool renderSelectionDelta() {
                     Palette::Canvas);
                 renderBleDevicesData();
             } else {
-                const std::size_t end = bleDeviceCatalog.size() <
+                const std::size_t end = bleDeviceVisibleSize() <
                         currentFirst + kVisibleWifiNetworkRows
-                    ? bleDeviceCatalog.size()
+                    ? bleDeviceVisibleSize()
                     : currentFirst + kVisibleWifiNetworkRows;
                 for (std::size_t index = currentFirst; index < end; ++index) {
                     renderBleDeviceRow(index, currentFirst);
@@ -11179,8 +11464,11 @@ bool startBleDevicesProduct() {
     }
     closeProductSurveyBackend();
     bleDeviceCatalog.reset();
+    bleDeviceNavigationOrder.reset();
     bleDeviceSelection = 0;
     bleDeviceDetail = {};
+    bleDeviceRenderedDetail = {};
+    bleDeviceDetailSignal = {};
     productSurveyRuntime = {};
     productSurveyRuntime.selected = true;
     productSurveyRuntime.workerReady = productSurveyWorkerReady;
@@ -11450,19 +11738,29 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
         } else if (bleProductView == BleProductView::Devices) {
             handled = true;
+            if (action == UiAction::Up || action == UiAction::Down ||
+                action == UiAction::Select || action == UiAction::Right) {
+                bleDeviceNavigationOrder.lock(bleDeviceCatalog);
+            }
             if (action == UiAction::Up && bleDeviceSelection > 0U) {
                 --bleDeviceSelection;
                 changed = true;
             } else if (action == UiAction::Down &&
-                       bleDeviceSelection + 1U < bleDeviceCatalog.size()) {
+                       bleDeviceSelection + 1U < bleDeviceVisibleSize()) {
                 ++bleDeviceSelection;
                 changed = true;
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {
-                const Observation* device =
-                    bleDeviceCatalog.at(bleDeviceSelection);
+                const Observation* device = bleDeviceAt(bleDeviceSelection);
                 if (device != nullptr) {
                     bleDeviceDetail = *device;
+                    const std::size_t catalogIndex =
+                        bleDeviceCatalog.indexOfIdentity(*device);
+                    const BleDeviceSignalStats* signal =
+                        bleDeviceCatalog.signalAt(catalogIndex);
+                    bleDeviceDetailSignal = signal == nullptr
+                        ? BleDeviceSignalStats{} : *signal;
+                    bleDeviceRenderedDetail = {};
                     bleProductView = BleProductView::DeviceDetail;
                     lastRuntimeEvent = "ble_device_detail";
                     changed = true;
@@ -17206,6 +17504,97 @@ void emitWifiNetworkDetailState(Stream& reply) {
     reply.println(line);
 }
 
+void emitBleDeviceDetailState(Stream& reply) {
+    const std::size_t catalogIndex =
+        bleDeviceCatalog.indexOfIdentity(bleDeviceDetail);
+    const bool live = bleProductView == BleProductView::DeviceDetail &&
+        catalogIndex < bleDeviceCatalog.size();
+    const Observation& device = *liveBleDeviceDetail();
+    const BleDeviceSignalStats& signal = *liveBleDeviceSignal();
+    const auto& facts = device.bleAdvertisement;
+    char vendor[BleCompanyDatabase::kNameSize + 1U] = {};
+    const bool vendorKnown = bleDeviceVendor(device, vendor, sizeof(vendor));
+    for (char* byte = vendor; *byte != '\0'; ++byte) {
+        const bool safe = (*byte >= 'A' && *byte <= 'Z') ||
+            (*byte >= 'a' && *byte <= 'z') ||
+            (*byte >= '0' && *byte <= '9') || *byte == ' ' ||
+            *byte == '.' || *byte == '-' || *byte == '_' ||
+            *byte == '/' || *byte == '&' || *byte == '(' || *byte == ')';
+        if (!safe) *byte = '?';
+    }
+    char service[24] = {};
+    compactBleService(device, service, sizeof(service));
+    std::uint32_t identityHash = 2166136261U;
+    for (std::size_t index = 0; index < device.identityLength; ++index) {
+        identityHash ^= device.identity[index];
+        identityHash *= 16777619U;
+    }
+    const BleSubtype subtype =
+        leshy1::apps::ble::classifyBleSubtype(device);
+    const BleTrackerKind tracker =
+        leshy1::apps::ble::classifyBleTracker(device);
+    const char* trackerName = tracker == BleTrackerKind::FindMy
+        ? "find_my" : (tracker == BleTrackerKind::SmartTag
+            ? "smart_tag" : (tracker == BleTrackerKind::Tile
+                ? "tile" : "none"));
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.ble.device_detail.v1\",\"kind\":\"state\","
+        "\"active\":%s,\"passive\":true,\"active_probe_allowed\":false,"
+        "\"identity_hash\":%lu,\"label_known\":%s,"
+        "\"company_database_available\":%s,"
+        "\"company_database_records\":%u,"
+        "\"facts_known\":%s,\"vendor_known\":%s,\"vendor\":\"%s\","
+        "\"company_known\":%s,\"company_id\":%u,"
+        "\"device_kind\":%u,\"subtype\":\"%s\","
+        "\"tracker\":\"%s\",\"address_type\":%u,"
+        "\"advertisement_type\":%u,\"legacy\":%s,"
+        "\"scannable\":%s,\"connectable\":%s,"
+        "\"tx_power_known\":%s,\"tx_power_dbm\":%d,"
+        "\"appearance_known\":%s,\"appearance\":%u,"
+        "\"service\":\"%s\",\"service_uuid_hash\":%lu,"
+        "\"known_service_mask\":%u,"
+        "\"service_uuid_count\":%u,\"service_data_count\":%u,"
+        "\"manufacturer_data_length\":%u,\"payload_length\":%u,"
+        "\"rssi_dbm\":%d,\"signal_samples\":%u,"
+        "\"minimum_rssi_dbm\":%d,\"maximum_rssi_dbm\":%d,"
+        "\"rssi_trend_db\":%d,\"catalog_revision\":%lu}",
+        live ? "true" : "false",
+        static_cast<unsigned long>(identityHash),
+        device.labelLength != 0U ? "true" : "false",
+        bleCompanyDatabase.available() ? "true" : "false",
+        static_cast<unsigned>(bleCompanyDatabase.records()),
+        facts.present ? "true" : "false",
+        vendorKnown ? "true" : "false", vendor,
+        facts.companyKnown ? "true" : "false",
+        static_cast<unsigned>(facts.companyId),
+        static_cast<unsigned>(leshy1::apps::ble::classifyBleDevice(device)),
+        leshy1::apps::ble::bleSubtypeName(subtype), trackerName,
+        static_cast<unsigned>(facts.addressType),
+        static_cast<unsigned>(facts.advertisementType),
+        facts.legacy ? "true" : "false",
+        facts.scannable ? "true" : "false",
+        facts.connectable ? "true" : "false",
+        facts.txPowerKnown ? "true" : "false",
+        static_cast<int>(facts.txPowerDbm),
+        facts.appearanceKnown ? "true" : "false",
+        static_cast<unsigned>(facts.appearance), service,
+        static_cast<unsigned long>(facts.firstServiceUuidHash),
+        static_cast<unsigned>(facts.knownServiceMask),
+        static_cast<unsigned>(facts.serviceUuidCount),
+        static_cast<unsigned>(facts.serviceDataCount),
+        static_cast<unsigned>(facts.manufacturerDataLength),
+        static_cast<unsigned>(facts.payloadLength),
+        static_cast<int>(device.rssiDbm),
+        static_cast<unsigned>(signal.samples),
+        static_cast<int>(signal.minimumRssiDbm),
+        static_cast<int>(signal.maximumRssiDbm),
+        static_cast<int>(signal.rssiTrendDb),
+        static_cast<unsigned long>(bleDeviceCatalog.revision()));
+    reply.println(line);
+}
+
 bool commandAllowedDuringSafetyStop(const char* command) {
     if (command == nullptr) return false;
     return std::strncmp(command, "hil.begin ", 10) == 0 ||
@@ -17265,6 +17654,8 @@ void handleCommand(Stream& reply, const char* command) {
         emitUiState(reply, UiAction::Unknown, false);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
         emitWifiNetworkDetailState(reply);
+    } else if (std::strcmp(command, "ble.device.detail") == 0) {
+        emitBleDeviceDetailState(reply);
     } else if (std::strcmp(command, "survey.browser") == 0) {
         emitSurveyBrowser(reply);
     } else if (std::strcmp(command, "capture.state") == 0) {

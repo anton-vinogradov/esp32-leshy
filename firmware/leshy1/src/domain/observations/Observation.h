@@ -113,6 +113,71 @@ inline bool wifiNetworkFactsEqual(const WifiNetworkFacts& left,
         left.vhtCenterChannel2 == right.vhtCenterChannel2;
 }
 
+struct BleAdvertisementFacts final {
+    // The 240 px UI displays either a short UUID or the assigned-number slice
+    // of a 128-bit UUID. Keep that text plus a hash of the full UUID instead of
+    // copying 36 bytes into every bounded survey observation.
+    static constexpr std::size_t kServiceUuidCapacity = 8;
+    static constexpr std::uint16_t kServiceHid = 1U << 0U;
+    static constexpr std::uint16_t kServiceBattery = 1U << 1U;
+    static constexpr std::uint16_t kServiceHeartRate = 1U << 2U;
+    static constexpr std::uint16_t kServiceThermometer = 1U << 3U;
+    static constexpr std::uint16_t kServiceFitness = 1U << 4U;
+    static constexpr std::uint16_t kServiceEddystone = 1U << 5U;
+    static constexpr std::uint16_t kServiceXiaomi = 1U << 6U;
+    static constexpr std::uint16_t kServiceSmartTag = 1U << 7U;
+    static constexpr std::uint16_t kServiceTile = 1U << 8U;
+    static constexpr std::uint16_t kServiceFastPair = 1U << 9U;
+    static constexpr std::uint16_t kServiceExposure = 1U << 10U;
+
+    bool present = false;
+    std::uint8_t addressType = 0;
+    std::uint8_t advertisementType = 0;
+    bool legacy = false;
+    bool scannable = false;
+    bool connectable = false;
+    bool txPowerKnown = false;
+    std::int8_t txPowerDbm = 0;
+    bool appearanceKnown = false;
+    std::uint16_t appearance = 0;
+    bool companyKnown = false;
+    std::uint16_t companyId = 0;
+    std::uint8_t appleContinuityType = 0;
+    std::uint16_t knownServiceMask = 0;
+    std::array<char, kServiceUuidCapacity + 1U> firstServiceUuid{};
+    std::uint32_t firstServiceUuidHash = 0;
+    std::uint8_t firstServiceUuidLength = 0;
+    std::uint8_t serviceUuidCount = 0;
+    std::uint8_t serviceDataCount = 0;
+    std::uint8_t manufacturerDataLength = 0;
+    std::uint8_t payloadLength = 0;
+};
+
+inline bool bleAdvertisementFactsEqual(const BleAdvertisementFacts& left,
+                                       const BleAdvertisementFacts& right) {
+    return left.present == right.present &&
+        left.addressType == right.addressType &&
+        left.advertisementType == right.advertisementType &&
+        left.legacy == right.legacy &&
+        left.scannable == right.scannable &&
+        left.connectable == right.connectable &&
+        left.txPowerKnown == right.txPowerKnown &&
+        left.txPowerDbm == right.txPowerDbm &&
+        left.appearanceKnown == right.appearanceKnown &&
+        left.appearance == right.appearance &&
+        left.companyKnown == right.companyKnown &&
+        left.companyId == right.companyId &&
+        left.appleContinuityType == right.appleContinuityType &&
+        left.knownServiceMask == right.knownServiceMask &&
+        left.firstServiceUuidHash == right.firstServiceUuidHash &&
+        left.firstServiceUuidLength == right.firstServiceUuidLength &&
+        left.firstServiceUuid == right.firstServiceUuid &&
+        left.serviceUuidCount == right.serviceUuidCount &&
+        left.serviceDataCount == right.serviceDataCount &&
+        left.manufacturerDataLength == right.manufacturerDataLength &&
+        left.payloadLength == right.payloadLength;
+}
+
 struct Observation final {
     static constexpr std::size_t kIdentityCapacity = 6;
     static constexpr std::size_t kLabelCapacity = 32;
@@ -128,6 +193,7 @@ struct Observation final {
     std::array<char, kLabelCapacity + 1> label{};
     std::uint8_t labelLength = 0;
     WifiNetworkFacts wifiNetwork{};
+    BleAdvertisementFacts bleAdvertisement{};
 };
 
 }  // namespace leshy1::domain::observations
