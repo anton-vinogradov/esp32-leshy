@@ -33,6 +33,8 @@ SOURCE_FILES = {
     "navigation": "firmware/leshy1/src/apps/wifi/WifiNetworkNavigationOrder.h",
     "oui_h": "firmware/leshy1/src/apps/wifi/WifiOuiDatabase.h",
     "oui_cpp": "firmware/leshy1/src/apps/wifi/WifiOuiDatabase.cpp",
+    "oui_asset": "firmware/leshy1/assets/oui.bin",
+    "oui_metadata": "firmware/leshy1/assets/oui.json",
     "source_guard": "tools/check_wifi_networks_contract.py",
     "native_tests": "tests/native/clean_target_tests.cpp",
 }
