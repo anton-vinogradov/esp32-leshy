@@ -69,6 +69,15 @@ def normalize_home(device: Any) -> list[dict[str, Any]]:
     raise RuntimeError("could not normalize Home selection")
 
 
+def cleanup_reached_legacy_home(cleanup: dict[str, Any]) -> bool:
+    state = cleanup.get("final_state", {})
+    return (
+        state.get("page") == "home" and
+        state.get("runtime_owner") == "none" and
+        state.get("lease_mask") == 0
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -117,7 +126,7 @@ def main() -> int:
                 if failures:
                     raise RuntimeError("boot identity differs")
                 cleanup_before = best_effort_cleanup(device)
-                if not cleanup_before.get("complete"):
+                if not cleanup_reached_legacy_home(cleanup_before):
                     raise RuntimeError("initial cleanup did not reach Home/lease 0")
 
                 trace.extend(normalize_home(device))
@@ -175,7 +184,7 @@ def main() -> int:
                     f"probe_phase: {type(error).__name__}: {error}")
             finally:
                 cleanup_after = best_effort_cleanup(device)
-                if not cleanup_after.get("complete"):
+                if not cleanup_reached_legacy_home(cleanup_after):
                     failures.append("cleanup_after: terminal Home/lease 0 unproven")
     except Exception as error:
         failures.append(f"runner: {type(error).__name__}: {error}")
