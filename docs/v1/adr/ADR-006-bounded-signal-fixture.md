@@ -77,3 +77,7 @@ cause. [`0.2.2`](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed
 adds exact powered-down register telemetry and localizes the next boundary to an
 invalid all-zero slot-2 SPI read-back. The following diagnostic must inventory all
 slots and both legacy data-pin orientations with every CE held LOW before any fix.
+The retained [`0.2.3` inventory](../../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json)
+found no plausible nRF across either orientation and no CE-high event. Its runner
+contract omission remains a test failure; the next diagnostic adds shared-bus CC1101
+identity before classifying the board-02 shield.

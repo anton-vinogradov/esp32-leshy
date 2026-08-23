@@ -99,6 +99,14 @@ RF_CH и RF_SETUP. Его [physical short regression](../../tests/hil/evidence/b
 ориентации SPI data pins, удерживая CE LOW. Non-gate regression обязан пройти до
 повтора полного scenario.
 
+Fixture `0.2.3` реализовал этот inventory. Сохранённый physical response показывает
+полностью нулевые primary arrays STATUS/CONFIG/RF_CH/RF_SETUP, полностью `0xFF`
+swapped arrays, masks `0/0` и `ce_high_events=0` на board-02. Run остаётся failed-safe,
+потому что новый response не включил generic fixture fields `session_id` и
+`nrf_powered_down`. Следующая source-bound revision исправляет protocol и читает
+identity CC1101 на той же SPI bus, чтобы отличить contact/power всего shield от
+nRF-only failure: [inventory evidence](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json).
+
 ## Read-only admission board-02
 
 До любой fixture flash `profile_hil_board.py` запускает ROM esptool с `--no-stub` и

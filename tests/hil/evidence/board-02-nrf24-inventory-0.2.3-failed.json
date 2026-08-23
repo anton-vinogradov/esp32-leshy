@@ -1,0 +1,74 @@
+{
+  "schema": "leshy.hil.negative_evidence.v1",
+  "status": "failed_safe",
+  "date": "2026-08-23",
+  "scenario_id": "nrf24-fixture-inventory",
+  "checkpoint": "physical_nrf24_fixture_ce_low_inventory",
+  "run_id": "547a10fa0e0902fd2b25e1c26028b45d",
+  "source_commit": "2c82d2d61260381a00192558bbef1eb3bcf50249",
+  "raw_run_sha256": "0e949942318f5b5723b784d5db9e370132e3f33f59a323d88f5ef3d3c36ced68",
+  "raw_manifest_sha256": "72f42d0f7d07cbb17d39601729f6e0f18d640bf880cb90b4f4ef2cd8bbe568e9",
+  "candidate": {
+    "board": "board-01",
+    "port": "/dev/cu.usbmodem2101",
+    "version": "0.129.0-pre-app-watchdog",
+    "firmware_sha256": "5b88751d67080ba8a03de69a009c7c26422f63637db819a3ed586a2b2635f0cd",
+    "app_elf_sha256": "2b88b4903b29464d94c45757cbd4ee8ed067d39f1d6832f4e65bbe4997ab0ae0",
+    "expected_cid": "FE343253440000002000000055019CB7",
+    "exact_flash_reused": true,
+    "cleanup_complete": true,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_lease_mask": 0
+  },
+  "fixture": {
+    "board": "board-02",
+    "port": "/dev/cu.usbmodem1101",
+    "fixture_id": "00009070690D15E0",
+    "profile_sha256": "729ac286ef505203bd6db06ee4129b1df977b5833e11797d6571d8bf04eaa74d",
+    "version": "0.2.3-bounded-signals",
+    "firmware_sha256": "da6a80a387814ca7a42c2f2949ab4848ae35bbec7ed942739e4ca41c4374d2ea",
+    "app_elf_sha256": "d400df67d6fa0c7e676a709ef1eb137fe77b33f3e5518e85804d81470acc81e8",
+    "flashed": true,
+    "ce_high_events": 0,
+    "nrf_ce_inactive": true,
+    "nrf_carrier_active": false,
+    "ir_tx_inactive": true,
+    "buzzer_inactive": true,
+    "primary": {
+      "miso": 13,
+      "mosi": 11,
+      "status": [0, 0, 0],
+      "config": [0, 0, 0],
+      "channel": [0, 0, 0],
+      "rf_setup": [0, 0, 0],
+      "plausible_mask": 0
+    },
+    "swapped": {
+      "miso": 11,
+      "mosi": 13,
+      "status": [255, 255, 255],
+      "config": [255, 255, 255],
+      "channel": [255, 255, 255],
+      "rf_setup": [255, 255, 255],
+      "plausible_mask": 0
+    }
+  },
+  "diagnosis": {
+    "physical_inventory_completed": true,
+    "responding_nrf_slots": 0,
+    "candidate_bus_orientation_found": false,
+    "protocol_failure": "inventory_response_omitted_session_id_and_nrf_powered_down",
+    "root_cause_status": "open_pending_shared_shield_cc1101_identity",
+    "automatic_gate_restart_allowed": false,
+    "next_action": "read_only_cc1101_identity_on_shared_bus_then_classify_shield_contact_or_nrf_only_fault"
+  },
+  "limits": {
+    "scenario_passed": false,
+    "rf_emission_authorized": false,
+    "known_signal_detected": false,
+    "calibrated_power_or_distance": false,
+    "physical_rf_silence_instrumented": false,
+    "stage_or_phase_promoted": false
+  }
+}

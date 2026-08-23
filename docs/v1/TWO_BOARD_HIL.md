@@ -98,6 +98,14 @@ emissions and safe cleanup. The next diagnostic inventories every slot and both 
 SPI data-pin orientations while CE remains LOW. The non-gate regression must pass
 before the full scenario may be retried.
 
+Fixture `0.2.3` implemented that inventory. Its retained physical response reports
+primary STATUS/CONFIG/RF_CH/RF_SETUP arrays all zero, swapped arrays all `0xFF`, masks
+`0/0` and `ce_high_events=0` across board-02. The run remains failed-safe because the
+new response omitted generic fixture fields `session_id` and `nrf_powered_down`.
+The next source-bound revision fixes that protocol and reads CC1101 identity on the
+same SPI bus to classify whole-shield contact/power versus nRF-only failure:
+[inventory evidence](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json).
+
 ## Read-only board-02 admission
 
 Before any fixture flash, `profile_hil_board.py` invokes ROM esptool with `--no-stub`

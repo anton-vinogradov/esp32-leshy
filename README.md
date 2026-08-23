@@ -16,7 +16,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
 - **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 automated steps.
-- **Next gate:** complete CE-low board-02 nRF24 inventory, pass the short bounded fixture regression, then prove the known 2,442 MHz signal through the three-receiver finder with safe two-board cleanup.
+- **Next gate:** classify the board-02 shared RF-shield bus with read-only CC1101 identity, restore at least one verified nRF fixture slot, then pass the short bounded regression before the known-signal finder gate.
 
 ### Current stage phases
 

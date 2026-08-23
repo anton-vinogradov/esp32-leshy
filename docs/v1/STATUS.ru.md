@@ -14,24 +14,29 @@
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
 - **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
 - **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 автоматических шага.
-- **Следующий evidence gate:** завершить CE-low inventory nRF24 board-02, пройти короткий bounded fixture regression и затем доказать известный сигнал 2 442 МГц через finder трёх приёмников с безопасной очисткой обеих плат.
+- **Следующий evidence gate:** классифицировать shared bus RF-shield board-02 через read-only identity CC1101, восстановить хотя бы один проверенный nRF fixture slot и пройти короткий bounded regression до known-signal gate finder.
 - **Принятая physical baseline:** exact `0.129.0-pre-app-watchdog`; все прежние принятые checkpoints сохранены ниже.
-- **Текущий source candidate:** exact product `0.129.0-pre-app-watchdog` не изменён, а source commit `6b734aeabf1dbe2bb14d612231bf1d09c3fa2438` добавляет source-bound register diagnostics fixture `0.2.2`; полный tracked host suite и обе сборки проходят. Product image также имеет gate-eligible local run pre-app RTC watchdog; его отдельный retained bundle остаётся документационным follow-up, а не release claim.
+- **Текущий source candidate:** exact product `0.129.0-pre-app-watchdog` не изменён, а source commit `2c82d2d61260381a00192558bbef1eb3bcf50249` добавляет source-bound CE-low inventory fixture `0.2.3`; focused host checks и fixture build проходят. Product image также имеет gate-eligible local run pre-app RTC watchdog; его отдельный retained bundle остаётся документационным follow-up, а не release claim.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
-- **Ближайшая граница:** проинвентаризировать все три nRF24 slot fixture и обе
-  документированные ориентации SPI data pins при всех CE LOW, затем привязать fixed
-  vector только к положительно определённому radio и повторить короткий regression.
+- **Ближайшая граница:** прочитать identity CC1101 на той же SPI bus board-02, чтобы
+  отличить disconnected/unpowered shield от nRF-only assembly fault; исправить contract
+  ответа inventory и продолжать удерживать все nRF CE LOW.
 - **Текущее negative evidence:** fixture `0.2.0` обнаружил реальную ошибку выбора slot;
   исправленный на slot 2 fixture `0.2.1` всё равно отказал до CE HIGH. Diagnostic
   `0.2.2` локализовал отказ до некорректного SPI exchange со slot 2 board-02:
-  `STATUS/CONFIG/RF_CH/RF_SETUP = 0/0/0/0`, `channel_readback_mismatch`. Все три run
-  сохранили zero emissions, terminal fixture inactive/powered-down и product Home/lease
-  0. Следующий шаг — CE-low inventory всех slots; полный gate остаётся закрыт. См.
+  `STATUS/CONFIG/RF_CH/RF_SETUP = 0/0/0/0`, `channel_readback_mismatch`. Затем CE-low
+  inventory `0.2.3` прочитал все три slots как нули на documented bus и как `0xFF` при
+  swapped data pins, не найдя plausible nRF на board-02. В payload не хватило двух
+  обязательных generic-runner fields, поэтому scenario корректно остался красным, но
+  physical inventory и zero-CE fact сохранены. Все run сохранили zero emissions, safe
+  terminal fixture и product Home/lease 0. Следующий шаг — identity CC1101 на shared
+  bus; полный gate остаётся закрыт. См.
   [0.2.0](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json),
   [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json) и
-  [0.2.2](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json).
+  [0.2.2](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json) и
+  [inventory 0.2.3](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json).
 
 ### План фаз S5
 
