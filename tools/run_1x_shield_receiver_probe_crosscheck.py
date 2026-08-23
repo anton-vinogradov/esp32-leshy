@@ -27,7 +27,9 @@ RUN_SCHEMA = "leshy.shield_receiver_crosscheck.run.v1"
 PROBE_SCHEMA = "leshy.shield.receiver_probe.v1"
 
 
-def probe_contract_failures(report: dict[str, Any]) -> list[str]:
+def probe_contract_failures(
+    report: dict[str, Any], require_bus_characterization: bool = False,
+) -> list[str]:
     failures = expect(report, {
         "schema_version": 1,
         "read_only": True,
@@ -55,6 +57,19 @@ def probe_contract_failures(report: dict[str, Any]) -> list[str]:
     }:
         failures.append(
             f"unexpected probe side effects: {report.get('side_effects')!r}")
+    if require_bus_characterization:
+        bus = report.get("bus_line", {})
+        failures.extend(expect(bus, {
+            "complete": True,
+            "samples_per_pull": 32,
+            "nrf_nop_reads": 4,
+            "bitbang_spi_bytes_clocked": 4,
+        }, "shield_receiver_probe.bus_line"))
+        nop = bus.get("nrf_nop")
+        if not isinstance(nop, list) or len(nop) != 2:
+            failures.append(f"unexpected nRF NOP characterization: {nop!r}")
+        elif [row.get("slot") for row in nop] != [1, 2]:
+            failures.append(f"unexpected nRF NOP slots: {nop!r}")
     return failures
 
 
@@ -92,6 +107,7 @@ def main() -> int:
         help=("do not write flash; fail closed unless the running version and "
               "app ELF identity match the supplied exact image"),
     )
+    parser.add_argument("--require-bus-characterization", action="store_true")
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0),
                         default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
@@ -175,7 +191,8 @@ def main() -> int:
                     device, b"hardware.shield.receivers",
                     PROBE_SCHEMA, "report",
                 )
-                failures.extend(probe_contract_failures(probe))
+                failures.extend(probe_contract_failures(
+                    probe, args.require_bus_characterization))
                 safe_outputs = query(
                     device, b"hardware.safe-outputs",
                     "leshy.hardware.safe-outputs.v1", "state",

@@ -52,6 +52,14 @@ struct ShieldReceiverProbeReport final {
     std::uint8_t nrfRegisterReads = 0;
     std::uint8_t ccStatusReads = 0;
     std::uint16_t spiBytesClocked = 0;
+    bool busLineCharacterizationComplete = false;
+    std::uint8_t misoSamplesPerPull = 0;
+    std::uint8_t misoIdlePullDownHighSamples = 0;
+    std::uint8_t misoIdlePullUpHighSamples = 0;
+    std::array<std::uint8_t, 2> nrfNopStatusPullDown{{0xFF, 0xFF}};
+    std::array<std::uint8_t, 2> nrfNopStatusPullUp{{0xFF, 0xFF}};
+    std::uint8_t nrfNopReads = 0;
+    std::uint8_t bitBangSpiBytesClocked = 0;
     std::uint8_t nrfCeHighEvents = 0;
     std::uint8_t ccCommandStrobes = 0;
     std::uint8_t radioTxCommands = 0;

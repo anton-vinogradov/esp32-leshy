@@ -17873,6 +17873,13 @@ void emitShieldReceiverProbeReport(Stream& reply) {
         "\"channel\":%u,\"rf_setup\":%u,\"feature\":%u}],"
         "\"cc1101\":{\"detected\":%s,\"ready\":%s,\"status\":%u,"
         "\"partnum\":%u,\"version\":%u},"
+        "\"bus_line\":{\"complete\":%s,\"samples_per_pull\":%u,"
+        "\"idle_pull_down_high_samples\":%u,"
+        "\"idle_pull_up_high_samples\":%u,"
+        "\"nrf_nop\":["
+        "{\"slot\":1,\"pull_down_status\":%u,\"pull_up_status\":%u},"
+        "{\"slot\":2,\"pull_down_status\":%u,\"pull_up_status\":%u}],"
+        "\"nrf_nop_reads\":%u,\"bitbang_spi_bytes_clocked\":%u},"
         "\"wire\":{\"nrf_register_reads\":%u,\"cc_status_reads\":%u,"
         "\"spi_bytes_clocked\":%u},"
         "\"side_effects\":{\"nrf_ce_high_events\":%u,"
@@ -17907,6 +17914,16 @@ void emitShieldReceiverProbeReport(Stream& reply) {
         static_cast<unsigned>(report.cc1101.status),
         static_cast<unsigned>(report.cc1101.partNumber),
         static_cast<unsigned>(report.cc1101.version),
+        report.busLineCharacterizationComplete ? "true" : "false",
+        static_cast<unsigned>(report.misoSamplesPerPull),
+        static_cast<unsigned>(report.misoIdlePullDownHighSamples),
+        static_cast<unsigned>(report.misoIdlePullUpHighSamples),
+        static_cast<unsigned>(report.nrfNopStatusPullDown[0]),
+        static_cast<unsigned>(report.nrfNopStatusPullUp[0]),
+        static_cast<unsigned>(report.nrfNopStatusPullDown[1]),
+        static_cast<unsigned>(report.nrfNopStatusPullUp[1]),
+        static_cast<unsigned>(report.nrfNopReads),
+        static_cast<unsigned>(report.bitBangSpiBytesClocked),
         static_cast<unsigned>(report.nrfRegisterReads),
         static_cast<unsigned>(report.ccStatusReads),
         static_cast<unsigned>(report.spiBytesClocked),

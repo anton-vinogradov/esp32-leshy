@@ -162,11 +162,15 @@ def main() -> int:
         shield_probe = shield_receiver_adapter.read_text(encoding="utf-8")
         for marker in (
             "kNrfReadRegister = 0x00",
+            "kNrfNop = 0xFF",
             "kCcReadPartNumber = 0xF0",
             "kCcReadVersion = 0xF1",
             "kProbeSpiHz = 1000000",
             "pinMode(BoardProfile::kNrfCsPins[2], INPUT)",
             "digitalWrite(pin, LOW)",
+            "INPUT_PULLDOWN",
+            "INPUT_PULLUP",
+            "report_->nrfNopReads == 4",
             "gpio21Safe()",
             "finalizeShieldReceiverProbe(report_)",
         ):
