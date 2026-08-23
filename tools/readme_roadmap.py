@@ -29,6 +29,7 @@ class LanguageConfig:
     stage_plan: str
     functionality_map: str
     status_labels: dict[str, str]
+    snapshot_fields: tuple[tuple[str, str], ...]
 
 
 CONFIGS = (
@@ -47,6 +48,11 @@ CONFIGS = (
         stage_plan="stage outcomes and exit gates",
         functionality_map="complete functionality map",
         status_labels={"done": "complete", "active": "in progress", "planned": "later"},
+        snapshot_fields=(
+            ("Current phase", "Current phase"),
+            ("Verified checkpoint", "Verified checkpoint"),
+            ("Next evidence gate", "Next gate"),
+        ),
     ),
     LanguageConfig(
         readme=ROOT / "README.ru.md",
@@ -63,6 +69,11 @@ CONFIGS = (
         stage_plan="результаты и exit gates этапов",
         functionality_map="полная карта функциональности",
         status_labels={"done": "готово", "active": "в работе", "planned": "дальше"},
+        snapshot_fields=(
+            ("Текущая фаза", "Текущая фаза"),
+            ("Проверенный checkpoint", "Проверенный checkpoint"),
+            ("Следующий evidence gate", "Следующий gate"),
+        ),
     ),
 )
 
@@ -99,10 +110,37 @@ def parse_stage_states(path: Path) -> dict[str, str]:
     return states
 
 
+def parse_snapshot(config: LanguageConfig, active_stage: str) -> list[tuple[str, str]]:
+    text = config.status.read_text(encoding="utf-8")
+    snapshot: list[tuple[str, str]] = []
+    for source_label, display_label in config.snapshot_fields:
+        matches = re.findall(
+            rf"^- \*\*{re.escape(source_label)}:\*\* (.+?)\s*$",
+            text,
+            re.MULTILINE,
+        )
+        if len(matches) != 1:
+            raise ValueError(
+                f"{config.status}: expected exactly one {source_label!r} field"
+            )
+        value = matches[0]
+        if "](" in value:
+            raise ValueError(
+                f"{config.status}: front-page field must not contain relative links"
+            )
+        snapshot.append((display_label, value))
+    if active_stage not in snapshot[0][1]:
+        raise ValueError(
+            f"{config.status}: current phase must belong to active {active_stage}"
+        )
+    return snapshot
+
+
 def render(config: LanguageConfig) -> str:
     names = parse_stage_names(config.delivery_plan)
     states = parse_stage_states(config.status)
     active = next(stage for stage in EXPECTED_STAGES if states[stage] == "active")
+    snapshot = parse_snapshot(config, active)
     done = sum(state == "done" for state in states.values())
     icon = {"done": "✅", "active": "🟡", "planned": "⬜"}
 
@@ -117,6 +155,9 @@ def render(config: LanguageConfig) -> str:
         config.source_note,
         "",
     ]
+    for label, value in snapshot:
+        lines.append(f"- **{label}:** {value}")
+    lines.append("")
     for stage in EXPECTED_STAGES:
         state = states[stage]
         lines.append(

@@ -86,6 +86,10 @@ Work is complete only when:
 
 - Update `STATUS` whenever the active stage, a gate, a blocker, or verified evidence
   changes; its date is the project freshness date.
+- Every phase/checkpoint transition updates the `Current phase`, `Verified checkpoint`,
+  and `Next evidence gate` snapshot fields in `STATUS`, then regenerates the public
+  README roadmap with `python3 tools/readme_roadmap.py --write`. `check_docs.py`
+  rejects README roadmap drift.
 - Change `DELIVERY_PLAN` only when stage boundaries or order change, not for daily
   progress.
 - Do not delete requirements: mark them `rejected` or `deferred`.

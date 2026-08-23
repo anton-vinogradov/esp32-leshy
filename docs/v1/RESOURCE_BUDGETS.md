@@ -147,6 +147,7 @@ defines the 1.x partition and memory policy.
 | RB-M125 | measured | passive all-receiver nRF24 signal finder | 3,055,192 B linked flash; 229,448 B static RAM; app/factory images 3,055,600/3,121,136 B; exact nRF24 HIL heap total/free/min 152,004/81,772/67,540 B; dedicated DIRAM 310,216/341,760 B (90.77%, 31,544 B remaining) | board-01 `0.123.0-nrf24-signal-finder`, `E-BUILD-123`/`E-AUTO-087`/`E-HIL-147`/`E-UX-042`; +5,508 B linked flash, +760 B static RAM and +5,504/+5,504 B images vs 0.122.2. Fixed 83-bin baseline/response state, product route, diagnostics and HIL surface remain allocation-free. Focused physical minimum stays below RB-04 and does not supersede mixed-workload release endurance |
 | RB-M126 | measured | passive wide-span CC1101 frequency finder with robust ambient rejection | 3,060,648 B linked flash; 233,288 B static RAM; app/factory images 3,061,056/3,126,592 B; exact CC1101 HIL heap total/free/min 148,164/77,932/63,700 B; dedicated DIRAM 314,056/341,760 B (91.89%, 27,704 B remaining) | board-01 `0.124.1-cc1101-frequency-finder`, `E-BUILD-124`/`E-AUTO-088`/`E-HIL-148`/`E-UX-043`; +5,456 B linked flash, +3,840 B static RAM and +5,456/+5,456 B images vs 0.123. Three fixed 1,099-bin arrays (baseline, raw rise and held response), 240-column projection and diagnostics are allocation-free. Two ambient runs preserve heap, reject retained predecessor false peaks and end lease 0. Focused minimum stays below RB-04 and does not supersede mixed-workload release endurance |
 | RB-M127 | measured build / physical open | product IR Library metadata plus separate two-board NEC fixture foundation | product 3,061,504 B linked flash; 233,288 B static RAM; app/factory images 3,061,904/3,127,440 B; dedicated DIRAM unchanged at 314,056/341,760 B (91.89%, 27,704 B remaining). Separate fixture: 322,215 B linked flash; 22,724 B static RAM; app/factory 322,624/388,160 B; DIRAM 74,519/341,760 B | unflashed source `0.125.0-ir-fixture-foundation` / fixture `0.1.0-ir-nec`, `E-BUILD-125`/`E-AUTO-089`, source `f1b3394`; product delta vs 0.124.1 is +856 B linked flash, zero static RAM and +848/+848 B images. The separate fixture budget never enters the product image. No physical heap or two-board result exists yet, so RB-04 and accepted 0.89 endurance are not superseded |
+| RB-M128 | measured build + physical positive | pre-app safety guard, physical IR envelope tolerance and closed-loop two-board NEC | product 3,062,560 B linked flash; 233,288 B static RAM; app/factory images 3,062,960/3,128,496 B; RTC no-init 128 B; physical heap total/free/min 148,164/77,932/63,700 B. Fixture remains 322,215 B linked flash and 22,724 B static RAM | board-01/02 `0.129.0-pre-app-watchdog`, `E-BUILD-129`/`E-AUTO-093`/`E-HIL-150`/`E-RADIO-014`/`E-STORAGE-031`; +1,056 B linked flash, zero static-RAM growth and +1,056/+1,056 B images vs 0.125. The physical run keeps heap invariant across NEC receive/save/cold reopen, but its 63,700 B focused minimum is below RB-04 and does not replace mixed-workload endurance |
 
 The probe's `heap_min_free` covers only its short diagnostic run. It does not predict
 Wi-Fi/BLE buffers, display caches, Session queues, storage transactions, or the
@@ -242,12 +243,11 @@ These limits are review triggers, not evidence that the product meets its NFRs.
 - Storage, power, and shared-bus limits remain explicit unknowns; features depending
   on them cannot be promoted from `unknown` to `available` by documentation alone.
 
-Latest build delta `RB-M127`: unflashed product source 0.125 uses 3,061,504 B linked
-flash and 233,288 B static RAM; app/factory images are 3,061,904/3,127,440 B and
-dedicated DIRAM remains 314,056/341,760 B (27,704 B remains). This is +856 B linked
-flash, zero static RAM and +848/+848 B images over accepted 0.124.1 for explicit IR
-Library metadata. The separate fixed-NEC fixture uses 322,215 B linked flash,
-22,724 B static RAM and 322,624/388,160 B app/factory images; none of that footprint
-enters the product. No physical heap measurement or two-board HIL result exists, so
-the accepted 0.124.1 physical row, RB-04 and mixed-workload release endurance remain
-the operational baseline.
+Latest build delta `RB-M128`: exact product 0.129 uses 3,062,560 B linked flash and
+233,288 B static RAM; app/factory images are 3,062,960/3,128,496 B and RTC no-init is
+128 B. This is +1,056 B linked flash, zero static RAM and +1,056/+1,056 B images over
+source 0.125. The separate fixed-NEC fixture remains 322,215 B linked flash and
+22,724 B static RAM; none of that footprint enters the product. Passing physical
+two-board HIL measures invariant heap 148,164/77,932/63,700 B, so exact 0.129 is the
+physical functional baseline while RB-04 and mixed-workload release endurance remain
+the resource/release baseline.

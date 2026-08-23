@@ -2,8 +2,8 @@
 
 *Читать на: [English](TWO_BOARD_HIL.md) · **Русский***
 
-Статус: **foundation S5 реализован и проверен на host; board-02 куплена, но ещё не
-подключена, не прошла read-only profile и не участвовала в physical run**.
+Статус: **принятый physical IR checkpoint S5; exact 0.129 закрывает source-bound
+двухплатную цепочку NEC receive, persistence, cold export и safe cleanup**.
 
 ## Роли и граница доверия
 
@@ -31,9 +31,9 @@ scenario. Он:
    и экспортирует byte-identical CSV;
 6. возвращает обе платы в доказанное inactive state, а board-01 — на Home/lease 0.
 
-Существующее одноплатное no-signal evidence exact 0.104 остаётся принятым. Новый
-positive scenario gate-eligible по контракту, но **физически не запускался**, поэтому
-ещё не является evidence.
+Существующее одноплатное no-signal evidence exact 0.104 остаётся принятым. Exact
+0.129 теперь также проходит physical positive scenario и сохранён как
+[machine-checked evidence](../../tests/hil/evidence/board-01-infrared-nec-0.129.json).
 
 ## Safety contract fixture
 
@@ -81,7 +81,7 @@ tools/run_ir_two_board_hil.py \
   --candidate-port /dev/cu.CANDIDATE \
   --fixture-port /dev/cu.FIXTURE \
   --expected-cid FE343253440000002000000055019CB7 \
-  --output work/outputs/ir-nec-positive-0.125 \
+  --output work/outputs/ir-nec-positive-0.129 \
   --profile-fixture-read-only \
   --declare-standard-v2-no-extensions \
   --declare-antennas-attached
@@ -96,14 +96,15 @@ inactive outputs.
 
 ## Текущая граница evidence
 
-Source commit `f1b3394a10848b4a7112f2b8777b0e46c0954019` и host tests устанавливают
-software boundary. Product candidate `0.125.0-ir-fixture-foundation` собирается с
-233 288 B static RAM и 3 061 504 B linked flash. Fixture app image
-`c95996e2…f520` занимает 322 624 B, имеет app identity `2786589a…557`, 22 724 B
-static RAM и 322 215 B linked flash.
+Source commit `149e4ef37a650953b7335885c118824ed632fa16` связывает exact product 0.129,
+fixture 0.1.0, runner и scenario. Profile board-02 доказывает fixture ID
+`00009070690D15E0`, ESP32-S3/16 MB, явно объявленную standard v2 assembly и zero
+profiling writes. Зелёный run переиспользует exact hashes уже прошитых images,
+выполняет одну fixed NEC emission 68,424 ms, принимает/декодирует 67 pulses на
+board-01, продвигает catalog generation 97→98 после явного Save, cold-reopen-ит item
+и побайтно сравнивает live/Library CSV. Обе платы заканчивают inactive, product
+owner/lease — `none`/`0`.
 
-На этом checkpoint ни одна плата не прошивалась. Profile board-02, successful NEC
-decode, persistence, cold Library export и final physical cleanup остаются открыты
-до подключения обоих устройств. Fixture TX Sub-GHz и 2.4 ГГц остаётся запрещён до
-отдельных контрактов region/band, attenuation/separation и vector; разрешение IR не
-распространяется на RF.
+Это закрывает только объявленную IR positive boundary. Fixture TX Sub-GHz и 2.4 ГГц
+остаётся запрещён до отдельных контрактов region/band, minimum-power, separation и
+vector; разрешение IR не распространяется на RF.

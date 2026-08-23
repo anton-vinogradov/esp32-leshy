@@ -14,6 +14,10 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
 
+- **Current phase:** `S5.2 — controlled nRF24 positive fixture`.
+- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 automated steps.
+- **Next gate:** define the bounded minimum-power nRF24 fixture contract, then prove a known physical signal through the three-receiver finder with safe two-board cleanup.
+
 - ✅ **S0 — Governance and generation boundary** · complete
 - ✅ **S1 — Evidence baseline: users, competitors, and hardware** · complete
 - ✅ **S2 — Clean 1.x platform** · complete

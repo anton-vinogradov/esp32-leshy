@@ -2,8 +2,8 @@
 
 *Read in: **English** · [Русский](TWO_BOARD_HIL.ru.md)*
 
-Status: **implemented and host-verified S5 foundation; board-02 is purchased but
-has not yet been connected, read-only profiled or used for a physical run**.
+Status: **accepted physical S5 IR checkpoint; exact 0.129 completes the source-bound
+two-board NEC receive, persistence, cold export and safe-cleanup path**.
 
 ## Roles and trust boundary
 
@@ -31,9 +31,9 @@ scenario. It:
    exports a byte-identical CSV;
 6. returns both boards to a proven inactive state and board-01 to Home/lease 0.
 
-The existing one-board no-signal evidence for exact 0.104 remains accepted. The new
-positive scenario is gate-eligible by contract but has **not run physically**, so it
-is not evidence yet.
+The existing one-board no-signal evidence for exact 0.104 remains accepted. Exact
+0.129 now also passes the physical positive scenario and is retained as
+[machine-checked evidence](../../tests/hil/evidence/board-01-infrared-nec-0.129.json).
 
 ## Fixture safety contract
 
@@ -82,7 +82,7 @@ tools/run_ir_two_board_hil.py \
   --candidate-port /dev/cu.CANDIDATE \
   --fixture-port /dev/cu.FIXTURE \
   --expected-cid FE343253440000002000000055019CB7 \
-  --output work/outputs/ir-nec-positive-0.125 \
+  --output work/outputs/ir-nec-positive-0.129 \
   --profile-fixture-read-only \
   --declare-standard-v2-no-extensions \
   --declare-antennas-attached
@@ -97,14 +97,15 @@ profile/source/image identity and terminal inactive outputs.
 
 ## Current evidence boundary
 
-Source commit `f1b3394a10848b4a7112f2b8777b0e46c0954019` and host tests establish the
-software boundary. Product candidate `0.125.0-ir-fixture-foundation` builds at
-233,288 B static RAM and 3,061,504 B linked flash. Fixture app image
-`c95996e2…f520` is 322,624 B, with app identity `2786589a…557`, 22,724 B static RAM
-and 322,215 B linked flash.
+Source commit `149e4ef37a650953b7335885c118824ed632fa16` binds exact product 0.129,
+fixture 0.1.0, the runner and scenario. Board-02 profile proves fixture ID
+`00009070690D15E0`, ESP32-S3/16 MB, the explicitly declared standard v2 assembly and
+zero profiling writes. The passing run reuses exact already-flashed image hashes,
+performs one 68.424 ms fixed NEC emission, captures/decodes 67 pulses on board-01,
+advances catalog generation 97→98 after explicit Save, cold-reopens the item and
+compares live/Library CSV byte-for-byte. Both boards finish inactive and product
+owner/lease is `none`/`0`.
 
-No board was flashed for this checkpoint. Board-02 profile, successful NEC decode,
-persistence, cold Library export and final physical cleanup all remain open until
-both devices are connected. Sub-GHz and 2.4 GHz fixture transmission remain
-unauthorized pending separate regional/band, attenuation/separation and vector
-contracts; the IR permission does not generalize to RF.
+This closes the declared IR positive boundary only. Sub-GHz and 2.4 GHz fixture
+transmission remain unauthorized pending separate region/band, minimum-power,
+separation and vector contracts; the IR permission does not generalize to RF.

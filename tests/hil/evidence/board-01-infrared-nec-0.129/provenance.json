@@ -1,0 +1,37 @@
+{
+  "app_elf_sha256": "2b88b4903b29464d94c45757cbd4ee8ed067d39f1d6832f4e65bbe4997ab0ae0",
+  "checkpoint": "physical_ir_nec_decode_save",
+  "factory_bytes": 3128496,
+  "factory_sha256": "aa1211c5480b72ce3dfb8118af965477c611f5ded8d02a5fe94c101c7e0ba326",
+  "firmware_bytes": 3062960,
+  "firmware_sha256": "5b88751d67080ba8a03de69a009c7c26422f63637db819a3ed586a2b2635f0cd",
+  "fixture": {
+    "app_elf_sha256": "2786589a8ddc074821dd7e661368458768708e9a16bade934b093b504800a557",
+    "firmware_bytes": 322624,
+    "firmware_sha256": "c95996e28d196fa8d786171dda674237c767cba13f4bc0de082bfcf92e83f520",
+    "fixture_id": "00009070690D15E0",
+    "profile_sha256": "729ac286ef505203bd6db06ee4129b1df977b5833e11797d6571d8bf04eaa74d",
+    "source_commit": "149e4ef37a650953b7335885c118824ed632fa16",
+    "source_files": {
+      "firmware/leshy_fixture/platformio.ini": "7ac07b41e03ad2f6ac10e10c594cd80aac9a9a5577e18581baa907bfd12edd9f",
+      "firmware/leshy_fixture/src/FixtureSession.cpp": "c28ef46c6c22f57d210fca729cee4479706d6967be8820fe169166e96e4234f4",
+      "firmware/leshy_fixture/src/FixtureSession.h": "ed7bb7a6e9aadca2857a27606838cc442b8f65a5325d511cbb826d5c97133247",
+      "firmware/leshy_fixture/src/main.cpp": "0b3250cccc754b71a832d0e9042b9b7a2ffe1271907f2f346a2a09c1e134eb15"
+    },
+    "version": "0.1.0-ir-nec"
+  },
+  "linked_flash_bytes": 3062560,
+  "map_sha256": "f7e47627acc09904c262feef55bec46973e8b49a9cd2f3f4623b407e52a17385",
+  "run_schema": "leshy.hil.scenario_run.v1",
+  "run_sha256": "9bdcc24e04db984a96076a18b84b7149530428b3d664fade7b1fae6f96f2efff",
+  "runner_commit": "149e4ef37a650953b7335885c118824ed632fa16",
+  "runner_path": "tools/run_hil_scenario.py",
+  "runner_sha256": "517fdd02851f80673cafda8768d5d594d798ee05bc0edaf471d567705036503f",
+  "scenario_id": "infrared-nec-positive",
+  "scenario_path": "tests/hil/scenarios/infrared-nec-positive.json",
+  "scenario_sha256": "7150bc157fc227bc92e34ab04f8f62f5d38a2a3459a6964acac7f834b1a9f129",
+  "schema": "leshy.hil.provenance.v1",
+  "source_commit": "149e4ef37a650953b7335885c118824ed632fa16",
+  "static_ram_bytes": 233288,
+  "version": "0.129.0-pre-app-watchdog"
+}
