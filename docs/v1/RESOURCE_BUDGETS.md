@@ -251,3 +251,11 @@ source 0.125. The separate fixed-NEC fixture remains 322,215 B linked flash and
 two-board HIL measures invariant heap 148,164/77,932/63,700 B, so exact 0.129 is the
 physical functional baseline while RB-04 and mixed-workload release endurance remain
 the resource/release baseline.
+
+The source-bound `0.2.4` diagnostic fixture uses 332,135 B program flash and 22,844 B
+static RAM. Its +9,920/+120 B delta over the fixed-NEC fixture adds read-only identity
+telemetry for all nRF chip selects, both data-pin orientations and shared-bus CC1101;
+it does not enter or change the exact product image. The physical 2/2-step diagnostic
+performs zero emissions and retains no runtime-heap claim; its negative receiver
+inventory is recorded in
+[board-02 evidence](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).

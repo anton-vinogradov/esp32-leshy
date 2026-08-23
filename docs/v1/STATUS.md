@@ -14,15 +14,15 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
 - **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
 - **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 automated steps.
-- **Next evidence gate:** classify the board-02 shared RF-shield bus with read-only CC1101 identity, restore at least one verified nRF fixture slot, then pass the short bounded regression before the known-signal finder gate.
+- **Next evidence gate:** power off and reseat the detachable board-02 RF shield, repeat the read-only shared-bus inventory, then pass the short bounded nRF regression before the known-signal finder gate.
 - **Accepted physical baseline:** exact `0.129.0-pre-app-watchdog`; earlier accepted checkpoints remain retained below.
-- **Working source candidate:** exact product `0.129.0-pre-app-watchdog` remains unchanged while source commit `2c82d2d61260381a00192558bbef1eb3bcf50249` adds source-bound fixture `0.2.3` CE-low inventory; focused host checks and the fixture build pass. The product image also has a gate-eligible local pre-app RTC-watchdog run; its separate retained bundle remains documentation follow-up rather than a release claim.
+- **Working source candidate:** exact product `0.129.0-pre-app-watchdog` remains unchanged while source commit `b0893f6d8948d4eaef20bbd004dca4d628f6584d` adds source-bound fixture `0.2.4` shared nRF/CC1101 CE-low identity; focused host checks and the fixture build pass. The physical diagnostic passes 2/2 steps without emission and classifies the board-02 RF shield as electrically unavailable. The product image also has a gate-eligible local pre-app RTC-watchdog run; its separate retained bundle remains documentation follow-up rather than a release claim.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** establish the S5 stock-hardware completeness baseline and
   advance each present module through probe → observe/capture → Library → inspect/export.
-- **Immediate boundary:** use a read-only CC1101 identity on the same board-02 SPI bus
-  to distinguish a disconnected/unpowered shield from an nRF-only assembly fault;
-  correct the inventory response contract and keep every nRF CE LOW.
+- **Immediate boundary:** with USB power removed, reseat the detachable board-02 RF
+  shield/pogo contacts, reconnect both boards and repeat the same read-only inventory
+  while every nRF CE remains LOW.
 - **Current negative evidence:** fixture `0.2.0` exposed a real wrong-slot error;
   corrected slot-2 fixture `0.2.1` still failed before CE HIGH. Diagnostic `0.2.2`
   now localizes that failure to an invalid SPI exchange on board-02 slot 2:
@@ -30,13 +30,18 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   The `0.2.3` CE-low inventory then read all three slots as zero on the documented bus
   and `0xFF` with swapped data pins, finding no plausible nRF on board-02. Its payload
   omitted two generic runner fields, so the scenario correctly remained red, but the
-  physical inventory and zero-CE fact are retained. All runs kept zero emissions,
-  safe terminal fixture state and product Home/lease 0. Shared-bus CC1101 identity is
-  next; the full gate remains closed.
+  physical inventory and zero-CE fact are retained. Source-bound `0.2.4` fixed the
+  protocol and passed the two-step diagnostic, yet CC1101 also returns invalid identity
+  `0/0/0` on the documented bus and no-ready/`0xFF` on the swapped bus. This rules
+  against an nRF-only fault and supports an electrically unavailable whole RF shield
+  on board-02. All runs kept zero emissions, safe terminal fixture state and product
+  Home/lease 0; the full gate remains closed until a powered-off shield reseat and
+  repeated read-only inventory.
   See [0.2.0](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
   [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json) and
   [0.2.2](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json), plus
-  [0.2.3 inventory](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json).
+  [0.2.3 inventory](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json)
+  and [0.2.4 shared-shield identity](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
 
 ### S5 phase plan
 

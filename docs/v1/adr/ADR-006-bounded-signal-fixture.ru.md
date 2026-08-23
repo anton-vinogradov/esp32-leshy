@@ -78,5 +78,10 @@ Ambient evidence не проверяет positive detection; arbitrary/product T
 инвентаризировать все slots и обе legacy-ориентации data pins при всех CE LOW до fix.
 Сохранённый [`0.2.3 inventory`](../../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json)
 не нашёл plausible nRF ни в одной orientation и не поднял CE. Пропуск fields generic
-runner остаётся test failure; следующая диагностика добавляет identity CC1101 на
-shared bus до классификации shield board-02.
+runner остаётся test failure. Source-bound `0.2.4` исправляет contract и проходит
+диагностику, но identity CC1101 на shared bus тоже invalid: `0/0/0` на documented bus
+и no-ready/`0xFF` на swapped bus. Сохранённый
+[`0.2.4 evidence`](../../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json)
+поэтому указывает на электрическую недоступность всего съёмного shield, не разрешает
+RF emission и требует переустановить shield при выключенном питании, а затем повторить
+тот же read-only inventory до bounded carrier regression.

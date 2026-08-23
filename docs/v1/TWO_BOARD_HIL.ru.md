@@ -103,9 +103,16 @@ Fixture `0.2.3` реализовал этот inventory. Сохранённый 
 полностью нулевые primary arrays STATUS/CONFIG/RF_CH/RF_SETUP, полностью `0xFF`
 swapped arrays, masks `0/0` и `ce_high_events=0` на board-02. Run остаётся failed-safe,
 потому что новый response не включил generic fixture fields `session_id` и
-`nrf_powered_down`. Следующая source-bound revision исправляет protocol и читает
-identity CC1101 на той же SPI bus, чтобы отличить contact/power всего shield от
-nRF-only failure: [inventory evidence](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json).
+`nrf_powered_down`. Source-bound fixture `0.2.4` исправляет protocol и проходит
+двухшаговую диагностику. CC1101 на той же bus также возвращает invalid identity
+`status/part/version = 0/0/0` в documented orientation и no-ready/`0xFF` в swapped
+orientation. При прежних zero/`0xFF` identity всех трёх nRF, отсутствии CE HIGH и
+излучения и clean terminal states обеих плат evidence указывает на электрическую
+недоступность всего съёмного RF-shield, а не только nRF. Следующее физическое действие —
+при выключенном питании переустановить shield/pogo-контакты board-02 и повторить тот же
+read-only inventory; RF emission остаётся запрещённым:
+[inventory 0.2.3](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json),
+[shared-shield identity 0.2.4](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
 
 ## Read-only admission board-02
 

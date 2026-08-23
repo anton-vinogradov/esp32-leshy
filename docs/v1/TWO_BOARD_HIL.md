@@ -102,9 +102,16 @@ Fixture `0.2.3` implemented that inventory. Its retained physical response repor
 primary STATUS/CONFIG/RF_CH/RF_SETUP arrays all zero, swapped arrays all `0xFF`, masks
 `0/0` and `ce_high_events=0` across board-02. The run remains failed-safe because the
 new response omitted generic fixture fields `session_id` and `nrf_powered_down`.
-The next source-bound revision fixes that protocol and reads CC1101 identity on the
-same SPI bus to classify whole-shield contact/power versus nRF-only failure:
-[inventory evidence](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json).
+Source-bound fixture `0.2.4` fixes that protocol and passes the two-step diagnostic.
+CC1101 on the same bus also returns invalid identity `status/part/version = 0/0/0`
+on the documented orientation and no-ready/`0xFF` on the swapped orientation. With
+all three nRF identities still zero/`0xFF`, no CE-high event, no emission and clean
+terminal states on both boards, the evidence supports an electrically unavailable
+whole detachable RF shield rather than an nRF-only fault. The next physical action is
+a powered-off board-02 shield/pogo-contact reseat followed by the same read-only
+inventory; RF emission remains unauthorized:
+[0.2.3 inventory](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json),
+[0.2.4 shared-shield identity](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
 
 ## Read-only board-02 admission
 

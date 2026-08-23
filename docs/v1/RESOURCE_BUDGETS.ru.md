@@ -248,3 +248,10 @@ no-init — 128 B. Это +1 056 B linked flash, zero static RAM и +1 056/+1 05
 HIL измеряет invariant heap 148 164/77 932/63 700 B, поэтому exact 0.129 становится
 physical functional baseline, а RB-04 и mixed-workload release endurance остаются
 resource/release baseline.
+
+Source-bound diagnostic fixture `0.2.4` использует 332 135 B program flash и 22 844 B
+static RAM. Delta +9 920/+120 B против fixed-NEC fixture добавляет read-only identity
+telemetry всех nRF chip select, обеих orientation data pins и CC1101 на shared bus;
+он не входит и не меняет exact product image. Физическая диагностика 2/2 выполняет
+zero emissions и не заявляет runtime heap; отрицательный receiver inventory сохранён
+в [evidence board-02](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).

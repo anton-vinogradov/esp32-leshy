@@ -79,5 +79,10 @@ invalid all-zero slot-2 SPI read-back. The following diagnostic must inventory a
 slots and both legacy data-pin orientations with every CE held LOW before any fix.
 The retained [`0.2.3` inventory](../../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json)
 found no plausible nRF across either orientation and no CE-high event. Its runner
-contract omission remains a test failure; the next diagnostic adds shared-bus CC1101
-identity before classifying the board-02 shield.
+contract omission remains a test failure. Source-bound `0.2.4` fixes the contract and
+passes its diagnostic while shared-bus CC1101 identity is also invalid: `0/0/0` on
+the documented bus, no-ready/`0xFF` on the swapped bus. The retained
+[`0.2.4` evidence](../../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json)
+therefore supports an electrically unavailable whole detachable shield, keeps RF
+emission unauthorized and requires a powered-off shield reseat plus the same read-only
+inventory before a bounded carrier regression.
