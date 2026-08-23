@@ -21,6 +21,7 @@ from run_1x_product_survey_hil import (
     artifact_manifest,
     best_effort_cleanup,
     boot_failures,
+    boot_ready_failures,
     capture,
     expect,
     query,
@@ -556,9 +557,18 @@ def main() -> int:
                 devices[role] = device
             product = devices["candidate"]
 
-            # Registered after the serial contexts so ExitStack invokes cleanup
-            # while the candidate port is still open, including on any failed
-            # query, assertion, or scenario step.
+            # Close whichever candidate connection is current only after the
+            # safety callbacks.  A reboot replaces ``product`` without adding
+            # the replacement to ExitStack: otherwise its context would close
+            # before the callbacks registered earlier in this stack.
+            def close_candidate() -> None:
+                product.close()
+
+            stack.callback(close_candidate)
+
+            # Registered after the serial contexts and dynamic close callback
+            # so cleanup runs while the current candidate port is still open,
+            # including after a reboot or any failed scenario step.
             def cleanup_candidate() -> None:
                 nonlocal cleanup
                 cleanup = best_effort_cleanup(product)
@@ -692,8 +702,8 @@ def main() -> int:
                     captured_ready, captured_recovery, timing = reset_capture(
                         ports["candidate"], args.output, step_id,
                         float(step.get("capture_seconds", 8.0)))
-                    product = stack.enter_context(PassiveSerial(
-                        ports["candidate"], 115200, timeout=0.5))
+                    product = PassiveSerial(
+                        ports["candidate"], 115200, timeout=0.5)
                     synchronize_console(product, 30.0)
                     devices["candidate"] = product
                     ready_after = query(
@@ -705,15 +715,17 @@ def main() -> int:
                         ready_after, recovery_at_reboot,
                         args.expected_version, app_identity,
                         args.expected_cid))
-                    operation_failures.extend(boot_failures(
-                        captured_ready, captured_recovery,
-                        args.expected_version, app_identity,
-                        args.expected_cid))
+                    # The boot transcript guarantees the exact candidate and
+                    # input readiness. Product recovery is a query contract,
+                    # so it is verified in full on the reconnected console.
+                    operation_failures.extend(boot_ready_failures(
+                        captured_ready, args.expected_version, app_identity))
                     record = {
                         "before": before_reboot,
                         "fixture": fixture_before_reboot,
                         "captured_ready": captured_ready,
                         "captured_recovery": captured_recovery,
+                        "recovery_observation": "post_reconnect_query",
                         "timing": timing,
                         "ready": ready_after,
                         "recovery": recovery_at_reboot,

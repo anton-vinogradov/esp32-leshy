@@ -140,6 +140,21 @@ class HilScenarioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "writes_performed"):
             hil.validate_fixture_profile(profile, fixture_id)
 
+    def test_raw_boot_requires_ready_but_recovery_is_query_only(self) -> None:
+        ready = {
+            "version": "0.126.0-ir-physical-decode",
+            "app_elf_sha256": "a" * 64,
+            "buzzer_inactive": True,
+            "input_detected": True,
+            "input_probe_attempts": 2,
+            "input_probe_transient_retries": 1,
+        }
+        self.assertEqual([], hil.boot_ready_failures(
+            ready, "0.126.0-ir-physical-decode", "a" * 64))
+        ready["input_probe_transient_retries"] = 0
+        self.assertEqual(1, len(hil.boot_ready_failures(
+            ready, "0.126.0-ir-physical-decode", "a" * 64)))
+
     def test_repository_positive_fixture_scenario_is_valid(self) -> None:
         scenario = json.loads((
             ROOT / "tests/hil/scenarios/infrared-nec-positive.json"

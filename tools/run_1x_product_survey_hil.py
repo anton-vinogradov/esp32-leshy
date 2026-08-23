@@ -71,9 +71,8 @@ def expect(record: dict[str, Any], expected: dict[str, Any], prefix: str) -> lis
     return failures
 
 
-def boot_failures(ready: dict[str, Any], recovery: dict[str, Any],
-                  expected_version: str, app_identity: str,
-                  expected_cid: str) -> list[str]:
+def boot_ready_failures(ready: dict[str, Any], expected_version: str,
+                        app_identity: str) -> list[str]:
     failures = expect(ready, {
         "version": expected_version,
         "app_elf_sha256": app_identity,
@@ -91,6 +90,14 @@ def boot_failures(ready: dict[str, Any], recovery: dict[str, Any],
         failures.append(
             "boot.input_probe_transient_retries: expected attempts - 1"
         )
+    return failures
+
+
+def boot_failures(ready: dict[str, Any], recovery: dict[str, Any],
+                  expected_version: str, app_identity: str,
+                  expected_cid: str) -> list[str]:
+    failures = boot_ready_failures(
+        ready, expected_version, app_identity)
     failures.extend(expect(recovery, {
         "status": "admitted",
         "enrolled": True,
