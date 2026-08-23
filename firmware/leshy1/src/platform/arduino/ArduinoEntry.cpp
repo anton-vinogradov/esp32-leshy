@@ -17979,7 +17979,7 @@ void emitCc1101FinderReport(Stream& reply) {
         "\"tuning_windows_khz\":[[300000,348000],[387000,464000],"
         "[779000,928000]],\"sweeps\":%lu,"
         "\"calibration_passes\":%u,\"next_bin\":%u,"
-        "\"baseline_semantics\":\"minimum_of_two_ambient_sweeps\","
+        "\"baseline_semantics\":\"median_of_three_ambient_sweeps\","
         "\"response_semantics\":\"local_rssi_rise_after_common_drift\","
         "\"rx_only\":%s,\"adapter_active\":%s,\"volatile\":true,"
         "\"wire\":{\"register_reads\":%lu,\"register_writes\":%lu,"

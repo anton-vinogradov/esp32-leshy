@@ -16,14 +16,16 @@ enum class Cc1101SignalFinderState : std::uint8_t {
 const char* cc1101SignalFinderStateName(Cc1101SignalFinderState state);
 
 // Passive, allocation-free frequency finder for the complete tunable CC1101
-// receive envelope. Two ambient passes learn both the room floor and stable
-// receiver spurs. Search results are the local RSSI rise above that floor after
-// subtracting common whole-sweep drift.
+// receive envelope. Three ambient passes learn a median room floor per bin;
+// this rejects both a single accidental button press and the low-biased noise
+// floor that a minimum would create. Search results are the local RSSI rise
+// above that floor after subtracting common whole-sweep drift. Known local
+// crystal harmonics are never eligible as signal candidates.
 class Cc1101SignalFinder final {
 public:
     static constexpr std::uint32_t kStepKHz = 250;
     static constexpr std::size_t kBinCount = 1099;
-    static constexpr std::uint8_t kCalibrationPasses = 2;
+    static constexpr std::uint8_t kCalibrationPasses = 3;
     static constexpr std::uint8_t kDetectionRiseDb = 18;
     static constexpr std::uint8_t kGraphFullScaleDb = 45;
 

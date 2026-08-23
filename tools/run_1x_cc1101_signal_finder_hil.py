@@ -69,7 +69,7 @@ def wait_for_calibration(device: PassiveSerial,
     while time.monotonic() < deadline:
         report = finder_report(device)
         if report.get("calibrated") is True and \
-                int(report.get("sweeps", 0)) >= 2:
+                int(report.get("sweeps", 0)) >= 3:
             return report
         time.sleep(0.12)
     raise RuntimeError(f"frequency finder did not calibrate: {report!r}")
@@ -134,7 +134,7 @@ def report_failures(report: dict[str, Any], *, active: bool,
         "rx_only": True,
         "adapter_active": active,
         "volatile": True,
-        "baseline_semantics": "minimum_of_two_ambient_sweeps",
+        "baseline_semantics": "median_of_three_ambient_sweeps",
         "response_semantics": "local_rssi_rise_after_common_drift",
         "current_owner": "subghz",
         "current_lease_mask": 9,

@@ -17,6 +17,18 @@ constexpr FinderWindow kWindows[] = {
 };
 constexpr std::uint8_t kHoldDecayDb = 3;
 
+bool crystalSpurFrequency(std::uint32_t frequencyKHz) {
+    constexpr std::uint32_t crystalKHz[] = {26000U, 40000U};
+    for (const std::uint32_t crystal : crystalKHz) {
+        const std::uint32_t harmonic =
+            (frequencyKHz + crystal / 2U) / crystal * crystal;
+        const std::uint32_t distance = frequencyKHz > harmonic
+            ? frequencyKHz - harmonic : harmonic - frequencyKHz;
+        if (distance <= 500U) return true;
+    }
+    return false;
+}
+
 constexpr std::size_t windowBins(const FinderWindow& window) {
     return static_cast<std::size_t>(
         (window.lastKHz - window.firstKHz) /
@@ -87,12 +99,17 @@ bool Cc1101SignalFinder::start(std::uint64_t monotonicUs) {
 }
 
 void Cc1101SignalFinder::finishSweep() {
+    bool clearRawRise = true;
     if (state_ == Cc1101SignalFinderState::Calibrating) {
         ++calibrationPasses_;
         heldRise_.fill(0);
         strongestRiseDb_ = 0;
         if (calibrationPasses_ >= kCalibrationPasses) {
             state_ = Cc1101SignalFinderState::Searching;
+        } else {
+            // The calibration path temporarily uses rawRise_ for the first
+            // two samples' maximum; keep it until the median pass completes.
+            clearRawRise = false;
         }
     } else {
         std::int32_t totalDelta = 0;
@@ -120,7 +137,7 @@ void Cc1101SignalFinder::finishSweep() {
     }
     if (sweeps_ != std::numeric_limits<std::uint32_t>::max()) ++sweeps_;
     if (revision_ != std::numeric_limits<std::uint32_t>::max()) ++revision_;
-    rawRise_.fill(0);
+    if (clearRawRise) rawRise_.fill(0);
     nextBin_ = 0;
 }
 
@@ -137,10 +154,33 @@ bool Cc1101SignalFinder::ingest(std::uint32_t frequencyKHz,
     }
     const std::int8_t sample = static_cast<std::int8_t>(rssiDbm);
     if (state_ == Cc1101SignalFinderState::Calibrating) {
-        if (calibrationPasses_ == 0U || sample < baseline_[nextBin_]) {
+        // baseline_ and rawRise_ temporarily retain the minimum and maximum
+        // of the first two passes. On pass three, min + max + sample minus the
+        // outer two values is the median, without another 1099-bin buffer.
+        if (calibrationPasses_ == 0U) {
             baseline_[nextBin_] = sample;
+            rawRise_[nextBin_] = sample;
+        } else if (calibrationPasses_ == 1U) {
+            if (sample < baseline_[nextBin_]) baseline_[nextBin_] = sample;
+            if (sample > rawRise_[nextBin_]) rawRise_[nextBin_] = sample;
+        } else {
+            const std::int16_t firstMinimum = baseline_[nextBin_];
+            const std::int16_t firstMaximum = rawRise_[nextBin_];
+            const std::int16_t minimum = sample < firstMinimum
+                ? sample : firstMinimum;
+            const std::int16_t maximum = sample > firstMaximum
+                ? sample : firstMaximum;
+            baseline_[nextBin_] = static_cast<std::int8_t>(
+                firstMinimum + firstMaximum + sample - minimum - maximum);
         }
     } else {
+        if (crystalSpurFrequency(frequencyKHz)) {
+            rawRise_[nextBin_] = 0;
+            updatedUs_ = endedUs;
+            ++nextBin_;
+            if (nextBin_ == kBinCount) finishSweep();
+            return true;
+        }
         std::int16_t rise = static_cast<std::int16_t>(sample) -
                             static_cast<std::int16_t>(baseline_[nextBin_]);
         if (rise < -120) rise = -120;

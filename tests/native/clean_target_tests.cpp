@@ -831,13 +831,13 @@ void testCc1101SignalFinderCoversWindowsAndRejectsAmbientDrift() {
     std::uint64_t now = 100U;
     const std::uint32_t targetFrequencyKHz = 433250U;
     const auto feedSweep = [&](std::int16_t ambientDbm,
-                               bool targetActive) {
+                               std::uint32_t activeFrequencyKHz) {
         for (std::size_t bin = 0;
              bin < Cc1101SignalFinder::kBinCount; ++bin) {
             const std::uint32_t frequency =
                 Cc1101SignalFinder::frequencyKHz(bin);
-            const std::int16_t rssi = targetActive &&
-                    frequency == targetFrequencyKHz
+            const std::int16_t rssi = activeFrequencyKHz != 0U &&
+                    frequency == activeFrequencyKHz
                 ? static_cast<std::int16_t>(-60) : ambientDbm;
             const std::uint64_t started = ++now;
             const std::uint64_t ended = ++now;
@@ -848,23 +848,30 @@ void testCc1101SignalFinderCoversWindowsAndRejectsAmbientDrift() {
     const std::uint64_t invalidStarted = ++now;
     const std::uint64_t invalidEnded = ++now;
     CHECK(!finder.ingest(300250U, -96, invalidStarted, invalidEnded));
-    feedSweep(-96, false);
+    feedSweep(-96, 0U);
     CHECK(finder.calibrationPasses() == 1U);
-    feedSweep(-98, false);
+    feedSweep(-98, 0U);
+    CHECK(finder.calibrationPasses() == 2U);
+    // One accidental press, including on the final calibration pass, must not
+    // poison the retained median.
+    feedSweep(-95, targetFrequencyKHz);
     CHECK(finder.state() == Cc1101SignalFinderState::Searching);
     CHECK(!finder.found());
 
     // A uniform one-dB ambient shift is common drift, not a signal.
-    feedSweep(-97, false);
+    feedSweep(-95, 0U);
     CHECK(!finder.found());
-    feedSweep(-97, true);
+    // Stable local 26/40 MHz crystal harmonics are not user signals.
+    feedSweep(-95, 312000U);
+    CHECK(!finder.found());
+    feedSweep(-95, targetFrequencyKHz);
     CHECK(finder.found());
     CHECK(finder.strongestFrequencyKHz() == targetFrequencyKHz);
     CHECK(std::strcmp(finder.bandHint(), "433 ISM") == 0);
     CHECK(finder.strongestRiseDb() >=
           Cc1101SignalFinder::kDetectionRiseDb);
-    CHECK(finder.sweeps() == 4U);
-    CHECK(finder.revision() == 4U);
+    CHECK(finder.sweeps() == 6U);
+    CHECK(finder.revision() == 6U);
 
     CHECK(finder.restart(++now));
     CHECK(finder.state() == Cc1101SignalFinderState::Calibrating);

@@ -32,13 +32,14 @@ def main() -> int:
 
     require(header, (
         b"kStepKHz = 250", b"kBinCount = 1099",
-        b"kCalibrationPasses = 2", b"kDetectionRiseDb = 18",
+        b"kCalibrationPasses = 3", b"kDetectionRiseDb = 18",
         b"std::array<std::int8_t, kBinCount> baseline_",
         b"std::array<std::uint8_t, kBinCount> heldRise_",
     ), "bounded finder")
     require(app, (
         b"{300000U, 348000U}", b"{387000U, 464000U}",
-        b"{779000U, 928000U}", b"sample < baseline_[nextBin_]",
+        b"{779000U, 928000U}", b"crystalSpurFrequency",
+        b"firstMinimum + firstMaximum + sample - minimum - maximum",
         b"meanDelta", b"kHoldDecayDb", b"433 ISM", b"915 ISM",
     ), "finder algorithm")
     require(board, (
@@ -52,7 +53,7 @@ def main() -> int:
         b"renderCcFinderPage", b"renderCcFinderGraph",
         b"hardware.cc1101.finder",
         b"leshy.cc1101.signal-finder.v1",
-        b"minimum_of_two_ambient_sweeps",
+        b"median_of_three_ambient_sweeps",
         b"local_rssi_rise_after_common_drift",
         b"storage_writes\\\":0",
     ), "product route and diagnostics")
@@ -66,7 +67,7 @@ def main() -> int:
         b"uniform one-dB ambient shift is common drift",
     ), "native proof")
     require(platform, (
-        b'LESHY1_VERSION=\\"0.124.0-cc1101-frequency-finder\\"',
+        b'LESHY1_VERSION=\\"0.124.1-cc1101-frequency-finder\\"',
     ), "exact version")
 
     sample = board.split(
