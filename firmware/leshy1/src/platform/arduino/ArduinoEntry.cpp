@@ -879,11 +879,13 @@ struct ProductBootRecoveryState final {
 ProductBootRecoveryState productBootRecovery;
 constexpr std::uint32_t kProductBootRetryRtcMagic = 0x4C425231U;
 constexpr std::uint32_t kProductBootWatchdogTestRtcMagic = 0x4C425754U;
+constexpr std::uint32_t kEarlyBootWatchdogTestRtcMagic = 0x4C425745U;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryRtcMagic;
 RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryRestarts;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryAppIdentity;
 RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryTimeouts;
 RTC_NOINIT_ATTR std::uint32_t productBootWatchdogTestRtcState;
+RTC_NOINIT_ATTR std::uint32_t earlyBootWatchdogTestRtcState;
 RTC_NOINIT_ATTR volatile SafetyRetainedRecord safetyRetainedRtc;
 volatile std::uint32_t runtimeSafetyWatchdogArmed = 0;
 volatile std::uint32_t runtimeSafetyAppIdentity = 0;
@@ -4942,6 +4944,32 @@ void triggerRuntimeSafetyWatchdogTest(Stream& reply) {
     // Deliberately stop feeding the loop task. The independent panic Task WDT
     // must take the ISR quiesce path, retain the reason, and reset the MCU.
     for (;;) delay(1000);
+}
+
+void triggerEarlyBootSafetyWatchdogTest(Stream& reply) {
+    const bool outputsInactive = BoardSafeOutputs::buzzerHeldInactive() &&
+        BoardSafeOutputs::radioTransmitPathsHeldInactive();
+    const bool eligible = safetySupervisor.state() == SafetyState::Armed &&
+        runtimeSafetyWatchdogReady && outputsInactive &&
+        !appRuntime.running() && appRuntime.activeResources() == 0 &&
+        productBootRecovery.catalogAdmitted &&
+        productBootRecovery.ownedAfter == 0;
+    if (!eligible) {
+        reply.println(
+            "{\"schema\":\"leshy.safety.early_boot_watchdog_test.v1\","
+            "\"kind\":\"error\",\"reason\":\"unsafe_precondition\"}");
+        return;
+    }
+    earlyBootWatchdogTestRtcState = kEarlyBootWatchdogTestRtcMagic;
+    reply.println(
+        "{\"schema\":\"leshy.safety.early_boot_watchdog_test.v1\","
+        "\"kind\":\"armed\",\"status\":\"ready\","
+        "\"stage\":\"before_display\",\"watchdog_timeout_ms\":5000,"
+        "\"outputs_inactive\":true,\"filesystem_write_attempted\":false,"
+        "\"physical_write_calls\":0}");
+    reply.flush();
+    delay(50);
+    esp_restart();
 }
 
 void restartLatchedSafetyStopForTest(Stream& reply) {
@@ -18339,6 +18367,9 @@ void handleCommand(Stream& reply, const char* command) {
                            "safety.watchdog-test confirm") == 0) {
         triggerRuntimeSafetyWatchdogTest(reply);
     } else if (std::strcmp(command,
+                           "safety.early-boot-watchdog-test confirm") == 0) {
+        triggerEarlyBootSafetyWatchdogTest(reply);
+    } else if (std::strcmp(command,
                            "safety.restart-test confirm") == 0) {
         restartLatchedSafetyStopForTest(reply);
     } else if (std::strcmp(command, "safety.clear confirm") == 0) {
@@ -18772,6 +18803,21 @@ void setup() {
     bootMetrics.buzzerInactive = BoardSafeOutputs::buzzerHeldInactive();
     bootMetrics.runtimeReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
 
+    // Protect every fallible application boot stage, not only SD recovery and
+    // the steady-state loop. The exact-app ISR latch is already restorable at
+    // this point and all software-controlled outputs are at their boot-safe
+    // levels. A confirmed test stalls before display initialization to prove
+    // this previously uncovered interval with the real panic Task WDT.
+    if (!armRuntimeSafetyWatchdog()) {
+        latchSafetyStopInTask(SafetyReason::SupervisorUnavailable);
+    }
+    if (earlyBootWatchdogTestRtcState == kEarlyBootWatchdogTestRtcMagic) {
+        earlyBootWatchdogTestRtcState = 0;
+        if (runtimeSafetyWatchdogReady) {
+            for (;;) delay(1000);
+        }
+    }
+
     ledcAttach(BoardProfile::kBacklightPin, 5000, 8);
     ledcWrite(BoardProfile::kBacklightPin, 255);
     display.init();
@@ -18783,6 +18829,7 @@ void setup() {
     touchCalibrationSucceededAtBoot = !touchCalibrationRequiredAtBoot;
     languageController.restore(loadUiLanguage());
     bootMetrics.displayReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    feedRuntimeSafetyWatchdog();
 
     Wire.begin(BoardProfile::kI2cSdaPin, BoardProfile::kI2cSclPin, kI2cHz);
     bootMetrics.inputDetected =
@@ -18803,6 +18850,7 @@ void setup() {
     bootMetrics.inputDetected =
         bootMetrics.inputDetected && physicalInputTaskStarted;
     bootMetrics.inputReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    feedRuntimeSafetyWatchdog();
     if (!safetySupervisor.latched()) {
         surveyDemoReady = prepareSurveyDemo();
         libraryDemoReady = prepareLibraryDemo();
@@ -18819,10 +18867,7 @@ void setup() {
         productBootRecovery.status = "safety_latched";
         productBootRecovery.cleanupComplete = true;
     }
-
-    if (!armRuntimeSafetyWatchdog()) {
-        latchSafetyStopInTask(SafetyReason::SupervisorUnavailable);
-    }
+    feedRuntimeSafetyWatchdog();
     if (!BoardSafeOutputs::buzzerHeldInactive() ||
         !BoardSafeOutputs::radioTransmitPathsHeldInactive()) {
         latchSafetyStopInTask(SafetyReason::OutputInvariant);
@@ -18947,8 +18992,10 @@ void setup() {
                        : "rf_shield_not_declared"});
 
     appCatalog.rebuild(inventory);
+    feedRuntimeSafetyWatchdog();
     renderInteractiveScreen();
     bootMetrics.interactiveReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    feedRuntimeSafetyWatchdog();
 
     emitMetrics();
     emitInventory();
@@ -18957,6 +19004,7 @@ void setup() {
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
               "\"safety.state\",\"safety.watchdog-test confirm\","
+              "\"safety.early-boot-watchdog-test confirm\","
               "\"safety.clear confirm\","
               "\"hardware.shield.receivers\","
               "\"hardware.nrf24.spectrum\","

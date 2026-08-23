@@ -142,7 +142,7 @@ class HilScenarioTests(unittest.TestCase):
 
     def test_raw_boot_requires_ready_but_recovery_is_query_only(self) -> None:
         ready = {
-            "version": "0.127.0-ir-receiver-variance",
+            "version": "0.128.0-early-boot-watchdog",
             "app_elf_sha256": "a" * 64,
             "buzzer_inactive": True,
             "input_detected": True,
@@ -150,10 +150,10 @@ class HilScenarioTests(unittest.TestCase):
             "input_probe_transient_retries": 1,
         }
         self.assertEqual([], hil.boot_ready_failures(
-            ready, "0.127.0-ir-receiver-variance", "a" * 64))
+            ready, "0.128.0-early-boot-watchdog", "a" * 64))
         ready["input_probe_transient_retries"] = 0
         self.assertEqual(1, len(hil.boot_ready_failures(
-            ready, "0.127.0-ir-receiver-variance", "a" * 64)))
+            ready, "0.128.0-early-boot-watchdog", "a" * 64)))
 
     def test_repository_positive_fixture_scenario_is_valid(self) -> None:
         scenario = json.loads((
