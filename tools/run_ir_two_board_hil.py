@@ -33,6 +33,8 @@ SCENARIOS = {
         ROOT / "tests/hil/scenarios/nrf24-carrier-positive.json"),
     "nrf24-fixture-regression": (
         ROOT / "tests/hil/scenarios/nrf24-fixture-regression.json"),
+    "nrf24-fixture-inventory": (
+        ROOT / "tests/hil/scenarios/nrf24-fixture-inventory.json"),
 }
 SCENARIO = SCENARIOS["infrared-nec-positive"]
 VERSION_VALUE = re.compile(

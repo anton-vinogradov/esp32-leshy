@@ -1,0 +1,54 @@
+{
+  "schema": "leshy.hil.scenario.v1",
+  "id": "nrf24-fixture-inventory",
+  "checkpoint": "physical_nrf24_fixture_ce_low_inventory",
+  "gate_eligible": false,
+  "devices": {
+    "candidate": {"required": true},
+    "fixture": {"required": true, "kind": "bounded_signal_fixture"}
+  },
+  "steps": [
+    {
+      "id": "fixture_inventory",
+      "op": "query",
+      "target": "fixture",
+      "command": "fixture.nrf24.inventory",
+      "response_schema": "leshy.hil.fixture.signal.v1",
+      "kind": "nrf24_inventory",
+      "timeout": 3,
+      "expect": {
+        "role": "bounded_signal_fixture",
+        "read_only": true,
+        "spi_hz": 2000000,
+        "ce_high_events": 0,
+        "ir_tx_inactive": true,
+        "nrf_ce_inactive": true,
+        "nrf_carrier_active": false,
+        "buzzer_inactive": true,
+        "output_inactive": true
+      }
+    },
+    {
+      "id": "final",
+      "op": "query",
+      "command": "ui.state",
+      "response_schema": "leshy.ui.v1",
+      "expect": {"page": "home", "runtime_owner": "none", "lease_mask": 0}
+    }
+  ],
+  "invariants": {
+    "final_home_zero_lease": true,
+    "storage_unchanged": true,
+    "heap_free_unchanged": true,
+    "input_clean": true,
+    "safe_outputs": true
+  },
+  "limits": {
+    "diagnostic_only": true,
+    "register_reads_only": true,
+    "all_nrf_ce_low": true,
+    "rf_emission_authorized": false,
+    "product_receiver_not_exercised": true,
+    "stage_or_phase_promotion_allowed": false
+  }
+}

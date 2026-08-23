@@ -13,7 +13,7 @@
 #include "FixtureSession.h"
 
 #ifndef LESHY_FIXTURE_VERSION
-#define LESHY_FIXTURE_VERSION "0.2.2-bounded-signals"
+#define LESHY_FIXTURE_VERSION "0.2.3-bounded-signals"
 #endif
 
 namespace {
@@ -45,6 +45,7 @@ constexpr std::uint8_t kCarrierDuty = 85;
 constexpr std::uint32_t kNecCode = 0xCB34EF10U;
 constexpr std::uint32_t kConsoleBaud = 115200;
 constexpr std::uint32_t kNrfSpiHz = 8000000;
+constexpr std::uint32_t kNrfProbeSpiHz = 2000000;
 constexpr std::uint8_t kNrfReadRegister = 0x00;
 constexpr std::uint8_t kNrfWriteRegister = 0x20;
 constexpr std::uint8_t kNrfRegConfig = 0x00;
@@ -56,6 +57,16 @@ constexpr std::uint8_t kNrfChannel = 42;
 constexpr std::uint16_t kNrfFrequencyMhz = 2400U + kNrfChannel;
 constexpr std::int8_t kNrfPowerDbm = -18;
 constexpr std::uint8_t kNrfMinimumPowerCarrierSetup = 0x90;
+constexpr int kNrfCsnPins[3] = {
+    kNrfCsn1Pin, kNrfCsn2Pin, kNrfCsn3Pin};
+
+struct NrfInventoryReadback {
+    std::uint8_t status[3]{};
+    std::uint8_t config[3]{};
+    std::uint8_t channel[3]{};
+    std::uint8_t rfSetup[3]{};
+    std::uint8_t plausibleMask = 0;
+};
 
 FixtureSession session;
 char runningAppSha256[65]{};
@@ -75,6 +86,8 @@ std::uint8_t nrfStatusReadback = 0xFF;
 std::uint8_t nrfConfigReadback = 0xFF;
 std::uint8_t nrfChannelReadback = 0xFF;
 std::uint8_t nrfRfSetupReadback = 0xFF;
+NrfInventoryReadback nrfPrimaryInventory;
+NrfInventoryReadback nrfSwappedInventory;
 
 void IRAM_ATTR quiesceFromIsr() {
     GPIO.out_w1tc = (1U << kBuzzerPin) | (1U << kIrTxPin) |
@@ -161,6 +174,68 @@ bool stopNrfCarrier() {
     endNrfBus();
     nrfCarrierActive = false;
     return nrfPoweredDown;
+}
+
+bool outputsInactive();
+
+std::uint8_t nrfProbeReadRegister(int csn, std::uint8_t reg,
+                                  std::uint8_t* status = nullptr) {
+    digitalWrite(csn, LOW);
+    const std::uint8_t commandStatus =
+        SPI.transfer(kNrfReadRegister | (reg & 0x1FU));
+    const std::uint8_t value = SPI.transfer(0xFF);
+    digitalWrite(csn, HIGH);
+    if (status != nullptr) *status = commandStatus;
+    return value;
+}
+
+bool plausibleNrfIdentity(std::uint8_t status, std::uint8_t config,
+                          std::uint8_t channel) {
+    return status != 0x00U && status != 0xFFU &&
+           (config & 0x80U) == 0 && channel <= 125U;
+}
+
+NrfInventoryReadback probeNrfOrientation(int miso, int mosi) {
+    NrfInventoryReadback result;
+    holdNrfCeLow();
+    for (const int pin : {kNrfCsn1Pin, kNrfCsn2Pin, kNrfCsn3Pin,
+                          kCc1101CsPin, kSdCsPin}) {
+        digitalWrite(pin, HIGH);
+        pinMode(pin, OUTPUT);
+    }
+    SPI.begin(kRadioSckPin, miso, mosi, -1);
+    delay(5);
+    SPI.beginTransaction(SPISettings(kNrfProbeSpiHz, MSBFIRST, SPI_MODE0));
+    for (std::uint8_t slot = 0; slot < 3; ++slot) {
+        result.config[slot] = nrfProbeReadRegister(
+            kNrfCsnPins[slot], kNrfRegConfig, &result.status[slot]);
+        result.channel[slot] = nrfProbeReadRegister(
+            kNrfCsnPins[slot], kNrfRegRfChannel);
+        result.rfSetup[slot] = nrfProbeReadRegister(
+            kNrfCsnPins[slot], kNrfRegRfSetup);
+        if (plausibleNrfIdentity(
+                result.status[slot], result.config[slot],
+                result.channel[slot])) {
+            result.plausibleMask = static_cast<std::uint8_t>(
+                result.plausibleMask | (1U << slot));
+        }
+    }
+    SPI.endTransaction();
+    SPI.end();
+    holdNrfCeLow();
+    holdChipSelectsHigh();
+    return result;
+}
+
+bool probeNrfInventory() {
+    if (nrfBusStarted || nrfCarrierActive) return false;
+    holdNrfCeLow();
+    nrfPrimaryInventory = probeNrfOrientation(
+        kRadioMisoPin, kRadioMosiPin);
+    nrfSwappedInventory = probeNrfOrientation(
+        kRadioMosiPin, kRadioMisoPin);
+    pinMode(kNrfCsn3Pin, INPUT);
+    return outputsInactive();
 }
 
 void quiesceOutputs() {
@@ -306,6 +381,64 @@ void emitError(const char* reason) {
         static_cast<unsigned>(nrfRfSetupReadback));
 }
 
+void emitNrfInventory() {
+    Serial.printf(
+        "{\"schema\":\"leshy.hil.fixture.signal.v1\","
+        "\"kind\":\"nrf24_inventory\",\"version\":\"%s\","
+        "\"role\":\"bounded_signal_fixture\",\"fixture_id\":\"%s\","
+        "\"read_only\":true,\"spi_hz\":2000000,\"ce_high_events\":0,"
+        "\"primary_miso\":13,\"primary_mosi\":11,"
+        "\"primary_status\":[%u,%u,%u],"
+        "\"primary_config\":[%u,%u,%u],"
+        "\"primary_channel\":[%u,%u,%u],"
+        "\"primary_rf_setup\":[%u,%u,%u],\"primary_mask\":%u,"
+        "\"swapped_miso\":11,\"swapped_mosi\":13,"
+        "\"swapped_status\":[%u,%u,%u],"
+        "\"swapped_config\":[%u,%u,%u],"
+        "\"swapped_channel\":[%u,%u,%u],"
+        "\"swapped_rf_setup\":[%u,%u,%u],\"swapped_mask\":%u,"
+        "\"ir_tx_inactive\":%s,\"nrf_ce_inactive\":%s,"
+        "\"nrf_carrier_active\":%s,\"buzzer_inactive\":%s,"
+        "\"output_inactive\":%s}\n",
+        LESHY_FIXTURE_VERSION, runningFixtureId,
+        static_cast<unsigned>(nrfPrimaryInventory.status[0]),
+        static_cast<unsigned>(nrfPrimaryInventory.status[1]),
+        static_cast<unsigned>(nrfPrimaryInventory.status[2]),
+        static_cast<unsigned>(nrfPrimaryInventory.config[0]),
+        static_cast<unsigned>(nrfPrimaryInventory.config[1]),
+        static_cast<unsigned>(nrfPrimaryInventory.config[2]),
+        static_cast<unsigned>(nrfPrimaryInventory.channel[0]),
+        static_cast<unsigned>(nrfPrimaryInventory.channel[1]),
+        static_cast<unsigned>(nrfPrimaryInventory.channel[2]),
+        static_cast<unsigned>(nrfPrimaryInventory.rfSetup[0]),
+        static_cast<unsigned>(nrfPrimaryInventory.rfSetup[1]),
+        static_cast<unsigned>(nrfPrimaryInventory.rfSetup[2]),
+        static_cast<unsigned>(nrfPrimaryInventory.plausibleMask),
+        static_cast<unsigned>(nrfSwappedInventory.status[0]),
+        static_cast<unsigned>(nrfSwappedInventory.status[1]),
+        static_cast<unsigned>(nrfSwappedInventory.status[2]),
+        static_cast<unsigned>(nrfSwappedInventory.config[0]),
+        static_cast<unsigned>(nrfSwappedInventory.config[1]),
+        static_cast<unsigned>(nrfSwappedInventory.config[2]),
+        static_cast<unsigned>(nrfSwappedInventory.channel[0]),
+        static_cast<unsigned>(nrfSwappedInventory.channel[1]),
+        static_cast<unsigned>(nrfSwappedInventory.channel[2]),
+        static_cast<unsigned>(nrfSwappedInventory.rfSetup[0]),
+        static_cast<unsigned>(nrfSwappedInventory.rfSetup[1]),
+        static_cast<unsigned>(nrfSwappedInventory.rfSetup[2]),
+        static_cast<unsigned>(nrfSwappedInventory.plausibleMask),
+        gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0
+            ? "true" : "false",
+        gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
+                gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 0 &&
+                gpio_get_level(static_cast<gpio_num_t>(kNrfCe3Pin)) == 0
+            ? "true" : "false",
+        nrfCarrierActive ? "true" : "false",
+        gpio_get_level(static_cast<gpio_num_t>(kBuzzerPin)) == 0
+            ? "true" : "false",
+        outputsInactive() ? "true" : "false");
+}
+
 void mark(std::uint32_t durationUs) {
     ledcWrite(kIrTxPin, kCarrierDuty);
     delayMicroseconds(durationUs);
@@ -435,6 +568,19 @@ void handleCommand(char* line) {
     if (std::strcmp(command, "fixture.state") == 0) {
         serviceFixtureHardware();
         emitState("state");
+        return;
+    }
+    if (std::strcmp(command, "fixture.nrf24.inventory") == 0) {
+        if (nextToken(&context) != nullptr) {
+            emitError("unexpected_argument");
+            return;
+        }
+        quiesceOutputs();
+        if (!probeNrfInventory()) {
+            emitError("nrf24_inventory_unavailable");
+            return;
+        }
+        emitNrfInventory();
         return;
     }
     if (std::strcmp(command, "fixture.begin") == 0) {

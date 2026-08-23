@@ -36,6 +36,9 @@ def main() -> int:
     nrf_regression = json.loads((
         ROOT / "tests/hil/scenarios/nrf24-fixture-regression.json"
     ).read_text(encoding="utf-8"))
+    nrf_inventory = json.loads((
+        ROOT / "tests/hil/scenarios/nrf24-fixture-inventory.json"
+    ).read_text(encoding="utf-8"))
     product_sources = "\n".join(
         path.read_text(encoding="utf-8", errors="replace")
         for path in (PRODUCT / "src").rglob("*") if path.is_file())
@@ -46,7 +49,7 @@ def main() -> int:
         "board_build.flash_size = 16MB",
         "-std=gnu++17",
         "ARDUINO_USB_CDC_ON_BOOT=1",
-        "LESHY_FIXTURE_VERSION=\\\"0.2.2-bounded-signals\\\"",
+        "LESHY_FIXTURE_VERSION=\\\"0.2.3-bounded-signals\\\"",
     )
     for marker in required_config:
         if marker not in config:
@@ -60,6 +63,7 @@ def main() -> int:
         'std::strcmp(command, "fixture.begin")',
         'std::strcmp(command, "fixture.ir.nec.once")',
         'std::strcmp(command, "fixture.nrf24.carrier.start")',
+        'std::strcmp(command, "fixture.nrf24.inventory")',
         'std::strcmp(command, "fixture.stop")',
         'std::strcmp(command, "fixture.panic")',
         "esp_task_wdt_isr_user_handler", "fixed_vector_only\\\":true",
@@ -73,6 +77,9 @@ def main() -> int:
         "nrf_start_error\\\":\\\"%s", "nrf_status_readback\\\":%u",
         "channel_readback_mismatch", "rf_setup_readback_mismatch",
         "config_readback_mismatch",
+        "kNrfProbeSpiHz = 2000000", "probeNrfOrientation",
+        "ce_high_events\\\":0", "primary_mask\\\":%u",
+        "swapped_mask\\\":%u",
     ):
         if marker not in entry:
             errors.append(f"fixture entry missing safety marker: {marker}")
@@ -184,6 +191,23 @@ def main() -> int:
         errors.append("short nRF fixture regression lacks the fixed vector")
     if regression_steps.get("fixture_complete", {}).get("op") != "poll_query":
         errors.append("short nRF fixture regression lacks terminal read-back")
+    inventory_steps = {
+        step.get("id"): step for step in nrf_inventory.get("steps", [])
+        if isinstance(step, dict)
+    }
+    inventory = inventory_steps.get("fixture_inventory", {})
+    inventory_expect = inventory.get("expect", {})
+    if nrf_inventory.get("gate_eligible") is not False:
+        errors.append("nRF fixture inventory is incorrectly gate eligible")
+    if inventory.get("command") != "fixture.nrf24.inventory":
+        errors.append("nRF fixture inventory lacks the diagnostic command")
+    for field, expected in (
+            ("read_only", True), ("ce_high_events", 0),
+            ("nrf_ce_inactive", True), ("nrf_carrier_active", False),
+            ("output_inactive", True)):
+        if inventory_expect.get(field) != expected:
+            errors.append(
+                f"nRF fixture inventory does not enforce {field}={expected}")
     if '\\"source\\":\\"infrared\\"' not in product_sources or \
             '\\"captured_infrared_raw\\"' not in product_sources:
         errors.append("product Library lacks explicit IR capture metadata")

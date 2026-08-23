@@ -95,7 +95,7 @@ class HilScenarioTests(unittest.TestCase):
 
     def test_fixture_admission_is_exact_and_inactive(self) -> None:
         identity = {
-            "version": "0.2.2-bounded-signals",
+            "version": "0.2.3-bounded-signals",
             "role": "bounded_signal_fixture",
             "fixture_id": "0011223344556677",
             "app_elf_sha256": "a" * 64,
@@ -109,11 +109,11 @@ class HilScenarioTests(unittest.TestCase):
             "session_lifetime_ms": 5000,
         }
         self.assertEqual([], hil.fixture_admission_failures(
-            identity, "0.2.2-bounded-signals",
+            identity, "0.2.3-bounded-signals",
             "0011223344556677", "a" * 64))
         identity["ir_tx_inactive"] = False
         self.assertEqual(1, len(hil.fixture_admission_failures(
-            identity, "0.2.2-bounded-signals",
+            identity, "0.2.3-bounded-signals",
             "0011223344556677", "a" * 64)))
 
     def test_fixture_profile_requires_read_only_accepted_board(self) -> None:
