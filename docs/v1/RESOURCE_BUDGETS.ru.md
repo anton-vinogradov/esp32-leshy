@@ -145,6 +145,7 @@ shared-bus/power остаются открытыми**.
 | RB-M124 | measured | passive BLE advertisement intelligence, company lookup и встроенный radar | 3 049 684 B linked flash; 228 688 B static RAM; app/factory images 3 050 096/3 115 632 B; exact BLE HIL heap total/free/min 152 764/82 248/9 760 B; dedicated DIRAM 309 456/341 760 B (90,55%, остаётся 32 304 B) | board-01 `0.122.2-ble-device-intelligence`, `E-BUILD-122`/`E-AUTO-086`/`E-HIL-146`/`E-UX-041`; +158 040 B linked flash, +19 224 B static RAM и +158 048/+158 048 B images против 0.121. Flash asset 128 384 B хранит 4 012 assigned companies; bounded advertisement facts расширяют shared Observation/queue/session/catalog state. Два physical lifecycle имеют byte-identical post-warm heap, zero drops/writes и final lease 0, но historical minimum 9 760 B намного ниже RB-04. Этот focused functional checkpoint явно не заменяет accepted endurance 0.89; после изменения baseline feature set обязательны mixed-workload memory consolidation и новый release-budget run |
 | RB-M125 | measured | пассивный all-receiver finder сигнала nRF24 | 3 055 192 B linked flash; 229 448 B static RAM; app/factory images 3 055 600/3 121 136 B; exact nRF24 HIL heap total/free/min 152 004/81 772/67 540 B; dedicated DIRAM 310 216/341 760 B (90,77%, остаётся 31 544 B) | board-01 `0.123.0-nrf24-signal-finder`, `E-BUILD-123`/`E-AUTO-087`/`E-HIL-147`/`E-UX-042`; +5 508 B linked flash, +760 B static RAM и +5 504/+5 504 B images против 0.122.2. Fixed state baseline/response на 83 bin, product route, diagnostics и HIL surface остаются allocation-free. Focused physical minimum ниже RB-04 и не заменяет mixed-workload release endurance |
 | RB-M126 | measured | passive wide-span finder частоты CC1101 с robust ambient rejection | 3 060 648 B linked flash; 233 288 B static RAM; app/factory images 3 061 056/3 126 592 B; exact CC1101 HIL heap total/free/min 148 164/77 932/63 700 B; dedicated DIRAM 314 056/341 760 B (91,89%, остаётся 27 704 B) | board-01 `0.124.1-cc1101-frequency-finder`, `E-BUILD-124`/`E-AUTO-088`/`E-HIL-148`/`E-UX-043`; +5 456 B linked flash, +3 840 B static RAM и +5 456/+5 456 B images против 0.123. Три fixed arrays по 1 099 bins (baseline, raw rise и held response), projection 240 columns и diagnostics остаются allocation-free. Два ambient run сохраняют heap, отвергают retained false peaks predecessor и заканчивают lease 0. Focused minimum ниже RB-04 и не заменяет mixed-workload release endurance |
+| RB-M127 | measured build / physical open | product IR Library metadata плюс отдельный two-board NEC fixture foundation | product 3 061 504 B linked flash; 233 288 B static RAM; app/factory images 3 061 904/3 127 440 B; dedicated DIRAM неизменна: 314 056/341 760 B (91,89%, остаётся 27 704 B). Отдельный fixture: 322 215 B linked flash; 22 724 B static RAM; app/factory 322 624/388 160 B; DIRAM 74 519/341 760 B | непрошитый source `0.125.0-ir-fixture-foundation` / fixture `0.1.0-ir-nec`, `E-BUILD-125`/`E-AUTO-089`, source `f1b3394`; product delta против 0.124.1 равен +856 B linked flash, zero static RAM и +848/+848 B images. Бюджет отдельного fixture никогда не входит в product image. Physical heap и two-board result ещё отсутствуют, поэтому RB-04 и accepted endurance 0.89 не заменяются |
 
 `heap_min_free` probe относится только к короткой diagnostic run. Он не предсказывает
 буферы Wi-Fi/BLE, display caches, Session queues, storage transactions или Survey
@@ -238,12 +239,12 @@ contracts, поэтому не задаёт форму clean platform.
 - Storage, power и shared-bus limits остаются явными unknown; зависимые от них
   возможности нельзя перевести из `unknown` в `available` одной документацией.
 
-Последний measured delta `RB-M126`: exact `0.124.1-cc1101-frequency-finder`
-использует 3 060 648 B linked flash и 233 288 B static RAM; app/factory images равны
-3 061 056/3 126 592 B, dedicated DIRAM — 314 056/341 760 B (остаётся 27 704 B),
-focused physical heap — 148 164/77 932/63 700 B total/free/minimum. Это +5 456 B
-linked flash, +3 840 B static RAM и +5 456/+5 456 B images против 0.123 за три
-fixed arrays по 1 099 bins, projection 240 columns, product route, diagnostics и HIL
-surface. Focused minimum остаётся ниже RB-04 и не заменяет accepted mixed-workload
-release endurance; до следующего release-budget promotion по-прежнему обязательна
-memory consolidation.
+Последний build delta `RB-M127`: непрошитый product source 0.125 использует
+3 061 504 B linked flash и 233 288 B static RAM; app/factory images равны
+3 061 904/3 127 440 B, dedicated DIRAM остаётся 314 056/341 760 B (27 704 B
+свободно). Это +856 B linked flash, zero static RAM и +848/+848 B images против
+accepted 0.124.1 за explicit IR Library metadata. Отдельный fixed-NEC fixture
+использует 322 215 B linked flash, 22 724 B static RAM и 322 624/388 160 B
+app/factory images; этот footprint не входит в product. Physical heap measurement и
+two-board HIL result ещё отсутствуют, поэтому accepted physical row 0.124.1, RB-04
+и mixed-workload release endurance остаются operational baseline.
