@@ -233,6 +233,16 @@ def main() -> int:
                     "survey_product_store_open_attempted": True,
                     "survey_product_store_bytes_written": 0,
                 }, "ble_nearby_live")
+                first_attempts = int(live_first.get(
+                    "survey_ble_scan_attempts", 0))
+                first_retries = int(live_first.get(
+                    "survey_ble_scan_transient_retries", -1))
+                first_cycles = int(live_first[
+                    "survey_product_ble_scan_cycles"])
+                if not first_cycles <= first_attempts <= first_cycles * 2 or \
+                        first_retries != first_attempts - first_cycles:
+                    raise RuntimeError(
+                        "BLE bounded scan-retry accounting mismatch")
                 screens["ble_devices_first"] = capture(
                     device, frames, "ble-devices-first")
                 first_cycle = int(live_first["survey_product_ble_scan_cycles"])
@@ -240,6 +250,16 @@ def main() -> int:
                 live_second = wait_live(
                     device, first_cycle + 1, first_revision)
                 trace.append(live_second)
+                second_attempts = int(live_second.get(
+                    "survey_ble_scan_attempts", 0))
+                second_retries = int(live_second.get(
+                    "survey_ble_scan_transient_retries", -1))
+                second_cycles = int(live_second[
+                    "survey_product_ble_scan_cycles"])
+                if not second_cycles <= second_attempts <= second_cycles * 2 \
+                        or second_retries != second_attempts - second_cycles:
+                    raise RuntimeError(
+                        "BLE cumulative scan-retry accounting mismatch")
                 screens["ble_devices_second"] = capture(
                     device, frames, "ble-devices-second")
                 list_pixel_changes = changed_pixels(

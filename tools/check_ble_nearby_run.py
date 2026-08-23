@@ -133,6 +133,16 @@ def main() -> int:
             second.get("ble_device_catalog_revision", 0) >
                 first.get("ble_device_catalog_revision", 0),
             "live BLE catalog did not advance")
+    for label, state in (("first", first), ("second", second)):
+        cycles = state.get("survey_product_ble_scan_cycles")
+        attempts = state.get("survey_ble_scan_attempts")
+        retries = state.get("survey_ble_scan_transient_retries")
+        require(failures,
+                isinstance(cycles, int) and isinstance(attempts, int) and
+                isinstance(retries, int) and
+                cycles <= attempts <= cycles * 2 and
+                retries == attempts - cycles,
+                f"{label} bounded BLE retry accounting mismatch")
     require(failures,
             run.get("list_pixel_changes", {}).get(
                 "content_changed_pixels", 0) > 0 and

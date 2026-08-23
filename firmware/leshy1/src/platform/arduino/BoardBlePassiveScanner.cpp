@@ -245,34 +245,49 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
     // The blocking BLEScan overload waits forever when NimBLE loses its
     // discovery-complete notification. Run asynchronously with a local,
     // fail-closed deadline so the worker can always release its resources.
-    const bool started = activeScan_->start(
-        plan.durationMs / 1000U, nullptr, false);
-    if (!started) {
-        activeScan_->setAdvertisedDeviceCallbacks(nullptr, false, true);
-        result.status = BoardBleScanStatus::ScannerUnavailable;
-        return result;
-    }
+    // One bounded passive retry recovers the observed ESP BLE transport case
+    // where start succeeds but that completion notification is lost. A second
+    // failure is terminal; this never enables active scanning or transmission.
+    constexpr std::uint16_t kMaximumScanAttempts = 2U;
     constexpr std::uint32_t kCompletionGraceMs = 1000U;
-    const std::uint64_t deadlineUs = startedUs +
-        static_cast<std::uint64_t>(plan.durationMs + kCompletionGraceMs) *
-            1000ULL;
-    while (activeScan_->isScanning()) {
-        if (static_cast<std::uint64_t>(esp_timer_get_time()) >= deadlineUs) {
-            activeScan_->stop();
-            activeScan_->setAdvertisedDeviceCallbacks(nullptr, false, true);
-            activeScan_->clearResults();
-            result.durationUs =
-                static_cast<std::uint64_t>(esp_timer_get_time()) - startedUs;
-            result.status = BoardBleScanStatus::ScanTimedOut;
-            return result;
+    for (std::uint16_t attempt = 1U;
+         attempt <= kMaximumScanAttempts; ++attempt) {
+        result.attempts = attempt;
+        const std::uint64_t attemptStartedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        const bool started = activeScan_->start(
+            plan.durationMs / 1000U, nullptr, false);
+        if (!started) {
+            result.status = BoardBleScanStatus::ScannerUnavailable;
+        } else {
+            const std::uint64_t deadlineUs = attemptStartedUs +
+                static_cast<std::uint64_t>(
+                    plan.durationMs + kCompletionGraceMs) * 1000ULL;
+            while (activeScan_->isScanning() &&
+                   static_cast<std::uint64_t>(esp_timer_get_time()) <
+                       deadlineUs) {
+                vTaskDelay(pdMS_TO_TICKS(20));
+            }
+            if (activeScan_->isScanning()) {
+                activeScan_->stop();
+                result.status = BoardBleScanStatus::ScanTimedOut;
+            } else {
+                result.status = BoardBleScanStatus::Valid;
+            }
         }
-        vTaskDelay(pdMS_TO_TICKS(20));
+        if (result.valid() || attempt == kMaximumScanAttempts) break;
+        if (result.status != BoardBleScanStatus::ScannerUnavailable &&
+            result.status != BoardBleScanStatus::ScanTimedOut) {
+            break;
+        }
+        ++result.transientRetries;
+        activeScan_->clearResults();
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
     activeScan_->setAdvertisedDeviceCallbacks(nullptr, false, true);
     result.durationUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - startedUs;
     activeScan_->clearResults();
-    result.status = BoardBleScanStatus::Valid;
     return result;
 }
 

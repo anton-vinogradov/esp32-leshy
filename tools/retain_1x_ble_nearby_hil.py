@@ -13,7 +13,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.122.1-ble-device-intelligence"
+VERSION = "0.122.2-ble-device-intelligence"
+FAILED_VERSION = "0.122.1-ble-device-intelligence"
+FAILED_SOURCE_COMMIT = "55045b8cabf063d3c33cc95313d2ced072acec4f"
 CID = "FE343253440000002000000055019CB7"
 EVIDENCE_IDS = ["E-BUILD-122", "E-AUTO-086", "E-HIL-146", "E-UX-041"]
 SOURCE_FILES = {
@@ -22,6 +24,7 @@ SOURCE_FILES = {
     "passive_h": "firmware/leshy1/src/drivers/ble/BlePassiveContract.h",
     "passive_cpp": "firmware/leshy1/src/drivers/ble/BlePassiveContract.cpp",
     "adapter": "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.cpp",
+    "adapter_h": "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.h",
     "catalog_h": "firmware/leshy1/src/apps/ble/BleDeviceCatalog.h",
     "catalog_cpp": "firmware/leshy1/src/apps/ble/BleDeviceCatalog.cpp",
     "navigation": "firmware/leshy1/src/apps/ble/BleDeviceNavigationOrder.h",
@@ -59,6 +62,7 @@ def require(condition: bool, message: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, type=Path)
+    parser.add_argument("--failed-source", required=True, type=Path)
     parser.add_argument("--destination", required=True, type=Path)
     parser.add_argument("--summary", required=True, type=Path)
     parser.add_argument("--factory", required=True, type=Path)
@@ -70,6 +74,7 @@ def main() -> int:
     parser.add_argument("--linked-flash-bytes", required=True, type=int)
     args = parser.parse_args()
     source = args.source.resolve()
+    failed_source = args.failed_source.resolve()
     destination = args.destination.resolve()
     summary = args.summary.resolve()
     runner = ROOT / "tools/run_1x_ble_nearby_hil.py"
@@ -77,6 +82,8 @@ def main() -> int:
     source_guard = ROOT / "tools/check_ble_nearby_contract.py"
     required = (source / "run.json", source / "firmware.bin",
                 source / "artifacts.sha256",
+                failed_source / "run.json", failed_source / "firmware.bin",
+                failed_source / "artifacts.sha256",
                 args.factory.resolve(), args.elf.resolve(),
                 args.map.resolve(), runner, checker, source_guard)
     require(not destination.exists() and not summary.exists(),
@@ -86,6 +93,7 @@ def main() -> int:
     require(len(args.firmware_source_commit) == 40 and
             len(args.runner_commit) == 40, "commits must be full IDs")
     run = load(source / "run.json")
+    failed_run = load(failed_source / "run.json")
     candidate = run.get("candidate", {})
     require(run.get("schema") == "leshy.ble_nearby_hil.run.v2" and
             run.get("passed") is True and run.get("gate_eligible") is True and
@@ -95,6 +103,21 @@ def main() -> int:
             candidate.get("flash_mode") == "fresh" and
             run.get("expected_cid") == CID,
             "source is not the exact fresh-flash pass")
+    failed_candidate = failed_run.get("candidate", {})
+    require(failed_run.get("schema") == "leshy.ble_nearby_hil.run.v2" and
+            failed_run.get("passed") is False and
+            failed_run.get("gate_eligible") is False and
+            bool(failed_run.get("failures")) and
+            failed_candidate.get("version") == FAILED_VERSION and
+            failed_candidate.get("source_commit") == FAILED_SOURCE_COMMIT and
+            failed_candidate.get("flash_mode") == "fresh" and
+            failed_candidate.get("firmware_sha256") ==
+                digest(failed_source / "firmware.bin") and
+            failed_run.get("expected_cid") == CID and
+            failed_run.get("cleanup_after", {}).get("complete") is True and
+            failed_run.get("cleanup_after", {}).get(
+                "final_state", {}).get("lease_mask") == 0,
+            "negative run is not the exact fail-closed 0.122.1 attempt")
     require(run.get("runner_source_sha256") == digest(runner),
             "runner hash mismatch")
     verification = subprocess.run(
@@ -129,6 +152,8 @@ def main() -> int:
     destination.mkdir(parents=True)
     main_dir = destination / "run"
     shutil.copytree(source, main_dir)
+    negative_dir = destination / "negative"
+    shutil.copytree(failed_source, negative_dir)
     tools_dir = destination / "tools"
     tools_dir.mkdir()
     for tool in (runner, checker, source_guard):
@@ -165,6 +190,9 @@ def main() -> int:
         "source_guard_sha256": digest(tools_dir / source_guard.name),
         "source_sha256": source_hashes,
         "run_sha256": digest(main_dir / "run.json"),
+        "negative_run_sha256": digest(negative_dir / "run.json"),
+        "negative_artifact_index_sha256":
+            digest(negative_dir / "artifacts.sha256"),
         "static_ram_bytes": args.static_ram_bytes,
         "linked_flash_bytes": args.linked_flash_bytes,
         "tft_states": len(run.get("screens", {})),
@@ -183,11 +211,36 @@ def main() -> int:
         "evidence": {"artifact_index_sha256": digest(manifest),
                      "files": len(indexed) + 1,
                      "tft_states": len(run.get("screens", {}))},
+        "retained_failure": {
+            "status": "failed",
+            "gate_eligible": False,
+            "candidate_version": FAILED_VERSION,
+            "candidate_source_commit": FAILED_SOURCE_COMMIT,
+            "candidate_firmware_sha256":
+                failed_candidate.get("firmware_sha256"),
+            "candidate_app_elf_sha256":
+                failed_candidate.get("app_elf_sha256"),
+            "run_sha256": digest(negative_dir / "run.json"),
+            "artifact_index_sha256":
+                digest(negative_dir / "artifacts.sha256"),
+            "failure_stage": "before_first_valid_ble_scan",
+            "failure_count": len(failed_run.get("failures", [])),
+            "final_cleanup_complete": True,
+            "final_lease_mask": 0,
+        },
         "verified": {
             "fresh_flash_pass": True, "manual_button_presses": 0,
             "unique_devices_first": run["live_first"]["ble_devices_unique"],
             "unique_devices_second": run["live_second"]["ble_devices_unique"],
-            "scan_drops": 0, "active_scan": False,
+            "driver_scan_drops": 0, "active_scan": False,
+            "scan_attempts_first":
+                run["live_first"]["survey_ble_scan_attempts"],
+            "scan_transient_retries_first":
+                run["live_first"]["survey_ble_scan_transient_retries"],
+            "scan_attempts_second":
+                run["live_second"]["survey_ble_scan_attempts"],
+            "scan_transient_retries_second":
+                run["live_second"]["survey_ble_scan_transient_retries"],
             "live_content_changed_pixels": run["list_pixel_changes"][
                 "content_changed_pixels"],
             "live_chrome_changed_pixels": 0,

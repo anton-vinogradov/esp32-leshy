@@ -1437,6 +1437,10 @@ void accumulateProductSurveyBleScan(BoardBlePassiveScanResult* total,
     if (total == nullptr) return;
     total->status = scan.status;
     total->durationUs += scan.durationUs;
+    total->attempts = static_cast<std::uint16_t>(
+        total->attempts + scan.attempts);
+    total->transientRetries = static_cast<std::uint16_t>(
+        total->transientRetries + scan.transientRetries);
     total->recordsReported = static_cast<std::uint16_t>(
         total->recordsReported + scan.recordsReported);
     total->recordsRead = static_cast<std::uint16_t>(
@@ -10695,6 +10699,8 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_scan_rejected\":%u,"
                       "\"survey_scan_dropped\":%u,"
                       "\"survey_ble_scan_status\":\"%s\","
+                      "\"survey_ble_scan_attempts\":%u,"
+                      "\"survey_ble_scan_transient_retries\":%u,"
                       "\"survey_ble_scan_reported\":%u,"
                       "\"survey_ble_scan_read\":%u,"
                       "\"survey_ble_scan_accepted\":%u,"
@@ -10925,6 +10931,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned>(productSurveyRuntime.scan.dropped),
                       leshy1::platform::arduino::boardBleScanStatusName(
                           productSurveyRuntime.bleScan.status),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.bleScan.attempts),
+                      static_cast<unsigned>(
+                          productSurveyRuntime.bleScan.transientRetries),
                       static_cast<unsigned>(
                           productSurveyRuntime.bleScan.recordsReported),
                       static_cast<unsigned>(

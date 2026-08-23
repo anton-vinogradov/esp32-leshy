@@ -83,6 +83,8 @@ def main() -> int:
         "scanner_->erase",
         "populateAdvertisementFacts",
         "knownServiceMask",
+        "kMaximumScanAttempts = 2U",
+        "result.transientRetries",
     )
     forbidden_adapter = (
         "setActiveScan(true)",
