@@ -18,7 +18,13 @@ bool nearDuration(std::uint16_t actual, std::uint16_t expected,
 // protocol-specific windows here: real NEC zero/one spaces remain
 // unambiguous, while the byte-complement checks below still reject noise.
 bool validNecBitMark(std::uint16_t actual) {
-    return actual >= 180U && actual <= 900U;
+    // The capture plan has already rejected pulses shorter than 80 us. Real
+    // ESP32-DIV receiver envelopes observed across repeated fixed-vector runs
+    // can compress isolated 560 us carrier marks to 110 us while preserving
+    // an unambiguous following zero/one space. Keep the decoder aligned with
+    // that acquisition floor; header, exact pulse structure, disjoint spaces
+    // and NEC complement bytes remain independent fail-closed checks.
+    return actual >= 80U && actual <= 900U;
 }
 
 int classifyNecBitSpace(std::uint16_t actual) {

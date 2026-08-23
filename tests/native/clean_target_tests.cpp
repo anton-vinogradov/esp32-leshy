@@ -1410,12 +1410,30 @@ void testInfraredCaptureDecodesPhysicalDemodulatedNecTrace() {
     CHECK(decoded.command == 0x34U);
     CHECK(decoded.integrityValid);
 
+    // A second physical run from the same fixed fixture includes two carrier
+    // marks compressed to 153/110 us by the demodulating receiver. The bit
+    // spaces and NEC complement bytes remain unambiguous and exact.
+    const std::array<std::uint16_t, 67> compressedMarkTrace{
+        8856, 4645, 422, 914, 153, 772, 416, 706, 442, 702, 420, 2131,
+        110, 771, 416, 640, 460, 772, 393, 1808, 442, 1823, 421, 1824,
+        439, 1871, 395, 692, 454, 2003, 241, 2003, 315, 1816, 417, 749,
+        394, 684, 442, 1799, 442, 728, 438, 1851, 382, 1904, 399, 657,
+        443, 767, 377, 1825, 441, 1827, 438, 780, 295, 1850, 421, 767,
+        442, 636, 442, 1847, 417, 1850, 416,
+    };
+    const InfraredDecode compressed = decodeTrace(compressedMarkTrace);
+    CHECK(compressed.protocol == InfraredProtocol::Nec);
+    CHECK(compressed.rawCode == 0xCB34EF10U);
+    CHECK(compressed.address == 0x10U);
+    CHECK(compressed.command == 0x34U);
+    CHECK(compressed.integrityValid);
+
     auto ambiguousSpace = physicalTrace;
     ambiguousSpace[3] = 1125U;
     CHECK(decodeTrace(ambiguousSpace).protocol == InfraredProtocol::Unknown);
 
     auto invalidMark = physicalTrace;
-    invalidMark[2] = 120U;
+    invalidMark[2] = 901U;
     CHECK(decodeTrace(invalidMark).protocol == InfraredProtocol::Unknown);
 
     auto brokenComplement = physicalTrace;
