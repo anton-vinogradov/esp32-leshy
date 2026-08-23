@@ -6499,15 +6499,17 @@ void renderRadioSignalCard(
         display.fillRect(bounds.x + kTrackInset + 1, kTrackY + 1,
                          fillWidth, kTrackHeight - 2, tone);
     }
-    display.setTextColor(Palette::TextMuted, Palette::Surface);
-    const std::int16_t scaleY = bounds.y + (compact ? 69 : 79);
-    setUiCursor(UiTextRole::Meta, bounds.x + kTrackInset, scaleY);
-    display.print(tr(UiTextId::RadioSignalScaleWeak));
-    const char* strong = tr(UiTextId::RadioSignalScaleStrong);
-    const std::int16_t strongX = bounds.x + bounds.width - kTrackInset -
-                                 display.textWidth(strong);
-    setUiCursor(UiTextRole::Meta, strongX, scaleY);
-    display.print(strong);
+    if (!compact) {
+        display.setTextColor(Palette::TextMuted, Palette::Surface);
+        const std::int16_t scaleY = bounds.y + 79;
+        setUiCursor(UiTextRole::Meta, bounds.x + kTrackInset, scaleY);
+        display.print(tr(UiTextId::RadioSignalScaleWeak));
+        const char* strong = tr(UiTextId::RadioSignalScaleStrong);
+        const std::int16_t strongX = bounds.x + bounds.width - kTrackInset -
+                                     display.textWidth(strong);
+        setUiCursor(UiTextRole::Meta, strongX, scaleY);
+        display.print(strong);
+    }
 }
 
 void renderWifiNetworkRow(std::size_t index, std::size_t firstVisible) {
@@ -6959,6 +6961,14 @@ void renderBleDeviceRow(std::size_t index, std::size_t firstVisible) {
     char vendor[BleCompanyDatabase::kNameSize + 1U] = {};
     const char* descriptor =
         bleDeviceDescriptor(*device, vendor, sizeof(vendor));
+    if (std::strcmp(label, descriptor) == 0) {
+        const bool hasDifferentVendor =
+            bleDeviceVendor(*device, vendor, sizeof(vendor)) &&
+            std::strcmp(label, vendor) != 0;
+        descriptor = hasDifferentVendor
+            ? vendor
+            : tr(bleAdvertisementModeText(device->bleAdvertisement));
+    }
     std::snprintf(note, sizeof(note), tr(UiTextId::BleDeviceRowFormat),
                   descriptor, static_cast<int>(device->rssiDbm));
     display.setTextColor(

@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.122.0-ble-device-intelligence"
+VERSION = "0.122.1-ble-device-intelligence"
 CID = "FE343253440000002000000055019CB7"
 EVIDENCE_IDS = ["E-BUILD-122", "E-AUTO-086", "E-HIL-146", "E-UX-041"]
 SOURCE_FILES = {
