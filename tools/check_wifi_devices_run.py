@@ -123,9 +123,12 @@ def main() -> int:
             run.get("list_pixel_changes", {}).get("chrome_changed_pixels") == 0,
             "live redraw escaped the data rows")
     detail_pixels = run.get("detail_pixel_changes", {})
+    detail_visual_input_changed = run.get("detail_visual_input_changed") is True
     require(failures,
             detail_pixels.get("identity_changed_pixels") == 0 and
-            detail_pixels.get("live_changed_pixels", 0) > 0 and
+            detail_pixels.get("live_changed_pixels", -1) >= 0 and
+            (not detail_visual_input_changed or
+             detail_pixels.get("live_changed_pixels", 0) > 0) and
             detail_pixels.get("chrome_changed_pixels") == 0,
             "integrated detail changed identity/chrome or did not update radar")
     detail_first = run.get("detail_first", {})

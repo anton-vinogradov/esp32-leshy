@@ -182,6 +182,7 @@ def main() -> int:
     cleanup_after: dict[str, Any] = {"attempted": False}
     list_pixel_changes: dict[str, int] = {}
     detail_pixel_changes: dict[str, int] = {}
+    detail_visual_input_changed = False
 
     try:
         if args.flash:
@@ -287,9 +288,13 @@ def main() -> int:
                 detail_pixel_changes = changed_live_detail_pixels(
                     frames, "wifi-device-live-detail-first",
                     "wifi-device-live-detail-second")
+                detail_visual_input_changed = (
+                    detail_second.get("wifi_device_detail_rssi_dbm") !=
+                    detail_first.get("wifi_device_detail_rssi_dbm"))
                 if (detail_pixel_changes["identity_changed_pixels"] != 0 or
-                        detail_pixel_changes["live_changed_pixels"] == 0 or
-                        detail_pixel_changes["chrome_changed_pixels"] != 0):
+                        detail_pixel_changes["chrome_changed_pixels"] != 0 or
+                        (detail_visual_input_changed and
+                         detail_pixel_changes["live_changed_pixels"] == 0)):
                     raise RuntimeError(
                         "integrated live-detail redraw mismatch: "
                         f"{detail_pixel_changes}")
@@ -412,6 +417,7 @@ def main() -> int:
         "safe_outputs": safe_outputs,
         "list_pixel_changes": list_pixel_changes,
         "detail_pixel_changes": detail_pixel_changes,
+        "detail_visual_input_changed": detail_visual_input_changed,
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
