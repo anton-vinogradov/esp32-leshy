@@ -13,7 +13,7 @@
 #include "FixtureSession.h"
 
 #ifndef LESHY_FIXTURE_VERSION
-#define LESHY_FIXTURE_VERSION "0.2.1-bounded-signals"
+#define LESHY_FIXTURE_VERSION "0.2.2-bounded-signals"
 #endif
 
 namespace {
@@ -70,6 +70,11 @@ bool nrfTransactionOpen = false;
 bool nrfCarrierActive = false;
 bool nrfPoweredDown = true;
 std::uint32_t nrfCarrierStartedUs = 0;
+const char* nrfStartError = "not_attempted";
+std::uint8_t nrfStatusReadback = 0xFF;
+std::uint8_t nrfConfigReadback = 0xFF;
+std::uint8_t nrfChannelReadback = 0xFF;
+std::uint8_t nrfRfSetupReadback = 0xFF;
 
 void IRAM_ATTR quiesceFromIsr() {
     GPIO.out_w1tc = (1U << kBuzzerPin) | (1U << kIrTxPin) |
@@ -117,18 +122,23 @@ void endNrfBus() {
     pinMode(kNrfCsn3Pin, INPUT);
 }
 
-void nrfWriteRegister(std::uint8_t reg, std::uint8_t value) {
+std::uint8_t nrfWriteRegister(std::uint8_t reg, std::uint8_t value) {
     digitalWrite(kFixtureNrfCsnPin, LOW);
-    SPI.transfer(kNrfWriteRegister | (reg & 0x1FU));
+    const std::uint8_t status =
+        SPI.transfer(kNrfWriteRegister | (reg & 0x1FU));
     SPI.transfer(value);
     digitalWrite(kFixtureNrfCsnPin, HIGH);
+    return status;
 }
 
-std::uint8_t nrfReadRegister(std::uint8_t reg) {
+std::uint8_t nrfReadRegister(std::uint8_t reg,
+                             std::uint8_t* status = nullptr) {
     digitalWrite(kFixtureNrfCsnPin, LOW);
-    SPI.transfer(kNrfReadRegister | (reg & 0x1FU));
+    const std::uint8_t commandStatus =
+        SPI.transfer(kNrfReadRegister | (reg & 0x1FU));
     const std::uint8_t value = SPI.transfer(0xFF);
     digitalWrite(kFixtureNrfCsnPin, HIGH);
+    if (status != nullptr) *status = commandStatus;
     return value;
 }
 
@@ -235,6 +245,9 @@ void emitState(const char* kind) {
         "\"nrf_frequency_mhz\":2442,\"nrf_power_dbm\":-18,"
         "\"nrf_rf_setup\":144,\"nrf_carrier_duration_us\":2000000,"
         "\"maximum_nrf_carrier_us\":2500000,"
+        "\"nrf_start_error\":\"%s\",\"nrf_status_readback\":%u,"
+        "\"nrf_config_readback\":%u,\"nrf_channel_readback\":%u,"
+        "\"nrf_rf_setup_readback\":%u,"
         "\"session_lifetime_ms\":5000,"
         "\"fixed_vector_only\":true,\"auto_arm\":false,"
         "\"watchdog_armed\":%s,\"last_error\":\"%s\"}\n",
@@ -260,6 +273,10 @@ void emitState(const char* kind) {
         nrfCarrierActive ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kBuzzerPin)) == 0 ? "true" : "false",
         outputsInactive() ? "true" : "false",
+        nrfStartError, static_cast<unsigned>(nrfStatusReadback),
+        static_cast<unsigned>(nrfConfigReadback),
+        static_cast<unsigned>(nrfChannelReadback),
+        static_cast<unsigned>(nrfRfSetupReadback),
         watchdogReady ? "true" : "false", report.lastError);
 }
 
@@ -270,7 +287,10 @@ void emitError(const char* reason) {
         "{\"schema\":\"leshy.hil.fixture.signal.v1\",\"kind\":\"error\","
         "\"reason\":\"%s\",\"state\":\"%s\","
         "\"ir_tx_inactive\":%s,\"nrf_ce_inactive\":%s,"
-        "\"nrf_powered_down\":%s,\"buzzer_inactive\":%s}\n",
+        "\"nrf_powered_down\":%s,\"buzzer_inactive\":%s,"
+        "\"nrf_start_error\":\"%s\",\"nrf_status_readback\":%u,"
+        "\"nrf_config_readback\":%u,\"nrf_channel_readback\":%u,"
+        "\"nrf_rf_setup_readback\":%u}\n",
         reason, fixtureStateName(session.report().state),
         gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0 ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
@@ -279,7 +299,11 @@ void emitError(const char* reason) {
             ? "true" : "false",
         nrfPoweredDown ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kBuzzerPin)) == 0
-            ? "true" : "false");
+            ? "true" : "false",
+        nrfStartError, static_cast<unsigned>(nrfStatusReadback),
+        static_cast<unsigned>(nrfConfigReadback),
+        static_cast<unsigned>(nrfChannelReadback),
+        static_cast<unsigned>(nrfRfSetupReadback));
 }
 
 void mark(std::uint32_t durationUs) {
@@ -307,22 +331,50 @@ std::uint32_t emitFixedNecVector() {
 }
 
 bool startFixedNrf24Carrier() {
-    if (nrfCarrierActive || nrfBusStarted || !outputsInactive() ||
-        !nrfPoweredDown) {
+    nrfStatusReadback = 0xFF;
+    nrfConfigReadback = 0xFF;
+    nrfChannelReadback = 0xFF;
+    nrfRfSetupReadback = 0xFF;
+    if (nrfCarrierActive) {
+        nrfStartError = "already_active";
         return false;
     }
+    if (nrfBusStarted) {
+        nrfStartError = "spi_already_active";
+        return false;
+    }
+    if (!outputsInactive()) {
+        nrfStartError = "output_not_inactive";
+        return false;
+    }
+    if (!nrfPoweredDown) {
+        nrfStartError = "not_powered_down";
+        return false;
+    }
+    nrfStartError = "configuring";
     beginNrfBus();
-    nrfWriteRegister(kNrfRegConfig, 0x00);
+    nrfStatusReadback = nrfWriteRegister(kNrfRegConfig, 0x00);
     nrfWriteRegister(kNrfRegEnableAutoAck, 0x00);
     nrfWriteRegister(kNrfRegEnableReceiveAddress, 0x00);
     nrfWriteRegister(kNrfRegRfChannel, kNrfChannel);
     nrfWriteRegister(kNrfRegRfSetup, kNrfMinimumPowerCarrierSetup);
     nrfWriteRegister(kNrfRegConfig, 0x02);
-    const bool configured =
-        nrfReadRegister(kNrfRegRfChannel) == kNrfChannel &&
-        nrfReadRegister(kNrfRegRfSetup) == kNrfMinimumPowerCarrierSetup &&
-        (nrfReadRegister(kNrfRegConfig) & 0x03U) == 0x02U;
-    if (!configured) {
+    nrfChannelReadback = nrfReadRegister(
+        kNrfRegRfChannel, &nrfStatusReadback);
+    nrfRfSetupReadback = nrfReadRegister(kNrfRegRfSetup);
+    nrfConfigReadback = nrfReadRegister(kNrfRegConfig);
+    if (nrfChannelReadback != kNrfChannel) {
+        nrfStartError = "channel_readback_mismatch";
+        stopNrfCarrier();
+        return false;
+    }
+    if (nrfRfSetupReadback != kNrfMinimumPowerCarrierSetup) {
+        nrfStartError = "rf_setup_readback_mismatch";
+        stopNrfCarrier();
+        return false;
+    }
+    if ((nrfConfigReadback & 0x03U) != 0x02U) {
+        nrfStartError = "config_readback_mismatch";
         stopNrfCarrier();
         return false;
     }
@@ -331,6 +383,7 @@ bool startFixedNrf24Carrier() {
     nrfCarrierStartedUs = micros();
     digitalWrite(kFixtureNrfCePin, HIGH);
     nrfCarrierActive = true;
+    nrfStartError = "none";
     return true;
 }
 

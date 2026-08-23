@@ -69,5 +69,7 @@ Ambient evidence не проверяет positive detection; arbitrary/product T
 Первый [physical attempt `0.2.0`](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
 намеренно сохранён как negative evidence: он обращался
 к unpopulated/PN532-reserved slot 1 и отверг carrier после register read-back. `0.2.1`
-связывает vector с populated slot 2 из сохранённой hardware implementation 0.x;
-неудачная попытка не поднимала CE и закончилась в power-down.
+связал vector с populated slot 2 из сохранённой implementation 0.x, но его
+[короткий regression](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json)
+тоже отверг start до CE HIGH. Выбор slot был дефектом, но не полной root cause;
+`0.2.2` добавляет exact powered-down register telemetry до следующего исправления.

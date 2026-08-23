@@ -46,7 +46,7 @@ def main() -> int:
         "board_build.flash_size = 16MB",
         "-std=gnu++17",
         "ARDUINO_USB_CDC_ON_BOOT=1",
-        "LESHY_FIXTURE_VERSION=\\\"0.2.1-bounded-signals\\\"",
+        "LESHY_FIXTURE_VERSION=\\\"0.2.2-bounded-signals\\\"",
     )
     for marker in required_config:
         if marker not in config:
@@ -70,6 +70,9 @@ def main() -> int:
         "kFixtureNrfCePin = kNrfCe2Pin",
         "kFixtureNrfCsnPin = kNrfCsn2Pin",
         "startFixedNrf24Carrier", "serviceFixtureHardware",
+        "nrf_start_error\\\":\\\"%s", "nrf_status_readback\\\":%u",
+        "channel_readback_mismatch", "rf_setup_readback_mismatch",
+        "config_readback_mismatch",
     ):
         if marker not in entry:
             errors.append(f"fixture entry missing safety marker: {marker}")

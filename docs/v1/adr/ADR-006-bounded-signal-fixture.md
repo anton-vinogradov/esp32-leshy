@@ -70,5 +70,7 @@ this binary functional checkpoint.
 The first [`0.2.0` physical attempt](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
 intentionally remains negative evidence: it
 addressed unpopulated/PN532-reserved slot 1 and rejected the carrier after register
-read-back. `0.2.1` binds the vector to populated slot 2 found in the preserved 0.x
-hardware implementation; the failed attempt did not raise CE and ended powered down.
+read-back. `0.2.1` bound the vector to populated slot 2 from preserved 0.x, but its
+[short regression](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json)
+also rejected start before CE HIGH. Slot selection was a defect, not the complete root
+cause; `0.2.2` adds exact powered-down register telemetry before another fix is made.

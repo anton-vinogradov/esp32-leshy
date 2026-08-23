@@ -22,13 +22,13 @@
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
 - **Ближайшая граница:** реализовать source-bound nRF24 vector на минимальной
   поддерживаемой мощности и доказать на нём уже реализованный passive finder.
-- **Текущее negative evidence:** fixture `0.2.0` fail-safe остановился до emission,
-  потому что обращался к unpopulated/PN532-reserved slot 1. Product завершил ambient
-  calibration RX-only всеми тремя обнаруженными антеннами; emission count fixture
-  остался нулевым, CE — inactive, обе платы очистились, product вернулся на Home/lease
-  0. Source-bound correction использует populated slot 2 и обязан пройти короткий
-  physical fixture regression до повтора полного finder gate. Сохранён
-  [failure record](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json).
+- **Текущее negative evidence:** fixture `0.2.0` обнаружил реальную ошибку выбора slot
+  и fail-safe остановился до emission; исправленный на slot 2 fixture `0.2.1` также
+  отказал до CE HIGH, поэтому полная причина остаётся открытой. Обе попытки сохранили
+  zero emissions, terminal fixture inactive/powered-down и product Home/lease 0.
+  Следующая диагностика — exact register read-back telemetry; полный gate остаётся
+  закрыт. См. [0.2.0](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
+  и [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json).
 
 ### План фаз S5
 
