@@ -20,6 +20,7 @@
 #include "apps/survey/SurveyWorkflow.h"
 #include "apps/ble/BleDeviceCatalog.h"
 #include "apps/wifi/WifiNetworkCatalog.h"
+#include "apps/wifi/WifiNetworkNavigationOrder.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
 #include "apps/wifi/WifiChannelLoad.h"
 #include "apps/library/LibraryController.h"
@@ -2058,6 +2059,74 @@ void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     catalog.reset();
     CHECK(catalog.size() == 0);
     CHECK(catalog.at(0) == nullptr);
+}
+
+void testWifiNetworkNavigationLocksIdentityOrder() {
+    leshy1::apps::wifi::WifiNetworkCatalog catalog;
+    leshy1::apps::wifi::WifiNetworkNavigationOrder navigation;
+    leshy1::drivers::wifi::WifiScanRecord record;
+    record.bssid = {0x02, 0x11, 0x22, 0x33, 0x44, 0x01};
+    record.channel = 1;
+    record.rssiDbm = -40;
+    record.ssid = "first";
+    record.ssidLength = 5;
+    Observation observation;
+    CHECK(normalizePassiveRecord(record, 1000, &observation));
+    CHECK(catalog.upsert(observation));
+    record.bssid[5] = 0x02;
+    record.channel = 6;
+    record.rssiDbm = -50;
+    record.ssid = "second";
+    record.ssidLength = 6;
+    CHECK(normalizePassiveRecord(record, 2000, &observation));
+    CHECK(catalog.upsert(observation));
+    record.bssid[5] = 0x03;
+    record.channel = 11;
+    record.rssiDbm = -60;
+    record.ssid = "third";
+    record.ssidLength = 5;
+    CHECK(normalizePassiveRecord(record, 3000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.strongestFirst());
+
+    CHECK(navigation.lock(catalog));
+    CHECK(navigation.locked());
+    CHECK(navigation.size(catalog) == 3);
+    const std::uint32_t lockedOrder = navigation.orderHash(catalog);
+    const std::uint32_t selectedIdentity = navigation.identityHash(catalog, 1);
+    CHECK(navigation.at(catalog, 0)->identity[5] == 0x01);
+    CHECK(navigation.at(catalog, 1)->identity[5] == 0x02);
+    CHECK(navigation.at(catalog, 2)->identity[5] == 0x03);
+
+    // A large RSSI swing still reorders the discovery catalog, but the visible
+    // identity order and the object under selection do not move.
+    record.rssiDbm = -20;
+    CHECK(normalizePassiveRecord(record, 4000, &observation));
+    CHECK(catalog.upsert(observation, false));
+    CHECK(catalog.at(0)->identity[5] == 0x03);
+    CHECK(navigation.at(catalog, 0)->identity[5] == 0x01);
+    CHECK(navigation.at(catalog, 1)->identity[5] == 0x02);
+    CHECK(navigation.at(catalog, 2)->identity[5] == 0x03);
+    CHECK(navigation.at(catalog, 2)->rssiDbm == -20);
+    CHECK(navigation.orderHash(catalog) == lockedOrder);
+    CHECK(navigation.identityHash(catalog, 1) == selectedIdentity);
+
+    // Networks discovered after interaction do not extend the navigated
+    // snapshot; they become visible on the next entry, when sorting resumes.
+    record.bssid[5] = 0x04;
+    record.channel = 3;
+    record.rssiDbm = -10;
+    record.ssid = "new";
+    record.ssidLength = 3;
+    CHECK(normalizePassiveRecord(record, 5000, &observation));
+    CHECK(catalog.upsert(observation, false));
+    CHECK(catalog.size() == 4);
+    CHECK(navigation.size(catalog) == 3);
+    CHECK(navigation.orderHash(catalog) == lockedOrder);
+    navigation.reset();
+    CHECK(!navigation.locked());
+    CHECK(navigation.size(catalog) == 4);
+    CHECK(navigation.at(catalog, 0)->identity[5] == 0x04);
 }
 
 void testBleDeviceCatalogKeepsStrongestUniqueRows() {
@@ -5245,6 +5314,7 @@ int main() {
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testWifiNetworkCatalogKeepsStrongestUniqueRows();
+    testWifiNetworkNavigationLocksIdentityOrder();
     testBleDeviceCatalogKeepsStrongestUniqueRows();
     testWifiDeviceCatalogDecodesOnlyClientActivity();
     testWifiChannelLoadIsBoundedAndTruthful();

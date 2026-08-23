@@ -105,7 +105,7 @@ def main() -> int:
             first.get("survey_product_active_source_mask") == 1 and
             first.get("wifi_networks_strongest_first") is True and
             isinstance(first.get("wifi_networks_unique"), int) and
-            first.get("wifi_networks_unique", 0) >= 1 and
+            first.get("wifi_networks_unique", 0) >= 2 and
             first.get("survey_scan_status") == "valid" and
             first.get("survey_scan_accepted") == first.get("survey_scan_read") and
             first.get("survey_scan_dropped") == 0 and
@@ -128,6 +128,30 @@ def main() -> int:
                 "content_changed_pixels": 0, "chrome_changed_pixels": 0},
             "network detail changed during background scan")
 
+    navigation_first = run.get("navigation_first", {})
+    navigation_second = run.get("navigation_second", {})
+    require(failures,
+            navigation_first.get("wifi_product_view") == "networks" and
+            navigation_first.get("wifi_network_navigation_locked") is True and
+            isinstance(navigation_first.get("wifi_network_order_hash"), int) and
+            isinstance(navigation_first.get(
+                "wifi_network_selected_identity_hash"), int) and
+            navigation_first.get("wifi_network_selected_identity_hash", 0) != 0,
+            "navigation lock was not established")
+    require(failures,
+            navigation_second.get("wifi_network_navigation_locked") is True and
+            navigation_second.get("survey_product_wifi_scan_cycles", 0) >=
+                navigation_first.get("survey_product_wifi_scan_cycles", 0) + 2 and
+            navigation_second.get("wifi_network_catalog_revision", 0) >
+                navigation_first.get("wifi_network_catalog_revision", 0),
+            "live scans did not advance while navigation was locked")
+    for field in (
+            "wifi_network_selection", "wifi_network_visible_size",
+            "wifi_network_order_hash", "wifi_network_selected_identity_hash"):
+        require(failures, navigation_second.get(field) ==
+                navigation_first.get(field),
+                f"locked navigation field changed: {field}")
+
     first_heap = run.get("metrics_after_first", {})
     final_heap = run.get("metrics_after", {})
     scope = run.get("scope", {})
@@ -142,7 +166,10 @@ def main() -> int:
     require(failures, scope.get("manual_button_presses") == 0 and
             scope.get("screenshots_automatic") is True and
             scope.get("passive_wifi_only") is True and
-            scope.get("storage_write_authorized") is False,
+            scope.get("storage_write_authorized") is False and
+            scope.get("navigation_press_count") == 8 and
+            scope.get("identity_order_locked_during_navigation") is True and
+            scope.get("live_rssi_updates_in_place") is True,
             "automation/passive scope mismatch")
 
     before = run.get("recovery_before", {})

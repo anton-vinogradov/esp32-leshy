@@ -19,6 +19,9 @@ def main() -> int:
     catalog_cpp = (
         ROOT / "firmware/leshy1/src/apps/wifi/WifiNetworkCatalog.cpp"
     ).read_text(encoding="utf-8")
+    navigation = (
+        ROOT / "firmware/leshy1/src/apps/wifi/WifiNetworkNavigationOrder.h"
+    ).read_text(encoding="utf-8")
     strings = (
         ROOT / "firmware/leshy1/src/ui/UiStrings.def"
     ).read_text(encoding="utf-8")
@@ -26,7 +29,7 @@ def main() -> int:
         "WifiProductView::Menu",
         "WifiProductView::Networks",
         "WifiProductView::NetworkDetail",
-        "wifiNetworkCatalog.upsert(observation)",
+        "wifiNetworkCatalog.upsert(",
         "renderWifiNetworksData();",
         "renderWifiNetworkRow(index, currentFirst);",
         "productSurveyIncrementalRefreshPending",
@@ -38,6 +41,13 @@ def main() -> int:
         "wifi_network_catalog_revision",
         "wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor)",
         "renderRadioSignalCard(wifiNetworkDetail.rssiDbm)",
+        "wifiNetworkNavigationOrder.lock(wifiNetworkCatalog)",
+        "wifiNetworkVisibleSize()",
+        "wifiNetworkAt(wifiNetworkSelection)",
+        "!wifiNetworkNavigationOrder.locked()",
+        "wifi_network_navigation_locked",
+        "wifi_network_order_hash",
+        "wifi_network_selected_identity_hash",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -48,6 +58,17 @@ def main() -> int:
         "entries_[position - 1U].rssiDbm < current.rssiDbm",
         "bool WifiNetworkCatalog::strongestFirst() const",
         "indexOfIdentity",
+        "bool allowReplacement = true",
+        "!allowReplacement",
+    )
+    required_navigation = (
+        "class WifiNetworkNavigationOrder final",
+        "bool lock(const WifiNetworkCatalog& catalog)",
+        "return locked_ ? size_ : catalog.size()",
+        "catalog.indexOfIdentity(identity)",
+        "std::uint32_t orderHash",
+        "std::uint32_t identityHash",
+        "WifiNetworkCatalog::kCapacity",
     )
     required_strings = (
         "WifiMenuNetworks",
@@ -67,6 +88,10 @@ def main() -> int:
         if token not in catalog_h and token not in catalog_cpp
     )
     failures.extend(
+        f"navigation-order token missing: {token}"
+        for token in required_navigation if token not in navigation
+    )
+    failures.extend(
         f"string token missing: {token}"
         for token in required_strings if token not in strings
     )
@@ -76,7 +101,8 @@ def main() -> int:
         return 1
     print(
         "Wi-Fi networks contract passed: unique strongest-first BSSID rows, four-row "
-        "touch UI, data-only live redraw and dense frozen detail chrome"
+        "touch UI, strongest-first discovery with identity-stable navigation, "
+        "data-only live redraw and dense frozen detail chrome"
     )
     return 0
 

@@ -34,7 +34,12 @@ Actions.
 Every live list of radio objects is ordered by descending received signal: the
 strongest current RSSI is first and weaker entries follow. Equal RSSI keeps its
 existing relative order, and a refresh anchors selection to the same identity so
-resorting never silently changes the object under the user's cursor.
+resorting never silently changes the object under the user's cursor. For an
+interactive live list, descending signal defines the order before navigation.
+The first Navigate/Open action freezes the visible identity order until the user
+leaves that task: current signal values still update in place, while rows and the
+object under the cursor cannot jump. Re-entering takes a new strongest-first
+snapshot and includes newly discovered objects.
 
 Screen space is budgeted by user value. A non-interactive one-line fact occupies
 one compact line. A large row is reserved for a touch target and carries both its

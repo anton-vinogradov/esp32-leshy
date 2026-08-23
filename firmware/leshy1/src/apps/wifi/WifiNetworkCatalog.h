@@ -17,7 +17,10 @@ public:
     static constexpr std::size_t kCapacity = 32;
 
     void reset();
-    bool upsert(const domain::observations::Observation& observation);
+    // A locked navigation snapshot disables replacement of its identities when
+    // the bounded catalog is full, while existing rows still receive live data.
+    bool upsert(const domain::observations::Observation& observation,
+                bool allowReplacement = true);
 
     std::size_t size() const { return size_; }
     std::uint32_t revision() const { return revision_; }

@@ -123,6 +123,9 @@ def main() -> int:
     detail_pixel_changes: dict[str, int] = {}
     live_first: dict[str, Any] = {}
     live_second: dict[str, Any] = {}
+    navigation_first: dict[str, Any] = {}
+    navigation_second: dict[str, Any] = {}
+    navigation_press_count = 0
     detail_first: dict[str, Any] = {}
     detail_second: dict[str, Any] = {}
 
@@ -170,7 +173,7 @@ def main() -> int:
                         state.get("wifi_product_view") == "networks" and
                         state.get("survey_workflow_state") == "running" and
                         state.get("wifi_networks_strongest_first") is True and
-                        int(state.get("wifi_networks_unique", 0)) >= 1 and
+                        int(state.get("wifi_networks_unique", 0)) >= 2 and
                         int(state.get("survey_product_wifi_scan_cycles", 0)) >= 1
                     ), 45.0, "nearby Wi-Fi networks did not appear")
                 trace.append(live_first)
@@ -203,6 +206,54 @@ def main() -> int:
                         list_pixel_changes["chrome_changed_pixels"] != 0:
                     raise RuntimeError(
                         f"live list redraw escaped data rows: {list_pixel_changes}")
+
+                # Exercise real navigation before opening detail. The first
+                # Navigate action must freeze visible BSSID order; subsequent
+                # scans may update RSSI in place but cannot move rows or replace
+                # the object under the cursor.
+                navigation_first = query(
+                    device, b"ui.state", "leshy.ui.v1", "state")
+                for _ in range(8):
+                    selection = int(
+                        navigation_first.get("wifi_network_selection", 0))
+                    visible = int(
+                        navigation_first.get("wifi_network_visible_size", 0))
+                    direction = "down" if selection + 1 < visible else "up"
+                    navigation_first = action(device, direction)
+                    navigation_press_count += 1
+                trace.append(navigation_first)
+                require_exact(navigation_first, {
+                    "wifi_product_view": "networks",
+                    "wifi_network_navigation_locked": True,
+                    "runtime_owner": "wifi", "lease_mask": 15,
+                }, "wifi_network_navigation_locked")
+                locked_cycle = int(
+                    navigation_first["survey_product_wifi_scan_cycles"])
+                locked_revision = int(
+                    navigation_first["wifi_network_catalog_revision"])
+                navigation_second = wait_ui_state(
+                    device,
+                    lambda state: (
+                        state.get("wifi_product_view") == "networks" and
+                        state.get("wifi_network_navigation_locked") is True and
+                        int(state.get("survey_product_wifi_scan_cycles", 0)) >=
+                            locked_cycle + 2 and
+                        int(state.get("wifi_network_catalog_revision", 0)) >
+                            locked_revision
+                    ), 60.0, "locked Wi-Fi navigation did not survive live scans")
+                trace.append(navigation_second)
+                for field in (
+                        "wifi_network_selection", "wifi_network_visible_size",
+                        "wifi_network_order_hash",
+                        "wifi_network_selected_identity_hash"):
+                    if navigation_second.get(field) != navigation_first.get(field):
+                        raise RuntimeError(
+                            f"navigation field moved after lock: {field} "
+                            f"{navigation_first.get(field)!r} -> "
+                            f"{navigation_second.get(field)!r}")
+                if int(navigation_first.get(
+                        "wifi_network_selected_identity_hash", 0)) == 0:
+                    raise RuntimeError("locked selection identity hash is empty")
 
                 detail_first = action(device, "right")
                 trace.append(detail_first)
@@ -368,6 +419,8 @@ def main() -> int:
         "safe_outputs": safe_outputs,
         "live_first": live_first,
         "live_second": live_second,
+        "navigation_first": navigation_first,
+        "navigation_second": navigation_second,
         "detail_first": detail_first,
         "detail_second": detail_second,
         "list_pixel_changes": list_pixel_changes,
@@ -385,6 +438,9 @@ def main() -> int:
             "live_redraw_data_rows_only": True,
             "detail_screen_stable_during_background_scan": True,
             "two_complete_wifi_lifecycles": True,
+            "navigation_press_count": navigation_press_count,
+            "identity_order_locked_during_navigation": True,
+            "live_rssi_updates_in_place": True,
             "bounded_one_time_heap_warmup_bytes": (
                 boot.get("heap_free", 0) -
                 metrics_after_first.get("heap_free", 0)

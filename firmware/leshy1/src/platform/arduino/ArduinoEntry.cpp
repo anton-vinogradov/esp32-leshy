@@ -42,6 +42,7 @@
 #include "apps/survey/SurveyWorkflow.h"
 #include "apps/ble/BleDeviceCatalog.h"
 #include "apps/wifi/WifiNetworkCatalog.h"
+#include "apps/wifi/WifiNetworkNavigationOrder.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
 #include "boards/esp32_div_v2/BoardProfile.h"
 #include "domain/apps/AppCatalog.h"
@@ -155,6 +156,7 @@ using leshy1::apps::survey::SurveyWorkflowState;
 using leshy1::apps::survey::SurveyWorkflowStatus;
 using leshy1::apps::ble::BleDeviceCatalog;
 using leshy1::apps::wifi::WifiNetworkCatalog;
+using leshy1::apps::wifi::WifiNetworkNavigationOrder;
 using leshy1::apps::wifi::WifiDeviceCatalog;
 using leshy1::apps::wifi::WifiDeviceObservation;
 using leshy1::apps::wifi::WifiDeviceRecord;
@@ -550,8 +552,17 @@ const char* wifiProductViewName(WifiProductView view) {
 WifiProductView wifiProductView = WifiProductView::None;
 std::uint8_t wifiProductSelection = 0;
 WifiNetworkCatalog wifiNetworkCatalog;
+WifiNetworkNavigationOrder wifiNetworkNavigationOrder;
 std::size_t wifiNetworkSelection = 0;
 Observation wifiNetworkDetail;
+
+std::size_t wifiNetworkVisibleSize() {
+    return wifiNetworkNavigationOrder.size(wifiNetworkCatalog);
+}
+
+const Observation* wifiNetworkAt(std::size_t index) {
+    return wifiNetworkNavigationOrder.at(wifiNetworkCatalog, index);
+}
 WifiDeviceCatalog wifiDeviceCatalog;
 std::size_t wifiDeviceSelection = 0;
 WifiDeviceRecord wifiDeviceDetail;
@@ -2293,16 +2304,17 @@ bool drainProductSurveyWorkerObservations() {
     bool changed = false;
     Observation observation;
     while (xQueueReceive(productSurveyObservations, &observation, 0) == pdTRUE) {
-        const Observation* selectedWifi =
-            wifiNetworkCatalog.at(wifiNetworkSelection);
+        const Observation* selectedWifi = wifiNetworkAt(wifiNetworkSelection);
         const Observation wifiSelectionAnchor = selectedWifi == nullptr
             ? Observation{} : *selectedWifi;
         const bool wifiSelectionAnchored = selectedWifi != nullptr;
         const bool wifiCatalogChanged =
             (wifiProductView == WifiProductView::Networks ||
              wifiProductView == WifiProductView::NetworkDetail) &&
-            wifiNetworkCatalog.upsert(observation);
-        if (wifiCatalogChanged && wifiSelectionAnchored) {
+            wifiNetworkCatalog.upsert(
+                observation, !wifiNetworkNavigationOrder.locked());
+        if (wifiCatalogChanged && wifiSelectionAnchored &&
+            !wifiNetworkNavigationOrder.locked()) {
             const std::size_t anchored =
                 wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor);
             wifiNetworkSelection = anchored < wifiNetworkCatalog.size()
@@ -6408,7 +6420,7 @@ void renderRadioSignalCard(std::int16_t rssiDbm) {
 }
 
 void renderWifiNetworkRow(std::size_t index, std::size_t firstVisible) {
-    const Observation* observation = wifiNetworkCatalog.at(index);
+    const Observation* observation = wifiNetworkAt(index);
     if (observation == nullptr || index < firstVisible ||
         index >= firstVisible + kVisibleWifiNetworkRows) {
         return;
@@ -6452,16 +6464,17 @@ void renderWifiNetworkRow(std::size_t index, std::size_t firstVisible) {
 }
 
 void renderWifiNetworksData() {
-    if (wifiNetworkCatalog.size() == 0) {
+    const std::size_t visibleSize = wifiNetworkVisibleSize();
+    if (visibleSize == 0) {
         display.setTextColor(Palette::Positive, Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 70);
         display.print(tr(UiTextId::WifiNetworksSearching));
         return;
     }
     const std::size_t first = wifiNetworkFirstVisible(wifiNetworkSelection);
-    const std::size_t end = wifiNetworkCatalog.size() <
+    const std::size_t end = visibleSize <
             first + kVisibleWifiNetworkRows
-        ? wifiNetworkCatalog.size() : first + kVisibleWifiNetworkRows;
+        ? visibleSize : first + kVisibleWifiNetworkRows;
     for (std::size_t index = first; index < end; ++index) {
         renderWifiNetworkRow(index, first);
     }
@@ -8024,7 +8037,7 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         static_cast<std::uint8_t>(wifiProductView),
         wifiProductSelection,
         wifiNetworkSelection,
-        wifiNetworkCatalog.size(),
+        wifiNetworkVisibleSize(),
         wifiNetworkCatalog.revision(),
         wifiDeviceSelection,
         wifiDeviceCatalog.size(),
@@ -8166,12 +8179,12 @@ bool renderSelectionDelta() {
             wifiNetworkFirstVisible(renderedUi.wifiNetworkSelection);
         const std::size_t currentFirst = wifiNetworkFirstVisible(current);
         const bool dataChanged = productSurveyIncrementalRefreshPending ||
-            renderedUi.wifiNetworkSize != wifiNetworkCatalog.size() ||
+            renderedUi.wifiNetworkSize != wifiNetworkVisibleSize() ||
             renderedUi.wifiNetworkRevision != wifiNetworkCatalog.revision();
         if (dataChanged || oldFirst != currentFirst) {
             const bool clearRows = oldFirst != currentFirst ||
                 renderedUi.wifiNetworkSize == 0 ||
-                wifiNetworkCatalog.size() == 0;
+                wifiNetworkVisibleSize() == 0;
             if (clearRows) {
                 display.fillRect(
                     Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
@@ -8179,9 +8192,9 @@ bool renderSelectionDelta() {
                     Palette::Canvas);
                 renderWifiNetworksData();
             } else {
-                const std::size_t end = wifiNetworkCatalog.size() <
+                const std::size_t end = wifiNetworkVisibleSize() <
                         currentFirst + kVisibleWifiNetworkRows
-                    ? wifiNetworkCatalog.size()
+                    ? wifiNetworkVisibleSize()
                     : currentFirst + kVisibleWifiNetworkRows;
                 for (std::size_t index = currentFirst; index < end; ++index) {
                     renderWifiNetworkRow(index, currentFirst);
@@ -9956,6 +9969,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"ble_devices_strongest_first\":%s,"
                       "\"ble_device_catalog_revision\":%lu,"
                       "\"wifi_network_selection\":%u,"
+                      "\"wifi_network_visible_size\":%u,"
+                      "\"wifi_network_navigation_locked\":%s,"
+                      "\"wifi_network_order_hash\":%lu,"
+                      "\"wifi_network_selected_identity_hash\":%lu,"
                       "\"wifi_networks_unique\":%u,"
                       "\"wifi_networks_strongest_first\":%s,"
                       "\"wifi_network_catalog_revision\":%lu,"
@@ -10186,6 +10203,14 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       bleDeviceCatalog.strongestFirst() ? "true" : "false",
                       static_cast<unsigned long>(bleDeviceCatalog.revision()),
                       static_cast<unsigned>(wifiNetworkSelection),
+                      static_cast<unsigned>(wifiNetworkVisibleSize()),
+                      wifiNetworkNavigationOrder.locked() ? "true" : "false",
+                      static_cast<unsigned long>(
+                          wifiNetworkNavigationOrder.orderHash(
+                              wifiNetworkCatalog)),
+                      static_cast<unsigned long>(
+                          wifiNetworkNavigationOrder.identityHash(
+                              wifiNetworkCatalog, wifiNetworkSelection)),
                       static_cast<unsigned>(wifiNetworkCatalog.size()),
                       wifiNetworkCatalog.strongestFirst() ? "true" : "false",
                       static_cast<unsigned long>(
@@ -10629,6 +10654,7 @@ bool startWifiNetworksProduct() {
     }
     closeProductSurveyBackend();
     wifiNetworkCatalog.reset();
+    wifiNetworkNavigationOrder.reset();
     wifiNetworkSelection = 0;
     wifiNetworkDetail = {};
     productSurveyRuntime = {};
@@ -11260,18 +11286,22 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (wifiProductView == WifiProductView::Networks &&
                    surveyWorkflow.state() == SurveyWorkflowState::Running) {
             handled = true;
+            if (action == UiAction::Up || action == UiAction::Down ||
+                action == UiAction::Select || action == UiAction::Right) {
+                wifiNetworkNavigationOrder.lock(wifiNetworkCatalog);
+            }
             if (action == UiAction::Up && wifiNetworkSelection > 0) {
                 --wifiNetworkSelection;
                 changed = true;
             } else if (action == UiAction::Down &&
                        wifiNetworkSelection + 1U <
-                           wifiNetworkCatalog.size()) {
+                           wifiNetworkVisibleSize()) {
                 ++wifiNetworkSelection;
                 changed = true;
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {
-                const Observation* observation =
-                    wifiNetworkCatalog.at(wifiNetworkSelection);
+                const Observation* observation = wifiNetworkAt(
+                    wifiNetworkSelection);
                 if (observation != nullptr) {
                     wifiNetworkDetail = *observation;
                     wifiProductView = WifiProductView::NetworkDetail;
@@ -11869,7 +11899,7 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
             return {leshy1::ui::hitTouchTarget(
                         TouchTargetLayout::HomeRows, point,
                         static_cast<std::uint8_t>(first),
-                        static_cast<std::uint8_t>(wifiNetworkCatalog.size())),
+                        static_cast<std::uint8_t>(wifiNetworkVisibleSize())),
                     static_cast<std::uint8_t>(wifiNetworkSelection)};
         }
         if (wifiProductView == WifiProductView::Devices) {

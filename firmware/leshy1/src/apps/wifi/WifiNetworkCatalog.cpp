@@ -54,7 +54,8 @@ bool WifiNetworkCatalog::strongestFirst() const {
 }
 
 bool WifiNetworkCatalog::upsert(
-    const domain::observations::Observation& observation) {
+    const domain::observations::Observation& observation,
+    bool allowReplacement) {
     if (observation.radio != domain::observations::RadioKind::Wifi ||
         observation.identityLength == 0 ||
         observation.identityLength > observation.identity.size()) {
@@ -76,7 +77,8 @@ bool WifiNetworkCatalog::upsert(
         ++revision_;
         return true;
     }
-    if (observation.rssiDbm <= entries_[size_ - 1U].rssiDbm) return false;
+    if (!allowReplacement ||
+        observation.rssiDbm <= entries_[size_ - 1U].rssiDbm) return false;
     entries_[size_ - 1U] = observation;
     sortStrongestFirst();
     ++revision_;
