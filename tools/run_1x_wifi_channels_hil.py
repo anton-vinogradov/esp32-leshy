@@ -395,6 +395,7 @@ def main() -> int:
             "recommendation_primary_criterion": "visible_session_average",
             "recommendation_tie_break": "adjacent_overlap_pressure",
             "recommended_axis_label_highlighted": True,
+            "current_bar_tone_channel_neutral": True,
             "minimum_average_dwells_per_channel": 2,
             "static_pixels_unchanged_during_live_refresh": True,
             "two_complete_wifi_lifecycles": True,

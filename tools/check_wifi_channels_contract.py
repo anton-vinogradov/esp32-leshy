@@ -36,6 +36,8 @@ def main() -> int:
         "bin.averageBusyPermille",
         "WifiChannelsAverageLegend",
         "renderWifiChannelAxisLabel",
+        "wifiChannelBarTone(std::uint16_t busyPermille)",
+        "return Palette::Positive;",
         "kWifiChannelGraphBackground",
         "rgb565(0, 0, 0)",
         "wifi_channel_completed_sweeps",
@@ -91,6 +93,8 @@ def main() -> int:
         f"adapter contains active/TX path: {token}"
         for token in forbidden_adapter if token in adapter_cpp
     )
+    if "channel == 1U || channel == 6U || channel == 11U" in renderer:
+        failures.append("legacy 1/6/11 visual emphasis remains")
     if "kWifiChannelDisplayFullScalePermille = 80" not in renderer:
         failures.append("honest lower-bound 0..8% display scale missing")
     if failures:
@@ -100,7 +104,8 @@ def main() -> int:
     print(
         "Wi-Fi channels contract passed: real passive airtime over channels "
         "1..13, bounded aggregation, all-channel mean recommendation, black idle "
-        "background, gray session mean, adjacent-pressure tie-break and "
+        "background, channel-neutral current bars, gray session mean, "
+        "adjacent-pressure tie-break and "
         "changed-bar-only redraw with no TX/config path"
     )
     return 0

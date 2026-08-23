@@ -157,6 +157,7 @@ def main() -> int:
             scope.get("recommendation_tie_break") ==
                 "adjacent_overlap_pressure" and
             scope.get("recommended_axis_label_highlighted") is True and
+            scope.get("current_bar_tone_channel_neutral") is True and
             scope.get("minimum_average_dwells_per_channel") == 2 and
             scope.get("static_pixels_unchanged_during_live_refresh") is True and
             scope.get("storage_write_authorized") is False,

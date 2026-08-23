@@ -7160,12 +7160,10 @@ constexpr std::uint16_t kWifiChannelAverageTone =
 static_assert(kWifiChannelAxisY + 18 <= Layout::FooterDividerY,
               "Wi-Fi channel axis must stay above the footer");
 
-std::uint16_t wifiChannelBarTone(std::uint16_t busyPermille,
-                                 std::uint8_t channel) {
+std::uint16_t wifiChannelBarTone(std::uint16_t busyPermille) {
     if (busyPermille >= 80U) return Palette::Danger;
     if (busyPermille >= 40U) return Palette::Warning;
-    return channel == 1U || channel == 6U || channel == 11U
-        ? Palette::Positive : Palette::TextSecondary;
+    return Palette::Positive;
 }
 
 std::int16_t wifiChannelBarHeight(std::uint16_t busyPermille) {
@@ -7275,7 +7273,7 @@ void renderWifiChannelBar(std::uint8_t channel,
             (kWifiChannelBarWidth - kWifiChannelCurrentBarWidth) / 2;
         display.fillRect(currentX, kWifiChannelGraphBottom - nextHeight,
                          kWifiChannelCurrentBarWidth, nextHeight,
-                         wifiChannelBarTone(next, channel));
+                         wifiChannelBarTone(next));
     }
     wifiChannelRenderedLoads[at] = next;
     wifiChannelRenderedAverages[at] = nextAverage;
