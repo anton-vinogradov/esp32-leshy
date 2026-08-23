@@ -11,6 +11,7 @@ release-checks/
 __pycache__/
 *.py[cod]
 *.bin
+!firmware/leshy1/assets/oui.bin
 *.elf
 *.map
 *.o

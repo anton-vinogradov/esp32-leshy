@@ -44,6 +44,8 @@
 #include "apps/wifi/WifiNetworkCatalog.h"
 #include "apps/wifi/WifiNetworkNavigationOrder.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
+#include "apps/wifi/WifiDeviceNavigationOrder.h"
+#include "apps/wifi/WifiOuiDatabase.h"
 #include "boards/esp32_div_v2/BoardProfile.h"
 #include "domain/apps/AppCatalog.h"
 #include "domain/hardware/HardwareInventory.h"
@@ -108,6 +110,11 @@
 
 namespace {
 
+extern const std::uint8_t wifiOuiAssetStart[]
+    asm("_binary_assets_oui_bin_start");
+extern const std::uint8_t wifiOuiAssetEnd[]
+    asm("_binary_assets_oui_bin_end");
+
 using leshy1::boards::esp32_div_v2::BoardProfile;
 using leshy1::apps::library::LibraryController;
 using leshy1::apps::library::LibraryEntry;
@@ -160,6 +167,9 @@ using leshy1::apps::wifi::WifiNetworkNavigationOrder;
 using leshy1::apps::wifi::WifiDeviceCatalog;
 using leshy1::apps::wifi::WifiDeviceObservation;
 using leshy1::apps::wifi::WifiDeviceRecord;
+using leshy1::apps::wifi::WifiDeviceNavigationOrder;
+using leshy1::apps::wifi::WifiOuiDatabase;
+using leshy1::apps::wifi::WifiDeviceGeneration;
 using leshy1::apps::wifi::WifiDeviceState;
 using leshy1::apps::wifi::WifiChannelLoadSnapshot;
 using leshy1::domain::apps::AppCatalog;
@@ -532,6 +542,7 @@ enum class WifiProductView : std::uint8_t {
     NetworkDetail,
     Devices,
     DeviceDetail,
+    DeviceRadar,
     Channels,
     Capture,
 };
@@ -543,6 +554,7 @@ const char* wifiProductViewName(WifiProductView view) {
         case WifiProductView::NetworkDetail: return "network_detail";
         case WifiProductView::Devices: return "devices";
         case WifiProductView::DeviceDetail: return "device_detail";
+        case WifiProductView::DeviceRadar: return "device_radar";
         case WifiProductView::Channels: return "channels";
         case WifiProductView::Capture: return "capture";
         case WifiProductView::None:
@@ -564,9 +576,21 @@ const Observation* wifiNetworkAt(std::size_t index) {
     return wifiNetworkNavigationOrder.at(wifiNetworkCatalog, index);
 }
 WifiDeviceCatalog wifiDeviceCatalog;
+WifiDeviceNavigationOrder wifiDeviceNavigationOrder;
+WifiOuiDatabase wifiOuiDatabase(
+    wifiOuiAssetStart,
+    static_cast<std::size_t>(wifiOuiAssetEnd - wifiOuiAssetStart));
 std::size_t wifiDeviceSelection = 0;
 WifiDeviceRecord wifiDeviceDetail;
 std::uint64_t nextWifiDeviceUiRefreshUs = 0;
+
+std::size_t wifiDeviceVisibleSize() {
+    return wifiDeviceNavigationOrder.size(wifiDeviceCatalog);
+}
+
+const WifiDeviceRecord* wifiDeviceAt(std::size_t index) {
+    return wifiDeviceNavigationOrder.at(wifiDeviceCatalog, index);
+}
 enum class BleProductView : std::uint8_t {
     None,
     Devices,
@@ -5003,7 +5027,11 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
         }
         if (wifiProductView == WifiProductView::DeviceDetail) {
-            return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
+            return {{NavigationKey::Left, UiTextId::NavList}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavTrack}};
+        }
+        if (wifiProductView == WifiProductView::DeviceRadar) {
+            return {{NavigationKey::Left, UiTextId::NavInfo}, {}, {}};
         }
         if (wifiProductView == WifiProductView::Devices) {
             return {back, choose, enter};
@@ -6623,6 +6651,57 @@ std::size_t wifiDeviceFirstVisible(std::size_t selection) {
         ? 0 : selection - kVisibleWifiNetworkRows + 1U;
 }
 
+UiTextId wifiDeviceGenerationText(WifiDeviceGeneration generation) {
+    switch (generation) {
+        case WifiDeviceGeneration::Legacy:
+            return UiTextId::WifiDeviceWifiLegacy;
+        case WifiDeviceGeneration::Wifi4:
+            return UiTextId::WifiDeviceWifi4;
+        case WifiDeviceGeneration::Wifi5:
+            return UiTextId::WifiDeviceWifi5;
+        case WifiDeviceGeneration::Wifi6:
+            return UiTextId::WifiDeviceWifi6;
+        case WifiDeviceGeneration::Unknown:
+        default:
+            return UiTextId::WifiDeviceUnknown;
+    }
+}
+
+const char* wifiDeviceMaker(const WifiDeviceRecord& device) {
+    if (device.wpsManufacturerLength != 0U) {
+        return device.wpsManufacturer.data();
+    }
+    return device.ouiVendorLength != 0U ? device.ouiVendor.data() : nullptr;
+}
+
+const char* wifiDevicePrimaryLabel(const WifiDeviceRecord& device) {
+    if (device.wpsDeviceNameLength != 0U) {
+        return device.wpsDeviceName.data();
+    }
+    if (device.wpsModelLength != 0U) return device.wpsModel.data();
+    const char* maker = wifiDeviceMaker(device);
+    return maker == nullptr ? "" : maker;
+}
+
+void formatWifiAddress(const std::array<std::uint8_t, 6>& address,
+                       char* output, std::size_t capacity);
+
+void compactWifiDeviceLabel(const WifiDeviceRecord& device, char* output,
+                            std::size_t capacity) {
+    if (output == nullptr || capacity == 0U) return;
+    const char* source = wifiDevicePrimaryLabel(device);
+    if (source[0] == '\0') {
+        formatWifiAddress(device.address, output, capacity);
+        return;
+    }
+    const std::size_t sourceLength = std::strlen(source);
+    const std::size_t visible = sourceLength < capacity
+        ? sourceLength : capacity - 1U;
+    std::memcpy(output, source, visible);
+    output[visible] = '\0';
+    if (visible < sourceLength && visible > 1U) output[visible - 1U] = '~';
+}
+
 UiTextId wifiDeviceStateText(WifiDeviceState state) {
     switch (state) {
         case WifiDeviceState::Searching: return UiTextId::WifiDeviceSearching;
@@ -6645,7 +6724,7 @@ void formatWifiAddress(const std::array<std::uint8_t, 6>& address,
 }
 
 void renderWifiDeviceRow(std::size_t index, std::size_t firstVisible) {
-    const WifiDeviceRecord* device = wifiDeviceCatalog.at(index);
+    const WifiDeviceRecord* device = wifiDeviceAt(index);
     if (device == nullptr || index < firstVisible ||
         index >= firstVisible + kVisibleWifiNetworkRows) {
         return;
@@ -6658,14 +6737,14 @@ void renderWifiDeviceRow(std::size_t index, std::size_t firstVisible) {
     display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
                           Layout::Radius, background);
     renderFocusCue(bounds, selected);
-    char address[24] = {};
-    formatWifiAddress(device->address, address, sizeof(address));
+    char primary[23] = {};
+    compactWifiDeviceLabel(*device, primary, sizeof(primary));
     const std::int16_t labelTop = menuRowTextTop(bounds);
     display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
                          background);
     setUiCursor(UiTextRole::Body,
                 bounds.x + kInteractiveRowTextInset, labelTop);
-    display.print(address);
+    display.print(primary);
     char note[64] = {};
     std::snprintf(note, sizeof(note), tr(UiTextId::WifiDeviceRowFormat),
                   tr(wifiDeviceStateText(device->state)),
@@ -6690,9 +6769,9 @@ void renderWifiDevicesData() {
         return;
     }
     const std::size_t first = wifiDeviceFirstVisible(wifiDeviceSelection);
-    const std::size_t end = wifiDeviceCatalog.size() <
+    const std::size_t end = wifiDeviceVisibleSize() <
             first + kVisibleWifiNetworkRows
-        ? wifiDeviceCatalog.size() : first + kVisibleWifiNetworkRows;
+        ? wifiDeviceVisibleSize() : first + kVisibleWifiNetworkRows;
     for (std::size_t index = first; index < end; ++index) {
         renderWifiDeviceRow(index, first);
     }
@@ -6706,18 +6785,49 @@ void renderWifiDevices(bool clearContent) {
 void renderWifiDeviceDetail(bool clearContent) {
     renderHeader(tr(UiTextId::WifiDeviceDetailTitle), clearContent);
     char line[96] = {};
-    formatWifiAddress(wifiDeviceDetail.address, line, sizeof(line));
+    char primary[23] = {};
+    compactWifiDeviceLabel(wifiDeviceDetail, primary, sizeof(primary));
     display.setTextColor(Palette::Focus, Palette::Canvas);
     setUiCursor(UiTextRole::Body, 14, 42);
+    display.print(primary);
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 69);
+    formatWifiAddress(wifiDeviceDetail.address, line, sizeof(line));
     display.print(line);
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 92);
+    display.print(tr(wifiDeviceDetail.locallyAdministered
+                         ? UiTextId::WifiDevicePrivateAddress
+                         : UiTextId::WifiDeviceFactoryAddress));
+    const char* maker = wifiDeviceMaker(wifiDeviceDetail);
+    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceMakerFormat),
+                  maker == nullptr ? tr(UiTextId::WifiDeviceUnknown) : maker);
+    display.setTextColor(maker == nullptr ? Palette::TextMuted
+                                         : Palette::TextSecondary,
+                         Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 115);
+    display.print(line);
+    if (wifiDeviceDetail.wpsModelLength != 0U) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceModelFormat),
+                      wifiDeviceDetail.wpsModel.data());
+        setUiCursor(UiTextRole::Meta, 14, 138);
+        display.print(line);
+    }
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::WifiDeviceRadioFormat),
+        tr(wifiDeviceGenerationText(wifiDeviceDetail.generation)),
+        static_cast<unsigned>(wifiDeviceDetail.channel));
     display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 70);
-    display.print(tr(wifiDeviceStateText(wifiDeviceDetail.state)));
-    std::snprintf(line, sizeof(line), tr(UiTextId::RadioChannelFormat),
-                  static_cast<unsigned>(wifiDeviceDetail.channel));
-    setUiCursor(UiTextRole::Body, 14, 98);
+    setUiCursor(UiTextRole::Meta, 14, 161);
     display.print(line);
-    renderRadioSignalCard(wifiDeviceDetail.rssiDbm);
+    if (wifiDeviceDetail.ssidLength != 0U) {
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::WifiDeviceNetworkFormat),
+                      wifiDeviceDetail.ssid.data());
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 184);
+        display.print(line);
+    }
     if (wifiDeviceDetail.bssidKnown) {
         std::snprintf(
             line, sizeof(line), tr(UiTextId::WifiNetworkBssidFormat),
@@ -6728,9 +6838,59 @@ void renderWifiDeviceDetail(bool clearContent) {
             static_cast<unsigned>(wifiDeviceDetail.bssid[4]),
             static_cast<unsigned>(wifiDeviceDetail.bssid[5]));
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 247);
+        setUiCursor(UiTextRole::Meta, 14, 207);
         display.print(line);
     }
+    const std::uint64_t observedUs = wifiDeviceDetail.monotonicUs >=
+            wifiDeviceDetail.firstSeenUs
+        ? wifiDeviceDetail.monotonicUs - wifiDeviceDetail.firstSeenUs : 0U;
+    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceSeenFormat),
+                  static_cast<unsigned long>(observedUs / 1000000ULL),
+                  tr(wifiDeviceStateText(wifiDeviceDetail.state)));
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 230);
+    display.print(line);
+    setUiCursor(UiTextRole::Meta, 14, 257);
+    display.print(tr(UiTextId::WifiDevicePassiveOnly));
+}
+
+UiTextId wifiDeviceTrendText(std::int16_t trendDb) {
+    if (trendDb >= 4) return UiTextId::WifiDeviceTrendCloser;
+    if (trendDb <= -4) return UiTextId::WifiDeviceTrendFarther;
+    return UiTextId::WifiDeviceTrendStable;
+}
+
+void renderWifiDeviceRadarData() {
+    display.fillRect(Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
+                     Layout::FooterDividerY - Layout::ContentTop,
+                     Palette::Canvas);
+    char line[96] = {};
+    char primary[23] = {};
+    compactWifiDeviceLabel(wifiDeviceDetail, primary, sizeof(primary));
+    display.setTextColor(Palette::Focus, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 42);
+    display.print(primary);
+    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceRadioFormat),
+                  tr(wifiDeviceStateText(wifiDeviceDetail.state)),
+                  static_cast<unsigned>(wifiDeviceDetail.channel));
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 70);
+    display.print(line);
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 98);
+    display.print(tr(wifiDeviceTrendText(wifiDeviceDetail.rssiTrendDb)));
+    renderRadioSignalCard(wifiDeviceDetail.rssiDbm);
+    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceRssiRangeFormat),
+                  static_cast<int>(wifiDeviceDetail.minimumRssiDbm),
+                  static_cast<int>(wifiDeviceDetail.maximumRssiDbm));
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 247);
+    display.print(line);
+}
+
+void renderWifiDeviceRadar(bool clearContent) {
+    renderHeader(tr(UiTextId::WifiDeviceRadarTitle), clearContent);
+    renderWifiDeviceRadarData();
 }
 
 constexpr std::int16_t kWifiChannelInfoY = Layout::ContentTop;
@@ -7605,6 +7765,10 @@ void renderInventoryPage(bool clearContent) {
         renderWifiDeviceDetail(clearContent);
         return;
     }
+    if (wifiProductView == WifiProductView::DeviceRadar) {
+        renderWifiDeviceRadar(clearContent);
+        return;
+    }
     if (wifiProductView == WifiProductView::Channels) {
         renderWifiChannels(clearContent);
         return;
@@ -8040,7 +8204,7 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         wifiNetworkVisibleSize(),
         wifiNetworkCatalog.revision(),
         wifiDeviceSelection,
-        wifiDeviceCatalog.size(),
+        wifiDeviceVisibleSize(),
         wifiDeviceCatalog.revision(),
         wifiFrameCapture.deviceMonitorStats().active,
         static_cast<std::uint8_t>(bleProductView),
@@ -8216,6 +8380,17 @@ bool renderSelectionDelta() {
     }
 
     if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::DeviceRadar &&
+        renderedUi.wifiProductView ==
+            static_cast<std::uint8_t>(WifiProductView::DeviceRadar)) {
+        if (renderedUi.wifiDeviceRevision == wifiDeviceCatalog.revision()) {
+            return false;
+        }
+        renderWifiDeviceRadarData();
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
         wifiProductView == WifiProductView::Devices &&
         renderedUi.wifiProductView ==
             static_cast<std::uint8_t>(WifiProductView::Devices)) {
@@ -8224,14 +8399,14 @@ bool renderSelectionDelta() {
             wifiDeviceFirstVisible(renderedUi.wifiDeviceSelection);
         const std::size_t currentFirst = wifiDeviceFirstVisible(current);
         const bool dataChanged =
-            renderedUi.wifiDeviceSize != wifiDeviceCatalog.size() ||
+            renderedUi.wifiDeviceSize != wifiDeviceVisibleSize() ||
             renderedUi.wifiDeviceRevision != wifiDeviceCatalog.revision() ||
             renderedUi.wifiDeviceActive !=
                 wifiFrameCapture.deviceMonitorStats().active;
         if (dataChanged || oldFirst != currentFirst) {
             const bool clearRows = oldFirst != currentFirst ||
                 renderedUi.wifiDeviceSize == 0U ||
-                wifiDeviceCatalog.size() == 0U;
+                wifiDeviceVisibleSize() == 0U;
             if (clearRows) {
                 display.fillRect(
                     Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
@@ -8239,9 +8414,9 @@ bool renderSelectionDelta() {
                     Palette::Canvas);
                 renderWifiDevicesData();
             } else {
-                const std::size_t end = wifiDeviceCatalog.size() <
+                const std::size_t end = wifiDeviceVisibleSize() <
                         currentFirst + kVisibleWifiNetworkRows
-                    ? wifiDeviceCatalog.size()
+                    ? wifiDeviceVisibleSize()
                     : currentFirst + kVisibleWifiNetworkRows;
                 for (std::size_t index = currentFirst; index < end; ++index) {
                     renderWifiDeviceRow(index, currentFirst);
@@ -9977,10 +10152,22 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"wifi_networks_strongest_first\":%s,"
                       "\"wifi_network_catalog_revision\":%lu,"
                       "\"wifi_device_selection\":%u,"
+                      "\"wifi_device_visible_size\":%u,"
+                      "\"wifi_device_navigation_locked\":%s,"
+                      "\"wifi_device_order_hash\":%lu,"
                       "\"wifi_devices_unique\":%u,"
                       "\"wifi_devices_strongest_first\":%s,"
                       "\"wifi_device_catalog_revision\":%lu,"
+                      "\"wifi_device_oui_database_available\":%s,"
+                      "\"wifi_device_oui_records\":%u,"
+                      "\"wifi_device_detail_private_mac\":%s,"
+                      "\"wifi_device_detail_ssid_known\":%s,"
+                      "\"wifi_device_detail_wps_identity_known\":%s,"
+                      "\"wifi_device_detail_generation\":\"%s\","
+                      "\"wifi_device_detail_last_seen_us\":%llu,"
+                      "\"wifi_device_detail_rssi_dbm\":%d,"
                       "\"wifi_device_monitor_active\":%s,"
+                      "\"wifi_device_channel_locked\":%s,"
                       "\"wifi_device_monitor_cleanup_complete\":%s,"
                       "\"wifi_device_nvs_disabled\":%s,"
                       "\"wifi_device_volatile_storage_only\":%s,"
@@ -10216,10 +10403,29 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       static_cast<unsigned long>(
                           wifiNetworkCatalog.revision()),
                       static_cast<unsigned>(wifiDeviceSelection),
+                      static_cast<unsigned>(wifiDeviceVisibleSize()),
+                      wifiDeviceNavigationOrder.locked() ? "true" : "false",
+                      static_cast<unsigned long>(
+                          wifiDeviceNavigationOrder.orderHash(
+                              wifiDeviceCatalog)),
                       static_cast<unsigned>(wifiDeviceCatalog.size()),
                       wifiDeviceCatalog.strongestFirst() ? "true" : "false",
                       static_cast<unsigned long>(wifiDeviceCatalog.revision()),
+                      wifiOuiDatabase.available() ? "true" : "false",
+                      static_cast<unsigned>(wifiOuiDatabase.records()),
+                      wifiDeviceDetail.locallyAdministered ? "true" : "false",
+                      wifiDeviceDetail.ssidLength != 0U ? "true" : "false",
+                      (wifiDeviceDetail.wpsDeviceNameLength != 0U ||
+                       wifiDeviceDetail.wpsManufacturerLength != 0U ||
+                       wifiDeviceDetail.wpsModelLength != 0U)
+                          ? "true" : "false",
+                      leshy1::apps::wifi::wifiDeviceGenerationName(
+                          wifiDeviceDetail.generation),
+                      static_cast<unsigned long long>(
+                          wifiDeviceDetail.monotonicUs),
+                      static_cast<int>(wifiDeviceDetail.rssiDbm),
                       wifiDeviceStats.active ? "true" : "false",
+                      wifiFrameCapture.deviceChannelLocked() ? "true" : "false",
                       wifiDeviceStats.cleanupComplete ? "true" : "false",
                       wifiFrameCapture.nvsDisabled() ? "true" : "false",
                       wifiFrameCapture.volatileStorageOnly() ? "true" : "false",
@@ -10707,6 +10913,7 @@ bool startBleDevicesProduct() {
 bool startWifiDevicesProduct() {
     wifiFrameCapture.reset();
     wifiDeviceCatalog.reset();
+    wifiDeviceNavigationOrder.reset();
     wifiDeviceSelection = 0;
     wifiDeviceDetail = {};
     std::uint64_t startedUs =
@@ -10740,29 +10947,63 @@ void serviceWifiDevicesProduct() {
     if (nowUs == 0U) nowUs = 1U;
     wifiFrameCapture.service(nowUs);
     bool changed = false;
-    const WifiDeviceRecord* selected =
-        wifiDeviceCatalog.at(wifiDeviceSelection);
+    const WifiDeviceRecord* selected = wifiDeviceAt(wifiDeviceSelection);
     const std::array<std::uint8_t, 6> selectionAnchor = selected == nullptr
         ? std::array<std::uint8_t, 6>{} : selected->address;
     const bool selectionAnchored = selected != nullptr;
     WifiDeviceObservation observation{};
     while (wifiFrameCapture.pollDevice(&observation)) {
+        const std::size_t existingIndex =
+            wifiDeviceCatalog.indexOfAddress(observation.address);
+        if (wifiDeviceNavigationOrder.locked() &&
+            existingIndex >= wifiDeviceCatalog.size()) {
+            observation = {};
+            continue;
+        }
+        if (!observation.locallyAdministered &&
+            observation.wpsManufacturerLength == 0U) {
+            const WifiDeviceRecord* existing =
+                wifiDeviceCatalog.at(existingIndex);
+            const bool needsVendor = existing == nullptr ||
+                (existing->wpsManufacturerLength == 0U &&
+                 existing->ouiVendorLength == 0U);
+            if (needsVendor) {
+                char vendor[WifiDeviceObservation::kWpsTextCapacity] = {};
+                if (wifiOuiDatabase.lookup(observation.address.data(), vendor,
+                                           sizeof(vendor))) {
+                    std::snprintf(observation.ouiVendor.data(),
+                                  observation.ouiVendor.size(), "%s", vendor);
+                    observation.ouiVendorLength = static_cast<std::uint8_t>(
+                        std::strlen(observation.ouiVendor.data()));
+                }
+            }
+        }
         changed = wifiDeviceCatalog.upsert(observation) || changed;
         observation = {};
     }
-    if (changed && selectionAnchored) {
+    if (changed && selectionAnchored &&
+        !wifiDeviceNavigationOrder.locked()) {
         const std::size_t anchored =
             wifiDeviceCatalog.indexOfAddress(selectionAnchor);
         wifiDeviceSelection = anchored < wifiDeviceCatalog.size()
             ? anchored : wifiDeviceCatalog.size() - 1U;
     }
+    if (changed &&
+        (wifiProductView == WifiProductView::DeviceDetail ||
+         wifiProductView == WifiProductView::DeviceRadar)) {
+        const std::size_t detailIndex =
+            wifiDeviceCatalog.indexOfAddress(wifiDeviceDetail.address);
+        const WifiDeviceRecord* current = wifiDeviceCatalog.at(detailIndex);
+        if (current != nullptr) wifiDeviceDetail = *current;
+    }
     const auto after = wifiFrameCapture.deviceMonitorStats();
     const bool terminal = before.active && !after.active;
     if (terminal) lastRuntimeEvent = "wifi_devices_failed";
-    // At most four data-row refreshes per second. Detail is intentionally
-    // frozen while the passive monitor continues collecting in the background.
+    // At most four data-only refreshes per second. The facts page remains
+    // stable; the explicit Radar page updates live without repainting chrome.
     if ((changed || terminal) && uiController.page() == 2 &&
-        wifiProductView == WifiProductView::Devices &&
+        (wifiProductView == WifiProductView::Devices ||
+         wifiProductView == WifiProductView::DeviceRadar) &&
         (terminal || nowUs >= nextWifiDeviceUiRefreshUs)) {
         nextWifiDeviceUiRefreshUs = nowUs + 250000ULL;
         renderInteractiveScreen(false);
@@ -11217,20 +11458,49 @@ bool applyUiAction(UiAction action, bool render = true) {
                 wifiProductView = WifiProductView::Devices;
                 lastRuntimeEvent = "wifi_devices";
                 changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                std::uint64_t nowUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                if (nowUs == 0U) nowUs = 1U;
+                if (wifiFrameCapture.lockDeviceChannel(
+                        wifiDeviceDetail.channel, nowUs)) {
+                    wifiProductView = WifiProductView::DeviceRadar;
+                    nextWifiDeviceUiRefreshUs = nowUs;
+                    lastRuntimeEvent = "wifi_device_radar";
+                    changed = true;
+                } else {
+                    lastRuntimeEvent = "wifi_device_radar_unavailable";
+                }
+            }
+        } else if (wifiProductView == WifiProductView::DeviceRadar) {
+            handled = true;
+            if (action == UiAction::Back || action == UiAction::Left) {
+                std::uint64_t nowUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                if (nowUs == 0U) nowUs = 1U;
+                wifiFrameCapture.unlockDeviceChannel(nowUs);
+                wifiProductView = WifiProductView::DeviceDetail;
+                lastRuntimeEvent = "wifi_device_detail";
+                changed = true;
             }
         } else if (wifiProductView == WifiProductView::Devices) {
             handled = true;
+            if (action == UiAction::Up || action == UiAction::Down ||
+                action == UiAction::Select || action == UiAction::Right) {
+                wifiDeviceNavigationOrder.lock(wifiDeviceCatalog);
+            }
             if (action == UiAction::Up && wifiDeviceSelection > 0U) {
                 --wifiDeviceSelection;
                 changed = true;
             } else if (action == UiAction::Down &&
-                       wifiDeviceSelection + 1U < wifiDeviceCatalog.size()) {
+                       wifiDeviceSelection + 1U < wifiDeviceVisibleSize()) {
                 ++wifiDeviceSelection;
                 changed = true;
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {
                 const WifiDeviceRecord* device =
-                    wifiDeviceCatalog.at(wifiDeviceSelection);
+                    wifiDeviceAt(wifiDeviceSelection);
                 if (device != nullptr) {
                     wifiDeviceDetail = *device;
                     wifiProductView = WifiProductView::DeviceDetail;
@@ -11820,6 +12090,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                 if (wifiApp) {
                     wifiFrameCapture.reset();
                     wifiDeviceCatalog.reset();
+                    wifiDeviceNavigationOrder.reset();
                     wifiDeviceSelection = 0;
                     wifiDeviceDetail = {};
                     nextWifiDeviceUiRefreshUs = 0;
@@ -11908,7 +12179,7 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
             return {leshy1::ui::hitTouchTarget(
                         TouchTargetLayout::HomeRows, point,
                         static_cast<std::uint8_t>(first),
-                        static_cast<std::uint8_t>(wifiDeviceCatalog.size())),
+                        static_cast<std::uint8_t>(wifiDeviceVisibleSize())),
                     static_cast<std::uint8_t>(wifiDeviceSelection)};
         }
         if (rfSpectrumView == RfSpectrumView::SourceMenu) {

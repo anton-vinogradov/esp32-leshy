@@ -22,6 +22,8 @@
 #include "apps/wifi/WifiNetworkCatalog.h"
 #include "apps/wifi/WifiNetworkNavigationOrder.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
+#include "apps/wifi/WifiDeviceNavigationOrder.h"
+#include "apps/wifi/WifiOuiDatabase.h"
 #include "apps/wifi/WifiChannelLoad.h"
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
@@ -2264,6 +2266,110 @@ void testWifiDeviceCatalogDecodesOnlyClientActivity() {
     frame[10] = 0xff;  // Multicast/broadcast transmitter is never a device row.
     CHECK(!decodeWifiClientFrame(frame.data(), frame.size(), -60, 1, 5000,
                                  &observation));
+}
+
+void testWifiDevicePassiveFingerprintAndOuiLookup() {
+    std::array<std::uint8_t, 128> frame{};
+    const std::array<std::uint8_t, 6> client =
+        {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
+    std::memcpy(frame.data() + 10U, client.data(), client.size());
+    frame[0] = 0x40;  // Probe request.
+    std::size_t offset = 24U;
+    const auto appendIe = [&frame, &offset](
+                              std::uint8_t kind,
+                              const std::uint8_t* value,
+                              std::size_t length) {
+        CHECK(length <= 255U);
+        frame[offset++] = kind;
+        frame[offset++] = static_cast<std::uint8_t>(length);
+        std::memcpy(frame.data() + offset, value, length);
+        offset += length;
+    };
+    const std::array<std::uint8_t, 7> ssid =
+        {'C', 'a', 'f', 'e', 'L', 'a', 'b'};
+    appendIe(0U, ssid.data(), ssid.size());
+    const std::array<std::uint8_t, 4> rates = {2, 4, 11, 108};
+    appendIe(1U, rates.data(), rates.size());
+    const std::array<std::uint8_t, 1> ht = {0};
+    appendIe(45U, ht.data(), ht.size());
+    const std::array<std::uint8_t, 1> vht = {0};
+    appendIe(191U, vht.data(), vht.size());
+    const std::array<std::uint8_t, 2> he = {35, 0};
+    appendIe(255U, he.data(), he.size());
+
+    std::array<std::uint8_t, 40> wps{};
+    std::size_t wpsOffset = 0U;
+    const std::array<std::uint8_t, 4> wpsOui = {0x00, 0x50, 0xf2, 0x04};
+    std::memcpy(wps.data(), wpsOui.data(), wpsOui.size());
+    wpsOffset += wpsOui.size();
+    const auto appendWps = [&wps, &wpsOffset](
+                               std::uint16_t kind, const char* value) {
+        const std::size_t length = std::strlen(value);
+        wps[wpsOffset++] = static_cast<std::uint8_t>(kind >> 8U);
+        wps[wpsOffset++] = static_cast<std::uint8_t>(kind);
+        wps[wpsOffset++] = static_cast<std::uint8_t>(length >> 8U);
+        wps[wpsOffset++] = static_cast<std::uint8_t>(length);
+        std::memcpy(wps.data() + wpsOffset, value, length);
+        wpsOffset += length;
+    };
+    appendWps(0x1021U, "Acme");
+    appendWps(0x1023U, "Phone X");
+    appendWps(0x1011U, "Alice");
+    appendIe(221U, wps.data(), wpsOffset);
+
+    WifiDeviceObservation observation;
+    CHECK(decodeWifiClientFrame(frame.data(), offset, -61, 6, 10'000,
+                                &observation));
+    CHECK(!observation.locallyAdministered);
+    CHECK(observation.ssidLength == 7U);
+    CHECK(std::strcmp(observation.ssid.data(), "CafeLab") == 0);
+    CHECK(observation.generation == WifiDeviceGeneration::Wifi6);
+    CHECK(observation.maxLegacyRateHalfMbps == 108U);
+    CHECK(std::strcmp(observation.wpsManufacturer.data(), "Acme") == 0);
+    CHECK(std::strcmp(observation.wpsModel.data(), "Phone X") == 0);
+    CHECK(std::strcmp(observation.wpsDeviceName.data(), "Alice") == 0);
+    CHECK((observation.evidence & WifiDeviceEvidenceProbe) != 0U);
+
+    std::array<std::uint8_t, 64> ouiAsset{};
+    ouiAsset[0] = 0x00;
+    ouiAsset[1] = 0x11;
+    ouiAsset[2] = 0x22;
+    std::memcpy(ouiAsset.data() + 3U, "Acme Devices", 12U);
+    ouiAsset[32] = 0x00;
+    ouiAsset[33] = 0xaa;
+    ouiAsset[34] = 0xbb;
+    std::memcpy(ouiAsset.data() + 35U, "Bravo", 5U);
+    WifiOuiDatabase database(ouiAsset.data(), ouiAsset.size());
+    CHECK(database.available());
+    CHECK(database.records() == 2U);
+    char maker[WifiDeviceObservation::kWpsTextCapacity] = {};
+    CHECK(database.lookup(client.data(), maker, sizeof(maker)));
+    CHECK(std::strcmp(maker, "Acme Devices") == 0);
+    std::array<std::uint8_t, 6> privateMac = client;
+    privateMac[0] = 0x02;
+    CHECK(!database.lookup(privateMac.data(), maker, sizeof(maker)));
+
+    WifiDeviceCatalog catalog;
+    CHECK(catalog.upsert(observation));
+    WifiDeviceObservation stronger = observation;
+    stronger.address[5] = 0x56;
+    stronger.rssiDbm = -30;
+    stronger.monotonicUs = 20'000;
+    CHECK(catalog.upsert(stronger));
+    WifiDeviceNavigationOrder navigation;
+    CHECK(navigation.lock(catalog));
+    CHECK(navigation.at(catalog, 0)->address[5] == 0x56);
+    const std::uint32_t lockedHash = navigation.orderHash(catalog);
+    observation.rssiDbm = -20;
+    observation.monotonicUs = 30'000;
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.at(0)->address == client);
+    CHECK(navigation.at(catalog, 0)->address[5] == 0x56);
+    CHECK(navigation.orderHash(catalog) == lockedHash);
+    CHECK(catalog.at(0)->firstSeenUs == 10'000U);
+    CHECK(catalog.at(0)->minimumRssiDbm == -61);
+    CHECK(catalog.at(0)->maximumRssiDbm == -20);
+    CHECK(catalog.at(0)->rssiTrendDb == 41);
 }
 
 void testWifiChannelLoadIsBoundedAndTruthful() {
@@ -5317,6 +5423,7 @@ int main() {
     testWifiNetworkNavigationLocksIdentityOrder();
     testBleDeviceCatalogKeepsStrongestUniqueRows();
     testWifiDeviceCatalogDecodesOnlyClientActivity();
+    testWifiDevicePassiveFingerprintAndOuiLookup();
     testWifiChannelLoadIsBoundedAndTruthful();
     testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations();
     testSurveySessionIsOrderedBoundedAndStopIsIdempotent();

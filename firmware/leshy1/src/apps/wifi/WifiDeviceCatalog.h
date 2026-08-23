@@ -14,18 +14,57 @@ enum class WifiDeviceState : std::uint8_t {
 
 const char* wifiDeviceStateName(WifiDeviceState state);
 
+enum class WifiDeviceGeneration : std::uint8_t {
+    Unknown,
+    Legacy,
+    Wifi4,
+    Wifi5,
+    Wifi6,
+};
+
+const char* wifiDeviceGenerationName(WifiDeviceGeneration generation);
+
+enum WifiDeviceEvidence : std::uint8_t {
+    WifiDeviceEvidenceNone = 0,
+    WifiDeviceEvidenceProbe = 1U << 0U,
+    WifiDeviceEvidenceAssociation = 1U << 1U,
+    WifiDeviceEvidenceData = 1U << 2U,
+};
+
 struct WifiDeviceObservation {
+    static constexpr std::size_t kSsidCapacity = 33;
+    static constexpr std::size_t kWpsTextCapacity = 29;
+
     std::array<std::uint8_t, 6> address{};
     std::array<std::uint8_t, 6> bssid{};
+    std::array<char, kSsidCapacity> ssid{};
+    std::array<char, kWpsTextCapacity> wpsDeviceName{};
+    std::array<char, kWpsTextCapacity> wpsManufacturer{};
+    std::array<char, kWpsTextCapacity> wpsModel{};
+    std::array<char, kWpsTextCapacity> ouiVendor{};
     WifiDeviceState state = WifiDeviceState::Searching;
+    WifiDeviceGeneration generation = WifiDeviceGeneration::Unknown;
     std::uint8_t channel = 0;
+    std::uint8_t evidence = WifiDeviceEvidenceNone;
+    std::uint8_t ssidLength = 0;
+    std::uint8_t wpsDeviceNameLength = 0;
+    std::uint8_t wpsManufacturerLength = 0;
+    std::uint8_t wpsModelLength = 0;
+    std::uint8_t ouiVendorLength = 0;
+    std::uint8_t maxLegacyRateHalfMbps = 0;
     std::int16_t rssiDbm = 0;
     std::uint64_t monotonicUs = 0;
     bool bssidKnown = false;
+    bool locallyAdministered = false;
 };
 
 struct WifiDeviceRecord final : WifiDeviceObservation {
     std::uint32_t framesSeen = 0;
+    std::uint64_t firstSeenUs = 0;
+    std::int16_t previousRssiDbm = 0;
+    std::int16_t minimumRssiDbm = 0;
+    std::int16_t maximumRssiDbm = 0;
+    std::int16_t rssiTrendDb = 0;
 };
 
 // Extract only client-side activity that can be stated honestly from passive

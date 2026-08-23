@@ -58,6 +58,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/apps/ble/BleDeviceCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/wifi/WifiNetworkCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/wifi/WifiDeviceCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/wifi/WifiOuiDatabase.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/wifi/WifiChannelLoad.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/apps/AppCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/hardware/HardwareInventory.cpp" \

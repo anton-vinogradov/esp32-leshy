@@ -51,6 +51,9 @@ public:
     apps::wifi::WifiChannelLoadSnapshot channelLoadSnapshot() const;
     std::uint8_t bestPrimaryChannel() const;
     bool pollDevice(apps::wifi::WifiDeviceObservation* output);
+    bool lockDeviceChannel(std::uint8_t channel, std::uint64_t nowUs);
+    void unlockDeviceChannel(std::uint64_t nowUs);
+    bool deviceChannelLocked() const { return deviceChannelLocked_; }
     const apps::capture::WifiFrameCapture& capture() const { return capture_; }
     std::uint8_t currentChannel() const { return currentChannel_; }
     bool cleanupComplete() const { return cleanupComplete_; }
@@ -77,6 +80,7 @@ private:
     std::size_t deviceQueueTail_ = 0;
     std::size_t deviceQueueSize_ = 0;
     bool deviceMonitor_ = false;
+    bool deviceChannelLocked_ = false;
     bool channelMonitor_ = false;
     bool initialized_ = false;
     bool started_ = false;

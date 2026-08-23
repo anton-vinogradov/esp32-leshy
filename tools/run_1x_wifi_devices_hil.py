@@ -28,7 +28,7 @@ from run_1x_product_survey_hil import (
 )
 
 
-RUN_SCHEMA = "leshy.wifi_devices_hil.run.v1"
+RUN_SCHEMA = "leshy.wifi_devices_hil.run.v2"
 CONTENT_X0 = 12
 CONTENT_X1 = 228
 CONTENT_Y0 = 32
@@ -145,6 +145,8 @@ def main() -> int:
     live_second: dict[str, Any] = {}
     detail_first: dict[str, Any] = {}
     detail_second: dict[str, Any] = {}
+    radar_first: dict[str, Any] = {}
+    radar_second: dict[str, Any] = {}
     monitor_after_first: dict[str, Any] = {}
     monitor_after_second: dict[str, Any] = {}
     metrics_after_first: dict[str, Any] = {}
@@ -155,6 +157,7 @@ def main() -> int:
     cleanup_after: dict[str, Any] = {"attempted": False}
     list_pixel_changes: dict[str, int] = {}
     detail_pixel_changes: dict[str, int] = {}
+    radar_pixel_changes: dict[str, int] = {}
 
     try:
         if args.flash:
@@ -223,6 +226,9 @@ def main() -> int:
                     "wifi_product_view": "device_detail",
                     "runtime_owner": "wifi", "lease_mask": 15,
                     "wifi_device_monitor_active": True,
+                    "wifi_device_oui_database_available": True,
+                    "wifi_device_oui_records": 39984,
+                    "wifi_device_navigation_locked": True,
                 }, "wifi_device_detail")
                 screens["wifi_device_detail_first"] = capture(
                     device, frames, "wifi-device-detail-first")
@@ -250,6 +256,56 @@ def main() -> int:
                     raise RuntimeError(
                         f"stable device detail changed: {detail_pixel_changes}")
 
+                radar_first = action(device, "right")
+                trace.append(radar_first)
+                require_exact(radar_first, {
+                    "wifi_product_view": "device_radar",
+                    "runtime_owner": "wifi", "lease_mask": 15,
+                    "wifi_device_monitor_active": True,
+                    "wifi_device_channel_locked": True,
+                }, "wifi_device_radar")
+                screens["wifi_device_radar_first"] = capture(
+                    device, frames, "wifi-device-radar-first")
+                radar_accepted = int(
+                    radar_first.get("wifi_device_clients_accepted", 0))
+                radar_revision = int(
+                    radar_first.get("wifi_device_catalog_revision", 0))
+                radar_last_seen = int(
+                    radar_first.get("wifi_device_detail_last_seen_us", 0))
+                radar_hops = int(
+                    radar_first.get("wifi_device_channel_hops", 0))
+                radar_second = wait_ui_state(
+                    device,
+                    lambda state: (
+                        state.get("wifi_product_view") == "device_radar" and
+                        state.get("wifi_device_channel_locked") is True and
+                        int(state.get("wifi_device_clients_accepted", 0)) >
+                            radar_accepted and
+                        int(state.get("wifi_device_catalog_revision", 0)) >
+                            radar_revision and
+                        int(state.get("wifi_device_detail_last_seen_us", 0)) >
+                            radar_last_seen
+                    ), 90.0, "channel-locked device radar saw no live client")
+                trace.append(radar_second)
+                if int(radar_second.get("wifi_device_channel_hops", -1)) != \
+                        radar_hops:
+                    raise RuntimeError("device radar hopped away from its channel")
+                screens["wifi_device_radar_second"] = capture(
+                    device, frames, "wifi-device-radar-second")
+                radar_pixel_changes = changed_pixels(
+                    frames, "wifi-device-radar-first",
+                    "wifi-device-radar-second")
+                if radar_pixel_changes["chrome_changed_pixels"] != 0:
+                    raise RuntimeError(
+                        f"live radar redraw mismatch: {radar_pixel_changes}")
+
+                info_after_radar = action(device, "left")
+                trace.append(info_after_radar)
+                require_exact(info_after_radar, {
+                    "wifi_product_view": "device_detail",
+                    "wifi_device_channel_locked": False,
+                    "wifi_device_monitor_active": True,
+                }, "wifi_device_radar_back")
                 trace.append(action(device, "left"))
                 monitor_after_first = action(device, "left")
                 trace.append(monitor_after_first)
@@ -354,6 +410,8 @@ def main() -> int:
         "live_second": live_second,
         "detail_first": detail_first,
         "detail_second": detail_second,
+        "radar_first": radar_first,
+        "radar_second": radar_second,
         "monitor_after_first": monitor_after_first,
         "monitor_after_second": monitor_after_second,
         "metrics_after_first": metrics_after_first,
@@ -362,6 +420,7 @@ def main() -> int:
         "safe_outputs": safe_outputs,
         "list_pixel_changes": list_pixel_changes,
         "detail_pixel_changes": detail_pixel_changes,
+        "radar_pixel_changes": radar_pixel_changes,
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
@@ -375,6 +434,11 @@ def main() -> int:
             "channels_listened": list(range(1, 14)),
             "live_redraw_data_rows_only": True,
             "detail_screen_stable_during_background_monitor": True,
+            "embedded_ieee_oui_records": 39984,
+            "passive_probe_association_wps_fingerprint": True,
+            "identity_stable_device_navigation": True,
+            "channel_locked_live_radar": True,
+            "radar_redraw_content_only": True,
             "two_complete_wifi_lifecycles": True,
             "zero_heap_drift_after_warmup": (
                 metrics_after.get("heap_free") ==

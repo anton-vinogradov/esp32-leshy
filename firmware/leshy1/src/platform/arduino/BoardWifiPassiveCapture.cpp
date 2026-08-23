@@ -123,6 +123,7 @@ bool BoardWifiPassiveCapture::beginDeviceMonitor(
     deviceStats_ = {};
     deviceStats_.cleanupComplete = false;
     deviceMonitor_ = true;
+    deviceChannelLocked_ = false;
     channelMonitor_ = false;
     cleanupComplete_ = false;
     lastError_ = 0;
@@ -283,6 +284,7 @@ bool BoardWifiPassiveCapture::beginChannelMonitor(
 bool BoardWifiPassiveCapture::service(std::uint64_t nowUs) {
     if (deviceMonitor_ || channelMonitor_) {
         if (!promiscuous_) return false;
+        if (deviceMonitor_ && deviceChannelLocked_) return false;
         if (nowUs >= nextChannelUs_) {
             if (channelMonitor_) {
                 const std::uint64_t elapsed = nowUs - channelLandedUs_;
@@ -354,6 +356,7 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
     portEXIT_CRITICAL(&mux_);
     const bool wifiCleanup = endWifi();
     deviceMonitor_ = false;
+    deviceChannelLocked_ = false;
     channelMonitor_ = false;
     if (wasDeviceMonitor) {
         portENTER_CRITICAL(&mux_);
@@ -383,6 +386,7 @@ void BoardWifiPassiveCapture::reset() {
     channelLoad_.reset();
     portEXIT_CRITICAL(&mux_);
     deviceMonitor_ = false;
+    deviceChannelLocked_ = false;
     channelMonitor_ = false;
     currentChannel_ = 0;
     nextChannelUs_ = 0;
@@ -447,6 +451,25 @@ bool BoardWifiPassiveCapture::pollDevice(
     --deviceQueueSize_;
     portEXIT_CRITICAL(&mux_);
     return true;
+}
+
+bool BoardWifiPassiveCapture::lockDeviceChannel(std::uint8_t channel,
+                                                std::uint64_t nowUs) {
+    if (!deviceMonitor_ || !promiscuous_ || channel < 1U || channel > 13U ||
+        nowUs == 0U) {
+        return false;
+    }
+    if (currentChannel_ != channel && !changeChannel(channel, nowUs)) {
+        return false;
+    }
+    deviceChannelLocked_ = true;
+    return true;
+}
+
+void BoardWifiPassiveCapture::unlockDeviceChannel(std::uint64_t nowUs) {
+    if (!deviceMonitor_ || !promiscuous_) return;
+    deviceChannelLocked_ = false;
+    nextChannelUs_ = nowUs == 0U ? 1U : nowUs;
 }
 
 void BoardWifiPassiveCapture::receive(void* buffer,

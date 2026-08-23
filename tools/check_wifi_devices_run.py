@@ -12,7 +12,7 @@ from typing import Any
 from esp_app_identity import app_elf_sha256
 
 
-SCHEMA = "leshy.wifi_devices_hil.run.v1"
+SCHEMA = "leshy.wifi_devices_hil.run.v2"
 SCREENS = {
     "wifi_menu": "wifi-menu",
     "wifi_menu_after": "wifi-menu-after",
@@ -20,6 +20,8 @@ SCREENS = {
     "wifi_devices_second": "wifi-devices-second",
     "wifi_device_detail_first": "wifi-device-detail-first",
     "wifi_device_detail_second": "wifi-device-detail-second",
+    "wifi_device_radar_first": "wifi-device-radar-first",
+    "wifi_device_radar_second": "wifi-device-radar-second",
 }
 
 
@@ -133,6 +135,31 @@ def main() -> int:
             detail_second.get("wifi_device_channel_hops", 0) >
                 detail_first.get("wifi_device_channel_hops", 0),
             "background device monitor did not progress behind frozen detail")
+    require(failures,
+            detail_first.get("wifi_device_oui_database_available") is True and
+            detail_first.get("wifi_device_oui_records") == 39984 and
+            detail_first.get("wifi_device_navigation_locked") is True,
+            "device intelligence/OUI/navigation contract mismatch")
+    radar_first = run.get("radar_first", {})
+    radar_second = run.get("radar_second", {})
+    require(failures,
+            radar_first.get("wifi_product_view") == "device_radar" and
+            radar_first.get("wifi_device_channel_locked") is True and
+            radar_second.get("wifi_product_view") == "device_radar" and
+            radar_second.get("wifi_device_channel_locked") is True and
+            radar_second.get("wifi_device_clients_accepted", 0) >
+                radar_first.get("wifi_device_clients_accepted", 0) and
+            radar_second.get("wifi_device_catalog_revision", 0) >
+                radar_first.get("wifi_device_catalog_revision", 0) and
+            radar_second.get("wifi_device_detail_last_seen_us", 0) >
+                radar_first.get("wifi_device_detail_last_seen_us", 0) and
+            radar_second.get("wifi_device_channel_hops") ==
+                radar_first.get("wifi_device_channel_hops"),
+            "channel-locked radar did not receive live client updates")
+    require(failures,
+            run.get("radar_pixel_changes", {}).get(
+                "chrome_changed_pixels") == 0,
+            "radar redraw escaped content")
 
     for label in ("monitor_after_first", "monitor_after_second"):
         state = run.get(label, {})
@@ -158,6 +185,11 @@ def main() -> int:
             scope.get("channels_listened") == list(range(1, 14)) and
             scope.get("live_redraw_data_rows_only") is True and
             scope.get("detail_screen_stable_during_background_monitor") is True and
+            scope.get("embedded_ieee_oui_records") == 39984 and
+            scope.get("passive_probe_association_wps_fingerprint") is True and
+            scope.get("identity_stable_device_navigation") is True and
+            scope.get("channel_locked_live_radar") is True and
+            scope.get("radar_redraw_content_only") is True and
             scope.get("storage_write_authorized") is False,
             "automation/passive/no-flicker scope mismatch")
 
@@ -200,6 +232,9 @@ def main() -> int:
         "channel_hops": second.get("wifi_device_channel_hops"),
         "chrome_changed_pixels": 0,
         "detail_changed_pixels": 0,
+        "radar_changed_pixels": run.get("radar_pixel_changes", {}).get(
+            "content_changed_pixels"),
+        "oui_records": 39984,
         "final_lease_mask": 0,
     }, sort_keys=True))
     return 0

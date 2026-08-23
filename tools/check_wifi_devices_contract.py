@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Fail-closed source guard for the Wi-Fi Devices product function."""
 
+import hashlib
+import json
 from pathlib import Path
 
 
@@ -11,13 +13,19 @@ def main() -> int:
     renderer = (ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp").read_text()
     catalog_h = (ROOT / "firmware/leshy1/src/apps/wifi/WifiDeviceCatalog.h").read_text()
     catalog_cpp = (ROOT / "firmware/leshy1/src/apps/wifi/WifiDeviceCatalog.cpp").read_text()
+    oui_h = (ROOT / "firmware/leshy1/src/apps/wifi/WifiOuiDatabase.h").read_text()
+    oui_cpp = (ROOT / "firmware/leshy1/src/apps/wifi/WifiOuiDatabase.cpp").read_text()
+    navigation = (ROOT / "firmware/leshy1/src/apps/wifi/WifiDeviceNavigationOrder.h").read_text()
     adapter_h = (ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveCapture.h").read_text()
     adapter_cpp = (ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveCapture.cpp").read_text()
     strings = (ROOT / "firmware/leshy1/src/ui/UiStrings.def").read_text()
+    runner = (ROOT / "tools/run_1x_wifi_devices_hil.py").read_text()
+    checker = (ROOT / "tools/check_wifi_devices_run.py").read_text()
 
     required_renderer = (
         "WifiProductView::Devices",
         "WifiProductView::DeviceDetail",
+        "WifiProductView::DeviceRadar",
         "startWifiDevicesProduct()",
         "serviceWifiDevicesProduct()",
         "renderWifiDevicesData();",
@@ -26,9 +34,14 @@ def main() -> int:
         "wifi_device_monitor_active",
         "wifi_devices_strongest_first",
         "wifi_device_clients_dropped",
-        "wifiDeviceCatalog.indexOfAddress(selectionAnchor)",
+        "wifiDeviceNavigationOrder.lock(wifiDeviceCatalog)",
+        "wifiDeviceNavigationOrder.locked()",
         "nextWifiDeviceUiRefreshUs = nowUs + 250000ULL",
         "renderRadioSignalCard(wifiDeviceDetail.rssiDbm)",
+        "wifiFrameCapture.lockDeviceChannel(",
+        "wifiFrameCapture.unlockDeviceChannel(nowUs)",
+        "wifiOuiDatabase.lookup(",
+        "wifi_device_detail_wps_identity_known",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -41,6 +54,13 @@ def main() -> int:
         "entries_[position - 1U].rssiDbm < current.rssiDbm",
         "bool WifiDeviceCatalog::strongestFirst() const",
         "indexOfAddress",
+        "parseInformationElements",
+        "parseWpsAttributes",
+        "WifiDeviceGeneration::Wifi4",
+        "WifiDeviceGeneration::Wifi5",
+        "WifiDeviceGeneration::Wifi6",
+        "locallyAdministered",
+        "rssiTrendDb",
     )
     required_adapter = (
         "beginDeviceMonitor",
@@ -52,6 +72,8 @@ def main() -> int:
         "esp_wifi_set_promiscuous(false)",
         "init.nvs_enable = 0",
         "WIFI_STORAGE_RAM",
+        "lockDeviceChannel",
+        "deviceChannelLocked_",
     )
     forbidden_adapter = (
         "esp_wifi_connect(",
@@ -66,6 +88,11 @@ def main() -> int:
         "WifiDeviceDetailTitle",
         "RadioChannelFormat",
         "RadioSignalLabel",
+        "WifiDevicePrivateAddress",
+        "WifiDeviceMakerFormat",
+        "WifiDeviceNetworkFormat",
+        "WifiDeviceRadarTitle",
+        "WifiDeviceTrendCloser",
     )
 
     failures = [
@@ -88,17 +115,48 @@ def main() -> int:
         f"string token missing: {token}"
         for token in required_strings if token not in strings
     )
+    for token in ("kRecordSize = 32", "kNameSize = 29", "bool lookup("):
+        if token not in oui_h + oui_cpp:
+            failures.append(f"OUI database token missing: {token}")
+    for token in ("std::uint32_t orderHash", "addresses_", "locked_"):
+        if token not in navigation:
+            failures.append(f"navigation token missing: {token}")
+    asset = ROOT / "firmware/leshy1/assets/oui.bin"
+    metadata_path = ROOT / "firmware/leshy1/assets/oui.json"
+    if not asset.is_file() or not metadata_path.is_file():
+        failures.append("release-pinned IEEE OUI asset or metadata is missing")
+    else:
+        metadata = json.loads(metadata_path.read_text())
+        digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+        if metadata.get("schema") != "leshy.wifi_oui_asset.v1":
+            failures.append("OUI asset metadata schema mismatch")
+        if metadata.get("asset_sha256") != digest:
+            failures.append("OUI asset hash does not match metadata")
+        if metadata.get("records", 0) < 10_000:
+            failures.append("OUI asset is unexpectedly sparse")
+        if metadata.get("asset_bytes") != asset.stat().st_size:
+            failures.append("OUI asset byte count does not match metadata")
     if "type == 2U && toDistribution && !fromDistribution" not in catalog_cpp:
         failures.append("connected-client inference is not limited to To-DS data")
     if "subtype == 4U" not in catalog_cpp:
         failures.append("searching-client inference does not require probe request")
+    for token in (
+            'RUN_SCHEMA = "leshy.wifi_devices_hil.run.v2"',
+            '"wifi_product_view": "device_radar"',
+            '"wifi_device_channel_locked": True',
+            '"wifi_device_detail_last_seen_us"',
+            '"wifi-device-radar-first"',
+            '"wifi-device-radar-second"'):
+        if token not in runner + checker:
+            failures.append(f"radar HIL token missing: {token}")
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
         return 1
     print(
-        "Wi-Fi devices contract passed: passive client-only inference, bounded "
-        "queue/strongest-first catalog, data-only redraw, dense frozen detail and no TX/config path"
+        "Wi-Fi devices contract passed: passive client fingerprint, embedded "
+        "IEEE OUI lookup, identity-stable list, facts + channel-locked live "
+        "radar, bounded redraw and no TX/config path"
     )
     return 0
 
