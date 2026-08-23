@@ -980,7 +980,11 @@ bool lastUiRenderWasIncremental = false;
 std::uint64_t lastUiRenderUs = 0;
 
 struct SdPhysicalEvidenceWorkspace final {
-    char line[6144] = {};
+    // UI state is intentionally a single reusable static workspace.  The
+    // network/device passports pushed the bounded schema past 6 KiB; retaining
+    // 7 KiB here avoids both truncation and the historical loop-task stack
+    // panic without allocating per command.
+    char line[7168] = {};
     char summaryA[512] = {};
     char summaryB[512] = {};
     char summaryC[512] = {};

@@ -223,9 +223,9 @@ def main() -> int:
         if shared_workspace is not None and
            "auto& diagnosticJson = sdPhysicalEvidence.line;" in ui else 0)
     require(failures,
-            3072 <= workspace_size <= 6144 and
+            3072 <= workspace_size <= 7168 and
             re.search(r"char line\[(?:3072|4096)\]", ui) is None,
-            "diagnostic JSON must reuse one static 3-6 KiB bounded workspace")
+            "diagnostic JSON must reuse one static 3-7 KiB bounded workspace")
     # The exact candidate block binds the historical 0.53 evidence. Current
     # source may advance while this accepted Self-Test evidence stays replayable.
     require(failures, evidence.get("scope") == {
