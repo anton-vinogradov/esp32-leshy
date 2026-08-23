@@ -91,6 +91,15 @@ scan request, pairing или active probe и не сохраняет enriched de
 принятый physical run не потребовал его, поэтому recovery этой ветки остаётся
 source-contract, а не injected HIL evidence.
 
+Exact `0.123.0-nrf24-signal-finder` углубляет CAP-012 второй пользовательской
+задачей рядом с принятыми Спектром/Водопадом: «Найти сигнал» пульта, метки или
+датчика. Она использует все обнаруженные nRF24, изучает два коротких окна фона и
+показывает только локальный отклик над этим фоном с точной частотой и ближайшим
+каналом Wi-Fi, когда это осмысленно. Путь allocation-free, volatile и RX-only.
+Physical ambient/waiting path и немерцающий график проходят; deterministic host
+injection доказывает mapping найденного сигнала. До controlled source на board-02
+не заявляются physical found result и calibrated power/distance.
+
 Exact `0.117.0-wifi-device-live-detail` уточняет presentation CAP-016/017: открытие
 Wi-Fi-клиента сразу фиксирует его наблюдавшийся канал и показывает identity facts
 вместе с live RSSI meter/range/trend на одном экране. Left снимает фиксацию канала и

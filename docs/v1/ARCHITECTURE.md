@@ -540,6 +540,26 @@ association, calibrated distance or persistent signal history is added.
 
 ## Data model
 
+### Passive 2.4 GHz signal finder
+
+Exact `0.123.0-nrf24-signal-finder` reuses the guarded
+`BoardNrf24PassiveSpectrum` adapter and its all-detected-slot receive-only plan;
+it does not add a second hardware driver or any TX operation. The allocation-free
+`Nrf24SignalFinder` aggregates 48 complete 83-bin sweeps per window. Two calibration
+windows retain the per-bin minimum as ambient floor. Search subtracts that floor
+and the common mean delta, then applies a bounded two-count hold decay so a local
+transient remains visible without turning a broad environmental change into a
+false target. Detection starts at local rise eight.
+
+The UI state is separate from the receiver lifetime: the direct `spectrum24` app
+holds `UiForeground|RadioSpi` while its two-choice menu is open, starts the adapter
+only inside Overview/Finder, and returns to the menu before final app release.
+Finder draws static chrome once and updates result state plus changed graph columns
+only. Read-only `hardware.nrf24.finder` exposes calibration, mapping, receiver mask,
+side-effect counters and leases for HIL; none of those counters appears on the TFT.
+The physical acceptance covers real ambient receive/search/restart/cleanup; a known
+board-02 source remains required for physical found-state evidence.
+
 Raw observation is separate from interpretation:
 
 ```text

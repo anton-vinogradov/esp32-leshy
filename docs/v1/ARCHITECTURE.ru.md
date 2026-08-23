@@ -641,6 +641,26 @@ Diagnostic client проходит через тот же Navigator и чита�
 
 ## 9. Безопасность и обновления
 
+### Пассивный поиск сигнала 2.4 ГГц
+
+Exact `0.123.0-nrf24-signal-finder` переиспользует guarded adapter
+`BoardNrf24PassiveSpectrum` и его receive-only plan всех обнаруженных slots; второй
+hardware driver и TX operations не добавляются. Allocation-free
+`Nrf24SignalFinder` объединяет 48 полных sweep по 83 bin в одно окно. Два окна
+калибровки сохраняют минимум каждого bin как ambient floor. Поиск вычитает этот фон
+и общий mean delta, затем применяет bounded hold-decay на два count, чтобы локальный
+transient оставался виден, а широкая смена окружения не становилась ложной целью.
+Detection начинается при local rise восемь.
+
+UI state отделён от lifetime приёмника: direct app `spectrum24` удерживает
+`UiForeground|RadioSpi` в двухстрочном menu, запускает adapter только внутри
+Overview/Finder и возвращается в menu до финального release app. Finder один раз
+рисует static chrome и затем обновляет только result state и изменившиеся columns
+графика. Read-only `hardware.nrf24.finder` отдаёт calibration, mapping, receiver
+mask, side-effect counters и leases для HIL; на TFT этих counters нет. Physical
+acceptance покрывает реальный ambient receive/search/restart/cleanup; для physical
+found-state нужен известный source на board-02.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

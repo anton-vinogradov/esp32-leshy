@@ -235,3 +235,13 @@ contracts, поэтому не задаёт форму clean platform.
   qualification 8 h необязательна после крупных storage/runtime/radio changes.
 - Storage, power и shared-bus limits остаются явными unknown; зависимые от них
   возможности нельзя перевести из `unknown` в `available` одной документацией.
+
+Последний measured delta `RB-M125`: exact `0.123.0-nrf24-signal-finder` использует
+3 055 192 B linked flash и 229 448 B static RAM; app/factory images равны
+3 055 600/3 121 136 B, dedicated DIRAM — 310 216/341 760 B (остаётся 31 544 B),
+focused physical heap — 152 004/81 772/67 540 B total/free/minimum. Это +5 508 B
+linked flash, +760 B static RAM и +5 504/+5 504 B images против 0.122.2 за fixed
+arrays baseline/response на 83 bin, двухстрочный product route, diagnostics и HIL
+surface. Focused minimum остаётся ниже RB-04 и не заменяет accepted mixed-workload
+release endurance; до следующего release-budget promotion обязательна memory
+consolidation.

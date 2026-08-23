@@ -13,7 +13,7 @@ entry contains settings, checks and system information:
 ```text
 Wi-Fi          find nearby networks
 Bluetooth      find nearby devices
-2.4 GHz        see busy channels
+2.4 GHz        see air / find a signal
 Sub-GHz        see air / record a signal
 Capture        record Wi-Fi or infrared
 Library        open saved records
@@ -163,7 +163,7 @@ Exact `0.93.0-product-menu` supersedes the executable Home portion of 0.90 witho
 discarding the 1.0 capability map. The current Home contains only implemented jobs,
 in this order: Wi-Fi, Bluetooth, 2.4 GHz, Sub-GHz, Capture, Library, Device. Future
 Targets and Lab stay in this document and the roadmap until they are usable. Wi-Fi
-and Bluetooth open their own one-source Start row; 2.4 GHz opens live nRF24 directly;
+and Bluetooth open their own one-source Start row; 2.4 GHz opens Air overview / Find a signal;
 Sub-GHz opens the CC band chooser; Device remains last and owns all service pages.
 One connected-candidate command retains 13 actual TFT states and independently
 verifies every entry, populated waterfalls, final Home and zero ownership with zero
@@ -216,6 +216,17 @@ pixel-identical, while current dBm, meter, volatile range and trend may change.
 The accepted 240×320 frames change 111 list-content/zero chrome pixels and 3,234
 radar/zero static-or-chrome pixels (`E-BUILD-122`/`E-AUTO-086`/`E-HIL-146`/
 `E-UX-041`).
+
+Exact `0.123.0-nrf24-signal-finder` changes the 2.4 GHz entry from one implicit
+live view into two explicit outcome rows: **Air overview** (Spectrum/Waterfall) and
+**Find a signal** (remote/tag/sensor). Finder first says to leave the source off
+while two ambient windows are learned, then asks the user to turn it on and hold it
+near the antennas. The screen keeps the `RX N1+2+3` status, a black full-width
+2,402…2,484 MHz response plot and **Again**; when detected it replaces the prompt
+with exact MHz and nearest Wi-Fi channel. During live search only the result when
+its state changes and the graph bars may redraw. Eight exact TFT states plus a
+two-frame comparison accept zero changes in header, legend, axis and footer
+(`E-BUILD-123`/`E-AUTO-087`/`E-HIL-147`/`E-UX-042`).
 
 Exact `0.113.0-dense-details` applies the screen-space rule to the three implemented
 radio-object details without changing navigation. Bluetooth Device, Wi-Fi Network

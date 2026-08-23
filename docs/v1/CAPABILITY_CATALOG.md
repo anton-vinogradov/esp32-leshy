@@ -90,6 +90,15 @@ is permitted only for a transient scan-start/completion failure; the accepted
 physical run needed none, so recovery of that branch remains source-contract rather
 than injected HIL evidence.
 
+Exact `0.123.0-nrf24-signal-finder` deepens CAP-012 with a second user job beside
+the accepted Spectrum/Waterfall: Find a signal from a remote, tag or sensor. It
+uses every detected nRF24 receiver, learns two short ambient windows and reports
+only a local response above that floor, with exact frequency and nearest Wi-Fi
+channel where meaningful. It is allocation-free, volatile and RX-only. The physical
+ambient/waiting path and non-flickering graph pass; deterministic host injection
+proves the found mapping. A controlled board-02 source is still required before a
+physical found result or calibrated power/distance claim can be accepted.
+
 Exact `0.117.0-wifi-device-live-detail` refines the CAP-016/017 presentation:
 opening a Wi-Fi client now locks its observed channel and presents identity facts
 plus the live RSSI meter/range/trend on one screen. Left unlocks the channel and

@@ -13,7 +13,7 @@ S2 на реальном TFT; эта карта уже задаёт структ
 ```text
 Wi-Fi          найти сети рядом
 Bluetooth      найти устройства рядом
-2.4 ГГц        увидеть занятые каналы
+2.4 ГГц        увидеть эфир / найти сигнал
 Sub-GHz        увидеть эфир / записать сигнал
 Захват         записать Wi-Fi или ИК
 Библиотека     открыть сохранённые записи
@@ -164,7 +164,7 @@ Exact `0.93.0-product-menu` заменяет executable-часть Home 0.90, н
 в таком порядке: Wi-Fi, Bluetooth, 2.4 ГГц, Sub-GHz, Захват, Библиотека,
 Устройство. Будущие Цели и Лаборатория остаются в этом документе и roadmap,
 пока не станут полезными. Wi-Fi и Bluetooth открывают свою single-source строку Start;
-2.4 ГГц сразу открывает live nRF24; Sub-GHz — chooser диапазонов CC; Устройство
+2.4 ГГц открывает «Обзор эфира» / «Найти сигнал»; Sub-GHz — chooser диапазонов CC; Устройство
 остаётся последним и владеет всеми service pages. Одна connected-candidate команда
 сохраняет 13 реальных TFT states и независимо проверяет каждый пункт,
 наполненные водопады, final Home и zero ownership без ручных нажатий
@@ -216,6 +216,16 @@ passive passport над единственной встроенной signal car
 pixel-identical, меняются current dBm, meter, volatile range и trend. Принятые frames
 240×320 меняют 111 list-content/zero chrome pixels и 3 234 radar/zero
 static-or-chrome pixels (`E-BUILD-122`/`E-AUTO-086`/`E-HIL-146`/`E-UX-041`).
+
+Exact `0.123.0-nrf24-signal-finder` заменяет один implicit live view пункта 2.4 ГГц
+двумя outcome rows: **Обзор эфира** (Спектр/Водопад) и **Найти сигнал**
+(пульт/метка/датчик). Сначала Finder просит оставить источник выключенным на два
+окна изучения фона, затем — включить и поднести его к антеннам. Экран сохраняет
+status `RX N1+2+3`, чёрный полноширинный plot отклика 2 402…2 484 МГц и действие
+**Заново**; при обнаружении prompt заменяется точными МГц и ближайшим каналом Wi-Fi.
+В live search перерисовываются только result при смене state и bars графика. Восемь
+exact TFT states и comparison двух frames принимают zero changes в header, legend,
+axis и footer (`E-BUILD-123`/`E-AUTO-087`/`E-HIL-147`/`E-UX-042`).
 
 Exact `0.113.0-dense-details` применяет правило расходования площади к трём
 реализованным detail radio objects, не меняя navigation. Bluetooth Device, Wi-Fi

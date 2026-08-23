@@ -238,3 +238,13 @@ These limits are review triggers, not evidence that the product meets its NFRs.
   8 h qualification is optional after major storage/runtime/radio changes.
 - Storage, power, and shared-bus limits remain explicit unknowns; features depending
   on them cannot be promoted from `unknown` to `available` by documentation alone.
+
+Latest measured delta `RB-M125`: exact `0.123.0-nrf24-signal-finder` uses
+3,055,192 B linked flash and 229,448 B static RAM; app/factory images are
+3,055,600/3,121,136 B, dedicated DIRAM is 310,216/341,760 B (31,544 B remains),
+and focused physical heap is 152,004/81,772/67,540 B total/free/minimum. This is
++5,508 B linked flash, +760 B static RAM and +5,504/+5,504 B images over 0.122.2
+for the fixed 83-bin baseline/response arrays, two-choice product route, diagnostics
+and HIL surface. The focused minimum remains below RB-04 and does not supersede the
+accepted mixed-workload release endurance; memory consolidation is required before
+the next release-budget promotion.

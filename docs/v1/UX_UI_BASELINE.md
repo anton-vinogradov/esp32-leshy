@@ -297,7 +297,7 @@ unchanged storage, stabilized invariant heap and final lease 0
 Exact candidate `0.93.0-product-menu` supersedes the executable Home part of 0.90.
 Only implemented jobs appear: Wi-Fi, Bluetooth, 2.4 GHz, Sub-GHz, Capture, Library
 and Device. Future Targets/Lab remain in the 1.0 roadmap, not as dead menu entries.
-Wi-Fi/BLE each open a one-source Start row, 2.4 GHz starts the live nRF24 screen,
+Wi-Fi/BLE each open a one-source Start row, 2.4 GHz offers Air overview / Find a signal,
 Sub-GHz opens the CC band chooser, and Device remains the final service container.
 
 The connected-board checkpoint is now one foreground command:
@@ -380,6 +380,7 @@ and what can they do next?** Visible content follows this order:
 | Home | choose a task by its result | job name plus a plain-language outcome | protocol, module, storage and implementation terminology |
 | Wi-Fi / Bluetooth | find nearby networks or devices | name, signal, channel/address where useful, found count, filter and availability | FIFO, duty cycle, generation, queue/drop telemetry when healthy |
 | 2.4 GHz / Sub-GHz spectrum | identify quiet and busy parts of the band | active RX antennas, mode, clear color legend, one-pixel data, channel/frequency axis | sweep/sample counters, peaks, internal cadence and buffer state |
+| 2.4 GHz signal finder | find the frequency of a remote, tag or sensor | two-step ambient/action instruction, exact frequency, nearest Wi-Fi channel where applicable and full-width response graph | windows, sweeps, thresholds, response-bin counts and receiver wire counters |
 | Wi-Fi Capture | obtain a bounded PCAP recording | purpose, duration, live packet count/current channel, loss warning only if non-zero, privacy confirmation and save outcome | snap length, payload bytes, raw-memory lifecycle, internal persist status/generation |
 | Infrared Capture | read a remote-control key | where to point/what to press, detected/no-signal result, protocol and code only when decoded, save outcome | GPIO, sample gaps, zero-valued code, raw pulse count and receiver safety invariants |
 | Sub-GHz signal Capture | record a signal from the user's remote/sensor | chosen frequency, simple action, detected/recorded/no-signal result, remedy and save outcome | threshold, samples, pulse capacity, OOK implementation and future FSK/GDO0 work |

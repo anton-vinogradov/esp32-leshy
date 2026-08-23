@@ -1,0 +1,75 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "9bc9ea783dd100699dcff92ffd218a483b5c2f22f5731cb48205960cb995fb98",
+    "app_image_bytes": 3055600,
+    "checker_sha256": "e79e719d5aabcd5e543de2c7c35ec57b7cfb20cb0ac51e0c89389f81e7980d49",
+    "cid": "FE343253440000002000000055019CB7",
+    "elf_file_sha256": "9bc9ea783dd100699dcff92ffd218a483b5c2f22f5731cb48205960cb995fb98",
+    "factory_image_bytes": 3121136,
+    "factory_sha256": "78bae21499aff24fd675ec14a5b38570440a4bb9370f39501eb3f610597f1f6e",
+    "firmware_sha256": "3d9900439f41d61bd659947c7a27553b04e86cf210cbca76be3b82c70be66b36",
+    "firmware_source_commit": "07b551f3876b26d48c1d4a25b9730e2ff4e1e056",
+    "linked_flash_bytes": 3055192,
+    "map_sha256": "83b2bb241e29c0f33a97d61e6d3ac79612b7c1376553cc7721332e59161a1869",
+    "run_sha256": "a141ffc44eec23261498736bb41072765868a4537bb4c6bbcaf44df61d731ac6",
+    "runner_commit": "07b551f3876b26d48c1d4a25b9730e2ff4e1e056",
+    "runner_sha256": "dabc4dd10cd473eac5e4032b5d345173bfa2b4c14d08038545623aaf0eb33d1b",
+    "schema": "leshy.nrf24_signal_finder_hil.provenance.v1",
+    "source_guard_sha256": "a82e086768d6e0222ccb0ff9e36096d542802e0b2c3dfa74d75cd3a6f5d67367",
+    "source_sha256": {
+      "adapter_cpp": "e07fd05489141536da7ef8e8a6e4e18c892128efe9b2857264c0125c17fb28fb",
+      "adapter_h": "66fc579dd9e003d76090e1e05339e3a0d748edea60d6532e0c240427f14f06cc",
+      "catalog": "e1f57ed7015719a9e439c2fed2153d3b7b92b19f837241cc80aa271a73be6cc8",
+      "finder_cpp": "f26134efe86c99d1b4cf7855ad89a57ba0950104f139fe38f8eb3a5a362e3ec8",
+      "finder_h": "30983f81fd4dfd906122dc05b4ebb033e1567159f5e068601e8a0fa919f7d091",
+      "native_tests": "1880bef0441ef45e796aad5374a7a1e53c6f0060558a172ac1e81011aa62167d",
+      "passive_cpp": "59fd8d227c1a3a3be7f624afc4c75505b26b8c45c9b48a3c32d8f2bb7bce8cfe",
+      "passive_h": "76b06706adb6b3e9c8e2b727435f2c0ceddb5da54004d4c1d31696253149f563",
+      "platform": "35feaf64285be3f2a8cd30637b4db2c4bc92cb70b999065aec2b2ada1906566a",
+      "renderer": "44d263addc31dfd0dbec6e42ad7cf2ca6089f2de23de60e5aa482fed0f6047c3",
+      "source_contract": "a82e086768d6e0222ccb0ff9e36096d542802e0b2c3dfa74d75cd3a6f5d67367",
+      "strings": "427ef0a84934adbed543f9f50ededd4ff9d6de05741dbbc6eee7b9884cf4fba6"
+    },
+    "static_ram_bytes": 229448,
+    "tft_states": 8,
+    "version": "0.123.0-nrf24-signal-finder"
+  },
+  "evidence": {
+    "artifact_index_sha256": "3aa01953c7fe6cbed5adfd546afea26b5ee11e0d6ad5e5e9b8bf0a9ad374a7ff",
+    "files": 47,
+    "tft_states": 8
+  },
+  "evidence_ids": [
+    "E-BUILD-123",
+    "E-AUTO-087",
+    "E-HIL-147",
+    "E-UX-042"
+  ],
+  "limits": {
+    "ambient_environment": "one board and one location",
+    "calibrated_power_or_distance": false,
+    "found_branch": "deterministic host injection",
+    "known_signal_physical_source": false,
+    "physical_rf_silence": false
+  },
+  "schema": "leshy.nrf24_signal_finder.acceptance.v1",
+  "status": "pass_passive_signal_finder",
+  "verified": {
+    "active_slot_mask": 7,
+    "ambient_found": false,
+    "ambient_response": 3,
+    "calibration_windows": 2,
+    "final_lease_mask": 0,
+    "generation": 95,
+    "graph_changed_pixels": 720,
+    "heap_free_after": 81772,
+    "heap_min_after": 67540,
+    "measured_windows": 3,
+    "modules": 3,
+    "observations": 0,
+    "physical_write_calls": 0,
+    "response_threshold": 8,
+    "static_changed_pixels": 0
+  }
+}
