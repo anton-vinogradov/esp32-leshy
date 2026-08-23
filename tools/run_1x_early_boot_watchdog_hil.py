@@ -14,7 +14,6 @@ from typing import Any
 
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
-from run_1x_product_boot_watchdog_hil import parse_ready
 from run_1x_product_survey_hil import (
     artifact_manifest,
     boot_failures,
@@ -303,15 +302,23 @@ def main() -> int:
             records["watchdog_ready_marker_ms"] = ready_ms
             records["watchdog_usb_disconnects"] = watchdog_disconnects
             records["watchdog_usb_open_attempts"] = watchdog_open_attempts
+            if ready_ms is None:
+                failures.append("watchdog_boot.ready_marker: missing")
 
         (args.output / "watchdog-reset.ndjson").write_bytes(watchdog_raw)
         if "injection" not in records:
             raise RuntimeError(
                 "initial admission failed; early-boot injection was not started"
             )
-        records["watchdog_ready"] = parse_ready(watchdog_raw)
         with PassiveSerial(args.port, 115200, timeout=0.05) as device:
             synchronize_console(device, 15.0)
+            # Native USB can accept only the leading 256 bytes of the
+            # unsolicited ready record while its endpoint re-enumerates.
+            # Query the same immutable BootMetrics record after synchronization
+            # instead of weakening JSON parsing for a truncated line.
+            records["watchdog_ready"] = query(
+                device, b"metrics", "leshy.boot.v1", "ready"
+            )
             records["safety_latched"] = query(
                 device, b"safety.state", "leshy.safety.v1", "state"
             )
@@ -350,10 +357,14 @@ def main() -> int:
             records["clear_ready_marker_ms"] = clear_ready_ms
             records["clear_usb_disconnects"] = clear_disconnects
             records["clear_usb_open_attempts"] = clear_open_attempts
+            if clear_ready_ms is None:
+                failures.append("clear_boot.ready_marker: missing")
             (args.output / "clear-restart.ndjson").write_bytes(clear_raw)
-            records["clear_ready"] = parse_ready(clear_raw)
             with PassiveSerial(args.port, 115200, timeout=0.05) as device:
                 synchronize_console(device, 15.0)
+                records["clear_ready"] = query(
+                    device, b"metrics", "leshy.boot.v1", "ready"
+                )
                 records["recovery_final"] = query(
                     device, b"storage.product.boot-recovery",
                     "leshy.storage.product_boot_recovery.v1", "state",
