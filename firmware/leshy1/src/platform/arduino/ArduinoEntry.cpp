@@ -4,6 +4,7 @@
 #include <TFT_eSPI.h>
 #include <Wire.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -609,6 +610,7 @@ BleDeviceCatalog bleDeviceCatalog;
 std::size_t bleDeviceSelection = 0;
 Observation bleDeviceDetail;
 std::array<std::uint16_t, 13> wifiChannelRenderedLoads{};
+std::array<std::uint16_t, 13> wifiChannelRenderedAverages{};
 std::uint8_t wifiChannelRenderedBest = 0xffU;
 std::uint32_t wifiCaptureRenderedFrames = UINT32_MAX;
 std::uint32_t wifiCaptureRenderedDrops = UINT32_MAX;
@@ -6903,10 +6905,13 @@ constexpr std::int16_t kWifiChannelGraphBottom =
 constexpr std::int16_t kWifiChannelAxisY = kWifiChannelGraphBottom + 5;
 constexpr std::int16_t kWifiChannelBarX = 4;
 constexpr std::int16_t kWifiChannelBarWidth = 13;
+constexpr std::int16_t kWifiChannelCurrentBarWidth = 7;
 constexpr std::int16_t kWifiChannelBarStep = 18;
 constexpr std::uint16_t kWifiChannelDisplayFullScalePermille = 80;
 constexpr std::uint16_t kWifiChannelGraphBackground =
     leshy1::ui::visual::rgb565(0, 0, 0);
+constexpr std::uint16_t kWifiChannelAverageTone =
+    leshy1::ui::visual::rgb565(104, 108, 108);
 static_assert(kWifiChannelAxisY + 18 <= Layout::FooterDividerY,
               "Wi-Fi channel axis must stay above the footer");
 
@@ -6934,6 +6939,10 @@ void renderWifiChannelInfo(const WifiChannelLoadSnapshot& snapshot,
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 4, kWifiChannelInfoY + 5);
         display.print(tr(UiTextId::WifiChannelsScale));
+        display.fillRect(50, kWifiChannelInfoY + 9, 7, 7,
+                         kWifiChannelAverageTone);
+        setUiCursor(UiTextRole::Meta, 61, kWifiChannelInfoY + 5);
+        display.print(tr(UiTextId::WifiChannelsAverageLegend));
     }
     if (!force && best == wifiChannelRenderedBest) return;
     constexpr std::int16_t rightX = 116;
@@ -6967,31 +6976,41 @@ void renderWifiChannelBar(std::uint8_t channel,
     const std::size_t at = static_cast<std::size_t>(channel - 1U);
     const auto& bin = snapshot.channels[at];
     const std::uint16_t next = bin.measured ? bin.busyPermille : 0U;
+    const std::uint16_t nextAverage =
+        bin.measured ? bin.averageBusyPermille : 0U;
     const std::uint16_t previous = wifiChannelRenderedLoads[at];
-    if (!force && previous == next) return;
+    const std::uint16_t previousAverage = wifiChannelRenderedAverages[at];
+    if (!force && previous == next && previousAverage == nextAverage) return;
     const std::int16_t x = kWifiChannelBarX +
         static_cast<std::int16_t>(at) * kWifiChannelBarStep;
     const std::int16_t nextHeight = wifiChannelBarHeight(next);
+    const std::int16_t nextAverageHeight = wifiChannelBarHeight(nextAverage);
     const std::int16_t previousHeight = previous == 0xffffU
         ? 0 : wifiChannelBarHeight(previous);
-    if (force || nextHeight < previousHeight) {
-        const std::int16_t clearTop = force
-            ? kWifiChannelGraphY
-            : kWifiChannelGraphBottom - previousHeight;
-        const std::int16_t clearHeight = force
-            ? kWifiChannelGraphHeight
-            : previousHeight - nextHeight;
-        if (clearHeight > 0) {
-            display.fillRect(x, clearTop, kWifiChannelBarWidth, clearHeight,
-                             kWifiChannelGraphBackground);
-        }
+    const std::int16_t previousAverageHeight = previousAverage == 0xffffU
+        ? 0 : wifiChannelBarHeight(previousAverage);
+    const std::int16_t clearHeight = force ? kWifiChannelGraphHeight
+        : std::max(std::max(previousHeight, previousAverageHeight),
+                   std::max(nextHeight, nextAverageHeight));
+    if (clearHeight > 0) {
+        display.fillRect(x, kWifiChannelGraphBottom - clearHeight,
+                         kWifiChannelBarWidth, clearHeight,
+                         kWifiChannelGraphBackground);
+    }
+    if (nextAverageHeight > 0) {
+        display.fillRect(x, kWifiChannelGraphBottom - nextAverageHeight,
+                         kWifiChannelBarWidth, nextAverageHeight,
+                         kWifiChannelAverageTone);
     }
     if (nextHeight > 0) {
-        display.fillRect(x, kWifiChannelGraphBottom - nextHeight,
-                         kWifiChannelBarWidth, nextHeight,
+        const std::int16_t currentX = x +
+            (kWifiChannelBarWidth - kWifiChannelCurrentBarWidth) / 2;
+        display.fillRect(currentX, kWifiChannelGraphBottom - nextHeight,
+                         kWifiChannelCurrentBarWidth, nextHeight,
                          wifiChannelBarTone(next, channel));
     }
     wifiChannelRenderedLoads[at] = next;
+    wifiChannelRenderedAverages[at] = nextAverage;
 }
 
 void renderWifiChannelsData(bool full) {
@@ -11013,6 +11032,7 @@ void serviceWifiDevicesProduct() {
 bool startWifiChannelsProduct() {
     wifiFrameCapture.reset();
     wifiChannelRenderedLoads.fill(0xffffU);
+    wifiChannelRenderedAverages.fill(0xffffU);
     wifiChannelRenderedBest = 0xffU;
     std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());

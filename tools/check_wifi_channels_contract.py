@@ -30,7 +30,11 @@ def main() -> int:
         "serviceWifiChannelsProduct()",
         "renderWifiChannelsData(false);",
         "renderWifiChannelBar(channel, snapshot, full);",
-        "if (!force && previous == next) return;",
+        "wifiChannelRenderedAverages",
+        "kWifiChannelAverageTone",
+        "kWifiChannelCurrentBarWidth",
+        "bin.averageBusyPermille",
+        "WifiChannelsAverageLegend",
         "kWifiChannelGraphBackground",
         "rgb565(0, 0, 0)",
         "wifi_channel_completed_sweeps",
@@ -44,6 +48,9 @@ def main() -> int:
         "static constexpr std::uint8_t kLastChannel = 13",
         "constexpr std::array<std::uint8_t, 3> primary = {1, 6, 11}",
         "busyPermille",
+        "averageBusyPermille",
+        "cumulativeBusyPermille_",
+        "snapshot_.channels[index(candidate)].averageBusyPermille",
         "completedSweeps",
         "measuredMask",
     )
@@ -91,7 +98,8 @@ def main() -> int:
     print(
         "Wi-Fi channels contract passed: real passive airtime over channels "
         "1..13, bounded aggregation, 1/6/11 recommendation, black idle "
-        "background and changed-bar-only redraw with no TX/config path"
+        "background, gray session mean, mean-based free-channel choice and "
+        "changed-bar-only redraw with no TX/config path"
     )
     return 0
 

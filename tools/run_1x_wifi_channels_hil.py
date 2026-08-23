@@ -28,9 +28,10 @@ from run_1x_product_survey_hil import (
 )
 
 
-RUN_SCHEMA = "leshy.wifi_channels_hil.run.v1"
+RUN_SCHEMA = "leshy.wifi_channels_hil.run.v2"
 WIDTH = 240
 HEIGHT = 320
+AVERAGE_GRAY_RGB565 = 0x6B6D
 
 
 def require_exact(record: dict[str, Any], expected: dict[str, Any],
@@ -98,6 +99,21 @@ def changed_pixels(frames: Path, before_name: str,
         "dynamic_changed_pixels": dynamic,
         "static_changed_pixels": static,
     }
+
+
+def count_graph_tone(frames: Path, name: str, tone: int) -> int:
+    frame = (frames / f"{name}.rgb565").read_bytes()
+    if len(frame) != WIDTH * HEIGHT * 2:
+        raise RuntimeError("TFT tone count requires a complete 240x320 frame")
+    target = tone.to_bytes(2, "big")
+    count = 0
+    for y in range(58, 252):
+        row = y * WIDTH * 2
+        for x in range(WIDTH):
+            offset = row + x * 2
+            if frame[offset:offset + 2] == target:
+                count += 1
+    return count
 
 
 def open_channels(device: PassiveSerial, frames: Path | None = None,
@@ -181,6 +197,7 @@ def main() -> int:
     cleanup_before: dict[str, Any] = {"attempted": False}
     cleanup_after: dict[str, Any] = {"attempted": False}
     pixel_changes: dict[str, int] = {}
+    average_gray_pixels: dict[str, int] = {}
 
     try:
         if args.flash:
@@ -210,7 +227,7 @@ def main() -> int:
                         state.get("wifi_product_view") == "channels" and
                         state.get("wifi_channel_monitor_active") is True and
                         int(state.get("wifi_channel_measured_mask", 0)) == 8191 and
-                        int(state.get("wifi_channel_completed_sweeps", 0)) >= 1 and
+                        int(state.get("wifi_channel_completed_sweeps", 0)) >= 2 and
                         int(state.get("wifi_channel_frames_reported", 0)) > 0 and
                         int(state.get("wifi_channel_best_primary", 0)) in (1, 6, 11)
                     ), 60.0, "complete passive Wi-Fi channel sweep did not appear")
@@ -224,6 +241,11 @@ def main() -> int:
                 }, "wifi_channels_live")
                 screens["wifi_channels_first"] = capture(
                     device, frames, "wifi-channels-first")
+                average_gray_pixels["first"] = count_graph_tone(
+                    frames, "wifi-channels-first", AVERAGE_GRAY_RGB565)
+                if average_gray_pixels["first"] <= 0:
+                    raise RuntimeError(
+                        "session-average gray bars are absent from first TFT frame")
                 first_revision = int(live_first["wifi_channel_revision"])
                 first_sweeps = int(live_first["wifi_channel_completed_sweeps"])
                 first_frames = int(live_first["wifi_channel_frames_reported"])
@@ -237,6 +259,11 @@ def main() -> int:
                 trace.append(live_second)
                 screens["wifi_channels_second"] = capture(
                     device, frames, "wifi-channels-second")
+                average_gray_pixels["second"] = count_graph_tone(
+                    frames, "wifi-channels-second", AVERAGE_GRAY_RGB565)
+                if average_gray_pixels["second"] <= 0:
+                    raise RuntimeError(
+                        "session-average gray bars are absent from second TFT frame")
                 pixel_changes = changed_pixels(
                     frames, "wifi-channels-first", "wifi-channels-second")
                 if pixel_changes["static_changed_pixels"] != 0:
@@ -349,6 +376,7 @@ def main() -> int:
         "input": input_state,
         "safe_outputs": safe_outputs,
         "pixel_changes": pixel_changes,
+        "average_gray_pixels": average_gray_pixels,
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
@@ -361,6 +389,9 @@ def main() -> int:
             "channels_measured": list(range(1, 14)),
             "lower_bound_airtime_estimate": True,
             "recommended_primary_channels": [1, 6, 11],
+            "average_load_rendered_gray": True,
+            "recommendation_uses_session_average": True,
+            "minimum_average_dwells_per_channel": 2,
             "static_pixels_unchanged_during_live_refresh": True,
             "two_complete_wifi_lifecycles": True,
             "zero_heap_drift_after_warmup": (
@@ -378,6 +409,7 @@ def main() -> int:
         "output": str(args.output),
         "screens": sorted(screens),
         "pixel_changes": pixel_changes,
+        "average_gray_pixels": average_gray_pixels,
     }, ensure_ascii=False, sort_keys=True))
     return 0 if result["passed"] else 2
 

@@ -8,8 +8,10 @@ namespace leshy1::apps::wifi {
 
 struct WifiChannelLoadBin final {
     std::uint16_t busyPermille = 0;
+    std::uint16_t averageBusyPermille = 0;
     std::uint16_t frames = 0;
     std::int16_t peakRssiDbm = -127;
+    std::uint32_t dwells = 0;
     bool measured = false;
 };
 
@@ -47,6 +49,7 @@ private:
     std::array<std::uint32_t, 13> pendingBusyUs_{};
     std::array<std::uint16_t, 13> pendingFrames_{};
     std::array<std::int16_t, 13> pendingPeakRssi_{};
+    std::array<std::uint64_t, 13> cumulativeBusyPermille_{};
 };
 
 }  // namespace leshy1::apps::wifi

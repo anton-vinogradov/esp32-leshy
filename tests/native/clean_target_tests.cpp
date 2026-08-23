@@ -2386,6 +2386,8 @@ void testWifiChannelLoadIsBoundedAndTruthful() {
     auto snapshot = load.snapshot();
     CHECK(snapshot.channels[0].measured);
     CHECK(snapshot.channels[0].busyPermille == 25);
+    CHECK(snapshot.channels[0].averageBusyPermille == 25);
+    CHECK(snapshot.channels[0].dwells == 1);
     CHECK(snapshot.channels[0].frames == 2);
     CHECK(snapshot.channels[0].peakRssiDbm == -40);
     CHECK(snapshot.framesObserved == 2);
@@ -2398,12 +2400,29 @@ void testWifiChannelLoadIsBoundedAndTruthful() {
     CHECK(load.completeDwell(11, 120000));
     CHECK(load.bestPrimaryChannel() == 6);
 
+    // A second pass makes channel 6 momentarily busy and channels 1/11
+    // momentarily empty. The recommendation must follow the accumulated
+    // mean (11), not the latest dwell (which would tie 1 and 11 at zero).
+    CHECK(load.completeDwell(1, 120000));
+    CHECK(load.observe(6, 9600, -45));
+    CHECK(load.completeDwell(6, 120000));
+    CHECK(load.completeDwell(11, 120000));
+    snapshot = load.snapshot();
+    CHECK(snapshot.channels[0].busyPermille == 0);
+    CHECK(snapshot.channels[0].averageBusyPermille == 12);
+    CHECK(snapshot.channels[5].busyPermille == 80);
+    CHECK(snapshot.channels[5].averageBusyPermille == 44);
+    CHECK(snapshot.channels[10].busyPermille == 0);
+    CHECK(snapshot.channels[10].averageBusyPermille == 8);
+    CHECK(snapshot.channels[10].dwells == 2);
+    CHECK(load.bestPrimaryChannel() == 11);
+
     CHECK(load.observe(13, 200000, -30));
     CHECK(load.completeDwell(13, 120000));
     snapshot = load.snapshot();
     CHECK(snapshot.channels[12].busyPermille == 1000);
     CHECK(snapshot.completedSweeps == 1);
-    CHECK(snapshot.revision == 4);
+    CHECK(snapshot.revision == 7);
 
     load.reset();
     snapshot = load.snapshot();

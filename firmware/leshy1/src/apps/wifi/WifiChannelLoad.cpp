@@ -9,6 +9,7 @@ void WifiChannelLoad::reset() {
     pendingBusyUs_.fill(0);
     pendingFrames_.fill(0);
     pendingPeakRssi_.fill(-127);
+    cumulativeBusyPermille_.fill(0);
 }
 
 bool WifiChannelLoad::observe(std::uint8_t channel,
@@ -43,8 +44,20 @@ bool WifiChannelLoad::completeDwell(std::uint8_t channel,
     WifiChannelLoadBin& bin = snapshot_.channels[at];
     const std::uint64_t permille =
         static_cast<std::uint64_t>(pendingBusyUs_[at]) * 1000ULL / observedUs;
-    bin.busyPermille = static_cast<std::uint16_t>(
+    const std::uint16_t currentBusyPermille = static_cast<std::uint16_t>(
         permille > 1000ULL ? 1000ULL : permille);
+    bin.busyPermille = currentBusyPermille;
+    if (bin.dwells != std::numeric_limits<std::uint32_t>::max()) {
+        cumulativeBusyPermille_[at] += currentBusyPermille;
+        ++bin.dwells;
+    } else {
+        // Preserve a bounded running mean even after an impractically long
+        // session instead of allowing either counter to wrap.
+        cumulativeBusyPermille_[at] -= bin.averageBusyPermille;
+        cumulativeBusyPermille_[at] += currentBusyPermille;
+    }
+    bin.averageBusyPermille = static_cast<std::uint16_t>(
+        cumulativeBusyPermille_[at] / bin.dwells);
     bin.frames = pendingFrames_[at];
     bin.peakRssiDbm = pendingFrames_[at] == 0U
         ? -127 : pendingPeakRssi_[at];
@@ -67,8 +80,8 @@ std::uint8_t WifiChannelLoad::bestPrimaryChannel() const {
     std::uint8_t best = primary[0];
     for (std::size_t at = 1; at < primary.size(); ++at) {
         const std::uint8_t candidate = primary[at];
-        if (snapshot_.channels[index(candidate)].busyPermille <
-            snapshot_.channels[index(best)].busyPermille) {
+        if (snapshot_.channels[index(candidate)].averageBusyPermille <
+            snapshot_.channels[index(best)].averageBusyPermille) {
             best = candidate;
         }
     }

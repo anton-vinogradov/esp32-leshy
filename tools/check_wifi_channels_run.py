@@ -12,7 +12,7 @@ from typing import Any
 from esp_app_identity import app_elf_sha256
 
 
-SCHEMA = "leshy.wifi_channels_hil.run.v1"
+SCHEMA = "leshy.wifi_channels_hil.run.v2"
 SCREENS = {
     "wifi_menu": "wifi-menu",
     "wifi_menu_after": "wifi-menu-after",
@@ -104,7 +104,7 @@ def main() -> int:
                 state.get("wifi_device_nvs_disabled") is True and
                 state.get("wifi_device_volatile_storage_only") is True and
                 state.get("wifi_channel_measured_mask") == 8191 and
-                state.get("wifi_channel_completed_sweeps", 0) >= 1 and
+                state.get("wifi_channel_completed_sweeps", 0) >= 2 and
                 state.get("wifi_channel_frames_reported", 0) > 0 and
                 state.get("wifi_channel_invalid_frames") == 0 and
                 state.get("wifi_channel_best_primary") in (1, 6, 11),
@@ -122,6 +122,11 @@ def main() -> int:
             changes.get("dynamic_changed_pixels", 0) > 0 and
             changes.get("static_changed_pixels") == 0,
             "live redraw escaped graph/recommendation regions")
+    average_gray = run.get("average_gray_pixels", {})
+    require(failures,
+            average_gray.get("first", 0) > 0 and
+            average_gray.get("second", 0) > 0,
+            "gray session-average bars are not physically visible")
 
     for label in ("monitor_after_first", "monitor_after_second"):
         state = run.get(label, {})
@@ -145,6 +150,9 @@ def main() -> int:
             scope.get("channels_measured") == list(range(1, 14)) and
             scope.get("lower_bound_airtime_estimate") is True and
             scope.get("recommended_primary_channels") == [1, 6, 11] and
+            scope.get("average_load_rendered_gray") is True and
+            scope.get("recommendation_uses_session_average") is True and
+            scope.get("minimum_average_dwells_per_channel") == 2 and
             scope.get("static_pixels_unchanged_during_live_refresh") is True and
             scope.get("storage_write_authorized") is False,
             "automation/passive/no-flicker scope mismatch")
@@ -189,6 +197,7 @@ def main() -> int:
         "sweeps": second.get("wifi_channel_completed_sweeps"),
         "dynamic_changed_pixels": changes.get("dynamic_changed_pixels"),
         "static_changed_pixels": 0,
+        "average_gray_pixels": average_gray,
         "final_lease_mask": 0,
     }, sort_keys=True))
     return 0
