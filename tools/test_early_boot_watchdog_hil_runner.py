@@ -27,7 +27,7 @@ APP = "a" * 64
 class EarlyBootWatchdogHilRunnerTests(unittest.TestCase):
     def records(self) -> tuple[dict[str, Any], ...]:
         armed = {
-            "status": "ready", "stage": "before_display",
+            "status": "ready", "stage": "before_setup",
             "watchdog_timeout_ms": 5000, "outputs_inactive": True,
             "filesystem_write_attempted": False, "physical_write_calls": 0,
         }
@@ -42,6 +42,7 @@ class EarlyBootWatchdogHilRunnerTests(unittest.TestCase):
             "state": "latched", "reason": "runtime_watchdog",
             "armed": True, "latched": True, "clear_pending": False,
             "trip_count": 1, "emergency_quiesce_count": 1,
+            "startup_guard_tripped": True,
             "buzzer_inactive": True, "nrf_ce_inactive": True,
             "runtime_owner": "none", "lease_mask": 0,
             "automatic_clear": False,
@@ -69,7 +70,7 @@ class EarlyBootWatchdogHilRunnerTests(unittest.TestCase):
 
     def test_rejects_wrong_stage_software_reset_and_missing_quiesce(self) -> None:
         records = list(self.records())
-        records[0]["stage"] = "after_display"
+        records[0]["stage"] = "after_setup"
         records[1]["reset_reason_code"] = 3
         records[2]["emergency_quiesce_count"] = 0
         failures = RUNNER.early_boot_injection_failures(

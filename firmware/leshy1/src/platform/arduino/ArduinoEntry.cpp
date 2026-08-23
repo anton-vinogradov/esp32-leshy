@@ -16,8 +16,12 @@
 #include <esp_timer.h>
 #include <esp_app_desc.h>
 #include <esp_attr.h>
+#include <esp_private/startup_internal.h>
 #include <esp_private/system_internal.h>
+#include <esp_rom_sys.h>
+#include <hal/wdt_hal.h>
 #include <soc/gpio_struct.h>
+#include <soc/rtc.h>
 #include <mbedtls/sha256.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -880,13 +884,22 @@ ProductBootRecoveryState productBootRecovery;
 constexpr std::uint32_t kProductBootRetryRtcMagic = 0x4C425231U;
 constexpr std::uint32_t kProductBootWatchdogTestRtcMagic = 0x4C425754U;
 constexpr std::uint32_t kEarlyBootWatchdogTestRtcMagic = 0x4C425745U;
+constexpr std::uint32_t kEarlyBootGuardRtcMagic = 0x4C424747U;
+constexpr std::uint32_t kEarlyBootGuardTripRtcMagic = 0x4C424754U;
+constexpr std::uint32_t kEarlyBootGuardTimeoutMs = 5000U;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryRtcMagic;
 RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryRestarts;
 RTC_NOINIT_ATTR std::uint32_t productBootRetryAppIdentity;
 RTC_NOINIT_ATTR volatile std::uint32_t productBootRetryTimeouts;
 RTC_NOINIT_ATTR std::uint32_t productBootWatchdogTestRtcState;
 RTC_NOINIT_ATTR std::uint32_t earlyBootWatchdogTestRtcState;
+RTC_NOINIT_ATTR volatile std::uint32_t earlyBootGuardRtcState;
+RTC_NOINIT_ATTR volatile std::uint32_t earlyBootGuardRtcStateInverse;
+RTC_NOINIT_ATTR volatile std::uint32_t earlyBootGuardTripRtcState;
+RTC_NOINIT_ATTR volatile std::uint32_t earlyBootGuardTripRtcStateInverse;
 RTC_NOINIT_ATTR volatile SafetyRetainedRecord safetyRetainedRtc;
+bool earlyBootGuardActive = false;
+bool earlyBootGuardTrippedAtBoot = false;
 volatile std::uint32_t runtimeSafetyWatchdogArmed = 0;
 volatile std::uint32_t runtimeSafetyAppIdentity = 0;
 volatile std::uint32_t runtimeSafetyNextTripCount = 1;
@@ -894,6 +907,82 @@ volatile std::uint32_t runtimeSafetyNextQuiesceCount = 1;
 SafetySupervisor safetySupervisor;
 std::uint32_t runningAppIdentity = 0;
 bool runtimeSafetyWatchdogReady = false;
+
+bool earlyBootGuardWatchdogReset(esp_reset_reason_t reason) {
+    return reason == ESP_RST_PANIC || reason == ESP_RST_INT_WDT ||
+           reason == ESP_RST_TASK_WDT || reason == ESP_RST_WDT;
+}
+
+void feedEarlyBootGuard() {
+    if (!earlyBootGuardActive) return;
+    wdt_hal_context_t guard = RWDT_HAL_CONTEXT_DEFAULT();
+    wdt_hal_write_protect_disable(&guard);
+    wdt_hal_feed(&guard);
+    wdt_hal_write_protect_enable(&guard);
+}
+
+void disarmEarlyBootGuard() {
+    if (!earlyBootGuardActive) return;
+    wdt_hal_context_t guard = RWDT_HAL_CONTEXT_DEFAULT();
+    wdt_hal_write_protect_disable(&guard);
+    wdt_hal_feed(&guard);
+    wdt_hal_set_flashboot_en(&guard, false);
+    wdt_hal_disable(&guard);
+    wdt_hal_write_protect_enable(&guard);
+    earlyBootGuardActive = false;
+    earlyBootGuardRtcState = 0;
+    earlyBootGuardRtcStateInverse = 0;
+}
+
+// ESP-IDF normally disables the bootloader RTC WDT at secondary-init priority
+// 999. Re-arm it immediately afterwards so a lockup between ROM entry and the
+// Arduino loop task cannot escape the application-owned safety envelope.
+ESP_SYSTEM_INIT_FN(leshy_early_boot_guard, SECONDARY, BIT(0), 1000) {
+    const bool previousGuardArmed =
+        earlyBootGuardRtcState == kEarlyBootGuardRtcMagic &&
+        earlyBootGuardRtcStateInverse == ~kEarlyBootGuardRtcMagic;
+    if (previousGuardArmed && earlyBootGuardWatchdogReset(esp_reset_reason())) {
+        earlyBootGuardTripRtcState = 0;
+        earlyBootGuardTripRtcStateInverse = ~kEarlyBootGuardTripRtcMagic;
+        __atomic_thread_fence(__ATOMIC_RELEASE);
+        earlyBootGuardTripRtcState = kEarlyBootGuardTripRtcMagic;
+    } else {
+        earlyBootGuardTripRtcState = 0;
+        earlyBootGuardTripRtcStateInverse = 0;
+    }
+
+    // These active-high TX/buzzer paths must remain low even if startup stops
+    // before the Arduino GPIO API is available.
+    GPIO.out_w1tc = (1U << 2U) | (1U << 14U) | (1U << 15U);
+    GPIO.out1_w1tc.val = (1U << (47U - 32U));
+
+    wdt_hal_context_t guard = RWDT_HAL_CONTEXT_DEFAULT();
+    wdt_hal_init(&guard, WDT_RWDT, 0, false);
+    const std::uint32_t slowFrequency = rtc_clk_slow_freq_get_hz();
+    const std::uint32_t timeoutTicks = static_cast<std::uint32_t>(
+        static_cast<std::uint64_t>(kEarlyBootGuardTimeoutMs) *
+        slowFrequency / 1000ULL);
+    wdt_hal_write_protect_disable(&guard);
+    wdt_hal_config_stage(
+        &guard, WDT_STAGE0, timeoutTicks, WDT_STAGE_ACTION_RESET_SYSTEM);
+    wdt_hal_config_stage(
+        &guard, WDT_STAGE1, timeoutTicks, WDT_STAGE_ACTION_RESET_RTC);
+    wdt_hal_set_flashboot_en(&guard, true);
+    earlyBootGuardRtcState = 0;
+    earlyBootGuardRtcStateInverse = ~kEarlyBootGuardRtcMagic;
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    earlyBootGuardRtcState = kEarlyBootGuardRtcMagic;
+    wdt_hal_enable(&guard);
+    wdt_hal_write_protect_enable(&guard);
+    earlyBootGuardActive = true;
+
+    if (earlyBootWatchdogTestRtcState == kEarlyBootWatchdogTestRtcMagic) {
+        earlyBootWatchdogTestRtcState = 0;
+        while (true) esp_rom_delay_us(100000);
+    }
+    return ESP_OK;
+}
+
 constexpr std::uint32_t kLittleFsResetRtcMagic = 0x4C465231U;
 struct LittleFsResetRtcState final {
     std::uint32_t magic;
@@ -3819,6 +3908,7 @@ bool armRuntimeSafetyWatchdog() {
 }
 
 void feedRuntimeSafetyWatchdog() {
+    feedEarlyBootGuard();
     if (!runtimeSafetyWatchdogReady) return;
     if (esp_task_wdt_reset() != ESP_OK) {
         latchSafetyStopInTask(SafetyReason::SupervisorUnavailable);
@@ -4899,6 +4989,7 @@ void emitSafetyState(Stream& reply) {
         "\"latched\":%s,\"clear_pending\":%s,"
         "\"watchdog_timeout_ms\":%lu,\"trip_count\":%lu,"
         "\"emergency_quiesce_count\":%lu,\"reset_reason_code\":%lu,"
+        "\"startup_guard_tripped\":%s,"
         "\"buzzer_inactive\":%s,\"nrf_ce_inactive\":%s,"
         "\"runtime_owner\":\"%s\",\"lease_mask\":%lu,"
         "\"software_only\":true,\"physical_rail_kill_available\":false,"
@@ -4915,6 +5006,7 @@ void emitSafetyState(Stream& reply) {
         static_cast<unsigned long>(safetySupervisor.tripCount()),
         static_cast<unsigned long>(safetySupervisor.quiesceCount()),
         static_cast<unsigned long>(bootMetrics.resetReason),
+        earlyBootGuardTrippedAtBoot ? "true" : "false",
         BoardSafeOutputs::buzzerHeldInactive() ? "true" : "false",
         BoardSafeOutputs::radioTransmitPathsHeldInactive() ? "true" : "false",
         appRuntime.activeApp(),
@@ -4964,7 +5056,7 @@ void triggerEarlyBootSafetyWatchdogTest(Stream& reply) {
     reply.println(
         "{\"schema\":\"leshy.safety.early_boot_watchdog_test.v1\","
         "\"kind\":\"armed\",\"status\":\"ready\","
-        "\"stage\":\"before_display\",\"watchdog_timeout_ms\":5000,"
+        "\"stage\":\"before_setup\",\"watchdog_timeout_ms\":5000,"
         "\"outputs_inactive\":true,\"filesystem_write_attempted\":false,"
         "\"physical_write_calls\":0}");
     reply.flush();
@@ -18786,6 +18878,14 @@ void setup() {
     }
     bootMetrics.appElfSha256 = runningAppElfSha256;
     bootMetrics.resetReason = static_cast<std::uint32_t>(esp_reset_reason());
+    earlyBootGuardTrippedAtBoot =
+        earlyBootGuardTripRtcState == kEarlyBootGuardTripRtcMagic &&
+        earlyBootGuardTripRtcStateInverse == ~kEarlyBootGuardTripRtcMagic;
+    earlyBootGuardTripRtcState = 0;
+    earlyBootGuardTripRtcStateInverse = 0;
+    if (earlyBootGuardTrippedAtBoot) {
+        persistSafetyStop(SafetyReason::RuntimeWatchdog, 1, 1);
+    }
     const SafetyRetainedRecord retainedSafety = snapshotSafetyRetainedRecord();
     safetySupervisor.restore(
         retainedSafety, runningAppIdentity,
@@ -18803,19 +18903,13 @@ void setup() {
     bootMetrics.buzzerInactive = BoardSafeOutputs::buzzerHeldInactive();
     bootMetrics.runtimeReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());
 
-    // Protect every fallible application boot stage, not only SD recovery and
-    // the steady-state loop. The exact-app ISR latch is already restorable at
-    // this point and all software-controlled outputs are at their boot-safe
-    // levels. A confirmed test stalls before display initialization to prove
-    // this previously uncovered interval with the real panic Task WDT.
+    // Transfer protection from the pre-app RTC guard to the loop-task WDT.
+    // The exact-app ISR latch is already restorable and every software output
+    // is at its boot-safe level before the RTC guard is released.
     if (!armRuntimeSafetyWatchdog()) {
         latchSafetyStopInTask(SafetyReason::SupervisorUnavailable);
-    }
-    if (earlyBootWatchdogTestRtcState == kEarlyBootWatchdogTestRtcMagic) {
-        earlyBootWatchdogTestRtcState = 0;
-        if (runtimeSafetyWatchdogReady) {
-            for (;;) delay(1000);
-        }
+    } else {
+        disarmEarlyBootGuard();
     }
 
     ledcAttach(BoardProfile::kBacklightPin, 5000, 8);

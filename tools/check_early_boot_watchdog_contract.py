@@ -31,18 +31,26 @@ def main() -> int:
             "bounded boot stages require explicit progress feeds")
     for token in (
         "RTC_NOINIT_ATTR std::uint32_t earlyBootWatchdogTestRtcState",
+        "ESP_SYSTEM_INIT_FN(leshy_early_boot_guard, SECONDARY, BIT(0), 1000)",
+        "wdt_hal_config_stage(",
+        "WDT_STAGE_ACTION_RESET_SYSTEM",
+        "earlyBootGuardTripRtcState = kEarlyBootGuardTripRtcMagic",
+        "persistSafetyStop(SafetyReason::RuntimeWatchdog, 1, 1)",
+        "disarmEarlyBootGuard()",
+        "startup_guard_tripped",
         "safety.early-boot-watchdog-test confirm",
         "leshy.safety.early_boot_watchdog_test.v1",
-        '\\"stage\\":\\"before_display\\"',
+        '\\"stage\\":\\"before_setup\\"',
         "earlyBootWatchdogTestRtcState = 0",
-        "for (;;) delay(1000)",
+        "while (true) esp_rom_delay_us(100000)",
         "recordRuntimeSafetyWatchdogTrip()",
         "quiesceEmergencyGpioFromIsr()",
     ):
         require(token in text, f"missing {token!r}")
     print(
-        "early boot watchdog contract passed: exact-app Task-WDT is armed "
-        "before display/input/SD and has a confirmed pre-display injection"
+        "early boot watchdog contract passed: RTC guard covers pre-app startup, "
+        "hands off to Task-WDT before display/input/SD, and has a confirmed "
+        "pre-setup injection"
     )
     return 0
 

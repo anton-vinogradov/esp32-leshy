@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove that the exact app fails safe before display initialization."""
+"""Prove that the exact app fails safe before Arduino app startup."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def early_boot_injection_failures(
             "watchdog_boot.reset_reason_code: expected panic/watchdog reset"
         )
     failures.extend(expect(armed, {
-        "status": "ready", "stage": "before_display",
+        "status": "ready", "stage": "before_setup",
         "watchdog_timeout_ms": 5000, "outputs_inactive": True,
         "filesystem_write_attempted": False, "physical_write_calls": 0,
     }, "injection"))
@@ -50,6 +50,7 @@ def early_boot_injection_failures(
         "state": "latched", "reason": "runtime_watchdog",
         "armed": True, "latched": True, "clear_pending": False,
         "trip_count": 1, "emergency_quiesce_count": 1,
+        "startup_guard_tripped": True,
         "buzzer_inactive": True, "nrf_ce_inactive": True,
         "runtime_owner": "none", "lease_mask": 0,
         "automatic_clear": False,
@@ -86,6 +87,7 @@ def final_failures(
         "state": "armed", "reason": "none", "armed": True,
         "latched": False, "clear_pending": False,
         "trip_count": 0, "emergency_quiesce_count": 0,
+        "startup_guard_tripped": False,
         "buzzer_inactive": True, "nrf_ce_inactive": True,
         "runtime_owner": "none", "lease_mask": 0,
     }, "safety_final"))
