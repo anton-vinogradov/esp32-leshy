@@ -78,6 +78,18 @@ obsolete restriction. Current-load bar tone is a function of measured load only;
 channels 1/6/11 no longer receive a preferred low-load color. The one cyan axis
 label remains the recommendation. No measurement or ranking semantics change.
 
+Exact `0.122.2-ble-device-intelligence` deepens CAP-011/016/017 for Bluetooth
+Nearby Devices. The fixed catalog now monotonically combines passive advertisement
+facts, a pinned 4,012-record Bluetooth SIG assigned-company lookup, available
+device/subtype/tracker/service classifications and volatile signal statistics.
+Strongest-first rows remain identity-stable after interaction, while detail presents
+vendor, address/type, connectable/scannable state, TX power/appearance/service when
+present and an integrated current/range/trend radar. It sends no scan request,
+pairing or active probe and persists no enriched device passport. One bounded retry
+is permitted only for a transient scan-start/completion failure; the accepted
+physical run needed none, so recovery of that branch remains source-contract rather
+than injected HIL evidence.
+
 Exact `0.117.0-wifi-device-live-detail` refines the CAP-016/017 presentation:
 opening a Wi-Fi client now locks its observed channel and presents identity facts
 plus the live RSSI meter/range/trend on one screen. Left unlocks the channel and

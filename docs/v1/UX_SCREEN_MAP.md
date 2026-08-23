@@ -206,6 +206,17 @@ changed data redraws content rows only, and background discovery never redraws a
 open detail. Five exact TFT states plus physical pixel comparisons accept this
 non-flickering contract (`E-BUILD-111`/`E-AUTO-075`/`E-HIL-135`/`E-UX-030`).
 
+Exact `0.122.2-ble-device-intelligence` replaces that intentionally sparse baseline
+without adding a page. Each of the four rows uses its first line for the best
+available name/type and its second for a different useful vendor, state or RSSI fact;
+duplicate captions are suppressed. Opening a row keeps the same identity and shows a
+compact passive passport above one integrated signal card. Continued discovery
+repaints only that card: the name, address, vendor and advertisement facts stay
+pixel-identical, while current dBm, meter, volatile range and trend may change.
+The accepted 240×320 frames change 111 list-content/zero chrome pixels and 3,234
+radar/zero static-or-chrome pixels (`E-BUILD-122`/`E-AUTO-086`/`E-HIL-146`/
+`E-UX-041`).
+
 Exact `0.113.0-dense-details` applies the screen-space rule to the three implemented
 radio-object details without changing navigation. Bluetooth Device, Wi-Fi Network
 and Wi-Fi Device compact identity/channel-or-mode facts above one shared signal

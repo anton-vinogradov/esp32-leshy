@@ -79,6 +79,18 @@ Exact `0.121.0-wifi-channel-neutral-bars` удаляет последний ви
 загрузки; каналы 1/6/11 больше не получают особый цвет при низкой загрузке.
 Единственным голубым номером остаётся рекомендация. Измерение и ranking не меняются.
 
+Exact `0.122.2-ble-device-intelligence` углубляет CAP-011/016/017 для Bluetooth
+«Устройства рядом». Fixed catalog теперь монотонно объединяет passive advertisement
+facts, закреплённый lookup 4 012 назначенных компаний Bluetooth SIG, доступные
+классификации device/subtype/tracker/service и volatile signal statistics.
+Strongest-first строки сохраняют identity после начала взаимодействия, а detail
+показывает vendor, address/type, connectable/scannable, TX power/appearance/service,
+когда они объявлены, и встроенный current/range/trend radar. Прошивка не посылает
+scan request, pairing или active probe и не сохраняет enriched device passport.
+Один bounded retry разрешён только для transient failure старта/завершения scan;
+принятый physical run не потребовал его, поэтому recovery этой ветки остаётся
+source-contract, а не injected HIL evidence.
+
 Exact `0.117.0-wifi-device-live-detail` уточняет presentation CAP-016/017: открытие
 Wi-Fi-клиента сразу фиксирует его наблюдавшийся канал и показывает identity facts
 вместе с live RSSI meter/range/trend на одном экране. Left снимает фиксацию канала и

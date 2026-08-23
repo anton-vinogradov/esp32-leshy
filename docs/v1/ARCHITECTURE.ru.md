@@ -548,6 +548,22 @@ channel-neutral модели. `wifiChannelBarTone()` принимает толь
 пороги warning/danger общие для всех каналов, а низкая загрузка всегда получает
 один positive tone. Host guard запрещает возвращать прежнюю ветку 1/6/11.
 
+Exact `0.122.2-ble-device-intelligence` сохраняет BLE discovery receive-only и
+проводит bounded advertisement facts через существующий observation pipeline.
+Adapter явно отключает active scan, deduplicates controller results и нормализует
+address/advertisement type, legacy/connectable/scannable, TX power, appearance,
+company ID, known service mask/counts и bounded payload lengths. `BleDeviceCatalog`
+монотонно объединяет sparse advertisements для 32 identities, переносит fixed signal
+statistics вместе со stable strongest-first sort и snapshot-ит identity order после
+начала взаимодействия. Flash asset 128 384 B содержит 4 012 Bluetooth SIG company
+records и ищется бинарно, не копируясь в heap. Full detail рисует stable facts один
+раз, incremental refresh ограничен прямоугольником радара. Один scan cycle допускает
+не более двух attempts и повторяет только scanner-unavailable/scan-timeout; второй
+failure остаётся terminal, cleanup освобождает все leases. Advertisement enrichment
+остаётся volatile и не кодируется текущей Session schema. Focused HIL minimum heap
+9 760 B ниже RB-04, поэтому функциональный checkpoint не заменяет mixed-workload
+release resource/endurance evidence.
+
 Exact `0.117.0-wifi-device-live-detail` удаляет `DeviceRadar` как отдельное UI- и
 runtime-state. Open в «Устройствах» копирует выбранную fixed record, фиксирует
 passive adapter на её наблюдавшемся канале и входит в `DeviceDetail`; Left выполняет

@@ -1,0 +1,9 @@
+{
+  "schema": "leshy.ble_company_asset.v1",
+  "source": "https://bitbucket.org/bluetooth-SIG/public/raw/main/assigned_numbers/company_identifiers/company_identifiers.yaml",
+  "source_sha256": "5d543338c4da4cbdb902849c27f6ad18a869c08d83951568ad2b0f9ede412719",
+  "asset_sha256": "9d7709e3bc78aa8725b67ee72ce54e2aa863cfd2b03b031a97c47f19a9c64a39",
+  "records": 4012,
+  "record_bytes": 32,
+  "asset_bytes": 128384
+}

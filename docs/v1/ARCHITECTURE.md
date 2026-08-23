@@ -488,6 +488,23 @@ channel-neutral model. `wifiChannelBarTone()` accepts only `busyPermille`; warni
 and danger thresholds are common to every channel and low load always uses the same
 positive tone. A host guard rejects reintroduction of the former 1/6/11 branch.
 
+Exact `0.122.2-ble-device-intelligence` keeps BLE discovery receive-only while
+carrying bounded advertisement facts through the existing observation pipeline.
+The adapter explicitly disables active scan, deduplicates controller results and
+normalizes address/advertisement type, legacy/connectable/scannable flags, TX power,
+appearance, company ID, known service mask/counts and bounded payload lengths.
+`BleDeviceCatalog` monotonically merges sparse advertisements for 32 identities,
+moves fixed signal statistics with its stable strongest-first sort and snapshots
+identity order once the user interacts. A 128,384-byte flash asset supplies 4,012
+Bluetooth SIG company records by binary search; it is not copied into heap.
+The full detail draws stable facts once and incremental refresh is limited to its
+radar rectangle. A scan cycle permits at most two attempts and retries only the
+scanner-unavailable/scan-timeout classes; a second failure remains terminal and
+cleanup releases every lease. Advertisement enrichment remains volatile and is not
+encoded by the current Session schema. The focused HIL minimum heap of 9,760 B is
+below RB-04, so this functional checkpoint does not supersede mixed-workload release
+resource/endurance evidence.
+
 Exact `0.117.0-wifi-device-live-detail` removes `DeviceRadar` as a separate UI and
 runtime state. The Devices open action copies the selected fixed record, locks the
 passive adapter to its observed channel and enters `DeviceDetail`; Left performs the

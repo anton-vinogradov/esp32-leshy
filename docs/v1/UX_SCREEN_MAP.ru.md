@@ -207,6 +207,16 @@ name (или явный fallback без имени), RSSI, suffix адреса �
 comparisons принимают этот немерцающий контракт (`E-BUILD-111`/`E-AUTO-075`/
 `E-HIL-135`/`E-UX-030`).
 
+Exact `0.122.2-ble-device-intelligence` заменяет этот намеренно краткий baseline без
+новой страницы. Первая строка каждой из четырёх row показывает лучшее доступное
+имя/type, вторая — отличающийся полезный vendor, state или RSSI fact; повторяющиеся
+подписи подавляются. Открытие row сохраняет ту же identity и показывает компактный
+passive passport над единственной встроенной signal card. Продолжающийся discovery
+перерисовывает только эту card: name, address, vendor и advertisement facts остаются
+pixel-identical, меняются current dBm, meter, volatile range и trend. Принятые frames
+240×320 меняют 111 list-content/zero chrome pixels и 3 234 radar/zero
+static-or-chrome pixels (`E-BUILD-122`/`E-AUTO-086`/`E-HIL-146`/`E-UX-041`).
+
 Exact `0.113.0-dense-details` применяет правило расходования площади к трём
 реализованным detail radio objects, не меняя navigation. Bluetooth Device, Wi-Fi
 Network и Wi-Fi Device компактно показывают identity/channel-or-mode над одной
