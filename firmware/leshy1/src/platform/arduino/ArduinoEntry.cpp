@@ -33,6 +33,7 @@
 #include "apps/capture/SubGhzRawCsv.h"
 #include "apps/capture/WifiFrameCapture.h"
 #include "apps/self_test/SelfTestController.h"
+#include "apps/spectrum/Cc1101SignalFinder.h"
 #include "apps/spectrum/Cc1101SpectrumController.h"
 #include "apps/spectrum/Nrf24SignalFinder.h"
 #include "apps/spectrum/Nrf24SpectrumController.h"
@@ -146,6 +147,8 @@ using leshy1::apps::self_test::SelfTestMode;
 using leshy1::apps::self_test::SelfTestReport;
 using leshy1::apps::self_test::SelfTestResultStatus;
 using leshy1::apps::self_test::SelfTestView;
+using leshy1::apps::spectrum::Cc1101SignalFinder;
+using leshy1::apps::spectrum::Cc1101SignalFinderState;
 using leshy1::apps::spectrum::Cc1101SpectrumController;
 using leshy1::apps::spectrum::Cc1101SpectrumViewState;
 using leshy1::apps::spectrum::Nrf24SignalFinder;
@@ -375,6 +378,7 @@ Nrf24SpectrumController nrf24SpectrumController;
 Nrf24SignalFinder nrf24SignalFinder;
 Nrf24PassiveSpectrumReport nrf24SpectrumReport;
 BoardNrf24PassiveSpectrum boardNrf24Spectrum;
+Cc1101SignalFinder cc1101SignalFinder;
 Cc1101SpectrumController cc1101SpectrumController;
 Cc1101PassiveSpectrumReport cc1101SpectrumReport;
 BoardCc1101PassiveSpectrum boardCc1101Spectrum;
@@ -533,6 +537,7 @@ enum class RfSpectrumView : std::uint8_t {
     Nrf24Menu,
     Nrf24Finder,
     SubGhzMenu,
+    CcFinder,
     CcBandMenu,
     SubGhzCaptureBandMenu,
     SubGhzCaptureLive,
@@ -545,6 +550,7 @@ const char* rfSpectrumViewName(RfSpectrumView view) {
         case RfSpectrumView::Nrf24Menu: return "nrf24_menu";
         case RfSpectrumView::Nrf24Finder: return "nrf24_finder";
         case RfSpectrumView::SubGhzMenu: return "subghz_menu";
+        case RfSpectrumView::CcFinder: return "cc1101_finder";
         case RfSpectrumView::CcBandMenu: return "cc_band_menu";
         case RfSpectrumView::SubGhzCaptureBandMenu:
             return "subghz_capture_band_menu";
@@ -689,6 +695,12 @@ Nrf24SignalFinderState nrf24FinderRenderedState =
     Nrf24SignalFinderState::Idle;
 std::uint8_t nrf24FinderRenderedChannel = 0xffU;
 bool nrf24FinderRenderedFound = false;
+std::array<std::int16_t, Layout::ScreenWidth> ccFinderRenderedHeights{};
+std::uint32_t ccFinderRenderedRevision = UINT32_MAX;
+Cc1101SignalFinderState ccFinderRenderedState =
+    Cc1101SignalFinderState::Idle;
+std::uint32_t ccFinderRenderedFrequencyKHz = UINT32_MAX;
+bool ccFinderRenderedFound = false;
 SubGhzRawCapture subGhzRawCapture;
 std::uint64_t nextSubGhzCaptureUiRefreshUs = 0;
 std::uint64_t spectrumWaterfallStartedUs = 0;
@@ -5152,6 +5164,10 @@ NavigationFooter navigationFooterForCurrentState() {
             return {back, {},
                     {NavigationKey::RightAndSelect, UiTextId::NavAgain}};
         }
+        if (rfSpectrumView == RfSpectrumView::CcFinder) {
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavAgain}};
+        }
         if (rfSpectrumView == RfSpectrumView::SubGhzMenu ||
             rfSpectrumView == RfSpectrumView::SubGhzCaptureBandMenu) {
             return {back, choose, enter};
@@ -7881,14 +7897,23 @@ void renderNrf24ModeMenu(bool clearContent) {
     renderNrf24ModeRow(1, nrf24ModeSelection == 1U);
 }
 
+void renderSubGhzModeRow(std::uint8_t index, bool selected) {
+    if (index >= 3U) return;
+    const UiTextId label = index == 0U
+        ? UiTextId::SubGhzSpectrum
+        : (index == 1U ? UiTextId::CcFinder : UiTextId::SubGhzRaw);
+    const UiTextId note = index == 0U
+        ? UiTextId::SubGhzSpectrumNote
+        : (index == 1U ? UiTextId::CcFinderNote : UiTextId::SubGhzRawNote);
+    renderMenuRow(Components::choiceRow(index), tr(label), tr(note),
+                  selected, true, Tone::Positive);
+}
+
 void renderSubGhzModeMenu(bool clearContent) {
     renderHeader(tr(UiTextId::SubGhzModes), clearContent);
-    renderMenuRow(Components::choiceRow(0), tr(UiTextId::SubGhzSpectrum),
-                  tr(UiTextId::SubGhzSpectrumNote),
-                  subGhzModeSelection == 0, true, Tone::Positive);
-    renderMenuRow(Components::choiceRow(1), tr(UiTextId::SubGhzRaw),
-                  tr(UiTextId::SubGhzRawNote),
-                  subGhzModeSelection == 1, true, Tone::Positive);
+    for (std::uint8_t index = 0; index < 3U; ++index) {
+        renderSubGhzModeRow(index, subGhzModeSelection == index);
+    }
 }
 
 leshy1::drivers::radio::Cc1101SpectrumBand ccBandFromIndex(
@@ -8416,6 +8441,150 @@ void renderNrf24FinderPage(bool clearContent) {
     renderNrf24FinderGraph(true);
 }
 
+void renderCcFinderResult(bool force) {
+    const Cc1101SignalFinderState state = cc1101SignalFinder.state();
+    const bool found = cc1101SignalFinder.found();
+    const std::uint32_t frequency = cc1101SignalFinder.strongestFrequencyKHz();
+    if (!force && state == ccFinderRenderedState &&
+        found == ccFinderRenderedFound &&
+        (!found || frequency == ccFinderRenderedFrequencyKHz)) {
+        return;
+    }
+    display.fillRect(0, kNrfFinderInfoY, Layout::ScreenWidth,
+                     kNrfFinderInfoHeight, Palette::Canvas);
+    if (state == Cc1101SignalFinderState::Fault) {
+        display.setTextColor(Palette::Danger, Palette::Canvas);
+        setUiCursor(UiTextRole::Body, 8, kNrfFinderInfoY + 12);
+        display.print(tr(UiTextId::CcFinderFault));
+    } else if (state == Cc1101SignalFinderState::Calibrating) {
+        display.setTextColor(Palette::TextPrimary, Palette::Canvas);
+        setUiCursor(UiTextRole::Body, 8, kNrfFinderInfoY + 6);
+        display.print(tr(UiTextId::CcFinderCalibrating));
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 8, kNrfFinderInfoY + 32);
+        display.print(tr(UiTextId::CcFinderCalibratingNote));
+    } else if (!found) {
+        display.setTextColor(Palette::TextPrimary, Palette::Canvas);
+        setUiCursor(UiTextRole::Body, 8, kNrfFinderInfoY + 6);
+        display.print(tr(UiTextId::CcFinderWaiting));
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 8, kNrfFinderInfoY + 32);
+        display.print(tr(UiTextId::CcFinderWaitingNote));
+    } else {
+        display.setTextColor(Palette::Positive, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 8, kNrfFinderInfoY + 1);
+        display.print(tr(UiTextId::CcFinderFound));
+        char line[32] = {};
+        std::snprintf(line, sizeof(line), tr(UiTextId::CcFinderFrequencyFormat),
+                      static_cast<unsigned long>(frequency / 1000U),
+                      static_cast<unsigned long>(frequency % 1000U));
+        display.setTextColor(Palette::TextPrimary, Palette::Canvas);
+        setUiCursor(UiTextRole::Body, 8, kNrfFinderInfoY + 19);
+        display.print(line);
+        const char* hint = cc1101SignalFinder.bandHint();
+        if (hint[0] != '\0') {
+            selectUiFont(UiTextRole::Meta);
+            display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+            setUiCursor(UiTextRole::Meta,
+                        Layout::ScreenWidth - 8 - display.textWidth(hint),
+                        kNrfFinderInfoY + 23);
+            display.print(hint);
+        }
+    }
+    ccFinderRenderedState = state;
+    ccFinderRenderedFound = found;
+    ccFinderRenderedFrequencyKHz = frequency;
+}
+
+void renderCcFinderGraph(bool force) {
+    if (force) {
+        display.fillRect(0, kNrfFinderGraphY, Layout::ScreenWidth,
+                         kNrfFinderGraphHeight, kSpectrumNoSignal);
+        ccFinderRenderedHeights.fill(0);
+    }
+    for (std::int16_t x = 0; x < Layout::ScreenWidth; ++x) {
+        std::size_t first = static_cast<std::size_t>(x) *
+            Cc1101SignalFinder::kBinCount / Layout::ScreenWidth;
+        std::size_t last = static_cast<std::size_t>(x + 1) *
+            Cc1101SignalFinder::kBinCount / Layout::ScreenWidth;
+        if (last <= first) last = first + 1U;
+        std::uint8_t strength = 0;
+        for (std::size_t bin = first;
+             bin < last && bin < Cc1101SignalFinder::kBinCount; ++bin) {
+            const std::uint8_t candidate = cc1101SignalFinder.strength(bin);
+            if (candidate > strength) strength = candidate;
+        }
+        const std::int16_t height = static_cast<std::int16_t>(
+            (strength < Cc1101SignalFinder::kGraphFullScaleDb
+                 ? strength : Cc1101SignalFinder::kGraphFullScaleDb) *
+            kNrfFinderGraphHeight /
+            Cc1101SignalFinder::kGraphFullScaleDb);
+        const std::int16_t previous =
+            ccFinderRenderedHeights[static_cast<std::size_t>(x)];
+        if (height < previous) {
+            display.drawFastVLine(x, kNrfFinderAxisY - previous,
+                                  previous - height, kSpectrumNoSignal);
+        } else if (height > previous) {
+            display.drawFastVLine(
+                x, kNrfFinderAxisY - height, height - previous,
+                strength >= Cc1101SignalFinder::kDetectionRiseDb
+                    ? Palette::Positive : Palette::TextMuted);
+        }
+        ccFinderRenderedHeights[static_cast<std::size_t>(x)] = height;
+    }
+    ccFinderRenderedRevision = cc1101SignalFinder.revision();
+}
+
+std::int16_t ccFinderAxisX(std::uint32_t frequencyKHz) {
+    std::size_t bestBin = 0;
+    std::uint32_t bestDistance = UINT32_MAX;
+    for (std::size_t bin = 0; bin < Cc1101SignalFinder::kBinCount; ++bin) {
+        const std::uint32_t candidate =
+            Cc1101SignalFinder::frequencyKHz(bin);
+        const std::uint32_t distance = candidate > frequencyKHz
+            ? candidate - frequencyKHz : frequencyKHz - candidate;
+        if (distance < bestDistance) {
+            bestDistance = distance;
+            bestBin = bin;
+        }
+    }
+    return static_cast<std::int16_t>(bestBin * Layout::ScreenWidth /
+                                     Cc1101SignalFinder::kBinCount);
+}
+
+void renderCcFinderAxis() {
+    display.fillRect(0, kNrfFinderLegendY, Layout::ScreenWidth,
+                     kNrfFinderLegendHeight, Palette::Surface);
+    display.setTextColor(Palette::TextSecondary, Palette::Surface);
+    setUiCursor(UiTextRole::Meta, 4, kNrfFinderLegendY + 1);
+    display.print(tr(UiTextId::CcFinderResponse));
+
+    display.fillRect(0, kNrfFinderAxisY, Layout::ScreenWidth,
+                     kNrfFinderAxisHeight, Palette::Canvas);
+    struct Tick final { std::uint32_t frequencyKHz; const char* label; };
+    constexpr Tick ticks[] = {
+        {315000U, "315"}, {433920U, "433"},
+        {868350U, "868"}, {915000U, "915"},
+    };
+    selectUiFont(UiTextRole::Meta);
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    for (const Tick& tick : ticks) {
+        const std::int16_t x = ccFinderAxisX(tick.frequencyKHz);
+        display.drawFastVLine(x, kNrfFinderAxisY, 3, Palette::Divider);
+        const std::int16_t width = display.textWidth(tick.label);
+        setUiCursor(UiTextRole::Meta, x - width / 2,
+                    kNrfFinderAxisY + 2);
+        display.print(tick.label);
+    }
+}
+
+void renderCcFinderPage(bool clearContent) {
+    renderHeader(tr(UiTextId::CcFinderTitle), clearContent);
+    renderCcFinderAxis();
+    renderCcFinderResult(true);
+    renderCcFinderGraph(true);
+}
+
 void formatCcFrequency(std::uint32_t frequencyKHz, char* output,
                        std::size_t capacity) {
     if (output == nullptr || capacity == 0) return;
@@ -8514,6 +8683,10 @@ void renderInventoryPage(bool clearContent) {
     }
     if (rfSpectrumView == RfSpectrumView::SubGhzMenu) {
         renderSubGhzModeMenu(clearContent);
+        return;
+    }
+    if (rfSpectrumView == RfSpectrumView::CcFinder) {
+        renderCcFinderPage(clearContent);
         return;
     }
     if (rfSpectrumView == RfSpectrumView::CcBandMenu) {
@@ -9243,17 +9416,8 @@ bool renderSelectionDelta() {
             static_cast<std::uint8_t>(RfSpectrumView::SubGhzMenu)) {
         const std::uint8_t current = subGhzModeSelection;
         if (renderedUi.subGhzModeSelection == current) return false;
-        const auto renderMode = [](std::uint8_t index, bool selected) {
-            renderMenuRow(
-                Components::choiceRow(index),
-                tr(index == 0 ? UiTextId::SubGhzSpectrum
-                              : UiTextId::SubGhzRaw),
-                tr(index == 0 ? UiTextId::SubGhzSpectrumNote
-                              : UiTextId::SubGhzRawNote),
-                selected, true, Tone::Positive);
-        };
-        renderMode(renderedUi.subGhzModeSelection, false);
-        renderMode(current, true);
+        renderSubGhzModeRow(renderedUi.subGhzModeSelection, false);
+        renderSubGhzModeRow(current, true);
         renderNavigationFooter();
         return true;
     }
@@ -9586,11 +9750,54 @@ bool startCc1101Spectrum(
     return true;
 }
 
+bool startCc1101Finder() {
+    cc1101SignalFinder.reset();
+    cc1101SpectrumReport = {};
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
+        AppRuntime::kForegroundOwner;
+    const bool hardwareReady = boardCc1101Spectrum.begin(
+        owned, &cc1101SpectrumReport);
+    const bool started = hardwareReady &&
+        cc1101SignalFinder.start(startedUs);
+    if (!started) {
+        boardCc1101Spectrum.end();
+        cc1101SignalFinder.fail();
+    }
+    rfSpectrumKind = RfSpectrumKind::Cc1101;
+    rfSpectrumView = RfSpectrumView::CcFinder;
+    ccFinderRenderedHeights.fill(0);
+    ccFinderRenderedRevision = UINT32_MAX;
+    ccFinderRenderedState = Cc1101SignalFinderState::Idle;
+    ccFinderRenderedFrequencyKHz = UINT32_MAX;
+    ccFinderRenderedFound = false;
+    lastRuntimeEvent = started ? "cc1101_finder_calibrating"
+                               : "cc1101_finder_start_failed";
+    return true;
+}
+
+bool stopCc1101Finder() {
+    const bool cleanup = boardCc1101Spectrum.end();
+    if (cc1101SignalFinder.state() != Cc1101SignalFinderState::Idle) {
+        cc1101SignalFinder.stop();
+    }
+    rfSpectrumView = RfSpectrumView::SubGhzMenu;
+    nextSpectrumUiRefreshUs = 0;
+    lastRuntimeEvent = cleanup ? "cc1101_finder_stopped"
+                               : "cc1101_finder_cleanup_failed";
+    return true;
+}
+
 bool stopCc1101Spectrum(bool returnToSourceMenu) {
     const bool cleanup = boardCc1101Spectrum.end();
     if (cc1101SpectrumController.state() !=
         Cc1101SpectrumViewState::Idle) {
         cc1101SpectrumController.stop();
+    }
+    if (cc1101SignalFinder.state() != Cc1101SignalFinderState::Idle) {
+        cc1101SignalFinder.stop();
     }
     rfSpectrumView = returnToSourceMenu ? RfSpectrumView::CcBandMenu
                                         : RfSpectrumView::None;
@@ -9635,6 +9842,46 @@ void serviceCc1101Spectrum() {
         renderSpectrumBars();
         display.endWrite();
         nextSpectrumUiRefreshUs = refreshUs + 100000ULL;
+    }
+}
+
+void serviceCc1101Finder() {
+    if (rfSpectrumView != RfSpectrumView::CcFinder ||
+        rfSpectrumKind != RfSpectrumKind::Cc1101 ||
+        (cc1101SignalFinder.state() !=
+             Cc1101SignalFinderState::Calibrating &&
+         cc1101SignalFinder.state() !=
+             Cc1101SignalFinderState::Searching)) {
+        return;
+    }
+    const std::uint32_t revision = cc1101SignalFinder.revision();
+    const std::uint32_t frequency =
+        cc1101SignalFinder.nextFrequencyKHz();
+    std::int16_t rssiDbm = -128;
+    std::uint64_t startedUs = 0;
+    std::uint64_t endedUs = 0;
+    const bool valid = boardCc1101Spectrum.sampleFrequency(
+        frequency, &rssiDbm, &startedUs, &endedUs) &&
+        cc1101SignalFinder.ingest(
+            frequency, rssiDbm, startedUs, endedUs);
+    if (!valid) {
+        boardCc1101Spectrum.end();
+        cc1101SignalFinder.fail();
+        lastRuntimeEvent = "cc1101_finder_runtime_fault";
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (cc1101SignalFinder.revision() != revision &&
+        !uiController.isRoot() && uiController.page() == 2) {
+        display.startWrite();
+        renderCcFinderResult(false);
+        renderCcFinderGraph(false);
+        display.endWrite();
+        lastRuntimeEvent = cc1101SignalFinder.found()
+            ? "cc1101_finder_signal_found"
+            : (cc1101SignalFinder.calibrated()
+                   ? "cc1101_finder_waiting"
+                   : "cc1101_finder_calibrating");
     }
 }
 
@@ -9752,6 +9999,11 @@ bool activeReceiveSampling() {
         (rfSpectrumView == RfSpectrumView::Nrf24Finder &&
          nrf24SpectrumController.state() ==
              Nrf24SpectrumViewState::Running) ||
+        (rfSpectrumView == RfSpectrumView::CcFinder &&
+         (cc1101SignalFinder.state() ==
+              Cc1101SignalFinderState::Calibrating ||
+          cc1101SignalFinder.state() ==
+              Cc1101SignalFinderState::Searching)) ||
         (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive &&
          (rawState == SubGhzRawCaptureState::Waiting ||
           rawState == SubGhzRawCaptureState::Capturing)) ||
@@ -12148,24 +12400,28 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
         } else if (rfSpectrumView == RfSpectrumView::SubGhzMenu) {
             handled = true;
-            if (action == UiAction::Up && subGhzModeSelection != 0) {
-                subGhzModeSelection = 0;
+            if (action == UiAction::Up && subGhzModeSelection != 0U) {
+                --subGhzModeSelection;
                 changed = true;
             } else if (action == UiAction::Down &&
-                       subGhzModeSelection != 1) {
-                subGhzModeSelection = 1;
+                       subGhzModeSelection != 2U) {
+                ++subGhzModeSelection;
                 changed = true;
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {
                 rfCcBandSelection =
                     leshy1::drivers::radio::Cc1101SpectrumBand::Band433;
-                rfSpectrumView = subGhzModeSelection == 0
-                    ? RfSpectrumView::CcBandMenu
-                    : RfSpectrumView::SubGhzCaptureBandMenu;
-                lastRuntimeEvent = subGhzModeSelection == 0
-                    ? "cc1101_spectrum_band_menu"
-                    : "subghz_raw_band_menu";
-                changed = true;
+                if (subGhzModeSelection == 0U) {
+                    rfSpectrumView = RfSpectrumView::CcBandMenu;
+                    lastRuntimeEvent = "cc1101_spectrum_band_menu";
+                    changed = true;
+                } else if (subGhzModeSelection == 1U) {
+                    changed = startCc1101Finder();
+                } else {
+                    rfSpectrumView = RfSpectrumView::SubGhzCaptureBandMenu;
+                    lastRuntimeEvent = "subghz_raw_band_menu";
+                    changed = true;
+                }
             } else if (action == UiAction::Back ||
                        action == UiAction::Left) {
                 rfSpectrumView = RfSpectrumView::None;
@@ -12174,6 +12430,25 @@ bool applyUiAction(UiAction action, bool render = true) {
                     true, 2);
                 if (changed) appRuntime.stop();
                 lastRuntimeEvent = "subghz_home";
+            }
+        } else if (rfSpectrumView == RfSpectrumView::CcFinder) {
+            handled = true;
+            if (action == UiAction::Back || action == UiAction::Left) {
+                changed = stopCc1101Finder();
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                std::uint64_t nowUs =
+                    static_cast<std::uint64_t>(esp_timer_get_time());
+                if (nowUs == 0U) nowUs = 1U;
+                changed = cc1101SignalFinder.restart(nowUs);
+                if (changed) {
+                    ccFinderRenderedRevision = UINT32_MAX;
+                    ccFinderRenderedState = Cc1101SignalFinderState::Idle;
+                    ccFinderRenderedFrequencyKHz = UINT32_MAX;
+                    ccFinderRenderedFound = false;
+                    ccFinderRenderedHeights.fill(0);
+                    lastRuntimeEvent = "cc1101_finder_calibrating";
+                }
             }
         } else if (rfSpectrumView ==
                    RfSpectrumView::SubGhzCaptureBandMenu) {
@@ -12957,6 +13232,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                 nrf24SpectrumController.reset();
                 nrf24SignalFinder.reset();
                 nrf24SpectrumReport = {};
+                cc1101SignalFinder.reset();
                 cc1101SpectrumController.reset();
                 cc1101SpectrumReport = {};
             }
@@ -13077,7 +13353,7 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
         }
         if (rfSpectrumView == RfSpectrumView::SubGhzMenu) {
             return {leshy1::ui::hitTouchTarget(
-                        TouchTargetLayout::TwoChoices, point),
+                        TouchTargetLayout::ThreeChoices, point, 0, 3),
                     subGhzModeSelection};
         }
         if (rfSpectrumView == RfSpectrumView::CcBandMenu ||
@@ -17685,6 +17961,69 @@ void emitNrf24FinderReport(Stream& reply) {
     reply.println(line);
 }
 
+void emitCc1101FinderReport(Stream& reply) {
+    const auto& report = cc1101SpectrumReport;
+    std::uint16_t nonzeroBins = 0;
+    for (std::size_t index = 0;
+         index < Cc1101SignalFinder::kBinCount; ++index) {
+        if (cc1101SignalFinder.strength(index) != 0U) ++nonzeroBins;
+    }
+    auto& line = diagnosticJson;
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.cc1101.signal-finder.v1\",\"kind\":\"state\","
+        "\"view\":\"%s\",\"state\":\"%s\",\"calibrated\":%s,"
+        "\"found\":%s,\"frequency_khz\":%lu,\"band_hint\":\"%s\","
+        "\"response_db\":%u,\"response_threshold_db\":%u,"
+        "\"response_bins\":%u,\"bins\":%u,\"step_khz\":%lu,"
+        "\"tuning_windows_khz\":[[300000,348000],[387000,464000],"
+        "[779000,928000]],\"sweeps\":%lu,"
+        "\"calibration_passes\":%u,\"next_bin\":%u,"
+        "\"baseline_semantics\":\"minimum_of_two_ambient_sweeps\","
+        "\"response_semantics\":\"local_rssi_rise_after_common_drift\","
+        "\"rx_only\":%s,\"adapter_active\":%s,\"volatile\":true,"
+        "\"wire\":{\"register_reads\":%lu,\"register_writes\":%lu,"
+        "\"command_strobes\":%lu,\"reset_strobes\":%lu,"
+        "\"receive_strobes\":%lu,\"idle_strobes\":%lu},"
+        "\"side_effects\":{\"rejected_strobes\":%lu,"
+        "\"tx_strobes\":%lu,\"pa_table_writes\":%lu,"
+        "\"fifo_writes\":%lu,\"storage_writes\":0},"
+        "\"read_only_query\":true,\"current_owner\":\"%s\","
+        "\"current_lease_mask\":%lu}",
+        rfSpectrumViewName(rfSpectrumView),
+        leshy1::apps::spectrum::cc1101SignalFinderStateName(
+            cc1101SignalFinder.state()),
+        cc1101SignalFinder.calibrated() ? "true" : "false",
+        cc1101SignalFinder.found() ? "true" : "false",
+        static_cast<unsigned long>(
+            cc1101SignalFinder.found()
+                ? cc1101SignalFinder.strongestFrequencyKHz() : 0U),
+        cc1101SignalFinder.bandHint(),
+        static_cast<unsigned>(cc1101SignalFinder.strongestRiseDb()),
+        static_cast<unsigned>(Cc1101SignalFinder::kDetectionRiseDb),
+        static_cast<unsigned>(nonzeroBins),
+        static_cast<unsigned>(Cc1101SignalFinder::kBinCount),
+        static_cast<unsigned long>(Cc1101SignalFinder::kStepKHz),
+        static_cast<unsigned long>(cc1101SignalFinder.sweeps()),
+        static_cast<unsigned>(cc1101SignalFinder.calibrationPasses()),
+        static_cast<unsigned>(cc1101SignalFinder.nextBin()),
+        report.rxOnly ? "true" : "false",
+        boardCc1101Spectrum.active() ? "true" : "false",
+        static_cast<unsigned long>(report.registerReads),
+        static_cast<unsigned long>(report.registerWrites),
+        static_cast<unsigned long>(report.commandStrobes),
+        static_cast<unsigned long>(report.resetStrobes),
+        static_cast<unsigned long>(report.receiveStrobes),
+        static_cast<unsigned long>(report.idleStrobes),
+        static_cast<unsigned long>(report.rejectedStrobes),
+        static_cast<unsigned long>(report.txStrobes),
+        static_cast<unsigned long>(report.paTableWrites),
+        static_cast<unsigned long>(report.fifoWrites),
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
 void emitCc1101SpectrumReport(Stream& reply) {
     const auto& report = cc1101SpectrumReport;
     const Cc1101PassiveSpectrumPlan plan = cc1101SpectrumController.plan();
@@ -18010,6 +18349,8 @@ void handleCommand(Stream& reply, const char* command) {
         emitNrf24SpectrumReport(reply);
     } else if (std::strcmp(command, "hardware.nrf24.finder") == 0) {
         emitNrf24FinderReport(reply);
+    } else if (std::strcmp(command, "hardware.cc1101.finder") == 0) {
+        emitCc1101FinderReport(reply);
     } else if (std::strcmp(command, "hardware.cc1101.spectrum") == 0) {
         emitCc1101SpectrumReport(reply);
     } else if (std::strcmp(command, "ping") == 0) {
@@ -18620,6 +18961,7 @@ void setup() {
               "\"hardware.shield.receivers\","
               "\"hardware.nrf24.spectrum\","
               "\"hardware.nrf24.finder\","
+              "\"hardware.cc1101.finder\","
               "\"hardware.cc1101.spectrum\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"wifi.network.detail\","
@@ -18694,6 +19036,7 @@ void loop() {
         serviceFullGuidedRfChecks();
         serviceNrf24Spectrum();
         serviceCc1101Spectrum();
+        serviceCc1101Finder();
         serviceSubGhzRawCapture();
         serviceInfraredCapture();
         serviceSpectrumWaterfallCadence();

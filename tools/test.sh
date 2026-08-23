@@ -48,6 +48,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/apps/library/SessionCatalog.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/self_test/SelfTestController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/spectrum/Cc1101SpectrumController.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/spectrum/Cc1101SignalFinder.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/spectrum/Nrf24SignalFinder.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/spectrum/Nrf24SpectrumController.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/spectrum/SpectrumViewport.cpp" \
@@ -200,6 +201,7 @@ run_opaque_evidence_check tools/check_nrf24_spectrum_acceptance.py
 python3 "$repo_dir/tools/check_nrf24_signal_finder_contract.py"
 run_opaque_evidence_check tools/check_nrf24_signal_finder_acceptance.py
 run_opaque_evidence_check tools/check_cc1101_spectrum_acceptance.py
+python3 "$repo_dir/tools/check_cc1101_signal_finder_contract.py"
 python3 "$repo_dir/tools/check_full_guided_rf_acceptance.py"
 run_opaque_evidence_check tools/check_full_guided_artifact_acceptance.py
 run_opaque_evidence_check tools/check_full_guided_disposable_acceptance.py

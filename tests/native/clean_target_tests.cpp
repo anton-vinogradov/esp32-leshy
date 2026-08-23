@@ -31,6 +31,7 @@
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/self_test/SelfTestController.h"
+#include "apps/spectrum/Cc1101SignalFinder.h"
 #include "apps/spectrum/Cc1101SpectrumController.h"
 #include "apps/spectrum/Nrf24SignalFinder.h"
 #include "apps/spectrum/Nrf24SpectrumController.h"
@@ -811,6 +812,66 @@ void testNrf24SignalFinderLearnsFloorAndFindsOnlyLocalRise() {
     CHECK(finder.stop());
     CHECK(finder.state() == Nrf24SignalFinderState::Idle);
     CHECK(!finder.ingest({}));
+}
+
+void testCc1101SignalFinderCoversWindowsAndRejectsAmbientDrift() {
+    Cc1101SignalFinder finder;
+    CHECK(Cc1101SignalFinder::kBinCount == 1099U);
+    CHECK(Cc1101SignalFinder::frequencyKHz(0) == 300000U);
+    CHECK(Cc1101SignalFinder::frequencyKHz(192) == 348000U);
+    CHECK(Cc1101SignalFinder::frequencyKHz(193) == 387000U);
+    CHECK(Cc1101SignalFinder::frequencyKHz(501) == 464000U);
+    CHECK(Cc1101SignalFinder::frequencyKHz(502) == 779000U);
+    CHECK(Cc1101SignalFinder::frequencyKHz(1098) == 928000U);
+    CHECK(Cc1101SignalFinder::frequencyKHz(1099) == 0U);
+    CHECK(!Cc1101SignalFinder::tunableFrequency(370000U));
+    CHECK(finder.start(100U));
+    CHECK(finder.state() == Cc1101SignalFinderState::Calibrating);
+
+    std::uint64_t now = 100U;
+    const std::uint32_t targetFrequencyKHz = 433250U;
+    const auto feedSweep = [&](std::int16_t ambientDbm,
+                               bool targetActive) {
+        for (std::size_t bin = 0;
+             bin < Cc1101SignalFinder::kBinCount; ++bin) {
+            const std::uint32_t frequency =
+                Cc1101SignalFinder::frequencyKHz(bin);
+            const std::int16_t rssi = targetActive &&
+                    frequency == targetFrequencyKHz
+                ? static_cast<std::int16_t>(-60) : ambientDbm;
+            const std::uint64_t started = ++now;
+            const std::uint64_t ended = ++now;
+            CHECK(finder.ingest(frequency, rssi, started, ended));
+        }
+    };
+
+    const std::uint64_t invalidStarted = ++now;
+    const std::uint64_t invalidEnded = ++now;
+    CHECK(!finder.ingest(300250U, -96, invalidStarted, invalidEnded));
+    feedSweep(-96, false);
+    CHECK(finder.calibrationPasses() == 1U);
+    feedSweep(-98, false);
+    CHECK(finder.state() == Cc1101SignalFinderState::Searching);
+    CHECK(!finder.found());
+
+    // A uniform one-dB ambient shift is common drift, not a signal.
+    feedSweep(-97, false);
+    CHECK(!finder.found());
+    feedSweep(-97, true);
+    CHECK(finder.found());
+    CHECK(finder.strongestFrequencyKHz() == targetFrequencyKHz);
+    CHECK(std::strcmp(finder.bandHint(), "433 ISM") == 0);
+    CHECK(finder.strongestRiseDb() >=
+          Cc1101SignalFinder::kDetectionRiseDb);
+    CHECK(finder.sweeps() == 4U);
+    CHECK(finder.revision() == 4U);
+
+    CHECK(finder.restart(++now));
+    CHECK(finder.state() == Cc1101SignalFinderState::Calibrating);
+    CHECK(finder.revision() == 0U);
+    CHECK(!finder.found());
+    CHECK(finder.stop());
+    CHECK(finder.state() == Cc1101SignalFinderState::Idle);
 }
 
 void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
@@ -5725,6 +5786,7 @@ int main() {
     testShieldReceiverIdentityContractFailsClosed();
     testNrf24PassiveSpectrumContractAndControllerAreBounded();
     testNrf24SignalFinderLearnsFloorAndFindsOnlyLocalRise();
+    testCc1101SignalFinderCoversWindowsAndRejectsAmbientDrift();
     testCc1101PassiveSpectrumContractAndControllerAreBounded();
     testSubGhzRawCaptureIsPassiveBoundedAndNonBlocking();
     testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics();

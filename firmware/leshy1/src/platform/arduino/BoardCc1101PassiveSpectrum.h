@@ -20,6 +20,11 @@ public:
         const drivers::radio::Cc1101PassiveSpectrumPlan& plan,
         std::size_t bin,
         drivers::radio::Cc1101PassiveSample* output);
+    // Sample an exact point in any declared CC1101 tuning window. This is the
+    // receive-only primitive used by the automatic frequency finder.
+    bool sampleFrequency(std::uint32_t frequencyKHz, std::int16_t* rssiDbm,
+                         std::uint64_t* startedUs,
+                         std::uint64_t* endedUs);
     // Lock the same receive-only adapter to one tunable frequency and expose
     // bounded RSSI envelope samples. No FIFO, PA table or TX strobe exists.
     bool lockReceive(std::uint32_t frequencyKHz);

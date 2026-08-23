@@ -301,7 +301,7 @@ bool BoardCc1101PassiveSpectrum::begin(
     digitalWrite(BoardProfile::kCc1101CsPin, HIGH);
     digitalWrite(BoardProfile::kSdCsPin, HIGH);
     if (!gpio21Safe()) {
-        report_->status = Cc1101PassiveSpectrumStatus::Fault;
+        report_->status = drivers::radio::Cc1101PassiveSpectrumStatus::Fault;
         cleanupPinsAndSpi();
         report_ = nullptr;
         return false;
@@ -365,6 +365,39 @@ bool BoardCc1101PassiveSpectrum::sample(
         ? static_cast<int>(rawRssi) - 256 : static_cast<int>(rawRssi);
     output->rssiDbm = static_cast<std::int16_t>(signedRaw / 2 - 74);
     output->valid = true;
+    ++report_->samples;
+    report_->gpio21StableHigh = gpio21Safe();
+    return drivers::radio::validateCc1101PassiveSpectrumReport(
+        *report_, false);
+}
+
+bool BoardCc1101PassiveSpectrum::sampleFrequency(
+    std::uint32_t frequencyKHz, std::int16_t* rssiDbm,
+    std::uint64_t* startedUs, std::uint64_t* endedUs) {
+    const bool tunable =
+        (frequencyKHz >= 300000U && frequencyKHz <= 348000U) ||
+        (frequencyKHz >= 387000U && frequencyKHz <= 464000U) ||
+        (frequencyKHz >= 779000U && frequencyKHz <= 928000U);
+    if (!active_ || report_ == nullptr || !tunable || rssiDbm == nullptr ||
+        startedUs == nullptr || endedUs == nullptr) {
+        return false;
+    }
+    const auto receivePlan = drivers::radio::cc1101PassiveSpectrumPlan(
+        drivers::radio::Cc1101SpectrumBand::Band433);
+    *startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    std::uint8_t rawRssi = 0;
+    bool read = sampleAtFrequency(receivePlan, frequencyKHz, &rawRssi);
+    if (!read && recoverReceive()) {
+        read = sampleAtFrequency(receivePlan, frequencyKHz, &rawRssi);
+    }
+    *endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (!read || !gpio21Safe() || *endedUs < *startedUs) {
+        report_->status = Cc1101PassiveSpectrumStatus::Fault;
+        return false;
+    }
+    const int signedRaw = rawRssi >= 128U
+        ? static_cast<int>(rawRssi) - 256 : static_cast<int>(rawRssi);
+    *rssiDbm = static_cast<std::int16_t>(signedRaw / 2 - 74);
     ++report_->samples;
     report_->gpio21StableHigh = gpio21Safe();
     return drivers::radio::validateCc1101PassiveSpectrumReport(
