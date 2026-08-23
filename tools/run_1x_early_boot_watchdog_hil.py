@@ -14,7 +14,7 @@ from typing import Any
 
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
-from run_1x_product_boot_watchdog_hil import capture_until_ready, parse_ready
+from run_1x_product_boot_watchdog_hil import parse_ready
 from run_1x_product_survey_hil import (
     artifact_manifest,
     boot_failures,
@@ -29,6 +29,74 @@ from run_1x_product_survey_hil import (
 RUN_SCHEMA = "leshy.early_boot_watchdog_hil.run.v1"
 WATCHDOG_RESET_REASONS = {4, 5, 6, 7}
 SOFTWARE_RESET_REASON = 3
+
+
+def capture_reconnecting_until_ready(
+        port: str, seconds: float, *, serial_factory: Any | None = None,
+        settle_seconds: float = 1.0, retry_seconds: float = 0.1,
+        ) -> tuple[bytes, float | None, int, int]:
+    """Capture a native-USB reboot across disconnect and re-enumeration."""
+    import serial
+    from capture_1x_ui import PassiveSerial
+
+    if seconds <= 0:
+        raise ValueError("capture timeout must be positive")
+    if settle_seconds < 0 or retry_seconds < 0:
+        raise ValueError("capture timing values must not be negative")
+
+    factory = serial_factory or (
+        lambda: PassiveSerial(port, 115200, timeout=0.05)
+    )
+    deadline = time.monotonic() + seconds
+    started = time.monotonic()
+    ready_at: float | None = None
+    raw = bytearray()
+    device: Any | None = None
+    disconnects = 0
+    open_attempts = 0
+
+    try:
+        while time.monotonic() < deadline:
+            if device is None:
+                open_attempts += 1
+                try:
+                    device = factory()
+                except (OSError, serial.SerialException):
+                    if retry_seconds:
+                        time.sleep(retry_seconds)
+                    continue
+            try:
+                chunk = device.read(device.in_waiting or 1)
+            except (OSError, serial.SerialException):
+                disconnects += 1
+                try:
+                    device.close()
+                except (OSError, serial.SerialException):
+                    pass
+                device = None
+                if retry_seconds:
+                    time.sleep(retry_seconds)
+                continue
+            if chunk:
+                raw.extend(chunk)
+                if (ready_at is None and
+                        b'"schema":"leshy.boot.v1","kind":"ready"' in raw):
+                    ready_at = time.monotonic()
+            if (ready_at is not None and
+                    time.monotonic() - ready_at >= settle_seconds):
+                break
+    finally:
+        if device is not None:
+            try:
+                device.close()
+            except (OSError, serial.SerialException):
+                pass
+
+    ready_ms = (
+        None if ready_at is None
+        else round((ready_at - started) * 1000.0, 3)
+    )
+    return bytes(raw), ready_ms, disconnects, open_attempts
 
 
 def early_boot_injection_failures(
@@ -226,10 +294,15 @@ def main() -> int:
                     device, "leshy.safety.early_boot_watchdog_test.v1",
                     "armed", 5.0,
                 )
-                watchdog_raw, ready_ms = capture_until_ready(
-                    device, args.watchdog_seconds
-                )
-                records["watchdog_ready_marker_ms"] = ready_ms
+
+        if "injection" in records:
+            (watchdog_raw, ready_ms, watchdog_disconnects,
+             watchdog_open_attempts) = capture_reconnecting_until_ready(
+                args.port, args.watchdog_seconds
+            )
+            records["watchdog_ready_marker_ms"] = ready_ms
+            records["watchdog_usb_disconnects"] = watchdog_disconnects
+            records["watchdog_usb_open_attempts"] = watchdog_open_attempts
 
         (args.output / "watchdog-reset.ndjson").write_bytes(watchdog_raw)
         if "injection" not in records:
@@ -270,10 +343,13 @@ def main() -> int:
                 records["clear_request"] = read_json(
                     device, "leshy.safety.v1", "clear_confirmed", 5.0
                 )
-                clear_raw, clear_ready_ms = capture_until_ready(
-                    device, args.boot_seconds
-                )
-                records["clear_ready_marker_ms"] = clear_ready_ms
+            (clear_raw, clear_ready_ms, clear_disconnects,
+             clear_open_attempts) = capture_reconnecting_until_ready(
+                args.port, args.boot_seconds
+            )
+            records["clear_ready_marker_ms"] = clear_ready_ms
+            records["clear_usb_disconnects"] = clear_disconnects
+            records["clear_usb_open_attempts"] = clear_open_attempts
             (args.output / "clear-restart.ndjson").write_bytes(clear_raw)
             records["clear_ready"] = parse_ready(clear_raw)
             with PassiveSerial(args.port, 115200, timeout=0.05) as device:

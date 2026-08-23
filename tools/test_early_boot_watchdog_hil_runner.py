@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+import serial
+
 
 def load_runner() -> Any:
     path = Path(__file__).with_name("run_1x_early_boot_watchdog_hil.py")
@@ -86,6 +88,81 @@ class EarlyBootWatchdogHilRunnerTests(unittest.TestCase):
             *records, "test", APP
         )
         self.assertEqual(2, len(failures))
+
+    def test_capture_reopens_native_usb_after_watchdog_reset(self) -> None:
+        ready = (
+            b'ESP-ROM\n'
+            b'{"schema":"leshy.boot.v1","kind":"ready"}\n'
+        )
+
+        class FakePort:
+            def __init__(self, chunks: list[bytes | Exception]) -> None:
+                self.chunks = chunks
+                self.closed = False
+
+            @property
+            def in_waiting(self) -> int:
+                return 1
+
+            def read(self, _: int) -> bytes:
+                value = self.chunks.pop(0)
+                if isinstance(value, Exception):
+                    raise value
+                return value
+
+            def close(self) -> None:
+                self.closed = True
+
+        ports = [
+            FakePort([b"pre-reset\n", serial.SerialException("gone")]),
+            FakePort([ready]),
+        ]
+
+        raw, ready_ms, disconnects, open_attempts = (
+            RUNNER.capture_reconnecting_until_ready(
+                "/dev/fake", 1.0, serial_factory=lambda: ports.pop(0),
+                settle_seconds=0.0, retry_seconds=0.0,
+            )
+        )
+
+        self.assertIn(b"pre-reset", raw)
+        self.assertIn(b'"kind":"ready"', raw)
+        self.assertIsNotNone(ready_ms)
+        self.assertEqual(1, disconnects)
+        self.assertEqual(2, open_attempts)
+
+    def test_capture_retries_port_reenumeration_open(self) -> None:
+        ready = b'{"schema":"leshy.boot.v1","kind":"ready"}\n'
+
+        class FakePort:
+            in_waiting = 1
+
+            def read(self, _: int) -> bytes:
+                return ready
+
+            def close(self) -> None:
+                pass
+
+        attempts = 0
+
+        def factory() -> FakePort:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise serial.SerialException("not enumerated")
+            return FakePort()
+
+        raw, ready_ms, disconnects, open_attempts = (
+            RUNNER.capture_reconnecting_until_ready(
+                "/dev/fake", 1.0, serial_factory=factory,
+                settle_seconds=0.0, retry_seconds=0.0,
+            )
+        )
+
+        self.assertEqual(ready, raw)
+        self.assertIsNotNone(ready_ms)
+        self.assertEqual(0, disconnects)
+        self.assertEqual(2, open_attempts)
 
 
 if __name__ == "__main__":
