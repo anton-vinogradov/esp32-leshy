@@ -475,6 +475,14 @@ Native tests deliberately make the instantaneous winner differ from the mean win
 physical HIL waits for at least two samples per channel and verifies exact gray TFT
 pixels, data-only redraw, two clean lifecycles and final lease 0.
 
+Later exact `0.120.0-wifi-channel-choice` supersedes that last selection rule without
+changing storage. `bestPrimaryChannel()` waits for the complete 13-bit measured mask,
+then compares `averageBusyPermille` for channels 1…13. A strictly smaller mean always
+wins. Only equal means invoke an allocation-free adjacent-pressure sum over ±3
+channel centres with weights 3/2/1, approximating decreasing 20 MHz overlap. The
+renderer repaints the previous/new axis label together with the bounded recommendation
+region, so exactly one candidate is highlighted and no full-screen refresh is added.
+
 Exact `0.117.0-wifi-device-live-detail` removes `DeviceRadar` as a separate UI and
 runtime state. The Devices open action copies the selected fixed record, locks the
 passive adapter to its observed channel and enters `DeviceDetail`; Left performs the

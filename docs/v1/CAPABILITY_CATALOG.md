@@ -65,6 +65,14 @@ chooses the least-busy primary among 1/6/11 from those means. The mean is bounde
 allocation-free and volatile; it is neither calibrated CCA utilization nor a
 persistent site survey.
 
+Later exact `0.120.0-wifi-channel-choice` corrects the hidden 1/6/11 restriction.
+Every measured channel 1…13 is now eligible, and the same gray session mean visible
+on the graph is the primary comparison value. Equal means are resolved by a bounded
+3/2/1 adjacent-channel overlap-pressure estimate; this cannot overrule a lower
+visible mean. The recommended channel alone is highlighted on the axis. This remains
+a received-frame airtime estimate, not calibrated RF energy/CCA or a regulatory
+router-configuration oracle.
+
 Exact `0.117.0-wifi-device-live-detail` refines the CAP-016/017 presentation:
 opening a Wi-Fi client now locks its observed channel and presents identity facts
 plus the live RSSI meter/range/trend on one screen. Left unlocks the channel and

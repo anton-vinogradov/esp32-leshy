@@ -535,6 +535,14 @@ header и footer не мерцают. Native regression намеренно ра�
 проверяет точные серые TFT pixels, data-only redraw, два чистых lifecycle и final
 lease 0.
 
+Более поздний exact `0.120.0-wifi-channel-choice` заменяет последнее правило выбора без изменения
+storage. `bestPrimaryChannel()` ждёт полный 13-bit measured mask, затем сравнивает
+`averageBusyPermille` каналов 1…13. Строго меньшее среднее всегда побеждает. Только
+при равенстве allocation-free сумма давления соседей берёт центры ±3 каналов с
+весами 3/2/1 как bounded-приближение убывающего перекрытия 20 МГц. Renderer вместе
+с bounded-областью рекомендации перерисовывает старую/новую подпись оси, поэтому
+выделен ровно один кандидат и full-screen refresh не добавлен.
+
 Exact `0.117.0-wifi-device-live-detail` удаляет `DeviceRadar` как отдельное UI- и
 runtime-state. Open в «Устройствах» копирует выбранную fixed record, фиксирует
 passive adapter на её наблюдавшемся канале и входит в `DeviceDetail`; Left выполняет

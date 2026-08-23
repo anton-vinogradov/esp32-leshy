@@ -244,6 +244,14 @@ changed bar or recommendation is redrawn. Four exact TFT states prove visible gr
 means and zero changes outside live regions (`E-BUILD-116`/`E-AUTO-080`/
 `E-HIL-140`/`E-UX-035`).
 
+Later exact `0.120.0-wifi-channel-choice` makes that recommendation legible and consistent
+with the graph. All measured labels 1…13 are candidates; the lowest visible gray
+mean wins, equal means use adjacent-channel pressure only as a tie-break, and only
+the resulting channel number is cyan. The old permanent cyan 1/6/11 labels and the
+English `BEST 1/6/11` copy are removed. Exact board evidence recommends and
+highlights channel 13 after both the second and third full sweep
+(`E-BUILD-120`/`E-AUTO-084`/`E-HIL-144`/`E-UX-039`).
+
 Exact `0.117.0-wifi-device-live-detail` collapses the historical three-level
 Wi-Fi→Devices flow into strongest-first list → integrated live information. Right
 or OK immediately opens the selected identity and pins its channel; the upper
