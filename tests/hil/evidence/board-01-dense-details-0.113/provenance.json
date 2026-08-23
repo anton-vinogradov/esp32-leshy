@@ -1,0 +1,40 @@
+{
+  "app_elf_sha256": "55980a31da74c458ef47c1c86ab2ee364390327d80c4b9496cec408ba29895a8",
+  "app_image_bytes": 1579120,
+  "checker_sha256": {
+    "ble": "df66e3bcdad14b4603f658788aeba1ba606157795ccf8343223ec6438559b187",
+    "wifi-devices": "adc67e52a90f8c52d2324e2fdb59d876b430e438cfb1f8ea32436b0626bdf16e",
+    "wifi-networks": "64699056ff32878ce81674561a1caaf61319f90a7d93797f2f19b2f8d14d1a5b"
+  },
+  "cid": "FE343253440000002000000055019CB7",
+  "elf_file_sha256": "55980a31da74c458ef47c1c86ab2ee364390327d80c4b9496cec408ba29895a8",
+  "factory_image_bytes": 1644656,
+  "factory_sha256": "ae8e7a0c45697d96e0690503c0b0e53936fc2af5dc4cfabf9864e571bb0209dc",
+  "firmware_sha256": "083b55a2da40d4deab616b7f8147857c58c564144bb29dfc68814f5068491693",
+  "firmware_source_commit": "69c347f28b50cd5392b899d10508ca655c03e0b0",
+  "linked_flash_bytes": 1578716,
+  "map_sha256": "a691b37cacce1b41298fd8f5a0240548b56053ca788300de68a449ad66421f60",
+  "run_sha256": {
+    "ble": "91f55539db7437516e62a1ea09a2227f77e49ced03d34582552fd3cbc1987829",
+    "wifi-devices": "875bc92c2b75e2e49238ac51b2ce6645d9b3aa212b6a331f0da98845780d7168",
+    "wifi-networks": "e6e9d33108942f7fcb908fe937a7e2f0276491ea8b6fdbc04cda02f930719f6c"
+  },
+  "runner_commit": "69c347f28b50cd5392b899d10508ca655c03e0b0",
+  "runner_sha256": {
+    "ble": "33afeeaa31639266fc70a2941f8ccfd2a076028cdd7ce02969211152e8a4b616",
+    "wifi-devices": "6fa91b2fd7480da4d6c10a3dc06b582bce21076be9fa9687b472d60281384644",
+    "wifi-networks": "33e25837679cd09621a4a45647785090ba74c6ea200d92924694476d35e65815"
+  },
+  "schema": "leshy.dense_details_hil.provenance.v1",
+  "source_sha256": {
+    "ble_guard": "fe4adbb5e144d9f005401cb48acf1ef7ec4952771b2590b4711598aa54683d66",
+    "content_guard": "372dce3e068f3d483161624d11cce4f8484257d31d041ba4b0b8f039b408393f",
+    "renderer": "bd9c1fd354b3985e469c2634e928a9de3a8d4cade797d6fc856a6ef766493628",
+    "strings": "07986353e828e098b0367e488fd38fd2aa39b206366c3994a05f2369ad3086ba",
+    "wifi_devices_guard": "73954e2bd21577d3bed9656ba0a5548aa8ea297725b101937d3ac85d21994e0b",
+    "wifi_networks_guard": "31c680316365a227ee18e1829ff29658d418e1709b72d4dd56f95c22d452f378"
+  },
+  "static_ram_bytes": 182080,
+  "tft_states": 17,
+  "version": "0.113.0-dense-details"
+}

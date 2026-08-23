@@ -200,3 +200,11 @@ full address and passivity. Duplicate timestamp-only observations draw nothing,
 changed data redraws content rows only, and background discovery never redraws an
 open detail. Five exact TFT states plus physical pixel comparisons accept this
 non-flickering contract (`E-BUILD-111`/`E-AUTO-075`/`E-HIL-135`/`E-UX-030`).
+
+Exact `0.113.0-dense-details` applies the screen-space rule to the three implemented
+radio-object details without changing navigation. Bluetooth Device, Wi-Fi Network
+and Wi-Fi Device compact identity/channel-or-mode facts above one shared signal
+card containing qualitative strength, numeric dBm and a weak-to-strong meter.
+Healthy sample/frame counters are removed. One fresh flash and two same-hash reuse
+runs retain 17 TFT states; all three open details remain pixel-identical during
+background reception (`E-BUILD-113`/`E-AUTO-077`/`E-HIL-137`/`E-UX-032`).

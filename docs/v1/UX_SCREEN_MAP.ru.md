@@ -201,3 +201,11 @@ name (или явный fallback без имени), RSSI, suffix адреса �
 никогда не перерисовывает открытый detail. Пять exact TFT states и physical pixel
 comparisons принимают этот немерцающий контракт (`E-BUILD-111`/`E-AUTO-075`/
 `E-HIL-135`/`E-UX-030`).
+
+Exact `0.113.0-dense-details` применяет правило расходования площади к трём
+реализованным detail radio objects, не меняя navigation. Bluetooth Device, Wi-Fi
+Network и Wi-Fi Device компактно показывают identity/channel-or-mode над одной
+общей signal card с качественной оценкой, числом dBm и шкалой от слабого к сильному.
+Штатные sample/frame counters удалены. Один fresh flash и два same-hash reuse run
+сохраняют 17 TFT states; все три открытых detail остаются pixel-identical при
+background reception (`E-BUILD-113`/`E-AUTO-077`/`E-HIL-137`/`E-UX-032`).
