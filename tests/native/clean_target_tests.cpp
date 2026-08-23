@@ -32,6 +32,7 @@
 #include "apps/library/SessionCatalog.h"
 #include "apps/self_test/SelfTestController.h"
 #include "apps/spectrum/Cc1101SpectrumController.h"
+#include "apps/spectrum/Nrf24SignalFinder.h"
 #include "apps/spectrum/Nrf24SpectrumController.h"
 #include "apps/spectrum/SpectrumViewport.h"
 #include "domain/apps/AppCatalog.h"
@@ -760,6 +761,56 @@ void testNrf24PassiveSpectrumContractAndControllerAreBounded() {
     CHECK(controller.start(3, 4000));
     CHECK(controller.stop());
     CHECK(!controller.start(4, 5000));
+}
+
+void testNrf24SignalFinderLearnsFloorAndFindsOnlyLocalRise() {
+    Nrf24SignalFinder finder;
+    CHECK(finder.start(3, 100));
+    CHECK(finder.state() == Nrf24SignalFinderState::Calibrating);
+    CHECK(!finder.found());
+
+    std::uint64_t now = 100;
+    const auto feedWindow = [&](std::size_t targetIndex,
+                                bool targetActive) {
+        for (std::uint8_t pass = 0;
+             pass < Nrf24SignalFinder::kSweepsPerWindow; ++pass) {
+            Nrf24PassiveSweep sweep;
+            sweep.modules = 3;
+            sweep.startedUs = ++now;
+            sweep.endedUs = ++now;
+            sweep.sampled.fill(1);
+            sweep.hits[10] = pass % 4U == 0U ? 1U : 0U;
+            if (targetActive) sweep.hits[targetIndex] = 1;
+            sweep.sweepComplete = true;
+            sweep.valid = true;
+            CHECK(finder.ingest(sweep));
+        }
+    };
+
+    feedWindow(40, false);
+    CHECK(finder.state() == Nrf24SignalFinderState::Calibrating);
+    CHECK(finder.calibrationWindows() == 1);
+    feedWindow(40, false);
+    CHECK(finder.state() == Nrf24SignalFinderState::Searching);
+    CHECK(!finder.found());
+
+    feedWindow(40, true);
+    CHECK(finder.found());
+    CHECK(finder.strongestChannel() == 42);
+    CHECK(finder.strongestFrequencyMhz() == 2442);
+    CHECK(finder.nearestWifiChannel() == 7);
+    CHECK(finder.strength(40) >= Nrf24SignalFinder::kDetectionRise);
+    CHECK(finder.strength(10) < Nrf24SignalFinder::kDetectionRise);
+    CHECK(finder.windows() == 3);
+    CHECK(finder.revision() == 3);
+
+    CHECK(finder.restart(++now));
+    CHECK(finder.state() == Nrf24SignalFinderState::Calibrating);
+    CHECK(!finder.found());
+    CHECK(finder.revision() == 0);
+    CHECK(finder.stop());
+    CHECK(finder.state() == Nrf24SignalFinderState::Idle);
+    CHECK(!finder.ingest({}));
 }
 
 void testCc1101PassiveSpectrumContractAndControllerAreBounded() {
@@ -5673,6 +5724,7 @@ int main() {
     testDisposableScratchCleanupPermitIsExactAndFailClosed();
     testShieldReceiverIdentityContractFailsClosed();
     testNrf24PassiveSpectrumContractAndControllerAreBounded();
+    testNrf24SignalFinderLearnsFloorAndFindsOnlyLocalRise();
     testCc1101PassiveSpectrumContractAndControllerAreBounded();
     testSubGhzRawCaptureIsPassiveBoundedAndNonBlocking();
     testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics();

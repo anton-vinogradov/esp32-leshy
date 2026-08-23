@@ -308,6 +308,15 @@ def main() -> int:
                 trace.append(action(device, "left"))
 
                 home_selection(device, 2)
+                nrf_modes = action(device, "right")
+                trace.append(nrf_modes)
+                require_exact(nrf_modes, {
+                    "page": "survey", "selected_id": "spectrum24",
+                    "runtime_event": "nrf24_modes",
+                    "runtime_owner": "spectrum24", "lease_mask": 9,
+                }, "nrf_modes")
+                screens["nrf_modes"] = capture(
+                    device, frames, "nrf-modes")
                 nrf = action(device, "right")
                 trace.append(nrf)
                 require_exact(nrf, {
@@ -366,6 +375,14 @@ def main() -> int:
                     "state": "running",
                 }, "nrf_signal_again")
                 trace.append(action(device, "up"))
+                trace.append(action(device, "left"))
+                nrf_menu = read_only_query(
+                    device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")
+                require_exact(nrf_menu, {
+                    "view": "nrf24_menu", "state": "idle",
+                    "adapter_active": False, "cleanup_complete": True,
+                    "current_owner": "spectrum24", "current_lease_mask": 9,
+                }, "nrf_menu_cleanup")
                 trace.append(action(device, "left"))
                 stopped_nrf = read_only_query(
                     device, b"hardware.nrf24.spectrum", NRF_SCHEMA, "state")

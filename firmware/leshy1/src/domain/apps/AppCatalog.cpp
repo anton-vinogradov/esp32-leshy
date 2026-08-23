@@ -58,7 +58,8 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
             kernel::runtime::Resource::UiForeground) |
         kernel::runtime::resourceMask(
             kernel::runtime::Resource::RadioSpi);
-    items_[size_++] = {"spectrum24", "2.4 GHZ", "spectrum / waterfall",
+    items_[size_++] = {"spectrum24", "2.4 GHZ",
+                       "spectrum / waterfall / signal finder",
                        2, spectrum, false, spectrumResources};
     items_[size_++] = {"subghz", "SUB-GHZ", "315 / 433 / 868 / 915",
                        2, spectrum, false, spectrumResources};
