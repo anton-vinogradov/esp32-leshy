@@ -1,0 +1,29 @@
+{
+  "app_elf_sha256": "4f07a226f93287173c851e1d0e1a37514687571c41df62dddd11513c7a9e6782",
+  "app_image_bytes": 2892048,
+  "checker_sha256": "ef7f5423844c41ff9c4f3b745a2a2048e7b063418d897466ea558b5c8e6a6d2c",
+  "cid": "FE343253440000002000000055019CB7",
+  "elf_file_sha256": "4f07a226f93287173c851e1d0e1a37514687571c41df62dddd11513c7a9e6782",
+  "factory_image_bytes": 2957584,
+  "factory_sha256": "5540e051500825b7d94c10492965e14ac2d22a41e9a5e79be63641878d2c4328",
+  "firmware_sha256": "b10a1d322ed3387aa5b3c8e0be0f316331ab10ff14bfa0601c6a85d9390c9766",
+  "firmware_source_commit": "4a9565d48f3497ddb542c1f34e3953b966066443",
+  "linked_flash_bytes": 2891644,
+  "map_sha256": "a17014b4f0f304a3ff5d6ae94af763dba469f6cd79ef83a8076c6df0412e35a5",
+  "run_sha256": "6391a06d41b00487377c1f78ef6f4721ce5f9ced6e6064ae83ddefc3e790a070",
+  "runner_commit": "4a9565d48f3497ddb542c1f34e3953b966066443",
+  "runner_sha256": "6337686d6662a7cd97985418877f70502c7ecab432970d077754597a3953fc3b",
+  "schema": "leshy.wifi_channel_neutral_bars_hil.provenance.v1",
+  "source_guard_sha256": "17213c4916901c845154dc69ecd61cf23d746901410c378da215838f433f68e4",
+  "source_sha256": {
+    "contract": "17213c4916901c845154dc69ecd61cf23d746901410c378da215838f433f68e4",
+    "load_cpp": "641518a7ba4358b011deda481bc93fc1495cfa57be05faf682d46c596e3d283e",
+    "load_h": "5b66c1fac29738ea69e57998581d88cce48bb26b730841146173a0698f3624aa",
+    "native_tests": "815ff7283ada3cdb51dc297f689aecbe1579d35d76aabd68d40c93e0ef140d5f",
+    "renderer": "6f4c953209e6f8ca38611e67b144b7ea82f762d5ad9040fac1835a1ab5ff8b2a",
+    "strings": "457aadcea70eabc3f7ca0ffdde13a9bb7fe18f5deb91bd1db1f75a6e0b469dc0"
+  },
+  "static_ram_bytes": 209464,
+  "tft_states": 4,
+  "version": "0.121.0-wifi-channel-neutral-bars"
+}

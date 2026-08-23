@@ -73,6 +73,11 @@ visible mean. The recommended channel alone is highlighted on the axis. This rem
 a received-frame airtime estimate, not calibrated RF energy/CCA or a regulatory
 router-configuration oracle.
 
+Exact `0.121.0-wifi-channel-neutral-bars` removes the last visual remnant of that
+obsolete restriction. Current-load bar tone is a function of measured load only;
+channels 1/6/11 no longer receive a preferred low-load color. The one cyan axis
+label remains the recommendation. No measurement or ranking semantics change.
+
 Exact `0.117.0-wifi-device-live-detail` refines the CAP-016/017 presentation:
 opening a Wi-Fi client now locks its observed channel and presents identity facts
 plus the live RSSI meter/range/trend on one screen. Left unlocks the channel and

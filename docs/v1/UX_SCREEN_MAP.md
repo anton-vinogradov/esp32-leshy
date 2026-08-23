@@ -252,6 +252,12 @@ English `BEST 1/6/11` copy are removed. Exact board evidence recommends and
 highlights channel 13 after both the second and third full sweep
 (`E-BUILD-120`/`E-AUTO-084`/`E-HIL-144`/`E-UX-039`).
 
+Self-review exact `0.121.0-wifi-channel-neutral-bars` also removes the legacy green
+low-load tint that still applied only to 1/6/11. Current bars now use one
+load-dependent palette for every channel; cyan remains exclusive to the actual
+recommended axis label. Fresh physical evidence changes only the live region and
+leaves static chrome exact (`E-BUILD-121`/`E-AUTO-085`/`E-HIL-145`/`E-UX-040`).
+
 Exact `0.117.0-wifi-device-live-detail` collapses the historical three-level
 Wi-Fi→Devices flow into strongest-first list → integrated live information. Right
 or OK immediately opens the selected identity and pins its channel; the upper

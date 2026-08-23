@@ -483,6 +483,11 @@ channel centres with weights 3/2/1, approximating decreasing 20 MHz overlap. The
 renderer repaints the previous/new axis label together with the bounded recommendation
 region, so exactly one candidate is highlighted and no full-screen refresh is added.
 
+Self-review exact `0.121.0-wifi-channel-neutral-bars` makes rendering obey the same
+channel-neutral model. `wifiChannelBarTone()` accepts only `busyPermille`; warning
+and danger thresholds are common to every channel and low load always uses the same
+positive tone. A host guard rejects reintroduction of the former 1/6/11 branch.
+
 Exact `0.117.0-wifi-device-live-detail` removes `DeviceRadar` as a separate UI and
 runtime state. The Devices open action copies the selected fixed record, locks the
 passive adapter to its observed channel and enters `DeviceDetail`; Left performs the

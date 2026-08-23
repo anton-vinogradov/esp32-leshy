@@ -543,6 +543,11 @@ storage. `bestPrimaryChannel()` ждёт полный 13-bit measured mask, за
 с bounded-областью рекомендации перерисовывает старую/новую подпись оси, поэтому
 выделен ровно один кандидат и full-screen refresh не добавлен.
 
+Саморевью exact `0.121.0-wifi-channel-neutral-bars` приводит rendering к той же
+channel-neutral модели. `wifiChannelBarTone()` принимает только `busyPermille`;
+пороги warning/danger общие для всех каналов, а низкая загрузка всегда получает
+один positive tone. Host guard запрещает возвращать прежнюю ветку 1/6/11.
+
 Exact `0.117.0-wifi-device-live-detail` удаляет `DeviceRadar` как отдельное UI- и
 runtime-state. Open в «Устройствах» копирует выбранную fixed record, фиксирует
 passive adapter на её наблюдавшемся канале и входит в `DeviceDetail`; Left выполняет

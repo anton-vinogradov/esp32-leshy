@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Retain exact physical evidence for all-channel Wi-Fi recommendation."""
+"""Retain exact physical evidence for neutral Wi-Fi channel bars."""
 
 from __future__ import annotations
 
@@ -16,9 +16,9 @@ from retain_1x_signal_order_hil import digest, load, require, write
 
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.120.0-wifi-channel-choice"
+VERSION = "0.121.0-wifi-channel-neutral-bars"
 CID = "FE343253440000002000000055019CB7"
-EVIDENCE_IDS = ["E-BUILD-120", "E-AUTO-084", "E-HIL-144", "E-UX-039"]
+EVIDENCE_IDS = ["E-BUILD-121", "E-AUTO-085", "E-HIL-145", "E-UX-040"]
 SOURCE_FILES = {
     "renderer": "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp",
     "load_h": "firmware/leshy1/src/apps/wifi/WifiChannelLoad.h",
@@ -48,8 +48,9 @@ def verify_choice(run: dict[str, Any]) -> None:
                 "visible_session_average" and
             scope.get("recommendation_tie_break") ==
                 "adjacent_overlap_pressure" and
+            scope.get("current_bar_tone_channel_neutral") is True and
             scope.get("recommended_axis_label_highlighted") is True,
-            "all-channel visible-mean recommendation scope missing")
+            "neutral all-channel recommendation scope missing")
 
 
 def run_check(command: list[str], message: str) -> None:
@@ -134,7 +135,7 @@ def main() -> int:
 
     firmware = destination / "run/firmware.bin"
     provenance = {
-        "schema": "leshy.wifi_channel_choice_hil.provenance.v1",
+        "schema": "leshy.wifi_channel_neutral_bars_hil.provenance.v1",
         "version": VERSION,
         "cid": CID,
         "firmware_source_commit": args.firmware_source_commit,
@@ -166,8 +167,8 @@ def main() -> int:
     recovery = run["recovery_after"]
     final = run["cleanup_after"]["final_state"]
     summary_value = {
-        "schema": "leshy.wifi_channel_choice.acceptance.v1",
-        "status": "pass_all_channel_wifi_choice",
+        "schema": "leshy.wifi_channel_neutral_bars.acceptance.v1",
+        "status": "pass_wifi_channel_neutral_bars",
         "board": "board-01",
         "evidence_ids": EVIDENCE_IDS,
         "candidate": provenance,
@@ -189,6 +190,7 @@ def main() -> int:
             "visible_session_average_primary": True,
             "adjacent_overlap_tie_break": True,
             "recommended_axis_label_highlighted": True,
+            "current_bar_tone_channel_neutral": True,
             "average_gray_pixels_first": run["average_gray_pixels"]["first"],
             "average_gray_pixels_second": run["average_gray_pixels"]["second"],
             "dynamic_changed_pixels": run["pixel_changes"]["dynamic_changed_pixels"],
