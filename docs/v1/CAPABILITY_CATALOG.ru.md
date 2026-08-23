@@ -100,6 +100,16 @@ Physical ambient/waiting path и немерцающий график прохо�
 injection доказывает mapping найденного сигнала. До controlled source на board-02
 не заявляются physical found result и calibrated power/distance.
 
+Exact `0.124.1-cc1101-frequency-finder` углубляет CAP-013 соответствующей задачей
+Sub-GHz рядом с «Обзором эфира» и «Захватом RAW». Она пассивно покрывает 275…950 МГц
+1 099 receiver bins с шагом 250 кГц, строит median-of-three ambient floor, отвергает
+common drift и окрестности гармоник тактовой частоты платы и сообщает точные кГц
+плюс ближайшую подсказку диапазона 315/433/868/915 МГц. Два независимых ambient run
+отвергают невоспроизводимые пики, ложно принятые 0.124.0; failed predecessor сохранён
+рядом с corrected evidence. Deterministic host injection доказывает настоящий
+локальный отклик на 433 250 кГц. Physical positive detection и calibrated frequency,
+power/distance остаются открыты до controlled source на board-02.
+
 Exact `0.117.0-wifi-device-live-detail` уточняет presentation CAP-016/017: открытие
 Wi-Fi-клиента сразу фиксирует его наблюдавшийся канал и показывает identity facts
 вместе с live RSSI meter/range/trend на одном экране. Left снимает фиксацию канала и

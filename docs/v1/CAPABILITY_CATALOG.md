@@ -99,6 +99,16 @@ ambient/waiting path and non-flickering graph pass; deterministic host injection
 proves the found mapping. A controlled board-02 source is still required before a
 physical found result or calibrated power/distance claim can be accepted.
 
+Exact `0.124.1-cc1101-frequency-finder` deepens CAP-013 with the corresponding
+Sub-GHz job beside Air overview and RAW Capture. It passively covers 275…950 MHz
+in 1,099 receiver bins at 250 kHz spacing, builds a median-of-three ambient floor,
+rejects common drift and board-clock harmonic neighborhoods, and reports exact kHz
+plus the nearest 315/433/868/915 MHz band hint. Two independent ambient runs reject
+the non-repeatable peaks falsely accepted by 0.124.0; that failed predecessor is
+retained with the corrected evidence. Deterministic host injection proves a real
+local response at 433,250 kHz. Physical positive detection and calibrated frequency,
+power or distance remain open for a controlled board-02 source.
+
 Exact `0.117.0-wifi-device-live-detail` refines the CAP-016/017 presentation:
 opening a Wi-Fi client now locks its observed channel and presents identity facts
 plus the live RSSI meter/range/trend on one screen. Left unlocks the channel and

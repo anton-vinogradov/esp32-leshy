@@ -661,6 +661,27 @@ mask, side-effect counters и leases для HIL; на TFT этих counters не
 acceptance покрывает реальный ambient receive/search/restart/cleanup; для physical
 found-state нужен известный source на board-02.
 
+### Пассивный поиск частоты Sub-GHz
+
+Exact `0.124.1-cc1101-frequency-finder` переиспользует guarded receive-only adapter
+CC1101 и удерживает `UiForeground|RadioSpi` только пока Overview/Finder/Capture нужен
+приёмник. `Cc1101SignalFinder` проходит fixed plan 275 000…949 500 кГц с шагом
+250 кГц: по 1 099 signed baseline bins, raw-rise bins и held-response bins размещены
+статически. Три полных calibration sweep образуют per-bin median; search вычитает
+common-wideband drift, отвергает окрестности в пределах 500 кГц от гармоник
+тактовых частот платы 26/40 МГц и требует local rise 18 dB. Прежняя calibration
+minimum-of-two превращала невоспроизводимые ambient minima в пики; оба failed run
+0.124.0 сохранены, исправленный candidate дважды их отвергает.
+
+Board adapter программирует по одному bounded receive observation CC1101 и допускает
+только reset/RX/idle strobes. Product renderer один раз рисует static header,
+инструкции, axis и footer, затем меняет только result state и 240-column projection
+отклика. Read-only `hardware.cc1101.finder` отдаёт calibration sweeps, frequency
+mapping, response, side effects и lease state для HIL. Finder path не содержит TX,
+PATABLE, FIFO или storage operations. Принятый evidence board-01 покрывает реальный
+ambient receive/search/restart/cleanup; controlled source board-02 всё ещё нужен для
+physical found-state и любых заявлений calibrated accuracy.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

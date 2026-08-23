@@ -560,6 +560,27 @@ side-effect counters and leases for HIL; none of those counters appears on the T
 The physical acceptance covers real ambient receive/search/restart/cleanup; a known
 board-02 source remains required for physical found-state evidence.
 
+### Passive Sub-GHz frequency finder
+
+Exact `0.124.1-cc1101-frequency-finder` reuses the guarded receive-only CC1101
+adapter and owns `UiForeground|RadioSpi` only while Overview/Finder/Capture needs
+the radio. `Cc1101SignalFinder` scans a fixed 275,000…949,500 kHz plan in 250 kHz
+steps: 1,099 signed baseline bins, 1,099 raw-rise bins and 1,099 held-response bins
+are statically allocated. Three complete calibration sweeps form a per-bin median;
+search removes common-wideband drift, rejects neighborhoods within 500 kHz of
+26/40 MHz board-clock harmonics and requires a local 18 dB rise. The earlier
+minimum-of-two calibration accepted non-repeatable ambient minima as peaks; both
+failed 0.124.0 runs are retained and the fixed candidate rejects them twice.
+
+The board adapter programs one bounded CC1101 receive observation at a time and
+permits only reset/RX/idle strobes. The product renderer draws static header,
+instructions, axis and footer once, then changes only result state and the 240-column
+response projection. Read-only `hardware.cc1101.finder` exposes calibration sweeps,
+frequency mapping, response, side effects and lease state for HIL. No TX, PATABLE,
+FIFO or storage operation exists in the finder path. The accepted board-01 evidence
+covers real ambient receive/search/restart/cleanup; a controlled board-02 source is
+still required for physical found-state and any calibrated-accuracy claim.
+
 Raw observation is separate from interpretation:
 
 ```text

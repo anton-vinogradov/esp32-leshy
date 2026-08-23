@@ -1,0 +1,90 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "5111bf56b8ddc6ddc08937929aa0ec25c61739353638dae39f783f26d969f482",
+    "app_image_bytes": 3061056,
+    "checker_sha256": "a9eb8d18408ee5688fafe810018646653730e580e42c0363a48eda1ba144a8fd",
+    "cid": "FE343253440000002000000055019CB7",
+    "elf_file_sha256": "5111bf56b8ddc6ddc08937929aa0ec25c61739353638dae39f783f26d969f482",
+    "factory_image_bytes": 3126592,
+    "factory_sha256": "de382ff8de0231f5def77aab4a1b7411cd005d5b3d1384d94474f35d0e37fb0f",
+    "failed_fresh_run_sha256": "d5c266b461b9cff0d9cabc1b43c5f253f2244fac55de01e0915d2d4e9e9b3cd2",
+    "failed_reuse_run_sha256": "371e01f30579b087bc90df18d87a4779686b9dde424d31d6940f1495f88257a6",
+    "failed_source_commit": "fca18717a0c9b30df2da4ad8814e59bfbbf655df",
+    "firmware_sha256": "17981885bb0e39d9ed020b15674e2e70a6aab8c2d4aa06bf76068a85ac272b04",
+    "firmware_source_commit": "7219af540b3ab67ee2fbc5a088b7b7b2215c25a8",
+    "linked_flash_bytes": 3060648,
+    "map_sha256": "79ed0a35e137478bf5c7722eedad1bd9b4cf02df3cfdcea25bb61ae30946a38e",
+    "quiet_regression_run_sha256": "fd76f132e0dc5d40fdca0e998e103af0af706d1d6e9c5b7b6ccb26cae4aee162",
+    "run_sha256": "1b2d4df181960f923f3ce7b105c1bb702c9ea5efe35838b1956b1819af4e4d18",
+    "runner_commit": "7219af540b3ab67ee2fbc5a088b7b7b2215c25a8",
+    "runner_sha256": "f960a96688e2e7d8e91e65eb3d0ab3a4d389ef93f9c31fe59b513f0053bc95a0",
+    "schema": "leshy.cc1101_signal_finder_hil.provenance.v1",
+    "source_guard_sha256": "8068aa74f6b8121f1e44409fe08fc29ab52d99f61ceb5735576e6e98661382e8",
+    "source_sha256": {
+      "adapter_cpp": "198312453bd66a48640791645acc03ce717d4a3cf3f5119aa2cb877c765925f6",
+      "adapter_h": "6a56f1caf8acf6e3d7da40f88d963eb4c512f4b7690474e7c8182de6fcb6c11a",
+      "catalog": "e1f57ed7015719a9e439c2fed2153d3b7b92b19f837241cc80aa271a73be6cc8",
+      "finder_cpp": "98ed0aedec0cb5201623e677f2c24309ed5ad096cb5f1d2308605c84858c8a90",
+      "finder_h": "b8dd88e8807cd2b87eadd99f44d2bac24a15d6167cafda1d814f0893696e7434",
+      "native_tests": "f46c2c01e41e62fb4896311e5dcb3f6186afd307a3e49200a2da647b898d2df4",
+      "passive_cpp": "6af3b07b6d75ece1a6d7d45dd35f48de4f9f54b91c62356e4fd43c8bd8049bda",
+      "passive_h": "1e2afb1814488476e6e9ec5930c2a4b3f5f70aaebfaea086c775834433e3aef2",
+      "platform": "cbe9f4a9fcf644f7ef05a1f6dfec9254a2034ffac272621f7b4dd566106296b0",
+      "renderer": "3183584e46cee459da1d4b691a3063c6b9b05cd0e233d3c7dd65d8f4f892e8da",
+      "source_contract": "8068aa74f6b8121f1e44409fe08fc29ab52d99f61ceb5735576e6e98661382e8",
+      "strings": "6296ce4f1acc7c0dc53ddcef34ccc04a3ea7ca40767e7bf1d65f025c256f7e23"
+    },
+    "static_ram_bytes": 233288,
+    "tft_states": 8,
+    "version": "0.124.1-cc1101-frequency-finder"
+  },
+  "evidence": {
+    "artifact_index_sha256": "f3a90dce361f9edc523db98c8a640ea974f4b3c020bd0849658c933984122388",
+    "files": 128,
+    "tft_states": 8
+  },
+  "evidence_ids": [
+    "E-BUILD-124",
+    "E-AUTO-088",
+    "E-HIL-148",
+    "E-UX-043"
+  ],
+  "limits": {
+    "ambient_environment": "one board and one location",
+    "calibrated_power_or_distance": false,
+    "found_branch": "deterministic native injection",
+    "known_signal_physical_source": false,
+    "physical_rf_silence": false
+  },
+  "regression": {
+    "failed_version": "0.124.0-cc1101-frequency-finder",
+    "fix": "three-pass median plus 26/40 MHz harmonic exclusion",
+    "root_cause": "two-pass minimum biased the per-bin floor low",
+    "symptom": "nonrepeatable ambient false frequency"
+  },
+  "schema": "leshy.cc1101_signal_finder.acceptance.v1",
+  "status": "pass_after_false_positive_regression",
+  "verified": {
+    "bins": 1099,
+    "calibration_passes": 3,
+    "failed_fresh_frequency_khz": 335000,
+    "failed_fresh_response_db": 21,
+    "failed_reuse_frequency_khz": 346250,
+    "failed_reuse_response_db": 19,
+    "final_lease_mask": 0,
+    "fresh_ambient_found": false,
+    "fresh_ambient_response_db": 13,
+    "generation": 95,
+    "graph_changed_pixels": 1455,
+    "heap_free_after": 77932,
+    "heap_min_after": 63700,
+    "observations": 0,
+    "physical_write_calls": 0,
+    "response_threshold_db": 18,
+    "reuse_ambient_found": false,
+    "reuse_ambient_response_db": 15,
+    "static_changed_pixels": 0,
+    "step_khz": 250
+  }
+}

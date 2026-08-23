@@ -227,6 +227,16 @@ status `RX N1+2+3`, чёрный полноширинный plot отклика 
 exact TFT states и comparison двух frames принимают zero changes в header, legend,
 axis и footer (`E-BUILD-123`/`E-AUTO-087`/`E-HIL-147`/`E-UX-042`).
 
+Exact `0.124.1-cc1101-frequency-finder` даёт Sub-GHz три явных row:
+**Обзор эфира**, **Найти частоту** и **Захват RAW**. Сначала Finder просит оставить
+источник выключенным на три ambient sweep, затем — включить и поднести к антеннам.
+Экран сохраняет `RX CC`, чёрный полноширинный plot 275…950 МГц с частотной осью и
+действие **Заново**. Найденный результат заменяет prompt точными кГц и подсказкой
+ближайшего стандартного диапазона; штатный run не показывает sweep/bin/counter
+telemetry. Search перерисовывает только изменившиеся result и graph regions. Fresh
+и независимый ambient run принимают 1 455 graph и zero static changed pixels
+(`E-BUILD-124`/`E-AUTO-088`/`E-HIL-148`/`E-UX-043`).
+
 Exact `0.113.0-dense-details` применяет правило расходования площади к трём
 реализованным detail radio objects, не меняя navigation. Bluetooth Device, Wi-Fi
 Network и Wi-Fi Device компактно показывают identity/channel-or-mode над одной

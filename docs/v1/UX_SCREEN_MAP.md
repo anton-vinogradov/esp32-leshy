@@ -228,6 +228,16 @@ its state changes and the graph bars may redraw. Eight exact TFT states plus a
 two-frame comparison accept zero changes in header, legend, axis and footer
 (`E-BUILD-123`/`E-AUTO-087`/`E-HIL-147`/`E-UX-042`).
 
+Exact `0.124.1-cc1101-frequency-finder` gives Sub-GHz three explicit rows:
+**Air overview**, **Find frequency**, and **RAW Capture**. Finder first asks the user
+to keep the source off while three ambient sweeps are learned, then asks to activate
+and bring it near the antennas. The screen retains `RX CC`, a black full-width
+275…950 MHz response plot with frequency axis and **Again**. A found result replaces
+the prompt with exact kHz and the nearest standard band hint; healthy runs expose no
+sweep/bin/counter telemetry. Search redraws only changed result and graph regions.
+Fresh and independent ambient runs accept 1,455 graph and zero static changed pixels
+(`E-BUILD-124`/`E-AUTO-088`/`E-HIL-148`/`E-UX-043`).
+
 Exact `0.113.0-dense-details` applies the screen-space rule to the three implemented
 radio-object details without changing navigation. Bluetooth Device, Wi-Fi Network
 and Wi-Fi Device compact identity/channel-or-mode facts above one shared signal

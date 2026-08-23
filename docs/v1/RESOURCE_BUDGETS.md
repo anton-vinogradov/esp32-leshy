@@ -144,6 +144,8 @@ defines the 1.x partition and memory policy.
 | RB-M122 | measured | all-channel visible-mean Wi-Fi recommendation and selected-axis highlight | 2,891,648 B linked flash; 209,464 B static RAM; app/factory images 2,892,048/2,957,584 B; exact Wi-Fi HIL heap total/free/min 171,988/104,460/40,464 B; RTC no-init 108 B; IRAM 16,384/16,384 B | board-01 `0.120.0-wifi-channel-choice`, `E-BUILD-120`/`E-AUTO-084`/`E-HIL-144`/`E-UX-039`; +220 B linked flash, zero static RAM and +208/+208 B images vs 0.119. Ranking reuses the existing 13 fixed means, computes adjacent pressure on the stack and stores no new state. Fresh HIL measures all channels, recommends/highlights 13 after 2 and 3 sweeps, changes 1,195 dynamic/zero unrelated static pixels, preserves byte-identical post-warm total/free heap, writes zero bytes and ends lease 0. The focused minimum is 76 B below 0.119 and does not supersede mixed-workload release endurance; IRAM remains full |
 | RB-M123 | measured | channel-neutral Wi-Fi current-load bar palette | 2,891,644 B linked flash; 209,464 B static RAM; app/factory images 2,892,048/2,957,584 B; exact Wi-Fi HIL heap total/free/min 171,988/104,460/34,996 B; RTC no-init 108 B; IRAM 16,384/16,384 B | board-01 `0.121.0-wifi-channel-neutral-bars`, `E-BUILD-121`/`E-AUTO-085`/`E-HIL-145`/`E-UX-040`; −4 B linked flash, zero static RAM/image growth vs 0.120. Removing channel identity from the color function adds no state or allocation. Fresh HIL measures all 13 channels, recommends 13 after 2 and 3 sweeps, changes 998 live/zero static pixels, preserves byte-identical post-warm total/free heap, writes zero bytes and ends lease 0. Focused minimum does not supersede mixed-workload release endurance; IRAM remains full |
 | RB-M124 | measured | passive BLE advertisement intelligence, company lookup and integrated radar | 3,049,684 B linked flash; 228,688 B static RAM; app/factory images 3,050,096/3,115,632 B; exact BLE HIL heap total/free/min 152,764/82,248/9,760 B; dedicated DIRAM 309,456/341,760 B (90.55%, 32,304 B remaining) | board-01 `0.122.2-ble-device-intelligence`, `E-BUILD-122`/`E-AUTO-086`/`E-HIL-146`/`E-UX-041`; +158,040 B linked flash, +19,224 B static RAM and +158,048/+158,048 B images vs 0.121. A 128,384 B flash asset holds 4,012 assigned companies; bounded advertisement facts widen shared Observation/queue/session/catalog state. Two physical lifecycles have byte-identical post-warm heap, zero drops/writes and final lease 0, but the 9,760 B historical minimum is far below RB-04. This focused functional checkpoint explicitly does not supersede accepted 0.89 endurance; mixed-workload memory consolidation and a new release-budget run are required after the baseline feature set changes |
+| RB-M125 | measured | passive all-receiver nRF24 signal finder | 3,055,192 B linked flash; 229,448 B static RAM; app/factory images 3,055,600/3,121,136 B; exact nRF24 HIL heap total/free/min 152,004/81,772/67,540 B; dedicated DIRAM 310,216/341,760 B (90.77%, 31,544 B remaining) | board-01 `0.123.0-nrf24-signal-finder`, `E-BUILD-123`/`E-AUTO-087`/`E-HIL-147`/`E-UX-042`; +5,508 B linked flash, +760 B static RAM and +5,504/+5,504 B images vs 0.122.2. Fixed 83-bin baseline/response state, product route, diagnostics and HIL surface remain allocation-free. Focused physical minimum stays below RB-04 and does not supersede mixed-workload release endurance |
+| RB-M126 | measured | passive wide-span CC1101 frequency finder with robust ambient rejection | 3,060,648 B linked flash; 233,288 B static RAM; app/factory images 3,061,056/3,126,592 B; exact CC1101 HIL heap total/free/min 148,164/77,932/63,700 B; dedicated DIRAM 314,056/341,760 B (91.89%, 27,704 B remaining) | board-01 `0.124.1-cc1101-frequency-finder`, `E-BUILD-124`/`E-AUTO-088`/`E-HIL-148`/`E-UX-043`; +5,456 B linked flash, +3,840 B static RAM and +5,456/+5,456 B images vs 0.123. Three fixed 1,099-bin arrays (baseline, raw rise and held response), 240-column projection and diagnostics are allocation-free. Two ambient runs preserve heap, reject retained predecessor false peaks and end lease 0. Focused minimum stays below RB-04 and does not supersede mixed-workload release endurance |
 
 The probe's `heap_min_free` covers only its short diagnostic run. It does not predict
 Wi-Fi/BLE buffers, display caches, Session queues, storage transactions, or the
@@ -239,12 +241,12 @@ These limits are review triggers, not evidence that the product meets its NFRs.
 - Storage, power, and shared-bus limits remain explicit unknowns; features depending
   on them cannot be promoted from `unknown` to `available` by documentation alone.
 
-Latest measured delta `RB-M125`: exact `0.123.0-nrf24-signal-finder` uses
-3,055,192 B linked flash and 229,448 B static RAM; app/factory images are
-3,055,600/3,121,136 B, dedicated DIRAM is 310,216/341,760 B (31,544 B remains),
-and focused physical heap is 152,004/81,772/67,540 B total/free/minimum. This is
-+5,508 B linked flash, +760 B static RAM and +5,504/+5,504 B images over 0.122.2
-for the fixed 83-bin baseline/response arrays, two-choice product route, diagnostics
-and HIL surface. The focused minimum remains below RB-04 and does not supersede the
-accepted mixed-workload release endurance; memory consolidation is required before
-the next release-budget promotion.
+Latest measured delta `RB-M126`: exact `0.124.1-cc1101-frequency-finder` uses
+3,060,648 B linked flash and 233,288 B static RAM; app/factory images are
+3,061,056/3,126,592 B, dedicated DIRAM is 314,056/341,760 B (27,704 B remains),
+and focused physical heap is 148,164/77,932/63,700 B total/free/minimum. This is
++5,456 B linked flash, +3,840 B static RAM and +5,456/+5,456 B images over 0.123
+for three fixed 1,099-bin arrays, the 240-column projection, product route,
+diagnostics and HIL surface. The focused minimum remains below RB-04 and does not
+supersede accepted mixed-workload release endurance; memory consolidation remains
+required before the next release-budget promotion.
