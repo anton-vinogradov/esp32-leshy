@@ -177,3 +177,13 @@ Waterfall as sibling views, but the existing 112-row ring now advances on a fixe
 Home/menu/RF states and host timings 2.905…2.927 s across nRF24 and all four CC bands
 accept the result (`E-BUILD-097`/`E-AUTO-061`/`E-HIL-121`/`E-UX-020`/
 `E-RADIO-007`).
+
+Exact `0.111.0-ble-nearby` supersedes the Bluetooth entry path from exact 0.93:
+Home→Bluetooth now starts Nearby Devices directly rather than opening a technical
+single-source Start row. The live list owns four 216×60 touch rows; Up/Down select,
+Right or OK opens detail, and Left returns. The list shows advertised name (or an
+explicit unnamed fallback), RSSI, address suffix and signal bars; detail shows the
+full address and passivity. Duplicate timestamp-only observations draw nothing,
+changed data redraws content rows only, and background discovery never redraws an
+open detail. Five exact TFT states plus physical pixel comparisons accept this
+non-flickering contract (`E-BUILD-111`/`E-AUTO-075`/`E-HIL-135`/`E-UX-030`).

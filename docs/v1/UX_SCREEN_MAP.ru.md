@@ -177,3 +177,14 @@ views, но существующий ring на 112 строк теперь дв�
 не зависящему от sweep duration приёмника. Четырнадцать exact EN/RU states
 Home/menu/RF и host timings 2,905…2,927 s на nRF24 и всех четырёх CC bands принимают
 результат (`E-BUILD-097`/`E-AUTO-061`/`E-HIL-121`/`E-UX-020`/`E-RADIO-007`).
+
+Exact `0.111.0-ble-nearby` заменяет Bluetooth entry path exact 0.93:
+Home→Bluetooth теперь сразу запускает «Устройства рядом» вместо технической
+single-source строки Start. Live list владеет четырьмя touch row 216×60; Up/Down
+выбирают, Right или OK открывает detail, Left возвращает. List показывает advertised
+name (или явный fallback без имени), RSSI, suffix адреса и signal bars; detail — полный
+адрес и пассивность. Duplicate timestamp-only observations ничего не рисуют,
+изменившиеся данные перерисовывают только content rows, а background discovery
+никогда не перерисовывает открытый detail. Пять exact TFT states и physical pixel
+comparisons принимают этот немерцающий контракт (`E-BUILD-111`/`E-AUTO-075`/
+`E-HIL-135`/`E-UX-030`).
