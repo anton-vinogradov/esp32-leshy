@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote
 
+from readme_roadmap import drift_errors as readme_roadmap_drift_errors
+
 
 ROOT = Path(__file__).resolve().parent.parent
 V1 = ROOT / "docs" / "v1"
@@ -20,6 +22,8 @@ def ids(path: Path, pattern: str) -> set[str]:
 
 def main() -> int:
     errors: list[str] = []
+
+    errors.extend(readme_roadmap_drift_errors())
 
     markdown_files = [ROOT / "README.md", ROOT / "README.ru.md"]
     markdown_files.extend(sorted((ROOT / "docs").rglob("*.md")))

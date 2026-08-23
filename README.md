@@ -5,8 +5,30 @@ Read this in: **English** · [Русский](README.ru.md)
 ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 [ESP32-DIV](https://github.com/CiferTech/ESP32-DIV) wireless multitool.
 
-> **Live status and next gate:** [docs/v1/STATUS.md](docs/v1/STATUS.md). Released 0.x
-> remains a frozen proof-of-concept line; no user-facing 1.x binary exists yet.
+<!-- LESHY-ROADMAP:START -->
+## Development status and roadmap
+
+> **Now: S5 — Complete ESP32-DIV hardware**
+>
+> Stage gates complete: 5 of 9.
+
+This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
+
+- ✅ **S0 — Governance and generation boundary** · complete
+- ✅ **S1 — Evidence baseline: users, competitors, and hardware** · complete
+- ✅ **S2 — Clean 1.x platform** · complete
+- ✅ **S3 — First vertical slice: Survey Session** · complete
+- ✅ **S4 — Cross-radio passive platform** · complete
+- 🟡 **S5 — Complete ESP32-DIV hardware** · in progress
+- ⬜ **S6 — Product differentiation: Targets, comparison, companion** · later
+- ⬜ **S7 — Safe Lab and extensibility** · later
+- ⬜ **S8 — Release hardening and 1.0.0** · later
+
+[live status and next evidence gate](docs/v1/STATUS.md) · [stage outcomes and exit gates](docs/v1/DELIVERY_PLAN.md) · [complete functionality map](docs/v1/DELIVERY_PLAN.md#product-functionality-map)
+<!-- LESHY-ROADMAP:END -->
+
+Released 0.x remains a frozen proof-of-concept line; no user-facing 1.x binary has
+been released yet.
 
 ## Version lines
 
@@ -45,10 +67,13 @@ IR, NFC, GPS, and storage become capabilities shared by those workflows.
 ## Development
 
 Documentation defines the 1.x scope and gates. Current code, prototype, and
-verification state lives only in [STATUS](docs/v1/STATUS.md), keeping this README from
-becoming a competing source of truth.
+verification state lives only in [STATUS](docs/v1/STATUS.md). The front-page roadmap
+is generated from that status and the delivery plan, keeping this README from becoming
+a competing source of truth.
 
 ```bash
+python3 tools/readme_roadmap.py --write
+python3 tools/check_docs.py
 tools/test.sh
 tools/build.sh
 ```
