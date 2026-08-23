@@ -1,0 +1,72 @@
+{
+  "schema": "leshy.hil.diagnostic_evidence.v1",
+  "status": "passed_crosscheck_hardware_unavailable",
+  "date": "2026-08-23",
+  "checkpoint": "same_image_two_board_read_only_rf_shield_crosscheck",
+  "run_id": "a8535aa32598cb6d488c5871d8a2d77e",
+  "runner_source_commit": "b27585a7b32ed3ceec20363d7bae23d662e91e9c",
+  "raw_run_sha256": "76a79d18f3e193b8f563cae8d54620b1f9779e046e7b12bec0639b7afc7a40d7",
+  "raw_artifact_index_sha256": "8e90252528a2c93c8197edaf73deda22d4ee1507f741c22955751cddb86bd711",
+  "candidate": {
+    "version": "0.81.0-shield-receiver-probe",
+    "source_commit": "b125470ab32212a5452d7c8d3624f1e5c759cb38",
+    "firmware_sha256": "2d0bc0cf424bb0497f4ba6841e262240d6b689947b61461f353e012a5cb58379",
+    "app_elf_sha256": "e86968d448992e140c23e882373b222b9bd4478bf3320d14e83c1011a4acd033",
+    "fresh_flash": true
+  },
+  "known_positive_control": {
+    "board": "board-01",
+    "run_id": "7be1712a413f75c85967100a8cae6c76",
+    "raw_run_sha256": "61b57b7919171d11cce0a930ee9376f12d65bfcaca83bebb1f997ff7bdb4690e",
+    "raw_artifact_index_sha256": "3d8611becb863800d5d4f9231efa322408c7cd01f6f814c8b6ca4d777666fea9",
+    "same_firmware_sha256": "2d0bc0cf424bb0497f4ba6841e262240d6b689947b61461f353e012a5cb58379",
+    "detected_receivers": 3,
+    "nrf": [
+      {"slot": 1, "status": 14, "config": 8, "channel": 2, "rf_setup": 15, "feature": 0},
+      {"slot": 2, "status": 14, "config": 8, "channel": 2, "rf_setup": 15, "feature": 0}
+    ],
+    "cc1101": {"ready": true, "status": 0, "partnum": 0, "version": 20}
+  },
+  "device_under_test": {
+    "board": "board-02",
+    "port": "/dev/cu.usbmodem1101",
+    "efuse_mac": "90:70:69:0d:15:e0",
+    "boot_profile": "esp32-div-v2-n16",
+    "detected_receivers": 0,
+    "probe_status": "failed",
+    "nrf": [
+      {"slot": 1, "status": 0, "config": 0, "channel": 0, "rf_setup": 0, "feature": 0},
+      {"slot": 2, "status": 0, "config": 0, "channel": 0, "rf_setup": 0, "feature": 0}
+    ],
+    "cc1101": {"ready": true, "status": 0, "partnum": 0, "version": 0},
+    "wire": {
+      "nrf_register_reads": 8,
+      "cc_status_reads": 2,
+      "spi_bytes_clocked": 20
+    },
+    "side_effects": {
+      "nrf_ce_high_events": 0,
+      "cc_command_strobes": 0,
+      "radio_tx_commands": 0
+    },
+    "cleanup_complete": true,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "final_lease_mask": 0,
+    "buzzer_inactive": true
+  },
+  "diagnosis": {
+    "same_exact_firmware_disagrees_by_board": true,
+    "fixture_specific_software_fault_supported": false,
+    "board_02_rf_shield_electrical_fault_supported": true,
+    "estimated_software_probability": "below_5_to_10_percent",
+    "automatic_rf_emission_gate_restart_allowed": false,
+    "next_action": "power_off_and_reseat_board_02_detachable_rf_shield_then_repeat_same_0_81_crosscheck"
+  },
+  "limits": {
+    "diagnostic_runner_passed": true,
+    "rf_emission_authorized": false,
+    "known_signal_detected": false,
+    "stage_or_phase_promoted": false
+  }
+}

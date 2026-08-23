@@ -113,6 +113,16 @@ inventory; RF emission remains unauthorized:
 [0.2.3 inventory](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json),
 [0.2.4 shared-shield identity](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
 
+The independent same-image cross-check removes the principal diagnostic-firmware
+ambiguity. Exact product `0.81.0` and firmware hash `2d0bc0cf…8379` previously detect
+two nRF identities `14/8/2/15` and CC1101 version `20` on board-01. Freshly flashed on
+board-02, that identical image completes the same bounded eight nRF plus two CC reads
+but returns zero for both nRF identities and CC1101 version. The run performs zero
+TX commands and CE-high events, leaves the buzzer inactive, and ends Home/lease 0.
+This supports a board-02 shield/contact/power fault rather than fixture-specific code;
+the same `0.81.0` image remains on board-02 for a powered-off reseat/retest:
+[cross-check evidence](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json).
+
 ## Read-only board-02 admission
 
 Before any fixture flash, `profile_hil_board.py` invokes ROM esptool with `--no-stub`

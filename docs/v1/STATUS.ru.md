@@ -13,10 +13,10 @@
 - **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
 - **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
-- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 автоматических шага.
+- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага; exact same-image cross-check `0.81.0` находит все три RF-приёмника на board-01 и ноль на board-02 при zero TX/CE-high events.
 - **Следующий evidence gate:** при выключенном питании переустановить съёмный RF-shield board-02, повторить read-only inventory shared bus, затем пройти короткий bounded nRF regression до known-signal gate finder.
 - **Принятая physical baseline:** exact `0.129.0-pre-app-watchdog`; все прежние принятые checkpoints сохранены ниже.
-- **Текущий source candidate:** exact product `0.129.0-pre-app-watchdog` не изменён, а source commit `b0893f6d8948d4eaef20bbd004dca4d628f6584d` добавляет source-bound fixture `0.2.4` с общей CE-low identity nRF/CC1101; focused host checks и fixture build проходят. Физическая диагностика проходит 2/2 шага без излучения и классифицирует RF-shield board-02 как электрически недоступный. Product image также имеет gate-eligible local run pre-app RTC watchdog; его отдельный retained bundle остаётся документационным follow-up, а не release claim.
+- **Текущий source candidate:** exact product `0.129.0-pre-app-watchdog` не изменён. Source-bound fixture `0.2.4` и focused cross-check runner commit `b27585a7b32ed3ceec20363d7bae23d662e91e9c` проходят safety contracts. Известный положительный exact image `0.81.0` независимо воспроизводит zero identities board-02, снижая рабочую вероятность fixture-specific software explanation ниже 5–10%. Product image также имеет gate-eligible local run pre-app RTC watchdog; его отдельный retained bundle остаётся документационным follow-up, а не release claim.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
@@ -34,14 +34,19 @@
   и прошёл двухшаговую диагностику, однако CC1101 также вернул invalid identity
   `0/0/0` на documented bus и no-ready/`0xFF` на swapped bus. Это не поддерживает
   nRF-only fault и указывает на электрическую недоступность всего RF-shield board-02.
-  Все run сохранили zero emissions, safe terminal fixture и product Home/lease 0;
+  Второй независимый run затем прошил exact image `0.81.0`, ранее читавший на board-01
+  две nRF identity `14/8/2/15` и CC1101 version `20`; тот же image на board-02 прочитал
+  обе nRF identity и CC1101 version как нули. Его bounded 8+2 SPI reads, zero TX/CE-high
+  events и cleanup Home/lease 0 проходят, поэтому shared firmware fault маловероятен.
+  Все run сохранили safe terminal state;
   полный gate закрыт до переустановки shield при выключенном питании и повторного
   read-only inventory. См.
   [0.2.0](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json),
   [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json) и
   [0.2.2](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json) и
   [inventory 0.2.3](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json)
-  и [shared-shield identity 0.2.4](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
+  [shared-shield identity 0.2.4](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json)
+  и [same-image cross-check 0.81](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json).
 
 ### План фаз S5
 

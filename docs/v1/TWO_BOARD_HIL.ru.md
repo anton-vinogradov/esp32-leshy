@@ -114,6 +114,16 @@ read-only inventory; RF emission остаётся запрещённым:
 [inventory 0.2.3](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json),
 [shared-shield identity 0.2.4](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
 
+Независимый same-image cross-check снимает основную неопределённость diagnostic
+firmware. Exact product `0.81.0` с firmware hash `2d0bc0cf…8379` ранее находил на
+board-01 две nRF identity `14/8/2/15` и CC1101 version `20`. Свежая прошивка того же
+image на board-02 завершает те же bounded восемь nRF и два CC reads, но возвращает
+нули для обеих nRF identity и CC1101 version. Run выполняет zero TX commands и
+CE-high events, оставляет buzzer inactive и заканчивает Home/lease 0. Это подтверждает
+shield/contact/power fault board-02, а не fixture-specific code; тот же `0.81.0`
+остаётся на board-02 для переустановки при выключенном питании и повторной проверки:
+[cross-check evidence](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json).
+
 ## Read-only admission board-02
 
 До любой fixture flash `profile_hil_board.py` запускает ROM esptool с `--no-stub` и
