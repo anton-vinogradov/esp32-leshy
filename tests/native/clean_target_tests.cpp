@@ -1973,6 +1973,15 @@ void testWifiIngressIsPassiveOnlyAndNormalizesObservations() {
     record.rssiDbm = -67;
     record.ssid = "field-ap";
     record.ssidLength = 8;
+    record.network.present = true;
+    record.network.authentication = WifiAuthentication::Wpa2Psk;
+    record.network.pairwiseCipher = WifiCipher::Ccmp;
+    record.network.groupCipher = WifiCipher::Ccmp;
+    record.network.channelWidth = WifiChannelWidth::Mhz40;
+    record.network.phyMask = WifiNetworkFacts::kPhy11b |
+        WifiNetworkFacts::kPhy11g | WifiNetworkFacts::kPhy11n;
+    record.network.wps = true;
+    record.network.countryCode = {'U', 'S', '\0'};
     Observation observation;
     CHECK(normalizePassiveRecord(record, 2000, &observation));
     CHECK(observation.radio == RadioKind::Wifi);
@@ -1982,6 +1991,22 @@ void testWifiIngressIsPassiveOnlyAndNormalizesObservations() {
     CHECK(observation.identityLength == 6);
     CHECK(observation.identity == record.bssid);
     CHECK(std::strcmp(observation.label.data(), "field-ap") == 0);
+    CHECK(observation.wifiNetwork.present);
+    CHECK(observation.wifiNetwork.authentication ==
+          WifiAuthentication::Wpa2Psk);
+    CHECK(std::strcmp(wifiAuthenticationName(
+                          observation.wifiNetwork.authentication),
+                      "WPA2-PSK") == 0);
+    CHECK(std::strcmp(wifiCipherName(
+                          observation.wifiNetwork.pairwiseCipher),
+                      "CCMP") == 0);
+    CHECK(std::strcmp(wifiChannelWidthName(
+                          observation.wifiNetwork.channelWidth),
+                      "40 MHZ") == 0);
+    char phy[24] = {};
+    CHECK(formatWifiPhyMask(observation.wifiNetwork.phyMask,
+                            phy, sizeof(phy)));
+    CHECK(std::strcmp(phy, "B/G/N") == 0);
 
     record.channel = 0;
     CHECK(!normalizePassiveRecord(record, 2000, &observation));
@@ -1992,6 +2017,54 @@ void testWifiIngressIsPassiveOnlyAndNormalizesObservations() {
     record.rssiDbm = -67;
     record.bssid = {};
     CHECK(!normalizePassiveRecord(record, 2000, &observation));
+}
+
+void testWifiNetworkCatalogResolvesHiddenSsidMonotonically() {
+    WifiNetworkCatalog catalog;
+    WifiNetworkNavigationOrder navigation;
+    WifiScanRecord record;
+    record.bssid = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
+    record.channel = 11;
+    record.rssiDbm = -64;
+    record.network.present = true;
+    record.network.authentication = WifiAuthentication::Wpa3Psk;
+    record.network.pairwiseCipher = WifiCipher::Ccmp;
+    record.network.groupCipher = WifiCipher::Ccmp;
+    record.network.channelWidth = WifiChannelWidth::Mhz20;
+    Observation observation;
+    CHECK(normalizePassiveRecord(record, 1000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.at(0)->labelLength == 0U);
+    CHECK(catalog.hiddenResolutions() == 0U);
+    CHECK(navigation.lock(catalog));
+    const std::uint32_t orderHash = navigation.orderHash(catalog);
+
+    // A later beacon/probe response for the same BSSID reveals the name.  The
+    // navigation identity stays fixed while its visible label is enriched.
+    record.ssid = "revealed-network";
+    record.ssidLength = std::strlen(record.ssid);
+    record.rssiDbm = -61;
+    CHECK(normalizePassiveRecord(record, 2000, &observation));
+    CHECK(catalog.upsert(observation, false));
+    CHECK(catalog.hiddenResolutions() == 1U);
+    CHECK(std::strcmp(navigation.at(catalog, 0)->label.data(),
+                      "revealed-network") == 0);
+    CHECK(navigation.orderHash(catalog) == orderHash);
+
+    // Hidden beacons remain incomplete evidence and cannot erase a name that
+    // was already observed.  Missing metadata is preserved for the same reason.
+    record.ssid = nullptr;
+    record.ssidLength = 0U;
+    record.network = {};
+    record.rssiDbm = -59;
+    CHECK(normalizePassiveRecord(record, 3000, &observation));
+    CHECK(catalog.upsert(observation, false));
+    const Observation* live = navigation.at(catalog, 0);
+    CHECK(live != nullptr);
+    CHECK(std::strcmp(live->label.data(), "revealed-network") == 0);
+    CHECK(live->wifiNetwork.present);
+    CHECK(live->wifiNetwork.authentication == WifiAuthentication::Wpa3Psk);
+    CHECK(catalog.hiddenResolutions() == 1U);
 }
 
 void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
@@ -5439,6 +5512,7 @@ int main() {
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
     testWifiNetworkCatalogKeepsStrongestUniqueRows();
+    testWifiNetworkCatalogResolvesHiddenSsidMonotonically();
     testWifiNetworkNavigationLocksIdentityOrder();
     testBleDeviceCatalogKeepsStrongestUniqueRows();
     testWifiDeviceCatalogDecodesOnlyClientActivity();

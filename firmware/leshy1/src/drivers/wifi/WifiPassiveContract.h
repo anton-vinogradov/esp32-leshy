@@ -22,6 +22,7 @@ struct WifiScanRecord final {
     std::int16_t rssiDbm = 0;
     const char* ssid = nullptr;
     std::size_t ssidLength = 0;
+    domain::observations::WifiNetworkFacts network{};
 };
 
 constexpr bool kActiveProbeAllowed = false;
@@ -34,5 +35,12 @@ bool validatePassivePlan(const WifiScanPlan& plan);
 std::uint32_t channelFrequencyKhz(std::uint8_t channel);
 bool normalizePassiveRecord(const WifiScanRecord& record, std::uint64_t monotonicUs,
                             domain::observations::Observation* output);
+const char* wifiAuthenticationName(
+    domain::observations::WifiAuthentication authentication);
+const char* wifiCipherName(domain::observations::WifiCipher cipher);
+const char* wifiChannelWidthName(
+    domain::observations::WifiChannelWidth width);
+bool formatWifiPhyMask(std::uint16_t phyMask, char* output,
+                       std::size_t capacity);
 
 }  // namespace leshy1::drivers::wifi

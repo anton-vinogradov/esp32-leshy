@@ -8,6 +8,111 @@
 
 namespace leshy1::platform::arduino {
 
+namespace {
+
+domain::observations::WifiAuthentication normalizeAuthentication(
+    wifi_auth_mode_t authentication) {
+    using Authentication = domain::observations::WifiAuthentication;
+    switch (authentication) {
+        case WIFI_AUTH_OPEN: return Authentication::Open;
+        case WIFI_AUTH_WEP: return Authentication::Wep;
+        case WIFI_AUTH_WPA_PSK: return Authentication::WpaPsk;
+        case WIFI_AUTH_WPA2_PSK: return Authentication::Wpa2Psk;
+        case WIFI_AUTH_WPA_WPA2_PSK: return Authentication::WpaWpa2Psk;
+        case WIFI_AUTH_WPA2_ENTERPRISE:
+            return Authentication::Wpa2Enterprise;
+        case WIFI_AUTH_WPA3_PSK:
+        case WIFI_AUTH_WPA3_EXT_PSK: return Authentication::Wpa3Psk;
+        case WIFI_AUTH_WPA2_WPA3_PSK:
+        case WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE:
+            return Authentication::Wpa2Wpa3Psk;
+        case WIFI_AUTH_WAPI_PSK: return Authentication::WapiPsk;
+        case WIFI_AUTH_OWE: return Authentication::Owe;
+        case WIFI_AUTH_WPA3_ENT_192:
+            return Authentication::Wpa3Enterprise192;
+        case WIFI_AUTH_DPP: return Authentication::Dpp;
+        case WIFI_AUTH_WPA3_ENTERPRISE:
+            return Authentication::Wpa3Enterprise;
+        case WIFI_AUTH_WPA2_WPA3_ENTERPRISE:
+            return Authentication::Wpa2Wpa3Enterprise;
+        case WIFI_AUTH_WPA_ENTERPRISE:
+            return Authentication::WpaEnterprise;
+        case WIFI_AUTH_MAX:
+        default: return Authentication::Unknown;
+    }
+}
+
+domain::observations::WifiCipher normalizeCipher(wifi_cipher_type_t cipher) {
+    using Cipher = domain::observations::WifiCipher;
+    switch (cipher) {
+        case WIFI_CIPHER_TYPE_NONE: return Cipher::None;
+        case WIFI_CIPHER_TYPE_WEP40: return Cipher::Wep40;
+        case WIFI_CIPHER_TYPE_WEP104: return Cipher::Wep104;
+        case WIFI_CIPHER_TYPE_TKIP: return Cipher::Tkip;
+        case WIFI_CIPHER_TYPE_CCMP: return Cipher::Ccmp;
+        case WIFI_CIPHER_TYPE_TKIP_CCMP: return Cipher::TkipCcmp;
+        case WIFI_CIPHER_TYPE_AES_CMAC128: return Cipher::AesCmac128;
+        case WIFI_CIPHER_TYPE_SMS4: return Cipher::Sms4;
+        case WIFI_CIPHER_TYPE_GCMP: return Cipher::Gcmp;
+        case WIFI_CIPHER_TYPE_GCMP256: return Cipher::Gcmp256;
+        case WIFI_CIPHER_TYPE_AES_GMAC128: return Cipher::AesGmac128;
+        case WIFI_CIPHER_TYPE_AES_GMAC256: return Cipher::AesGmac256;
+        case WIFI_CIPHER_TYPE_UNKNOWN:
+        default: return Cipher::Unknown;
+    }
+}
+
+domain::observations::WifiChannelWidth normalizeWidth(
+    wifi_bandwidth_t width) {
+    using Width = domain::observations::WifiChannelWidth;
+    switch (width) {
+        case WIFI_BW_HT20: return Width::Mhz20;
+        case WIFI_BW_HT40: return Width::Mhz40;
+        case WIFI_BW80: return Width::Mhz80;
+        case WIFI_BW160: return Width::Mhz160;
+        case WIFI_BW80_BW80: return Width::Mhz80Plus80;
+        default: return Width::Unknown;
+    }
+}
+
+domain::observations::WifiNetworkFacts networkFacts(
+    const wifi_ap_record_t& source) {
+    using Facts = domain::observations::WifiNetworkFacts;
+    Facts facts;
+    facts.present = true;
+    facts.authentication = normalizeAuthentication(source.authmode);
+    facts.pairwiseCipher = normalizeCipher(source.pairwise_cipher);
+    facts.groupCipher = normalizeCipher(source.group_cipher);
+    facts.channelWidth = normalizeWidth(source.bandwidth);
+    facts.secondaryChannelDirection =
+        static_cast<std::uint8_t>(source.second);
+    facts.receiveAntenna = source.ant == WIFI_ANT_ANT0
+        ? 0U : (source.ant == WIFI_ANT_ANT1 ? 1U : 0xffU);
+    facts.phyMask = static_cast<std::uint16_t>(
+        (source.phy_11b ? Facts::kPhy11b : 0U) |
+        (source.phy_11g ? Facts::kPhy11g : 0U) |
+        (source.phy_11n ? Facts::kPhy11n : 0U) |
+        (source.phy_lr ? Facts::kPhyLowRate : 0U) |
+        (source.phy_11a ? Facts::kPhy11a : 0U) |
+        (source.phy_11ac ? Facts::kPhy11ac : 0U) |
+        (source.phy_11ax ? Facts::kPhy11ax : 0U));
+    facts.wps = source.wps;
+    facts.ftmResponder = source.ftm_responder;
+    facts.ftmInitiator = source.ftm_initiator;
+    std::memcpy(facts.countryCode.data(), source.country.cc,
+                facts.countryCode.size());
+    facts.countryStartChannel = source.country.schan;
+    facts.countryChannelCount = source.country.nchan;
+    facts.countryMaximumTxPowerDbm = source.country.max_tx_power;
+    facts.bssColor = source.he_ap.bss_color;
+    facts.bssColorKnown = source.phy_11ax && !source.he_ap.bss_color_disabled;
+    facts.vhtCenterChannel1 = source.vht_ch_freq1;
+    facts.vhtCenterChannel2 = source.vht_ch_freq2;
+    return facts;
+}
+
+}  // namespace
+
 const char* boardWifiScanStatusName(BoardWifiScanStatus status) {
     switch (status) {
         case BoardWifiScanStatus::Valid: return "valid";
@@ -120,6 +225,7 @@ BoardWifiPassiveScanResult BoardWifiPassiveScanner::scan(
         while (record.ssidLength < 32U && source.ssid[record.ssidLength] != 0) {
             ++record.ssidLength;
         }
+        record.network = networkFacts(source);
         switch (visitor(record,
                         static_cast<std::uint64_t>(esp_timer_get_time()),
                         context)) {

@@ -24,6 +24,7 @@ public:
 
     std::size_t size() const { return size_; }
     std::uint32_t revision() const { return revision_; }
+    std::uint32_t hiddenResolutions() const { return hiddenResolutions_; }
     bool strongestFirst() const;
     const domain::observations::Observation* at(std::size_t index) const;
     std::size_t indexOfIdentity(
@@ -41,6 +42,7 @@ private:
     std::array<domain::observations::Observation, kCapacity> entries_{};
     std::size_t size_ = 0;
     std::uint32_t revision_ = 0;
+    std::uint32_t hiddenResolutions_ = 0;
 };
 
 }  // namespace leshy1::apps::wifi

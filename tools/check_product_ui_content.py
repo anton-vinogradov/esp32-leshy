@@ -88,7 +88,9 @@ REQUIRED_DENSE_DETAIL_IDS = {
     "RadioSignalDbmFormat",
     "RadioSignalScaleWeak",
     "RadioSignalScaleStrong",
-    "RadioChannelFormat",
+    "WifiNetworkRadioFormat",
+    "WifiNetworkSecurityFormat",
+    "WifiNetworkVendorFormat",
 }
 
 
@@ -113,9 +115,9 @@ def main() -> int:
         if f"UiTextId::{identifier}" not in renderer:
             failures.append(f"dense detail string is not rendered: {identifier}")
 
-    if renderer.count("renderRadioSignalCard(") != 4:
+    if renderer.count("renderRadioSignalCard(") != 3:
         failures.append(
-            "shared signal card must have one definition and exactly three detail uses"
+            "shared signal card must have one definition and exactly two detail uses"
         )
 
     for internal in (

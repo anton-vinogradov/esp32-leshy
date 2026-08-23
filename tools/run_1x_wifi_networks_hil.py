@@ -76,6 +76,21 @@ def changed_pixels(frames: Path, before_name: str,
     return {"content_changed_pixels": content, "chrome_changed_pixels": chrome}
 
 
+def changed_outside_signal_line(frames: Path, before_name: str,
+                                after_name: str) -> int:
+    before = (frames / f"{before_name}.rgb565").read_bytes()
+    after = (frames / f"{after_name}.rgb565").read_bytes()
+    outside = 0
+    for y in range(320):
+        for x in range(240):
+            offset = (y * 240 + x) * 2
+            if before[offset:offset + 2] == after[offset:offset + 2]:
+                continue
+            if not (CONTENT_X0 <= x < CONTENT_X1 and 270 <= y < 290):
+                outside += 1
+    return outside
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -86,6 +101,7 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--reuse-exact-flash", action="store_true")
+    parser.add_argument("--network-intelligence", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     if not args.firmware.is_file():
@@ -128,6 +144,9 @@ def main() -> int:
     navigation_press_count = 0
     detail_first: dict[str, Any] = {}
     detail_second: dict[str, Any] = {}
+    detail_facts_first: dict[str, Any] = {}
+    detail_facts_second: dict[str, Any] = {}
+    detail_outside_signal_pixels = 0
 
     try:
         if args.flash:
@@ -255,6 +274,16 @@ def main() -> int:
                         "wifi_network_selected_identity_hash", 0)) == 0:
                     raise RuntimeError("locked selection identity hash is empty")
 
+                if args.network_intelligence:
+                    # Start at the strongest locked BSSID and, if necessary,
+                    # walk the identity-stable list until the physical air
+                    # supplies one named AP with a globally assigned OUI.
+                    detail_list_state = navigation_second
+                    while int(detail_list_state.get(
+                            "wifi_network_selection", 0)) > 0:
+                        detail_list_state = action(device, "up")
+                        navigation_press_count += 1
+
                 detail_first = action(device, "right")
                 trace.append(detail_first)
                 require_exact(detail_first, {
@@ -262,6 +291,43 @@ def main() -> int:
                     "runtime_owner": "wifi", "lease_mask": 15,
                     "survey_workflow_state": "running",
                 }, "wifi_network_detail")
+                if args.network_intelligence:
+                    visible = int(detail_first.get(
+                        "wifi_network_visible_size", 0))
+                    for candidate_index in range(max(1, visible)):
+                        detail_facts_first = query(
+                            device, b"wifi.network.detail",
+                            "leshy.wifi.network_detail.v1", "state")
+                        if (detail_facts_first.get("ssid_known") is True and
+                                detail_facts_first.get("vendor_known") is True and
+                                detail_facts_first.get("facts_known") is True):
+                            break
+                        if candidate_index + 1 >= visible:
+                            raise RuntimeError(
+                                "no named globally assigned BSSID exposed a "
+                                "vendor/facts passport")
+                        trace.append(action(device, "left"))
+                        moved = action(device, "down")
+                        navigation_press_count += 1
+                        trace.append(moved)
+                        detail_first = action(device, "right")
+                        trace.append(detail_first)
+                    require_exact(detail_facts_first, {
+                        "active": True, "passive": True,
+                        "active_probe_allowed": False,
+                        "ssid_known": True, "vendor_known": True,
+                        "facts_known": True,
+                    }, "wifi_network_detail_facts")
+                    if (not detail_facts_first.get("vendor") or
+                            detail_facts_first.get("authentication") ==
+                                "UNKNOWN" or
+                            detail_facts_first.get("channel_width") ==
+                                "WIDTH ?" or
+                            int(detail_facts_first.get("phy_mask", 0)) == 0 or
+                            int(detail_facts_first.get("identity_hash", 0)) == 0):
+                        raise RuntimeError(
+                            f"incomplete physical network passport: "
+                            f"{detail_facts_first!r}")
                 screens["wifi_network_detail_first"] = capture(
                     device, frames, "wifi-network-detail-first")
                 detail_cycle = int(
@@ -275,10 +341,33 @@ def main() -> int:
                     ), 45.0, "background scan did not progress on detail")
                 screens["wifi_network_detail_second"] = capture(
                     device, frames, "wifi-network-detail-second")
+                if args.network_intelligence:
+                    detail_facts_second = query(
+                        device, b"wifi.network.detail",
+                        "leshy.wifi.network_detail.v1", "state")
+                    for field in (
+                            "identity_hash", "vendor", "authentication",
+                            "pairwise_cipher", "group_cipher",
+                            "channel_width", "phy_mask", "channel",
+                            "frequency_khz"):
+                        if detail_facts_second.get(field) != \
+                                detail_facts_first.get(field):
+                            raise RuntimeError(
+                                f"network detail identity/fact moved: {field}")
                 detail_pixel_changes = changed_pixels(
                     frames, "wifi-network-detail-first",
                     "wifi-network-detail-second")
-                if detail_pixel_changes != {
+                detail_outside_signal_pixels = changed_outside_signal_line(
+                    frames, "wifi-network-detail-first",
+                    "wifi-network-detail-second")
+                if args.network_intelligence and (
+                        detail_pixel_changes["chrome_changed_pixels"] != 0 or
+                        detail_outside_signal_pixels != 0):
+                    raise RuntimeError(
+                        "live network passport redrew outside the RSSI line: "
+                        f"{detail_pixel_changes}, outside="
+                        f"{detail_outside_signal_pixels}")
+                if not args.network_intelligence and detail_pixel_changes != {
                         "content_changed_pixels": 0,
                         "chrome_changed_pixels": 0}:
                     raise RuntimeError(
@@ -423,8 +512,11 @@ def main() -> int:
         "navigation_second": navigation_second,
         "detail_first": detail_first,
         "detail_second": detail_second,
+        "detail_facts_first": detail_facts_first,
+        "detail_facts_second": detail_facts_second,
         "list_pixel_changes": list_pixel_changes,
         "detail_pixel_changes": detail_pixel_changes,
+        "detail_outside_signal_pixels": detail_outside_signal_pixels,
         "screens": screens,
         "trace": trace,
         "cleanup_before": cleanup_before,
@@ -436,7 +528,12 @@ def main() -> int:
             "passive_wifi_only": True,
             "unique_bssid_rows": True,
             "live_redraw_data_rows_only": True,
-            "detail_screen_stable_during_background_scan": True,
+            "detail_screen_stable_during_background_scan":
+                not args.network_intelligence,
+            "network_intelligence": args.network_intelligence,
+            "network_vendor_lookup": args.network_intelligence,
+            "network_driver_facts": args.network_intelligence,
+            "detail_live_rssi_line_only": args.network_intelligence,
             "two_complete_wifi_lifecycles": True,
             "navigation_press_count": navigation_press_count,
             "identity_order_locked_during_navigation": True,

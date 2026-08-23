@@ -40,7 +40,14 @@ def main() -> int:
         "wifi_networks_strongest_first",
         "wifi_network_catalog_revision",
         "wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor)",
-        "renderRadioSignalCard(wifiNetworkDetail.rssiDbm)",
+        "renderWifiNetworkDetailData()",
+        "renderWifiNetworkSignalLine(live)",
+        "wifiNetworkDetailStaticFieldsDiffer(",
+        "wifiOuiDatabase.lookup(",
+        "liveWifiNetworkDetail()",
+        "emitWifiNetworkDetailState(",
+        "leshy.wifi.network_detail.v1",
+        "active_probe_allowed\\\":false",
         "wifiNetworkNavigationOrder.lock(wifiNetworkCatalog)",
         "wifiNetworkVisibleSize()",
         "wifiNetworkAt(wifiNetworkSelection)",
@@ -60,6 +67,10 @@ def main() -> int:
         "indexOfIdentity",
         "bool allowReplacement = true",
         "!allowReplacement",
+        "resolvedHidden",
+        "observation.labelLength == 0U",
+        "hiddenResolutions_",
+        "wifiNetworkFactsEqual",
     )
     required_navigation = (
         "class WifiNetworkNavigationOrder final",
@@ -75,8 +86,11 @@ def main() -> int:
         "WifiNetworksSearching",
         "WifiNetworkDetailTitle",
         "WifiNetworkBssidFormat",
-        "RadioChannelFormat",
-        "RadioSignalLabel",
+        "WifiNetworkRadioFormat",
+        "WifiNetworkSecurityFormat",
+        "WifiNetworkCipherFormat",
+        "WifiNetworkVendorFormat",
+        "WifiNetworkListeningForName",
     )
     failures = [
         f"renderer token missing: {token}"
@@ -102,7 +116,8 @@ def main() -> int:
     print(
         "Wi-Fi networks contract passed: unique strongest-first BSSID rows, four-row "
         "touch UI, strongest-first discovery with identity-stable navigation, "
-        "data-only live redraw and dense frozen detail chrome"
+        "data-only live redraw, OUI/security/PHY detail and monotonic hidden-SSID "
+        "resolution without cursor movement"
     )
     return 0
 

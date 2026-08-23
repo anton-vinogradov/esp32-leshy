@@ -7,6 +7,7 @@ namespace leshy1::apps::wifi {
 void WifiNetworkCatalog::reset() {
     entries_.fill(domain::observations::Observation{});
     size_ = 0;
+    hiddenResolutions_ = 0;
     ++revision_;
 }
 
@@ -24,10 +25,12 @@ bool WifiNetworkCatalog::sameIdentity(
 bool WifiNetworkCatalog::visibleFieldsDiffer(
     const domain::observations::Observation& left,
     const domain::observations::Observation& right) {
+    const bool factsDiffer = !domain::observations::wifiNetworkFactsEqual(
+        left.wifiNetwork, right.wifiNetwork);
     return left.channel != right.channel || left.rssiDbm != right.rssiDbm ||
         left.labelLength != right.labelLength ||
         std::memcmp(left.label.data(), right.label.data(),
-                    left.labelLength) != 0;
+                    left.labelLength) != 0 || factsDiffer;
 }
 
 void WifiNetworkCatalog::sortStrongestFirst() {
@@ -63,8 +66,24 @@ bool WifiNetworkCatalog::upsert(
     }
     for (std::size_t index = 0; index < size_; ++index) {
         if (!sameIdentity(entries_[index], observation)) continue;
-        const bool changed = visibleFieldsDiffer(entries_[index], observation);
-        entries_[index] = observation;
+        auto merged = observation;
+        // A hidden beacon is incomplete information, not a new name.  Once a
+        // beacon or probe response reveals the SSID for this BSSID, later
+        // zero-length SSIDs must never erase it again.
+        const bool resolvedHidden = entries_[index].labelLength == 0U &&
+            observation.labelLength != 0U;
+        if (observation.labelLength == 0U &&
+            entries_[index].labelLength != 0U) {
+            merged.label = entries_[index].label;
+            merged.labelLength = entries_[index].labelLength;
+        }
+        if (!observation.wifiNetwork.present &&
+            entries_[index].wifiNetwork.present) {
+            merged.wifiNetwork = entries_[index].wifiNetwork;
+        }
+        const bool changed = visibleFieldsDiffer(entries_[index], merged);
+        entries_[index] = merged;
+        if (resolvedHidden) ++hiddenResolutions_;
         if (changed) {
             sortStrongestFirst();
             ++revision_;
