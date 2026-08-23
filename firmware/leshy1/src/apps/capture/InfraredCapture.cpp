@@ -12,6 +12,21 @@ bool nearDuration(std::uint16_t actual, std::uint16_t expected,
     return actual >= expected - delta && actual <= expected + delta;
 }
 
+// A demodulating IR receiver reports the envelope, not the electrical LED
+// drive time. Its recovery delay can shorten every carrier mark and lengthen
+// the following space by a few hundred microseconds. Keep disjoint,
+// protocol-specific windows here: real NEC zero/one spaces remain
+// unambiguous, while the byte-complement checks below still reject noise.
+bool validNecBitMark(std::uint16_t actual) {
+    return actual >= 180U && actual <= 900U;
+}
+
+int classifyNecBitSpace(std::uint16_t actual) {
+    if (actual >= 300U && actual <= 1050U) return 0;
+    if (actual >= 1200U && actual <= 2500U) return 1;
+    return -1;
+}
+
 }  // namespace
 
 const char* infraredCaptureStateName(InfraredCaptureState state) {
@@ -171,8 +186,7 @@ void InfraredCapture::decodeCapturedSignal() {
         !nearDuration(pulses_[0], 9000U)) {
         return;
     }
-    if (nearDuration(pulses_[1], 2250U) &&
-        nearDuration(pulses_[2], 560U)) {
+    if (nearDuration(pulses_[1], 2250U) && validNecBitMark(pulses_[2])) {
         decode_.protocol = domain::captures::InfraredProtocol::NecRepeat;
         decode_.integrityValid = true;
         return;
@@ -182,10 +196,11 @@ void InfraredCapture::decodeCapturedSignal() {
     for (std::size_t bit = 0; bit < 32U; ++bit) {
         const std::size_t mark = 2U + bit * 2U;
         const std::size_t space = mark + 1U;
-        if (!nearDuration(pulses_[mark], 560U)) return;
-        if (nearDuration(pulses_[space], 1690U)) {
+        if (!validNecBitMark(pulses_[mark])) return;
+        const int bitValue = classifyNecBitSpace(pulses_[space]);
+        if (bitValue == 1) {
             code |= static_cast<std::uint32_t>(1U << bit);
-        } else if (!nearDuration(pulses_[space], 560U)) {
+        } else if (bitValue != 0) {
             return;
         }
     }

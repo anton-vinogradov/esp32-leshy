@@ -1368,6 +1368,61 @@ void testInfraredCaptureIsBoundedAndDecodesNecWithoutTxSemantics() {
     CHECK(capture.stats().state == InfraredCaptureState::Failed);
 }
 
+void testInfraredCaptureDecodesPhysicalDemodulatedNecTrace() {
+    using leshy1::domain::captures::InfraredDecode;
+    using leshy1::domain::captures::InfraredProtocol;
+    const std::array<std::uint16_t, 67> physicalTrace{
+        8907, 4642, 442, 658, 464, 728, 460, 744, 351, 706, 394, 1851,
+        437, 687, 413, 701, 442, 768, 376, 1850, 443, 1776, 461, 1806,
+        442, 1819, 355, 771, 438, 1828, 451, 1810, 442, 1889, 398, 701,
+        438, 706, 416, 1849, 397, 684, 455, 2027, 224, 1916, 372, 701,
+        438, 683, 417, 1894, 376, 1844, 420, 729, 438, 1850, 375, 741,
+        351, 772, 372, 1894, 398, 1845, 416,
+    };
+    const auto decodeTrace = [](const std::array<std::uint16_t, 67>& trace) {
+        InfraredCapture capture;
+        InfraredCapturePlan plan;
+        std::uint64_t now = 1000000U;
+        CHECK(capture.begin(plan, now, true));
+        now += 100U;
+        CHECK(capture.ingest({now, false}));
+        for (std::size_t index = 0; index < trace.size(); ++index) {
+            const bool level = (index & 1U) != 0U;
+            const std::uint64_t ended = now + trace[index];
+            while (now + 100U < ended) {
+                now += 100U;
+                CHECK(!capture.ingest({now, level}));
+            }
+            now = ended;
+            CHECK(capture.ingest({now, !level}));
+        }
+        CHECK(capture.service(now + plan.endGapUs));
+        CHECK(capture.stats().state == InfraredCaptureState::Complete);
+        CHECK(capture.pulseCount() == trace.size());
+        CHECK(capture.stats().maximumObservedSampleGapUs <= 100U);
+        return capture.decode();
+    };
+
+    const InfraredDecode decoded = decodeTrace(physicalTrace);
+    CHECK(decoded.protocol == InfraredProtocol::Nec);
+    CHECK(decoded.rawCode == 0xCB34EF10U);
+    CHECK(decoded.address == 0x10U);
+    CHECK(decoded.command == 0x34U);
+    CHECK(decoded.integrityValid);
+
+    auto ambiguousSpace = physicalTrace;
+    ambiguousSpace[3] = 1125U;
+    CHECK(decodeTrace(ambiguousSpace).protocol == InfraredProtocol::Unknown);
+
+    auto invalidMark = physicalTrace;
+    invalidMark[2] = 120U;
+    CHECK(decodeTrace(invalidMark).protocol == InfraredProtocol::Unknown);
+
+    auto brokenComplement = physicalTrace;
+    brokenComplement[35] = 1690U;
+    CHECK(decodeTrace(brokenComplement).protocol == InfraredProtocol::Unknown);
+}
+
 void testSpectrumViewportKeepsBoundedRingHistory() {
     CHECK(SpectrumViewport::kDisplayColumns == 240);
     CHECK(SpectrumViewport::kHistoryRows == 224);
@@ -5820,6 +5875,7 @@ int main() {
     testSubGhzRawCaptureIsPassiveBoundedAndNonBlocking();
     testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics();
     testInfraredCaptureIsBoundedAndDecodesNecWithoutTxSemantics();
+    testInfraredCaptureDecodesPhysicalDemodulatedNecTrace();
     testSpectrumViewportKeepsBoundedRingHistory();
     testProductBootRetryIsNarrowAndBounded();
     testSafetySupervisorLatchesOnlyExactUntornEvidence();

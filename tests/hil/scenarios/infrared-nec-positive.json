@@ -100,11 +100,6 @@
         "pulses": 67,
         "start_level": false,
         "truncated": false,
-        "protocol": "nec",
-        "raw_code": 3409243920,
-        "address": 16,
-        "command": 52,
-        "decode_integrity_valid": true,
         "csv_available": true,
         "cleanup_complete": true,
         "storage_written": false,
@@ -128,6 +123,22 @@
         "end": {"status": "valid", "pulses": 67}
       },
       "checks": [{"path": "bytes", "op": "gt", "value": 100}]
+    },
+    {
+      "id": "decoded_contract",
+      "op": "query",
+      "command": "capture.ir.state",
+      "response_schema": "leshy.capture.infrared_raw.v1",
+      "expect": {
+        "state": "complete",
+        "protocol": "nec",
+        "raw_code": 3409243920,
+        "address": 16,
+        "command": 52,
+        "decode_integrity_valid": true,
+        "pulses": 67,
+        "lease_mask": 11
+      }
     },
     {"id": "save", "op": "action", "name": "right"},
     {
