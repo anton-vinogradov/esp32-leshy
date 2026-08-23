@@ -2293,14 +2293,36 @@ bool drainProductSurveyWorkerObservations() {
     bool changed = false;
     Observation observation;
     while (xQueueReceive(productSurveyObservations, &observation, 0) == pdTRUE) {
+        const Observation* selectedWifi =
+            wifiNetworkCatalog.at(wifiNetworkSelection);
+        const Observation wifiSelectionAnchor = selectedWifi == nullptr
+            ? Observation{} : *selectedWifi;
+        const bool wifiSelectionAnchored = selectedWifi != nullptr;
         const bool wifiCatalogChanged =
             (wifiProductView == WifiProductView::Networks ||
              wifiProductView == WifiProductView::NetworkDetail) &&
             wifiNetworkCatalog.upsert(observation);
+        if (wifiCatalogChanged && wifiSelectionAnchored) {
+            const std::size_t anchored =
+                wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor);
+            wifiNetworkSelection = anchored < wifiNetworkCatalog.size()
+                ? anchored : wifiNetworkCatalog.size() - 1U;
+        }
+        const Observation* selectedBle =
+            bleDeviceCatalog.at(bleDeviceSelection);
+        const Observation bleSelectionAnchor = selectedBle == nullptr
+            ? Observation{} : *selectedBle;
+        const bool bleSelectionAnchored = selectedBle != nullptr;
         const bool bleCatalogChanged =
             (bleProductView == BleProductView::Devices ||
              bleProductView == BleProductView::DeviceDetail) &&
             bleDeviceCatalog.upsert(observation);
+        if (bleCatalogChanged && bleSelectionAnchored) {
+            const std::size_t anchored =
+                bleDeviceCatalog.indexOfIdentity(bleSelectionAnchor);
+            bleDeviceSelection = anchored < bleDeviceCatalog.size()
+                ? anchored : bleDeviceCatalog.size() - 1U;
+        }
         const SurveyPipelineStatus queued = surveyPipeline.enqueue(observation);
         const bool accepted = queued == SurveyPipelineStatus::Queued;
         const SourceTimelineStatus timelineStatus =
@@ -9909,12 +9931,15 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"ble_product_view\":\"%s\","
                       "\"ble_device_selection\":%u,"
                       "\"ble_devices_unique\":%u,"
+                      "\"ble_devices_strongest_first\":%s,"
                       "\"ble_device_catalog_revision\":%lu,"
                       "\"wifi_network_selection\":%u,"
                       "\"wifi_networks_unique\":%u,"
+                      "\"wifi_networks_strongest_first\":%s,"
                       "\"wifi_network_catalog_revision\":%lu,"
                       "\"wifi_device_selection\":%u,"
                       "\"wifi_devices_unique\":%u,"
+                      "\"wifi_devices_strongest_first\":%s,"
                       "\"wifi_device_catalog_revision\":%lu,"
                       "\"wifi_device_monitor_active\":%s,"
                       "\"wifi_device_monitor_cleanup_complete\":%s,"
@@ -10136,13 +10161,16 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       bleProductViewName(bleProductView),
                       static_cast<unsigned>(bleDeviceSelection),
                       static_cast<unsigned>(bleDeviceCatalog.size()),
+                      bleDeviceCatalog.strongestFirst() ? "true" : "false",
                       static_cast<unsigned long>(bleDeviceCatalog.revision()),
                       static_cast<unsigned>(wifiNetworkSelection),
                       static_cast<unsigned>(wifiNetworkCatalog.size()),
+                      wifiNetworkCatalog.strongestFirst() ? "true" : "false",
                       static_cast<unsigned long>(
                           wifiNetworkCatalog.revision()),
                       static_cast<unsigned>(wifiDeviceSelection),
                       static_cast<unsigned>(wifiDeviceCatalog.size()),
+                      wifiDeviceCatalog.strongestFirst() ? "true" : "false",
                       static_cast<unsigned long>(wifiDeviceCatalog.revision()),
                       wifiDeviceStats.active ? "true" : "false",
                       wifiDeviceStats.cleanupComplete ? "true" : "false",
@@ -10664,10 +10692,21 @@ void serviceWifiDevicesProduct() {
     if (nowUs == 0U) nowUs = 1U;
     wifiFrameCapture.service(nowUs);
     bool changed = false;
+    const WifiDeviceRecord* selected =
+        wifiDeviceCatalog.at(wifiDeviceSelection);
+    const std::array<std::uint8_t, 6> selectionAnchor = selected == nullptr
+        ? std::array<std::uint8_t, 6>{} : selected->address;
+    const bool selectionAnchored = selected != nullptr;
     WifiDeviceObservation observation{};
     while (wifiFrameCapture.pollDevice(&observation)) {
         changed = wifiDeviceCatalog.upsert(observation) || changed;
         observation = {};
+    }
+    if (changed && selectionAnchored) {
+        const std::size_t anchored =
+            wifiDeviceCatalog.indexOfAddress(selectionAnchor);
+        wifiDeviceSelection = anchored < wifiDeviceCatalog.size()
+            ? anchored : wifiDeviceCatalog.size() - 1U;
     }
     const auto after = wifiFrameCapture.deviceMonitorStats();
     const bool terminal = before.active && !after.active;

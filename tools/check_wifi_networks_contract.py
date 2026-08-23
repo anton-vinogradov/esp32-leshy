@@ -41,7 +41,10 @@ def main() -> int:
         "bool upsert",
         "sameIdentity",
         "visibleFieldsDiffer",
-        "weakestIndex",
+        "sortStrongestFirst",
+        "entries_[position - 1U].rssiDbm < current.rssiDbm",
+        "bool WifiNetworkCatalog::strongestFirst() const",
+        "indexOfIdentity",
     )
     required_strings = (
         "WifiMenuNetworks",
@@ -62,14 +65,12 @@ def main() -> int:
         f"string token missing: {token}"
         for token in required_strings if token not in strings
     )
-    if "entries_[size_++] = observation" not in catalog_cpp:
-        failures.append("catalog does not retain stable insertion order")
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
         return 1
     print(
-        "Wi-Fi networks contract passed: unique stable BSSID rows, four-row "
+        "Wi-Fi networks contract passed: unique strongest-first BSSID rows, four-row "
         "touch UI, data-only live redraw and frozen detail chrome"
     )
     return 0

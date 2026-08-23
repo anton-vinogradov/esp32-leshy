@@ -1,6 +1,5 @@
 #include "BleDeviceCatalog.h"
 
-#include <algorithm>
 #include <cstring>
 
 namespace leshy1::apps::ble {
@@ -32,11 +31,26 @@ bool BleDeviceCatalog::visibleFieldsDiffer(
 }
 
 void BleDeviceCatalog::sortStrongestFirst() {
-    std::stable_sort(
-        entries_.begin(), entries_.begin() + size_,
-        [](const auto& left, const auto& right) {
-            return left.rssiDbm > right.rssiDbm;
-        });
+    // Stable insertion sort keeps the fixed-capacity catalog allocation-free.
+    for (std::size_t index = 1; index < size_; ++index) {
+        const auto current = entries_[index];
+        std::size_t position = index;
+        while (position > 0U &&
+               entries_[position - 1U].rssiDbm < current.rssiDbm) {
+            entries_[position] = entries_[position - 1U];
+            --position;
+        }
+        entries_[position] = current;
+    }
+}
+
+bool BleDeviceCatalog::strongestFirst() const {
+    for (std::size_t index = 1; index < size_; ++index) {
+        if (entries_[index - 1U].rssiDbm < entries_[index].rssiDbm) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool BleDeviceCatalog::upsert(
@@ -72,6 +86,14 @@ bool BleDeviceCatalog::upsert(
 const domain::observations::Observation* BleDeviceCatalog::at(
     std::size_t index) const {
     return index < size_ ? &entries_[index] : nullptr;
+}
+
+std::size_t BleDeviceCatalog::indexOfIdentity(
+    const domain::observations::Observation& observation) const {
+    for (std::size_t index = 0; index < size_; ++index) {
+        if (sameIdentity(entries_[index], observation)) return index;
+    }
+    return size_;
 }
 
 }  // namespace leshy1::apps::ble

@@ -169,6 +169,7 @@ def main() -> int:
                     lambda state: (
                         state.get("wifi_product_view") == "networks" and
                         state.get("survey_workflow_state") == "running" and
+                        state.get("wifi_networks_strongest_first") is True and
                         int(state.get("wifi_networks_unique", 0)) >= 1 and
                         int(state.get("survey_product_wifi_scan_cycles", 0)) >= 1
                     ), 45.0, "nearby Wi-Fi networks did not appear")
@@ -271,6 +272,7 @@ def main() -> int:
                     lambda state: (
                         state.get("wifi_product_view") == "networks" and
                         state.get("survey_workflow_state") == "running" and
+                        state.get("wifi_networks_strongest_first") is True and
                         int(state.get("wifi_networks_unique", 0)) >= 1 and
                         int(state.get("survey_product_wifi_scan_cycles", 0)) >= 1
                     ), 45.0, "warm Wi-Fi cycle did not produce networks")

@@ -34,6 +34,10 @@ def main() -> int:
         "WifiDeviceState::Connecting",
         "WifiDeviceState::Connected",
         "oldestIndex",
+        "sortStrongestFirst",
+        "entries_[position - 1U].rssiDbm < current.rssiDbm",
+        "bool WifiDeviceCatalog::strongestFirst() const",
+        "indexOfAddress",
     )
     required_adapter = (
         "beginDeviceMonitor",
@@ -89,7 +93,7 @@ def main() -> int:
         return 1
     print(
         "Wi-Fi devices contract passed: passive client-only inference, bounded "
-        "queue/catalog, data-only redraw, frozen detail and no TX/config path"
+        "queue/strongest-first catalog, data-only redraw, frozen detail and no TX/config path"
     )
     return 0
 

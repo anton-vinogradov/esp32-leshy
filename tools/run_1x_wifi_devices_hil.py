@@ -183,6 +183,7 @@ def main() -> int:
                     lambda state: (
                         state.get("wifi_product_view") == "devices" and
                         state.get("wifi_device_monitor_active") is True and
+                        state.get("wifi_devices_strongest_first") is True and
                         int(state.get("wifi_devices_unique", 0)) >= 1 and
                         int(state.get("wifi_device_clients_accepted", 0)) >= 1 and
                         int(state.get("wifi_device_channel_hops", 0)) >= 13
@@ -274,6 +275,7 @@ def main() -> int:
                     device,
                     lambda state: (
                         state.get("wifi_product_view") == "devices" and
+                        state.get("wifi_devices_strongest_first") is True and
                         int(state.get("wifi_devices_unique", 0)) >= 1 and
                         int(state.get("wifi_device_clients_accepted", 0)) >= 1
                     ), 90.0, "second Wi-Fi device lifecycle found no clients")

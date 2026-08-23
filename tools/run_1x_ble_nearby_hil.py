@@ -85,6 +85,7 @@ def wait_live(device: PassiveSerial, minimum_cycle: int = 1,
         lambda state: (
             state.get("ble_product_view") == "devices" and
             state.get("survey_workflow_state") == "running" and
+            state.get("ble_devices_strongest_first") is True and
             int(state.get("ble_devices_unique", 0)) >= 1 and
             int(state.get("survey_product_ble_scan_cycles", 0)) >=
                 minimum_cycle and

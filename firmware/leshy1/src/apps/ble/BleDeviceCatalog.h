@@ -21,7 +21,10 @@ public:
 
     std::size_t size() const { return size_; }
     std::uint32_t revision() const { return revision_; }
+    bool strongestFirst() const;
     const domain::observations::Observation* at(std::size_t index) const;
+    std::size_t indexOfIdentity(
+        const domain::observations::Observation& observation) const;
 
 private:
     static bool sameIdentity(

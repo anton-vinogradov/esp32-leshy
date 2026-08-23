@@ -31,6 +31,11 @@ status bar never invents battery or power state without an authoritative
 capability. Touch, physical buttons, and diagnostic automation emit the same typed
 Actions.
 
+Every live list of radio objects is ordered by descending received signal: the
+strongest current RSSI is first and weaker entries follow. Equal RSSI keeps its
+existing relative order, and a refresh anchors selection to the same identity so
+resorting never silently changes the object under the user's cursor.
+
 ## Navigation tree
 
 ```text

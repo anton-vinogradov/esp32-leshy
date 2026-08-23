@@ -44,7 +44,9 @@ def main() -> int:
         "sameIdentity",
         "visibleFieldsDiffer",
         "sortStrongestFirst",
-        "std::stable_sort",
+        "entries_[position - 1U].rssiDbm < current.rssiDbm",
+        "bool BleDeviceCatalog::strongestFirst() const",
+        "indexOfIdentity",
     )
     required_adapter = (
         "setActiveScan(false)",

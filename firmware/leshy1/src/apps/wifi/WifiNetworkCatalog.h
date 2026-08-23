@@ -10,8 +10,8 @@ namespace leshy1::apps::wifi {
 
 // A bounded, allocation-free live view of nearby access points. Survey
 // sessions deliberately retain every observation; this catalog instead keeps
-// one stable row per BSSID so the product UI does not jump or fill with
-// duplicates while a scan remains open.
+// one row per BSSID, ordered by descending RSSI, so the strongest nearby
+// networks remain at the top without filling the UI with duplicates.
 class WifiNetworkCatalog final {
 public:
     static constexpr std::size_t kCapacity = 32;
@@ -21,7 +21,10 @@ public:
 
     std::size_t size() const { return size_; }
     std::uint32_t revision() const { return revision_; }
+    bool strongestFirst() const;
     const domain::observations::Observation* at(std::size_t index) const;
+    std::size_t indexOfIdentity(
+        const domain::observations::Observation& observation) const;
 
 private:
     static bool sameIdentity(
@@ -30,7 +33,7 @@ private:
     static bool visibleFieldsDiffer(
         const domain::observations::Observation& left,
         const domain::observations::Observation& right);
-    std::size_t weakestIndex() const;
+    void sortStrongestFirst();
 
     std::array<domain::observations::Observation, kCapacity> entries_{};
     std::size_t size_ = 0;

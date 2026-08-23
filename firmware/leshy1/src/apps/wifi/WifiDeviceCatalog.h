@@ -44,10 +44,14 @@ public:
 
     std::size_t size() const { return size_; }
     std::uint32_t revision() const { return revision_; }
+    bool strongestFirst() const;
     const WifiDeviceRecord* at(std::size_t index) const;
+    std::size_t indexOfAddress(
+        const std::array<std::uint8_t, 6>& address) const;
 
 private:
     std::size_t oldestIndex() const;
+    void sortStrongestFirst();
 
     std::array<WifiDeviceRecord, kCapacity> entries_{};
     std::size_t size_ = 0;

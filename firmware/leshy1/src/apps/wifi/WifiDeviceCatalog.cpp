@@ -100,6 +100,29 @@ std::size_t WifiDeviceCatalog::oldestIndex() const {
     return oldest;
 }
 
+void WifiDeviceCatalog::sortStrongestFirst() {
+    // Stable insertion sort keeps the fixed-capacity catalog allocation-free.
+    for (std::size_t index = 1; index < size_; ++index) {
+        const auto current = entries_[index];
+        std::size_t position = index;
+        while (position > 0U &&
+               entries_[position - 1U].rssiDbm < current.rssiDbm) {
+            entries_[position] = entries_[position - 1U];
+            --position;
+        }
+        entries_[position] = current;
+    }
+}
+
+bool WifiDeviceCatalog::strongestFirst() const {
+    for (std::size_t index = 1; index < size_; ++index) {
+        if (entries_[index - 1U].rssiDbm < entries_[index].rssiDbm) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool WifiDeviceCatalog::upsert(const WifiDeviceObservation& observation) {
     if (!usableClientAddress(observation.address.data()) ||
         observation.channel == 0U || observation.channel > 14U ||
@@ -123,6 +146,7 @@ bool WifiDeviceCatalog::upsert(const WifiDeviceObservation& observation) {
             current.bssidKnown = true;
         }
         ++current.framesSeen;
+        sortStrongestFirst();
         ++revision_;
         return true;
     }
@@ -135,12 +159,21 @@ bool WifiDeviceCatalog::upsert(const WifiDeviceObservation& observation) {
     } else {
         entries_[oldestIndex()] = record;
     }
+    sortStrongestFirst();
     ++revision_;
     return true;
 }
 
 const WifiDeviceRecord* WifiDeviceCatalog::at(std::size_t index) const {
     return index < size_ ? &entries_[index] : nullptr;
+}
+
+std::size_t WifiDeviceCatalog::indexOfAddress(
+    const std::array<std::uint8_t, 6>& address) const {
+    for (std::size_t index = 0; index < size_; ++index) {
+        if (entries_[index].address == address) return index;
+    }
+    return size_;
 }
 
 }  // namespace leshy1::apps::wifi

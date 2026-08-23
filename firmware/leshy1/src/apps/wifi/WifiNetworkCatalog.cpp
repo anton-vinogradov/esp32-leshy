@@ -30,14 +30,27 @@ bool WifiNetworkCatalog::visibleFieldsDiffer(
                     left.labelLength) != 0;
 }
 
-std::size_t WifiNetworkCatalog::weakestIndex() const {
-    std::size_t weakest = 0;
+void WifiNetworkCatalog::sortStrongestFirst() {
+    // Stable insertion sort keeps the fixed-capacity catalog allocation-free.
     for (std::size_t index = 1; index < size_; ++index) {
-        if (entries_[index].rssiDbm < entries_[weakest].rssiDbm) {
-            weakest = index;
+        const auto current = entries_[index];
+        std::size_t position = index;
+        while (position > 0U &&
+               entries_[position - 1U].rssiDbm < current.rssiDbm) {
+            entries_[position] = entries_[position - 1U];
+            --position;
+        }
+        entries_[position] = current;
+    }
+}
+
+bool WifiNetworkCatalog::strongestFirst() const {
+    for (std::size_t index = 1; index < size_; ++index) {
+        if (entries_[index - 1U].rssiDbm < entries_[index].rssiDbm) {
+            return false;
         }
     }
-    return weakest;
+    return true;
 }
 
 bool WifiNetworkCatalog::upsert(
@@ -51,17 +64,21 @@ bool WifiNetworkCatalog::upsert(
         if (!sameIdentity(entries_[index], observation)) continue;
         const bool changed = visibleFieldsDiffer(entries_[index], observation);
         entries_[index] = observation;
-        if (changed) ++revision_;
+        if (changed) {
+            sortStrongestFirst();
+            ++revision_;
+        }
         return changed;
     }
     if (size_ < entries_.size()) {
         entries_[size_++] = observation;
+        sortStrongestFirst();
         ++revision_;
         return true;
     }
-    const std::size_t weakest = weakestIndex();
-    if (observation.rssiDbm <= entries_[weakest].rssiDbm) return false;
-    entries_[weakest] = observation;
+    if (observation.rssiDbm <= entries_[size_ - 1U].rssiDbm) return false;
+    entries_[size_ - 1U] = observation;
+    sortStrongestFirst();
     ++revision_;
     return true;
 }
@@ -69,6 +86,14 @@ bool WifiNetworkCatalog::upsert(
 const domain::observations::Observation* WifiNetworkCatalog::at(
     std::size_t index) const {
     return index < size_ ? &entries_[index] : nullptr;
+}
+
+std::size_t WifiNetworkCatalog::indexOfIdentity(
+    const domain::observations::Observation& observation) const {
+    for (std::size_t index = 0; index < size_; ++index) {
+        if (sameIdentity(entries_[index], observation)) return index;
+    }
+    return size_;
 }
 
 }  // namespace leshy1::apps::wifi

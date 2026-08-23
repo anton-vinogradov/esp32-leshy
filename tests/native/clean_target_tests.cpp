@@ -1991,7 +1991,7 @@ void testWifiIngressIsPassiveOnlyAndNormalizesObservations() {
     CHECK(!normalizePassiveRecord(record, 2000, &observation));
 }
 
-void testWifiNetworkCatalogKeepsStableUniqueRows() {
+void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     WifiNetworkCatalog catalog;
     WifiScanRecord record;
     record.bssid = {0x02, 0x11, 0x22, 0x33, 0x44, 0x55};
@@ -2011,7 +2011,7 @@ void testWifiNetworkCatalogKeepsStableUniqueRows() {
     CHECK(catalog.revision() == insertedRevision);
     CHECK(catalog.size() == 1);
 
-    // Signal changes update the same stable BSSID row.
+    // Signal changes update the same BSSID row.
     record.rssiDbm = -51;
     CHECK(normalizePassiveRecord(record, 4000, &observation));
     CHECK(catalog.upsert(observation));
@@ -2021,13 +2021,29 @@ void testWifiNetworkCatalogKeepsStableUniqueRows() {
 
     record.bssid[5] = 0x56;
     record.channel = 11;
+    record.rssiDbm = -42;
     record.ssid = "second-ap";
     record.ssidLength = 9;
     CHECK(normalizePassiveRecord(record, 5000, &observation));
     CHECK(catalog.upsert(observation));
     CHECK(catalog.size() == 2);
-    CHECK(std::strcmp(catalog.at(0)->label.data(), "field-ap") == 0);
-    CHECK(std::strcmp(catalog.at(1)->label.data(), "second-ap") == 0);
+    CHECK(catalog.strongestFirst());
+    CHECK(std::strcmp(catalog.at(0)->label.data(), "second-ap") == 0);
+    CHECK(std::strcmp(catalog.at(1)->label.data(), "field-ap") == 0);
+
+    // A changed signal reorders the list but identity remains addressable so
+    // the UI can keep the user's selection on the same network.
+    record.bssid[5] = 0x55;
+    record.channel = 6;
+    record.rssiDbm = -30;
+    record.ssid = "field-ap";
+    record.ssidLength = 8;
+    CHECK(normalizePassiveRecord(record, 6000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.at(0)->identity[5] == 0x55);
+    CHECK(catalog.at(1)->identity[5] == 0x56);
+    CHECK(catalog.strongestFirst());
+    CHECK(catalog.indexOfIdentity(observation) == 0);
 
     observation.radio = RadioKind::Ble;
     CHECK(!catalog.upsert(observation));
@@ -2064,6 +2080,7 @@ void testBleDeviceCatalogKeepsStrongestUniqueRows() {
         record, 4000, &observation));
     CHECK(catalog.upsert(observation));
     CHECK(catalog.size() == 2);
+    CHECK(catalog.strongestFirst());
     CHECK(catalog.at(0) != nullptr);
     CHECK(catalog.at(0)->identity[5] == 0x56);
     CHECK(catalog.at(1)->identity[5] == 0x55);
@@ -2077,6 +2094,8 @@ void testBleDeviceCatalogKeepsStrongestUniqueRows() {
     CHECK(catalog.upsert(observation));
     CHECK(catalog.size() == 2);
     CHECK(catalog.at(0)->identity[5] == 0x55);
+    CHECK(catalog.strongestFirst());
+    CHECK(catalog.indexOfIdentity(observation) == 0);
 
     observation.radio = RadioKind::Wifi;
     CHECK(!catalog.upsert(observation));
@@ -2131,6 +2150,25 @@ void testWifiDeviceCatalogDecodesOnlyClientActivity() {
     CHECK(catalog.upsert(observation));
     CHECK(catalog.at(0)->state == WifiDeviceState::Connected);
     CHECK(catalog.at(0)->framesSeen == 3);
+
+    WifiDeviceObservation second = observation;
+    second.address[5] = 0x02;
+    second.rssiDbm = -35;
+    second.monotonicUs = 5000;
+    CHECK(catalog.upsert(second));
+    CHECK(catalog.size() == 2);
+    CHECK(catalog.strongestFirst());
+    CHECK(catalog.at(0)->address[5] == 0x02);
+    CHECK(catalog.at(1)->address == client);
+
+    observation.address = client;
+    observation.rssiDbm = -25;
+    observation.monotonicUs = 6000;
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.at(0)->address == client);
+    CHECK(catalog.at(1)->address[5] == 0x02);
+    CHECK(catalog.strongestFirst());
+    CHECK(catalog.indexOfAddress(client) == 0);
 
     frame[10] = 0xff;  // Multicast/broadcast transmitter is never a device row.
     CHECK(!decodeWifiClientFrame(frame.data(), frame.size(), -60, 1, 5000,
@@ -5184,7 +5222,7 @@ int main() {
     testAppCatalogProjectsCapabilityStatesBeforeLaunch();
     testRuntimeAcquiresAtomicallyAndBackReleasesEverything();
     testWifiIngressIsPassiveOnlyAndNormalizesObservations();
-    testWifiNetworkCatalogKeepsStableUniqueRows();
+    testWifiNetworkCatalogKeepsStrongestUniqueRows();
     testBleDeviceCatalogKeepsStrongestUniqueRows();
     testWifiDeviceCatalogDecodesOnlyClientActivity();
     testWifiChannelLoadIsBoundedAndTruthful();
