@@ -92,8 +92,11 @@ cause. Both records retain zero emission/duration, inactive/powered-down fixture
 product Home/lease 0: [0.2.0](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json),
 [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json).
 Fixture `0.2.2` adds exact CE-low/PWR_DOWN STATUS, CONFIG, RF_CH and RF_SETUP read-back
-telemetry. The non-gate `nrf24-fixture-regression` must pass before the full scenario
-may be retried.
+telemetry. Its [physical short regression](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json)
+retained `0/0/0/0` and `channel_readback_mismatch` on board-02 slot 2 with zero
+emissions and safe cleanup. The next diagnostic inventories every slot and both legacy
+SPI data-pin orientations while CE remains LOW. The non-gate regression must pass
+before the full scenario may be retried.
 
 ## Read-only board-02 admission
 

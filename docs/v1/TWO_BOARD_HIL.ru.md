@@ -93,8 +93,11 @@ unpopulated/PN532-reserved slot 1. Исправленный на slot 2 fixture 
 0: [0.2.0](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json),
 [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json).
 Fixture `0.2.2` добавляет exact CE-low/PWR_DOWN telemetry read-back STATUS, CONFIG,
-RF_CH и RF_SETUP. Non-gate `nrf24-fixture-regression` обязан пройти до повтора полного
-scenario.
+RF_CH и RF_SETUP. Его [physical short regression](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json)
+сохранил `0/0/0/0` и `channel_readback_mismatch` на slot 2 board-02 при zero emissions
+и safe cleanup. Следующая диагностика инвентаризирует каждый slot и обе legacy
+ориентации SPI data pins, удерживая CE LOW. Non-gate regression обязан пройти до
+повтора полного scenario.
 
 ## Read-only admission board-02
 

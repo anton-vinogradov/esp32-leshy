@@ -14,21 +14,25 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
 - **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
 - **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 automated steps.
-- **Next evidence gate:** define the bounded minimum-power nRF24 fixture contract, then prove a known physical signal through the three-receiver finder with safe two-board cleanup.
+- **Next evidence gate:** complete CE-low board-02 nRF24 inventory, pass the short bounded fixture regression, then prove the known 2,442 MHz signal through the three-receiver finder with safe two-board cleanup.
 - **Accepted physical baseline:** exact `0.129.0-pre-app-watchdog`; earlier accepted checkpoints remain retained below.
-- **Working source candidate:** exact `0.129.0-pre-app-watchdog` at source commit `149e4ef37a650953b7335885c118824ed632fa16` passes the full tracked host suite, exact build and the source-bound two-board IR scenario. The same image also has a gate-eligible local pre-app RTC-watchdog run; its separate retained bundle remains documentation follow-up rather than a release claim.
+- **Working source candidate:** exact product `0.129.0-pre-app-watchdog` remains unchanged while source commit `6b734aeabf1dbe2bb14d612231bf1d09c3fa2438` adds source-bound fixture `0.2.2` register diagnostics; the full tracked host suite and both builds pass. The product image also has a gate-eligible local pre-app RTC-watchdog run; its separate retained bundle remains documentation follow-up rather than a release claim.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** establish the S5 stock-hardware completeness baseline and
   advance each present module through probe → observe/capture → Library → inspect/export.
-- **Immediate boundary:** implement the fixture-side, source-bound nRF24 vector at the
-  minimum supported power and prove the already implemented passive finder against it.
-- **Current negative evidence:** fixture `0.2.0` exposed a real wrong-slot error and
-  failed safe before emission; corrected slot-2 fixture `0.2.1` also failed before CE
-  HIGH, so the complete cause remains open. Both attempts retained zero emissions,
-  inactive/powered-down terminal fixture state and product Home/lease 0. Exact
-  register read-back telemetry is the next diagnostic; the full gate remains closed.
+- **Immediate boundary:** inventory all three fixture nRF24 slots and both documented
+  SPI data-pin orientations with every CE held LOW, then bind the fixed vector only to
+  a positively identified radio before retrying the short regression.
+- **Current negative evidence:** fixture `0.2.0` exposed a real wrong-slot error;
+  corrected slot-2 fixture `0.2.1` still failed before CE HIGH. Diagnostic `0.2.2`
+  now localizes that failure to an invalid SPI exchange on board-02 slot 2:
+  `STATUS/CONFIG/RF_CH/RF_SETUP = 0/0/0/0`, with `channel_readback_mismatch`.
+  All three runs retained zero emissions, inactive/powered-down terminal fixture state
+  and product Home/lease 0. The all-slot CE-low inventory is next; the full gate remains
+  closed.
   See [0.2.0](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
-  and [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json).
+  [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json) and
+  [0.2.2](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json).
 
 ### S5 phase plan
 

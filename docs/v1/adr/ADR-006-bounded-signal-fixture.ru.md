@@ -72,4 +72,7 @@ Ambient evidence не проверяет positive detection; arbitrary/product T
 связал vector с populated slot 2 из сохранённой implementation 0.x, но его
 [короткий regression](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json)
 тоже отверг start до CE HIGH. Выбор slot был дефектом, но не полной root cause;
-`0.2.2` добавляет exact powered-down register telemetry до следующего исправления.
+[`0.2.2`](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json)
+добавляет exact powered-down register telemetry и локализует следующую границу до
+некорректного полностью нулевого SPI read-back slot 2. Следующая диагностика обязана
+инвентаризировать все slots и обе legacy-ориентации data pins при всех CE LOW до fix.

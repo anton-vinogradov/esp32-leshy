@@ -73,4 +73,7 @@ addressed unpopulated/PN532-reserved slot 1 and rejected the carrier after regis
 read-back. `0.2.1` bound the vector to populated slot 2 from preserved 0.x, but its
 [short regression](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json)
 also rejected start before CE HIGH. Slot selection was a defect, not the complete root
-cause; `0.2.2` adds exact powered-down register telemetry before another fix is made.
+cause. [`0.2.2`](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json)
+adds exact powered-down register telemetry and localizes the next boundary to an
+invalid all-zero slot-2 SPI read-back. The following diagnostic must inventory all
+slots and both legacy data-pin orientations with every CE held LOW before any fix.
