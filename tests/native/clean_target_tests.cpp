@@ -2045,6 +2045,13 @@ void testWifiNetworkCatalogKeepsStrongestUniqueRows() {
     CHECK(catalog.strongestFirst());
     CHECK(catalog.indexOfIdentity(observation) == 0);
 
+    record.rssiDbm = -42;
+    CHECK(normalizePassiveRecord(record, 7000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.at(0)->identity[5] == 0x55);
+    CHECK(catalog.at(1)->identity[5] == 0x56);
+    CHECK(catalog.strongestFirst());
+
     observation.radio = RadioKind::Ble;
     CHECK(!catalog.upsert(observation));
     CHECK(catalog.size() == 2);
@@ -2096,6 +2103,14 @@ void testBleDeviceCatalogKeepsStrongestUniqueRows() {
     CHECK(catalog.at(0)->identity[5] == 0x55);
     CHECK(catalog.strongestFirst());
     CHECK(catalog.indexOfIdentity(observation) == 0);
+
+    record.rssiDbm = -42;
+    CHECK(leshy1::drivers::ble::normalizePassiveRecord(
+        record, 6000, &observation));
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.at(0)->identity[5] == 0x55);
+    CHECK(catalog.at(1)->identity[5] == 0x56);
+    CHECK(catalog.strongestFirst());
 
     observation.radio = RadioKind::Wifi;
     CHECK(!catalog.upsert(observation));
@@ -2169,6 +2184,13 @@ void testWifiDeviceCatalogDecodesOnlyClientActivity() {
     CHECK(catalog.at(1)->address[5] == 0x02);
     CHECK(catalog.strongestFirst());
     CHECK(catalog.indexOfAddress(client) == 0);
+
+    observation.rssiDbm = -35;
+    observation.monotonicUs = 7000;
+    CHECK(catalog.upsert(observation));
+    CHECK(catalog.at(0)->address == client);
+    CHECK(catalog.at(1)->address[5] == 0x02);
+    CHECK(catalog.strongestFirst());
 
     frame[10] = 0xff;  // Multicast/broadcast transmitter is never a device row.
     CHECK(!decodeWifiClientFrame(frame.data(), frame.size(), -60, 1, 5000,

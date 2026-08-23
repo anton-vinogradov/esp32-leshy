@@ -1,0 +1,71 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "260ec5cd4c4326c3981241eb8aad28d0c1d532a260306bc46c953196b7bf1fc2",
+    "app_image_bytes": 1578720,
+    "checker_sha256": {
+      "ble": "df66e3bcdad14b4603f658788aeba1ba606157795ccf8343223ec6438559b187",
+      "wifi-devices": "adc67e52a90f8c52d2324e2fdb59d876b430e438cfb1f8ea32436b0626bdf16e",
+      "wifi-networks": "64699056ff32878ce81674561a1caaf61319f90a7d93797f2f19b2f8d14d1a5b"
+    },
+    "cid": "FE343253440000002000000055019CB7",
+    "elf_file_sha256": "260ec5cd4c4326c3981241eb8aad28d0c1d532a260306bc46c953196b7bf1fc2",
+    "factory_image_bytes": 1644256,
+    "factory_sha256": "d1586eeb731ad0081100d190eefce55ff887a6ab2c83c8f3f0194c5329fe6958",
+    "firmware_sha256": "b48e006dfa2563b98dad29d89b376ac0c0f53b8df02fdca9c9b2e0427926dd4f",
+    "firmware_source_commit": "1ff10d2438bfe17d92e4d7face11670d494641ef",
+    "linked_flash_bytes": 1578308,
+    "map_sha256": "754b908f88d3ae35d87d10427fbca2675b855bad5c45aaaa5908268dfbd92782",
+    "run_sha256": {
+      "ble": "57a6ed0faf58c2b55e426dd1cdcd70aa0fe56b82b95e51d8a51fa071757021cb",
+      "wifi-devices": "6d8cc536e5c704184a34e5c7a326b4289b08d12cc51343d21e7da92c97cd2458",
+      "wifi-networks": "75555bba394e7cbd74df3a8fc1f7ed202093d227a1b581a6763067c6eb3c2a20"
+    },
+    "runner_commit": "1ff10d2438bfe17d92e4d7face11670d494641ef",
+    "runner_sha256": {
+      "ble": "33afeeaa31639266fc70a2941f8ccfd2a076028cdd7ce02969211152e8a4b616",
+      "wifi-devices": "6fa91b2fd7480da4d6c10a3dc06b582bce21076be9fa9687b472d60281384644",
+      "wifi-networks": "33e25837679cd09621a4a45647785090ba74c6ea200d92924694476d35e65815"
+    },
+    "schema": "leshy.signal_order_hil.provenance.v1",
+    "static_ram_bytes": 182080,
+    "tft_states": 17,
+    "version": "0.112.0-signal-order"
+  },
+  "evidence": {
+    "artifact_index_sha256": "614165c7afea2c36c162814267bc5e503b872b9d969a5b184ba88bffdaeaf1c3",
+    "files": 68,
+    "tft_states": 17
+  },
+  "evidence_ids": [
+    "E-BUILD-112",
+    "E-AUTO-076",
+    "E-HIL-136",
+    "E-UX-031"
+  ],
+  "schema": "leshy.signal_order.acceptance.v1",
+  "status": "pass_descending_signal_checkpoint",
+  "verified": {
+    "ble_strongest_first": true,
+    "ble_unique_first": 31,
+    "ble_unique_second": 32,
+    "buzzer_inactive": true,
+    "detail_changed_pixels": 0,
+    "exact_flash_reuse_runs": 2,
+    "final_lease_mask": 0,
+    "fresh_flashes": 1,
+    "live_chrome_changed_pixels": 0,
+    "manual_button_presses": 0,
+    "physical_sd_write_calls": 0,
+    "radio_drops": 0,
+    "selection_anchored_to_identity": true,
+    "stable_equal_signal_order": true,
+    "wifi_devices_strongest_first": true,
+    "wifi_devices_unique_first": 1,
+    "wifi_devices_unique_second": 2,
+    "wifi_networks_strongest_first": true,
+    "wifi_networks_unique_first": 16,
+    "wifi_networks_unique_second": 21,
+    "zero_heap_drift_after_warmup": true
+  }
+}

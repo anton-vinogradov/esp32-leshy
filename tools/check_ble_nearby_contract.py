@@ -37,7 +37,9 @@ def main() -> int:
         "TouchTargetLayout::HomeRows",
         "ble_product_view",
         "ble_devices_unique",
+        "ble_devices_strongest_first",
         "ble_device_catalog_revision",
+        "bleDeviceCatalog.indexOfIdentity(bleSelectionAnchor)",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",

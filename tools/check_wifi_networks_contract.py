@@ -34,7 +34,9 @@ def main() -> int:
         "wifiProductView != WifiProductView::NetworkDetail",
         "TouchTargetLayout::HomeRows",
         "wifi_networks_unique",
+        "wifi_networks_strongest_first",
         "wifi_network_catalog_revision",
+        "wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor)",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",

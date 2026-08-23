@@ -24,7 +24,9 @@ def main() -> int:
         "renderWifiDeviceRow(index, currentFirst);",
         "wifiProductView == WifiProductView::Devices",
         "wifi_device_monitor_active",
+        "wifi_devices_strongest_first",
         "wifi_device_clients_dropped",
+        "wifiDeviceCatalog.indexOfAddress(selectionAnchor)",
         "nextWifiDeviceUiRefreshUs = nowUs + 250000ULL",
     )
     required_catalog = (
