@@ -124,9 +124,41 @@ def main() -> int:
             run.get("list_pixel_changes", {}).get(
                 "chrome_changed_pixels") == 0,
             "live redraw escaped the data region")
-    require(failures, run.get("detail_pixel_changes") == {
-                "content_changed_pixels": 0, "chrome_changed_pixels": 0},
-            "network detail changed during background scan")
+    scope = run.get("scope", {})
+    intelligence = scope.get("network_intelligence") is True
+    if intelligence:
+        require(failures,
+                run.get("detail_pixel_changes", {}).get(
+                    "chrome_changed_pixels") == 0 and
+                run.get("detail_outside_signal_pixels") == 0,
+                "network passport redraw escaped the live RSSI line")
+        facts_first = run.get("detail_facts_first", {})
+        facts_second = run.get("detail_facts_second", {})
+        require(failures,
+                facts_first.get("active") is True and
+                facts_first.get("passive") is True and
+                facts_first.get("active_probe_allowed") is False and
+                facts_first.get("ssid_known") is True and
+                facts_first.get("vendor_known") is True and
+                bool(facts_first.get("vendor")) and
+                facts_first.get("facts_known") is True and
+                facts_first.get("authentication") != "UNKNOWN" and
+                facts_first.get("channel_width") != "WIDTH ?" and
+                isinstance(facts_first.get("phy_mask"), int) and
+                facts_first.get("phy_mask", 0) != 0 and
+                isinstance(facts_first.get("identity_hash"), int) and
+                facts_first.get("identity_hash", 0) != 0,
+                "physical network intelligence passport is incomplete")
+        for field in (
+                "identity_hash", "vendor", "authentication",
+                "pairwise_cipher", "group_cipher", "channel_width",
+                "phy_mask", "channel", "frequency_khz"):
+            require(failures, facts_second.get(field) == facts_first.get(field),
+                    f"network passport changed identity/fact: {field}")
+    else:
+        require(failures, run.get("detail_pixel_changes") == {
+                    "content_changed_pixels": 0, "chrome_changed_pixels": 0},
+                "network detail changed during background scan")
 
     navigation_first = run.get("navigation_first", {})
     navigation_second = run.get("navigation_second", {})
@@ -154,7 +186,6 @@ def main() -> int:
 
     first_heap = run.get("metrics_after_first", {})
     final_heap = run.get("metrics_after", {})
-    scope = run.get("scope", {})
     warmup = scope.get("bounded_one_time_heap_warmup_bytes")
     require(failures, isinstance(warmup, int) and 0 <= warmup <= 2048,
             "bounded Wi-Fi heap warm-up proof missing")
@@ -167,10 +198,18 @@ def main() -> int:
             scope.get("screenshots_automatic") is True and
             scope.get("passive_wifi_only") is True and
             scope.get("storage_write_authorized") is False and
-            scope.get("navigation_press_count") == 8 and
+            ((isinstance(scope.get("navigation_press_count"), int) and
+              scope.get("navigation_press_count", 0) >= 8)
+             if intelligence else scope.get("navigation_press_count") == 8) and
             scope.get("identity_order_locked_during_navigation") is True and
             scope.get("live_rssi_updates_in_place") is True,
             "automation/passive scope mismatch")
+    if intelligence:
+        require(failures,
+                scope.get("network_vendor_lookup") is True and
+                scope.get("network_driver_facts") is True and
+                scope.get("detail_live_rssi_line_only") is True,
+                "network intelligence scope mismatch")
 
     before = run.get("recovery_before", {})
     after = run.get("recovery_after", {})
@@ -209,7 +248,9 @@ def main() -> int:
         "version": args.expected_version,
         "unique_networks": second.get("wifi_networks_unique"),
         "chrome_changed_pixels": 0,
-        "detail_changed_pixels": 0,
+        "detail_changed_pixels": run.get(
+            "detail_pixel_changes", {}).get("content_changed_pixels"),
+        "network_intelligence": intelligence,
         "final_lease_mask": 0,
     }, sort_keys=True))
     return 0
