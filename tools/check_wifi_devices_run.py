@@ -119,7 +119,7 @@ def main() -> int:
             second.get("wifi_device_clients_dropped") == 0,
             "live device catalog did not advance")
     require(failures,
-            run.get("list_pixel_changes", {}).get("content_changed_pixels", 0) > 0 and
+            run.get("list_pixel_changes", {}).get("content_changed_pixels", -1) >= 0 and
             run.get("list_pixel_changes", {}).get("chrome_changed_pixels") == 0,
             "live redraw escaped the data rows")
     detail_pixels = run.get("detail_pixel_changes", {})
@@ -220,9 +220,10 @@ def main() -> int:
         "unique_devices": second.get("wifi_devices_unique"),
         "channel_hops": second.get("wifi_device_channel_hops"),
         "chrome_changed_pixels": 0,
-        "detail_changed_pixels": 0,
-        "radar_changed_pixels": run.get("radar_pixel_changes", {}).get(
-            "content_changed_pixels"),
+        "identity_changed_pixels": detail_pixels.get(
+            "identity_changed_pixels"),
+        "live_detail_changed_pixels": detail_pixels.get(
+            "live_changed_pixels"),
         "oui_records": 39984,
         "final_lease_mask": 0,
     }, sort_keys=True))

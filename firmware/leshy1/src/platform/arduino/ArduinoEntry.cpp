@@ -6789,37 +6789,56 @@ void renderWifiDeviceDetail(bool clearContent) {
     renderHeader(tr(UiTextId::WifiDeviceDetailTitle), clearContent);
     char line[96] = {};
     char primary[23] = {};
+    const char* primarySource = wifiDevicePrimaryLabel(wifiDeviceDetail);
+    const bool primaryIsAddress = primarySource[0] == '\0';
     compactWifiDeviceLabel(wifiDeviceDetail, primary, sizeof(primary));
     display.setTextColor(Palette::Focus, Palette::Canvas);
     setUiCursor(UiTextRole::Body, 14, 42);
     display.print(primary);
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    display.setTextColor(primaryIsAddress ? Palette::TextMuted
+                                          : Palette::TextSecondary,
+                         Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 65);
-    formatWifiAddress(wifiDeviceDetail.address, line, sizeof(line));
-    display.print(line);
-    const char* maker = wifiDeviceMaker(wifiDeviceDetail);
-    if (maker != nullptr && wifiDeviceDetail.wpsModelLength != 0U) {
-        std::snprintf(line, sizeof(line), "%s · %s", maker,
-                      wifiDeviceDetail.wpsModel.data());
-    } else if (maker != nullptr) {
-        std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceMakerFormat),
-                      maker);
-    } else if (wifiDeviceDetail.wpsModelLength != 0U) {
-        std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceModelFormat),
-                      wifiDeviceDetail.wpsModel.data());
-    } else {
+    if (primaryIsAddress) {
         std::snprintf(line, sizeof(line), "%s",
                       tr(wifiDeviceDetail.locallyAdministered
                              ? UiTextId::WifiDevicePrivateAddress
                              : UiTextId::WifiDeviceFactoryAddress));
+    } else {
+        formatWifiAddress(wifiDeviceDetail.address, line, sizeof(line));
     }
-    display.setTextColor(maker == nullptr &&
-                                 wifiDeviceDetail.wpsModelLength == 0U
-                             ? Palette::TextMuted
-                             : Palette::TextSecondary,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 88);
     display.print(line);
+    const char* maker = wifiDeviceMaker(wifiDeviceDetail);
+    bool secondaryIdentity = false;
+    if (wifiDeviceDetail.wpsDeviceNameLength != 0U && maker != nullptr &&
+        wifiDeviceDetail.wpsModelLength != 0U) {
+        std::snprintf(line, sizeof(line), "%s · %s", maker,
+                      wifiDeviceDetail.wpsModel.data());
+        secondaryIdentity = true;
+    } else if ((wifiDeviceDetail.wpsDeviceNameLength != 0U ||
+                wifiDeviceDetail.wpsModelLength != 0U) && maker != nullptr) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceMakerFormat),
+                      maker);
+        secondaryIdentity = true;
+    } else if (wifiDeviceDetail.wpsDeviceNameLength != 0U &&
+               wifiDeviceDetail.wpsModelLength != 0U) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceModelFormat),
+                      wifiDeviceDetail.wpsModel.data());
+        secondaryIdentity = true;
+    } else if (!primaryIsAddress) {
+        std::snprintf(line, sizeof(line), "%s",
+                      tr(wifiDeviceDetail.locallyAdministered
+                             ? UiTextId::WifiDevicePrivateAddress
+                             : UiTextId::WifiDeviceFactoryAddress));
+        secondaryIdentity = true;
+    }
+    if (secondaryIdentity) {
+        display.setTextColor(
+            maker == nullptr ? Palette::TextMuted : Palette::TextSecondary,
+            Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 88);
+        display.print(line);
+    }
     renderWifiDeviceDetailLiveData();
 }
 
