@@ -543,7 +543,6 @@ enum class WifiProductView : std::uint8_t {
     NetworkDetail,
     Devices,
     DeviceDetail,
-    DeviceRadar,
     Channels,
     Capture,
 };
@@ -555,7 +554,6 @@ const char* wifiProductViewName(WifiProductView view) {
         case WifiProductView::NetworkDetail: return "network_detail";
         case WifiProductView::Devices: return "devices";
         case WifiProductView::DeviceDetail: return "device_detail";
-        case WifiProductView::DeviceRadar: return "device_radar";
         case WifiProductView::Channels: return "channels";
         case WifiProductView::Capture: return "capture";
         case WifiProductView::None:
@@ -5029,11 +5027,7 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
         }
         if (wifiProductView == WifiProductView::DeviceDetail) {
-            return {{NavigationKey::Left, UiTextId::NavList}, {},
-                    {NavigationKey::RightAndSelect, UiTextId::NavTrack}};
-        }
-        if (wifiProductView == WifiProductView::DeviceRadar) {
-            return {{NavigationKey::Left, UiTextId::NavInfo}, {}, {}};
+            return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
         }
         if (wifiProductView == WifiProductView::Devices) {
             return {back, choose, enter};
@@ -6401,11 +6395,14 @@ UiTextId radioSignalQualityText(std::int16_t rssiDbm) {
     }
 }
 
-void renderRadioSignalCard(std::int16_t rssiDbm) {
-    constexpr Rect bounds{Layout::Edge, 128, Layout::ContentWidth, 104};
+void renderRadioSignalCard(
+        std::int16_t rssiDbm,
+        const Rect& bounds = {
+            Layout::Edge, 128, Layout::ContentWidth, 104}) {
     constexpr std::int16_t kTrackInset = 10;
-    constexpr std::int16_t kTrackY = bounds.y + 59;
-    constexpr std::int16_t kTrackWidth = bounds.width - 2 * kTrackInset;
+    const bool compact = bounds.height < 100;
+    const std::int16_t kTrackY = bounds.y + (compact ? 50 : 59);
+    const std::int16_t kTrackWidth = bounds.width - 2 * kTrackInset;
     constexpr std::int16_t kTrackHeight = 14;
     const std::uint8_t level = wifiSignalLevel(rssiDbm);
     const std::uint16_t tone = level >= 3U
@@ -6440,12 +6437,13 @@ void renderRadioSignalCard(std::int16_t rssiDbm) {
                          fillWidth, kTrackHeight - 2, tone);
     }
     display.setTextColor(Palette::TextMuted, Palette::Surface);
-    setUiCursor(UiTextRole::Meta, bounds.x + kTrackInset, bounds.y + 79);
+    const std::int16_t scaleY = bounds.y + (compact ? 69 : 79);
+    setUiCursor(UiTextRole::Meta, bounds.x + kTrackInset, scaleY);
     display.print(tr(UiTextId::RadioSignalScaleWeak));
     const char* strong = tr(UiTextId::RadioSignalScaleStrong);
     const std::int16_t strongX = bounds.x + bounds.width - kTrackInset -
                                  display.textWidth(strong);
-    setUiCursor(UiTextRole::Meta, strongX, bounds.y + 79);
+    setUiCursor(UiTextRole::Meta, strongX, scaleY);
     display.print(strong);
 }
 
@@ -6784,6 +6782,9 @@ void renderWifiDevices(bool clearContent) {
     renderWifiDevicesData();
 }
 
+UiTextId wifiDeviceTrendText(std::int16_t trendDb);
+void renderWifiDeviceDetailLiveData();
+
 void renderWifiDeviceDetail(bool clearContent) {
     renderHeader(tr(UiTextId::WifiDeviceDetailTitle), clearContent);
     char line[96] = {};
@@ -6793,44 +6794,55 @@ void renderWifiDeviceDetail(bool clearContent) {
     setUiCursor(UiTextRole::Body, 14, 42);
     display.print(primary);
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 69);
+    setUiCursor(UiTextRole::Meta, 14, 65);
     formatWifiAddress(wifiDeviceDetail.address, line, sizeof(line));
     display.print(line);
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 92);
-    display.print(tr(wifiDeviceDetail.locallyAdministered
-                         ? UiTextId::WifiDevicePrivateAddress
-                         : UiTextId::WifiDeviceFactoryAddress));
     const char* maker = wifiDeviceMaker(wifiDeviceDetail);
-    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceMakerFormat),
-                  maker == nullptr ? tr(UiTextId::WifiDeviceUnknown) : maker);
-    display.setTextColor(maker == nullptr ? Palette::TextMuted
-                                         : Palette::TextSecondary,
-                         Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 115);
-    display.print(line);
-    if (wifiDeviceDetail.wpsModelLength != 0U) {
+    if (maker != nullptr && wifiDeviceDetail.wpsModelLength != 0U) {
+        std::snprintf(line, sizeof(line), "%s · %s", maker,
+                      wifiDeviceDetail.wpsModel.data());
+    } else if (maker != nullptr) {
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceMakerFormat),
+                      maker);
+    } else if (wifiDeviceDetail.wpsModelLength != 0U) {
         std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceModelFormat),
                       wifiDeviceDetail.wpsModel.data());
-        setUiCursor(UiTextRole::Meta, 14, 138);
-        display.print(line);
+    } else {
+        std::snprintf(line, sizeof(line), "%s",
+                      tr(wifiDeviceDetail.locallyAdministered
+                             ? UiTextId::WifiDevicePrivateAddress
+                             : UiTextId::WifiDeviceFactoryAddress));
     }
+    display.setTextColor(maker == nullptr &&
+                                 wifiDeviceDetail.wpsModelLength == 0U
+                             ? Palette::TextMuted
+                             : Palette::TextSecondary,
+                         Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 88);
+    display.print(line);
+    renderWifiDeviceDetailLiveData();
+}
+
+void renderWifiDeviceDetailLiveData() {
+    constexpr std::int16_t kLiveTop = 101;
+    display.fillRect(Layout::Edge, kLiveTop, Layout::ContentWidth,
+                     Layout::FooterDividerY - kLiveTop, Palette::Canvas);
+    char line[96] = {};
     std::snprintf(
         line, sizeof(line), tr(UiTextId::WifiDeviceRadioFormat),
         tr(wifiDeviceGenerationText(wifiDeviceDetail.generation)),
         static_cast<unsigned>(wifiDeviceDetail.channel));
     display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 161);
+    setUiCursor(UiTextRole::Meta, 14, 108);
     display.print(line);
     if (wifiDeviceDetail.ssidLength != 0U) {
         std::snprintf(line, sizeof(line),
                       tr(UiTextId::WifiDeviceNetworkFormat),
                       wifiDeviceDetail.ssid.data());
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 184);
+        setUiCursor(UiTextRole::Meta, 14, 130);
         display.print(line);
-    }
-    if (wifiDeviceDetail.bssidKnown) {
+    } else if (wifiDeviceDetail.bssidKnown) {
         std::snprintf(
             line, sizeof(line), tr(UiTextId::WifiNetworkBssidFormat),
             static_cast<unsigned>(wifiDeviceDetail.bssid[0]),
@@ -6840,59 +6852,38 @@ void renderWifiDeviceDetail(bool clearContent) {
             static_cast<unsigned>(wifiDeviceDetail.bssid[4]),
             static_cast<unsigned>(wifiDeviceDetail.bssid[5]));
         display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-        setUiCursor(UiTextRole::Meta, 14, 207);
+        setUiCursor(UiTextRole::Meta, 14, 130);
         display.print(line);
+    } else {
+        display.setTextColor(Palette::TextMuted, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 14, 130);
+        display.print(tr(UiTextId::WifiDevicePassiveOnly));
     }
-    const std::uint64_t observedUs = wifiDeviceDetail.monotonicUs >=
-            wifiDeviceDetail.firstSeenUs
-        ? wifiDeviceDetail.monotonicUs - wifiDeviceDetail.firstSeenUs : 0U;
-    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceSeenFormat),
-                  static_cast<unsigned long>(observedUs / 1000000ULL),
-                  tr(wifiDeviceStateText(wifiDeviceDetail.state)));
+    renderRadioSignalCard(
+        wifiDeviceDetail.rssiDbm,
+        {Layout::Edge, 150, Layout::ContentWidth, 88});
+    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceRssiRangeFormat),
+                  static_cast<int>(wifiDeviceDetail.minimumRssiDbm),
+                  static_cast<int>(wifiDeviceDetail.maximumRssiDbm));
     display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 230);
+    setUiCursor(UiTextRole::Meta, 14, 246);
     display.print(line);
-    setUiCursor(UiTextRole::Meta, 14, 257);
-    display.print(tr(UiTextId::WifiDevicePassiveOnly));
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 269);
+    display.print(tr(wifiDeviceTrendText(wifiDeviceDetail.rssiTrendDb)));
+    const char* state = tr(wifiDeviceStateText(wifiDeviceDetail.state));
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 0, 269);
+    const std::int16_t stateX = Layout::ScreenWidth - Layout::Edge -
+                                display.textWidth(state);
+    setUiCursor(UiTextRole::Meta, stateX, 269);
+    display.print(state);
 }
 
 UiTextId wifiDeviceTrendText(std::int16_t trendDb) {
     if (trendDb >= 4) return UiTextId::WifiDeviceTrendCloser;
     if (trendDb <= -4) return UiTextId::WifiDeviceTrendFarther;
     return UiTextId::WifiDeviceTrendStable;
-}
-
-void renderWifiDeviceRadarData() {
-    display.fillRect(Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
-                     Layout::FooterDividerY - Layout::ContentTop,
-                     Palette::Canvas);
-    char line[96] = {};
-    char primary[23] = {};
-    compactWifiDeviceLabel(wifiDeviceDetail, primary, sizeof(primary));
-    display.setTextColor(Palette::Focus, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 42);
-    display.print(primary);
-    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceRadioFormat),
-                  tr(wifiDeviceStateText(wifiDeviceDetail.state)),
-                  static_cast<unsigned>(wifiDeviceDetail.channel));
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 70);
-    display.print(line);
-    display.setTextColor(Palette::Positive, Palette::Canvas);
-    setUiCursor(UiTextRole::Body, 14, 98);
-    display.print(tr(wifiDeviceTrendText(wifiDeviceDetail.rssiTrendDb)));
-    renderRadioSignalCard(wifiDeviceDetail.rssiDbm);
-    std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceRssiRangeFormat),
-                  static_cast<int>(wifiDeviceDetail.minimumRssiDbm),
-                  static_cast<int>(wifiDeviceDetail.maximumRssiDbm));
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 247);
-    display.print(line);
-}
-
-void renderWifiDeviceRadar(bool clearContent) {
-    renderHeader(tr(UiTextId::WifiDeviceRadarTitle), clearContent);
-    renderWifiDeviceRadarData();
 }
 
 constexpr std::int16_t kWifiChannelInfoY = Layout::ContentTop;
@@ -7784,10 +7775,6 @@ void renderInventoryPage(bool clearContent) {
         renderWifiDeviceDetail(clearContent);
         return;
     }
-    if (wifiProductView == WifiProductView::DeviceRadar) {
-        renderWifiDeviceRadar(clearContent);
-        return;
-    }
     if (wifiProductView == WifiProductView::Channels) {
         renderWifiChannels(clearContent);
         return;
@@ -8399,13 +8386,13 @@ bool renderSelectionDelta() {
     }
 
     if (uiController.page() == 2 &&
-        wifiProductView == WifiProductView::DeviceRadar &&
+        wifiProductView == WifiProductView::DeviceDetail &&
         renderedUi.wifiProductView ==
-            static_cast<std::uint8_t>(WifiProductView::DeviceRadar)) {
+            static_cast<std::uint8_t>(WifiProductView::DeviceDetail)) {
         if (renderedUi.wifiDeviceRevision == wifiDeviceCatalog.revision()) {
             return false;
         }
-        renderWifiDeviceRadarData();
+        renderWifiDeviceDetailLiveData();
         return true;
     }
 
@@ -11008,8 +10995,7 @@ void serviceWifiDevicesProduct() {
             ? anchored : wifiDeviceCatalog.size() - 1U;
     }
     if (changed &&
-        (wifiProductView == WifiProductView::DeviceDetail ||
-         wifiProductView == WifiProductView::DeviceRadar)) {
+        wifiProductView == WifiProductView::DeviceDetail) {
         const std::size_t detailIndex =
             wifiDeviceCatalog.indexOfAddress(wifiDeviceDetail.address);
         const WifiDeviceRecord* current = wifiDeviceCatalog.at(detailIndex);
@@ -11018,11 +11004,11 @@ void serviceWifiDevicesProduct() {
     const auto after = wifiFrameCapture.deviceMonitorStats();
     const bool terminal = before.active && !after.active;
     if (terminal) lastRuntimeEvent = "wifi_devices_failed";
-    // At most four data-only refreshes per second. The facts page remains
-    // stable; the explicit Radar page updates live without repainting chrome.
+    // At most four data-only refreshes per second. Device identity remains
+    // stable while the integrated selected-channel radar updates in place.
     if ((changed || terminal) && uiController.page() == 2 &&
         (wifiProductView == WifiProductView::Devices ||
-         wifiProductView == WifiProductView::DeviceRadar) &&
+         wifiProductView == WifiProductView::DeviceDetail) &&
         (terminal || nowUs >= nextWifiDeviceUiRefreshUs)) {
         nextWifiDeviceUiRefreshUs = nowUs + 250000ULL;
         renderInteractiveScreen(false);
@@ -11475,33 +11461,12 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (wifiProductView == WifiProductView::DeviceDetail) {
             handled = true;
             if (action == UiAction::Back || action == UiAction::Left) {
-                wifiProductView = WifiProductView::Devices;
-                lastRuntimeEvent = "wifi_devices";
-                changed = true;
-            } else if (action == UiAction::Select ||
-                       action == UiAction::Right) {
-                std::uint64_t nowUs =
-                    static_cast<std::uint64_t>(esp_timer_get_time());
-                if (nowUs == 0U) nowUs = 1U;
-                if (wifiFrameCapture.lockDeviceChannel(
-                        wifiDeviceDetail.channel, nowUs)) {
-                    wifiProductView = WifiProductView::DeviceRadar;
-                    nextWifiDeviceUiRefreshUs = nowUs;
-                    lastRuntimeEvent = "wifi_device_radar";
-                    changed = true;
-                } else {
-                    lastRuntimeEvent = "wifi_device_radar_unavailable";
-                }
-            }
-        } else if (wifiProductView == WifiProductView::DeviceRadar) {
-            handled = true;
-            if (action == UiAction::Back || action == UiAction::Left) {
                 std::uint64_t nowUs =
                     static_cast<std::uint64_t>(esp_timer_get_time());
                 if (nowUs == 0U) nowUs = 1U;
                 wifiFrameCapture.unlockDeviceChannel(nowUs);
-                wifiProductView = WifiProductView::DeviceDetail;
-                lastRuntimeEvent = "wifi_device_detail";
+                wifiProductView = WifiProductView::Devices;
+                lastRuntimeEvent = "wifi_devices";
                 changed = true;
             }
         } else if (wifiProductView == WifiProductView::Devices) {
@@ -11523,8 +11488,16 @@ bool applyUiAction(UiAction action, bool render = true) {
                     wifiDeviceAt(wifiDeviceSelection);
                 if (device != nullptr) {
                     wifiDeviceDetail = *device;
+                    std::uint64_t nowUs =
+                        static_cast<std::uint64_t>(esp_timer_get_time());
+                    if (nowUs == 0U) nowUs = 1U;
+                    const bool locked = wifiFrameCapture.lockDeviceChannel(
+                        wifiDeviceDetail.channel, nowUs);
                     wifiProductView = WifiProductView::DeviceDetail;
-                    lastRuntimeEvent = "wifi_device_detail";
+                    nextWifiDeviceUiRefreshUs = nowUs;
+                    lastRuntimeEvent = locked
+                        ? "wifi_device_detail_live"
+                        : "wifi_device_detail_live_unavailable";
                     changed = true;
                 }
             } else if (action == UiAction::Back ||

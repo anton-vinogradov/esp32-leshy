@@ -12,16 +12,14 @@ from typing import Any
 from esp_app_identity import app_elf_sha256
 
 
-SCHEMA = "leshy.wifi_devices_hil.run.v2"
+SCHEMA = "leshy.wifi_devices_hil.run.v3"
 SCREENS = {
     "wifi_menu": "wifi-menu",
     "wifi_menu_after": "wifi-menu-after",
     "wifi_devices_first": "wifi-devices-first",
     "wifi_devices_second": "wifi-devices-second",
-    "wifi_device_detail_first": "wifi-device-detail-first",
-    "wifi_device_detail_second": "wifi-device-detail-second",
-    "wifi_device_radar_first": "wifi-device-radar-first",
-    "wifi_device_radar_second": "wifi-device-radar-second",
+    "wifi_device_detail_first": "wifi-device-live-detail-first",
+    "wifi_device_detail_second": "wifi-device-live-detail-second",
 }
 
 
@@ -124,43 +122,33 @@ def main() -> int:
             run.get("list_pixel_changes", {}).get("content_changed_pixels", 0) > 0 and
             run.get("list_pixel_changes", {}).get("chrome_changed_pixels") == 0,
             "live redraw escaped the data rows")
-    require(failures, run.get("detail_pixel_changes") == {
-                "content_changed_pixels": 0, "chrome_changed_pixels": 0},
-            "device detail changed during background monitoring")
+    detail_pixels = run.get("detail_pixel_changes", {})
+    require(failures,
+            detail_pixels.get("identity_changed_pixels") == 0 and
+            detail_pixels.get("live_changed_pixels", 0) > 0 and
+            detail_pixels.get("chrome_changed_pixels") == 0,
+            "integrated detail changed identity/chrome or did not update radar")
     detail_first = run.get("detail_first", {})
     detail_second = run.get("detail_second", {})
     require(failures,
+            detail_first.get("wifi_product_view") == "device_detail" and
+            detail_first.get("wifi_device_channel_locked") is True and
+            detail_second.get("wifi_product_view") == "device_detail" and
+            detail_second.get("wifi_device_channel_locked") is True and
             detail_second.get("wifi_device_clients_accepted", 0) >
                 detail_first.get("wifi_device_clients_accepted", 0) and
-            detail_second.get("wifi_device_channel_hops", 0) >
-                detail_first.get("wifi_device_channel_hops", 0),
-            "background device monitor did not progress behind frozen detail")
+            detail_second.get("wifi_device_catalog_revision", 0) >
+                detail_first.get("wifi_device_catalog_revision", 0) and
+            detail_second.get("wifi_device_detail_last_seen_us", 0) >
+                detail_first.get("wifi_device_detail_last_seen_us", 0) and
+            detail_second.get("wifi_device_channel_hops") ==
+                detail_first.get("wifi_device_channel_hops"),
+            "integrated channel-locked detail did not receive live updates")
     require(failures,
             detail_first.get("wifi_device_oui_database_available") is True and
             detail_first.get("wifi_device_oui_records") == 39984 and
             detail_first.get("wifi_device_navigation_locked") is True,
             "device intelligence/OUI/navigation contract mismatch")
-    radar_first = run.get("radar_first", {})
-    radar_second = run.get("radar_second", {})
-    require(failures,
-            radar_first.get("wifi_product_view") == "device_radar" and
-            radar_first.get("wifi_device_channel_locked") is True and
-            radar_second.get("wifi_product_view") == "device_radar" and
-            radar_second.get("wifi_device_channel_locked") is True and
-            radar_second.get("wifi_device_clients_accepted", 0) >
-                radar_first.get("wifi_device_clients_accepted", 0) and
-            radar_second.get("wifi_device_catalog_revision", 0) >
-                radar_first.get("wifi_device_catalog_revision", 0) and
-            radar_second.get("wifi_device_detail_last_seen_us", 0) >
-                radar_first.get("wifi_device_detail_last_seen_us", 0) and
-            radar_second.get("wifi_device_channel_hops") ==
-                radar_first.get("wifi_device_channel_hops"),
-            "channel-locked radar did not receive live client updates")
-    require(failures,
-            run.get("radar_pixel_changes", {}).get(
-                "chrome_changed_pixels") == 0,
-            "radar redraw escaped content")
-
     for label in ("monitor_after_first", "monitor_after_second"):
         state = run.get(label, {})
         require(failures,
@@ -184,12 +172,13 @@ def main() -> int:
             scope.get("access_point_beacons_excluded") is True and
             scope.get("channels_listened") == list(range(1, 14)) and
             scope.get("live_redraw_data_rows_only") is True and
-            scope.get("detail_screen_stable_during_background_monitor") is True and
+            scope.get("integrated_live_device_detail") is True and
+            scope.get("device_identity_region_stable") is True and
             scope.get("embedded_ieee_oui_records") == 39984 and
             scope.get("passive_probe_association_wps_fingerprint") is True and
             scope.get("identity_stable_device_navigation") is True and
             scope.get("channel_locked_live_radar") is True and
-            scope.get("radar_redraw_content_only") is True and
+            scope.get("live_detail_redraw_live_region_only") is True and
             scope.get("storage_write_authorized") is False,
             "automation/passive/no-flicker scope mismatch")
 

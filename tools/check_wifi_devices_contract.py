@@ -25,7 +25,6 @@ def main() -> int:
     required_renderer = (
         "WifiProductView::Devices",
         "WifiProductView::DeviceDetail",
-        "WifiProductView::DeviceRadar",
         "startWifiDevicesProduct()",
         "serviceWifiDevicesProduct()",
         "renderWifiDevicesData();",
@@ -37,7 +36,7 @@ def main() -> int:
         "wifiDeviceNavigationOrder.lock(wifiDeviceCatalog)",
         "wifiDeviceNavigationOrder.locked()",
         "nextWifiDeviceUiRefreshUs = nowUs + 250000ULL",
-        "renderRadioSignalCard(wifiDeviceDetail.rssiDbm)",
+        "renderRadioSignalCard(",
         "wifiFrameCapture.lockDeviceChannel(",
         "wifiFrameCapture.unlockDeviceChannel(nowUs)",
         "wifiOuiDatabase.lookup(",
@@ -91,7 +90,6 @@ def main() -> int:
         "WifiDevicePrivateAddress",
         "WifiDeviceMakerFormat",
         "WifiDeviceNetworkFormat",
-        "WifiDeviceRadarTitle",
         "WifiDeviceTrendCloser",
     )
 
@@ -141,14 +139,22 @@ def main() -> int:
     if "subtype == 4U" not in catalog_cpp:
         failures.append("searching-client inference does not require probe request")
     for token in (
-            'RUN_SCHEMA = "leshy.wifi_devices_hil.run.v2"',
-            '"wifi_product_view": "device_radar"',
+            'RUN_SCHEMA = "leshy.wifi_devices_hil.run.v3"',
+            '"wifi_product_view": "device_detail"',
             '"wifi_device_channel_locked": True',
             '"wifi_device_detail_last_seen_us"',
-            '"wifi-device-radar-first"',
-            '"wifi-device-radar-second"'):
+            '"wifi-device-live-detail-first"',
+            '"wifi-device-live-detail-second"',
+            '"identity_changed_pixels"',
+            '"live_changed_pixels"'):
         if token not in runner + checker:
-            failures.append(f"radar HIL token missing: {token}")
+            failures.append(f"integrated live-detail HIL token missing: {token}")
+    for token in (
+            "WifiProductView::DeviceRadar",
+            "renderWifiDeviceRadar(",
+            'return "device_radar"'):
+        if token in renderer:
+            failures.append(f"separate device-radar route remains: {token}")
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}")
@@ -156,7 +162,7 @@ def main() -> int:
     print(
         "Wi-Fi devices contract passed: passive client fingerprint, embedded "
         "IEEE OUI lookup, identity-stable list, facts + channel-locked live "
-        "radar, bounded redraw and no TX/config path"
+        "radar in one detail screen, bounded redraw and no TX/config path"
     )
     return 0
 
