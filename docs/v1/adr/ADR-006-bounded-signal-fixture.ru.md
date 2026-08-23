@@ -83,12 +83,15 @@ runner остаётся test failure. Source-bound `0.2.4` исправляет 
 и no-ready/`0xFF` на swapped bus. Сохранённый
 [`0.2.4 evidence`](../../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json)
 поэтому указывает на электрическую недоступность всего съёмного shield, не разрешает
-RF emission и требует переустановить shield при выключенном питании, а затем повторить
-тот же read-only inventory до bounded carrier regression.
+RF emission и требует powered-off hardware diagnosis до bounded carrier regression.
 
 Независимый [same-image cross-check `0.81.0`](../../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json)
 затем воспроизводит zero identities на board-02 тем же exact product image и driver,
 которые ранее нашли все три приёмника на board-01. Bounded 8+2 SPI reads, zero
 TX/CE-high events и terminal Home/lease 0 делают fixture-specific code маловероятным;
-до разрешения carrier start этим ADR обязательны переустановка shield при выключенном
-питании и повторный same-image probe.
+полная disassembly/reassembly connector 2×10 без питания и no-flash same-image rerun
+теперь воспроизводят fault. Upstream v2 pin definitions совпадают с Leshy, а все
+receiver используют прямые общие 3,3 В/SPI. До разрешения carrier start этим ADR
+обязательны comparative connector continuity, assembled 3,3 В и последующая plausible
+same-image receiver identity. Cross-swap shields и stock-firmware diagnosis не
+допускаются.

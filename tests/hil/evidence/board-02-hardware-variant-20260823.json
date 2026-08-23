@@ -1,0 +1,227 @@
+{
+  "schema": "leshy.hardware.variant_evidence.v1",
+  "status": "partial_variant_classified_rf_fault",
+  "date": "2026-08-23",
+  "checkpoint": "two_board_rom_photo_and_read_only_reassembly_crosscheck",
+  "source_commit": "af5dc060d8768852eb7f235f3060c4affd42c7cc",
+  "boards": {
+    "board-01": {
+      "role": "known_positive_original",
+      "efuse_mac": "1C:DB:D4:87:90:D4",
+      "module_marking": "ESP32-S3-WROOM-1U-N16",
+      "rom": {
+        "chip": "ESP32-S3 QFN56 revision v0.2",
+        "flash_bytes": 16777216,
+        "embedded_psram_bytes": 0,
+        "raw_sha256": "31d66e6a10a4eec53e18ea56878639333eca1ac1c6fadc5842f0d3a878134015"
+      },
+      "assembly": {
+        "main_board_marking": "ESP32-DIV x CiferTech x",
+        "interboard_connector": "2x10 socket/header",
+        "buzzer_populated": true,
+        "rf_carrier_alternative_ufl_populated": true,
+        "rf_modules": [
+          "3x nRF24L01-compatible modules with external front-end IC",
+          "1x AS07-M1101S CC1101 module"
+        ]
+      },
+      "known_positive_receiver_identity": {
+        "firmware_sha256": "2d0bc0cf424bb0497f4ba6841e262240d6b689947b61461f353e012a5cb58379",
+        "detected_receivers": 3,
+        "nrf_status": [14, 14],
+        "cc1101_version": 20
+      }
+    },
+    "board-02": {
+      "role": "n16r8_dnp_variant",
+      "efuse_mac": "90:70:69:0D:15:E0",
+      "module_marking": "ESP32-S3-WROOM-1U-N16R8",
+      "rom": {
+        "chip": "ESP32-S3 QFN56 revision v0.2",
+        "flash_bytes": 16777216,
+        "embedded_psram_bytes": 8388608,
+        "embedded_psram_voltage": "3.3 V",
+        "raw_sha256": "e10367a5b27e458f93602c1a68a39ceed90870c0afa0506cff4777c246dd5264"
+      },
+      "assembly": {
+        "main_board_marking": "ESP-DIV x CiferTech x",
+        "interboard_connector": "2x10 socket/header",
+        "buzzer_populated": false,
+        "rf_carrier_alternative_ufl_populated": false,
+        "rf_modules": [
+          "3x nRF24L01-compatible modules with external front-end IC",
+          "1x AS07-M1101S V3.1 CC1101 module"
+        ],
+        "population_equivalent_to_board_01": false
+      },
+      "runtime": {
+        "exact_version": "0.81.0-shield-receiver-probe",
+        "exact_image_reused_without_flash": true,
+        "runner_source_sha256": "089d751d6eff979786e8650e444cedf284f2ab8e63a1798da6c553dda564e167",
+        "firmware_sha256": "2d0bc0cf424bb0497f4ba6841e262240d6b689947b61461f353e012a5cb58379",
+        "app_elf_sha256": "e86968d448992e140c23e882373b222b9bd4478bf3320d14e83c1011a4acd033",
+        "flash_bytes": 16777216,
+        "psram_found": false,
+        "psram_bytes": 0,
+        "input_detected": true,
+        "read_only_run_sha256": "bdb9980e208092a9bb3077fcf2676e041dc70b0ac362493edfc045fcd7708cc1",
+        "read_only_artifacts_sha256": "8de6f636644f8251ccc7556d79a9d3b80333e780bd8505bf05d4b6bf86f9cb90"
+      },
+      "receiver_identity_after_powered_off_reassembly": {
+        "detected_receivers": 0,
+        "nrf_status": [0, 0],
+        "nrf_config": [0, 0],
+        "cc1101_ready_line_low": true,
+        "cc1101_partnum": 0,
+        "cc1101_version": 0,
+        "bounded_wire_reads": {
+          "nrf_register_reads": 8,
+          "cc_status_reads": 2,
+          "spi_bytes_clocked": 20
+        },
+        "side_effects": {
+          "nrf_ce_high_events": 0,
+          "cc_command_strobes": 0,
+          "radio_tx_commands": 0
+        },
+        "cleanup_complete": true,
+        "terminal_page": "home",
+        "terminal_owner": "none",
+        "terminal_lease_mask": 0
+      }
+    }
+  },
+  "photo_evidence": [
+    {
+      "subject": "board-02 main board component side",
+      "sha256": "e986c20368c694ef8e6d53208780c54b0145fbdc876a5d156d99efe68d0485b0"
+    },
+    {
+      "subject": "board-02 RF carrier component side",
+      "sha256": "be65ebe3cbff0278f4fa0dcc9e549a09d72e86c588feaff0a5498d775e5251d6"
+    },
+    {
+      "subject": "board-01 main board component side",
+      "sha256": "549cd51d62433b6505ffca1a7954812f886644a1afaa1fb72039490a30f5e6ce"
+    },
+    {
+      "subject": "board-01 RF carrier component side",
+      "sha256": "427fb2f94cd10fe8a8a05aa083829e61e9abd946e36b0cb2b58fa840dab995ea"
+    }
+  ],
+  "upstream_design_evidence": {
+    "repository": "https://github.com/CiferTech/ESP32-DIV.git",
+    "commit": "9d4d82fe7a12febf554b12e1eca6d434ebe79d39",
+    "source_hashes": {
+      "ESP32-DIV/shared.h": "3804458846faeb0a1556cd1e6180259b15e90e008accc4163bd15d68d2db6e3a",
+      "Libraries/User_Setup v2.h": "406414518246d5a5101968e8af0822ceddeed4cc90bf2357676d1847d10bb9a2",
+      "CONTRIBUTING.md": "3ee7969a3bdab8fb38fb60d62ab88a239c93fb4eaca88d41a94b2f471113acdd",
+      "Schematic/v2/Shield-Schematic.jpg": "d2957d8ccfde485b8a68bb56313204b9d5dc24a2b6de66441019f9a8c8370f66",
+      "Schematic/v2/Main-Schematic.jpg": "78ee326e7be95203f30bd9dcf1bf525a9bbaa96b136a3d891c97e048ddf40b02",
+      "Schematic/v2/main-BOM.xls": "c26c88a87890e07b512ac8b1de26c5775a36b4da58042d6b8b0cf9b5d2d60f6f",
+      "Schematic/v2/shield-BOM.xlsx": "8a53730ec269f61043df62e50e02445a9edf7790d2e3df5011a3610a047fea7b"
+    },
+    "v2_radio_pinout": {
+      "spi": {"sck": 12, "miso": 13, "mosi": 11},
+      "nrf1": {"ce": 15, "csn": 4},
+      "nrf2": {"ce": 47, "csn": 48},
+      "nrf3": {"ce": 14, "csn": 21},
+      "cc1101": {"csn": 5, "gdo0": 6, "gdo2": 3}
+    },
+    "interboard_power": {
+      "ground_pins": [2, 16],
+      "three_volt_three_pins": [17, 18],
+      "five_volt_pins": [19, 20],
+      "radio_modules_use_direct_three_volt_three": true
+    },
+    "bom_findings": {
+      "main_module": "ESP32-S3-WROOM-1U-N16",
+      "main_buzzer": "CMT-7525-80-SMT-TR",
+      "shield_nrf_decoupling": "3x 10 uF",
+      "shield_cc1101": "RF 433MHz, 10mW",
+      "shield_antenna_footprints_are_alternative_population_options": true,
+      "r2_r4_are_antenna_zero_ohm_links": true,
+      "r3_r5_belong_to_ir_transmit": true
+    },
+    "software_findings": {
+      "leshy_and_upstream_v2_radio_pinout_match": true,
+      "upstream_build_guide_requests_opi_psram": true,
+      "display_uses_gpio_35_36_37": true,
+      "n16r8_opi_psram_conflicts_with_display_gpio": true,
+      "n16r8_changes_external_module_land_pattern_or_pin_numbering": false,
+      "n16r8_reserved_gpio": [35, 36, 37],
+      "radio_gpio_intersects_n16r8_reserved_gpio": false,
+      "stock_source_contains_full_power_constant_carrier_paths": true,
+      "stock_nrf_default_pa_level": 3,
+      "stock_image_safe_as_read_only_diagnostic": false
+    }
+  },
+  "vendor_evidence": {
+    "esp32_s3_wroom_1_1u_datasheet": "https://documentation.espressif.com/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf",
+    "n16r8_flash": "16 MB Quad SPI",
+    "n16r8_psram": "8 MB Octal SPI",
+    "module_land_pattern_or_external_pin_numbering_changed": false,
+    "gpio_unavailable_to_application_on_octal_psram_variant": [35, 36, 37]
+  },
+  "external_corroboration": {
+    "evidence_class": "unverified community reports, not causal proof",
+    "upstream_issue_102": {
+      "url": "https://github.com/cifertech/ESP32-DIV/issues/102",
+      "reported_failure": "NRF24 and CC1101 initialization can both fail with cold soldering or oxidation at the interboard connection",
+      "reported_next_measurements": ["shield 3V3", "shield 5V", "CE", "CSN"],
+      "matches_board_02_common_zero_shape": true,
+      "proves_board_02_root_cause": false,
+      "ce_high_acceptance_adopted": false,
+      "ce_high_rejection_reason": "Leshy passive admission intentionally requires zero CE-high events before receiver identity is plausible"
+    },
+    "upstream_discussion_90": {
+      "url": "https://github.com/cifertech/ESP32-DIV/discussions/90",
+      "reported_failure": "a failed nRF initialization can leave shared pins or SPI state unusable for a later CC1101 operation; poor CC1101 modules were also reported",
+      "matches_board_02_clean_probe": false,
+      "reason": "the exact Leshy probe performs independent bounded reads after a clean boot and still receives all-zero identities from every permitted receiver"
+    },
+    "upstream_white_screen_reports": {
+      "urls": [
+        "https://github.com/cifertech/ESP32-DIV/discussions/90",
+        "https://github.com/cifertech/ESP32-DIV/issues/135",
+        "https://github.com/cifertech/ESP32-DIV/issues/157",
+        "https://github.com/cifertech/ESP32-DIV/issues/158"
+      ],
+      "n16r8_or_gpio_35_36_37_cause_confirmed": false,
+      "use": "background only; reports mainly concern wrong hardware firmware or incomplete flash sets"
+    },
+    "clone_revision_discussion_204": {
+      "url": "https://github.com/cifertech/ESP32-DIV/discussions/204",
+      "maintainer_answer_present": false,
+      "official_revision_or_pinout_confirmed": false
+    }
+  },
+  "assessment": {
+    "standard_v2_equivalence_proven": false,
+    "board_02_profile": "esp-div-n16r8-dnp-unqualified",
+    "board_02_embedded_psram_admitted": false,
+    "board_02_rf_state": "fault",
+    "radio_pinout_mismatch_with_upstream_v2_supported": false,
+    "missing_buzzer_is_real_non_stock_population": true,
+    "missing_alternative_rf_ufl_is_a_radio_bus_fault_explanation": false,
+    "three_independent_receiver_failures_supported": false,
+    "common_rf_power_spi_or_connector_fault_supported": true,
+    "powered_off_reassembly_resolved_fault": false,
+    "stock_firmware_diagnostic_allowed": false,
+    "active_rf_fixture_use_allowed": false,
+    "cross_swap_allowed": false,
+    "next_safe_evidence": [
+      "powered-off continuity comparison of connector ground, 3V3 and SPI pins",
+      "rail-voltage comparison with each board assembled with its own RF carrier",
+      "pinout admission before any shield cross-swap"
+    ]
+  },
+  "limits": {
+    "photo_population_is_manual_evidence": true,
+    "exact_front_end_part_numbers_unconfirmed": true,
+    "radiated_power_unmeasured": true,
+    "rf_emission_authorized": false,
+    "psram_runtime_memory_test_passed": false,
+    "stage_or_phase_promoted": false
+  }
+}

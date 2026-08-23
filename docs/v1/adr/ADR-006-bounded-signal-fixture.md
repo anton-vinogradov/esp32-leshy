@@ -84,12 +84,15 @@ passes its diagnostic while shared-bus CC1101 identity is also invalid: `0/0/0` 
 the documented bus, no-ready/`0xFF` on the swapped bus. The retained
 [`0.2.4` evidence](../../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json)
 therefore supports an electrically unavailable whole detachable shield, keeps RF
-emission unauthorized and requires a powered-off shield reseat plus the same read-only
-inventory before a bounded carrier regression.
+emission unauthorized and requires a powered-off hardware diagnosis before a bounded
+carrier regression.
 
 The independent [same-image `0.81.0` cross-check](../../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json)
 then reproduces zero identities on board-02 with the exact product image and driver
 that previously detected all three receivers on board-01. Its bounded 8+2 SPI reads,
 zero TX/CE-high events and terminal Home/lease 0 make fixture-specific code unlikely;
-the powered-off shield reseat and a repeated same-image probe remain mandatory before
-this ADR permits any carrier start.
+a full powered-off 2×10 disassembly/reassembly plus a no-flash same-image rerun now
+reproduce the fault. Upstream v2 pin definitions match Leshy and all receivers share
+direct 3.3 V/SPI. Comparative connector continuity, assembled 3.3 V and a subsequent
+plausible same-image receiver identity are now mandatory before this ADR permits any
+carrier start. Cross-swapping shields and stock-firmware diagnosis are not admitted.

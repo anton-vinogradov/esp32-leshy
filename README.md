@@ -15,8 +15,8 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
 
 - **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
-- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps; an exact same-image `0.81.0` cross-check detects all three RF receivers on board-01 and zero on board-02 with zero TX/CE-high events.
-- **Next gate:** power off and reseat the detachable board-02 RF shield, repeat the read-only shared-bus inventory, then pass the short bounded nRF regression before the known-signal finder gate.
+- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps; an exact same-image `0.81.0` cross-check detects two permitted nRF receivers plus CC1101 on board-01 and zero on board-02 with zero TX/CE-high events. A powered-off full reassembly and no-flash exact-image rerun reproduce the board-02 fault.
+- **Next gate:** compare powered-off continuity and assembled 3.3 V on board-01/board-02 connector pins 17/18 plus SPI/MISO; only after a plausible read-only identity may the short bounded nRF regression and known-signal finder gate resume.
 
 ### Current stage phases
 

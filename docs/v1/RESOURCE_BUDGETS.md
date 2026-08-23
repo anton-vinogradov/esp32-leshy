@@ -160,7 +160,7 @@ These limits are review triggers, not evidence that the product meets its NFRs.
 
 | ID | Guardrail | Rationale / closure |
 |---|---|---|
-| RB-01 | No required path may depend on PSRAM | board-01 and BOM identify the N16/no-PSRAM envelope; only new HW-T01 evidence may expand it |
+| RB-01 | No required path may depend on PSRAM | board-01/BOM define N16/no-PSRAM; board-02 N16R8 memory collides with display pins and therefore confirms that ROM capacity alone cannot expand the portable envelope |
 | RB-02 | Keep two bootable app slots and at least 12.5% free space in either selected slot | preserves OTA/rollback and growth; final values require the partition ADR |
 | RB-03 | Clean S2 platform: static RAM ≤ 96 KiB and free internal heap ≥ 240 KiB after interactive boot | leaves room for the first radio/storage slice; measure on the independent target |
 | RB-04 | S3 passive Survey steady state: free internal heap ≥ 160 KiB and minimum ≥ 128 KiB with no downward trend across ≥45 minutes and ≥8 complete release cycles | reserves bounded worker/parse/export headroom; close within the one-hour endurance budget using heap time series and queue high-water marks |
@@ -259,3 +259,11 @@ it does not enter or change the exact product image. The physical 2/2-step diagn
 performs zero emissions and retains no runtime-heap claim; its negative receiver
 inventory is recorded in
 [board-02 evidence](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
+
+Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
+16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
+the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
+the stock display bus and the OPI-enabled experiment does not reach a stable product
+boot. Therefore the portable ledger remains 16 MiB flash / zero PSRAM; the apparent
+8 MiB must not fund buffers, caches or feature admission. The source-bound details are
+retained in [variant evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).

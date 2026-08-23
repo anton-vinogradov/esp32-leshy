@@ -85,7 +85,13 @@ def main() -> int:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--flash", action="store_true")
+    image_mode = parser.add_mutually_exclusive_group(required=True)
+    image_mode.add_argument("--flash", action="store_true")
+    image_mode.add_argument(
+        "--reuse-current", action="store_true",
+        help=("do not write flash; fail closed unless the running version and "
+              "app ELF identity match the supplied exact image"),
+    )
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0),
                         default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
@@ -111,10 +117,9 @@ def main() -> int:
     cleanup_after: dict[str, Any] = {"attempted": False}
 
     try:
-        if not args.flash:
-            raise RuntimeError("cross-check requires a fresh exact-image flash")
-        flash_candidate(args.port, candidate, args.flash_offset, args.flash_baud)
-        time.sleep(0.5)
+        if args.flash:
+            flash_candidate(args.port, candidate, args.flash_offset, args.flash_baud)
+            time.sleep(0.5)
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             try:
                 synchronize_console(device, 30.0)
@@ -194,7 +199,7 @@ def main() -> int:
         "schema": RUN_SCHEMA,
         "run_id": secrets.token_hex(16),
         "runner_source_sha256": sha256_file(Path(__file__).resolve()),
-        "passed": bool(args.flash) and not failures,
+        "passed": not failures,
         "failures": failures,
         "outcome": (
             "all_receivers_detected" if detected == 3 else
@@ -207,6 +212,7 @@ def main() -> int:
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
             "flashed": args.flash,
+            "exact_image_reused": args.reuse_current,
         },
         "boot": boot,
         "shield_receiver_probe": probe,

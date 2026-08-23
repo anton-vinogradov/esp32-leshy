@@ -15,8 +15,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
 - **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
-- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага; exact same-image cross-check `0.81.0` находит все три RF-приёмника на board-01 и ноль на board-02 при zero TX/CE-high events.
-- **Следующий gate:** при выключенном питании переустановить съёмный RF-shield board-02, повторить read-only inventory shared bus, затем пройти короткий bounded nRF regression до known-signal gate finder.
+- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага; exact same-image cross-check `0.81.0` находит два разрешённых nRF receiver плюс CC1101 на board-01 и ноль на board-02 при zero TX/CE-high events. Полная reassembly без питания и no-flash rerun exact image воспроизводят fault board-02.
+- **Следующий gate:** сравнить powered-off continuity и assembled 3,3 В board-01/board-02 на connector pins 17/18 плюс SPI/MISO; короткий bounded nRF regression и known-signal gate finder разрешаются только после plausible read-only identity.
 
 ### Фазы текущего этапа
 

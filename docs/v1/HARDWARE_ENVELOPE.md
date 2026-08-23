@@ -28,13 +28,15 @@ The analysis uses upstream snapshot `9d4d82f` dated 7 August 2026:
   [TI PCF8574 datasheet](https://www.ti.com/lit/ds/symlink/pcf8574.pdf).
 
 Evidence tags are `S` schematic, `B` BOM, `O` original code, `L` Leshy prototype,
-`D` vendor datasheet, and `H` physical HIL. No `H` evidence is present yet.
+`D` vendor datasheet, and `H` physical HIL. Physical evidence now covers two
+assemblies and is retained in
+[`board-02-hardware-variant-20260823.json`](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).
 
 ## Physical assembly layers
 
 | Layer | Contents | 1.x treatment |
 |---|---|---|
-| v2 main board | ESP32-S3, TFT/touch, SD slot, PCF8574/buttons, WS2812, buzzer, backlight, IP5306, LF33, CP2102, two USB paths | declared by board profile, then functionally checked |
+| v2 main board | ESP32-S3, TFT/touch, SD slot, PCF8574/buttons, WS2812, optional-by-assembly buzzer, backlight, IP5306, LF33, USB bridge, two USB paths | declared by an exact assembly profile, then functionally checked |
 | v2 RF shield | 3× NRF24L01, CC1101, IR RX/TX, antenna routing | detachable/optional; identity probes never transmit |
 | External modules | NEO-6M GPS and PN532 | absent from v2 main/shield schematic and BOM; explicit assembly profile plus probe |
 | Media/power | microSD and Li-ion cell | slot/charger exist; card/cell may not |
@@ -51,11 +53,51 @@ using GPIO35/36/37 for display/touch; Octal-PSRAM variants reserve those lines.
 |---|---:|---:|---|
 | v2 schematic + BOM | 16 MB | none (`N16`) | design-confirmed for repository artifacts |
 | original CONTRIBUTING settings | 16 MB | OPI PSRAM | conflicts with ordering code and display pins |
-| Leshy prototype `platformio.ini` | 8 MB partitions | no-PSRAM board | not BOM-accurate; current compatibility build only |
+| Leshy product `platformio.ini` | 16 MB physical flash, bounded partitions | PSRAM disabled | compatible conservative profile on both observed modules |
+| board-01 ROM/photo | 16 MB | none (`N16`) | known-positive original assembly |
+| board-02 ROM/photo | 16 MB | 8 MB embedded Octal (`N16R8`) | real variant; PSRAM is not admitted because it collides with display GPIO35/36/37 |
 
 At boot, 1.x reads actual flash, `psramFound()`, chip/package/revision, and partition
-layout. Until HIL, design budgets assume **8 MB flash / no PSRAM**; a confirmed N16
-release profile should expose 16 MB without requiring PSRAM.
+layout. The binding portable budget is now **16 MB flash / no usable PSRAM**. The
+board-02 ROM reports its embedded 8 MB, but enabling it boot-looped the display build;
+the exact compatibility image runs with `psramFound=false`. No feature may count that
+memory until a distinct pin-compatible board profile proves both display and PSRAM.
+The N16R8 substitution does not renumber the module pads or remap application GPIOs;
+it makes IO35/36/37 unavailable because they are internally connected to Octal PSRAM.
+The v2 radio set (GPIO3–6, 11–15, 21, 47 and 48) does not intersect those pins, so
+the processor-memory variant explains the display/PSRAM conflict but not the
+common-zero radio identity.
+
+## Observed assembly profiles
+
+| Profile | Main module and population | RF result | Admission |
+|---|---|---|---|
+| `esp32-div-v2-n16` / board-01 | `ESP32-S3-WROOM-1U-N16`; BOM buzzer populated | exact 0.81 reads two permitted nRF identities and CC1101 VERSION `0x14` | known-positive baseline |
+| `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer omitted; one alternative carrier U.FL footprint omitted | exact same image reads nRF `0/0` and CC `0/0` after a powered-off full reassembly | display/input compatibility only; RF `fault`, fixture TX forbidden |
+
+Both carriers contain three nRF24-compatible modules with external PA/LNA front ends
+and one CC1101 module. The shield BOM specifies the latter as **433 MHz, 10 mW**;
+315/868/915 MHz are therefore software tuning choices, not proven useful bands for
+this physical assembly. The shield schematic also proves that R2/R4 are alternative
+antenna links and R3/R5 belong to IR TX; their population cannot explain a missing
+SPI identity. All four receivers share direct 3.3 V and SPI through the 2×10
+connector, so board-02's common-zero result points to the shared rail, SPI/MISO,
+connector continuity, or an undocumented clone pinout.
+
+Upstream community evidence has the same failure shape but does not prove this unit's
+root cause. [Issue #102](https://github.com/cifertech/ESP32-DIV/issues/102) reports
+simultaneous NRF24/CC1101 initialization loss from interboard cold joints or oxidized
+contacts and recommends checking shield rails plus CE/CSN. Leshy adopts the rail and
+continuity checks, but not that report's CE-high criterion: passive admission requires
+CE to remain LOW until a plausible receiver identity exists. [Discussion
+#90](https://github.com/cifertech/ESP32-DIV/discussions/90) also reports a failed nRF
+initialization poisoning later shared-bus operations. That is a weaker fit here because
+the exact Leshy image performs independent bounded reads after a clean boot and still
+gets common-zero identities. White-screen reports in that discussion and issues
+[#135](https://github.com/cifertech/ESP32-DIV/issues/135),
+[#157](https://github.com/cifertech/ESP32-DIV/issues/157), and
+[#158](https://github.com/cifertech/ESP32-DIV/issues/158) do not identify N16R8 or
+GPIO35/36/37 as their cause and therefore remain background only.
 
 ## Normative GPIO map
 
@@ -122,8 +164,9 @@ evidence.
 
 Confirmed topology: IP5306 handles the Li-ion/power-bank path; LF33 creates 3.3 V from
 the 5 V rail; ESP/TFT logic/touch/PCF/SD/radios use 3.3 V; WS2812, IR LED, and buzzer
-circuitry use 5 V. The shield has 10 µF per NRF but peak-current and rail margins are
-unknown. GPIO2 is not an independent battery ADC because it also drives the buzzer.
+circuitry use 5 V. The shield has 10 µF per NRF and takes 3.3 V directly from pins
+17/18 of the interboard connector, but peak-current and rail margins are unknown.
+GPIO2 is not an independent battery ADC because it also drives the optional buzzer.
 
 Unknown until HIL: LF33 exact current/thermal limit, IP5306 I²C variant/registers,
 rail peak current, USB+cell behavior, multi-radio brownout margin, and useful VBAT
@@ -258,15 +301,15 @@ flag or a successful unrelated probe.
 
 | ID | Evidence state | Binding safe default for 1.x | Physical closure |
 |---|---|---|---|
-| HW-U01 | partial: board-01 is S3 rev 0.2, 16 MiB Quad, no PSRAM; batch range unknown | baseline profile is N16/no-PSRAM; any flash/PSRAM/profile mismatch is `fault`/unsupported | HW-T01 on second v2 unit + assembly IDs |
+| HW-U01 | partial: board-01 is N16/no-PSRAM; board-02 is an N16R8/DNP variant whose embedded 8 MiB Octal PSRAM conflicts with display GPIO35/36/37 and is unusable in the compatibility image | portable baseline is 16 MiB flash with PSRAM disabled; N16R8 is a distinct unqualified profile, never dynamic budget expansion | additional batch IDs plus a pin-compatible display/PSRAM profile if one exists |
 | HW-U02 | unmeasured: schematic and legacy flag conflict | TFT reset is external/unassigned; GPIO0 remains BOOT-only and is never driven as display reset | HW-T02 continuity/logic trace |
 | HW-U03 | partial: read-only I²C responds at `0x75`; exact power-manager identity/map unknown | expose only generic presence/evidence; battery percentage and write/control operations are unavailable | exact marking/datasheet + HW-T04 |
-| HW-U04 | design-only LF33 evidence; current/thermal headroom unknown | no default combined shield load; each new combination remains unavailable under RB-08 | marking + HW-T10 rail/thermal matrix |
+| HW-U04 | design-only LF33 evidence; board-02 returns common-zero identities from all four receivers after reassembly, but rail voltage is not yet measured | no active board-02 RF fixture and no default combined shield load; each new combination remains unavailable under RB-08 | compare assembled 3.3 V at connector pins 17/18 plus HW-T10 rail/thermal matrix |
 | HW-U05 | operator reports no GPS/PN532 assembly on board-01; no standard connector contract proven | default profile declares both absent; either requires its own explicit assembly profile, never output-mode autodetect | assembly photo/spec + HW-T07 |
 | HW-U06 | partial: GPIO38 reads LOW with one inserted/identified card; polarity/batch consistency remain unmeasured | GPIO38 is not authoritative in S2; storage state comes from a bounded explicit operation and remains fault/absent on failure | HW-T05 across media and board batch |
-| HW-U07 | partial: three guarded SD identity runs and the exact 0.81 sequential receiver probe complete with exclusive RadioSpi, GPIO21 HIGH, stable CID/CSD/generation and cleanup; instrumented coexistence remains unmeasured | `spi_radio` is an exclusive operation lease; SD and shield receivers never overlap | HW-T03/HW-T05 + radio→SD→radio recovery + RB-07 endurance |
+| HW-U07 | partial: board-01 completes guarded SD and exact 0.81 receiver identity; the same image on board-02 returns zero for every permitted receiver after full reassembly; upstream v2 pin definitions match Leshy exactly | `spi_radio` is exclusive; board-02 RF remains `fault`; stock firmware is not a diagnostic because it contains full-power constant-carrier paths | powered-off continuity and assembled rail comparison, then read-only same-image identity before any emission |
 | HW-U08 | electrical/ADC behavior is unmeasured; the false-sound software root cause is confirmed by 0.x and upstream issue #117 | battery percentage is unavailable; GPIO2 is never ADC-sampled and is held OUTPUT LOW from the first setup instruction; HIGH belongs only to a future bounded sound service | HW-T09 for ADC/sound characterization; silent invariant closes through boot/runtime state plus audible observation |
-| HW-U09 | partial: exact 0.104 proves the explicit-profile passive input path and safe no-signal behavior; no physical signal identity has succeeded yet | IR RX is available only from the explicit RF-shield profile and is mutually exclusive with nRF #3; no autodetect; IR TX additionally requires Lab/ADR-002 evidence | known NEC fixture/second board + instrumented HW-T08 |
+| HW-U09 | partial: exact 0.129 proves one bounded physical NEC receive/save/cold-export path; GPIO21 remains exclusive with nRF #3 | IR RX is available only from the explicit RF-shield profile; no autodetect; product IR TX additionally requires Lab/ADR-002 evidence | broaden protocol vectors and instrument GPIO21 switching under HW-T08 |
 | HW-U10 | no rail peak/thermal measurement | first slice is Wi-Fi-only; shield operations are one receiver at a time after per-module HIL; combined modes unavailable | HW-T10 and RB-08 endurance |
 
 ## Architecture consequences

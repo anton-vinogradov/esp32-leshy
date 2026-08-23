@@ -107,9 +107,10 @@ CC1101 on the same bus also returns invalid identity `status/part/version = 0/0/
 on the documented orientation and no-ready/`0xFF` on the swapped orientation. With
 all three nRF identities still zero/`0xFF`, no CE-high event, no emission and clean
 terminal states on both boards, the evidence supports an electrically unavailable
-whole detachable RF shield rather than an nRF-only fault. The next physical action is
-a powered-off board-02 shield/pogo-contact reseat followed by the same read-only
-inventory; RF emission remains unauthorized:
+whole detachable RF shield rather than an nRF-only fault. Photos subsequently prove
+a real 2×10 socket/header connection, not pogo contacts. A full powered-off
+disassembly/reassembly did not change the identities; RF emission remains
+unauthorized:
 [0.2.3 inventory](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json),
 [0.2.4 shared-shield identity](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
 
@@ -119,9 +120,20 @@ two nRF identities `14/8/2/15` and CC1101 version `20` on board-01. Freshly flas
 board-02, that identical image completes the same bounded eight nRF plus two CC reads
 but returns zero for both nRF identities and CC1101 version. The run performs zero
 TX commands and CE-high events, leaves the buzzer inactive, and ends Home/lease 0.
-This supports a board-02 shield/contact/power fault rather than fixture-specific code;
-the same `0.81.0` image remains on board-02 for a powered-off reseat/retest:
-[cross-check evidence](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json).
+This supports a board-02 shared rail/SPI/connector or undocumented clone-pinout fault
+rather than fixture-specific code. The exact same `0.81.0` image remains on board-02
+and a no-flash rerun after reassembly reproduces zero identities with the same bounded
+8+2 reads, zero TX/CE-high events and Home/lease-0 cleanup. Upstream v2 schematics,
+BOM and source confirm that Leshy uses the exact stock pinout and that all four
+receivers share direct 3.3 V and SPI. The next safe evidence is powered-off continuity
+plus assembled 3.3 V comparison; do not cross-swap shields or emit before profile
+admission: [same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
+[variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).
+
+The upstream stock image is not admitted as a diagnostic fallback. Its source
+contains maximum-power nRF24 constant-carrier paths, while the observed modules have
+external PA/LNA devices and radiated power is unmeasured. A stock flash could expose
+the same electrical fault less clearly while broadening RF side effects.
 
 ## Read-only board-02 admission
 

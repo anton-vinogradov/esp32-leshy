@@ -108,9 +108,9 @@ swapped arrays, masks `0/0` и `ce_high_events=0` на board-02. Run остаё�
 `status/part/version = 0/0/0` в documented orientation и no-ready/`0xFF` в swapped
 orientation. При прежних zero/`0xFF` identity всех трёх nRF, отсутствии CE HIGH и
 излучения и clean terminal states обеих плат evidence указывает на электрическую
-недоступность всего съёмного RF-shield, а не только nRF. Следующее физическое действие —
-при выключенном питании переустановить shield/pogo-контакты board-02 и повторить тот же
-read-only inventory; RF emission остаётся запрещённым:
+недоступность всего съёмного RF-shield, а не только nRF. Фото затем подтвердили
+настоящий connector socket/header 2×10, а не pogo contacts. Полная разборка и сборка
+без питания не изменила identities; RF emission остаётся запрещённым:
 [inventory 0.2.3](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json),
 [shared-shield identity 0.2.4](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
 
@@ -119,10 +119,21 @@ firmware. Exact product `0.81.0` с firmware hash `2d0bc0cf…8379` ранее �
 board-01 две nRF identity `14/8/2/15` и CC1101 version `20`. Свежая прошивка того же
 image на board-02 завершает те же bounded восемь nRF и два CC reads, но возвращает
 нули для обеих nRF identity и CC1101 version. Run выполняет zero TX commands и
-CE-high events, оставляет buzzer inactive и заканчивает Home/lease 0. Это подтверждает
-shield/contact/power fault board-02, а не fixture-specific code; тот же `0.81.0`
-остаётся на board-02 для переустановки при выключенном питании и повторной проверки:
-[cross-check evidence](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json).
+CE-high events, оставляет buzzer inactive и заканчивает Home/lease 0. Это поддерживает
+fault общей rail/SPI/connector board-02 либо undocumented clone pinout, а не
+fixture-specific code. Тот же exact image `0.81.0` остаётся на board-02; no-flash
+rerun после reassembly снова получил zero identities с теми же bounded 8+2 reads,
+zero TX/CE-high events и Home/lease-0 cleanup. Upstream v2 schematics, BOM и source
+подтверждают точное совпадение pinout Leshy со stock и прямые общие 3,3 В/SPI для
+всех четырёх receiver. Следующий safe evidence — powered-off continuity и сравнение
+assembled 3,3 В; cross-swap shields и emission запрещены до admission profile:
+[same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
+[variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).
+
+Upstream stock image не допускается как diagnostic fallback. Его source содержит
+maximum-power nRF24 constant-carrier paths, тогда как на observed modules есть
+внешние PA/LNA и radiated power не измерена. Stock flash может лишь менее ясно
+показать тот же electrical fault, одновременно расширив RF side effects.
 
 ## Read-only admission board-02
 

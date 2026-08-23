@@ -13,16 +13,16 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Active stage:** `S5 — Complete ESP32-DIV hardware`.
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
 - **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
-- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps; an exact same-image `0.81.0` cross-check detects all three RF receivers on board-01 and zero on board-02 with zero TX/CE-high events.
-- **Next evidence gate:** power off and reseat the detachable board-02 RF shield, repeat the read-only shared-bus inventory, then pass the short bounded nRF regression before the known-signal finder gate.
+- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps; an exact same-image `0.81.0` cross-check detects two permitted nRF receivers plus CC1101 on board-01 and zero on board-02 with zero TX/CE-high events. A powered-off full reassembly and no-flash exact-image rerun reproduce the board-02 fault.
+- **Next evidence gate:** compare powered-off continuity and assembled 3.3 V on board-01/board-02 connector pins 17/18 plus SPI/MISO; only after a plausible read-only identity may the short bounded nRF regression and known-signal finder gate resume.
 - **Accepted physical baseline:** exact `0.129.0-pre-app-watchdog`; earlier accepted checkpoints remain retained below.
 - **Working source candidate:** exact product `0.129.0-pre-app-watchdog` remains unchanged. Source-bound fixture `0.2.4` and focused cross-check runner commit `b27585a7b32ed3ceec20363d7bae23d662e91e9c` pass their safety contracts. The known-positive exact `0.81.0` image now independently reproduces the board-02 zero identities, reducing a fixture-specific software explanation below the working 5–10% range. The product image also has a gate-eligible local pre-app RTC-watchdog run; its separate retained bundle remains documentation follow-up rather than a release claim.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** establish the S5 stock-hardware completeness baseline and
   advance each present module through probe → observe/capture → Library → inspect/export.
-- **Immediate boundary:** with USB power removed, reseat the detachable board-02 RF
-  shield/pogo contacts, reconnect both boards and repeat the same read-only inventory
-  while every nRF CE remains LOW.
+- **Immediate boundary:** board-02 is an unqualified N16R8/DNP variant with RF in
+  `fault`. Do not cross-swap shields, flash stock firmware or emit RF. The next safe
+  operation is a comparative rail/continuity check while every nRF CE remains LOW.
 - **Current negative evidence:** fixture `0.2.0` exposed a real wrong-slot error;
   corrected slot-2 fixture `0.2.1` still failed before CE HIGH. Diagnostic `0.2.2`
   now localizes that failure to an invalid SPI exchange on board-02 slot 2:
@@ -39,14 +39,23 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   board-01; on board-02 the same image reads both nRF identities and CC1101 version
   as zero. Its 8+2 bounded SPI reads, zero TX/CE-high events and Home/lease-0 cleanup
   pass, making a shared firmware fault unlikely. All runs kept safe terminal state and
-  Home/lease 0; the full gate remains closed until a powered-off shield reseat and
-  repeated read-only inventory.
+  Home/lease 0. The user then fully disassembled/reassembled the real 2×10 connector
+  with power removed; a no-flash rerun of the same exact image reproduced nRF `0/0`
+  and CC `0/0` with the same bounded reads and safe cleanup. ROM/photo evidence now
+  classifies board-02 as an N16R8/DNP variant: its buzzer is absent and its embedded
+  8 MiB Octal PSRAM cannot be admitted because the display uses GPIO35/36/37. Upstream
+  v2 source matches Leshy's radio pinout exactly, while schematics prove all four
+  receivers share direct 3.3 V and SPI. This makes a wrong Leshy v2 pin map and simple
+  reseat unlikely; the gate remains closed pending comparative rail/continuity
+  evidence. Stock firmware is not used as a diagnostic because its source contains
+  maximum-power constant-carrier paths for modules with uncharacterized PA/LNA.
   See [0.2.0](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
   [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json) and
   [0.2.2](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json), plus
   [0.2.3 inventory](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json)
   [0.2.4 shared-shield identity](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json),
-  and [same-image 0.81 cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json).
+  [same-image 0.81 cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
+  and [variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).
 
 ### S5 phase plan
 
@@ -842,6 +851,7 @@ endurance are explicit `DEMO-S4` criteria.
 | E-AUTO-089 | source-bound two-board IR fixture foundation | pass: full host regression; separate fixture source/image; inactive boot and Task-WDT quiesce; exact efuse-MAC/app/session admission; one fixed ≤100 ms NEC vector; exact-port read-only profiler; declarative 67-pulse decode/save/cold-Library/byte-exact-CSV scenario; fixture-aware evidence verifier; clean-tree one-command orchestration | physical board-02 profile, emission/decode, product persistence, cold export and final two-device cleanup remain open. An executing approximately 68 ms blocking burst cannot be interrupted by serial panic, though it cannot repeat or exceed 100 ms |
 | E-BUILD-129 | exact build `0.129.0-pre-app-watchdog` plus unchanged fixture `0.1.0-ir-nec` | pass at source `149e4ef37a650953b7335885c118824ed632fa16`: product static RAM/linked flash 233,288/3,062,560 B, app/factory 3,062,960/3,128,496 B, firmware `5b88751d…0cd`, factory `aa1211c5…326`, app identity `2b88b490…ae0`, RTC no-init 128 B; fixture static RAM/linked flash 22,724/322,215 B and firmware `c95996e2…520` | +1,056 B linked flash and zero static-RAM growth versus 0.125 for physical IR envelope tolerance plus Task/RTC pre-app watchdog state; focused heap remains below RB-04 and does not replace mixed-workload endurance |
 | E-AUTO-093 / E-HIL-150 / E-RADIO-014 / E-STORAGE-031 | board-01 + board-02 exact 0.129 physical NEC positive loop | pass/gate-eligible: 33/33 declarative steps bind exact source/images, distinct USB roles, read-only fixture profile and one fixed 68.424 ms NEC emission. Board-01 captures 67 pulses, decodes `0x10/0x34`, advances generation 97→98 only after explicit Save, cold-reopens exact IR metadata and emits byte-exact live/Library CSV. Six TFT states, invariant heap 148,164/77,932/63,700 B, zero input errors/drops, inactive fixture/product outputs and final owner/lease none/0 are retained in [machine-checked evidence](../../tests/hil/evidence/board-01-infrared-nec-0.129.json) | accepts one-board-pair/fixed-vector NEC receive, persistence and export. It does not authorize product replay, general IR protocol coverage, RF fixture transmission or S5 closure |
+| E-HIL-151 / E-RADIO-015 | board-02 N16R8/DNP classification and no-flash receiver rerun | partial/fail-closed: ROM identifies 16 MiB flash plus embedded 8 MiB Octal PSRAM; photos identify missing BOM buzzer and a separately populated RF carrier. After full powered-off 2×10 reassembly, exact running `0.81.0` reuses firmware `2d0bc0cf…8379`/ELF `e86968d4…033` without flash and again reads nRF `0/0` plus CC `0/0` across bounded 8+2 reads, zero CE-high/TX and Home/lease 0. Upstream source/schematic/BOM hashes and the exact stock radio pinout are bound in [machine evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json) | rejects simple reseat, wrong Leshy-v2 pin mapping, usable PSRAM and stock-flash-as-diagnostic explanations; RF stays `fault`, emission/cross-swap forbidden pending comparative connector continuity and assembled 3.3 V |
 
 ## Known uncertainties and risks
 
@@ -859,19 +869,21 @@ endurance are explicit `DEMO-S4` criteria.
   point opens the intended 46 px Home row. The failed threshold-350 run is retained;
   threshold 80 is accepted against the measured idle range 3…14. This is one-board
   panel evidence, not a claim that every display/touch-controller lot is pre-calibrated.
-- Board-01 provides partial evidence for `HW-T01/T04/T07/T11`; other physical tests
-  have not run, and no composite HW-T test is fully closed yet.
-- BOM says ESP32-S3-WROOM-1U-N16 (16 MB, no PSRAM), while the original build guide
-  says OPI PSRAM; `HW-U01` remains physically open but is constrained to N16/no-PSRAM.
+- Two boards now provide partial `HW-T01` evidence: board-01 is N16/no-PSRAM and
+  board-02 is an unqualified N16R8/DNP assembly. `HW-T04/T07/T11` remain board-01
+  evidence; continuity, rail and instrumented RF/power tests remain open.
+- BOM says N16/no-PSRAM while the original build guide says OPI PSRAM. Board-02 proves
+  the mismatch can ship physically: its N16R8 ROM memory collides with display
+  GPIO35/36/37 and is excluded from the portable resource budget.
 - Schematic TFT RESET and legacy `TFT_RST=0` conflict; GPIO0 is forbidden as display
   reset until `HW-T02`.
 - The clean platform gate is closed by `DEMO-S2`; product prototypes remain
   implementation evidence until their own `DEMO-S3…S8` gates.
 - The PRD is accepted as baseline 1.0, but `accepted` is not `verified`: each P0 is
   verified only by its applicable S2…S8 gate.
-- The earlier 0.125 board-02 boundary is superseded by exact 0.129 physical fixture
-  evidence. Board-02 now has bounded IR NEC authority only; RF fixture authority
-  remains closed until each separate RF contract is accepted and verified.
+- Board-02 retains bounded IR NEC authority from exact 0.129, but its detachable RF
+  path is now an explicit hardware `fault`; RF fixture authority remains closed until
+  rail/continuity repair or profile admission produces a plausible read-only identity.
 - No microphone/scope evidence exists for the buzzer: exact boot/runtime pad state is
   proven, while absence of audible hum remains an operator observation and HW-T09.
 
@@ -880,10 +892,12 @@ endurance are explicit `DEMO-S4` criteria.
 Exact 0.129 closes the first closed-loop two-board result: the retained run binds both
 images, source commit, distinct USB identities and the read-only board-02 profile,
 then passes fixed NEC receive → save → cold Library byte-exact CSV and safe cleanup.
-The current phase moves to a similarly bounded nRF24 positive fixture. It must use a
-fixed channel/vector, the minimum supported TX power, one finite session and panic/
-watchdog cleanup before it can be admitted against the existing passive finder. The
-two-board role and evidence boundary remains in [TWO_BOARD_HIL.md](TWO_BOARD_HIL.md).
+The current phase still targets a similarly bounded nRF24 positive fixture, but the
+new board-02 hardware gate precedes it: comparative connector continuity and assembled
+3.3 V must restore a plausible powered-down identity. Only then may a fixed channel/
+vector, minimum supported TX power, one finite session and panic/watchdog cleanup be
+admitted against the passive finder. The role and evidence boundary remains in
+[TWO_BOARD_HIL.md](TWO_BOARD_HIL.md).
 
 FSK capture still requires the declared GDO0 path. GPS and PN532 stay
 conditional on an explicitly selected compatible assembly; missing modules are N/A,
@@ -920,9 +934,9 @@ changing storage, radio or the remaining S4 exit criteria.
 The currently unavailable controlled
 power-cut fixture remains an explicit
 `DEMO-S4` exit requirement, and software reset is not accepted as its substitute.
-A second board, multimeter, and logic/RF detector remain named later-stage
-gaps; affected capabilities stay conditional/unavailable rather than being enabled by
-assumption.
+A multimeter and logic/RF detector remain named later-stage gaps; the second board is
+present but its RF path is faulty. Affected capabilities stay conditional/unavailable
+rather than being enabled by assumption.
 
 The 0.51 hardware-watchdog injection, regression, and shortened endurance checkpoint
 are retained (`E-HIL-073…075`). On 18 August 2026 the product owner superseded the

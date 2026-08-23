@@ -13,16 +13,16 @@
 - **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
 - **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
-- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага; exact same-image cross-check `0.81.0` находит все три RF-приёмника на board-01 и ноль на board-02 при zero TX/CE-high events.
-- **Следующий evidence gate:** при выключенном питании переустановить съёмный RF-shield board-02, повторить read-only inventory shared bus, затем пройти короткий bounded nRF regression до known-signal gate finder.
+- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага; exact same-image cross-check `0.81.0` находит два разрешённых nRF receiver плюс CC1101 на board-01 и ноль на board-02 при zero TX/CE-high events. Полная reassembly без питания и no-flash rerun exact image воспроизводят fault board-02.
+- **Следующий evidence gate:** сравнить powered-off continuity и assembled 3,3 В board-01/board-02 на connector pins 17/18 плюс SPI/MISO; короткий bounded nRF regression и known-signal gate finder разрешаются только после plausible read-only identity.
 - **Принятая physical baseline:** exact `0.129.0-pre-app-watchdog`; все прежние принятые checkpoints сохранены ниже.
 - **Текущий source candidate:** exact product `0.129.0-pre-app-watchdog` не изменён. Source-bound fixture `0.2.4` и focused cross-check runner commit `b27585a7b32ed3ceec20363d7bae23d662e91e9c` проходят safety contracts. Известный положительный exact image `0.81.0` независимо воспроизводит zero identities board-02, снижая рабочую вероятность fixture-specific software explanation ниже 5–10%. Product image также имеет gate-eligible local run pre-app RTC watchdog; его отдельный retained bundle остаётся документационным follow-up, а не release claim.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
-- **Ближайшая граница:** при отключённом USB-питании переустановить съёмный RF-shield
-  и pogo-контакты board-02, снова подключить обе платы и повторить тот же read-only
-  inventory, продолжая удерживать все nRF CE LOW.
+- **Ближайшая граница:** board-02 — unqualified N16R8/DNP variant с RF в `fault`.
+  Не cross-swap-ить shields, не прошивать stock firmware и не излучать RF. Следующая
+  safe operation — сравнительная проверка rail/continuity при всех nRF CE в LOW.
 - **Текущее negative evidence:** fixture `0.2.0` обнаружил реальную ошибку выбора slot;
   исправленный на slot 2 fixture `0.2.1` всё равно отказал до CE HIGH. Diagnostic
   `0.2.2` локализовал отказ до некорректного SPI exchange со slot 2 board-02:
@@ -38,15 +38,23 @@
   две nRF identity `14/8/2/15` и CC1101 version `20`; тот же image на board-02 прочитал
   обе nRF identity и CC1101 version как нули. Его bounded 8+2 SPI reads, zero TX/CE-high
   events и cleanup Home/lease 0 проходят, поэтому shared firmware fault маловероятен.
-  Все run сохранили safe terminal state;
-  полный gate закрыт до переустановки shield при выключенном питании и повторного
-  read-only inventory. См.
+  Затем user полностью разобрал и собрал настоящий connector 2×10 без питания;
+  no-flash rerun того же exact image повторил nRF `0/0` и CC `0/0` с теми же bounded
+  reads и safe cleanup. ROM/photo evidence теперь классифицирует board-02 как
+  N16R8/DNP variant: buzzer отсутствует, а встроенные 8 MiB Octal PSRAM нельзя
+  допустить из-за display GPIO35/36/37. Upstream v2 source точно совпадает с radio
+  pinout Leshy, а schematics доказывают прямые общие 3,3 В и SPI всех четырёх
+  receiver. Wrong Leshy pin map и простой reseat стали маловероятны; gate закрыт до
+  comparative rail/continuity evidence. Stock firmware не используется как
+  diagnostic, потому что source содержит maximum-power constant-carrier paths для
+  modules с неохарактеризованными PA/LNA. См.
   [0.2.0](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json),
   [0.2.1](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.1-failed.json) и
   [0.2.2](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.2-failed.json) и
   [inventory 0.2.3](../../tests/hil/evidence/board-02-nrf24-inventory-0.2.3-failed.json)
-  [shared-shield identity 0.2.4](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json)
-  и [same-image cross-check 0.81](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json).
+  [shared-shield identity 0.2.4](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json),
+  [same-image cross-check 0.81](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json)
+  и [variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).
 
 ### План фаз S5
 
@@ -841,6 +849,7 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-AUTO-089 | source-bound two-board IR fixture foundation | pass: полный host regression; отдельные fixture source/image; inactive boot и Task-WDT quiesce; exact admission efuse-MAC/app/session; один fixed NEC vector ≤100 ms; exact-port read-only profiler; declarative scenario decode 67 pulses/save/cold-Library/byte-exact CSV; fixture-aware evidence verifier; one-command orchestration только из clean tree | physical profile board-02, emission/decode, product persistence, cold export и final two-device cleanup остаются открыты. Уже выполняющийся blocking burst около 68 ms не прерывается serial panic, хотя не может повториться или превысить 100 ms |
 | E-BUILD-129 | exact build `0.129.0-pre-app-watchdog` плюс неизменный fixture `0.1.0-ir-nec` | pass на source `149e4ef37a650953b7335885c118824ed632fa16`: product static RAM/linked flash 233 288/3 062 560 B, app/factory 3 062 960/3 128 496 B, firmware `5b88751d…0cd`, factory `aa1211c5…326`, app identity `2b88b490…ae0`, RTC no-init 128 B; fixture static RAM/linked flash 22 724/322 215 B и firmware `c95996e2…520` | +1 056 B linked flash и zero static-RAM growth против 0.125 за physical IR envelope tolerance и Task/RTC pre-app watchdog state; focused heap остаётся ниже RB-04 и не заменяет mixed-workload endurance |
 | E-AUTO-093 / E-HIL-150 / E-RADIO-014 / E-STORAGE-031 | board-01 + board-02 exact 0.129 physical positive loop NEC | pass/gate-eligible: 33/33 declarative steps связывают exact source/images, разные USB roles, read-only fixture profile и одну fixed NEC emission 68,424 ms. Board-01 принимает 67 pulses, декодирует `0x10/0x34`, продвигает generation 97→98 только после явного Save, cold-reopen-ит exact IR metadata и выдаёт byte-exact live/Library CSV. Шесть TFT states, invariant heap 148 164/77 932/63 700 B, zero input errors/drops, inactive fixture/product outputs и final owner/lease none/0 сохранены в [machine-checked evidence](../../tests/hil/evidence/board-01-infrared-nec-0.129.json) | принимает NEC receive/persistence/export для одной пары плат и fixed vector. Не разрешает product replay, общую поддержку IR protocols, RF fixture TX или закрытие S5 |
+| E-HIL-151 / E-RADIO-015 | классификация N16R8/DNP board-02 и no-flash receiver rerun | partial/fail-closed: ROM определяет 16 MiB flash плюс встроенные 8 MiB Octal PSRAM; фото подтверждают отсутствующий BOM buzzer и отдельно распаянный RF carrier. После полной reassembly connector 2×10 без питания exact running `0.81.0` переиспользует firmware `2d0bc0cf…8379`/ELF `e86968d4…033` без flash и снова читает nRF `0/0` плюс CC `0/0` за bounded 8+2 reads, zero CE-high/TX и Home/lease 0. Hashes upstream source/schematic/BOM и точный stock radio pinout привязаны в [machine evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json) | отвергает simple reseat, wrong Leshy-v2 pin mapping, usable PSRAM и stock-flash-as-diagnostic explanations; RF остаётся `fault`, emission/cross-swap запрещены до comparative connector continuity и assembled 3,3 В |
 
 ## Известные неопределённости и риски
 
@@ -858,19 +867,21 @@ goldens. Управляемый physical power-cut и восьмичасовой
   нужную строку Home высотой 46 px. Failed run с threshold 350 сохранён; threshold
   80 принят относительно measured idle range 3…14. Это evidence одной board/panel,
   а не утверждение о предкалибровке каждой партии display/touch-controller.
-- Board-01 дала partial evidence для `HW-T01/T04/T07/T11`; остальные physical tests
-  не выполнены, и ни один составной HW-T test ещё не закрыт целиком.
-- BOM указывает ESP32-S3-WROOM-1U-N16 (16 MB, без PSRAM), а original build guide —
-  OPI PSRAM; `HW-U01` физически открыт, но constrained до N16/no-PSRAM.
+- Две платы теперь дают partial evidence `HW-T01`: board-01 — N16/no-PSRAM, board-02 —
+  unqualified N16R8/DNP assembly. `HW-T04/T07/T11` остаются evidence board-01;
+  continuity, rail и instrumented RF/power tests открыты.
+- BOM указывает N16/no-PSRAM, а original build guide — OPI PSRAM. Board-02 доказывает,
+  что mismatch встречается физически: её N16R8 ROM memory конфликтует с display
+  GPIO35/36/37 и исключена из portable resource budget.
 - TFT RESET на schematic и `TFT_RST=0` в legacy flags противоречат друг другу;
   GPIO0 запрещён как display reset до `HW-T02`.
 - Clean platform gate закрыт `DEMO-S2`; product prototypes остаются implementation
   evidence до собственных gates `DEMO-S3…S8`.
 - PRD принят как baseline 1.0, но `accepted` не означает `verified`: verification
   каждого P0 остаётся за соответствующими S2…S8 gates.
-- Прежняя граница board-02 из 0.125 заменена exact physical fixture evidence 0.129.
-  Board-02 теперь имеет только bounded IR NEC authority; RF fixture authority остаётся
-  закрытой до принятия и проверки каждого отдельного RF-контракта.
+- Board-02 сохраняет bounded IR NEC authority exact 0.129, но её detachable RF path
+  теперь explicit hardware `fault`; RF fixture authority закрыта, пока rail/continuity
+  repair либо admission profile не даст plausible read-only identity.
 - Для buzzer нет microphone/scope evidence: exact boot/runtime pad state подтверждён,
   но отсутствие слышимого фона остаётся операторским наблюдением и HW-T09.
 
@@ -879,10 +890,11 @@ goldens. Управляемый physical power-cut и восьмичасовой
 Exact 0.129 закрывает первый closed-loop result двух плат: retained run связывает оба
 image, source commit, разные USB identities и read-only profile board-02, затем
 проходит fixed NEC receive → save → cold Library byte-exact CSV и безопасную очистку.
-Текущая фаза переходит к аналогичному bounded positive fixture nRF24. До admission
-против существующего passive finder он обязан использовать фиксированные channel/
-vector, минимальную доступную мощность TX, одну конечную session и panic/watchdog
-cleanup. Полные роли и evidence boundary остаются в
+Текущая фаза по-прежнему ведёт к bounded positive fixture nRF24, но перед ним появился
+hardware gate board-02: comparative connector continuity и assembled 3,3 В должны
+восстановить plausible powered-down identity. Только затем допускаются fixed channel/
+vector, минимальная supported TX power, одна finite session и panic/watchdog cleanup
+против существующего passive finder. Полные роли и evidence boundary остаются в
 [TWO_BOARD_HIL.ru.md](TWO_BOARD_HIL.ru.md).
 
 FSK capture всё ещё требует declared path GDO0. GPS и PN532
@@ -919,10 +931,10 @@ targets, non-interactive chrome и Quick 9/9 приняты без измене�
 оставшихся exit criteria S4.
 Недоступный сейчас управляемый
 power-cut fixture остаётся явным exit
-requirement `DEMO-S4`, software reset не принимается как замена. Второй
-экземпляр, мультиметр и logic/RF detector остаются named gaps следующих этапов;
-затронутые capabilities остаются conditional/unavailable и не включаются
-предположением.
+requirement `DEMO-S4`, software reset не принимается как замена. Мультиметр и logic/RF
+detector остаются named gaps следующих этапов; второй экземпляр присутствует, но его
+RF path неисправен. Затронутые capabilities остаются conditional/unavailable и не
+включаются предположением.
 
 0.51 hardware-watchdog injection, regression и shortened endurance checkpoint
 сохранены (`E-HIL-073…075`). 18 августа 2026 года владелец продукта заменил прежний
