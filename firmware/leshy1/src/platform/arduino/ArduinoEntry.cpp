@@ -6831,6 +6831,10 @@ void renderWifiDeviceDetail(bool clearContent) {
                              ? UiTextId::WifiDevicePrivateAddress
                              : UiTextId::WifiDeviceFactoryAddress));
         secondaryIdentity = true;
+    } else {
+        std::snprintf(line, sizeof(line), "%s",
+                      tr(UiTextId::WifiDevicePassiveOnly));
+        secondaryIdentity = true;
     }
     if (secondaryIdentity) {
         display.setTextColor(
@@ -6874,9 +6878,15 @@ void renderWifiDeviceDetailLiveData() {
         setUiCursor(UiTextRole::Meta, 14, 130);
         display.print(line);
     } else {
+        const std::uint64_t observedUs = wifiDeviceDetail.monotonicUs >=
+                wifiDeviceDetail.firstSeenUs
+            ? wifiDeviceDetail.monotonicUs - wifiDeviceDetail.firstSeenUs : 0U;
+        std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceSeenFormat),
+                      static_cast<unsigned long>(observedUs / 1000000ULL),
+                      tr(wifiDeviceStateText(wifiDeviceDetail.state)));
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 130);
-        display.print(tr(UiTextId::WifiDevicePassiveOnly));
+        display.print(line);
     }
     renderRadioSignalCard(
         wifiDeviceDetail.rssiDbm,
@@ -6890,13 +6900,15 @@ void renderWifiDeviceDetailLiveData() {
     display.setTextColor(Palette::Positive, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 269);
     display.print(tr(wifiDeviceTrendText(wifiDeviceDetail.rssiTrendDb)));
-    const char* state = tr(wifiDeviceStateText(wifiDeviceDetail.state));
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 0, 269);
-    const std::int16_t stateX = Layout::ScreenWidth - Layout::Edge -
-                                display.textWidth(state);
-    setUiCursor(UiTextRole::Meta, stateX, 269);
-    display.print(state);
+    if (wifiDeviceDetail.ssidLength != 0U || wifiDeviceDetail.bssidKnown) {
+        const char* state = tr(wifiDeviceStateText(wifiDeviceDetail.state));
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, 0, 269);
+        const std::int16_t stateX = Layout::ScreenWidth - Layout::Edge -
+                                    display.textWidth(state);
+        setUiCursor(UiTextRole::Meta, stateX, 269);
+        display.print(state);
+    }
 }
 
 UiTextId wifiDeviceTrendText(std::int16_t trendDb) {
