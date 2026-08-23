@@ -78,6 +78,7 @@ def retain(args: argparse.Namespace) -> int:
 
     run = load(source / "run.json")
     candidate = run.get("candidate", {})
+    fixture = run.get("fixture")
     require(run.get("schema") == args.run_schema, "run schema mismatch")
     require(run.get("passed") is True and run.get("failures") == [],
             "only a passing fail-closed run can be retained")
@@ -91,6 +92,77 @@ def retain(args: argparse.Namespace) -> int:
     require(candidate.get("app_elf_sha256") ==
             app_elf_sha256(source / "firmware.bin"),
             "app identity mismatch")
+    fixture_provenance: dict[str, Any] | None = None
+    if fixture is not None:
+        fixture_image = source / "fixture.bin"
+        fixture_profile_path = source / "fixture-profile.json"
+        require(isinstance(fixture, dict), "fixture record is invalid")
+        require(fixture_image.is_file(), "fixture image is missing")
+        require(fixture_profile_path.is_file(), "fixture profile is missing")
+        require(args.fixture_source_commit is not None and
+                len(args.fixture_source_commit) == 40,
+                "fixture source commit must be a full ID")
+        require(fixture.get("source_commit") == args.fixture_source_commit,
+                "fixture source commit mismatch")
+        require(fixture.get("firmware_sha256") == digest(fixture_image),
+                "fixture firmware hash mismatch")
+        require(fixture.get("app_elf_sha256") ==
+                app_elf_sha256(fixture_image),
+                "fixture app identity mismatch")
+        require(fixture.get("profile_sha256") ==
+                digest(fixture_profile_path),
+                "fixture profile hash mismatch")
+        fixture_profile = load(fixture_profile_path)
+        require(fixture_profile.get("schema") ==
+                "leshy.hil.board_profile.v1" and
+                fixture_profile.get("accepted_for_fixture_flash") is True and
+                fixture_profile.get("writes_performed") is False and
+                fixture_profile.get("chip", {}).get("fixture_id") ==
+                fixture.get("fixture_id"),
+                "fixture profile admission mismatch")
+        fixture_identity = fixture.get("identity", {})
+        fixture_admission = fixture.get("admission", {})
+        fixture_cleanup = fixture.get("cleanup", {})
+        require(fixture_identity.get("fixture_id") ==
+                fixture.get("fixture_id") and
+                fixture_identity.get("app_elf_sha256") ==
+                fixture.get("app_elf_sha256") and
+                fixture_admission.get("session_id") == run.get("run_id"),
+                "fixture identity/admission mismatch")
+        require(fixture_cleanup.get("attempted") is True and
+                fixture_cleanup.get("ir_tx_inactive") is True and
+                fixture_cleanup.get("nrf_ce_inactive") is True and
+                fixture_cleanup.get("buzzer_inactive") is True and
+                fixture_cleanup.get("state") == "stopped",
+                "fixture cleanup is incomplete")
+        fixture_source_paths = (
+            "firmware/leshy_fixture/platformio.ini",
+            "firmware/leshy_fixture/src/FixtureSession.h",
+            "firmware/leshy_fixture/src/FixtureSession.cpp",
+            "firmware/leshy_fixture/src/main.cpp",
+        )
+        fixture_source_files: dict[str, str] = {}
+        for relative in fixture_source_paths:
+            working = ROOT / relative
+            require(working.is_file(), f"fixture source is missing: {relative}")
+            source_digest = digest(working)
+            require(hashlib.sha256(git_blob(
+                args.fixture_source_commit, relative)).hexdigest() ==
+                source_digest,
+                f"fixture commit does not bind source: {relative}")
+            fixture_source_files[relative] = source_digest
+        fixture_provenance = {
+            "version": fixture.get("version"),
+            "source_commit": fixture.get("source_commit"),
+            "firmware_sha256": fixture.get("firmware_sha256"),
+            "app_elf_sha256": fixture.get("app_elf_sha256"),
+            "fixture_id": fixture.get("fixture_id"),
+            "firmware_bytes": fixture_image.stat().st_size,
+            "profile_sha256": fixture.get("profile_sha256"),
+            "source_files": fixture_source_files,
+        }
+    elif args.fixture_source_commit is not None:
+        raise ValueError("fixture source commit supplied for a one-board run")
     require(run.get("runner_source_sha256") == digest(runner),
             "executed runner hash mismatch")
     runner_relative = relative_to_root(runner)
@@ -149,6 +221,7 @@ def retain(args: argparse.Namespace) -> int:
         "factory_bytes": (destination / "firmware.factory.bin").stat().st_size,
         "static_ram_bytes": args.static_ram_bytes,
         "linked_flash_bytes": args.linked_flash_bytes,
+        "fixture": fixture_provenance,
     }
     write(destination / "provenance.json", provenance)
     indexed = sorted(path for path in destination.rglob("*") if path.is_file())
@@ -182,6 +255,12 @@ def retain(args: argparse.Namespace) -> int:
             "storage_observations": recovery.get("observations"),
             "storage_physical_write_calls": recovery.get(
                 "physical_write_calls"),
+            "storage_generation_before": recovery.get("generation"),
+            "storage_generation_after": run.get("recovery_after", {}).get(
+                "generation"),
+            "storage_observations_before": recovery.get("observations"),
+            "storage_observations_after": run.get("recovery_after", {}).get(
+                "observations"),
             "heap": [run.get("boot", {}).get("heap_total"),
                      run.get("boot", {}).get("heap_free"),
                      run.get("boot", {}).get("heap_min_free")],
@@ -196,6 +275,15 @@ def retain(args: argparse.Namespace) -> int:
             "manual_button_presses": 0,
             "final_owner": final.get("runtime_owner"),
             "final_lease_mask": final.get("lease_mask"),
+            "fixture_id": fixture.get("fixture_id")
+                if isinstance(fixture, dict) else None,
+            "fixture_state": fixture.get("cleanup", {}).get("state")
+                if isinstance(fixture, dict) else None,
+            "fixture_outputs_inactive": (
+                fixture.get("cleanup", {}).get("ir_tx_inactive") is True and
+                fixture.get("cleanup", {}).get("nrf_ce_inactive") is True and
+                fixture.get("cleanup", {}).get("buzzer_inactive") is True
+            ) if isinstance(fixture, dict) else None,
         },
         "limits": run.get("limits", {}),
     }
@@ -280,6 +368,39 @@ def verify_summary(summary_path: Path) -> dict[str, Any]:
     verify_optional_build_artifact(
         factory, provenance.get("factory_sha256"),
         provenance.get("factory_bytes"), "factory")
+    fixture_provenance = provenance.get("fixture")
+    if fixture_provenance is not None:
+        require(isinstance(fixture_provenance, dict),
+                "fixture provenance is invalid")
+        fixture_image = bundle / "fixture.bin"
+        fixture_profile_path = bundle / "fixture-profile.json"
+        verify_optional_build_artifact(
+            fixture_image, fixture_provenance.get("firmware_sha256"),
+            fixture_provenance.get("firmware_bytes"), "fixture")
+        require(fixture_image.is_file() and
+                app_elf_sha256(fixture_image) ==
+                fixture_provenance.get("app_elf_sha256"),
+                "fixture app identity mismatch")
+        require(fixture_profile_path.is_file() and
+                digest(fixture_profile_path) ==
+                fixture_provenance.get("profile_sha256"),
+                "fixture profile mismatch")
+        fixture_profile = load(fixture_profile_path)
+        require(fixture_profile.get("accepted_for_fixture_flash") is True and
+                fixture_profile.get("writes_performed") is False and
+                fixture_profile.get("chip", {}).get("fixture_id") ==
+                fixture_provenance.get("fixture_id"),
+                "fixture profile is not accepted")
+        source_files = fixture_provenance.get("source_files")
+        require(isinstance(source_files, dict) and len(source_files) == 4,
+                "fixture source provenance is incomplete")
+        for relative, expected_hash in source_files.items():
+            require(isinstance(relative, str) and
+                    isinstance(expected_hash, str) and
+                    hashlib.sha256(git_blob(
+                        fixture_provenance["source_commit"],
+                        relative)).hexdigest() == expected_hash,
+                    f"fixture source commit mismatch: {relative}")
     require(isinstance(provenance.get("app_elf_sha256"), str) and
             len(provenance["app_elf_sha256"]) == 64,
             "app identity is invalid")
@@ -321,18 +442,53 @@ def verify_summary(summary_path: Path) -> dict[str, Any]:
             provenance.get("firmware_sha256") and
             run_candidate.get("app_elf_sha256") ==
             provenance.get("app_elf_sha256"), "candidate mismatch")
+    run_fixture = run.get("fixture")
+    if fixture_provenance is not None:
+        require(isinstance(run_fixture, dict) and
+                run_fixture.get("version") ==
+                fixture_provenance.get("version") and
+                run_fixture.get("source_commit") ==
+                fixture_provenance.get("source_commit") and
+                run_fixture.get("firmware_sha256") ==
+                fixture_provenance.get("firmware_sha256") and
+                run_fixture.get("app_elf_sha256") ==
+                fixture_provenance.get("app_elf_sha256") and
+                run_fixture.get("fixture_id") ==
+                verified.get("fixture_id") and
+                run_fixture.get("profile_sha256") ==
+                fixture_provenance.get("profile_sha256") and
+                run_fixture.get("cleanup", {}).get("state") ==
+                verified.get("fixture_state") == "stopped" and
+                verified.get("fixture_outputs_inactive") is True,
+                "fixture run/provenance/cleanup mismatch")
+    else:
+        require(run_fixture is None, "unexpected fixture run")
     require(run.get("expected_cid") == verified.get("expected_cid"),
             "expected CID mismatch")
     before = run.get("recovery_before", {})
     after = run.get("recovery_after", {})
-    require(before.get("generation") == after.get("generation") ==
-            verified.get("storage_generation") and
-            before.get("observations") == after.get("observations") ==
-            verified.get("storage_observations") and
-            before.get("physical_write_calls") ==
-            after.get("physical_write_calls") ==
-            verified.get("storage_physical_write_calls"),
-            "storage continuity mismatch")
+    invariants = run.get("invariants", {})
+    if invariants.get("storage_unchanged", True):
+        require(before.get("generation") == after.get("generation") ==
+                verified.get("storage_generation") and
+                before.get("observations") == after.get("observations") ==
+                verified.get("storage_observations") and
+                before.get("physical_write_calls") ==
+                after.get("physical_write_calls") ==
+                verified.get("storage_physical_write_calls"),
+                "storage continuity mismatch")
+    else:
+        generation_report = invariants.get("storage_generation_from_report")
+        saved = run.get("reports", {}).get(generation_report, {})
+        require(isinstance(before.get("generation"), int) and
+                saved.get("persist_generation") == before["generation"] + 1 ==
+                after.get("generation") and
+                verified.get("storage_generation_before") ==
+                before.get("generation") and
+                verified.get("storage_generation_after") ==
+                after.get("generation") and
+                after.get("physical_write_calls") == 0,
+                "persisted storage continuity mismatch")
     final = run.get("reports", {}).get("final", {})
     require(final.get("runtime_owner") == verified.get("final_owner") ==
             "none" and final.get("lease_mask") ==
@@ -382,6 +538,7 @@ def parser() -> argparse.ArgumentParser:
     pack.add_argument("--scenario")
     pack.add_argument("--source-commit", required=True)
     pack.add_argument("--runner-commit", required=True)
+    pack.add_argument("--fixture-source-commit")
     pack.add_argument("--factory", required=True, type=Path)
     pack.add_argument("--map", required=True, type=Path)
     pack.add_argument("--static-ram-bytes", required=True, type=int)

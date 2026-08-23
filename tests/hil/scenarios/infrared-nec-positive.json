@@ -1,0 +1,294 @@
+{
+  "schema": "leshy.hil.scenario.v1",
+  "id": "infrared-nec-positive",
+  "checkpoint": "physical_ir_nec_decode_save",
+  "gate_eligible": true,
+  "devices": {
+    "candidate": {"required": true},
+    "fixture": {"required": true, "kind": "ir_nec_fixture"}
+  },
+  "steps": [
+    {
+      "id": "home_capture",
+      "op": "select_home_app",
+      "app_id": "capture",
+      "expect": {
+        "page": "home",
+        "selected_id": "capture",
+        "selected_enabled": true,
+        "runtime_owner": "none",
+        "lease_mask": 0
+      }
+    },
+    {
+      "id": "open_sources",
+      "op": "action",
+      "name": "right",
+      "expect": {"page": "capture", "runtime_owner": "capture"}
+    },
+    {"id": "choose_ir", "op": "action", "name": "down"},
+    {"id": "open_ir", "op": "action", "name": "right"},
+    {
+      "id": "setup",
+      "op": "query",
+      "command": "capture.ir.state",
+      "response_schema": "leshy.capture.infrared_raw.v1",
+      "expect": {
+        "state": "idle",
+        "passive_only": true,
+        "rx_only": true,
+        "gpio_rx": 21,
+        "gpio_tx": 14,
+        "tx_level": "low",
+        "application_tx_calls": 0,
+        "storage_written": false,
+        "persist_state": "volatile",
+        "cleanup_complete": true,
+        "lease_mask": 11
+      }
+    },
+    {"id": "start", "op": "action", "name": "right"},
+    {
+      "id": "waiting",
+      "op": "poll_query",
+      "command": "capture.ir.state",
+      "response_schema": "leshy.capture.infrared_raw.v1",
+      "until": {"state": "waiting"},
+      "timeout": 3,
+      "expect": {
+        "state": "waiting",
+        "passive_only": true,
+        "rx_only": true,
+        "tx_level": "low",
+        "application_tx_calls": 0,
+        "cleanup_complete": false,
+        "persist_state": "volatile",
+        "lease_mask": 11
+      }
+    },
+    {
+      "id": "emit_nec",
+      "op": "query",
+      "target": "fixture",
+      "command": "fixture.ir.nec.once ${session_id} nec-10-34",
+      "response_schema": "leshy.hil.fixture.ir.v1",
+      "kind": "result",
+      "timeout": 3,
+      "expect": {
+        "state": "complete",
+        "role": "ir_nec_fixture",
+        "vector_id": "nec-10-34",
+        "fixed_vector_only": true,
+        "auto_arm": false,
+        "carrier_hz": 38000,
+        "maximum_emission_us": 100000
+      }
+    },
+    {
+      "id": "decoded",
+      "op": "poll_query",
+      "command": "capture.ir.state",
+      "response_schema": "leshy.capture.infrared_raw.v1",
+      "until": {"state": "complete"},
+      "timeout": 3,
+      "expect": {
+        "state": "complete",
+        "passive_only": true,
+        "rx_only": true,
+        "tx_level": "low",
+        "application_tx_calls": 0,
+        "pulses": 67,
+        "start_level": false,
+        "truncated": false,
+        "protocol": "nec",
+        "raw_code": 3409243920,
+        "address": 16,
+        "command": 52,
+        "decode_integrity_valid": true,
+        "csv_available": true,
+        "cleanup_complete": true,
+        "storage_written": false,
+        "persist_state": "volatile",
+        "lease_mask": 11
+      },
+      "checks": [
+        {"path": "transitions", "op": "gte", "value": 67},
+        {"path": "driver_error", "op": "eq", "value": 0}
+      ]
+    },
+    {"id": "decoded_screen", "op": "capture", "name": "ir-nec-decoded"},
+    {
+      "id": "live_csv",
+      "op": "stream",
+      "command": "capture.ir.export.csv",
+      "name": "ir-nec-live",
+      "timeout": 5,
+      "expect": {
+        "begin": {"pulses": 67, "protocol": "nec", "streaming": true},
+        "end": {"status": "valid", "pulses": 67}
+      },
+      "checks": [{"path": "bytes", "op": "gt", "value": 100}]
+    },
+    {"id": "save", "op": "action", "name": "right"},
+    {
+      "id": "saved",
+      "op": "poll_query",
+      "command": "capture.ir.state",
+      "response_schema": "leshy.capture.infrared_raw.v1",
+      "until": {"persist_state": "saved"},
+      "timeout": 35,
+      "interval": 0.1,
+      "expect": {
+        "state": "complete",
+        "protocol": "nec",
+        "raw_code": 3409243920,
+        "address": 16,
+        "command": 52,
+        "decode_integrity_valid": true,
+        "storage_written": true,
+        "persist_state": "saved",
+        "persist_status": "saved",
+        "cleanup_complete": true,
+        "lease_mask": 11
+      },
+      "checks": [
+        {"path": "persist_generation", "op": "gte", "value": 1}
+      ]
+    },
+    {"id": "saved_screen", "op": "capture", "name": "ir-nec-saved"},
+    {"id": "back_to_sources", "op": "action", "name": "left"},
+    {"id": "back_home", "op": "action", "name": "left"},
+    {
+      "id": "pre_reboot",
+      "op": "query",
+      "command": "ui.state",
+      "response_schema": "leshy.ui.v1",
+      "expect": {"page": "home", "runtime_owner": "none", "lease_mask": 0}
+    },
+    {
+      "id": "cold_reopen",
+      "op": "reboot",
+      "capture_seconds": 8,
+      "timeout": 15,
+      "expect": {
+        "ready": {"kind": "ready"},
+        "recovery": {
+          "status": "admitted",
+          "mounted_read_only": true,
+          "physical_write_calls": 0,
+          "cleanup_complete": true,
+          "owned_after": 0
+        }
+      },
+      "checks": [{"path": "recovery.generation", "op": "gte", "value": 1}]
+    },
+    {
+      "id": "home_library",
+      "op": "select_home_app",
+      "app_id": "library",
+      "expect": {
+        "page": "home",
+        "selected_id": "library",
+        "selected_enabled": true,
+        "runtime_owner": "none",
+        "lease_mask": 0
+      }
+    },
+    {"id": "open_library", "op": "action", "name": "right"},
+    {"id": "library_list", "op": "capture", "name": "ir-library-list"},
+    {"id": "open_session", "op": "action", "name": "right"},
+    {"id": "library_detail", "op": "capture", "name": "ir-library-detail"},
+    {"id": "open_export", "op": "action", "name": "right"},
+    {
+      "id": "library_metadata",
+      "op": "query",
+      "command": "library.capture",
+      "response_schema": "leshy.capture.metadata.v1",
+      "kind": "capture",
+      "expect": {
+        "status": "valid",
+        "integrity": "valid",
+        "persistent": true,
+        "immutable": true,
+        "receive": {"mode": "passive", "rx_only": true, "source": "infrared"},
+        "decode": {
+          "protocol": "nec",
+          "raw_code": 3409243920,
+          "address": 16,
+          "command": 52,
+          "integrity_valid": true
+        },
+        "payload": {
+          "status": "captured_infrared_raw",
+          "records": 67,
+          "bytes": 134,
+          "start_level": false,
+          "truncated": false
+        },
+        "exports": {
+          "json_summary": "available",
+          "pulse_csv": "available_from_validated_segment",
+          "pcap": "not_applicable"
+        },
+        "radio_touched": false
+      }
+    },
+    {
+      "id": "library_csv",
+      "op": "stream",
+      "command": "library.export.csv",
+      "name": "ir-nec-library",
+      "timeout": 5,
+      "expect": {
+        "begin": {
+          "status": "valid",
+          "format": "infrared_raw_pulses",
+          "records": 67,
+          "columns": 3,
+          "line_endings": "crlf",
+          "radio_touched": false
+        },
+        "end": {
+          "status": "complete",
+          "format": "infrared_raw_pulses",
+          "records": 67,
+          "persistent": true,
+          "radio_touched": false
+        }
+      },
+      "checks": [{"path": "bytes", "op": "gt", "value": 100}]
+    },
+    {"id": "library_export", "op": "capture", "name": "ir-library-export"},
+    {"id": "back_to_detail", "op": "action", "name": "left"},
+    {"id": "back_to_list", "op": "action", "name": "left"},
+    {"id": "back_from_library", "op": "action", "name": "left"},
+    {
+      "id": "final",
+      "op": "query",
+      "command": "ui.state",
+      "response_schema": "leshy.ui.v1",
+      "expect": {"page": "home", "runtime_owner": "none", "lease_mask": 0}
+    },
+    {"id": "final_home", "op": "capture", "name": "final-home"}
+  ],
+  "invariants": {
+    "final_home_zero_lease": true,
+    "storage_unchanged": false,
+    "storage_generation_from_report": "saved",
+    "byte_exact_streams": ["live_csv", "library_csv"],
+    "heap_free_unchanged": true,
+    "input_clean": true,
+    "safe_outputs": true
+  },
+  "limits": {
+    "fixed_nec_vector": "nec-10-34",
+    "product_ir_tx_or_replay_used": false,
+    "fixture_source_bound": true,
+    "fixture_single_bounded_emission": true,
+    "successful_physical_signal_required": true,
+    "physical_persistence_exercised": true,
+    "cold_reopen_exercised": true,
+    "byte_exact_csv_compared": true,
+    "gate_eligible_only_after_all_declared_checks": true
+  }
+}

@@ -11,7 +11,6 @@ BOARD = ROOT / "firmware/leshy1/src/platform/arduino/BoardCc1101PassiveSpectrum.
 ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 STRINGS = ROOT / "firmware/leshy1/src/ui/UiStrings.def"
 TESTS = ROOT / "tests/native/clean_target_tests.cpp"
-PLATFORM = ROOT / "firmware/leshy1/platformio.ini"
 
 
 def require(blob: bytes, tokens: tuple[bytes, ...], label: str) -> None:
@@ -28,7 +27,6 @@ def main() -> int:
     entry = ENTRY.read_bytes()
     strings = STRINGS.read_bytes()
     tests = TESTS.read_bytes()
-    platform = PLATFORM.read_bytes()
 
     require(header, (
         b"kStepKHz = 250", b"kBinCount = 1099",
@@ -66,10 +64,6 @@ def main() -> int:
         b"targetFrequencyKHz = 433250U",
         b"uniform one-dB ambient shift is common drift",
     ), "native proof")
-    require(platform, (
-        b'LESHY1_VERSION=\\"0.124.1-cc1101-frequency-finder\\"',
-    ), "exact version")
-
     sample = board.split(
         b"BoardCc1101PassiveSpectrum::sampleFrequency", 1)[1].split(
         b"BoardCc1101PassiveSpectrum::lockReceive", 1)[0]

@@ -113,6 +113,17 @@ run_opaque_evidence_check() {
 "${CXX:-c++}" \
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy_fixture/src" \
+    "$repo_dir/tests/native/ir_fixture_tests.cpp" \
+    "$repo_dir/firmware/leshy_fixture/src/FixtureSession.cpp" \
+    -o "$test_tmp/ir_fixture_tests"
+
+"$test_tmp/ir_fixture_tests"
+python3 "$repo_dir/tools/check_ir_fixture_contract.py"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/storage_filesystem_fixture.cpp" \
     "$repo_dir/firmware/leshy1/src/drivers/wifi/WifiPassiveContract.cpp" \
@@ -234,6 +245,8 @@ if [[ "$retained_evidence_mode" == "tracked" ]]; then
 fi
 python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_hil_scenario_runner.py"
+python3 "$repo_dir/tools/test_hil_board_profile.py"
+python3 "$repo_dir/tools/test_ir_two_board_hil.py"
 python3 "$repo_dir/tools/test_sd_power_cut_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"

@@ -1307,6 +1307,28 @@ void testInfraredCaptureIsBoundedAndDecodesNecWithoutTxSemantics() {
     CHECK(std::strstr(json, "\"protocol\":\"nec\"") != nullptr);
     CHECK(std::strstr(json, "\"rx_only\":true") != nullptr);
 
+    LibraryController library;
+    CHECK(library.add(reopened, 1, SessionIntegrity::Valid, true, false));
+    CHECK(library.openSelected());
+    CHECK(library.requestExport());
+    char libraryMetadata[1600] = {};
+    CHECK(library.formatSelectedCaptureMetadata(
+              libraryMetadata, sizeof(libraryMetadata)).valid());
+    CHECK(std::strstr(
+              libraryMetadata, "\"source\":\"infrared\"") != nullptr);
+    CHECK(std::strstr(
+              libraryMetadata, "\"protocol\":\"nec\"") != nullptr);
+    CHECK(std::strstr(
+              libraryMetadata, "\"raw_code\":3409243920") != nullptr);
+    CHECK(std::strstr(
+              libraryMetadata, "\"records\":67") != nullptr);
+    CHECK(std::strstr(
+              libraryMetadata,
+              "\"pulse_csv\":\"available_from_validated_segment\"") !=
+          nullptr);
+    CHECK(std::strstr(
+              libraryMetadata, "\"csv_observations\"") == nullptr);
+
     leshy1::platform::arduino::RamSessionStoreIo store;
     SessionStoreWorkspace workspace;
     const SessionStoreCommitResult committed = commitNextInfraredRawCapture(
