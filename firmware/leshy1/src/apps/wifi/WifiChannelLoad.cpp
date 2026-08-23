@@ -73,16 +73,42 @@ bool WifiChannelLoad::completeDwell(std::uint8_t channel,
 }
 
 std::uint8_t WifiChannelLoad::bestPrimaryChannel() const {
-    constexpr std::array<std::uint8_t, 3> primary = {1, 6, 11};
-    constexpr std::uint16_t required =
-        static_cast<std::uint16_t>((1U << 0U) | (1U << 5U) | (1U << 10U));
+    constexpr std::uint16_t required = (1U << kLastChannel) - 1U;
     if ((snapshot_.measuredMask & required) != required) return 0;
-    std::uint8_t best = primary[0];
-    for (std::size_t at = 1; at < primary.size(); ++at) {
-        const std::uint8_t candidate = primary[at];
-        if (snapshot_.channels[index(candidate)].averageBusyPermille <
-            snapshot_.channels[index(best)].averageBusyPermille) {
+
+    // The graph exposes the arithmetic session mean for every legal channel,
+    // so that same visible value must be the primary recommendation criterion.
+    // When two means are equal, prefer the channel with less nearby mean load.
+    // The 3/2/1 kernel is a bounded approximation of the decreasing spectral
+    // overlap of 20 MHz Wi-Fi centres one, two and three 5 MHz steps apart.
+    const auto adjacentPressure = [this](std::uint8_t candidate) {
+        std::uint32_t pressure = 0;
+        for (std::uint8_t channel = kFirstChannel;
+             channel <= kLastChannel; ++channel) {
+            const std::uint8_t distance = channel > candidate
+                ? static_cast<std::uint8_t>(channel - candidate)
+                : static_cast<std::uint8_t>(candidate - channel);
+            if (distance == 0U || distance > 3U) continue;
+            const std::uint8_t weight = static_cast<std::uint8_t>(4U - distance);
+            pressure += static_cast<std::uint32_t>(
+                snapshot_.channels[index(channel)].averageBusyPermille) * weight;
+        }
+        return pressure;
+    };
+
+    std::uint8_t best = kFirstChannel;
+    std::uint32_t bestPressure = adjacentPressure(best);
+    for (std::uint8_t candidate = kFirstChannel + 1U;
+         candidate <= kLastChannel; ++candidate) {
+        const std::uint16_t candidateMean =
+            snapshot_.channels[index(candidate)].averageBusyPermille;
+        const std::uint16_t bestMean =
+            snapshot_.channels[index(best)].averageBusyPermille;
+        const std::uint32_t candidatePressure = adjacentPressure(candidate);
+        if (candidateMean < bestMean ||
+            (candidateMean == bestMean && candidatePressure < bestPressure)) {
             best = candidate;
+            bestPressure = candidatePressure;
         }
     }
     return best;

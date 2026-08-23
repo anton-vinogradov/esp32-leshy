@@ -74,8 +74,9 @@ def home_wifi(device: PassiveSerial) -> dict[str, Any]:
 
 
 def is_dynamic_pixel(x: int, y: int) -> bool:
-    # Only the graph body and the right-hand recommendation may change.
-    return 58 <= y < 252 or (116 <= x < WIDTH and 32 <= y < 58)
+    # Only the graph body, selected channel label and recommendation may change.
+    return (58 <= y < 252 or 252 <= y < 275 or
+            (116 <= x < WIDTH and 32 <= y < 58))
 
 
 def changed_pixels(frames: Path, before_name: str,
@@ -229,7 +230,7 @@ def main() -> int:
                         int(state.get("wifi_channel_measured_mask", 0)) == 8191 and
                         int(state.get("wifi_channel_completed_sweeps", 0)) >= 2 and
                         int(state.get("wifi_channel_frames_reported", 0)) > 0 and
-                        int(state.get("wifi_channel_best_primary", 0)) in (1, 6, 11)
+                        int(state.get("wifi_channel_best_primary", 0)) in range(1, 14)
                     ), 60.0, "complete passive Wi-Fi channel sweep did not appear")
                 trace.append(live_first)
                 require_exact(live_first, {
@@ -388,9 +389,12 @@ def main() -> int:
             "passive_receive_only": True,
             "channels_measured": list(range(1, 14)),
             "lower_bound_airtime_estimate": True,
-            "recommended_primary_channels": [1, 6, 11],
+            "recommended_primary_channels": list(range(1, 14)),
             "average_load_rendered_gray": True,
             "recommendation_uses_session_average": True,
+            "recommendation_primary_criterion": "visible_session_average",
+            "recommendation_tie_break": "adjacent_overlap_pressure",
+            "recommended_axis_label_highlighted": True,
             "minimum_average_dwells_per_channel": 2,
             "static_pixels_unchanged_during_live_refresh": True,
             "two_complete_wifi_lifecycles": True,

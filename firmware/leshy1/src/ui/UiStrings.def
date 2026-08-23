@@ -280,7 +280,7 @@ LESHY_UI_TEXT(WifiDeviceRssiRangeFormat, Meta, 196, "RANGE %d...%d DBM", u8"ДИ
 LESHY_UI_TEXT(WifiChannelsTitle, Meta, 196, "WI-FI / CHANNELS", u8"WI-FI / КАНАЛЫ")
 LESHY_UI_TEXT(WifiChannelsScale, Meta, 44, "~ 0-8%", u8"~ 0-8%")
 LESHY_UI_TEXT(WifiChannelsAverageLegend, Meta, 48, "AVG", u8"СРЕД")
-LESHY_UI_TEXT(WifiChannelsBestFormat, Meta, 112, "BEST 1/6/11: %u", u8"СВОБОДНЕЕ: %u")
+LESHY_UI_TEXT(WifiChannelsBestFormat, Meta, 112, "FREER: %u", u8"СВОБОДНЕЕ: %u")
 LESHY_UI_TEXT(WifiChannelsMeasuring, Meta, 112, "MEASURING...", u8"ИЗМЕРЯЮ...")
 LESHY_UI_TEXT(WifiChannelsFailed, Meta, 196, "WI-FI RECEIVER UNAVAILABLE", u8"ПРИЁМНИК WI-FI НЕДОСТУПЕН")
 LESHY_UI_TEXT(WifiCaptureTitle, Meta, 196, "WI-FI / PACKETS", u8"WI-FI / ПАКЕТЫ")

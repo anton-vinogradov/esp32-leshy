@@ -107,7 +107,7 @@ def main() -> int:
                 state.get("wifi_channel_completed_sweeps", 0) >= 2 and
                 state.get("wifi_channel_frames_reported", 0) > 0 and
                 state.get("wifi_channel_invalid_frames") == 0 and
-                state.get("wifi_channel_best_primary") in (1, 6, 11),
+                state.get("wifi_channel_best_primary") in range(1, 14),
                 f"{label} passive channel observation mismatch")
     require(failures,
             second.get("wifi_channel_revision", 0) >
@@ -149,9 +149,14 @@ def main() -> int:
             scope.get("passive_receive_only") is True and
             scope.get("channels_measured") == list(range(1, 14)) and
             scope.get("lower_bound_airtime_estimate") is True and
-            scope.get("recommended_primary_channels") == [1, 6, 11] and
+            scope.get("recommended_primary_channels") == list(range(1, 14)) and
             scope.get("average_load_rendered_gray") is True and
             scope.get("recommendation_uses_session_average") is True and
+            scope.get("recommendation_primary_criterion") ==
+                "visible_session_average" and
+            scope.get("recommendation_tie_break") ==
+                "adjacent_overlap_pressure" and
+            scope.get("recommended_axis_label_highlighted") is True and
             scope.get("minimum_average_dwells_per_channel") == 2 and
             scope.get("static_pixels_unchanged_during_live_refresh") is True and
             scope.get("storage_write_authorized") is False,

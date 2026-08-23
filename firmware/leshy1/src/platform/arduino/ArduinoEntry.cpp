@@ -7177,6 +7177,22 @@ std::int16_t wifiChannelBarHeight(std::uint16_t busyPermille) {
             ? kWifiChannelGraphHeight : scaled);
 }
 
+void renderWifiChannelAxisLabel(std::uint8_t channel, std::uint16_t tone) {
+    if (channel < 1U || channel > 13U) return;
+    char label[4] = {};
+    std::snprintf(label, sizeof(label), "%u", static_cast<unsigned>(channel));
+    selectUiFont(UiTextRole::Meta);
+    const std::int16_t center = kWifiChannelBarX +
+        static_cast<std::int16_t>(channel - 1U) * kWifiChannelBarStep +
+        kWifiChannelBarWidth / 2;
+    display.fillRect(center - kWifiChannelBarStep / 2, kWifiChannelAxisY,
+                     kWifiChannelBarStep, 17, Palette::Canvas);
+    display.setTextColor(tone, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, center - display.textWidth(label) / 2,
+                kWifiChannelAxisY);
+    display.print(label);
+}
+
 void renderWifiChannelInfo(const WifiChannelLoadSnapshot& snapshot,
                            bool force) {
     const std::uint8_t best = wifiFrameCapture.bestPrimaryChannel();
@@ -7190,6 +7206,13 @@ void renderWifiChannelInfo(const WifiChannelLoadSnapshot& snapshot,
         display.print(tr(UiTextId::WifiChannelsAverageLegend));
     }
     if (!force && best == wifiChannelRenderedBest) return;
+    if (wifiChannelRenderedBest >= 1U && wifiChannelRenderedBest <= 13U) {
+        renderWifiChannelAxisLabel(wifiChannelRenderedBest,
+                                   Palette::TextMuted);
+    }
+    if (best >= 1U && best <= 13U) {
+        renderWifiChannelAxisLabel(best, Palette::Focus);
+    }
     constexpr std::int16_t rightX = 116;
     display.fillRect(rightX, kWifiChannelInfoY,
                      Layout::ScreenWidth - rightX,
@@ -7274,22 +7297,7 @@ void renderWifiChannelsData(bool full) {
             display.drawFastHLine(0, y, Layout::ScreenWidth, grid);
         }
         for (std::uint8_t channel = 1U; channel <= 13U; ++channel) {
-            char label[4] = {};
-            std::snprintf(label, sizeof(label), "%u",
-                          static_cast<unsigned>(channel));
-            selectUiFont(UiTextRole::Meta);
-            const std::int16_t center = kWifiChannelBarX +
-                static_cast<std::int16_t>(channel - 1U) *
-                    kWifiChannelBarStep + kWifiChannelBarWidth / 2;
-            const bool primary = channel == 1U || channel == 6U ||
-                                 channel == 11U;
-            display.setTextColor(primary ? Palette::Focus
-                                         : Palette::TextMuted,
-                                 Palette::Canvas);
-            setUiCursor(UiTextRole::Meta,
-                        center - display.textWidth(label) / 2,
-                        kWifiChannelAxisY);
-            display.print(label);
+            renderWifiChannelAxisLabel(channel, Palette::TextMuted);
         }
     }
     renderWifiChannelInfo(snapshot, full);

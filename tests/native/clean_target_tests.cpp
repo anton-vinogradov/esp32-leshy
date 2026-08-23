@@ -2491,10 +2491,14 @@ void testWifiChannelLoadIsBoundedAndTruthful() {
     CHECK(snapshot.completedDwells == 1);
     CHECK(load.bestPrimaryChannel() == 0);
 
-    CHECK(load.observe(6, 1000, -65));
     CHECK(load.completeDwell(6, 120000));
     CHECK(load.observe(11, 2000, -55));
     CHECK(load.completeDwell(11, 120000));
+    for (std::uint8_t channel = 2; channel <= 13; ++channel) {
+        if (channel == 6 || channel == 11) continue;
+        CHECK(load.observe(channel, 1000, -65));
+        CHECK(load.completeDwell(channel, 120000));
+    }
     CHECK(load.bestPrimaryChannel() == 6);
 
     // A second pass makes channel 6 momentarily busy and channels 1/11
@@ -2504,22 +2508,34 @@ void testWifiChannelLoadIsBoundedAndTruthful() {
     CHECK(load.observe(6, 9600, -45));
     CHECK(load.completeDwell(6, 120000));
     CHECK(load.completeDwell(11, 120000));
+    for (std::uint8_t channel = 2; channel <= 13; ++channel) {
+        if (channel == 6 || channel == 11) continue;
+        CHECK(load.observe(channel, 2400, -60));
+        CHECK(load.completeDwell(channel, 120000));
+    }
     snapshot = load.snapshot();
     CHECK(snapshot.channels[0].busyPermille == 0);
     CHECK(snapshot.channels[0].averageBusyPermille == 12);
     CHECK(snapshot.channels[5].busyPermille == 80);
-    CHECK(snapshot.channels[5].averageBusyPermille == 44);
+    CHECK(snapshot.channels[5].averageBusyPermille == 40);
     CHECK(snapshot.channels[10].busyPermille == 0);
     CHECK(snapshot.channels[10].averageBusyPermille == 8);
     CHECK(snapshot.channels[10].dwells == 2);
     CHECK(load.bestPrimaryChannel() == 11);
 
-    CHECK(load.observe(13, 200000, -30));
-    CHECK(load.completeDwell(13, 120000));
+    load.reset();
+    for (std::uint8_t channel = 1; channel <= 13; ++channel) {
+        if (channel <= 11) CHECK(load.observe(channel, 1200, -55));
+        CHECK(load.completeDwell(channel, 120000));
+    }
     snapshot = load.snapshot();
-    CHECK(snapshot.channels[12].busyPermille == 1000);
+    CHECK(snapshot.channels[11].averageBusyPermille == 0);
+    CHECK(snapshot.channels[12].averageBusyPermille == 0);
     CHECK(snapshot.completedSweeps == 1);
-    CHECK(snapshot.revision == 7);
+    CHECK(snapshot.revision == 13);
+    // Channels 12 and 13 are equally empty by the visible session mean.
+    // Channel 13 wins the tie because it has less adjacent-channel pressure.
+    CHECK(load.bestPrimaryChannel() == 13);
 
     load.reset();
     snapshot = load.snapshot();
