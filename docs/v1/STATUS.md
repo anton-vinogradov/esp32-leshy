@@ -22,6 +22,13 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   advance each present module through probe → observe/capture → Library → inspect/export.
 - **Immediate boundary:** implement the fixture-side, source-bound nRF24 vector at the
   minimum supported power and prove the already implemented passive finder against it.
+- **Current negative evidence:** fixture `0.2.0` failed safe before emission because
+  it addressed unpopulated/PN532-reserved slot 1. The product completed ambient
+  calibration RX-only on all three detected antennas; fixture emission count stayed
+  zero, CE stayed inactive, both boards cleaned up and product returned Home/lease 0.
+  The source-bound correction targets populated slot 2 and must pass a short physical
+  fixture regression before the full finder gate is retried. See the retained
+  [failure record](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json).
 
 ### S5 phase plan
 

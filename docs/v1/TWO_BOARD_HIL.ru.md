@@ -59,8 +59,9 @@ NEC emitter намеренно allocation-free и blocking примерно на
 inactive. Эта software boundary не заменяет независимый physical rail kill или
 oscilloscope/RF proof.
 
-Source `0.2.0-bounded-signals` сохраняет NEC contract и добавляет ровно один RF
-vector `nrf24-ch42-min-2s`. Он использует module slot 1, nRF channel 42 / 2 442 МГц,
+Source `0.2.1-bounded-signals` сохраняет NEC contract и добавляет ровно один RF
+vector `nrf24-ch42-min-2s`. Он использует populated module slot 2 (CSN48/CE47), nRF
+channel 42 / 2 442 МГц,
 `RF_SETUP=0x90` (continuous carrier + PLL lock + минимальная настройка чипа −18 dBm)
 и duration 2 секунды при hard ceiling 2,5 секунды. Boot, completion, stop, panic,
 parser failure и Task-WDT удерживают CE всех трёх модулей inactive и переводят
@@ -83,6 +84,15 @@ radiated power, sensitivity, range, calibrated frequency или instrumented RF 
 
 Scenario становится gate-eligible только после сохранения physical результата. До
 этого это реализованный test contract, а не принятое RF evidence.
+
+Первый physical attempt с fixture `0.2.0` завершился fail-safe до emission:
+сохранённый hardware code 0.x указывает populated slots 2/3 и
+unpopulated/PN532-reserved slot 1. Строгий register read-back отверг slot 1; emission
+count и duration остались нулевыми, все fixture outputs закончились inactive/powered
+down, а product вернулся на Home/lease 0. Результат сохранён как
+[negative evidence](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json).
+Fixture `0.2.1` исправляет fixed vector на slot 2 и обязан пройти non-gate
+`nrf24-fixture-regression` до повтора полного scenario.
 
 ## Read-only admission board-02
 

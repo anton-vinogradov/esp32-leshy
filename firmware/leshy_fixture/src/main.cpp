@@ -13,7 +13,7 @@
 #include "FixtureSession.h"
 
 #ifndef LESHY_FIXTURE_VERSION
-#define LESHY_FIXTURE_VERSION "0.2.0-bounded-signals"
+#define LESHY_FIXTURE_VERSION "0.2.1-bounded-signals"
 #endif
 
 namespace {
@@ -35,6 +35,8 @@ constexpr int kRadioMisoPin = 13;
 constexpr int kNrfCsn1Pin = 4;
 constexpr int kNrfCsn2Pin = 48;
 constexpr int kNrfCsn3Pin = 21;
+constexpr int kFixtureNrfCePin = kNrfCe2Pin;
+constexpr int kFixtureNrfCsnPin = kNrfCsn2Pin;
 constexpr int kCc1101CsPin = 5;
 constexpr int kSdCsPin = 10;
 constexpr std::uint32_t kCarrierHz = 38000;
@@ -116,17 +118,17 @@ void endNrfBus() {
 }
 
 void nrfWriteRegister(std::uint8_t reg, std::uint8_t value) {
-    digitalWrite(kNrfCsn1Pin, LOW);
+    digitalWrite(kFixtureNrfCsnPin, LOW);
     SPI.transfer(kNrfWriteRegister | (reg & 0x1FU));
     SPI.transfer(value);
-    digitalWrite(kNrfCsn1Pin, HIGH);
+    digitalWrite(kFixtureNrfCsnPin, HIGH);
 }
 
 std::uint8_t nrfReadRegister(std::uint8_t reg) {
-    digitalWrite(kNrfCsn1Pin, LOW);
+    digitalWrite(kFixtureNrfCsnPin, LOW);
     SPI.transfer(kNrfReadRegister | (reg & 0x1FU));
     const std::uint8_t value = SPI.transfer(0xFF);
-    digitalWrite(kNrfCsn1Pin, HIGH);
+    digitalWrite(kFixtureNrfCsnPin, HIGH);
     return value;
 }
 
@@ -229,7 +231,7 @@ void emitState(const char* kind) {
         "\"nrf_powered_down\":%s,\"nrf_carrier_active\":%s,"
         "\"buzzer_inactive\":%s,\"output_inactive\":%s,"
         "\"carrier_hz\":38000,\"maximum_ir_emission_us\":100000,"
-        "\"nrf_module_slot\":1,\"nrf_channel\":42,"
+        "\"nrf_module_slot\":2,\"nrf_channel\":42,"
         "\"nrf_frequency_mhz\":2442,\"nrf_power_dbm\":-18,"
         "\"nrf_rf_setup\":144,\"nrf_carrier_duration_us\":2000000,"
         "\"maximum_nrf_carrier_us\":2500000,"
@@ -327,15 +329,15 @@ bool startFixedNrf24Carrier() {
     delayMicroseconds(2000);
     nrfPoweredDown = false;
     nrfCarrierStartedUs = micros();
-    digitalWrite(kNrfCe1Pin, HIGH);
+    digitalWrite(kFixtureNrfCePin, HIGH);
     nrfCarrierActive = true;
     return true;
 }
 
 bool nrfCarrierOutputValid() {
     return nrfCarrierActive &&
-           gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 1 &&
-           gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 0 &&
+           gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
+           gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 1 &&
            gpio_get_level(static_cast<gpio_num_t>(kNrfCe3Pin)) == 0 &&
            gpio_get_level(static_cast<gpio_num_t>(kBuzzerPin)) == 0 &&
            gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0;

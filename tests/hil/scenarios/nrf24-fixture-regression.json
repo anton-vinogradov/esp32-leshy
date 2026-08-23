@@ -1,0 +1,85 @@
+{
+  "schema": "leshy.hil.scenario.v1",
+  "id": "nrf24-fixture-regression",
+  "checkpoint": "physical_nrf24_fixture_regression",
+  "gate_eligible": false,
+  "devices": {
+    "candidate": {"required": true},
+    "fixture": {"required": true, "kind": "bounded_signal_fixture"}
+  },
+  "steps": [
+    {
+      "id": "start_known_signal",
+      "op": "query",
+      "target": "fixture",
+      "command": "fixture.nrf24.carrier.start ${session_id} nrf24-ch42-min-2s",
+      "response_schema": "leshy.hil.fixture.signal.v1",
+      "kind": "running",
+      "timeout": 3,
+      "expect": {
+        "state": "running",
+        "role": "bounded_signal_fixture",
+        "signal": "nrf24_carrier",
+        "vector_id": "nrf24-ch42-min-2s",
+        "fixed_vector_only": true,
+        "auto_arm": false,
+        "nrf_module_slot": 2,
+        "nrf_channel": 42,
+        "nrf_frequency_mhz": 2442,
+        "nrf_power_dbm": -18,
+        "nrf_rf_setup": 144,
+        "nrf_carrier_duration_us": 2000000,
+        "maximum_nrf_carrier_us": 2500000,
+        "ir_tx_inactive": true,
+        "buzzer_inactive": true
+      }
+    },
+    {
+      "id": "fixture_complete",
+      "op": "poll_query",
+      "target": "fixture",
+      "command": "fixture.state",
+      "response_schema": "leshy.hil.fixture.signal.v1",
+      "until": {"state": "complete"},
+      "timeout": 4,
+      "interval": 0.05,
+      "expect": {
+        "state": "complete",
+        "signal": "nrf24_carrier",
+        "vector_id": "nrf24-ch42-min-2s",
+        "nrf_module_slot": 2,
+        "nrf_ce_inactive": true,
+        "nrf_powered_down": true,
+        "nrf_carrier_active": false,
+        "ir_tx_inactive": true,
+        "buzzer_inactive": true
+      }
+    },
+    {
+      "id": "final",
+      "op": "query",
+      "command": "ui.state",
+      "response_schema": "leshy.ui.v1",
+      "expect": {"page": "home", "runtime_owner": "none", "lease_mask": 0}
+    }
+  ],
+  "invariants": {
+    "final_home_zero_lease": true,
+    "storage_unchanged": true,
+    "heap_free_unchanged": true,
+    "input_clean": true,
+    "safe_outputs": true
+  },
+  "limits": {
+    "regression_only": true,
+    "product_receiver_not_exercised": true,
+    "fixed_nrf24_vector": "nrf24-ch42-min-2s",
+    "fixture_single_bounded_emission": true,
+    "fixture_minimum_chip_tx_power_dbm": -18,
+    "fixture_channel": 42,
+    "fixture_frequency_mhz": 2442,
+    "fixture_duration_us": 2000000,
+    "calibrated_power_or_distance": false,
+    "physical_rf_silence_instrumented": false
+  }
+}

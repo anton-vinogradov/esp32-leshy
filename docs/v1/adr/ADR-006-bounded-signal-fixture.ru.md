@@ -25,7 +25,8 @@
    ID из efuse; admission истекает через пять секунд.
 3. Разрешены только проверенные fixed vectors. Нет произвольных payload, frequency,
    duration, replay, Wi-Fi, BLE, storage или product-side TX command.
-4. Первый RF vector использует один nRF24, канал 42 / 2 442 МГц, минимальную настройку
+4. Первый RF vector использует populated slot 2 shield (CSN48/CE47), канал 42 /
+   2 442 МГц, минимальную настройку
    мощности чипа −18 dBm и двухсекундную непрерывную немодулированную несущую. Hard
    software ceiling — 2,5 секунды.
 5. Completion, timeout, mismatch, parser failure, explicit stop, panic и Task-WDT
@@ -64,3 +65,9 @@ Ambient evidence не проверяет positive detection; arbitrary/product T
 - two-board HIL доказывает ambient `not found` → bounded fixture active → exact channel
   42 найден product на трёх receivers → обе платы inactive и product lease 0;
 - intentional identity, state, duration или cleanup mismatch приводит к fail closed.
+
+Первый [physical attempt `0.2.0`](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
+намеренно сохранён как negative evidence: он обращался
+к unpopulated/PN532-reserved slot 1 и отверг carrier после register read-back. `0.2.1`
+связывает vector с populated slot 2 из сохранённой hardware implementation 0.x;
+неудачная попытка не поднимала CE и закончилась в power-down.

@@ -80,7 +80,7 @@
         "vector_id": "nrf24-ch42-min-2s",
         "fixed_vector_only": true,
         "auto_arm": false,
-        "nrf_module_slot": 1,
+        "nrf_module_slot": 2,
         "nrf_channel": 42,
         "nrf_frequency_mhz": 2442,
         "nrf_power_dbm": -18,

@@ -33,6 +33,9 @@ def main() -> int:
     nrf_scenario = json.loads((
         ROOT / "tests/hil/scenarios/nrf24-carrier-positive.json"
     ).read_text(encoding="utf-8"))
+    nrf_regression = json.loads((
+        ROOT / "tests/hil/scenarios/nrf24-fixture-regression.json"
+    ).read_text(encoding="utf-8"))
     product_sources = "\n".join(
         path.read_text(encoding="utf-8", errors="replace")
         for path in (PRODUCT / "src").rglob("*") if path.is_file())
@@ -43,7 +46,7 @@ def main() -> int:
         "board_build.flash_size = 16MB",
         "-std=gnu++17",
         "ARDUINO_USB_CDC_ON_BOOT=1",
-        "LESHY_FIXTURE_VERSION=\\\"0.2.0-bounded-signals\\\"",
+        "LESHY_FIXTURE_VERSION=\\\"0.2.1-bounded-signals\\\"",
     )
     for marker in required_config:
         if marker not in config:
@@ -64,6 +67,8 @@ def main() -> int:
         "nrf_powered_down\\\":%s", "nrf_carrier_active\\\":%s",
         "kNrfChannel = 42", "kNrfFrequencyMhz = 2400U + kNrfChannel",
         "kNrfPowerDbm = -18", "kNrfMinimumPowerCarrierSetup = 0x90",
+        "kFixtureNrfCePin = kNrfCe2Pin",
+        "kFixtureNrfCsnPin = kNrfCsn2Pin",
         "startFixedNrf24Carrier", "serviceFixtureHardware",
     ):
         if marker not in entry:
@@ -164,6 +169,18 @@ def main() -> int:
                 f"nRF scenario limit {required_limit} is not {expected}")
     if nrf_scenario.get("gate_eligible") is not True:
         errors.append("complete nRF scenario is not gate eligible")
+    regression_steps = {
+        step.get("id"): step for step in nrf_regression.get("steps", [])
+        if isinstance(step, dict)
+    }
+    if nrf_regression.get("gate_eligible") is not False:
+        errors.append("short nRF fixture regression is incorrectly gate eligible")
+    if regression_steps.get("start_known_signal", {}).get("command") != (
+            "fixture.nrf24.carrier.start ${session_id} "
+            "nrf24-ch42-min-2s"):
+        errors.append("short nRF fixture regression lacks the fixed vector")
+    if regression_steps.get("fixture_complete", {}).get("op") != "poll_query":
+        errors.append("short nRF fixture regression lacks terminal read-back")
     if '\\"source\\":\\"infrared\\"' not in product_sources or \
             '\\"captured_infrared_raw\\"' not in product_sources:
         errors.append("product Library lacks explicit IR capture metadata")

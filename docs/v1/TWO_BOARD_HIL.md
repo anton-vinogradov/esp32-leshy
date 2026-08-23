@@ -58,8 +58,9 @@ the burst cannot repeat or exceed 100 ms and its completion path immediately dri
 all controlled outputs inactive. This software bound is not an independent physical
 rail kill or oscilloscope/RF proof.
 
-The `0.2.0-bounded-signals` source retains the NEC contract and adds exactly one RF
-vector, `nrf24-ch42-min-2s`. It uses module slot 1, nRF channel 42 / 2,442 MHz,
+The `0.2.1-bounded-signals` source retains the NEC contract and adds exactly one RF
+vector, `nrf24-ch42-min-2s`. It uses populated module slot 2 (CSN48/CE47), nRF
+channel 42 / 2,442 MHz,
 `RF_SETUP=0x90` (continuous carrier + PLL lock + chip minimum −18 dBm setting) and a
 two-second duration with a 2.5-second hard ceiling. Boot, completion, stop, panic,
 parser failure and Task-WDT hold all three CE pads inactive and put the addressed
@@ -82,6 +83,15 @@ radiated power, sensitivity, range, calibrated frequency or instrumented RF sile
 
 The scenario is gate-eligible only after the physical result is retained. Until then
 it is an implemented test contract, not accepted RF evidence.
+
+The first physical attempt with fixture `0.2.0` failed safe before emission: preserved
+0.x hardware code identifies slots 2/3 as populated and slot 1 as
+unpopulated/PN532-reserved. The strict register read-back rejected slot 1; emission
+count and duration remained zero, all fixture outputs ended inactive/powered down and
+the product returned Home/lease 0. This is retained as
+[negative evidence](../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json).
+Fixture `0.2.1` corrects the fixed vector to slot 2 and must pass the non-gate
+`nrf24-fixture-regression` before the full scenario may be retried.
 
 ## Read-only board-02 admission
 

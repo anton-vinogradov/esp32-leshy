@@ -26,7 +26,8 @@ command surface:
    efuse-derived fixture ID; admission expires after five seconds.
 3. Only source-reviewed fixed vectors exist. There is no arbitrary payload, frequency,
    duration, replay, Wi-Fi, BLE, storage or product-side transmitter command.
-4. The first RF vector uses one nRF24 module, channel 42 / 2,442 MHz, chip minimum
+4. The first RF vector uses populated shield slot 2 (CSN48/CE47), channel 42 /
+   2,442 MHz, chip minimum
    power setting −18 dBm and a two-second continuous unmodulated carrier. Its hard
    software ceiling is 2.5 seconds.
 5. Completion, timeout, mismatch, parser failure, explicit stop, panic and Task-WDT
@@ -65,3 +66,9 @@ this binary functional checkpoint.
 - two-board HIL proves ambient `not found` → bounded fixture active → exact channel 42
   found on the product's three receivers → both boards inactive and product lease 0;
 - intentional identity, state, duration or cleanup mismatch fails closed.
+
+The first [`0.2.0` physical attempt](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
+intentionally remains negative evidence: it
+addressed unpopulated/PN532-reserved slot 1 and rejected the carrier after register
+read-back. `0.2.1` binds the vector to populated slot 2 found in the preserved 0.x
+hardware implementation; the failed attempt did not raise CE and ended powered down.
