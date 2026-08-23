@@ -1,0 +1,67 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_elf_sha256": "eaed48330c34559c55e9040b76ddc58ca9b20aad98c2a36bbaec5c161230e824",
+    "app_image_bytes": 2875360,
+    "checker_sha256": "fddfaf82763fddfe3d918bd2ddc6e7c5aeaedfc03cd0070f9bd991247237ee3a",
+    "cid": "FE343253440000002000000055019CB7",
+    "elf_file_sha256": "eaed48330c34559c55e9040b76ddc58ca9b20aad98c2a36bbaec5c161230e824",
+    "factory_image_bytes": 2940896,
+    "factory_sha256": "09e8485dd18c5630ac849aba8cd3650b1a9398d9b0c11d4976c38282dbbe7c53",
+    "firmware_sha256": "ccda1a1e2009f4b5a6e81e04c3609865741b2002b6bc81e76830da8987535e8c",
+    "firmware_source_commit": "8cd1a0bf5e3114b796575e51c9864917f94dabff",
+    "linked_flash_bytes": 2875204,
+    "map_sha256": "08e46145d981e589efdd64aa5b1a23c72657c9651df7049109ba9ca115215511",
+    "run_sha256": "b73e16bf9f165299c041c116146252a747eccd71add1c9e178c0884ecf47772b",
+    "runner_commit": "8cd1a0bf5e3114b796575e51c9864917f94dabff",
+    "runner_sha256": "ce8fa429f65dd0ec56ec5eb311b2bfd4aa046d885bd98155dd67577b9e99cfed",
+    "schema": "leshy.wifi_device_live_detail_hil.provenance.v1",
+    "source_sha256": {
+      "adapter_cpp": "e9316201c0cb8a0cf6ff8b6d8f0e5b6b6a16ff9453ca86c028a36628aeda0a71",
+      "adapter_h": "b3c350d236d9fdc66124bf8d52bea96daa4049465162fa72b819746a4be018e8",
+      "catalog_cpp": "0c447616d152a1c9ff796056951b3af5edb7c2228262559a9682ca274b9ffbb3",
+      "catalog_h": "5e3187284b31274f3cb2eb6bb7eedaefce0fea0c2ce25cce3efc0f46d53aebb0",
+      "contract": "44c0e0844ca2a355183255dab6852b4dc97746318800ebc22aca70b04e23813e",
+      "renderer": "638180bd0a3427f4be3d236b4cf56cc7f1f7f419ee5b52e72b4e6109bc3d825a",
+      "strings": "164286b347578525b699c987380b37bc7fc630fe2a9406e5b61f6088308095b6"
+    },
+    "static_ram_bytes": 198800,
+    "tft_states": 6,
+    "version": "0.117.0-wifi-device-live-detail"
+  },
+  "evidence": {
+    "artifact_index_sha256": "ff5c39e026caaf65b4f779543993037d0f013d41441c83bd912dca22c2fe4424",
+    "files": 35,
+    "tft_states": 6
+  },
+  "evidence_ids": [
+    "E-BUILD-117",
+    "E-AUTO-081",
+    "E-HIL-141",
+    "E-UX-036"
+  ],
+  "schema": "leshy.wifi_device_live_detail.acceptance.v1",
+  "status": "pass_integrated_wifi_device_live_detail",
+  "verified": {
+    "buzzer_inactive": true,
+    "channel_hops_during_detail": 0,
+    "chrome_changed_pixels": 0,
+    "final_lease_mask": 0,
+    "fresh_flashes": 1,
+    "heap_free_bytes": 116660,
+    "heap_min_free_bytes": 54724,
+    "heap_total_bytes": 182652,
+    "identity_changed_pixels": 0,
+    "live_changed_pixels": 2120,
+    "manual_button_presses": 0,
+    "physical_sd_write_calls": 0,
+    "selected_channel": 12,
+    "selected_client_updates": 2,
+    "selected_last_seen_advanced": true,
+    "selected_rssi_first_dbm": -82,
+    "selected_rssi_second_dbm": -74,
+    "two_complete_wifi_lifecycles": true,
+    "unique_devices": 2,
+    "zero_heap_drift_after_warmup": true
+  }
+}

@@ -475,6 +475,15 @@ Native tests deliberately make the instantaneous winner differ from the mean win
 physical HIL waits for at least two samples per channel and verifies exact gray TFT
 pixels, data-only redraw, two clean lifecycles and final lease 0.
 
+Exact `0.117.0-wifi-device-live-detail` removes `DeviceRadar` as a separate UI and
+runtime state. The Devices open action copies the selected fixed record, locks the
+passive adapter to its observed channel and enters `DeviceDetail`; Left performs the
+matching unlock before returning to the list. Full render draws stable identity once.
+Catalog revisions call only `renderWifiDeviceDetailLiveData()`, whose bounded lower
+rectangle contains observation state and the existing signal card/range/trend. The
+HIL oracle separates identity, live and chrome pixels and accepts an unchanged frame
+when a newly received packet leaves every displayed value unchanged.
+
 ## Data model
 
 Raw observation is separate from interpretation:

@@ -66,6 +66,12 @@ CAP-042. Последний passive airtime dwell остаётся виден у
 Среднее bounded, allocation-free и volatile; это не calibrated CCA utilization и не
 постоянный site survey.
 
+Exact `0.117.0-wifi-device-live-detail` уточняет presentation CAP-016/017: открытие
+Wi-Fi-клиента сразу фиксирует его наблюдавшийся канал и показывает identity facts
+вместе с live RSSI meter/range/trend на одном экране. Left снимает фиксацию канала и
+возвращает прямо к стабильному списку. Удалено промежуточное navigation-only state;
+active probing, calibrated distance или retained history не добавлены.
+
 ## Цели и сравнение
 
 | ID | Возможность 1.0 | Обязательство | Требования | Этап готовности |

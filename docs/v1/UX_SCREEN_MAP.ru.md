@@ -244,3 +244,12 @@ Exact `0.116.0-wifi-channel-average` уточняет Wi-Fi→«Каналы», 
 переворачивает рекомендацию. Перерисовывается только изменившийся столбец или
 рекомендация. Четыре exact TFT states доказывают видимые серые средние и zero changes
 за пределами live regions (`E-BUILD-116`/`E-AUTO-080`/`E-HIL-140`/`E-UX-035`).
+
+Exact `0.117.0-wifi-device-live-detail` сворачивает исторический трёхуровневый flow
+Wi-Fi→«Устройства» в strongest-first list → встроенную живую информацию. Right или
+OK сразу открывает выбранную identity и фиксирует её канал; верхняя область
+identity/MAC/passive evidence остаётся стабильной, а ниже обновляются только
+generation/channel, network или состояние наблюдения, signal meter, range и trend.
+Left снимает фиксацию и возвращает прямо к списку. Шесть physical TFT states
+доказывают 2 120 changed pixels live-области и zero identity/chrome changes
+(`E-BUILD-117`/`E-AUTO-081`/`E-HIL-141`/`E-UX-036`).

@@ -535,6 +535,15 @@ header и footer не мерцают. Native regression намеренно ра�
 проверяет точные серые TFT pixels, data-only redraw, два чистых lifecycle и final
 lease 0.
 
+Exact `0.117.0-wifi-device-live-detail` удаляет `DeviceRadar` как отдельное UI- и
+runtime-state. Open в «Устройствах» копирует выбранную fixed record, фиксирует
+passive adapter на её наблюдавшемся канале и входит в `DeviceDetail`; Left выполняет
+парный unlock перед возвратом к списку. Full render один раз рисует стабильную
+identity. Catalog revision вызывает только `renderWifiDeviceDetailLiveData()`, чья
+bounded нижняя область содержит состояние наблюдения и прежние signal card/range/
+trend. HIL oracle отдельно считает identity, live и chrome pixels и допускает
+неизменный frame, если новый принятый пакет не изменил ни одного показанного значения.
+
 ## 7. Модель данных
 
 Наблюдение отделено от интерпретации:

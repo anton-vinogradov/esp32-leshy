@@ -65,6 +65,12 @@ chooses the least-busy primary among 1/6/11 from those means. The mean is bounde
 allocation-free and volatile; it is neither calibrated CCA utilization nor a
 persistent site survey.
 
+Exact `0.117.0-wifi-device-live-detail` refines the CAP-016/017 presentation:
+opening a Wi-Fi client now locks its observed channel and presents identity facts
+plus the live RSSI meter/range/trend on one screen. Left unlocks the channel and
+returns directly to the stable list. This removes a navigation-only intermediate
+state; it does not add active probing, calibrated distance or retained history.
+
 ## Targets and comparison
 
 | ID | 1.0 capability | Commitment | Requirements | Ready stage |

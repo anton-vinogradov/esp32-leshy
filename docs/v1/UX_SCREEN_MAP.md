@@ -243,3 +243,12 @@ means of 1/6/11, so one short burst cannot alone flip the recommendation. Only a
 changed bar or recommendation is redrawn. Four exact TFT states prove visible gray
 means and zero changes outside live regions (`E-BUILD-116`/`E-AUTO-080`/
 `E-HIL-140`/`E-UX-035`).
+
+Exact `0.117.0-wifi-device-live-detail` collapses the historical three-level
+Wi-Fi→Devices flow into strongest-first list → integrated live information. Right
+or OK immediately opens the selected identity and pins its channel; the upper
+identity/MAC/passive-evidence region stays stable while only generation/channel,
+network or observed state, signal meter, range and trend update below it. Left
+unlocks and returns directly to the list. Six physical TFT states prove 2,120
+live-region and zero identity/chrome changed pixels (`E-BUILD-117`/`E-AUTO-081`/
+`E-HIL-141`/`E-UX-036`).
