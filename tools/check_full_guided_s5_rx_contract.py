@@ -52,8 +52,15 @@ def main() -> int:
     attach = active.index("boardCc1101Spectrum.startAsyncEdgeCapture(")
     require(render < attach,
             "FSK ISR must attach only after its one-time TFT redraw", failures)
-    require("if (!boardCc1101Spectrum.asyncEdgeCaptureActive())" in active,
-            "FSK deferred ISR attachment guard is missing", failures)
+    fsk_start = active.index(
+        "if (fullGuidedRfState.step == FullGuidedRfStep::SubGhzFskReceive)")
+    fsk_end = active.index(
+        "fullGuidedRfState.step = FullGuidedRfStep::InfraredReceive", fsk_start)
+    fsk = active[fsk_start:fsk_end]
+    require(fsk.index("startAsyncEdgeCapture(") <
+            fsk.index("sampleRssi(") < fsk.index("stopAsyncEdgeCapture()"),
+            "FSK smoke must attach, sample and detach in one service pass",
+            failures)
     for call in (
         "boardCc1101Spectrum.lockReceive(",
         "boardCc1101Spectrum.sampleRssi(",

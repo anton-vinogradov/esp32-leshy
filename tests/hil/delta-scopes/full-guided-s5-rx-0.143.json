@@ -1,0 +1,21 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "full-guided-s5-rx-0.143",
+  "rationale": "This corrective delta preserves the accepted product FSK capture behavior and fixes only its fixture-free Full/Guided smoke. Candidate 0.142 proved that an unattached antenna produces enough asynchronous GDO0 noise to overflow a 512-edge ring between main-loop passes. Plan-v10 now opens, drains and closes one bounded ISR window in the same service pass for each of 32 RSSI samples, matching the product rule that long-lived GDO0 capture is admitted only by a real RSSI carrier. Board profile, partitions, receive configuration, storage formats and all TX prohibitions remain unchanged.",
+  "reviewed_cross_cutting_sha256": {
+    "firmware/leshy1/platformio.ini": "41e02fb33c797a98faf1cab958913315a8e27e8beed2717a861ee277e9c1f6d3"
+  },
+  "required_host_checks": [
+    "full host/source/docs suite in tracked-evidence mode",
+    "Full/Guided plan-v10 native result and both heap-floor negative cases",
+    "same-pass FSK ISR attach/sample/drain/detach and no-TX source contract",
+    "exact firmware build and resource budget"
+  ],
+  "required_hil_scenarios": [
+    "one public Full/Guided delta run through nRF24, CC1101 spectrum, OOK, FSK and IR receive smoke",
+    "32 bounded FSK ISR windows complete without overflow on the no-fixture board",
+    "Quick and final Full reports pass both explicit current-product heap gates",
+    "disposable scratch removed with product CID, generation and observations unchanged",
+    "zero radio TX commands, input drops and final ownership"
+  ]
+}

@@ -12438,20 +12438,21 @@ void serviceFullGuidedRfChecks() {
         return;
     }
     if (fullGuidedRfState.step == FullGuidedRfStep::SubGhzFskReceive) {
-        // Arm the ISR only after the one-time screen redraw above. Otherwise
-        // the TFT transfer can fill the bounded edge ring before service gets
-        // its first chance to drain it.
-        if (!boardCc1101Spectrum.asyncEdgeCaptureActive()) {
-            bool startLevel = false;
-            if (!boardCc1101Spectrum.startAsyncEdgeCapture(&startLevel)) {
-                fullGuidedRfState.subGhzFskComplete = true;
-                finishFullGuidedRfChecks(false);
-            }
+        // Product capture arms GDO0 only after RSSI carrier admission. This
+        // automatic no-fixture smoke instead opens one bounded ISR window per
+        // RSSI sample and closes it before returning to the main loop. Leaving
+        // asynchronous data attached between loop passes would intentionally
+        // collect unqualified receiver noise and can fill the finite ring.
+        bool startLevel = false;
+        if (!boardCc1101Spectrum.startAsyncEdgeCapture(&startLevel)) {
+            fullGuidedRfState.subGhzFskComplete = true;
+            finishFullGuidedRfChecks(false);
             return;
         }
         std::int16_t rssiDbm = -128;
         std::uint64_t sampleUs = 0;
         if (!boardCc1101Spectrum.sampleRssi(&rssiDbm, &sampleUs)) {
+            boardCc1101Spectrum.stopAsyncEdgeCapture();
             fullGuidedRfState.subGhzFskComplete = true;
             finishFullGuidedRfChecks(false);
             return;
@@ -12465,12 +12466,12 @@ void serviceFullGuidedRfChecks() {
         fullGuidedRfState.subGhzFskOverflow =
             fullGuidedRfState.subGhzFskOverflow ||
             boardCc1101Spectrum.takeAsyncEdgeOverflow();
+        boardCc1101Spectrum.stopAsyncEdgeCapture();
         ++fullGuidedRfState.subGhzFskSamples;
         if (fullGuidedRfState.subGhzFskSamples <
             kFullGuidedReceiveSamples) {
             return;
         }
-        boardCc1101Spectrum.stopAsyncEdgeCapture();
         const bool cleanup = boardCc1101Spectrum.end();
         fullGuidedRfState.subGhzFskComplete = true;
         fullGuidedRfState.subGhzFskPassed = cleanup &&
