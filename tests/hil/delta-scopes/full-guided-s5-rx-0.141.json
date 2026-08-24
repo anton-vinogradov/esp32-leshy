@@ -1,0 +1,20 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "full-guided-s5-rx-0.141",
+  "rationale": "platformio.ini only advances LESHY1_VERSION; board, partitions and build flags remain unchanged. The runtime delta is confined to the existing user-started Full/Guided Self-Test and sequentially reuses already accepted receive-only nRF24, CC1101 OOK/FSK and IR adapters under the existing RadioSpi lease. It adds bounded samples, FSK ISR drain, report facts and mandatory cleanup without adding a transmit API or changing product capture/storage formats.",
+  "reviewed_cross_cutting_sha256": {
+    "firmware/leshy1/platformio.ini": "46e24c1c8529e79cf719caa07db61c39775bdb5297330463e12c9950b0073e72"
+  },
+  "required_host_checks": [
+    "full host/source/docs suite in tracked-evidence mode",
+    "Full/Guided plan-v9 native result matrix",
+    "bounded S5 RX adapter and no-TX source contract",
+    "exact firmware build and resource budget"
+  ],
+  "required_hil_scenarios": [
+    "one public Full/Guided run through nRF24, CC1101 spectrum, OOK, FSK and IR receive smoke",
+    "FSK ISR queue drained without overflow and all S5 receive checks passed",
+    "disposable scratch removed with product CID, generation and observations unchanged",
+    "zero radio TX commands, input drops and final ownership"
+  ]
+}

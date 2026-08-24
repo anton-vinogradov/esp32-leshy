@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prove plan-v7 RF, artifact and disposable storage checks on the device."""
+"""Prove plan-v9 S4/S5 RX, artifact and disposable checks on the device."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from run_1x_product_survey_hil import (
 )
 
 
-RUN_SCHEMA = "leshy.full_guided_disposable_self_test_hil.run.v2"
+RUN_SCHEMA = "leshy.full_guided_disposable_self_test_hil.run.v3"
 REPORT_SCHEMA = "leshy.self_test.report.v1"
 ACTIVE_RF_SCHEMA = "leshy.self_test.active_rf.v1"
 ACTIVE_ARTIFACT_SCHEMA = "leshy.self_test.active_artifact.v1"
@@ -35,6 +35,7 @@ QUICK_IDS = [
     "quick.board.profile",
     "quick.runtime.heap",
     "quick.display.ready",
+    "quick.input.touch",
     "quick.input.frontend",
     "quick.input.queue",
     "quick.output.buzzer",
@@ -51,10 +52,12 @@ FULL_CHECKS = [
     ("full.s4.capture.persistence", "pass"),
     ("full.assembly.gps", "not_applicable"),
     ("full.assembly.pn532", "not_applicable"),
-    ("full.shield.ir", "not_applicable"),
+    ("full.shield.ir", "pass"),
     ("full.s4.shield.receivers", "pass"),
     ("full.s4.spectrum.nrf24.receive", "pass"),
     ("full.s4.spectrum.cc1101.receive", "pass"),
+    ("full.s5.capture.subghz.ook.receive", "pass"),
+    ("full.s5.capture.subghz.fsk.receive", "pass"),
     ("full.s4.storage.recovery.audit", "pass"),
     ("full.s4.library.export.audit", "pass"),
     ("full.s4.capture.pcap.audit", "pass"),
@@ -69,15 +72,15 @@ FULL_CHECKS = [
 def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
     failures = expect(report, {
         "schema_version": 1,
-        "plan_version": 7,
+        "plan_version": 9,
         "mode": "full_guided" if full else "quick",
         "status": "blocked" if full else "pass",
         "read_only": not full,
         "cancelled": False,
-        "passed": 25 if full else 8,
+        "passed": 29 if full else 9,
         "failed": 0,
         "blocked": 1 if full else 0,
-        "not_applicable": 3 if full else 0,
+        "not_applicable": 2 if full else 0,
         "current_owner": "self-test",
         "current_lease_mask": 1,
     }, "full_report" if full else "quick_report")
@@ -107,9 +110,11 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
     ):
         if facts.get(key) is not True:
             failures.append(f"report fact is not ready: {key}")
-    for key in ("gps_declared", "pn532_declared", "ir_declared"):
+    for key in ("gps_declared", "pn532_declared"):
         if facts.get(key) is not False:
             failures.append(f"absent assembly is not explicit: {key}")
+    if facts.get("ir_declared") is not True:
+        failures.append("stock IR receiver is not declared")
     if facts.get("run_resource_mask") != 1:
         failures.append("Self-Test report was not scoped to UI-only lease 1")
     if full:
@@ -120,6 +125,12 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
             "nrf24_spectrum_exercise_passed",
             "cc1101_spectrum_exercise_complete",
             "cc1101_spectrum_exercise_passed",
+            "subghz_ook_exercise_complete",
+            "subghz_ook_exercise_passed",
+            "subghz_fsk_exercise_complete",
+            "subghz_fsk_exercise_passed",
+            "infrared_receiver_exercise_complete",
+            "infrared_receiver_exercise_passed",
             "persistent_recovery_audit_complete",
             "persistent_recovery_audit_passed",
             "library_export_audit_complete",
@@ -139,7 +150,7 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
 
 def active_rf_failures(report: dict[str, Any]) -> list[str]:
     failures = expect(report, {
-        "plan_version": 7, "step": "complete", "rx_only": True,
+        "plan_version": 9, "step": "complete", "rx_only": True,
         "resource_acquired": True, "resource_released": True,
         "cleanup_complete": True, "current_owner": "self-test",
         "current_lease_mask": 1,
@@ -175,6 +186,30 @@ def active_rf_failures(report: dict[str, Any]) -> list[str]:
             isinstance(reads, int) and
             wire.get("spi_bytes_clocked") != 2 * (reads + 208) + 194):
         failures.append(f"CC1101 active wire differs: {wire!r}")
+    ook = report.get("subghz_ook", {})
+    failures.extend(expect(ook, {
+        "complete": True, "passed": True, "frequency_khz": 433920,
+        "samples": 32, "report_samples": 32, "cleanup_complete": True,
+    }, "active_rf.subghz_ook"))
+    fsk = report.get("subghz_fsk", {})
+    failures.extend(expect(fsk, {
+        "complete": True, "passed": True, "frequency_khz": 433920,
+        "samples": 32, "overflow": False, "report_samples": 32,
+        "async_capture_active": False, "cleanup_complete": True,
+    }, "active_rf.subghz_fsk"))
+    if not isinstance(fsk.get("edges"), int) or fsk.get("edges") < 0:
+        failures.append(f"FSK edge count is invalid: {fsk.get('edges')!r}")
+    infrared = report.get("infrared", {})
+    failures.extend(expect(infrared, {
+        "complete": True, "passed": True, "samples": 64,
+        "report_samples": 64, "tx_held_low": True,
+        "nrf_ce_held_low": True, "gpio21_input": True,
+        "cleanup_complete": True,
+    }, "active_rf.infrared"))
+    if (not isinstance(infrared.get("transitions"), int) or
+            infrared.get("transitions") < 0):
+        failures.append(
+            f"IR transition count is invalid: {infrared.get('transitions')!r}")
     expected_effects = {
         "radio_tx_commands": 0, "nrf_tx_mode_entries": 0,
         "nrf_tx_payload_commands": 0, "cc_tx_strobes": 0,
@@ -190,7 +225,7 @@ def active_rf_failures(report: dict[str, Any]) -> list[str]:
 def active_artifact_failures(report: dict[str, Any],
                              recovery: dict[str, Any]) -> list[str]:
     failures = expect(report, {
-        "plan_version": 7, "step": "complete", "read_only": False,
+        "plan_version": 9, "step": "complete", "read_only": False,
         "expected_cid": recovery.get("expected_fingerprint"),
         "cleanup_complete": True, "current_owner": "self-test",
         "current_lease_mask": 1,
@@ -223,8 +258,8 @@ def active_artifact_failures(report: dict[str, Any],
         failures.append("artifact PCAP digest is absent")
     disposable = report.get("disposable", {})
     failures.extend(expect(disposable, {
-        "run_id": "full-guided-v7",
-        "scratch_path": "/leshy-hil/full-guided-v7",
+        "run_id": "full-guided-v9",
+        "scratch_path": "/leshy-hil/full-guided-v9",
         "observed_cid": recovery.get("expected_fingerprint"),
         "identity_passed": True, "scratch_created": True,
         "commit_complete": True, "commit_passed": True,
@@ -390,7 +425,7 @@ def main() -> int:
                 trace.append(state)
                 failures.extend(expect(state, {
                     "self_test_view": "result", "self_test_status": "pass",
-                    "self_test_checks": 8, "self_test_passed": 8,
+                    "self_test_checks": 9, "self_test_passed": 9,
                     "self_test_failed": 0, "self_test_blocked": 0,
                     "self_test_not_applicable": 0, "lease_mask": 1,
                 }, "quick_result"))
@@ -465,9 +500,9 @@ def main() -> int:
                     failures.append("active disposable UI phase was not captured")
                 failures.extend(expect(state, {
                     "self_test_view": "result", "self_test_status": "blocked",
-                    "self_test_checks": 29, "self_test_passed": 25,
+                    "self_test_checks": 32, "self_test_passed": 29,
                     "self_test_failed": 0, "self_test_blocked": 1,
-                    "self_test_not_applicable": 3, "lease_mask": 1,
+                    "self_test_not_applicable": 2, "lease_mask": 1,
                 }, "full_result"))
                 captures["full_result"] = capture(device, frames, "full-result")
                 full = query(device, b"self-test.report", REPORT_SCHEMA, "report")
