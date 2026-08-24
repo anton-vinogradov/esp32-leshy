@@ -1131,8 +1131,10 @@ constexpr UBaseType_t kProductSurveyObservationCapacity =
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
 constexpr std::uint64_t kProductSurveyPreparationDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 8000000ULL;
+constexpr std::uint64_t kWifiCaptureStoreDeadlineUs = 8000000ULL;
 constexpr std::uint32_t kProductSurveyPreparationDeadlineInjectionMs = 10000;
 constexpr std::uint32_t kProductSurveyWorkerDeadlineInjectionMs = 10000;
+constexpr std::uint32_t kWifiCaptureStoreDeadlineInjectionMs = 10000;
 static_assert(
     kProductSurveyWorkerDeadlineUs >
         BoardBlePassiveScanner::worstCaseScanDurationUs(
@@ -1155,6 +1157,8 @@ bool productSurveyIncrementalRefreshPending = false;
 WorkerDeadlineSupervisor workerDeadlineSupervisor;
 bool productSurveyPreparationDeadlineInjectionOnce = false;
 bool productSurveyWorkerDeadlineInjectionOnce = false;
+bool wifiCaptureStoreDeadlineInjectionOnce = false;
+bool wifiCaptureStoreDeadlineCancelRequested = false;
 
 void renderInteractiveScreen(bool clearContent = true);
 void broadcast(const char* line);
@@ -1566,6 +1570,75 @@ bool disarmProductSurveyWorkerDeadline() {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     const bool disarmed = workerDeadlineSupervisor.disarm(
         SupervisedWorker::ProductSurvey);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return disarmed;
+}
+
+void setWifiCaptureStoreDeadlineInjection(bool armed) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    wifiCaptureStoreDeadlineInjectionOnce = armed;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+bool wifiCaptureStoreDeadlineInjectionArmed() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed = wifiCaptureStoreDeadlineInjectionOnce;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+bool consumeWifiCaptureStoreDeadlineInjection() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool injected = wifiCaptureStoreDeadlineInjectionOnce;
+    wifiCaptureStoreDeadlineInjectionOnce = false;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return injected;
+}
+
+void resetWifiCaptureStoreDeadlineCancel() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    wifiCaptureStoreDeadlineCancelRequested = false;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+void requestWifiCaptureStoreDeadlineCancel() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    wifiCaptureStoreDeadlineCancelRequested = true;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+bool wifiCaptureStoreDeadlineCancelled() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool cancelled = wifiCaptureStoreDeadlineCancelRequested;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return cancelled;
+}
+
+bool armWifiCaptureStoreDeadline(std::uint64_t nowUs) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed = workerDeadlineSupervisor.arm(
+        SupervisedWorker::WifiCaptureStore, nowUs,
+        kWifiCaptureStoreDeadlineUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+bool heartbeatWifiCaptureStore(std::uint64_t nowUs = 0) {
+    if (nowUs == 0) {
+        nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs == 0) nowUs = 1;
+    }
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool accepted = workerDeadlineSupervisor.heartbeat(
+        SupervisedWorker::WifiCaptureStore, nowUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return accepted;
+}
+
+bool disarmWifiCaptureStoreDeadline() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool disarmed = workerDeadlineSupervisor.disarm(
+        SupervisedWorker::WifiCaptureStore);
     portEXIT_CRITICAL(&productSurveyWorkerMux);
     return disarmed;
 }
@@ -2884,10 +2957,39 @@ void runCaptureStoreWorker(void*) {
     event.status = "store_failed";
     bool identityCleanupComplete = true;
     bool filesystemAttempted = false;
+    bool deadlineArmed = false;
+    bool supervisionHealthy = true;
     leshy1::storage::SdTransportRunResult identity;
     char expectedFingerprint[33] = {};
     char observedFingerprint[33] = {};
+    const auto supervisedCheckpoint = [&]() {
+        if (wifiCaptureStoreDeadlineCancelled()) {
+            event.status = "safety_worker_deadline";
+            supervisionHealthy = false;
+            return false;
+        }
+        if (!heartbeatWifiCaptureStore()) {
+            event.status = "worker_supervisor_unavailable";
+            supervisionHealthy = false;
+            return false;
+        }
+        return true;
+    };
     do {
+        resetWifiCaptureStoreDeadlineCancel();
+        std::uint64_t startedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (startedUs == 0) startedUs = 1;
+        deadlineArmed = armWifiCaptureStoreDeadline(startedUs);
+        if (!deadlineArmed) {
+            event.status = "worker_supervisor_unavailable";
+            break;
+        }
+        if (consumeWifiCaptureStoreDeadlineInjection()) {
+            vTaskDelay(pdMS_TO_TICKS(
+                kWifiCaptureStoreDeadlineInjectionMs));
+        }
+        if (!supervisedCheckpoint()) break;
         const auto required =
             leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
             leshy1::kernel::runtime::resourceMask(Resource::Storage) |
@@ -2902,6 +3004,7 @@ void runCaptureStoreWorker(void*) {
             event.status = "enrollment_missing";
             break;
         }
+        if (!supervisedCheckpoint()) break;
         for (std::uint8_t attempt = 1;
              attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
              ++attempt) {
@@ -2922,6 +3025,7 @@ void runCaptureStoreWorker(void*) {
             identityCleanupComplete = transport.cleanupComplete();
             formatCidFingerprint(identity.identity, observedFingerprint,
                                  sizeof(observedFingerprint));
+            if (!supervisedCheckpoint()) break;
             if (identityCleanupComplete &&
                 identity.status ==
                     leshy1::storage::SdTransportRunStatus::Valid) {
@@ -2941,7 +3045,9 @@ void runCaptureStoreWorker(void*) {
             }
             vTaskDelay(pdMS_TO_TICKS(
                 leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+            if (!supervisedCheckpoint()) break;
         }
+        if (!supervisionHealthy) break;
         if (!identityCleanupComplete ||
             identity.status != leshy1::storage::SdTransportRunStatus::Valid) {
             event.status = "identity_failed";
@@ -2956,6 +3062,7 @@ void runCaptureStoreWorker(void*) {
             event.status = "mount_failed";
             break;
         }
+        if (!supervisedCheckpoint()) break;
         const std::uint64_t cardCapacity =
             productSurveyFilesystem.cardCapacityBytes();
         const std::uint64_t cachedFree =
@@ -2993,6 +3100,7 @@ void runCaptureStoreWorker(void*) {
             event.status = "store_open_failed";
             break;
         }
+        if (!supervisedCheckpoint()) break;
 
         const auto& stats = wifiFrameCapture.stats();
         char sessionId[SurveySession::kSessionIdCapacity + 1] = {};
@@ -3015,6 +3123,7 @@ void runCaptureStoreWorker(void*) {
             leshy1::storage::commitNextWifiFrameCapture(
                 productSurveyStore, sessionStoreWorkspace, surveySession,
                 wifiFrameCapture.capture());
+        if (!supervisedCheckpoint()) break;
         event.storeStatus = commit.status;
         if (!commit.complete()) {
             event.status = leshy1::storage::sessionStoreStatusName(commit.status);
@@ -3024,6 +3133,7 @@ void runCaptureStoreWorker(void*) {
             leshy1::storage::recoverSession(
                 productSurveyStore, sessionStoreWorkspace,
                 &sessionStoreWorkspace.validationSession);
+        if (!supervisedCheckpoint()) break;
         if (!recovered.valid() || recovered.generation != commit.generation) {
             event.status = "reopen_failed";
             event.storeStatus = recovered.status;
@@ -3034,6 +3144,9 @@ void runCaptureStoreWorker(void*) {
         event.status = "saved";
     } while (false);
 
+    if (deadlineArmed && !wifiCaptureStoreDeadlineCancelled()) {
+        heartbeatWifiCaptureStore();
+    }
     productSurveyStore.end();
     if (productSurveyFilesystem.mounted()) productSurveyFilesystem.end();
     const bool filesystemCleanup = !filesystemAttempted ||
@@ -3044,8 +3157,14 @@ void runCaptureStoreWorker(void*) {
         event.valid = false;
         event.status = "cleanup_failed";
     }
+    if (wifiCaptureStoreDeadlineCancelled()) {
+        event.valid = false;
+        event.status = "safety_worker_deadline";
+    }
+    if (deadlineArmed) disarmWifiCaptureStoreDeadline();
+    resetWifiCaptureStoreDeadlineCancel();
     if (captureStoreEvents != nullptr) {
-        xQueueSend(captureStoreEvents, &event, portMAX_DELAY);
+        xQueueOverwrite(captureStoreEvents, &event);
     }
     vTaskDelete(nullptr);
 }
@@ -4082,19 +4201,28 @@ void serviceWorkerDeadlineSupervisor() {
     const std::uint64_t nowUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     bool expired = false;
+    WorkerDeadlineSnapshot worker;
     portENTER_CRITICAL(&productSurveyWorkerMux);
     expired = workerDeadlineSupervisor.evaluate(nowUs);
+    worker = workerDeadlineSupervisor.snapshot();
     portEXIT_CRITICAL(&productSurveyWorkerMux);
     if (!expired) return;
 
-    requestProductSurveyWorkerStop(true);
-    if (productSurveyScanStartGate != nullptr) {
-        xSemaphoreGive(productSurveyScanStartGate);
+    if (worker.lastExpiredWorker == SupervisedWorker::WifiCaptureStore) {
+        requestWifiCaptureStoreDeadlineCancel();
+        capturePersistState = CapturePersistState::Failed;
+        capturePersistStatus = "safety_worker_deadline";
+        capturePersistGeneration = 0;
+    } else {
+        requestProductSurveyWorkerStop(true);
+        if (productSurveyScanStartGate != nullptr) {
+            xSemaphoreGive(productSurveyScanStartGate);
+        }
+        productSurveyRuntime.status = "safety_worker_deadline";
+        productSurveyRuntime.sourceActive = false;
     }
     if (appRuntime.running()) appRuntime.stop();
-    productSurveyRuntime.status = "safety_worker_deadline";
-    productSurveyRuntime.sourceActive = false;
-    lastRuntimeEvent = productSurveyRuntime.status;
+    lastRuntimeEvent = "safety_worker_deadline";
     latchSafetyStopInTask(SafetyReason::WorkerDeadline);
     renderInteractiveScreen(true);
 }
@@ -5250,7 +5378,8 @@ void triggerWorkerDeadlineTest(Stream& reply) {
         productSurveyWorkerReady && !appRuntime.running() &&
         appRuntime.activeResources() == 0 && !worker.armed &&
         !productSurveyPreparationDeadlineInjectionArmed() &&
-        !productSurveyWorkerDeadlineInjectionArmed();
+        !productSurveyWorkerDeadlineInjectionArmed() &&
+        !wifiCaptureStoreDeadlineInjectionArmed();
     if (!eligible) {
         reply.println(
             "{\"schema\":\"leshy.safety.worker_deadline_test.v1\","
@@ -5275,7 +5404,8 @@ void triggerPreparationDeadlineTest(Stream& reply) {
         productSurveyWorkerReady && !appRuntime.running() &&
         appRuntime.activeResources() == 0 && !worker.armed &&
         !productSurveyPreparationDeadlineInjectionArmed() &&
-        !productSurveyWorkerDeadlineInjectionArmed();
+        !productSurveyWorkerDeadlineInjectionArmed() &&
+        !wifiCaptureStoreDeadlineInjectionArmed();
     if (!eligible) {
         reply.println(
             "{\"schema\":\"leshy.safety.worker_preparation_deadline_test.v1\","
@@ -5289,6 +5419,34 @@ void triggerPreparationDeadlineTest(Stream& reply) {
         "\"deadline_ms\":8000,\"injection_ms\":10000,"
         "\"requires_public_survey_start\":true,"
         "\"before_hardware_preparation\":true,"
+        "\"outputs_inactive\":true,\"physical_write_calls\":0}");
+}
+
+void triggerWifiCaptureStoreDeadlineTest(Stream& reply) {
+    const bool outputsInactive = BoardSafeOutputs::buzzerHeldInactive() &&
+        BoardSafeOutputs::radioTransmitPathsHeldInactive();
+    const WorkerDeadlineSnapshot worker = workerDeadlineSnapshot();
+    const bool eligible = safetySupervisor.state() == SafetyState::Armed &&
+        runtimeSafetyWatchdogReady && outputsInactive &&
+        captureStoreEvents != nullptr && captureStoreTaskHandle == nullptr &&
+        !appRuntime.running() && appRuntime.activeResources() == 0 &&
+        !worker.armed &&
+        !productSurveyPreparationDeadlineInjectionArmed() &&
+        !productSurveyWorkerDeadlineInjectionArmed() &&
+        !wifiCaptureStoreDeadlineInjectionArmed();
+    if (!eligible) {
+        reply.println(
+            "{\"schema\":\"leshy.safety.capture_store_deadline_test.v1\","
+            "\"kind\":\"error\",\"reason\":\"unsafe_precondition\"}");
+        return;
+    }
+    setWifiCaptureStoreDeadlineInjection(true);
+    reply.println(
+        "{\"schema\":\"leshy.safety.capture_store_deadline_test.v1\","
+        "\"kind\":\"armed\",\"worker\":\"wifi_capture_store\","
+        "\"deadline_ms\":8000,\"injection_ms\":10000,"
+        "\"requires_public_capture_save\":true,"
+        "\"before_storage_hardware\":true,"
         "\"outputs_inactive\":true,\"physical_write_calls\":0}");
 }
 
@@ -18775,6 +18933,9 @@ void handleCommand(Stream& reply, const char* command) {
                            "safety.worker-preparation-deadline-test confirm") == 0) {
         triggerPreparationDeadlineTest(reply);
     } else if (std::strcmp(command,
+                           "safety.capture-store-deadline-test confirm") == 0) {
+        triggerWifiCaptureStoreDeadlineTest(reply);
+    } else if (std::strcmp(command,
                            "safety.early-boot-watchdog-test confirm") == 0) {
         triggerEarlyBootSafetyWatchdogTest(reply);
     } else if (std::strcmp(command,
@@ -19416,6 +19577,7 @@ void setup() {
               "\"safety.state\",\"safety.watchdog-test confirm\","
               "\"safety.worker-deadline-test confirm\","
               "\"safety.worker-preparation-deadline-test confirm\","
+              "\"safety.capture-store-deadline-test confirm\","
               "\"safety.early-boot-watchdog-test confirm\","
               "\"safety.clear confirm\","
               "\"hardware.shield.receivers\","

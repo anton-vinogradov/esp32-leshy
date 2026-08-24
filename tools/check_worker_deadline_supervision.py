@@ -35,7 +35,7 @@ def main() -> int:
 
     require(header, (
         "enum class SupervisedWorker", "ProductSurveyPreparation",
-        "ProductSurvey", "lastHeartbeatUs",
+        "ProductSurvey", "WifiCaptureStore", "lastHeartbeatUs",
         "deadlineUs", "heartbeatCount", "tripCount", "bool evaluate",
     ), "deadline core API")
     require(core, (
@@ -71,11 +71,33 @@ def main() -> int:
     if before_scan < 0 or after_scan < scan_at:
         raise AssertionError("blocking hardware scan is not heartbeat-bracketed")
 
+    capture_start = entry.index("void runCaptureStoreWorker(")
+    capture_end = entry.index("bool requestWifiFrameCapturePersist()", capture_start)
+    capture_store = entry[capture_start:capture_end]
+    require(capture_store, (
+        "armWifiCaptureStoreDeadline(startedUs)",
+        "consumeWifiCaptureStoreDeadlineInjection()",
+        "kWifiCaptureStoreDeadlineInjectionMs",
+        "wifiCaptureStoreDeadlineCancelled()",
+        "disarmWifiCaptureStoreDeadline();",
+        "xQueueOverwrite(captureStoreEvents, &event)",
+    ), "Wi-Fi Capture Store deadline integration")
+    if capture_store.count("supervisedCheckpoint()") < 8:
+        raise AssertionError(
+            "Capture Store lacks heartbeat coverage around storage boundaries")
+    injection_at = capture_store.index(
+        "consumeWifiCaptureStoreDeadlineInjection()")
+    transport_at = capture_store.index("BoardSdSpiTransport transport;")
+    if injection_at >= transport_at:
+        raise AssertionError("Capture Store injection must precede SD hardware")
+
     require(entry, (
         "kProductSurveyPreparationDeadlineUs = 8000000ULL",
         "kProductSurveyPreparationDeadlineInjectionMs = 10000",
         "kProductSurveyWorkerDeadlineUs = 8000000ULL",
         "kProductSurveyWorkerDeadlineInjectionMs = 10000",
+        "kWifiCaptureStoreDeadlineUs = 8000000ULL",
+        "kWifiCaptureStoreDeadlineInjectionMs = 10000",
         "BoardBlePassiveScanner::worstCaseScanDurationUs(",
         "serviceWorkerDeadlineSupervisor();",
         "requestProductSurveyWorkerStop(true);",
@@ -84,6 +106,9 @@ def main() -> int:
         "latchSafetyStopInTask(SafetyReason::WorkerDeadline);",
         "safety.worker-deadline-test confirm",
         "safety.worker-preparation-deadline-test confirm",
+        "safety.capture-store-deadline-test confirm",
+        "worker.lastExpiredWorker == SupervisedWorker::WifiCaptureStore",
+        "requestWifiCaptureStoreDeadlineCancel();",
         r'\"worker_supervision\":true',
     ), "platform deadline response")
     service_at = entry.index("serviceWorkerDeadlineSupervisor();")
@@ -98,14 +123,14 @@ def main() -> int:
         "kMaximumScanAttempts = 2U", "kCompletionGraceMs = 1000U",
         "kRetryDelayMs = 100U", "worstCaseScanDurationUs",
     ), "bounded BLE scan deadline")
-    if 'LESHY1_VERSION=\\"0.135.0-survey-preparation-deadline\\"' not in platform:
+    if 'LESHY1_VERSION=\\"0.136.0-capture-store-deadline\\"' not in platform:
         raise AssertionError("exact candidate version is not bound")
     if "kRfCarrierChipSelectCharacterizationOnly = false" not in profile:
         raise AssertionError("diagnostic-only carrier gate remains active")
 
     print(
-        "worker deadline contract passed: preparation + real Survey heartbeat, "
-        "BLE-bounded 8 s deadline, cancel/quiesce/retained Safe Mode"
+        "worker deadline contract passed: preparation + real Survey/Capture "
+        "Store heartbeat, 8 s deadlines, cancel/quiesce/retained Safe Mode"
     )
     return 0
 

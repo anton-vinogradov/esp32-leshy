@@ -8,6 +8,8 @@ const char* supervisedWorkerName(SupervisedWorker worker) {
             return "product_survey_preparation";
         case SupervisedWorker::ProductSurvey:
             return "product_survey";
+        case SupervisedWorker::WifiCaptureStore:
+            return "wifi_capture_store";
         case SupervisedWorker::None:
         default:
             return "none";

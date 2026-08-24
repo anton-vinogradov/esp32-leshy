@@ -8,6 +8,7 @@ enum class SupervisedWorker : std::uint8_t {
     None = 0,
     ProductSurveyPreparation = 1,
     ProductSurvey = 2,
+    WifiCaptureStore = 3,
 };
 
 struct WorkerDeadlineSnapshot final {

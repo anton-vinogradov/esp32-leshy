@@ -1636,6 +1636,9 @@ void testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence() {
                       "product_survey_preparation") == 0);
     CHECK(std::strcmp(supervisedWorkerName(SupervisedWorker::ProductSurvey),
                       "product_survey") == 0);
+    CHECK(std::strcmp(
+              supervisedWorkerName(SupervisedWorker::WifiCaptureStore),
+              "wifi_capture_store") == 0);
     CHECK(!supervisor.arm(SupervisedWorker::None, 100, 6000));
     CHECK(!supervisor.arm(SupervisedWorker::ProductSurvey, 0, 6000));
     CHECK(supervisor.arm(SupervisedWorker::ProductSurvey, 100, 6000));
