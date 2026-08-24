@@ -13,10 +13,13 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from capture_1x_boot import reset_and_capture_reconnecting
+from capture_1x_boot import (
+    capture_reconnecting_until_ready,
+    reset_and_capture_reconnecting,
+)
 from capture_1x_ui import PassiveSerial, read_json, synchronize_console
 from esp_app_identity import app_elf_sha256
-from run_1x_product_boot_watchdog_hil import capture_until_ready, parse_ready
+from run_1x_product_boot_watchdog_hil import parse_ready
 from run_1x_product_survey_hil import (
     action,
     artifact_manifest,
@@ -489,9 +492,13 @@ def main() -> int:
             product.flush()
             records["restart_request"] = read_json(
                 product, "leshy.safety.restart_test.v1", "restart", 5.0)
-            restart_raw, restart_ready_ms = capture_until_ready(
-                product, args.boot_seconds)
-            records["restart_ready_marker_ms"] = restart_ready_ms
+
+        (restart_raw, restart_ready_ms, restart_disconnects,
+         restart_open_attempts) = capture_reconnecting_until_ready(
+            args.candidate_port, args.boot_seconds)
+        records["restart_ready_marker_ms"] = restart_ready_ms
+        records["restart_usb_disconnects"] = restart_disconnects
+        records["restart_usb_open_attempts"] = restart_open_attempts
 
         (args.output / "latched-restart.ndjson").write_bytes(restart_raw)
         records["restart_ready"] = parse_ready(restart_raw)
@@ -525,9 +532,13 @@ def main() -> int:
                 product, frames, "infrared-store-deadline-clear-pending")
             product.write(b"ui.key right\n")
             product.flush()
-            clear_raw, clear_ready_ms = capture_until_ready(
-                product, args.boot_seconds)
-            records["clear_ready_marker_ms"] = clear_ready_ms
+
+        (clear_raw, clear_ready_ms, clear_disconnects,
+         clear_open_attempts) = capture_reconnecting_until_ready(
+            args.candidate_port, args.boot_seconds)
+        records["clear_ready_marker_ms"] = clear_ready_ms
+        records["clear_usb_disconnects"] = clear_disconnects
+        records["clear_usb_open_attempts"] = clear_open_attempts
 
         (args.output / "clear-restart.ndjson").write_bytes(clear_raw)
         records["clear_ready"] = parse_ready(clear_raw)

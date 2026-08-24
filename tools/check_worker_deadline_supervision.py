@@ -158,11 +158,18 @@ def main() -> int:
         "infrared_capture_store", "fixture.ir.nec.once",
         "post-flash-ready-seconds", "records[\"post_flash\"]",
         "post-flash boot contract failed",
+        "capture_reconnecting_until_ready",
+        "restart_usb_disconnects", "restart_usb_open_attempts",
+        "clear_usb_disconnects", "clear_usb_open_attempts",
         "normal IR store heartbeat coverage incomplete",
         "fault_injection_before_storage_hardware",
         "fault_injection_physical_write_calls", "safety_after_restart",
         "safety_final", "two_bounded_fixture_emissions",
     ), "automated two-board IR Store deadline HIL")
+    if "capture_until_ready(" in ir_runner:
+        raise AssertionError(
+            "IR deadline HIL must not retain a stale native-USB handle "
+            "across restart")
     require(ble_header, (
         "kMaximumScanAttempts = 2U", "kCompletionGraceMs = 1000U",
         "kRetryDelayMs = 100U", "worstCaseScanDurationUs",
