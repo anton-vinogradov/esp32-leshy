@@ -1,0 +1,24 @@
+{
+  "candidate": {
+    "app_elf_sha256": "7a46b7f7029a7b0322c9d4280c5660216b8d98d02b8fe7d528d33825d2c2e0cf",
+    "elf_sha256": "7a46b7f7029a7b0322c9d4280c5660216b8d98d02b8fe7d528d33825d2c2e0cf",
+    "firmware_bytes": 3090368,
+    "firmware_sha256": "d4715ad02673aea33b149d78f57038501d98d623fb4973b123784bdd5f917631",
+    "map_sha256": "bbdace954ca0572b42de8e88fafd0d3a0a8f854c527d9c1ee48a65fb2d557b54",
+    "version": "0.145.0-interface-settings"
+  },
+  "retention_script": "tools/retain_1x_interface_settings_hil.py",
+  "schema": "leshy.interface_settings_hil.provenance.v1",
+  "source_commit": "0a2b22d0943b85969308e2b6f606bd669c34b30c",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "54af8817829a60b92fc20e297372239ce3490268f80ed26d2f38ae1bca6d477d",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "80c60ee43739769e8ea9a785ee936672e5f44e248d7f1128da22656a0157ced6",
+    "firmware/leshy1/src/ui/InterfaceSettingsController.cpp": "f1d2856df9560f0e1f8e2df1fbf073df74fa3b89548b5236158e19a58c9dec94",
+    "firmware/leshy1/src/ui/InterfaceSettingsController.h": "0bc188855c8c93853f9a391001d5a0325a095a2cbaad972839d71d216468da9b",
+    "firmware/leshy1/src/ui/UiStrings.def": "8eedab5d19479725945f9497877f0f5775ba2d7e25b1bc1df507127d2608ec37",
+    "firmware/leshy1/src/ui/VisualTheme.h": "e98d2be1298a85af5256518ca597ff830f32bd3d8ccf4423dd275ad7f5411e8b",
+    "tests/hil/delta-scopes/interface-settings-0.145.json": "e6e41b63777d2b4096b1a3c7f922c436d3e01138bfe282c6cd2b70c23ceb52c0",
+    "tools/check_interface_settings_contract.py": "9d7f19c487125b83e1f5049c0473af69eb64b28163bb941dc9a0b872fd4b62bb",
+    "tools/run_1x_interface_settings_hil.py": "c52b9d3bffff8e7d59d4cc4bd526df5072247bcdacc6802457bdfd831fa6febd"
+  }
+}

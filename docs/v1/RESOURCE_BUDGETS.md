@@ -327,6 +327,19 @@ product writes and radio TX remain zero, and the 505 B scratch is removed. This
 focused delta is not a mixed-workload release budget and does not replace the
 stage-end matrix or a qualified physical RF-positive gate.
 
+Latest accepted delta `RB-M139`: exact 0.145 uses 3,089,868 B linked flash,
+211,224 B static RAM and app/factory images 3,090,368/3,155,904 B. This is
++2,620 B linked flash, +16 B static RAM and +2,624/+2,624 B images versus
+0.144 for persistent EN/RU language, five brightness levels, the runtime
+Forest/High Contrast semantic palette and a fail-closed unavailable Sound row.
+Dedicated DIRAM is 294,404/341,760 B (86.14%, 47,356 B remaining); dedicated
+IRAM remains exactly 16,384/16,384 B with no headroom. One-flash board-01 HIL
+and two physical hard resets prove changed preferences survive reboot and the
+restored RU/100%/Forest values persist again. The run issues zero radio TX,
+keeps buzzer and nRF CE inactive, reports zero input errors/drops and finishes
+Home/none/lease 0. This focused interface delta does not replace the stage-end
+matrix or qualified physical RF-positive gate.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

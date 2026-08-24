@@ -1,0 +1,66 @@
+{
+  "bundle": "tests/hil/evidence/board-01-interface-settings-0.145",
+  "candidate": {
+    "app_elf_sha256": "7a46b7f7029a7b0322c9d4280c5660216b8d98d02b8fe7d528d33825d2c2e0cf",
+    "elf_sha256": "7a46b7f7029a7b0322c9d4280c5660216b8d98d02b8fe7d528d33825d2c2e0cf",
+    "firmware_bytes": 3090368,
+    "firmware_sha256": "d4715ad02673aea33b149d78f57038501d98d623fb4973b123784bdd5f917631",
+    "map_sha256": "bbdace954ca0572b42de8e88fafd0d3a0a8f854c527d9c1ee48a65fb2d557b54",
+    "version": "0.145.0-interface-settings"
+  },
+  "evidence_id": "E-HIL-163",
+  "final": {
+    "brightness_duty": 255,
+    "brightness_percent": 100,
+    "language": "ru",
+    "lease_mask": 0,
+    "page": "home",
+    "runtime_owner": "none",
+    "sound_available": false,
+    "theme": "forest"
+  },
+  "flash_count": 1,
+  "hardware_reset_count": 2,
+  "initial": {
+    "brightness_duty": 255,
+    "brightness_percent": 100,
+    "language": "ru",
+    "theme": "forest"
+  },
+  "input": {
+    "queue_drops": 0,
+    "read_errors": 0,
+    "status": "ready"
+  },
+  "manifest_sha256": "e8006b87518a7afd7d2c419bb0e5d89aaed585789679246cc4d1e8206c5c8ee4",
+  "persisted": {
+    "brightness_duty": 176,
+    "brightness_percent": 69,
+    "language": "en",
+    "theme": "high_contrast"
+  },
+  "radio_tx_commands": 0,
+  "safe_outputs": {
+    "buzzer_inactive": true,
+    "buzzer_level": "low",
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true
+  },
+  "schema": "leshy.interface_settings_hil.summary.v1",
+  "screens": {
+    "home_restored": {
+      "png": "frames/home-restored.png",
+      "png_sha256": "9b58fc6fdcb76f894cb6668f85e0e2451504d005055f1a1cf6c5a44a240c259f"
+    },
+    "settings_changed": {
+      "png": "frames/settings-changed.png",
+      "png_sha256": "847aba4faab092e27066a01bfef097264d79eefb289944ccccfb3120132f9461"
+    },
+    "settings_initial": {
+      "png": "frames/settings-initial.png",
+      "png_sha256": "2a7c377aa04d095925e1c6b3e7640433cbf1e15981e621f06eb1f6eb5fbe2ffd"
+    }
+  },
+  "source_commit": "0a2b22d0943b85969308e2b6f606bd669c34b30c",
+  "status": "pass"
+}

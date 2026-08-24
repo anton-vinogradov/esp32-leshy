@@ -1,0 +1,14 @@
+{
+  "frames/home-restored.json": "b47b9d4b57252a1c8d7bb6a1e312703a6dbcde7f64f9c7cbd3c2607f7d2403a7",
+  "frames/home-restored.png": "9b58fc6fdcb76f894cb6668f85e0e2451504d005055f1a1cf6c5a44a240c259f",
+  "frames/settings-changed.json": "89a987dd877918f08fe69b5eb6d4c5e5a74aa6bedba602fb753a5f0691dc2089",
+  "frames/settings-changed.png": "847aba4faab092e27066a01bfef097264d79eefb289944ccccfb3120132f9461",
+  "frames/settings-initial.json": "6c2ee52475acb4588bf6bdfd82e86ad63a1c4655a2591614d7bd1e410236a40b",
+  "frames/settings-initial.png": "2a7c377aa04d095925e1c6b3e7640433cbf1e15981e621f06eb1f6eb5fbe2ffd",
+  "persistence-reset.json": "945690934b8d94c1ac26999fdff9798d5c6666ed740b9f8655f6b588d200f98f",
+  "persistence-reset.ndjson": "09ffc4196f902d3d0e0b9af25fc7a38dc07a7d9bf3861a34f26d08eead27e07a",
+  "provenance.json": "640a3f7672f5b08b738f3402e1c4ffb1b159db4ba01c33ab5c186d594a593798",
+  "restore-reset.json": "60293dfaac23f539340f09dd24f2b6d1618b28251398c5d70ea8321c35983993",
+  "restore-reset.ndjson": "197a16bcc99fa630d2eda19faebb71ebbaa117b648560b3a6c74f7c70dc1508e",
+  "run.json": "024cbb59bb93c61a4d91450a670e09213dce994b38c57767740857487b927975"
+}

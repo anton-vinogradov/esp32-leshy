@@ -174,6 +174,15 @@ positive nRF24/Sub-GHz OOK/FSK source participated. Therefore this is a reproduc
 delta checkpoint, not `DEMO-S5`; the source-bound physical receive→save→cold export
 paths and integrated two-board exit run remain mandatory.
 
+Exact 0.145 `E-BUILD-145`/`E-HIL-163` additionally accepts the executable
+interface-preference slice used by this demo. Device→Settings presents four
+full-width rows; EN/RU language, five brightness levels and Forest/High Contrast
+apply immediately and persist. One exact flash and two physical hard resets prove
+changed preferences survive reset and restored RU/100%/Forest persist again. Sound
+is explicitly unavailable, the buzzer remains inactive, three TFT states are
+retained and the run ends Home/none/lease 0 with zero TX or input drops. This is a
+cadence-controlled delta and does not replace the final `DEMO-S5` matrix.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases. Physical HIL is
