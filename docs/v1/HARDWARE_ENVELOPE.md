@@ -73,7 +73,7 @@ common-zero radio identity.
 | Profile | Main module and population | RF result | Admission |
 |---|---|---|---|
 | `esp32-div-v2-n16` / board-01 | `ESP32-S3-WROOM-1U-N16`; BOM buzzer populated | exact 0.81 reads two permitted nRF identities and CC1101 VERSION `0x14` | known-positive baseline |
-| `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer omitted; one alternative carrier U.FL footprint omitted | exact 0.130 reads zero identities after reseat; shared MISO remains LOW for 32/32 samples under both pull choices despite measured 4.7/3.3 V rails | display/input compatibility only; RF `fault`, fixture TX forbidden |
+| `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer omitted; one alternative carrier U.FL footprint omitted | assembled exact 0.130 reads zero identities and MISO LOW 0/32 under both pulls; isolated-main exact 0.131 reads the same GPIO13 HIGH 32/32 under both pulls after the detachable RF carrier is removed | display/input compatibility only; carrier-side RF `fault`, fixture TX forbidden |
 
 Both carriers contain three nRF24-compatible modules with external PA/LNA front ends
 and one CC1101 module. The shield BOM specifies the latter as **433 MHz, 10 mW**;
@@ -87,11 +87,15 @@ rail is no longer a supported explanation. Exact 0.130 then holds every CE LOW,
 samples GPIO13 under both internal pulls and performs four nRF NOP reads: board-01
 stays HIGH 32/32 with NOP STATUS `0x0E`, while board-02 stays LOW 0/32 with STATUS
 `0x00` before and after a powered-off reseat. Powered-off MISO-to-ground resistance is
-23 kΩ on board-02 versus 32 kΩ on board-01, rejecting a hard passive short. The
-fault is therefore a powered/logic-dependent shared MISO clamp; the exact pull test
-on the isolated board-02 main hardware must distinguish the RF carrier from connector
-routing or ESP GPIO13. See the
-[retained characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json).
+23 kΩ on board-02 versus 32 kΩ on board-01, rejecting a hard passive short. Exact
+0.131 then samples the isolated board-02 main hardware with the detachable RF carrier
+absent and changes the same observed GPIO13 to HIGH 32/32 under both pulls, with zero
+SPI clocks, receiver reads, CE-high events, command strobes or TX commands. GPIO13 is
+also the main-board SD MISO line, so this high-dominant isolated state is not evidence
+of a damaged ESP input. The assembly-dependent LOW localizes the powered/logic-dependent
+clamp to the RF carrier or its connector side. See the
+[assembled characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
+and [isolated-main characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json).
 
 Upstream community evidence has the same failure shape but does not prove this unit's
 root cause. [Issue #102](https://github.com/cifertech/ESP32-DIV/issues/102) reports
@@ -318,7 +322,7 @@ flag or a successful unrelated probe.
 | HW-U04 | partial: idle connector rails are user-measured at 4.35/3.2 V on working board-01 and 4.7/3.3 V on board-02; ripple, peak and thermal margin are unmeasured | no active board-02 RF fixture and no default combined shield load; each new combination remains unavailable under RB-08 | calibrated dynamic HW-T10 rail/thermal matrix |
 | HW-U05 | operator reports no GPS/PN532 assembly on board-01; no standard connector contract proven | default profile declares both absent; either requires its own explicit assembly profile, never output-mode autodetect | assembly photo/spec + HW-T07 |
 | HW-U06 | partial: GPIO38 reads LOW with one inserted/identified card; polarity/batch consistency remain unmeasured | GPIO38 is not authoritative in S2; storage state comes from a bounded explicit operation and remains fault/absent on failure | HW-T05 across media and board batch |
-| HW-U07 | partial: exact 0.130 reads valid receiver identities and MISO HIGH 32/32 on board-01, but board-02 holds shared MISO LOW 0/32 under pull-down and pull-up before/after reseat despite valid idle rails; powered-off MISO-to-ground is 23 kΩ versus 32 kΩ, rejecting a hard short; upstream v2 pin definitions match Leshy exactly | `spi_radio` is exclusive; board-02 RF remains `fault`; no cross-swap or emission | remove the board-02 RF carrier and repeat exact pull characterization; localize to carrier if GPIO13 follows both pulls or main board/ESP if it remains LOW |
+| HW-U07 | partial: exact 0.130 reads valid receiver identities and MISO HIGH 32/32 on board-01, but assembled board-02 holds shared MISO LOW 0/32 under both pulls before/after reseat despite valid idle rails; powered-off MISO-to-ground is 23 kΩ versus 32 kΩ, rejecting a hard short; exact isolated-main 0.131 changes board-02 GPIO13 to HIGH 32/32 under both pulls when the RF carrier is removed, localizing the LOW source to the carrier or its connector side | `spi_radio` is exclusive; board-02 carrier RF remains `fault`; no cross-swap or emission | map carrier CSN/MISO pads, prove every receiver CSN HIGH under the quiescent exact image, then isolate carrier modules one at a time if MISO remains LOW; require repaired plausible identities before bounded regression |
 | HW-U08 | electrical/ADC behavior is unmeasured; the false-sound software root cause is confirmed by 0.x and upstream issue #117 | battery percentage is unavailable; GPIO2 is never ADC-sampled and is held OUTPUT LOW from the first setup instruction; HIGH belongs only to a future bounded sound service | HW-T09 for ADC/sound characterization; silent invariant closes through boot/runtime state plus audible observation |
 | HW-U09 | partial: exact 0.129 proves one bounded physical NEC receive/save/cold-export path; GPIO21 remains exclusive with nRF #3 | IR RX is available only from the explicit RF-shield profile; no autodetect; product IR TX additionally requires Lab/ADR-002 evidence | broaden protocol vectors and instrument GPIO21 switching under HW-T08 |
 | HW-U10 | no rail peak/thermal measurement | first slice is Wi-Fi-only; shield operations are one receiver at a time after per-module HIL; combined modes unavailable | HW-T10 and RB-08 endurance |

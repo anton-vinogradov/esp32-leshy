@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from run_1x_shield_receiver_probe_crosscheck import (
@@ -100,7 +101,57 @@ def main() -> int:
     assert probe_contract_failures(
         unsafe, require_isolated_main_characterization=True)
 
-    print("isolated-main MISO contract passed: pull-only, zero SPI/TX")
+    evidence = json.loads((
+        ROOT / "tests/hil/evidence/board-02-isolated-main-miso-0.131.json"
+    ).read_text(encoding="utf-8"))
+    assert evidence["schema"] == (
+        "leshy.hardware.isolated_main_miso_evidence.v1")
+    assert evidence["status"] == (
+        "retained_fault_localized_to_rf_carrier")
+    assert evidence["candidate"]["version"] == (
+        "0.131.0-isolated-main-miso")
+    assert evidence["exact_run"]["passed"] is True
+    assert evidence["exact_run"]["raw_runner_outcome"] == (
+        "isolated_main_gpio_stuck_high")
+    assert evidence["exact_run"]["idle_miso_high_samples"] == {
+        "pulldown": 32,
+        "pullup": 32,
+        "samples_per_pull": 32,
+    }
+    assert all(
+        value == 0
+        for value in evidence["exact_run"]["receiver_operations"].values()
+    )
+    assert all(
+        value == 0
+        for value in evidence["exact_run"]["side_effects"].values()
+    )
+    assert evidence["comparison"][
+        "assembled_exact_0_130_miso_high_samples"] == {
+            "pulldown": 0,
+            "pullup": 0,
+            "samples_per_pull": 32,
+        }
+    assert evidence["comparison"][
+        "isolated_exact_0_131_miso_high_samples"] == {
+            "pulldown": 32,
+            "pullup": 32,
+            "samples_per_pull": 32,
+        }
+    assert evidence["comparison"][
+        "state_changes_when_rf_carrier_removed"] is True
+    assert evidence["assessment"][
+        "rf_carrier_or_its_connector_side_is_low_source_supported"] is True
+    assert evidence["assessment"][
+        "main_board_only_gpio13_stuck_low_supported"] is False
+    assert evidence["assessment"]["rf_emission_allowed"] is False
+    assert evidence["assessment"]["shield_cross_swap_allowed"] is False
+    assert evidence["limits"]["stage_or_phase_promoted"] is False
+
+    print(
+        "isolated-main MISO contract/evidence passed: carrier-side LOW, "
+        "pull-only, zero SPI/TX"
+    )
     return 0
 
 

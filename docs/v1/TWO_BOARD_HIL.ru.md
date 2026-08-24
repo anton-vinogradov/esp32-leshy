@@ -131,13 +131,19 @@ zero TX/CE-high events и Home/lease-0 cleanup. Upstream v2 schematics, BOM и s
 HIGH 32/32 со STATUS `0x0E`, board-02 — LOW 0/32 со STATUS `0x00` до и после reseat
 без питания. Отсутствие rail и случайный плохой контакт больше не поддерживаются.
 Powered-off MISO→GND равно 23 кОм на board-02 против 32 кОм на board-01,
-что отвергает hard passive short. Следующий safe evidence — та же exact
-pull-characterization на isolated main hardware board-02: следование обоим pull
-локализует powered clamp на RF carrier, а LOW под обоими pull — на main board
-или ESP GPIO13. Cross-swap shields и emission запрещены до
+что отвергает hard passive short. Exact 0.131 затем снимает detachable RF carrier и
+читает тот же GPIO13 board-02 как HIGH 32/32 под обоими pull при zero SPI bytes и
+zero receiver operations. Переход attached→isolated LOW→HIGH доказывает, что ESP
+input наблюдает оба состояния, и локализует источник LOW на RF carrier или его стороне
+connector. GPIO13 также обслуживает SD MISO main board, поэтому isolated HIGH под
+обоими pull не является диагнозом повреждения main board. Следующий safe evidence —
+quiescent carrier-pad localization: доказать HIGH на CSN каждого receiver, затем
+по одному изолировать carrier modules, если shared MISO остаётся LOW. Cross-swap
+shields и emission запрещены до
 локализации: [same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
 [variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json),
-[MISO characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json).
+[assembled MISO characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json),
+[isolated-main MISO characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json).
 
 Official stock v1.6 один раз использован как bounded manual corroboration после
 сохранения полного flash backup клона: internal Wi-Fi и BLE работали, внешний scanner

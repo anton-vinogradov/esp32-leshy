@@ -13,31 +13,32 @@
 - **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
 - **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
-- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact passive diagnostic `0.130.0` теперь находит оба разрешённых nRF receiver плюс CC1101 на board-01, а board-02 возвращает zero identities и удерживает shared MISO/GPIO13 в LOW во всех 32 pull-down и 32 pull-up samples. На assembled connector board-02 измерены 4,7/3,3 В против 4,35/3,2 В рабочего control; reseat без питания и exact no-flash rerun воспроизводят clamp. Powered-off resistance MISO→GND равно 23 кОм на board-02 против 32 кОм на board-01, что отвергает жёсткое passive short.
-- **Следующий evidence gate:** выполнить ту же exact pull-characterization на isolated main hardware board-02 при снятом RF carrier. GPIO13 должен читать LOW под pull-down и HIGH под pull-up; такой результат локализует powered clamp на RF carrier, а LOW под обоими pull — на routing main board или ESP pin. Known-signal emission остаётся закрытым.
+- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact passive `0.130.0` удерживает shared MISO/GPIO13 собранной board-02 в LOW на 32/32 samples под обеими подтяжками и читает zero receiver identities; exact isolated-main `0.131.0` меняет тот же наблюдаемый input на HIGH на 32/32 samples под обеими подтяжками при снятом RF carrier. Второй run выполняет zero SPI clocks, receiver reads, CE-high events, strobes и TX commands и возвращает Home/lease 0. Зависящий от сборки LOW локализует fault на RF carrier или его стороне connector, а не на main-only stuck-low ESP input.
+- **Следующий evidence gate:** разметить CSN/MISO pads RF carrier и проверить HIGH на CSN каждого receiver под quiescent exact image. Если все deselected, а MISO остаётся LOW, по одному изолировать carrier modules и потребовать plausible identities после ремонта до любого known-signal emission. Cross-swap и RF emission остаются закрыты.
 - **Принятая physical baseline:** exact `0.129.0-pre-app-watchdog`; все прежние принятые checkpoints сохранены ниже.
-- **Текущий source candidate:** accepted product baseline остаётся exact `0.129.0-pre-app-watchdog`; focused read-only diagnostic `0.130.0-rf-bus-characterization` на `401d4251a66fa03ef71d24c0cb336eb2ecff0e58` использует firmware/ELF hashes `d2ecc7a6…9910`/`7af37a71…c71`, держит все CE в LOW, выполняет только четыре nRF NOP reads для характеристики линии и возвращается Home с lease 0. Это diagnostic evidence, не promotion product/release.
+- **Текущий source candidate:** accepted product baseline остаётся exact `0.129.0-pre-app-watchdog`; focused pull-only diagnostic `0.131.0-isolated-main-miso` на `4243c87b319e3cc453ddf9cca8d75d67d25fe87f` использует firmware/ELF hashes `ee7feb9a…3086`/`872d5b32…dc7`, выполняет zero SPI или receiver operations при снятом carrier и возвращается Home с lease 0. Это diagnostic evidence, не promotion product/release.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
 - **Ближайшая граница:** board-02 — unqualified N16R8/DNP variant с RF в `fault`.
   Не cross-swap-ить shields и не излучать RF. Official stock v1.6 использован только
   как bounded manual corroboration (internal Wi-Fi/BLE работают; внешний scanner
-  2,4 ГГц остаётся пустым), затем заменён exact Leshy 0.130 после сохранения полного
-  flash backup. Powered-off comparison 23/32 кОм отвергает жёсткое
-  passive short; следующая safe operation — exact read-only pull test при
-  снятом RF carrier board-02.
+  2,4 ГГц остаётся пустым), затем заменён после сохранения полного flash backup.
+  Powered-off comparison 23/32 кОм отвергает жёсткое passive short; exact 0.131
+  локализует powered LOW condition на RF carrier или его стороне connector.
+  Следующая safe operation — quiescent carrier pad/CSN localization, не TX.
 - **Последняя локализация:** гипотеза отсутствующей rail отвергнута для idle condition:
   board-02 показывает 4,7/3,3 В — немного выше рабочего control board-01. Exact 0.130
-  samples idle MISO под обоими внутренними pull и выполняет только nRF NOP. Board-01
-  читает `32/32` HIGH и устойчивый STATUS `0x0E`; board-02 читает `0/32` HIGH под
-  обоими pull и STATUS `0x00` на обоих slots до и после reseat connector без питания.
-  Powered-off resistance MISO→GND равно 23 кОм против 32 кОм на board-01,
-  поэтому hard passive short не поддерживается и остаётся powered/logic-dependent
-  clamp. Isolated-main pull test должен различить RF carrier, routing main
-  board и ESP GPIO13. [Retained characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
-  фиксирует exact hashes, измерения, stock corroboration, zero side effects и fault
-  tree ремонта.
+  читает MISO собранной board-01 как HIGH `32/32` со STATUS `0x0E`, а собранной
+  board-02 как LOW `0/32` со STATUS `0x00` до и после reseat. Exact 0.131 затем снимает
+  RF carrier и читает ESP input board-02 как HIGH `32/32` под обеими подтяжками, при
+  zero SPI clocks и receiver operations. GPIO13 также является SD MISO main board,
+  поэтому runner label `isolated_main_gpio_stuck_high` фиксирует high-dominant shared
+  net, а не повреждение main board. Переход attached→isolated LOW→HIGH доказывает, что
+  ESP input видит оба состояния, и локализует источник LOW на стороне carrier.
+  [Assembled characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
+  и [isolated-main characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json)
+  сохраняют exact hashes, measurements, zero side effects и суженный repair tree.
 - **Текущее negative evidence:** fixture `0.2.0` обнаружил реальную ошибку выбора slot;
   исправленный на slot 2 fixture `0.2.1` всё равно отказал до CE HIGH. Diagnostic
   `0.2.2` локализовал отказ до некорректного SPI exchange со slot 2 board-02:

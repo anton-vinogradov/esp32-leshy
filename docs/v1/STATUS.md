@@ -13,31 +13,32 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Active stage:** `S5 — Complete ESP32-DIV hardware`.
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
 - **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
-- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps. Exact passive diagnostic `0.130.0` now detects both permitted nRF receivers plus CC1101 on board-01, while board-02 returns zero identities and holds shared MISO/GPIO13 LOW for all 32 pull-down and all 32 pull-up samples. Board-02 has measured 4.7/3.3 V at the assembled connector versus 4.35/3.2 V on the working control; a powered-off reseat plus exact no-flash rerun reproduce the clamp. Powered-off MISO-to-ground resistance is 23 kΩ on board-02 versus 32 kΩ on board-01, rejecting a hard passive short.
-- **Next evidence gate:** run the same exact pull characterization on isolated board-02 main hardware with its RF carrier removed. GPIO13 must read LOW under pull-down and HIGH under pull-up; that result assigns the powered clamp to the RF carrier, while LOW under both pulls assigns it to main-board routing or the ESP pin. Known-signal emission remains closed.
+- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps. Exact passive `0.130.0` holds assembled board-02 shared MISO/GPIO13 LOW for 32/32 samples under both pulls and reads zero receiver identities; exact isolated-main `0.131.0` changes the same observed input to HIGH for 32/32 samples under both pulls when the detachable RF carrier is absent. The second run performs zero SPI clocks, receiver reads, CE-high events, strobes or TX commands and returns Home/lease 0. This assembly-dependent LOW localizes the fault to the RF carrier or its connector side rather than a main-only stuck-low ESP input.
+- **Next evidence gate:** map the RF-carrier CSN/MISO pads and verify every receiver CSN is HIGH under the quiescent exact image. If all are deselected while MISO remains LOW, isolate the carrier modules one at a time and require repaired plausible identities before any known-signal emission. Cross-swap and RF emission remain closed.
 - **Accepted physical baseline:** exact `0.129.0-pre-app-watchdog`; earlier accepted checkpoints remain retained below.
-- **Working source candidate:** the accepted product baseline remains exact `0.129.0-pre-app-watchdog`; focused read-only diagnostic `0.130.0-rf-bus-characterization` at `401d4251a66fa03ef71d24c0cb336eb2ecff0e58` uses firmware/ELF hashes `d2ecc7a6…9910`/`7af37a71…c71`, keeps every CE LOW, issues only four nRF NOP reads for line characterization and returns Home with lease 0. It is diagnostic evidence, not a product or release promotion.
+- **Working source candidate:** the accepted product baseline remains exact `0.129.0-pre-app-watchdog`; focused pull-only diagnostic `0.131.0-isolated-main-miso` at `4243c87b319e3cc453ddf9cca8d75d67d25fe87f` uses firmware/ELF hashes `ee7feb9a…3086`/`872d5b32…dc7`, performs zero SPI or receiver operations with the carrier absent and returns Home with lease 0. It is diagnostic evidence, not a product or release promotion.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** establish the S5 stock-hardware completeness baseline and
   advance each present module through probe → observe/capture → Library → inspect/export.
 - **Immediate boundary:** board-02 is an unqualified N16R8/DNP variant with RF in
   `fault`. Do not cross-swap shields or emit RF. Official stock v1.6 was observed only
-  as a bounded manual corroboration (internal Wi-Fi/BLE work; external 2.4 GHz scanner
-  remains blank), then replaced by exact Leshy 0.130 after retaining a full-flash
-  backup. The 23/32 kΩ powered-off comparison rejects a hard passive short; the next
-  safe operation is the exact read-only pull test with the board-02 RF carrier removed.
+  as bounded manual corroboration (internal Wi-Fi/BLE work; external 2.4 GHz scanner
+  remains blank), then replaced after retaining a full-flash backup. The 23/32 kΩ
+  powered-off comparison rejects a hard passive short; exact 0.131 now localizes the
+  powered LOW condition to the RF carrier or its connector side. The next safe operation
+  is quiescent carrier pad/CSN localization, not transmission.
 - **Latest localization:** the rail-absence hypothesis is rejected for this idle
   condition: board-02 measures 4.7/3.3 V, slightly above the working board-01 control.
-  Exact 0.130 samples idle MISO under both internal pulls and performs nRF NOP only.
-  Board-01 reads `32/32` HIGH and stable STATUS `0x0E`; board-02 reads `0/32` HIGH
-  under both pulls and STATUS `0x00` on both slots, before and after a powered-off
-  connector reseat. Powered-off MISO-to-ground resistance is 23 kΩ versus 32 kΩ
-  on board-01, so a hard passive short is unsupported and a powered/logic-dependent
-  clamp remains. An isolated-main pull test must now distinguish the RF carrier from
-  connector routing or ESP GPIO13.
-  The [retained characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
-  records exact hashes, measurements, stock corroboration, zero side effects and the
-  repair fault tree.
+  Exact 0.130 reads assembled board-01 MISO HIGH `32/32` with STATUS `0x0E`, but
+  assembled board-02 LOW `0/32` with STATUS `0x00` before and after reseat. Exact 0.131
+  then removes the RF carrier and reads the board-02 ESP input HIGH `32/32` under both
+  pull choices, with zero SPI clocks or receiver operations. GPIO13 is also the main-board
+  SD MISO line, so the runner label `isolated_main_gpio_stuck_high` records a high-dominant
+  shared net, not a damaged-main diagnosis. The attached→isolated LOW→HIGH change proves
+  the ESP input observes both states and localizes the LOW source to the carrier side.
+  The [assembled characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
+  and [isolated-main characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json)
+  retain exact hashes, measurements, zero side effects and the narrowed repair tree.
 - **Current negative evidence:** fixture `0.2.0` exposed a real wrong-slot error;
   corrected slot-2 fixture `0.2.1` still failed before CE HIGH. Diagnostic `0.2.2`
   now localizes that failure to an invalid SPI exchange on board-02 slot 2:

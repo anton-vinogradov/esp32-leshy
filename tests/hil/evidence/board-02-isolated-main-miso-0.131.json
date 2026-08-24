@@ -1,0 +1,108 @@
+{
+  "schema": "leshy.hardware.isolated_main_miso_evidence.v1",
+  "status": "retained_fault_localized_to_rf_carrier",
+  "date": "2026-08-24",
+  "checkpoint": "board_02_assembled_vs_isolated_shared_miso",
+  "source_commit": "4243c87b319e3cc453ddf9cca8d75d67d25fe87f",
+  "candidate": {
+    "version": "0.131.0-isolated-main-miso",
+    "firmware_sha256": "ee7feb9a07c7f29b9cc8e33c4b0663161b676e498911eb2a7109d00a6e123086",
+    "app_elf_sha256": "872d5b3223d7f09e5629a6c1d51dfcab1980cd04d1eeb670ff983465e3ceadc7",
+    "runner_source_sha256": "12618a29dbb7aa28a22fd011c162fb614408302a791f2309a1fd3ce13f1aa8dd"
+  },
+  "board": {
+    "id": "board-02",
+    "efuse_mac": "90:70:69:0D:15:E0",
+    "module": "ESP32-S3-WROOM-1U-N16R8",
+    "tested_assembly": "main_board_only_with_detachable_rf_carrier_absent",
+    "rf_carrier_absence_user_confirmed": true
+  },
+  "failed_predecessor": {
+    "version": "0.130.0-rf-bus-characterization",
+    "path": "work/outputs/rf-bus-characterization-board02-main-only-0.130-20260824-07/run.json",
+    "sha256": "d4f4b5554f6d08c566f41f3c395aefffe1cb127e486cc7f90d0ad629206373f2",
+    "passed": false,
+    "reason": "the assembled-carrier guard aborted before pull sampling, so its zero sample counts are retained as fail-closed harness evidence and not interpreted as GPIO state"
+  },
+  "exact_run": {
+    "path": "work/outputs/rf-bus-characterization-board02-main-only-0.131-20260824-08/run.json",
+    "sha256": "9ac42e7ca97a88f326f125bd8f3bc1c742dee52eed0d33aebb2c74be39a3089e",
+    "log_sha256": "4970664c62568fca63c81450685c6356897b30ec3d767ce5e737e877b0062970",
+    "run_id": "42586bda35a82bba6608d62483074eb2",
+    "flashed": true,
+    "passed": true,
+    "raw_runner_outcome": "isolated_main_gpio_stuck_high",
+    "raw_outcome_limit": "the label classifies 32/32 samples under both internal pulls; it does not by itself diagnose a damaged ESP input because the main board also contains the shared SD MISO branch",
+    "idle_miso_high_samples": {
+      "pulldown": 32,
+      "pullup": 32,
+      "samples_per_pull": 32
+    },
+    "receiver_operations": {
+      "nrf_nop_reads": 0,
+      "nrf_register_reads": 0,
+      "cc_status_reads": 0,
+      "spi_bytes_clocked": 0
+    },
+    "side_effects": {
+      "nrf_ce_high_events": 0,
+      "cc_command_strobes": 0,
+      "radio_tx_commands": 0
+    },
+    "safety": {
+      "buzzer_inactive": true,
+      "software_quiesce_complete": true,
+      "terminal_page": "home",
+      "terminal_owner": "none",
+      "terminal_lease_mask": 0
+    }
+  },
+  "comparison": {
+    "assembled_exact_0_130_miso_high_samples": {
+      "pulldown": 0,
+      "pullup": 0,
+      "samples_per_pull": 32
+    },
+    "isolated_exact_0_131_miso_high_samples": {
+      "pulldown": 32,
+      "pullup": 32,
+      "samples_per_pull": 32
+    },
+    "state_changes_when_rf_carrier_removed": true,
+    "esp_input_observed_low_and_high_across_the_two_assemblies": true
+  },
+  "design_checks": {
+    "shared_spi_miso_gpio": 13,
+    "main_board_sd_uses_same_miso_gpio": true,
+    "upstream_pinout_source": "https://github.com/cifertech/ESP32-DIV/wiki/Schematics",
+    "rf_receivers_use_same_miso_gpio": true,
+    "carrier_removal_breaks_the_only_observed_low_condition": true
+  },
+  "assessment": {
+    "board_02_rf_state": "fault",
+    "main_board_only_gpio13_stuck_low_supported": false,
+    "esp_gpio13_input_can_observe_both_states": true,
+    "rf_carrier_or_its_connector_side_is_low_source_supported": true,
+    "single_faulty_receiver_identified": false,
+    "main_board_discard_justified": false,
+    "whole_device_discard_justified": false,
+    "repairability": "likely_repairable_but_carrier_component_or_joint_not_yet_identified",
+    "rf_emission_allowed": false,
+    "shield_cross_swap_allowed": false,
+    "next_safe_evidence": [
+      "map every carrier receiver CSN and shared-MISO pad from the upstream v2 schematic and the retained board photos",
+      "with the carrier assembled and the exact quiescent image running, verify HIGH at every receiver CSN pad before treating any receiver as selected",
+      "if all CSN pads are HIGH while shared MISO is LOW, inspect or isolate the carrier modules one at a time without authorizing CE HIGH or RF transmission",
+      "after a repair, require the same exact read-only identity probe to recover plausible nRF and CC1101 identities before any bounded known-signal regression"
+    ]
+  },
+  "limits": {
+    "logic_analyzer_used": false,
+    "oscilloscope_used": false,
+    "rf_detector_used": false,
+    "main_board_external_pull_strength_measured": false,
+    "individual_carrier_module_fault_identified": false,
+    "radiated_power_measured": false,
+    "stage_or_phase_promoted": false
+  }
+}

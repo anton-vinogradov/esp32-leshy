@@ -131,14 +131,20 @@ MISO/GPIO13 32 times under each internal pull and issued only four CE-low nRF NO
 board-01 was HIGH 32/32 with STATUS `0x0E`, while board-02 was LOW 0/32 with STATUS
 `0x00` both before and after a powered-off reseat. Rail absence and a casual connector
 contact are no longer supported. Powered-off MISO-to-ground resistance is 23 kΩ on
-board-02 versus 32 kΩ on board-01, rejecting a hard passive short. The next safe
-evidence is the same exact pull characterization on isolated board-02 main hardware:
-following both pulls assigns the powered clamp to the RF carrier; LOW under both pulls
-assigns it to main-board routing or ESP GPIO13.
+board-02 versus 32 kΩ on board-01, rejecting a hard passive short. Exact 0.131 then
+removed the detachable RF carrier and read the same board-02 GPIO13 HIGH 32/32 under
+both pulls while clocking zero SPI bytes and performing zero receiver operations. The
+attached-to-isolated LOW→HIGH transition proves that the ESP input observes both
+states and localizes the LOW source to the RF carrier or its connector side. GPIO13
+also serves the main-board SD MISO branch, so isolated HIGH under both pulls is not a
+damaged-main diagnosis. The next safe evidence is quiescent carrier-pad localization:
+prove every receiver CSN HIGH, then isolate carrier modules one at a time if shared
+MISO remains LOW.
 Do not cross-swap shields or emit before localization:
 [same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
 [variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json),
-[MISO characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json).
+[assembled MISO characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json),
+[isolated-main MISO characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json).
 
 Official stock v1.6 was used once as bounded manual corroboration after retaining a
 full clone flash backup: internal Wi-Fi and BLE worked while the external 2.4 GHz
