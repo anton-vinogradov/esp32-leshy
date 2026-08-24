@@ -347,7 +347,7 @@ def main() -> int:
     require(failures, "HintY = 294" in theme and "HintHeight = 26" in theme,
             "26 px compact footer theme contract missing")
     for marker in ("renderSelectionDelta()", "renderHomeRow(",
-                   "renderLanguageRow(", "renderSelfTestModeRow(",
+                   "renderSettingsRow(", "renderSelfTestModeRow(",
                    "renderSurveyListRow(", "renderLibraryListRow(",
                    "renderInteractiveScreen(!lastUiActionUsedIncrementalRender)"):
         require(failures, marker in renderer,

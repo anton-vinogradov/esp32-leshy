@@ -77,6 +77,7 @@
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/TouchInput.h"
 #include "ui/TouchTargets.h"
+#include "ui/InterfaceSettingsController.h"
 #include "ui/LanguageController.h"
 #include "ui/UiController.h"
 #include "ui/UiStrings.h"
@@ -163,6 +164,8 @@ void testVisualThemeContract() {
     using leshy1::ui::visual::Palette;
     using leshy1::ui::visual::rgb565;
 
+    leshy1::ui::visual::applyTheme(leshy1::ui::InterfaceTheme::Forest);
+
     CHECK(Layout::ScreenWidth == 240);
     CHECK(Layout::ScreenHeight == 320);
     CHECK(Layout::Edge * 2 + Layout::ContentWidth == Layout::ScreenWidth);
@@ -177,6 +180,13 @@ void testVisualThemeContract() {
     CHECK(Palette::TextPrimary != Palette::TextSecondary);
     CHECK(Palette::Focus != Palette::Positive);
     CHECK(Palette::Warning != Palette::Danger);
+
+    leshy1::ui::visual::applyTheme(
+        leshy1::ui::InterfaceTheme::HighContrast);
+    CHECK(Palette::Canvas == rgb565(0, 0, 0));
+    CHECK(Palette::TextPrimary == rgb565(255, 255, 255));
+    CHECK(Palette::Surface != Palette::SurfaceFocus);
+    leshy1::ui::visual::applyTheme(leshy1::ui::InterfaceTheme::Forest);
 }
 
 void testUiComponentGeometryContract() {
@@ -340,6 +350,43 @@ void testLanguageCatalogAndControllerAreBounded() {
     controller.restore(UiLanguage::Russian);
     CHECK(controller.active() == UiLanguage::Russian);
     CHECK(controller.selection() == 1);
+}
+
+void testInterfaceSettingsAreBoundedAndFailClosed() {
+    using leshy1::ui::InterfaceSetting;
+    using leshy1::ui::InterfaceSettingsController;
+    using leshy1::ui::InterfaceTheme;
+
+    InterfaceSettingsController controller;
+    CHECK(controller.selection() == 0);
+    CHECK(controller.selected() == InterfaceSetting::Language);
+    CHECK(controller.brightnessDuty() == 255);
+    CHECK(controller.brightnessPercent() == 100);
+    CHECK(controller.theme() == InterfaceTheme::Forest);
+    CHECK(!controller.previous());
+    CHECK(controller.next());
+    CHECK(controller.selected() == InterfaceSetting::Brightness);
+    CHECK(controller.cycleBrightness());
+    CHECK(controller.brightnessDuty() == 176);
+    CHECK(controller.brightnessPercent() == 69);
+    for (std::uint8_t index = 1;
+         index < InterfaceSettingsController::kBrightnessCount; ++index) {
+        CHECK(controller.cycleBrightness());
+    }
+    CHECK(controller.brightnessDuty() == 255);
+    CHECK(controller.next());
+    CHECK(controller.selected() == InterfaceSetting::Theme);
+    CHECK(controller.cycleTheme());
+    CHECK(controller.theme() == InterfaceTheme::HighContrast);
+    CHECK(controller.next());
+    CHECK(controller.selected() == InterfaceSetting::Sound);
+    CHECK(!controller.next());
+    CHECK(!InterfaceSettingsController::soundAvailable());
+    controller.restore(99, static_cast<InterfaceTheme>(99));
+    CHECK(controller.brightnessDuty() == 255);
+    CHECK(controller.theme() == InterfaceTheme::Forest);
+    controller.enter();
+    CHECK(controller.selected() == InterfaceSetting::Language);
 }
 
 void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
@@ -6095,6 +6142,7 @@ int main() {
     testTouchInputIsEdgeTriggeredAndBounded();
     testTouchTargetsExposeRowsButNeverChrome();
     testLanguageCatalogAndControllerAreBounded();
+    testInterfaceSettingsAreBoundedAndFailClosed();
     testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
     testDisposableScratchCleanupPermitIsExactAndFailClosed();
     testShieldReceiverIdentityContractFailsClosed();

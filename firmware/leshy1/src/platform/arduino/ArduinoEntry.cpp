@@ -115,6 +115,7 @@
 #include "storage/StorageTiming.h"
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/TouchTargets.h"
+#include "ui/InterfaceSettingsController.h"
 #include "ui/LanguageController.h"
 #include "ui/UiComponents.h"
 #include "ui/UiController.h"
@@ -277,6 +278,9 @@ using leshy1::services::survey::SurveySession;
 using leshy1::ui::UiAction;
 using leshy1::ui::UiController;
 using leshy1::ui::UiLanguage;
+using leshy1::ui::InterfaceSetting;
+using leshy1::ui::InterfaceSettingsController;
+using leshy1::ui::InterfaceTheme;
 using leshy1::ui::UiTextId;
 using leshy1::ui::UiTextRole;
 using leshy1::ui::LanguageController;
@@ -346,6 +350,8 @@ constexpr const char* kProductEnrollmentNamespace = "leshy1";
 constexpr const char* kProductEnrollmentKey = "sd.cid.v1";
 constexpr const char* kUiPreferencesNamespace = "leshy1-ui";
 constexpr const char* kUiLanguageKey = "lang.v1";
+constexpr const char* kUiBrightnessKey = "bright.v1";
+constexpr const char* kUiThemeKey = "theme.v1";
 HardwareInventory inventory;
 AppCatalog appCatalog;
 ResourceBroker resourceBroker;
@@ -390,6 +396,7 @@ bool touchCalibrationRequiredAtBoot = false;
 bool touchCalibrationSucceededAtBoot = false;
 UiController uiController;
 LanguageController languageController;
+InterfaceSettingsController interfaceSettingsController;
 SelfTestController selfTestController;
 constexpr std::uint8_t kDevicePage = 9;
 constexpr std::uint8_t kAboutPage = 10;
@@ -1486,6 +1493,43 @@ bool saveUiLanguage(UiLanguage language) {
         kUiLanguageKey, static_cast<std::uint8_t>(language));
     preferences.end();
     return written == sizeof(std::uint8_t);
+}
+
+std::uint8_t loadUiBrightnessIndex() {
+    Preferences preferences;
+    if (!preferences.begin(kUiPreferencesNamespace, true)) return 0;
+    const std::uint8_t stored = preferences.getUChar(kUiBrightnessKey, 0);
+    preferences.end();
+    return stored < InterfaceSettingsController::kBrightnessCount ? stored : 0;
+}
+
+InterfaceTheme loadUiTheme() {
+    Preferences preferences;
+    if (!preferences.begin(kUiPreferencesNamespace, true)) {
+        return InterfaceTheme::Forest;
+    }
+    const std::uint8_t stored = preferences.getUChar(kUiThemeKey, 0);
+    preferences.end();
+    return stored == static_cast<std::uint8_t>(InterfaceTheme::HighContrast)
+               ? InterfaceTheme::HighContrast
+               : InterfaceTheme::Forest;
+}
+
+bool saveUiPreference(const char* key, std::uint8_t value) {
+    Preferences preferences;
+    if (!preferences.begin(kUiPreferencesNamespace, false)) return false;
+    const std::size_t written = preferences.putUChar(key, value);
+    preferences.end();
+    return written == sizeof(std::uint8_t);
+}
+
+bool saveUiBrightnessIndex(std::uint8_t index) {
+    if (index >= InterfaceSettingsController::kBrightnessCount) return false;
+    return saveUiPreference(kUiBrightnessKey, index);
+}
+
+bool saveUiTheme(InterfaceTheme theme) {
+    return saveUiPreference(kUiThemeKey, static_cast<std::uint8_t>(theme));
 }
 
 bool closeProductSurveyBackend() {
@@ -7003,7 +7047,8 @@ bool performBoundedLightSleep(std::uint64_t requestedUs) {
     ledcWrite(BoardProfile::kBacklightPin, 0);
     delay(5);
     if (esp_sleep_enable_timer_wakeup(requestedUs) != ESP_OK) {
-        ledcWrite(BoardProfile::kBacklightPin, 255);
+        ledcWrite(BoardProfile::kBacklightPin,
+                  interfaceSettingsController.brightnessDuty());
         return false;
     }
     const std::uint64_t startedUs =
@@ -7013,7 +7058,8 @@ bool performBoundedLightSleep(std::uint64_t requestedUs) {
         static_cast<std::uint64_t>(esp_timer_get_time());
     lastBoundedSleepWakeCause = esp_sleep_get_wakeup_cause();
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-    ledcWrite(BoardProfile::kBacklightPin, 255);
+    ledcWrite(BoardProfile::kBacklightPin,
+              interfaceSettingsController.brightnessDuty());
     feedRuntimeSafetyWatchdog();
     if (slept != ESP_OK || finishedUs < startedUs) return false;
     lastBoundedSleepRequestedUs = requestedUs;
@@ -7154,30 +7200,59 @@ SelfTestFacts snapshotSelfTestFacts() {
     return facts;
 }
 
-void renderLanguageRow(std::uint8_t index) {
-    const UiTextId labels[2] = {UiTextId::LanguageEnglish,
-                                UiTextId::LanguageRussian};
-    const UiTextId notes[2] = {UiTextId::LanguageEnglishNote,
-                               UiTextId::LanguageRussianNote};
-    if (index >= 2) return;
-    renderMenuRow(Components::choiceRow(index), tr(labels[index]),
-                  tr(notes[index]), languageController.selection() == index,
-                  true,
-                  languageController.active() ==
-                          (index == 0 ? UiLanguage::English
-                                      : UiLanguage::Russian)
-                      ? Tone::Positive
-                      : Tone::Neutral);
+UiTextId settingsBrightnessNote() {
+    switch (interfaceSettingsController.brightnessIndex()) {
+        case 1: return UiTextId::SettingsBrightness69;
+        case 2: return UiTextId::SettingsBrightness44;
+        case 3: return UiTextId::SettingsBrightness25;
+        case 4: return UiTextId::SettingsBrightness9;
+        default: return UiTextId::SettingsBrightness100;
+    }
 }
 
-void renderLanguagePage(bool clearContent) {
-    renderHeader(tr(UiTextId::LanguageTitle), clearContent);
-    for (std::uint8_t index = 0; index < 2; ++index) {
-        renderLanguageRow(index);
+UiTextId settingsLabel(std::uint8_t index) {
+    switch (static_cast<InterfaceSetting>(index)) {
+        case InterfaceSetting::Language: return UiTextId::SettingsLanguage;
+        case InterfaceSetting::Brightness: return UiTextId::SettingsBrightness;
+        case InterfaceSetting::Theme: return UiTextId::SettingsTheme;
+        case InterfaceSetting::Sound: return UiTextId::SettingsSound;
     }
-    display.setTextColor(Palette::TextMuted, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, 14, 207);
-    display.print(tr(UiTextId::LanguagePersisted));
+    return UiTextId::SettingsSound;
+}
+
+UiTextId settingsNote(std::uint8_t index) {
+    switch (static_cast<InterfaceSetting>(index)) {
+        case InterfaceSetting::Language:
+            return languageController.active() == UiLanguage::Russian
+                       ? UiTextId::SettingsLanguageRussian
+                       : UiTextId::SettingsLanguageEnglish;
+        case InterfaceSetting::Brightness: return settingsBrightnessNote();
+        case InterfaceSetting::Theme:
+            return interfaceSettingsController.theme() ==
+                           InterfaceTheme::HighContrast
+                       ? UiTextId::SettingsThemeContrast
+                       : UiTextId::SettingsThemeForest;
+        case InterfaceSetting::Sound: return UiTextId::SettingsSoundLocked;
+    }
+    return UiTextId::SettingsSoundLocked;
+}
+
+void renderSettingsRow(std::uint8_t index) {
+    if (index >= InterfaceSettingsController::kItemCount) return;
+    const bool enabled = static_cast<InterfaceSetting>(index) !=
+                         InterfaceSetting::Sound;
+    renderMenuRow(Components::homeRow(index), tr(settingsLabel(index)),
+                  tr(settingsNote(index)),
+                  interfaceSettingsController.selection() == index, enabled,
+                  enabled ? Tone::Positive : Tone::Muted);
+}
+
+void renderSettingsPage(bool clearContent) {
+    renderHeader(tr(UiTextId::SettingsTitle), clearContent);
+    for (std::uint8_t index = 0;
+         index < InterfaceSettingsController::kItemCount; ++index) {
+        renderSettingsRow(index);
+    }
 }
 
 void renderWifiCapturePage(bool clearContent) {
@@ -10322,7 +10397,10 @@ struct UiRenderSnapshot final {
     std::uint8_t page = 0;
     std::uint8_t rootSelection = 0;
     std::uint8_t deviceSelection = 0;
-    std::uint8_t languageSelection = 0;
+    std::uint8_t settingsSelection = 0;
+    std::uint8_t settingsBrightnessIndex = 0;
+    std::uint8_t settingsTheme = 0;
+    std::uint8_t settingsLanguage = 0;
     std::uint8_t selfTestView = 0;
     std::uint8_t selfTestSelection = 0;
     std::uint8_t wifiProductView = 0;
@@ -10371,7 +10449,10 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         uiController.page(),
         uiController.selection(),
         deviceSelection,
-        languageController.selection(),
+        interfaceSettingsController.selection(),
+        interfaceSettingsController.brightnessIndex(),
+        static_cast<std::uint8_t>(interfaceSettingsController.theme()),
+        static_cast<std::uint8_t>(languageController.active()),
         static_cast<std::uint8_t>(selfTestController.view()),
         selfTestController.selection(),
         static_cast<std::uint8_t>(wifiProductView),
@@ -10829,11 +10910,25 @@ bool renderSelectionDelta() {
     }
 
     if (uiController.page() == 5) {
-        const std::uint8_t current = languageController.selection();
-        if (renderedUi.languageSelection == current) return false;
-        renderLanguageRow(renderedUi.languageSelection);
-        renderLanguageRow(current);
-        return true;
+        if (renderedUi.settingsLanguage !=
+                static_cast<std::uint8_t>(languageController.active()) ||
+            renderedUi.settingsTheme != static_cast<std::uint8_t>(
+                interfaceSettingsController.theme())) {
+            return false;
+        }
+        const std::uint8_t current = interfaceSettingsController.selection();
+        if (renderedUi.settingsSelection != current) {
+            renderSettingsRow(renderedUi.settingsSelection);
+            renderSettingsRow(current);
+            return true;
+        }
+        if (renderedUi.settingsBrightnessIndex !=
+            interfaceSettingsController.brightnessIndex()) {
+            renderSettingsRow(static_cast<std::uint8_t>(
+                InterfaceSetting::Brightness));
+            return true;
+        }
+        return false;
     }
 
     if (uiController.page() == 6 &&
@@ -10870,7 +10965,7 @@ void renderInteractiveScreen(bool clearContent) {
         } else if (uiController.page() == 4) {
             renderCapturePage(clearContent);
         } else if (uiController.page() == 5) {
-            renderLanguagePage(clearContent);
+            renderSettingsPage(clearContent);
         } else if (uiController.page() == 6) {
             renderSelfTestPage(clearContent);
         } else if (uiController.page() == kDevicePage) {
@@ -12705,6 +12800,9 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "\"selection\":%u,\"selected_id\":\"%s\","
                   "\"selected_enabled\":%s,\"reason\":\"%s\","
                   "\"language\":\"%s\",\"language_selection\":%u,"
+                  "\"settings_selection\":%u,\"brightness_percent\":%u,"
+                  "\"brightness_duty\":%u,\"theme\":\"%s\","
+                  "\"sound_available\":false,"
                   "\"revision\":%lu,\"safety_state\":\"%s\","
                   "\"safety_reason\":\"%s\",\"safety_latched\":%s,"
                   "\"safety_clear_pending\":%s,\"render_mode\":\"%s\","
@@ -12721,6 +12819,14 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   selected == nullptr ? "missing selection" : selected->reason,
                   leshy1::ui::uiLanguageName(languageController.active()),
                   static_cast<unsigned>(languageController.selection()),
+                  static_cast<unsigned>(interfaceSettingsController.selection()),
+                  static_cast<unsigned>(
+                      interfaceSettingsController.brightnessPercent()),
+                  static_cast<unsigned>(
+                      interfaceSettingsController.brightnessDuty()),
+                  interfaceSettingsController.theme() ==
+                          InterfaceTheme::HighContrast
+                      ? "high_contrast" : "forest",
                   static_cast<unsigned long>(uiController.revision()),
                   leshy1::kernel::safety::safetyStateName(
                       safetySupervisor.state()),
@@ -13859,6 +13965,11 @@ bool closeWifiCaptureProduct() {
 }
 
 bool selectionCanRepaintInPlace(UiAction action) {
+    if (uiController.page() == 5 &&
+        (action == UiAction::Up || action == UiAction::Down ||
+         action == UiAction::Select || action == UiAction::Right)) {
+        return true;
+    }
     if (action != UiAction::Up && action != UiAction::Down) return false;
     if (uiController.isRoot()) return true;
     if (uiController.page() == 2) {
@@ -13887,7 +13998,6 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (uiController.page() == 4) {
         return captureView == CaptureView::SourceMenu;
     }
-    if (uiController.page() == 5) return true;
     if (uiController.page() == kDevicePage) return true;
     return uiController.page() == 6 &&
            selfTestController.view() == SelfTestView::ModeMenu;
@@ -14800,7 +14910,9 @@ bool applyUiAction(UiAction action, bool render = true) {
                 kPowerPage, 5, 6, 1, kAboutPage,
             };
             changed = uiController.openChild(pages[deviceSelection]);
-            if (changed && deviceSelection == 1) languageController.enter();
+            if (changed && deviceSelection == 1) {
+                interfaceSettingsController.enter();
+            }
             lastRuntimeEvent = changed ? "device_item_opened"
                                        : "device_item_rejected";
         }
@@ -14824,17 +14936,67 @@ bool applyUiAction(UiAction action, bool render = true) {
         bool changed = false;
         if (action == UiAction::Up) {
             handled = true;
-            changed = languageController.previous();
+            changed = interfaceSettingsController.previous();
         } else if (action == UiAction::Down) {
             handled = true;
-            changed = languageController.next();
+            changed = interfaceSettingsController.next();
         } else if (action == UiAction::Select || action == UiAction::Right) {
             handled = true;
-            const UiLanguage requested = languageController.selected();
-            const bool persisted = saveUiLanguage(requested);
-            changed = persisted && languageController.apply();
-            lastRuntimeEvent = persisted ? "language_persisted"
-                                         : "language_persist_failed";
+            switch (interfaceSettingsController.selected()) {
+                case InterfaceSetting::Language: {
+                    const UiLanguage requested =
+                        languageController.active() == UiLanguage::English
+                            ? UiLanguage::Russian : UiLanguage::English;
+                    const bool persisted = saveUiLanguage(requested);
+                    if (persisted) languageController.restore(requested);
+                    changed = persisted;
+                    lastRuntimeEvent = persisted ? "language_persisted"
+                                                 : "language_persist_failed";
+                    break;
+                }
+                case InterfaceSetting::Brightness: {
+                    const std::uint8_t previous =
+                        interfaceSettingsController.brightnessIndex();
+                    const InterfaceTheme theme =
+                        interfaceSettingsController.theme();
+                    interfaceSettingsController.cycleBrightness();
+                    const bool persisted = saveUiBrightnessIndex(
+                        interfaceSettingsController.brightnessIndex());
+                    if (!persisted) {
+                        interfaceSettingsController.restore(previous, theme);
+                    } else {
+                        ledcWrite(BoardProfile::kBacklightPin,
+                                  interfaceSettingsController.brightnessDuty());
+                    }
+                    changed = persisted;
+                    lastRuntimeEvent = persisted ? "brightness_persisted"
+                                                 : "brightness_persist_failed";
+                    break;
+                }
+                case InterfaceSetting::Theme: {
+                    const std::uint8_t brightness =
+                        interfaceSettingsController.brightnessIndex();
+                    const InterfaceTheme previous =
+                        interfaceSettingsController.theme();
+                    interfaceSettingsController.cycleTheme();
+                    const bool persisted = saveUiTheme(
+                        interfaceSettingsController.theme());
+                    if (!persisted) {
+                        interfaceSettingsController.restore(brightness, previous);
+                    } else {
+                        leshy1::ui::visual::applyTheme(
+                            interfaceSettingsController.theme());
+                    }
+                    changed = persisted;
+                    lastRuntimeEvent = persisted ? "theme_persisted"
+                                                 : "theme_persist_failed";
+                    break;
+                }
+                case InterfaceSetting::Sound:
+                    changed = false;
+                    lastRuntimeEvent = "sound_locked_hw_t09";
+                    break;
+            }
         }
         if (handled) {
             uiController.recordHandledAction(action);
@@ -20650,8 +20812,11 @@ void setup() {
         disarmEarlyBootGuard();
     }
 
+    interfaceSettingsController.restore(loadUiBrightnessIndex(), loadUiTheme());
+    leshy1::ui::visual::applyTheme(interfaceSettingsController.theme());
     ledcAttach(BoardProfile::kBacklightPin, 5000, 8);
-    ledcWrite(BoardProfile::kBacklightPin, 255);
+    ledcWrite(BoardProfile::kBacklightPin,
+              interfaceSettingsController.brightnessDuty());
     display.init();
     display.setRotation(2);
     boardTouchInput.begin(display, millis());

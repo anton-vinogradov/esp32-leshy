@@ -105,6 +105,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/ui/Pcf8574ButtonInput.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/TouchInput.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/TouchTargets.cpp" \
+    "$repo_dir/firmware/leshy1/src/ui/InterfaceSettingsController.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/LanguageController.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/UiController.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/UiStrings.cpp" \
@@ -167,6 +168,7 @@ python3 "$repo_dir/tools/check_full_guided_s5_rx_contract.py"
 python3 "$repo_dir/tools/check_full_guided_s5_rx_delta_acceptance.py"
 python3 "$repo_dir/tools/check_ui_components_acceptance.py"
 python3 "$repo_dir/tools/check_ui_language_contract.py"
+python3 "$repo_dir/tools/check_interface_settings_contract.py"
 python3 "$repo_dir/tools/check_product_ui_content.py"
 python3 "$repo_dir/tools/check_wifi_networks_contract.py"
 python3 "$repo_dir/tools/check_wifi_networks_acceptance.py"

@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "ui/InterfaceSettingsController.h"
+
 namespace leshy1::ui::visual {
 
 constexpr std::uint16_t rgb565(std::uint8_t red, std::uint8_t green,
@@ -15,21 +17,53 @@ constexpr std::uint16_t rgb565(std::uint8_t red, std::uint8_t green,
 // UX-03 semantic color roles. Screens consume roles rather than raw colors so a
 // state remains consistent across Home, Survey, Library, and Diagnostics.
 struct Palette final {
-    static constexpr std::uint16_t Canvas = rgb565(7, 16, 12);
-    static constexpr std::uint16_t Header = rgb565(26, 58, 40);
-    static constexpr std::uint16_t Surface = rgb565(13, 22, 17);
-    static constexpr std::uint16_t SurfaceFocus = rgb565(26, 78, 52);
-    static constexpr std::uint16_t SurfaceFocusDisabled = rgb565(66, 78, 52);
-    static constexpr std::uint16_t Divider = rgb565(60, 72, 64);
+    static inline std::uint16_t Canvas = rgb565(7, 16, 12);
+    static inline std::uint16_t Header = rgb565(26, 58, 40);
+    static inline std::uint16_t Surface = rgb565(13, 22, 17);
+    static inline std::uint16_t SurfaceFocus = rgb565(26, 78, 52);
+    static inline std::uint16_t SurfaceFocusDisabled = rgb565(66, 78, 52);
+    static inline std::uint16_t Divider = rgb565(60, 72, 64);
 
-    static constexpr std::uint16_t TextPrimary = rgb565(231, 207, 143);
-    static constexpr std::uint16_t TextSecondary = rgb565(198, 208, 200);
-    static constexpr std::uint16_t TextMuted = rgb565(104, 117, 107);
-    static constexpr std::uint16_t Focus = rgb565(245, 197, 66);
-    static constexpr std::uint16_t Positive = rgb565(85, 217, 138);
-    static constexpr std::uint16_t Warning = rgb565(247, 166, 65);
-    static constexpr std::uint16_t Danger = rgb565(240, 93, 94);
+    static inline std::uint16_t TextPrimary = rgb565(231, 207, 143);
+    static inline std::uint16_t TextSecondary = rgb565(198, 208, 200);
+    static inline std::uint16_t TextMuted = rgb565(104, 117, 107);
+    static inline std::uint16_t Focus = rgb565(245, 197, 66);
+    static inline std::uint16_t Positive = rgb565(85, 217, 138);
+    static inline std::uint16_t Warning = rgb565(247, 166, 65);
+    static inline std::uint16_t Danger = rgb565(240, 93, 94);
 };
+
+inline void applyTheme(InterfaceTheme theme) {
+    if (theme == InterfaceTheme::HighContrast) {
+        Palette::Canvas = rgb565(0, 0, 0);
+        Palette::Header = rgb565(18, 18, 18);
+        Palette::Surface = rgb565(8, 8, 8);
+        Palette::SurfaceFocus = rgb565(62, 52, 0);
+        Palette::SurfaceFocusDisabled = rgb565(52, 52, 52);
+        Palette::Divider = rgb565(150, 150, 150);
+        Palette::TextPrimary = rgb565(255, 255, 255);
+        Palette::TextSecondary = rgb565(220, 220, 220);
+        Palette::TextMuted = rgb565(145, 145, 145);
+        Palette::Focus = rgb565(255, 224, 48);
+        Palette::Positive = rgb565(72, 255, 150);
+        Palette::Warning = rgb565(255, 178, 48);
+        Palette::Danger = rgb565(255, 92, 92);
+        return;
+    }
+    Palette::Canvas = rgb565(7, 16, 12);
+    Palette::Header = rgb565(26, 58, 40);
+    Palette::Surface = rgb565(13, 22, 17);
+    Palette::SurfaceFocus = rgb565(26, 78, 52);
+    Palette::SurfaceFocusDisabled = rgb565(66, 78, 52);
+    Palette::Divider = rgb565(60, 72, 64);
+    Palette::TextPrimary = rgb565(231, 207, 143);
+    Palette::TextSecondary = rgb565(198, 208, 200);
+    Palette::TextMuted = rgb565(104, 117, 107);
+    Palette::Focus = rgb565(245, 197, 66);
+    Palette::Positive = rgb565(85, 217, 138);
+    Palette::Warning = rgb565(247, 166, 65);
+    Palette::Danger = rgb565(240, 93, 94);
+}
 
 // UX-03 240x320 geometry. The compact header carries truthful system status;
 // the footer is reserved for physical-key hints and never shows diagnostics.

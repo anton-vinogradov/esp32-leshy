@@ -181,10 +181,10 @@ def main() -> int:
             "uiController.openChild" in renderer,
             "Language/Self-Test must live below the final Device domain")
     controller = CONTROLLER.read_text(encoding="utf-8")
-    require(failures, 'case 5: return "language"' in controller and
+    require(failures, 'case 5: return "settings"' in controller and
             'case 6: return "self_test"' in controller and
             'case 9: return "device"' in controller,
-            "Device/Language/Self-Test page mapping mismatch")
+            "Device/Settings/Self-Test page mapping mismatch")
     platformio = PLATFORMIO.read_text(encoding="utf-8")
     require(failures, "-D LOAD_GFXFF=1" in platformio,
             "UTF-8 firmware font build contract missing")

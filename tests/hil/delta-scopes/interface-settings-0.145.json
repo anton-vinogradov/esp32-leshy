@@ -1,0 +1,19 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "interface-settings-0.145",
+  "rationale": "This S5 UI delta replaces the misleading language-only Settings page with four truthful interface controls. Language, five bounded 0.x-derived brightness levels and two semantic themes apply immediately and persist; sound remains visibly unavailable until HW-T09 can prove the GPIO2 buzzer/VBAT path. The test changes only UI/NVS/backlight behavior and leaves every RF, storage-session and safety-output path untouched.",
+  "required_host_checks": [
+    "native controller bounds, invalid-value fallback and semantic-theme tests",
+    "EN/RU generated-font fit and UI source contracts",
+    "exact firmware build and resource budget",
+    "buzzer and radio transmit safety contracts remain unchanged"
+  ],
+  "required_hil_scenarios": [
+    "one changed-candidate flash on board-01",
+    "four-row Settings TFT in both themes with incremental selection and brightness redraw",
+    "language, brightness and theme survive a hardware reset",
+    "sound action remains unchanged and reports unavailable",
+    "original preferences are restored and survive a second reset",
+    "zero radio TX, input drops and final ownership"
+  ]
+}

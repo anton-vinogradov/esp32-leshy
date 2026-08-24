@@ -75,7 +75,7 @@ const char* probePageName(std::uint8_t page) {
         case 2: return "survey";
         case 3: return "library";
         case 4: return "capture";
-        case 5: return "language";
+        case 5: return "settings";
         case 6: return "self_test";
         case 7: return "targets";
         case 8: return "lab";
