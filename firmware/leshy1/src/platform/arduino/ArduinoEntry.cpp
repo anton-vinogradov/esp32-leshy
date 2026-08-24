@@ -4481,7 +4481,10 @@ void feedRuntimeSafetyWatchdog() {
     Serial.flush();
     Serial0.flush();
     delay(20);
-    esp_restart();
+    // Safe Mode may follow an interrupted worker/storage transaction.  Do not
+    // enter shutdown handlers that can wait forever on a lock owned by the
+    // failed path; every output and retained-state transition is complete.
+    esp_restart_noos();
     for (;;) {}
 }
 
@@ -5792,7 +5795,10 @@ void restartLatchedSafetyStopForTest(Stream& reply) {
     Serial.flush();
     Serial0.flush();
     delay(20);
-    esp_restart();
+    // The latched worker may have been cancelled while an SDK shutdown lock
+    // was owned.  Bypass shutdown handlers after fail-safe quiesce so the
+    // retained latch can always reach the next boot for inspection.
+    esp_restart_noos();
     for (;;) {}
 }
 

@@ -170,11 +170,23 @@ def main() -> int:
         raise AssertionError(
             "IR deadline HIL must not retain a stale native-USB handle "
             "across restart")
+    clear_start = entry.index("[[noreturn]] void clearSafetyStopAndRestart()")
+    clear_end = entry.index("void recoverProductCatalogAtBoot()", clear_start)
+    restart_start = entry.index("void restartLatchedSafetyStopForTest(")
+    restart_end = entry.index("void clearSafetyStopFromConsole(", restart_start)
+    for label, reset_path in (
+        ("confirmed safety clear", entry[clear_start:clear_end]),
+        ("retained-latch restart", entry[restart_start:restart_end]),
+    ):
+        if "esp_restart_noos();" not in reset_path or \
+                "esp_restart();" in reset_path:
+            raise AssertionError(
+                f"{label} must bypass potentially locked shutdown handlers")
     require(ble_header, (
         "kMaximumScanAttempts = 2U", "kCompletionGraceMs = 1000U",
         "kRetryDelayMs = 100U", "worstCaseScanDurationUs",
     ), "bounded BLE scan deadline")
-    if 'LESHY1_VERSION=\\"0.137.0-pulse-store-deadline\\"' not in platform:
+    if 'LESHY1_VERSION=\\"0.138.0-safety-restart-noos\\"' not in platform:
         raise AssertionError("exact candidate version is not bound")
     if "kRfCarrierChipSelectCharacterizationOnly = false" not in profile:
         raise AssertionError("diagnostic-only carrier gate remains active")
