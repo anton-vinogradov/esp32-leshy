@@ -410,9 +410,26 @@ def main() -> int:
                 if int(state.get("selection", -1)) != 0:
                     raise RuntimeError("could not normalize Home selection")
                 state = query(device, b"ui.language ru", "leshy.ui.v1", "state")
-                for _ in range(5):
+                for _ in range(8):
+                    if state.get("selected_id") == "device":
+                        break
                     state = action(device, "down")
                     trace.append(state)
+                if state.get("selected_id") != "device":
+                    raise RuntimeError("could not select Device on Home")
+                state = action(device, "right")
+                trace.append(state)
+                failures.extend(expect(state, {
+                    "page": "device", "device_selection": 0,
+                    "lease_mask": 1,
+                }, "device_menu"))
+                for _ in range(2):
+                    state = action(device, "down")
+                    trace.append(state)
+                failures.extend(expect(state, {
+                    "page": "device", "device_selection": 2,
+                    "lease_mask": 1,
+                }, "device_self_test_selection"))
                 state = action(device, "right")
                 trace.append(state)
                 failures.extend(expect(state, {
@@ -521,9 +538,13 @@ def main() -> int:
                 )
                 failures.extend(shield_probe_failures(shield_probe))
 
-                trace.append(action(device, "left"))
                 state = action(device, "left")
                 trace.append(state)
+                for _ in range(3):
+                    if state.get("page") == "home":
+                        break
+                    state = action(device, "left")
+                    trace.append(state)
                 failures.extend(expect(state, {
                     "page": "home", "runtime_owner": "none", "lease_mask": 0,
                 }, "final"))
