@@ -98,13 +98,16 @@ handler can only lower the known buzzer/nRF CE pads and publish an exact-app,
 torn-write-resistant RTC record; it never logs, allocates, waits, or touches SPI.
 The watchdog reset enters a latched Safe Mode that skips product workers and normal
 Actions. A second reset preserves an already confirmed latch. Only an explicit
-two-step user clear removes it and restarts. Exact 0.133 adds an allocation-free 6 s
-deadline to the real Product Survey worker after scanner preparation. Main-loop
-evaluation precedes normal worker service; expiry cancels both scanners, releases
-the application lease, quiesces software outputs and enters the same retained Safe
-Mode with reason `worker_deadline`. The Wi-Fi Nearby Networks path is physically
-accepted; BLE, preparation, other workers and physical rail/radio shutdown remain
-open. The binding contract is
+two-step user clear removes it and restarts. Exact 0.133 first added the
+allocation-free deadline to the real Product Survey worker after scanner
+preparation. Exact 0.134 calibrates that deadline to 8 s and uses a compile-time
+assertion to keep it above the BLE adapter's current bounded two-attempt/one-retry
+worst case of 6.1 s. Main-loop evaluation precedes normal worker service; expiry
+cancels both scanners, releases the application lease, quiesces software outputs
+and enters the same retained Safe Mode with reason `worker_deadline`. Both public
+Wi-Fi Nearby Networks and BLE Nearby Devices worker paths are physically accepted;
+preparation/admission, other workers and physical rail/radio shutdown remain open.
+The binding contract is
 [`SAFETY_SUPERVISOR.md`](SAFETY_SUPERVISOR.md).
 
 ## Concurrency and memory

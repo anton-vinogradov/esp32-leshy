@@ -113,41 +113,47 @@ Task-WDT reset произошёл через 5 810,775 ms с reason 6; один 
 [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json)
 также связаны все negative hardware claims ниже.
 
-## Принятый checkpoint дедлайна Wi-Fi worker Product Survey
+## Принятый калиброванный checkpoint дедлайна Wi-Fi+BLE worker Product Survey
 
-Версия `0.133.0-worker-deadline-supervision` добавляет первую supervised worker
-границу без изменения layout retained record. Реальная Core-0 task Product Survey
-включает дедлайн 6 s только после admission и подготовки scanners. Heartbeat стоит
-вокруг UI start gate, каждого blocking Wi-Fi/BLE scan и bounded inter-scan wait;
-disarm происходит только после cleanup scanner/filesystem.
+Версия `0.133.0-worker-deadline-supervision` добавила первую supervised worker
+границу без изменения layout retained record. Версия
+`0.134.0-ble-worker-deadline` калибрует дедлайн реальной Core-0 task Product Survey
+до 8 s. BLE adapter публикует exact worst-case двух attempts и одного retry: 6 100 ms
+для текущего плана. Compile-time assertion требует, чтобы дедлайн Product Survey
+оставался больше этого bound. Task по-прежнему включает дедлайн только после
+admission и подготовки scanners. Heartbeat стоит вокруг UI start gate, каждого
+blocking Wi-Fi/BLE scan и bounded inter-scan wait; disarm происходит только после
+cleanup scanner/filesystem.
 
 Main loop оценивает это независимое состояние до обычных worker events. Expiry
 запрашивает cancel обоих scanners, снимает foreground application lease, удерживает
 software-controlled outputs inactive и защёлкивает `worker_deadline` в том же
 exact-app RTC record, что использует main-loop watchdog. Test-only команда
-`safety.worker-deadline-test confirm` лишь взводит одноразовую задержку 8 s;
+`safety.worker-deadline-test confirm` лишь взводит одноразовую задержку 10 s;
 реальный worker запускается обычным public Survey Start.
 
-Exact HIL board-01 теперь принимает первый bounded slice по публичному пути
-**Wi-Fi → Сети рядом**. Реальный worker Product Survey взводится один раз и даёт два
-heartbeat; injected stall 8 s срабатывает один раз на возрасте 6 001 ms при дедлайне
-6 000 ms. Cancel/cleanup завершается, owner/lease становится `none`/`0`, buzzer и nRF
-CE остаются inactive, а retained latch `worker_deadline` переживает software restart
-с reason 3. Safe Mode переходит `latched` → `clear_pending` только после первой
-публичной Action Right/OK, очищается и перезапускается только после второй и
-возвращается на Home с неизменными exact CID, catalog 98/0 и zero physical storage
-writes. Три TFT state 240×320 и exact hashes source/image/runner/transcript связаны в
-[machine-checked artifact](../../tests/hil/evidence/board-01-worker-deadline-0.133.json).
+Exact 0.133 HIL board-01 принимает fault path **Wi-Fi → Сети рядом**. Exact 0.134
+теперь принимает normal и fault paths **Bluetooth → Устройства рядом**. Normal
+lifecycle завершает один BLE cycle/attempt, принимает 34/34 observations, фиксирует
+zero drops/transient retries и не срабатывает, затем очищается до owner/lease
+`none`/`0`. Второй lifecycle взводит тот же worker, внедряет stall 10 s и срабатывает
+один раз на возрасте 8 001 ms при дедлайне 8 000 ms; cumulative arm/heartbeat/trip
+равны 2/8/1. Cancel/cleanup завершается, buzzer и nRF CE остаются inactive, а
+retained latch `worker_deadline` переживает software restart с reason 3. Safe Mode
+переходит `latched` → `clear_pending` только после первой публичной Action Right/OK,
+очищается и перезапускается только после второй и возвращается на Home с
+неизменными exact CID, catalog 98/0 и zero physical storage writes. Три TFT state
+240×320 и exact hashes source/image/runner/transcript связаны в
+[machine-checked artifact](../../tests/hil/evidence/board-01-worker-deadline-0.134.json).
 
-Checkpoint намеренно не заявляет physical coverage BLE-worker или интервала
-admission/scanner preparation: текущий дедлайн взводится только после завершения
-этой подготовки. Pre-gate run со старой позицией меню вошёл в BLE и был отклонён,
-а не переиспользован как evidence. Для BLE нужен собственный source-appropriate
-deadline/heartbeat proof до признания границы Product Survey полной.
+Checkpoint намеренно не заявляет интервал admission/scanner preparation: текущий
+дедлайн взводится только после завершения этой подготовки. Он также не покрывает
+остальные long-lived workers, будущие transmit leases, retained state при полном
+снятии питания или physical rail/radio kill.
 
 ## Открытая safety-работа
 
-- расширить принятый Wi-Fi slice Product Survey на BLE, pre-admission/preparation,
+- расширить принятый Wi-Fi+BLE slice Product Survey на pre-admission/preparation,
   каждый другой long-lived worker и будущие transmit leases;
 - направлять driver invariant, brownout/thermal и storage safe-shutdown faults в ту
   же reasoned latch только после появления надёжных sensors;

@@ -149,6 +149,7 @@ shared-bus/power остаются открытыми**.
 | RB-M128 | measured build + physical positive | pre-app safety guard, physical IR envelope tolerance и closed-loop NEC двух плат | product 3 062 560 B linked flash; 233 288 B static RAM; app/factory images 3 062 960/3 128 496 B; RTC no-init 128 B; physical heap total/free/min 148 164/77 932/63 700 B. Fixture остаётся 322 215 B linked flash и 22 724 B static RAM | board-01/02 `0.129.0-pre-app-watchdog`, `E-BUILD-129`/`E-AUTO-093`/`E-HIL-150`/`E-RADIO-014`/`E-STORAGE-031`; +1 056 B linked flash, zero static-RAM growth и +1 056/+1 056 B images против 0.125. Physical run сохраняет heap invariant через NEC receive/save/cold reopen, но focused minimum 63 700 B ниже RB-04 и не заменяет mixed-workload endurance |
 | RB-M129 | measured diagnostic build + physical localization | isolated-main characterization shared MISO со всеми подавленными receiver operations | product-derived diagnostic 3 063 436 B linked flash; 233 288 B static RAM; app/factory images 3 063 840/3 129 376 B; dedicated DIRAM 314 056/341 760 B (91,89%, остаётся 27 704 B); isolated physical heap total/free/min 148 164/78 440/78 440 B | board-02 `0.131.0-isolated-main-miso`; +876 B linked flash, zero static RAM и +880/+880 B images против exact product 0.129. Retained run samples только GPIO13, clocks zero SPI bytes, выполняет zero receiver/TX operations и заканчивает Home/lease 0. Его более высокий focused heap minimum относится только к diagnostic и не продвигает product, не заменяет RB-04 или mixed-workload release endurance |
 | RB-M130 | measured build + focused physical safety | allocation-free deadline state и первый trip/restart/clear Wi-Fi worker Product Survey | 3 066 128 B linked flash; 233 360 B static RAM; app image 3 066 528 B; boot-before exact HIL heap total/free/min 148 092/77 860/63 628 B | board-01 `0.133.0-worker-deadline-supervision`, `E-BUILD-133`/`E-AUTO-094`/`E-HIL-154`/`E-SAFETY-002`; +3 568 B linked flash и +72 B static RAM против exact product 0.129. Один arm Wi-Fi worker/два heartbeat/один trip чисто снимают lease и переживают restart. Этот fault-focused run не выполняет normal mixed Survey workload и не заменяет RB-04/release endurance |
+| RB-M131 | measured build + normal/fault-focused physical safety | BLE-calibrated дедлайн Product Survey с normal cycle плюс trip/restart/clear | 3 066 124 B linked flash; 233 360 B static RAM; app image 3 066 528 B; boot-before exact HIL heap total/free/min 148 092/77 860/63 628 B | board-01 `0.134.0-ble-worker-deadline`, `E-BUILD-134`/`E-AUTO-095`/`E-HIL-155`/`E-SAFETY-003`; −4 B linked flash и zero delta static RAM/image против 0.133. Один normal BLE cycle принимает 34/34 с zero drops/retries и без ложного trip при bound 6,1 s ниже дедлайна 8 s; второй lifecycle срабатывает через 8 001 ms и чисто снимает lease. Этот focused run не выполняет normal mixed Survey workload и не заменяет RB-04/release endurance |
 
 `heap_min_free` probe относится только к короткой diagnostic run. Он не предсказывает
 буферы Wi-Fi/BLE, display caches, Session queues, storage transactions или Survey
@@ -242,12 +243,14 @@ contracts, поэтому не задаёт форму clean platform.
 - Storage, power и shared-bus limits остаются явными unknown; зависимые от них
   возможности нельзя перевести из `unknown` в `available` одной документацией.
 
-Последний build delta `RB-M130`: exact 0.133 использует 3 066 128 B linked flash и
-233 360 B static RAM; app image равен 3 066 528 B. Это +3 568 B linked flash и +72 B
-static RAM против exact product 0.129 для deadline core, integration, retained
-reason/UI/telemetry и test surface. Focused HIL boot-before heap равен
-148 092/77 860/63 628 B, fault path снимает lease 0, но не выполняет normal mixed
-Survey workload. Exact 0.129 остаётся physical functional baseline, а RB-04 плюс
+Последний build delta `RB-M131`: exact 0.134 использует 3 066 124 B linked flash и
+233 360 B static RAM; app image равен 3 066 528 B. Это на 4 B меньше linked flash
+при zero delta static RAM/image против 0.133. Изменение публикует bound BLE scan и
+compile-time проверяет калиброванный дедлайн 8 s выше текущего worst case 6,1 s.
+Focused HIL boot-before heap равен 148 092/77 860/63 628 B; normal BLE cycle
+принимает 34/34 с zero drops/retries и без ложного trip, а injected path снимает
+lease 0 после срабатывания через 8 001 ms. Run не выполняет normal mixed Survey
+workload. Exact 0.129 остаётся physical functional baseline, а RB-04 плюс
 mixed-workload release endurance — resource/release baseline.
 
 Source-bound diagnostic fixture `0.2.4` использует 332 135 B program flash и 22 844 B
