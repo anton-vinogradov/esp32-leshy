@@ -15,8 +15,8 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
 
 - **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
-- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps; an exact same-image `0.81.0` cross-check detects two permitted nRF receivers plus CC1101 on board-01 and zero on board-02 with zero TX/CE-high events. A powered-off full reassembly and no-flash exact-image rerun reproduce the board-02 fault.
-- **Next gate:** compare powered-off continuity and assembled 3.3 V on board-01/board-02 connector pins 17/18 plus SPI/MISO; only after a plausible read-only identity may the short bounded nRF regression and known-signal finder gate resume.
+- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps. Exact passive diagnostic `0.130.0` now detects both permitted nRF receivers plus CC1101 on board-01, while board-02 returns zero identities and holds shared MISO/GPIO13 LOW for all 32 pull-down and all 32 pull-up samples. Board-02 has measured 4.7/3.3 V at the assembled connector versus 4.35/3.2 V on the working control; a powered-off reseat plus exact no-flash rerun reproduce the clamp. Powered-off MISO-to-ground resistance is 23 kΩ on board-02 versus 32 kΩ on board-01, rejecting a hard passive short.
+- **Next gate:** run the same exact pull characterization on isolated board-02 main hardware with its RF carrier removed. GPIO13 must read LOW under pull-down and HIGH under pull-up; that result assigns the powered clamp to the RF carrier, while LOW under both pulls assigns it to main-board routing or the ESP pin. Known-signal emission remains closed.
 
 ### Current stage phases
 

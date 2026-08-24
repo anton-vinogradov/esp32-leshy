@@ -4,6 +4,13 @@
   "date": "2026-08-23",
   "checkpoint": "two_board_rom_photo_and_read_only_reassembly_crosscheck",
   "source_commit": "af5dc060d8768852eb7f235f3060c4affd42c7cc",
+  "corrections": [
+    {
+      "date": "2026-08-24",
+      "field": "upstream_design_evidence.interboard_power",
+      "reason": "A magnified read of upstream Main-Schematic J3 plus physical voltage measurements corrected an earlier mirrored-connector interpretation. Pins 17 and 19 are GPIO6 and GPIO3, not paired power pins."
+    }
+  ],
   "boards": {
     "board-01": {
       "role": "known_positive_original",
@@ -129,9 +136,10 @@
       "cc1101": {"csn": 5, "gdo0": 6, "gdo2": 3}
     },
     "interboard_power": {
-      "ground_pins": [2, 16],
-      "three_volt_three_pins": [17, 18],
-      "five_volt_pins": [19, 20],
+      "ground_pins": [16],
+      "three_volt_three_pins": [18],
+      "five_volt_pins": [20],
+      "adjacent_non_power_pins": {"17": "GPIO6", "19": "GPIO3"},
       "radio_modules_use_direct_three_volt_three": true
     },
     "bom_findings": {

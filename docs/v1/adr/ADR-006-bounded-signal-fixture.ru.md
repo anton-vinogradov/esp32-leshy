@@ -91,7 +91,13 @@ RF emission и требует powered-off hardware diagnosis до bounded carrie
 TX/CE-high events и terminal Home/lease 0 делают fixture-specific code маловероятным;
 полная disassembly/reassembly connector 2×10 без питания и no-flash same-image rerun
 теперь воспроизводят fault. Upstream v2 pin definitions совпадают с Leshy, а все
-receiver используют прямые общие 3,3 В/SPI. До разрешения carrier start этим ADR
-обязательны comparative connector continuity, assembled 3,3 В и последующая plausible
-same-image receiver identity. Cross-swap shields и stock-firmware diagnosis не
-допускаются.
+receiver используют прямые общие 3,3 В/SPI. Exact passive `0.130.0` затем
+измеряет valid idle rails, держит все CE LOW, samples MISO под обоими pull и
+тактирует только nRF NOP: board-01 показывает HIGH 32/32 с STATUS `0x0E`, а
+board-02 остаётся LOW 0/32 с STATUS `0x00` до и после ещё одного reseat без
+питания. Powered-off MISO→GND равно 23 кОм на board-02 против 32 кОм на
+board-01, что отвергает hard passive short и оставляет powered/logic-dependent
+clamp. До разрешения carrier start этим ADR обязательны та же exact
+pull-characterization на isolated main hardware board-02, localization на RF carrier
+или main board/ESP GPIO13 и последующая plausible same-image receiver identity.
+Cross-swap shields и stock-firmware diagnosis не допускаются.

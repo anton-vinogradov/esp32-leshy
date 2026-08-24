@@ -15,8 +15,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
 - **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
-- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага; exact same-image cross-check `0.81.0` находит два разрешённых nRF receiver плюс CC1101 на board-01 и ноль на board-02 при zero TX/CE-high events. Полная reassembly без питания и no-flash rerun exact image воспроизводят fault board-02.
-- **Следующий gate:** сравнить powered-off continuity и assembled 3,3 В board-01/board-02 на connector pins 17/18 плюс SPI/MISO; короткий bounded nRF regression и known-signal gate finder разрешаются только после plausible read-only identity.
+- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact passive diagnostic `0.130.0` теперь находит оба разрешённых nRF receiver плюс CC1101 на board-01, а board-02 возвращает zero identities и удерживает shared MISO/GPIO13 в LOW во всех 32 pull-down и 32 pull-up samples. На assembled connector board-02 измерены 4,7/3,3 В против 4,35/3,2 В рабочего control; reseat без питания и exact no-flash rerun воспроизводят clamp. Powered-off resistance MISO→GND равно 23 кОм на board-02 против 32 кОм на board-01, что отвергает жёсткое passive short.
+- **Следующий gate:** выполнить ту же exact pull-characterization на isolated main hardware board-02 при снятом RF carrier. GPIO13 должен читать LOW под pull-down и HIGH под pull-up; такой результат локализует powered clamp на RF carrier, а LOW под обоими pull — на routing main board или ESP pin. Known-signal emission остаётся закрытым.
 
 ### Фазы текущего этапа
 

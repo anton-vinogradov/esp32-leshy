@@ -2,7 +2,7 @@
 
 *Читать на: [English](STATUS.md) · **Русский***
 
-Последнее обновление: **23 августа 2026 года**.
+Последнее обновление: **24 августа 2026 года**.
 
 Это единственный документ с живым состоянием проекта. Границы этапов находятся в
 [DELIVERY_PLAN.ru.md](DELIVERY_PLAN.ru.md), а правила обновления — в
@@ -13,16 +13,31 @@
 - **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
 - **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
-- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага; exact same-image cross-check `0.81.0` находит два разрешённых nRF receiver плюс CC1101 на board-01 и ноль на board-02 при zero TX/CE-high events. Полная reassembly без питания и no-flash rerun exact image воспроизводят fault board-02.
-- **Следующий evidence gate:** сравнить powered-off continuity и assembled 3,3 В board-01/board-02 на connector pins 17/18 плюс SPI/MISO; короткий bounded nRF regression и known-signal gate finder разрешаются только после plausible read-only identity.
+- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact passive diagnostic `0.130.0` теперь находит оба разрешённых nRF receiver плюс CC1101 на board-01, а board-02 возвращает zero identities и удерживает shared MISO/GPIO13 в LOW во всех 32 pull-down и 32 pull-up samples. На assembled connector board-02 измерены 4,7/3,3 В против 4,35/3,2 В рабочего control; reseat без питания и exact no-flash rerun воспроизводят clamp. Powered-off resistance MISO→GND равно 23 кОм на board-02 против 32 кОм на board-01, что отвергает жёсткое passive short.
+- **Следующий evidence gate:** выполнить ту же exact pull-characterization на isolated main hardware board-02 при снятом RF carrier. GPIO13 должен читать LOW под pull-down и HIGH под pull-up; такой результат локализует powered clamp на RF carrier, а LOW под обоими pull — на routing main board или ESP pin. Known-signal emission остаётся закрытым.
 - **Принятая physical baseline:** exact `0.129.0-pre-app-watchdog`; все прежние принятые checkpoints сохранены ниже.
-- **Текущий source candidate:** exact product `0.129.0-pre-app-watchdog` не изменён. Source-bound fixture `0.2.4` и focused cross-check runner commit `b27585a7b32ed3ceec20363d7bae23d662e91e9c` проходят safety contracts. Известный положительный exact image `0.81.0` независимо воспроизводит zero identities board-02, снижая рабочую вероятность fixture-specific software explanation ниже 5–10%. Product image также имеет gate-eligible local run pre-app RTC watchdog; его отдельный retained bundle остаётся документационным follow-up, а не release claim.
+- **Текущий source candidate:** accepted product baseline остаётся exact `0.129.0-pre-app-watchdog`; focused read-only diagnostic `0.130.0-rf-bus-characterization` на `401d4251a66fa03ef71d24c0cb336eb2ecff0e58` использует firmware/ELF hashes `d2ecc7a6…9910`/`7af37a71…c71`, держит все CE в LOW, выполняет только четыре nRF NOP reads для характеристики линии и возвращается Home с lease 0. Это diagnostic evidence, не promotion product/release.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
 - **Ближайшая граница:** board-02 — unqualified N16R8/DNP variant с RF в `fault`.
-  Не cross-swap-ить shields, не прошивать stock firmware и не излучать RF. Следующая
-  safe operation — сравнительная проверка rail/continuity при всех nRF CE в LOW.
+  Не cross-swap-ить shields и не излучать RF. Official stock v1.6 использован только
+  как bounded manual corroboration (internal Wi-Fi/BLE работают; внешний scanner
+  2,4 ГГц остаётся пустым), затем заменён exact Leshy 0.130 после сохранения полного
+  flash backup. Powered-off comparison 23/32 кОм отвергает жёсткое
+  passive short; следующая safe operation — exact read-only pull test при
+  снятом RF carrier board-02.
+- **Последняя локализация:** гипотеза отсутствующей rail отвергнута для idle condition:
+  board-02 показывает 4,7/3,3 В — немного выше рабочего control board-01. Exact 0.130
+  samples idle MISO под обоими внутренними pull и выполняет только nRF NOP. Board-01
+  читает `32/32` HIGH и устойчивый STATUS `0x0E`; board-02 читает `0/32` HIGH под
+  обоими pull и STATUS `0x00` на обоих slots до и после reseat connector без питания.
+  Powered-off resistance MISO→GND равно 23 кОм против 32 кОм на board-01,
+  поэтому hard passive short не поддерживается и остаётся powered/logic-dependent
+  clamp. Isolated-main pull test должен различить RF carrier, routing main
+  board и ESP GPIO13. [Retained characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
+  фиксирует exact hashes, измерения, stock corroboration, zero side effects и fault
+  tree ремонта.
 - **Текущее negative evidence:** fixture `0.2.0` обнаружил реальную ошибку выбора slot;
   исправленный на slot 2 fixture `0.2.1` всё равно отказал до CE HIGH. Diagnostic
   `0.2.2` локализовал отказ до некорректного SPI exchange со slot 2 board-02:
@@ -850,6 +865,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-129 | exact build `0.129.0-pre-app-watchdog` плюс неизменный fixture `0.1.0-ir-nec` | pass на source `149e4ef37a650953b7335885c118824ed632fa16`: product static RAM/linked flash 233 288/3 062 560 B, app/factory 3 062 960/3 128 496 B, firmware `5b88751d…0cd`, factory `aa1211c5…326`, app identity `2b88b490…ae0`, RTC no-init 128 B; fixture static RAM/linked flash 22 724/322 215 B и firmware `c95996e2…520` | +1 056 B linked flash и zero static-RAM growth против 0.125 за physical IR envelope tolerance и Task/RTC pre-app watchdog state; focused heap остаётся ниже RB-04 и не заменяет mixed-workload endurance |
 | E-AUTO-093 / E-HIL-150 / E-RADIO-014 / E-STORAGE-031 | board-01 + board-02 exact 0.129 physical positive loop NEC | pass/gate-eligible: 33/33 declarative steps связывают exact source/images, разные USB roles, read-only fixture profile и одну fixed NEC emission 68,424 ms. Board-01 принимает 67 pulses, декодирует `0x10/0x34`, продвигает generation 97→98 только после явного Save, cold-reopen-ит exact IR metadata и выдаёт byte-exact live/Library CSV. Шесть TFT states, invariant heap 148 164/77 932/63 700 B, zero input errors/drops, inactive fixture/product outputs и final owner/lease none/0 сохранены в [machine-checked evidence](../../tests/hil/evidence/board-01-infrared-nec-0.129.json) | принимает NEC receive/persistence/export для одной пары плат и fixed vector. Не разрешает product replay, общую поддержку IR protocols, RF fixture TX или закрытие S5 |
 | E-HIL-151 / E-RADIO-015 | классификация N16R8/DNP board-02 и no-flash receiver rerun | partial/fail-closed: ROM определяет 16 MiB flash плюс встроенные 8 MiB Octal PSRAM; фото подтверждают отсутствующий BOM buzzer и отдельно распаянный RF carrier. После полной reassembly connector 2×10 без питания exact running `0.81.0` переиспользует firmware `2d0bc0cf…8379`/ELF `e86968d4…033` без flash и снова читает nRF `0/0` плюс CC `0/0` за bounded 8+2 reads, zero CE-high/TX и Home/lease 0. Hashes upstream source/schematic/BOM и точный stock radio pinout привязаны в [machine evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json) | отвергает simple reseat, wrong Leshy-v2 pin mapping, usable PSRAM и stock-flash-as-diagnostic explanations; RF остаётся `fault`, emission/cross-swap запрещены до comparative connector continuity и assembled 3,3 В |
+| E-BUILD-130 | exact diagnostic build `0.130.0-rf-bus-characterization` | pass: static RAM 233 288 B, linked flash 3 063 472 B; app/factory 3 063 872/3 129 408 B; firmware `d2ecc7a6…9910`, factory `0baf2b71…e734`, ELF/app identity `7af37a71…c71`, map `4207cb8b…c9`; exact source `401d425` | +912 B linked flash, zero static-RAM growth и +912/+912 B images против 0.129 за CE-low dual-pull MISO sampling и четыре bounded nRF NOP reads; только diagnostic, без promotion product/release |
+| E-HIL-152 / E-RADIO-016 | exact 0.130, passive characterization shared bus | partial/fail-closed: exact image `d2ecc7a6…9910`/ELF `7af37a71…c71` находит оба admitted nRF плюс CC1101 на board-01, где shared MISO HIGH 32/32 под каждым pull, а NOP STATUS равен `0x0E`. Board-02 имеет measured rails 4,7/3,3 В, но остаётся LOW 0/32 под каждым pull, возвращает NOP STATUS `0x00` на обоих nRF selects и воспроизводит all-zero identities после ещё одного reseat без питания в exact no-flash run `1d5850ca…7589`. Все CE остаются LOW, CC strobes/TX равны zero, cleanup достигает Home/none/lease 0 в [machine evidence](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json). Powered-off MISO→GND равно 23 кОм на board-02 против 32 кОм на board-01 | отвергает отсутствующее idle power, transient seating и hard passive short; локализует общий fault до powered/logic-dependent clamp shared MISO/GPIO13. RF закрыт до того же exact pull test на isolated main hardware board-02, который различит RF carrier, routing main board или ESP pin damage |
 
 ## Известные неопределённости и риски
 

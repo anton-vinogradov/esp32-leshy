@@ -125,15 +125,26 @@ fixture-specific code. Тот же exact image `0.81.0` остаётся на bo
 rerun после reassembly снова получил zero identities с теми же bounded 8+2 reads,
 zero TX/CE-high events и Home/lease-0 cleanup. Upstream v2 schematics, BOM и source
 подтверждают точное совпадение pinout Leshy со stock и прямые общие 3,3 В/SPI для
-всех четырёх receiver. Следующий safe evidence — powered-off continuity и сравнение
-assembled 3,3 В; cross-swap shields и emission запрещены до admission profile:
-[same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
-[variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).
+всех четырёх receiver. Сравнительные измерения затем дали примерно 4,35/3,2 В на
+рабочей board-01 и 4,7/3,3 В на board-02. Exact 0.130 sampled shared MISO/GPIO13 32
+раза под каждым internal pull и выполнил только четыре CE-low nRF NOP: board-01 был
+HIGH 32/32 со STATUS `0x0E`, board-02 — LOW 0/32 со STATUS `0x00` до и после reseat
+без питания. Отсутствие rail и случайный плохой контакт больше не поддерживаются.
+Powered-off MISO→GND равно 23 кОм на board-02 против 32 кОм на board-01,
+что отвергает hard passive short. Следующий safe evidence — та же exact
+pull-characterization на isolated main hardware board-02: следование обоим pull
+локализует powered clamp на RF carrier, а LOW под обоими pull — на main board
+или ESP GPIO13. Cross-swap shields и emission запрещены до
+локализации: [same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
+[variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json),
+[MISO characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json).
 
-Upstream stock image не допускается как diagnostic fallback. Его source содержит
-maximum-power nRF24 constant-carrier paths, тогда как на observed modules есть
-внешние PA/LNA и radiated power не измерена. Stock flash может лишь менее ясно
-показать тот же electrical fault, одновременно расширив RF side effects.
+Official stock v1.6 один раз использован как bounded manual corroboration после
+сохранения полного flash backup клона: internal Wi-Fi и BLE работали, внешний scanner
+2,4 ГГц остался пустым. Stock не дал machine-readable receiver identity и был заменён
+exact Leshy 0.130. Он остаётся недопустимым для automated diagnostic/fixture work:
+source содержит maximum-power nRF24 constant-carrier paths, на observed modules есть
+внешние PA/LNA, а radiated power не измерена.
 
 ## Read-only admission board-02
 

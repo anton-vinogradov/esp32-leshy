@@ -41,7 +41,9 @@ def probe_contract_failures(
         "resource_acquired": True,
         "resource_released": True,
         "cleanup_complete": True,
-        "current_owner": "self-test",
+        # Self-Test is a Device child page; the runtime lease remains owned by
+        # the launched top-level Device app throughout the guarded probe.
+        "current_owner": "device",
         "current_lease_mask": 1,
     }, "shield_receiver_probe")
     if report.get("wire") != {
@@ -82,6 +84,39 @@ def normalize_home(device: Any) -> list[dict[str, Any]]:
         state = action(device, "up")
         trace.append(state)
     raise RuntimeError("could not normalize Home selection")
+
+
+def navigate_home_to(device: Any, target_id: str) -> list[dict[str, Any]]:
+    """Select a Home item by its public identity, not its menu position."""
+    trace: list[dict[str, Any]] = []
+    state = query(device, b"ui.state", "leshy.ui.v1", "state")
+    for _ in range(16):
+        if state.get("page") != "home":
+            raise RuntimeError(
+                f"left Home while seeking {target_id!r}: {state.get('page')!r}")
+        if state.get("selected_id") == target_id:
+            return trace
+        state = action(device, "down")
+        trace.append(state)
+    raise RuntimeError(f"could not select Home item {target_id!r}")
+
+
+def navigate_device_to(device: Any, target_selection: int) -> list[dict[str, Any]]:
+    """Select a Device submenu item from its observable selection index."""
+    trace: list[dict[str, Any]] = []
+    state = query(device, b"ui.state", "leshy.ui.v1", "state")
+    for _ in range(8):
+        if state.get("page") != "device":
+            raise RuntimeError(
+                "left Device while seeking selection "
+                f"{target_selection}: {state.get('page')!r}")
+        selection = int(state.get("device_selection", -1))
+        if selection == target_selection:
+            return trace
+        state = action(device, "down" if selection < target_selection else "up")
+        trace.append(state)
+    raise RuntimeError(
+        f"could not select Device item {target_selection}")
 
 
 def cleanup_reached_legacy_home(cleanup: dict[str, Any]) -> bool:
@@ -151,8 +186,15 @@ def main() -> int:
                     raise RuntimeError("initial cleanup did not reach Home/lease 0")
 
                 trace.extend(normalize_home(device))
-                for _ in range(5):
-                    trace.append(action(device, "down"))
+                trace.extend(navigate_home_to(device, "device"))
+                state = action(device, "right")
+                trace.append(state)
+                failures.extend(expect(state, {
+                    "page": "device",
+                    "device_selection": 0,
+                    "lease_mask": 1,
+                }, "device_menu"))
+                trace.extend(navigate_device_to(device, 1))
                 state = action(device, "right")
                 trace.append(state)
                 failures.extend(expect(state, {

@@ -93,6 +93,13 @@ that previously detected all three receivers on board-01. Its bounded 8+2 SPI re
 zero TX/CE-high events and terminal Home/lease 0 make fixture-specific code unlikely;
 a full powered-off 2×10 disassembly/reassembly plus a no-flash same-image rerun now
 reproduce the fault. Upstream v2 pin definitions match Leshy and all receivers share
-direct 3.3 V/SPI. Comparative connector continuity, assembled 3.3 V and a subsequent
-plausible same-image receiver identity are now mandatory before this ADR permits any
-carrier start. Cross-swapping shields and stock-firmware diagnosis are not admitted.
+direct 3.3 V/SPI. Exact passive `0.130.0` then measures valid idle rails, keeps every
+CE LOW, samples MISO under both pulls and clocks only nRF NOP: board-01 is HIGH 32/32
+with STATUS `0x0E`, whereas board-02 remains LOW 0/32 with STATUS `0x00` before and
+after another powered-off reseat. Powered-off MISO-to-ground is 23 kΩ on board-02
+versus 32 kΩ on board-01, rejecting a hard passive short and leaving a powered or
+logic-dependent clamp. The same exact pull characterization on the isolated board-02
+main hardware, localization to its RF carrier or main board/ESP GPIO13, and a
+subsequent plausible same-image receiver identity are mandatory before this ADR
+permits any carrier start. Cross-swapping shields and stock-firmware diagnosis are
+not admitted.

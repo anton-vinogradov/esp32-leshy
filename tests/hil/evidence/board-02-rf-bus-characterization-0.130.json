@@ -1,0 +1,176 @@
+{
+  "schema": "leshy.hardware.rf_bus_characterization_evidence.v1",
+  "status": "retained_fault_localized_to_shared_miso_low",
+  "date": "2026-08-24",
+  "checkpoint": "board_02_powered_rail_and_safe_shared_spi_characterization",
+  "source_commit": "401d4251a66fa03ef71d24c0cb336eb2ecff0e58",
+  "candidate": {
+    "version": "0.130.0-rf-bus-characterization",
+    "firmware_sha256": "d2ecc7a6c320bd8d70c105e67903537b09637b2ba3aa46448943108dd46c9910",
+    "app_elf_sha256": "7af37a7165ec28215a6677c6322d26d68bed92c279d00c71b02cea5949314c71",
+    "runner_source_sha256": "b4a7da9ba6688e223e54f4318cea0d3e24409183d54e812a85d5f341ef653c4f"
+  },
+  "boards": {
+    "board-01": {
+      "role": "known_positive_original_control",
+      "efuse_mac": "1C:DB:D4:87:90:D4",
+      "module": "ESP32-S3-WROOM-1U-N16",
+      "user_reported_dc_voltage_v": {
+        "connector_5v": 4.35,
+        "connector_3v3": 3.2
+      },
+      "user_reported_powered_off_resistance_kohm": {
+        "miso_gpio13_to_ground": 32,
+        "probe_order": "measured second with unchanged meter mode and polarity"
+      },
+      "read_only_run": {
+        "path": "work/outputs/rf-bus-characterization-board01-0.130-20260824-04/run.json",
+        "sha256": "5a517e454c29b247e6b69941ded8742108c647f49373be2544b0f2e5512a308c",
+        "exact_image_reused": true,
+        "outcome": "all_receivers_detected",
+        "detected_receivers": 3,
+        "nrf_status": [14, 14],
+        "nrf_config": [8, 8],
+        "cc1101_partnum": 0,
+        "cc1101_version": 20,
+        "idle_miso_high_samples": {
+          "pulldown": 32,
+          "pullup": 32,
+          "samples_per_pull": 32
+        },
+        "nrf_nop_status": {
+          "slot_1_pulldown_pullup": [14, 14],
+          "slot_2_pulldown_pullup": [14, 14]
+        },
+        "side_effects": {
+          "nrf_ce_high_events": 0,
+          "cc_command_strobes": 0,
+          "radio_tx_commands": 0
+        },
+        "cleanup": {
+          "complete": true,
+          "terminal_page": "home",
+          "terminal_owner": "none",
+          "terminal_lease_mask": 0
+        },
+        "harness_limit": "The receiver observations passed, but this preliminary run was formally red only because the runner still expected owner self-test while the public Device route correctly reported owner device. The runner expectation was corrected before board-02 evidence."
+      }
+    },
+    "board-02": {
+      "role": "n16r8_dnp_fault_subject",
+      "efuse_mac": "90:70:69:0D:15:E0",
+      "module": "ESP32-S3-WROOM-1U-N16R8",
+      "user_reported_dc_voltage_v": {
+        "connector_5v": 4.7,
+        "connector_3v3": 3.3
+      },
+      "user_reported_powered_off_resistance_kohm": {
+        "miso_gpio13_to_ground": 23,
+        "probe_order": "measured first with all USB and battery power removed"
+      },
+      "first_exact_run": {
+        "path": "work/outputs/rf-bus-characterization-board02-0.130-20260824-04/run.json",
+        "sha256": "fd2936eb289cc45b4e33989f6405566780ac4f3f4ffe61959c10ac1e8c3279bf",
+        "log_sha256": "008a7fa6c70174f5838b68c23e3cc019f20340a3ecc88ee9eb6d44fb0d84acfd",
+        "flashed": true,
+        "passed": true,
+        "outcome": "no_receivers_detected"
+      },
+      "post_reseat_exact_run": {
+        "path": "work/outputs/rf-bus-characterization-board02-0.130-20260824-06/run.json",
+        "sha256": "1d5850cacd10f82b78bc7c5ca0596d5e32edd02ccfb4c7463ab0cd3d90d7589a",
+        "log_sha256": "3b9661b6a20eac08ce75a229fd7bd5eb369a41922a70232553a90f6314ac8888",
+        "exact_image_reused": true,
+        "passed": true,
+        "outcome": "no_receivers_detected",
+        "detected_receivers": 0,
+        "nrf_status": [0, 0],
+        "nrf_config": [0, 0],
+        "cc1101_partnum": 0,
+        "cc1101_version": 0,
+        "idle_miso_high_samples": {
+          "pulldown": 0,
+          "pullup": 0,
+          "samples_per_pull": 32
+        },
+        "nrf_nop_status": {
+          "slot_1_pulldown_pullup": [0, 0],
+          "slot_2_pulldown_pullup": [0, 0]
+        },
+        "wire": {
+          "idle_samples": 64,
+          "nrf_nop_reads": 4,
+          "bitbang_spi_bytes_clocked": 4
+        },
+        "side_effects": {
+          "nrf_ce_high_events": 0,
+          "cc_command_strobes": 0,
+          "radio_tx_commands": 0
+        },
+        "cleanup": {
+          "complete": true,
+          "terminal_page": "home",
+          "terminal_owner": "none",
+          "terminal_lease_mask": 0
+        }
+      },
+      "stock_v1_6_observation": {
+        "official_app_sha256": "1338ed9f37812a432793688e5be6676f9ec2660711376faac3ea9a1d19b61bfd",
+        "pre_stock_full_flash_backup_sha256": "945c1a467f286ad119509c963fd30cb2f14ab03a39954a7e824667a83d102a72",
+        "internal_wifi_observed_working": true,
+        "internal_ble_observed_working": true,
+        "external_2_4ghz_scanner_observed_blank": true,
+        "identity_claim": "manual corroboration only; stock Scanner does not expose a bounded machine-readable receiver identity"
+      }
+    }
+  },
+  "design_checks": {
+    "spi_miso_gpio": 13,
+    "interboard_power_pins": {
+      "ground": [16],
+      "three_volt_three": [18],
+      "five_volt": [20],
+      "adjacent_non_power": {"pin_17": "GPIO6", "pin_19": "GPIO3"}
+    },
+    "n16r8_external_module_pin_numbering_changed": false,
+    "n16r8_reserved_gpio": [35, 36, 37],
+    "radio_gpio_intersects_n16r8_reserved_gpio": false,
+    "main_board_red_indicators_encode_rf_fault": false,
+    "main_board_indicator_classes": [
+      "four GPIO1 WS2812 status LEDs",
+      "CP2102 UART TX/RX activity LEDs",
+      "IP5306 power/charge indication"
+    ]
+  },
+  "assessment": {
+    "board_02_rf_state": "fault",
+    "radio_rail_absent_supported": false,
+    "connector_reseat_resolved_fault": false,
+    "shared_miso_held_low_supported": true,
+    "physical_short_to_ground_proven": false,
+    "hard_passive_short_to_ground_supported": false,
+    "powered_only_or_logic_dependent_clamp_supported": true,
+    "active_receiver_or_csn_clamp_excluded": false,
+    "esp_gpio13_damage_excluded": false,
+    "repairability": "undetermined_but_localized_and_not_discard_justified",
+    "rf_emission_allowed": false,
+    "shield_cross_swap_allowed": false,
+    "next_safe_evidence": [
+      "with all USB and battery power removed, separate board-02 main board from its RF carrier",
+      "run the same exact read-only pull characterization on the isolated main board: GPIO13 must read LOW under pull-down and HIGH under pull-up",
+      "if the isolated GPIO follows both pulls, localize the powered clamp to the RF carrier; if it remains LOW, localize it to main-board routing or ESP GPIO13",
+      "only after the clamping half is identified decide between connector rework, receiver isolation, or main-board GPIO repair"
+    ]
+  },
+  "limits": {
+    "dc_voltage_measurements_are_user_reported": true,
+    "meter_accuracy_and_dynamic_rail_margin_uncharacterized": true,
+    "logic_analyzer_used": false,
+    "oscilloscope_used": false,
+    "rf_detector_used": false,
+    "powered_off_resistance_measured": true,
+    "powered_off_resistance_is_in_circuit_and_direction_dependent": true,
+    "radiated_power_measured": false,
+    "stage_or_phase_promoted": false
+  }
+}

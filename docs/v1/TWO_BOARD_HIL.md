@@ -125,15 +125,27 @@ rather than fixture-specific code. The exact same `0.81.0` image remains on boar
 and a no-flash rerun after reassembly reproduces zero identities with the same bounded
 8+2 reads, zero TX/CE-high events and Home/lease-0 cleanup. Upstream v2 schematics,
 BOM and source confirm that Leshy uses the exact stock pinout and that all four
-receivers share direct 3.3 V and SPI. The next safe evidence is powered-off continuity
-plus assembled 3.3 V comparison; do not cross-swap shields or emit before profile
-admission: [same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
-[variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json).
+receivers share direct 3.3 V and SPI. Comparative measurements then found approximately
+4.35/3.2 V on working board-01 and 4.7/3.3 V on board-02. Exact 0.130 sampled shared
+MISO/GPIO13 32 times under each internal pull and issued only four CE-low nRF NOPs:
+board-01 was HIGH 32/32 with STATUS `0x0E`, while board-02 was LOW 0/32 with STATUS
+`0x00` both before and after a powered-off reseat. Rail absence and a casual connector
+contact are no longer supported. Powered-off MISO-to-ground resistance is 23 kΩ on
+board-02 versus 32 kΩ on board-01, rejecting a hard passive short. The next safe
+evidence is the same exact pull characterization on isolated board-02 main hardware:
+following both pulls assigns the powered clamp to the RF carrier; LOW under both pulls
+assigns it to main-board routing or ESP GPIO13.
+Do not cross-swap shields or emit before localization:
+[same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
+[variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json),
+[MISO characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json).
 
-The upstream stock image is not admitted as a diagnostic fallback. Its source
-contains maximum-power nRF24 constant-carrier paths, while the observed modules have
-external PA/LNA devices and radiated power is unmeasured. A stock flash could expose
-the same electrical fault less clearly while broadening RF side effects.
+Official stock v1.6 was used once as bounded manual corroboration after retaining a
+full clone flash backup: internal Wi-Fi and BLE worked while the external 2.4 GHz
+scanner remained blank. It did not provide a machine-readable receiver identity and
+was replaced by exact Leshy 0.130. Stock remains inadmissible for automated diagnostic
+or fixture work because its source contains maximum-power nRF24 constant-carrier paths,
+the observed modules have external PA/LNA devices and radiated power is unmeasured.
 
 ## Read-only board-02 admission
 

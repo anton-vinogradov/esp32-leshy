@@ -89,16 +89,24 @@ identity.
 | Profile | Main module и population | RF-результат | Допуск |
 |---|---|---|---|
 | `esp32-div-v2-n16` / board-01 | `ESP32-S3-WROOM-1U-N16`; BOM buzzer распаян | exact 0.81 читает две разрешённые nRF identity и CC1101 VERSION `0x14` | known-positive baseline |
-| `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer отсутствует; один альтернативный U.FL carrier не распаян | тот же exact image читает nRF `0/0` и CC `0/0` после полной переустановки без питания | совместимы display/input; RF в `fault`, fixture TX запрещён |
+| `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer отсутствует; один альтернативный U.FL carrier не распаян | exact 0.130 читает zero identities после reseat; shared MISO остаётся LOW во всех 32/32 samples под обоими pull при измеренных rails 4,7/3,3 В | совместимы display/input; RF в `fault`, fixture TX запрещён |
 
 На обоих carriers стоят три nRF24-compatible module с внешними PA/LNA и один
 CC1101. Shield BOM описывает последний как **433 МГц, 10 мВт**; 315/868/915 МГц —
 software tuning choices, но не доказанные полезные диапазоны этого physical assembly.
 Схема также показывает, что R2/R4 — альтернативные antenna links, а R3/R5 относятся
 к IR TX: их population не объясняет отсутствие SPI identity. Все четыре receiver
-получают прямые 3,3 В и общий SPI через connector 2×10, поэтому common-zero board-02
-указывает на shared rail, SPI/MISO, continuity connector либо undocumented clone
-pinout.
+получают прямые 3,3 В и общий SPI через connector 2×10. Сравнительные DC measurements
+теперь показывают примерно 4,7/3,3 В на board-02 и 4,35/3,2 В на рабочей board-01,
+поэтому отсутствие idle rail больше не поддерживается. Exact 0.130 удерживает все CE
+в LOW, samples GPIO13 с обоими внутренними pull и выполняет четыре nRF NOP reads:
+board-01 остаётся HIGH 32/32 со STATUS `0x0E`, board-02 остаётся LOW 0/32 со STATUS
+`0x00` до и после reseat без питания. Powered-off resistance MISO→GND равно
+23 кОм на board-02 против 32 кОм на board-01, что отвергает hard passive short.
+Fault теперь классифицирован как powered/logic-dependent shared MISO clamp;
+exact pull test на isolated main hardware board-02 должен различить RF carrier,
+routing connector и ESP GPIO13. См.
+[retained characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json).
 
 Upstream community evidence имеет такую же форму отказа, но не доказывает root cause
 этого экземпляра. [Issue #102](https://github.com/cifertech/ESP32-DIV/issues/102)
@@ -187,8 +195,9 @@ Design-confirmed topology:
 - ESP32-S3, TFT logic/touch, PCF8574, SD и RF modules используют 3.3 V;
 - WS2812, IR LED и buzzer circuitry используют 5 V;
 - RF shield имеет по 10 µF рядом с каждым NRF24 и получает прямые 3,3 В через
-  pins 17/18 connector 2×10, но допустимый peak current и стабильность rail не
-  подтверждены;
+  pin 18 connector 2×10; pin 20 подаёт 5 В. User-observed idle DC values: 4,35/3,2 В на board-01
+  и 4,7/3,3 В на board-02; meter accuracy, ripple, peak current и thermal margin
+  не подтверждены;
 - VBAT divider и buzzer делят GPIO2, поэтому firmware не получает независимый
   battery ADC channel.
 
@@ -353,10 +362,10 @@ Software evidence для GPIO2: авторское описание root cause �
 | HW-U01 | partial: board-01 — N16/no-PSRAM; board-02 — N16R8/DNP variant, чьи встроенные 8 MiB Octal PSRAM конфликтуют с display GPIO35/36/37 и не используются compatibility image | portable baseline — 16 MiB flash с отключённой PSRAM; N16R8 — отдельный unqualified profile, не dynamic budget expansion | дополнительные batch IDs и pin-compatible display/PSRAM profile, если он существует |
 | HW-U02 | unmeasured: schematic противоречит legacy flag | TFT reset внешний/unassigned; GPIO0 остаётся только BOOT и не управляет display reset | HW-T02 continuity/logic trace |
 | HW-U03 | partial: read-only I²C отвечает на `0x75`; identity/map power manager неизвестны | показывать только generic presence/evidence; battery percentage и write/control operations unavailable | exact marking/datasheet + HW-T04 |
-| HW-U04 | только design evidence LF33; board-02 возвращает common-zero identities всех четырёх receiver после reassembly, но rail voltage ещё не измерено | никакого active RF fixture board-02 и default combined shield load; новая combination unavailable по RB-08 | сравнить assembled 3,3 В на connector pins 17/18, затем HW-T10 rail/thermal matrix |
+| HW-U04 | partial: idle connector rails user-measured 4,35/3,2 В на рабочей board-01 и 4,7/3,3 В на board-02; ripple, peak и thermal margin не измерены | никакого active RF fixture board-02 и default combined shield load; новая combination unavailable по RB-08 | calibrated dynamic HW-T10 rail/thermal matrix |
 | HW-U05 | оператор подтвердил отсутствие GPS/PN532 assembly на board-01; standard connector contract не доказан | default profile объявляет оба absent; каждому нужен explicit assembly profile, output-mode autodetect запрещён | assembly photo/spec + HW-T07 |
 | HW-U06 | partial: GPIO38 LOW с одной inserted/identified card; polarity и batch consistency не измерены | GPIO38 не authoritative в S2; storage state определяется bounded explicit operation и остаётся fault/absent при failure | HW-T05 на разных media/batch |
-| HW-U07 | partial: board-01 проходит guarded SD и exact 0.81 receiver identity; тот же image на board-02 после полной reassembly возвращает нули для всех разрешённых receiver; upstream v2 pin definitions полностью совпадают с Leshy | `spi_radio` exclusive; RF board-02 остаётся `fault`; stock firmware не диагностический инструмент, так как содержит full-power constant-carrier paths | powered-off continuity и assembled rail comparison, затем read-only same-image identity до любой emission |
+| HW-U07 | partial: exact 0.130 читает valid receiver identities и MISO HIGH 32/32 на board-01, но board-02 удерживает shared MISO LOW 0/32 под pull-down и pull-up до/после reseat несмотря на valid idle rails; powered-off MISO→GND 23 кОм против 32 кОм отвергает hard short; upstream v2 pin definitions полностью совпадают с Leshy | `spi_radio` exclusive; RF board-02 остаётся `fault`; cross-swap и emission запрещены | снять RF carrier board-02 и повторить exact pull-characterization; локализовать на carrier, если GPIO13 следует обоим pull, или на main board/ESP, если он остаётся LOW |
 | HW-U08 | electrical/ADC behavior не измерен; software root cause ложного звука подтверждён 0.x и upstream issue #117 | battery percentage unavailable; GPIO2 никогда не sampled как ADC и с первой инструкции setup удерживается OUTPUT LOW; HIGH разрешён только будущему bounded sound service | HW-T09 для ADC/sound characterization; silent invariant закрывается boot/runtime state + audible observation |
 | HW-U09 | partial: exact 0.129 доказывает один bounded physical NEC receive/save/cold-export path; GPIO21 остаётся exclusive с nRF #3 | IR RX available только из explicit RF-shield profile; autodetect отсутствует; product IR TX дополнительно требует Lab/ADR-002 evidence | расширить protocol vectors и instrument GPIO21 switching по HW-T08 |
 | HW-U10 | нет rail peak/thermal measurements | первый slice только Wi-Fi; shield по одному receiver после per-module HIL; combined modes unavailable | HW-T10 и endurance RB-08 |
