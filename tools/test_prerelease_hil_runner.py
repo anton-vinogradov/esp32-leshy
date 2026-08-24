@@ -32,14 +32,29 @@ class PrereleaseRunnerTests(unittest.TestCase):
         firmware = Path("candidate.bin")
         with mock.patch.object(RUNNER.subprocess, "run") as run:
             RUNNER.flash_candidate("/dev/candidate", firmware, 0x10000, 460800)
-        command = run.call_args.args[0]
+        self.assertEqual(2, run.call_count)
+        flash_command = run.call_args_list[0].args[0]
         self.assertIn(
-            ["--after", "watchdog-reset"],
-            [command[index:index + 2] for index in range(len(command) - 1)],
+            ["--after", "no-reset"],
+            [flash_command[index:index + 2]
+             for index in range(len(flash_command) - 1)],
         )
         self.assertEqual(
-            ["write-flash", "0x10000", str(firmware)], command[-3:])
-        run.assert_called_once_with(command, check=True)
+            ["write-flash", "0x10000", str(firmware)], flash_command[-3:])
+        reset_command = run.call_args_list[1].args[0]
+        self.assertIn(
+            ["--before", "no-reset"],
+            [reset_command[index:index + 2]
+             for index in range(len(reset_command) - 1)],
+        )
+        self.assertIn(
+            ["--after", "watchdog-reset"],
+            [reset_command[index:index + 2]
+             for index in range(len(reset_command) - 1)],
+        )
+        self.assertEqual("read-mac", reset_command[-1])
+        for call in run.call_args_list:
+            self.assertTrue(call.kwargs["check"])
 
     def test_candidate_app_identity_is_read_from_descriptor(self) -> None:
         image = bytearray(288)

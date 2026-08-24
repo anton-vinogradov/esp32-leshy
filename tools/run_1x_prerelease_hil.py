@@ -225,12 +225,21 @@ def write_json(path: Path, value: Any) -> None:
 
 
 def flash_candidate(port: str, firmware: Path, offset: int, baud: int) -> None:
-    command = [
+    flash_command = [
         sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port,
-        "--baud", str(baud), "--after", "watchdog-reset",
+        "--baud", str(baud), "--after", "no-reset",
         "write-flash", hex(offset), str(firmware),
     ]
-    subprocess.run(command, check=True)
+    subprocess.run(flash_command, check=True)
+    # Native USB disappears while the S3 watchdog is armed.  Keeping that
+    # transition in the write-flash process makes macOS report the expected
+    # disconnect as an I/O failure after the image hash was already verified.
+    # Exit the stub first, then perform the reset as a separate ROM operation.
+    reset_command = [
+        sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port,
+        "--before", "no-reset", "--after", "watchdog-reset", "read-mac",
+    ]
+    subprocess.run(reset_command, check=True)
 
 
 def capture_frame(device: Any) -> tuple[dict[str, Any], bytes, dict[str, Any], dict[str, Any]]:
