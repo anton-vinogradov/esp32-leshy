@@ -14,9 +14,9 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
-- **Текущая фаза:** `S5.5 — завершение deadline Capture Store IR/Sub-GHz`.
-- **Проверенный checkpoint:** exact `0.138.0-safety-restart-noos` закрывает physical gate дедлайна IR Capture Store на no-PSRAM board-01 с fixture `0.2.5-shared-pin-safe`. Одна fixed NEC emission `0x10/0x34` декодируется и сохраняется, продвигая exact-CID catalog generation 106→107 при 94 136 B free heap, largest block 51 188 B и mount error zero. Вторая bounded emission входит в тот же публичный Save path, зависает на 10 s до storage hardware и срабатывает на deadline 8 000 ms через 8 001 ms с zero physical writes. Outputs глушатся, lease достигает нуля, Safe Mode переживает no-OS software restart, recovery остаётся read-only, две публичные Action очищают latch, final state — Home с exact CID, catalog 107/0 и lease 0. Обе emission fixture короче 100 ms и заканчиваются inactive. Fresh exact flash двух плат и все 26 product actions сохранены как machine-checked evidence.
-- **Следующий gate:** применить принятую общую 8-секундную Store boundary к positive physical path Sub-GHz capture/save, когда будет доступен receiver carrier с plausible read-only identities; параллельно добавить low-voltage safe-write и sleep/resume coverage на board-01. Приостановленные gate S5.3 nRF и S5.4 Sub-GHz не должны использовать или передавать с unqualified RF carrier клона.
+- **Текущая фаза:** `S5.3 — controlled positive-signal gate nRF24 (аппаратно заблокирован)`.
+- **Проверенный checkpoint:** exact `0.139.0-s5-runtime-complete` закрывает исполнимую runtime-часть S5.5 на no-PSRAM board-01. Stock assembly честно определён как `stock-rf-no-gps-no-pn532`: I²C `0x75` отвечает, но его тип/напряжение не выдумываются, voltage остаётся unavailable, потому что GPIO2 принадлежит баззеру, GPS/PN532 явно not applicable. Три injected low-voltage samples запрещают Store до открытия filesystem с zero writes и неизменным generation 109. Реальный light sleep ESP32 на 300 ms просыпается по timer с invariant heap/generation; public Action Power спит 1 s и восстанавливает UI/input. Затем RX-only software fixture Sub-GHz проходит public Capture Store path на 433,920 МГц, атомарно сохраняет три pulses, продвигает exact-CID generation 109→110, выполняет zero TX/PATABLE/FIFO и возвращается Home/none/lease 0. HIL session явно завершена, три TFT frame сохранены. Checkpoint не заявляет физический Sub-GHz signal и не закрывает S5.
+- **Следующий gate:** использовать квалифицированный второй RF carrier/source для physical positive result nRF24 S5.3, затем выполнить S5.4: physical Sub-GHz frequency→OOK capture→save→cold export и объявленный path FSK/GDO0. Неисправный клон восстановлен в stock для возврата и не является разрешённым transmitter; без replacement source physical/two-board gates остаются fail-closed.
 
 ### Фазы текущего этапа
 
@@ -24,9 +24,9 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 |---|---|---|
 | S5.1 | Пассивные product slices штатных радио: all-antenna overview/finder nRF24, robust finder CC1101, основы bounded RAW/IR capture | ✅ готово |
 | S5.2 | Первый physical loop двух плат: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ готово |
-| S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup; ожидает исправный/заменённый RF carrier board-02 | ⬜ дальше |
+| S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup; заблокирован до появления исправного/заменённого RF carrier | 🟡 в работе |
 | S5.4 | Известный Sub-GHz signal: поиск частоты плюс OOK capture/save/cold export; объявленный и проверенный FSK/GDO0 path | ⬜ дальше |
-| S5.5 | Полнота runtime: exact 0.138 принимает preparation/admission Product Survey, калиброванные workers Wi-Fi+BLE и оба paths deadline/restart/clear Capture Store Wi-Fi/IR; positive Store Sub-GHz, low-voltage safe-write, sleep/resume и применимые явные assembly profiles GPS/PN532 остаются | 🟡 в работе |
+| S5.5 | Полнота runtime: exact 0.139 принимает унаследованную от 0.138 safety Product Survey/workers плюс truthful applicability stock assembly, debounced отказ Store при low voltage, реальный light-sleep/resume и public RX-only software-fixture path Store Sub-GHz; physical positive RF остаётся в S5.3/S5.4 | ✅ готово |
 | S5.6 | Интегральный hardware gate S5: on-device Full check плюс автоматический two-board regression без утечки leases/outputs | ⬜ дальше |
 
 ### Роадмап

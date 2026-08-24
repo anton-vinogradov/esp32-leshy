@@ -75,6 +75,11 @@ common-zero radio identity.
 | `esp32-div-v2-n16` / board-01 | `ESP32-S3-WROOM-1U-N16`; BOM buzzer populated | exact 0.81 reads two permitted nRF identities and CC1101 VERSION `0x14` | known-positive baseline |
 | `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer omitted; CC1101 AS07 antenna-interface population differs from board-01 and its U.FL is unused | assembled exact 0.130 reads zero identities and MISO LOW 0/32 under both pulls; isolated-main exact 0.131 reads the same GPIO13 HIGH 32/32 under both pulls after the detachable RF carrier is removed | display/input compatibility only; carrier-side RF `fault`, fixture TX forbidden |
 
+Exact 0.139 applies the software assembly overlay `stock-rf-no-gps-no-pn532` to
+board-01. This makes the observed stock RF carrier applicable while declaring GPS
+and PN532 `not_applicable`; neither contested GPIO output nor speculative module
+probe is used to infer their absence.
+
 Both carriers contain three nRF24-compatible modules with external PA/LNA front ends
 and one CC1101 module. The shield BOM specifies the latter as **433 MHz, 10 mW**;
 315/868/915 MHz are therefore software tuning choices, not proven useful bands for
@@ -191,6 +196,9 @@ of the interboard connector; pin 20 supplies 5 V. User-observed idle DC values a
 board-01 and 4.7/3.3 V on board-02; meter accuracy, ripple, peak-current and thermal
 margins remain unknown.
 GPIO2 is not an independent battery ADC because it also drives the optional buzzer.
+Exact 0.139 therefore keeps it OUTPUT LOW and reports voltage/battery percentage as
+unavailable. I²C address `0x75` ACKs read-only, but the power-manager type and register
+map remain unidentified; no charge-control or percentage claim follows from the ACK.
 
 Unknown until HIL: LF33 exact current/thermal limit, IP5306 I²C variant/registers,
 rail peak current, USB+cell behavior, multi-radio brownout margin, and useful VBAT
@@ -327,9 +335,9 @@ flag or a successful unrelated probe.
 |---|---|---|---|
 | HW-U01 | partial: board-01 is N16/no-PSRAM; board-02 is an N16R8/DNP variant whose embedded 8 MiB Octal PSRAM conflicts with display GPIO35/36/37 and is unusable in the compatibility image | portable baseline is 16 MiB flash with PSRAM disabled; N16R8 is a distinct unqualified profile, never dynamic budget expansion | additional batch IDs plus a pin-compatible display/PSRAM profile if one exists |
 | HW-U02 | unmeasured: schematic and legacy flag conflict | TFT reset is external/unassigned; GPIO0 remains BOOT-only and is never driven as display reset | HW-T02 continuity/logic trace |
-| HW-U03 | partial: read-only I²C responds at `0x75`; exact power-manager identity/map unknown | expose only generic presence/evidence; battery percentage and write/control operations are unavailable | exact marking/datasheet + HW-T04 |
+| HW-U03 | partial: read-only I²C responds at `0x75`; exact 0.139 exposes the ACK while keeping power-manager identity/map and voltage unavailable | expose only generic presence/evidence; battery percentage and write/control operations are unavailable | exact marking/datasheet + HW-T04 |
 | HW-U04 | partial: idle connector rails are user-measured at 4.35/3.2 V on working board-01 and 4.7/3.3 V on board-02; ripple, peak and thermal margin are unmeasured | no active board-02 RF fixture and no default combined shield load; each new combination remains unavailable under RB-08 | calibrated dynamic HW-T10 rail/thermal matrix |
-| HW-U05 | operator reports no GPS/PN532 assembly on board-01; no standard connector contract proven | default profile declares both absent; either requires its own explicit assembly profile, never output-mode autodetect | assembly photo/spec + HW-T07 |
+| HW-U05 | exact 0.139 applies `stock-rf-no-gps-no-pn532` to board-01; no standard expansion connector contract is proven | stock profile reports both `not_applicable`; either module requires its own explicit assembly profile, never output-mode autodetect | future equipped assembly + HW-T07 |
 | HW-U06 | partial: GPIO38 reads LOW with one inserted/identified card; polarity/batch consistency remain unmeasured | GPIO38 is not authoritative in S2; storage state comes from a bounded explicit operation and remains fault/absent on failure | HW-T05 across media and board batch |
 | HW-U07 | partial: exact 0.130 reads valid receiver identities and MISO HIGH 32/32 on board-01, but assembled board-02 holds shared MISO LOW 0/32 under both pulls before/after reseat despite valid idle rails; powered-off MISO-to-ground is 23 kΩ versus 32 kΩ, rejecting a hard short; exact isolated-main 0.131 changes GPIO13 to HIGH 32/32 without the carrier; exact reassembled 0.132 proves every receiver CSN HIGH 32/32 while MISO returns LOW 0/32 with zero bus/TX activity | `spi_radio` is exclusive; board-02 carrier RF remains `fault`; no cross-swap or emission; no single module or antenna/U.FL fault is claimed | return/replace the carrier/device or physically isolate module MISO/power one at a time; require repaired plausible identities before bounded regression |
 | HW-U08 | electrical/ADC behavior is unmeasured; the false-sound software root cause is confirmed by 0.x and upstream issue #117 | battery percentage is unavailable; GPIO2 is never ADC-sampled and is held OUTPUT LOW from the first setup instruction; HIGH belongs only to a future bounded sound service | HW-T09 for ADC/sound characterization; silent invariant closes through boot/runtime state plus audible observation |

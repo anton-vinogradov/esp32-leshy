@@ -243,6 +243,7 @@ python3 "$repo_dir/tools/check_worker_preparation_deadline_acceptance.py"
 python3 "$repo_dir/tools/check_capture_store_deadline_acceptance.py"
 python3 "$repo_dir/tools/check_infrared_store_deadline_acceptance.py"
 python3 "$repo_dir/tools/check_s5_runtime_completeness_contract.py"
+run_opaque_evidence_check tools/check_s5_runtime_completeness_acceptance.py
 python3 "$repo_dir/tools/check_sd_power_cut_acceptance.py"
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 if [[ "$retained_evidence_mode" == "tracked" ]]; then
@@ -281,4 +282,5 @@ python3 "$repo_dir/tools/test_camera_subset.py"
 python3 "$repo_dir/tools/test_prerelease_bundle_verifier.py"
 python3 "$repo_dir/tools/test_prerelease_bundle_package.py"
 python3 "$repo_dir/tools/test_release_1x.py"
+python3 "$repo_dir/tools/test_hil_scope_planner.py"
 python3 "$repo_dir/tools/read_1x_version.py" >/dev/null

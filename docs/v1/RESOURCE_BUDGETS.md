@@ -286,6 +286,18 @@ the no-OS primitive. The normal IR Save reaches the storage boundary with
 bytes and does not claim a mount allocation. This is physical safety evidence,
 not mixed-workload resource or release endurance.
 
+Latest accepted delta `RB-M136`: exact 0.139 uses 3,078,272 B linked flash,
+208,304 B static RAM and app/factory images 3,078,768/3,144,304 B. This is
++16,764/+344/+16,848/+16,848 B versus 0.138 for the power safety policy, explicit
+assembly profile, real light-sleep/resume reporting, truthful Power UI and bounded
+HIL-only RX fixture. The fresh board-01 runtime gate starts at heap
+total/free/minimum 171,012/100,736/86,548 B; 300 ms light sleep preserves both
+free/minimum values exactly. The authorized Sub-GHz Store reaches mount with
+91,656 B free and a 49,140 B largest block and advances catalog 109→110. The
+low-voltage path opens no filesystem and performs zero writes. This is a focused
+runtime checkpoint, not mixed-workload or release endurance, and it does not add a
+physical positive-RF claim.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

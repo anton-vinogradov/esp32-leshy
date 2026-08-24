@@ -1,0 +1,49 @@
+{
+  "schema": "leshy.hil_cadence.v1",
+  "revision": 1,
+  "default_scope": "delta",
+  "full_after_accepted_deltas": 15,
+  "anchor_evidence": "tests/hil/evidence/board-01-s5-runtime-completeness-0.139.json",
+  "full_triggers": [
+    "stage_end",
+    "release_candidate",
+    "accepted_delta_interval",
+    "cross_cutting_runtime_change"
+  ],
+  "cross_cutting_prefixes": [
+    "firmware/leshy1/src/kernel/runtime/ResourceBroker",
+    "firmware/leshy1/src/kernel/safety/",
+    "firmware/leshy1/src/services/power/",
+    "firmware/leshy1/src/storage/",
+    "firmware/leshy1/src/platform/arduino/BoardProfile",
+    "firmware/leshy1/partitions",
+    "firmware/leshy1/platformio.ini"
+  ],
+  "firmware_prefixes": [
+    "firmware/",
+    "src/",
+    "tests/native/"
+  ],
+  "hil_prefixes": [
+    "diagnostics/hil_probe/",
+    "tests/hil/",
+    "tools/run_1x_",
+    "tools/capture_1x_"
+  ],
+  "host_only_prefixes": [
+    "docs/",
+    "README.md",
+    "README.ru.md",
+    "tools/check_",
+    "tools/plan_hil_scope.py",
+    "tools/retain_",
+    "tools/test_",
+    "tests/hil/evidence/",
+    "tests/hil/hil-cadence.v1.json"
+  ],
+  "execution_rules": {
+    "delta": "Run the affected scenario plus its adjacent negative/cleanup assertions; flash at most once and only when the candidate image changed.",
+    "full": "Flash the exact candidate once, then run the applicable regression matrix against that same image.",
+    "none": "Run host, source, documentation and retained-evidence checks only; do not touch a board."
+  }
+}

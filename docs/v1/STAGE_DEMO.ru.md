@@ -165,13 +165,26 @@ S5 активен. Результат покрывает одну пару board
 
 ## Ритм тестирования внутри этапа
 
-- **При изменении:** быстрые host/static tests и связанные negative cases.
-- **При готовности slice:** build, автоматический board smoke, TFT/action evidence и
-  resource cleanup.
-- **Перед gate:** полный `DEMO-S*`, regression matrix текущих возможностей и review
-  открытых рисков/бюджетов.
+- **При изменении:** быстрые host/static tests и связанные negative cases. Physical
+  HIL по умолчанию **дельтовый**: выполняются только затронутый сценарий, соседний
+  negative path и финальный cleanup. Candidate прошивается не более одного раза и
+  вообще не перепрошивается, если hash бинарника не изменился.
+- **Периодический checkpoint:** после 15 принятых delta HIL checkpoint выполняется
+  применимая regression matrix текущих возможностей. Один exact candidate image
+  прошивается один раз и используется всеми сценариями.
+- **Немедленный полный trigger:** интервал не ждём после cross-cutting изменения
+  safety, power, storage, resource ownership или board profile.
+- **Перед gate этапа или RC:** выполняются полный применимый `DEMO-S*`, regression
+  matrix текущих возможностей и review открытых рисков/бюджетов. Недоступные
+  physical fixtures остаются явными blockers и не подменяются software evidence.
 - **S8:** два последовательных RC проходят один и тот же release packet без
   изменения критериев после результата.
+
+`tests/hil/hil-cadence.v1.json` — machine-readable policy. Перед physical работой
+запускается `python3 tools/plan_hil_scope.py --base HEAD`; на границах добавляется
+`--stage-end` или `--release-candidate`. Planner возвращает `none`, `delta` или
+`full`, причину и flash policy. Интервал считает новые принятые retained HIL summary
+после текущего anchor, а не попытки или нажатия клавиш.
 
 Stage Demo не является маркетинговым роликом: он считается pass только если команды,
 логи, бинарный hash и ожидаемые наблюдения позволяют повторить результат.

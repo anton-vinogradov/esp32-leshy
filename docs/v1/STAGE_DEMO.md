@@ -164,13 +164,26 @@ promote a release or claim instrumented RF silence.
 
 ## Test cadence within a stage
 
-- **On change:** fast host/static tests and related negative cases.
-- **At slice completion:** build, automated board smoke, TFT/action evidence, and
-  resource cleanup.
-- **Before the gate:** complete `DEMO-S*`, current-capability regression matrix, and
-  open risk/budget review.
+- **On change:** fast host/static tests and related negative cases. Physical HIL is
+  **delta by default**: only the affected scenario, its adjacent negative path and
+  final cleanup are run. The candidate is flashed at most once, and is not reflashed
+  at all when its binary hash did not change.
+- **Periodic checkpoint:** after 15 accepted delta HIL checkpoints, run the applicable
+  current-capability matrix. The same exact candidate image is flashed once and
+  reused by all scenarios.
+- **Immediate full trigger:** do not wait for the interval after a cross-cutting
+  safety, power, storage, resource-ownership or board-profile change.
+- **Before the stage gate or an RC:** run the complete applicable `DEMO-S*`, current-
+  capability regression matrix, and open risk/budget review. Unavailable physical
+  fixtures remain explicit blockers; they are never replaced with software evidence.
 - **S8:** two consecutive RCs pass the same release packet without redefining the
   criteria after seeing the result.
+
+`tests/hil/hil-cadence.v1.json` is the machine-readable policy. Run
+`python3 tools/plan_hil_scope.py --base HEAD` before physical work; add `--stage-end`
+or `--release-candidate` at those boundaries. The planner returns `none`, `delta` or
+`full`, the trigger and the flash policy. Its interval counts newly accepted retained
+HIL summaries after the current anchor, rather than attempts or button presses.
 
 A Stage Demo is not a marketing video: it passes only when commands, logs, binary
 hash, and expected observations make the result reproducible.

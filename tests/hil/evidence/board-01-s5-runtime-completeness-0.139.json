@@ -1,0 +1,81 @@
+{
+  "board": "board-01",
+  "candidate": {
+    "app_image_bytes": 3078768,
+    "cid": "FE343253440000002000000055019CB7",
+    "elf_file_bytes": 22735676,
+    "elf_sha256": "a8b2c46af001c360216b9eddc2db367105bd4662e9ed75a0624929a2227512e4",
+    "factory_image_bytes": 3144304,
+    "factory_sha256": "c45cfa3ebc0524c0249a1515ac8a7c31c9ec8da9a6cf4e60a964bd5c5acc1284",
+    "firmware_sha256": "5c7e8e86ea31595332c07303c5cd0c5804fd2955531d2019345edc585b177878",
+    "linked_flash_bytes": 3078272,
+    "map_file_bytes": 17918189,
+    "map_sha256": "bd659ef07aff6f54ad184c236b197a2e982f09ae73b8f3d1617478548431163a",
+    "retainer_sha256": "2951d868494a4e5436f8ba46c7b65cf134e753c7e99de8d1960d195ee753d599",
+    "run_sha256": "c72573a24b71e0dcc7e28e386629f9d0a101262ad6c270c3781979a7d764cb5c",
+    "runner_sha256": "aa10e897a4235a62412dcfc2c7e2f6d71e92e977398626207a5451fe5e6d00e8",
+    "schema": "leshy.s5_runtime_completeness_hil.provenance.v1",
+    "source_commit": "6fce0e8337e2b9758ea229ffc393e0071f5e51cf",
+    "source_guard_sha256": "1d49d4671503284a0c140395ba66473602b875cfeb66c45a0c68c0fd6c4b10b5",
+    "source_sha256": {
+      "board": "94d5c452b78f019be040240d0b1fca0ba51c5e586384e5957508e0cbd0e80176",
+      "entry": "f9159e80229a355699b8319627bea2f505fed8924e1dfc9e317b0454c67f95ff",
+      "inventory_cpp": "f956adab84577b0522d015bce87507937e2f3e658fd98ddb650e201e4a573e4d",
+      "inventory_h": "af473cce9f2195940da41cef9ba9a27f83d97ed88f7c32ef7e112a6670297644",
+      "native_tests": "93ad2c8a6a46bd0cd2717fd282deab7b7bdcb353705a7535679a80b6b3b5f22e",
+      "platform": "d342c280bed9fb6abe66e3fd2ac9015c4c684368db81e3825164714456b01418",
+      "power_cpp": "8b314f665e807dfb5c39c65b89e7ef45c7d22388109beb173483787797019942",
+      "power_h": "c791150d2b0a895f758f4df3ab6d248262f11ce231c4655cc10913c2f2a677c1",
+      "store_cpp": "46ce578da3ff446e3b4c218d4007f6eba0afd9a9858d44c02294db15a0b3661e",
+      "store_h": "734a2c874c7df9c276735ca4fdbb0a499979a90931a342fc1b491f61e0f0ff4b"
+    },
+    "static_ram_bytes": 208304,
+    "tft_states": 3,
+    "version": "0.139.0-s5-runtime-complete"
+  },
+  "evidence": {
+    "artifact_index_sha256": "2c40f1c1ac9ed7634fddd2591e627e151f1b97020417f1cce55b51a36103c33c",
+    "files": 31,
+    "tft_states": 3
+  },
+  "evidence_ids": [
+    "E-BUILD-139",
+    "E-AUTO-100",
+    "E-HIL-160",
+    "E-POWER-001",
+    "E-STORAGE-032",
+    "E-RADIO-018"
+  ],
+  "limits": {
+    "gps_present_on_stock_assembly": false,
+    "open_gate": "qualified physical nRF/Sub-GHz source and two-board regression",
+    "physical_subghz_positive_signal": false,
+    "pn532_present_on_stock_assembly": false,
+    "radio_transmit_authorized": false,
+    "s5_exit_gate_closed": false,
+    "subghz_capture_source": "HIL-only RX software fixture"
+  },
+  "schema": "leshy.s5_runtime_completeness.acceptance.v1",
+  "status": "pass_runtime_checkpoint_physical_rf_open",
+  "verified": {
+    "assembly_profile": "stock-rf-no-gps-no-pn532",
+    "final_lease_mask": 0,
+    "generation_after_store": 110,
+    "generation_before": 109,
+    "gps": "not_applicable",
+    "hil_session_ended": true,
+    "light_sleep_elapsed_us": 291608,
+    "light_sleep_requested_us": 300000,
+    "low_voltage_samples": 3,
+    "low_voltage_write_calls": 0,
+    "manager_address": 117,
+    "manager_address_ack": true,
+    "pn532": "not_applicable",
+    "sleep_heap_invariant": true,
+    "subghz_application_tx_calls": 0,
+    "subghz_frequency_khz": 433920,
+    "subghz_pulses": 3,
+    "subghz_storage_written": true,
+    "voltage_available": false
+  }
+}

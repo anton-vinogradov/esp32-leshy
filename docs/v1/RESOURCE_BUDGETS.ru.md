@@ -281,6 +281,17 @@ largest block 51 188 B; injected path пишет zero bytes и не заявля
 allocation. Это physical safety evidence, а не mixed-workload resource или release
 endurance.
 
+Последний принятый delta `RB-M136`: exact 0.139 использует 3 078 272 B linked
+flash, 208 304 B static RAM и app/factory images 3 078 768/3 144 304 B. Это
++16 764/+344/+16 848/+16 848 B против 0.138 за power safety policy, explicit
+assembly profile, реальный light-sleep/resume reporting, truthful Power UI и bounded
+HIL-only RX fixture. Fresh runtime gate board-01 стартует с heap
+total/free/minimum 171 012/100 736/86 548 B; light sleep 300 ms сохраняет free и
+minimum byte-exact. Разрешённый Store Sub-GHz достигает mount при 91 656 B free и
+largest block 49 140 B и продвигает catalog 109→110. Low-voltage path не открывает
+filesystem и выполняет zero writes. Это focused runtime checkpoint, а не
+mixed-workload/release endurance, и он не добавляет physical positive-RF claim.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

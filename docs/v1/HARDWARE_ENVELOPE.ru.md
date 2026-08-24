@@ -91,6 +91,11 @@ identity.
 | `esp32-div-v2-n16` / board-01 | `ESP32-S3-WROOM-1U-N16`; BOM buzzer распаян | exact 0.81 читает две разрешённые nRF identity и CC1101 VERSION `0x14` | known-positive baseline |
 | `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer отсутствует; population antenna interface CC1101 AS07 отличается от board-01, U.FL не используется | assembled exact 0.130 читает zero identities и MISO LOW 0/32 под обоими pull; isolated-main exact 0.131 читает тот же GPIO13 HIGH 32/32 под обоими pull после снятия detachable RF carrier | совместимы display/input; carrier-side RF в `fault`, fixture TX запрещён |
 
+Exact 0.139 применяет к board-01 software assembly overlay
+`stock-rf-no-gps-no-pn532`. Наблюдаемый stock RF carrier считается применимым, а
+GPS/PN532 объявляются `not_applicable`; ни contested GPIO output, ни speculative
+module probe не используются для вывода об их отсутствии.
+
 На обоих carriers стоят три nRF24-compatible module с внешними PA/LNA и один
 CC1101. Shield BOM описывает последний как **433 МГц, 10 мВт**; 315/868/915 МГц —
 software tuning choices, но не доказанные полезные диапазоны этого physical assembly.
@@ -213,6 +218,10 @@ Design-confirmed topology:
   не подтверждены;
 - VBAT divider и buzzer делят GPIO2, поэтому firmware не получает независимый
   battery ADC channel.
+
+Exact 0.139 поэтому удерживает GPIO2 OUTPUT LOW и сообщает voltage/battery percentage
+как unavailable. I²C address `0x75` отвечает read-only, но type/register map power
+manager остаются неизвестны; из ACK не делается вывод о charge control или процентах.
 
 Неизвестны: точная LF33 variant/current/thermal margin, IP5306 I²C register variant,
 максимальный ток обеих rail, поведение при USB+cell, brownout при трёх NRF и точность
@@ -374,9 +383,9 @@ Software evidence для GPIO2: авторское описание root cause �
 |---|---|---|---|
 | HW-U01 | partial: board-01 — N16/no-PSRAM; board-02 — N16R8/DNP variant, чьи встроенные 8 MiB Octal PSRAM конфликтуют с display GPIO35/36/37 и не используются compatibility image | portable baseline — 16 MiB flash с отключённой PSRAM; N16R8 — отдельный unqualified profile, не dynamic budget expansion | дополнительные batch IDs и pin-compatible display/PSRAM profile, если он существует |
 | HW-U02 | unmeasured: schematic противоречит legacy flag | TFT reset внешний/unassigned; GPIO0 остаётся только BOOT и не управляет display reset | HW-T02 continuity/logic trace |
-| HW-U03 | partial: read-only I²C отвечает на `0x75`; identity/map power manager неизвестны | показывать только generic presence/evidence; battery percentage и write/control operations unavailable | exact marking/datasheet + HW-T04 |
+| HW-U03 | partial: read-only I²C отвечает на `0x75`; exact 0.139 показывает ACK, сохраняя identity/map power manager и voltage unavailable | показывать только generic presence/evidence; battery percentage и write/control operations unavailable | exact marking/datasheet + HW-T04 |
 | HW-U04 | partial: idle connector rails user-measured 4,35/3,2 В на рабочей board-01 и 4,7/3,3 В на board-02; ripple, peak и thermal margin не измерены | никакого active RF fixture board-02 и default combined shield load; новая combination unavailable по RB-08 | calibrated dynamic HW-T10 rail/thermal matrix |
-| HW-U05 | оператор подтвердил отсутствие GPS/PN532 assembly на board-01; standard connector contract не доказан | default profile объявляет оба absent; каждому нужен explicit assembly profile, output-mode autodetect запрещён | assembly photo/spec + HW-T07 |
+| HW-U05 | exact 0.139 применяет `stock-rf-no-gps-no-pn532` к board-01; standard connector contract расширений не доказан | stock profile показывает оба `not_applicable`; каждому нужен собственный explicit assembly profile, output-mode autodetect запрещён | будущая equipped assembly + HW-T07 |
 | HW-U06 | partial: GPIO38 LOW с одной inserted/identified card; polarity и batch consistency не измерены | GPIO38 не authoritative в S2; storage state определяется bounded explicit operation и остаётся fault/absent при failure | HW-T05 на разных media/batch |
 | HW-U07 | partial: exact 0.130 читает valid receiver identities и MISO HIGH 32/32 на board-01, но assembled board-02 удерживает shared MISO LOW 0/32 под обоими pull до/после reseat несмотря на valid idle rails; powered-off MISO→GND 23 кОм против 32 кОм отвергает hard short; exact isolated-main 0.131 меняет GPIO13 на HIGH 32/32 без carrier; exact reassembled 0.132 доказывает каждый receiver CSN HIGH 32/32, пока MISO возвращается LOW 0/32 при zero bus/TX activity | `spi_radio` exclusive; carrier RF board-02 остаётся `fault`; cross-swap и emission запрещены; конкретный module или antenna/U.FL fault не заявляется | вернуть/заменить carrier/device либо физически изолировать MISO/power modules по одному; до bounded regression потребовать repaired plausible identities |
 | HW-U08 | electrical/ADC behavior не измерен; software root cause ложного звука подтверждён 0.x и upstream issue #117 | battery percentage unavailable; GPIO2 никогда не sampled как ADC и с первой инструкции setup удерживается OUTPUT LOW; HIGH разрешён только будущему bounded sound service | HW-T09 для ADC/sound characterization; silent invariant закрывается boot/runtime state + audible observation |
