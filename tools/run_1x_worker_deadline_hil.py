@@ -48,6 +48,22 @@ def wait_state(
     raise RuntimeError(f"{message}: {last}")
 
 
+def wait_ui_state(
+    device: PassiveSerial,
+    predicate: Callable[[dict[str, Any]], bool],
+    timeout_s: float,
+    message: str,
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout_s
+    last: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        last = query(device, b"ui.state", "leshy.ui.v1", "state")
+        if predicate(last):
+            return last
+        time.sleep(0.15)
+    raise RuntimeError(f"{message}: {last}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -141,36 +157,97 @@ def main() -> int:
             if failures:
                 raise RuntimeError("preflight contract failed")
 
+            # First prove that the longest public Product Survey source can
+            # complete a real passive cycle without a false deadline trip.
+            ble_home = action(device, "down")
+            trace.append(ble_home)
+            failures.extend(expect(ble_home, {
+                "page": "home", "selection": 1, "selected_id": "ble",
+                "runtime_owner": "none", "lease_mask": 0,
+            }, "ble_home"))
+            normal_start = action(device, "right")
+            trace.append(normal_start)
+            failures.extend(expect(normal_start, {
+                "page": "survey", "selected_id": "ble",
+                "ble_product_view": "devices",
+                "survey_product_status": "preparing",
+                "survey_product_selected_source_mask": 2,
+                "runtime_owner": "ble", "lease_mask": 15,
+            }, "ble_normal_start"))
+            records["normal_ble_cycle"] = wait_ui_state(
+                device,
+                lambda state: (
+                    state.get("page") == "survey" and
+                    state.get("ble_product_view") == "devices" and
+                    state.get("survey_product_status") == "running" and
+                    state.get("survey_product_active_source_mask") == 2 and
+                    int(state.get("survey_product_ble_scan_cycles", 0)) >= 1
+                ),
+                30.0,
+                "normal BLE Product Survey cycle did not complete",
+            )
+            records["safety_after_normal_ble"] = query(
+                device, b"safety.state", "leshy.safety.v1", "state"
+            )
+            failures.extend(expect(records["safety_after_normal_ble"], {
+                "state": "armed", "reason": "none", "latched": False,
+                "worker_supervision": True,
+                "worker_active": "product_survey", "worker_armed": True,
+                "worker_expired": False, "worker_deadline_ms": 8000,
+                "worker_arm_count": 1, "worker_trip_count": 0,
+            }, "safety_after_normal_ble"))
+            normal_heartbeats = int(
+                records["safety_after_normal_ble"].get(
+                    "worker_heartbeat_count", 0))
+            if normal_heartbeats < 4:
+                failures.append("normal BLE cycle has insufficient heartbeats")
+            trace.append(action(device, "left"))
+            records["home_after_normal_ble"] = wait_ui_state(
+                device,
+                lambda state: (
+                    state.get("page") == "home" and
+                    state.get("selected_id") == "ble" and
+                    state.get("runtime_owner") == "none" and
+                    state.get("lease_mask") == 0 and
+                    state.get("survey_product_cleanup_complete") is True
+                ),
+                15.0,
+                "normal BLE Product Survey did not clean up",
+            )
+            records["safety_after_normal_cleanup"] = query(
+                device, b"safety.state", "leshy.safety.v1", "state"
+            )
+            failures.extend(expect(records["safety_after_normal_cleanup"], {
+                "state": "armed", "reason": "none", "latched": False,
+                "runtime_owner": "none", "lease_mask": 0,
+                "worker_active": "none", "worker_armed": False,
+                "worker_expired": False, "worker_deadline_ms": 8000,
+                "worker_arm_count": 1, "worker_trip_count": 0,
+            }, "safety_after_normal_cleanup"))
+            if failures:
+                raise RuntimeError("normal BLE deadline calibration failed")
+
             device.write(b"safety.worker-deadline-test confirm\n")
             device.flush()
             records["injection"] = read_json(
                 device, "leshy.safety.worker_deadline_test.v1", "armed", 5.0
             )
             failures.extend(expect(records["injection"], {
-                "worker": "product_survey", "deadline_ms": 6000,
-                "injection_ms": 8000, "requires_public_survey_start": True,
+                "worker": "product_survey", "deadline_ms": 8000,
+                "injection_ms": 10000, "requires_public_survey_start": True,
                 "outputs_inactive": True, "physical_write_calls": 0,
             }, "injection"))
 
-            # The product-first menu no longer exposes the old generic Survey
-            # setup screen. Enter the stable Wi-Fi item and launch its first
-            # public function (Nearby networks); that function owns the real
-            # Wi-Fi-only Product Survey worker under test.
-            wifi_menu = action(device, "select")
-            trace.append(wifi_menu)
-            failures.extend(expect(wifi_menu, {
-                "page": "survey", "selected_id": "wifi",
-                "wifi_product_view": "menu", "wifi_product_selection": 0,
-                "runtime_owner": "wifi", "lease_mask": 15,
-            }, "wifi_menu"))
-            start_ack = action(device, "select")
+            # Re-enter the same public BLE item. The one-shot delay now proves
+            # that this exact source reaches the common supervised worker.
+            start_ack = action(device, "right")
             trace.append(start_ack)
             failures.extend(expect(start_ack, {
-                "page": "survey", "selected_id": "wifi",
-                "wifi_product_view": "networks",
+                "page": "survey", "selected_id": "ble",
+                "ble_product_view": "devices",
                 "survey_product_status": "preparing",
                 "survey_workflow_state": "setup",
-                "survey_product_selected_source_mask": 1,
+                "survey_product_selected_source_mask": 2,
             }, "survey_start_ack"))
             if failures:
                 raise RuntimeError("public Survey start contract failed")
@@ -193,11 +270,15 @@ def main() -> int:
                 "worker_supervision": True,
                 "worker_last_expired": "product_survey",
                 "worker_armed": True, "worker_expired": True,
-                "worker_deadline_ms": 6000, "worker_trip_count": 1,
+                "worker_deadline_ms": 8000, "worker_arm_count": 2,
+                "worker_trip_count": 1,
                 "automatic_clear": False,
             }, "safety_tripped"))
-            if int(records["safety_tripped"].get("worker_age_ms", 0)) < 6000:
+            if int(records["safety_tripped"].get("worker_age_ms", 0)) < 8000:
                 failures.append("worker trip age is below its deadline")
+            if int(records["safety_tripped"].get(
+                    "worker_heartbeat_count", 0)) < normal_heartbeats + 2:
+                failures.append("injected BLE lifecycle heartbeat delta missing")
 
             records["safety_cleanup"] = wait_state(
                 device,
@@ -215,7 +296,7 @@ def main() -> int:
                 "worker_active": "none", "worker_armed": False,
                 "worker_expired": True,
                 "worker_last_expired": "product_survey",
-                "worker_deadline_ms": 6000, "worker_trip_count": 1,
+                "worker_deadline_ms": 8000, "worker_trip_count": 1,
             }, "safety_cleanup"))
             records["outputs_latched"] = query(
                 device, b"hardware.safe-outputs",

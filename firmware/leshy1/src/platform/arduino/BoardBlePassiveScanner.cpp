@@ -248,8 +248,6 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
     // One bounded passive retry recovers the observed ESP BLE transport case
     // where start succeeds but that completion notification is lost. A second
     // failure is terminal; this never enables active scanning or transmission.
-    constexpr std::uint16_t kMaximumScanAttempts = 2U;
-    constexpr std::uint32_t kCompletionGraceMs = 1000U;
     for (std::uint16_t attempt = 1U;
          attempt <= kMaximumScanAttempts; ++attempt) {
         result.attempts = attempt;
@@ -282,7 +280,7 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
         }
         ++result.transientRetries;
         activeScan_->clearResults();
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS(kRetryDelayMs));
     }
     activeScan_->setAdvertisedDeviceCallbacks(nullptr, false, true);
     result.durationUs =

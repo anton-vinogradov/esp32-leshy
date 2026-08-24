@@ -1129,8 +1129,13 @@ constexpr UBaseType_t kProductSurveyWorkerEventCapacity = 8;
 constexpr UBaseType_t kProductSurveyObservationCapacity =
     leshy1::services::survey::SurveySession::kObservationCapacity;
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
-constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 6000000ULL;
-constexpr std::uint32_t kProductSurveyWorkerDeadlineInjectionMs = 8000;
+constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 8000000ULL;
+constexpr std::uint32_t kProductSurveyWorkerDeadlineInjectionMs = 10000;
+static_assert(
+    kProductSurveyWorkerDeadlineUs >
+        BoardBlePassiveScanner::worstCaseScanDurationUs(
+            leshy1::drivers::ble::defaultPassivePlan()),
+    "worker deadline must exceed the bounded BLE retry path");
 QueueHandle_t productSurveyWorkerEvents = nullptr;
 QueueHandle_t productSurveyObservations = nullptr;
 StaticSemaphore_t productSurveyScanStartGateStorage{};
@@ -5160,7 +5165,7 @@ void triggerWorkerDeadlineTest(Stream& reply) {
     reply.println(
         "{\"schema\":\"leshy.safety.worker_deadline_test.v1\","
         "\"kind\":\"armed\",\"worker\":\"product_survey\","
-        "\"deadline_ms\":6000,\"injection_ms\":8000,"
+        "\"deadline_ms\":8000,\"injection_ms\":10000,"
         "\"requires_public_survey_start\":true,"
         "\"outputs_inactive\":true,\"physical_write_calls\":0}");
 }

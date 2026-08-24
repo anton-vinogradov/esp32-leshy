@@ -24,6 +24,8 @@ def main() -> int:
               "SafetySupervisor.cpp").read_text(encoding="utf-8")
     entry = (ROOT / "firmware/leshy1/src/platform/arduino/"
              "ArduinoEntry.cpp").read_text(encoding="utf-8")
+    ble_header = (ROOT / "firmware/leshy1/src/platform/arduino/"
+                  "BoardBlePassiveScanner.h").read_text(encoding="utf-8")
     tests = (ROOT / "tests/native/clean_target_tests.cpp").read_text(
         encoding="utf-8")
     platform = (ROOT / "firmware/leshy1/platformio.ini").read_text(
@@ -60,7 +62,9 @@ def main() -> int:
         raise AssertionError("blocking hardware scan is not heartbeat-bracketed")
 
     require(entry, (
-        "kProductSurveyWorkerDeadlineUs = 6000000ULL",
+        "kProductSurveyWorkerDeadlineUs = 8000000ULL",
+        "kProductSurveyWorkerDeadlineInjectionMs = 10000",
+        "BoardBlePassiveScanner::worstCaseScanDurationUs(",
         "serviceWorkerDeadlineSupervisor();",
         "requestProductSurveyWorkerStop(true);",
         "xSemaphoreGive(productSurveyScanStartGate);",
@@ -77,14 +81,18 @@ def main() -> int:
         "testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence",
         "snapshot.tripCount == 1", "supervisor.evaluate(6999)",
     ), "native deadline matrix")
-    if 'LESHY1_VERSION=\\"0.133.0-worker-deadline-supervision\\"' not in platform:
+    require(ble_header, (
+        "kMaximumScanAttempts = 2U", "kCompletionGraceMs = 1000U",
+        "kRetryDelayMs = 100U", "worstCaseScanDurationUs",
+    ), "bounded BLE scan deadline")
+    if 'LESHY1_VERSION=\\"0.134.0-ble-worker-deadline\\"' not in platform:
         raise AssertionError("exact candidate version is not bound")
     if "kRfCarrierChipSelectCharacterizationOnly = false" not in profile:
         raise AssertionError("diagnostic-only carrier gate remains active")
 
     print(
-        "worker deadline contract passed: real Survey heartbeat, 6 s deadline, "
-        "cancel/quiesce/retained Safe Mode"
+        "worker deadline contract passed: real Survey heartbeat, BLE-bounded "
+        "8 s deadline, cancel/quiesce/retained Safe Mode"
     )
     return 0
 

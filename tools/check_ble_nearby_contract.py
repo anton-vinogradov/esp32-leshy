@@ -28,6 +28,8 @@ def main() -> int:
     ).read_text(encoding="utf-8")
     adapter = (
         ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.cpp"
+    ).read_text(encoding="utf-8") + (
+        ROOT / "firmware/leshy1/src/platform/arduino/BoardBlePassiveScanner.h"
     ).read_text(encoding="utf-8")
     strings = (
         ROOT / "firmware/leshy1/src/ui/UiStrings.def"

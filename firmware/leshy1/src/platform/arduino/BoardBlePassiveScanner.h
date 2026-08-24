@@ -45,6 +45,19 @@ struct BoardBlePassiveScanResult final {
 
 class BoardBlePassiveScanner final {
 public:
+    static constexpr std::uint16_t kMaximumScanAttempts = 2U;
+    static constexpr std::uint32_t kCompletionGraceMs = 1000U;
+    static constexpr std::uint32_t kRetryDelayMs = 100U;
+
+    static constexpr std::uint64_t worstCaseScanDurationUs(
+        const drivers::ble::BleScanPlan& plan) {
+        return (static_cast<std::uint64_t>(plan.durationMs) +
+                kCompletionGraceMs) *
+                   kMaximumScanAttempts * 1000ULL +
+               static_cast<std::uint64_t>(kMaximumScanAttempts - 1U) *
+                   kRetryDelayMs * 1000ULL;
+    }
+
     ~BoardBlePassiveScanner() { end(); }
 
     bool begin();
