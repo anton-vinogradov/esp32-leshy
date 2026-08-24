@@ -1129,7 +1129,9 @@ constexpr UBaseType_t kProductSurveyWorkerEventCapacity = 8;
 constexpr UBaseType_t kProductSurveyObservationCapacity =
     leshy1::services::survey::SurveySession::kObservationCapacity;
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
+constexpr std::uint64_t kProductSurveyPreparationDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 8000000ULL;
+constexpr std::uint32_t kProductSurveyPreparationDeadlineInjectionMs = 10000;
 constexpr std::uint32_t kProductSurveyWorkerDeadlineInjectionMs = 10000;
 static_assert(
     kProductSurveyWorkerDeadlineUs >
@@ -1151,6 +1153,7 @@ bool productSurveySourceUnavailableOnce = false;
 std::uint8_t productSurveyRuntimeUnavailableOnceMask = 0;
 bool productSurveyIncrementalRefreshPending = false;
 WorkerDeadlineSupervisor workerDeadlineSupervisor;
+bool productSurveyPreparationDeadlineInjectionOnce = false;
 bool productSurveyWorkerDeadlineInjectionOnce = false;
 
 void renderInteractiveScreen(bool clearContent = true);
@@ -1488,6 +1491,56 @@ bool consumeProductSurveyWorkerDeadlineInjection() {
     return injected;
 }
 
+void setProductSurveyPreparationDeadlineInjection(bool armed) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    productSurveyPreparationDeadlineInjectionOnce = armed;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+bool productSurveyPreparationDeadlineInjectionArmed() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed = productSurveyPreparationDeadlineInjectionOnce;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+bool consumeProductSurveyPreparationDeadlineInjection() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool injected = productSurveyPreparationDeadlineInjectionOnce;
+    productSurveyPreparationDeadlineInjectionOnce = false;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return injected;
+}
+
+bool armProductSurveyPreparationDeadline(std::uint64_t nowUs) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed = workerDeadlineSupervisor.arm(
+        SupervisedWorker::ProductSurveyPreparation, nowUs,
+        kProductSurveyPreparationDeadlineUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+bool heartbeatProductSurveyPreparation(std::uint64_t nowUs = 0) {
+    if (nowUs == 0) {
+        nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs == 0) nowUs = 1;
+    }
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool accepted = workerDeadlineSupervisor.heartbeat(
+        SupervisedWorker::ProductSurveyPreparation, nowUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return accepted;
+}
+
+bool disarmProductSurveyPreparationDeadline() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool disarmed = workerDeadlineSupervisor.disarm(
+        SupervisedWorker::ProductSurveyPreparation);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return disarmed;
+}
+
 bool armProductSurveyWorkerDeadline(std::uint64_t nowUs) {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     const bool armed = workerDeadlineSupervisor.arm(
@@ -1737,6 +1790,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     ProductSurveyWorkerReport report;
     report.status = "preparing";
     report.cleanupComplete = false;
+    heartbeatProductSurveyPreparation();
     if (wifiScanner == nullptr || bleScanner == nullptr) {
         report.status = "worker_missing";
         return report;
@@ -1771,6 +1825,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
             report.status = "cancelled";
             return report;
         }
+        heartbeatProductSurveyPreparation();
         BoardSdSpiTransport identityTransport;
         const bool identityBegun = identityTransport.begin();
         identity = {};
@@ -1785,6 +1840,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
                 identityTransport, policy);
             identityTransport.end();
         }
+        heartbeatProductSurveyPreparation();
         report.identityAttempts = attempt;
         report.identityTransientRetries =
             static_cast<std::uint8_t>(attempt - 1U);
@@ -1817,6 +1873,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
             pdTRUE,
             pdMS_TO_TICKS(
                 leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+        heartbeatProductSurveyPreparation();
     }
     if (productSurveyCancelRequested()) {
         report.status = "cancelled";
@@ -1834,10 +1891,12 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     }
 
     report.filesystemAttempted = true;
+    heartbeatProductSurveyPreparation();
     if (!productSurveyFilesystem.begin()) {
         report.status = "mount_failed";
         return report;
     }
+    heartbeatProductSurveyPreparation();
     if (productSurveyCancelRequested()) {
         report.status = "cancelled";
         return report;
@@ -1910,11 +1969,13 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     // reopened only after both scanners have stopped, immediately before the
     // atomic terminal commit.
     report.storeOpenAttempted = true;
+    heartbeatProductSurveyPreparation();
     if (!productSurveyStore.selectDrive(productSurveyFilesystem.driveNumber()) ||
         !productSurveyStore.openExistingWritable(storePermit)) {
         report.status = "store_open_failed";
         return report;
     }
+    heartbeatProductSurveyPreparation();
     productSurveyStore.end();
     productSurveyFilesystem.end();
     surveyStoreRouter.bind(ramSessionStore);
@@ -1937,8 +1998,10 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         leshy1::services::survey::sourceMask(RadioKind::Ble);
     const bool wifiSelected = (selectedSourceMask & wifiMask) != 0;
     const bool bleSelected = (selectedSourceMask & bleMask) != 0;
+    heartbeatProductSurveyPreparation();
     const bool wifiBegun = wifiSelected ? wifiScanner->begin() : false;
     const bool bleBegun = bleSelected ? bleScanner->begin() : false;
+    heartbeatProductSurveyPreparation();
     report.activeSourceMask = static_cast<std::uint8_t>(
         (wifiBegun ? wifiMask : 0U) | (bleBegun ? bleMask : 0U));
     report.unavailableSourceMask = static_cast<std::uint8_t>(
@@ -1954,6 +2017,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     surveyRequest.ownedResources = ownedResources;
     const leshy1::apps::survey::ProductSurveyPermit surveyPermit =
         leshy1::apps::survey::authorizeProductSurvey(surveyRequest);
+    heartbeatProductSurveyPreparation();
     report.admissionStatus = surveyPermit.status;
     report.scannerCleanupComplete = !wifiBegun && !bleBegun;
     if (!surveyPermit.allowed()) {
@@ -1983,6 +2047,24 @@ void runProductSurveyWorker(void*) {
         setProductSurveyScanActive(false);
         BoardWifiPassiveScanner wifiScanner;
         BoardBlePassiveScanner bleScanner;
+        std::uint64_t preparationStartedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (preparationStartedUs == 0) preparationStartedUs = 1;
+        if (!armProductSurveyPreparationDeadline(preparationStartedUs)) {
+            ProductSurveyWorkerReport report;
+            report.status = "preparation_supervisor_unavailable";
+            const bool wifiCleanup = wifiScanner.end();
+            const bool bleCleanup = bleScanner.end();
+            report.scannerCleanupComplete = wifiCleanup && bleCleanup;
+            cleanupProductSurveyWorkerHardware(&report);
+            sendProductSurveyWorkerEvent(
+                ProductSurveyWorkerEventKind::Failed, report);
+            continue;
+        }
+        if (consumeProductSurveyPreparationDeadlineInjection()) {
+            vTaskDelay(pdMS_TO_TICKS(
+                kProductSurveyPreparationDeadlineInjectionMs));
+        }
         ProductSurveyWorkerReport report =
             prepareProductSurveyWorker(&wifiScanner, &bleScanner);
         if (std::strcmp(report.status, "prepared") != 0) {
@@ -1991,6 +2073,7 @@ void runProductSurveyWorker(void*) {
             report.scannerCleanupComplete = wifiCleanup && bleCleanup;
             report.sourceActive = false;
             cleanupProductSurveyWorkerHardware(&report);
+            disarmProductSurveyPreparationDeadline();
             const bool cancelled = productSurveyCancelRequested() ||
                 std::strcmp(report.status, "cancelled") == 0;
             sendProductSurveyWorkerEvent(
@@ -2009,6 +2092,7 @@ void runProductSurveyWorker(void*) {
             report.scannerCleanupComplete = wifiCleanup && bleCleanup;
             report.sourceActive = false;
             cleanupProductSurveyWorkerHardware(&report);
+            disarmProductSurveyPreparationDeadline();
             sendProductSurveyWorkerEvent(
                 ProductSurveyWorkerEventKind::Cancelled, report);
             continue;
@@ -2016,6 +2100,17 @@ void runProductSurveyWorker(void*) {
         std::uint64_t workerStartedUs =
             static_cast<std::uint64_t>(esp_timer_get_time());
         if (workerStartedUs == 0) workerStartedUs = 1;
+        if (!disarmProductSurveyPreparationDeadline()) {
+            report.status = "preparation_supervisor_release_failed";
+            const bool wifiCleanup = wifiScanner.end();
+            const bool bleCleanup = bleScanner.end();
+            report.scannerCleanupComplete = wifiCleanup && bleCleanup;
+            report.sourceActive = false;
+            cleanupProductSurveyWorkerHardware(&report);
+            sendProductSurveyWorkerEvent(
+                ProductSurveyWorkerEventKind::Failed, report);
+            continue;
+        }
         if (!armProductSurveyWorkerDeadline(workerStartedUs)) {
             report.status = "worker_supervisor_unavailable";
             const bool wifiCleanup = wifiScanner.end();
@@ -5154,6 +5249,7 @@ void triggerWorkerDeadlineTest(Stream& reply) {
         runtimeSafetyWatchdogReady && outputsInactive &&
         productSurveyWorkerReady && !appRuntime.running() &&
         appRuntime.activeResources() == 0 && !worker.armed &&
+        !productSurveyPreparationDeadlineInjectionArmed() &&
         !productSurveyWorkerDeadlineInjectionArmed();
     if (!eligible) {
         reply.println(
@@ -5167,6 +5263,32 @@ void triggerWorkerDeadlineTest(Stream& reply) {
         "\"kind\":\"armed\",\"worker\":\"product_survey\","
         "\"deadline_ms\":8000,\"injection_ms\":10000,"
         "\"requires_public_survey_start\":true,"
+        "\"outputs_inactive\":true,\"physical_write_calls\":0}");
+}
+
+void triggerPreparationDeadlineTest(Stream& reply) {
+    const bool outputsInactive = BoardSafeOutputs::buzzerHeldInactive() &&
+        BoardSafeOutputs::radioTransmitPathsHeldInactive();
+    const WorkerDeadlineSnapshot worker = workerDeadlineSnapshot();
+    const bool eligible = safetySupervisor.state() == SafetyState::Armed &&
+        runtimeSafetyWatchdogReady && outputsInactive &&
+        productSurveyWorkerReady && !appRuntime.running() &&
+        appRuntime.activeResources() == 0 && !worker.armed &&
+        !productSurveyPreparationDeadlineInjectionArmed() &&
+        !productSurveyWorkerDeadlineInjectionArmed();
+    if (!eligible) {
+        reply.println(
+            "{\"schema\":\"leshy.safety.worker_preparation_deadline_test.v1\","
+            "\"kind\":\"error\",\"reason\":\"unsafe_precondition\"}");
+        return;
+    }
+    setProductSurveyPreparationDeadlineInjection(true);
+    reply.println(
+        "{\"schema\":\"leshy.safety.worker_preparation_deadline_test.v1\","
+        "\"kind\":\"armed\",\"worker\":\"product_survey_preparation\","
+        "\"deadline_ms\":8000,\"injection_ms\":10000,"
+        "\"requires_public_survey_start\":true,"
+        "\"before_hardware_preparation\":true,"
         "\"outputs_inactive\":true,\"physical_write_calls\":0}");
 }
 
@@ -18650,6 +18772,9 @@ void handleCommand(Stream& reply, const char* command) {
                            "safety.worker-deadline-test confirm") == 0) {
         triggerWorkerDeadlineTest(reply);
     } else if (std::strcmp(command,
+                           "safety.worker-preparation-deadline-test confirm") == 0) {
+        triggerPreparationDeadlineTest(reply);
+    } else if (std::strcmp(command,
                            "safety.early-boot-watchdog-test confirm") == 0) {
         triggerEarlyBootSafetyWatchdogTest(reply);
     } else if (std::strcmp(command,
@@ -19290,6 +19415,7 @@ void setup() {
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
               "\"safety.state\",\"safety.watchdog-test confirm\","
               "\"safety.worker-deadline-test confirm\","
+              "\"safety.worker-preparation-deadline-test confirm\","
               "\"safety.early-boot-watchdog-test confirm\","
               "\"safety.clear confirm\","
               "\"hardware.shield.receivers\","

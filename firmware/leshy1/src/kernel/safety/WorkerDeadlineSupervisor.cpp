@@ -4,6 +4,8 @@ namespace leshy1::kernel::safety {
 
 const char* supervisedWorkerName(SupervisedWorker worker) {
     switch (worker) {
+        case SupervisedWorker::ProductSurveyPreparation:
+            return "product_survey_preparation";
         case SupervisedWorker::ProductSurvey:
             return "product_survey";
         case SupervisedWorker::None:

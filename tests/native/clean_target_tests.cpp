@@ -1631,6 +1631,9 @@ void testSafetySupervisorLatchesOnlyExactUntornEvidence() {
 void testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence() {
     using namespace leshy1::kernel::safety;
     WorkerDeadlineSupervisor supervisor;
+    CHECK(std::strcmp(supervisedWorkerName(
+                          SupervisedWorker::ProductSurveyPreparation),
+                      "product_survey_preparation") == 0);
     CHECK(std::strcmp(supervisedWorkerName(SupervisedWorker::ProductSurvey),
                       "product_survey") == 0);
     CHECK(!supervisor.arm(SupervisedWorker::None, 100, 6000));

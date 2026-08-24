@@ -73,6 +73,10 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--flash", action="store_true")
+    parser.add_argument(
+        "--injection-stage", choices=("worker", "preparation"),
+        default="worker",
+    )
     parser.add_argument("--flash-baud", type=int, default=460800)
     parser.add_argument("--boot-seconds", type=float, default=30.0)
     args = parser.parse_args()
@@ -194,7 +198,7 @@ def main() -> int:
                 "worker_supervision": True,
                 "worker_active": "product_survey", "worker_armed": True,
                 "worker_expired": False, "worker_deadline_ms": 8000,
-                "worker_arm_count": 1, "worker_trip_count": 0,
+                "worker_arm_count": 2, "worker_trip_count": 0,
             }, "safety_after_normal_ble"))
             normal_heartbeats = int(
                 records["safety_after_normal_ble"].get(
@@ -222,21 +226,40 @@ def main() -> int:
                 "runtime_owner": "none", "lease_mask": 0,
                 "worker_active": "none", "worker_armed": False,
                 "worker_expired": False, "worker_deadline_ms": 8000,
-                "worker_arm_count": 1, "worker_trip_count": 0,
+                "worker_arm_count": 2, "worker_trip_count": 0,
             }, "safety_after_normal_cleanup"))
             if failures:
                 raise RuntimeError("normal BLE deadline calibration failed")
 
-            device.write(b"safety.worker-deadline-test confirm\n")
+            injection_is_preparation = args.injection_stage == "preparation"
+            injection_command = (
+                b"safety.worker-preparation-deadline-test confirm\n"
+                if injection_is_preparation
+                else b"safety.worker-deadline-test confirm\n"
+            )
+            injection_schema = (
+                "leshy.safety.worker_preparation_deadline_test.v1"
+                if injection_is_preparation
+                else "leshy.safety.worker_deadline_test.v1"
+            )
+            injected_worker = (
+                "product_survey_preparation"
+                if injection_is_preparation else "product_survey"
+            )
+            expected_arm_count = 3 if injection_is_preparation else 4
+            device.write(injection_command)
             device.flush()
             records["injection"] = read_json(
-                device, "leshy.safety.worker_deadline_test.v1", "armed", 5.0
+                device, injection_schema, "armed", 5.0
             )
             failures.extend(expect(records["injection"], {
-                "worker": "product_survey", "deadline_ms": 8000,
+                "worker": injected_worker, "deadline_ms": 8000,
                 "injection_ms": 10000, "requires_public_survey_start": True,
                 "outputs_inactive": True, "physical_write_calls": 0,
             }, "injection"))
+            if injection_is_preparation and records["injection"].get(
+                    "before_hardware_preparation") is not True:
+                failures.append("preparation injection is not pre-hardware")
 
             # Re-enter the same public BLE item. The one-shot delay now proves
             # that this exact source reaches the common supervised worker.
@@ -268,16 +291,18 @@ def main() -> int:
                 "buzzer_inactive": True, "nrf_ce_inactive": True,
                 "runtime_owner": "none", "lease_mask": 0,
                 "worker_supervision": True,
-                "worker_last_expired": "product_survey",
+                "worker_last_expired": injected_worker,
                 "worker_armed": True, "worker_expired": True,
-                "worker_deadline_ms": 8000, "worker_arm_count": 2,
+                "worker_deadline_ms": 8000,
+                "worker_arm_count": expected_arm_count,
                 "worker_trip_count": 1,
                 "automatic_clear": False,
             }, "safety_tripped"))
             if int(records["safety_tripped"].get("worker_age_ms", 0)) < 8000:
                 failures.append("worker trip age is below its deadline")
             if int(records["safety_tripped"].get(
-                    "worker_heartbeat_count", 0)) < normal_heartbeats + 2:
+                    "worker_heartbeat_count", 0)) < normal_heartbeats + (
+                        1 if injection_is_preparation else 2):
                 failures.append("injected BLE lifecycle heartbeat delta missing")
 
             records["safety_cleanup"] = wait_state(
@@ -295,7 +320,7 @@ def main() -> int:
                 "runtime_owner": "none", "lease_mask": 0,
                 "worker_active": "none", "worker_armed": False,
                 "worker_expired": True,
-                "worker_last_expired": "product_survey",
+                "worker_last_expired": injected_worker,
                 "worker_deadline_ms": 8000, "worker_trip_count": 1,
             }, "safety_cleanup"))
             records["outputs_latched"] = query(
@@ -428,6 +453,7 @@ def main() -> int:
             "flashed": args.flash,
         },
         "expected_cid": expected_cid,
+        "injection_stage": args.injection_stage,
         "restart_raw": {
             "bytes": len(restart_raw),
             "sha256": hashlib.sha256(restart_raw).hexdigest(),

@@ -6,7 +6,8 @@ namespace leshy1::kernel::safety {
 
 enum class SupervisedWorker : std::uint8_t {
     None = 0,
-    ProductSurvey = 1,
+    ProductSurveyPreparation = 1,
+    ProductSurvey = 2,
 };
 
 struct WorkerDeadlineSnapshot final {

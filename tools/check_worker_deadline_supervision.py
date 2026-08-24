@@ -34,7 +34,8 @@ def main() -> int:
                "BoardProfile.h").read_text(encoding="utf-8")
 
     require(header, (
-        "enum class SupervisedWorker", "ProductSurvey", "lastHeartbeatUs",
+        "enum class SupervisedWorker", "ProductSurveyPreparation",
+        "ProductSurvey", "lastHeartbeatUs",
         "deadlineUs", "heartbeatCount", "tripCount", "bool evaluate",
     ), "deadline core API")
     require(core, (
@@ -48,11 +49,20 @@ def main() -> int:
     worker_end = entry.index("bool initializeProductSurveyWorker()", worker_start)
     worker = entry[worker_start:worker_end]
     require(worker, (
+        "armProductSurveyPreparationDeadline(preparationStartedUs)",
+        "disarmProductSurveyPreparationDeadline();",
+        "consumeProductSurveyPreparationDeadlineInjection()",
         "armProductSurveyWorkerDeadline(workerStartedUs)",
         "heartbeatProductSurveyWorker();",
         "disarmProductSurveyWorkerDeadline();",
         "consumeProductSurveyWorkerDeadlineInjection()",
     ), "real Product Survey worker integration")
+    preparation_start = entry.index("ProductSurveyWorkerReport prepareProductSurveyWorker(")
+    preparation_end = entry.index("void runProductSurveyWorker(", preparation_start)
+    preparation = entry[preparation_start:preparation_end]
+    if preparation.count("heartbeatProductSurveyPreparation();") < 8:
+        raise AssertionError(
+            "preparation lacks heartbeat coverage around identity/mount/scanners")
     if worker.count("heartbeatProductSurveyWorker();") < 5:
         raise AssertionError("worker lacks heartbeat coverage around waits/scans")
     scan_at = worker.index("wifiScanner.scan(")
@@ -62,6 +72,8 @@ def main() -> int:
         raise AssertionError("blocking hardware scan is not heartbeat-bracketed")
 
     require(entry, (
+        "kProductSurveyPreparationDeadlineUs = 8000000ULL",
+        "kProductSurveyPreparationDeadlineInjectionMs = 10000",
         "kProductSurveyWorkerDeadlineUs = 8000000ULL",
         "kProductSurveyWorkerDeadlineInjectionMs = 10000",
         "BoardBlePassiveScanner::worstCaseScanDurationUs(",
@@ -71,6 +83,7 @@ def main() -> int:
         "if (appRuntime.running()) appRuntime.stop();",
         "latchSafetyStopInTask(SafetyReason::WorkerDeadline);",
         "safety.worker-deadline-test confirm",
+        "safety.worker-preparation-deadline-test confirm",
         r'\"worker_supervision\":true',
     ), "platform deadline response")
     service_at = entry.index("serviceWorkerDeadlineSupervisor();")
@@ -85,14 +98,14 @@ def main() -> int:
         "kMaximumScanAttempts = 2U", "kCompletionGraceMs = 1000U",
         "kRetryDelayMs = 100U", "worstCaseScanDurationUs",
     ), "bounded BLE scan deadline")
-    if 'LESHY1_VERSION=\\"0.134.0-ble-worker-deadline\\"' not in platform:
+    if 'LESHY1_VERSION=\\"0.135.0-survey-preparation-deadline\\"' not in platform:
         raise AssertionError("exact candidate version is not bound")
     if "kRfCarrierChipSelectCharacterizationOnly = false" not in profile:
         raise AssertionError("diagnostic-only carrier gate remains active")
 
     print(
-        "worker deadline contract passed: real Survey heartbeat, BLE-bounded "
-        "8 s deadline, cancel/quiesce/retained Safe Mode"
+        "worker deadline contract passed: preparation + real Survey heartbeat, "
+        "BLE-bounded 8 s deadline, cancel/quiesce/retained Safe Mode"
     )
     return 0
 
