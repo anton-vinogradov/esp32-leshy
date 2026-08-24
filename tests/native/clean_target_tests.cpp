@@ -46,6 +46,7 @@
 #include "kernel/runtime/AppRuntime.h"
 #include "kernel/runtime/ResourceBroker.h"
 #include "kernel/safety/SafetySupervisor.h"
+#include "kernel/safety/WorkerDeadlineSupervisor.h"
 #include "platform/arduino/RamSessionStoreIo.h"
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
@@ -1625,6 +1626,44 @@ void testSafetySupervisorLatchesOnlyExactUntornEvidence() {
         app, SafetyReason::SupervisorUnavailable, 1, 1);
     supervisor.restore(unavailable, app, false);
     CHECK(supervisor.latched());
+}
+
+void testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence() {
+    using namespace leshy1::kernel::safety;
+    WorkerDeadlineSupervisor supervisor;
+    CHECK(std::strcmp(supervisedWorkerName(SupervisedWorker::ProductSurvey),
+                      "product_survey") == 0);
+    CHECK(!supervisor.arm(SupervisedWorker::None, 100, 6000));
+    CHECK(!supervisor.arm(SupervisedWorker::ProductSurvey, 0, 6000));
+    CHECK(supervisor.arm(SupervisedWorker::ProductSurvey, 100, 6000));
+    CHECK(!supervisor.arm(SupervisedWorker::ProductSurvey, 101, 6000));
+    CHECK(!supervisor.heartbeat(SupervisedWorker::None, 200));
+    CHECK(supervisor.heartbeat(SupervisedWorker::ProductSurvey, 200));
+    CHECK(!supervisor.evaluate(6199));
+    CHECK(supervisor.evaluate(6200));
+    CHECK(!supervisor.evaluate(6201));
+    CHECK(!supervisor.heartbeat(SupervisedWorker::ProductSurvey, 6201));
+    WorkerDeadlineSnapshot snapshot = supervisor.snapshot();
+    CHECK(snapshot.armed);
+    CHECK(snapshot.expired);
+    CHECK(snapshot.activeWorker == SupervisedWorker::ProductSurvey);
+    CHECK(snapshot.lastExpiredWorker == SupervisedWorker::ProductSurvey);
+    CHECK(snapshot.lastObservedAgeUs == 6000);
+    CHECK(snapshot.armCount == 1);
+    CHECK(snapshot.heartbeatCount == 2);
+    CHECK(snapshot.tripCount == 1);
+    CHECK(supervisor.disarm(SupervisedWorker::ProductSurvey));
+    snapshot = supervisor.snapshot();
+    CHECK(!snapshot.armed);
+    CHECK(snapshot.expired);
+    CHECK(snapshot.activeWorker == SupervisedWorker::None);
+    CHECK(snapshot.lastExpiredWorker == SupervisedWorker::ProductSurvey);
+    CHECK(snapshot.deadlineUs == 6000);
+    CHECK(snapshot.lastObservedAgeUs == 6000);
+    CHECK(snapshot.tripCount == 1);
+    CHECK(supervisor.arm(SupervisedWorker::ProductSurvey, 7000, 6000));
+    CHECK(supervisor.evaluate(6999));
+    CHECK(supervisor.snapshot().tripCount == 2);
 }
 
 void testProductStartIdentityRetryStopsBeforeFilesystem() {
@@ -5897,6 +5936,7 @@ int main() {
     testSpectrumViewportKeepsBoundedRingHistory();
     testProductBootRetryIsNarrowAndBounded();
     testSafetySupervisorLatchesOnlyExactUntornEvidence();
+    testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence();
     testProductStartIdentityRetryStopsBeforeFilesystem();
     testStorageTimingSummaryUsesNearestRank();
     testIngressRateSummaryUsesNearestRankAndRejectsZero();

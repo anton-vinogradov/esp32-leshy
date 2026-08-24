@@ -16,7 +16,7 @@
 - **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact `0.130.0`/`0.131.0` меняют shared MISO/GPIO13 board-02 из LOW с подключённым RF carrier в HIGH при снятом carrier. Exact `0.132.0-carrier-csn-characterization` снова подключает carrier и наблюдает все четыре receiver select в HIGH на 32/32 samples (nRF GPIO4/48/21 и CC1101 GPIO5), а MISO возвращается в LOW: 0/32 HIGH samples под обоими pull. Run выполняет zero SPI bytes, receiver reads, CE-high events, strobes и TX commands и возвращает Home/none/lease 0. Это отвергает случайно выбранный receiver и локализует fault до carrier module или общей MISO-сети carrier; один модуль не определён, antenna/U.FL fault не доказан.
 - **Следующий evidence gate:** отремонтировать, вернуть или заменить RF carrier/device board-02, затем потребовать plausible identities nRF и CC1101 тем же exact read-only probe до любой bounded known-signal emission. Изоляция отдельных modules теперь требует физического разрыва MISO или power, потому что carrier не имеет software-controlled power modules. Cross-swap и RF emission остаются закрыты.
 - **Принятая physical baseline:** exact `0.129.0-pre-app-watchdog`; все прежние принятые checkpoints сохранены ниже.
-- **Текущий source candidate:** accepted product baseline остаётся exact `0.129.0-pre-app-watchdog`; focused diagnostic `0.132.0-carrier-csn-characterization` сохранён на source `3f491ae` с firmware `2af4d1c8…3039` и ELF `aecb08fc…8edf`. Его exact physical run board-02 проходит diagnostic contract и сохранён ниже, но это evidence локализации fault, а не promotion product/release.
+- **Текущий source candidate:** `0.133.0-worker-deadline-supervision` возвращает product policy receiver probe после сохранённой диагностики 0.132 и добавляет 6-секундную heartbeat/deadline границу вокруг реального Product Survey worker. Host contracts и exact build проходят; следующий шаг — автоматический board-01 HIL trip/restart/clear, поэтому это ещё не принятый physical checkpoint и не promotion релиза.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
@@ -92,7 +92,7 @@
 | S5.2 | Первый physical loop двух плат: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | `done` |
 | S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup | `active` |
 | S5.4 | Известный Sub-GHz signal: поиск частоты плюс OOK capture/save/cold export; объявленный и проверенный FSK/GDO0 path | `planned` |
-| S5.5 | Полнота runtime: worker supervision, low-voltage safe-write, sleep/resume и применимые явные assembly profiles GPS/PN532 | `planned` |
+| S5.5 | Полнота runtime: Product Survey worker heartbeat/deadline проходит exact 0.133 HIL; затем остальные workers, low-voltage safe-write, sleep/resume и применимые явные assembly profiles GPS/PN532 | `planned` |
 | S5.6 | Интегральный hardware gate S5: on-device Full check плюс автоматический two-board regression без утечки leases/outputs | `planned` |
 <!-- LESHY-ACTIVE-PHASES:END -->
 

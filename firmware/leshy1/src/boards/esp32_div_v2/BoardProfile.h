@@ -47,7 +47,7 @@ struct BoardProfile final {
     // samples each carrier CSN as an input under its weak pull-up, then exits
     // before generating any SPI clock. Remove this gate after board-02 has a
     // retained carrier diagnosis and the product receiver probe is restored.
-    static constexpr bool kRfCarrierChipSelectCharacterizationOnly = true;
+    static constexpr bool kRfCarrierChipSelectCharacterizationOnly = false;
 
     // HW-U05: external assemblies are never autodetected. IR RX/TX belongs to
     // the declared stock RF shield and is time-multiplexed with nRF slot 3;

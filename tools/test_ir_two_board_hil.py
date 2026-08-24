@@ -19,7 +19,7 @@ import run_ir_two_board_hil as flow  # noqa: E402
 class IrTwoBoardHilTests(unittest.TestCase):
     def test_versions_are_extracted_from_both_projects(self) -> None:
         self.assertEqual(
-            "0.132.0-carrier-csn-characterization",
+            "0.133.0-worker-deadline-supervision",
             flow.read_version(
                 ROOT / "firmware/leshy1/platformio.ini", "LESHY1_VERSION"))
         self.assertEqual(

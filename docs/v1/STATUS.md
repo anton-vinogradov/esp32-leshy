@@ -16,7 +16,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps. Exact `0.130.0`/`0.131.0` changes board-02 shared MISO/GPIO13 from LOW with its RF carrier attached to HIGH with the carrier absent. Exact `0.132.0-carrier-csn-characterization` then reattaches the carrier and observes all four receiver selects HIGH for 32/32 samples (nRF GPIO4/48/21 and CC1101 GPIO5) while MISO returns LOW for 0/32 HIGH samples under both pulls. It performs zero SPI bytes, receiver reads, CE-high events, strobes or TX commands and returns Home/none/lease 0. This rejects an accidentally selected receiver and localizes the fault to a carrier module or the carrier's shared-MISO net; it does not identify one module or prove an antenna/U.FL fault.
 - **Next evidence gate:** repair, return or replace the board-02 RF carrier/device, then require plausible nRF and CC1101 identities from the same exact read-only probe before any bounded known-signal emission. Per-module isolation now requires physical separation of MISO or power because the carrier has no software-controlled module power. Cross-swap and RF emission remain closed.
 - **Accepted physical baseline:** exact `0.129.0-pre-app-watchdog`; earlier accepted checkpoints remain retained below.
-- **Working source candidate:** the accepted product baseline remains exact `0.129.0-pre-app-watchdog`; focused diagnostic `0.132.0-carrier-csn-characterization` is retained at source `3f491ae` with firmware `2af4d1c8…3039` and ELF `aecb08fc…8edf`. Its exact board-02 physical run passes the diagnostic contract and is retained below, but this is fault-localization evidence rather than product or release promotion.
+- **Working source candidate:** `0.133.0-worker-deadline-supervision` restores the product receiver-probe policy after the retained 0.132 diagnostic and adds a 6 s heartbeat/deadline boundary around the real Product Survey worker. Host contracts and the exact build pass; the automated board-01 trip/restart/clear HIL is the next action, so this is not yet an accepted physical checkpoint or release promotion.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** establish the S5 stock-hardware completeness baseline and
   advance each present module through probe → observe/capture → Library → inspect/export.
@@ -93,7 +93,7 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S5.2 | First physical two-board loop: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | `done` |
 | S5.3 | Known nRF24 signal: source-bound 2,442 MHz minimum-power fixture → three-receiver finder result → safe cleanup | `active` |
 | S5.4 | Known Sub-GHz signal: frequency find plus OOK capture/save/cold export; declare and verify the FSK/GDO0 path | `planned` |
-| S5.5 | Runtime completeness: worker supervision, low-voltage safe-write, sleep/resume and applicable explicit GPS/PN532 assembly profiles | `planned` |
+| S5.5 | Runtime completeness: Product Survey worker heartbeat/deadline slice under exact 0.133 HIL; then remaining workers, low-voltage safe-write, sleep/resume and applicable explicit GPS/PN532 assembly profiles | `planned` |
 | S5.6 | Integrated S5 hardware gate: on-device Full check plus automated two-board regression with zero leaked leases/outputs | `planned` |
 <!-- LESHY-ACTIVE-PHASES:END -->
 

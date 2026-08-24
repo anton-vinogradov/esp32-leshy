@@ -113,9 +113,27 @@ Task-WDT reset произошёл через 5 810,775 ms с reason 6; один 
 [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json)
 также связаны все negative hardware claims ниже.
 
+## Candidate дедлайна Product Survey worker
+
+Версия `0.133.0-worker-deadline-supervision` добавляет первую supervised worker
+границу без изменения layout retained record. Реальная Core-0 task Product Survey
+включает дедлайн 6 s только после admission и подготовки scanners. Heartbeat стоит
+вокруг UI start gate, каждого blocking Wi-Fi/BLE scan и bounded inter-scan wait;
+disarm происходит только после cleanup scanner/filesystem.
+
+Main loop оценивает это независимое состояние до обычных worker events. Expiry
+запрашивает cancel обоих scanners, снимает foreground application lease, удерживает
+software-controlled outputs inactive и защёлкивает `worker_deadline` в том же
+exact-app RTC record, что использует main-loop watchdog. Test-only команда
+`safety.worker-deadline-test confirm` лишь взводит одноразовую задержку 8 s;
+реальный worker запускается обычным public Survey Start. Exact physical trip,
+post-cancel cleanup, retained restart и explicit two-action clear остаются pending
+до сохранения source-bound HIL artifact board-01.
+
 ## Открытая safety-работа
 
-- добавить heartbeat/deadline supervision worker tasks и будущих transmit leases;
+- расширить heartbeat/deadline supervision с Product Survey на каждый long-lived
+  worker и будущие transmit leases после прохождения первого physical checkpoint;
 - направлять driver invariant, brownout/thermal и storage safe-shutdown faults в ту
   же reasoned latch только после появления надёжных sensors;
 - для любого будущего active-radio profile добавить внешний rail/PA kill либо load

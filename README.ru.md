@@ -26,7 +26,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | S5.2 | Первый physical loop двух плат: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ готово |
 | S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup | 🟡 в работе |
 | S5.4 | Известный Sub-GHz signal: поиск частоты плюс OOK capture/save/cold export; объявленный и проверенный FSK/GDO0 path | ⬜ дальше |
-| S5.5 | Полнота runtime: worker supervision, low-voltage safe-write, sleep/resume и применимые явные assembly profiles GPS/PN532 | ⬜ дальше |
+| S5.5 | Полнота runtime: Product Survey worker heartbeat/deadline проходит exact 0.133 HIL; затем остальные workers, low-voltage safe-write, sleep/resume и применимые явные assembly profiles GPS/PN532 | ⬜ дальше |
 | S5.6 | Интегральный hardware gate S5: on-device Full check плюс автоматический two-board regression без утечки leases/outputs | ⬜ дальше |
 
 ### Роадмап

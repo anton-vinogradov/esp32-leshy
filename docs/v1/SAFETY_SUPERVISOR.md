@@ -113,9 +113,27 @@ and exact CID remained unchanged, and explicit clear ended at Home with lease ze
 The [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json)
 also binds all negative hardware claims below.
 
+## Product Survey worker deadline candidate
+
+Version `0.133.0-worker-deadline-supervision` adds the first supervised worker
+boundary without changing the retained-record layout. The real Core-0 Product Survey
+task arms a 6 s deadline only after admission and scanner preparation complete. It
+heartbeats around the UI start gate, every blocking Wi-Fi/BLE scan and the bounded
+inter-scan wait, then disarms only after scanner/filesystem cleanup.
+
+The main loop evaluates that independent state before normal worker events. Expiry
+requests both scanners to cancel, releases the foreground application lease, holds
+software-controlled outputs inactive and latches `worker_deadline` in the same
+exact-app RTC record used by the main-loop watchdog. The test-only command
+`safety.worker-deadline-test confirm` merely arms a one-shot 8 s delay; a normal
+public Survey Start must activate the real worker. The exact physical trip,
+post-cancel cleanup, retained restart and explicit two-action clear remain pending
+until the source-bound board-01 HIL artifact is retained.
+
 ## Open safety work
 
-- add heartbeat/deadline supervision for worker tasks and future transmit leases;
+- extend heartbeat/deadline supervision beyond Product Survey to every long-lived
+  worker and any future transmit lease after the first physical checkpoint passes;
 - route driver invariant, brownout/thermal, and storage safe-shutdown faults into the
   same reasoned latch only after trustworthy sensors exist;
 - add an external rail/PA kill or load switch and a CC1101 reset/power gate for any

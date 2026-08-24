@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from run_1x_shield_receiver_probe_crosscheck import (
@@ -13,6 +14,12 @@ from run_1x_shield_receiver_probe_crosscheck import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def retained_blob(commit: str, path: str) -> str:
+    return subprocess.check_output(
+        ["git", "-C", str(ROOT), "show", f"{commit}:{path}"], text=True
+    )
 
 
 def isolated_report(down: int, up: int) -> dict:
@@ -59,10 +66,13 @@ def isolated_report(down: int, up: int) -> dict:
 
 
 def main() -> int:
+    evidence = json.loads((
+        ROOT / "tests/hil/evidence/board-02-isolated-main-miso-0.131.json"
+    ).read_text(encoding="utf-8"))
     source = (ROOT / "firmware/leshy1/src/platform/arduino/"
               "BoardShieldReceiverProbe.cpp").read_text(encoding="utf-8")
-    platform = (ROOT / "firmware/leshy1/platformio.ini").read_text(
-        encoding="utf-8")
+    platform = retained_blob(
+        evidence["source_commit"], "firmware/leshy1/platformio.ini")
 
     characterize = source.split(
         "void BoardShieldReceiverProbe::characterizeBusLine()", 1)[1].split(
@@ -79,8 +89,10 @@ def main() -> int:
     assembled_guard_at = run_body.index(
         "if (!report_->busLineCharacterizationComplete || !gpio21Safe())")
     assert characterize_at < assembled_guard_at
-    assert 'LESHY1_VERSION=\\"0.132.0-carrier-csn-characterization\\"' in (
-        platform)
+    assert (
+        f'LESHY1_VERSION=\\"{evidence["candidate"]["version"]}\\"'
+        in platform
+    )
 
     healthy = isolated_report(0, 32)
     assert not probe_contract_failures(
@@ -102,9 +114,6 @@ def main() -> int:
     assert probe_contract_failures(
         unsafe, require_isolated_main_characterization=True)
 
-    evidence = json.loads((
-        ROOT / "tests/hil/evidence/board-02-isolated-main-miso-0.131.json"
-    ).read_text(encoding="utf-8"))
     assert evidence["schema"] == (
         "leshy.hardware.isolated_main_miso_evidence.v1")
     assert evidence["status"] == (

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from run_1x_shield_receiver_probe_crosscheck import (
@@ -13,6 +14,12 @@ from run_1x_shield_receiver_probe_crosscheck import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def retained_blob(commit: str, path: str) -> str:
+    return subprocess.check_output(
+        ["git", "-C", str(ROOT), "show", f"{commit}:{path}"], text=True
+    )
 
 
 def carrier_report(
@@ -76,18 +83,24 @@ def carrier_report(
 
 
 def main() -> int:
+    evidence = json.loads((
+        ROOT / "tests/hil/evidence/board-02-rf-carrier-csn-0.132.json"
+    ).read_text(encoding="utf-8"))
     source = (ROOT / "firmware/leshy1/src/platform/arduino/"
               "BoardShieldReceiverProbe.cpp").read_text(encoding="utf-8")
     header = (ROOT / "firmware/leshy1/src/drivers/radio/"
               "ShieldReceiverIdentity.h").read_text(encoding="utf-8")
-    profile = (ROOT / "firmware/leshy1/src/boards/esp32_div_v2/"
-               "BoardProfile.h").read_text(encoding="utf-8")
-    platform = (ROOT / "firmware/leshy1/platformio.ini").read_text(
-        encoding="utf-8")
+    profile = retained_blob(
+        evidence["source_commit"],
+        "firmware/leshy1/src/boards/esp32_div_v2/BoardProfile.h")
+    platform = retained_blob(
+        evidence["source_commit"], "firmware/leshy1/platformio.ini")
 
     assert "kRfCarrierChipSelectCharacterizationOnly = true" in profile
-    assert 'LESHY1_VERSION=\\"0.132.0-carrier-csn-characterization\\"' in (
-        platform)
+    assert (
+        f'LESHY1_VERSION=\\"{evidence["candidate"]["version"]}\\"'
+        in platform
+    )
     assert "chipSelectCharacterizationComplete" in header
     assert "std::array<std::uint8_t, 3> nrfCsnPullUpHighSamples" in header
 
@@ -141,9 +154,6 @@ def main() -> int:
     assert probe_contract_failures(
         unsafe, require_carrier_csn_characterization=True)
 
-    evidence = json.loads((
-        ROOT / "tests/hil/evidence/board-02-rf-carrier-csn-0.132.json"
-    ).read_text(encoding="utf-8"))
     assert evidence["schema"] == (
         "leshy.hardware.rf_carrier_csn_evidence.v1")
     assert evidence["source_commit"] == (

@@ -193,6 +193,7 @@ LESHY_UI_TEXT(SafetyStopTitle, Body, 206, "SAFETY STOP", u8"АВАРИЙНЫЙ �
 LESHY_UI_TEXT(SafetyWatchdogReason, Body, 212, "MAIN LOOP WATCHDOG", u8"ЗАВИС ОСНОВНОЙ ЦИКЛ")
 LESHY_UI_TEXT(SafetySupervisorReason, Body, 212, "WATCHDOG UNAVAILABLE", u8"НЕТ КОНТРОЛЯ ЗАВИСАНИЯ")
 LESHY_UI_TEXT(SafetyOutputReason, Body, 212, "OUTPUT CHECK FAILED", u8"СБОЙ БЕЗОПАСНЫХ ВЫХОДОВ")
+LESHY_UI_TEXT(SafetyWorkerReason, Body, 212, "SCAN WORKER TIMEOUT", u8"ЗАВИС СКАНЕР")
 LESHY_UI_TEXT(SafetyOutputsStopped, Body, 212, "OUTPUTS STOPPED", u8"ВЫХОДЫ ОСТАНОВЛЕНЫ")
 LESHY_UI_TEXT(SafetyPowerWarning, Meta, 212, "POWER IS STILL CONNECTED", u8"ПИТАНИЕ НЕ ОТКЛЮЧЕНО")
 LESHY_UI_TEXT(SafetyClearPrompt, Body, 212, "OK: REQUEST UNLOCK", u8"OK: СНЯТЬ БЛОКИРОВКУ")

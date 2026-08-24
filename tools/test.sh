@@ -74,6 +74,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/kernel/runtime/AppRuntime.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/runtime/ResourceBroker.cpp" \
     "$repo_dir/firmware/leshy1/src/kernel/safety/SafetySupervisor.cpp" \
+    "$repo_dir/firmware/leshy1/src/kernel/safety/WorkerDeadlineSupervisor.cpp" \
     "$repo_dir/firmware/leshy1/src/platform/arduino/RamSessionStoreIo.cpp" \
     "$repo_dir/firmware/leshy1/src/services/diagnostics/BootReport.cpp" \
     "$repo_dir/firmware/leshy1/src/services/diagnostics/HilSession.cpp" \
@@ -156,6 +157,7 @@ python3 "$repo_dir/tools/check_product_recovery_acceptance.py"
 python3 "$repo_dir/tools/check_product_start_resilience_acceptance.py"
 python3 "$repo_dir/tools/check_product_boot_resilience_acceptance.py"
 python3 "$repo_dir/tools/check_product_hardware_watchdog_acceptance.py"
+python3 "$repo_dir/tools/check_worker_deadline_supervision.py"
 python3 "$repo_dir/tools/check_visual_system_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_ui_components_acceptance.py"

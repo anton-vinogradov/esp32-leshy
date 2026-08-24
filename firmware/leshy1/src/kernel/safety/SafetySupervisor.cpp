@@ -5,7 +5,7 @@ namespace {
 
 bool recognizedReason(std::uint32_t reason) {
     return reason >= static_cast<std::uint32_t>(SafetyReason::RuntimeWatchdog) &&
-           reason <= static_cast<std::uint32_t>(SafetyReason::OutputInvariant);
+           reason <= static_cast<std::uint32_t>(SafetyReason::WorkerDeadline);
 }
 
 }  // namespace
@@ -63,6 +63,8 @@ const char* safetyReasonName(SafetyReason reason) {
             return "supervisor_unavailable";
         case SafetyReason::OutputInvariant:
             return "output_invariant";
+        case SafetyReason::WorkerDeadline:
+            return "worker_deadline";
         case SafetyReason::None:
         default:
             return "none";

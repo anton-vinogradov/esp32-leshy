@@ -26,7 +26,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | S5.2 | First physical two-board loop: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ complete |
 | S5.3 | Known nRF24 signal: source-bound 2,442 MHz minimum-power fixture → three-receiver finder result → safe cleanup | 🟡 in progress |
 | S5.4 | Known Sub-GHz signal: frequency find plus OOK capture/save/cold export; declare and verify the FSK/GDO0 path | ⬜ later |
-| S5.5 | Runtime completeness: worker supervision, low-voltage safe-write, sleep/resume and applicable explicit GPS/PN532 assembly profiles | ⬜ later |
+| S5.5 | Runtime completeness: Product Survey worker heartbeat/deadline slice under exact 0.133 HIL; then remaining workers, low-voltage safe-write, sleep/resume and applicable explicit GPS/PN532 assembly profiles | ⬜ later |
 | S5.6 | Integrated S5 hardware gate: on-device Full check plus automated two-board regression with zero leaked leases/outputs | ⬜ later |
 
 ### Roadmap

@@ -12,6 +12,7 @@ enum class SafetyReason : std::uint32_t {
     RuntimeWatchdog = 1,
     SupervisorUnavailable = 2,
     OutputInvariant = 3,
+    WorkerDeadline = 4,
 };
 
 enum class SafetyState : std::uint8_t {
