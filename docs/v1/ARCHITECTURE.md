@@ -122,6 +122,12 @@ The binding contract is
 - Steady state avoids repeated heap allocation; large buffers belong to reusable services.
 - No mandatory path relies on PSRAM until `HW-U01` is resolved. Boot diagnostics
   records actual flash, partition table, package/revision, and PSRAM presence.
+- Large workspace aliasing is allowed only when the resource broker makes the owning
+  lifecycles mutually exclusive. Exact 0.136 shares Survey/diagnostic Session state
+  and product/diagnostic FatFs workspaces under their existing exclusive lifecycle
+  and Storage+RadioSpi ownership; the public Capture Store path must publish free heap,
+  largest block and exact mount error before storage work. `E-HIL-157` proves this
+  restores no-PSRAM mount headroom without allowing a fault-injected worker to write.
 
 Source ingress never waits on filesystem durability barriers. Each receiver publishes
 normalized Observations into a fixed-capacity ring owned by the Survey service; the

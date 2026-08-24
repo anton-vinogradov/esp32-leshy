@@ -897,3 +897,13 @@ failure path остаётся fail-closed. `tools/hil_evidence.py` упаков�
 нужно добавлять manifest сценария вместо ещё одной тройки runner/packer/verifier.
 Cross-device stimulus следует bounded [ролям HIL на двух платах](TWO_BOARD_HIL.ru.md);
 board-02 до допуска как fixture обязательно проходит read-only profiling.
+
+Exact 0.136 распространяет ту же дисциплину machine-checked release evidence на
+safety boundary storage worker. Принятый run board-01 сначала доказывает normal
+публичный save Wi-Fi Capture Store, затем внедряет pre-storage stall 10 s и требует
+срабатывания supervisor 8 s до любого physical write. Retained bundle содержит exact
+hashes source/firmware/ELF/map/runner, три TFT state, состояния restart/recovery-block/
+two-action-clear, final CID/catalog/lease, независимый artifact index и оба
+fail-closed predecessor run. Raw payload и PCAP намеренно отсутствуют.
+`tools/check_capture_store_deadline_acceptance.py` независимо перепроверяет эти
+утверждения; focused checkpoint не заменяет mixed-workload release endurance.

@@ -153,6 +153,7 @@ defines the 1.x partition and memory policy.
 | RB-M131 | measured build + normal/fault-focused physical safety | BLE-calibrated Product Survey deadline with normal cycle plus trip/restart/clear | 3,066,124 B linked flash; 233,360 B static RAM; app image 3,066,528 B; boot-before exact HIL heap total/free/min 148,092/77,860/63,628 B | board-01 `0.134.0-ble-worker-deadline`, `E-BUILD-134`/`E-AUTO-095`/`E-HIL-155`/`E-SAFETY-003`; −4 B linked flash and zero static-RAM/image delta versus 0.133. One normal BLE cycle accepts 34/34 with zero drops/retries and no false trip under a 6.1 s bound below the 8 s deadline; the second lifecycle trips at 8,001 ms and cleanly releases lease. This focused run does not exercise a normal mixed Survey workload or supersede RB-04/release endurance |
 
 | RB-M132 | measured build + normal/fault-focused physical safety | Product Survey preparation/admission deadline before the calibrated Wi-Fi+BLE worker boundary | 3,067,656 B linked flash; 233,360 B static RAM; app image 3,068,064 B; boot-before exact HIL heap total/free/min 148,092/77,860/63,628 B | board-01 `0.135.0-survey-preparation-deadline`, `E-BUILD-135`/`E-AUTO-096`/`E-HIL-156`/`E-SAFETY-004`; +1,532 B linked flash, +1,536 B image and zero static-RAM delta versus 0.134. A normal BLE lifecycle arms preparation then worker, accepts 30/30 with zero scan drops/retries and no false trip; a pre-hardware 10 s stall trips preparation at 8,001 ms and cleanly releases lease. This focused run does not exercise a normal mixed Survey workload or supersede RB-04/release endurance |
+| RB-M133 | measured build + normal/fault-focused physical safety | Wi-Fi Capture Store worker deadline plus no-PSRAM workspace consolidation | 3,059,360 B linked flash; 207,928 B static RAM; app image 3,059,760 B; boot-before exact HIL heap total/free/min 173,524/103,248/89,060 B | board-01 `0.136.0-capture-store-deadline`, `E-BUILD-136`/`E-AUTO-097`/`E-HIL-157`/`E-SAFETY-005`; −8,296 B linked flash, −25,432 B static RAM and −8,304 B image versus 0.135. Lifecycle-exclusive Session/FatFs workspaces are shared. Normal Capture Store mounts with 93,544 B free heap, 32,756 B largest block and error zero, saves 2 frames/433 B and advances generation 98→99; a pre-storage 10 s stall trips at 8,001 ms with zero writes and cleanly releases lease. This focused run does not exercise a normal mixed workload or supersede RB-04/release endurance |
 
 The probe's `heap_min_free` covers only its short diagnostic run. It does not predict
 Wi-Fi/BLE buffers, display caches, Session queues, storage transactions, or the
@@ -248,15 +249,17 @@ These limits are review triggers, not evidence that the product meets its NFRs.
 - Storage, power, and shared-bus limits remain explicit unknowns; features depending
   on them cannot be promoted from `unknown` to `available` by documentation alone.
 
-Latest build delta `RB-M132`: exact 0.135 uses 3,067,656 B linked flash and 233,360 B
-static RAM; its app image is 3,068,064 B. This is +1,532 B linked flash and +1,536 B
-image with zero static-RAM delta versus 0.134. The change adds a separate 8 s
-preparation/admission supervisor before the existing calibrated worker. Focused HIL
-boot-before heap remains 148,092/77,860/63,628 B; the normal BLE lifecycle accepts
-30/30 with zero scan drops/retries and no false trip, while a pre-hardware injected
-path releases lease 0 after tripping at 8,001 ms. It does not execute a normal mixed
-Survey workload. Exact 0.129 remains the physical functional baseline; RB-04 plus
-mixed-workload release endurance remain the resource/release baseline.
+Latest build delta `RB-M133`: exact 0.136 uses 3,059,360 B linked flash and 207,928 B
+static RAM; its app image is 3,059,760 B. This is −8,296 B linked flash, −25,432 B
+static RAM and −8,304 B image versus 0.135. The reduction aliases only workspaces
+whose owning lifecycles are mutually exclusive: Survey/diagnostic Session and
+product/diagnostic FatFs. Boot-before heap rises to 173,524/103,248/89,060 B. The
+normal Capture Store reaches mount with 93,544 B free and a 32,756 B largest block,
+reports mount error zero, persists 2 frames/433 B and advances generation 98→99.
+The injected pre-storage path trips at 8,001 ms before any physical write. It does
+not execute a normal mixed workload. Exact 0.129 remains the physical functional
+baseline; RB-04 plus mixed-workload release endurance remain the resource/release
+baseline.
 
 The source-bound `0.2.4` diagnostic fixture uses 332,135 B program flash and 22,844 B
 static RAM. Its +9,920/+120 B delta over the fixed-NEC fixture adds read-only identity

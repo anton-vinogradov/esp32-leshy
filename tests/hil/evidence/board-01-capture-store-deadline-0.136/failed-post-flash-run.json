@@ -1,0 +1,47 @@
+{
+  "candidate": {
+    "app_elf_sha256": "ebd08020a670a054b6024c6b86e1bd7870e8e0febb95b27c7955a8dbb09cfab4",
+    "firmware_sha256": "aaa24fd6cf3354834d18f36be5300c724c4c40fb9d2b6a9bb743e71a6e0391a0",
+    "flashed": true,
+    "runner_sha256": "b95f437d35ac51b7e4038a505525f346d0c66b0524944a0500752d855810b5b1",
+    "source_commit": "f6711822e2af834883b3981ec2636ac984034507",
+    "version": "0.136.0-capture-store-deadline"
+  },
+  "clear_raw": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "expected_cid": "FE343253440000002000000055019CB7",
+  "failures": [
+    "TimeoutError: timed out synchronizing the firmware console"
+  ],
+  "gate_eligible": false,
+  "passed": false,
+  "records": {
+    "boot_before": {
+      "ready": {},
+      "recovery": {},
+      "timing": {
+        "bytes": 265,
+        "first_byte_ms": 110.7390420511365,
+        "ready_marker_ms": null,
+        "sha256": "194911848d3689b3c91008ef9e91c568925619137c628de7480a97dbbbcfd626"
+      }
+    }
+  },
+  "restart_raw": {
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "schema": "leshy.capture_store_deadline_hil.run.v1",
+  "scope": {
+    "fault_injection_before_storage_hardware": true,
+    "fault_injection_physical_write_calls": 0,
+    "manual_button_presses": 0,
+    "normal_storage_write_authorized": true,
+    "pcap_retained_in_evidence": false,
+    "raw_80211_payload_retained_in_evidence": false,
+    "screenshots_automatic": true
+  },
+  "trace": []
+}

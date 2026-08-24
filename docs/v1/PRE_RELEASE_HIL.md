@@ -905,3 +905,13 @@ the indexed retained result. The first migrated 19-step IR no-signal scenario re
 a scenario manifest instead of another runner/packer/verifier trio. Cross-device
 stimulus follows the bounded [two-board HIL roles](TWO_BOARD_HIL.md); board-02 must be
 profiled read-only before it is admitted as a fixture.
+
+Exact 0.136 extends the same machine-checked release-evidence discipline to a storage
+worker safety boundary. Its accepted board-01 run first proves a normal public Wi-Fi
+Capture Store save, then injects a 10 s pre-storage stall and requires the 8 s
+supervisor to trip before any physical write. The retained bundle includes exact
+source/firmware/ELF/map/runner hashes, three TFT states, restart/recovery-block/
+two-action-clear state, final CID/catalog/lease, an independent artifact index and
+both fail-closed predecessor runs. Raw payload and PCAP data are deliberately absent.
+`tools/check_capture_store_deadline_acceptance.py` independently re-derives those
+claims; this focused checkpoint does not replace mixed-workload release endurance.

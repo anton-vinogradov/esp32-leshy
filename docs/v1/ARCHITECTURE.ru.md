@@ -180,6 +180,14 @@ TX-lease получает deadline. По таймауту, panic/back или wat
 `psramFound()`; отличие от assembly profile является fault, а не поводом молча
 поменять memory policy.
 
+Объединять большие workspaces разрешено только тогда, когда resource broker делает
+их owning lifecycle взаимоисключающими. Exact 0.136 совместно использует состояние
+Survey/diagnostic Session и workspaces product/diagnostic FatFs под существующими
+exclusive lifecycle и ownership Storage+RadioSpi; публичный Capture Store обязан
+публиковать free heap, largest block и точную ошибку mount до работы с накопителем.
+`E-HIL-157` доказывает, что это возвращает no-PSRAM headroom mount и не позволяет
+fault-injected worker выполнить write.
+
 Source ingress никогда не ждёт filesystem durability barriers. Каждый receiver
 публикует normalized Observations в fixed-capacity ring, которым владеет Survey
 service; storage worker забирает bounded batch в текущий segment и публикует новый
