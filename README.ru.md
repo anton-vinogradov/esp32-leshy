@@ -14,9 +14,9 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
-- **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
+- **Текущая фаза:** `S5.5 — завершение deadline Capture Store IR/Sub-GHz`.
 - **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact `0.130.0`/`0.131.0` меняют shared MISO/GPIO13 board-02 из LOW с подключённым RF carrier в HIGH при снятом carrier. Exact `0.132.0-carrier-csn-characterization` снова подключает carrier и наблюдает все четыре receiver select в HIGH на 32/32 samples (nRF GPIO4/48/21 и CC1101 GPIO5), а MISO возвращается в LOW: 0/32 HIGH samples под обоими pull. Run выполняет zero SPI bytes, receiver reads, CE-high events, strobes и TX commands и возвращает Home/none/lease 0. Это отвергает случайно выбранный receiver и локализует fault до carrier module или общей MISO-сети carrier; один модуль не определён, antenna/U.FL fault не доказан. Exact `0.136.0-capture-store-deadline` расширяет принятый safety slice S5.5 на публичный worker Wi-Fi Capture Store no-PSRAM board-01: normal save сохраняет 2 frames/433 payload bytes и продвигает generation 98→99 при 93 544 B free heap, largest block 32 756 B и mount error zero. Второй save внедряет stall 10 s до storage hardware; worker deadline 8 000 ms срабатывает через 8 001 ms с zero physical writes, глушит outputs/освобождает lease, Safe Mode переживает restart, блокирует recovery writes, требует двухшаговый clear и возвращает exact CID/catalog 99/0, Home и lease 0.
-- **Следующий gate:** отремонтировать, вернуть или заменить RF carrier/device board-02, затем потребовать plausible identities nRF и CC1101 тем же exact read-only probe до любой bounded known-signal emission. Изоляция отдельных modules теперь требует физического разрыва MISO или power, потому что carrier не имеет software-controlled power modules. Cross-swap и RF emission остаются закрыты.
+- **Следующий gate:** подключить board-02 как уже квалифицированный bounded IR fixture и запустить одно-командный exact flow `0.137.0-pulse-store-deadline`: два fixed NEC emission, normal IR save, injected pre-storage stall 10 s, trip 8 s, retained restart, recovery block, двухшаговый clear и final zero lease. Worker Sub-GHz пока покрыт только source/native; его positive physical gate и приостановленный nRF gate S5.3 всё ещё требуют исправного или заменённого RF carrier/device с plausible read-only identities.
 
 ### Фазы текущего этапа
 
@@ -24,9 +24,9 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 |---|---|---|
 | S5.1 | Пассивные product slices штатных радио: all-antenna overview/finder nRF24, robust finder CC1101, основы bounded RAW/IR capture | ✅ готово |
 | S5.2 | Первый physical loop двух плат: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ готово |
-| S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup | 🟡 в работе |
+| S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup; ожидает исправный/заменённый RF carrier board-02 | ⬜ дальше |
 | S5.4 | Известный Sub-GHz signal: поиск частоты плюс OOK capture/save/cold export; объявленный и проверенный FSK/GDO0 path | ⬜ дальше |
-| S5.5 | Полнота runtime: exact 0.136 принимает preparation/admission Product Survey, калиброванные workers Wi-Fi+BLE и heartbeat/deadline slice worker Wi-Fi Capture Store; workers store Sub-GHz/IR, low-voltage safe-write, sleep/resume и применимые явные assembly profiles GPS/PN532 остаются | ⬜ дальше |
+| S5.5 | Полнота runtime: exact 0.136 принимает preparation/admission Product Survey, калиброванные workers Wi-Fi+BLE и Wi-Fi Capture Store; source/native/automation IR/Sub-GHz Store 0.137 готовы, следующим идёт physical two-board IR gate; low-voltage safe-write, sleep/resume и применимые явные assembly profiles GPS/PN532 остаются | 🟡 в работе |
 | S5.6 | Интегральный hardware gate S5: on-device Full check плюс автоматический two-board regression без утечки leases/outputs | ⬜ дальше |
 
 ### Роадмап

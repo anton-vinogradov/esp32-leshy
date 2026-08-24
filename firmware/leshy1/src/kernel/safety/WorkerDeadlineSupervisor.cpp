@@ -10,6 +10,10 @@ const char* supervisedWorkerName(SupervisedWorker worker) {
             return "product_survey";
         case SupervisedWorker::WifiCaptureStore:
             return "wifi_capture_store";
+        case SupervisedWorker::SubGhzCaptureStore:
+            return "subghz_capture_store";
+        case SupervisedWorker::InfraredCaptureStore:
+            return "infrared_capture_store";
         case SupervisedWorker::None:
         default:
             return "none";

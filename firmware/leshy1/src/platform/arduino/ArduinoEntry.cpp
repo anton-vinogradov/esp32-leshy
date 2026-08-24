@@ -814,11 +814,17 @@ TaskHandle_t captureStoreTaskHandle = nullptr;
 CapturePersistState subGhzCapturePersistState = CapturePersistState::Result;
 const char* subGhzCapturePersistStatus = "volatile";
 std::uint32_t subGhzCapturePersistGeneration = 0;
+std::uint32_t subGhzCapturePersistHeapFreeBeforeMount = 0;
+std::uint32_t subGhzCapturePersistHeapLargestBeforeMount = 0;
+int subGhzCapturePersistFilesystemMountError = 0;
 QueueHandle_t subGhzCaptureStoreEvents = nullptr;
 TaskHandle_t subGhzCaptureStoreTaskHandle = nullptr;
 CapturePersistState infraredCapturePersistState = CapturePersistState::Result;
 const char* infraredCapturePersistStatus = "volatile";
 std::uint32_t infraredCapturePersistGeneration = 0;
+std::uint32_t infraredCapturePersistHeapFreeBeforeMount = 0;
+std::uint32_t infraredCapturePersistHeapLargestBeforeMount = 0;
+int infraredCapturePersistFilesystemMountError = 0;
 QueueHandle_t infraredCaptureStoreEvents = nullptr;
 TaskHandle_t infraredCaptureStoreTaskHandle = nullptr;
 const char* capturePersistStateName(CapturePersistState state) {
@@ -1144,9 +1150,11 @@ constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
 constexpr std::uint64_t kProductSurveyPreparationDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kWifiCaptureStoreDeadlineUs = 8000000ULL;
+constexpr std::uint64_t kPulseCaptureStoreDeadlineUs = 8000000ULL;
 constexpr std::uint32_t kProductSurveyPreparationDeadlineInjectionMs = 10000;
 constexpr std::uint32_t kProductSurveyWorkerDeadlineInjectionMs = 10000;
 constexpr std::uint32_t kWifiCaptureStoreDeadlineInjectionMs = 10000;
+constexpr std::uint32_t kPulseCaptureStoreDeadlineInjectionMs = 10000;
 static_assert(
     kProductSurveyWorkerDeadlineUs >
         BoardBlePassiveScanner::worstCaseScanDurationUs(
@@ -1171,6 +1179,10 @@ bool productSurveyPreparationDeadlineInjectionOnce = false;
 bool productSurveyWorkerDeadlineInjectionOnce = false;
 bool wifiCaptureStoreDeadlineInjectionOnce = false;
 bool wifiCaptureStoreDeadlineCancelRequested = false;
+bool subGhzCaptureStoreDeadlineInjectionOnce = false;
+bool subGhzCaptureStoreDeadlineCancelRequested = false;
+bool infraredCaptureStoreDeadlineInjectionOnce = false;
+bool infraredCaptureStoreDeadlineCancelRequested = false;
 
 void renderInteractiveScreen(bool clearContent = true);
 void broadcast(const char* line);
@@ -1651,6 +1663,111 @@ bool disarmWifiCaptureStoreDeadline() {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     const bool disarmed = workerDeadlineSupervisor.disarm(
         SupervisedWorker::WifiCaptureStore);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return disarmed;
+}
+
+bool pulseCaptureStoreWorker(SupervisedWorker worker) {
+    return worker == SupervisedWorker::SubGhzCaptureStore ||
+           worker == SupervisedWorker::InfraredCaptureStore;
+}
+
+void setPulseCaptureStoreDeadlineInjection(SupervisedWorker worker,
+                                           bool armed) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    if (worker == SupervisedWorker::SubGhzCaptureStore) {
+        subGhzCaptureStoreDeadlineInjectionOnce = armed;
+    } else if (worker == SupervisedWorker::InfraredCaptureStore) {
+        infraredCaptureStoreDeadlineInjectionOnce = armed;
+    }
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+bool pulseCaptureStoreDeadlineInjectionArmed(SupervisedWorker worker) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed =
+        worker == SupervisedWorker::SubGhzCaptureStore
+            ? subGhzCaptureStoreDeadlineInjectionOnce
+            : worker == SupervisedWorker::InfraredCaptureStore
+                  ? infraredCaptureStoreDeadlineInjectionOnce
+                  : false;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+bool consumePulseCaptureStoreDeadlineInjection(SupervisedWorker worker) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    bool injected = false;
+    if (worker == SupervisedWorker::SubGhzCaptureStore) {
+        injected = subGhzCaptureStoreDeadlineInjectionOnce;
+        subGhzCaptureStoreDeadlineInjectionOnce = false;
+    } else if (worker == SupervisedWorker::InfraredCaptureStore) {
+        injected = infraredCaptureStoreDeadlineInjectionOnce;
+        infraredCaptureStoreDeadlineInjectionOnce = false;
+    }
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return injected;
+}
+
+void resetPulseCaptureStoreDeadlineCancel(SupervisedWorker worker) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    if (worker == SupervisedWorker::SubGhzCaptureStore) {
+        subGhzCaptureStoreDeadlineCancelRequested = false;
+    } else if (worker == SupervisedWorker::InfraredCaptureStore) {
+        infraredCaptureStoreDeadlineCancelRequested = false;
+    }
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+void requestPulseCaptureStoreDeadlineCancel(SupervisedWorker worker) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    if (worker == SupervisedWorker::SubGhzCaptureStore) {
+        subGhzCaptureStoreDeadlineCancelRequested = true;
+    } else if (worker == SupervisedWorker::InfraredCaptureStore) {
+        infraredCaptureStoreDeadlineCancelRequested = true;
+    }
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+bool pulseCaptureStoreDeadlineCancelled(SupervisedWorker worker) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool cancelled =
+        worker == SupervisedWorker::SubGhzCaptureStore
+            ? subGhzCaptureStoreDeadlineCancelRequested
+            : worker == SupervisedWorker::InfraredCaptureStore
+                  ? infraredCaptureStoreDeadlineCancelRequested
+                  : false;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return cancelled;
+}
+
+bool armPulseCaptureStoreDeadline(SupervisedWorker worker,
+                                  std::uint64_t nowUs) {
+    if (!pulseCaptureStoreWorker(worker)) return false;
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed = workerDeadlineSupervisor.arm(
+        worker, nowUs, kPulseCaptureStoreDeadlineUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+bool heartbeatPulseCaptureStore(SupervisedWorker worker,
+                                std::uint64_t nowUs = 0) {
+    if (!pulseCaptureStoreWorker(worker)) return false;
+    if (nowUs == 0) {
+        nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs == 0) nowUs = 1;
+    }
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool accepted = workerDeadlineSupervisor.heartbeat(worker, nowUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return accepted;
+}
+
+bool disarmPulseCaptureStoreDeadline(SupervisedWorker worker) {
+    if (!pulseCaptureStoreWorker(worker)) return false;
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool disarmed = workerDeadlineSupervisor.disarm(worker);
     portEXIT_CRITICAL(&productSurveyWorkerMux);
     return disarmed;
 }
@@ -3264,10 +3381,42 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
     event.status = "store_failed";
     bool identityCleanupComplete = true;
     bool filesystemAttempted = false;
+    bool deadlineArmed = false;
+    bool supervisionHealthy = true;
+    const SupervisedWorker worker = infrared
+        ? SupervisedWorker::InfraredCaptureStore
+        : SupervisedWorker::SubGhzCaptureStore;
     leshy1::storage::SdTransportRunResult identity;
     char expectedFingerprint[33] = {};
     char observedFingerprint[33] = {};
+    const auto supervisedCheckpoint = [&]() {
+        if (pulseCaptureStoreDeadlineCancelled(worker)) {
+            event.status = "safety_worker_deadline";
+            supervisionHealthy = false;
+            return false;
+        }
+        if (!heartbeatPulseCaptureStore(worker)) {
+            event.status = "worker_supervisor_unavailable";
+            supervisionHealthy = false;
+            return false;
+        }
+        return true;
+    };
     do {
+        resetPulseCaptureStoreDeadlineCancel(worker);
+        std::uint64_t startedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (startedUs == 0) startedUs = 1;
+        deadlineArmed = armPulseCaptureStoreDeadline(worker, startedUs);
+        if (!deadlineArmed) {
+            event.status = "worker_supervisor_unavailable";
+            break;
+        }
+        if (consumePulseCaptureStoreDeadlineInjection(worker)) {
+            vTaskDelay(pdMS_TO_TICKS(
+                kPulseCaptureStoreDeadlineInjectionMs));
+        }
+        if (!supervisedCheckpoint()) break;
         const auto required =
             leshy1::kernel::runtime::resourceMask(Resource::UiForeground) |
             leshy1::kernel::runtime::resourceMask(Resource::Storage) |
@@ -3283,6 +3432,7 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
             event.status = "enrollment_missing";
             break;
         }
+        if (!supervisedCheckpoint()) break;
         for (std::uint8_t attempt = 1;
              attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
              ++attempt) {
@@ -3303,6 +3453,7 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
             identityCleanupComplete = transport.cleanupComplete();
             formatCidFingerprint(identity.identity, observedFingerprint,
                                  sizeof(observedFingerprint));
+            if (!supervisedCheckpoint()) break;
             if (identityCleanupComplete &&
                 identity.status ==
                     leshy1::storage::SdTransportRunStatus::Valid) {
@@ -3322,7 +3473,9 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
             }
             vTaskDelay(pdMS_TO_TICKS(
                 leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+            if (!supervisedCheckpoint()) break;
         }
+        if (!supervisionHealthy) break;
         if (!identityCleanupComplete ||
             identity.status !=
                 leshy1::storage::SdTransportRunStatus::Valid) {
@@ -3334,10 +3487,17 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
             break;
         }
         filesystemAttempted = true;
-        if (!productSurveyFilesystem.begin()) {
+        event.heapFreeBeforeMount = static_cast<std::uint32_t>(
+            heap_caps_get_free_size(MALLOC_CAP_8BIT));
+        event.heapLargestBeforeMount = static_cast<std::uint32_t>(
+            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        const bool filesystemMounted = productSurveyFilesystem.begin();
+        event.filesystemMountError = productSurveyFilesystem.mountError();
+        if (!filesystemMounted) {
             event.status = "mount_failed";
             break;
         }
+        if (!supervisedCheckpoint()) break;
         const std::uint64_t cardCapacity =
             productSurveyFilesystem.cardCapacityBytes();
         const std::uint64_t cachedFree =
@@ -3375,6 +3535,7 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
             event.status = "store_open_failed";
             break;
         }
+        if (!supervisedCheckpoint()) break;
 
         char sessionId[SurveySession::kSessionIdCapacity + 1] = {};
         surveySession.reset();
@@ -3421,6 +3582,7 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
                 productSurveyStore, sessionStoreWorkspace, surveySession,
                 subGhzRawCapture);
         }
+        if (!supervisedCheckpoint()) break;
         event.storeStatus = commit.status;
         if (!commit.complete()) {
             event.status =
@@ -3431,6 +3593,7 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
             leshy1::storage::recoverSession(
                 productSurveyStore, sessionStoreWorkspace,
                 &sessionStoreWorkspace.validationSession);
+        if (!supervisedCheckpoint()) break;
         if (!recovered.valid() || recovered.generation != commit.generation) {
             event.status = "reopen_failed";
             event.storeStatus = recovered.status;
@@ -3458,11 +3621,15 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
             event.status = "pulse_reopen_failed";
             break;
         }
+        if (!supervisedCheckpoint()) break;
         event.valid = true;
         event.generation = recovered.generation;
         event.status = "saved";
     } while (false);
 
+    if (deadlineArmed && !pulseCaptureStoreDeadlineCancelled(worker)) {
+        heartbeatPulseCaptureStore(worker);
+    }
     productSurveyStore.end();
     if (productSurveyFilesystem.mounted()) productSurveyFilesystem.end();
     const bool filesystemCleanup = !filesystemAttempted ||
@@ -3473,8 +3640,14 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
         event.valid = false;
         event.status = "cleanup_failed";
     }
+    if (pulseCaptureStoreDeadlineCancelled(worker)) {
+        event.valid = false;
+        event.status = "safety_worker_deadline";
+    }
+    if (deadlineArmed) disarmPulseCaptureStoreDeadline(worker);
+    resetPulseCaptureStoreDeadlineCancel(worker);
     if (events != nullptr) {
-        xQueueSend(events, &event, portMAX_DELAY);
+        xQueueOverwrite(events, &event);
     }
     vTaskDelete(nullptr);
 }
@@ -3544,6 +3717,9 @@ void serviceSubGhzRawCapturePersist() {
                                         : CapturePersistState::Failed;
     subGhzCapturePersistStatus = admitted ? "saved" : event.status;
     subGhzCapturePersistGeneration = admitted ? event.generation : 0;
+    subGhzCapturePersistHeapFreeBeforeMount = event.heapFreeBeforeMount;
+    subGhzCapturePersistHeapLargestBeforeMount = event.heapLargestBeforeMount;
+    subGhzCapturePersistFilesystemMountError = event.filesystemMountError;
     lastRuntimeEvent = admitted ? "subghz_raw_saved"
                                 : "subghz_raw_store_failed";
     if (rfSpectrumView == RfSpectrumView::SubGhzCaptureLive) {
@@ -3607,6 +3783,9 @@ void serviceInfraredRawCapturePersist() {
                                           : CapturePersistState::Failed;
     infraredCapturePersistStatus = admitted ? "saved" : event.status;
     infraredCapturePersistGeneration = admitted ? event.generation : 0;
+    infraredCapturePersistHeapFreeBeforeMount = event.heapFreeBeforeMount;
+    infraredCapturePersistHeapLargestBeforeMount = event.heapLargestBeforeMount;
+    infraredCapturePersistFilesystemMountError = event.filesystemMountError;
     lastRuntimeEvent = admitted ? "infrared_raw_saved"
                                 : "infrared_raw_store_failed";
     if (uiController.page() == 4 && captureView == CaptureView::Infrared) {
@@ -4234,6 +4413,20 @@ void serviceWorkerDeadlineSupervisor() {
         capturePersistState = CapturePersistState::Failed;
         capturePersistStatus = "safety_worker_deadline";
         capturePersistGeneration = 0;
+    } else if (worker.lastExpiredWorker ==
+               SupervisedWorker::SubGhzCaptureStore) {
+        requestPulseCaptureStoreDeadlineCancel(
+            SupervisedWorker::SubGhzCaptureStore);
+        subGhzCapturePersistState = CapturePersistState::Failed;
+        subGhzCapturePersistStatus = "safety_worker_deadline";
+        subGhzCapturePersistGeneration = 0;
+    } else if (worker.lastExpiredWorker ==
+               SupervisedWorker::InfraredCaptureStore) {
+        requestPulseCaptureStoreDeadlineCancel(
+            SupervisedWorker::InfraredCaptureStore);
+        infraredCapturePersistState = CapturePersistState::Failed;
+        infraredCapturePersistStatus = "safety_worker_deadline";
+        infraredCapturePersistGeneration = 0;
     } else {
         requestProductSurveyWorkerStop(true);
         if (productSurveyScanStartGate != nullptr) {
@@ -5400,7 +5593,11 @@ void triggerWorkerDeadlineTest(Stream& reply) {
         appRuntime.activeResources() == 0 && !worker.armed &&
         !productSurveyPreparationDeadlineInjectionArmed() &&
         !productSurveyWorkerDeadlineInjectionArmed() &&
-        !wifiCaptureStoreDeadlineInjectionArmed();
+        !wifiCaptureStoreDeadlineInjectionArmed() &&
+        !pulseCaptureStoreDeadlineInjectionArmed(
+            SupervisedWorker::SubGhzCaptureStore) &&
+        !pulseCaptureStoreDeadlineInjectionArmed(
+            SupervisedWorker::InfraredCaptureStore);
     if (!eligible) {
         reply.println(
             "{\"schema\":\"leshy.safety.worker_deadline_test.v1\","
@@ -5426,7 +5623,11 @@ void triggerPreparationDeadlineTest(Stream& reply) {
         appRuntime.activeResources() == 0 && !worker.armed &&
         !productSurveyPreparationDeadlineInjectionArmed() &&
         !productSurveyWorkerDeadlineInjectionArmed() &&
-        !wifiCaptureStoreDeadlineInjectionArmed();
+        !wifiCaptureStoreDeadlineInjectionArmed() &&
+        !pulseCaptureStoreDeadlineInjectionArmed(
+            SupervisedWorker::SubGhzCaptureStore) &&
+        !pulseCaptureStoreDeadlineInjectionArmed(
+            SupervisedWorker::InfraredCaptureStore);
     if (!eligible) {
         reply.println(
             "{\"schema\":\"leshy.safety.worker_preparation_deadline_test.v1\","
@@ -5454,7 +5655,11 @@ void triggerWifiCaptureStoreDeadlineTest(Stream& reply) {
         !worker.armed &&
         !productSurveyPreparationDeadlineInjectionArmed() &&
         !productSurveyWorkerDeadlineInjectionArmed() &&
-        !wifiCaptureStoreDeadlineInjectionArmed();
+        !wifiCaptureStoreDeadlineInjectionArmed() &&
+        !pulseCaptureStoreDeadlineInjectionArmed(
+            SupervisedWorker::SubGhzCaptureStore) &&
+        !pulseCaptureStoreDeadlineInjectionArmed(
+            SupervisedWorker::InfraredCaptureStore);
     if (!eligible) {
         reply.println(
             "{\"schema\":\"leshy.safety.capture_store_deadline_test.v1\","
@@ -5469,6 +5674,50 @@ void triggerWifiCaptureStoreDeadlineTest(Stream& reply) {
         "\"requires_public_capture_save\":true,"
         "\"before_storage_hardware\":true,"
         "\"outputs_inactive\":true,\"physical_write_calls\":0}");
+}
+
+void triggerPulseCaptureStoreDeadlineTest(Stream& reply, bool infrared) {
+    const SupervisedWorker selected = infrared
+        ? SupervisedWorker::InfraredCaptureStore
+        : SupervisedWorker::SubGhzCaptureStore;
+    const bool queueReady = infrared
+        ? infraredCaptureStoreEvents != nullptr &&
+              infraredCaptureStoreTaskHandle == nullptr
+        : subGhzCaptureStoreEvents != nullptr &&
+              subGhzCaptureStoreTaskHandle == nullptr;
+    const bool outputsInactive = BoardSafeOutputs::buzzerHeldInactive() &&
+        BoardSafeOutputs::radioTransmitPathsHeldInactive();
+    const WorkerDeadlineSnapshot worker = workerDeadlineSnapshot();
+    const bool eligible = safetySupervisor.state() == SafetyState::Armed &&
+        runtimeSafetyWatchdogReady && outputsInactive && queueReady &&
+        !appRuntime.running() && appRuntime.activeResources() == 0 &&
+        !worker.armed &&
+        !productSurveyPreparationDeadlineInjectionArmed() &&
+        !productSurveyWorkerDeadlineInjectionArmed() &&
+        !wifiCaptureStoreDeadlineInjectionArmed() &&
+        !pulseCaptureStoreDeadlineInjectionArmed(
+            SupervisedWorker::SubGhzCaptureStore) &&
+        !pulseCaptureStoreDeadlineInjectionArmed(
+            SupervisedWorker::InfraredCaptureStore);
+    if (!eligible) {
+        reply.println(
+            "{\"schema\":\"leshy.safety.pulse_capture_store_deadline_test.v1\","
+            "\"kind\":\"error\",\"reason\":\"unsafe_precondition\"}");
+        return;
+    }
+    setPulseCaptureStoreDeadlineInjection(selected, true);
+    char line[320] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.safety.pulse_capture_store_deadline_test.v1\","
+        "\"kind\":\"armed\",\"worker\":\"%s\",\"source\":\"%s\","
+        "\"deadline_ms\":8000,\"injection_ms\":10000,"
+        "\"requires_public_capture_save\":true,"
+        "\"before_storage_hardware\":true,\"outputs_inactive\":true,"
+        "\"physical_write_calls\":0}",
+        leshy1::kernel::safety::supervisedWorkerName(selected),
+        infrared ? "infrared" : "subghz");
+    reply.println(line);
 }
 
 void triggerRuntimeSafetyWatchdogTest(Stream& reply) {
@@ -10471,6 +10720,9 @@ bool startSubGhzRawCapture(
     subGhzCapturePersistState = CapturePersistState::Result;
     subGhzCapturePersistStatus = "volatile";
     subGhzCapturePersistGeneration = 0;
+    subGhzCapturePersistHeapFreeBeforeMount = 0;
+    subGhzCapturePersistHeapLargestBeforeMount = 0;
+    subGhzCapturePersistFilesystemMountError = 0;
     cc1101SpectrumReport = {};
     SubGhzRawCapturePlan plan;
     plan.frequencyKHz = subGhzCaptureFrequencyKHz(band);
@@ -11565,6 +11817,9 @@ bool startInfraredCapture() {
     infraredCapturePersistState = CapturePersistState::Result;
     infraredCapturePersistStatus = "volatile";
     infraredCapturePersistGeneration = 0;
+    infraredCapturePersistHeapFreeBeforeMount = 0;
+    infraredCapturePersistHeapLargestBeforeMount = 0;
+    infraredCapturePersistFilesystemMountError = 0;
     infraredReceiverReport = {};
     bool initialLevel = true;
     std::uint64_t startedUs = 0;
@@ -12282,7 +12537,7 @@ void emitSubGhzRawCaptureState(Stream& reply) {
     const bool noTransmit = cc1101SpectrumReport.txStrobes == 0U &&
         cc1101SpectrumReport.paTableWrites == 0U &&
         cc1101SpectrumReport.fifoWrites == 0U;
-    char line[1024] = {};
+    char line[1280] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.capture.subghz_raw.v1\",\"kind\":\"state\","
@@ -12302,6 +12557,9 @@ void emitSubGhzRawCaptureState(Stream& reply) {
         "\"physical_no_tx_verified\":%s,\"cleanup_complete\":%s,"
         "\"storage_written\":%s,\"persist_state\":\"%s\","
         "\"persist_status\":\"%s\",\"persist_generation\":%lu,"
+        "\"heap_free_before_mount\":%lu,"
+        "\"heap_largest_before_mount\":%lu,"
+        "\"filesystem_mount_error\":%d,"
         "\"lease_mask\":%lu}",
         leshy1::apps::capture::subGhzRawCaptureStateName(stats.state),
         static_cast<unsigned long>(plan.frequencyKHz),
@@ -12333,6 +12591,9 @@ void emitSubGhzRawCaptureState(Stream& reply) {
         capturePersistStateName(subGhzCapturePersistState),
         subGhzCapturePersistStatus,
         static_cast<unsigned long>(subGhzCapturePersistGeneration),
+        static_cast<unsigned long>(subGhzCapturePersistHeapFreeBeforeMount),
+        static_cast<unsigned long>(subGhzCapturePersistHeapLargestBeforeMount),
+        subGhzCapturePersistFilesystemMountError,
         static_cast<unsigned long>(appRuntime.activeResources()));
     reply.println(line);
 }
@@ -12389,7 +12650,7 @@ void emitInfraredRawCaptureState(Stream& reply) {
     const auto& stats = infraredCapture.stats();
     const auto& plan = infraredCapture.plan();
     const auto& decode = infraredCapture.decode();
-    char line[1024] = {};
+    char line[1280] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.capture.infrared_raw.v1\",\"kind\":\"state\","
@@ -12409,6 +12670,9 @@ void emitInfraredRawCaptureState(Stream& reply) {
         "\"csv_available\":%s,\"cleanup_complete\":%s,"
         "\"storage_written\":%s,\"persist_state\":\"%s\","
         "\"persist_status\":\"%s\",\"persist_generation\":%lu,"
+        "\"heap_free_before_mount\":%lu,"
+        "\"heap_largest_before_mount\":%lu,"
+        "\"filesystem_mount_error\":%d,"
         "\"lease_mask\":%lu}",
         leshy1::apps::capture::infraredCaptureStateName(stats.state),
         BoardProfile::kIrRxPin, BoardProfile::kIrTxPin,
@@ -12442,6 +12706,9 @@ void emitInfraredRawCaptureState(Stream& reply) {
         capturePersistStateName(infraredCapturePersistState),
         infraredCapturePersistStatus,
         static_cast<unsigned long>(infraredCapturePersistGeneration),
+        static_cast<unsigned long>(infraredCapturePersistHeapFreeBeforeMount),
+        static_cast<unsigned long>(infraredCapturePersistHeapLargestBeforeMount),
+        infraredCapturePersistFilesystemMountError,
         static_cast<unsigned long>(appRuntime.activeResources()));
     reply.println(line);
 }
@@ -18971,6 +19238,14 @@ void handleCommand(Stream& reply, const char* command) {
     } else if (std::strcmp(command,
                            "safety.capture-store-deadline-test confirm") == 0) {
         triggerWifiCaptureStoreDeadlineTest(reply);
+    } else if (std::strcmp(
+                   command,
+                   "safety.capture-ir-store-deadline-test confirm") == 0) {
+        triggerPulseCaptureStoreDeadlineTest(reply, true);
+    } else if (std::strcmp(
+                   command,
+                   "safety.capture-subghz-store-deadline-test confirm") == 0) {
+        triggerPulseCaptureStoreDeadlineTest(reply, false);
     } else if (std::strcmp(command,
                            "safety.early-boot-watchdog-test confirm") == 0) {
         triggerEarlyBootSafetyWatchdogTest(reply);
@@ -19614,6 +19889,8 @@ void setup() {
               "\"safety.worker-deadline-test confirm\","
               "\"safety.worker-preparation-deadline-test confirm\","
               "\"safety.capture-store-deadline-test confirm\","
+              "\"safety.capture-ir-store-deadline-test confirm\","
+              "\"safety.capture-subghz-store-deadline-test confirm\","
               "\"safety.early-boot-watchdog-test confirm\","
               "\"safety.clear confirm\","
               "\"hardware.shield.receivers\","

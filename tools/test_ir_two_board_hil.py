@@ -19,7 +19,7 @@ import run_ir_two_board_hil as flow  # noqa: E402
 class IrTwoBoardHilTests(unittest.TestCase):
     def test_versions_are_extracted_from_both_projects(self) -> None:
         self.assertEqual(
-            "0.136.0-capture-store-deadline",
+            "0.137.0-pulse-store-deadline",
             flow.read_version(
                 ROOT / "firmware/leshy1/platformio.ini", "LESHY1_VERSION"))
         self.assertEqual(
@@ -78,6 +78,20 @@ class IrTwoBoardHilTests(unittest.TestCase):
         self.assertIn("--flash", command)
         self.assertIn("--flash-fixture", command)
         self.assertNotIn("--reuse-exact-flash", command)
+
+    def test_deadline_runner_is_one_command_and_source_bound(self) -> None:
+        command = flow.deadline_runner_command(
+            candidate_port="/dev/candidate", fixture_port="/dev/fixture",
+            profile=Path("profile.json"), fixture_id="0" * 16,
+            expected_cid="A" * 32, output=Path("output"),
+            source_commit="a" * 40,
+            product_version="product", fixture_version="fixture",
+            reuse_candidate=False, reuse_fixture=False)
+        self.assertIn("run_1x_infrared_store_deadline_hil.py", command[1])
+        self.assertIn("--flash", command)
+        self.assertIn("--flash-fixture", command)
+        self.assertIn("--source-commit", command)
+        self.assertIn("--expected-fixture-id", command)
 
 
 if __name__ == "__main__":

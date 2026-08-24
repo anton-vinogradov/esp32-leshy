@@ -36,6 +36,7 @@ SCENARIOS = {
     "nrf24-fixture-inventory": (
         ROOT / "tests/hil/scenarios/nrf24-fixture-inventory.json"),
 }
+DEADLINE_FLOW = "infrared-store-deadline"
 SCENARIO = SCENARIOS["infrared-nec-positive"]
 VERSION_VALUE = re.compile(
     r"-D\s+{symbol}=\\\"([^\"\r\n]+)\\\"")
@@ -123,6 +124,35 @@ def runner_command(*, candidate_port: str, fixture_port: str,
     return command
 
 
+def deadline_runner_command(*, candidate_port: str, fixture_port: str,
+                            profile: Path, fixture_id: str,
+                            expected_cid: str, output: Path,
+                            source_commit: str, product_version: str,
+                            fixture_version: str,
+                            reuse_candidate: bool,
+                            reuse_fixture: bool) -> list[str]:
+    command = [
+        str(esptool_python()),
+        str(ROOT / "tools/run_1x_infrared_store_deadline_hil.py"),
+        "--candidate-port", candidate_port,
+        "--fixture-port", fixture_port,
+        "--firmware", str(PRODUCT_FIRMWARE),
+        "--fixture-firmware", str(FIXTURE_FIRMWARE),
+        "--fixture-profile", str(profile),
+        "--expected-version", product_version,
+        "--expected-fixture-version", fixture_version,
+        "--expected-fixture-id", fixture_id,
+        "--expected-cid", expected_cid,
+        "--source-commit", source_commit,
+        "--output", str(output),
+    ]
+    command.append("--reuse-exact-flash" if reuse_candidate else "--flash")
+    command.append(
+        "--reuse-exact-fixture-flash" if reuse_fixture
+        else "--flash-fixture")
+    return command
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate-port", required=True)
@@ -130,7 +160,7 @@ def main() -> int:
     parser.add_argument("--expected-cid", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument(
-        "--scenario", choices=tuple(SCENARIOS),
+        "--scenario", choices=(*SCENARIOS, DEADLINE_FLOW),
         default="infrared-nec-positive")
     profile = parser.add_mutually_exclusive_group(required=True)
     profile.add_argument("--fixture-profile", type=Path)
@@ -181,20 +211,34 @@ def main() -> int:
         subprocess.run([str(ROOT / "tools/build.sh")], cwd=ROOT, check=True)
         subprocess.run(
             [str(ROOT / "tools/build_ir_fixture.sh")], cwd=ROOT, check=True)
-        subprocess.run(runner_command(
-            candidate_port=args.candidate_port,
-            fixture_port=args.fixture_port,
-            profile=fixture_profile,
-            fixture_id=fixture_id,
-            expected_cid=args.expected_cid,
-            output=args.output,
-            source_commit=source_commit,
-            product_version=product_version,
-            fixture_version=fixture_version,
-            reuse_candidate=args.reuse_exact_candidate_flash,
-            reuse_fixture=args.reuse_exact_fixture_flash,
-            scenario=SCENARIOS[args.scenario],
-        ), cwd=ROOT, check=True)
+        if args.scenario == DEADLINE_FLOW:
+            command = deadline_runner_command(
+                candidate_port=args.candidate_port,
+                fixture_port=args.fixture_port,
+                profile=fixture_profile,
+                fixture_id=fixture_id,
+                expected_cid=args.expected_cid,
+                output=args.output,
+                source_commit=source_commit,
+                product_version=product_version,
+                fixture_version=fixture_version,
+                reuse_candidate=args.reuse_exact_candidate_flash,
+                reuse_fixture=args.reuse_exact_fixture_flash)
+        else:
+            command = runner_command(
+                candidate_port=args.candidate_port,
+                fixture_port=args.fixture_port,
+                profile=fixture_profile,
+                fixture_id=fixture_id,
+                expected_cid=args.expected_cid,
+                output=args.output,
+                source_commit=source_commit,
+                product_version=product_version,
+                fixture_version=fixture_version,
+                reuse_candidate=args.reuse_exact_candidate_flash,
+                reuse_fixture=args.reuse_exact_fixture_flash,
+                scenario=SCENARIOS[args.scenario])
+        subprocess.run(command, cwd=ROOT, check=True)
     except (OSError, ValueError, json.JSONDecodeError,
             subprocess.CalledProcessError) as error:
         parser.error(str(error))

@@ -28,6 +28,8 @@ def main() -> int:
                   "BoardBlePassiveScanner.h").read_text(encoding="utf-8")
     tests = (ROOT / "tests/native/clean_target_tests.cpp").read_text(
         encoding="utf-8")
+    ir_runner = (ROOT / "tools/run_1x_infrared_store_deadline_hil.py").read_text(
+        encoding="utf-8")
     platform = (ROOT / "firmware/leshy1/platformio.ini").read_text(
         encoding="utf-8")
     profile = (ROOT / "firmware/leshy1/src/boards/esp32_div_v2/"
@@ -35,7 +37,8 @@ def main() -> int:
 
     require(header, (
         "enum class SupervisedWorker", "ProductSurveyPreparation",
-        "ProductSurvey", "WifiCaptureStore", "lastHeartbeatUs",
+        "ProductSurvey", "WifiCaptureStore", "SubGhzCaptureStore",
+        "InfraredCaptureStore", "lastHeartbeatUs",
         "deadlineUs", "heartbeatCount", "tripCount", "bool evaluate",
     ), "deadline core API")
     require(core, (
@@ -91,6 +94,28 @@ def main() -> int:
     if injection_at >= transport_at:
         raise AssertionError("Capture Store injection must precede SD hardware")
 
+    pulse_start = entry.index("void runPulseCaptureStoreWorker(")
+    pulse_end = entry.index("void runSubGhzCaptureStoreWorker(", pulse_start)
+    pulse_store = entry[pulse_start:pulse_end]
+    require(pulse_store, (
+        "armPulseCaptureStoreDeadline(worker, startedUs)",
+        "consumePulseCaptureStoreDeadlineInjection(worker)",
+        "kPulseCaptureStoreDeadlineInjectionMs",
+        "pulseCaptureStoreDeadlineCancelled(worker)",
+        "disarmPulseCaptureStoreDeadline(worker)",
+        "xQueueOverwrite(events, &event)",
+    ), "pulse Capture Store deadline integration")
+    if pulse_store.count("supervisedCheckpoint()") < 8:
+        raise AssertionError(
+            "pulse Capture Store lacks heartbeat coverage around storage "
+            "boundaries")
+    pulse_injection_at = pulse_store.index(
+        "consumePulseCaptureStoreDeadlineInjection(worker)")
+    pulse_transport_at = pulse_store.index("BoardSdSpiTransport transport;")
+    if pulse_injection_at >= pulse_transport_at:
+        raise AssertionError(
+            "pulse Capture Store injection must precede SD hardware")
+
     require(entry, (
         "kProductSurveyPreparationDeadlineUs = 8000000ULL",
         "kProductSurveyPreparationDeadlineInjectionMs = 10000",
@@ -98,6 +123,8 @@ def main() -> int:
         "kProductSurveyWorkerDeadlineInjectionMs = 10000",
         "kWifiCaptureStoreDeadlineUs = 8000000ULL",
         "kWifiCaptureStoreDeadlineInjectionMs = 10000",
+        "kPulseCaptureStoreDeadlineUs = 8000000ULL",
+        "kPulseCaptureStoreDeadlineInjectionMs = 10000",
         "BoardBlePassiveScanner::worstCaseScanDurationUs(",
         "serviceWorkerDeadlineSupervisor();",
         "requestProductSurveyWorkerStop(true);",
@@ -107,8 +134,13 @@ def main() -> int:
         "safety.worker-deadline-test confirm",
         "safety.worker-preparation-deadline-test confirm",
         "safety.capture-store-deadline-test confirm",
+        "safety.capture-ir-store-deadline-test confirm",
+        "safety.capture-subghz-store-deadline-test confirm",
         "worker.lastExpiredWorker == SupervisedWorker::WifiCaptureStore",
         "requestWifiCaptureStoreDeadlineCancel();",
+        "worker.lastExpiredWorker ==\n               SupervisedWorker::SubGhzCaptureStore",
+        "worker.lastExpiredWorker ==\n               SupervisedWorker::InfraredCaptureStore",
+        "requestPulseCaptureStoreDeadlineCancel(",
         r'\"worker_supervision\":true',
     ), "platform deadline response")
     service_at = entry.index("serviceWorkerDeadlineSupervisor();")
@@ -118,19 +150,30 @@ def main() -> int:
     require(tests, (
         "testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence",
         "snapshot.tripCount == 1", "supervisor.evaluate(6999)",
+        "SupervisedWorker::SubGhzCaptureStore",
+        "SupervisedWorker::InfraredCaptureStore",
     ), "native deadline matrix")
+    require(ir_runner, (
+        "safety.capture-ir-store-deadline-test confirm",
+        "infrared_capture_store", "fixture.ir.nec.once",
+        "normal IR store heartbeat coverage incomplete",
+        "fault_injection_before_storage_hardware",
+        "fault_injection_physical_write_calls", "safety_after_restart",
+        "safety_final", "two_bounded_fixture_emissions",
+    ), "automated two-board IR Store deadline HIL")
     require(ble_header, (
         "kMaximumScanAttempts = 2U", "kCompletionGraceMs = 1000U",
         "kRetryDelayMs = 100U", "worstCaseScanDurationUs",
     ), "bounded BLE scan deadline")
-    if 'LESHY1_VERSION=\\"0.136.0-capture-store-deadline\\"' not in platform:
+    if 'LESHY1_VERSION=\\"0.137.0-pulse-store-deadline\\"' not in platform:
         raise AssertionError("exact candidate version is not bound")
     if "kRfCarrierChipSelectCharacterizationOnly = false" not in profile:
         raise AssertionError("diagnostic-only carrier gate remains active")
 
     print(
-        "worker deadline contract passed: preparation + real Survey/Capture "
-        "Store heartbeat, 8 s deadlines, cancel/quiesce/retained Safe Mode"
+        "worker deadline contract passed: preparation + real Survey/Wi-Fi/"
+        "Sub-GHz/IR Capture Store heartbeat, 8 s deadlines, cancel/quiesce/"
+        "retained Safe Mode"
     )
     return 0
 

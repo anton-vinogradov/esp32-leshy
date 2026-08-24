@@ -1639,6 +1639,12 @@ void testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence() {
     CHECK(std::strcmp(
               supervisedWorkerName(SupervisedWorker::WifiCaptureStore),
               "wifi_capture_store") == 0);
+    CHECK(std::strcmp(
+              supervisedWorkerName(SupervisedWorker::SubGhzCaptureStore),
+              "subghz_capture_store") == 0);
+    CHECK(std::strcmp(
+              supervisedWorkerName(SupervisedWorker::InfraredCaptureStore),
+              "infrared_capture_store") == 0);
     CHECK(!supervisor.arm(SupervisedWorker::None, 100, 6000));
     CHECK(!supervisor.arm(SupervisedWorker::ProductSurvey, 0, 6000));
     CHECK(supervisor.arm(SupervisedWorker::ProductSurvey, 100, 6000));
@@ -1670,6 +1676,14 @@ void testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence() {
     CHECK(supervisor.arm(SupervisedWorker::ProductSurvey, 7000, 6000));
     CHECK(supervisor.evaluate(6999));
     CHECK(supervisor.snapshot().tripCount == 2);
+    CHECK(supervisor.disarm(SupervisedWorker::ProductSurvey));
+    CHECK(supervisor.arm(SupervisedWorker::SubGhzCaptureStore, 8000, 6000));
+    CHECK(supervisor.heartbeat(SupervisedWorker::SubGhzCaptureStore, 8100));
+    CHECK(supervisor.disarm(SupervisedWorker::SubGhzCaptureStore));
+    CHECK(supervisor.arm(SupervisedWorker::InfraredCaptureStore,
+                         9000, 6000));
+    CHECK(supervisor.heartbeat(SupervisedWorker::InfraredCaptureStore, 9100));
+    CHECK(supervisor.disarm(SupervisedWorker::InfraredCaptureStore));
 }
 
 void testProductStartIdentityRetryStopsBeforeFilesystem() {
