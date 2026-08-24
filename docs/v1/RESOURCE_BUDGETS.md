@@ -149,6 +149,7 @@ defines the 1.x partition and memory policy.
 | RB-M127 | measured build / physical open | product IR Library metadata plus separate two-board NEC fixture foundation | product 3,061,504 B linked flash; 233,288 B static RAM; app/factory images 3,061,904/3,127,440 B; dedicated DIRAM unchanged at 314,056/341,760 B (91.89%, 27,704 B remaining). Separate fixture: 322,215 B linked flash; 22,724 B static RAM; app/factory 322,624/388,160 B; DIRAM 74,519/341,760 B | unflashed source `0.125.0-ir-fixture-foundation` / fixture `0.1.0-ir-nec`, `E-BUILD-125`/`E-AUTO-089`, source `f1b3394`; product delta vs 0.124.1 is +856 B linked flash, zero static RAM and +848/+848 B images. The separate fixture budget never enters the product image. No physical heap or two-board result exists yet, so RB-04 and accepted 0.89 endurance are not superseded |
 | RB-M128 | measured build + physical positive | pre-app safety guard, physical IR envelope tolerance and closed-loop two-board NEC | product 3,062,560 B linked flash; 233,288 B static RAM; app/factory images 3,062,960/3,128,496 B; RTC no-init 128 B; physical heap total/free/min 148,164/77,932/63,700 B. Fixture remains 322,215 B linked flash and 22,724 B static RAM | board-01/02 `0.129.0-pre-app-watchdog`, `E-BUILD-129`/`E-AUTO-093`/`E-HIL-150`/`E-RADIO-014`/`E-STORAGE-031`; +1,056 B linked flash, zero static-RAM growth and +1,056/+1,056 B images vs 0.125. The physical run keeps heap invariant across NEC receive/save/cold reopen, but its 63,700 B focused minimum is below RB-04 and does not replace mixed-workload endurance |
 | RB-M129 | measured diagnostic build + physical localization | isolated-main shared-MISO characterization with all receiver operations suppressed | product-derived diagnostic 3,063,436 B linked flash; 233,288 B static RAM; app/factory images 3,063,840/3,129,376 B; dedicated DIRAM 314,056/341,760 B (91.89%, 27,704 B remaining); isolated physical heap total/free/min 148,164/78,440/78,440 B | board-02 `0.131.0-isolated-main-miso`; +876 B linked flash, zero static RAM and +880/+880 B images vs exact product 0.129. The retained run samples GPIO13 only, clocks zero SPI bytes, performs zero receiver/TX operations and ends Home/lease 0. Its higher focused heap minimum is diagnostic-only and does not promote the product or supersede RB-04/mixed-workload release endurance |
+| RB-M130 | measured build + focused physical safety | allocation-free deadline state and first Product Survey Wi-Fi worker trip/restart/clear | 3,066,128 B linked flash; 233,360 B static RAM; app image 3,066,528 B; boot-before exact HIL heap total/free/min 148,092/77,860/63,628 B | board-01 `0.133.0-worker-deadline-supervision`, `E-BUILD-133`/`E-AUTO-094`/`E-HIL-154`/`E-SAFETY-002`; +3,568 B linked flash and +72 B static RAM versus exact product 0.129. One Wi-Fi worker arm/two heartbeats/one trip cleanly releases lease and survives restart. This fault-focused run neither exercises a normal mixed Survey workload nor supersedes RB-04/release endurance |
 
 The probe's `heap_min_free` covers only its short diagnostic run. It does not predict
 Wi-Fi/BLE buffers, display caches, Session queues, storage transactions, or the
@@ -244,13 +245,13 @@ These limits are review triggers, not evidence that the product meets its NFRs.
 - Storage, power, and shared-bus limits remain explicit unknowns; features depending
   on them cannot be promoted from `unknown` to `available` by documentation alone.
 
-Latest build delta `RB-M129`: the focused 0.131 diagnostic uses 3,063,436 B linked
-flash and 233,288 B static RAM; app/factory images are 3,063,840/3,129,376 B. This is
-+876 B linked flash, zero static RAM and +880/+880 B images over exact product 0.129.
-The delta is diagnostic control/telemetry, not a promoted product feature. Isolated
-physical HIL measures heap 148,164/78,440/78,440 B while performing zero receiver
-operations; exact 0.129 remains the physical functional baseline and RB-04 plus
-mixed-workload release endurance remain the resource/release baseline.
+Latest build delta `RB-M130`: exact 0.133 uses 3,066,128 B linked flash and 233,360 B
+static RAM; its app image is 3,066,528 B. This is +3,568 B linked flash and +72 B
+static RAM over exact product 0.129 for the deadline core, integration, retained
+reason/UI/telemetry and test surface. Focused HIL boot-before heap is
+148,092/77,860/63,628 B and the fault path releases lease 0, but it does not execute a
+normal mixed Survey workload. Exact 0.129 remains the physical functional baseline;
+RB-04 plus mixed-workload release endurance remain the resource/release baseline.
 
 The source-bound `0.2.4` diagnostic fixture uses 332,135 B program flash and 22,844 B
 static RAM. Its +9,920/+120 B delta over the fixed-NEC fixture adds read-only identity

@@ -126,8 +126,13 @@ handler может только опустить известные pads buzzer/
 torn-write-resistant RTC record; он не пишет log, не выделяет память, не ждёт и не
 трогает SPI. Watchdog reset входит в защёлкнутый Safe Mode, пропускающий product
 workers и normal Actions. Второй reset сохраняет уже подтверждённую защёлку. Снять
-её можно только явным двухшаговым user clear с restart. Heartbeats workers и
-physical rail/radio shutdown остаются отдельной открытой работой. Обязательный
+её можно только явным двухшаговым user clear с restart. Exact 0.133 добавляет
+allocation-free дедлайн 6 s реальному worker Product Survey после подготовки
+scanners. Main-loop evaluation идёт до обычного worker service; expiry отменяет оба
+scanner, снимает application lease, глушит software outputs и входит в тот же
+retained Safe Mode с reason `worker_deadline`. Путь Wi-Fi «Сети рядом» принят
+физически; BLE, preparation, остальные workers и physical rail/radio shutdown
+остаются открыты. Обязательный
 контракт — [`SAFETY_SUPERVISOR.ru.md`](SAFETY_SUPERVISOR.ru.md).
 
 ## 5. Ресурсы и coexistence

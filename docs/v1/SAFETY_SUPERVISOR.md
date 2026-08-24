@@ -113,7 +113,7 @@ and exact CID remained unchanged, and explicit clear ended at Home with lease ze
 The [machine-checked artifact](../../tests/hil/evidence/board-01-safety-watchdog-0.103.json)
 also binds all negative hardware claims below.
 
-## Product Survey worker deadline candidate
+## Accepted Product Survey Wi-Fi worker deadline checkpoint
 
 Version `0.133.0-worker-deadline-supervision` adds the first supervised worker
 boundary without changing the retained-record layout. The real Core-0 Product Survey
@@ -126,14 +126,29 @@ requests both scanners to cancel, releases the foreground application lease, hol
 software-controlled outputs inactive and latches `worker_deadline` in the same
 exact-app RTC record used by the main-loop watchdog. The test-only command
 `safety.worker-deadline-test confirm` merely arms a one-shot 8 s delay; a normal
-public Survey Start must activate the real worker. The exact physical trip,
-post-cancel cleanup, retained restart and explicit two-action clear remain pending
-until the source-bound board-01 HIL artifact is retained.
+public Survey Start must activate the real worker.
+
+Exact board-01 HIL now accepts the first bounded slice on the public **Wi-Fi →
+Nearby Networks** path. The real Product Survey worker arms once and heartbeats
+twice; the 8 s injected stall trips once at age 6,001 ms against the 6,000 ms
+deadline. Cancel/cleanup completes, owner/lease becomes `none`/`0`, buzzer and nRF
+CE remain inactive, and the retained `worker_deadline` latch survives a reason-3
+software restart. Safe Mode advances through `latched` → `clear_pending` only after
+the first public Right/OK Action, clears and restarts only after the second, and
+returns Home with exact CID, catalog 98/0 and zero physical storage writes unchanged.
+Three 240×320 TFT states and exact source/image/runner/transcript hashes are bound in
+the [machine-checked artifact](../../tests/hil/evidence/board-01-worker-deadline-0.133.json).
+
+This checkpoint deliberately does not claim physical BLE-worker coverage or the
+admission/scanner-preparation interval: the current deadline arms only after that
+preparation completes. A stale-menu pre-gate run entered the BLE path and was
+rejected rather than reused as evidence. BLE needs its own source-appropriate
+deadline/heartbeat proof before the Product Survey boundary is considered complete.
 
 ## Open safety work
 
-- extend heartbeat/deadline supervision beyond Product Survey to every long-lived
-  worker and any future transmit lease after the first physical checkpoint passes;
+- extend the accepted Wi-Fi Product Survey slice to BLE, the pre-admission/preparation
+  interval, every other long-lived worker and any future transmit lease;
 - route driver invariant, brownout/thermal, and storage safe-shutdown faults into the
   same reasoned latch only after trustworthy sensors exist;
 - add an external rail/PA kill or load switch and a CC1101 reset/power gate for any

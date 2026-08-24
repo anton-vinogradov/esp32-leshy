@@ -1,0 +1,71 @@
+{
+  "schema": "leshy.worker_deadline_acceptance.v1",
+  "status": "pass_product_survey_wifi_worker_checkpoint",
+  "board": "board-01",
+  "evidence_ids": [
+    "E-BUILD-133",
+    "E-AUTO-094",
+    "E-HIL-154",
+    "E-SAFETY-002"
+  ],
+  "candidate": {
+    "schema": "leshy.worker_deadline.provenance.v1",
+    "version": "0.133.0-worker-deadline-supervision",
+    "source_commit": "da9e0bd47177af27a871467dd5bff322488a5f5e",
+    "runner_commit": "da9e0bd47177af27a871467dd5bff322488a5f5e",
+    "firmware_sha256": "40212538f5e3fe1518ab08eddfdb6ae42e0f1d32521a0f41f0382723cc232525",
+    "app_elf_sha256": "52a0e00f095693d492ce320c9c3b1473e578f75c57fae49d4a12574555adc76c",
+    "map_sha256": "8a80f84e44c10158beaf1403b79adad9ee9bebc4e1b03d757ff5144310a1bc12",
+    "runner_sha256": "42e51864726e3f3cc137279bd861eff45fb0aba115b94a491767f14162913394",
+    "run_sha256": "3b4bb2219dea177120774c266b2285ab8315281b30083cc483818e6ce4be7a21",
+    "firmware_bytes": 3066528,
+    "linked_flash_bytes": 3066128,
+    "static_ram_bytes": 233360
+  },
+  "evidence": {
+    "files": 16,
+    "indexed_files": 15,
+    "tft_states": 3,
+    "artifact_index_sha256": "5f2646fab482175bd8c8668886bc9430d70c13963fc6911a78b16d9cff8b81e9",
+    "run_sha256": "3b4bb2219dea177120774c266b2285ab8315281b30083cc483818e6ce4be7a21"
+  },
+  "verified": {
+    "automatic_clear": false,
+    "automatic_screenshots": true,
+    "buzzer_inactive": true,
+    "catalog_generation": 98,
+    "catalog_observations": 0,
+    "clear_reset_reason_code": 3,
+    "deadline_ms": 6000,
+    "emergency_quiesce_count": 1,
+    "exact_cid": "FE343253440000002000000055019CB7",
+    "final_lease_mask": 0,
+    "final_owner": "none",
+    "injection_ms": 8000,
+    "latched_restart_reset_reason_code": 3,
+    "manual_button_presses": 0,
+    "nrf_ce_inactive": true,
+    "observed_expiry_age_ms": 6001,
+    "physical_rail_kill_available": false,
+    "public_product_path": "wifi_nearby_networks",
+    "selected_source_mask": 1,
+    "software_only": true,
+    "storage_physical_write_calls": 0,
+    "trip_count": 1,
+    "worker": "product_survey",
+    "worker_arm_count": 1,
+    "worker_heartbeat_count": 2,
+    "worker_trip_count": 1
+  },
+  "coverage": {
+    "all_long_lived_workers": false,
+    "ble_product_survey_physical_injection": false,
+    "future_transmit_leases": false,
+    "physical_rail_kill": false,
+    "product_survey_preparation_phase": false,
+    "product_survey_wifi_worker": true,
+    "software_controlled_outputs_quiesced": true,
+    "software_restart_latch_retention": true,
+    "worker_heartbeat_supervision": true
+  }
+}
