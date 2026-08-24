@@ -204,7 +204,16 @@ def main() -> int:
             failures.extend(expect(records["normal_saved"], {
                 "persist_state": "saved", "persist_status": "saved",
                 "storage_written": True,
+                "filesystem_mount_error": 0,
             }, "normal_saved"))
+            if int(records["normal_saved"].get(
+                    "heap_free_before_mount", 0)) <= 0:
+                failures.append(
+                    "normal save did not retain pre-mount free-heap telemetry")
+            if int(records["normal_saved"].get(
+                    "heap_largest_before_mount", 0)) <= 0:
+                failures.append(
+                    "normal save did not retain pre-mount largest-block telemetry")
             saved_generation = int(
                 records["normal_saved"].get("persist_generation", 0))
             if saved_generation != generation_before + 1:
@@ -250,6 +259,9 @@ def main() -> int:
             failures.extend(expect(records["saving"], {
                 "persist_state": "saving", "persist_status": "saving",
                 "storage_written": False,
+                "heap_free_before_mount": 0,
+                "heap_largest_before_mount": 0,
+                "filesystem_mount_error": 0,
             }, "injected_saving"))
             if failures:
                 raise RuntimeError("public injected save contract failed")

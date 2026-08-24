@@ -16,6 +16,7 @@
 #include <esp_timer.h>
 #include <esp_app_desc.h>
 #include <esp_attr.h>
+#include <esp_heap_caps.h>
 #include <esp_private/startup_internal.h>
 #include <esp_private/system_internal.h>
 #include <esp_rom_sys.h>
@@ -345,16 +346,21 @@ SurveySession surveySession;
 SurveyController surveyController(surveySession);
 SurveySourceController surveySourceController;
 SurveySession librarySession;
-SurveySession littleFsResetSession;
+// Destructive storage fixtures and Self-Test are admitted only while the
+// foreground Survey workflow is stopped. Reuse its bounded session instead of
+// permanently reserving another 10 KiB on N16 boards without PSRAM.
+SurveySession& littleFsResetSession = surveySession;
 LibraryController libraryController;
 SessionCatalog sessionCatalog;
 leshy1::services::survey::ObservationQueue surveyIngressQueue;
 leshy1::storage::SessionStoreWorkspace sessionStoreWorkspace;
 ArduinoFsSessionStoreWorkspace sdSessionStoreIoWorkspace;
-ArduinoFsSessionStoreWorkspace productSurveyIoWorkspace;
 RamSessionStoreIo ramSessionStore;
 leshy1::storage::SessionStoreIoRouter surveyStoreRouter(ramSessionStore);
-ArduinoFsSessionStoreIo productSurveyStore(productSurveyIoWorkspace);
+// Every physical-store path owns Storage+RadioSpi exclusively and closes its
+// adapter before releasing that lease. Product and diagnostic paths therefore
+// share one 4.4 KiB I/O workspace safely.
+ArduinoFsSessionStoreIo productSurveyStore(sdSessionStoreIoWorkspace);
 BoardSdFilesystem productSurveyFilesystem;
 SurveyWorkflow surveyWorkflow(surveyController, surveyStoreRouter,
                               sessionStoreWorkspace, librarySession,
@@ -791,12 +797,18 @@ struct CaptureStoreEvent final {
     bool valid = false;
     bool cleanupComplete = false;
     std::uint32_t generation = 0;
+    std::uint32_t heapFreeBeforeMount = 0;
+    std::uint32_t heapLargestBeforeMount = 0;
+    int filesystemMountError = 0;
     leshy1::storage::SessionStoreStatus storeStatus =
         leshy1::storage::SessionStoreStatus::InvalidArgument;
 };
 CapturePersistState capturePersistState = CapturePersistState::Result;
 const char* capturePersistStatus = "volatile";
 std::uint32_t capturePersistGeneration = 0;
+std::uint32_t capturePersistHeapFreeBeforeMount = 0;
+std::uint32_t capturePersistHeapLargestBeforeMount = 0;
+int capturePersistFilesystemMountError = 0;
 QueueHandle_t captureStoreEvents = nullptr;
 TaskHandle_t captureStoreTaskHandle = nullptr;
 CapturePersistState subGhzCapturePersistState = CapturePersistState::Result;
@@ -3058,7 +3070,13 @@ void runCaptureStoreWorker(void*) {
             break;
         }
         filesystemAttempted = true;
-        if (!productSurveyFilesystem.begin()) {
+        event.heapFreeBeforeMount = static_cast<std::uint32_t>(
+            heap_caps_get_free_size(MALLOC_CAP_8BIT));
+        event.heapLargestBeforeMount = static_cast<std::uint32_t>(
+            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        const bool filesystemMounted = productSurveyFilesystem.begin();
+        event.filesystemMountError = productSurveyFilesystem.mountError();
+        if (!filesystemMounted) {
             event.status = "mount_failed";
             break;
         }
@@ -3229,6 +3247,9 @@ void serviceWifiFrameCapturePersist() {
                                    : CapturePersistState::Failed;
     capturePersistStatus = admitted ? "saved" : event.status;
     capturePersistGeneration = admitted ? event.generation : 0;
+    capturePersistHeapFreeBeforeMount = event.heapFreeBeforeMount;
+    capturePersistHeapLargestBeforeMount = event.heapLargestBeforeMount;
+    capturePersistFilesystemMountError = event.filesystemMountError;
     lastRuntimeEvent = admitted ? "capture_store_saved"
                                 : "capture_store_failed";
     if (uiController.page() == 4 ||
@@ -11478,6 +11499,9 @@ bool startWifiFrameCapture() {
     capturePersistState = CapturePersistState::Result;
     capturePersistStatus = "volatile";
     capturePersistGeneration = 0;
+    capturePersistHeapFreeBeforeMount = 0;
+    capturePersistHeapLargestBeforeMount = 0;
+    capturePersistFilesystemMountError = 0;
     wifiCaptureRenderedFrames = UINT32_MAX;
     wifiCaptureRenderedDrops = UINT32_MAX;
     wifiCaptureRenderedChannel = 0xffU;
@@ -12161,6 +12185,9 @@ void emitWifiFrameCaptureState(Stream& reply) {
         "\"volatile_ram\":true,\"immutable_after_stop\":true,"
         "\"persist_state\":\"%s\",\"persist_status\":\"%s\","
         "\"persist_generation\":%lu,"
+        "\"heap_free_before_mount\":%lu,"
+        "\"heap_largest_before_mount\":%lu,"
+        "\"filesystem_mount_error\":%d,"
         "\"channel_plan\":%u,\"current_channel\":%u,"
         "\"duration_ms\":%lu,\"channel_dwell_ms\":%u,"
         "\"snap_length\":%u,\"maximum_frames\":%u,"
@@ -12176,6 +12203,9 @@ void emitWifiFrameCaptureState(Stream& reply) {
         capturePersistState == CapturePersistState::Saved ? "true" : "false",
         capturePersistStateName(capturePersistState), capturePersistStatus,
         static_cast<unsigned long>(capturePersistGeneration),
+        static_cast<unsigned long>(capturePersistHeapFreeBeforeMount),
+        static_cast<unsigned long>(capturePersistHeapLargestBeforeMount),
+        capturePersistFilesystemMountError,
         static_cast<unsigned>(plan.channel),
         static_cast<unsigned>(wifiFrameCapture.currentChannel()),
         static_cast<unsigned long>(plan.durationMs),
@@ -12708,6 +12738,9 @@ bool openWifiCaptureProduct() {
     capturePersistState = CapturePersistState::Result;
     capturePersistStatus = "volatile";
     capturePersistGeneration = 0;
+    capturePersistHeapFreeBeforeMount = 0;
+    capturePersistHeapLargestBeforeMount = 0;
+    capturePersistFilesystemMountError = 0;
     wifiCaptureRenderedFrames = UINT32_MAX;
     wifiCaptureRenderedDrops = UINT32_MAX;
     wifiCaptureRenderedChannel = 0xffU;
@@ -12727,6 +12760,9 @@ bool closeWifiCaptureProduct() {
     capturePersistState = CapturePersistState::Result;
     capturePersistStatus = "volatile";
     capturePersistGeneration = 0;
+    capturePersistHeapFreeBeforeMount = 0;
+    capturePersistHeapLargestBeforeMount = 0;
+    capturePersistFilesystemMountError = 0;
     wifiCaptureRenderedFrames = UINT32_MAX;
     wifiCaptureRenderedDrops = UINT32_MAX;
     wifiCaptureRenderedChannel = 0xffU;
@@ -14138,7 +14174,7 @@ void emitStorageGuard(Stream& reply) {
 }
 
 void emitStorageDiscovery(Stream& reply) {
-    static char line[768] = {};
+    auto& line = diagnosticJson;
     if (storageDiscoveryReady && leshy1::storage::formatMediaDiscoveryJson(
                                      storageDiscovery, line, sizeof(line))) {
         reply.println(line);
@@ -14306,7 +14342,7 @@ void emitProductSurveyRuntimeUnavailableTest(Stream& reply,
 }
 
 void emitSdReadOnlyProtocol(Stream& reply) {
-    static char line[512] = {};
+    auto& line = diagnosticJson;
     const leshy1::storage::SdReadOnlyPlan plan =
         leshy1::storage::defaultSdIdentificationPlan();
     if (leshy1::storage::formatSdReadOnlyProtocolJson(plan, line, sizeof(line))) {
@@ -14320,7 +14356,7 @@ void emitSdReadOnlyProtocol(Stream& reply) {
 }
 
 void emitSdIdentificationFixture(Stream& reply) {
-    static char line[640] = {};
+    auto& line = diagnosticJson;
     const leshy1::storage::SdReadOnlyPlan plan =
         leshy1::storage::defaultSdIdentificationPlan();
     const leshy1::storage::SdIdentificationTranscript transcript =
@@ -14344,7 +14380,7 @@ void emitSdIdentificationFixture(Stream& reply) {
 }
 
 void emitSdTransportFixture(Stream& reply) {
-    static char line[512] = {};
+    auto& line = diagnosticJson;
     const leshy1::storage::SdReadOnlyPlan plan =
         leshy1::storage::defaultSdIdentificationPlan();
     leshy1::storage::GoldenFakeSdTransport transport;
@@ -14368,7 +14404,7 @@ void emitSdTransportFixture(Stream& reply) {
 }
 
 void emitSdWireContract(Stream& reply) {
-    static char line[512] = {};
+    auto& line = diagnosticJson;
     if (leshy1::storage::formatSdWireContractJson(line, sizeof(line))) {
         reply.println(line);
         return;
@@ -14381,9 +14417,9 @@ void emitSdWireContract(Stream& reply) {
 }
 
 void emitPhysicalSdIdentification(Stream& reply) {
-    static char line[1400] = {};
-    static char cidHex[33] = {};
-    static char csdHex[33] = {};
+    auto& line = diagnosticJson;
+    auto& cidHex = sdPhysicalEvidence.cidHex;
+    auto& csdHex = sdPhysicalEvidence.summaryA;
     cidHex[0] = '\0';
     csdHex[0] = '\0';
 
@@ -17325,7 +17361,7 @@ void emitSessionFixture(Stream& reply) {
                       "\"radio_touched\":false}");
         return;
     }
-    static char summary[768] = {};
+    auto& summary = sdPhysicalEvidence.summaryA;
     auto& segment = sessionStoreWorkspace.segment;
     auto& manifest = sessionStoreWorkspace.manifest;
     SurveySession& reopened = sessionStoreWorkspace.validationSession;
@@ -17406,7 +17442,7 @@ void emitSessionStoreFixture(Stream& reply) {
     SurveySession& reopened = sessionStoreWorkspace.validationSession;
     const leshy1::storage::SessionStoreRecoveryResult newest =
         leshy1::storage::recoverSession(ramSessionStore, sessionStoreWorkspace, &reopened);
-    static char summary[768] = {};
+    auto& summary = sdPhysicalEvidence.summaryA;
     const bool summaryReady = newest.valid() &&
                               leshy1::storage::formatSessionJsonSummary(
                                   reopened, summary, sizeof(summary));
@@ -17463,7 +17499,7 @@ void emitSessionStoreFixture(Stream& reply) {
 
 void emitLibraryFixture(Stream& reply) {
     const LibraryEntry* entry = libraryController.selected();
-    static char summary[768] = {};
+    auto& summary = sdPhysicalEvidence.summaryA;
     const bool valid = libraryDemoReady && entry != nullptr && entry->session != nullptr &&
                        leshy1::storage::formatSessionJsonSummary(
                            *entry->session, summary, sizeof(summary));
@@ -17494,7 +17530,7 @@ void emitLibraryFixture(Stream& reply) {
 }
 
 void emitLibraryExport(Stream& reply) {
-    static char artifact[4096] = {};
+    auto& artifact = diagnosticJson;
     if (libraryController.view() != LibraryView::ExportReady) {
         reply.println(
             "{\"schema\":\"leshy.library.export.v1\",\"kind\":\"artifact\","
