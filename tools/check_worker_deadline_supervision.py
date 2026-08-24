@@ -156,6 +156,8 @@ def main() -> int:
     require(ir_runner, (
         "safety.capture-ir-store-deadline-test confirm",
         "infrared_capture_store", "fixture.ir.nec.once",
+        "post-flash-ready-seconds", "records[\"post_flash\"]",
+        "post-flash boot contract failed",
         "normal IR store heartbeat coverage incomplete",
         "fault_injection_before_storage_hardware",
         "fault_injection_physical_write_calls", "safety_after_restart",

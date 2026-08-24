@@ -209,6 +209,7 @@ def main() -> int:
     parser.add_argument("--reuse-exact-fixture-flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
     parser.add_argument("--boot-seconds", type=float, default=30.0)
+    parser.add_argument("--post-flash-ready-seconds", type=float, default=45.0)
     args = parser.parse_args()
 
     if args.candidate_port == args.fixture_port:
@@ -275,6 +276,40 @@ def main() -> int:
             flash_candidate(
                 args.fixture_port, fixture_image, 0x10000, args.flash_baud)
             time.sleep(0.5)
+
+        # esptool already hard-resets each target.  Do not issue the
+        # independent candidate reset until its boot-time product-SD recovery
+        # has reached the command loop: interrupting that bounded transaction
+        # tests the harness reset timing rather than the IR Store deadline.
+        if args.flash or args.flash_fixture:
+            with PassiveSerial(
+                    args.candidate_port, 115200, timeout=0.05) as product, \
+                 PassiveSerial(
+                     args.fixture_port, 115200, timeout=0.05) as fixture:
+                synchronize_console(product, args.post_flash_ready_seconds)
+                synchronize_console(fixture, args.post_flash_ready_seconds)
+                post_flash_ready = query(
+                    product, b"metrics", "leshy.boot.v1", "ready")
+                post_flash_recovery = query(
+                    product, b"storage.product.boot-recovery",
+                    "leshy.storage.product_boot_recovery.v1", "state")
+                post_flash_fixture = query(
+                    fixture, b"fixture.identity", FIXTURE_SCHEMA, "ready", 5.0)
+                records["post_flash"] = {
+                    "ready": post_flash_ready,
+                    "recovery": post_flash_recovery,
+                    "fixture": post_flash_fixture,
+                }
+                post_flash_cid = resolve_expected_cid(
+                    args.expected_cid, post_flash_recovery)
+                failures.extend(boot_failures(
+                    post_flash_ready, post_flash_recovery,
+                    args.expected_version, app_identity, post_flash_cid))
+                failures.extend(fixture_admission_failures(
+                    post_flash_fixture, args.expected_fixture_version,
+                    args.expected_fixture_id, fixture_app_identity))
+            if failures:
+                raise RuntimeError("post-flash boot contract failed")
 
         before_ready, before_recovery, before_timing = reset_capture(
             args.candidate_port, args.output, "boot-before", args.boot_seconds)
