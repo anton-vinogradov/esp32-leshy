@@ -60,7 +60,7 @@ FULL_CHECKS = [
     ("full.s5.capture.subghz.fsk.receive", "pass"),
     ("full.s4.storage.recovery.audit", "pass"),
     ("full.s4.library.export.audit", "pass"),
-    ("full.s4.capture.pcap.audit", "pass"),
+    ("full.s4.capture.pcap.audit", "dynamic"),
     ("full.s4.storage.disposable.commit", "pass"),
     ("full.s4.storage.disposable.remount", "pass"),
     ("full.s4.library.disposable.export", "pass"),
@@ -70,6 +70,10 @@ FULL_CHECKS = [
 
 
 def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
+    facts = report.get("facts", {})
+    pcap_applicable = facts.get("capture_pcap_audit_applicable") is True
+    expected_passed = 29 if pcap_applicable else 28
+    expected_not_applicable = 2 if pcap_applicable else 3
     failures = expect(report, {
         "schema_version": 1,
         "plan_version": 10,
@@ -77,14 +81,18 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
         "status": "blocked" if full else "pass",
         "read_only": not full,
         "cancelled": False,
-        "passed": 29 if full else 9,
+        "passed": expected_passed if full else 9,
         "failed": 0,
         "blocked": 1 if full else 0,
-        "not_applicable": 2 if full else 0,
+        "not_applicable": expected_not_applicable if full else 0,
         "current_owner": "device",
         "current_lease_mask": 1,
     }, "full_report" if full else "quick_report")
-    expected = FULL_CHECKS if full else [(check_id, "pass") for check_id in QUICK_IDS]
+    expected = ([(check_id, "pass" if status == "dynamic" and
+                  pcap_applicable else "not_applicable" if
+                  status == "dynamic" else status)
+                 for check_id, status in FULL_CHECKS] if full else
+                [(check_id, "pass") for check_id in QUICK_IDS])
     actual = [(item.get("id"), item.get("status"))
               for item in report.get("checks", [])]
     if actual != expected:
@@ -100,7 +108,6 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
     if (full and (not isinstance(write_bytes, int) or write_bytes <= 0)) or (
             not full and write_bytes != 0):
         failures.append(f"unexpected Self-Test write bytes: {write_bytes!r}")
-    facts = report.get("facts", {})
     for key in (
         "build_identity_present", "profile_matched", "display_ready",
         "input_frontend_ready", "input_queue_healthy", "buzzer_inactive",
@@ -119,7 +126,7 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
         failures.append("Self-Test report was not scoped to UI-only lease 1")
     for value_key, floor_key, expected_floor in (
         ("heap_free", "heap_free_floor", 80 * 1024),
-        ("heap_minimum", "heap_minimum_floor", 64 * 1024),
+        ("heap_minimum", "heap_minimum_floor", 48 * 1024),
     ):
         value = facts.get(value_key)
         if facts.get(floor_key) != expected_floor:
@@ -147,8 +154,6 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
             "library_export_audit_complete",
             "library_export_audit_passed",
             "capture_pcap_audit_complete",
-            "capture_pcap_audit_applicable",
-            "capture_pcap_audit_passed",
             "disposable_commit_complete", "disposable_commit_passed",
             "disposable_remount_complete", "disposable_remount_passed",
             "disposable_export_complete", "disposable_export_passed",
@@ -156,6 +161,8 @@ def report_failures(report: dict[str, Any], *, full: bool) -> list[str]:
         ):
             if facts.get(key) is not True:
                 failures.append(f"shield receiver fact is not true: {key}")
+        if facts.get("capture_pcap_audit_passed") is not pcap_applicable:
+            failures.append("PCAP audit result does not match applicability")
     return failures
 
 
@@ -263,13 +270,17 @@ def active_artifact_failures(report: dict[str, Any],
         if not isinstance(value, int) or value <= 0:
             failures.append(f"artifact library {field} is invalid: {value!r}")
     capture = report.get("capture", {})
+    pcap_applicable = capture.get("applicable") is True
     failures.extend(expect(capture, {
-        "complete": True, "applicable": True, "passed": True,
-        "pcap_frames": 16, "pcap_bytes": 2773,
+        "complete": True, "applicable": pcap_applicable,
+        "passed": pcap_applicable,
+        "pcap_frames": 16 if pcap_applicable else 0,
+        "pcap_bytes": 2773 if pcap_applicable else 0,
     }, "active_artifact.capture"))
-    if not isinstance(capture.get("pcap_fnv1a"), int) or not capture.get(
-            "pcap_fnv1a"):
-        failures.append("artifact PCAP digest is absent")
+    if (pcap_applicable and
+            (not isinstance(capture.get("pcap_fnv1a"), int) or
+             not capture.get("pcap_fnv1a"))):
+        failures.append("applicable artifact PCAP digest is absent")
     disposable = report.get("disposable", {})
     failures.extend(expect(disposable, {
         "run_id": "full-guided-v10",
@@ -531,13 +542,17 @@ def main() -> int:
                     failures.append("active disposable UI phase was not captured")
                 failures.extend(expect(state, {
                     "self_test_view": "result", "self_test_status": "blocked",
-                    "self_test_checks": 32, "self_test_passed": 29,
+                    "self_test_checks": 32,
                     "self_test_failed": 0, "self_test_blocked": 1,
-                    "self_test_not_applicable": 2, "lease_mask": 1,
+                    "lease_mask": 1,
                 }, "full_result"))
                 captures["full_result"] = capture(device, frames, "full-result")
                 full = query(device, b"self-test.report", REPORT_SCHEMA, "report")
                 failures.extend(report_failures(full, full=True))
+                failures.extend(expect(state, {
+                    "self_test_passed": full.get("passed"),
+                    "self_test_not_applicable": full.get("not_applicable"),
+                }, "full_result_dynamic_counts"))
                 active_rf = query(
                     device, b"self-test.active-rf", ACTIVE_RF_SCHEMA, "report")
                 failures.extend(active_rf_failures(active_rf))

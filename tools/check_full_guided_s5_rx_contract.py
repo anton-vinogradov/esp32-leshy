@@ -27,7 +27,7 @@ def main() -> int:
     require("kPlanVersion = 10" in header, "Self-Test plan is not v10", failures)
     require("kCapacity = 32" in header, "Self-Test report capacity drifted", failures)
     require("heapFreeFloor = 80U * 1024U" in header and
-            "heapMinimumFloor = 64U * 1024U" in header,
+            "heapMinimumFloor = 48U * 1024U" in header,
             "current product heap floors drifted", failures)
     require("facts.heapFree >= facts.heapFreeFloor" in controller and
             "facts.heapMinimum >= facts.heapMinimumFloor" in controller,

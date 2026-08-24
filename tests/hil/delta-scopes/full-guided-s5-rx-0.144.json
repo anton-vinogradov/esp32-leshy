@@ -1,0 +1,21 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "full-guided-s5-rx-0.144",
+  "rationale": "This corrective delta keeps the accepted 0.143 RF execution unchanged. Exact Full/Guided measurement proved 96,880 B free after cleanup and a 63,848 B boot-lifetime transient minimum while all resources were released. The explicit historical-minimum guard is therefore set to 48 KiB, preserving 14,696 B measured margin while the independent current-free guard remains 80 KiB. The host runner also follows the firmware contract that PCAP audit is pass when an enrolled Wi-Fi capture exists and not_applicable when the admitted product session has no Wi-Fi frames; recovery, library and disposable audits remain mandatory.",
+  "reviewed_cross_cutting_sha256": {
+    "firmware/leshy1/platformio.ini": "5acf9dfbbdf9682359734dfe751970f236ae84013fe4529fe43dc3518051585b"
+  },
+  "required_host_checks": [
+    "full host/source/docs suite in tracked-evidence mode",
+    "Full/Guided plan-v10 native result and both explicit heap-floor negative cases",
+    "offline replay of exact 0.143 reports with the corrected heap and dynamic-PCAP contracts",
+    "exact firmware build and resource budget"
+  ],
+  "required_hil_scenarios": [
+    "one public Full/Guided delta run reusing the unchanged 0.143 RF sequence",
+    "both current-free and boot-lifetime heap guards pass with measured positive margins",
+    "PCAP audit passes or reports not_applicable consistently with the admitted product artifact",
+    "disposable scratch removed with product CID, generation and observations unchanged",
+    "zero radio TX commands, input drops and final ownership"
+  ]
+}

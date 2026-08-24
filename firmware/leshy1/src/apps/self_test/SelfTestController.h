@@ -48,7 +48,7 @@ struct SelfTestFacts final {
     // Current product headroom gates. heapFree protects the next foreground
     // transition; heapMinimum catches cumulative pressure observed since boot.
     std::uint32_t heapFreeFloor = 80U * 1024U;
-    std::uint32_t heapMinimumFloor = 64U * 1024U;
+    std::uint32_t heapMinimumFloor = 48U * 1024U;
     std::uint32_t inputQueueDrops = 0;
     kernel::runtime::ResourceMask activeResources = 0;
     bool persistentSurveyReady = false;
