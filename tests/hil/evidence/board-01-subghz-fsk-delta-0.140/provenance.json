@@ -1,0 +1,63 @@
+{
+  "base_commit": "0b0f0cf341fa53311b517abeb93025cd79a1de0a",
+  "build": {
+    "factory_sha256": "f293c63d226b0d1924db898c60a9f6d2bf5fd92e45a9b7b4fcc31201e066dd2d",
+    "linked_flash_bytes": 3084428,
+    "map_sha256": "0087f015e97fd463537d9ca82a3cf902dd2253b4460d2eddde5b3aa22eeb0d89",
+    "static_ram_bytes": 210984
+  },
+  "candidate": {
+    "app_elf_sha256": "5647c991098f395470996a1b4a43070d9cc1760d02039a3250e2cc2b00fdff40",
+    "exact_flash_reused": false,
+    "firmware_sha256": "cc4dbfe5df747968cb618845c4bfee28eefc37208a79c79f0dd584713a7059b9",
+    "flashed": true,
+    "source_commit": "ed820b8e61026e5feb37d0284508808e964bd55a",
+    "version": "0.140.0-subghz-fsk-rx"
+  },
+  "original_bundle": {
+    "artifact_manifest_sha256": "4ef54f836289bdea1787b02345e8bf674905d8f241dfe9a15f9a8ffa2d870224",
+    "bytes": 45818642,
+    "files": 36
+  },
+  "retention": {
+    "omitted": [
+      "firmware.bin",
+      "firmware.elf",
+      "firmware.map",
+      "rgb565",
+      "per-frame JSON"
+    ],
+    "png_frames": 10,
+    "policy": "compact_delta_no_duplicate_build_binaries"
+  },
+  "run_sha256": "7d009827f3deafe7d149bc22867598266c6ccd8f34ebecadb5d9db2d0ca0a2c3",
+  "runner_sha256": "9172aa55ed36a32859c5b414cd09a41158aa845d7bdac0644c1137d90b93ae1b",
+  "schema": "leshy.compact_delta_hil.provenance.v1",
+  "source_sha256": {
+    "docs/v1/STAGE_DEMO.md": "db9a6c3f7e92cf502620ed91cb8f4d90a7dc43cd6267d74abb872aef0d50b58d",
+    "docs/v1/STAGE_DEMO.ru.md": "c2a8e469e309da4625a4fdb30a6688813f7cb600ba90e9560289a09c7949a79d",
+    "firmware/leshy1/platformio.ini": "6e5cf20e77486aba356a23188b38c4037839b2bd92d7d7dc00e0e10f2336cbf4",
+    "firmware/leshy1/src/apps/capture/SubGhzRawCapture.cpp": "d475bdc361f3914a59c55d95fe9dc4a264b3559a9449a7e95ce1c3d47a411c88",
+    "firmware/leshy1/src/apps/capture/SubGhzRawCapture.h": "c1bcb26fe6590a60b706f3d39f2b4deaabf2ee05973d80d0099f5e5314762f19",
+    "firmware/leshy1/src/apps/library/LibraryController.cpp": "95e10b068630b9b051cdcc79e5d1c81be124e6922439403ed007ed279c760d1d",
+    "firmware/leshy1/src/boards/esp32_div_v2/BoardProfile.h": "c58b4dad5c518938469d2c94fde12666665df793dcf95c8876f15371376d4f1c",
+    "firmware/leshy1/src/domain/captures/SubGhzRaw.h": "f6d29e846cc7f3ff0ed1e0675c8a00708843d172eef62e9b1248957f6699344c",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "59d6955a20e00e88ccad878707de6fae45ed7170ea9de75c5947d753171a8e68",
+    "firmware/leshy1/src/platform/arduino/BoardCc1101PassiveSpectrum.cpp": "890b2a0a64fbe452a07bd911b2c9b4ba096ae5474736c5457c2b1ccc1335b9e4",
+    "firmware/leshy1/src/platform/arduino/BoardCc1101PassiveSpectrum.h": "8bcc1217fa98a5f41f84f925b984de14576a7334259835a6eb8806b30c075e3e",
+    "firmware/leshy1/src/services/survey/SurveySession.cpp": "63afa60dcf48e2418f5187a4f262110bc4a9feec8ad15c78453a3f8bf3ff1db8",
+    "firmware/leshy1/src/storage/SessionCodec.cpp": "20dc1c3a95a96d1e3ee802a7d5551cb3a6672802871bcfb079cf7ad71a89dac3",
+    "firmware/leshy1/src/ui/UiStrings.def": "6bb6f7158b798f9ad3c20d104e609acb79fde2828677b4337053c7b014af1420",
+    "tests/hil/delta-scopes/subghz-fsk-rx-0.140.json": "5e6779593e86a8a87752f03694369478c9c3f9bb51fd5e991458dec2b367d37f",
+    "tests/hil/hil-cadence.v1.json": "54fb8ceaaf1517a3e66a66235cca8380f8a78d99a6fbf643b5ff182fd84d48e6",
+    "tests/native/clean_target_tests.cpp": "9d3aa1a37175119381ca2c64b521059d8cdb0d8c0eb5974ca3acfd921861f218",
+    "tools/check_subghz_fsk_contract.py": "c38d91d31f4e7c404a0cf2e5bb057ee558d940e4d171559cfb835b57a3af79eb",
+    "tools/check_subghz_fsk_elf_contract.py": "bc61a16f95a871b951e51183dda36fbf6ce0f59a7f47addb7a21a94fc2d00cfa",
+    "tools/check_worker_deadline_supervision.py": "e9fed3f3efea627a7c082a31fc1d2329bce4d3befe26e9ff631b5a3d83939da1",
+    "tools/plan_hil_scope.py": "dc3663cecbcf61deeeaa60cd49c702e0488b222cc868e92f144411eff36de5d2",
+    "tools/run_1x_subghz_fsk_delta_hil.py": "9172aa55ed36a32859c5b414cd09a41158aa845d7bdac0644c1137d90b93ae1b",
+    "tools/test.sh": "2533a02d39cadc820bbc89c13090ed0af4bcad2ced99cc4fb4bd8ddc2bc956f1",
+    "tools/test_hil_scope_planner.py": "afe258b458769a03fc17a1336922a1839da63ed72c14d27e29ab87efc9dd8e86",
+    "tools/test_ir_two_board_hil.py": "ab10c457015b49c04e63ddf74473363e7bcc86ca28e64ab356e49c7c8e63475e"
+  }
+}

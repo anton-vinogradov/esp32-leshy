@@ -1,0 +1,74 @@
+{
+  "board": "board-01",
+  "cadence": {
+    "accepted_delta_ordinal": 1,
+    "anchor_evidence": "tests/hil/evidence/board-01-s5-runtime-completeness-0.139.json",
+    "flash_policy": "one_exact_candidate_flash_for_delta_matrix",
+    "full_after_accepted_deltas": 15,
+    "full_matrix_run": false,
+    "scope": "delta"
+  },
+  "candidate": {
+    "app_elf_sha256": "5647c991098f395470996a1b4a43070d9cc1760d02039a3250e2cc2b00fdff40",
+    "cid": "FE343253440000002000000055019CB7",
+    "factory_sha256": "f293c63d226b0d1924db898c60a9f6d2bf5fd92e45a9b7b4fcc31201e066dd2d",
+    "firmware_sha256": "cc4dbfe5df747968cb618845c4bfee28eefc37208a79c79f0dd584713a7059b9",
+    "linked_flash_bytes": 3084428,
+    "map_sha256": "0087f015e97fd463537d9ca82a3cf902dd2253b4460d2eddde5b3aa22eeb0d89",
+    "source_commit": "ed820b8e61026e5feb37d0284508808e964bd55a",
+    "static_ram_bytes": 210984,
+    "version": "0.140.0-subghz-fsk-rx"
+  },
+  "evidence": {
+    "compact_artifact_manifest_sha256": "1acfebff4be73a99ca1dbf01e1011c1a9c3605d8401a84fadb1011a1743b547f",
+    "compact_files": 14,
+    "compact_provenance_sha256": "992efda185679122ab6d04edff7689653489acd7eb8190488e8dbcdcb56ea2e6",
+    "original_artifact_manifest_sha256": "4ef54f836289bdea1787b02345e8bf674905d8f241dfe9a15f9a8ffa2d870224",
+    "original_bytes": 45818642,
+    "original_files": 36,
+    "png_frames": 10,
+    "retained_bytes_max": 1048576,
+    "run_sha256": "7d009827f3deafe7d149bc22867598266c6ccd8f34ebecadb5d9db2d0ca0a2c3"
+  },
+  "evidence_ids": [
+    "E-BUILD-140",
+    "E-AUTO-101",
+    "E-HIL-161",
+    "E-RADIO-019"
+  ],
+  "limits": {
+    "physical_fsk_edge_capture_proven": false,
+    "physical_fsk_positive_source_used": false,
+    "radio_transmit_authorized": false,
+    "s5_exit_gate_closed": false
+  },
+  "schema": "leshy.subghz_fsk_delta.acceptance.v1",
+  "status": "pass_software_and_no_signal_delta_physical_positive_open",
+  "verified": {
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "fsk_frequency_khz": 433920,
+    "fsk_gdo0_gpio": 6,
+    "fsk_receiver_register_writes": 42,
+    "fsk_samples": 143724,
+    "fsk_state": "timed_out",
+    "heap_free_after": 97800,
+    "heap_free_before": 97800,
+    "heap_min_after": 83612,
+    "heap_min_before": 83612,
+    "hil_session_ended": true,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "ook_receiver_register_writes": 35,
+    "ook_samples": 143061,
+    "ook_state": "timed_out",
+    "radio_application_tx_calls": 0,
+    "radio_fifo_writes": 0,
+    "radio_pa_table_writes": 0,
+    "radio_tx_strobes": 0,
+    "storage_generation_after": 110,
+    "storage_generation_before": 110,
+    "storage_physical_write_calls": 0
+  }
+}

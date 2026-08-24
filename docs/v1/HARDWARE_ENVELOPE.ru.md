@@ -96,6 +96,14 @@ Exact 0.139 применяет к board-01 software assembly overlay
 GPS/PN532 объявляются `not_applicable`; ни contested GPIO output, ни speculative
 module probe не используются для вывода об их отсутствии.
 
+Exact 0.140 объявляет CC1101 GDO0 как GPIO6 только внутри stock profile без GPS.
+FSK receiver арендует resources CC1101/SPI, настраивает GPIO6 как input и подключает
+edge ISR в IRAM только на время asynchronous RX; cleanup снимает ISR до освобождения
+lease. GDO2/GPIO3 остаётся нетронутым. Native/source/ELF checks доказывают bounded
+implementation 4 µs/512 events и её call graph в IRAM, а no-signal HIL board-01 —
+receive-only setup/cleanup. До promotion этого pin path из software/no-signal в
+positive hardware result всё ещё нужен physical FSK edge source.
+
 На обоих carriers стоят три nRF24-compatible module с внешними PA/LNA и один
 CC1101. Shield BOM описывает последний как **433 МГц, 10 мВт**; 315/868/915 МГц —
 software tuning choices, но не доказанные полезные диапазоны этого physical assembly.

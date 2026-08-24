@@ -80,6 +80,15 @@ board-01. This makes the observed stock RF carrier applicable while declaring GP
 and PN532 `not_applicable`; neither contested GPIO output nor speculative module
 probe is used to infer their absence.
 
+Exact 0.140 declares CC1101 GDO0 as GPIO6 only inside that stock no-GPS profile.
+The FSK receiver leases the CC1101/SPI resources, configures GPIO6 as input and
+attaches an IRAM edge ISR only while asynchronous RX is active; cleanup detaches the
+ISR before releasing the lease. GDO2/GPIO3 remains untouched. Native/source/ELF
+checks prove the bounded 4 µs/512-event implementation and its IRAM call graph, while
+board-01 no-signal HIL proves receive-only setup/cleanup. A physical FSK edge source
+is still required before this pin path can be promoted from software/no-signal to a
+positive hardware result.
+
 Both carriers contain three nRF24-compatible modules with external PA/LNA front ends
 and one CC1101 module. The shield BOM specifies the latter as **433 MHz, 10 mW**;
 315/868/915 MHz are therefore software tuning choices, not proven useful bands for

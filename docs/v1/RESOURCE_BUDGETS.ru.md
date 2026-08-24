@@ -292,6 +292,18 @@ largest block 49 140 B и продвигает catalog 109→110. Low-voltage pa
 filesystem и выполняет zero writes. Это focused runtime checkpoint, а не
 mixed-workload/release endurance, и он не добавляет physical positive-RF claim.
 
+Последний принятый delta `RB-M137`: exact 0.140 использует 3 084 428 B linked
+flash, 210 984 B static RAM и app/factory images 3 084 592/3 150 128 B. Это
++6 156 B linked flash, +2 680 B static RAM и +5 824/+5 824 B images против
+0.139 за chooser OOK/FSK, bounded capture state GDO0 на 512 events, asynchronous
+receive registers CC1101 и diagnostics. Dedicated DIRAM равна
+294 164/341 760 B (86,07%, свободно 47 596 B); dedicated IRAM остаётся ровно
+16 384/16 384 B без запаса. One-flash delta board-01 byte-exact сохраняет heap
+total/free/minimum 168 076/97 800/83 612 B в lifecycle no-signal FSK и соседнего
+OOK с zero storage/TX side effects. Это не physical positive-RF и не
+mixed-workload release budget. Compact retention сокращает checked HIL bundle с
+45 818 642 B до менее 1 MiB, сохраняя run, PNG и identities source/artifacts.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

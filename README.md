@@ -14,9 +14,9 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
 
-- **Current phase:** `S5.3 — controlled nRF24 positive-signal gate (hardware-blocked)`.
-- **Verified checkpoint:** exact `0.139.0-s5-runtime-complete` closes the executable S5.5 runtime slice on no-PSRAM board-01. The stock assembly is identified truthfully as `stock-rf-no-gps-no-pn532`: I²C `0x75` ACKs but its type/voltage are not guessed, voltage remains unavailable because GPIO2 belongs to the buzzer, and GPS/PN532 are explicitly not applicable. Three injected low-voltage samples prohibit Store before filesystem open with zero writes and unchanged generation 109. Real 300 ms ESP32 light sleep wakes by timer with heap/generation invariant; the public Power action sleeps for 1 s and restores UI/input. An RX-only Sub-GHz software fixture then follows the public Capture Store path at 433.920 MHz, saves three pulses atomically, advances exact-CID generation 109→110, issues zero TX/PATABLE/FIFO commands and returns Home/none/lease 0. The HIL session is explicitly ended and three TFT frames are retained. This checkpoint does not claim a physical Sub-GHz signal or close S5.
-- **Next gate:** use a qualified second RF carrier/source to close the physical S5.3 nRF24 positive result, then S5.4 physical Sub-GHz frequency→OOK capture→save→cold export and declared FSK/GDO0 path. The faulty clone is restored to stock for return and is not an authorized transmitter; without a replacement source those physical/two-board gates remain fail-closed.
+- **Current phase:** `S5.4 — Sub-GHz OOK/FSK completion (physical positive gate hardware-blocked)`.
+- **Verified checkpoint:** exact `0.140.0-subghz-fsk-rx` implements the declared receive-only FSK/GDO0 path on board-01. Capture now asks for OOK remote or FSK sensor, then the band; FSK configures CC1101 asynchronous serial RX on GDO0/GPIO6, rejects pulses shorter than 4 µs and stores at most 512 events. A one-flash delta HIL exercises the complete FSK menu/no-signal lifecycle plus adjacent OOK regression: both issue reset/receive/idle only, with zero TX/PATABLE/FIFO/storage writes, invariant heap 168,076/97,800/83,612 B, exact CID/generation 110, ten TFT frames and final Home/none/lease 0. This is accepted software/no-signal evidence, not a physical FSK-positive or S5 exit result.
+- **Next gate:** use a qualified owned RF source to close the physical S5.3 nRF24 result and S5.4 Sub-GHz frequency→OOK/FSK capture→save→cold export, then run the integrated S5.6 gate. The faulty clone is restored to stock for return and is not an authorized transmitter; without a replacement source those physical/two-board gates remain fail-closed.
 
 ### Current stage phases
 
@@ -24,8 +24,8 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 |---|---|---|
 | S5.1 | Stock-radio passive product slices: all-antenna nRF24 overview/finder, robust CC1101 finder, bounded RAW/IR capture foundations | ✅ complete |
 | S5.2 | First physical two-board loop: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ complete |
-| S5.3 | Known nRF24 signal: source-bound 2,442 MHz minimum-power fixture → three-receiver finder result → safe cleanup; blocked until a repaired/replacement RF carrier is available | 🟡 in progress |
-| S5.4 | Known Sub-GHz signal: frequency find plus OOK capture/save/cold export; declare and verify the FSK/GDO0 path | ⬜ later |
+| S5.3 | Known nRF24 signal: source-bound 2,442 MHz minimum-power fixture → three-receiver finder result → safe cleanup; blocked until a repaired/replacement RF carrier is available | 🔴 blocked |
+| S5.4 | Known Sub-GHz signal: exact 0.140 accepts the bounded OOK/FSK UI, GDO0 receive implementation and one-flash no-signal delta; physical frequency→capture→save→cold export remains source-blocked | 🟡 in progress |
 | S5.5 | Runtime completeness: exact 0.139 accepts Product Survey/worker safety inherited from 0.138 plus truthful stock assembly applicability, debounced low-voltage Store refusal, real light-sleep/resume and a public RX-only Sub-GHz software-fixture Store path; physical positive RF remains owned by S5.3/S5.4 | ✅ complete |
 | S5.6 | Integrated S5 hardware gate: on-device Full check plus automated two-board regression with zero leaked leases/outputs | ⬜ later |
 

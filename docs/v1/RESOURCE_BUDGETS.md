@@ -298,6 +298,19 @@ low-voltage path opens no filesystem and performs zero writes. This is a focused
 runtime checkpoint, not mixed-workload or release endurance, and it does not add a
 physical positive-RF claim.
 
+Latest accepted delta `RB-M137`: exact 0.140 uses 3,084,428 B linked flash,
+210,984 B static RAM and app/factory images 3,084,592/3,150,128 B. This is
++6,156 B linked flash, +2,680 B static RAM and +5,824/+5,824 B images versus
+0.139 for the OOK/FSK chooser, bounded 512-event GDO0 capture state, CC1101
+asynchronous receive registers and diagnostics. Dedicated DIRAM is
+294,164/341,760 B (86.07%, 47,596 B remaining); the dedicated IRAM region remains
+exactly 16,384/16,384 B with no headroom. The one-flash board-01 delta preserves
+heap total/free/minimum exactly at 168,076/97,800/83,612 B across FSK and adjacent
+OOK no-signal lifecycles, with zero storage/TX side effects. It is not a physical
+positive-RF or mixed-workload release budget. Compact retention reduces the checked
+HIL bundle from 45,818,642 B to less than 1 MiB without discarding run, PNG or
+source/artifact identities.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

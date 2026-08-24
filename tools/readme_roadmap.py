@@ -51,7 +51,10 @@ CONFIGS = (
         detailed_status="live status and next evidence gate",
         stage_plan="stage outcomes and exit gates",
         functionality_map="complete functionality map",
-        status_labels={"done": "complete", "active": "in progress", "planned": "later"},
+        status_labels={
+            "done": "complete", "active": "in progress",
+            "blocked": "blocked", "planned": "later",
+        },
         snapshot_fields=(
             ("Current phase", "Current phase"),
             ("Verified checkpoint", "Verified checkpoint"),
@@ -74,7 +77,10 @@ CONFIGS = (
         detailed_status="живой статус и ближайший evidence gate",
         stage_plan="результаты и exit gates этапов",
         functionality_map="полная карта функциональности",
-        status_labels={"done": "готово", "active": "в работе", "planned": "дальше"},
+        status_labels={
+            "done": "готово", "active": "в работе",
+            "blocked": "заблокировано", "planned": "дальше",
+        },
         snapshot_fields=(
             ("Текущая фаза", "Текущая фаза"),
             ("Проверенный checkpoint", "Проверенный checkpoint"),
@@ -141,7 +147,8 @@ def parse_active_phases(config: LanguageConfig,
         raise ValueError(
             f"{config.status}: expected sequential phases {expected_ids}, "
             f"got {actual_ids}")
-    unknown = sorted({row[2] for row in rows} - {"done", "active", "planned"})
+    unknown = sorted(
+        {row[2] for row in rows} - {"done", "active", "blocked", "planned"})
     if unknown:
         raise ValueError(f"{config.status}: unsupported phase states {unknown}")
     active = [row[0] for row in rows if row[2] == "active"]
@@ -186,7 +193,7 @@ def render(config: LanguageConfig) -> str:
     active_phase = next(row[0] for row in phases if row[2] == "active")
     snapshot = parse_snapshot(config, active_phase)
     done = sum(state == "done" for state in states.values())
-    icon = {"done": "✅", "active": "🟡", "planned": "⬜"}
+    icon = {"done": "✅", "active": "🟡", "blocked": "🔴", "planned": "⬜"}
 
     lines = [
         START_MARKER,

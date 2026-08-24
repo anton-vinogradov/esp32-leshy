@@ -14,9 +14,9 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
-- **Текущая фаза:** `S5.3 — controlled positive-signal gate nRF24 (аппаратно заблокирован)`.
-- **Проверенный checkpoint:** exact `0.139.0-s5-runtime-complete` закрывает исполнимую runtime-часть S5.5 на no-PSRAM board-01. Stock assembly честно определён как `stock-rf-no-gps-no-pn532`: I²C `0x75` отвечает, но его тип/напряжение не выдумываются, voltage остаётся unavailable, потому что GPIO2 принадлежит баззеру, GPS/PN532 явно not applicable. Три injected low-voltage samples запрещают Store до открытия filesystem с zero writes и неизменным generation 109. Реальный light sleep ESP32 на 300 ms просыпается по timer с invariant heap/generation; public Action Power спит 1 s и восстанавливает UI/input. Затем RX-only software fixture Sub-GHz проходит public Capture Store path на 433,920 МГц, атомарно сохраняет три pulses, продвигает exact-CID generation 109→110, выполняет zero TX/PATABLE/FIFO и возвращается Home/none/lease 0. HIL session явно завершена, три TFT frame сохранены. Checkpoint не заявляет физический Sub-GHz signal и не закрывает S5.
-- **Следующий gate:** использовать квалифицированный второй RF carrier/source для physical positive result nRF24 S5.3, затем выполнить S5.4: physical Sub-GHz frequency→OOK capture→save→cold export и объявленный path FSK/GDO0. Неисправный клон восстановлен в stock для возврата и не является разрешённым transmitter; без replacement source physical/two-board gates остаются fail-closed.
+- **Текущая фаза:** `S5.4 — завершение Sub-GHz OOK/FSK (physical positive gate аппаратно заблокирован)`.
+- **Проверенный checkpoint:** exact `0.140.0-subghz-fsk-rx` реализует объявленный receive-only path FSK/GDO0 на board-01. Capture теперь предлагает OOK-пульт или FSK-датчик, затем диапазон; FSK настраивает CC1101 asynchronous serial RX на GDO0/GPIO6, отбрасывает pulses короче 4 µs и хранит максимум 512 events. One-flash delta HIL проходит полный FSK menu/no-signal lifecycle и соседнюю OOK regression: оба используют только reset/receive/idle, с zero TX/PATABLE/FIFO/storage writes, invariant heap 168 076/97 800/83 612 B, exact CID/generation 110, десятью TFT frames и финалом Home/none/lease 0. Это принятое software/no-signal evidence, а не physical FSK-positive или S5 exit result.
+- **Следующий gate:** использовать квалифицированный собственный RF source, чтобы закрыть physical nRF24 result S5.3 и Sub-GHz frequency→OOK/FSK capture→save→cold export S5.4, затем выполнить integrated gate S5.6. Неисправный клон восстановлен в stock для возврата и не является разрешённым transmitter; без replacement source physical/two-board gates остаются fail-closed.
 
 ### Фазы текущего этапа
 
@@ -24,8 +24,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 |---|---|---|
 | S5.1 | Пассивные product slices штатных радио: all-antenna overview/finder nRF24, robust finder CC1101, основы bounded RAW/IR capture | ✅ готово |
 | S5.2 | Первый physical loop двух плат: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ готово |
-| S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup; заблокирован до появления исправного/заменённого RF carrier | 🟡 в работе |
-| S5.4 | Известный Sub-GHz signal: поиск частоты плюс OOK capture/save/cold export; объявленный и проверенный FSK/GDO0 path | ⬜ дальше |
+| S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup; заблокирован до появления исправного/заменённого RF carrier | 🔴 заблокировано |
+| S5.4 | Известный Sub-GHz signal: exact 0.140 принимает bounded OOK/FSK UI, реализацию receive GDO0 и one-flash no-signal delta; physical frequency→capture→save→cold export остаётся source-blocked | 🟡 в работе |
 | S5.5 | Полнота runtime: exact 0.139 принимает унаследованную от 0.138 safety Product Survey/workers плюс truthful applicability stock assembly, debounced отказ Store при low voltage, реальный light-sleep/resume и public RX-only software-fixture path Store Sub-GHz; physical positive RF остаётся в S5.3/S5.4 | ✅ готово |
 | S5.6 | Интегральный hardware gate S5: on-device Full check плюс автоматический two-board regression без утечки leases/outputs | ⬜ дальше |
 
