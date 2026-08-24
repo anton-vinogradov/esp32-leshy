@@ -90,11 +90,15 @@ std::uint8_t BoardShieldReceiverProbe::readNrfNopBitBang(
 }
 
 void BoardShieldReceiverProbe::characterizeBusLine() {
-    if (report_ == nullptr || !gpio21Safe()) return;
+    if (report_ == nullptr) return;
+    // Sampling an input under the two internal pulls does not clock or select
+    // any receiver. Keep this evidence even when the detachable RF carrier is
+    // absent and GPIO21 therefore cannot satisfy the assembled-shield guard.
     report_->misoSamplesPerPull = kMisoSamplesPerPull;
     report_->misoIdlePullDownHighSamples = sampleMisoHigh(INPUT_PULLDOWN);
     report_->misoIdlePullUpHighSamples = sampleMisoHigh(INPUT_PULLUP);
     pinMode(BoardProfile::kRadioMisoPin, INPUT);
+    if (!gpio21Safe()) return;
 
     for (std::size_t slot = 0; slot < report_->nrfNopStatusPullDown.size();
          ++slot) {
@@ -214,13 +218,6 @@ bool BoardShieldReceiverProbe::run(bool radioSpiOwned,
     digitalWrite(BoardProfile::kNrfCsPins[1], HIGH);
     digitalWrite(BoardProfile::kCc1101CsPin, HIGH);
     digitalWrite(BoardProfile::kSdCsPin, HIGH);
-    if (!gpio21Safe()) {
-        cleanup();
-        drivers::radio::finalizeShieldReceiverProbe(report_);
-        report_ = nullptr;
-        return false;
-    }
-
     characterizeBusLine();
     if (!report_->busLineCharacterizationComplete || !gpio21Safe()) {
         cleanup();

@@ -29,28 +29,42 @@ PROBE_SCHEMA = "leshy.shield.receiver_probe.v1"
 
 def probe_contract_failures(
     report: dict[str, Any], require_bus_characterization: bool = False,
+    require_isolated_main_characterization: bool = False,
 ) -> list[str]:
-    failures = expect(report, {
+    expected = {
         "schema_version": 1,
         "read_only": True,
         "profile_declared": True,
         "gps_excluded_by_profile": True,
         "pn532_excluded_by_profile": True,
         "nrf_slot3_gated": True,
-        "gpio21_stable_high": True,
         "resource_acquired": True,
         "resource_released": True,
-        "cleanup_complete": True,
         # Self-Test is a Device child page; the runtime lease remains owned by
         # the launched top-level Device app throughout the guarded probe.
         "current_owner": "device",
         "current_lease_mask": 1,
-    }, "shield_receiver_probe")
-    if report.get("wire") != {
+    }
+    expected.update({
+        "gpio21_stable_high": not require_isolated_main_characterization,
+        "cleanup_complete": not require_isolated_main_characterization,
+    })
+    if require_isolated_main_characterization:
+        expected.update({
+            "status": "failed",
+            "detected_receivers": 0,
+        })
+    failures = expect(report, expected, "shield_receiver_probe")
+    expected_wire = ({
+        "nrf_register_reads": 0,
+        "cc_status_reads": 0,
+        "spi_bytes_clocked": 0,
+    } if require_isolated_main_characterization else {
         "nrf_register_reads": 8,
         "cc_status_reads": 2,
         "spi_bytes_clocked": 20,
-    }:
+    })
+    if report.get("wire") != expected_wire:
         failures.append(f"unexpected wire bounds: {report.get('wire')!r}")
     if report.get("side_effects") != {
         "nrf_ce_high_events": 0,
@@ -59,7 +73,31 @@ def probe_contract_failures(
     }:
         failures.append(
             f"unexpected probe side effects: {report.get('side_effects')!r}")
-    if require_bus_characterization:
+    if require_isolated_main_characterization:
+        bus = report.get("bus_line", {})
+        failures.extend(expect(bus, {
+            "complete": False,
+            "samples_per_pull": 32,
+            "nrf_nop_reads": 0,
+            "bitbang_spi_bytes_clocked": 0,
+        }, "shield_receiver_probe.bus_line"))
+        nop = bus.get("nrf_nop")
+        if not isinstance(nop, list) or len(nop) != 2:
+            failures.append(f"unexpected isolated nRF NOP records: {nop!r}")
+        elif any(
+            row.get("slot") != slot or
+            row.get("pull_down_status") != 0xFF or
+            row.get("pull_up_status") != 0xFF
+            for slot, row in enumerate(nop, start=1)
+        ):
+            failures.append(f"isolated probe clocked or changed nRF NOP: {nop!r}")
+        for field in (
+            "idle_pull_down_high_samples", "idle_pull_up_high_samples",
+        ):
+            value = bus.get(field)
+            if not isinstance(value, int) or not 0 <= value <= 32:
+                failures.append(f"invalid isolated {field}: {value!r}")
+    elif require_bus_characterization:
         bus = report.get("bus_line", {})
         failures.extend(expect(bus, {
             "complete": True,
@@ -73,6 +111,19 @@ def probe_contract_failures(
         elif [row.get("slot") for row in nop] != [1, 2]:
             failures.append(f"unexpected nRF NOP slots: {nop!r}")
     return failures
+
+
+def isolated_main_outcome(report: dict[str, Any]) -> str:
+    bus = report.get("bus_line", {})
+    down = bus.get("idle_pull_down_high_samples")
+    up = bus.get("idle_pull_up_high_samples")
+    if down == 0 and up == 32:
+        return "isolated_main_gpio_follows_pulls"
+    if down == 0 and up == 0:
+        return "isolated_main_gpio_stuck_low"
+    if down == 32 and up == 32:
+        return "isolated_main_gpio_stuck_high"
+    return "isolated_main_gpio_unstable"
 
 
 def normalize_home(device: Any) -> list[dict[str, Any]]:
@@ -143,10 +194,18 @@ def main() -> int:
               "app ELF identity match the supplied exact image"),
     )
     parser.add_argument("--require-bus-characterization", action="store_true")
+    parser.add_argument(
+        "--require-isolated-main-characterization", action="store_true",
+        help=("accept an intentionally absent RF carrier, require pull-only "
+              "GPIO13 sampling and reject every SPI clock or receiver read"),
+    )
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0),
                         default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
+    if (args.require_bus_characterization and
+            args.require_isolated_main_characterization):
+        parser.error("bus and isolated-main characterization are exclusive")
     if not args.firmware.is_file():
         parser.error(f"firmware not found: {args.firmware}")
     if args.output.exists():
@@ -234,7 +293,8 @@ def main() -> int:
                     PROBE_SCHEMA, "report",
                 )
                 failures.extend(probe_contract_failures(
-                    probe, args.require_bus_characterization))
+                    probe, args.require_bus_characterization,
+                    args.require_isolated_main_characterization))
                 safe_outputs = query(
                     device, b"hardware.safe-outputs",
                     "leshy.hardware.safe-outputs.v1", "state",
@@ -254,17 +314,18 @@ def main() -> int:
         failures.append(f"runner: {type(error).__name__}: {error}")
 
     detected = int(probe.get("detected_receivers", 0))
+    outcome = (isolated_main_outcome(probe)
+               if args.require_isolated_main_characterization else (
+                   "all_receivers_detected" if detected == 3 else
+                   "partial_receivers_detected" if detected > 0 else
+                   "no_receivers_detected"))
     result = {
         "schema": RUN_SCHEMA,
         "run_id": secrets.token_hex(16),
         "runner_source_sha256": sha256_file(Path(__file__).resolve()),
         "passed": not failures,
         "failures": failures,
-        "outcome": (
-            "all_receivers_detected" if detected == 3 else
-            "partial_receivers_detected" if detected > 0 else
-            "no_receivers_detected"
-        ),
+        "outcome": outcome,
         "candidate": {
             "version": args.expected_version,
             "source_commit": args.source_commit,
@@ -282,6 +343,10 @@ def main() -> int:
         "limits": {
             "read_only_identity": True,
             "rf_transmission_authorized": False,
+            "isolated_main_characterization":
+                args.require_isolated_main_characterization,
+            "rf_carrier_required_absent":
+                args.require_isolated_main_characterization,
             "storage_required": False,
             "stage_or_phase_promotion": False,
         },
