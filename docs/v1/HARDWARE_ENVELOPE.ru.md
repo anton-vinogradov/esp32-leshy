@@ -111,10 +111,15 @@ clocks, receiver reads, CE-high events, command strobes и TX commands. GPIO13 �
 clamp на RF carrier или его стороне connector. См.
 [assembled characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
 и [isolated-main characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json).
-Видимое отличие antenna interface ещё не является результатом RF continuity и не
-может объяснить отсутствие digital identity. Нельзя добавлять припой или считать U.FL
-оборванным только по виду фото. Host/build-checked diagnostic 0.132 следующим samples
-CSN GPIO4, 48, 21 и 5 плюс MISO, не трогая SCK/MOSI и не включая CE.
+Видимое отличие antenna interface не является результатом RF continuity и не может
+объяснить отсутствие digital identity. Нельзя добавлять припой или считать U.FL
+оборванным только по виду фото. Exact 0.132 снова подключает carrier и samples CSN
+GPIO4, 48, 21 и 5 HIGH 32/32 каждый, пока MISO остаётся LOW 0/32 под обоими pull.
+Он clocks zero SPI bytes и выполняет zero reads, CE-high events, strobes и TX commands.
+Значит, line удерживает не выбранный receiver, а carrier module или shared-MISO net
+carrier не переходит в high impedance. Общая direct power/MISO topology исключает
+дальнейшую software-only изоляцию отдельных modules. См.
+[carrier-CSN evidence](../../tests/hil/evidence/board-02-rf-carrier-csn-0.132.json).
 
 Upstream community evidence имеет такую же форму отказа, но не доказывает root cause
 этого экземпляра. [Issue #102](https://github.com/cifertech/ESP32-DIV/issues/102)
@@ -373,7 +378,7 @@ Software evidence для GPIO2: авторское описание root cause �
 | HW-U04 | partial: idle connector rails user-measured 4,35/3,2 В на рабочей board-01 и 4,7/3,3 В на board-02; ripple, peak и thermal margin не измерены | никакого active RF fixture board-02 и default combined shield load; новая combination unavailable по RB-08 | calibrated dynamic HW-T10 rail/thermal matrix |
 | HW-U05 | оператор подтвердил отсутствие GPS/PN532 assembly на board-01; standard connector contract не доказан | default profile объявляет оба absent; каждому нужен explicit assembly profile, output-mode autodetect запрещён | assembly photo/spec + HW-T07 |
 | HW-U06 | partial: GPIO38 LOW с одной inserted/identified card; polarity и batch consistency не измерены | GPIO38 не authoritative в S2; storage state определяется bounded explicit operation и остаётся fault/absent при failure | HW-T05 на разных media/batch |
-| HW-U07 | partial: exact 0.130 читает valid receiver identities и MISO HIGH 32/32 на board-01, но assembled board-02 удерживает shared MISO LOW 0/32 под обоими pull до/после reseat несмотря на valid idle rails; powered-off MISO→GND 23 кОм против 32 кОм отвергает hard short; exact isolated-main 0.131 меняет GPIO13 board-02 на HIGH 32/32 под обоими pull при снятом RF carrier, локализуя источник LOW на carrier или его стороне connector | `spi_radio` exclusive; carrier RF board-02 остаётся `fault`; cross-swap и emission запрещены | разметить carrier CSN/MISO pads, доказать HIGH на CSN каждого receiver под quiescent exact image, затем по одному изолировать carrier modules, если MISO остаётся LOW; до bounded regression потребовать repaired plausible identities |
+| HW-U07 | partial: exact 0.130 читает valid receiver identities и MISO HIGH 32/32 на board-01, но assembled board-02 удерживает shared MISO LOW 0/32 под обоими pull до/после reseat несмотря на valid idle rails; powered-off MISO→GND 23 кОм против 32 кОм отвергает hard short; exact isolated-main 0.131 меняет GPIO13 на HIGH 32/32 без carrier; exact reassembled 0.132 доказывает каждый receiver CSN HIGH 32/32, пока MISO возвращается LOW 0/32 при zero bus/TX activity | `spi_radio` exclusive; carrier RF board-02 остаётся `fault`; cross-swap и emission запрещены; конкретный module или antenna/U.FL fault не заявляется | вернуть/заменить carrier/device либо физически изолировать MISO/power modules по одному; до bounded regression потребовать repaired plausible identities |
 | HW-U08 | electrical/ADC behavior не измерен; software root cause ложного звука подтверждён 0.x и upstream issue #117 | battery percentage unavailable; GPIO2 никогда не sampled как ADC и с первой инструкции setup удерживается OUTPUT LOW; HIGH разрешён только будущему bounded sound service | HW-T09 для ADC/sound characterization; silent invariant закрывается boot/runtime state + audible observation |
 | HW-U09 | partial: exact 0.129 доказывает один bounded physical NEC receive/save/cold-export path; GPIO21 остаётся exclusive с nRF #3 | IR RX available только из explicit RF-shield profile; autodetect отсутствует; product IR TX дополнительно требует Lab/ADR-002 evidence | расширить protocol vectors и instrument GPIO21 switching по HW-T08 |
 | HW-U10 | нет rail peak/thermal measurements | первый slice только Wi-Fi; shield по одному receiver после per-module HIL; combined modes unavailable | HW-T10 и endurance RB-08 |

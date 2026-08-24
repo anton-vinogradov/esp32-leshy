@@ -13,10 +13,10 @@
 - **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
 - **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
-- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact passive `0.130.0` удерживает shared MISO/GPIO13 собранной board-02 в LOW на 32/32 samples под обеими подтяжками и читает zero receiver identities; exact isolated-main `0.131.0` меняет тот же наблюдаемый input на HIGH на 32/32 samples под обеими подтяжками при снятом RF carrier. Второй run выполняет zero SPI clocks, receiver reads, CE-high events, strobes и TX commands и возвращает Home/lease 0. Зависящий от сборки LOW локализует fault на RF carrier или его стороне connector, а не на main-only stuck-low ESP input. Host/build-checked `0.132.0-carrier-csn-characterization` подготовлен, но physical claim ещё не сделан.
-- **Следующий evidence gate:** запустить exact `0.132.0` на снова собранной board-02 и по 32 раза sample nRF CSN GPIO4/48/21, CC1101 CSN GPIO5 и shared MISO GPIO13, удерживая все CE в LOW и не трогая SCK/MOSI. Если все CSN HIGH, а MISO остаётся LOW, по одному изолировать carrier modules и потребовать plausible identities после ремонта до любого known-signal emission. Cross-swap и RF emission остаются закрыты.
+- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact `0.130.0`/`0.131.0` меняют shared MISO/GPIO13 board-02 из LOW с подключённым RF carrier в HIGH при снятом carrier. Exact `0.132.0-carrier-csn-characterization` снова подключает carrier и наблюдает все четыре receiver select в HIGH на 32/32 samples (nRF GPIO4/48/21 и CC1101 GPIO5), а MISO возвращается в LOW: 0/32 HIGH samples под обоими pull. Run выполняет zero SPI bytes, receiver reads, CE-high events, strobes и TX commands и возвращает Home/none/lease 0. Это отвергает случайно выбранный receiver и локализует fault до carrier module или общей MISO-сети carrier; один модуль не определён, antenna/U.FL fault не доказан.
+- **Следующий evidence gate:** отремонтировать, вернуть или заменить RF carrier/device board-02, затем потребовать plausible identities nRF и CC1101 тем же exact read-only probe до любой bounded known-signal emission. Изоляция отдельных modules теперь требует физического разрыва MISO или power, потому что carrier не имеет software-controlled power modules. Cross-swap и RF emission остаются закрыты.
 - **Принятая physical baseline:** exact `0.129.0-pre-app-watchdog`; все прежние принятые checkpoints сохранены ниже.
-- **Текущий source candidate:** accepted product baseline остаётся exact `0.129.0-pre-app-watchdog`; focused diagnostic `0.132.0-carrier-csn-characterization` прошёл host и ESP build и заменяет ручное касание мелких pads на pull-only sampling четырёх CSN плюс MISO. Он выходит до каждого bit-bang/SPI path и не может разрешить RF. Exact commit/image hashes и physical evidence ещё ожидаются, поэтому это не promotion product/release.
+- **Текущий source candidate:** accepted product baseline остаётся exact `0.129.0-pre-app-watchdog`; focused diagnostic `0.132.0-carrier-csn-characterization` сохранён на source `3f491ae` с firmware `2af4d1c8…3039` и ELF `aecb08fc…8edf`. Его exact physical run board-02 проходит diagnostic contract и сохранён ниже, но это evidence локализации fault, а не promotion product/release.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
@@ -29,8 +29,9 @@
   показывают две ревизии antenna interface CC1101: на AS07 клона есть неиспользуемый
   U.FL, а на оригинале — другая population external feed. Antenna continuity пока не
   квалифицирована, но отсутствие антенны не объясняет пропавшую SPI identity; изменение
-  пайки не разрешено. Следующая safe operation — exact pull-only characterization CSN
-  carrier, а не TX.
+  пайки не разрешено. Exact 0.132 теперь отвергает selected-CSN explanation: все четыре
+  CSN HIGH, а shared MISO остаётся LOW. Дальнейшая локализация требует физической
+  изоляции modules, замены carrier или возврата device, а не TX.
 - **Последняя локализация:** гипотеза отсутствующей rail отвергнута для idle condition:
   board-02 показывает 4,7/3,3 В — немного выше рабочего control board-01. Exact 0.130
   читает MISO собранной board-01 как HIGH `32/32` со STATUS `0x0E`, а собранной
@@ -40,8 +41,14 @@
   поэтому runner label `isolated_main_gpio_stuck_high` фиксирует high-dominant shared
   net, а не повреждение main board. Переход attached→isolated LOW→HIGH доказывает, что
   ESP input видит оба состояния, и локализует источник LOW на стороне carrier.
+  Exact 0.132 снова подключает carrier и samples nRF CSN GPIO4/48/21 плюс CC1101 CSN
+  GPIO5 HIGH `32/32` каждый, пока GPIO13 остаётся LOW `0/32` под обоими pull. При всех
+  deselected receiver и zero clocks/reads/TX shared line удерживает carrier module или
+  MISO net carrier; software не может различить их, потому что четыре module делят
+  direct power и MISO.
   [Assembled characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
   и [isolated-main characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json)
+  вместе с [carrier-CSN characterization](../../tests/hil/evidence/board-02-rf-carrier-csn-0.132.json)
   сохраняют exact hashes, measurements, zero side effects и суженный repair tree.
 - **Текущее negative evidence:** fixture `0.2.0` обнаружил реальную ошибку выбора slot;
   исправленный на slot 2 fixture `0.2.1` всё равно отказал до CE HIGH. Diagnostic
@@ -872,6 +879,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-HIL-151 / E-RADIO-015 | классификация N16R8/DNP board-02 и no-flash receiver rerun | partial/fail-closed: ROM определяет 16 MiB flash плюс встроенные 8 MiB Octal PSRAM; фото подтверждают отсутствующий BOM buzzer и отдельно распаянный RF carrier. После полной reassembly connector 2×10 без питания exact running `0.81.0` переиспользует firmware `2d0bc0cf…8379`/ELF `e86968d4…033` без flash и снова читает nRF `0/0` плюс CC `0/0` за bounded 8+2 reads, zero CE-high/TX и Home/lease 0. Hashes upstream source/schematic/BOM и точный stock radio pinout привязаны в [machine evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json) | отвергает simple reseat, wrong Leshy-v2 pin mapping, usable PSRAM и stock-flash-as-diagnostic explanations; RF остаётся `fault`, emission/cross-swap запрещены до comparative connector continuity и assembled 3,3 В |
 | E-BUILD-130 | exact diagnostic build `0.130.0-rf-bus-characterization` | pass: static RAM 233 288 B, linked flash 3 063 472 B; app/factory 3 063 872/3 129 408 B; firmware `d2ecc7a6…9910`, factory `0baf2b71…e734`, ELF/app identity `7af37a71…c71`, map `4207cb8b…c9`; exact source `401d425` | +912 B linked flash, zero static-RAM growth и +912/+912 B images против 0.129 за CE-low dual-pull MISO sampling и четыре bounded nRF NOP reads; только diagnostic, без promotion product/release |
 | E-HIL-152 / E-RADIO-016 | exact 0.130, passive characterization shared bus | partial/fail-closed: exact image `d2ecc7a6…9910`/ELF `7af37a71…c71` находит оба admitted nRF плюс CC1101 на board-01, где shared MISO HIGH 32/32 под каждым pull, а NOP STATUS равен `0x0E`. Board-02 имеет measured rails 4,7/3,3 В, но остаётся LOW 0/32 под каждым pull, возвращает NOP STATUS `0x00` на обоих nRF selects и воспроизводит all-zero identities после ещё одного reseat без питания в exact no-flash run `1d5850ca…7589`. Все CE остаются LOW, CC strobes/TX равны zero, cleanup достигает Home/none/lease 0 в [machine evidence](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json). Powered-off MISO→GND равно 23 кОм на board-02 против 32 кОм на board-01 | отвергает отсутствующее idle power, transient seating и hard passive short; локализует общий fault до powered/logic-dependent clamp shared MISO/GPIO13. RF закрыт до того же exact pull test на isolated main hardware board-02, который различит RF carrier, routing main board или ESP pin damage |
+| E-BUILD-132 | exact diagnostic build `0.132.0-carrier-csn-characterization` | pass на source `3f491ae0993a5bc8b43e67e88989c4d9ead88969`: static RAM/linked flash 233 304/3 063 064 B; firmware `2af4d1c8…3039`; ELF/app identity `aecb08fc…8edf`; host regression и docs checks проходят | diagnostic-only delta добавляет pull-up sampling CSN GPIO4/48/21/5 и выходит до bit-bang/SPI/receiver/TX paths; без promotion product/release |
+| E-HIL-153 / E-RADIO-017 | exact 0.132, passive carrier-CSN characterization | pass diagnostic/fail-closed RF: reassembled board-02 читает nRF CSN GPIO4/48/21 и CC1101 CSN GPIO5 HIGH 32/32 каждый, но shared MISO GPIO13 остаётся LOW 0/32 под обоими pull. Exact run выполняет zero SPI bytes, receiver reads, CE-high events, strobes и TX commands, сохраняет heap 148 148/78 424/78 424 B и возвращает Home/none/lease 0 в [machine-checked evidence](../../tests/hil/evidence/board-02-rf-carrier-csn-0.132.json) | отвергает случайно selected receiver и main-only stuck-low ESP input; локализует fault до carrier module или shared-MISO net без определения одного module или antenna path. Software-only isolation исчерпана; carrier repair/return/replacement и plausible identities обязательны до emission |
 
 ## Известные неопределённости и риски
 

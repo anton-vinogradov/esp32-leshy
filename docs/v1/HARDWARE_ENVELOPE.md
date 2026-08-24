@@ -96,10 +96,15 @@ of a damaged ESP input. The assembly-dependent LOW localizes the powered/logic-d
 clamp to the RF carrier or its connector side. See the
 [assembled characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
 and [isolated-main characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json).
-The visible antenna-interface difference is not yet an RF-continuity result and cannot
+The visible antenna-interface difference is not an RF-continuity result and cannot
 explain missing digital identity. Do not add solder or infer a broken U.FL path from
-photo appearance alone. Host/build-checked diagnostic 0.132 next samples CSN GPIO4,
-48, 21 and 5 plus MISO without touching SCK/MOSI or enabling CE.
+photo appearance alone. Exact 0.132 reattaches the carrier and samples CSN GPIO4, 48,
+21 and 5 HIGH 32/32 each while MISO remains LOW 0/32 under both pulls. It clocks zero
+SPI bytes and performs zero reads, CE-high events, strobes or TX commands. Thus a
+selected receiver is not holding the line: a carrier module or the carrier shared-MISO
+net fails to tri-state. The shared direct power/MISO topology prevents further
+software-only per-module isolation. See the
+[carrier-CSN evidence](../../tests/hil/evidence/board-02-rf-carrier-csn-0.132.json).
 
 Upstream community evidence has the same failure shape but does not prove this unit's
 root cause. [Issue #102](https://github.com/cifertech/ESP32-DIV/issues/102) reports
@@ -326,7 +331,7 @@ flag or a successful unrelated probe.
 | HW-U04 | partial: idle connector rails are user-measured at 4.35/3.2 V on working board-01 and 4.7/3.3 V on board-02; ripple, peak and thermal margin are unmeasured | no active board-02 RF fixture and no default combined shield load; each new combination remains unavailable under RB-08 | calibrated dynamic HW-T10 rail/thermal matrix |
 | HW-U05 | operator reports no GPS/PN532 assembly on board-01; no standard connector contract proven | default profile declares both absent; either requires its own explicit assembly profile, never output-mode autodetect | assembly photo/spec + HW-T07 |
 | HW-U06 | partial: GPIO38 reads LOW with one inserted/identified card; polarity/batch consistency remain unmeasured | GPIO38 is not authoritative in S2; storage state comes from a bounded explicit operation and remains fault/absent on failure | HW-T05 across media and board batch |
-| HW-U07 | partial: exact 0.130 reads valid receiver identities and MISO HIGH 32/32 on board-01, but assembled board-02 holds shared MISO LOW 0/32 under both pulls before/after reseat despite valid idle rails; powered-off MISO-to-ground is 23 kΩ versus 32 kΩ, rejecting a hard short; exact isolated-main 0.131 changes board-02 GPIO13 to HIGH 32/32 under both pulls when the RF carrier is removed, localizing the LOW source to the carrier or its connector side | `spi_radio` is exclusive; board-02 carrier RF remains `fault`; no cross-swap or emission | map carrier CSN/MISO pads, prove every receiver CSN HIGH under the quiescent exact image, then isolate carrier modules one at a time if MISO remains LOW; require repaired plausible identities before bounded regression |
+| HW-U07 | partial: exact 0.130 reads valid receiver identities and MISO HIGH 32/32 on board-01, but assembled board-02 holds shared MISO LOW 0/32 under both pulls before/after reseat despite valid idle rails; powered-off MISO-to-ground is 23 kΩ versus 32 kΩ, rejecting a hard short; exact isolated-main 0.131 changes GPIO13 to HIGH 32/32 without the carrier; exact reassembled 0.132 proves every receiver CSN HIGH 32/32 while MISO returns LOW 0/32 with zero bus/TX activity | `spi_radio` is exclusive; board-02 carrier RF remains `fault`; no cross-swap or emission; no single module or antenna/U.FL fault is claimed | return/replace the carrier/device or physically isolate module MISO/power one at a time; require repaired plausible identities before bounded regression |
 | HW-U08 | electrical/ADC behavior is unmeasured; the false-sound software root cause is confirmed by 0.x and upstream issue #117 | battery percentage is unavailable; GPIO2 is never ADC-sampled and is held OUTPUT LOW from the first setup instruction; HIGH belongs only to a future bounded sound service | HW-T09 for ADC/sound characterization; silent invariant closes through boot/runtime state plus audible observation |
 | HW-U09 | partial: exact 0.129 proves one bounded physical NEC receive/save/cold-export path; GPIO21 remains exclusive with nRF #3 | IR RX is available only from the explicit RF-shield profile; no autodetect; product IR TX additionally requires Lab/ADR-002 evidence | broaden protocol vectors and instrument GPIO21 switching under HW-T08 |
 | HW-U10 | no rail peak/thermal measurement | first slice is Wi-Fi-only; shield operations are one receiver at a time after per-module HIL; combined modes unavailable | HW-T10 and RB-08 endurance |

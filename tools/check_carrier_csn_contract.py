@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from run_1x_shield_receiver_probe_crosscheck import (
@@ -140,7 +141,34 @@ def main() -> int:
     assert probe_contract_failures(
         unsafe, require_carrier_csn_characterization=True)
 
-    print("carrier CSN contract passed: four pull-up lines, zero SPI/TX")
+    evidence = json.loads((
+        ROOT / "tests/hil/evidence/board-02-rf-carrier-csn-0.132.json"
+    ).read_text(encoding="utf-8"))
+    assert evidence["schema"] == (
+        "leshy.hardware.rf_carrier_csn_evidence.v1")
+    assert evidence["source_commit"] == (
+        "3f491ae0993a5bc8b43e67e88989c4d9ead88969")
+    assert evidence["candidate"]["firmware_sha256"] == (
+        "2af4d1c840205c5cce9e74541829a5365efb06e5096f1fde45c5f3a5bc93039a")
+    exact = evidence["exact_run"]
+    assert exact["passed"] is True
+    assert exact["raw_runner_outcome"] == "carrier_csn_high_miso_low"
+    assert set(exact["chip_select_pullup_high_samples"].values()) == {32}
+    assert set(exact["idle_miso_gpio13_high_samples"].values()) == {0, 32}
+    assert set(exact["receiver_operations"].values()) == {0}
+    assert set(exact["side_effects"].values()) == {0}
+    assert exact["safety"]["software_quiesce_complete"] is True
+    assert exact["safety"]["terminal_page"] == "home"
+    assert exact["safety"]["terminal_owner"] == "none"
+    assert exact["safety"]["terminal_lease_mask"] == 0
+    assessment = evidence["assessment"]
+    assert assessment["all_receivers_observed_deselected"] is True
+    assert assessment["individual_faulty_receiver_identified"] is False
+    assert assessment["antenna_or_ufl_fault_proven"] is False
+    assert assessment["software_only_per_module_isolation_available"] is False
+    assert assessment["rf_emission_allowed"] is False
+
+    print("carrier CSN contract/evidence passed: four HIGH CSNs, LOW MISO, zero SPI/TX")
     return 0
 
 

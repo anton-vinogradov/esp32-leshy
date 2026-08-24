@@ -137,17 +137,22 @@ both pulls while clocking zero SPI bytes and performing zero receiver operations
 attached-to-isolated LOW→HIGH transition proves that the ESP input observes both
 states and localizes the LOW source to the RF carrier or its connector side. GPIO13
 also serves the main-board SD MISO branch, so isolated HIGH under both pulls is not a
-damaged-main diagnosis. Host/build-checked diagnostic 0.132 automates the next safe
-evidence: with the original board-02 carrier reattached, sample nRF CSN GPIO4/48/21,
-CC1101 CSN GPIO5 and MISO GPIO13 32 times each under weak pulls while CE remains LOW
-and SCK/MOSI receive zero transitions. If every CSN is HIGH but MISO remains LOW,
-isolate carrier modules one at a time. The different CC1101 U.FL/external-feed
+damaged-main diagnosis. Exact diagnostic 0.132 reattaches the original board-02
+carrier and samples nRF CSN GPIO4/48/21 plus CC1101 CSN GPIO5 HIGH 32/32 each while
+MISO remains LOW 0/32 under both pulls. CE remains LOW and SCK/MOSI receive zero
+transitions; zero receiver reads, strobes and TX commands execute. This rules out an
+accidentally selected receiver and localizes the remaining fault to a carrier module
+or its shared-MISO net. Because all four modules share direct power and MISO, selecting
+one in software cannot isolate the offender; module-by-module diagnosis now requires
+physical MISO/power isolation, or the carrier/device can be returned or replaced. The
+different CC1101 U.FL/external-feed
 populations are not digital-identity evidence and must not be modified by appearance.
 Do not cross-swap shields or emit before localization:
 [same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
 [variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json),
 [assembled MISO characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json),
-[isolated-main MISO characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json).
+[isolated-main MISO characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json),
+[carrier-CSN characterization](../../tests/hil/evidence/board-02-rf-carrier-csn-0.132.json).
 
 Official stock v1.6 was used once as bounded manual corroboration after retaining a
 full clone flash backup: internal Wi-Fi and BLE worked while the external 2.4 GHz

@@ -1,0 +1,115 @@
+{
+  "schema": "leshy.hardware.rf_carrier_csn_evidence.v1",
+  "status": "retained_fault_localized_within_rf_carrier",
+  "date": "2026-08-24",
+  "checkpoint": "board_02_attached_carrier_csn_and_shared_miso",
+  "source_commit": "3f491ae0993a5bc8b43e67e88989c4d9ead88969",
+  "candidate": {
+    "version": "0.132.0-carrier-csn-characterization",
+    "firmware_sha256": "2af4d1c840205c5cce9e74541829a5365efb06e5096f1fde45c5f3a5bc93039a",
+    "app_elf_sha256": "aecb08fcf82a40da6ccf2a04f20f611007749e8058f03b33c455a06fdae18edf",
+    "runner_source_sha256": "7bb0e8e61281e7c54e2155683c27a1e94b9d87bc2fa1ceaefef8cfeff39a65a3"
+  },
+  "board": {
+    "id": "board-02",
+    "efuse_mac": "90:70:69:0D:15:E0",
+    "module": "ESP32-S3-WROOM-1U-N16R8",
+    "tested_assembly": "main_board_with_its_own_detachable_rf_carrier_reassembled",
+    "rf_carrier_presence_user_confirmed": true,
+    "cross_swap_used": false
+  },
+  "exact_run": {
+    "path": "work/outputs/rf-carrier-csn-board02-0.132-20260824-09/run.json",
+    "sha256": "742ce2cc6af59514a41f0d878516201623bb32cf770f30982570dc829abbebbd",
+    "artifacts_manifest_sha256": "e0a13e2bd9c1e750d6adce5d9b8bbe1bcd11e2461360c731c00d0217b5aa6b7a",
+    "run_id": "df9bf37eb9e046d99b06e67ee744e370",
+    "flashed": true,
+    "passed": true,
+    "raw_runner_outcome": "carrier_csn_high_miso_low",
+    "chip_select_pullup_high_samples": {
+      "nrf_slot_1_gpio4": 32,
+      "nrf_slot_2_gpio48": 32,
+      "nrf_slot_3_gpio21": 32,
+      "cc1101_gpio5": 32,
+      "samples_per_pin": 32
+    },
+    "idle_miso_gpio13_high_samples": {
+      "pulldown": 0,
+      "pullup": 0,
+      "samples_per_pull": 32
+    },
+    "receiver_operations": {
+      "nrf_nop_reads": 0,
+      "nrf_register_reads": 0,
+      "cc_status_reads": 0,
+      "spi_bytes_clocked": 0
+    },
+    "side_effects": {
+      "nrf_ce_high_events": 0,
+      "cc_command_strobes": 0,
+      "radio_tx_commands": 0
+    },
+    "runtime": {
+      "heap_total": 148148,
+      "heap_free": 78424,
+      "heap_min_free": 78424,
+      "buzzer_inactive": true
+    },
+    "safety": {
+      "software_quiesce_complete": true,
+      "terminal_page": "home",
+      "terminal_owner": "none",
+      "terminal_lease_mask": 0,
+      "safety_state": "armed",
+      "safety_latched": false
+    }
+  },
+  "comparison": {
+    "assembled_exact_0_130_miso_high_samples": {
+      "pulldown": 0,
+      "pullup": 0,
+      "samples_per_pull": 32
+    },
+    "isolated_main_exact_0_131_miso_high_samples": {
+      "pulldown": 32,
+      "pullup": 32,
+      "samples_per_pull": 32
+    },
+    "reassembled_exact_0_132_miso_high_samples": {
+      "pulldown": 0,
+      "pullup": 0,
+      "samples_per_pull": 32
+    },
+    "all_receiver_chip_selects_high_in_exact_0_132": true,
+    "low_condition_returns_with_rf_carrier": true
+  },
+  "assessment": {
+    "board_02_rf_state": "fault",
+    "all_receivers_observed_deselected": true,
+    "selected_receiver_explains_miso_low": false,
+    "rf_carrier_module_or_shared_miso_net_fault_supported": true,
+    "main_board_only_gpio13_stuck_low_supported": false,
+    "individual_faulty_receiver_identified": false,
+    "antenna_or_ufl_fault_proven": false,
+    "software_only_per_module_isolation_available": false,
+    "main_board_discard_justified": false,
+    "whole_device_discard_justified": false,
+    "rf_carrier_repair_or_replacement_required": true,
+    "rf_emission_allowed": false,
+    "shield_cross_swap_allowed": false,
+    "next_safe_evidence": [
+      "return or replace the faulty RF carrier/device, or physically isolate carrier receiver MISO/power branches one at a time",
+      "after replacement or repair, require plausible nRF and CC1101 identities with the exact read-only probe",
+      "only after identity admission, run the bounded known-signal regression"
+    ]
+  },
+  "limits": {
+    "logic_analyzer_used": false,
+    "oscilloscope_used": false,
+    "rf_detector_used": false,
+    "individual_carrier_module_fault_identified": false,
+    "antenna_continuity_measured": false,
+    "radiated_power_measured": false,
+    "stage_or_phase_promoted": false
+  }
+}
