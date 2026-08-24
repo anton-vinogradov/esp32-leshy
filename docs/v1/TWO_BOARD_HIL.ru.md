@@ -136,9 +136,12 @@ Powered-off MISO→GND равно 23 кОм на board-02 против 32 кОм
 zero receiver operations. Переход attached→isolated LOW→HIGH доказывает, что ESP
 input наблюдает оба состояния, и локализует источник LOW на RF carrier или его стороне
 connector. GPIO13 также обслуживает SD MISO main board, поэтому isolated HIGH под
-обоими pull не является диагнозом повреждения main board. Следующий safe evidence —
-quiescent carrier-pad localization: доказать HIGH на CSN каждого receiver, затем
-по одному изолировать carrier modules, если shared MISO остаётся LOW. Cross-swap
+обоими pull не является диагнозом повреждения main board. Host/build-checked diagnostic
+0.132 автоматизирует следующий safe evidence: при подключённом родном carrier board-02
+по 32 раза sample nRF CSN GPIO4/48/21, CC1101 CSN GPIO5 и MISO GPIO13 под weak pulls,
+удерживая CE LOW и не создавая transitions SCK/MOSI. Если все CSN HIGH, а MISO остаётся
+LOW, по одному изолировать carrier modules. Разная population U.FL/external feed CC1101
+не является evidence digital identity и не должна изменяться только по виду. Cross-swap
 shields и emission запрещены до
 локализации: [same-image cross-check](../../tests/hil/evidence/board-02-shield-receiver-crosscheck-0.81.json),
 [variant/reassembly evidence](../../tests/hil/evidence/board-02-hardware-variant-20260823.json),

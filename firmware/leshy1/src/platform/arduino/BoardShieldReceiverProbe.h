@@ -18,7 +18,9 @@ private:
     drivers::radio::NrfReceiverIdentity readNrf(int chipSelect);
     bool readCcStatus(std::uint8_t address, std::uint8_t* status,
                       std::uint8_t* value);
+    std::uint8_t samplePinHigh(int pin, int inputMode);
     std::uint8_t sampleMisoHigh(int inputMode);
+    void characterizeChipSelectLines();
     std::uint8_t readNrfNopBitBang(int chipSelect, int inputMode);
     void characterizeBusLine();
     bool gpio21Safe() const;

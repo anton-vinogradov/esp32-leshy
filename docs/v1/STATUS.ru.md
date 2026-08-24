@@ -13,10 +13,10 @@
 - **Активный этап:** `S5 — Полнота железа ESP32-DIV`.
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
 - **Текущая фаза:** `S5.3 — проверка известного сигнала nRF24`.
-- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact passive `0.130.0` удерживает shared MISO/GPIO13 собранной board-02 в LOW на 32/32 samples под обеими подтяжками и читает zero receiver identities; exact isolated-main `0.131.0` меняет тот же наблюдаемый input на HIGH на 32/32 samples под обеими подтяжками при снятом RF carrier. Второй run выполняет zero SPI clocks, receiver reads, CE-high events, strobes и TX commands и возвращает Home/lease 0. Зависящий от сборки LOW локализует fault на RF carrier или его стороне connector, а не на main-only stuck-low ESP input.
-- **Следующий evidence gate:** разметить CSN/MISO pads RF carrier и проверить HIGH на CSN каждого receiver под quiescent exact image. Если все deselected, а MISO остаётся LOW, по одному изолировать carrier modules и потребовать plausible identities после ремонта до любого known-signal emission. Cross-swap и RF emission остаются закрыты.
+- **Проверенный checkpoint:** exact `0.129.0-pre-app-watchdog` завершает физическую цепочку двух плат NEC receive → save → cold Library CSV за 33/33 шага. Exact passive `0.130.0` удерживает shared MISO/GPIO13 собранной board-02 в LOW на 32/32 samples под обеими подтяжками и читает zero receiver identities; exact isolated-main `0.131.0` меняет тот же наблюдаемый input на HIGH на 32/32 samples под обеими подтяжками при снятом RF carrier. Второй run выполняет zero SPI clocks, receiver reads, CE-high events, strobes и TX commands и возвращает Home/lease 0. Зависящий от сборки LOW локализует fault на RF carrier или его стороне connector, а не на main-only stuck-low ESP input. Host/build-checked `0.132.0-carrier-csn-characterization` подготовлен, но physical claim ещё не сделан.
+- **Следующий evidence gate:** запустить exact `0.132.0` на снова собранной board-02 и по 32 раза sample nRF CSN GPIO4/48/21, CC1101 CSN GPIO5 и shared MISO GPIO13, удерживая все CE в LOW и не трогая SCK/MOSI. Если все CSN HIGH, а MISO остаётся LOW, по одному изолировать carrier modules и потребовать plausible identities после ремонта до любого known-signal emission. Cross-swap и RF emission остаются закрыты.
 - **Принятая physical baseline:** exact `0.129.0-pre-app-watchdog`; все прежние принятые checkpoints сохранены ниже.
-- **Текущий source candidate:** accepted product baseline остаётся exact `0.129.0-pre-app-watchdog`; focused pull-only diagnostic `0.131.0-isolated-main-miso` на `4243c87b319e3cc453ddf9cca8d75d67d25fe87f` использует firmware/ELF hashes `ee7feb9a…3086`/`872d5b32…dc7`, выполняет zero SPI или receiver operations при снятом carrier и возвращается Home с lease 0. Это diagnostic evidence, не promotion product/release.
+- **Текущий source candidate:** accepted product baseline остаётся exact `0.129.0-pre-app-watchdog`; focused diagnostic `0.132.0-carrier-csn-characterization` прошёл host и ESP build и заменяет ручное касание мелких pads на pull-only sampling четырёх CSN плюс MISO. Он выходит до каждого bit-bang/SPI path и не может разрешить RF. Exact commit/image hashes и physical evidence ещё ожидаются, поэтому это не promotion product/release.
 - **Релизный статус:** 0.x — замороженный PoC; бинарник 1.x ещё не выпускался.
 - **Главная цель текущего этапа:** зафиксировать baseline полноты штатного железа S5
   и провести каждый present module через probe → observe/capture → Library → inspect/export.
@@ -25,8 +25,12 @@
   как bounded manual corroboration (internal Wi-Fi/BLE работают; внешний scanner
   2,4 ГГц остаётся пустым), затем заменён после сохранения полного flash backup.
   Powered-off comparison 23/32 кОм отвергает жёсткое passive short; exact 0.131
-  локализует powered LOW condition на RF carrier или его стороне connector.
-  Следующая safe operation — quiescent carrier pad/CSN localization, не TX.
+  локализует powered LOW condition на RF carrier или его стороне connector. Фото также
+  показывают две ревизии antenna interface CC1101: на AS07 клона есть неиспользуемый
+  U.FL, а на оригинале — другая population external feed. Antenna continuity пока не
+  квалифицирована, но отсутствие антенны не объясняет пропавшую SPI identity; изменение
+  пайки не разрешено. Следующая safe operation — exact pull-only characterization CSN
+  carrier, а не TX.
 - **Последняя локализация:** гипотеза отсутствующей rail отвергнута для idle condition:
   board-02 показывает 4,7/3,3 В — немного выше рабочего control board-01. Exact 0.130
   читает MISO собранной board-01 как HIGH `32/32` со STATUS `0x0E`, а собранной

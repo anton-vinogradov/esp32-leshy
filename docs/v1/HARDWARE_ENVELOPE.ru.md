@@ -89,7 +89,7 @@ identity.
 | Profile | Main module и population | RF-результат | Допуск |
 |---|---|---|---|
 | `esp32-div-v2-n16` / board-01 | `ESP32-S3-WROOM-1U-N16`; BOM buzzer распаян | exact 0.81 читает две разрешённые nRF identity и CC1101 VERSION `0x14` | known-positive baseline |
-| `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer отсутствует; один альтернативный U.FL carrier не распаян | assembled exact 0.130 читает zero identities и MISO LOW 0/32 под обоими pull; isolated-main exact 0.131 читает тот же GPIO13 HIGH 32/32 под обоими pull после снятия detachable RF carrier | совместимы display/input; carrier-side RF в `fault`, fixture TX запрещён |
+| `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer отсутствует; population antenna interface CC1101 AS07 отличается от board-01, U.FL не используется | assembled exact 0.130 читает zero identities и MISO LOW 0/32 под обоими pull; isolated-main exact 0.131 читает тот же GPIO13 HIGH 32/32 под обоими pull после снятия detachable RF carrier | совместимы display/input; carrier-side RF в `fault`, fixture TX запрещён |
 
 На обоих carriers стоят три nRF24-compatible module с внешними PA/LNA и один
 CC1101. Shield BOM описывает последний как **433 МГц, 10 мВт**; 315/868/915 МГц —
@@ -111,6 +111,10 @@ clocks, receiver reads, CE-high events, command strobes и TX commands. GPIO13 �
 clamp на RF carrier или его стороне connector. См.
 [assembled characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
 и [isolated-main characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json).
+Видимое отличие antenna interface ещё не является результатом RF continuity и не
+может объяснить отсутствие digital identity. Нельзя добавлять припой или считать U.FL
+оборванным только по виду фото. Host/build-checked diagnostic 0.132 следующим samples
+CSN GPIO4, 48, 21 и 5 плюс MISO, не трогая SCK/MOSI и не включая CE.
 
 Upstream community evidence имеет такую же форму отказа, но не доказывает root cause
 этого экземпляра. [Issue #102](https://github.com/cifertech/ESP32-DIV/issues/102)

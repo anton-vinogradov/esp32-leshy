@@ -30,6 +30,7 @@ PROBE_SCHEMA = "leshy.shield.receiver_probe.v1"
 def probe_contract_failures(
     report: dict[str, Any], require_bus_characterization: bool = False,
     require_isolated_main_characterization: bool = False,
+    require_carrier_csn_characterization: bool = False,
 ) -> list[str]:
     expected = {
         "schema_version": 1,
@@ -45,21 +46,30 @@ def probe_contract_failures(
         "current_owner": "device",
         "current_lease_mask": 1,
     }
-    expected.update({
-        "gpio21_stable_high": not require_isolated_main_characterization,
-        "cleanup_complete": not require_isolated_main_characterization,
-    })
     if require_isolated_main_characterization:
         expected.update({
             "status": "failed",
             "detected_receivers": 0,
+            "gpio21_stable_high": False,
+            "cleanup_complete": False,
+        })
+    elif require_carrier_csn_characterization:
+        expected.update({
+            "status": "failed",
+            "detected_receivers": 0,
+        })
+    else:
+        expected.update({
+            "gpio21_stable_high": True,
+            "cleanup_complete": True,
         })
     failures = expect(report, expected, "shield_receiver_probe")
     expected_wire = ({
         "nrf_register_reads": 0,
         "cc_status_reads": 0,
         "spi_bytes_clocked": 0,
-    } if require_isolated_main_characterization else {
+    } if (require_isolated_main_characterization or
+          require_carrier_csn_characterization) else {
         "nrf_register_reads": 8,
         "cc_status_reads": 2,
         "spi_bytes_clocked": 20,
@@ -73,7 +83,77 @@ def probe_contract_failures(
     }:
         failures.append(
             f"unexpected probe side effects: {report.get('side_effects')!r}")
-    if require_isolated_main_characterization:
+    if require_carrier_csn_characterization:
+        bus = report.get("bus_line", {})
+        failures.extend(expect(bus, {
+            "complete": False,
+            "samples_per_pull": 32,
+            "nrf_nop_reads": 0,
+            "bitbang_spi_bytes_clocked": 0,
+        }, "shield_receiver_probe.bus_line"))
+        nop = bus.get("nrf_nop")
+        if not isinstance(nop, list) or len(nop) != 2:
+            failures.append(f"unexpected carrier nRF NOP records: {nop!r}")
+        elif any(
+            row.get("slot") != slot or
+            row.get("pull_down_status") != 0xFF or
+            row.get("pull_up_status") != 0xFF
+            for slot, row in enumerate(nop, start=1)
+        ):
+            failures.append(f"carrier probe clocked or changed nRF NOP: {nop!r}")
+        for field in (
+            "idle_pull_down_high_samples", "idle_pull_up_high_samples",
+        ):
+            value = bus.get(field)
+            if not isinstance(value, int) or not 0 <= value <= 32:
+                failures.append(f"invalid carrier {field}: {value!r}")
+            elif value not in (0, 32):
+                failures.append(f"unstable carrier {field}: {value!r}")
+        chip_selects = report.get("chip_selects", {})
+        failures.extend(expect(chip_selects, {
+            "complete": True,
+            "samples_per_pin": 32,
+        }, "shield_receiver_probe.chip_selects"))
+        nrf = chip_selects.get("nrf")
+        expected_pins = [(1, 4), (2, 48), (3, 21)]
+        if not isinstance(nrf, list) or len(nrf) != 3:
+            failures.append(f"unexpected carrier nRF CSN records: {nrf!r}")
+        else:
+            for row, (slot, gpio) in zip(nrf, expected_pins):
+                value = row.get("pull_up_high_samples")
+                if row.get("slot") != slot or row.get("gpio") != gpio:
+                    failures.append(
+                        f"unexpected carrier nRF CSN identity: {row!r}")
+                if not isinstance(value, int) or not 0 <= value <= 32:
+                    failures.append(
+                        f"invalid carrier nRF CSN sample count: {row!r}")
+                elif value not in (0, 32):
+                    failures.append(
+                        f"unstable carrier nRF CSN sample count: {row!r}")
+        cc = chip_selects.get("cc1101", {})
+        cc_samples = cc.get("pull_up_high_samples")
+        if cc.get("gpio") != 5 or not isinstance(cc_samples, int) or not (
+                0 <= cc_samples <= 32):
+            failures.append(f"unexpected carrier CC1101 CSN record: {cc!r}")
+        elif cc_samples not in (0, 32):
+            failures.append(f"unstable carrier CC1101 CSN record: {cc!r}")
+        for field in ("gpio21_stable_high", "cleanup_complete"):
+            if not isinstance(report.get(field), bool):
+                failures.append(
+                    f"shield_receiver_probe.{field}: expected bool")
+        if isinstance(nrf, list) and len(nrf) == 3:
+            slot3_samples = nrf[2].get("pull_up_high_samples")
+            if slot3_samples == 32:
+                failures.extend(expect(report, {
+                    "gpio21_stable_high": True,
+                    "cleanup_complete": True,
+                }, "shield_receiver_probe.carrier_cleanup"))
+            elif slot3_samples == 0:
+                failures.extend(expect(report, {
+                    "gpio21_stable_high": False,
+                    "cleanup_complete": False,
+                }, "shield_receiver_probe.carrier_cleanup"))
+    elif require_isolated_main_characterization:
         bus = report.get("bus_line", {})
         failures.extend(expect(bus, {
             "complete": False,
@@ -124,6 +204,34 @@ def isolated_main_outcome(report: dict[str, Any]) -> str:
     if down == 32 and up == 32:
         return "isolated_main_gpio_stuck_high"
     return "isolated_main_gpio_unstable"
+
+
+def carrier_csn_outcome(report: dict[str, Any]) -> str:
+    chip_selects = report.get("chip_selects", {})
+    nrf = chip_selects.get("nrf", [])
+    cc = chip_selects.get("cc1101", {})
+    samples = [
+        row.get("pull_up_high_samples")
+        for row in nrf if isinstance(row, dict)
+    ]
+    samples.append(cc.get("pull_up_high_samples"))
+    if len(samples) != 4 or any(not isinstance(value, int)
+                                for value in samples):
+        return "carrier_csn_characterization_incomplete"
+    if any(value == 0 for value in samples):
+        return "carrier_csn_stuck_low"
+    if any(value != 32 for value in samples):
+        return "carrier_csn_unstable"
+    bus = report.get("bus_line", {})
+    down = bus.get("idle_pull_down_high_samples")
+    up = bus.get("idle_pull_up_high_samples")
+    if down == 0 and up == 0:
+        return "carrier_csn_high_miso_low"
+    if down == 32 and up == 32:
+        return "carrier_csn_high_miso_high"
+    if down == 0 and up == 32:
+        return "carrier_csn_high_miso_follows_pulls"
+    return "carrier_csn_high_miso_unstable"
 
 
 def normalize_home(device: Any) -> list[dict[str, Any]]:
@@ -199,13 +307,22 @@ def main() -> int:
         help=("accept an intentionally absent RF carrier, require pull-only "
               "GPIO13 sampling and reject every SPI clock or receiver read"),
     )
+    parser.add_argument(
+        "--require-carrier-csn-characterization", action="store_true",
+        help=("require pull-up sampling of all four RF carrier chip-select "
+              "lines plus GPIO13, and reject every SPI clock or command"),
+    )
     parser.add_argument("--flash-offset", type=lambda value: int(value, 0),
                         default=0x10000)
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
-    if (args.require_bus_characterization and
-            args.require_isolated_main_characterization):
-        parser.error("bus and isolated-main characterization are exclusive")
+    characterization_modes = sum((
+        args.require_bus_characterization,
+        args.require_isolated_main_characterization,
+        args.require_carrier_csn_characterization,
+    ))
+    if characterization_modes > 1:
+        parser.error("characterization requirements are mutually exclusive")
     if not args.firmware.is_file():
         parser.error(f"firmware not found: {args.firmware}")
     if args.output.exists():
@@ -294,7 +411,8 @@ def main() -> int:
                 )
                 failures.extend(probe_contract_failures(
                     probe, args.require_bus_characterization,
-                    args.require_isolated_main_characterization))
+                    args.require_isolated_main_characterization,
+                    args.require_carrier_csn_characterization))
                 safe_outputs = query(
                     device, b"hardware.safe-outputs",
                     "leshy.hardware.safe-outputs.v1", "state",
@@ -314,11 +432,13 @@ def main() -> int:
         failures.append(f"runner: {type(error).__name__}: {error}")
 
     detected = int(probe.get("detected_receivers", 0))
-    outcome = (isolated_main_outcome(probe)
-               if args.require_isolated_main_characterization else (
+    outcome = (carrier_csn_outcome(probe)
+               if args.require_carrier_csn_characterization else (
+                   isolated_main_outcome(probe)
+                   if args.require_isolated_main_characterization else (
                    "all_receivers_detected" if detected == 3 else
                    "partial_receivers_detected" if detected > 0 else
-                   "no_receivers_detected"))
+                   "no_receivers_detected")))
     result = {
         "schema": RUN_SCHEMA,
         "run_id": secrets.token_hex(16),
@@ -347,6 +467,10 @@ def main() -> int:
                 args.require_isolated_main_characterization,
             "rf_carrier_required_absent":
                 args.require_isolated_main_characterization,
+            "carrier_csn_characterization":
+                args.require_carrier_csn_characterization,
+            "rf_carrier_required_present":
+                args.require_carrier_csn_characterization,
             "storage_required": False,
             "stage_or_phase_promotion": False,
         },

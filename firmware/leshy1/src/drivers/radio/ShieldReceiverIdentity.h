@@ -60,6 +60,10 @@ struct ShieldReceiverProbeReport final {
     std::array<std::uint8_t, 2> nrfNopStatusPullUp{{0xFF, 0xFF}};
     std::uint8_t nrfNopReads = 0;
     std::uint8_t bitBangSpiBytesClocked = 0;
+    bool chipSelectCharacterizationComplete = false;
+    std::uint8_t chipSelectSamplesPerPin = 0;
+    std::array<std::uint8_t, 3> nrfCsnPullUpHighSamples{};
+    std::uint8_t ccCsnPullUpHighSamples = 0;
     std::uint8_t nrfCeHighEvents = 0;
     std::uint8_t ccCommandStrobes = 0;
     std::uint8_t radioTxCommands = 0;

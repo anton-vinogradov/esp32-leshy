@@ -17880,6 +17880,12 @@ void emitShieldReceiverProbeReport(Stream& reply) {
         "{\"slot\":1,\"pull_down_status\":%u,\"pull_up_status\":%u},"
         "{\"slot\":2,\"pull_down_status\":%u,\"pull_up_status\":%u}],"
         "\"nrf_nop_reads\":%u,\"bitbang_spi_bytes_clocked\":%u},"
+        "\"chip_selects\":{\"complete\":%s,\"samples_per_pin\":%u,"
+        "\"nrf\":["
+        "{\"slot\":1,\"gpio\":4,\"pull_up_high_samples\":%u},"
+        "{\"slot\":2,\"gpio\":48,\"pull_up_high_samples\":%u},"
+        "{\"slot\":3,\"gpio\":21,\"pull_up_high_samples\":%u}],"
+        "\"cc1101\":{\"gpio\":5,\"pull_up_high_samples\":%u}},"
         "\"wire\":{\"nrf_register_reads\":%u,\"cc_status_reads\":%u,"
         "\"spi_bytes_clocked\":%u},"
         "\"side_effects\":{\"nrf_ce_high_events\":%u,"
@@ -17924,6 +17930,12 @@ void emitShieldReceiverProbeReport(Stream& reply) {
         static_cast<unsigned>(report.nrfNopStatusPullUp[1]),
         static_cast<unsigned>(report.nrfNopReads),
         static_cast<unsigned>(report.bitBangSpiBytesClocked),
+        report.chipSelectCharacterizationComplete ? "true" : "false",
+        static_cast<unsigned>(report.chipSelectSamplesPerPin),
+        static_cast<unsigned>(report.nrfCsnPullUpHighSamples[0]),
+        static_cast<unsigned>(report.nrfCsnPullUpHighSamples[1]),
+        static_cast<unsigned>(report.nrfCsnPullUpHighSamples[2]),
+        static_cast<unsigned>(report.ccCsnPullUpHighSamples),
         static_cast<unsigned>(report.nrfRegisterReads),
         static_cast<unsigned>(report.ccStatusReads),
         static_cast<unsigned>(report.spiBytesClocked),

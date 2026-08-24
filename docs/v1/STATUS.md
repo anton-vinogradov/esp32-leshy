@@ -13,10 +13,10 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Active stage:** `S5 — Complete ESP32-DIV hardware`.
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
 - **Current phase:** `S5.3 — controlled nRF24 known-signal proof`.
-- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps. Exact passive `0.130.0` holds assembled board-02 shared MISO/GPIO13 LOW for 32/32 samples under both pulls and reads zero receiver identities; exact isolated-main `0.131.0` changes the same observed input to HIGH for 32/32 samples under both pulls when the detachable RF carrier is absent. The second run performs zero SPI clocks, receiver reads, CE-high events, strobes or TX commands and returns Home/lease 0. This assembly-dependent LOW localizes the fault to the RF carrier or its connector side rather than a main-only stuck-low ESP input.
-- **Next evidence gate:** map the RF-carrier CSN/MISO pads and verify every receiver CSN is HIGH under the quiescent exact image. If all are deselected while MISO remains LOW, isolate the carrier modules one at a time and require repaired plausible identities before any known-signal emission. Cross-swap and RF emission remain closed.
+- **Verified checkpoint:** exact `0.129.0-pre-app-watchdog` completes the physical two-board NEC receive → save → cold Library CSV path in 33/33 steps. Exact passive `0.130.0` holds assembled board-02 shared MISO/GPIO13 LOW for 32/32 samples under both pulls and reads zero receiver identities; exact isolated-main `0.131.0` changes the same observed input to HIGH for 32/32 samples under both pulls when the detachable RF carrier is absent. The second run performs zero SPI clocks, receiver reads, CE-high events, strobes or TX commands and returns Home/lease 0. This assembly-dependent LOW localizes the fault to the RF carrier or its connector side rather than a main-only stuck-low ESP input. Host/build-checked `0.132.0-carrier-csn-characterization` is prepared but has no physical claim yet.
+- **Next evidence gate:** run exact `0.132.0` on reassembled board-02 and sample nRF CSN GPIO4/48/21, CC1101 CSN GPIO5 and shared MISO GPIO13 32 times each while every CE stays LOW and SCK/MOSI remain untouched. If all CSNs are HIGH while MISO stays LOW, isolate carrier modules one at a time and require repaired plausible identities before any known-signal emission. Cross-swap and RF emission remain closed.
 - **Accepted physical baseline:** exact `0.129.0-pre-app-watchdog`; earlier accepted checkpoints remain retained below.
-- **Working source candidate:** the accepted product baseline remains exact `0.129.0-pre-app-watchdog`; focused pull-only diagnostic `0.131.0-isolated-main-miso` at `4243c87b319e3cc453ddf9cca8d75d67d25fe87f` uses firmware/ELF hashes `ee7feb9a…3086`/`872d5b32…dc7`, performs zero SPI or receiver operations with the carrier absent and returns Home with lease 0. It is diagnostic evidence, not a product or release promotion.
+- **Working source candidate:** the accepted product baseline remains exact `0.129.0-pre-app-watchdog`; focused diagnostic `0.132.0-carrier-csn-characterization` is host- and ESP-build checked and replaces manual tiny-pad probing with pull-only sampling of four CSNs plus MISO. It exits before every bit-bang/SPI path and cannot authorize RF. Exact commit/image hashes and physical evidence remain pending, so this is not a product or release promotion.
 - **Release state:** 0.x is a frozen PoC; no 1.x binary has been released.
 - **Current objective:** establish the S5 stock-hardware completeness baseline and
   advance each present module through probe → observe/capture → Library → inspect/export.
@@ -25,8 +25,12 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
   as bounded manual corroboration (internal Wi-Fi/BLE work; external 2.4 GHz scanner
   remains blank), then replaced after retaining a full-flash backup. The 23/32 kΩ
   powered-off comparison rejects a hard passive short; exact 0.131 now localizes the
-  powered LOW condition to the RF carrier or its connector side. The next safe operation
-  is quiescent carrier pad/CSN localization, not transmission.
+  powered LOW condition to the RF carrier or its connector side. Photos also show two
+  CC1101 antenna-interface variants: the clone AS07 module has an unused U.FL connector
+  while the original uses a different external-feed population. Antenna continuity is
+  not qualified, but an absent antenna cannot explain missing SPI identity; no solder
+  change is authorized. The next safe operation is exact pull-only carrier CSN
+  characterization, not transmission.
 - **Latest localization:** the rail-absence hypothesis is rejected for this idle
   condition: board-02 measures 4.7/3.3 V, slightly above the working board-01 control.
   Exact 0.130 reads assembled board-01 MISO HIGH `32/32` with STATUS `0x0E`, but

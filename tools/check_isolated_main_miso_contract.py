@@ -79,7 +79,8 @@ def main() -> int:
     assembled_guard_at = run_body.index(
         "if (!report_->busLineCharacterizationComplete || !gpio21Safe())")
     assert characterize_at < assembled_guard_at
-    assert 'LESHY1_VERSION=\\"0.131.0-isolated-main-miso\\"' in platform
+    assert 'LESHY1_VERSION=\\"0.132.0-carrier-csn-characterization\\"' in (
+        platform)
 
     healthy = isolated_report(0, 32)
     assert not probe_contract_failures(

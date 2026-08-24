@@ -73,7 +73,7 @@ common-zero radio identity.
 | Profile | Main module and population | RF result | Admission |
 |---|---|---|---|
 | `esp32-div-v2-n16` / board-01 | `ESP32-S3-WROOM-1U-N16`; BOM buzzer populated | exact 0.81 reads two permitted nRF identities and CC1101 VERSION `0x14` | known-positive baseline |
-| `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer omitted; one alternative carrier U.FL footprint omitted | assembled exact 0.130 reads zero identities and MISO LOW 0/32 under both pulls; isolated-main exact 0.131 reads the same GPIO13 HIGH 32/32 under both pulls after the detachable RF carrier is removed | display/input compatibility only; carrier-side RF `fault`, fixture TX forbidden |
+| `esp-div-n16r8-dnp-unqualified` / board-02 | `ESP32-S3-WROOM-1U-N16R8`; buzzer omitted; CC1101 AS07 antenna-interface population differs from board-01 and its U.FL is unused | assembled exact 0.130 reads zero identities and MISO LOW 0/32 under both pulls; isolated-main exact 0.131 reads the same GPIO13 HIGH 32/32 under both pulls after the detachable RF carrier is removed | display/input compatibility only; carrier-side RF `fault`, fixture TX forbidden |
 
 Both carriers contain three nRF24-compatible modules with external PA/LNA front ends
 and one CC1101 module. The shield BOM specifies the latter as **433 MHz, 10 mW**;
@@ -96,6 +96,10 @@ of a damaged ESP input. The assembly-dependent LOW localizes the powered/logic-d
 clamp to the RF carrier or its connector side. See the
 [assembled characterization](../../tests/hil/evidence/board-02-rf-bus-characterization-0.130.json)
 and [isolated-main characterization](../../tests/hil/evidence/board-02-isolated-main-miso-0.131.json).
+The visible antenna-interface difference is not yet an RF-continuity result and cannot
+explain missing digital identity. Do not add solder or infer a broken U.FL path from
+photo appearance alone. Host/build-checked diagnostic 0.132 next samples CSN GPIO4,
+48, 21 and 5 plus MISO without touching SCK/MOSI or enabling CE.
 
 Upstream community evidence has the same failure shape but does not prove this unit's
 root cause. [Issue #102](https://github.com/cifertech/ESP32-DIV/issues/102) reports

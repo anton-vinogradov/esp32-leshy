@@ -22,6 +22,7 @@ constexpr std::uint8_t kCcReadPartNumber = 0xF0;
 constexpr std::uint8_t kCcReadVersion = 0xF1;
 constexpr std::uint32_t kCcReadyTimeoutUs = 2000;
 constexpr std::uint8_t kMisoSamplesPerPull = 32;
+constexpr std::uint8_t kChipSelectSamplesPerPin = 32;
 constexpr std::uint32_t kMisoSettleUs = 100;
 constexpr std::uint32_t kBitBangHalfPeriodUs = 5;
 
@@ -39,15 +40,46 @@ bool BoardShieldReceiverProbe::gpio21Safe() const {
     return digitalRead(BoardProfile::kNrfCsPins[2]) == HIGH;
 }
 
-std::uint8_t BoardShieldReceiverProbe::sampleMisoHigh(int inputMode) {
-    pinMode(BoardProfile::kRadioMisoPin, inputMode);
+std::uint8_t BoardShieldReceiverProbe::samplePinHigh(int pin, int inputMode) {
+    pinMode(pin, inputMode);
     delayMicroseconds(kMisoSettleUs);
     std::uint8_t highSamples = 0;
-    for (std::uint8_t sample = 0; sample < kMisoSamplesPerPull; ++sample) {
-        if (digitalRead(BoardProfile::kRadioMisoPin) == HIGH) ++highSamples;
+    for (std::uint8_t sample = 0; sample < kChipSelectSamplesPerPin; ++sample) {
+        if (digitalRead(pin) == HIGH) ++highSamples;
         delayMicroseconds(2);
     }
     return highSamples;
+}
+
+std::uint8_t BoardShieldReceiverProbe::sampleMisoHigh(int inputMode) {
+    return samplePinHigh(BoardProfile::kRadioMisoPin, inputMode);
+}
+
+void BoardShieldReceiverProbe::characterizeChipSelectLines() {
+    if (report_ == nullptr) return;
+    report_->chipSelectSamplesPerPin = kChipSelectSamplesPerPin;
+
+    // Every other receiver remains deselected while one CSN is sampled. The
+    // test never raises CE and never touches SCK/MOSI, so it cannot transmit or
+    // even issue a receiver command.
+    for (std::size_t slot = 0;
+         slot < report_->nrfCsnPullUpHighSamples.size(); ++slot) {
+        const int pin = BoardProfile::kNrfCsPins[slot];
+        report_->nrfCsnPullUpHighSamples[slot] =
+            samplePinHigh(pin, INPUT_PULLUP);
+        if (slot < 2) {
+            pinMode(pin, OUTPUT);
+            digitalWrite(pin, HIGH);
+        } else {
+            // GPIO21 is also the IR receiver output. It must never be driven.
+            pinMode(pin, INPUT);
+        }
+    }
+    report_->ccCsnPullUpHighSamples =
+        samplePinHigh(BoardProfile::kCc1101CsPin, INPUT_PULLUP);
+    pinMode(BoardProfile::kCc1101CsPin, OUTPUT);
+    digitalWrite(BoardProfile::kCc1101CsPin, HIGH);
+    report_->chipSelectCharacterizationComplete = true;
 }
 
 std::uint8_t BoardShieldReceiverProbe::readNrfNopBitBang(
@@ -98,6 +130,7 @@ void BoardShieldReceiverProbe::characterizeBusLine() {
     report_->misoIdlePullDownHighSamples = sampleMisoHigh(INPUT_PULLDOWN);
     report_->misoIdlePullUpHighSamples = sampleMisoHigh(INPUT_PULLUP);
     pinMode(BoardProfile::kRadioMisoPin, INPUT);
+    if (BoardProfile::kRfCarrierChipSelectCharacterizationOnly) return;
     if (!gpio21Safe()) return;
 
     for (std::size_t slot = 0; slot < report_->nrfNopStatusPullDown.size();
@@ -218,7 +251,14 @@ bool BoardShieldReceiverProbe::run(bool radioSpiOwned,
     digitalWrite(BoardProfile::kNrfCsPins[1], HIGH);
     digitalWrite(BoardProfile::kCc1101CsPin, HIGH);
     digitalWrite(BoardProfile::kSdCsPin, HIGH);
+    characterizeChipSelectLines();
     characterizeBusLine();
+    if (BoardProfile::kRfCarrierChipSelectCharacterizationOnly) {
+        cleanup();
+        drivers::radio::finalizeShieldReceiverProbe(report_);
+        report_ = nullptr;
+        return false;
+    }
     if (!report_->busLineCharacterizationComplete || !gpio21Safe()) {
         cleanup();
         drivers::radio::finalizeShieldReceiverProbe(report_);
