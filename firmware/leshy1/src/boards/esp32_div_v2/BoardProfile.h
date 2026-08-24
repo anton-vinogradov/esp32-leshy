@@ -40,6 +40,10 @@ struct BoardProfile final {
     static constexpr int kIrTxPin = 14;
     static constexpr int kIrRxPin = 21;
     static constexpr int kCc1101CsPin = 5;
+    // Stock RF shield routes CC1101 asynchronous serial data (GDO0) to GPIO6.
+    // GPIO6 is shared only with the excluded GPS TX assembly in this profile.
+    // GDO2/GPIO3 remains untouched because it is an ESP32-S3 strapping pin.
+    static constexpr int kCc1101Gdo0Pin = 6;
     static constexpr std::uint32_t kSdIdentificationSpiHz = 100000;
 
     // The measured board-01 assembly carries the stock RF shield, while external

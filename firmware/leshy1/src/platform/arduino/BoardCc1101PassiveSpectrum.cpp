@@ -3,6 +3,10 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <esp_timer.h>
+#include <freertos/FreeRTOS.h>
+#include <soc/gpio_struct.h>
+
+#include <array>
 
 #include "boards/esp32_div_v2/BoardProfile.h"
 
@@ -28,9 +32,51 @@ constexpr std::uint8_t kMarcStateReceive = 0x0D;
 constexpr std::uint8_t kCommandReset = 0x30;
 constexpr std::uint8_t kCommandReceive = 0x34;
 constexpr std::uint8_t kCommandIdle = 0x36;
+constexpr std::size_t kAsyncEdgeCapacity = 512;
+constexpr std::uint16_t kAsyncEdgeMask = kAsyncEdgeCapacity - 1U;
+static_assert((kAsyncEdgeCapacity & kAsyncEdgeMask) == 0U,
+              "async edge ring must remain a power of two");
+std::array<BoardCc1101PassiveSpectrum::AsyncEdge, kAsyncEdgeCapacity>
+    asyncEdges{};
+portMUX_TYPE asyncEdgeMux = portMUX_INITIALIZER_UNLOCKED;
+volatile std::uint16_t asyncEdgeHead = 0;
+volatile std::uint16_t asyncEdgeTail = 0;
+volatile std::uint32_t asyncLastEdgeUs = 0;
+volatile bool asyncEdgeOverflow = false;
+volatile bool asyncEdgeActive = false;
+bool asyncEdgeAttached = false;
+
+void IRAM_ATTR captureAsyncEdge(void*) {
+    portENTER_CRITICAL_ISR(&asyncEdgeMux);
+    if (!asyncEdgeActive) {
+        portEXIT_CRITICAL_ISR(&asyncEdgeMux);
+        return;
+    }
+    const std::uint32_t nowUs = static_cast<std::uint32_t>(
+        esp_timer_get_time());
+    const std::uint32_t durationUs = nowUs - asyncLastEdgeUs;
+    if (static_cast<std::uint16_t>(asyncEdgeHead - asyncEdgeTail) >=
+        kAsyncEdgeCapacity) {
+        asyncEdgeOverflow = true;
+        asyncEdgeActive = false;
+        portEXIT_CRITICAL_ISR(&asyncEdgeMux);
+        return;
+    }
+    auto& event = asyncEdges[asyncEdgeHead & kAsyncEdgeMask];
+    event.durationUs = static_cast<std::uint16_t>(
+        durationUs > UINT16_MAX ? UINT16_MAX : durationUs);
+    event.newLevel =
+        (GPIO.in & (1UL << BoardProfile::kCc1101Gdo0Pin)) != 0U;
+    event.clipped = durationUs > UINT16_MAX;
+    asyncLastEdgeUs = nowUs;
+    ++asyncEdgeHead;
+    portEXIT_CRITICAL_ISR(&asyncEdgeMux);
+}
 
 bool allowedReceiveRegister(std::uint8_t address) {
     switch (address) {
+        case 0x02:  // IOCFG0: receive-side GDO0 function only
+        case 0x08:  // PKTCTRL0: asynchronous serial receive format
         case 0x0B:
         case 0x0D:
         case 0x0E:
@@ -38,6 +84,7 @@ bool allowedReceiveRegister(std::uint8_t address) {
         case 0x10:
         case 0x11:
         case 0x12:
+        case 0x15:  // DEVIATN: 2-FSK receive deviation
         case 0x18:
         case 0x19:
         case 0x1B:
@@ -151,7 +198,8 @@ bool BoardCc1101PassiveSpectrum::resetReceiver() {
     return true;
 }
 
-bool BoardCc1101PassiveSpectrum::configureReceive() {
+bool BoardCc1101PassiveSpectrum::configureReceive(
+    domain::captures::SubGhzRawModulation modulation) {
     const struct RegisterValue final {
         std::uint8_t address;
         std::uint8_t value;
@@ -163,6 +211,25 @@ bool BoardCc1101PassiveSpectrum::configureReceive() {
     };
     for (const RegisterValue& setting : settings) {
         if (!writeRegister(setting.address, setting.value)) return false;
+    }
+    if (modulation == domain::captures::SubGhzRawModulation::FskAsync) {
+        // Same bounded async-RX settings proven by 0.x, now kept behind the
+        // receive-only adapter. IOCFG0 exports demodulated serial data; no FIFO,
+        // PA table or transmit strobe is representable here.
+        const RegisterValue fskSettings[] = {
+            {0x02, 0x0D},  // GDO0: asynchronous serial data output
+            {0x08, 0x32},  // asynchronous serial, infinite packet length
+            {0x12, 0x00},  // 2-FSK, no sync qualification
+            {0x15, 0x47},  // receiver deviation used by the proven 0.x path
+            {0x1B, 0x03}, {0x1C, 0x00}, {0x1D, 0x91},
+        };
+        for (const RegisterValue& setting : fskSettings) {
+            if (!writeRegister(setting.address, setting.value)) return false;
+        }
+        pinMode(BoardProfile::kCc1101Gdo0Pin, INPUT);
+    } else if (modulation !=
+               domain::captures::SubGhzRawModulation::OokEnvelope) {
+        return false;
     }
     return true;
 }
@@ -210,7 +277,7 @@ bool BoardCc1101PassiveSpectrum::recoverReceive() {
     if (report_ == nullptr || !spiStarted_ || !transactionOpen_) return false;
     ++report_->recoveryAttempts;
     deselectCc();
-    const bool recovered = resetReceiver() && configureReceive();
+    const bool recovered = resetReceiver() && configureReceive(modulation_);
     if (recovered) ++report_->recoveries;
     return recovered;
 }
@@ -251,6 +318,7 @@ void BoardCc1101PassiveSpectrum::cleanupPinsAndSpi() {
     pinMode(BoardProfile::kRadioMosiPin, INPUT);
     pinMode(BoardProfile::kRadioMisoPin, INPUT);
     pinMode(BoardProfile::kRadioSckPin, INPUT);
+    pinMode(BoardProfile::kCc1101Gdo0Pin, INPUT);
     pinMode(BoardProfile::kNrfCsPins[2], INPUT);
     if (report_ != nullptr) {
         report_->gpio21StableHigh = gpio21Safe();
@@ -316,7 +384,8 @@ bool BoardCc1101PassiveSpectrum::begin(
     if (!resetReceiver() ||
         !readStatus(kRegisterPartNumber, &report_->partNumber) ||
         !readStatus(kRegisterVersion, &report_->version) ||
-        !configureReceive()) {
+        !configureReceive(
+            domain::captures::SubGhzRawModulation::OokEnvelope)) {
         report_->status = Cc1101PassiveSpectrumStatus::Fault;
         cleanupPinsAndSpi();
         report_ = nullptr;
@@ -405,13 +474,27 @@ bool BoardCc1101PassiveSpectrum::sampleFrequency(
 }
 
 bool BoardCc1101PassiveSpectrum::lockReceive(std::uint32_t frequencyKHz) {
+    return lockReceive(
+        frequencyKHz,
+        domain::captures::SubGhzRawModulation::OokEnvelope);
+}
+
+bool BoardCc1101PassiveSpectrum::lockReceive(
+    std::uint32_t frequencyKHz,
+    domain::captures::SubGhzRawModulation modulation) {
     const bool tunable =
         (frequencyKHz >= 300000U && frequencyKHz <= 348000U) ||
         (frequencyKHz >= 387000U && frequencyKHz <= 464000U) ||
         (frequencyKHz >= 779000U && frequencyKHz <= 928000U);
-    if (!active_ || report_ == nullptr || !tunable) return false;
+    if (!active_ || report_ == nullptr || !tunable ||
+        (modulation != domain::captures::SubGhzRawModulation::OokEnvelope &&
+         modulation != domain::captures::SubGhzRawModulation::FskAsync)) {
+        return false;
+    }
+    modulation_ = modulation;
     for (std::uint8_t attempt = 0; attempt < 2U; ++attempt) {
-        if (command(kCommandIdle) && tune(frequencyKHz) &&
+        if (command(kCommandIdle) && configureReceive(modulation_) &&
+            tune(frequencyKHz) &&
             command(kCommandReceive)) {
             const ReceiveWaitResult wait = waitForReceive(kReadyTimeoutUs);
             if (wait == ReceiveWaitResult::Ready) return gpio21Safe();
@@ -445,12 +528,75 @@ bool BoardCc1101PassiveSpectrum::sampleRssi(
     return *monotonicUs != 0U;
 }
 
+bool BoardCc1101PassiveSpectrum::startAsyncEdgeCapture(bool* startLevel) {
+    if (!active_ || report_ == nullptr || startLevel == nullptr ||
+        modulation_ != domain::captures::SubGhzRawModulation::FskAsync ||
+        asyncEdgeAttached) {
+        return false;
+    }
+    pinMode(BoardProfile::kCc1101Gdo0Pin, INPUT);
+    *startLevel = digitalRead(BoardProfile::kCc1101Gdo0Pin) != LOW;
+    portENTER_CRITICAL(&asyncEdgeMux);
+    asyncEdgeHead = 0;
+    asyncEdgeTail = 0;
+    asyncEdgeOverflow = false;
+    asyncLastEdgeUs = static_cast<std::uint32_t>(esp_timer_get_time());
+    asyncEdgeActive = true;
+    portEXIT_CRITICAL(&asyncEdgeMux);
+    attachInterruptArg(BoardProfile::kCc1101Gdo0Pin,
+                       captureAsyncEdge, nullptr, CHANGE);
+    asyncEdgeAttached = true;
+    return true;
+}
+
+bool BoardCc1101PassiveSpectrum::stopAsyncEdgeCapture() {
+    if (asyncEdgeAttached) {
+        detachInterrupt(BoardProfile::kCc1101Gdo0Pin);
+        asyncEdgeAttached = false;
+    }
+    portENTER_CRITICAL(&asyncEdgeMux);
+    asyncEdgeActive = false;
+    asyncEdgeHead = 0;
+    asyncEdgeTail = 0;
+    asyncLastEdgeUs = 0;
+    asyncEdgeOverflow = false;
+    portEXIT_CRITICAL(&asyncEdgeMux);
+    return true;
+}
+
+bool BoardCc1101PassiveSpectrum::popAsyncEdge(AsyncEdge* output) {
+    if (output == nullptr) return false;
+    bool available = false;
+    portENTER_CRITICAL(&asyncEdgeMux);
+    if (asyncEdgeTail != asyncEdgeHead) {
+        *output = asyncEdges[asyncEdgeTail & kAsyncEdgeMask];
+        ++asyncEdgeTail;
+        available = true;
+    }
+    portEXIT_CRITICAL(&asyncEdgeMux);
+    return available;
+}
+
+bool BoardCc1101PassiveSpectrum::takeAsyncEdgeOverflow() {
+    bool overflowed = false;
+    portENTER_CRITICAL(&asyncEdgeMux);
+    overflowed = asyncEdgeOverflow;
+    asyncEdgeOverflow = false;
+    portEXIT_CRITICAL(&asyncEdgeMux);
+    return overflowed;
+}
+
+bool BoardCc1101PassiveSpectrum::asyncEdgeCaptureActive() const {
+    return asyncEdgeAttached;
+}
+
 bool BoardCc1101PassiveSpectrum::idle() {
     if (!active_ || report_ == nullptr) return false;
     return command(kCommandIdle);
 }
 
 bool BoardCc1101PassiveSpectrum::end() {
+    stopAsyncEdgeCapture();
     if (report_ == nullptr) {
         active_ = false;
         return true;
@@ -458,6 +604,7 @@ bool BoardCc1101PassiveSpectrum::end() {
     bool idled = true;
     if (spiStarted_ && transactionOpen_) idled = command(kCommandIdle);
     active_ = false;
+    modulation_ = domain::captures::SubGhzRawModulation::OokEnvelope;
     cleanupPinsAndSpi();
     const bool complete = idled && report_->cleanupComplete &&
         report_->gpio21StableHigh && report_->rejectedStrobes == 0U &&

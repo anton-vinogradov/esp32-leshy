@@ -189,8 +189,10 @@ CaptureMetadataStatus SurveySession::configureCaptureMetadata(
                 metadata.subGhzFrequencyKHz <= 928000U)) &&
               metadata.subGhzThresholdDbm >= -110 &&
               metadata.subGhzThresholdDbm <= -30 &&
-              metadata.subGhzModulation ==
-                  domain::captures::SubGhzRawModulation::OokEnvelope &&
+              (metadata.subGhzModulation ==
+                   domain::captures::SubGhzRawModulation::OokEnvelope ||
+               metadata.subGhzModulation ==
+                   domain::captures::SubGhzRawModulation::FskAsync) &&
               metadata.subGhzPulseRecords > 0 &&
               metadata.subGhzPulseRecords <= 512 &&
               metadata.subGhzPulseBytes ==

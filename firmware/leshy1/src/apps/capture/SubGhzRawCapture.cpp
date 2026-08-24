@@ -28,11 +28,15 @@ bool validateSubGhzRawCapturePlan(const SubGhzRawCapturePlan& plan) {
            plan.maximumCaptureMs >= 100U &&
            plan.maximumCaptureMs <= 60000U &&
            plan.debounceUs >= 20U && plan.debounceUs <= 1000U &&
+           plan.minimumFskPulseUs >= 1U &&
+           plan.minimumFskPulseUs <= 1000U &&
            plan.endGapUs >= 5000U && plan.endGapUs <= 60000U &&
            plan.maximumPulses >= 2U &&
            plan.maximumPulses <= SubGhzRawCapture::kPulseCapacity &&
-           plan.modulation ==
-               domain::captures::SubGhzRawModulation::OokEnvelope;
+           (plan.modulation ==
+                domain::captures::SubGhzRawModulation::OokEnvelope ||
+            plan.modulation ==
+                domain::captures::SubGhzRawModulation::FskAsync);
 }
 
 bool SubGhzRawCapture::begin(const SubGhzRawCapturePlan& plan,
@@ -50,6 +54,8 @@ bool SubGhzRawCapture::begin(const SubGhzRawCapturePlan& plan,
     candidateSinceUs_ = 0;
     stableSinceUs_ = 0;
     lastSampleUs_ = 0;
+    fskLevel_ = false;
+    fskLevelValid_ = false;
     return true;
 }
 
@@ -67,6 +73,12 @@ bool SubGhzRawCapture::acceptStableLevel(bool level,
     if (stats_.state != SubGhzRawCaptureState::Capturing ||
         level == stableLevel_ || monotonicUs < stableSinceUs_) {
         return false;
+    }
+    if (plan_.modulation ==
+        domain::captures::SubGhzRawModulation::FskAsync) {
+        stableLevel_ = level;
+        stableSinceUs_ = candidateSinceUs_;
+        return true;
     }
     const std::uint64_t duration = candidateSinceUs_ - stableSinceUs_;
     if (duration == 0U) return false;
@@ -122,6 +134,64 @@ bool SubGhzRawCapture::ingest(const SubGhzRawRssiSample& sample) {
     return service(sample.monotonicUs) || changed;
 }
 
+bool SubGhzRawCapture::armFskEdges(bool startLevel,
+                                   std::uint64_t monotonicUs) {
+    if (plan_.modulation !=
+            domain::captures::SubGhzRawModulation::FskAsync ||
+        stats_.state != SubGhzRawCaptureState::Capturing ||
+        monotonicUs < stats_.signalStartedUs) {
+        return false;
+    }
+    if (!fskLevelValid_) stats_.startLevel = startLevel;
+    fskLevel_ = startLevel;
+    fskLevelValid_ = true;
+    return true;
+}
+
+bool SubGhzRawCapture::ingestFskEdge(
+    std::uint32_t durationUs, bool newLevel, bool transportClipped,
+    std::uint64_t monotonicUs) {
+    if (plan_.modulation !=
+            domain::captures::SubGhzRawModulation::FskAsync ||
+        stats_.state != SubGhzRawCaptureState::Capturing ||
+        !fskLevelValid_ || monotonicUs < stats_.signalStartedUs ||
+        durationUs == 0U) {
+        ++stats_.invalidSamples;
+        return false;
+    }
+    if (newLevel == fskLevel_) return false;
+    if (durationUs < plan_.minimumFskPulseUs) {
+        ++stats_.shortTransitionsRejected;
+        return false;
+    }
+    if (size_ >= plan_.maximumPulses || size_ >= pulses_.size()) {
+        return finish(monotonicUs, true);
+    }
+    const bool clipped = transportClipped ||
+        durationUs > std::numeric_limits<std::uint16_t>::max();
+    pulses_[size_++] = static_cast<std::uint16_t>(
+        clipped ? std::numeric_limits<std::uint16_t>::max() : durationUs);
+    stats_.truncated = stats_.truncated || clipped;
+    stats_.pulsesAccepted = static_cast<std::uint32_t>(size_);
+    fskLevel_ = newLevel;
+    if (size_ >= plan_.maximumPulses || size_ >= pulses_.size()) {
+        return finish(monotonicUs, true);
+    }
+    return true;
+}
+
+bool SubGhzRawCapture::finishFskTransport(
+    std::uint64_t monotonicUs, bool overflowed) {
+    if (plan_.modulation !=
+            domain::captures::SubGhzRawModulation::FskAsync ||
+        stats_.state != SubGhzRawCaptureState::Capturing ||
+        monotonicUs < stats_.signalStartedUs) {
+        return false;
+    }
+    if (overflowed) return finish(monotonicUs, true);
+    return false;
+}
+
 bool SubGhzRawCapture::service(std::uint64_t monotonicUs) {
     if (monotonicUs == 0U || monotonicUs < stats_.startedUs) return false;
     if (stats_.state == SubGhzRawCaptureState::Waiting &&
@@ -133,6 +203,13 @@ bool SubGhzRawCapture::service(std::uint64_t monotonicUs) {
     }
     if (stats_.state == SubGhzRawCaptureState::Capturing &&
         !stableLevel_ && monotonicUs - stableSinceUs_ >= plan_.endGapUs) {
+        if (plan_.modulation ==
+                domain::captures::SubGhzRawModulation::FskAsync &&
+            size_ == 0U) {
+            stats_.state = SubGhzRawCaptureState::TimedOut;
+            stats_.endedUs = monotonicUs;
+            return true;
+        }
         return finish(monotonicUs, false);
     }
     if (stats_.state == SubGhzRawCaptureState::Capturing &&
@@ -191,6 +268,8 @@ void SubGhzRawCapture::reset() {
     candidateSinceUs_ = 0;
     stableSinceUs_ = 0;
     lastSampleUs_ = 0;
+    fskLevel_ = false;
+    fskLevelValid_ = false;
 }
 
 bool SubGhzRawCapture::pulseView(

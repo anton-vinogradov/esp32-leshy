@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "domain/captures/SubGhzRaw.h"
 #include "drivers/radio/Cc1101PassiveSpectrum.h"
 
 namespace leshy1::platform::arduino {
@@ -11,6 +12,12 @@ namespace leshy1::platform::arduino {
 // SIDLE command strobes are representable; PA-table, FIFO and TX paths are absent.
 class BoardCc1101PassiveSpectrum final {
 public:
+    struct AsyncEdge final {
+        std::uint16_t durationUs = 0;
+        bool newLevel = false;
+        bool clipped = false;
+    };
+
     ~BoardCc1101PassiveSpectrum() { end(); }
 
     bool begin(
@@ -28,7 +35,15 @@ public:
     // Lock the same receive-only adapter to one tunable frequency and expose
     // bounded RSSI envelope samples. No FIFO, PA table or TX strobe exists.
     bool lockReceive(std::uint32_t frequencyKHz);
+    bool lockReceive(
+        std::uint32_t frequencyKHz,
+        domain::captures::SubGhzRawModulation modulation);
     bool sampleRssi(std::int16_t* rssiDbm, std::uint64_t* monotonicUs);
+    bool startAsyncEdgeCapture(bool* startLevel);
+    bool stopAsyncEdgeCapture();
+    bool popAsyncEdge(AsyncEdge* output);
+    bool takeAsyncEdgeOverflow();
+    bool asyncEdgeCaptureActive() const;
     bool idle();
     bool end();
 
@@ -48,7 +63,8 @@ private:
     bool writeRegister(std::uint8_t address, std::uint8_t value);
     bool readStatus(std::uint8_t address, std::uint8_t* value);
     bool resetReceiver();
-    bool configureReceive();
+    bool configureReceive(
+        domain::captures::SubGhzRawModulation modulation);
     bool tune(std::uint32_t frequencyKHz);
     bool sampleAtFrequency(
         const drivers::radio::Cc1101PassiveSpectrumPlan& plan,
@@ -63,6 +79,8 @@ private:
     bool spiStarted_ = false;
     bool transactionOpen_ = false;
     bool active_ = false;
+    domain::captures::SubGhzRawModulation modulation_ =
+        domain::captures::SubGhzRawModulation::OokEnvelope;
 };
 
 }  // namespace leshy1::platform::arduino

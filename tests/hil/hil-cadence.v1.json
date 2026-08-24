@@ -39,6 +39,7 @@
     "tools/retain_",
     "tools/test_",
     "tests/hil/evidence/",
+    "tests/hil/delta-scopes/",
     "tests/hil/hil-cadence.v1.json"
   ],
   "execution_rules": {

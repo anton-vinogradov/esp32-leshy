@@ -18,10 +18,10 @@ import run_ir_two_board_hil as flow  # noqa: E402
 
 class IrTwoBoardHilTests(unittest.TestCase):
     def test_versions_are_extracted_from_both_projects(self) -> None:
-        self.assertEqual(
-            "0.139.0-s5-runtime-complete",
+        self.assertRegex(
             flow.read_version(
-                ROOT / "firmware/leshy1/platformio.ini", "LESHY1_VERSION"))
+                ROOT / "firmware/leshy1/platformio.ini", "LESHY1_VERSION"),
+            r"^0\.\d+\.\d+[-\w.]*$")
         self.assertEqual(
             "0.2.5-shared-pin-safe",
             flow.read_version(

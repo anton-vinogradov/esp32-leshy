@@ -8,6 +8,7 @@ turning into a full physical regression and makes every full-run trigger visible
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -69,8 +70,40 @@ def load_policy(path: Path) -> dict:
     return policy
 
 
+def file_sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with (ROOT / path).open("rb") as source:
+        for chunk in iter(lambda: source.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def load_delta_review(path: Path) -> dict:
+    review = json.loads(path.read_text(encoding="utf-8"))
+    if review.get("schema") != "leshy.hil_delta_review.v1":
+        raise ValueError(f"unsupported delta review schema in {path}")
+    required = (
+        "id", "rationale", "reviewed_cross_cutting_sha256",
+        "required_host_checks", "required_hil_scenarios",
+    )
+    for field in required:
+        if not review.get(field):
+            raise ValueError(f"delta review {path} has empty {field}")
+    hashes = review["reviewed_cross_cutting_sha256"]
+    if not isinstance(hashes, dict):
+        raise ValueError(f"delta review {path} hashes must be an object")
+    for reviewed_path, expected_hash in hashes.items():
+        actual_hash = file_sha256(reviewed_path)
+        if actual_hash != expected_hash:
+            raise ValueError(
+                f"delta review {path} is stale for {reviewed_path}: "
+                f"{actual_hash} != {expected_hash}"
+            )
+    return review
+
+
 def plan(policy: dict, paths: list[str], *, stage_end: bool,
-         release_candidate: bool) -> dict:
+         release_candidate: bool, delta_review: dict | None = None) -> dict:
     accepted = accepted_evidence_since(policy["anchor_evidence"])
     interval = int(policy["full_after_accepted_deltas"])
     host_only = [
@@ -90,6 +123,10 @@ def plan(policy: dict, paths: list[str], *, stage_end: bool,
         path for path in runtime_paths
         if begins_with_any(path, policy["cross_cutting_prefixes"])
     ]
+    reviewed_cross_cutting = sorted(
+        (delta_review or {}).get("reviewed_cross_cutting_sha256", {}).keys()
+    )
+    review_matches = bool(delta_review) and reviewed_cross_cutting == cross_cutting
 
     reasons: list[str] = []
     if stage_end:
@@ -98,14 +135,17 @@ def plan(policy: dict, paths: list[str], *, stage_end: bool,
         reasons.append("release_candidate")
     if len(accepted) >= interval:
         reasons.append("accepted_delta_interval")
-    if cross_cutting:
+    if cross_cutting and not review_matches:
         reasons.append("cross_cutting_runtime_change")
 
     if reasons:
         scope = "full"
     elif firmware or hil:
         scope = "delta"
-        reasons.append("affected_runtime_or_hil_surface")
+        reasons.append(
+            "reviewed_additive_cross_cutting_delta"
+            if review_matches else "affected_runtime_or_hil_surface"
+        )
     else:
         scope = "none"
         reasons.append("host_only_change")
@@ -119,6 +159,13 @@ def plan(policy: dict, paths: list[str], *, stage_end: bool,
         "firmware_paths": firmware,
         "hil_paths": hil,
         "cross_cutting_paths": cross_cutting,
+        "delta_review": None if delta_review is None else {
+            "id": delta_review["id"],
+            "rationale": delta_review["rationale"],
+            "reviewed_cross_cutting_paths": reviewed_cross_cutting,
+            "required_host_checks": delta_review["required_host_checks"],
+            "required_hil_scenarios": delta_review["required_hil_scenarios"],
+        },
         "accepted_deltas_since_anchor": len(accepted),
         "accepted_delta_evidence": accepted,
         "full_after_accepted_deltas": interval,
@@ -140,6 +187,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     parser.add_argument("--stage-end", action="store_true")
     parser.add_argument("--release-candidate", action="store_true")
+    parser.add_argument("--delta-review", type=Path)
     parser.add_argument("--compact", action="store_true")
     return parser.parse_args()
 
@@ -151,6 +199,10 @@ def main() -> int:
         result = plan(
             policy, changed_paths(args.base), stage_end=args.stage_end,
             release_candidate=args.release_candidate,
+            delta_review=(
+                load_delta_review(args.delta_review)
+                if args.delta_review is not None else None
+            ),
         )
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"HIL scope planning failed: {error}", file=sys.stderr)

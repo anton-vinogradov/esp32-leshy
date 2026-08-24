@@ -1060,6 +1060,8 @@ void testSubGhzRawCaptureIsPassiveBoundedAndNonBlocking() {
     invalid = plan;
     invalid.modulation =
         leshy1::domain::captures::SubGhzRawModulation::FskAsync;
+    CHECK(validateSubGhzRawCapturePlan(invalid));
+    invalid.minimumFskPulseUs = 0;
     CHECK(!validateSubGhzRawCapturePlan(invalid));
 
     SubGhzRawCapture capture;
@@ -1135,6 +1137,39 @@ void testSubGhzRawCaptureIsPassiveBoundedAndNonBlocking() {
     CHECK(capture.fail(-7, 4000100));
     CHECK(capture.stats().state == SubGhzRawCaptureState::Failed);
     CHECK(capture.stats().driverError == -7);
+
+    // Async FSK uses RSSI only as a carrier admission/end gate. Bit timing is
+    // supplied from the bounded GDO0 edge transport in task context.
+    capture.reset();
+    plan.modulation =
+        leshy1::domain::captures::SubGhzRawModulation::FskAsync;
+    plan.endGapUs = 5000;
+    CHECK(capture.begin(plan, 5000000));
+    CHECK(!capture.ingest({5000100, -100}));
+    CHECK(!capture.ingest({5001000, -40}));
+    CHECK(capture.ingest({5001060, -40}));
+    CHECK(capture.stats().state == SubGhzRawCaptureState::Capturing);
+    CHECK(capture.armFskEdges(false, 5001060));
+    CHECK(capture.armFskEdges(false, 5001061));
+    CHECK(capture.ingestFskEdge(416, true, false, 5001476));
+    CHECK(!capture.ingestFskEdge(2, false, false, 5001478));
+    CHECK(capture.stats().shortTransitionsRejected == 1);
+    CHECK(!capture.ingestFskEdge(418, true, false, 5001896));
+    CHECK(capture.ingestFskEdge(833, false, false, 5002311));
+    CHECK(capture.ingestFskEdge(70000, true, true, 5072311));
+    CHECK(capture.pulseCount() == 3);
+    CHECK(capture.stats().truncated);
+    CHECK(capture.pulseView(0, &pulse));
+    CHECK(pulse.durationUs == 416);
+    CHECK(capture.pulseView(1, &pulse));
+    CHECK(pulse.durationUs == 833);
+    CHECK(capture.pulseView(2, &pulse));
+    CHECK(pulse.durationUs == 65535);
+    CHECK(!capture.ingest({5072400, -100}));
+    CHECK(capture.ingest({5072460, -100}));
+    CHECK(!capture.service(5077399));
+    CHECK(capture.service(5077400));
+    CHECK(capture.stats().state == SubGhzRawCaptureState::Complete);
 }
 
 void testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics() {
@@ -1239,6 +1274,54 @@ void testSubGhzRawCapturePersistsAndReopensWithoutTxSemantics() {
     CHECK(openPersistedSubGhzRawCapture(
               reopened, segment.data(), segmentSize, &corrupt) !=
           SessionCodecStatus::Valid);
+
+    SubGhzRawCapture fskCapture;
+    SubGhzRawCapturePlan fskPlan;
+    fskPlan.modulation =
+        leshy1::domain::captures::SubGhzRawModulation::FskAsync;
+    fskPlan.endGapUs = 5000;
+    CHECK(fskCapture.begin(fskPlan, 2000000));
+    CHECK(!fskCapture.ingest({2000100, -40}));
+    CHECK(fskCapture.ingest({2000160, -40}));
+    CHECK(fskCapture.armFskEdges(false, 2000160));
+    CHECK(fskCapture.ingestFskEdge(417, true, false, 2000577));
+    CHECK(fskCapture.ingestFskEdge(834, false, false, 2001411));
+    CHECK(!fskCapture.ingest({2001500, -100}));
+    CHECK(fskCapture.ingest({2001560, -100}));
+    CHECK(fskCapture.service(2006500));
+    CHECK(fskCapture.stats().state == SubGhzRawCaptureState::Complete);
+
+    SurveySession fskArtifact;
+    CHECK(fskArtifact.start("sub-fsk-01", 2000000) ==
+          SessionStatus::Started);
+    CaptureMetadata fskMetadata = metadata;
+    fskMetadata.subGhzModulation = fskPlan.modulation;
+    fskMetadata.subGhzStartLevel = fskCapture.stats().startLevel;
+    fskMetadata.subGhzTruncated = fskCapture.stats().truncated;
+    fskMetadata.subGhzPulseRecords = static_cast<std::uint16_t>(
+        fskCapture.pulseCount());
+    fskMetadata.subGhzPulseBytes = static_cast<std::uint32_t>(
+        fskCapture.pulseCount() * 2U);
+    CHECK(fskArtifact.configureCaptureMetadata(fskMetadata) ==
+          CaptureMetadataStatus::Configured);
+    CHECK(fskArtifact.stop(fskCapture.stats().endedUs) ==
+          SessionStatus::Stopped);
+    segment.fill(0);
+    manifest.fill(0);
+    CHECK(encodeSubGhzRawCaptureSegment(
+              fskArtifact, fskCapture, segment.data(), segment.size(),
+              &segmentSize) == SessionCodecStatus::Valid);
+    CHECK(encodeSessionManifest(
+              fskArtifact, segment.data(), segmentSize, manifest.data(),
+              manifest.size(), &manifestSize) == SessionCodecStatus::Valid);
+    SurveySession fskReopened;
+    CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
+                        segmentSize, &fskReopened) ==
+          SessionCodecStatus::Valid);
+    CHECK(fskReopened.captureMetadata().subGhzModulation ==
+          leshy1::domain::captures::SubGhzRawModulation::FskAsync);
+    CHECK(formatSessionJsonSummary(fskReopened, json, sizeof(json)));
+    CHECK(std::strstr(json, "\"modulation\":\"fsk_async\"") != nullptr);
 }
 
 void testInfraredCaptureIsBoundedAndDecodesNecWithoutTxSemantics() {

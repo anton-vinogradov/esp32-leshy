@@ -185,6 +185,11 @@ S5 активен. Результат покрывает одну пару board
 `--stage-end` или `--release-candidate`. Planner возвращает `none`, `delta` или
 `full`, причину и flash policy. Интервал считает новые принятые retained HIL summary
 после текущего anchor, а не попытки или нажатия клавиш.
+Additive backward-compatible изменение внутри cross-cutting файла допускает delta HIL
+только с `--delta-review <manifest>`: manifest фиксирует точный SHA-256 каждого
+проверенного cross-cutting файла и перечисляет обязательные host checks и соседние
+physical scenarios. Устаревший или неполный review fail closed возвращает `full`;
+триггеры stage-end, RC и interval отменить им нельзя.
 
 Stage Demo не является маркетинговым роликом: он считается pass только если команды,
 логи, бинарный hash и ожидаемые наблюдения позволяют повторить результат.

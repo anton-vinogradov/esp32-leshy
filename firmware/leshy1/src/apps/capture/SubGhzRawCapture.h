@@ -27,6 +27,7 @@ struct SubGhzRawCapturePlan final {
     std::uint32_t waitTimeoutMs = 10000;
     std::uint32_t maximumCaptureMs = 5000;
     std::uint16_t debounceUs = 60;
+    std::uint16_t minimumFskPulseUs = 4;
     std::uint16_t endGapUs = 20000;
     std::uint16_t maximumPulses = 512;
     domain::captures::SubGhzRawModulation modulation =
@@ -60,6 +61,14 @@ public:
 
     bool begin(const SubGhzRawCapturePlan& plan, std::uint64_t startedUs);
     bool ingest(const SubGhzRawRssiSample& sample);
+    // FSK is admitted by the debounced RSSI carrier above. Once admitted, the
+    // platform records only GDO0 CHANGE durations into a bounded ISR transport
+    // and drains them here from task context. No radio write or transmit API is
+    // reachable through this capture object.
+    bool armFskEdges(bool startLevel, std::uint64_t monotonicUs);
+    bool ingestFskEdge(std::uint32_t durationUs, bool newLevel,
+                       bool transportClipped, std::uint64_t monotonicUs);
+    bool finishFskTransport(std::uint64_t monotonicUs, bool overflowed);
     bool service(std::uint64_t monotonicUs);
     bool cancel(std::uint64_t endedUs);
     bool fail(std::int32_t driverError, std::uint64_t endedUs);
@@ -85,6 +94,8 @@ private:
     std::uint64_t candidateSinceUs_ = 0;
     std::uint64_t stableSinceUs_ = 0;
     std::uint64_t lastSampleUs_ = 0;
+    bool fskLevel_ = false;
+    bool fskLevelValid_ = false;
 };
 
 }  // namespace leshy1::apps::capture

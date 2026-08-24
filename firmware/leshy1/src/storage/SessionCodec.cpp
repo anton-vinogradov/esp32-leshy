@@ -658,8 +658,8 @@ SessionCodecStatus decodeCaptureRecord(
     std::memcpy(metadata.appIdentity.data(), input + 40,
                 metadata.appIdentity.size());
     if (subGhzWire) {
-        if (input[83] != 0 || input[78] != static_cast<std::uint8_t>(
-                domain::captures::SubGhzRawModulation::OokEnvelope) ||
+        if (input[83] != 0 || input[78] > static_cast<std::uint8_t>(
+                domain::captures::SubGhzRawModulation::FskAsync) ||
             input[79] > 1U || input[82] > 1U) {
             return SessionCodecStatus::CaptureInvalid;
         }
@@ -1846,7 +1846,7 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
             "{\"schema\":\"leshy.capture.subghz_raw.v1\",\"id\":\"%s\","
             "\"started_us\":%llu,\"stopped_us\":%llu,"
             "\"frequency_khz\":%lu,\"threshold_dbm\":%d,"
-            "\"modulation\":\"ook_envelope\",\"pulses\":%u,"
+            "\"modulation\":\"%s\",\"pulses\":%u,"
             "\"pulse_bytes\":%lu,\"start_level\":%s,"
             "\"truncated\":%s,\"passive\":true,\"rx_only\":true}",
             session.id(),
@@ -1854,6 +1854,8 @@ bool formatSessionJsonSummary(const services::survey::SurveySession& session, ch
             static_cast<unsigned long long>(session.stoppedUs()),
             static_cast<unsigned long>(capture.subGhzFrequencyKHz),
             static_cast<int>(capture.subGhzThresholdDbm),
+            domain::captures::subGhzRawModulationName(
+                capture.subGhzModulation),
             static_cast<unsigned>(capture.subGhzPulseRecords),
             static_cast<unsigned long>(capture.subGhzPulseBytes),
             capture.subGhzStartLevel ? "true" : "false",

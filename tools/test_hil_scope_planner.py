@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -71,9 +72,64 @@ class HilScopePlannerTests(unittest.TestCase):
         self.assertEqual(result["scope"], "full")
         self.assertIn("cross_cutting_runtime_change", result["reasons"])
 
+    def test_exact_reviewed_additive_cross_cutting_change_selects_delta(self) -> None:
+        review = {
+            "id": "additive-codec",
+            "rationale": "Adds a backward-compatible value.",
+            "reviewed_cross_cutting_sha256": {
+                "firmware/leshy1/src/storage/SessionStore.cpp": "unused",
+            },
+            "required_host_checks": ["codec regression"],
+            "required_hil_scenarios": ["adjacent save/reopen"],
+        }
+        result = MODULE.plan(
+            POLICY, ["firmware/leshy1/src/storage/SessionStore.cpp"],
+            stage_end=False, release_candidate=False, delta_review=review,
+        )
+        self.assertEqual(result["scope"], "delta")
+        self.assertIn("reviewed_additive_cross_cutting_delta", result["reasons"])
+
+    def test_partial_review_cannot_hide_another_cross_cutting_change(self) -> None:
+        review = {
+            "id": "partial",
+            "rationale": "Only one path was reviewed.",
+            "reviewed_cross_cutting_sha256": {
+                "firmware/leshy1/src/storage/A.cpp": "unused",
+            },
+            "required_host_checks": ["one"],
+            "required_hil_scenarios": ["one"],
+        }
+        result = MODULE.plan(
+            POLICY,
+            ["firmware/leshy1/src/storage/A.cpp",
+             "firmware/leshy1/src/storage/B.cpp"],
+            stage_end=False, release_candidate=False, delta_review=review,
+        )
+        self.assertEqual(result["scope"], "full")
+
+    def test_delta_review_hash_is_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory(dir=MODULE.ROOT) as directory:
+            relative = str(Path(directory).relative_to(MODULE.ROOT) / "input.cpp")
+            (MODULE.ROOT / relative).write_text("current", encoding="utf-8")
+            review_path = Path(directory) / "review.json"
+            review_path.write_text(
+                '{"schema":"leshy.hil_delta_review.v1","id":"stale",'
+                '"rationale":"test","reviewed_cross_cutting_sha256":{'
+                f'"{relative}":"stale"}},"required_host_checks":["x"],'
+                '"required_hil_scenarios":["y"]}',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "is stale"):
+                MODULE.load_delta_review(review_path)
+
     def test_phase_end_overrides_docs_only(self) -> None:
         result = MODULE.plan(POLICY, ["docs/v1/STATUS.md"], stage_end=True,
-                             release_candidate=False)
+                             release_candidate=False, delta_review={
+                                 "id": "ignored", "rationale": "ignored",
+                                 "reviewed_cross_cutting_sha256": {},
+                                 "required_host_checks": ["x"],
+                                 "required_hil_scenarios": ["y"],
+                             })
         self.assertEqual(result["scope"], "full")
 
     def test_fifteenth_accepted_delta_selects_full(self) -> None:

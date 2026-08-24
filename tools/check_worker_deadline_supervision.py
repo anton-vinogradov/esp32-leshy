@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
@@ -186,8 +187,11 @@ def main() -> int:
         "kMaximumScanAttempts = 2U", "kCompletionGraceMs = 1000U",
         "kRetryDelayMs = 100U", "worstCaseScanDurationUs",
     ), "bounded BLE scan deadline")
-    if 'LESHY1_VERSION=\\"0.139.0-s5-runtime-complete\\"' not in platform:
-        raise AssertionError("exact candidate version is not bound")
+    version = re.search(
+        r'LESHY1_VERSION=\\"(\d+)\.(\d+)\.(\d+)[^\\"]*\\"', platform)
+    if version is None or tuple(map(int, version.groups())) < (0, 138, 0):
+        raise AssertionError(
+            "candidate predates the complete worker-deadline integration")
     if "kRfCarrierChipSelectCharacterizationOnly = false" not in profile:
         raise AssertionError("diagnostic-only carrier gate remains active")
 

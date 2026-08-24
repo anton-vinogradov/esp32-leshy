@@ -184,6 +184,11 @@ promote a release or claim instrumented RF silence.
 or `--release-candidate` at those boundaries. The planner returns `none`, `delta` or
 `full`, the trigger and the flash policy. Its interval counts newly accepted retained
 HIL summaries after the current anchor, rather than attempts or button presses.
+An additive, backward-compatible edit inside a cross-cutting file may use delta HIL
+only with `--delta-review <manifest>`: the manifest pins the exact SHA-256 of every
+reviewed cross-cutting file and names the required host checks and adjacent physical
+scenarios. A stale or incomplete review fails closed to `full`; stage-end, RC and
+interval triggers cannot be waived.
 
 A Stage Demo is not a marketing video: it passes only when commands, logs, binary
 hash, and expected observations make the result reproducible.

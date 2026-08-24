@@ -10,6 +10,14 @@ enum class SubGhzRawModulation : std::uint8_t {
     FskAsync = 1,
 };
 
+inline const char* subGhzRawModulationName(SubGhzRawModulation modulation) {
+    switch (modulation) {
+        case SubGhzRawModulation::OokEnvelope: return "ook_envelope";
+        case SubGhzRawModulation::FskAsync: return "fsk_async";
+    }
+    return "unknown";
+}
+
 struct SubGhzRawPulseView final {
     std::uint16_t durationUs = 0;
 };

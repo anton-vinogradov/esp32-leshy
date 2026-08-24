@@ -289,7 +289,7 @@ LibraryExportResult LibraryController::formatSelectedCaptureMetadata(
             "\"stopped_us\":%llu,\"build\":{\"app_elf_sha256\":\"%s\"},"
             "\"receive\":{\"mode\":\"passive\",\"rx_only\":true,"
             "\"source\":\"cc1101\",\"frequency_khz\":%lu,"
-            "\"threshold_dbm\":%d,\"modulation\":\"ook_envelope\"},"
+            "\"threshold_dbm\":%d,\"modulation\":\"%s\"},"
             "\"payload\":{\"status\":\"captured_subghz_raw\","
             "\"records\":%u,\"bytes\":%lu,\"start_level\":%s,"
             "\"truncated\":%s},\"exports\":{"
@@ -304,6 +304,8 @@ LibraryExportResult LibraryController::formatSelectedCaptureMetadata(
             identity.data(),
             static_cast<unsigned long>(capture.subGhzFrequencyKHz),
             static_cast<int>(capture.subGhzThresholdDbm),
+            domain::captures::subGhzRawModulationName(
+                capture.subGhzModulation),
             static_cast<unsigned>(capture.subGhzPulseRecords),
             static_cast<unsigned long>(capture.subGhzPulseBytes),
             capture.subGhzStartLevel ? "true" : "false",

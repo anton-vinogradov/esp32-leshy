@@ -1,0 +1,20 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "subghz-fsk-rx-0.140",
+  "rationale": "SessionCodec only accepts and reports the previously reserved fsk_async enum value; existing OOK wire values, schema version and decode paths are unchanged. platformio.ini only advances LESHY1_VERSION and leaves the board, partitions and build flags unchanged.",
+  "reviewed_cross_cutting_sha256": {
+    "firmware/leshy1/platformio.ini": "6e5cf20e77486aba356a23188b38c4037839b2bd92d7d7dc00e0e10f2336cbf4",
+    "firmware/leshy1/src/storage/SessionCodec.cpp": "20dc1c3a95a96d1e3ee802a7d5551cb3a6672802871bcfb079cf7ad71a89dac3"
+  },
+  "required_host_checks": [
+    "full host/source/docs suite",
+    "FSK encode/decode/manifest/reopen regression",
+    "RX-only CC1101 FSK source contract",
+    "exact ELF GDO0 ISR and every call target in IRAM"
+  ],
+  "required_hil_scenarios": [
+    "FSK menu and no-signal timeout",
+    "adjacent OOK capture regression",
+    "final zero ownership and receive-only wire accounting"
+  ]
+}
