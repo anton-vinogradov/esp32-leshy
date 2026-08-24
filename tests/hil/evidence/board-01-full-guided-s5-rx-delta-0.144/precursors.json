@@ -1,0 +1,106 @@
+{
+  "runs": [
+    {
+      "candidate_version": "0.141.0-full-guided-s5-rx",
+      "cleanup": {
+        "complete": true,
+        "final_lease_mask": 0,
+        "final_owner": "none",
+        "final_page": "home"
+      },
+      "failure_count": 206,
+      "failure_signatures": [
+        "mode_menu.page: 'library' != 'self_test'",
+        "mode_menu.lease_mask: 5 != 1"
+      ],
+      "outcome": "fail_closed_navigation_entered_library",
+      "raw_run_sha256": "52cdd32c881d8093e46ffeb719942473b7b348a3ea6cf349955c2b413e8b24f9",
+      "source_commit_reported": "02c1471890046f07ae2ab07283ef68f621299941"
+    },
+    {
+      "candidate_version": "0.141.0-full-guided-s5-rx",
+      "cleanup": {
+        "complete": true,
+        "final_lease_mask": 0,
+        "final_owner": "none",
+        "final_page": "home"
+      },
+      "failure_count": 99,
+      "failure_signatures": [
+        "quick.runtime.heap failed before explicit split floors",
+        "full.s5.capture.subghz.fsk.receive failed"
+      ],
+      "fsk": {
+        "edges": 512,
+        "overflow": true,
+        "samples": 32
+      },
+      "outcome": "fail_closed_stale_heap_gate_and_fsk_overflow",
+      "raw_run_sha256": "eca040d773c9881bbd071fb64a1374da1c784ef1af14b38a4c19c074031d5bde",
+      "source_commit_reported": "02c1471890046f07ae2ab07283ef68f621299941"
+    },
+    {
+      "candidate_version": "0.142.0-full-guided-s5-rx",
+      "cleanup": {
+        "complete": true,
+        "final_lease_mask": 0,
+        "final_owner": "none",
+        "final_page": "home"
+      },
+      "failure_count": 84,
+      "failure_signatures": [
+        "full.s5.capture.subghz.fsk.receive failed",
+        "active_rf.subghz_fsk.overflow: True != False"
+      ],
+      "fsk": {
+        "edges": 2872,
+        "overflow": true,
+        "samples": 32
+      },
+      "outcome": "fail_closed_fsk_isr_window_unbounded_between_service_passes",
+      "raw_run_sha256": "55b940806d2b68e92d4dfdb75923a8ed992de9445f3d9ff0ea902091e40e4b7d",
+      "source_commit_reported": "62f7ec56d01e26ddde7a658006b678ee6cc74bbd"
+    },
+    {
+      "candidate_version": "0.143.0-full-guided-s5-rx",
+      "cleanup": {
+        "complete": true,
+        "final_lease_mask": 0,
+        "final_owner": "none",
+        "final_page": "home"
+      },
+      "failure_count": 16,
+      "failure_signatures": [
+        "heap_minimum is below current product floor: 63848",
+        "active_artifact.capture.applicable: False != True"
+      ],
+      "fsk": {
+        "edges": 48,
+        "overflow": false,
+        "passed": true,
+        "samples": 32
+      },
+      "heap": {
+        "free_bytes": 96880,
+        "free_floor_bytes": 81920,
+        "minimum_bytes": 63848,
+        "minimum_floor_bytes": 65536
+      },
+      "outcome": "fail_closed_heap_floor_and_pcap_applicability_contract",
+      "raw_run_sha256": "4e155afe6541a5cf31489f51b5539569c4fca4a0590916a05b4f903c566eb769",
+      "source_commit_reported": "a7601481990abdf9d2c5b24ad53ad57b33ade032"
+    },
+    {
+      "board_touched": false,
+      "candidate_version": "0.144.0-full-guided-s5-rx",
+      "failure_count": 1,
+      "failure_signatures": [
+        "esptool could not open /dev/cu.usbmodem2101: operation not permitted"
+      ],
+      "outcome": "fail_closed_host_serial_permission_denied_before_flash",
+      "raw_run_sha256": "0c40cd2eb8891337be92952ec9eca989352ebd044456691e7b4d8801ae7c52df",
+      "source_commit_reported": "0f2ffdf554d81c80993ec08f9d5697462351fd76"
+    }
+  ],
+  "schema": "leshy.full_guided_s5_rx_delta.precursors.v1"
+}

@@ -311,6 +311,22 @@ positive-RF or mixed-workload release budget. Compact retention reduces the chec
 HIL bundle from 45,818,642 B to less than 1 MiB without discarding run, PNG or
 source/artifact identities.
 
+Latest accepted delta `RB-M138`: exact 0.144 uses 3,087,248 B linked flash,
+211,208 B static RAM and app/factory images 3,087,744/3,153,280 B. This is
++2,820 B linked flash, +224 B static RAM and +3,152/+3,152 B images versus
+0.140 for the plan-v10 Full/Guided receiver and artifact execution, split
+current-free/boot-lifetime-minimum heap gates and applicability-aware PCAP audit.
+Dedicated DIRAM is 294,388/341,760 B (86.14%, 47,372 B remaining); dedicated
+IRAM remains exactly 16,384/16,384 B with no headroom. The accepted board-01
+delta starts with 167,852 B total heap and finishes Full with 96,880 B free and
+a 63,848 B boot-lifetime minimum, leaving 14,960 B above the 80 KiB current-free
+gate and 14,696 B above the 48 KiB minimum gate. It runs bounded receive work on
+three nRF24 modules, CC1101, OOK, FSK and IR plus read-only product and disposable
+artifact audits; product generation 110/zero observations remains unchanged,
+product writes and radio TX remain zero, and the 505 B scratch is removed. This
+focused delta is not a mixed-workload release budget and does not replace the
+stage-end matrix or a qualified physical RF-positive gate.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

@@ -1,0 +1,108 @@
+{
+  "board": "board-01",
+  "cadence": {
+    "accepted_delta_ordinal": 2,
+    "anchor_evidence": "tests/hil/evidence/board-01-s5-runtime-completeness-0.139.json",
+    "flash_policy": "one_exact_candidate_flash_for_delta_matrix",
+    "full_after_accepted_deltas": 15,
+    "full_matrix_run": false,
+    "scope": "delta"
+  },
+  "candidate": {
+    "app_elf_sha256": "9fee1996de80316946fcdbebe07064be2ab3baac3bd88fd6300bf4df8ca66402",
+    "cid": "FE343253440000002000000055019CB7",
+    "factory_sha256": "4575b4706cea89b1b28f3973ae764117503a2e37e5a9e052373c08bfaf662add",
+    "firmware_sha256": "a173b2afb53e2b2b537c7a3460ebfbded1229e443f42aa5b4ab3db8ccc6dded2",
+    "linked_flash_bytes": 3087248,
+    "map_sha256": "d324d1d33734eb15badf444c025e99dfd690f92a554b87223b611ac19b079e46",
+    "source_commit": "0f2ffdf554d81c80993ec08f9d5697462351fd76",
+    "static_ram_bytes": 211208,
+    "version": "0.144.0-full-guided-s5-rx"
+  },
+  "evidence": {
+    "compact_artifact_manifest_sha256": "7605cc4be6aa115752fb236c7e51543e799682fc7ffb9a129860c4ad8c67fb4e",
+    "compact_bytes": 549917,
+    "compact_files": 18,
+    "compact_provenance_sha256": "f7aa0f3721f3c87374bbbea5fc46701ce8556de1b406701f3f375bcded7d8f46",
+    "fail_closed_precursors": 5,
+    "precursors_sha256": "f68115f00c0f8579a84d0e6e43b435c150a8f0854da9b19bf59d9ff80f1048a6",
+    "run_sha256": "4d52407fbc4ad4d12602ff559ff99007070e9db38a6b5f9b7e02b0573df9674e",
+    "runner_sha256": "44e453f30c7f0ebd7a2856a3b906939fef8f4f1725532e1cfc0672d01fc698ba",
+    "tft_png_frames": 13
+  },
+  "evidence_ids": [
+    "E-BUILD-144",
+    "E-AUTO-102",
+    "E-HIL-162",
+    "E-RADIO-020",
+    "E-STORAGE-033"
+  ],
+  "limits": {
+    "full_capability_coverage_blocked": true,
+    "physical_ir_positive_source_used": false,
+    "physical_subghz_fsk_positive_source_used": false,
+    "physical_subghz_ook_positive_source_used": false,
+    "radio_transmit_authorized": false,
+    "s5_exit_gate_closed": true
+  },
+  "schema": "leshy.full_guided_s5_rx_delta.acceptance.v1",
+  "status": "pass_delta_full_guided_receivers_and_artifacts_positive_sources_open",
+  "verified": {
+    "active_rf": {
+      "cc1101_bins": 64,
+      "cc1101_register_reads": 4270,
+      "cc1101_register_writes": 208,
+      "cc1101_spi_bytes": 9022,
+      "fsk_edges": 72,
+      "fsk_overflow": false,
+      "fsk_samples": 32,
+      "infrared_samples": 64,
+      "infrared_transitions": 0,
+      "nrf24_channels": 83,
+      "nrf24_modules": 3,
+      "nrf24_register_reads": 98,
+      "nrf24_register_writes": 101,
+      "nrf24_spi_bytes": 398,
+      "ook_samples": 32
+    },
+    "artifacts": {
+      "disposable_scratch_removed": true,
+      "disposable_write_bytes": 505,
+      "disposable_write_calls": 3,
+      "pcap_applicable": false,
+      "pcap_complete": true,
+      "product_generation_after": 110,
+      "product_generation_before": 110,
+      "product_observations_after": 0,
+      "product_observations_before": 0,
+      "product_storage_write_commands": 0
+    },
+    "final_lease_mask": 0,
+    "final_page": "home",
+    "final_runtime_owner": "none",
+    "full": {
+      "blocked": 1,
+      "failed": 0,
+      "not_applicable": 3,
+      "passed": 28,
+      "status": "blocked"
+    },
+    "heap": {
+      "free_bytes": 96880,
+      "free_floor_bytes": 81920,
+      "free_margin_bytes": 14960,
+      "minimum_bytes": 63848,
+      "minimum_floor_bytes": 49152,
+      "minimum_margin_bytes": 14696
+    },
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "quick": {
+      "failed": 0,
+      "passed": 9,
+      "status": "pass"
+    },
+    "radio_tx_commands": 0,
+    "shield_receivers_detected": 3
+  }
+}

@@ -26,6 +26,7 @@ FIRMWARE_SHA256 = "cc4dbfe5df747968cb618845c4bfee28eefc37208a79c79f0dd584713a705
 ELF_SHA256 = "5647c991098f395470996a1b4a43070d9cc1760d02039a3250e2cc2b00fdff40"
 RUNNER_SHA256 = "9172aa55ed36a32859c5b414cd09a41158aa845d7bdac0644c1137d90b93ae1b"
 RETAINER_SHA256 = "85ac62d96a45332abd55d0492cbb9deba2198394054aa72742bf41bc4f4a3adf"
+RETAINER_SOURCE = "f7304c74d898db6d5cd74278dfaa6800c3aec3d7"
 CAPTURES = {
     "fsk_async-band-433", "fsk_async-no-signal",
     "fsk_async-type-ook", "fsk_async-type-selected",
@@ -180,7 +181,9 @@ def main() -> int:
     require(failures,
             digest(BUNDLE / "run.json") == RUN_SHA256 and
             digest(BUNDLE / "runner.py") == RUNNER_SHA256 and
-            digest(ROOT / "tools/retain_compact_delta_hil.py") ==
+            hashlib.sha256(git_blob(
+                RETAINER_SOURCE,
+                "tools/retain_compact_delta_hil.py") or b"").hexdigest() ==
                 RETAINER_SHA256 and
             git_blob(SOURCE, "tools/run_1x_subghz_fsk_delta_hil.py") ==
                 (BUNDLE / "runner.py").read_bytes(),

@@ -97,6 +97,17 @@ def write_retained_manifest(destination: Path) -> tuple[int, str]:
     return len(files) + 1, digest(manifest)
 
 
+def capture_png(source: Path, name: str) -> Path:
+    candidates = dict.fromkeys([
+        source / "frames" / f"{name}.png",
+        source / "frames" / f"{name.replace('_', '-')}.png",
+    ])
+    matches = [path for path in candidates if path.is_file()]
+    require(len(matches) == 1,
+            f"capture PNG path is missing or ambiguous: {name}")
+    return matches[0]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True, type=Path)
@@ -106,6 +117,16 @@ def main() -> int:
     parser.add_argument("--linked-flash-bytes", required=True, type=int)
     parser.add_argument("--factory-sha256", required=True)
     parser.add_argument("--map-sha256", required=True)
+    parser.add_argument(
+        "--runner", type=Path,
+        help="executed runner path in the candidate commit when the raw bundle "
+             "does not carry its own copy",
+    )
+    parser.add_argument("--expected-run-schema")
+    parser.add_argument("--delta-review", type=Path)
+    parser.add_argument("--accepted-delta-ordinal", type=int)
+    parser.add_argument("--cadence-anchor")
+    parser.add_argument("--full-after-accepted-deltas", type=int, default=15)
     args = parser.parse_args()
     source = args.source.resolve()
     destination = args.destination.resolve()
@@ -116,9 +137,14 @@ def main() -> int:
     require(run_path.is_file(), "run.json missing")
     run = load(run_path)
     candidate = run.get("candidate", {})
+    if args.expected_run_schema is not None:
+        require(run.get("schema") == args.expected_run_schema,
+                "source run schema mismatch")
+    annotated_scope = run.get("scope")
+    annotated_full_matrix = run.get("full_matrix_run")
     require(run.get("passed") is True and run.get("failures") == [] and
-            run.get("scope") == "delta" and
-            run.get("full_matrix_run") is False and
+            annotated_scope in {None, "delta"} and
+            annotated_full_matrix in {None, False} and
             run.get("gate_eligible") is True,
             "source is not an accepted delta HIL run")
     commit = str(candidate.get("source_commit", ""))
@@ -127,22 +153,71 @@ def main() -> int:
     git("cat-file", "-e", f"{args.base_commit}^{{commit}}")
     original_files, original_bytes = verify_source_manifest(source)
 
-    runners = sorted(source.glob("run_1x_*.py"))
-    require(len(runners) == 1, "source must contain exactly one executed runner")
+    runner_bytes: bytes
+    runner_relative: str
+    if args.runner is not None:
+        runner = args.runner
+        if not runner.is_absolute():
+            runner = ROOT / runner
+        runner = runner.resolve()
+        try:
+            runner_relative = str(runner.relative_to(ROOT))
+        except ValueError as error:
+            raise ValueError("runner must stay below repository root") from error
+        runner_bytes = git("show", f"{commit}:{runner_relative}")
+        recorded_runner_sha = run.get("runner_source_sha256")
+        require(
+            isinstance(recorded_runner_sha, str) and
+            hashlib.sha256(runner_bytes).hexdigest() == recorded_runner_sha,
+            "candidate runner does not match the executed runner identity",
+        )
+    else:
+        runners = sorted(source.glob("run_1x_*.py"))
+        require(len(runners) == 1,
+                "source must contain exactly one executed runner")
+        runner_bytes = runners[0].read_bytes()
+        runner_relative = runners[0].name
+
+    delta_review: dict[str, Any] | None = None
+    delta_review_relative: str | None = None
+    if args.delta_review is not None:
+        review = args.delta_review
+        if not review.is_absolute():
+            review = ROOT / review
+        review = review.resolve()
+        try:
+            delta_review_relative = str(review.relative_to(ROOT))
+        except ValueError as error:
+            raise ValueError(
+                "delta review must stay below repository root") from error
+        delta_review = load(review)
+        require(delta_review.get("schema") == "leshy.hil_delta_review.v1",
+                "delta review schema mismatch")
+        require(git("show", f"{commit}:{delta_review_relative}") ==
+                review.read_bytes(),
+                "delta review is not bound to the candidate commit")
+    if annotated_scope is None or annotated_full_matrix is None:
+        require(delta_review is not None,
+                "unannotated run requires a source-bound delta review")
+    require(args.accepted_delta_ordinal is None or
+            args.accepted_delta_ordinal > 0,
+            "accepted delta ordinal must be positive")
+    require(args.full_after_accepted_deltas > 0,
+            "full-HIL cadence must be positive")
     captures = run.get("captures", {})
     require(isinstance(captures, dict) and captures,
             "run has no automatic TFT captures")
 
     destination.mkdir(parents=True)
     shutil.copy2(run_path, destination / "run.json")
-    shutil.copy2(runners[0], destination / "runner.py")
+    (destination / "runner.py").write_bytes(runner_bytes)
     frames = destination / "frames"
     frames.mkdir()
     for name, capture in sorted(captures.items()):
-        png = source / "frames" / f"{name}.png"
+        png = capture_png(source, name)
         require(png.is_file() and digest(png) == capture.get("png_sha256"),
                 f"PNG identity mismatch: {name}")
-        shutil.copy2(png, frames / png.name)
+        shutil.copy2(png, frames / f"{name}.png")
 
     provenance = {
         "schema": "leshy.compact_delta_hil.provenance.v1",
@@ -151,6 +226,20 @@ def main() -> int:
         "source_sha256": source_hashes(args.base_commit, commit),
         "run_sha256": digest(destination / "run.json"),
         "runner_sha256": digest(destination / "runner.py"),
+        "runner_source": runner_relative,
+        "delta_review": ({
+            "path": delta_review_relative,
+            "sha256": digest(ROOT / delta_review_relative),
+            "id": delta_review.get("id"),
+        } if delta_review is not None and delta_review_relative is not None
+         else None),
+        "cadence": {
+            "scope": "delta",
+            "full_matrix_run": False,
+            "accepted_delta_ordinal": args.accepted_delta_ordinal,
+            "anchor_evidence": args.cadence_anchor,
+            "full_after_accepted_deltas": args.full_after_accepted_deltas,
+        },
         "build": {
             "static_ram_bytes": args.static_ram_bytes,
             "linked_flash_bytes": args.linked_flash_bytes,

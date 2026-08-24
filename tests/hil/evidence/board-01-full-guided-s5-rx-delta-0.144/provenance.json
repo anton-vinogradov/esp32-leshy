@@ -1,0 +1,55 @@
+{
+  "base_commit": "a7601486b63954b546591be1665b75657d52d4c4",
+  "build": {
+    "factory_sha256": "4575b4706cea89b1b28f3973ae764117503a2e37e5a9e052373c08bfaf662add",
+    "linked_flash_bytes": 3087248,
+    "map_sha256": "d324d1d33734eb15badf444c025e99dfd690f92a554b87223b611ac19b079e46",
+    "static_ram_bytes": 211208
+  },
+  "cadence": {
+    "accepted_delta_ordinal": 2,
+    "anchor_evidence": "tests/hil/evidence/board-01-s5-runtime-completeness-0.139.json",
+    "full_after_accepted_deltas": 15,
+    "full_matrix_run": false,
+    "scope": "delta"
+  },
+  "candidate": {
+    "app_elf_sha256": "9fee1996de80316946fcdbebe07064be2ab3baac3bd88fd6300bf4df8ca66402",
+    "firmware_sha256": "a173b2afb53e2b2b537c7a3460ebfbded1229e443f42aa5b4ab3db8ccc6dded2",
+    "flashed": true,
+    "source_commit": "0f2ffdf554d81c80993ec08f9d5697462351fd76",
+    "version": "0.144.0-full-guided-s5-rx"
+  },
+  "delta_review": {
+    "id": "full-guided-s5-rx-0.144",
+    "path": "tests/hil/delta-scopes/full-guided-s5-rx-0.144.json",
+    "sha256": "f00205b7a25a6b5bcf8edfe9148167295f401476a0cf726f6f32711694098adf"
+  },
+  "original_bundle": {
+    "artifact_manifest_sha256": "4d93e544746bb21722d9ee457c97265c0896e84993ad9d6aad104e93c3bad89a",
+    "bytes": 5703072,
+    "files": 42
+  },
+  "retention": {
+    "omitted": [
+      "firmware.bin",
+      "firmware.elf",
+      "firmware.map",
+      "rgb565",
+      "per-frame JSON"
+    ],
+    "png_frames": 13,
+    "policy": "compact_delta_no_duplicate_build_binaries"
+  },
+  "run_sha256": "4d52407fbc4ad4d12602ff559ff99007070e9db38a6b5f9b7e02b0573df9674e",
+  "runner_sha256": "44e453f30c7f0ebd7a2856a3b906939fef8f4f1725532e1cfc0672d01fc698ba",
+  "runner_source": "tools/run_1x_full_guided_rf_hil.py",
+  "schema": "leshy.compact_delta_hil.provenance.v1",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "5acf9dfbbdf9682359734dfe751970f236ae84013fe4529fe43dc3518051585b",
+    "firmware/leshy1/src/apps/self_test/SelfTestController.h": "583c0c8ee47689aa464a61cfd08d6c97dc4ac7228a31e6317b6fff20d681ddf5",
+    "tests/hil/delta-scopes/full-guided-s5-rx-0.144.json": "f00205b7a25a6b5bcf8edfe9148167295f401476a0cf726f6f32711694098adf",
+    "tools/check_full_guided_s5_rx_contract.py": "50917aaee82ef5b6a862fd958049695171b9ff746e088dcb1698aa03ba2d93a0",
+    "tools/run_1x_full_guided_rf_hil.py": "44e453f30c7f0ebd7a2856a3b906939fef8f4f1725532e1cfc0672d01fc698ba"
+  }
+}

@@ -162,6 +162,18 @@ eight-cycle exact 0.89 endurance result, this satisfies the stable S4 exit gate.
 S4 is closed and S5 is active. The result covers one board/card pair and does not
 promote a release or claim instrumented RF silence.
 
+S5 progress now accepts the autonomous board-01 half of `DEMO-S5` through exact
+0.144 `E-AUTO-102`/`E-HIL-162`/`E-RADIO-020`/`E-STORAGE-033`. From the public
+Device→Self-Test→Full route, plan v10 runs all three nRF24 receive paths, CC1101,
+bounded OOK/FSK and IR input, then audits product Recovery/Library, an
+applicability-aware PCAP result and an exact-CID disposable Session. Quick is 9/9;
+Full is 28 pass/0 fail/1 blocked/3 N/A with zero TX/product writes/input drops,
+14,960/14,696 B heap margins, complete scratch cleanup, 13 TFT captures and final
+Home/none/lease 0. The capability-coverage blocker is intentional: no qualified
+positive nRF24/Sub-GHz OOK/FSK source participated. Therefore this is a reproducible
+delta checkpoint, not `DEMO-S5`; the source-bound physical receive→save→cold export
+paths and integrated two-board exit run remain mandatory.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases. Physical HIL is

@@ -163,6 +163,18 @@ writes/syncs, полным cleanup scratch и lease 0. Вместе с прин�
 S5 активен. Результат покрывает одну пару board/card, не выпускает релиз и не
 заявляет instrumented RF silence.
 
+Прогресс S5 теперь принимает автономную половину `DEMO-S5` на board-01 через exact
+0.144 `E-AUTO-102`/`E-HIL-162`/`E-RADIO-020`/`E-STORAGE-033`. Из публичного пути
+Устройство→Самопроверка→Полная plan v10 запускает все три receive path nRF24,
+CC1101, bounded OOK/FSK и вход IR, затем проверяет product Recovery/Library,
+applicability-aware PCAP и disposable Session exact CID. Быстрая проходит 9/9;
+Полная даёт 28 pass/0 fail/1 blocked/3 N/A с zero TX/product writes/input drops,
+margins heap 14 960/14 696 B, полным cleanup scratch, 13 TFT captures и финалом
+Home/none/lease 0. Blocker capability coverage намеренный: qualified positive source
+nRF24/Sub-GHz OOK/FSK не участвовал. Поэтому это воспроизводимый delta checkpoint,
+а не `DEMO-S5`; source-bound physical paths receive→save→cold export и интегральный
+two-board exit run остаются обязательными.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases. Physical

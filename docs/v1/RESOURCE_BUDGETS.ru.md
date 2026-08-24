@@ -304,6 +304,21 @@ OOK с zero storage/TX side effects. Это не physical positive-RF и не
 mixed-workload release budget. Compact retention сокращает checked HIL bundle с
 45 818 642 B до менее 1 MiB, сохраняя run, PNG и identities source/artifacts.
 
+Последний принятый delta `RB-M138`: exact 0.144 использует 3 087 248 B linked
+flash, 211 208 B static RAM и app/factory images 3 087 744/3 153 280 B. Это
++2 820 B linked flash, +224 B static RAM и +3 152/+3 152 B images против 0.140
+за plan-v10 execution receivers/artifacts Full/Guided, раздельные gates heap для
+current free и boot-lifetime minimum и applicability-aware audit PCAP. Dedicated
+DIRAM равна 294 388/341 760 B (86,14%, свободно 47 372 B); dedicated IRAM остаётся
+ровно 16 384/16 384 B без запаса. Принятая delta board-01 стартует с 167 852 B
+total heap и завершает Full с 96 880 B free и boot-lifetime minimum 63 848 B,
+оставляя 14 960 B над gate current-free 80 КиБ и 14 696 B над gate minimum
+48 КиБ. Она выполняет bounded receive на трёх nRF24, CC1101, OOK, FSK и IR плюс
+read-only product/disposable artifact audits; product generation 110/zero
+observations остаётся неизменной, product writes и radio TX равны нулю, scratch
+505 B удалён. Эта focused delta не является mixed-workload release budget и не
+заменяет stage-end matrix или квалифицированный physical RF-positive gate.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
