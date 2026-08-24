@@ -209,8 +209,8 @@ void SelfTestController::evaluateQuick(const SelfTestFacts& facts) {
            facts.profileMatched ? SelfTestResultStatus::Pass
                                 : SelfTestResultStatus::Fail);
     append("quick.runtime.heap",
-           facts.heapFree >= facts.heapFloor &&
-                   facts.heapMinimum >= facts.heapFloor
+           facts.heapFree >= facts.heapFreeFloor &&
+                   facts.heapMinimum >= facts.heapMinimumFloor
                ? SelfTestResultStatus::Pass
                : SelfTestResultStatus::Fail);
     append("quick.display.ready",

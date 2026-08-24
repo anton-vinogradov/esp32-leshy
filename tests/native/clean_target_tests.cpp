@@ -503,7 +503,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(std::strcmp(selfTestResultStatusName(
                           SelfTestResultStatus::NotApplicable),
                       "not_applicable") == 0);
-    CHECK(SelfTestReport::kPlanVersion == 9);
+    CHECK(SelfTestReport::kPlanVersion == 10);
 
     CHECK(controller.back());
     CHECK(controller.previousMode());
@@ -539,7 +539,7 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(incompleteReport.notApplicable == 1);
 
     SelfTestFacts degradedHeap = healthy;
-    degradedHeap.heapMinimum = degradedHeap.heapFloor - 1U;
+    degradedHeap.heapMinimum = degradedHeap.heapMinimumFloor - 1U;
     SelfTestController finalHeapFailure;
     CHECK(finalHeapFailure.nextMode());
     CHECK(finalHeapFailure.activate(healthy, 540));
@@ -557,6 +557,15 @@ void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
     CHECK(heapFailure.failed == 1);
     CHECK(heapFailure.blocked == 1);
     CHECK(heapFailure.notApplicable == 2);
+
+    SelfTestFacts lowFreeHeap = healthy;
+    lowFreeHeap.heapFree = lowFreeHeap.heapFreeFloor - 1U;
+    SelfTestController freeHeapFailure;
+    CHECK(freeHeapFailure.activate(lowFreeHeap, 580));
+    freeHeapFailure.finishRun(590);
+    CHECK(freeHeapFailure.report().status == SelfTestResultStatus::Fail);
+    CHECK(freeHeapFailure.report().checks[2].status ==
+          SelfTestResultStatus::Fail);
 
     SelfTestFacts unprobed = healthy;
     unprobed.shieldReceiverProbeComplete = false;

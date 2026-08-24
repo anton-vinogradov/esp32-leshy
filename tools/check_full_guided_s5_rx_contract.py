@@ -24,8 +24,14 @@ def main() -> int:
     active = entry[start:end]
     failures: list[str] = []
 
-    require("kPlanVersion = 9" in header, "Self-Test plan is not v9", failures)
+    require("kPlanVersion = 10" in header, "Self-Test plan is not v10", failures)
     require("kCapacity = 32" in header, "Self-Test report capacity drifted", failures)
+    require("heapFreeFloor = 80U * 1024U" in header and
+            "heapMinimumFloor = 64U * 1024U" in header,
+            "current product heap floors drifted", failures)
+    require("facts.heapFree >= facts.heapFreeFloor" in controller and
+            "facts.heapMinimum >= facts.heapMinimumFloor" in controller,
+            "Quick does not enforce both heap headroom gates", failures)
     for check_id in (
         "full.shield.ir",
         "full.s5.capture.subghz.ook.receive",
@@ -42,6 +48,12 @@ def main() -> int:
     require("SubGhzRawModulation::OokEnvelope" in active and
             "SubGhzRawModulation::FskAsync" in active,
             "both CC1101 receive modes are not exercised", failures)
+    render = active.index('lastRuntimeEvent = "self_test_active_subghz_fsk"')
+    attach = active.index("boardCc1101Spectrum.startAsyncEdgeCapture(")
+    require(render < attach,
+            "FSK ISR must attach only after its one-time TFT redraw", failures)
+    require("if (!boardCc1101Spectrum.asyncEdgeCaptureActive())" in active,
+            "FSK deferred ISR attachment guard is missing", failures)
     for call in (
         "boardCc1101Spectrum.lockReceive(",
         "boardCc1101Spectrum.sampleRssi(",

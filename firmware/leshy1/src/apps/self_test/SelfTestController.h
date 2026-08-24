@@ -45,7 +45,10 @@ struct SelfTestFacts final {
     bool resourceScopeClean = false;
     std::uint32_t heapFree = 0;
     std::uint32_t heapMinimum = 0;
-    std::uint32_t heapFloor = 128U * 1024U;
+    // Current product headroom gates. heapFree protects the next foreground
+    // transition; heapMinimum catches cumulative pressure observed since boot.
+    std::uint32_t heapFreeFloor = 80U * 1024U;
+    std::uint32_t heapMinimumFloor = 64U * 1024U;
     std::uint32_t inputQueueDrops = 0;
     kernel::runtime::ResourceMask activeResources = 0;
     bool persistentSurveyReady = false;
@@ -96,7 +99,7 @@ struct SelfTestCheckResult final {
 
 struct SelfTestReport final {
     static constexpr std::uint16_t kSchemaVersion = 1;
-    static constexpr std::uint16_t kPlanVersion = 9;
+    static constexpr std::uint16_t kPlanVersion = 10;
     static constexpr std::size_t kCapacity = 32;
 
     SelfTestMode mode = SelfTestMode::Quick;

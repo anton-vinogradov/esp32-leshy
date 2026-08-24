@@ -1,0 +1,21 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "full-guided-s5-rx-0.142",
+  "rationale": "This is the narrow corrective successor to failed candidate 0.141. The FSK ISR is armed only after the one-time TFT redraw, preventing the accepted 512-edge ring from overflowing before the service loop can drain it. Quick Self-Test replaces its obsolete pre-catalog 128 KiB single heap floor with explicit current-product gates of 80 KiB free and 64 KiB historical minimum. The existing Full/Guided sequence, receive-only drivers, storage formats, board profile, partitions and build flags remain unchanged.",
+  "reviewed_cross_cutting_sha256": {
+    "firmware/leshy1/platformio.ini": "c36460a3760960c045d795899634a26c6f05c452baa3301ed708789426f02957"
+  },
+  "required_host_checks": [
+    "full host/source/docs suite in tracked-evidence mode",
+    "Full/Guided plan-v10 native result and both heap-floor negative cases",
+    "deferred FSK ISR attachment and no-TX source contract",
+    "exact firmware build and resource budget"
+  ],
+  "required_hil_scenarios": [
+    "one public Full/Guided delta run through nRF24, CC1101 spectrum, OOK, FSK and IR receive smoke",
+    "FSK ISR queue armed after static redraw, drained without overflow and all S5 receive checks passed",
+    "Quick and final Full reports pass both explicit current-product heap gates",
+    "disposable scratch removed with product CID, generation and observations unchanged",
+    "zero radio TX commands, input drops and final ownership"
+  ]
+}

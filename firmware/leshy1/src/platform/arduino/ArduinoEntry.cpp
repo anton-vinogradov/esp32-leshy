@@ -307,7 +307,7 @@ constexpr std::uint64_t kStorageRequiredEncodedBytesPerSecond =
 constexpr std::uint64_t kProductSurveyCommitBytes = 64U * 1024U;
 constexpr std::uint64_t kProductSurveyReserveBytes = 1024U * 1024U;
 constexpr unsigned kWifiPersistMaxScans = 8;
-constexpr const char* kFullGuidedDisposableRunId = "full-guided-v9";
+constexpr const char* kFullGuidedDisposableRunId = "full-guided-v10";
 constexpr std::uint64_t kFullGuidedDisposableBytes = 64U * 1024U;
 constexpr std::uint64_t kFullGuidedDisposableReserve = 1024U * 1024U;
 constexpr std::uint8_t kFullGuidedReceiveSamples = 32;
@@ -12422,13 +12422,11 @@ void serviceFullGuidedRfChecks() {
         }
         const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
             AppRuntime::kForegroundOwner;
-        bool startLevel = false;
         const bool started = boardCc1101Spectrum.begin(
                 owned, &fullGuidedCc1101FskReport) &&
             boardCc1101Spectrum.lockReceive(
                 433920U,
-                leshy1::domain::captures::SubGhzRawModulation::FskAsync) &&
-            boardCc1101Spectrum.startAsyncEdgeCapture(&startLevel);
+                leshy1::domain::captures::SubGhzRawModulation::FskAsync);
         if (!started) {
             fullGuidedRfState.subGhzFskComplete = true;
             finishFullGuidedRfChecks(false);
@@ -12440,6 +12438,17 @@ void serviceFullGuidedRfChecks() {
         return;
     }
     if (fullGuidedRfState.step == FullGuidedRfStep::SubGhzFskReceive) {
+        // Arm the ISR only after the one-time screen redraw above. Otherwise
+        // the TFT transfer can fill the bounded edge ring before service gets
+        // its first chance to drain it.
+        if (!boardCc1101Spectrum.asyncEdgeCaptureActive()) {
+            bool startLevel = false;
+            if (!boardCc1101Spectrum.startAsyncEdgeCapture(&startLevel)) {
+                fullGuidedRfState.subGhzFskComplete = true;
+                finishFullGuidedRfChecks(false);
+            }
+            return;
+        }
         std::int16_t rssiDbm = -128;
         std::uint64_t sampleUs = 0;
         if (!boardCc1101Spectrum.sampleRssi(&rssiDbm, &sampleUs)) {
@@ -19137,7 +19146,9 @@ void emitSelfTestReport(Stream& reply) {
         "\"touch_frontend_ready\":%s,"
         "\"input_frontend_ready\":%s,\"input_queue_healthy\":%s,"
         "\"buzzer_inactive\":%s,\"resource_scope_clean\":%s,"
-        "\"heap_free\":%lu,\"heap_minimum\":%lu,\"heap_floor\":%lu,"
+        "\"heap_free\":%lu,\"heap_minimum\":%lu,"
+        "\"heap_free_floor\":%lu,\"heap_minimum_floor\":%lu,"
+        "\"heap_floor\":%lu,"
         "\"input_queue_drops\":%lu,\"run_resource_mask\":%lu,"
         "\"persistent_survey_ready\":%s,\"passive_ble_ready\":%s,"
         "\"passive_wifi_capture_ready\":%s,"
@@ -19206,7 +19217,11 @@ void emitSelfTestReport(Stream& reply) {
         report.facts.resourceScopeClean ? "true" : "false",
         static_cast<unsigned long>(report.facts.heapFree),
         static_cast<unsigned long>(report.facts.heapMinimum),
-        static_cast<unsigned long>(report.facts.heapFloor),
+        static_cast<unsigned long>(report.facts.heapFreeFloor),
+        static_cast<unsigned long>(report.facts.heapMinimumFloor),
+        // Compatibility alias for report-v1 readers. New readers must use
+        // the two explicit floors above.
+        static_cast<unsigned long>(report.facts.heapMinimumFloor),
         static_cast<unsigned long>(report.facts.inputQueueDrops),
         static_cast<unsigned long>(report.facts.activeResources),
         report.facts.persistentSurveyReady ? "true" : "false",
