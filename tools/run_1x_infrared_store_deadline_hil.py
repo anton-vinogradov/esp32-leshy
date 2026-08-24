@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from capture_1x_boot import reset_and_capture_reconnecting
 from capture_1x_ui import PassiveSerial, read_json, synchronize_console
 from esp_app_identity import app_elf_sha256
 from run_1x_product_boot_watchdog_hil import capture_until_ready, parse_ready
@@ -22,8 +23,8 @@ from run_1x_product_survey_hil import (
     boot_failures,
     capture,
     expect,
+    parse_boot_records,
     query,
-    reset_capture,
     resolve_expected_cid,
 )
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
@@ -311,8 +312,20 @@ def main() -> int:
             if failures:
                 raise RuntimeError("post-flash boot contract failed")
 
-        before_ready, before_recovery, before_timing = reset_capture(
-            args.candidate_port, args.output, "boot-before", args.boot_seconds)
+        boot_raw, ready_ms, usb_disconnects, open_attempts = \
+            reset_and_capture_reconnecting(
+                args.candidate_port, args.boot_seconds)
+        (args.output / "boot-before.ndjson").write_bytes(boot_raw)
+        before_ready, before_recovery = parse_boot_records(boot_raw)
+        before_timing = {
+            "bytes": len(boot_raw),
+            "sha256": hashlib.sha256(boot_raw).hexdigest(),
+            "first_byte_ms": None,
+            "ready_marker_ms": ready_ms,
+            "usb_disconnects": usb_disconnects,
+            "usb_open_attempts": open_attempts,
+            "reconnecting_capture": True,
+        }
         records["boot_before"] = {
             "ready": before_ready, "recovery": before_recovery,
             "timing": before_timing,

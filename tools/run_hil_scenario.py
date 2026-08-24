@@ -14,6 +14,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
+from capture_1x_boot import reset_and_capture_reconnecting
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import (
@@ -24,8 +25,8 @@ from run_1x_product_survey_hil import (
     boot_ready_failures,
     capture,
     expect,
+    parse_boot_records,
     query,
-    reset_capture,
     valid_cid,
 )
 SCENARIO_SCHEMA = "leshy.hil.scenario.v1"
@@ -702,9 +703,22 @@ def main() -> int:
                         raise RuntimeError(
                             "pre-reboot zero-lease contract failed")
                     product.close()
-                    captured_ready, captured_recovery, timing = reset_capture(
-                        ports["candidate"], args.output, step_id,
-                        float(step.get("capture_seconds", 8.0)))
+                    reboot_raw, ready_ms, usb_disconnects, open_attempts = \
+                        reset_and_capture_reconnecting(
+                            ports["candidate"],
+                            float(step.get("capture_seconds", 8.0)))
+                    (args.output / f"{step_id}.ndjson").write_bytes(reboot_raw)
+                    captured_ready, captured_recovery = parse_boot_records(
+                        reboot_raw)
+                    timing = {
+                        "bytes": len(reboot_raw),
+                        "sha256": hashlib.sha256(reboot_raw).hexdigest(),
+                        "first_byte_ms": None,
+                        "ready_marker_ms": ready_ms,
+                        "usb_disconnects": usb_disconnects,
+                        "usb_open_attempts": open_attempts,
+                        "reconnecting_capture": True,
+                    }
                     product = PassiveSerial(
                         ports["candidate"], 115200, timeout=0.5)
                     synchronize_console(product, 30.0)
