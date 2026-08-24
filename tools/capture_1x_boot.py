@@ -79,15 +79,16 @@ def capture_reconnecting_until_ready(
     return bytes(raw), ready_ms, disconnects, open_attempts
 
 
-def trigger_reset(device: serial.Serial) -> None:
-    """Pulse the native-USB reset lines and release the target."""
+def trigger_reset(device: serial.Serial, *, sleep=time.sleep) -> None:
+    """Hard-reset the target without asserting its ROM-download strap."""
+    # DTR drives IO0 on the ESP32-S3 native USB/JTAG bridge.  It must be
+    # released before EN is pulsed; asserting DTR while releasing RTS is the
+    # esptool bootloader-entry sequence, not an application cold reboot.
     device.dtr = False
     device.rts = True
-    time.sleep(0.1)
-    device.dtr = True
+    sleep(0.2)
     device.rts = False
-    time.sleep(0.1)
-    device.dtr = False
+    sleep(0.2)
 
 
 def reset_and_capture_reconnecting(
