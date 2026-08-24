@@ -153,6 +153,7 @@ shared-bus/power остаются открытыми**.
 
 | RB-M132 | measured build + normal/fault-focused physical safety | deadline preparation/admission Product Survey до calibrated boundary workers Wi-Fi+BLE | 3 067 656 B linked flash; 233 360 B static RAM; app image 3 068 064 B; boot-before exact HIL heap total/free/min 148 092/77 860/63 628 B | board-01 `0.135.0-survey-preparation-deadline`, `E-BUILD-135`/`E-AUTO-096`/`E-HIL-156`/`E-SAFETY-004`; +1 532 B linked flash, +1 536 B image и zero static-RAM delta против 0.134. Normal BLE lifecycle взводит preparation, затем worker, принимает 30/30 с zero scan drops/retries и без ложного trip; pre-hardware stall 10 s срабатывает на preparation через 8 001 ms и чисто снимает lease. Этот focused run не выполняет normal mixed Survey workload и не заменяет RB-04/release endurance |
 | RB-M133 | measured build + normal/fault-focused physical safety | deadline worker Wi-Fi Capture Store плюс консолидация workspaces без PSRAM | 3 059 360 B linked flash; 207 928 B static RAM; app image 3 059 760 B; boot-before exact HIL heap total/free/min 173 524/103 248/89 060 B | board-01 `0.136.0-capture-store-deadline`, `E-BUILD-136`/`E-AUTO-097`/`E-HIL-157`/`E-SAFETY-005`; −8 296 B linked flash, −25 432 B static RAM и −8 304 B image против 0.135. Lifecycle-exclusive workspaces Session/FatFs используются совместно. Normal Capture Store монтирует при 93 544 B free heap, largest block 32 756 B и error zero, сохраняет 2 frames/433 B и продвигает generation 98→99; pre-storage stall 10 s срабатывает через 8 001 ms с zero writes и чисто снимает lease. Этот focused run не выполняет normal mixed workload и не заменяет RB-04/release endurance |
+| RB-M135 | measured build + normal/fault-focused physical safety | deadline worker IR Capture Store плюс no-OS restart Safe Mode | 3 061 508 B linked flash; 207 960 B static RAM; app/factory images 3 061 920/3 127 456 B; normal pre-mount heap free/largest 94 136/51 188 B | board-01 `0.138.0-safety-restart-noos`, `E-BUILD-138`/`E-AUTO-099`/`E-HIL-159`/`E-SAFETY-006`; +12 B linked flash, zero static RAM и +16/+16 B image против 0.137. Normal NEC Save продвигает generation 106→107; pre-storage stall 10 s срабатывает через 8 001 ms с zero writes, no-OS restart возвращается за 947,445 ms, final lease равен нулю. Этот focused run не выполняет normal mixed workload и не заменяет RB-04/release endurance |
 
 `heap_min_free` probe относится только к короткой diagnostic run. Он не предсказывает
 буферы Wi-Fi/BLE, display caches, Session queues, storage transactions или Survey
@@ -271,6 +272,14 @@ flash, 207 960 B static RAM и app image 3 061 904 B. Это +2 136/+32/+2 144 B
 Её delta +112 B linked flash против 0.2.4 оставляет у физически общего pad GPIO14
 IR/CE3 единственного LEDC-safe owner и добавляет source guard. Это только build facts:
 текущий physical gate ИК-стенда остаётся fail-closed.
+
+Последний принятый delta `RB-M135`: exact 0.138 использует 3 061 508 B linked
+flash, 207 960 B static RAM и app/factory images 3 061 920/3 127 456 B. Это
++12/0/+16/+16 B против 0.137 за замену обоих software restart Safe Mode на no-OS
+primitive. Normal IR Save достигает storage boundary при 94 136 B free heap и
+largest block 51 188 B; injected path пишет zero bytes и не заявляет mount
+allocation. Это physical safety evidence, а не mixed-workload resource или release
+endurance.
 
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
