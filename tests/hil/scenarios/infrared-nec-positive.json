@@ -179,7 +179,7 @@
     {
       "id": "cold_reopen",
       "op": "reboot",
-      "capture_seconds": 8,
+      "capture_seconds": 30,
       "timeout": 15,
       "expect": {
         "ready": {"kind": "ready"},

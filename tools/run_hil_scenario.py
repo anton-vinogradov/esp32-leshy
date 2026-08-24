@@ -365,9 +365,9 @@ def validate_scenario(scenario: dict[str, Any], ports: dict[str, str]) -> None:
                     f"step {step['id']} can reboot only the candidate")
             if (isinstance(seconds, bool) or
                     not isinstance(seconds, (int, float)) or
-                    not 2.0 <= seconds <= 15.0):
+                    not 2.0 <= seconds <= 45.0):
                 raise ValueError(
-                    f"step {step['id']} reboot capture must be 2..15 seconds")
+                    f"step {step['id']} reboot capture must be 2..45 seconds")
         elif operation == "stream":
             name = step.get("name", step["id"])
             if role != "candidate" or step.get("command") not in \

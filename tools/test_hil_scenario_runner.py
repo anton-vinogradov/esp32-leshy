@@ -79,6 +79,16 @@ class HilScenarioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "1..256"):
             hil.validate_scenario(scenario, self.ports)
 
+    def test_reboot_capture_covers_bounded_boot_retries(self) -> None:
+        scenario = copy.deepcopy(self.scenario)
+        scenario["steps"][0] = {
+            "id": "retry-window", "op": "reboot", "capture_seconds": 45,
+        }
+        hil.validate_scenario(scenario, self.ports)
+        scenario["steps"][0]["capture_seconds"] = 45.001
+        with self.assertRaisesRegex(ValueError, "2..45"):
+            hil.validate_scenario(scenario, self.ports)
+
     def test_query_placeholders_are_allowlisted_and_fully_rendered(self) -> None:
         command = hil.render_query_command(
             "fixture.ir.nec.once ${session_id} nec-10-34",
@@ -168,6 +178,9 @@ class HilScenarioTests(unittest.TestCase):
         hil.validate_scenario(scenario, {
             "candidate": "/dev/candidate", "fixture": "/dev/fixture",
         })
+        cold_reopen = next(
+            step for step in scenario["steps"] if step["id"] == "cold_reopen")
+        self.assertGreaterEqual(cold_reopen["capture_seconds"], 30)
 
     def test_repository_nrf24_fixture_scenario_is_valid(self) -> None:
         scenario = json.loads((
