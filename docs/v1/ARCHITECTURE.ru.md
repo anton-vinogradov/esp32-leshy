@@ -133,8 +133,10 @@ Exact 0.134 калибрует его до 8 s и compile-time assertion уде�
 Main-loop evaluation идёт до обычного worker service; expiry отменяет оба scanner,
 снимает application lease, глушит software outputs и входит в тот же retained Safe
 Mode с reason `worker_deadline`. Публичные пути Wi-Fi «Сети рядом» и BLE «Устройства
-рядом» приняты физически; preparation/admission, остальные workers и physical
-rail/radio shutdown остаются открыты. Обязательный
+рядом» приняты физически. Exact 0.135 добавляет отдельную boundary 8 s через identity
+Product Survey, read-only проверки storage/store, startup scanners и admission с
+bounded heartbeat и physical fault injection до hardware preparation. Остальные
+workers и physical rail/radio shutdown остаются открыты. Обязательный
 контракт — [`SAFETY_SUPERVISOR.ru.md`](SAFETY_SUPERVISOR.ru.md).
 
 ## 5. Ресурсы и coexistence

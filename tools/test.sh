@@ -237,6 +237,7 @@ run_opaque_evidence_check tools/check_source_history_waterfall_acceptance.py
 run_opaque_evidence_check tools/check_subghz_raw_acceptance.py
 python3 "$repo_dir/tools/check_early_boot_watchdog_contract.py"
 run_opaque_evidence_check tools/check_safety_watchdog_acceptance.py
+python3 "$repo_dir/tools/check_worker_preparation_deadline_acceptance.py"
 python3 "$repo_dir/tools/check_sd_power_cut_acceptance.py"
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 if [[ "$retained_evidence_mode" == "tracked" ]]; then

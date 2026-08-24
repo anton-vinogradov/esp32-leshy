@@ -146,15 +146,26 @@ retained latch `worker_deadline` переживает software restart с reason
 240×320 и exact hashes source/image/runner/transcript связаны в
 [machine-checked artifact](../../tests/hil/evidence/board-01-worker-deadline-0.134.json).
 
-Checkpoint намеренно не заявляет интервал admission/scanner preparation: текущий
-дедлайн взводится только после завершения этой подготовки. Он также не покрывает
-остальные long-lived workers, будущие transmit leases, retained state при полном
-снятии питания или physical rail/radio kill.
+Exact `0.135.0-survey-preparation-deadline` добавляет отдельный supervisor 8 s от
+public Start transition через card identity, read-only filesystem/store checks,
+scanner startup и admission. Heartbeat обрамляет каждый bounded retry/wait и каждую
+hardware boundary; calibrated worker взводится только после disarm preparation.
+Test-only `safety.worker-preparation-deadline-test confirm` внедряет одну задержку
+10 s до любой hardware operation подготовки. Normal BLE lifecycle сначала взводит
+preparation, затем worker и принимает 30/30 observations за одну attempt с zero scan
+drops/retries. Injected lifecycle срабатывает на preparation через 8 001 ms с
+cumulative arm/heartbeat/trip 3/18/1 и сохраняет тот же quiesce, retained latch,
+two-action clear, exact CID/catalog и final Home/lease-zero contract. Exact
+source/image/runner/transcripts и три TFT state сохранены в
+[machine-checked artifact](../../tests/hil/evidence/board-01-worker-preparation-deadline-0.135.json).
+
+Checkpoint не покрывает остальные long-lived workers, будущие transmit leases,
+retained state при полном снятии питания или physical rail/radio kill.
 
 ## Открытая safety-работа
 
-- расширить принятый Wi-Fi+BLE slice Product Survey на pre-admission/preparation,
-  каждый другой long-lived worker и будущие transmit leases;
+- расширить принятый Product Survey slice на каждый другой long-lived worker и
+  будущие transmit leases;
 - направлять driver invariant, brownout/thermal и storage safe-shutdown faults в ту
   же reasoned latch только после появления надёжных sensors;
 - для любого будущего active-radio profile добавить внешний rail/PA kill либо load

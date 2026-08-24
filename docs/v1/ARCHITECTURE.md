@@ -105,8 +105,11 @@ assertion to keep it above the BLE adapter's current bounded two-attempt/one-ret
 worst case of 6.1 s. Main-loop evaluation precedes normal worker service; expiry
 cancels both scanners, releases the application lease, quiesces software outputs
 and enters the same retained Safe Mode with reason `worker_deadline`. Both public
-Wi-Fi Nearby Networks and BLE Nearby Devices worker paths are physically accepted;
-preparation/admission, other workers and physical rail/radio shutdown remain open.
+Wi-Fi Nearby Networks and BLE Nearby Devices worker paths are physically accepted.
+Exact 0.135 adds a separate 8 s boundary across Product Survey identity, read-only
+storage/store checks, scanner startup and admission, with bounded heartbeats and a
+pre-hardware physical fault-injection proof. Other workers and physical rail/radio
+shutdown remain open.
 The binding contract is
 [`SAFETY_SUPERVISOR.md`](SAFETY_SUPERVISOR.md).
 

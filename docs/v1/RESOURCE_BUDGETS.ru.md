@@ -151,6 +151,8 @@ shared-bus/power остаются открытыми**.
 | RB-M130 | measured build + focused physical safety | allocation-free deadline state и первый trip/restart/clear Wi-Fi worker Product Survey | 3 066 128 B linked flash; 233 360 B static RAM; app image 3 066 528 B; boot-before exact HIL heap total/free/min 148 092/77 860/63 628 B | board-01 `0.133.0-worker-deadline-supervision`, `E-BUILD-133`/`E-AUTO-094`/`E-HIL-154`/`E-SAFETY-002`; +3 568 B linked flash и +72 B static RAM против exact product 0.129. Один arm Wi-Fi worker/два heartbeat/один trip чисто снимают lease и переживают restart. Этот fault-focused run не выполняет normal mixed Survey workload и не заменяет RB-04/release endurance |
 | RB-M131 | measured build + normal/fault-focused physical safety | BLE-calibrated дедлайн Product Survey с normal cycle плюс trip/restart/clear | 3 066 124 B linked flash; 233 360 B static RAM; app image 3 066 528 B; boot-before exact HIL heap total/free/min 148 092/77 860/63 628 B | board-01 `0.134.0-ble-worker-deadline`, `E-BUILD-134`/`E-AUTO-095`/`E-HIL-155`/`E-SAFETY-003`; −4 B linked flash и zero delta static RAM/image против 0.133. Один normal BLE cycle принимает 34/34 с zero drops/retries и без ложного trip при bound 6,1 s ниже дедлайна 8 s; второй lifecycle срабатывает через 8 001 ms и чисто снимает lease. Этот focused run не выполняет normal mixed Survey workload и не заменяет RB-04/release endurance |
 
+| RB-M132 | measured build + normal/fault-focused physical safety | deadline preparation/admission Product Survey до calibrated boundary workers Wi-Fi+BLE | 3 067 656 B linked flash; 233 360 B static RAM; app image 3 068 064 B; boot-before exact HIL heap total/free/min 148 092/77 860/63 628 B | board-01 `0.135.0-survey-preparation-deadline`, `E-BUILD-135`/`E-AUTO-096`/`E-HIL-156`/`E-SAFETY-004`; +1 532 B linked flash, +1 536 B image и zero static-RAM delta против 0.134. Normal BLE lifecycle взводит preparation, затем worker, принимает 30/30 с zero scan drops/retries и без ложного trip; pre-hardware stall 10 s срабатывает на preparation через 8 001 ms и чисто снимает lease. Этот focused run не выполняет normal mixed Survey workload и не заменяет RB-04/release endurance |
+
 `heap_min_free` probe относится только к короткой diagnostic run. Он не предсказывает
 буферы Wi-Fi/BLE, display caches, Session queues, storage transactions или Survey
 gate ≥45 минут/≥8 циклов. Размер 0.x включает legacy functionality и feasibility
@@ -243,14 +245,14 @@ contracts, поэтому не задаёт форму clean platform.
 - Storage, power и shared-bus limits остаются явными unknown; зависимые от них
   возможности нельзя перевести из `unknown` в `available` одной документацией.
 
-Последний build delta `RB-M131`: exact 0.134 использует 3 066 124 B linked flash и
-233 360 B static RAM; app image равен 3 066 528 B. Это на 4 B меньше linked flash
-при zero delta static RAM/image против 0.133. Изменение публикует bound BLE scan и
-compile-time проверяет калиброванный дедлайн 8 s выше текущего worst case 6,1 s.
-Focused HIL boot-before heap равен 148 092/77 860/63 628 B; normal BLE cycle
-принимает 34/34 с zero drops/retries и без ложного trip, а injected path снимает
-lease 0 после срабатывания через 8 001 ms. Run не выполняет normal mixed Survey
-workload. Exact 0.129 остаётся physical functional baseline, а RB-04 плюс
+Последний build delta `RB-M132`: exact 0.135 использует 3 067 656 B linked flash и
+233 360 B static RAM; app image равен 3 068 064 B. Это +1 532 B linked flash и
++1 536 B image при zero static-RAM delta против 0.134. Изменение добавляет отдельный
+supervisor 8 s preparation/admission до существующего calibrated worker. Focused HIL
+boot-before heap остаётся 148 092/77 860/63 628 B; normal BLE lifecycle принимает
+30/30 с zero scan drops/retries и без ложного trip, а pre-hardware injected path
+снимает lease 0 после срабатывания через 8 001 ms. Run не выполняет normal mixed
+Survey workload. Exact 0.129 остаётся physical functional baseline, а RB-04 плюс
 mixed-workload release endurance — resource/release baseline.
 
 Source-bound diagnostic fixture `0.2.4` использует 332 135 B program flash и 22 844 B

@@ -146,15 +146,26 @@ returns Home with exact CID, catalog 98/0 and zero physical storage writes uncha
 Three 240×320 TFT states and exact source/image/runner/transcript hashes are bound in
 the [machine-checked artifact](../../tests/hil/evidence/board-01-worker-deadline-0.134.json).
 
-This checkpoint deliberately does not claim the admission/scanner-preparation
-interval: the current deadline arms only after that preparation completes. It also
-does not cover other long-lived workers, future transmit leases, full-power retained
-state or a physical rail/radio kill.
+Exact `0.135.0-survey-preparation-deadline` adds a separate 8 s supervisor from the
+public Start transition through card identity, read-only filesystem/store checks,
+scanner startup and admission. Heartbeats bracket every bounded retry/wait and each
+hardware boundary; the calibrated worker is armed only after preparation disarms.
+The test-only `safety.worker-preparation-deadline-test confirm` injects one 10 s
+delay before any preparation hardware operation. A normal BLE lifecycle first arms
+preparation then the worker and accepts 30/30 observations in one attempt with zero
+scan drops/retries. The injected lifecycle trips preparation at 8,001 ms, with
+cumulative arm/heartbeat/trip 3/18/1, and preserves the same quiesce, retained latch,
+two-action clear, exact CID/catalog and final Home/lease-zero contract. The exact
+source/image/runner/transcripts and three TFT states are retained in the
+[machine-checked artifact](../../tests/hil/evidence/board-01-worker-preparation-deadline-0.135.json).
+
+This checkpoint does not cover other long-lived workers, future transmit leases,
+full-power retained state or a physical rail/radio kill.
 
 ## Open safety work
 
-- extend the accepted Wi-Fi+BLE Product Survey slice to the pre-admission/preparation
-  interval, every other long-lived worker and any future transmit lease;
+- extend the accepted Product Survey slice to every other long-lived worker and any
+  future transmit lease;
 - route driver invariant, brownout/thermal, and storage safe-shutdown faults into the
   same reasoned latch only after trustworthy sensors exist;
 - add an external rail/PA kill or load switch and a CC1101 reset/power gate for any

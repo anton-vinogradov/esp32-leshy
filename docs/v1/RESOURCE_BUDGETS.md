@@ -152,6 +152,8 @@ defines the 1.x partition and memory policy.
 | RB-M130 | measured build + focused physical safety | allocation-free deadline state and first Product Survey Wi-Fi worker trip/restart/clear | 3,066,128 B linked flash; 233,360 B static RAM; app image 3,066,528 B; boot-before exact HIL heap total/free/min 148,092/77,860/63,628 B | board-01 `0.133.0-worker-deadline-supervision`, `E-BUILD-133`/`E-AUTO-094`/`E-HIL-154`/`E-SAFETY-002`; +3,568 B linked flash and +72 B static RAM versus exact product 0.129. One Wi-Fi worker arm/two heartbeats/one trip cleanly releases lease and survives restart. This fault-focused run neither exercises a normal mixed Survey workload nor supersedes RB-04/release endurance |
 | RB-M131 | measured build + normal/fault-focused physical safety | BLE-calibrated Product Survey deadline with normal cycle plus trip/restart/clear | 3,066,124 B linked flash; 233,360 B static RAM; app image 3,066,528 B; boot-before exact HIL heap total/free/min 148,092/77,860/63,628 B | board-01 `0.134.0-ble-worker-deadline`, `E-BUILD-134`/`E-AUTO-095`/`E-HIL-155`/`E-SAFETY-003`; −4 B linked flash and zero static-RAM/image delta versus 0.133. One normal BLE cycle accepts 34/34 with zero drops/retries and no false trip under a 6.1 s bound below the 8 s deadline; the second lifecycle trips at 8,001 ms and cleanly releases lease. This focused run does not exercise a normal mixed Survey workload or supersede RB-04/release endurance |
 
+| RB-M132 | measured build + normal/fault-focused physical safety | Product Survey preparation/admission deadline before the calibrated Wi-Fi+BLE worker boundary | 3,067,656 B linked flash; 233,360 B static RAM; app image 3,068,064 B; boot-before exact HIL heap total/free/min 148,092/77,860/63,628 B | board-01 `0.135.0-survey-preparation-deadline`, `E-BUILD-135`/`E-AUTO-096`/`E-HIL-156`/`E-SAFETY-004`; +1,532 B linked flash, +1,536 B image and zero static-RAM delta versus 0.134. A normal BLE lifecycle arms preparation then worker, accepts 30/30 with zero scan drops/retries and no false trip; a pre-hardware 10 s stall trips preparation at 8,001 ms and cleanly releases lease. This focused run does not exercise a normal mixed Survey workload or supersede RB-04/release endurance |
+
 The probe's `heap_min_free` covers only its short diagnostic run. It does not predict
 Wi-Fi/BLE buffers, display caches, Session queues, storage transactions, or the
 ≥45-minute/≥8-cycle Survey gate. The 0.x figure includes legacy functionality and feasibility
@@ -246,13 +248,13 @@ These limits are review triggers, not evidence that the product meets its NFRs.
 - Storage, power, and shared-bus limits remain explicit unknowns; features depending
   on them cannot be promoted from `unknown` to `available` by documentation alone.
 
-Latest build delta `RB-M131`: exact 0.134 uses 3,066,124 B linked flash and 233,360 B
-static RAM; its app image is 3,066,528 B. This is 4 B less linked flash with zero
-static-RAM/image delta versus 0.133. The change exposes the BLE scan bound and
-compile-time-validates the calibrated 8 s deadline above the current 6.1 s worst
-case. Focused HIL boot-before heap is 148,092/77,860/63,628 B; the normal BLE cycle
-accepts 34/34 with zero drops/retries and no false trip, while the injected path
-releases lease 0 after tripping at 8,001 ms. It does not execute a normal mixed
+Latest build delta `RB-M132`: exact 0.135 uses 3,067,656 B linked flash and 233,360 B
+static RAM; its app image is 3,068,064 B. This is +1,532 B linked flash and +1,536 B
+image with zero static-RAM delta versus 0.134. The change adds a separate 8 s
+preparation/admission supervisor before the existing calibrated worker. Focused HIL
+boot-before heap remains 148,092/77,860/63,628 B; the normal BLE lifecycle accepts
+30/30 with zero scan drops/retries and no false trip, while a pre-hardware injected
+path releases lease 0 after tripping at 8,001 ms. It does not execute a normal mixed
 Survey workload. Exact 0.129 remains the physical functional baseline; RB-04 plus
 mixed-workload release endurance remain the resource/release baseline.
 
