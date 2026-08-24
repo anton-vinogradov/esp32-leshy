@@ -11,6 +11,7 @@ enum class CapabilityState {
     Available,
     Conflicted,
     Fault,
+    NotApplicable,
     Unknown,
 };
 
@@ -25,7 +26,7 @@ struct CapabilityRecord {
 
 class HardwareInventory final {
 public:
-    static constexpr std::size_t kCapacity = 24;
+    static constexpr std::size_t kCapacity = 32;
 
     bool add(CapabilityRecord record);
     const CapabilityRecord* find(const char* key) const;

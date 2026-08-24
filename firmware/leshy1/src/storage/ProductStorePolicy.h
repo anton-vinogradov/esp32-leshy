@@ -3,6 +3,7 @@
 #include <cstdint>
 
 #include "kernel/runtime/Resources.h"
+#include "services/power/PowerSafetyPolicy.h"
 #include "storage/StorageGuard.h"
 
 namespace leshy1::storage {
@@ -34,6 +35,7 @@ enum class ProductStoreAccessStatus : std::uint8_t {
     InsufficientSpace,
     ResourcesMissing,
     ResourceConflict,
+    PowerUnsafe,
 };
 
 const char* productStoreAccessStatusName(ProductStoreAccessStatus status);
@@ -51,6 +53,8 @@ struct ProductStoreRequest final {
     std::uint64_t reserveBytes = 0;
     kernel::runtime::ResourceMask ownedResources = 0;
     bool conflictingOwner = false;
+    services::power::PowerWriteDisposition power =
+        services::power::PowerWriteDisposition::AtomicOnly;
 };
 
 struct ProductStorePermit final {

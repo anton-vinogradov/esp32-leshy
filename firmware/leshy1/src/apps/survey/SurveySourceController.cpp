@@ -18,6 +18,7 @@ SurveySourceState sourceState(const CapabilityRecord* record) {
             return SurveySourceState::Fault;
         case CapabilityState::Declared:
         case CapabilityState::Detected:
+        case CapabilityState::NotApplicable:
         case CapabilityState::Unknown:
             return SurveySourceState::Unavailable;
     }

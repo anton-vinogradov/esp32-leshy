@@ -12,6 +12,7 @@
 #include <cstring>
 
 #include <esp_system.h>
+#include <esp_sleep.h>
 #include <esp_task_wdt.h>
 #include <esp_timer.h>
 #include <esp_app_desc.h>
@@ -88,6 +89,7 @@
 #include "platform/arduino/RamSessionStoreIo.h"
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
+#include "services/power/PowerSafetyPolicy.h"
 #include "services/survey/IngressTiming.h"
 #include "services/survey/ObservationQueue.h"
 #include "services/survey/SessionBatchPolicy.h"
@@ -228,6 +230,9 @@ using leshy1::kernel::safety::SafetyState;
 using leshy1::kernel::safety::SafetySupervisor;
 using leshy1::kernel::safety::SupervisedWorker;
 using leshy1::kernel::safety::WorkerDeadlineSnapshot;
+using leshy1::services::power::PowerSafetyPolicy;
+using leshy1::services::power::PowerTelemetryState;
+using leshy1::services::power::PowerWriteDisposition;
 using leshy1::kernel::safety::WorkerDeadlineSupervisor;
 using leshy1::platform::arduino::BoardSafeOutputs;
 using leshy1::platform::arduino::BoardInfraredReceiver;
@@ -385,8 +390,41 @@ LanguageController languageController;
 SelfTestController selfTestController;
 constexpr std::uint8_t kDevicePage = 9;
 constexpr std::uint8_t kAboutPage = 10;
-constexpr std::uint8_t kDeviceItemCount = 4;
+constexpr std::uint8_t kPowerPage = 11;
+constexpr std::uint8_t kDeviceItemCount = 5;
 std::uint8_t deviceSelection = 0;
+PowerSafetyPolicy powerSafetyPolicy;
+bool powerManagerAddressAck = false;
+std::uint32_t boundedSleepCount = 0;
+std::uint64_t lastBoundedSleepRequestedUs = 0;
+std::uint64_t lastBoundedSleepElapsedUs = 0;
+esp_sleep_wakeup_cause_t lastBoundedSleepWakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
+// ESP32-S3 timer wakeup can return a few milliseconds before the programmed
+// interval because of RTC-domain entry/exit calibration.  Keep the acceptance
+// window explicit and bounded instead of pretending the wall clock is exact.
+constexpr std::uint64_t kLightSleepTimerToleranceUs = 20000ULL;
+// Native USB is suspended while the S3 is in light sleep.  Give its endpoint
+// time to resume before a HIL reply or the next UI action is emitted.
+constexpr std::uint32_t kLightSleepTransportRecoveryMs = 150U;
+struct PowerSleepTestReport {
+    bool available = false;
+    bool passed = false;
+    bool inputTaskRetained = false;
+    bool buzzerInactive = false;
+    std::uint64_t requestedUs = 0;
+    std::uint64_t elapsedUs = 0;
+    esp_sleep_wakeup_cause_t wakeCause = ESP_SLEEP_WAKEUP_UNDEFINED;
+    std::uint32_t generationBefore = 0;
+    std::uint32_t generationAfter = 0;
+    std::size_t observationsBefore = 0;
+    std::size_t observationsAfter = 0;
+    std::uint32_t heapBefore = 0;
+    std::uint32_t heapAfter = 0;
+    std::uint32_t minimumHeapBefore = 0;
+    std::uint32_t minimumHeapAfter = 0;
+    std::uint32_t leaseMask = 0;
+};
+PowerSleepTestReport powerSleepTestReport;
 ShieldReceiverProbeReport shieldReceiverProbeReport;
 Nrf24SpectrumController nrf24SpectrumController;
 Nrf24SignalFinder nrf24SignalFinder;
@@ -1186,6 +1224,8 @@ bool infraredCaptureStoreDeadlineCancelRequested = false;
 
 void renderInteractiveScreen(bool clearContent = true);
 void broadcast(const char* line);
+bool boundedSleepReady();
+bool performBoundedLightSleep(std::uint64_t requestedUs);
 
 bool lastUiActionUsedIncrementalRender = false;
 bool lastUiRenderWasIncremental = false;
@@ -2128,6 +2168,7 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     storeRequest.requiredBytes = kProductSurveyCommitBytes;
     storeRequest.reserveBytes = kProductSurveyReserveBytes;
     storeRequest.ownedResources = ownedResources;
+    storeRequest.power = powerSafetyPolicy.writeDisposition();
     const leshy1::storage::ProductStorePermit storePermit =
         leshy1::storage::authorizeProductStore(media, storeRequest);
     report.storeStatus = storePermit.status;
@@ -2723,6 +2764,7 @@ bool reopenProductSurveyBackendForCommit() {
     storeRequest.requiredBytes = kProductSurveyCommitBytes;
     storeRequest.reserveBytes = kProductSurveyReserveBytes;
     storeRequest.ownedResources = ownedResources;
+    storeRequest.power = powerSafetyPolicy.writeDisposition();
     const leshy1::storage::ProductStorePermit storePermit =
         leshy1::storage::authorizeProductStore(media, storeRequest);
     productSurveyRuntime.storeStatus = storePermit.status;
@@ -3222,6 +3264,7 @@ void runCaptureStoreWorker(void*) {
         request.requiredBytes = kProductSurveyCommitBytes;
         request.reserveBytes = kProductSurveyReserveBytes;
         request.ownedResources = owned;
+        request.power = powerSafetyPolicy.writeDisposition();
         const leshy1::storage::ProductStorePermit permit =
             leshy1::storage::authorizeProductStore(media, request);
         if (!permit.allowed()) {
@@ -3309,6 +3352,13 @@ bool requestWifiFrameCapturePersist() {
         wifiFrameCapture.stats().state != WifiFrameCaptureState::Complete ||
         wifiFrameCapture.capture().size() == 0) {
         return false;
+    }
+    if (powerSafetyPolicy.writeDisposition() ==
+        PowerWriteDisposition::ProhibitedLowVoltage) {
+        capturePersistState = CapturePersistState::Failed;
+        capturePersistStatus = "power_unsafe";
+        lastRuntimeEvent = "capture_store_power_unsafe";
+        return true;
     }
     if (captureStoreEvents == nullptr || captureStoreTaskHandle != nullptr) {
         capturePersistState = CapturePersistState::Failed;
@@ -3522,6 +3572,7 @@ void runPulseCaptureStoreWorker(bool infrared, QueueHandle_t events) {
         request.requiredBytes = kProductSurveyCommitBytes;
         request.reserveBytes = kProductSurveyReserveBytes;
         request.ownedResources = owned;
+        request.power = powerSafetyPolicy.writeDisposition();
         const leshy1::storage::ProductStorePermit permit =
             leshy1::storage::authorizeProductStore(media, request);
         if (!permit.allowed()) {
@@ -3667,6 +3718,13 @@ bool requestSubGhzRawCapturePersist() {
         subGhzRawCapture.pulseCount() == 0) {
         return false;
     }
+    if (powerSafetyPolicy.writeDisposition() ==
+        PowerWriteDisposition::ProhibitedLowVoltage) {
+        subGhzCapturePersistState = CapturePersistState::Failed;
+        subGhzCapturePersistStatus = "power_unsafe";
+        lastRuntimeEvent = "subghz_raw_store_power_unsafe";
+        return true;
+    }
     if (subGhzCaptureStoreEvents == nullptr ||
         subGhzCaptureStoreTaskHandle != nullptr) {
         subGhzCapturePersistState = CapturePersistState::Failed;
@@ -3732,6 +3790,13 @@ bool requestInfraredRawCapturePersist() {
         infraredCapture.stats().state != InfraredCaptureState::Complete ||
         infraredCapture.pulseCount() == 0) {
         return false;
+    }
+    if (powerSafetyPolicy.writeDisposition() ==
+        PowerWriteDisposition::ProhibitedLowVoltage) {
+        infraredCapturePersistState = CapturePersistState::Failed;
+        infraredCapturePersistStatus = "power_unsafe";
+        lastRuntimeEvent = "infrared_raw_store_power_unsafe";
+        return true;
     }
     if (infraredCaptureStoreEvents == nullptr ||
         infraredCaptureStoreTaskHandle != nullptr) {
@@ -5534,6 +5599,225 @@ void emitSafeOutputs(Stream& reply) {
     reply.println(line);
 }
 
+void emitPowerState(Stream& reply) {
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.power.runtime.v1\",\"kind\":\"state\","
+        "\"assembly_profile\":\"%s\",\"manager_address\":117,"
+        "\"manager_address_ack\":%s,\"manager_identified\":false,"
+        "\"voltage_available\":false,\"battery_percent_available\":false,"
+        "\"voltage_source\":\"gpio2_forbidden_buzzer_shared\","
+        "\"telemetry_state\":\"%s\",\"write_disposition\":\"%s\","
+        "\"atomic_store_enabled\":true,\"confirmed_low_voltage_gate\":true,"
+        "\"low_threshold_mv\":%u,\"recovery_threshold_mv\":%u,"
+        "\"confirm_samples\":%u,\"low_voltage_trips\":%lu,"
+        "\"sleep_supported\":true,\"sleep_count\":%lu,"
+        "\"last_sleep_requested_us\":%llu,\"last_sleep_elapsed_us\":%llu,"
+        "\"last_wakeup_cause\":%d,\"catalog_generation\":%lu,"
+        "\"catalog_observations\":%u,\"buzzer_inactive\":%s,"
+        "\"gps\":\"not_applicable\",\"pn532\":\"not_applicable\"}",
+        BoardProfile::kAssemblyProfileId,
+        powerManagerAddressAck ? "true" : "false",
+        leshy1::services::power::powerTelemetryStateName(
+            powerSafetyPolicy.state()),
+        leshy1::services::power::powerWriteDispositionName(
+            powerSafetyPolicy.writeDisposition()),
+        static_cast<unsigned>(PowerSafetyPolicy::kLowMillivolts),
+        static_cast<unsigned>(PowerSafetyPolicy::kRecoveryMillivolts),
+        static_cast<unsigned>(PowerSafetyPolicy::kConfirmSamples),
+        static_cast<unsigned long>(powerSafetyPolicy.lowVoltageTrips()),
+        static_cast<unsigned long>(boundedSleepCount),
+        static_cast<unsigned long long>(lastBoundedSleepRequestedUs),
+        static_cast<unsigned long long>(lastBoundedSleepElapsedUs),
+        static_cast<int>(lastBoundedSleepWakeCause),
+        static_cast<unsigned long>(productBootRecovery.catalog.generation),
+        static_cast<unsigned>(productBootRecovery.catalog.observations),
+        BoardSafeOutputs::buzzerHeldInactive() ? "true" : "false");
+    reply.println(line);
+}
+
+void runPowerLowVoltageAdmissionTest(Stream& reply) {
+    const bool ready = hilSession.active() && uiController.isRoot() &&
+        !appRuntime.running() && boundedSleepReady();
+    if (!ready) {
+        reply.println(
+            "{\"schema\":\"leshy.power.low_voltage_test.v1\","
+            "\"kind\":\"error\",\"reason\":\"runtime_not_idle\"}");
+        return;
+    }
+    const std::uint32_t generationBefore =
+        productBootRecovery.catalog.generation;
+    const std::size_t observationsBefore =
+        productBootRecovery.catalog.observations;
+    const std::uint32_t ownedBefore =
+        resourceBroker.ownedBy(AppRuntime::kForegroundOwner);
+    const std::uint32_t tripsBefore = powerSafetyPolicy.lowVoltageTrips();
+    powerSafetyPolicy.resetUnavailable();
+    for (std::uint8_t sample = 0;
+         sample < PowerSafetyPolicy::kConfirmSamples; ++sample) {
+        powerSafetyPolicy.observeMillivolts(
+            PowerSafetyPolicy::kLowMillivolts);
+    }
+    const PowerTelemetryState injectedState = powerSafetyPolicy.state();
+    const PowerWriteDisposition injectedDisposition =
+        powerSafetyPolicy.writeDisposition();
+
+    leshy1::storage::MediaIdentity media;
+    media.present = true;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint = "POWERTEST";
+    media.capacityBytes = 1024U * 1024U;
+    media.freeBytes = 512U * 1024U;
+    leshy1::storage::ProductStoreRequest request;
+    request.operation = leshy1::storage::ProductStoreOperation::CommitSession;
+    request.explicitlySelected = true;
+    request.expectedFingerprint = "POWERTEST";
+    request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+    request.rootExists = true;
+    request.driverWriteEnabled = true;
+    request.requiredBytes = 4096;
+    request.reserveBytes = 4096;
+    request.ownedResources =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    request.power = injectedDisposition;
+    const leshy1::storage::ProductStorePermit permit =
+        leshy1::storage::authorizeProductStore(media, request);
+    powerSafetyPolicy.resetUnavailable();
+    const std::uint32_t ownedAfter =
+        resourceBroker.ownedBy(AppRuntime::kForegroundOwner);
+    const bool passed = injectedState == PowerTelemetryState::LowVoltage &&
+        injectedDisposition == PowerWriteDisposition::ProhibitedLowVoltage &&
+        permit.status == leshy1::storage::ProductStoreAccessStatus::PowerUnsafe &&
+        powerSafetyPolicy.lowVoltageTrips() == tripsBefore + 1U &&
+        generationBefore == productBootRecovery.catalog.generation &&
+        observationsBefore == productBootRecovery.catalog.observations &&
+        ownedBefore == ownedAfter;
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.power.low_voltage_test.v1\","
+        "\"kind\":\"result\",\"status\":\"%s\","
+        "\"injected_state\":\"%s\",\"write_disposition\":\"%s\","
+        "\"store_permit\":\"%s\",\"samples\":%u,"
+        "\"trip_delta\":%lu,\"physical_storage_opened\":false,"
+        "\"physical_write_calls\":0,\"filesystem_mounted\":false,"
+        "\"generation_before\":%lu,\"generation_after\":%lu,"
+        "\"observations_before\":%u,\"observations_after\":%u,"
+        "\"owned_before\":%lu,\"owned_after\":%lu,"
+        "\"restored_state\":\"%s\",\"buzzer_inactive\":%s}",
+        passed ? "pass" : "fail",
+        leshy1::services::power::powerTelemetryStateName(injectedState),
+        leshy1::services::power::powerWriteDispositionName(
+            injectedDisposition),
+        leshy1::storage::productStoreAccessStatusName(permit.status),
+        static_cast<unsigned>(PowerSafetyPolicy::kConfirmSamples),
+        static_cast<unsigned long>(powerSafetyPolicy.lowVoltageTrips() -
+                                   tripsBefore),
+        static_cast<unsigned long>(generationBefore),
+        static_cast<unsigned long>(productBootRecovery.catalog.generation),
+        static_cast<unsigned>(observationsBefore),
+        static_cast<unsigned>(productBootRecovery.catalog.observations),
+        static_cast<unsigned long>(ownedBefore),
+        static_cast<unsigned long>(ownedAfter),
+        leshy1::services::power::powerTelemetryStateName(
+            powerSafetyPolicy.state()),
+        BoardSafeOutputs::buzzerHeldInactive() ? "true" : "false");
+    reply.println(line);
+}
+
+void emitPowerSleepTestReport(Stream& reply) {
+    if (!powerSleepTestReport.available) {
+        reply.println(
+            "{\"schema\":\"leshy.power.sleep_test.v1\","
+            "\"kind\":\"error\",\"reason\":\"not_run\"}");
+        return;
+    }
+    char line[1024] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.power.sleep_test.v1\","
+        "\"kind\":\"result\",\"status\":\"%s\","
+        "\"sleep_kind\":\"esp32_light_sleep\","
+        "\"requested_us\":%llu,\"elapsed_us\":%llu,"
+        "\"wakeup\":\"%s\",\"backlight_restored\":true,"
+        "\"input_task_retained\":%s,\"filesystem_mounted\":false,"
+        "\"physical_write_calls\":0,\"generation_before\":%lu,"
+        "\"generation_after\":%lu,\"observations_before\":%u,"
+        "\"observations_after\":%u,\"heap_before\":%lu,"
+        "\"heap_after\":%lu,\"minimum_heap_before\":%lu,"
+        "\"minimum_heap_after\":%lu,\"lease_mask\":%lu,"
+        "\"buzzer_inactive\":%s,\"radio_tx_commands\":0}",
+        powerSleepTestReport.passed ? "pass" : "fail",
+        static_cast<unsigned long long>(powerSleepTestReport.requestedUs),
+        static_cast<unsigned long long>(powerSleepTestReport.elapsedUs),
+        powerSleepTestReport.wakeCause == ESP_SLEEP_WAKEUP_TIMER
+            ? "timer" : "unexpected",
+        powerSleepTestReport.inputTaskRetained ? "true" : "false",
+        static_cast<unsigned long>(powerSleepTestReport.generationBefore),
+        static_cast<unsigned long>(powerSleepTestReport.generationAfter),
+        static_cast<unsigned>(powerSleepTestReport.observationsBefore),
+        static_cast<unsigned>(powerSleepTestReport.observationsAfter),
+        static_cast<unsigned long>(powerSleepTestReport.heapBefore),
+        static_cast<unsigned long>(powerSleepTestReport.heapAfter),
+        static_cast<unsigned long>(powerSleepTestReport.minimumHeapBefore),
+        static_cast<unsigned long>(powerSleepTestReport.minimumHeapAfter),
+        static_cast<unsigned long>(powerSleepTestReport.leaseMask),
+        powerSleepTestReport.buzzerInactive ? "true" : "false");
+    reply.println(line);
+}
+
+void runPowerSleepTest(Stream& reply) {
+    const bool ready = hilSession.active() && uiController.isRoot() &&
+        !appRuntime.running() && boundedSleepReady();
+    if (!ready) {
+        reply.println(
+            "{\"schema\":\"leshy.power.sleep_test.v1\","
+            "\"kind\":\"error\",\"reason\":\"runtime_not_idle\"}");
+        return;
+    }
+    constexpr std::uint64_t requestedUs = 300000ULL;
+    powerSleepTestReport = {};
+    powerSleepTestReport.requestedUs = requestedUs;
+    powerSleepTestReport.generationBefore =
+        productBootRecovery.catalog.generation;
+    powerSleepTestReport.observationsBefore =
+        productBootRecovery.catalog.observations;
+    powerSleepTestReport.heapBefore = ESP.getFreeHeap();
+    powerSleepTestReport.minimumHeapBefore = ESP.getMinFreeHeap();
+    const bool slept = performBoundedLightSleep(requestedUs);
+    powerSleepTestReport.elapsedUs = lastBoundedSleepElapsedUs;
+    powerSleepTestReport.wakeCause = lastBoundedSleepWakeCause;
+    powerSleepTestReport.generationAfter =
+        productBootRecovery.catalog.generation;
+    powerSleepTestReport.observationsAfter =
+        productBootRecovery.catalog.observations;
+    powerSleepTestReport.heapAfter = ESP.getFreeHeap();
+    powerSleepTestReport.minimumHeapAfter = ESP.getMinFreeHeap();
+    powerSleepTestReport.leaseMask =
+        resourceBroker.ownedBy(AppRuntime::kForegroundOwner);
+    powerSleepTestReport.inputTaskRetained = physicalInputTaskStarted;
+    powerSleepTestReport.buzzerInactive =
+        BoardSafeOutputs::buzzerHeldInactive();
+    const bool timerWake =
+        powerSleepTestReport.wakeCause == ESP_SLEEP_WAKEUP_TIMER;
+    const bool elapsedBounded =
+        powerSleepTestReport.elapsedUs + kLightSleepTimerToleranceUs >= requestedUs &&
+        powerSleepTestReport.elapsedUs <= requestedUs + 500000ULL;
+    powerSleepTestReport.passed = slept && timerWake && elapsedBounded &&
+        powerSleepTestReport.generationBefore ==
+            powerSleepTestReport.generationAfter &&
+        powerSleepTestReport.observationsBefore ==
+            powerSleepTestReport.observationsAfter &&
+        boundedSleepReady() && powerSleepTestReport.buzzerInactive;
+    powerSleepTestReport.available = true;
+    // UART can retain this immediate reply. Native USB may discard it while
+    // resuming, so HIL retrieves the retained result through the read-only
+    // `power.sleep-test state` command.
+    emitPowerSleepTestReport(reply);
+}
+
 void emitSafetyState(Stream& reply) {
     const bool watchdogArmed = runtimeSafetyWatchdogReady &&
         __atomic_load_n(&runtimeSafetyWatchdogArmed, __ATOMIC_ACQUIRE) != 0;
@@ -5835,6 +6119,13 @@ bool probeInputAtBoot(std::uint8_t* value, std::uint8_t* attempts) {
         if (attempt < kInputProbeMaxAttempts) delay(kInputProbeRetryDelayMs);
     }
     return false;
+}
+
+bool probeI2cAddressAck(std::uint8_t address) {
+    Wire.beginTransmission(address);
+    // Address-only transaction: it observes ACK/NACK and writes no register or
+    // payload byte to the unknown power-manager implementation.
+    return Wire.endTransmission(true) == 0;
 }
 
 void pollPhysicalInput(void*) {
@@ -6572,18 +6863,20 @@ std::uint8_t deviceFirstVisible(std::uint8_t selection) {
 
 UiTextId deviceLabel(std::uint8_t index) {
     switch (index) {
-        case 0: return UiTextId::DeviceSettings;
-        case 1: return UiTextId::AppSelfTest;
-        case 2: return UiTextId::AppDiagnostics;
+        case 0: return UiTextId::DevicePower;
+        case 1: return UiTextId::DeviceSettings;
+        case 2: return UiTextId::AppSelfTest;
+        case 3: return UiTextId::AppDiagnostics;
         default: return UiTextId::DeviceAbout;
     }
 }
 
 UiTextId deviceNote(std::uint8_t index) {
     switch (index) {
-        case 0: return UiTextId::DeviceSettingsNote;
-        case 1: return UiTextId::NoteSelfTest;
-        case 2: return UiTextId::DeviceDiagnosticsNote;
+        case 0: return UiTextId::DevicePowerNote;
+        case 1: return UiTextId::DeviceSettingsNote;
+        case 2: return UiTextId::NoteSelfTest;
+        case 3: return UiTextId::DeviceDiagnosticsNote;
         default: return UiTextId::DeviceAboutNote;
     }
 }
@@ -6624,6 +6917,78 @@ void renderAboutPage(bool clearContent) {
     display.setTextColor(Palette::Positive, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, 14, 168);
     display.print(tr(UiTextId::AboutOpenSource));
+}
+
+void renderPowerPage(bool clearContent) {
+    renderHeader(tr(UiTextId::PowerTitle), clearContent);
+    display.setTextColor(Palette::TextPrimary, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 66);
+    display.print(tr(powerManagerAddressAck
+                         ? UiTextId::PowerManagerPresent
+                         : UiTextId::PowerManagerUnknown));
+    setUiCursor(UiTextRole::Body, 14, 104);
+    display.print(tr(UiTextId::PowerVoltageUnavailable));
+    display.setTextColor(Palette::Positive, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 142);
+    display.print(tr(UiTextId::PowerWriteProtection));
+    display.setTextColor(Palette::TextPrimary, Palette::Canvas);
+    setUiCursor(UiTextRole::Body, 14, 190);
+    display.print(tr(UiTextId::PowerSleepAction));
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, 14, 230);
+    display.print(tr(UiTextId::PowerTruthNote));
+}
+
+bool boundedSleepReady() {
+    // The Survey task is intentionally persistent and waits for notifications;
+    // task existence is not activity.  Gate sleep on its control/scan state and
+    // on the short-lived Store worker handles instead.
+    const bool noWorkers =
+        productSurveyControl() == ProductSurveyWorkerControl::Idle &&
+        !productSurveyScanActive() &&
+        captureStoreTaskHandle == nullptr &&
+        subGhzCaptureStoreTaskHandle == nullptr &&
+        infraredCaptureStoreTaskHandle == nullptr;
+    return !safetySupervisor.latched() && noWorkers &&
+        resourceBroker.ownerOf(Resource::Storage) ==
+            leshy1::kernel::runtime::kNoOwner &&
+        resourceBroker.ownerOf(Resource::RadioSpi) ==
+            leshy1::kernel::runtime::kNoOwner &&
+        resourceBroker.ownerOf(Resource::EspRf) ==
+            leshy1::kernel::runtime::kNoOwner;
+}
+
+bool performBoundedLightSleep(std::uint64_t requestedUs) {
+    if (!boundedSleepReady() || requestedUs < 100000ULL ||
+        requestedUs > 2000000ULL ||
+        !BoardSafeOutputs::buzzerHeldInactive() ||
+        !BoardSafeOutputs::radioTransmitPathsHeldInactive()) {
+        return false;
+    }
+    feedRuntimeSafetyWatchdog();
+    ledcWrite(BoardProfile::kBacklightPin, 0);
+    delay(5);
+    if (esp_sleep_enable_timer_wakeup(requestedUs) != ESP_OK) {
+        ledcWrite(BoardProfile::kBacklightPin, 255);
+        return false;
+    }
+    const std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    const esp_err_t slept = esp_light_sleep_start();
+    const std::uint64_t finishedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    lastBoundedSleepWakeCause = esp_sleep_get_wakeup_cause();
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+    ledcWrite(BoardProfile::kBacklightPin, 255);
+    feedRuntimeSafetyWatchdog();
+    if (slept != ESP_OK || finishedUs < startedUs) return false;
+    lastBoundedSleepRequestedUs = requestedUs;
+    lastBoundedSleepElapsedUs = finishedUs - startedUs;
+    ++boundedSleepCount;
+    delay(kLightSleepTransportRecoveryMs);
+    feedRuntimeSafetyWatchdog();
+    return BoardSafeOutputs::buzzerHeldInactive() &&
+           BoardSafeOutputs::radioTransmitPathsHeldInactive();
 }
 
 void runShieldReceiverSelfTestProbe() {
@@ -10423,6 +10788,8 @@ void renderInteractiveScreen(bool clearContent) {
             renderSelfTestPage(clearContent);
         } else if (uiController.page() == kDevicePage) {
             renderDevicePage(clearContent);
+        } else if (uiController.page() == kPowerPage) {
+            renderPowerPage(clearContent);
         } else {
             renderAboutPage(clearContent);
         }
@@ -10773,6 +11140,74 @@ bool stopSubGhzRawCapture(bool returnToModes) {
     lastRuntimeEvent = cleanup ? "subghz_raw_stopped"
                                : "subghz_raw_cleanup_failed";
     return true;
+}
+
+bool loadSubGhzRawStoreTestFixture() {
+    if (!hilSession.active() ||
+        rfSpectrumView != RfSpectrumView::SubGhzCaptureLive ||
+        resourceBroker.ownerOf(Resource::RadioSpi) !=
+            AppRuntime::kForegroundOwner) {
+        return false;
+    }
+    const bool receiverCleanup = boardCc1101Spectrum.end();
+    subGhzRawCapture.reset();
+    SubGhzRawCapturePlan plan;
+    plan.frequencyKHz = 433920U;
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    bool valid = receiverCleanup && subGhzRawCapture.begin(plan, startedUs);
+    const auto ingest = [&](std::uint64_t offsetUs, std::int16_t rssiDbm) {
+        return subGhzRawCapture.ingest({startedUs + offsetUs, rssiDbm});
+    };
+    if (valid) {
+        ingest(100U, -100);
+        ingest(200U, -100);
+        ingest(1000U, -40);
+        ingest(1100U, -40);
+        ingest(2000U, -100);
+        ingest(2100U, -100);
+        ingest(3000U, -40);
+        ingest(3100U, -40);
+        ingest(4000U, -100);
+        ingest(4100U, -100);
+        subGhzRawCapture.service(startedUs + 25000U);
+        valid = subGhzRawCapture.stats().state ==
+                    SubGhzRawCaptureState::Complete &&
+                subGhzRawCapture.pulseCount() == 3U;
+    }
+    subGhzCapturePersistState = CapturePersistState::Result;
+    subGhzCapturePersistStatus = "volatile_test_fixture";
+    subGhzCapturePersistGeneration = 0;
+    nextSubGhzCaptureUiRefreshUs = 0;
+    lastRuntimeEvent = valid ? "subghz_store_test_fixture_ready"
+                             : "subghz_store_test_fixture_failed";
+    if (valid) renderInteractiveScreen(true);
+    return valid;
+}
+
+void emitSubGhzRawStoreTestFixture(Stream& reply) {
+    const bool loaded = loadSubGhzRawStoreTestFixture();
+    char line[640] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.capture.subghz_store_fixture.v1\","
+        "\"kind\":\"result\",\"status\":\"%s\","
+        "\"software_fixture\":true,\"physical_signal\":false,"
+        "\"rx_only_semantics\":true,\"frequency_khz\":433920,"
+        "\"pulses\":%u,\"capture_state\":\"%s\","
+        "\"receiver_cleanup_complete\":%s,"
+        "\"application_tx_calls\":0,\"radio_tx_commands\":0,"
+        "\"persist_state\":\"%s\",\"lease_mask\":%lu}",
+        loaded ? "ready" : "rejected",
+        static_cast<unsigned>(subGhzRawCapture.pulseCount()),
+        leshy1::apps::capture::subGhzRawCaptureStateName(
+            subGhzRawCapture.stats().state),
+        cc1101SpectrumReport.cleanupComplete ? "true" : "false",
+        capturePersistStateName(subGhzCapturePersistState),
+        static_cast<unsigned long>(
+            resourceBroker.ownedBy(AppRuntime::kForegroundOwner)));
+    reply.println(line);
 }
 
 void serviceSubGhzRawCapture() {
@@ -13953,10 +14388,10 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (action == UiAction::Select || action == UiAction::Right) {
             handled = true;
             constexpr std::uint8_t pages[kDeviceItemCount] = {
-                5, 6, 1, kAboutPage,
+                kPowerPage, 5, 6, 1, kAboutPage,
             };
             changed = uiController.openChild(pages[deviceSelection]);
-            if (changed && deviceSelection == 0) languageController.enter();
+            if (changed && deviceSelection == 1) languageController.enter();
             lastRuntimeEvent = changed ? "device_item_opened"
                                        : "device_item_rejected";
         }
@@ -13966,6 +14401,14 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
             return finish(changed);
         }
+    }
+    if (!wasRoot && uiController.page() == kPowerPage &&
+        (action == UiAction::Select || action == UiAction::Right)) {
+        const bool changed = performBoundedLightSleep(1000000ULL);
+        lastRuntimeEvent = changed ? "power_sleep_resumed"
+                                   : "power_sleep_rejected";
+        uiController.recordHandledAction(action);
+        return finish(changed);
     }
     if (!wasRoot && uiController.page() == 5) {
         bool handled = false;
@@ -16632,6 +17075,7 @@ void emitProductStoreBootstrap(Stream& reply,
     request.requiredBytes = 64U * 1024U;
     request.reserveBytes = 1024U * 1024U;
     request.ownedResources = ownedDuring;
+    request.power = powerSafetyPolicy.writeDisposition();
     const leshy1::storage::ProductStorePermit permit =
         leshy1::storage::authorizeProductStore(media, request);
 
@@ -19230,6 +19674,15 @@ void handleCommand(Stream& reply, const char* command) {
         emitInventory();
     } else if (std::strcmp(command, "hardware.safe-outputs") == 0) {
         emitSafeOutputs(reply);
+    } else if (std::strcmp(command, "power.state") == 0) {
+        emitPowerState(reply);
+    } else if (std::strcmp(command,
+                           "power.low-voltage-test confirm") == 0) {
+        runPowerLowVoltageAdmissionTest(reply);
+    } else if (std::strcmp(command, "power.sleep-test confirm") == 0) {
+        runPowerSleepTest(reply);
+    } else if (std::strcmp(command, "power.sleep-test state") == 0) {
+        emitPowerSleepTestReport(reply);
     } else if (std::strcmp(command, "safety.state") == 0) {
         emitSafetyState(reply);
     } else if (std::strcmp(command,
@@ -19270,6 +19723,10 @@ void handleCommand(Stream& reply, const char* command) {
         emitCc1101FinderReport(reply);
     } else if (std::strcmp(command, "hardware.cc1101.spectrum") == 0) {
         emitCc1101SpectrumReport(reply);
+    } else if (std::strcmp(
+                   command,
+                   "capture.subghz.test-fixture fixed-rx-only") == 0) {
+        emitSubGhzRawStoreTestFixture(reply);
     } else if (std::strcmp(command, "ping") == 0) {
         broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"pong\"}");
     } else if (std::strcmp(command, "ui.state") == 0) {
@@ -19722,6 +20179,8 @@ void setup() {
     Wire.begin(BoardProfile::kI2cSdaPin, BoardProfile::kI2cSclPin, kI2cHz);
     bootMetrics.inputDetected =
         probeInputAtBoot(&lastInputRaw, &bootMetrics.inputProbeAttempts);
+    powerManagerAddressAck =
+        probeI2cAddressAck(BoardProfile::kPowerManagerAddress);
     bootMetrics.inputProbeTransientRetries =
         bootMetrics.inputProbeAttempts == 0
             ? 0
@@ -19787,6 +20246,28 @@ void setup() {
                    "i2c_read_only_0x20",
                    bootMetrics.inputDetected ? "raw_byte_available" : "no_read_response"});
     inventory.add({
+        "power.manager",
+        powerManagerAddressAck ? CapabilityState::Detected
+                               : CapabilityState::Unknown,
+        "i2c_address_only_ack_0x75",
+        powerManagerAddressAck ? "present_register_map_unidentified"
+                               : "no_address_ack"});
+    inventory.add({
+        "power.voltage",
+        CapabilityState::Unknown,
+        "gpio2_reserved_output_low",
+        "unavailable_buzzer_shared_adc_forbidden"});
+    inventory.add({
+        "power.safe_write",
+        CapabilityState::Available,
+        "atomic_store_plus_confirmed_low_voltage_gate",
+        "atomic_only_without_trusted_voltage"});
+    inventory.add({
+        "power.sleep_resume",
+        CapabilityState::Declared,
+        "bounded_timer_light_sleep",
+        "runtime_gate_available"});
+    inventory.add({
         "input.touch",
         boardTouchInput.ready() ? CapabilityState::Available
                                 : CapabilityState::Declared,
@@ -19849,10 +20330,15 @@ void setup() {
                                          : "invalid_discovery_record"});
     inventory.add({"storage.atomicity", CapabilityState::Declared,
                    "E-STORAGE-001+guard_policy", "filesystem_backend_not_started"});
-    inventory.add({"assembly.gps", CapabilityState::Unknown, "default_profile",
-                   "not_declared_no_autodetect"});
-    inventory.add({"assembly.pn532", CapabilityState::Unknown, "default_profile",
-                   "not_declared_no_autodetect"});
+    inventory.add({"assembly.profile", CapabilityState::Available,
+                   BoardProfile::kAssemblyProfileId,
+                   "explicit_no_autodetect"});
+    inventory.add({"assembly.gps", CapabilityState::NotApplicable,
+                   BoardProfile::kAssemblyProfileId,
+                   "not_fitted_by_explicit_profile"});
+    inventory.add({"assembly.pn532", CapabilityState::NotApplicable,
+                   BoardProfile::kAssemblyProfileId,
+                   "not_fitted_by_explicit_profile"});
     inventory.add({
         "shield.ir",
         BoardProfile::kRfShieldDeclared && BoardProfile::kIrDeclared
@@ -19891,6 +20377,8 @@ void setup() {
               "\"hil.begin <session-id> <app-elf-sha256>\","
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
+              "\"power.state\",\"power.low-voltage-test confirm\","
+              "\"power.sleep-test confirm\",\"power.sleep-test state\","
               "\"safety.state\",\"safety.watchdog-test confirm\","
               "\"safety.worker-deadline-test confirm\","
               "\"safety.worker-preparation-deadline-test confirm\","
@@ -19904,6 +20392,7 @@ void setup() {
               "\"hardware.nrf24.finder\","
               "\"hardware.cc1101.finder\","
               "\"hardware.cc1101.spectrum\","
+              "\"capture.subghz.test-fixture fixed-rx-only\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"wifi.network.detail\","
               "\"capture.state\",\"capture.export.pcap\","

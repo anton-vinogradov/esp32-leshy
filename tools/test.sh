@@ -78,6 +78,7 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/platform/arduino/RamSessionStoreIo.cpp" \
     "$repo_dir/firmware/leshy1/src/services/diagnostics/BootReport.cpp" \
     "$repo_dir/firmware/leshy1/src/services/diagnostics/HilSession.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/power/PowerSafetyPolicy.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/IngressTiming.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/ObservationQueue.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SessionBatchPolicy.cpp" \
@@ -241,6 +242,7 @@ run_opaque_evidence_check tools/check_safety_watchdog_acceptance.py
 python3 "$repo_dir/tools/check_worker_preparation_deadline_acceptance.py"
 python3 "$repo_dir/tools/check_capture_store_deadline_acceptance.py"
 python3 "$repo_dir/tools/check_infrared_store_deadline_acceptance.py"
+python3 "$repo_dir/tools/check_s5_runtime_completeness_contract.py"
 python3 "$repo_dir/tools/check_sd_power_cut_acceptance.py"
 python3 "$repo_dir/tools/check_release_hil_acceptance.py"
 if [[ "$retained_evidence_mode" == "tracked" ]]; then

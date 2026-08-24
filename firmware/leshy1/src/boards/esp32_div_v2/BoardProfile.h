@@ -8,6 +8,8 @@ namespace leshy1::boards::esp32_div_v2 {
 // docs/v1/HARDWARE_ENVELOPE.md; this profile never upgrades an unknown capability.
 struct BoardProfile final {
     static constexpr const char* kId = "esp32-div-v2-n16";
+    static constexpr const char* kAssemblyProfileId =
+        "stock-rf-no-gps-no-pn532";
     static constexpr const char* kEnvelopeRevision = "S1-2026-08-16";
     static constexpr std::uint32_t kExpectedFlashBytes = 16U * 1024U * 1024U;
     static constexpr bool kExpectedPsram = false;
@@ -24,6 +26,7 @@ struct BoardProfile final {
     static constexpr int kI2cSdaPin = 8;
     static constexpr int kI2cSclPin = 9;
     static constexpr std::uint8_t kPcf8574Address = 0x20;
+    static constexpr std::uint8_t kPowerManagerAddress = 0x75;
 
     // HW-U06: the signal is sampled without reconfiguration, but its polarity is
     // not authoritative until HW-T05. It cannot by itself claim card presence.

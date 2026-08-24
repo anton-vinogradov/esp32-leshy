@@ -11,6 +11,7 @@ const char* capabilityStateName(CapabilityState state) {
         case CapabilityState::Available: return "available";
         case CapabilityState::Conflicted: return "conflicted";
         case CapabilityState::Fault: return "fault";
+        case CapabilityState::NotApplicable: return "not_applicable";
         case CapabilityState::Unknown: return "unknown";
     }
     return "unknown";

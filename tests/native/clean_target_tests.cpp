@@ -50,6 +50,7 @@
 #include "platform/arduino/RamSessionStoreIo.h"
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
+#include "services/power/PowerSafetyPolicy.h"
 #include "services/survey/IngressTiming.h"
 #include "services/survey/ObservationQueue.h"
 #include "services/survey/SessionBatchPolicy.h"
@@ -91,6 +92,7 @@ using namespace leshy1::kernel::runtime;
 using namespace leshy1::services::diagnostics;
 using namespace leshy1::services::survey;
 using namespace leshy1::storage;
+using namespace leshy1::services::power;
 using namespace leshy1::ui;
 using namespace leshy1::apps::survey;
 using namespace leshy1::apps::library;
@@ -110,6 +112,51 @@ int failures = 0;
             ++failures;                                                                         \
         }                                                                                       \
     } while (false)
+
+void testPowerSafetyPolicyDebouncesAndBlocksWrites() {
+    PowerSafetyPolicy policy;
+    CHECK(policy.state() == PowerTelemetryState::Unavailable);
+    CHECK(policy.writeDisposition() == PowerWriteDisposition::AtomicOnly);
+    policy.observeMillivolts(PowerSafetyPolicy::kLowMillivolts);
+    policy.observeMillivolts(PowerSafetyPolicy::kLowMillivolts - 1U);
+    CHECK(policy.state() == PowerTelemetryState::Unavailable);
+    policy.observeMillivolts(PowerSafetyPolicy::kLowMillivolts);
+    CHECK(policy.state() == PowerTelemetryState::LowVoltage);
+    CHECK(policy.lowVoltageTrips() == 1);
+    CHECK(policy.writeDisposition() ==
+          PowerWriteDisposition::ProhibitedLowVoltage);
+
+    MediaIdentity media;
+    media.present = true;
+    media.kind = MediaKind::Sd;
+    media.fingerprint = "CID";
+    media.capacityBytes = 1024U * 1024U;
+    media.freeBytes = 512U * 1024U;
+    ProductStoreRequest request;
+    request.operation = ProductStoreOperation::CommitSession;
+    request.explicitlySelected = true;
+    request.expectedFingerprint = "CID";
+    request.rootPath = kProductSessionStoreRoot;
+    request.rootExists = true;
+    request.driverWriteEnabled = true;
+    request.requiredBytes = 4096;
+    request.reserveBytes = 4096;
+    request.ownedResources = resourceMask(Resource::Storage) |
+                             resourceMask(Resource::RadioSpi);
+    request.power = policy.writeDisposition();
+    CHECK(authorizeProductStore(media, request).status ==
+          ProductStoreAccessStatus::PowerUnsafe);
+
+    policy.observeMillivolts(PowerSafetyPolicy::kRecoveryMillivolts);
+    policy.observeMillivolts(PowerSafetyPolicy::kRecoveryMillivolts + 1U);
+    CHECK(policy.state() == PowerTelemetryState::LowVoltage);
+    policy.observeMillivolts(PowerSafetyPolicy::kRecoveryMillivolts);
+    CHECK(policy.state() == PowerTelemetryState::Stable);
+    request.power = policy.writeDisposition();
+    CHECK(authorizeProductStore(media, request).allowed());
+    policy.resetUnavailable();
+    CHECK(policy.writeDisposition() == PowerWriteDisposition::AtomicOnly);
+}
 
 void testVisualThemeContract() {
     using leshy1::ui::visual::Layout;
@@ -5937,6 +5984,7 @@ void testSdSector0ReadIsSingleBoundedAndParseOnly() {
 }  // namespace
 
 int main() {
+    testPowerSafetyPolicyDebouncesAndBlocksWrites();
     testVisualThemeContract();
     testUiComponentGeometryContract();
     testTouchInputIsEdgeTriggeredAndBounded();

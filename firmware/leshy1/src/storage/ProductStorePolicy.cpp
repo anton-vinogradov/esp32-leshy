@@ -80,6 +80,8 @@ const char* productStoreAccessStatusName(ProductStoreAccessStatus status) {
             return "resources_missing";
         case ProductStoreAccessStatus::ResourceConflict:
             return "resource_conflict";
+        case ProductStoreAccessStatus::PowerUnsafe:
+            return "power_unsafe";
     }
     return "missing_media";
 }
@@ -148,6 +150,10 @@ ProductStorePermit authorizeProductStore(const MediaIdentity& media,
     }
     if (request.conflictingOwner) {
         return rejected(ProductStoreAccessStatus::ResourceConflict, request);
+    }
+    if (!recovery && request.power ==
+            services::power::PowerWriteDisposition::ProhibitedLowVoltage) {
+        return rejected(ProductStoreAccessStatus::PowerUnsafe, request);
     }
     return {ProductStoreAccessStatus::Permitted, request.operation,
             kProductStoreResources, kProductSessionStoreRoot,
