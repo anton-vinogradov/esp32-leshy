@@ -237,6 +237,7 @@ using leshy1::kernel::safety::WorkerDeadlineSupervisor;
 using leshy1::platform::arduino::BoardSafeOutputs;
 using leshy1::platform::arduino::BoardInfraredReceiver;
 using leshy1::platform::arduino::InfraredReceiverReport;
+using leshy1::platform::arduino::InfraredReceiverStatus;
 using leshy1::platform::arduino::BoardCc1101PassiveSpectrum;
 using leshy1::platform::arduino::BoardNrf24PassiveSpectrum;
 using leshy1::platform::arduino::BoardShieldReceiverProbe;
@@ -306,9 +307,11 @@ constexpr std::uint64_t kStorageRequiredEncodedBytesPerSecond =
 constexpr std::uint64_t kProductSurveyCommitBytes = 64U * 1024U;
 constexpr std::uint64_t kProductSurveyReserveBytes = 1024U * 1024U;
 constexpr unsigned kWifiPersistMaxScans = 8;
-constexpr const char* kFullGuidedDisposableRunId = "full-guided-v7";
+constexpr const char* kFullGuidedDisposableRunId = "full-guided-v9";
 constexpr std::uint64_t kFullGuidedDisposableBytes = 64U * 1024U;
 constexpr std::uint64_t kFullGuidedDisposableReserve = 1024U * 1024U;
+constexpr std::uint8_t kFullGuidedReceiveSamples = 32;
+constexpr std::uint8_t kFullGuidedInfraredSamples = 64;
 constexpr const char* kSdSessionStorePrefix =
     "storage.sd.session-store disposable-write ";
 constexpr const char* kSdSessionThroughputPrefix =
@@ -441,6 +444,9 @@ enum class FullGuidedRfStep : std::uint8_t {
     Idle,
     Nrf24Sweep,
     Cc1101Sweep,
+    SubGhzOokReceive,
+    SubGhzFskReceive,
+    InfraredReceive,
     Complete,
     Failed,
     Cancelled,
@@ -450,6 +456,9 @@ const char* fullGuidedRfStepName(FullGuidedRfStep step) {
         case FullGuidedRfStep::Idle: return "idle";
         case FullGuidedRfStep::Nrf24Sweep: return "nrf24_sweep";
         case FullGuidedRfStep::Cc1101Sweep: return "cc1101_sweep";
+        case FullGuidedRfStep::SubGhzOokReceive: return "subghz_ook_receive";
+        case FullGuidedRfStep::SubGhzFskReceive: return "subghz_fsk_receive";
+        case FullGuidedRfStep::InfraredReceive: return "infrared_receive";
         case FullGuidedRfStep::Complete: return "complete";
         case FullGuidedRfStep::Failed: return "failed";
         case FullGuidedRfStep::Cancelled: return "cancelled";
@@ -466,10 +475,24 @@ struct FullGuidedRfState final {
     bool cc1101Complete = false;
     bool cc1101Passed = false;
     std::uint8_t cc1101Bins = 0;
+    bool subGhzOokComplete = false;
+    bool subGhzOokPassed = false;
+    std::uint8_t subGhzOokSamples = 0;
+    bool subGhzFskComplete = false;
+    bool subGhzFskPassed = false;
+    std::uint8_t subGhzFskSamples = 0;
+    std::uint32_t subGhzFskEdges = 0;
+    bool subGhzFskOverflow = false;
+    bool infraredComplete = false;
+    bool infraredPassed = false;
+    std::uint8_t infraredSamples = 0;
 };
 FullGuidedRfState fullGuidedRfState;
 Nrf24PassiveSpectrumReport fullGuidedNrf24Report;
 Cc1101PassiveSpectrumReport fullGuidedCc1101Report;
+Cc1101PassiveSpectrumReport fullGuidedCc1101OokReport;
+Cc1101PassiveSpectrumReport fullGuidedCc1101FskReport;
+InfraredReceiverReport fullGuidedInfraredReport;
 std::uint64_t fullGuidedRfStartAfterUs = 0;
 enum class FullGuidedArtifactStep : std::uint8_t {
     Idle,
@@ -7089,6 +7112,13 @@ SelfTestFacts snapshotSelfTestFacts() {
     facts.nrf24SpectrumExercisePassed = fullGuidedRfState.nrf24Passed;
     facts.cc1101SpectrumExerciseComplete = fullGuidedRfState.cc1101Complete;
     facts.cc1101SpectrumExercisePassed = fullGuidedRfState.cc1101Passed;
+    facts.subGhzOokExerciseComplete = fullGuidedRfState.subGhzOokComplete;
+    facts.subGhzOokExercisePassed = fullGuidedRfState.subGhzOokPassed;
+    facts.subGhzFskExerciseComplete = fullGuidedRfState.subGhzFskComplete;
+    facts.subGhzFskExercisePassed = fullGuidedRfState.subGhzFskPassed;
+    facts.infraredReceiverExerciseComplete =
+        fullGuidedRfState.infraredComplete;
+    facts.infraredReceiverExercisePassed = fullGuidedRfState.infraredPassed;
     facts.persistentRecoveryAuditComplete =
         fullGuidedArtifactState.recoveryComplete;
     facts.persistentRecoveryAuditPassed =
@@ -7508,6 +7538,17 @@ void renderSelfTestPage(bool clearContent) {
         renderMetric(1, line,
                      fullGuidedRfState.cc1101Passed ? Tone::Positive
                                                     : Tone::Warning);
+        const unsigned s5ReceiveChecks =
+            static_cast<unsigned>(fullGuidedRfState.subGhzOokComplete) +
+            static_cast<unsigned>(fullGuidedRfState.subGhzFskComplete) +
+            static_cast<unsigned>(fullGuidedRfState.infraredComplete);
+        std::snprintf(line, sizeof(line), tr(UiTextId::FullActiveS5Format),
+                      s5ReceiveChecks);
+        renderMetric(2, line,
+                     fullGuidedRfState.subGhzOokPassed &&
+                             fullGuidedRfState.subGhzFskPassed &&
+                             fullGuidedRfState.infraredPassed
+                         ? Tone::Positive : Tone::Warning);
         display.setTextColor(Palette::TextMuted, Palette::Canvas);
         setUiCursor(UiTextRole::Meta, 14, 207);
         display.print(tr(UiTextId::FullActiveSafety));
@@ -11934,10 +11975,12 @@ void runFullGuidedProductVerify() {
 }
 
 void finishFullGuidedActiveChecks(bool success) {
+    boardCc1101Spectrum.stopAsyncEdgeCapture();
     const bool nrfCleanup = boardNrf24Spectrum.end();
     const bool ccCleanup = boardCc1101Spectrum.end();
+    const bool irCleanup = boardInfraredReceiver.end();
     releaseFullGuidedRfResource();
-    fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup &&
+    fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup && irCleanup &&
         fullGuidedRfState.resourceReleased;
     restoreFullGuidedLibraryView();
     const bool storageReleased =
@@ -11991,10 +12034,12 @@ void startFullGuidedArtifactChecks() {
 }
 
 void finishFullGuidedRfChecks(bool success) {
+    boardCc1101Spectrum.stopAsyncEdgeCapture();
     const bool nrfCleanup = boardNrf24Spectrum.end();
     const bool ccCleanup = boardCc1101Spectrum.end();
+    const bool irCleanup = boardInfraredReceiver.end();
     releaseFullGuidedRfResource();
-    fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup &&
+    fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup && irCleanup &&
         fullGuidedRfState.resourceReleased;
     fullGuidedRfState.step = success && fullGuidedRfState.cleanupComplete
         ? FullGuidedRfStep::Complete : FullGuidedRfStep::Failed;
@@ -12011,6 +12056,9 @@ void startFullGuidedRfChecks() {
     fullGuidedRfState.cleanupComplete = false;
     fullGuidedNrf24Report = {};
     fullGuidedCc1101Report = {};
+    fullGuidedCc1101OokReport = {};
+    fullGuidedCc1101FskReport = {};
+    fullGuidedInfraredReport = {};
     const auto radioSpi =
         leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
     fullGuidedRfState.resourceAcquired =
@@ -12035,10 +12083,12 @@ void startFullGuidedRfChecks() {
 }
 
 bool cancelFullGuidedRfChecks() {
+    boardCc1101Spectrum.stopAsyncEdgeCapture();
     const bool nrfCleanup = boardNrf24Spectrum.end();
     const bool ccCleanup = boardCc1101Spectrum.end();
+    const bool irCleanup = boardInfraredReceiver.end();
     releaseFullGuidedRfResource();
-    fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup &&
+    fullGuidedRfState.cleanupComplete = nrfCleanup && ccCleanup && irCleanup &&
         fullGuidedRfState.resourceReleased;
     bool disposableCleanup = true;
     if (fullGuidedArtifactState.scratchCreated &&
@@ -12317,8 +12367,156 @@ void serviceFullGuidedRfChecks() {
         fullGuidedRfState.cc1101Passed = cleanup &&
             fullGuidedCc1101Report.samples ==
                 Cc1101PassiveSpectrumPlan::kBinCount &&
-            fullGuidedCc1101Report.cleanupComplete;
-        finishFullGuidedRfChecks(fullGuidedRfState.cc1101Passed);
+            fullGuidedCc1101Report.cleanupComplete &&
+            fullGuidedCc1101Report.txStrobes == 0 &&
+            fullGuidedCc1101Report.paTableWrites == 0 &&
+            fullGuidedCc1101Report.fifoWrites == 0 &&
+            fullGuidedCc1101Report.rejectedStrobes == 0;
+        if (!fullGuidedRfState.cc1101Passed) {
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
+            AppRuntime::kForegroundOwner;
+        const bool started = boardCc1101Spectrum.begin(
+                owned, &fullGuidedCc1101OokReport) &&
+            boardCc1101Spectrum.lockReceive(
+                433920U,
+                leshy1::domain::captures::SubGhzRawModulation::OokEnvelope);
+        if (!started) {
+            fullGuidedRfState.subGhzOokComplete = true;
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        fullGuidedRfState.step = FullGuidedRfStep::SubGhzOokReceive;
+        lastRuntimeEvent = "self_test_active_subghz_ook";
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (fullGuidedRfState.step == FullGuidedRfStep::SubGhzOokReceive) {
+        std::int16_t rssiDbm = -128;
+        std::uint64_t sampleUs = 0;
+        if (!boardCc1101Spectrum.sampleRssi(&rssiDbm, &sampleUs)) {
+            fullGuidedRfState.subGhzOokComplete = true;
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        ++fullGuidedRfState.subGhzOokSamples;
+        if (fullGuidedRfState.subGhzOokSamples <
+            kFullGuidedReceiveSamples) {
+            return;
+        }
+        const bool cleanup = boardCc1101Spectrum.end();
+        fullGuidedRfState.subGhzOokComplete = true;
+        fullGuidedRfState.subGhzOokPassed = cleanup &&
+            fullGuidedCc1101OokReport.samples ==
+                kFullGuidedReceiveSamples &&
+            fullGuidedCc1101OokReport.cleanupComplete &&
+            fullGuidedCc1101OokReport.txStrobes == 0 &&
+            fullGuidedCc1101OokReport.paTableWrites == 0 &&
+            fullGuidedCc1101OokReport.fifoWrites == 0 &&
+            fullGuidedCc1101OokReport.rejectedStrobes == 0;
+        if (!fullGuidedRfState.subGhzOokPassed) {
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
+            AppRuntime::kForegroundOwner;
+        bool startLevel = false;
+        const bool started = boardCc1101Spectrum.begin(
+                owned, &fullGuidedCc1101FskReport) &&
+            boardCc1101Spectrum.lockReceive(
+                433920U,
+                leshy1::domain::captures::SubGhzRawModulation::FskAsync) &&
+            boardCc1101Spectrum.startAsyncEdgeCapture(&startLevel);
+        if (!started) {
+            fullGuidedRfState.subGhzFskComplete = true;
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        fullGuidedRfState.step = FullGuidedRfStep::SubGhzFskReceive;
+        lastRuntimeEvent = "self_test_active_subghz_fsk";
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (fullGuidedRfState.step == FullGuidedRfStep::SubGhzFskReceive) {
+        std::int16_t rssiDbm = -128;
+        std::uint64_t sampleUs = 0;
+        if (!boardCc1101Spectrum.sampleRssi(&rssiDbm, &sampleUs)) {
+            fullGuidedRfState.subGhzFskComplete = true;
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        BoardCc1101PassiveSpectrum::AsyncEdge edge;
+        while (boardCc1101Spectrum.popAsyncEdge(&edge)) {
+            ++fullGuidedRfState.subGhzFskEdges;
+            fullGuidedRfState.subGhzFskOverflow =
+                fullGuidedRfState.subGhzFskOverflow || edge.clipped;
+        }
+        fullGuidedRfState.subGhzFskOverflow =
+            fullGuidedRfState.subGhzFskOverflow ||
+            boardCc1101Spectrum.takeAsyncEdgeOverflow();
+        ++fullGuidedRfState.subGhzFskSamples;
+        if (fullGuidedRfState.subGhzFskSamples <
+            kFullGuidedReceiveSamples) {
+            return;
+        }
+        boardCc1101Spectrum.stopAsyncEdgeCapture();
+        const bool cleanup = boardCc1101Spectrum.end();
+        fullGuidedRfState.subGhzFskComplete = true;
+        fullGuidedRfState.subGhzFskPassed = cleanup &&
+            !fullGuidedRfState.subGhzFskOverflow &&
+            fullGuidedCc1101FskReport.samples ==
+                kFullGuidedReceiveSamples &&
+            fullGuidedCc1101FskReport.cleanupComplete &&
+            fullGuidedCc1101FskReport.txStrobes == 0 &&
+            fullGuidedCc1101FskReport.paTableWrites == 0 &&
+            fullGuidedCc1101FskReport.fifoWrites == 0 &&
+            fullGuidedCc1101FskReport.rejectedStrobes == 0;
+        if (!fullGuidedRfState.subGhzFskPassed) {
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        const bool owned = resourceBroker.ownerOf(Resource::RadioSpi) ==
+            AppRuntime::kForegroundOwner;
+        bool initialLevel = true;
+        std::uint64_t startedUs = 0;
+        if (!boardInfraredReceiver.begin(
+                owned, &fullGuidedInfraredReport, &initialLevel,
+                &startedUs)) {
+            fullGuidedRfState.infraredComplete = true;
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        fullGuidedRfState.step = FullGuidedRfStep::InfraredReceive;
+        lastRuntimeEvent = "self_test_active_infrared";
+        renderInteractiveScreen(true);
+        return;
+    }
+    if (fullGuidedRfState.step == FullGuidedRfStep::InfraredReceive) {
+        bool level = true;
+        std::uint64_t sampleUs = 0;
+        if (!boardInfraredReceiver.sample(&level, &sampleUs)) {
+            fullGuidedRfState.infraredComplete = true;
+            finishFullGuidedRfChecks(false);
+            return;
+        }
+        ++fullGuidedRfState.infraredSamples;
+        if (fullGuidedRfState.infraredSamples <
+            kFullGuidedInfraredSamples) {
+            return;
+        }
+        const bool cleanup = boardInfraredReceiver.end();
+        fullGuidedRfState.infraredComplete = true;
+        fullGuidedRfState.infraredPassed = cleanup &&
+            fullGuidedInfraredReport.status == InfraredReceiverStatus::Ready &&
+            fullGuidedInfraredReport.samples ==
+                kFullGuidedInfraredSamples &&
+            fullGuidedInfraredReport.cleanupComplete &&
+            fullGuidedInfraredReport.txHeldLow &&
+            fullGuidedInfraredReport.nrfCeHeldLow &&
+            fullGuidedInfraredReport.gpio21Input;
+        finishFullGuidedRfChecks(fullGuidedRfState.infraredPassed);
     }
 }
 
@@ -18914,7 +19112,9 @@ void emitSelfTestReport(Stream& reply) {
         shieldReceiverProbeReport.radioTxCommands +
         fullGuidedNrf24Report.txModeEntries +
         fullGuidedNrf24Report.txPayloadCommands +
-        fullGuidedCc1101Report.txStrobes;
+        fullGuidedCc1101Report.txStrobes +
+        fullGuidedCc1101OokReport.txStrobes +
+        fullGuidedCc1101FskReport.txStrobes;
     auto& line = diagnosticJson;
     line[0] = '\0';
     const int prefix = std::snprintf(
@@ -18953,6 +19153,12 @@ void emitSelfTestReport(Stream& reply) {
         "\"nrf24_spectrum_exercise_passed\":%s,"
         "\"cc1101_spectrum_exercise_complete\":%s,"
         "\"cc1101_spectrum_exercise_passed\":%s,"
+        "\"subghz_ook_exercise_complete\":%s,"
+        "\"subghz_ook_exercise_passed\":%s,"
+        "\"subghz_fsk_exercise_complete\":%s,"
+        "\"subghz_fsk_exercise_passed\":%s,"
+        "\"infrared_receiver_exercise_complete\":%s,"
+        "\"infrared_receiver_exercise_passed\":%s,"
         "\"persistent_recovery_audit_complete\":%s,"
         "\"persistent_recovery_audit_passed\":%s,"
         "\"library_export_audit_complete\":%s,"
@@ -19019,6 +19225,12 @@ void emitSelfTestReport(Stream& reply) {
         report.facts.nrf24SpectrumExercisePassed ? "true" : "false",
         report.facts.cc1101SpectrumExerciseComplete ? "true" : "false",
         report.facts.cc1101SpectrumExercisePassed ? "true" : "false",
+        report.facts.subGhzOokExerciseComplete ? "true" : "false",
+        report.facts.subGhzOokExercisePassed ? "true" : "false",
+        report.facts.subGhzFskExerciseComplete ? "true" : "false",
+        report.facts.subGhzFskExercisePassed ? "true" : "false",
+        report.facts.infraredReceiverExerciseComplete ? "true" : "false",
+        report.facts.infraredReceiverExercisePassed ? "true" : "false",
         report.facts.persistentRecoveryAuditComplete ? "true" : "false",
         report.facts.persistentRecoveryAuditPassed ? "true" : "false",
         report.facts.libraryExportAuditComplete ? "true" : "false",
@@ -19068,11 +19280,27 @@ void emitSelfTestReport(Stream& reply) {
 }
 
 void emitFullGuidedRfReport(Stream& reply) {
+    const std::uint32_t ccTxStrobes =
+        fullGuidedCc1101Report.txStrobes +
+        fullGuidedCc1101OokReport.txStrobes +
+        fullGuidedCc1101FskReport.txStrobes;
+    const std::uint32_t ccPaTableWrites =
+        fullGuidedCc1101Report.paTableWrites +
+        fullGuidedCc1101OokReport.paTableWrites +
+        fullGuidedCc1101FskReport.paTableWrites;
+    const std::uint32_t ccFifoWrites =
+        fullGuidedCc1101Report.fifoWrites +
+        fullGuidedCc1101OokReport.fifoWrites +
+        fullGuidedCc1101FskReport.fifoWrites;
+    const std::uint32_t ccRejectedStrobes =
+        fullGuidedCc1101Report.rejectedStrobes +
+        fullGuidedCc1101OokReport.rejectedStrobes +
+        fullGuidedCc1101FskReport.rejectedStrobes;
     const std::uint32_t radioTxCommands =
         shieldReceiverProbeReport.radioTxCommands +
         fullGuidedNrf24Report.txModeEntries +
         fullGuidedNrf24Report.txPayloadCommands +
-        fullGuidedCc1101Report.txStrobes;
+        ccTxStrobes;
     auto& line = diagnosticJson;
     std::snprintf(
         line, sizeof(line),
@@ -19091,6 +19319,18 @@ void emitFullGuidedRfReport(Stream& reply) {
         "\"spi_bytes_clocked\":%lu,\"command_strobes\":%lu,"
         "\"reset_strobes\":%lu,\"receive_strobes\":%lu,"
         "\"idle_strobes\":%lu},\"cleanup_complete\":%s},"
+        "\"subghz_ook\":{\"complete\":%s,\"passed\":%s,"
+        "\"frequency_khz\":433920,\"samples\":%u,"
+        "\"report_samples\":%lu,\"cleanup_complete\":%s},"
+        "\"subghz_fsk\":{\"complete\":%s,\"passed\":%s,"
+        "\"frequency_khz\":433920,\"samples\":%u,\"edges\":%lu,"
+        "\"overflow\":%s,\"report_samples\":%lu,"
+        "\"async_capture_active\":%s,\"cleanup_complete\":%s},"
+        "\"infrared\":{\"complete\":%s,\"passed\":%s,"
+        "\"samples\":%u,\"report_samples\":%lu,"
+        "\"transitions\":%lu,\"tx_held_low\":%s,"
+        "\"nrf_ce_held_low\":%s,\"gpio21_input\":%s,"
+        "\"cleanup_complete\":%s},"
         "\"side_effects\":{\"radio_tx_commands\":%lu,"
         "\"nrf_tx_mode_entries\":%lu,\"nrf_tx_payload_commands\":%lu,"
         "\"cc_tx_strobes\":%lu,\"cc_pa_table_writes\":%lu,"
@@ -19122,13 +19362,35 @@ void emitFullGuidedRfReport(Stream& reply) {
         static_cast<unsigned long>(fullGuidedCc1101Report.receiveStrobes),
         static_cast<unsigned long>(fullGuidedCc1101Report.idleStrobes),
         fullGuidedCc1101Report.cleanupComplete ? "true" : "false",
+        fullGuidedRfState.subGhzOokComplete ? "true" : "false",
+        fullGuidedRfState.subGhzOokPassed ? "true" : "false",
+        static_cast<unsigned>(fullGuidedRfState.subGhzOokSamples),
+        static_cast<unsigned long>(fullGuidedCc1101OokReport.samples),
+        fullGuidedCc1101OokReport.cleanupComplete ? "true" : "false",
+        fullGuidedRfState.subGhzFskComplete ? "true" : "false",
+        fullGuidedRfState.subGhzFskPassed ? "true" : "false",
+        static_cast<unsigned>(fullGuidedRfState.subGhzFskSamples),
+        static_cast<unsigned long>(fullGuidedRfState.subGhzFskEdges),
+        fullGuidedRfState.subGhzFskOverflow ? "true" : "false",
+        static_cast<unsigned long>(fullGuidedCc1101FskReport.samples),
+        boardCc1101Spectrum.asyncEdgeCaptureActive() ? "true" : "false",
+        fullGuidedCc1101FskReport.cleanupComplete ? "true" : "false",
+        fullGuidedRfState.infraredComplete ? "true" : "false",
+        fullGuidedRfState.infraredPassed ? "true" : "false",
+        static_cast<unsigned>(fullGuidedRfState.infraredSamples),
+        static_cast<unsigned long>(fullGuidedInfraredReport.samples),
+        static_cast<unsigned long>(fullGuidedInfraredReport.transitions),
+        fullGuidedInfraredReport.txHeldLow ? "true" : "false",
+        fullGuidedInfraredReport.nrfCeHeldLow ? "true" : "false",
+        fullGuidedInfraredReport.gpio21Input ? "true" : "false",
+        fullGuidedInfraredReport.cleanupComplete ? "true" : "false",
         static_cast<unsigned long>(radioTxCommands),
         static_cast<unsigned long>(fullGuidedNrf24Report.txModeEntries),
         static_cast<unsigned long>(fullGuidedNrf24Report.txPayloadCommands),
-        static_cast<unsigned long>(fullGuidedCc1101Report.txStrobes),
-        static_cast<unsigned long>(fullGuidedCc1101Report.paTableWrites),
-        static_cast<unsigned long>(fullGuidedCc1101Report.fifoWrites),
-        static_cast<unsigned long>(fullGuidedCc1101Report.rejectedStrobes),
+        static_cast<unsigned long>(ccTxStrobes),
+        static_cast<unsigned long>(ccPaTableWrites),
+        static_cast<unsigned long>(ccFifoWrites),
+        static_cast<unsigned long>(ccRejectedStrobes),
         appRuntime.activeApp(),
         static_cast<unsigned long>(appRuntime.activeResources()));
     reply.println(line);

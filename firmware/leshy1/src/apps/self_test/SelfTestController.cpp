@@ -116,8 +116,13 @@ void SelfTestController::evaluateCapabilityCoverage(
            facts.pn532Declared ? SelfTestResultStatus::Blocked
                                : SelfTestResultStatus::NotApplicable);
     append("full.shield.ir",
-           facts.irDeclared ? SelfTestResultStatus::Blocked
-                            : SelfTestResultStatus::NotApplicable);
+           !facts.irDeclared
+               ? SelfTestResultStatus::NotApplicable
+               : (!facts.infraredReceiverExerciseComplete
+                      ? SelfTestResultStatus::Blocked
+                      : (facts.infraredReceiverExercisePassed
+                             ? SelfTestResultStatus::Pass
+                             : SelfTestResultStatus::Fail)));
     append("full.s4.shield.receivers",
            !facts.shieldReceiversApplicable
                ? SelfTestResultStatus::NotApplicable
@@ -136,6 +141,18 @@ void SelfTestController::evaluateCapabilityCoverage(
            !facts.cc1101SpectrumExerciseComplete
                ? SelfTestResultStatus::Blocked
                : (facts.cc1101SpectrumExercisePassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
+    append("full.s5.capture.subghz.ook.receive",
+           !facts.subGhzOokExerciseComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.subGhzOokExercisePassed
+                      ? SelfTestResultStatus::Pass
+                      : SelfTestResultStatus::Fail));
+    append("full.s5.capture.subghz.fsk.receive",
+           !facts.subGhzFskExerciseComplete
+               ? SelfTestResultStatus::Blocked
+               : (facts.subGhzFskExercisePassed
                       ? SelfTestResultStatus::Pass
                       : SelfTestResultStatus::Fail));
     append("full.s4.storage.recovery.audit",
