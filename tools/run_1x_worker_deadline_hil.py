@@ -136,7 +136,7 @@ def main() -> int:
             )
             failures.extend(expect(records["ui_before"], {
                 "page": "home", "runtime_owner": "none", "lease_mask": 0,
-                "safety_latched": False,
+                "safety_latched": False, "selected_id": "wifi",
             }, "ui_before"))
             if failures:
                 raise RuntimeError("preflight contract failed")
@@ -152,25 +152,25 @@ def main() -> int:
                 "outputs_inactive": True, "physical_write_calls": 0,
             }, "injection"))
 
-            trace.append(action(device, "down"))
-            setup = action(device, "select")
-            trace.append(setup)
-            failures.extend(expect(setup, {
-                "page": "survey", "survey_workflow_state": "setup",
-                "survey_setup_view": "plan", "survey_setup_selection": 0,
-                "survey_source_selected_mask": 1,
-                "survey_source_can_start": True,
-            }, "survey_setup"))
-            start_row = action(device, "down")
-            trace.append(start_row)
-            failures.extend(expect(start_row, {
-                "survey_setup_selection": 1,
-            }, "survey_start_row"))
+            # The product-first menu no longer exposes the old generic Survey
+            # setup screen. Enter the stable Wi-Fi item and launch its first
+            # public function (Nearby networks); that function owns the real
+            # Wi-Fi-only Product Survey worker under test.
+            wifi_menu = action(device, "select")
+            trace.append(wifi_menu)
+            failures.extend(expect(wifi_menu, {
+                "page": "survey", "selected_id": "wifi",
+                "wifi_product_view": "menu", "wifi_product_selection": 0,
+                "runtime_owner": "wifi", "lease_mask": 15,
+            }, "wifi_menu"))
             start_ack = action(device, "select")
             trace.append(start_ack)
             failures.extend(expect(start_ack, {
+                "page": "survey", "selected_id": "wifi",
+                "wifi_product_view": "networks",
                 "survey_product_status": "preparing",
                 "survey_workflow_state": "setup",
+                "survey_product_selected_source_mask": 1,
             }, "survey_start_ack"))
             if failures:
                 raise RuntimeError("public Survey start contract failed")
