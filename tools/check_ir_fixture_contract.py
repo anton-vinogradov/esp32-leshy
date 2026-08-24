@@ -49,7 +49,7 @@ def main() -> int:
         "board_build.flash_size = 16MB",
         "-std=gnu++17",
         "ARDUINO_USB_CDC_ON_BOOT=1",
-        "LESHY_FIXTURE_VERSION=\\\"0.2.4-bounded-signals\\\"",
+        "LESHY_FIXTURE_VERSION=\\\"0.2.5-shared-pin-safe\\\"",
     )
     for marker in required_config:
         if marker not in config:
@@ -73,6 +73,8 @@ def main() -> int:
         "kNrfPowerDbm = -18", "kNrfMinimumPowerCarrierSetup = 0x90",
         "kFixtureNrfCePin = kNrfCe2Pin",
         "kFixtureNrfCsnPin = kNrfCsn2Pin",
+        "kNrfCe3SharedPin = kIrTxPin",
+        "configureIrCarrier", "ledcDetach(kIrTxPin)",
         "startFixedNrf24Carrier", "serviceFixtureHardware",
         "nrf_start_error\\\":\\\"%s", "nrf_status_readback\\\":%u",
         "channel_readback_mismatch", "rf_setup_readback_mismatch",
@@ -101,6 +103,11 @@ def main() -> int:
         r"digitalWrite\(pin, LOW\);\s*pinMode\(pin, OUTPUT\);", re.S)
     if not low_before_output.search(entry):
         errors.append("fixture does not preload inactive LOW before OUTPUT")
+    if re.search(r"digitalWrite\s*\(\s*kNrfCe3", entry):
+        errors.append(
+            "fixture drives shared IR/CE3 pin through GPIO after LEDC attach")
+    if "ledcWrite(kIrTxPin, 0)" not in entry:
+        errors.append("fixture does not quiesce the shared IR/CE3 pin via LEDC")
     if entry.find("establishBootInvariant();") > entry.find("Serial.begin"):
         errors.append("fixture console starts before safe outputs")
     for forbidden in (

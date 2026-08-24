@@ -13,7 +13,7 @@
 #include "FixtureSession.h"
 
 #ifndef LESHY_FIXTURE_VERSION
-#define LESHY_FIXTURE_VERSION "0.2.4-bounded-signals"
+#define LESHY_FIXTURE_VERSION "0.2.5-shared-pin-safe"
 #endif
 
 namespace {
@@ -27,7 +27,10 @@ constexpr int kBuzzerPin = 2;
 constexpr int kIrTxPin = 14;
 constexpr int kNrfCe1Pin = 15;
 constexpr int kNrfCe2Pin = 47;
-constexpr int kNrfCe3Pin = 14;
+// ESP32-DIV deliberately routes the third nRF CE and the IR transmitter to
+// the same GPIO.  Once LEDC owns this pin it must never be treated as an
+// independent GPIO output: doing so can suppress the bounded IR carrier.
+constexpr int kNrfCe3SharedPin = kIrTxPin;
 constexpr int kIrRxPin = 21;
 constexpr int kRadioMosiPin = 11;
 constexpr int kRadioSckPin = 12;
@@ -113,7 +116,24 @@ void holdChipSelectsHigh() {
 void holdNrfCeLow() {
     digitalWrite(kNrfCe1Pin, LOW);
     digitalWrite(kNrfCe2Pin, LOW);
-    digitalWrite(kNrfCe3Pin, LOW);
+    if (carrierReady) {
+        ledcWrite(kIrTxPin, 0);
+    } else {
+        gpio_set_level(static_cast<gpio_num_t>(kNrfCe3SharedPin), 0);
+    }
+}
+
+bool configureIrCarrier() {
+    if (carrierReady) {
+        ledcWrite(kIrTxPin, 0);
+        ledcDetach(kIrTxPin);
+        carrierReady = false;
+    }
+    gpio_set_level(static_cast<gpio_num_t>(kIrTxPin), 0);
+    pinMode(kIrTxPin, OUTPUT);
+    carrierReady = ledcAttach(
+        kIrTxPin, kCarrierHz, kCarrierResolutionBits);
+    return carrierReady && ledcWrite(kIrTxPin, 0);
 }
 
 void beginNrfBus() {
@@ -285,8 +305,7 @@ bool outputsInactive() {
     return gpio_get_level(static_cast<gpio_num_t>(kBuzzerPin)) == 0 &&
            gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0 &&
            gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
-           gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 0 &&
-           gpio_get_level(static_cast<gpio_num_t>(kNrfCe3Pin)) == 0;
+           gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 0;
 }
 
 void establishBootInvariant() {
@@ -299,9 +318,7 @@ void establishBootInvariant() {
         digitalWrite(pin, HIGH);
         pinMode(pin, OUTPUT);
     }
-    carrierReady = ledcAttach(
-        kIrTxPin, kCarrierHz, kCarrierResolutionBits);
-    ledcWrite(kIrTxPin, 0);
+    configureIrCarrier();
     digitalWrite(kBuzzerPin, LOW);
     holdNrfCeLow();
     holdChipSelectsHigh();
@@ -378,7 +395,8 @@ void emitState(const char* kind) {
         gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0 ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
                 gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 0 &&
-                gpio_get_level(static_cast<gpio_num_t>(kNrfCe3Pin)) == 0
+                gpio_get_level(
+                    static_cast<gpio_num_t>(kNrfCe3SharedPin)) == 0
             ? "true" : "false",
         nrfPoweredDown ? "true" : "false",
         nrfCarrierActive ? "true" : "false",
@@ -406,7 +424,8 @@ void emitError(const char* reason) {
         gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0 ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
                 gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 0 &&
-                gpio_get_level(static_cast<gpio_num_t>(kNrfCe3Pin)) == 0
+                gpio_get_level(
+                    static_cast<gpio_num_t>(kNrfCe3SharedPin)) == 0
             ? "true" : "false",
         nrfPoweredDown ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kBuzzerPin)) == 0
@@ -485,7 +504,8 @@ void emitNrfInventory() {
             ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
                 gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 0 &&
-                gpio_get_level(static_cast<gpio_num_t>(kNrfCe3Pin)) == 0
+                gpio_get_level(
+                    static_cast<gpio_num_t>(kNrfCe3SharedPin)) == 0
             ? "true" : "false",
         nrfCarrierActive ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kBuzzerPin)) == 0
@@ -578,7 +598,6 @@ bool nrfCarrierOutputValid() {
     return nrfCarrierActive &&
            gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
            gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 1 &&
-           gpio_get_level(static_cast<gpio_num_t>(kNrfCe3Pin)) == 0 &&
            gpio_get_level(static_cast<gpio_num_t>(kBuzzerPin)) == 0 &&
            gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0;
 }
@@ -654,10 +673,11 @@ void handleCommand(char* line) {
     if (std::strcmp(command, "fixture.ir.nec.once") == 0) {
         const char* sessionId = nextToken(&context);
         const char* vectorId = nextToken(&context);
-        if (nextToken(&context) != nullptr || !carrierReady ||
+        const bool carrierPrepared = configureIrCarrier();
+        if (nextToken(&context) != nullptr || !carrierPrepared ||
             !session.authorizeNecOnce(sessionId, vectorId, millis())) {
-            emitError(carrierReady ? session.report().lastError
-                                   : "carrier_unavailable");
+            emitError(carrierPrepared ? session.report().lastError
+                                      : "carrier_unavailable");
             return;
         }
         const std::uint32_t durationUs = emitFixedNecVector();
