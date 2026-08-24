@@ -264,6 +264,14 @@ telemetry всех nRF chip select, обеих orientation data pins и CC1101 �
 zero emissions и не заявляет runtime heap; отрицательный receiver inventory сохранён
 в [evidence board-02](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
 
+Последний candidate delta `RB-M134`: exact 0.137 использует 3 061 496 B linked
+flash, 207 960 B static RAM и app image 3 061 904 B. Это +2 136/+32/+2 144 B
+против 0.136 за общий path deadline, cancel и telemetry Store IR/Sub-GHz. Fixture
+0.2.5 использует 332 247 B linked flash, 22 844 B static RAM и image 332 656 B.
+Её delta +112 B linked flash против 0.2.4 оставляет у физически общего pad GPIO14
+IR/CE3 единственного LEDC-safe owner и добавляет source guard. Это только build facts:
+текущий physical gate ИК-стенда остаётся fail-closed.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

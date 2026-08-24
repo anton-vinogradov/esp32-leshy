@@ -269,6 +269,14 @@ performs zero emissions and retains no runtime-heap claim; its negative receiver
 inventory is recorded in
 [board-02 evidence](../../tests/hil/evidence/board-02-rf-shield-inventory-0.2.4.json).
 
+Latest candidate delta `RB-M134`: exact 0.137 uses 3,061,496 B linked flash,
+207,960 B static RAM and a 3,061,904 B app image. This is +2,136/+32/+2,144 B
+versus 0.136 for the shared IR/Sub-GHz Store deadline, cancel and telemetry path.
+Fixture 0.2.5 uses 332,247 B linked flash, 22,844 B static RAM and a 332,656 B
+image. Its +112 B linked-flash delta over 0.2.4 gives the physically shared GPIO14
+IR/CE3 pad one LEDC-safe owner and adds a source guard. These are build facts only:
+the current physical IR station gate remains fail-closed.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

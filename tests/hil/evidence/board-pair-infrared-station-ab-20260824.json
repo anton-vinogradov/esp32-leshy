@@ -1,0 +1,116 @@
+{
+  "accepted_baseline": {
+    "product": "0.136.0-capture-store-deadline",
+    "source_commit": "f6711822e2af834883b3981ec2636ac984034507"
+  },
+  "attempts": [
+    {
+      "candidate": {
+        "app_elf_sha256": "226dee6a36145b1d4d49cf8fb4c8802cc236beb54a80b3fae43845b9f3390f30",
+        "firmware_sha256": "3b9c4c714fb3db984ac0c99ec0987b827cd1447228cab3f1c24220b16166c7a3",
+        "source_commit": "a36ca9b02b5b69460fbc90aba3a372f591f08c48",
+        "version": "0.137.0-pulse-store-deadline"
+      },
+      "fixture": {
+        "app_elf_sha256": "c94fef07d1ee608b0141ecaf8b8f990e4f68d0f4c6f70d14badf1c98338edf94",
+        "emission_count": 1,
+        "firmware_sha256": "ad34877f7a2f4b1c6d9c9cf9c489990daafcdd00105c913897057876fd462039",
+        "last_duration_us": 68491,
+        "terminal_state": "panicked",
+        "version": "0.2.5-shared-pin-safe"
+      },
+      "name": "current-product-current-fixture",
+      "observation": {
+        "decode_integrity_valid": false,
+        "failure": "poll condition did not match: decoded",
+        "pulses": 0,
+        "transitions": 0
+      },
+      "passed": false,
+      "raw_run_json_sha256": "18b61fad7ccd0ce04e952d72c9adc6363fa646af88125a2708883d8338b27c12"
+    },
+    {
+      "candidate": {
+        "app_elf_sha256": "226dee6a36145b1d4d49cf8fb4c8802cc236beb54a80b3fae43845b9f3390f30",
+        "firmware_sha256": "3b9c4c714fb3db984ac0c99ec0987b827cd1447228cab3f1c24220b16166c7a3",
+        "source_commit": "a36ca9b02b5b69460fbc90aba3a372f591f08c48",
+        "version": "0.137.0-pulse-store-deadline"
+      },
+      "fixture": {
+        "app_elf_sha256": "2786589a8ddc074821dd7e661368458768708e9a16bade934b093b504800a557",
+        "emission_count": 1,
+        "firmware_sha256": "c95996e28d196fa8d786171dda674237c767cba13f4bc0de082bfcf92e83f520",
+        "last_duration_us": 68427,
+        "terminal_state": "panicked",
+        "version": "0.1.0-ir-nec"
+      },
+      "name": "current-product-retained-known-good-fixture",
+      "observation": {
+        "decode_integrity_valid": false,
+        "failure": "poll condition did not match: decoded",
+        "pulses": 0,
+        "transitions": 0
+      },
+      "passed": false,
+      "raw_run_json_sha256": "0085af52383977c2f1d7763b6d68936e4f7a3df2b09c0bd6d187ee69ffec6836"
+    },
+    {
+      "candidate": {
+        "app_elf_sha256": "2b88b4903b29464d94c45757cbd4ee8ed067d39f1d6832f4e65bbe4997ab0ae0",
+        "firmware_sha256": "5b88751d67080ba8a03de69a009c7c26422f63637db819a3ed586a2b2635f0cd",
+        "source_commit": "149e4ef37a650953b7335885c118824ed632fa16",
+        "version": "0.129.0-pre-app-watchdog"
+      },
+      "fixture": {
+        "app_elf_sha256": "2786589a8ddc074821dd7e661368458768708e9a16bade934b093b504800a557",
+        "emission_count": 1,
+        "firmware_sha256": "c95996e28d196fa8d786171dda674237c767cba13f4bc0de082bfcf92e83f520",
+        "last_duration_us": 68425,
+        "terminal_state": "panicked",
+        "version": "0.1.0-ir-nec"
+      },
+      "name": "retained-previously-accepted-exact-pair",
+      "observation": {
+        "decode_integrity_valid": false,
+        "failure": "poll condition did not match: decoded",
+        "pulses": 0,
+        "transitions": 0
+      },
+      "passed": false,
+      "raw_run_json_sha256": "ffbccb092701d6e6bd56f41d85dab24d90893492feaf0af69970b927899ef469"
+    }
+  ],
+  "conclusion": {
+    "current_firmware_regression_excluded": true,
+    "fixture_gpio14_fix_is_root_cause": false,
+    "remaining_boundary": "physical infrared station path: line of sight, emitter, receiver, lower-board interconnect, or power",
+    "rerun_authorized": false
+  },
+  "date": "2026-08-24",
+  "failure_preserved": true,
+  "gate_eligible": false,
+  "kind": "evidence",
+  "outcome": "blocked_physical_infrared_path",
+  "passed": false,
+  "restored_state": {
+    "fixture": {
+      "app_elf_sha256": "c94fef07d1ee608b0141ecaf8b8f990e4f68d0f4c6f70d14badf1c98338edf94",
+      "fixture_id": "00009070690D15E0",
+      "state": "panicked",
+      "version": "0.2.5-shared-pin-safe"
+    },
+    "product": {
+      "app_elf_sha256": "226dee6a36145b1d4d49cf8fb4c8802cc236beb54a80b3fae43845b9f3390f30",
+      "lease_mask": 0,
+      "page": "home",
+      "runtime_owner": "none",
+      "version": "0.137.0-pulse-store-deadline"
+    }
+  },
+  "schema": "leshy.infrared_station_ab.evidence.v1",
+  "station": {
+    "fixture_port": "/dev/cu.usbmodem1101",
+    "product_cid": "FE343253440000002000000055019CB7",
+    "product_port": "/dev/cu.usbmodem2101"
+  }
+}

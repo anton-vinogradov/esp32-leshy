@@ -214,6 +214,7 @@ python3 "$repo_dir/tools/check_self_test_coverage_acceptance.py"
 python3 "$repo_dir/tools/check_shield_receiver_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_isolated_main_miso_contract.py"
 python3 "$repo_dir/tools/check_carrier_csn_contract.py"
+python3 "$repo_dir/tools/check_infrared_station_ab_evidence.py"
 run_opaque_evidence_check tools/check_nrf24_spectrum_acceptance.py
 python3 "$repo_dir/tools/check_nrf24_signal_finder_contract.py"
 run_opaque_evidence_check tools/check_nrf24_signal_finder_acceptance.py
