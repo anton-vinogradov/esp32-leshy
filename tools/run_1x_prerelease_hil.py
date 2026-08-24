@@ -227,7 +227,8 @@ def write_json(path: Path, value: Any) -> None:
 def flash_candidate(port: str, firmware: Path, offset: int, baud: int) -> None:
     command = [
         sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port,
-        "--baud", str(baud), "write-flash", hex(offset), str(firmware),
+        "--baud", str(baud), "--after", "watchdog-reset",
+        "write-flash", hex(offset), str(firmware),
     ]
     subprocess.run(command, check=True)
 

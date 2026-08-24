@@ -11,6 +11,7 @@ import unittest
 import zlib
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 
 def load_runner() -> Any:
@@ -27,6 +28,19 @@ RUNNER = load_runner()
 
 
 class PrereleaseRunnerTests(unittest.TestCase):
+    def test_flash_exits_native_usb_download_mode_with_watchdog_reset(self) -> None:
+        firmware = Path("candidate.bin")
+        with mock.patch.object(RUNNER.subprocess, "run") as run:
+            RUNNER.flash_candidate("/dev/candidate", firmware, 0x10000, 460800)
+        command = run.call_args.args[0]
+        self.assertIn(
+            ["--after", "watchdog-reset"],
+            [command[index:index + 2] for index in range(len(command) - 1)],
+        )
+        self.assertEqual(
+            ["write-flash", "0x10000", str(firmware)], command[-3:])
+        run.assert_called_once_with(command, check=True)
+
     def test_candidate_app_identity_is_read_from_descriptor(self) -> None:
         image = bytearray(288)
         image[0] = 0xE9
