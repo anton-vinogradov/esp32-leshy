@@ -223,6 +223,7 @@ public:
     }
 
 private:
+    void resetTransient(bool clearPersistentState);
     TargetsLoadStatus loadBindings(const TargetProductBinding& baseline,
                                    const TargetProductBinding& current,
                                    bool compare,

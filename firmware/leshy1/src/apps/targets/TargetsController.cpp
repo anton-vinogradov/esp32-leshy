@@ -202,8 +202,14 @@ const char* targetsLoadStatusName(TargetsLoadStatus status) {
 }
 
 void TargetsController::reset() {
-    workspace_.catalog.clear();
-    workspace_.decisions.clear();
+    resetTransient(true);
+}
+
+void TargetsController::resetTransient(bool clearPersistentState) {
+    if (clearPersistentState) {
+        workspace_.catalog.clear();
+        workspace_.decisions.clear();
+    }
     workspace_.correlations = {};
     domain::targets::resetTargetComparisonResult(&workspace_.comparison);
     rows_.fill({});
@@ -285,14 +291,24 @@ TargetsLoadStatus TargetsController::loadBindings(
     const TargetProductBinding& current, bool compare,
     const domain::targets::TargetCatalog* persisted,
     const domain::targets::CorrelationDecisionLog* decisions) {
-    reset();
+    const bool catalogInPlace = persisted == &workspace_.catalog;
+    const bool decisionsInPlace = decisions == &workspace_.decisions;
+    if ((persisted != nullptr && catalogInPlace != decisionsInPlace) ||
+        (decisions != nullptr && catalogInPlace != decisionsInPlace)) {
+        reset();
+        status_ = TargetsLoadStatus::InvalidArgument;
+        return status_;
+    }
+    resetTransient(catalogInPlace && decisionsInPlace ? false : true);
     if (!bindingValid(current) || (compare && !bindingValid(baseline)) ||
         (compare && baseline.session == current.session)) {
         status_ = TargetsLoadStatus::InvalidArgument;
         return status_;
     }
-    if (persisted != nullptr) workspace_.catalog = *persisted;
-    if (decisions != nullptr) workspace_.decisions = *decisions;
+    if (persisted != nullptr && !catalogInPlace) workspace_.catalog = *persisted;
+    if (decisions != nullptr && !decisionsInPlace) {
+        workspace_.decisions = *decisions;
+    }
     baseline_ = baseline;
     current_ = current;
     services::targets::SessionTargetIdentityFilter filter{};

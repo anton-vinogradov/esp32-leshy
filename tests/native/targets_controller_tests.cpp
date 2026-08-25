@@ -449,6 +449,18 @@ void correlationReviewKeepsCandidateUnownedUntilDecision() {
     CHECK(reopenedStatus == TargetsLoadStatus::Ready);
     CHECK(reopened.catalog().size() == 2);
     CHECK(reopened.size() == 2);
+
+    TargetsWorkspace inPlaceWorkspace;
+    inPlaceWorkspace.catalog = persisted;
+    inPlaceWorkspace.decisions = decisions;
+    TargetsController inPlace(inPlaceWorkspace);
+    CHECK(inPlace.load({&baseline, 40}, {&current, 41},
+                       inPlaceWorkspace.catalog,
+                       inPlaceWorkspace.decisions) ==
+          TargetsLoadStatus::Ready);
+    CHECK(inPlace.decisions().size() == 1);
+    CHECK(inPlace.catalog().size() == 2);
+    CHECK(inPlace.size() == 2);
 }
 
 }  // namespace

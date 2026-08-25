@@ -46,12 +46,12 @@ def main() -> int:
     load_end = entry.index("bool rebuildTargetsProductFromCatalog")
     load_product = entry[load_start:load_end]
     require(failures,
-            load_product.rfind("filesystem.end();") <
-                load_product.rfind("allocateTargetsProduct()") and
-            "Release FAT/SPI heap before allocating" in load_product and
+            load_product.index("allocateTargetsProduct()") <
+                load_product.index("filesystem.beginReadOnly()") and
+            "recover directly into that workspace" in load_product and
             "filesystem_mount_error" in entry,
-            "persistent Sessions must mount/recover before Targets workspace "
-            "allocation and expose the exact mount result")
+            "Targets must reserve its no-PSRAM runtime before FatFs, recover "
+            "directly into it and expose the exact mount result")
     mutation_start = entry.index("void runTargetsMutationWorker")
     mutation_end = entry.index("bool requestTargetsFavoriteMutation")
     mutation_worker = entry[mutation_start:mutation_end]
