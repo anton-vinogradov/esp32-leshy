@@ -440,6 +440,8 @@ std::uint32_t targetsHeapFreeBefore = 0;
 std::uint32_t targetsHeapFreeAfter = 0;
 std::uint32_t targetsBlockedWriteAttempts = 0;
 int targetsFilesystemMountError = 0;
+std::uint8_t targetsFilesystemMountAttempts = 0;
+std::uint8_t targetsFilesystemMountTransientRetries = 0;
 bool targetsCleanupComplete = true;
 TargetProductBinding targetsBaselineBinding{};
 TargetProductBinding targetsCurrentBinding{};
@@ -4591,6 +4593,8 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     targetsMutationReport = {};
     targetsBlockedWriteAttempts = 0;
     targetsFilesystemMountError = 0;
+    targetsFilesystemMountAttempts = 0;
+    targetsFilesystemMountTransientRetries = 0;
     targetsCleanupComplete = true;
     if (item.simulated) {
         if (!allocateTargetsProduct()) return false;
@@ -4671,8 +4675,24 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     CorrelationDecisionLog* persistedDecisions =
         new (std::nothrow) CorrelationDecisionLog();
     BoardSdFilesystem filesystem;
-    const bool mounted = filesystem.beginReadOnly();
-    targetsFilesystemMountError = filesystem.mountError();
+    bool mounted = false;
+    constexpr std::uint8_t kTargetsMaximumMountAttempts = 3;
+    for (std::uint8_t attempt = 1;
+         attempt <= kTargetsMaximumMountAttempts; ++attempt) {
+        targetsFilesystemMountAttempts = attempt;
+        mounted = filesystem.beginReadOnly();
+        targetsFilesystemMountError = filesystem.mountError();
+        if (mounted && filesystem.readOnlyGuaranteed()) break;
+        if (!filesystem.cleanupComplete()) break;
+        if (attempt < kTargetsMaximumMountAttempts) {
+            targetsFilesystemMountTransientRetries = attempt;
+            // A just-finished Survey has released FatFs and its worker, but
+            // allocator coalescing may trail the UI transition by one tick.
+            // Retry only the fail-closed read-only mount, with every failed
+            // attempt already fully cleaned and all RF TX paths held inactive.
+            vTaskDelay(pdMS_TO_TICKS(50U * attempt));
+        }
+    }
     if (!mounted || !filesystem.readOnlyGuaranteed()) {
         if (filesystem.mounted()) filesystem.end();
         targetsCleanupComplete = filesystem.cleanupComplete();
@@ -15652,7 +15672,10 @@ void emitTargetsState(Stream& reply) {
         "\"mutation_expected_cid\":\"%s\","
         "\"mutation_observed_cid\":\"%s\","
         "\"blocked_write_attempts\":%lu,"
-        "\"filesystem_mount_error\":%d,\"cleanup_complete\":%s,"
+        "\"filesystem_mount_error\":%d,"
+        "\"filesystem_mount_attempts\":%u,"
+        "\"filesystem_mount_transient_retries\":%u,"
+        "\"cleanup_complete\":%s,"
         "\"lease_mask\":%lu,\"heap_free_before\":%lu,"
         "\"heap_free_now\":%lu,\"heap_free_after_release\":%lu}",
         targetsProductStatus,
@@ -15867,6 +15890,8 @@ void emitTargetsState(Stream& reply) {
         targetsMutationReport.observedFingerprint,
         static_cast<unsigned long>(targetsBlockedWriteAttempts),
         targetsFilesystemMountError,
+        static_cast<unsigned>(targetsFilesystemMountAttempts),
+        static_cast<unsigned>(targetsFilesystemMountTransientRetries),
         targetsCleanupComplete ? "true" : "false",
         static_cast<unsigned long>(appRuntime.activeResources()),
         static_cast<unsigned long>(targetsHeapFreeBefore),

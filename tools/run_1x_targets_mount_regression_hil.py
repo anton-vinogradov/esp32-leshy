@@ -144,6 +144,12 @@ def main() -> int:
             target_count = int(listed["target_count"])
             if not 1 <= target_count <= 16:
                 raise RuntimeError(f"invalid bounded Target count: {listed}")
+            attempts = int(listed.get("filesystem_mount_attempts", 0))
+            retries = int(listed.get(
+                "filesystem_mount_transient_retries", -1))
+            if not 1 <= attempts <= 3 or retries != attempts - 1:
+                raise RuntimeError(
+                    f"unbounded or inconsistent mount recovery: {listed}")
             screens["list"] = capture(device, frames, "targets-mount-list")
 
             compare_ui = action(device, "right")

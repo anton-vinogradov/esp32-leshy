@@ -82,9 +82,14 @@ def main() -> int:
             mutation_worker.index("TargetDecisionStateStoreWorkspace();") <
                 mutation_worker.index("filesystem.begin()") and
             "workspace_unavailable_before_mount" in mutation_worker and
-            r'\"mutation_heap_largest_before_mount\":%lu' in entry,
+            r'\"mutation_heap_largest_before_mount\":%lu' in entry and
+            "kTargetsMaximumMountAttempts = 3" in load_product and
+            "filesystem.cleanupComplete()" in load_product and
+            r'\"filesystem_mount_attempts\":%u' in entry and
+            r'\"filesystem_mount_transient_retries\":%u' in entry,
             "large Target codec buffers must be reserved before FatFs can "
-            "fragment the no-PSRAM heap, with observable pre-mount capacity")
+            "fragment the no-PSRAM heap, with observable pre-mount capacity "
+            "and bounded fail-closed read-only remount recovery")
     require(failures,
             "new (std::nothrow) domain::targets::TargetCatalog" in controller and
             "delete scratch" in controller and

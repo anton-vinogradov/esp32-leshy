@@ -53,6 +53,11 @@ def open_targets(device: PassiveSerial) -> dict[str, Any]:
             read_only=False, write_enabled=False,
             blocked_write_attempts=0, filesystem_mount_error=0,
             cleanup_complete=True, lease_mask=13)
+    attempts = int(listed.get("filesystem_mount_attempts", 0))
+    retries = int(listed.get("filesystem_mount_transient_retries", -1))
+    if not 1 <= attempts <= 3 or retries != attempts - 1:
+        raise RuntimeError(
+            f"unbounded or inconsistent mount recovery: {listed}")
     return listed
 
 
