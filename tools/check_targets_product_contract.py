@@ -146,6 +146,7 @@ def main() -> int:
             "CorrelationService service(*catalog, *decisions, lookup)" in entry and
             "requestTargetsCorrelationMutation(" in entry and
             r'\"correlation_count\":%u' in entry and
+            r'\"correlation_decision_count\":%u' in entry and
             r'\"correlation_proposal_id\":\"%s\"' in entry and
             r'\"correlation_candidate_identity_hex\":\"%s\"' in entry and
             r'\"correlation_feature_kind\":\"%s\"' in entry and

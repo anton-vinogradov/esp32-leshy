@@ -15609,6 +15609,7 @@ void emitTargetsState(Stream& reply) {
         "\"notes_editor_dirty\":%s,"
         "\"correlation_count\":%u,\"correlation_selection\":%u,"
         "\"correlation_review_selection\":%u,"
+        "\"correlation_decision_count\":%u,"
         "\"correlation_proposal_present\":%s,"
         "\"correlation_proposal_id\":\"%s\","
         "\"correlation_candidate_identity_kind\":%u,"
@@ -15761,6 +15762,8 @@ void emitTargetsState(Stream& reply) {
                                   ? 0 : controller->correlationSelection()),
         static_cast<unsigned>(controller == nullptr
                                   ? 0 : controller->correlationReviewSelection()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->decisions().size()),
         correlationProposal == nullptr ? "false" : "true",
         correlationProposalId,
         correlationProposal == nullptr ? 0U : static_cast<unsigned>(
