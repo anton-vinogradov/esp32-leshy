@@ -1,0 +1,36 @@
+{
+  "candidate": {
+    "app_elf_sha256": "9eaf3896cd681932f397f87cdb4cc07a087b9ef6914f2693c485bc40330a6ebd",
+    "checked_stack_frames": {
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 416,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 256,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "9eaf3896cd681932f397f87cdb4cc07a087b9ef6914f2693c485bc40330a6ebd",
+    "firmware_bytes": 3138688,
+    "firmware_sha256": "f2d151dcfc955260a4cd0bee67de1887a46af9bab53b18477bb6633ae99dd095",
+    "map_sha256": "4888aa7c2b1ef182121364a2e72e1e1f2a19eee769f4820613ac377574309ed7",
+    "version": "0.154.0-targets-notes-edit"
+  },
+  "raw_artifacts_manifest_sha256": "257e5a11e934fde7ed6b0e0eee94702c5ba790d446c312b46fbea053b4cbe2b8",
+  "raw_run_sha256": "e069c6f42239fd106c712f42474082142ffac7841d793e0d3073dab3fbc4a377",
+  "retention_script": "tools/retain_1x_targets_notes_hil.py",
+  "schema": "leshy.targets_notes_hil.provenance.v1",
+  "source_commit": "16ccf285713cbb2cd33382fd95992f4e6e77199f",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "c2a85cc8f62c3ff50e4f373592ffc1719790fd6c364a3b14fac625ac37eb8197",
+    "firmware/leshy1/src/apps/targets/TargetsController.cpp": "5e96844523dfbc1951c5bec2d03932674f75015d95530ce9dd6e2523ef2358d8",
+    "firmware/leshy1/src/apps/targets/TargetsController.h": "17a8001e906cd353e97dc125298560610a79565b64809b9cbe6db568a51664f3",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "8685b5c0aeafdd283df576cf0902534001edd3dc185a03cc00d0e2d145805e63",
+    "firmware/leshy1/src/ui/UiStrings.def": "2c8e61f92e6db0cec4072046962d562b3715bc572192397b0439c0ee5edc8847",
+    "tests/hil/delta-scopes/targets-notes-0.154.json": "695468a4743c1c1e28c6abe3ef3656c4dd4bc19c1df748dfa99956d5cf899d12",
+    "tests/native/targets_controller_tests.cpp": "b2526acc792883f5d58de2634b5cb38f341d8394406588b918039dcb81368f70",
+    "tools/check_targets_product_contract.py": "f52338732fbc189b26d0baa87367ca397364d2c0891999b424ab75bffc0c3a03",
+    "tools/run_1x_targets_notes_hil.py": "e241e7a494a56ba56df2cc53637821d339a9ff060814ee3e7b56a5b3195835d1"
+  }
+}

@@ -558,6 +558,28 @@ SHA-256 are
 The one-flash delta and seven reviewed TFT states are retained in `E-HIL-171`;
 the cadence advances to 8/15 without a full physical matrix.
 
+Targets Notes checkpoint `RB-M154`: exact production
+`0.154.0-targets-notes-edit` uses 3,138,180 B linked flash, 211,848 B static
+RAM and 3,138,688/3,204,224 B app/factory images. This is +2,808 B linked
+flash, +224 B static RAM and +2,816/+2,816 B images versus 0.153 for the
+fourth Actions row, bounded notes editor, typed set/clear path, strings, state
+probe and delta runner. Dedicated DIRAM is 295,028/341,760 B (86.33%, 46,732 B
+remaining); dedicated IRAM remains 16,384/16,384 B. The current foreground
+Targets allocation is 23,152 B: 19,008 B of Target/view state plus the 4,144 B
+controller including its bounded editors. The separate catalog-only mutation
+workspace remains 16,384 B; only a 24-byte notes prefix is hex-encoded in the
+existing static diagnostic JSON buffer. Exact HIL sees 75,656 B free and a
+34,804 B largest block before both mounts, returns heap from 84,736 B to
+96,516 B, and records UI/worker times of 153/2,942,650 µs for set and
+153/2,964,667 µs for clear. Both mutations use three writes, three file syncs
+and three directory syncs; generations advance 5→6→7, with a physical cold
+reopen after each transition. Firmware/ELF/map SHA-256 are
+`f2d151dcfc955260a4cd0bee67de1887a46af9bab53b18477bb6633ae99dd095`/
+`9eaf3896cd681932f397f87cdb4cc07a087b9ef6914f2693c485bc40330a6ebd`/
+`4888aa7c2b1ef182121364a2e72e1e1f2a19eee769f4820613ac377574309ed7`.
+The one-flash delta and seven reviewed TFT states are retained in `E-HIL-172`;
+the cadence advances to 9/15 without a full physical matrix.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

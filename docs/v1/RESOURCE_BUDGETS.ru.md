@@ -550,6 +550,28 @@ UI/worker 158/2 914 830 µs для add и 141/2 918 739 µs для remove. Об�
 One-flash delta и семь просмотренных TFT states сохранены в `E-HIL-171`;
 cadence продвигается до 8/15 без полной physical matrix.
 
+Checkpoint заметок Target `RB-M154`: exact production
+`0.154.0-targets-notes-edit` использует 3 138 180 B linked flash, 211 848 B
+static RAM и app/factory images 3 138 688/3 204 224 B. Это +2 808 B linked
+flash, +224 B static RAM и +2 816/+2 816 B images против 0.153 за четвёртую
+строку Actions, bounded редактор заметок, typed set/clear path, строки, state
+probe и delta runner. Dedicated DIRAM равна 295 028/341 760 B (86,33%,
+свободно 46 732 B), dedicated IRAM остаётся 16 384/16 384 B. Текущий
+foreground allocation Targets равен 23 152 B: 19 008 B Target/view state плюс
+controller 4 144 B со всеми bounded editors. Отдельный catalog-only mutation
+workspace остаётся 16 384 B; в существующем static diagnostic JSON buffer
+hex-кодируется только prefix заметки 24 bytes. Exact HIL видит 75 656 B free
+и largest block 34 804 B до обоих mount, возвращает heap с 84 736 B к
+96 516 B и фиксирует времена UI/worker 153/2 942 650 µs для set и
+153/2 964 667 µs для clear. Обе mutations используют три writes, три file
+syncs и три directory syncs; поколения продвигаются 5→6→7 с physical cold
+reopen после каждого перехода. SHA-256 firmware/ELF/map:
+`f2d151dcfc955260a4cd0bee67de1887a46af9bab53b18477bb6633ae99dd095`/
+`9eaf3896cd681932f397f87cdb4cc07a087b9ef6914f2693c485bc40330a6ebd`/
+`4888aa7c2b1ef182121364a2e72e1e1f2a19eee769f4820613ac377574309ed7`.
+One-flash delta и семь просмотренных TFT states сохранены в `E-HIL-172`;
+cadence продвигается до 9/15 без полной physical matrix.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

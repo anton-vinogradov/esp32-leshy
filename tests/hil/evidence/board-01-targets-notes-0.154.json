@@ -1,0 +1,128 @@
+{
+  "atomic_clear": {
+    "mutation_action_us": 153,
+    "mutation_bytes_written": 1689,
+    "mutation_directory_syncs": 3,
+    "mutation_elapsed_us": 2964667,
+    "mutation_file_syncs": 3,
+    "mutation_heap_free_before_mount": 75656,
+    "mutation_heap_largest_before_mount": 34804,
+    "mutation_identity_attempts": 1,
+    "mutation_identity_transient_retries": 0,
+    "mutation_write_calls": 3
+  },
+  "atomic_set": {
+    "mutation_action_us": 153,
+    "mutation_bytes_written": 1690,
+    "mutation_directory_syncs": 3,
+    "mutation_elapsed_us": 2942650,
+    "mutation_file_syncs": 3,
+    "mutation_heap_free_before_mount": 75656,
+    "mutation_heap_largest_before_mount": 34804,
+    "mutation_identity_attempts": 1,
+    "mutation_identity_transient_retries": 0,
+    "mutation_write_calls": 3
+  },
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-notes-0.154",
+  "candidate": {
+    "app_elf_sha256": "9eaf3896cd681932f397f87cdb4cc07a087b9ef6914f2693c485bc40330a6ebd",
+    "checked_stack_frames": {
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 416,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 256,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "9eaf3896cd681932f397f87cdb4cc07a087b9ef6914f2693c485bc40330a6ebd",
+    "firmware_bytes": 3138688,
+    "firmware_sha256": "f2d151dcfc955260a4cd0bee67de1887a46af9bab53b18477bb6633ae99dd095",
+    "map_sha256": "4888aa7c2b1ef182121364a2e72e1e1f2a19eee769f4820613ac377574309ed7",
+    "version": "0.154.0-targets-notes-edit"
+  },
+  "cold_reset_count": 2,
+  "cold_resets": [
+    {
+      "bytes": 8581,
+      "first_byte_ms": 0.20350003615021706,
+      "ready_marker_ms": 1212.9299170337617,
+      "sha256": "00260aa8035f4fd9275fc1367e148595c5da71e6ba4b695fc2de06df8f263061"
+    },
+    {
+      "bytes": 8581,
+      "first_byte_ms": 0.13975007459521294,
+      "ready_marker_ms": 1220.2556249685585,
+      "sha256": "fb705ae94fc685929a12bae087bdb1ac2bd40baf7040b9912ec99410daa5aaa9"
+    }
+  ],
+  "evidence_ids": [
+    "E-AUTO-112",
+    "E-HIL-172",
+    "E-UX-049"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final": {
+    "lease_mask": 0,
+    "library_generation": 114,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "flash_count": 1,
+  "heap": {
+    "after_release": 96516,
+    "before": 84736
+  },
+  "manifest_sha256": "1c1baf5a22fe79a3af732c438a03d6a9d69b27776e61c3e6b3594a5f6213c5b4",
+  "note": {
+    "cold_cleared_length": 0,
+    "cold_reopened_hex": "41",
+    "generation_before": 5,
+    "generation_cleared": 7,
+    "generation_set": 6,
+    "hex": "41"
+  },
+  "raw_artifacts_manifest_sha256": "257e5a11e934fde7ed6b0e0eee94702c5ba790d446c312b46fbea053b4cbe2b8",
+  "raw_run_sha256": "e069c6f42239fd106c712f42474082142ffac7841d793e0d3073dab3fbc4a377",
+  "schema": "leshy.targets_notes_hil.summary.v1",
+  "screens": {
+    "detail-clear-reopened": {
+      "png": "frames/detail-clear-reopened.png",
+      "png_sha256": "09e108f90103aad848426404bf72bf4427716278efce318156f827627d077105"
+    },
+    "detail-set-reopened": {
+      "png": "frames/detail-set-reopened.png",
+      "png_sha256": "09e108f90103aad848426404bf72bf4427716278efce318156f827627d077105"
+    },
+    "editor-before": {
+      "png": "frames/editor-before.png",
+      "png_sha256": "34b2a99035ac66638d04fd8c8711e090b65d085e4ad197203bdc8160669e2d14"
+    },
+    "editor-changed": {
+      "png": "frames/editor-changed.png",
+      "png_sha256": "129033d2dd22a588da52cf64e78aadd60b4b99a63f329b067e622308a3454032"
+    },
+    "editor-clear-saved": {
+      "png": "frames/editor-clear-saved.png",
+      "png_sha256": "408e6533f62d01a1025ec3529abbfdc70301b7b4f3804d323b8faedba20961d1"
+    },
+    "editor-cleared": {
+      "png": "frames/editor-cleared.png",
+      "png_sha256": "e92925cf0152693ee95dfe5cf853be4a6d1bd893daf3f4c777c903676c1aa683"
+    },
+    "editor-saved": {
+      "png": "frames/editor-saved.png",
+      "png_sha256": "cc416112f542f0f8884a60eaef52874469ede670b70e56f6d3d95a2e5c2ba3cc"
+    }
+  },
+  "session_generation": 114,
+  "source_commit": "16ccf285713cbb2cd33382fd95992f4e6e77199f",
+  "status": "pass",
+  "target_id": "F37CBAC2BD0F95D9FA95F192DDE4C007",
+  "workspace_bytes": 16384
+}

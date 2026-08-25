@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless compact exact 0.153 Targets tags HIL is intact."""
+"""Fail closed unless compact exact 0.154 Targets notes HIL is intact."""
 
 from __future__ import annotations
 
@@ -10,8 +10,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SUMMARY = ROOT / "tests/hil/evidence/board-01-targets-tags-0.153.json"
-SUCCESSOR = ROOT / "tests/hil/evidence/board-01-targets-notes-0.154.json"
+SUMMARY = ROOT / "tests/hil/evidence/board-01-targets-notes-0.154.json"
 
 
 def digest(path: Path) -> str:
@@ -37,12 +36,13 @@ def main() -> int:
             digest(manifest_path) == summary.get("manifest_sha256"),
             "manifest missing or hash mismatch")
     expected = {
-        "added-cold-reopen.ndjson", "removed-cold-reopen.ndjson",
+        "set-cold-reopen.ndjson", "clear-cold-reopen.ndjson",
         "provenance.json", "run.json",
     }
     frames = (
-        "list-before", "editor-before", "editor-changed", "list-added",
-        "list-added-reopened", "list-removed", "detail-removed-reopened",
+        "editor-before", "editor-changed", "editor-saved",
+        "detail-set-reopened", "editor-cleared", "editor-clear-saved",
+        "detail-clear-reopened",
     )
     for name in frames:
         expected.update({f"frames/{name}.json", f"frames/{name}.png"})
@@ -54,24 +54,25 @@ def main() -> int:
                 f"retained artifact mismatch: {relative}")
 
     require(failures,
-            summary.get("schema") == "leshy.targets_tags_hil.summary.v1" and
+            summary.get("schema") ==
+            "leshy.targets_notes_hil.summary.v1" and
             summary.get("status") == "pass" and
             summary.get("evidence_ids") ==
-            ["E-AUTO-111", "E-HIL-171", "E-UX-048"],
+            ["E-AUTO-112", "E-HIL-172", "E-UX-049"],
             "summary identity mismatch")
     require(failures, summary.get("source_commit") ==
-            "042b120e85766d6d3762a7d07f8bf3c183f83cc5",
+            "16ccf285713cbb2cd33382fd95992f4e6e77199f",
             "source identity mismatch")
     candidate = summary.get("candidate", {})
     require(failures,
-            candidate.get("version") == "0.153.0-targets-tags-edit" and
-            candidate.get("firmware_bytes") == 3135872 and
+            candidate.get("version") == "0.154.0-targets-notes-edit" and
+            candidate.get("firmware_bytes") == 3138688 and
             candidate.get("firmware_sha256") ==
-            "b9a49fe887baf595da01ea798eb1efa8dada57c5ac20af090f467fcb7b688651" and
+            "f2d151dcfc955260a4cd0bee67de1887a46af9bab53b18477bb6633ae99dd095" and
             candidate.get("app_elf_sha256") ==
-            "49d9c7cbb058158bda4ef19c88e6cfbf56c05f38b4a055e616841cb4091a0d56" and
+            "9eaf3896cd681932f397f87cdb4cc07a087b9ef6914f2693c485bc40330a6ebd" and
             candidate.get("map_sha256") ==
-            "0cdaa2ec9f4874991d5c9738f876f7f87fe6e4f96064dd42f3c0685273a3adde",
+            "4888aa7c2b1ef182121364a2e72e1e1f2a19eee769f4820613ac377574309ed7",
             "candidate identity mismatch")
     require(failures,
             summary.get("exact_cid") ==
@@ -82,30 +83,35 @@ def main() -> int:
             summary.get("target_id") ==
             "F37CBAC2BD0F95D9FA95F192DDE4C007",
             "media/session/Target identity mismatch")
-    require(failures, summary.get("tag") == {
-        "hex": "41", "count_before": 0,
-        "generation_before": 3, "generation_added": 4,
-        "generation_removed": 5, "cold_reopened_hex": "41",
-        "cold_removed_count": 0,
-    }, "tag add/remove cold-reopen transition mismatch")
-    require(failures, summary.get("atomic_add") == {
-        "mutation_action_us": 158, "mutation_elapsed_us": 2914830,
-        "mutation_bytes_written": 1691, "mutation_write_calls": 3,
-        "mutation_file_syncs": 3, "mutation_directory_syncs": 3,
-        "mutation_heap_free_before_mount": 75992,
+    require(failures, summary.get("note") == {
+        "hex": "41", "generation_before": 5,
+        "generation_set": 6, "generation_cleared": 7,
+        "cold_reopened_hex": "41", "cold_cleared_length": 0,
+    }, "note set/clear cold-reopen transition mismatch")
+    require(failures, summary.get("atomic_set") == {
+        "mutation_action_us": 153,
+        "mutation_elapsed_us": 2942650,
+        "mutation_bytes_written": 1690,
+        "mutation_write_calls": 3,
+        "mutation_file_syncs": 3,
+        "mutation_directory_syncs": 3,
+        "mutation_heap_free_before_mount": 75656,
         "mutation_heap_largest_before_mount": 34804,
         "mutation_identity_attempts": 1,
         "mutation_identity_transient_retries": 0,
-    }, "bounded atomic add metrics mismatch")
-    require(failures, summary.get("atomic_remove") == {
-        "mutation_action_us": 141, "mutation_elapsed_us": 2918739,
-        "mutation_bytes_written": 1689, "mutation_write_calls": 3,
-        "mutation_file_syncs": 3, "mutation_directory_syncs": 3,
-        "mutation_heap_free_before_mount": 75992,
+    }, "bounded atomic set metrics mismatch")
+    require(failures, summary.get("atomic_clear") == {
+        "mutation_action_us": 153,
+        "mutation_elapsed_us": 2964667,
+        "mutation_bytes_written": 1689,
+        "mutation_write_calls": 3,
+        "mutation_file_syncs": 3,
+        "mutation_directory_syncs": 3,
+        "mutation_heap_free_before_mount": 75656,
         "mutation_heap_largest_before_mount": 34804,
         "mutation_identity_attempts": 1,
         "mutation_identity_transient_retries": 0,
-    }, "bounded atomic remove metrics mismatch")
+    }, "bounded atomic clear metrics mismatch")
     require(failures, summary.get("workspace_bytes") == 16384 and
             summary.get("heap", {}).get("after_release", 0) >=
             summary.get("heap", {}).get("before", 0) - 512,
@@ -115,20 +121,20 @@ def main() -> int:
         "library_generation": 114,
     }, "terminal cleanup mismatch")
     expected_screens = {
-        "detail-removed-reopened":
+        "detail-clear-reopened":
+            "09e108f90103aad848426404bf72bf4427716278efce318156f827627d077105",
+        "detail-set-reopened":
             "09e108f90103aad848426404bf72bf4427716278efce318156f827627d077105",
         "editor-before":
-            "b0d4da6cad280e8c5613fc6adc8f6081f1cc7d82d45a57e5a8fc903d33c07e0e",
+            "34b2a99035ac66638d04fd8c8711e090b65d085e4ad197203bdc8160669e2d14",
         "editor-changed":
-            "b36d75db8968656821f2c1aeee07715f61b3d8b5f895c7c6a366473e17c30d15",
-        "list-added":
-            "8e32d58d90ea07957941b62eebb18256e12f6d09405a03c054ebc77f439d6ebc",
-        "list-added-reopened":
-            "8e32d58d90ea07957941b62eebb18256e12f6d09405a03c054ebc77f439d6ebc",
-        "list-before":
-            "0abf1eda0e99fe0db6810d46fc5eb63e5c37d5dec9e995c866f3beb07c234e88",
-        "list-removed":
-            "0abf1eda0e99fe0db6810d46fc5eb63e5c37d5dec9e995c866f3beb07c234e88",
+            "129033d2dd22a588da52cf64e78aadd60b4b99a63f329b067e622308a3454032",
+        "editor-clear-saved":
+            "408e6533f62d01a1025ec3529abbfdc70301b7b4f3804d323b8faedba20961d1",
+        "editor-cleared":
+            "e92925cf0152693ee95dfe5cf853be4a6d1bd893daf3f4c777c903676c1aa683",
+        "editor-saved":
+            "cc416112f542f0f8884a60eaef52874469ede670b70e56f6d3d95a2e5c2ba3cc",
     }
     require(failures, summary.get("screens") == {
         name: {"png": f"frames/{name}.png", "png_sha256": sha}
@@ -139,11 +145,7 @@ def main() -> int:
             digest(run_path) == summary.get("raw_run_sha256"),
             "raw accepted run mismatch")
     provenance_path = bundle / "provenance.json"
-    # A retained checkpoint proves its exact historical candidate forever, but
-    # only the newest accepted checkpoint may pin the live source tree.  The
-    # successor checker runs immediately after this one and fails closed on
-    # both its retained bundle and current source hashes.
-    if provenance_path.is_file() and not SUCCESSOR.is_file():
+    if provenance_path.is_file():
         provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
         for relative, expected_hash in provenance.get(
                 "source_sha256", {}).items():
@@ -154,7 +156,8 @@ def main() -> int:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
-    print("Targets tags HIL acceptance passed: bounded add/remove, exact CID, two cold reopens, clean heap/lease")
+    print("Targets notes HIL acceptance passed: bounded set/clear, exact CID, "
+          "two cold reopens, clean heap/lease")
     return 0
 
 
