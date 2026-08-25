@@ -8,26 +8,26 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 <!-- LESHY-ROADMAP:START -->
 ## Статус разработки и роадмап
 
-> **Сейчас: S5 — Полнота железа ESP32-DIV**
+> **Сейчас: S6 — Продуктовые отличия: Targets, compare и companion**
 >
 > Закрыто этапов: 5 из 9.
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
-- **Текущая фаза:** `S5.4 — завершение Sub-GHz OOK/FSK (physical positive gate аппаратно заблокирован)`.
-- **Проверенный checkpoint:** exact `0.145.0-interface-settings` закрывает исполнимую часть CAP-005 на board-01. Публичный экран Устройство → Настройки содержит четыре полноширинные строки для языка, яркости, темы и звука; EN/RU, пять уровней яркости и Лесная/Контрастная применяются сразу и сохраняются в NVS, а Звук честно недоступен и не включает баззер до закрытия HW-T09. Один exact flash и два физических hard reset доказывают RU/100%/Лесная → EN/69%/Контрастная с сохранением → восстановленные RU/100%/Лесная. Три TFT frame, zero radio TX, zero input errors/drops и final Home/none/lease 0 машинно проверяются `E-HIL-163`. Exact 0.144 остаётся принятой автономной baseline Full/Guided passive receivers; ни одна delta не предоставляет отсутствующие qualified physical RF-positive sources и не закрывает exit gate S5.
-- **Следующий gate:** подключить квалифицированный собственный RF source, пройти его read-only profile и проверку plausible identity, затем запустить `tools/run_s5_two_board_hil.py` с arguments `--retain-*`. Один command собирает каждую роль один раз, прошивает каждую роль только для первого применимого scenario, выполняет матрицу IR, nRF24, Sub-GHz OOK и Sub-GHz FSK с fail-closed checkpoint каждого child run и упаковывает passing matrix в компактное machine-checked evidence. Она должна закрыть physical result nRF24 S5.3 и frequency→capture→save→cold export S5.4 до принятия S5.6. Неисправный клон восстановлен в stock для возврата и не является разрешённым transmitter; без replacement source gates остаются fail-closed.
+- **Текущая фаза:** `S6.1 — фундамент Target (стабильная identity, metadata и ссылки на source evidence)`.
+- **Проверенный checkpoint:** host checkpoint `E-TARGET-001` реализует первый фундамент S6.1: стабильные Target ID, исключительное владение точными Wi-Fi/BLE identity и source Observation, bounded изменяемые metadata, no-eviction semantics отказов и семь versioned typed mutation Actions. Отдельные allocation-free native tests проходят; persistence, automatic correlation, compare и UI явно не заявляются. Exact `0.145.0-interface-settings` остаётся последней физически принятой product baseline board-01, а exact 0.144 — автономной baseline Full/Guided passive receivers; ни одна не предоставляет missing qualified RF-positive sources и не закрывает S5.
+- **Следующий gate:** определить и host-верифицировать bounded domain Target в S6: стабильные Target ID, не зависящие от radio identifiers, точное владение identity, изменяемые metadata name/tags/notes/favorite и неизменяемые ссылки обратно на source observations Session. В S6.1 запрещено заявлять automatic correlation. Physical gate S5 отложен, но не отменён: когда приедет заказанный replacement DIV, его read-only profile должен пройти до запуска сохранённой one-command матрицы IR→nRF24→OOK→FSK, закрывающей S5.3/S5.4/S5.6.
 
 ### Фазы текущего этапа
 
 | Фаза | Результат / exit gate | Статус |
 |---|---|---|
-| S5.1 | Пассивные product slices штатных радио: all-antenna overview/finder nRF24, robust finder CC1101, основы bounded RAW/IR capture | ✅ готово |
-| S5.2 | Первый physical loop двух плат: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ готово |
-| S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup; заблокирован до появления исправного/заменённого RF carrier | 🔴 заблокировано |
-| S5.4 | Известный Sub-GHz signal: exact 0.140 принимает bounded OOK/FSK UI, реализацию receive GDO0 и one-flash no-signal delta. Source `4f97b3a` реализует точные конечные minimum-power vectors fixture OOK/FSK и автоматические scenarios capture→save→cold export; их physical run остаётся source-blocked | 🟡 в работе |
-| S5.5 | Полнота runtime: exact 0.139 принимает унаследованную от 0.138 safety Product Survey/workers плюс truthful applicability stock assembly, debounced отказ Store при low voltage, реальный light-sleep/resume и public RX-only software-fixture path Store Sub-GHz; exact 0.145 добавляет сохраняемые язык/яркость/тему с безопасно недоступным Звуком; physical positive RF остаётся в S5.3/S5.4 | ✅ готово |
-| S5.6 | Интегральный hardware gate S5: exact 0.144 уже принимает автономную on-device половину Full receivers/artifacts без утечки leases/outputs. One-build/one-flash-per-role runner IR→nRF24→OOK→FSK build-checked на source `4f97b3a`; strict cross-child acceptance host-checked на `95079ec`, а независимая commit-bound перепроверка — на `3feb3bd`; выполнить physical половину с qualified source после S5.3/S5.4 | ⬜ дальше |
+| S6.1 | Фундамент Target: стабильные Target ID, точные radio identities, изменяемые name/tags/notes/favorite и неизменяемые ссылки на source evidence; всё bounded и host-verified | 🟡 в работе |
+| S6.2 | Объяснимая correlation предлагает связи с features/confidence; accept/reject и обратимые merge/split никогда не уничтожают source evidence | ⬜ дальше |
+| S6.3 | Baseline/diff сравнивает две Session и классифицирует новые, исчезнувшие и изменившиеся Targets; каждый вывод открывает своё evidence | ⬜ дальше |
+| S6.4 | On-device workflows Targets и Compare сначала показывают полезный результат, сохраняют стабильную навигацию и полноэкранные detail views | ⬜ дальше |
+| S6.5 | Local companion USB/Web использует те же Actions и versioned schemas с ограниченными connectivity и secrets | ⬜ дальше |
+| S6.6 | Интегральный DEMO-S6: записать и сравнить две survey, открыть каждый вывод на устройстве или локально и offline-export; перед принятием S6 вернуться к отложенному physical predecessor gate S5 и закрыть его | ⬜ дальше |
 
 ### Роадмап
 
@@ -36,8 +36,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 - ✅ **S2 — Чистая платформа 1.x** · готово
 - ✅ **S3 — Первый вертикальный срез: Survey Session** · готово
 - ✅ **S4 — Cross-radio passive platform** · готово
-- 🟡 **S5 — Полнота железа ESP32-DIV** · в работе
-- ⬜ **S6 — Продуктовые отличия: Targets, compare и companion** · дальше
+- 🔴 **S5 — Полнота железа ESP32-DIV** · заблокировано
+- 🟡 **S6 — Продуктовые отличия: Targets, compare и companion** · в работе
 - ⬜ **S7 — Безопасная Lab и расширяемость** · дальше
 - ⬜ **S8 — Release hardening и 1.0.0** · дальше
 

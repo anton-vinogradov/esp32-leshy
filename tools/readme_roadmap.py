@@ -115,7 +115,8 @@ def parse_stage_states(path: Path) -> dict[str, str]:
     if (len(matches) != len(EXPECTED_STAGES) or
             tuple(sorted(states, key=lambda stage: int(stage[1:]))) != EXPECTED_STAGES):
         raise ValueError(f"{path}: expected stage states S0…S8, got {sorted(states)}")
-    unknown = sorted(set(states.values()) - {"done", "active", "planned"})
+    unknown = sorted(
+        set(states.values()) - {"done", "active", "blocked", "planned"})
     if unknown:
         raise ValueError(f"{path}: unsupported stage states {unknown}")
     active = [stage for stage, state in states.items() if state == "active"]

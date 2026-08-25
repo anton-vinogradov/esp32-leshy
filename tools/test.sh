@@ -116,6 +116,18 @@ run_opaque_evidence_check() {
 "${CXX:-c++}" \
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/target_foundation_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/TargetService.cpp" \
+    -o "$test_tmp/target_foundation_tests"
+
+"$test_tmp/target_foundation_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy_fixture/src" \
     "$repo_dir/tests/native/ir_fixture_tests.cpp" \
     "$repo_dir/firmware/leshy_fixture/src/FixtureSession.cpp" \

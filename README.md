@@ -8,26 +8,26 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 <!-- LESHY-ROADMAP:START -->
 ## Development status and roadmap
 
-> **Now: S5 — Complete ESP32-DIV hardware**
+> **Now: S6 — Product differentiation: Targets, comparison, companion**
 >
 > Stage gates complete: 5 of 9.
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
 
-- **Current phase:** `S5.4 — Sub-GHz OOK/FSK completion (physical positive gate hardware-blocked)`.
-- **Verified checkpoint:** exact `0.145.0-interface-settings` closes the executable part of CAP-005 on board-01. The public Device → Settings screen exposes four full-width rows for language, brightness, theme and sound; EN/RU, five brightness levels and Forest/High Contrast apply immediately and persist in NVS, while Sound stays truthfully unavailable and never energizes the buzzer pending HW-T09. One exact flash plus two physical hard resets proves RU/100%/Forest → EN/69%/High Contrast persistence → restored RU/100%/Forest. Three retained TFT frames, zero radio TX, zero input errors/drops and final Home/none/lease 0 are machine-checked by `E-HIL-163`. Exact 0.144 remains the accepted autonomous Full/Guided passive-receiver baseline; neither delta supplies the missing qualified physical RF-positive sources or closes the S5 exit gate.
-- **Next gate:** connect a qualified owned RF source, pass its read-only profile and plausible-identity checks, then run `tools/run_s5_two_board_hil.py` with its `--retain-*` arguments. The one-command runner builds each role once, flashes each role only for the first applicable scenario, executes the IR, nRF24, Sub-GHz OOK and Sub-GHz FSK matrix with fail-closed child checkpoints, and packages the passing matrix into compact machine-checked evidence. This must close the physical S5.3 nRF24 result and S5.4 frequency→capture→save→cold export before S5.6 can pass. The faulty clone is restored to stock for return and is not an authorized transmitter; without a replacement source those gates remain fail-closed.
+- **Current phase:** `S6.1 — Target foundation (stable identity, metadata, and source-evidence references)`.
+- **Verified checkpoint:** host checkpoint `E-TARGET-001` implements the first S6.1 foundation: stable Target IDs, exclusive exact Wi-Fi/BLE identity and source-Observation ownership, bounded editable metadata, no-eviction failure semantics and seven versioned typed mutation Actions. Dedicated allocation-free native tests pass; persistence, automatic correlation, compare and UI are explicitly not claimed. Exact `0.145.0-interface-settings` remains the latest physically accepted board-01 product baseline, and exact 0.144 remains the autonomous Full/Guided passive-receiver baseline; neither supplies the missing qualified RF-positive sources or closes S5.
+- **Next gate:** define and host-verify the bounded S6 Target domain: stable Target IDs independent of radio identifiers, exact identity ownership, mutable name/tags/notes/favorite metadata, and immutable references back to source Session observations. No automatic correlation claim is allowed in S6.1. The physical S5 gate is postponed, not waived: when the ordered replacement DIV arrives, its read-only profile must pass before the retained one-command IR→nRF24→OOK→FSK matrix can close S5.3/S5.4/S5.6.
 
 ### Current stage phases
 
 | Phase | Outcome / exit gate | Status |
 |---|---|---|
-| S5.1 | Stock-radio passive product slices: all-antenna nRF24 overview/finder, robust CC1101 finder, bounded RAW/IR capture foundations | ✅ complete |
-| S5.2 | First physical two-board loop: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ complete |
-| S5.3 | Known nRF24 signal: source-bound 2,442 MHz minimum-power fixture → three-receiver finder result → safe cleanup; blocked until a repaired/replacement RF carrier is available | 🔴 blocked |
-| S5.4 | Known Sub-GHz signal: exact 0.140 accepts the bounded OOK/FSK UI, GDO0 receive implementation and one-flash no-signal delta. Source `4f97b3a` implements exact finite minimum-power OOK/FSK fixture vectors and automated capture→save→cold-export scenarios; their physical run remains source-blocked | 🟡 in progress |
-| S5.5 | Runtime completeness: exact 0.139 accepts Product Survey/worker safety inherited from 0.138 plus truthful stock assembly applicability, debounced low-voltage Store refusal, real light-sleep/resume and a public RX-only Sub-GHz software-fixture Store path; exact 0.145 adds persistent language/brightness/theme with safe unavailable Sound; physical positive RF remains owned by S5.3/S5.4 | ✅ complete |
-| S5.6 | Integrated S5 hardware gate: exact 0.144 already accepts the autonomous on-device Full receiver/artifact half with zero leaked leases/outputs. The one-build/one-flash-per-role IR→nRF24→OOK→FSK runner is build-checked at source `4f97b3a`; strict cross-child acceptance is host-checked at `95079ec`, and independent commit-bound re-verification at `3feb3bd`; execute the qualified-source physical half after S5.3/S5.4 | ⬜ later |
+| S6.1 | Target foundation: stable Target IDs, exact radio identities, editable name/tags/notes/favorite and immutable source-evidence references, all bounded and host-verified | 🟡 in progress |
+| S6.2 | Explainable correlation proposes links with features/confidence; accept/reject and reversible merge/split never destroy source evidence | ⬜ later |
+| S6.3 | Baseline/diff compares two Sessions and classifies new, disappeared and changed Targets with every conclusion opening its evidence | ⬜ later |
+| S6.4 | On-device Targets and Compare workflows expose the useful result first, stable navigation and full-area detail views | ⬜ later |
+| S6.5 | Local USB/Web companion uses the same Actions and versioned schemas with scoped connectivity and secrets | ⬜ later |
+| S6.6 | Integrated DEMO-S6: record and compare two surveys, inspect each conclusion on-device or locally, export offline, then return to and close the deferred S5 physical predecessor gate before S6 acceptance | ⬜ later |
 
 ### Roadmap
 
@@ -36,8 +36,8 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 - ✅ **S2 — Clean 1.x platform** · complete
 - ✅ **S3 — First vertical slice: Survey Session** · complete
 - ✅ **S4 — Cross-radio passive platform** · complete
-- 🟡 **S5 — Complete ESP32-DIV hardware** · in progress
-- ⬜ **S6 — Product differentiation: Targets, comparison, companion** · later
+- 🔴 **S5 — Complete ESP32-DIV hardware** · blocked
+- 🟡 **S6 — Product differentiation: Targets, comparison, companion** · in progress
 - ⬜ **S7 — Safe Lab and extensibility** · later
 - ⬜ **S8 — Release hardening and 1.0.0** · later
 
