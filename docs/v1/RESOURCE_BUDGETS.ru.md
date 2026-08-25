@@ -473,6 +473,23 @@ Physical acceptance exact 0.149 затем сохраняет 97 488/97 488 B д
 workspace короткой regression и 96 452/96 452 B до/после workspace full delta;
 оба завершаются с lease zero в `E-HIL-167`.
 
+Checkpoint row-evidence «Целей» `RB-M150`: production
+`0.150.0-targets-evidence` использует 3 112 664 B linked flash, неизменные
+211 296 B static RAM и images app/factory 3 113 168/3 178 704 B. Это +5 192 B
+linked flash и +5 200/+5 200 B images против 0.149 при zero growth static RAM за
+class/signal order, selectable строки сравнения, exact evidence detail,
+UTF-8-safe pixel fitting и incremental cleanup list band. SHA-256
+firmware/factory/ELF/map:
+`bbb200a5a9ca4b8c1cd60dcdd665ec64eea70ecb2a4d0244ff642df240268e65`/
+`37da3aaf7fe3a7101ab772e29020e901e619990154cbba40016edd8ec9b53dce`/
+`e91cad765c55c08dc317e4099e173423a18af4aeba323f824b1759e3b8caae56`/
+`5599e1d0835f81458d1647b31ed3a40d0fe5e67d55bab7d47f95a50a0516ae9c`.
+Linked disassembly дополнительно ограничивает load comparison side 272 B,
+row ordering 32 B и row comparison 480 B; прежние frames 256/416/32/80/1 104 B
+остаются внутри gates. Exact one-flash physical acceptance сохраняет workspace
+22 544 B lifecycle-owned, удерживает 97 488/97 488 B до/после release и завершает
+run с lease zero в `E-HIL-168`.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

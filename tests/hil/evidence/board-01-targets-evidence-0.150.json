@@ -1,0 +1,162 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-evidence-0.150",
+  "candidate": {
+    "app_elf_sha256": "e91cad765c55c08dc317e4099e173423a18af4aeba323f824b1759e3b8caae56",
+    "checked_stack_frames": {
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 416,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 256,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "e91cad765c55c08dc317e4099e173423a18af4aeba323f824b1759e3b8caae56",
+    "firmware_bytes": 3113168,
+    "firmware_sha256": "bbb200a5a9ca4b8c1cd60dcdd665ec64eea70ecb2a4d0244ff642df240268e65",
+    "map_sha256": "5599e1d0835f81458d1647b31ed3a40d0fe5e67d55bab7d47f95a50a0516ae9c",
+    "version": "0.150.0-targets-evidence"
+  },
+  "comparison": {
+    "class_order": [
+      "added",
+      "added",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged"
+    ],
+    "classes": {
+      "added": 2,
+      "changed": 0,
+      "removed": 0,
+      "unchanged": 14
+    },
+    "count": 16,
+    "exact_evidence_rows": 16,
+    "representative_signal_dbm": [
+      -73,
+      -88,
+      -70,
+      -70,
+      -70,
+      -71,
+      -75,
+      -75,
+      -76,
+      -77,
+      -78,
+      -78,
+      -79,
+      -80,
+      -87,
+      -87
+    ]
+  },
+  "evidence_ids": [
+    "E-AUTO-108",
+    "E-HIL-168",
+    "E-UX-045"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final": {
+    "lease_mask": 0,
+    "library_generation": 114,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "flash_count": 1,
+  "generations": [
+    113,
+    114
+  ],
+  "heap": {
+    "after_release": 97488,
+    "before": 97488
+  },
+  "input": {
+    "ambiguous_presses": 0,
+    "queue_drops": 0,
+    "read_errors": 0,
+    "status": "ready"
+  },
+  "manifest_sha256": "323dcc6b34bf5ad112d6d52b41fffb74609fdc1f6dbdd7ed0f019e3de37f7187",
+  "navigation": {
+    "compare_back_view": "list",
+    "detail_back_selection": 0,
+    "detail_back_view": "compare"
+  },
+  "opened_evidence": {
+    "baseline_channel": 0,
+    "baseline_evidence_generation": 0,
+    "baseline_evidence_present": false,
+    "baseline_observation_sequence": 0,
+    "baseline_rssi_dbm": 0,
+    "comparison_selection": 0,
+    "current_channel": 9,
+    "current_evidence_generation": 114,
+    "current_evidence_present": true,
+    "current_observation_sequence": 16,
+    "current_rssi_dbm": -73,
+    "selected_change_class": "added",
+    "selected_change_mask": 0
+  },
+  "radio_tx_commands": 0,
+  "raw_artifacts_manifest_sha256": "35628f2364689e30a9098243175f582f5c59300ba5a0bf132a0da866bfdebc43",
+  "raw_run_sha256": "4d33089edf151b727cd46ecc8fd2aad0610291bf35d97bc973c585f82227da40",
+  "read_only": {
+    "blocked_write_attempts": 0,
+    "filesystem_mount_error": 0,
+    "storage_write_calls": 0,
+    "write_enabled": false
+  },
+  "safe_outputs": {
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true
+  },
+  "schema": "leshy.targets_evidence_hil.summary.v1",
+  "screens": {
+    "compare-first": {
+      "png": "frames/compare-first.png",
+      "png_sha256": "7801332125c2885734c507bece0db22dd02acc17ce8cf756316d3e941c9ba981"
+    },
+    "compare-last": {
+      "png": "frames/compare-last.png",
+      "png_sha256": "9d628070c8fbb26174cc0acd0261928c1817cdc525f3da04fc15463024632791"
+    },
+    "detail": {
+      "png": "frames/detail.png",
+      "png_sha256": "9ba6377b3f845b0160af4fa35bc99230d2d4f487f242e176f00fd5a44b7c28fa"
+    },
+    "list": {
+      "png": "frames/list.png",
+      "png_sha256": "b80b0c34ae1ac331f81e665fd6c6dfc2db6454d817cc44142aef8928f4c64442"
+    }
+  },
+  "source_commit": "6ef57155b48be47fecfb6c8bb543886553009832",
+  "status": "pass",
+  "visual_precursor": {
+    "compare_last_png": "precursor/compare-last.png",
+    "compare_last_png_sha256": "5d7d1f8a870ec2142747a71a61f07ef818f5911e180ab05bf00fff1d61dd9f03",
+    "reason": "stale glyph pixels remained after scrolling a long Target name",
+    "record": "precursor/record.json",
+    "source_commit": "a146b5961d80e5c6f61dd16ecf399359f50e36a9",
+    "status": "rejected_after_manual_visual_review"
+  }
+}

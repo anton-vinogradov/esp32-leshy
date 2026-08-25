@@ -481,6 +481,23 @@ the 7,736 B result. Exact 0.149 physical acceptance then preserves
 97,488/97,488 B before/after the short workspace and 96,452/96,452 B before/after
 the full-delta workspace; both finish with lease zero in `E-HIL-167`.
 
+Targets row-evidence checkpoint `RB-M150`: production
+`0.150.0-targets-evidence` uses 3,112,664 B linked flash, unchanged 211,296 B
+static RAM and 3,113,168/3,178,704 B app/factory images. This is +5,192 B linked
+flash and +5,200/+5,200 B images versus 0.149, with zero static-RAM growth, for
+class/signal order, selectable comparison rows, exact evidence detail, UTF-8-safe
+pixel fitting and list-band incremental cleanup. Firmware/factory/ELF/map SHA-256
+are
+`bbb200a5a9ca4b8c1cd60dcdd665ec64eea70ecb2a4d0244ff642df240268e65`/
+`37da3aaf7fe3a7101ab772e29020e901e619990154cbba40016edd8ec9b53dce`/
+`e91cad765c55c08dc317e4099e173423a18af4aeba323f824b1759e3b8caae56`/
+`5599e1d0835f81458d1647b31ed3a40d0fe5e67d55bab7d47f95a50a0516ae9c`.
+Linked disassembly additionally bounds comparison-side loading at 272 B,
+row ordering at 32 B and row comparison at 480 B; the prior 256/416/32/80/1,104 B
+frames remain within their gates. Exact one-flash physical acceptance keeps the
+22,544 B workspace lifecycle-owned, preserves 97,488/97,488 B before/after release
+and ends at lease zero in `E-HIL-168`.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

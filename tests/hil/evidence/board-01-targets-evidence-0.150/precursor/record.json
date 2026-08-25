@@ -1,0 +1,26 @@
+{
+  "candidate": {
+    "app_elf_sha256": "bf0436f6d073c24428be199ad2df679fdca34328970e5e8136bb7a500004cb12",
+    "checked_stack_frames": {
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 416,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 256,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "bf0436f6d073c24428be199ad2df679fdca34328970e5e8136bb7a500004cb12",
+    "firmware_bytes": 3112928,
+    "firmware_sha256": "1886b25173bc2f66cd6f95199ae55d8b3e0ce371248180456dccf0451ebc10e9",
+    "map_sha256": "0032811abb4eb743393fc6178d7369e9138486761a491f676448352b168818dd",
+    "version": "0.150.0-targets-evidence"
+  },
+  "compare_last_png_sha256": "5d7d1f8a870ec2142747a71a61f07ef818f5911e180ab05bf00fff1d61dd9f03",
+  "reason": "stale glyph pixels remained after scrolling a long Target name",
+  "run_sha256": "0073ce6c1af1c6cad040bdffd46d9c1c20d417a6f6c1ac3452347aa86778ebd6",
+  "schema": "leshy.targets_evidence_hil.visual_precursor.v1",
+  "source_commit": "a146b5961d80e5c6f61dd16ecf399359f50e36a9",
+  "status": "rejected_after_manual_visual_review"
+}
