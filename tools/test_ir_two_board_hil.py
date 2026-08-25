@@ -102,29 +102,121 @@ class IrTwoBoardHilTests(unittest.TestCase):
         source_commit = "a" * 40
         candidate_hash = "b" * 64
         fixture_hash = "c" * 64
+        scenario_path = flow.SCENARIOS["subghz-ook-positive"]
         run = {
+            "schema": phase_flow.CHILD_SCHEMA,
             "passed": True,
-            "scenario": {"id": "subghz-ook-positive"},
+            "failures": [],
+            "gate_eligible": True,
+            "checkpoint": phase_flow.CHECKPOINTS["subghz-ook-positive"],
+            "expected_cid": "F" * 32,
+            "scenario": {
+                "id": "subghz-ook-positive",
+                "sha256": phase_flow.sha256_file(scenario_path),
+            },
+            "ports": {
+                "candidate": "/dev/candidate",
+                "fixture": "/dev/fixture",
+            },
             "candidate": {
+                "version": "product",
                 "source_commit": source_commit,
                 "firmware_sha256": candidate_hash,
                 "app_elf_sha256": "d" * 64,
+                "flashed": False,
+                "exact_flash_reused": True,
             },
             "fixture": {
+                "version": "fixture",
                 "source_commit": source_commit,
                 "firmware_sha256": fixture_hash,
                 "app_elf_sha256": "e" * 64,
+                "profile_sha256": "f" * 64,
+                "fixture_id": "0000AABBCCDDEEFF",
+                "flashed": False,
+                "exact_flash_reused": True,
+                "cleanup": {
+                    "state": "stopped",
+                    "output_inactive": True,
+                    "ir_tx_inactive": True,
+                    "nrf_ce_inactive": True,
+                    "nrf_powered_down": True,
+                    "cc_transmit_active": False,
+                    "cc_idle": True,
+                    "cc_power_cleared": True,
+                    "cc_tx_fifo_cleared": True,
+                },
             },
+            "cleanup": {"complete": True},
+            "reports": {"final": {
+                "page": "home", "runtime_owner": "none", "lease_mask": 0,
+            }},
         }
         with tempfile.TemporaryDirectory() as directory:
             run_path = Path(directory) / "run.json"
             run_path.write_text(json.dumps(run), encoding="utf-8")
             accepted = phase_flow.accepted_child(
-                run_path, "subghz-ook-positive", source_commit)
+                run_path, "subghz-ook-positive", source_commit,
+                product_version="product", fixture_version="fixture",
+                expected_cid="F" * 32,
+                candidate_port="/dev/candidate",
+                fixture_port="/dev/fixture",
+                fixture_id="0000AABBCCDDEEFF",
+                candidate_firmware_sha256=candidate_hash,
+                fixture_firmware_sha256=fixture_hash,
+                candidate_reused=True, fixture_reused=True)
         self.assertEqual(candidate_hash,
                          accepted["candidate_firmware_sha256"])
         self.assertEqual(fixture_hash,
                          accepted["fixture_firmware_sha256"])
+        self.assertEqual("f" * 64, accepted["fixture_profile_sha256"])
+
+    def test_s5_matrix_rejects_unproven_fixture_cleanup(self) -> None:
+        source_commit = "a" * 40
+        scenario_path = flow.SCENARIOS["subghz-fsk-positive"]
+        run = {
+            "schema": phase_flow.CHILD_SCHEMA,
+            "passed": True,
+            "failures": [],
+            "gate_eligible": True,
+            "checkpoint": phase_flow.CHECKPOINTS["subghz-fsk-positive"],
+            "scenario": {
+                "id": "subghz-fsk-positive",
+                "sha256": phase_flow.sha256_file(scenario_path),
+            },
+            "candidate": {
+                "source_commit": source_commit,
+                "firmware_sha256": "b" * 64,
+                "app_elf_sha256": "c" * 64,
+            },
+            "fixture": {
+                "source_commit": source_commit,
+                "firmware_sha256": "d" * 64,
+                "app_elf_sha256": "e" * 64,
+                "profile_sha256": "f" * 64,
+                "cleanup": {
+                    "state": "stopped",
+                    "output_inactive": True,
+                    "ir_tx_inactive": True,
+                    "nrf_ce_inactive": True,
+                    "nrf_powered_down": True,
+                    "cc_transmit_active": False,
+                    "cc_idle": True,
+                    "cc_power_cleared": False,
+                    "cc_tx_fifo_cleared": True,
+                },
+            },
+            "cleanup": {"complete": True},
+            "reports": {"final": {
+                "page": "home", "runtime_owner": "none", "lease_mask": 0,
+            }},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            run_path = Path(directory) / "run.json"
+            run_path.write_text(json.dumps(run), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "fixture terminal cleanup"):
+                phase_flow.accepted_child(
+                    run_path, "subghz-fsk-positive", source_commit)
 
 
 if __name__ == "__main__":

@@ -193,6 +193,17 @@ class HilScenarioTests(unittest.TestCase):
             "candidate": "/dev/candidate", "fixture": "/dev/fixture",
         })
 
+    def test_repository_subghz_fixture_scenarios_are_valid(self) -> None:
+        for name in ("subghz-ook-positive", "subghz-fsk-positive"):
+            with self.subTest(name=name):
+                scenario = json.loads((
+                    ROOT / f"tests/hil/scenarios/{name}.json"
+                ).read_text(encoding="utf-8"))
+                hil.validate_scenario(scenario, {
+                    "candidate": "/dev/candidate",
+                    "fixture": "/dev/fixture",
+                })
+
     def test_repository_nrf24_fixture_regression_is_valid(self) -> None:
         scenario = json.loads((
             ROOT / "tests/hil/scenarios/nrf24-fixture-regression.json"
