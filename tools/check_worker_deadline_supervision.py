@@ -39,7 +39,7 @@ def main() -> int:
     require(header, (
         "enum class SupervisedWorker", "ProductSurveyPreparation",
         "ProductSurvey", "WifiCaptureStore", "SubGhzCaptureStore",
-        "InfraredCaptureStore", "lastHeartbeatUs",
+        "InfraredCaptureStore", "TargetsStore", "lastHeartbeatUs",
         "deadlineUs", "heartbeatCount", "tripCount", "bool evaluate",
     ), "deadline core API")
     require(core, (
@@ -117,6 +117,21 @@ def main() -> int:
         raise AssertionError(
             "pulse Capture Store injection must precede SD hardware")
 
+    targets_start = entry.index("void runTargetsMutationWorker(")
+    targets_end = entry.index("bool requestTargetsFavoriteMutation()",
+                              targets_start)
+    targets_store = entry[targets_start:targets_end]
+    require(targets_store, (
+        "armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs)",
+        "targetsStoreDeadlineCancelled()",
+        "heartbeatTargetsStoreDeadline()",
+        "disarmTargetsStoreDeadline();",
+        "xQueueOverwrite(targetsMutationEvents, &event)",
+    ), "Targets Store deadline integration")
+    if targets_store.count("supervisedCheckpoint()") < 6:
+        raise AssertionError(
+            "Targets Store lacks heartbeat coverage around storage boundaries")
+
     require(entry, (
         "kProductSurveyPreparationDeadlineUs = 8000000ULL",
         "kProductSurveyPreparationDeadlineInjectionMs = 10000",
@@ -125,6 +140,7 @@ def main() -> int:
         "kWifiCaptureStoreDeadlineUs = 8000000ULL",
         "kWifiCaptureStoreDeadlineInjectionMs = 10000",
         "kPulseCaptureStoreDeadlineUs = 8000000ULL",
+        "kTargetsStoreDeadlineUs = 8000000ULL",
         "kPulseCaptureStoreDeadlineInjectionMs = 10000",
         "BoardBlePassiveScanner::worstCaseScanDurationUs(",
         "serviceWorkerDeadlineSupervisor();",
@@ -142,6 +158,8 @@ def main() -> int:
         "worker.lastExpiredWorker ==\n               SupervisedWorker::SubGhzCaptureStore",
         "worker.lastExpiredWorker ==\n               SupervisedWorker::InfraredCaptureStore",
         "requestPulseCaptureStoreDeadlineCancel(",
+        "worker.lastExpiredWorker ==\n               SupervisedWorker::TargetsStore",
+        "requestTargetsStoreDeadlineCancel();",
         r'\"worker_supervision\":true',
     ), "platform deadline response")
     service_at = entry.index("serviceWorkerDeadlineSupervisor();")
@@ -153,6 +171,7 @@ def main() -> int:
         "snapshot.tripCount == 1", "supervisor.evaluate(6999)",
         "SupervisedWorker::SubGhzCaptureStore",
         "SupervisedWorker::InfraredCaptureStore",
+        "SupervisedWorker::TargetsStore",
     ), "native deadline matrix")
     require(ir_runner, (
         "safety.capture-ir-store-deadline-test confirm",
@@ -197,7 +216,8 @@ def main() -> int:
 
     print(
         "worker deadline contract passed: preparation + real Survey/Wi-Fi/"
-        "Sub-GHz/IR Capture Store heartbeat, 8 s deadlines, cancel/quiesce/"
+        "Sub-GHz/IR Capture and Targets Store heartbeat, 8 s deadlines, "
+        "cancel/quiesce/"
         "retained Safe Mode"
     )
     return 0

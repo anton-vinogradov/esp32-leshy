@@ -831,6 +831,35 @@ TargetCodecStatus encodeTargetState(
     return TargetCodecStatus::Valid;
 }
 
+TargetCodecStatus encodeTargetCatalogState(
+    const domain::targets::TargetCatalog& catalog,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr || catalog.size() == 0 ||
+        catalog.size() > domain::targets::TargetCatalog::kCapacity) {
+        return TargetCodecStatus::InvalidArgument;
+    }
+    CborWriter writer(output, capacity);
+    writer.map(4);
+    writer.unsignedValue(0);
+    writer.unsignedValue(kTargetStateSchemaVersion);
+    writer.unsignedValue(1);
+    writer.array(catalog.size());
+    for (std::size_t index = 0; index < catalog.size(); ++index) {
+        const domain::targets::TargetRecord* record = catalog.get(index);
+        if (record == nullptr || !encodeRecord(writer, *record)) {
+            return writer.ok() ? TargetCodecStatus::InvalidArgument
+                               : TargetCodecStatus::BufferTooSmall;
+        }
+    }
+    writer.unsignedValue(2);
+    writer.array(0);
+    writer.unsignedValue(3);
+    writer.array(0);
+    if (!writer.ok()) return TargetCodecStatus::BufferTooSmall;
+    *outputSize = writer.size();
+    return TargetCodecStatus::Valid;
+}
+
 TargetCodecStatus decodeTargetState(
     const std::uint8_t* input, std::size_t size,
     domain::targets::TargetCatalog* catalog,
@@ -932,6 +961,63 @@ TargetCodecStatus decodeTargetState(
     return TargetCodecStatus::Valid;
 }
 
+TargetCodecStatus decodeTargetCatalogState(
+    const std::uint8_t* input, std::size_t size,
+    domain::targets::TargetCatalog* catalog) {
+    if (input == nullptr || catalog == nullptr || size == 0 ||
+        size > kTargetStateMaxBytes) {
+        return TargetCodecStatus::InvalidArgument;
+    }
+    catalog->clear();
+    CborReader reader(input, size);
+    std::uint64_t count = 0;
+    std::uint64_t version = 0;
+    if (!reader.map(&count) || (count != 3 && count != 4) || !key(reader, 0) ||
+        !reader.unsignedValue(&version)) {
+        return TargetCodecStatus::Malformed;
+    }
+    if (version != kTargetStatePreviousSchemaVersion &&
+        version != kTargetStateSchemaVersion) {
+        return TargetCodecStatus::UnsupportedSchema;
+    }
+    if ((version == kTargetStatePreviousSchemaVersion && count != 3) ||
+        (version == kTargetStateSchemaVersion && count != 4)) {
+        return TargetCodecStatus::Malformed;
+    }
+    if (!key(reader, 1) || !reader.array(&count) || count == 0 ||
+        count > domain::targets::TargetCatalog::kCapacity) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    for (std::size_t index = 0; index < count; ++index) {
+        domain::targets::TargetRecord record{};
+        const TargetCodecStatus status = decodeRecord(reader, &record);
+        if (status != TargetCodecStatus::Valid ||
+            catalog->restore(record) !=
+                domain::targets::TargetMutationStatus::Created) {
+            catalog->clear();
+            return status == TargetCodecStatus::Valid
+                ? TargetCodecStatus::Conflict : status;
+        }
+    }
+    // The compact runtime must never silently discard decisions or reversible
+    // merge history. A non-empty array is a hard admission failure until the
+    // full-history lifecycle is active.
+    if (!key(reader, 2) || !reader.array(&count) || count != 0) {
+        catalog->clear();
+        return TargetCodecStatus::Conflict;
+    }
+    if (version == kTargetStateSchemaVersion &&
+        (!key(reader, 3) || !reader.array(&count) || count != 0)) {
+        catalog->clear();
+        return TargetCodecStatus::Conflict;
+    }
+    if (!reader.complete()) {
+        catalog->clear();
+        return TargetCodecStatus::TrailingData;
+    }
+    return TargetCodecStatus::Valid;
+}
+
 TargetCodecStatus encodeTargetStateManifest(
     const domain::targets::TargetCatalog& catalog,
     const domain::targets::CorrelationDecisionLog& decisions,
@@ -957,6 +1043,36 @@ TargetCodecStatus encodeTargetStateManifest(
     writer.unsignedValue(decisions.size());
     writer.unsignedValue(3);
     writer.unsignedValue(merges.size());
+    writer.unsignedValue(4);
+    writer.unsignedValue(stateSize);
+    writer.unsignedValue(5);
+    writer.unsignedValue(crc32c(stateBytes, stateSize));
+    if (!writer.ok()) return TargetCodecStatus::BufferTooSmall;
+    *outputSize = writer.size();
+    return TargetCodecStatus::Valid;
+}
+
+TargetCodecStatus encodeTargetCatalogStateManifest(
+    const domain::targets::TargetCatalog& catalog,
+    const std::uint8_t* stateBytes, std::size_t stateSize,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (catalog.size() == 0 ||
+        catalog.size() > domain::targets::TargetCatalog::kCapacity ||
+        stateBytes == nullptr || stateSize == 0 ||
+        stateSize > kTargetStateMaxBytes || output == nullptr ||
+        outputSize == nullptr) {
+        return TargetCodecStatus::InvalidArgument;
+    }
+    CborWriter writer(output, capacity);
+    writer.map(6);
+    writer.unsignedValue(0);
+    writer.unsignedValue(kTargetStateSchemaVersion);
+    writer.unsignedValue(1);
+    writer.unsignedValue(catalog.size());
+    writer.unsignedValue(2);
+    writer.unsignedValue(0);
+    writer.unsignedValue(3);
+    writer.unsignedValue(0);
     writer.unsignedValue(4);
     writer.unsignedValue(stateSize);
     writer.unsignedValue(5);
@@ -1054,6 +1170,33 @@ TargetCodecStatus reopenTargetState(
         catalog->clear();
         decisions->clear();
         merges->clear();
+        return TargetCodecStatus::Malformed;
+    }
+    return TargetCodecStatus::Valid;
+}
+
+TargetCodecStatus reopenTargetCatalogState(
+    const std::uint8_t* manifestBytes, std::size_t manifestSize,
+    const std::uint8_t* stateBytes, std::size_t stateSize,
+    domain::targets::TargetCatalog* catalog) {
+    if (catalog == nullptr) return TargetCodecStatus::InvalidArgument;
+    catalog->clear();
+    TargetStateManifest manifest{};
+    const TargetCodecStatus manifestStatus = decodeTargetStateManifest(
+        manifestBytes, manifestSize, &manifest);
+    if (manifestStatus != TargetCodecStatus::Valid) return manifestStatus;
+    if (manifest.decisionCount != 0 || manifest.mergeCount != 0) {
+        return TargetCodecStatus::Conflict;
+    }
+    if (manifest.stateLength != stateSize || stateBytes == nullptr ||
+        manifest.stateCrc32c != crc32c(stateBytes, stateSize)) {
+        return TargetCodecStatus::ChecksumMismatch;
+    }
+    const TargetCodecStatus stateStatus =
+        decodeTargetCatalogState(stateBytes, stateSize, catalog);
+    if (stateStatus != TargetCodecStatus::Valid) return stateStatus;
+    if (catalog->size() != manifest.targetCount) {
+        catalog->clear();
         return TargetCodecStatus::Malformed;
     }
     return TargetCodecStatus::Valid;

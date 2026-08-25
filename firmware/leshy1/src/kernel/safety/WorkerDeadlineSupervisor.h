@@ -11,6 +11,7 @@ enum class SupervisedWorker : std::uint8_t {
     WifiCaptureStore = 3,
     SubGhzCaptureStore = 4,
     InfraredCaptureStore = 5,
+    TargetsStore = 6,
 };
 
 struct WorkerDeadlineSnapshot final {

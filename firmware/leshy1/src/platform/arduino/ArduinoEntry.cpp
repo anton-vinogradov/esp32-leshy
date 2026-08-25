@@ -92,6 +92,7 @@
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
 #include "services/power/PowerSafetyPolicy.h"
+#include "services/targets/TargetService.h"
 #include "services/survey/IngressTiming.h"
 #include "services/survey/ObservationQueue.h"
 #include "services/survey/SessionBatchPolicy.h"
@@ -115,6 +116,7 @@
 #include "storage/SessionStoreIoRouter.h"
 #include "storage/StorageGuard.h"
 #include "storage/StorageTiming.h"
+#include "storage/TargetStateStore.h"
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/TouchTargets.h"
 #include "ui/InterfaceSettingsController.h"
@@ -216,6 +218,8 @@ using leshy1::domain::apps::AppMenuItem;
 using leshy1::domain::hardware::CapabilityRecord;
 using leshy1::domain::targets::TargetChangeKind;
 using leshy1::domain::targets::TargetComparisonClass;
+using leshy1::domain::targets::TargetCatalog;
+using leshy1::domain::targets::TargetId;
 using leshy1::domain::hardware::CapabilityState;
 using leshy1::domain::hardware::HardwareInventory;
 using leshy1::domain::observations::Observation;
@@ -245,6 +249,9 @@ using leshy1::kernel::safety::WorkerDeadlineSnapshot;
 using leshy1::services::power::PowerSafetyPolicy;
 using leshy1::services::power::PowerTelemetryState;
 using leshy1::services::power::PowerWriteDisposition;
+using leshy1::services::targets::TargetAction;
+using leshy1::services::targets::TargetActionKind;
+using leshy1::services::targets::TargetService;
 using leshy1::kernel::safety::WorkerDeadlineSupervisor;
 using leshy1::platform::arduino::BoardSafeOutputs;
 using leshy1::platform::arduino::BoardInfraredReceiver;
@@ -390,6 +397,63 @@ std::uint32_t targetsHeapFreeAfter = 0;
 std::uint32_t targetsBlockedWriteAttempts = 0;
 int targetsFilesystemMountError = 0;
 bool targetsCleanupComplete = true;
+TargetProductBinding targetsBaselineBinding{};
+TargetProductBinding targetsCurrentBinding{};
+bool targetsComparisonLoaded = false;
+std::uint32_t targetsStateGeneration = 0;
+leshy1::storage::RecoveryChoice targetsStateHead =
+    leshy1::storage::RecoveryChoice::None;
+enum class TargetsMutationState : std::uint8_t {
+    Idle,
+    Saving,
+    Saved,
+    Failed,
+};
+const char* targetsMutationStateName(TargetsMutationState state) {
+    switch (state) {
+        case TargetsMutationState::Idle: return "idle";
+        case TargetsMutationState::Saving: return "saving";
+        case TargetsMutationState::Saved: return "saved";
+        case TargetsMutationState::Failed: return "failed";
+    }
+    return "failed";
+}
+struct TargetsMutationEvent final {
+    const char* status = "not_started";
+    bool persisted = false;
+    bool catalogRecovered = false;
+    bool cleanupComplete = false;
+    bool favorite = false;
+    TargetId targetId{};
+    std::uint32_t generation = 0;
+    leshy1::storage::RecoveryChoice head =
+        leshy1::storage::RecoveryChoice::None;
+    leshy1::storage::TargetStateStoreStatus storeStatus =
+        leshy1::storage::TargetStateStoreStatus::InvalidArgument;
+    leshy1::storage::CommitStage commitStage =
+        leshy1::storage::CommitStage::WritePayloads;
+    std::uint64_t elapsedUs = 0;
+    std::uint64_t bytesWritten = 0;
+    std::uint32_t writeCalls = 0;
+    std::uint32_t fileSyncs = 0;
+    std::uint32_t directorySyncs = 0;
+    std::uint32_t heapFreeBeforeMount = 0;
+    std::uint32_t heapLargestBeforeMount = 0;
+    int filesystemMountError = 0;
+    std::uint8_t identityAttempts = 0;
+    std::uint8_t identityTransientRetries = 0;
+    char expectedFingerprint[33] = {};
+    char observedFingerprint[33] = {};
+};
+TargetsMutationState targetsMutationState = TargetsMutationState::Idle;
+const char* targetsMutationStatus = "idle";
+TargetsMutationEvent targetsMutationReport{};
+TargetCatalog* targetsMutationCatalog = nullptr;
+TargetId targetsMutationTargetId{};
+bool targetsMutationFavorite = false;
+std::uint64_t targetsMutationStartActionUs = 0;
+QueueHandle_t targetsMutationEvents = nullptr;
+TaskHandle_t targetsMutationTaskHandle = nullptr;
 leshy1::services::survey::ObservationQueue surveyIngressQueue;
 leshy1::storage::SessionStoreWorkspace sessionStoreWorkspace;
 ArduinoFsSessionStoreWorkspace sdSessionStoreIoWorkspace;
@@ -1253,6 +1317,7 @@ constexpr std::uint64_t kProductSurveyPreparationDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kWifiCaptureStoreDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kPulseCaptureStoreDeadlineUs = 8000000ULL;
+constexpr std::uint64_t kTargetsStoreDeadlineUs = 8000000ULL;
 constexpr std::uint32_t kProductSurveyPreparationDeadlineInjectionMs = 10000;
 constexpr std::uint32_t kProductSurveyWorkerDeadlineInjectionMs = 10000;
 constexpr std::uint32_t kWifiCaptureStoreDeadlineInjectionMs = 10000;
@@ -1285,6 +1350,7 @@ bool subGhzCaptureStoreDeadlineInjectionOnce = false;
 bool subGhzCaptureStoreDeadlineCancelRequested = false;
 bool infraredCaptureStoreDeadlineInjectionOnce = false;
 bool infraredCaptureStoreDeadlineCancelRequested = false;
+bool targetsStoreDeadlineCancelRequested = false;
 
 void renderInteractiveScreen(bool clearContent = true);
 void broadcast(const char* line);
@@ -1804,6 +1870,51 @@ bool disarmWifiCaptureStoreDeadline() {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     const bool disarmed = workerDeadlineSupervisor.disarm(
         SupervisedWorker::WifiCaptureStore);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return disarmed;
+}
+
+void resetTargetsStoreDeadlineCancel() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    targetsStoreDeadlineCancelRequested = false;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+void requestTargetsStoreDeadlineCancel() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    targetsStoreDeadlineCancelRequested = true;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+bool targetsStoreDeadlineCancelled() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool cancelled = targetsStoreDeadlineCancelRequested;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return cancelled;
+}
+
+bool armTargetsStoreDeadline(std::uint64_t nowUs) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed = workerDeadlineSupervisor.arm(
+        SupervisedWorker::TargetsStore, nowUs, kTargetsStoreDeadlineUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+bool heartbeatTargetsStoreDeadline() {
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0) nowUs = 1;
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool accepted = workerDeadlineSupervisor.heartbeat(
+        SupervisedWorker::TargetsStore, nowUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return accepted;
+}
+
+bool disarmTargetsStoreDeadline() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool disarmed = workerDeadlineSupervisor.disarm(
+        SupervisedWorker::TargetsStore);
     portEXIT_CRITICAL(&productSurveyWorkerMux);
     return disarmed;
 }
@@ -4373,8 +4484,29 @@ bool allocateTargetsProduct() {
     return false;
 }
 
+TargetsLoadStatus loadBoundTargetsProduct(
+    TargetsController& controller, const TargetCatalog* persisted = nullptr) {
+    if (targetsComparisonLoaded) {
+        return persisted == nullptr
+            ? controller.load(targetsBaselineBinding, targetsCurrentBinding)
+            : controller.load(targetsBaselineBinding, targetsCurrentBinding,
+                              *persisted);
+    }
+    return persisted == nullptr
+        ? controller.load(targetsCurrentBinding)
+        : controller.load(targetsCurrentBinding, *persisted);
+}
+
 bool loadTargetsProduct(const AppMenuItem& item) {
     releaseTargetsProduct();
+    targetsBaselineBinding = {};
+    targetsCurrentBinding = {};
+    targetsComparisonLoaded = false;
+    targetsStateGeneration = 0;
+    targetsStateHead = leshy1::storage::RecoveryChoice::None;
+    targetsMutationState = TargetsMutationState::Idle;
+    targetsMutationStatus = "idle";
+    targetsMutationReport = {};
     targetsBlockedWriteAttempts = 0;
     targetsFilesystemMountError = 0;
     targetsCleanupComplete = true;
@@ -4390,6 +4522,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         }
         const TargetsLoadStatus loaded = controller.load(
             {entry->session, entry->generation});
+        targetsCurrentBinding = {entry->session, entry->generation};
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
         lastRuntimeEvent = targetsProductStatus;
@@ -4477,6 +4610,9 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     std::uint32_t currentGeneration = 0;
     bool latestRecovered = false;
     std::uint32_t latestGeneration = 0;
+    TargetCatalog* persistedCatalog = nullptr;
+    bool persistedCatalogAvailable = false;
+    bool targetStateAccepted = true;
     if (!permit.allowed()) {
         targetsProductStatus =
             leshy1::storage::productStoreAccessStatusName(permit.status);
@@ -4505,6 +4641,38 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                     latestGeneration = latest.generation;
                 }
             }
+            const bool sessionReady = pairRecovered || latestRecovered;
+            const bool targetStatePresent = filesystem.exists(
+                    "/leshy/sessions/v1/target-state-head-a.bin") ||
+                filesystem.exists(
+                    "/leshy/sessions/v1/target-state-head-b.bin");
+            if (sessionReady && targetStatePresent) {
+                persistedCatalog = new (std::nothrow) TargetCatalog();
+                auto* targetWorkspace = new (std::nothrow)
+                    leshy1::storage::TargetStateStoreWorkspace();
+                if (persistedCatalog == nullptr || targetWorkspace == nullptr) {
+                    delete persistedCatalog;
+                    persistedCatalog = nullptr;
+                    delete targetWorkspace;
+                    targetStateAccepted = false;
+                    targetsProductStatus = "target_state_workspace_unavailable";
+                } else {
+                    const auto recovered =
+                        leshy1::storage::recoverTargetCatalogState(
+                            io, *targetWorkspace, persistedCatalog);
+                    if (recovered.valid()) {
+                        persistedCatalogAvailable = true;
+                        targetsStateGeneration = recovered.generation;
+                        targetsStateHead = recovered.choice;
+                    } else {
+                        targetStateAccepted = false;
+                        targetsProductStatus =
+                            leshy1::storage::targetStateStoreStatusName(
+                                recovered.status);
+                    }
+                    delete targetWorkspace;
+                }
+            }
         }
         io.end();
     }
@@ -4516,18 +4684,398 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     }
     // Release FAT/SPI heap before allocating the foreground Targets workspace.
     if (targetsCleanupComplete && targetsBlockedWriteAttempts == 0 &&
+        targetStateAccepted &&
         (pairRecovered || latestRecovered)) {
-        if (!allocateTargetsProduct()) return false;
+        if (!allocateTargetsProduct()) {
+            delete persistedCatalog;
+            return false;
+        }
         TargetsController& controller = targetsProductRuntime->controller;
-        const TargetsLoadStatus loaded = pairRecovered
-            ? controller.load({&librarySession, baselineGeneration},
-                              {&surveySession, currentGeneration})
-            : controller.load({&surveySession, latestGeneration});
+        targetsComparisonLoaded = pairRecovered;
+        targetsBaselineBinding = pairRecovered
+            ? TargetProductBinding{&librarySession, baselineGeneration}
+            : TargetProductBinding{};
+        targetsCurrentBinding = pairRecovered
+            ? TargetProductBinding{&surveySession, currentGeneration}
+            : TargetProductBinding{&surveySession, latestGeneration};
+        const TargetsLoadStatus loaded = loadBoundTargetsProduct(
+            controller,
+            persistedCatalogAvailable ? persistedCatalog : nullptr);
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
     }
+    delete persistedCatalog;
     lastRuntimeEvent = targetsProductStatus;
     return true;
+}
+
+bool rebuildTargetsProductFromCatalog(const TargetCatalog* persisted,
+                                      const TargetId& selectedId,
+                                      bool openActions) {
+    if (!allocateTargetsProduct()) return false;
+    TargetsController& controller = targetsProductRuntime->controller;
+    const TargetsLoadStatus loaded = loadBoundTargetsProduct(
+        controller, persisted != nullptr && persisted->size() != 0
+            ? persisted : nullptr);
+    if (loaded != TargetsLoadStatus::Ready) {
+        targetsProductStatus =
+            leshy1::apps::targets::targetsLoadStatusName(loaded);
+        return false;
+    }
+    if (leshy1::domain::targets::targetIdValid(selectedId) &&
+        controller.selectTarget(selectedId)) {
+        controller.openSelected();
+        if (openActions) controller.openSelected();
+    }
+    targetsProductStatus = "ready";
+    return true;
+}
+
+void runTargetsMutationWorker(void*) {
+    TargetsMutationEvent event;
+    event.status = "store_failed";
+    event.favorite = targetsMutationFavorite;
+    event.targetId = targetsMutationTargetId;
+    const std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    TargetCatalog* catalog = targetsMutationCatalog;
+    BoardSdFilesystem filesystem;
+    bool identityCleanupComplete = true;
+    bool filesystemAttempted = false;
+    bool deadlineArmed = false;
+    ArduinoFsSessionStoreIo* io = nullptr;
+    auto* workspace = static_cast<leshy1::storage::TargetStateStoreWorkspace*>(
+        nullptr);
+    resetTargetsStoreDeadlineCancel();
+    deadlineArmed = armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs);
+    const auto supervisedCheckpoint = [&]() {
+        return !targetsStoreDeadlineCancelled() &&
+            heartbeatTargetsStoreDeadline();
+    };
+    do {
+        if (!deadlineArmed) {
+            event.status = "deadline_unavailable";
+            break;
+        }
+        if (catalog == nullptr || targetsMutationEvents == nullptr) {
+            event.status = "worker_invalid";
+            break;
+        }
+        const auto required =
+            leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+            leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+        const auto owned = appRuntime.activeResources();
+        if ((owned & required) != required) {
+            event.status = "resources_missing";
+            break;
+        }
+        if (!loadProductFingerprint(event.expectedFingerprint,
+                                    sizeof(event.expectedFingerprint)) ||
+            !exactCidFingerprint(event.expectedFingerprint)) {
+            event.status = "enrollment_missing";
+            break;
+        }
+
+        leshy1::storage::SdTransportRunResult identity{};
+        for (std::uint8_t attempt = 1;
+             attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
+             ++attempt) {
+            BoardSdSpiTransport transport;
+            const bool begun = transport.begin();
+            identity = {};
+            if (begun) {
+                leshy1::storage::SdTransportRunPolicy policy;
+                policy.allowPhysical = true;
+                policy.explicitlySelected = true;
+                policy.identificationOnly = true;
+                policy.ownedResources = owned;
+                identity = leshy1::storage::runSdIdentificationStateMachine(
+                    leshy1::storage::defaultSdIdentificationPlan(), transport,
+                    policy);
+                transport.end();
+            }
+            event.identityAttempts = attempt;
+            event.identityTransientRetries =
+                static_cast<std::uint8_t>(attempt - 1U);
+            identityCleanupComplete = transport.cleanupComplete();
+            formatCidFingerprint(identity.identity, event.observedFingerprint,
+                                 sizeof(event.observedFingerprint));
+            if (identityCleanupComplete &&
+                identity.status ==
+                    leshy1::storage::SdTransportRunStatus::Valid) {
+                break;
+            }
+            const leshy1::storage::ProductStartIdentityRetryEvidence evidence{
+                true,
+                true,
+                true,
+                true,
+                transport.physicalSpiStarted(),
+                identity.status,
+                std::strcmp(event.observedFingerprint,
+                            "00000000000000000000000000000000") == 0,
+                identityCleanupComplete,
+                false,
+            };
+            if (!leshy1::storage::shouldRetryProductStartIdentity(
+                    evidence, attempt)) {
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(
+                leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+        }
+        if (!identityCleanupComplete ||
+            identity.status != leshy1::storage::SdTransportRunStatus::Valid) {
+            event.status = "identity_failed";
+            break;
+        }
+        if (std::strcmp(event.expectedFingerprint,
+                        event.observedFingerprint) != 0) {
+            event.status = "fingerprint_mismatch";
+            break;
+        }
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+
+        event.heapFreeBeforeMount = static_cast<std::uint32_t>(
+            heap_caps_get_free_size(MALLOC_CAP_8BIT));
+        event.heapLargestBeforeMount = static_cast<std::uint32_t>(
+            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        filesystemAttempted = true;
+        if (!filesystem.begin()) {
+            event.filesystemMountError = filesystem.mountError();
+            event.status = "mount_failed";
+            break;
+        }
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+        event.filesystemMountError = filesystem.mountError();
+        const std::uint64_t cardCapacity = filesystem.cardCapacityBytes();
+        leshy1::storage::MediaIdentity media;
+        media.present = cardCapacity != 0 &&
+            cardCapacity == identity.identity.capacityBytes;
+        media.kind = leshy1::storage::MediaKind::Sd;
+        media.fingerprint = event.observedFingerprint;
+        media.capacityBytes = cardCapacity;
+        media.freeBytes = filesystem.cachedFreeBytes();
+        leshy1::storage::ProductStoreRequest request;
+        request.operation =
+            leshy1::storage::ProductStoreOperation::CommitSession;
+        request.explicitlySelected = true;
+        request.expectedFingerprint = event.expectedFingerprint;
+        request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+        request.rootExists = filesystem.exists(
+            leshy1::storage::kProductSessionStoreRoot);
+        request.driverWriteEnabled = true;
+        request.requiredBytes = kProductSurveyCommitBytes;
+        request.reserveBytes = kProductSurveyReserveBytes;
+        request.ownedResources = owned;
+        request.power = powerSafetyPolicy.writeDisposition();
+        const auto permit = leshy1::storage::authorizeProductStore(
+            media, request);
+        if (!permit.allowed()) {
+            event.status =
+                leshy1::storage::productStoreAccessStatusName(permit.status);
+            break;
+        }
+        io = new (std::nothrow) ArduinoFsSessionStoreIo(
+            filesystem.driveNumber(), sdSessionStoreIoWorkspace);
+        workspace = new (std::nothrow)
+            leshy1::storage::TargetStateStoreWorkspace();
+        if (io == nullptr || workspace == nullptr) {
+            event.status = "workspace_unavailable";
+            break;
+        }
+        if (!io->openExistingWritable(permit)) {
+            event.status = "open_failed";
+            break;
+        }
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+
+        TargetAction action;
+        action.kind = TargetActionKind::SetFavorite;
+        action.targetId = event.targetId;
+        action.favorite = event.favorite;
+        TargetService service(*catalog);
+        const auto applied = service.execute(action);
+        if (!applied.applied()) {
+            event.status = leshy1::domain::targets::targetMutationStatusName(
+                applied.status);
+            break;
+        }
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+        if (targetsStateGeneration == UINT32_MAX ||
+            (targetsStateGeneration != 0 &&
+             targetsStateHead != leshy1::storage::RecoveryChoice::A &&
+             targetsStateHead != leshy1::storage::RecoveryChoice::B)) {
+            event.status = "state_generation_invalid";
+            break;
+        }
+        const std::uint32_t nextGeneration =
+            targetsStateGeneration == 0 ? 1U : targetsStateGeneration + 1U;
+        const leshy1::storage::HeadSlot nextHead =
+            targetsStateGeneration == 0 ||
+                    targetsStateHead == leshy1::storage::RecoveryChoice::B
+                ? leshy1::storage::HeadSlot::A
+                : leshy1::storage::HeadSlot::B;
+        const auto committed = leshy1::storage::commitTargetCatalogState(
+            *io, *workspace, *catalog, nextGeneration, nextHead);
+        event.storeStatus = committed.status;
+        event.commitStage = committed.stage;
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+        const auto recovered = leshy1::storage::recoverTargetCatalogState(
+            *io, *workspace, catalog);
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+        event.catalogRecovered = recovered.valid();
+        if (recovered.valid()) {
+            event.generation = recovered.generation;
+            event.head = recovered.choice;
+        }
+        const auto* reopened = catalog->find(event.targetId);
+        event.persisted = committed.complete() && recovered.valid() &&
+            recovered.generation == committed.generation &&
+            reopened != nullptr && reopened->favorite == event.favorite;
+        event.status = event.persisted
+            ? "saved"
+            : (committed.complete()
+                   ? "reopen_failed"
+                   : leshy1::storage::targetStateStoreStatusName(
+                         committed.status));
+    } while (false);
+
+    if (io != nullptr) {
+        event.bytesWritten = io->bytesWritten();
+        event.writeCalls = io->writeCalls();
+        event.fileSyncs = io->fileSyncs();
+        event.directorySyncs = io->directorySyncs();
+        io->end();
+    }
+    delete io;
+    delete workspace;
+    if (filesystem.mounted()) filesystem.end();
+    const bool filesystemCleanup = !filesystemAttempted ||
+        filesystem.cleanupComplete();
+    event.cleanupComplete = identityCleanupComplete && filesystemCleanup &&
+        !filesystem.mounted();
+    if (!event.cleanupComplete) {
+        event.persisted = false;
+        event.status = "cleanup_failed";
+    }
+    if (targetsStoreDeadlineCancelled()) {
+        event.persisted = false;
+        event.status = "safety_worker_deadline";
+    }
+    if (deadlineArmed) disarmTargetsStoreDeadline();
+    resetTargetsStoreDeadlineCancel();
+    const std::uint64_t finishedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    event.elapsedUs = finishedUs >= startedUs ? finishedUs - startedUs : 0;
+    if (targetsMutationEvents != nullptr) {
+        xQueueOverwrite(targetsMutationEvents, &event);
+    }
+    vTaskDelete(nullptr);
+}
+
+bool requestTargetsFavoriteMutation() {
+    const std::uint64_t actionStartedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (targetsProductRuntime == nullptr ||
+        targetsProductRuntime->controller.view() != TargetsView::Actions ||
+        targetsMutationState == TargetsMutationState::Saving) {
+        return false;
+    }
+    const auto* selected =
+        targetsProductRuntime->controller.selectedTarget();
+    if (selected == nullptr) return false;
+    if (powerSafetyPolicy.writeDisposition() ==
+        PowerWriteDisposition::ProhibitedLowVoltage) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "power_unsafe";
+        lastRuntimeEvent = "targets_store_power_unsafe";
+        return true;
+    }
+    if (targetsMutationEvents == nullptr ||
+        targetsMutationTaskHandle != nullptr ||
+        targetsMutationCatalog != nullptr) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "worker_unavailable";
+        lastRuntimeEvent = "targets_store_worker_unavailable";
+        return true;
+    }
+    targetsMutationCatalog = new (std::nothrow) TargetCatalog(
+        targetsProductRuntime->controller.catalog());
+    if (targetsMutationCatalog == nullptr) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "workspace_unavailable";
+        lastRuntimeEvent = "targets_store_workspace_unavailable";
+        return true;
+    }
+    targetsMutationTargetId = selected->id;
+    targetsMutationFavorite = !selected->favorite;
+    targetsMutationReport = {};
+    releaseTargetsProduct();
+    targetsMutationState = TargetsMutationState::Saving;
+    targetsMutationStatus = "saving";
+    const bool started = xTaskCreatePinnedToCore(
+        runTargetsMutationWorker, "leshy-targets-store", 8192, nullptr, 1,
+        &targetsMutationTaskHandle, 0) == pdPASS;
+    targetsMutationStartActionUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) - actionStartedUs;
+    if (!started) {
+        targetsMutationTaskHandle = nullptr;
+        rebuildTargetsProductFromCatalog(targetsMutationCatalog,
+                                         targetsMutationTargetId, true);
+        delete targetsMutationCatalog;
+        targetsMutationCatalog = nullptr;
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "worker_unavailable";
+        lastRuntimeEvent = "targets_store_worker_unavailable";
+    } else {
+        targetsProductStatus = "saving";
+        lastRuntimeEvent = "targets_store_saving";
+    }
+    return true;
+}
+
+void serviceTargetsMutationWorker() {
+    if (targetsMutationEvents == nullptr) return;
+    TargetsMutationEvent event;
+    if (xQueueReceive(targetsMutationEvents, &event, 0) != pdTRUE) return;
+    targetsMutationTaskHandle = nullptr;
+    targetsMutationReport = event;
+    const bool rebuilt = rebuildTargetsProductFromCatalog(
+        event.catalogRecovered ? targetsMutationCatalog : nullptr,
+        event.targetId, true);
+    delete targetsMutationCatalog;
+    targetsMutationCatalog = nullptr;
+    if (event.catalogRecovered) {
+        targetsStateGeneration = event.generation;
+        targetsStateHead = event.head;
+    }
+    targetsMutationState = event.persisted && event.cleanupComplete && rebuilt
+        ? TargetsMutationState::Saved : TargetsMutationState::Failed;
+    targetsMutationStatus = targetsMutationState == TargetsMutationState::Saved
+        ? "saved" : event.status;
+    targetsProductStatus = rebuilt ? "ready" : targetsProductStatus;
+    lastRuntimeEvent = targetsMutationState == TargetsMutationState::Saved
+        ? "targets_store_saved" : "targets_store_failed";
+    if (uiController.page() == 7) renderInteractiveScreen();
 }
 
 bool IRAM_ATTR recordProductBootRecoveryTimeout() {
@@ -4763,6 +5311,11 @@ void serviceWorkerDeadlineSupervisor() {
         infraredCapturePersistState = CapturePersistState::Failed;
         infraredCapturePersistStatus = "safety_worker_deadline";
         infraredCapturePersistGeneration = 0;
+    } else if (worker.lastExpiredWorker ==
+               SupervisedWorker::TargetsStore) {
+        requestTargetsStoreDeadlineCancel();
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "safety_worker_deadline";
     } else {
         requestProductSurveyWorkerStop(true);
         if (productSurveyScanStartGate != nullptr) {
@@ -6716,6 +7269,9 @@ NavigationFooter navigationFooterForCurrentState() {
         return {{NavigationKey::Left, UiTextId::NavModes}, {}, {}};
     }
     if (uiController.page() == 7) {
+        if (targetsMutationState == TargetsMutationState::Saving) {
+            return {{}, {}, {}};
+        }
         if (targetsProductRuntime == nullptr) return {back, {}, {}};
         if (targetsProductRuntime->controller.view() == TargetsView::List) {
             return targetsProductRuntime->controller.entryCount() == 0
@@ -6733,7 +7289,13 @@ NavigationFooter navigationFooterForCurrentState() {
             TargetsView::CompareDetail) {
             return {{NavigationKey::Left, UiTextId::NavChanges}, {}, {}};
         }
-        return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
+        if (targetsProductRuntime->controller.view() ==
+            TargetsView::Actions) {
+            return {{NavigationKey::Left, UiTextId::NavDetails}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavToggle}};
+        }
+        return {{NavigationKey::Left, UiTextId::NavList}, {},
+                {NavigationKey::RightAndSelect, UiTextId::NavActions}};
     }
     if (uiController.page() == kDevicePage) return {back, choose, enter};
     return {back, {}, {}};
@@ -10872,8 +11434,16 @@ void renderTargetComparisonDetail(bool clearContent) {
 
 void renderTargetsPage(bool clearContent) {
     if (targetsProductRuntime == nullptr) {
-        renderHeader(tr(UiTextId::AppTargets), clearContent);
-        renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+        renderHeader(targetsMutationState == TargetsMutationState::Saving
+                         ? tr(UiTextId::TargetsActions)
+                         : tr(UiTextId::AppTargets),
+                     clearContent);
+        renderMetric(0,
+                     targetsMutationState == TargetsMutationState::Saving
+                         ? tr(UiTextId::TargetsSaving)
+                         : tr(UiTextId::TargetsLoadFailed),
+                     targetsMutationState == TargetsMutationState::Saving
+                         ? Tone::Positive : Tone::Danger);
         return;
     }
     TargetsController& controller = targetsProductRuntime->controller;
@@ -10894,6 +11464,26 @@ void renderTargetsPage(bool clearContent) {
             ? controller.comparisonSize() : first + kVisibleTargetRows;
         for (std::size_t index = first; index < end; ++index) {
             renderTargetComparisonRow(index, first);
+        }
+        return;
+    }
+    if (controller.view() == TargetsView::Actions) {
+        renderHeader(tr(UiTextId::TargetsActions), clearContent);
+        const auto* target = controller.selectedTarget();
+        if (target == nullptr) {
+            renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+            return;
+        }
+        renderMenuRow(Components::homeRow(0),
+                      tr(UiTextId::TargetsFavorite),
+                      tr(target->favorite ? UiTextId::TargetsFavoriteOn
+                                          : UiTextId::TargetsFavoriteOff),
+                      true, true,
+                      target->favorite ? Tone::Positive : Tone::Muted);
+        if (targetsMutationState == TargetsMutationState::Saved) {
+            renderMetric(2, tr(UiTextId::TargetsSaved), Tone::Positive);
+        } else if (targetsMutationState == TargetsMutationState::Failed) {
+            renderMetric(2, tr(UiTextId::TargetsSaveFailed), Tone::Danger);
         }
         return;
     }
@@ -10925,14 +11515,17 @@ void renderTargetsPage(bool clearContent) {
         }
         renderMetric(2, line);
         std::snprintf(line, sizeof(line),
-                      tr(UiTextId::TargetsEvidenceFormat),
-                      static_cast<unsigned>(target->evidenceCount));
-        renderMetric(3, line);
-        std::snprintf(line, sizeof(line),
-                      tr(UiTextId::TargetsGenerationFormat),
+                      tr(UiTextId::TargetsEvidenceGenerationFormat),
+                      static_cast<unsigned>(target->evidenceCount),
                       static_cast<unsigned long>(
                           row->evidence.sourceGeneration));
-        renderMetric(4, line);
+        renderMetric(3, line);
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::TargetsFavoriteFormat),
+                      tr(target->favorite ? UiTextId::TargetsFavoriteOn
+                                          : UiTextId::TargetsFavoriteOff));
+        renderMetric(4, line,
+                     target->favorite ? Tone::Positive : Tone::Muted);
         return;
     }
 
@@ -13940,6 +14533,8 @@ void emitTargetsState(Stream& reply) {
         ? nullptr : &targetsProductRuntime->controller;
     const TargetListRow* selected = controller == nullptr
         ? nullptr : controller->selectedRow();
+    const auto* selectedTarget = controller == nullptr
+        ? nullptr : controller->selectedTarget();
     const auto* comparison = controller != nullptr &&
             controller->compareAvailable()
         ? &controller->comparison() : nullptr;
@@ -13957,11 +14552,26 @@ void emitTargetsState(Stream& reply) {
         ? "none"
         : controller->view() == TargetsView::Detail
               ? "detail"
+              : controller->view() == TargetsView::Actions
+                    ? "actions"
               : controller->view() == TargetsView::Compare
                     ? "compare"
                     : controller->view() == TargetsView::CompareDetail
                           ? "compare_detail" : "list";
-    char line[1280] = {};
+    const char* stateHead = targetsStateHead ==
+            leshy1::storage::RecoveryChoice::A
+        ? "a"
+        : targetsStateHead == leshy1::storage::RecoveryChoice::B
+              ? "b" : "none";
+    char selectedTargetId[TargetId::kSize * 2U + 1U] = {};
+    if (selectedTarget != nullptr) {
+        for (std::size_t index = 0; index < TargetId::kSize; ++index) {
+            std::snprintf(selectedTargetId + index * 2U, 3, "%02X",
+                          static_cast<unsigned>(
+                              selectedTarget->id.bytes[index]));
+        }
+    }
+    char line[2048] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.targets.product.v1\",\"kind\":\"state\","
@@ -13984,7 +14594,20 @@ void emitTargetsState(Stream& reply) {
         "\"current_observation_sequence\":%llu,"
         "\"current_rssi_dbm\":%d,\"current_channel\":%u,"
         "\"selected_generation\":%lu,\"selected_rssi_dbm\":%d,"
-        "\"read_only\":true,\"write_enabled\":false,"
+        "\"selected_target_present\":%s,\"selected_target_id\":\"%s\","
+        "\"selected_favorite\":%s,"
+        "\"selected_revision\":%lu,"
+        "\"read_only\":false,\"write_enabled\":%s,"
+        "\"target_state_generation\":%lu,\"target_state_head\":\"%s\","
+        "\"mutation_state\":\"%s\",\"mutation_status\":\"%s\","
+        "\"mutation_persisted\":%s,\"mutation_generation\":%lu,"
+        "\"mutation_action_us\":%llu,\"mutation_elapsed_us\":%llu,"
+        "\"mutation_bytes_written\":%llu,\"mutation_write_calls\":%lu,"
+        "\"mutation_file_syncs\":%lu,\"mutation_directory_syncs\":%lu,"
+        "\"mutation_identity_attempts\":%u,"
+        "\"mutation_identity_transient_retries\":%u,"
+        "\"mutation_expected_cid\":\"%s\","
+        "\"mutation_observed_cid\":\"%s\","
         "\"blocked_write_attempts\":%lu,"
         "\"filesystem_mount_error\":%d,\"cleanup_complete\":%s,"
         "\"lease_mask\":%lu,\"heap_free_before\":%lu,"
@@ -14041,6 +14664,31 @@ void emitTargetsState(Stream& reply) {
         static_cast<unsigned long>(selected == nullptr
                                        ? 0 : selected->evidence.sourceGeneration),
         static_cast<int>(selected == nullptr ? 0 : selected->latest.rssiDbm),
+        selectedTarget == nullptr ? "false" : "true",
+        selectedTargetId,
+        selectedTarget != nullptr && selectedTarget->favorite
+            ? "true" : "false",
+        static_cast<unsigned long>(selectedTarget == nullptr
+                                       ? 0 : selectedTarget->revision),
+        controller != nullptr && controller->view() == TargetsView::Actions &&
+                targetsMutationState != TargetsMutationState::Saving
+            ? "true" : "false",
+        static_cast<unsigned long>(targetsStateGeneration), stateHead,
+        targetsMutationStateName(targetsMutationState),
+        targetsMutationStatus,
+        targetsMutationReport.persisted ? "true" : "false",
+        static_cast<unsigned long>(targetsMutationReport.generation),
+        static_cast<unsigned long long>(targetsMutationStartActionUs),
+        static_cast<unsigned long long>(targetsMutationReport.elapsedUs),
+        static_cast<unsigned long long>(targetsMutationReport.bytesWritten),
+        static_cast<unsigned long>(targetsMutationReport.writeCalls),
+        static_cast<unsigned long>(targetsMutationReport.fileSyncs),
+        static_cast<unsigned long>(targetsMutationReport.directorySyncs),
+        static_cast<unsigned>(targetsMutationReport.identityAttempts),
+        static_cast<unsigned>(
+            targetsMutationReport.identityTransientRetries),
+        targetsMutationReport.expectedFingerprint,
+        targetsMutationReport.observedFingerprint,
         static_cast<unsigned long>(targetsBlockedWriteAttempts),
         targetsFilesystemMountError,
         targetsCleanupComplete ? "true" : "false",
@@ -15469,15 +16117,31 @@ bool applyUiAction(UiAction action, bool render = true) {
         }
     }
     if (!wasRoot && uiController.page() == 7 &&
+        targetsMutationState == TargetsMutationState::Saving) {
+        uiController.recordHandledAction(action);
+        return finish(false);
+    }
+    if (!wasRoot && uiController.page() == 7 &&
         targetsProductRuntime != nullptr) {
         TargetsController& controller = targetsProductRuntime->controller;
         bool handled = false;
         bool changed = false;
         if ((controller.view() == TargetsView::Detail ||
+             controller.view() == TargetsView::Actions ||
              controller.view() == TargetsView::CompareDetail) &&
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
             changed = controller.back();
+        } else if (controller.view() == TargetsView::Detail &&
+                   (action == UiAction::Select ||
+                    action == UiAction::Right)) {
+            handled = true;
+            changed = controller.openSelected();
+        } else if (controller.view() == TargetsView::Actions &&
+                   (action == UiAction::Select ||
+                    action == UiAction::Right)) {
+            handled = true;
+            changed = requestTargetsFavoriteMutation();
         } else if (controller.view() == TargetsView::List ||
                    controller.view() == TargetsView::Compare) {
             if (action == UiAction::Up) {
@@ -16034,6 +16698,12 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         controller.navigationCount())),
                 static_cast<std::uint8_t>(
                     controller.navigationSelection())};
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() == TargetsView::Actions) {
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point, 0, 1),
+                0};
     }
     if (uiController.page() == 4 &&
         captureView == CaptureView::SourceMenu) {
@@ -21624,6 +22294,7 @@ void setup() {
         captureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
         subGhzCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
         infraredCaptureStoreEvents = xQueueCreate(1, sizeof(CaptureStoreEvent));
+        targetsMutationEvents = xQueueCreate(1, sizeof(TargetsMutationEvent));
     } else {
         productBootRecovery.status = "safety_latched";
         productBootRecovery.cleanupComplete = true;
@@ -21878,6 +22549,7 @@ void loop() {
         serviceWifiFrameCapturePersist();
         serviceSubGhzRawCapturePersist();
         serviceInfraredRawCapturePersist();
+        serviceTargetsMutationWorker();
         serviceFullGuidedRfChecks();
         serviceNrf24Spectrum();
         serviceCc1101Spectrum();

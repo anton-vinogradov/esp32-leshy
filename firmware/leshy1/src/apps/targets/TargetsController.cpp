@@ -198,20 +198,35 @@ TargetsLoadStatus TargetsController::load(
 }
 
 TargetsLoadStatus TargetsController::load(
+    const TargetProductBinding& current,
+    const domain::targets::TargetCatalog& persisted) {
+    return loadBindings({}, current, false, &persisted);
+}
+
+TargetsLoadStatus TargetsController::load(
     const TargetProductBinding& baseline,
     const TargetProductBinding& current) {
     return loadBindings(baseline, current, true);
 }
 
+TargetsLoadStatus TargetsController::load(
+    const TargetProductBinding& baseline,
+    const TargetProductBinding& current,
+    const domain::targets::TargetCatalog& persisted) {
+    return loadBindings(baseline, current, true, &persisted);
+}
+
 TargetsLoadStatus TargetsController::loadBindings(
     const TargetProductBinding& baseline,
-    const TargetProductBinding& current, bool compare) {
+    const TargetProductBinding& current, bool compare,
+    const domain::targets::TargetCatalog* persisted) {
     reset();
     if (!bindingValid(current) || (compare && !bindingValid(baseline)) ||
         (compare && baseline.session == current.session)) {
         status_ = TargetsLoadStatus::InvalidArgument;
         return status_;
     }
+    if (persisted != nullptr) workspace_.catalog = *persisted;
     baseline_ = baseline;
     current_ = current;
     services::targets::SessionTargetIdentityFilter filter{};
@@ -343,7 +358,10 @@ bool TargetsController::rebuildRows() {
                 found = true;
             }
         }
-        if (!found) return false;
+        // A durable catalog can contain identities from visits outside the two
+        // currently open Sessions. They remain retained state, but are not list
+        // rows until exact evidence for this view is available.
+        if (!found) continue;
         bool identityFound = false;
         for (std::size_t identityIndex = 0;
              identityIndex < target->identityCount; ++identityIndex) {
@@ -481,6 +499,10 @@ bool TargetsController::openSelected() {
         view_ = TargetsView::CompareDetail;
         return true;
     }
+    if (view_ == TargetsView::Detail && selectedTarget() != nullptr) {
+        view_ = TargetsView::Actions;
+        return true;
+    }
     return false;
 }
 
@@ -493,12 +515,26 @@ bool TargetsController::openCompare() {
 
 bool TargetsController::back() {
     if (view_ == TargetsView::List) return false;
+    if (view_ == TargetsView::Actions) {
+        view_ = TargetsView::Detail;
+        return true;
+    }
     if (view_ == TargetsView::CompareDetail) {
         view_ = TargetsView::Compare;
         return true;
     }
     view_ = TargetsView::List;
     return true;
+}
+
+bool TargetsController::selectTarget(
+    const domain::targets::TargetId& id) {
+    for (std::size_t index = 0; index < rowCount_; ++index) {
+        if (!domain::targets::targetIdEqual(rows_[index].targetId, id)) continue;
+        selection_ = index + (comparisonAvailable_ ? 1U : 0U);
+        return true;
+    }
+    return false;
 }
 
 const TargetListRow* TargetsController::row(std::size_t index) const {

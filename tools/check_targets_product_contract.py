@@ -39,7 +39,7 @@ def main() -> int:
             "TargetsWorkspace targets" not in entry,
             "Targets workspace must have foreground-only bounded lifetime")
     load_start = entry.index("bool loadTargetsProduct")
-    load_end = entry.index("bool IRAM_ATTR recordProductBootRecoveryTimeout")
+    load_end = entry.index("bool rebuildTargetsProductFromCatalog")
     load_product = entry[load_start:load_end]
     require(failures,
             load_product.rfind("filesystem.end();") <
@@ -87,7 +87,12 @@ def main() -> int:
     require(failures,
             'std::strcmp(command, "targets.state")' in entry and
             "leshy.targets.product.v1" in entry and
-            r'\"write_enabled\":false' in entry,
+            r'\"read_only\":false' in entry and
+            r'\"write_enabled\":%s' in entry and
+            r'\"mutation_state\":\"%s\"' in entry and
+            "commitTargetCatalogState(" in entry and
+            "recoverTargetCatalogState(" in entry and
+            "TargetActionKind::SetFavorite" in entry,
             "Targets needs a machine-readable release-test state")
     require(failures,
             '"git", "rev-parse", "HEAD"' in runner and

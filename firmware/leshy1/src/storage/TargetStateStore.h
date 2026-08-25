@@ -95,4 +95,19 @@ TargetStateStoreRecoveryResult recoverTargetState(
     domain::targets::CorrelationDecisionLog* decisions,
     domain::targets::TargetMergeHistory* merges);
 
+// Product lifecycle variant for schema-v3 states whose decision/merge arrays
+// are still empty. It uses the same files, manifests, heads and crash boundary
+// as the full store while avoiding empty-history RAM on no-PSRAM hardware.
+TargetStateStoreCommitResult commitTargetCatalogState(
+    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    const domain::targets::TargetCatalog& catalog,
+    std::uint32_t generation, HeadSlot publishSlot);
+TargetStateStoreCommitResult commitNextTargetCatalogState(
+    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    const domain::targets::TargetCatalog& catalog,
+    domain::targets::TargetCatalog& recoveryCatalogScratch);
+TargetStateStoreRecoveryResult recoverTargetCatalogState(
+    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    domain::targets::TargetCatalog* catalog);
+
 }  // namespace leshy1::storage

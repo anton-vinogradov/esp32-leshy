@@ -14,6 +14,7 @@ namespace leshy1::apps::targets {
 enum class TargetsView : std::uint8_t {
     List,
     Detail,
+    Actions,
     Compare,
     CompareDetail,
 };
@@ -62,13 +63,21 @@ public:
 
     void reset();
     TargetsLoadStatus load(const TargetProductBinding& current);
+    TargetsLoadStatus load(
+        const TargetProductBinding& current,
+        const domain::targets::TargetCatalog& persisted);
     TargetsLoadStatus load(const TargetProductBinding& baseline,
                            const TargetProductBinding& current);
+    TargetsLoadStatus load(
+        const TargetProductBinding& baseline,
+        const TargetProductBinding& current,
+        const domain::targets::TargetCatalog& persisted);
     bool next();
     bool previous();
     bool openSelected();
     bool openCompare();
     bool back();
+    bool selectTarget(const domain::targets::TargetId& id);
 
     TargetsView view() const { return view_; }
     TargetsLoadStatus status() const { return status_; }
@@ -118,7 +127,9 @@ public:
 private:
     TargetsLoadStatus loadBindings(const TargetProductBinding& baseline,
                                    const TargetProductBinding& current,
-                                   bool compare);
+                                   bool compare,
+                                   const domain::targets::TargetCatalog*
+                                       persisted = nullptr);
     bool rebuildRows();
     bool rebuildComparisonOrder();
     bool comparisonItemBefore(std::uint8_t left, std::uint8_t right) const;

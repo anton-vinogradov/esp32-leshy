@@ -90,4 +90,24 @@ TargetCodecStatus reopenTargetState(
     domain::targets::CorrelationDecisionLog* decisions,
     domain::targets::TargetMergeHistory* merges);
 
+// Memory-bounded product projection used before correlation/merge history is
+// admitted on device. It writes the exact schema-v3 Target state with empty
+// decision and merge arrays, and refuses to open a state that contains either.
+// This avoids reserving ~23 KiB for empty histories on no-PSRAM boards while
+// keeping one wire format and a fail-closed migration boundary.
+TargetCodecStatus encodeTargetCatalogState(
+    const domain::targets::TargetCatalog& catalog,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
+TargetCodecStatus encodeTargetCatalogStateManifest(
+    const domain::targets::TargetCatalog& catalog,
+    const std::uint8_t* stateBytes, std::size_t stateSize,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
+TargetCodecStatus decodeTargetCatalogState(
+    const std::uint8_t* input, std::size_t size,
+    domain::targets::TargetCatalog* catalog);
+TargetCodecStatus reopenTargetCatalogState(
+    const std::uint8_t* manifestBytes, std::size_t manifestSize,
+    const std::uint8_t* stateBytes, std::size_t stateSize,
+    domain::targets::TargetCatalog* catalog);
+
 }  // namespace leshy1::storage

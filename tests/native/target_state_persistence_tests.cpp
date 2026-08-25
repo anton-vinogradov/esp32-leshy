@@ -516,6 +516,78 @@ void testPathsAndAliasingFailClosed() {
               .status == TargetStateStoreStatus::InvalidArgument);
 }
 
+void testCatalogOnlyStateUsesTheCanonicalWireFormatAndRejectsHistory() {
+    TargetCatalog catalog;
+    CHECK(catalog.create(targetId(1), wifiIdentity(1), evidence(1, 1)) ==
+          TargetMutationStatus::Created);
+    CHECK(catalog.setFavorite(targetId(1), true) ==
+          TargetMutationStatus::Applied);
+    std::array<std::uint8_t, kTargetStateMaxBytes> state{};
+    std::array<std::uint8_t, kTargetStateManifestMaxBytes> manifest{};
+    std::size_t stateSize = 0;
+    std::size_t manifestSize = 0;
+    CHECK(encodeTargetCatalogState(catalog, state.data(), state.size(),
+                                   &stateSize) == TargetCodecStatus::Valid);
+    CHECK(encodeTargetCatalogStateManifest(
+              catalog, state.data(), stateSize, manifest.data(),
+              manifest.size(), &manifestSize) == TargetCodecStatus::Valid);
+
+    TargetCatalog reopened;
+    CHECK(reopenTargetCatalogState(
+              manifest.data(), manifestSize, state.data(), stateSize,
+              &reopened) == TargetCodecStatus::Valid);
+    CHECK(reopened.size() == 1);
+    CHECK(reopened.get(0) != nullptr && reopened.get(0)->favorite);
+
+    CorrelationDecisionLog decisions;
+    TargetMergeHistory merges;
+    const CorrelationProposal rejected =
+        proposal(targetId(1), evidence(1, 1), 20);
+    CHECK(decisions.record(rejected, CorrelationDecision::Reject, 2, 2) ==
+          CorrelationDecisionStatus::Rejected);
+    CHECK(encodeTargetState(catalog, decisions, merges, state.data(),
+                            state.size(), &stateSize) ==
+          TargetCodecStatus::Valid);
+    CHECK(encodeTargetStateManifest(
+              catalog, decisions, merges, state.data(), stateSize,
+              manifest.data(), manifest.size(), &manifestSize) ==
+          TargetCodecStatus::Valid);
+    CHECK(reopenTargetCatalogState(
+              manifest.data(), manifestSize, state.data(), stateSize,
+              &reopened) == TargetCodecStatus::Conflict);
+    CHECK(reopened.size() == 0);
+}
+
+void testCatalogOnlyStoreRetainsAtomicHeadRecovery() {
+    FakeStoreIo io;
+    TargetStateStoreWorkspace workspace;
+    TargetCatalog catalog;
+    TargetCatalog scratch;
+    CHECK(catalog.create(targetId(1), wifiIdentity(1), evidence(1, 1)) ==
+          TargetMutationStatus::Created);
+    TargetStateStoreCommitResult commit = commitNextTargetCatalogState(
+        io, workspace, catalog, scratch);
+    CHECK(commit.complete());
+    CHECK(commit.generation == 1);
+    CHECK(commit.publishedSlot == HeadSlot::A);
+    CHECK(catalog.setFavorite(targetId(1), true) ==
+          TargetMutationStatus::Applied);
+    commit = commitNextTargetCatalogState(io, workspace, catalog, scratch);
+    CHECK(commit.complete());
+    CHECK(commit.generation == 2);
+    CHECK(commit.publishedSlot == HeadSlot::B);
+
+    TargetCatalog reopened;
+    const TargetStateStoreRecoveryResult recovery =
+        recoverTargetCatalogState(io, workspace, &reopened);
+    CHECK(recovery.valid());
+    CHECK(recovery.generation == 2);
+    CHECK(recovery.targets == 1);
+    CHECK(recovery.decisions == 0);
+    CHECK(recovery.merges == 0);
+    CHECK(reopened.get(0) != nullptr && reopened.get(0)->favorite);
+}
+
 }  // namespace
 
 int main() {
@@ -524,6 +596,8 @@ int main() {
     testEveryInterruptedCommitKeepsGraphAndHistoryPaired();
     testMergeHistorySharesTheAtomicStateGeneration();
     testPathsAndAliasingFailClosed();
+    testCatalogOnlyStateUsesTheCanonicalWireFormatAndRejectsHistory();
+    testCatalogOnlyStoreRetainsAtomicHeadRecovery();
     if (failures != 0) return EXIT_FAILURE;
     std::cout << "S6 Target graph/decision atomic persistence tests passed\n";
     return EXIT_SUCCESS;

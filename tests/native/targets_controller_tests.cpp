@@ -133,6 +133,15 @@ void pairIsUsefulFirstAndStable() {
     CHECK(controller.comparisonSelection() == 0);
     CHECK(controller.back());
     CHECK(controller.view() == TargetsView::List);
+
+    CHECK(controller.selectTarget(selected));
+    CHECK(targetIdEqual(controller.selectedRow()->targetId, selected));
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == TargetsView::Detail);
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == TargetsView::Actions);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::Detail);
 }
 
 void singleSessionStillListsTargets() {
@@ -217,6 +226,37 @@ void comparisonClassesThenSignalAreStable() {
     CHECK(controller.comparisonTargetRow(3)->identity.value[5] == 1);
 }
 
+void persistedMetadataFollowsIdentityAcrossVisits() {
+    SurveySession prior = session(
+        "prior", 100, {wifi(1, 110, 9, -55), wifi(2, 120, 7, -80)});
+    TargetsWorkspace priorWorkspace;
+    TargetsController priorController(priorWorkspace);
+    CHECK(priorController.load({&prior, 1}) == TargetsLoadStatus::Ready);
+    const TargetRecord* remembered =
+        priorController.catalog().findByIdentity(
+            priorController.row(0)->identity);
+    CHECK(remembered != nullptr);
+    TargetCatalog persisted = priorController.catalog();
+    CHECK(persisted.setFavorite(remembered->id, true) ==
+          TargetMutationStatus::Applied);
+
+    SurveySession current = session(
+        "current-visit", 300, {wifi(1, 310, 9, -30)});
+    TargetsWorkspace currentWorkspace;
+    TargetsController currentController(currentWorkspace);
+    CHECK(currentController.load({&current, 2}, persisted) ==
+          TargetsLoadStatus::Ready);
+    CHECK(currentController.size() == 1);
+    CHECK(currentController.catalog().size() == 2);
+    const TargetRecord* selected = currentController.selectedTarget();
+    CHECK(selected != nullptr);
+    CHECK(targetIdEqual(selected->id, remembered->id));
+    CHECK(selected->favorite);
+    CHECK(selected->evidenceCount == 2);
+    CHECK(currentController.row(0)->latest.rssiDbm == -30);
+    CHECK(currentController.row(0)->evidence.sourceGeneration == 2);
+}
+
 }  // namespace
 
 int main() {
@@ -226,6 +266,7 @@ int main() {
     denseAirKeepsStrongestCurrentSlice();
     currentEvidenceWinsAcrossMonotonicReset();
     comparisonClassesThenSignalAreStable();
+    persistedMetadataFollowsIdentityAcrossVisits();
     if (failures != 0) {
         std::cerr << failures << " targets controller test(s) failed\n";
         return 1;
