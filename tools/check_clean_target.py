@@ -430,8 +430,8 @@ def main() -> int:
             "activeScan_->isScanning()",
             "BoardBleScanStatus::ScanTimedOut",
             "BoundedAdvertisementCallbacks",
-            "scanner_->erase(source.getAddress())",
-            "activeScan_->setDuplicateFilter(true)",
+            "seenAddresses_",
+            "setAdvertisedDeviceCallbacks(&callbacks, true, true)",
             "validatePassivePlan(plan)",
             "plan.maximumRecords",
             "activeScan_->clearResults()",
@@ -441,6 +441,10 @@ def main() -> int:
                 errors.append(f"passive BLE adapter is missing: {marker}")
         if "setActiveScan(true)" in passive_ble:
             errors.append("passive BLE adapter enables transmitting active scan")
+        if "scanner_->erase(" in passive_ble:
+            errors.append(
+                "passive BLE callback mutates Arduino result storage before insertion"
+            )
         if "activeScan_->start(plan.durationMs / 1000U, false)" in passive_ble:
             errors.append("passive BLE adapter uses an unbounded blocking scan")
 

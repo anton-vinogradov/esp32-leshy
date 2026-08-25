@@ -1,6 +1,7 @@
 #include "BoardBlePassiveScanner.h"
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstring>
 
@@ -121,31 +122,38 @@ class BoundedAdvertisementCallbacks final
     : public BLEAdvertisedDeviceCallbacks {
 public:
     BoundedAdvertisementCallbacks(
-        BLEScan* scanner, std::uint16_t maximumRecords,
-        BleRecordVisitor visitor, void* context,
+        std::uint16_t maximumRecords, BleRecordVisitor visitor, void* context,
         BoardBlePassiveScanResult* result)
-        : scanner_(scanner), maximumRecords_(maximumRecords),
-          visitor_(visitor), context_(context), result_(result) {}
+        : maximumRecords_(maximumRecords), visitor_(visitor),
+          context_(context), result_(result) {}
 
     void onResult(BLEAdvertisedDevice source) override {
-        if (result_ == nullptr || scanner_ == nullptr) return;
+        if (result_ == nullptr) return;
+        BLEAddress address = source.getAddress();
+        const std::uint8_t* native = address.getNative();
+        std::array<std::uint8_t, 6> canonicalAddress{};
+        if (native != nullptr) {
+#if defined(CONFIG_NIMBLE_ENABLED)
+            std::reverse_copy(native, native + canonicalAddress.size(),
+                              canonicalAddress.begin());
+#else
+            std::copy_n(native, canonicalAddress.size(),
+                        canonicalAddress.begin());
+#endif
+        }
+        for (std::uint16_t index = 0; index < seenCount_; ++index) {
+            if (seenAddresses_[index] == canonicalAddress) return;
+        }
+        if (seenCount_ < seenAddresses_.size()) {
+            seenAddresses_[seenCount_++] = canonicalAddress;
+        }
         if (result_->recordsReported != UINT16_MAX) {
             ++result_->recordsReported;
         }
         if (result_->recordsRead < maximumRecords_) {
-            BLEAddress address = source.getAddress();
-            const std::uint8_t* native = address.getNative();
             const String name = source.haveName() ? source.getName() : String();
             drivers::ble::BleAdvertisementRecord record;
-            if (native != nullptr) {
-#if defined(CONFIG_NIMBLE_ENABLED)
-                std::reverse_copy(native, native + record.address.size(),
-                                  record.address.begin());
-#else
-                std::copy_n(native, record.address.size(),
-                            record.address.begin());
-#endif
-            }
+            record.address = canonicalAddress;
             record.addressType = source.getAddressType();
             record.rssiDbm = static_cast<std::int16_t>(source.getRSSI());
             record.name = name.c_str();
@@ -170,14 +178,14 @@ public:
         } else if (result_->dropped != UINT16_MAX) {
             ++result_->dropped;
         }
-        // Arduino BLE stores every unique advertiser before invoking us. Erase
-        // it immediately so hostile/dense RF environments cannot grow an
-        // unbounded std::map and terminate the NimBLE host task on OOM.
-        scanner_->erase(source.getAddress());
     }
 
 private:
-    BLEScan* scanner_ = nullptr;
+    // The public passive contract caps a scan at 128 records.  Keeping the
+    // identities here gives deterministic duplicate suppression without the
+    // Arduino BLE heap-backed result map.
+    std::array<std::array<std::uint8_t, 6>, 128> seenAddresses_{};
+    std::uint16_t seenCount_ = 0;
     std::uint16_t maximumRecords_ = 0;
     BleRecordVisitor visitor_ = nullptr;
     void* context_ = nullptr;
@@ -235,11 +243,11 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
     activeScan_->setInterval(plan.intervalMs);
     activeScan_->setWindow(plan.windowMs);
     BoundedAdvertisementCallbacks callbacks(
-        activeScan_, plan.maximumRecords, visitor, context, &result);
-    activeScan_->setAdvertisedDeviceCallbacks(&callbacks, false, true);
-#if defined(CONFIG_NIMBLE_ENABLED)
-    activeScan_->setDuplicateFilter(true);
-#endif
+        plan.maximumRecords, visitor, context, &result);
+    // wantDuplicates=true prevents Arduino BLE from inserting callback-owned
+    // devices into its heap-backed results map.  The bounded callback above
+    // performs fixed-capacity identity deduplication instead.
+    activeScan_->setAdvertisedDeviceCallbacks(&callbacks, true, true);
     const std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     // The blocking BLEScan overload waits forever when NimBLE loses its
