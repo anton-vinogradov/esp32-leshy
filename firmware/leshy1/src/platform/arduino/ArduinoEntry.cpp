@@ -398,10 +398,21 @@ SurveySession& littleFsResetSession = surveySession;
 LibraryController libraryController;
 SessionCatalog sessionCatalog;
 struct TargetsProductRuntime final {
-    TargetsWorkspace workspace{};
-    TargetsController controller;
+    TargetsWorkspace* workspaceStorage = nullptr;
+    TargetsController* controllerStorage = nullptr;
+    TargetsWorkspace& workspace;
+    TargetsController& controller;
 
-    TargetsProductRuntime() : controller(workspace) {}
+    TargetsProductRuntime(TargetsWorkspace* workspaceValue,
+                          TargetsController* controllerValue)
+        : workspaceStorage(workspaceValue),
+          controllerStorage(controllerValue),
+          workspace(*workspaceValue),
+          controller(*controllerValue) {}
+    ~TargetsProductRuntime() {
+        delete controllerStorage;
+        delete workspaceStorage;
+    }
 };
 TargetsProductRuntime* targetsProductRuntime = nullptr;
 const char* targetsProductStatus = "not_loaded";
@@ -4505,8 +4516,14 @@ void releaseTargetsProduct() {
 bool allocateTargetsProduct() {
     targetsHeapFreeBefore = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_8BIT));
-    targetsProductRuntime = new (std::nothrow) TargetsProductRuntime();
+    auto* workspace = new (std::nothrow) TargetsWorkspace();
+    auto* controller = workspace == nullptr ? nullptr
+        : new (std::nothrow) TargetsController(*workspace);
+    targetsProductRuntime = controller == nullptr ? nullptr
+        : new (std::nothrow) TargetsProductRuntime(workspace, controller);
     if (targetsProductRuntime != nullptr) return true;
+    delete controller;
+    delete workspace;
     targetsProductStatus = "workspace_unavailable";
     lastRuntimeEvent = targetsProductStatus;
     return false;
@@ -4604,20 +4621,16 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         return true;
     }
 
-    // Allocate the long-lived product graph before FatFs can fragment the
-    // no-PSRAM heap, then recover directly into that workspace.  Keeping a
-    // second catalog/decision copy alive here prevents the UI runtime from
-    // obtaining one contiguous block on the physical N16 board.
-    if (!allocateTargetsProduct()) return false;
-    TargetsController& controller = targetsProductRuntime->controller;
-    TargetCatalog* persistedCatalog =
-        &targetsProductRuntime->workspace.catalog;
-    CorrelationDecisionLog* persistedDecisions =
-        &targetsProductRuntime->workspace.decisions;
-    // The codec buffer is also reserved before mount and released as soon as
-    // recovery finishes; product state itself stays in the runtime workspace.
+    // Reserve the large contiguous codec buffer before FatFs fragments the
+    // no-PSRAM heap. Catalog and decisions are recovered into bounded transfer
+    // objects; after unmount the product runtime is deliberately allocated as
+    // separate 32,984 B workspace and 4,160 B controller blocks. A monolithic
+    // 37 KiB runtime does not fit the physical post-mount largest block.
     auto* targetStateWorkspace = new (std::nothrow)
         leshy1::storage::TargetDecisionStateStoreWorkspace();
+    TargetCatalog* persistedCatalog = new (std::nothrow) TargetCatalog();
+    CorrelationDecisionLog* persistedDecisions =
+        new (std::nothrow) CorrelationDecisionLog();
     BoardSdFilesystem filesystem;
     const bool mounted = filesystem.beginReadOnly();
     targetsFilesystemMountError = filesystem.mountError();
@@ -4625,6 +4638,8 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         if (filesystem.mounted()) filesystem.end();
         targetsCleanupComplete = filesystem.cleanupComplete();
         delete targetStateWorkspace;
+        delete persistedCatalog;
+        delete persistedDecisions;
         targetsProductStatus = "readonly_mount_failed";
         lastRuntimeEvent = targetsProductStatus;
         return true;
@@ -4690,7 +4705,8 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 filesystem.exists(
                     "/leshy/sessions/v1/target-state-head-b.bin");
             if (sessionReady && targetStatePresent) {
-                if (targetStateWorkspace == nullptr) {
+                if (persistedCatalog == nullptr || persistedDecisions == nullptr ||
+                    targetStateWorkspace == nullptr) {
                     targetStateAccepted = false;
                     targetsProductStatus = "target_state_workspace_unavailable";
                 } else {
@@ -4724,6 +4740,12 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     if (targetsCleanupComplete && targetsBlockedWriteAttempts == 0 &&
         targetStateAccepted &&
         (pairRecovered || latestRecovered)) {
+        if (!allocateTargetsProduct()) {
+            delete persistedCatalog;
+            delete persistedDecisions;
+            return false;
+        }
+        TargetsController& controller = targetsProductRuntime->controller;
         targetsComparisonLoaded = pairRecovered;
         targetsBaselineBinding = pairRecovered
             ? TargetProductBinding{&librarySession, baselineGeneration}
@@ -4738,6 +4760,8 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
     }
+    delete persistedCatalog;
+    delete persistedDecisions;
     lastRuntimeEvent = targetsProductStatus;
     return true;
 }

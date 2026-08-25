@@ -46,12 +46,15 @@ def main() -> int:
     load_end = entry.index("bool rebuildTargetsProductFromCatalog")
     load_product = entry[load_start:load_end]
     require(failures,
-            load_product.index("allocateTargetsProduct()") <
-                load_product.index("filesystem.beginReadOnly()") and
-            "recover directly into that workspace" in load_product and
+            load_product.rfind("filesystem.end();") <
+                load_product.rfind("allocateTargetsProduct()") and
+            "separate 32,984 B workspace and 4,160 B controller blocks" in
+                load_product and
+            "new (std::nothrow) TargetsWorkspace" in entry and
+            "new (std::nothrow) TargetsController" in entry and
             "filesystem_mount_error" in entry,
-            "Targets must reserve its no-PSRAM runtime before FatFs, recover "
-            "directly into it and expose the exact mount result")
+            "Targets must release FatFs before allocating split no-PSRAM "
+            "runtime blocks and expose the exact mount result")
     mutation_start = entry.index("void runTargetsMutationWorker")
     mutation_end = entry.index("bool requestTargetsFavoriteMutation")
     mutation_worker = entry[mutation_start:mutation_end]

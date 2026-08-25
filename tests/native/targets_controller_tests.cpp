@@ -478,6 +478,8 @@ int main() {
         std::cerr << failures << " targets controller test(s) failed\n";
         return 1;
     }
-    std::cout << "targets controller tests passed\n";
+    std::cout << "targets controller tests passed; workspace_bytes="
+              << sizeof(TargetsWorkspace) << "; controller_bytes="
+              << sizeof(TargetsController) << '\n';
     return 0;
 }
