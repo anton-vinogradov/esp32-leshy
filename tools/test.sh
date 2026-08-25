@@ -178,6 +178,55 @@ run_opaque_evidence_check() {
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/session_target_admission_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/ObservationTargetAdapter.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/SessionTargetAdmission.cpp" \
+    -o "$test_tmp/session_target_admission_tests"
+
+"$test_tmp/session_target_admission_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/session_pair_recovery_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/platform/arduino/RamSessionStoreIo.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/AtomicHead.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/SessionCodec.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/SessionStore.cpp" \
+    -o "$test_tmp/session_pair_recovery_tests"
+
+"$test_tmp/session_pair_recovery_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/targets_controller_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/targets/TargetsController.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/TargetComparison.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/ObservationTargetAdapter.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/SessionTargetAdmission.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/SurveySessionTargetEvidenceLookup.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/TargetComparisonService.cpp" \
+    -o "$test_tmp/targets_controller_tests"
+
+"$test_tmp/targets_controller_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/target_state_persistence_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
@@ -242,6 +291,7 @@ python3 "$repo_dir/tools/check_worker_deadline_acceptance.py"
 python3 "$repo_dir/tools/check_worker_deadline_ble_acceptance.py"
 python3 "$repo_dir/tools/check_visual_system_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_acceptance.py"
+python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_full_guided_s5_rx_contract.py"
 python3 "$repo_dir/tools/check_full_guided_s5_rx_delta_acceptance.py"
 python3 "$repo_dir/tools/check_ui_components_acceptance.py"
@@ -371,4 +421,5 @@ python3 "$repo_dir/tools/test_prerelease_bundle_verifier.py"
 python3 "$repo_dir/tools/test_prerelease_bundle_package.py"
 python3 "$repo_dir/tools/test_release_1x.py"
 python3 "$repo_dir/tools/test_hil_scope_planner.py"
+python3 "$repo_dir/tools/run_1x_targets_hil.py" --help >/dev/null
 python3 "$repo_dir/tools/read_1x_version.py" >/dev/null

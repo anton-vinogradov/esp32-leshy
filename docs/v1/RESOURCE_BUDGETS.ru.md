@@ -402,6 +402,23 @@ lifecycle-owned, а не permanent product global. S6.4 обязана изме�
 live placement Target state, двух recovered Sessions и view model Compare. Это
 host/build evidence, а не HIL.
 
+Измерение on-device «Цели» `RB-M146`: exact production
+`0.146.0-targets` использует 3 108 996 B linked flash, 211 296 B static RAM и
+app/factory images 3 109 152/3 174 688 B. Против exact принятой 0.145 это
++19 128 B linked flash, +72 B static RAM и +18 784/+18 784 B images за
+read-only recovery пары, bounded admission и product route List/Compare/Detail.
+Dedicated DIRAM равна 294 476/341 760 B (86,16%, свободно 47 284 B), dedicated
+IRAM остаётся ровно 16 384/16 384 B. Steady foreground workspace занимает
+22 544 B: 19 008 B Target/view state плюс controller 3 536 B. Он переиспользует
+уже lifecycle-owned buffers Session Survey/Library, а scratch catalog 11 272 B
+существует только во время atomic admission и освобождается до rendering.
+SHA-256 firmware/factory/ELF/map:
+`f115f46b0e5e587ac1e1a4c83745c9f6d53818fd0c468de2adecf0bc99e1211c`/
+`db8a396cf272e67662d31eb0ad13ddd890d36d85ed72e1402ad5e13ab32494c9`/
+`d8d364734661e0c0b18c700cce1e16600a8e51ca318cf20f1053cec4f206ab0a`/
+`b134c373147f553ba5aac2a8a511a726454c502a48ff82175bb9ecaf7fbba7ff`.
+Это host/build evidence до focused physical delta.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

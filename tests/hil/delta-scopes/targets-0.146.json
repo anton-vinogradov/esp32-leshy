@@ -1,0 +1,23 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "targets-0.146",
+  "candidate_version": "0.146.0-targets",
+  "changed_surfaces": [
+    "session_pair_read_only_recovery",
+    "session_to_target_projection",
+    "targets_list_detail_compare_ui",
+    "targets_foreground_heap_lifecycle"
+  ],
+  "required_checks": [
+    "two_real_passive_survey_commits",
+    "exact_cid_read_only_targets_reopen",
+    "bounded_strongest_first_list",
+    "compare_classifies_every_visible_target",
+    "detail_opens_exact_generation",
+    "keypad_and_tft_capture",
+    "zero_tx_zero_blocked_writes_zero_input_drops",
+    "foreground_workspace_release_and_final_zero_lease"
+  ],
+  "full_matrix_required": false,
+  "cadence_after_acceptance": "4/15"
+}

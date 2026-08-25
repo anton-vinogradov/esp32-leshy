@@ -493,4 +493,62 @@ SessionStoreRecoveryResult recoverSession(SessionStoreIo& io,
     return result;
 }
 
+SessionStorePairRecoveryResult recoverSessionPair(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    services::survey::SurveySession* baseline,
+    services::survey::SurveySession* current) {
+    SessionStorePairRecoveryResult result;
+    if (baseline == nullptr || current == nullptr || baseline == current) {
+        result.status = SessionStoreStatus::InvalidArgument;
+        return result;
+    }
+    baseline->reset();
+    current->reset();
+    CandidateLoad a = loadCandidate(io, workspace, HeadSlot::A);
+    CandidateLoad b = loadCandidate(io, workspace, HeadSlot::B);
+    if (a.headRead == SessionStoreIo::ReadStatus::NotFound &&
+        b.headRead == SessionStoreIo::ReadStatus::NotFound) {
+        result.status = SessionStoreStatus::Empty;
+        return result;
+    }
+    const RecoveryResult recovered = recoverHead(a.candidate, b.candidate);
+    result.aStatus = recovered.aStatus;
+    result.bStatus = recovered.bStatus;
+    if (recovered.choice == RecoveryChoice::Conflict) {
+        result.status = SessionStoreStatus::Conflict;
+        return result;
+    }
+    if (recovered.aStatus != CandidateStatus::Valid ||
+        recovered.bStatus != CandidateStatus::Valid ||
+        a.record.generation == b.record.generation) {
+        result.status = SessionStoreStatus::NoGeneration;
+        return result;
+    }
+    result.baselineGeneration =
+        a.record.generation < b.record.generation ? a.record.generation
+                                                  : b.record.generation;
+    result.currentGeneration =
+        a.record.generation < b.record.generation ? b.record.generation
+                                                  : a.record.generation;
+    result.status = reopenSelected(io, workspace, result.baselineGeneration,
+                                   baseline);
+    if (result.status != SessionStoreStatus::Valid) {
+        baseline->reset();
+        current->reset();
+        return result;
+    }
+    result.status = reopenSelected(io, workspace, result.currentGeneration,
+                                   current);
+    if (result.status != SessionStoreStatus::Valid) {
+        baseline->reset();
+        current->reset();
+        result.baselineObservations = 0;
+        return result;
+    }
+    result.baselineObservations = baseline->size();
+    result.currentObservations = current->size();
+    workspace.generation = result.currentGeneration;
+    return result;
+}
+
 }  // namespace leshy1::storage

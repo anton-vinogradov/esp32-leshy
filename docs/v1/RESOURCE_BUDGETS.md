@@ -410,6 +410,23 @@ it remains lifecycle-owned and is not a permanent product global. S6.4 must
 measure the combined live placement of Target state, two recovered Sessions and
 the Compare view model. This is host/build evidence, not HIL.
 
+On-device Targets measurement `RB-M146`: exact production
+`0.146.0-targets` uses 3,108,996 B linked flash, 211,296 B static RAM and
+app/factory images 3,109,152/3,174,688 B. Against exact accepted 0.145 this is
++19,128 B linked flash, +72 B static RAM and +18,784/+18,784 B images for
+read-only pair recovery, bounded admission and the List/Compare/Detail product
+route. Dedicated DIRAM is 294,476/341,760 B (86.16%, 47,284 B remaining), and
+dedicated IRAM remains exactly 16,384/16,384 B. The foreground workspace is
+22,544 B steady: 19,008 B of target/view state plus the 3,536 B controller. It
+reuses the already lifecycle-owned Survey/Library Session buffers, while an
+11,272 B scratch catalog exists only during atomic admission and is released
+before rendering. Firmware/factory/ELF/map SHA-256 are
+`f115f46b0e5e587ac1e1a4c83745c9f6d53818fd0c468de2adecf0bc99e1211c`/
+`db8a396cf272e67662d31eb0ad13ddd890d36d85ed72e1402ad5e13ab32494c9`/
+`d8d364734661e0c0b18c700cce1e16600a8e51ca318cf20f1053cec4f206ab0a`/
+`b134c373147f553ba5aac2a8a511a726454c502a48ff82175bb9ecaf7fbba7ff`.
+This is host/build evidence pending the focused physical delta.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

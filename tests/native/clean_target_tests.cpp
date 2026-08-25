@@ -2281,7 +2281,7 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(constrained.add({"storage.sd", CapabilityState::Unknown, "probe", "not_mounted"}));
     AppCatalog catalog;
     catalog.rebuild(constrained);
-    CHECK(catalog.size() == 7);
+    CHECK(catalog.size() == 8);
     CHECK(catalog.get(0) != nullptr && !catalog.get(0)->enabled);
     CHECK(std::strcmp(catalog.get(0)->id, "wifi") == 0);
     CHECK(!catalog.get(0)->simulated);
@@ -2301,13 +2301,17 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(catalog.get(4)->page == 4);
     CHECK((catalog.get(4)->resources & resourceMask(Resource::EspRf)) != 0);
     CHECK(catalog.get(5) != nullptr && !catalog.get(5)->enabled);
-    CHECK(std::strcmp(catalog.get(5)->reason, "storage unavailable") == 0);
+    CHECK(std::strcmp(catalog.get(5)->id, "targets") == 0);
     CHECK((catalog.get(5)->resources & resourceMask(Resource::Storage)) != 0);
-    CHECK(catalog.get(6) != nullptr && catalog.get(6)->enabled);
-    CHECK(std::strcmp(catalog.get(6)->id, "device") == 0);
-    CHECK(std::strcmp(catalog.get(6)->label, "DEVICE") == 0);
-    CHECK(catalog.get(6)->page == 9);
-    CHECK(catalog.get(6)->resources == resourceMask(Resource::UiForeground));
+    CHECK((catalog.get(5)->resources & resourceMask(Resource::RadioSpi)) != 0);
+    CHECK(catalog.get(6) != nullptr && !catalog.get(6)->enabled);
+    CHECK(std::strcmp(catalog.get(6)->reason, "storage unavailable") == 0);
+    CHECK((catalog.get(6)->resources & resourceMask(Resource::Storage)) != 0);
+    CHECK(catalog.get(7) != nullptr && catalog.get(7)->enabled);
+    CHECK(std::strcmp(catalog.get(7)->id, "device") == 0);
+    CHECK(std::strcmp(catalog.get(7)->label, "DEVICE") == 0);
+    CHECK(catalog.get(7)->page == 9);
+    CHECK(catalog.get(7)->resources == resourceMask(Resource::UiForeground));
 
     HardwareInventory availableInventory;
     CHECK(availableInventory.add(
@@ -2324,6 +2328,7 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(catalog.get(3)->enabled);
     CHECK(catalog.get(4)->enabled);
     CHECK(catalog.get(5)->enabled);
+    CHECK(catalog.get(6)->enabled);
     CHECK((catalog.get(4)->resources & resourceMask(Resource::EspRf)) != 0);
 
     HardwareInventory simulatedInventory;
@@ -2368,8 +2373,12 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     catalog.rebuild(simulatedLibraryInventory);
     CHECK(catalog.get(5)->enabled);
     CHECK(catalog.get(5)->simulated);
-    CHECK(std::strcmp(catalog.get(5)->reason, "simulated / ram only") == 0);
+    CHECK(std::strcmp(catalog.get(5)->reason,
+                      "saved identities / compare visits") == 0);
     CHECK(catalog.get(5)->resources == resourceMask(Resource::UiForeground));
+    CHECK(catalog.get(6)->enabled);
+    CHECK(catalog.get(6)->simulated);
+    CHECK(std::strcmp(catalog.get(6)->reason, "simulated / ram only") == 0);
 
     HardwareInventory recoveredLibraryInventory;
     CHECK(recoveredLibraryInventory.add(
@@ -2382,10 +2391,13 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     catalog.rebuild(recoveredLibraryInventory);
     CHECK(catalog.get(5)->enabled);
     CHECK(!catalog.get(5)->simulated);
-    CHECK(std::strcmp(catalog.get(5)->reason, "ready") == 0);
+    CHECK(std::strcmp(catalog.get(5)->reason,
+                      "saved identities / compare visits") == 0);
     CHECK((catalog.get(5)->resources & resourceMask(Resource::Storage)) != 0);
     CHECK(!catalog.get(4)->enabled);
     CHECK(catalog.get(6)->enabled);
+    CHECK(!catalog.get(6)->simulated);
+    CHECK(std::strcmp(catalog.get(6)->reason, "ready") == 0);
 }
 
 void testRuntimeAcquiresAtomicallyAndBackReleasesEverything() {

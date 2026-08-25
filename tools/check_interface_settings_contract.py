@@ -73,8 +73,11 @@ def main() -> int:
                        "SettingsSoundLocked"):
         if f"LESHY_UI_TEXT({identifier}," not in strings:
             failures.append(f"EN/RU string missing: {identifier}")
-    if "0.145.0-interface-settings" not in version:
-        failures.append("exact 0.145 version missing")
+    current_version = re.search(
+        r'LESHY1_VERSION=\\"(\d+)\.(\d+)\.[^\\"]+\\"', version)
+    if (current_version is None or
+            (int(current_version.group(1)), int(current_version.group(2))) < (0, 145)):
+        failures.append("current product predates accepted 0.145 interface settings")
     if re.search(r"ledcWrite\s*\(\s*BoardProfile::kBuzzerPin", renderer):
         failures.append("Settings must not energize the unverified buzzer path")
 

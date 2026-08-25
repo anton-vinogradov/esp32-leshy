@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include <esp_system.h>
 #include <esp_sleep.h>
@@ -49,6 +50,7 @@
 #include "apps/survey/SurveyPipeline.h"
 #include "apps/survey/SurveySourceController.h"
 #include "apps/survey/SurveyWorkflow.h"
+#include "apps/targets/TargetsController.h"
 #include "apps/ble/BleCompanyDatabase.h"
 #include "apps/ble/BleDeviceCatalog.h"
 #include "apps/ble/BleDeviceIntelligence.h"
@@ -184,6 +186,12 @@ using leshy1::apps::survey::SurveyView;
 using leshy1::apps::survey::SurveyWorkflow;
 using leshy1::apps::survey::SurveyWorkflowState;
 using leshy1::apps::survey::SurveyWorkflowStatus;
+using leshy1::apps::targets::TargetListRow;
+using leshy1::apps::targets::TargetProductBinding;
+using leshy1::apps::targets::TargetsController;
+using leshy1::apps::targets::TargetsLoadStatus;
+using leshy1::apps::targets::TargetsView;
+using leshy1::apps::targets::TargetsWorkspace;
 using leshy1::apps::ble::BleDeviceCatalog;
 using leshy1::apps::ble::BleCompanyDatabase;
 using leshy1::apps::ble::BleDeviceKind;
@@ -366,6 +374,18 @@ SurveySession librarySession;
 SurveySession& littleFsResetSession = surveySession;
 LibraryController libraryController;
 SessionCatalog sessionCatalog;
+struct TargetsProductRuntime final {
+    TargetsWorkspace workspace{};
+    TargetsController controller;
+
+    TargetsProductRuntime() : controller(workspace) {}
+};
+TargetsProductRuntime* targetsProductRuntime = nullptr;
+const char* targetsProductStatus = "not_loaded";
+std::uint32_t targetsHeapFreeBefore = 0;
+std::uint32_t targetsHeapFreeAfter = 0;
+std::uint32_t targetsBlockedWriteAttempts = 0;
+bool targetsCleanupComplete = true;
 leshy1::services::survey::ObservationQueue surveyIngressQueue;
 leshy1::storage::SessionStoreWorkspace sessionStoreWorkspace;
 ArduinoFsSessionStoreWorkspace sdSessionStoreIoWorkspace;
@@ -4336,6 +4356,161 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
     }
 }
 
+void releaseTargetsProduct() {
+    delete targetsProductRuntime;
+    targetsProductRuntime = nullptr;
+    targetsHeapFreeAfter = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    targetsProductStatus = "not_loaded";
+}
+
+bool loadTargetsProduct(const AppMenuItem& item) {
+    releaseTargetsProduct();
+    targetsBlockedWriteAttempts = 0;
+    targetsCleanupComplete = true;
+    targetsHeapFreeBefore = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    targetsProductRuntime = new (std::nothrow) TargetsProductRuntime();
+    if (targetsProductRuntime == nullptr) {
+        targetsProductStatus = "workspace_unavailable";
+        lastRuntimeEvent = targetsProductStatus;
+        return false;
+    }
+
+    TargetsController& controller = targetsProductRuntime->controller;
+    if (item.simulated) {
+        const LibraryEntry* entry = libraryController.selected();
+        if (entry == nullptr || entry->session == nullptr ||
+            entry->generation == 0) {
+            targetsProductStatus = "session_unavailable";
+            lastRuntimeEvent = targetsProductStatus;
+            return true;
+        }
+        const TargetsLoadStatus loaded = controller.load(
+            {entry->session, entry->generation});
+        targetsProductStatus =
+            leshy1::apps::targets::targetsLoadStatusName(loaded);
+        lastRuntimeEvent = targetsProductStatus;
+        return true;
+    }
+
+    constexpr auto required =
+        leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+        leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+    const auto owned = appRuntime.activeResources();
+    char expectedFingerprint[33] = {};
+    if ((owned & required) != required) {
+        targetsProductStatus = "resources_missing";
+        lastRuntimeEvent = targetsProductStatus;
+        return true;
+    }
+    if (!loadProductFingerprint(expectedFingerprint,
+                                sizeof(expectedFingerprint))) {
+        targetsProductStatus = "enrollment_missing";
+        lastRuntimeEvent = targetsProductStatus;
+        return true;
+    }
+
+    BoardSdSpiTransport identityTransport;
+    const bool identityBegun = identityTransport.begin();
+    leshy1::storage::SdTransportRunResult identity{};
+    if (identityBegun) {
+        leshy1::storage::SdTransportRunPolicy policy;
+        policy.allowPhysical = true;
+        policy.explicitlySelected = true;
+        policy.identificationOnly = true;
+        policy.ownedResources = owned;
+        identity = leshy1::storage::runSdIdentificationStateMachine(
+            leshy1::storage::defaultSdIdentificationPlan(),
+            identityTransport, policy);
+        identityTransport.end();
+    }
+    char observedFingerprint[33] = {};
+    formatCidFingerprint(identity.identity, observedFingerprint,
+                         sizeof(observedFingerprint));
+    if (!identityBegun || !identityTransport.cleanupComplete() ||
+        identity.status != leshy1::storage::SdTransportRunStatus::Valid) {
+        targetsProductStatus = "identity_failed";
+        lastRuntimeEvent = targetsProductStatus;
+        return true;
+    }
+    if (std::strcmp(expectedFingerprint, observedFingerprint) != 0) {
+        targetsProductStatus = "fingerprint_mismatch";
+        lastRuntimeEvent = targetsProductStatus;
+        return true;
+    }
+
+    BoardSdFilesystem filesystem;
+    const bool mounted = filesystem.beginReadOnly();
+    if (!mounted || !filesystem.readOnlyGuaranteed()) {
+        if (filesystem.mounted()) filesystem.end();
+        targetsCleanupComplete = filesystem.cleanupComplete();
+        targetsProductStatus = "readonly_mount_failed";
+        lastRuntimeEvent = targetsProductStatus;
+        return true;
+    }
+    const std::uint64_t cardCapacity = filesystem.cardCapacityBytes();
+    const bool rootExists = filesystem.exists(
+        leshy1::storage::kProductSessionStoreRoot);
+    leshy1::storage::MediaIdentity media;
+    media.present = cardCapacity != 0 &&
+        cardCapacity == identity.identity.capacityBytes;
+    media.kind = leshy1::storage::MediaKind::Sd;
+    media.fingerprint = observedFingerprint;
+    media.capacityBytes = cardCapacity;
+    media.freeBytes = 0;
+    leshy1::storage::ProductStoreRequest request;
+    request.operation =
+        leshy1::storage::ProductStoreOperation::RecoverCatalog;
+    request.expectedFingerprint = expectedFingerprint;
+    request.rootPath = leshy1::storage::kProductSessionStoreRoot;
+    request.rootExists = rootExists;
+    request.driverReadOnlyGuaranteed = filesystem.readOnlyGuaranteed();
+    request.ownedResources = owned;
+    const auto permit = leshy1::storage::authorizeProductStore(media, request);
+
+    if (!permit.allowed()) {
+        targetsProductStatus =
+            leshy1::storage::productStoreAccessStatusName(permit.status);
+    } else {
+        ArduinoFsSessionStoreIo io(filesystem.driveNumber(),
+                                   sdSessionStoreIoWorkspace);
+        if (!io.openExistingReadOnly(permit)) {
+            targetsProductStatus = "open_failed";
+        } else {
+            const auto pair = leshy1::storage::recoverSessionPair(
+                io, sessionStoreWorkspace, &librarySession,
+                &surveySession);
+            TargetsLoadStatus loaded = TargetsLoadStatus::SessionUnavailable;
+            if (pair.valid()) {
+                loaded = controller.load(
+                    {&librarySession, pair.baselineGeneration},
+                    {&surveySession, pair.currentGeneration});
+            } else {
+                surveySession.reset();
+                const auto latest = leshy1::storage::recoverSession(
+                    io, sessionStoreWorkspace, &surveySession);
+                if (latest.valid()) {
+                    loaded = controller.load(
+                        {&surveySession, latest.generation});
+                }
+            }
+            targetsProductStatus =
+                leshy1::apps::targets::targetsLoadStatusName(loaded);
+        }
+        io.end();
+    }
+    targetsBlockedWriteAttempts = filesystem.blockedWriteAttempts();
+    filesystem.end();
+    targetsCleanupComplete = filesystem.cleanupComplete();
+    if (!targetsCleanupComplete || targetsBlockedWriteAttempts != 0) {
+        controller.reset();
+        targetsProductStatus = "cleanup_failed";
+    }
+    lastRuntimeEvent = targetsProductStatus;
+    return true;
+}
+
 bool IRAM_ATTR recordProductBootRecoveryTimeout() {
     if (__atomic_exchange_n(&productBootRecoveryWatchdogArmed, 0,
                             __ATOMIC_ACQ_REL) == 0) {
@@ -6546,6 +6721,15 @@ NavigationFooter navigationFooterForCurrentState() {
         }
         return {{NavigationKey::Left, UiTextId::NavModes}, {}, {}};
     }
+    if (uiController.page() == 7) {
+        if (targetsProductRuntime == nullptr) return {back, {}, {}};
+        if (targetsProductRuntime->controller.view() == TargetsView::List) {
+            return targetsProductRuntime->controller.entryCount() == 0
+                ? NavigationFooter{back, {}, {}}
+                : NavigationFooter{back, choose, enter};
+        }
+        return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
+    }
     if (uiController.page() == kDevicePage) return {back, choose, enter};
     return {back, {}, {}};
 }
@@ -6894,7 +7078,10 @@ UiTextId homeNote(const AppMenuItem& item) {
         return item.enabled ? UiTextId::NoteCaptureReady
                             : UiTextId::NoteCaptureUnavailable;
     }
-    if (std::strcmp(item.id, "targets") == 0) return UiTextId::NoteTargetsPlanned;
+    if (std::strcmp(item.id, "targets") == 0) {
+        return item.enabled ? UiTextId::NoteTargetsReady
+                            : UiTextId::NoteTargetsUnavailable;
+    }
     if (std::strcmp(item.id, "lab") == 0) return UiTextId::NoteLabPlanned;
     if (std::strcmp(item.id, "device") == 0) return UiTextId::NoteDevice;
     return UiTextId::Ready;
@@ -10392,6 +10579,187 @@ void renderLibraryPage(bool clearContent) {
     }
 }
 
+constexpr std::size_t kVisibleTargetRows = 4;
+
+std::size_t targetsFirstVisible(std::size_t selection) {
+    return selection < kVisibleTargetRows
+        ? 0U : selection - (kVisibleTargetRows - 1U);
+}
+
+void formatTargetIdentity(
+    const leshy1::domain::targets::TargetIdentity& identity,
+    char* output, std::size_t capacity) {
+    if (output == nullptr || capacity == 0) return;
+    output[0] = '\0';
+    if (identity.length != 6 || capacity < 18) return;
+    std::snprintf(
+        output, capacity, "%02X:%02X:%02X:%02X:%02X:%02X",
+        static_cast<unsigned>(identity.value[0]),
+        static_cast<unsigned>(identity.value[1]),
+        static_cast<unsigned>(identity.value[2]),
+        static_cast<unsigned>(identity.value[3]),
+        static_cast<unsigned>(identity.value[4]),
+        static_cast<unsigned>(identity.value[5]));
+}
+
+void formatTargetName(const TargetListRow& row, char* output,
+                      std::size_t capacity) {
+    if (output == nullptr || capacity == 0) return;
+    output[0] = '\0';
+    const auto* target = targetsProductRuntime == nullptr
+        ? nullptr : targetsProductRuntime->controller.catalog().find(
+              row.targetId);
+    if (target != nullptr && target->nameLength != 0) {
+        std::snprintf(output, capacity, "%s", target->name.data());
+        return;
+    }
+    if (row.latest.labelLength != 0) {
+        std::snprintf(output, capacity, "%s", row.latest.label.data());
+        return;
+    }
+    formatTargetIdentity(row.identity, output, capacity);
+}
+
+void renderTargetListRow(std::size_t entryIndex, std::size_t firstVisible) {
+    if (targetsProductRuntime == nullptr || entryIndex < firstVisible ||
+        entryIndex >= firstVisible + kVisibleTargetRows) {
+        return;
+    }
+    TargetsController& controller = targetsProductRuntime->controller;
+    if (entryIndex >= controller.entryCount()) return;
+    const Rect bounds = Components::homeRow(static_cast<std::uint8_t>(
+        entryIndex - firstVisible));
+    const bool selected = controller.selection() == entryIndex;
+    if (controller.compareAvailable() && entryIndex == 0) {
+        const auto& comparison = controller.comparison();
+        char note[64] = {};
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsCompareRowFormat),
+                      static_cast<unsigned>(comparison.added),
+                      static_cast<unsigned>(comparison.removed),
+                      static_cast<unsigned>(comparison.changed));
+        renderMenuRow(bounds, tr(UiTextId::TargetsCompareVisits), note,
+                      selected, true, Tone::Positive);
+        return;
+    }
+    const std::size_t rowIndex = controller.compareAvailable()
+        ? entryIndex - 1U : entryIndex;
+    const TargetListRow* row = controller.row(rowIndex);
+    if (row == nullptr) return;
+    char name[49] = {};
+    char note[64] = {};
+    formatTargetName(*row, name, sizeof(name));
+    if (row->latest.radio == RadioKind::Wifi) {
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsWifiRowFormat),
+                      static_cast<int>(row->latest.rssiDbm),
+                      static_cast<unsigned>(row->latest.channel));
+    } else {
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsBleRowFormat),
+                      static_cast<int>(row->latest.rssiDbm));
+    }
+    renderMenuRow(bounds, name, note, selected, true, Tone::Neutral);
+}
+
+void renderTargetsPage(bool clearContent) {
+    if (targetsProductRuntime == nullptr) {
+        renderHeader(tr(UiTextId::AppTargets), clearContent);
+        renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+        return;
+    }
+    TargetsController& controller = targetsProductRuntime->controller;
+    if (controller.view() == TargetsView::Compare) {
+        renderHeader(tr(UiTextId::TargetsCompare), clearContent);
+        const auto& comparison = controller.comparison();
+        char line[64] = {};
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::TargetsCompareGenerationFormat),
+                      static_cast<unsigned long>(
+                          comparison.baseline.generation),
+                      static_cast<unsigned long>(
+                          comparison.current.generation));
+        renderMetric(0, line, Tone::Positive);
+        std::snprintf(line, sizeof(line), tr(UiTextId::TargetsAddedFormat),
+                      static_cast<unsigned>(comparison.added));
+        renderMetric(1, line);
+        std::snprintf(line, sizeof(line), tr(UiTextId::TargetsRemovedFormat),
+                      static_cast<unsigned>(comparison.removed));
+        renderMetric(2, line);
+        std::snprintf(line, sizeof(line), tr(UiTextId::TargetsChangedFormat),
+                      static_cast<unsigned>(comparison.changed));
+        renderMetric(3, line, comparison.changed == 0
+                                  ? Tone::Neutral : Tone::Warning);
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::TargetsUnchangedFormat),
+                      static_cast<unsigned>(comparison.unchanged));
+        renderMetric(4, line);
+        return;
+    }
+    if (controller.view() == TargetsView::Detail) {
+        renderHeader(tr(UiTextId::TargetsDetail), clearContent);
+        const TargetListRow* row = controller.selectedRow();
+        const auto* target = controller.selectedTarget();
+        if (row == nullptr || target == nullptr) {
+            renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+            return;
+        }
+        char line[64] = {};
+        formatTargetName(*row, line, sizeof(line));
+        renderMetric(0, line, Tone::Positive);
+        char identity[24] = {};
+        formatTargetIdentity(row->identity, identity, sizeof(identity));
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::TargetsIdentityFormat), identity);
+        renderMetric(1, line);
+        if (row->latest.radio == RadioKind::Wifi) {
+            std::snprintf(line, sizeof(line),
+                          tr(UiTextId::TargetsWifiRowFormat),
+                          static_cast<int>(row->latest.rssiDbm),
+                          static_cast<unsigned>(row->latest.channel));
+        } else {
+            std::snprintf(line, sizeof(line),
+                          tr(UiTextId::TargetsBleRowFormat),
+                          static_cast<int>(row->latest.rssiDbm));
+        }
+        renderMetric(2, line);
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::TargetsEvidenceFormat),
+                      static_cast<unsigned>(target->evidenceCount));
+        renderMetric(3, line);
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::TargetsGenerationFormat),
+                      static_cast<unsigned long>(
+                          row->evidence.sourceGeneration));
+        renderMetric(4, line);
+        return;
+    }
+
+    char title[32] = {};
+    if (controller.truncated()) {
+        std::snprintf(title, sizeof(title),
+                      tr(UiTextId::TargetsLimitedTitleFormat),
+                      static_cast<unsigned>(controller.size()),
+                      static_cast<unsigned>(controller.sourceIdentityCount()));
+    }
+    renderHeader(controller.truncated() ? title : tr(UiTextId::AppTargets),
+                 clearContent);
+    if (controller.status() != TargetsLoadStatus::Ready) {
+        renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+        return;
+    }
+    if (controller.entryCount() == 0) {
+        renderMetric(0, tr(UiTextId::TargetsEmpty), Tone::Muted);
+        return;
+    }
+    const std::size_t first = targetsFirstVisible(controller.selection());
+    const std::size_t end = controller.entryCount() < first + kVisibleTargetRows
+        ? controller.entryCount() : first + kVisibleTargetRows;
+    for (std::size_t index = first; index < end; ++index) {
+        renderTargetListRow(index, first);
+    }
+}
+
 struct UiRenderSnapshot final {
     bool valid = false;
     std::uint8_t page = 0;
@@ -10439,6 +10807,9 @@ struct UiRenderSnapshot final {
     std::uint8_t libraryView = 0;
     std::size_t librarySelection = 0;
     std::size_t librarySize = 0;
+    std::uint8_t targetsView = 0;
+    std::size_t targetsSelection = 0;
+    std::size_t targetsSize = 0;
 };
 
 UiRenderSnapshot renderedUi{};
@@ -10491,6 +10862,14 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         static_cast<std::uint8_t>(libraryController.view()),
         libraryController.selection(),
         libraryController.size(),
+        targetsProductRuntime == nullptr
+            ? static_cast<std::uint8_t>(0)
+            : static_cast<std::uint8_t>(
+                targetsProductRuntime->controller.view()),
+        targetsProductRuntime == nullptr
+            ? 0U : targetsProductRuntime->controller.selection(),
+        targetsProductRuntime == nullptr
+            ? 0U : targetsProductRuntime->controller.entryCount(),
     };
 }
 
@@ -10909,6 +11288,27 @@ bool renderSelectionDelta() {
         return true;
     }
 
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() == TargetsView::List &&
+        renderedUi.targetsView ==
+            static_cast<std::uint8_t>(TargetsView::List) &&
+        renderedUi.targetsSize ==
+            targetsProductRuntime->controller.entryCount()) {
+        const std::size_t current =
+            targetsProductRuntime->controller.selection();
+        if (renderedUi.targetsSelection == current) return false;
+        const std::size_t oldFirst =
+            targetsFirstVisible(renderedUi.targetsSelection);
+        const std::size_t currentFirst = targetsFirstVisible(current);
+        if (oldFirst != currentFirst) {
+            renderTargetsPage(false);
+            return true;
+        }
+        renderTargetListRow(renderedUi.targetsSelection, currentFirst);
+        renderTargetListRow(current, currentFirst);
+        return true;
+    }
+
     if (uiController.page() == 5) {
         if (renderedUi.settingsLanguage !=
                 static_cast<std::uint8_t>(languageController.active()) ||
@@ -10968,6 +11368,8 @@ void renderInteractiveScreen(bool clearContent) {
             renderSettingsPage(clearContent);
         } else if (uiController.page() == 6) {
             renderSelfTestPage(clearContent);
+        } else if (uiController.page() == 7) {
+            renderTargetsPage(clearContent);
         } else if (uiController.page() == kDevicePage) {
             renderDevicePage(clearContent);
         } else if (uiController.page() == kPowerPage) {
@@ -13324,6 +13726,69 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
     reply.println(line);
 }
 
+void emitTargetsState(Stream& reply) {
+    const TargetsController* controller = targetsProductRuntime == nullptr
+        ? nullptr : &targetsProductRuntime->controller;
+    const TargetListRow* selected = controller == nullptr
+        ? nullptr : controller->selectedRow();
+    const auto* comparison = controller != nullptr &&
+            controller->compareAvailable()
+        ? &controller->comparison() : nullptr;
+    const char* view = controller == nullptr
+        ? "none"
+        : controller->view() == TargetsView::Detail
+              ? "detail"
+              : controller->view() == TargetsView::Compare
+                    ? "compare" : "list";
+    char line[768] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.targets.product.v1\",\"kind\":\"state\","
+        "\"status\":\"%s\",\"workspace_allocated\":%s,"
+        "\"page_open\":%s,\"view\":\"%s\","
+        "\"target_count\":%u,\"source_identity_count\":%u,"
+        "\"truncated\":%s,\"entry_count\":%u,\"selection\":%u,"
+        "\"compare_available\":%s,\"baseline_generation\":%lu,"
+        "\"current_generation\":%lu,\"added\":%u,\"removed\":%u,"
+        "\"changed\":%u,\"unchanged\":%u,"
+        "\"selected_generation\":%lu,\"selected_rssi_dbm\":%d,"
+        "\"read_only\":true,\"write_enabled\":false,"
+        "\"blocked_write_attempts\":%lu,\"cleanup_complete\":%s,"
+        "\"lease_mask\":%lu,\"heap_free_before\":%lu,"
+        "\"heap_free_now\":%lu,\"heap_free_after_release\":%lu}",
+        targetsProductStatus,
+        controller == nullptr ? "false" : "true",
+        uiController.page() == 7 ? "true" : "false", view,
+        static_cast<unsigned>(controller == nullptr ? 0 : controller->size()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->sourceIdentityCount()),
+        controller != nullptr && controller->truncated() ? "true" : "false",
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->entryCount()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->selection()),
+        comparison == nullptr ? "false" : "true",
+        static_cast<unsigned long>(comparison == nullptr
+                                       ? 0 : comparison->baseline.generation),
+        static_cast<unsigned long>(comparison == nullptr
+                                       ? 0 : comparison->current.generation),
+        static_cast<unsigned>(comparison == nullptr ? 0 : comparison->added),
+        static_cast<unsigned>(comparison == nullptr ? 0 : comparison->removed),
+        static_cast<unsigned>(comparison == nullptr ? 0 : comparison->changed),
+        static_cast<unsigned>(comparison == nullptr
+                                  ? 0 : comparison->unchanged),
+        static_cast<unsigned long>(selected == nullptr
+                                       ? 0 : selected->evidence.sourceGeneration),
+        static_cast<int>(selected == nullptr ? 0 : selected->latest.rssiDbm),
+        static_cast<unsigned long>(targetsBlockedWriteAttempts),
+        targetsCleanupComplete ? "true" : "false",
+        static_cast<unsigned long>(appRuntime.activeResources()),
+        static_cast<unsigned long>(targetsHeapFreeBefore),
+        static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
+        static_cast<unsigned long>(targetsHeapFreeAfter));
+    reply.println(line);
+}
+
 void emitWifiFrameCaptureState(Stream& reply) {
     const auto stats = wifiFrameCapture.stats();
     const auto& plan = wifiFrameCapture.capture().plan();
@@ -13995,6 +14460,10 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (uiController.page() == 3) {
         return libraryController.view() == LibraryView::SessionList;
     }
+    if (uiController.page() == 7) {
+        return targetsProductRuntime != nullptr &&
+            targetsProductRuntime->controller.view() == TargetsView::List;
+    }
     if (uiController.page() == 4) {
         return captureView == CaptureView::SourceMenu;
     }
@@ -14031,6 +14500,7 @@ bool applyUiAction(UiAction action, bool render = true) {
     }
     const AppMenuItem* selected = appCatalog.get(uiController.selection());
     const bool wasRoot = uiController.isRoot();
+    const std::uint8_t pageBefore = uiController.page();
     if (!wasRoot && uiController.page() == 2) {
         bool handled = false;
         bool changed = false;
@@ -14766,6 +15236,33 @@ bool applyUiAction(UiAction action, bool render = true) {
             return finish(changed);
         }
     }
+    if (!wasRoot && uiController.page() == 7 &&
+        targetsProductRuntime != nullptr) {
+        TargetsController& controller = targetsProductRuntime->controller;
+        bool handled = false;
+        bool changed = false;
+        if (controller.view() != TargetsView::List &&
+            (action == UiAction::Back || action == UiAction::Left)) {
+            handled = true;
+            changed = controller.back();
+        } else if (controller.view() == TargetsView::List) {
+            if (action == UiAction::Up) {
+                handled = true;
+                changed = controller.previous();
+            } else if (action == UiAction::Down) {
+                handled = true;
+                changed = controller.next();
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                handled = true;
+                changed = controller.openSelected();
+            }
+        }
+        if (handled) {
+            uiController.recordHandledAction(action);
+            return finish(changed);
+        }
+    }
     if (!wasRoot && uiController.page() == 4) {
         if (captureView == CaptureView::SourceMenu) {
             bool handled = false;
@@ -15099,6 +15596,10 @@ bool applyUiAction(UiAction action, bool render = true) {
             infraredCapturePersistGeneration = 0;
             nextCaptureUiRefreshUs = 0;
         }
+        if (openable && selected != nullptr &&
+            std::strcmp(selected->id, "targets") == 0) {
+            openable = loadTargetsProduct(*selected);
+        }
         const bool surveyApp = selected != nullptr &&
             (std::strcmp(selected->id, "wifi") == 0 ||
              std::strcmp(selected->id, "ble") == 0);
@@ -15167,9 +15668,14 @@ bool applyUiAction(UiAction action, bool render = true) {
         action, static_cast<std::uint8_t>(appCatalog.size()), openable,
         selected == nullptr ? UiController::kRootPage : selected->page);
     if (wantsLaunch && launchStatus == LaunchStatus::Started && !changed) {
+        if (selected != nullptr &&
+            std::strcmp(selected->id, "targets") == 0) {
+            releaseTargetsProduct();
+        }
         appRuntime.stop();
         lastRuntimeEvent = "launch_rolled_back";
     } else if (!wasRoot && uiController.isRoot() && changed) {
+        if (pageBefore == 7) releaseTargetsProduct();
         appRuntime.stop();
         lastRuntimeEvent = "stopped";
     }
@@ -15274,6 +15780,18 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         TouchTargetLayout::ThreeChoices, point),
                     static_cast<std::uint8_t>(surveyController.draftFilter())};
         }
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() == TargetsView::List) {
+        const std::size_t first = targetsFirstVisible(
+            targetsProductRuntime->controller.selection());
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point,
+                    static_cast<std::uint8_t>(first),
+                    static_cast<std::uint8_t>(
+                        targetsProductRuntime->controller.entryCount())),
+                static_cast<std::uint8_t>(
+                    targetsProductRuntime->controller.selection())};
     }
     if (uiController.page() == 4 &&
         captureView == CaptureView::SourceMenu) {
@@ -20380,6 +20898,8 @@ void handleCommand(Stream& reply, const char* command) {
         broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"pong\"}");
     } else if (std::strcmp(command, "ui.state") == 0) {
         emitUiState(reply, UiAction::Unknown, false);
+    } else if (std::strcmp(command, "targets.state") == 0) {
+        emitTargetsState(reply);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
         emitWifiNetworkDetailState(reply);
     } else if (std::strcmp(command, "ble.device.detail") == 0) {

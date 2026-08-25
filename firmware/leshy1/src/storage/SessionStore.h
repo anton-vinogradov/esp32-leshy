@@ -128,4 +128,24 @@ SessionStoreRecoveryResult recoverSession(SessionStoreIo& io,
                                           SessionStoreWorkspace& workspace,
                                           services::survey::SurveySession* output);
 
+struct SessionStorePairRecoveryResult final {
+    SessionStoreStatus status = SessionStoreStatus::NoGeneration;
+    CandidateStatus aStatus = CandidateStatus::InvalidHead;
+    CandidateStatus bStatus = CandidateStatus::InvalidHead;
+    std::uint32_t baselineGeneration = 0;
+    std::uint32_t currentGeneration = 0;
+    std::size_t baselineObservations = 0;
+    std::size_t currentObservations = 0;
+
+    bool valid() const { return status == SessionStoreStatus::Valid; }
+};
+
+// Recovers the two distinct durable generations currently named by the atomic
+// heads. Orphan payloads from interrupted writes are never admitted. Results
+// are chronological and all-or-nothing, ready for an exact Session compare.
+SessionStorePairRecoveryResult recoverSessionPair(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    services::survey::SurveySession* baseline,
+    services::survey::SurveySession* current);
+
 }  // namespace leshy1::storage

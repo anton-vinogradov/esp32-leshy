@@ -1,0 +1,176 @@
+#include <iostream>
+
+#include "apps/targets/TargetsController.h"
+
+using namespace leshy1::apps::targets;
+using namespace leshy1::domain::observations;
+using namespace leshy1::domain::targets;
+using namespace leshy1::services::survey;
+
+namespace {
+
+int failures = 0;
+#define CHECK(condition)                                                     \
+    do {                                                                     \
+        if (!(condition)) {                                                  \
+            std::cerr << __FILE__ << ':' << __LINE__ << ": CHECK("          \
+                      << #condition << ") failed\n";                         \
+            ++failures;                                                      \
+        }                                                                    \
+    } while (false)
+
+Observation wifi(std::uint64_t sequence, std::uint64_t us,
+                 std::uint8_t suffix, std::int16_t rssi) {
+    Observation value{};
+    value.sequence = sequence;
+    value.monotonicUs = us;
+    value.radio = RadioKind::Wifi;
+    value.frequencyKhz = 2412000;
+    value.channel = 1;
+    value.rssiDbm = rssi;
+    value.identity = {2, 0, 0, 0, 0, suffix};
+    value.identityLength = 6;
+    value.wifiNetwork.present = true;
+    return value;
+}
+
+SurveySession session(const char* id, std::uint64_t base,
+                      std::initializer_list<Observation> observations) {
+    SurveySession result;
+    CHECK(result.start(id, base) == SessionStatus::Started);
+    for (const Observation& observation : observations) {
+        CHECK(result.append(observation) == SessionStatus::Appended);
+    }
+    CHECK(result.stop(base + 100) == SessionStatus::Stopped);
+    return result;
+}
+
+SurveySession rangeSession(const char* id, std::uint64_t base,
+                           std::uint8_t firstSuffix, std::size_t count,
+                           std::int16_t firstRssi) {
+    SurveySession result;
+    CHECK(result.start(id, base) == SessionStatus::Started);
+    for (std::size_t index = 0; index < count; ++index) {
+        CHECK(result.append(wifi(
+                  index + 1, base + index + 1,
+                  static_cast<std::uint8_t>(firstSuffix + index),
+                  static_cast<std::int16_t>(firstRssi -
+                                            static_cast<std::int16_t>(index)))) ==
+              SessionStatus::Appended);
+    }
+    CHECK(result.stop(base + count + 1) == SessionStatus::Stopped);
+    return result;
+}
+
+void pairIsUsefulFirstAndStable() {
+    SurveySession baseline = session(
+        "baseline", 100, {wifi(1, 110, 1, -70), wifi(2, 120, 2, -45)});
+    SurveySession current = session(
+        "current", 300, {wifi(1, 310, 1, -30), wifi(2, 320, 3, -55)});
+    TargetsWorkspace workspace;
+    TargetsController controller(workspace);
+    CHECK(controller.load({&baseline, 1}, {&current, 2}) ==
+          TargetsLoadStatus::Ready);
+    CHECK(controller.size() == 3);
+    CHECK(controller.entryCount() == 4);
+    CHECK(controller.compareAvailable());
+    CHECK(controller.row(0)->latest.rssiDbm == -30);
+    CHECK(controller.row(1)->latest.rssiDbm == -45);
+    CHECK(controller.row(2)->latest.rssiDbm == -55);
+    CHECK(controller.comparison().added == 1);
+    CHECK(controller.comparison().removed == 1);
+    CHECK(controller.comparison().changed == 1);
+    CHECK(controller.comparison().unchanged == 0);
+
+    CHECK(controller.selectedIsCompare());
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == TargetsView::Compare);
+    CHECK(controller.back());
+    CHECK(controller.next());
+    const TargetId selected = controller.selectedRow()->targetId;
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == TargetsView::Detail);
+    CHECK(targetIdEqual(controller.selectedTarget()->id, selected));
+    CHECK(controller.back());
+    CHECK(controller.selection() == 1);
+    CHECK(controller.openCompare());
+    CHECK(controller.view() == TargetsView::Compare);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::List);
+}
+
+void singleSessionStillListsTargets() {
+    SurveySession current =
+        session("only", 500, {wifi(1, 510, 4, -40)});
+    TargetsWorkspace workspace;
+    TargetsController controller(workspace);
+    CHECK(controller.load({&current, 7}) == TargetsLoadStatus::Ready);
+    CHECK(controller.size() == 1);
+    CHECK(controller.entryCount() == 1);
+    CHECK(!controller.compareAvailable());
+    CHECK(!controller.openCompare());
+    CHECK(controller.openSelected());
+}
+
+void rejectedLoadClearsPriorRows() {
+    SurveySession current =
+        session("good", 700, {wifi(1, 710, 5, -40)});
+    TargetsWorkspace workspace;
+    TargetsController controller(workspace);
+    CHECK(controller.load({&current, 1}) == TargetsLoadStatus::Ready);
+    CHECK(controller.size() == 1);
+    SurveySession running;
+    CHECK(running.start("running", 900) == SessionStatus::Started);
+    CHECK(controller.load({&running, 2}) ==
+          TargetsLoadStatus::InvalidArgument);
+    CHECK(controller.size() == 0);
+    CHECK(controller.catalog().size() == 0);
+}
+
+void denseAirKeepsStrongestCurrentSlice() {
+    SurveySession baseline = rangeSession("dense-old", 10000, 1, 8, -20);
+    SurveySession current = rangeSession("dense-new", 100, 20, 20, -30);
+    TargetsWorkspace workspace;
+    TargetsController controller(workspace);
+    CHECK(controller.load({&baseline, 10}, {&current, 11}) ==
+          TargetsLoadStatus::Ready);
+    CHECK(controller.size() == TargetCatalog::kCapacity);
+    CHECK(controller.entryCount() == TargetCatalog::kCapacity + 1);
+    CHECK(controller.sourceIdentityCount() == 28);
+    CHECK(controller.truncated());
+    CHECK(controller.row(0)->identity.value[5] == 20);
+    CHECK(controller.row(0)->latest.rssiDbm == -30);
+    CHECK(controller.row(15)->identity.value[5] == 35);
+    CHECK(controller.comparison().added == TargetCatalog::kCapacity);
+    CHECK(controller.comparison().removed == 0);
+}
+
+void currentEvidenceWinsAcrossMonotonicReset() {
+    SurveySession baseline = session(
+        "old-boot", 10000, {wifi(1, 10010, 42, -25)});
+    SurveySession current = session(
+        "new-boot", 100, {wifi(1, 110, 42, -70)});
+    TargetsWorkspace workspace;
+    TargetsController controller(workspace);
+    CHECK(controller.load({&baseline, 20}, {&current, 21}) ==
+          TargetsLoadStatus::Ready);
+    CHECK(controller.size() == 1);
+    CHECK(controller.row(0)->latest.rssiDbm == -70);
+    CHECK(controller.row(0)->evidence.sourceGeneration == 21);
+}
+
+}  // namespace
+
+int main() {
+    pairIsUsefulFirstAndStable();
+    singleSessionStillListsTargets();
+    rejectedLoadClearsPriorRows();
+    denseAirKeepsStrongestCurrentSlice();
+    currentEvidenceWinsAcrossMonotonicReset();
+    if (failures != 0) {
+        std::cerr << failures << " targets controller test(s) failed\n";
+        return 1;
+    }
+    std::cout << "targets controller tests passed\n";
+    return 0;
+}

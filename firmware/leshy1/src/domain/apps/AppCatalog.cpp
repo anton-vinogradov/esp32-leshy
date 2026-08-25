@@ -79,6 +79,20 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
     const bool simulatedLibrary =
         !persistentLibrary && available(inventory, "library.simulated");
     const bool library = persistentLibrary || simulatedLibrary;
+    items_[size_++] = {
+        "targets", "TARGETS",
+        library ? "saved identities / compare visits"
+                : "saved sessions unavailable",
+        7, library, simulatedLibrary,
+        simulatedLibrary
+            ? kernel::runtime::resourceMask(
+                  kernel::runtime::Resource::UiForeground)
+            : kernel::runtime::resourceMask(
+                  kernel::runtime::Resource::UiForeground) |
+                  kernel::runtime::resourceMask(
+                      kernel::runtime::Resource::Storage) |
+                  kernel::runtime::resourceMask(
+                      kernel::runtime::Resource::RadioSpi)};
     items_[size_++] = {"library", "LIBRARY",
                        simulatedLibrary ? "simulated / ram only"
                                         : (persistentLibrary ? "ready"
@@ -89,8 +103,8 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
                            : kernel::runtime::Resource::UiForeground |
                                  kernel::runtime::Resource::Storage};
 
-    // Service functions remain the final entry. Planned Targets and Lab work
-    // stays in the documented roadmap until there is a usable screen behind it.
+    // Service functions remain the final entry. Planned Lab work stays in the
+    // documented roadmap until there is a usable screen behind it.
     items_[size_++] = {
         "device", "DEVICE", "settings / checks / information", 9, true, false,
         kernel::runtime::resourceMask(kernel::runtime::Resource::UiForeground)};
