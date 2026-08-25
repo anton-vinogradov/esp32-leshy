@@ -18,6 +18,7 @@ enum class TargetsView : std::uint8_t {
     NameEdit,
     TagList,
     TagEdit,
+    NotesEdit,
     Compare,
     CompareDetail,
 };
@@ -26,6 +27,7 @@ enum class TargetActionItem : std::uint8_t {
     Favorite,
     Name,
     Tags,
+    Notes,
 };
 
 enum class TargetsLoadStatus : std::uint8_t {
@@ -67,9 +69,10 @@ struct TargetsWorkspace final {
 
 class TargetsController final {
 public:
-    static constexpr std::size_t kActionCount = 3;
+    static constexpr std::size_t kActionCount = 4;
     static constexpr std::size_t kNameEditControlCount = 4;
     static constexpr std::size_t kTagEditControlCount = 4;
+    static constexpr std::size_t kNotesEditControlCount = 4;
 
     explicit TargetsController(TargetsWorkspace& workspace)
         : workspace_(workspace) {}
@@ -91,6 +94,7 @@ public:
     bool openNameEditor();
     bool openTagList();
     bool openTagEditor();
+    bool openNotesEditor();
     bool openCompare();
     bool back();
     bool selectTarget(const domain::targets::TargetId& id);
@@ -100,6 +104,9 @@ public:
     bool cycleTagEditorGlyph();
     bool appendTagEditorGlyph();
     bool eraseTagEditorGlyph();
+    bool cycleNotesEditorGlyph();
+    bool appendNotesEditorGlyph();
+    bool eraseNotesEditorGlyph();
 
     TargetsView view() const { return view_; }
     TargetsLoadStatus status() const { return status_; }
@@ -113,12 +120,8 @@ public:
     std::size_t nameEditorSelection() const { return nameEditorSelection_; }
     std::size_t tagSelection() const { return tagSelection_; }
     std::size_t tagEditorSelection() const { return tagEditorSelection_; }
-    TargetActionItem selectedAction() const {
-        return actionSelection_ == 0
-            ? TargetActionItem::Favorite
-            : actionSelection_ == 1 ? TargetActionItem::Name
-                                    : TargetActionItem::Tags;
-    }
+    std::size_t notesEditorSelection() const { return notesEditorSelection_; }
+    TargetActionItem selectedAction() const;
     const char* nameEditorText() const { return nameEditorText_.data(); }
     std::size_t nameEditorLength() const { return nameEditorLength_; }
     char nameEditorGlyph() const;
@@ -138,6 +141,13 @@ public:
     }
     bool tagEditorCanSave() const {
         return view_ == TargetsView::TagEdit && tagEditorLength_ != 0;
+    }
+    const char* notesEditorText() const { return notesEditorText_.data(); }
+    std::size_t notesEditorLength() const { return notesEditorLength_; }
+    char notesEditorGlyph() const;
+    bool notesEditorDirty() const;
+    bool notesEditorCanAppend() const {
+        return notesEditorLength_ < domain::targets::TargetRecord::kNotesCapacity;
     }
     std::size_t navigationSelection() const {
         return view_ == TargetsView::Compare ||
@@ -215,6 +225,14 @@ private:
         tagEditorText_{};
     std::size_t tagEditorLength_ = 0;
     std::size_t tagEditorGlyphSelection_ = 0;
+    std::size_t notesEditorSelection_ = 0;
+    std::array<char, domain::targets::TargetRecord::kNotesCapacity + 1>
+        notesEditorText_{};
+    std::size_t notesEditorLength_ = 0;
+    std::array<char, domain::targets::TargetRecord::kNotesCapacity + 1>
+        originalNotes_{};
+    std::size_t originalNotesLength_ = 0;
+    std::size_t notesEditorGlyphSelection_ = 0;
     TargetsView view_ = TargetsView::List;
     TargetsLoadStatus status_ = TargetsLoadStatus::SessionUnavailable;
     bool comparisonAvailable_ = false;

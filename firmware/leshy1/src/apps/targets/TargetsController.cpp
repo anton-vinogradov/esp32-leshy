@@ -15,6 +15,8 @@ constexpr char kTargetNameGlyphs[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_";
 constexpr char kTargetTagGlyphs[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
+constexpr char kTargetNotesGlyphs[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?-_/";
 
 bool bindingValid(const TargetProductBinding& binding) {
     return binding.session != nullptr && binding.generation != 0 &&
@@ -203,6 +205,12 @@ void TargetsController::reset() {
     tagEditorText_.fill('\0');
     tagEditorLength_ = 0;
     tagEditorGlyphSelection_ = 0;
+    notesEditorSelection_ = 0;
+    notesEditorText_.fill('\0');
+    notesEditorLength_ = 0;
+    originalNotes_.fill('\0');
+    originalNotesLength_ = 0;
+    notesEditorGlyphSelection_ = 0;
     view_ = TargetsView::List;
     status_ = TargetsLoadStatus::SessionUnavailable;
     comparisonAvailable_ = false;
@@ -509,6 +517,11 @@ bool TargetsController::next() {
         ++tagEditorSelection_;
         return true;
     }
+    if (view_ == TargetsView::NotesEdit) {
+        if (notesEditorSelection_ + 1 >= kNotesEditControlCount) return false;
+        ++notesEditorSelection_;
+        return true;
+    }
     return false;
 }
 
@@ -541,6 +554,11 @@ bool TargetsController::previous() {
     if (view_ == TargetsView::TagEdit) {
         if (tagEditorSelection_ == 0) return false;
         --tagEditorSelection_;
+        return true;
+    }
+    if (view_ == TargetsView::NotesEdit) {
+        if (notesEditorSelection_ == 0) return false;
+        --notesEditorSelection_;
         return true;
     }
     return false;
@@ -588,6 +606,15 @@ bool TargetsController::openNameEditor() {
     nameEditorGlyphSelection_ = 0;
     view_ = TargetsView::NameEdit;
     return true;
+}
+
+TargetActionItem TargetsController::selectedAction() const {
+    switch (actionSelection_) {
+        case 0: return TargetActionItem::Favorite;
+        case 1: return TargetActionItem::Name;
+        case 2: return TargetActionItem::Tags;
+        default: return TargetActionItem::Notes;
+    }
 }
 
 std::size_t TargetsController::tagEntryCount() const {
@@ -665,6 +692,72 @@ bool TargetsController::eraseTagEditorGlyph() {
     return true;
 }
 
+bool TargetsController::openNotesEditor() {
+    if (view_ != TargetsView::Actions ||
+        selectedAction() != TargetActionItem::Notes) {
+        return false;
+    }
+    const auto* target = selectedTarget();
+    if (target == nullptr || target->notesLength > target->notes.size() - 1U) {
+        return false;
+    }
+    notesEditorText_.fill('\0');
+    originalNotes_.fill('\0');
+    if (target->notesLength != 0) {
+        std::memcpy(notesEditorText_.data(), target->notes.data(),
+                    target->notesLength);
+        std::memcpy(originalNotes_.data(), target->notes.data(),
+                    target->notesLength);
+    }
+    notesEditorLength_ = target->notesLength;
+    originalNotesLength_ = target->notesLength;
+    notesEditorSelection_ = 0;
+    notesEditorGlyphSelection_ = 0;
+    view_ = TargetsView::NotesEdit;
+    return true;
+}
+
+char TargetsController::notesEditorGlyph() const {
+    constexpr std::size_t count = sizeof(kTargetNotesGlyphs) - 1U;
+    return kTargetNotesGlyphs[notesEditorGlyphSelection_ % count];
+}
+
+bool TargetsController::notesEditorDirty() const {
+    return view_ == TargetsView::NotesEdit &&
+        (notesEditorLength_ != originalNotesLength_ ||
+         std::memcmp(notesEditorText_.data(), originalNotes_.data(),
+                     notesEditorLength_) != 0);
+}
+
+bool TargetsController::cycleNotesEditorGlyph() {
+    if (view_ != TargetsView::NotesEdit) return false;
+    constexpr std::size_t count = sizeof(kTargetNotesGlyphs) - 1U;
+    notesEditorGlyphSelection_ = (notesEditorGlyphSelection_ + 1U) % count;
+    return true;
+}
+
+bool TargetsController::appendNotesEditorGlyph() {
+    if (view_ != TargetsView::NotesEdit || !notesEditorCanAppend()) return false;
+    notesEditorText_[notesEditorLength_++] = notesEditorGlyph();
+    notesEditorText_[notesEditorLength_] = '\0';
+    return true;
+}
+
+bool TargetsController::eraseNotesEditorGlyph() {
+    if (view_ != TargetsView::NotesEdit || notesEditorLength_ == 0) return false;
+    std::size_t start = notesEditorLength_ - 1U;
+    while (start > 0U &&
+           (static_cast<unsigned char>(notesEditorText_[start]) & 0xc0U) ==
+               0x80U) {
+        --start;
+    }
+    for (std::size_t index = start; index <= notesEditorLength_; ++index) {
+        notesEditorText_[index] = '\0';
+    }
+    notesEditorLength_ = start;
+    return true;
+}
+
 char TargetsController::nameEditorGlyph() const {
     constexpr std::size_t count = sizeof(kTargetNameGlyphs) - 1U;
     return kTargetNameGlyphs[nameEditorGlyphSelection_ % count];
@@ -724,6 +817,10 @@ bool TargetsController::back() {
         return true;
     }
     if (view_ == TargetsView::TagList) {
+        view_ = TargetsView::Actions;
+        return true;
+    }
+    if (view_ == TargetsView::NotesEdit) {
         view_ = TargetsView::Actions;
         return true;
     }

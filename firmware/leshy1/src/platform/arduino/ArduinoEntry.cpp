@@ -427,7 +427,7 @@ struct TargetsMutationEvent final {
     bool cleanupComplete = false;
     bool favorite = false;
     TargetActionKind actionKind = TargetActionKind::SetFavorite;
-    std::array<char, TargetRecord::kNameCapacity + 1> name{};
+    std::array<char, TargetRecord::kNotesCapacity + 1> name{};
     std::uint16_t nameLength = 0;
     TargetId targetId{};
     std::uint32_t generation = 0;
@@ -457,7 +457,7 @@ TargetCatalog* targetsMutationCatalog = nullptr;
 TargetId targetsMutationTargetId{};
 bool targetsMutationFavorite = false;
 TargetActionKind targetsMutationKind = TargetActionKind::SetFavorite;
-std::array<char, TargetRecord::kNameCapacity + 1> targetsMutationText{};
+std::array<char, TargetRecord::kNotesCapacity + 1> targetsMutationText{};
 std::uint16_t targetsMutationTextLength = 0;
 std::uint64_t targetsMutationStartActionUs = 0;
 QueueHandle_t targetsMutationEvents = nullptr;
@@ -4923,6 +4923,7 @@ void runTargetsMutationWorker(void*) {
         action.targetId = event.targetId;
         action.favorite = event.favorite;
         if ((event.actionKind == TargetActionKind::SetName ||
+             event.actionKind == TargetActionKind::SetNotes ||
              event.actionKind == TargetActionKind::AddTag ||
              event.actionKind == TargetActionKind::RemoveTag) &&
             !leshy1::services::targets::setTargetActionText(
@@ -4996,6 +4997,10 @@ void runTargetsMutationWorker(void*) {
                 valueReopened = reopened->nameLength == event.nameLength &&
                     std::memcmp(reopened->name.data(), event.name.data(),
                                 event.nameLength) == 0;
+            } else if (event.actionKind == TargetActionKind::SetNotes) {
+                valueReopened = reopened->notesLength == event.nameLength &&
+                    std::memcmp(reopened->notes.data(), event.name.data(),
+                                event.nameLength) == 0;
             } else if (event.actionKind == TargetActionKind::AddTag) {
                 valueReopened = tagReopened;
             } else if (event.actionKind == TargetActionKind::RemoveTag) {
@@ -5053,7 +5058,8 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
         (targetsProductRuntime->controller.view() != TargetsView::Actions &&
          targetsProductRuntime->controller.view() != TargetsView::NameEdit &&
          targetsProductRuntime->controller.view() != TargetsView::TagList &&
-         targetsProductRuntime->controller.view() != TargetsView::TagEdit) ||
+         targetsProductRuntime->controller.view() != TargetsView::TagEdit &&
+         targetsProductRuntime->controller.view() != TargetsView::NotesEdit) ||
         targetsMutationState == TargetsMutationState::Saving) {
         return false;
     }
@@ -5089,20 +5095,30 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
     targetsMutationText.fill('\0');
     targetsMutationTextLength = 0;
     if (kind == TargetActionKind::SetName ||
+        kind == TargetActionKind::SetNotes ||
         kind == TargetActionKind::AddTag ||
         kind == TargetActionKind::RemoveTag) {
         const bool tagAction = kind == TargetActionKind::AddTag ||
             kind == TargetActionKind::RemoveTag;
         const std::size_t maximum = tagAction
-            ? TargetRecord::kTagCapacity : TargetRecord::kNameCapacity;
+            ? TargetRecord::kTagCapacity
+            : kind == TargetActionKind::SetNotes
+                  ? TargetRecord::kNotesCapacity
+                  : TargetRecord::kNameCapacity;
         if (text == nullptr || textLength > maximum ||
             (tagAction && textLength == 0)) {
             delete targetsMutationCatalog;
             targetsMutationCatalog = nullptr;
             targetsMutationState = TargetsMutationState::Failed;
-            targetsMutationStatus = tagAction ? "tag_invalid" : "name_invalid";
+            targetsMutationStatus = tagAction
+                ? "tag_invalid"
+                : kind == TargetActionKind::SetNotes
+                      ? "notes_invalid" : "name_invalid";
             lastRuntimeEvent = tagAction
-                ? "targets_store_tag_invalid" : "targets_store_name_invalid";
+                ? "targets_store_tag_invalid"
+                : kind == TargetActionKind::SetNotes
+                      ? "targets_store_notes_invalid"
+                      : "targets_store_name_invalid";
             return true;
         }
         if (textLength != 0) {
@@ -5184,6 +5200,18 @@ bool requestTargetsTagRemoveMutation() {
         targetsProductRuntime->controller.selectedTagLength());
 }
 
+bool requestTargetsNotesMutation() {
+    if (targetsProductRuntime == nullptr ||
+        targetsProductRuntime->controller.view() != TargetsView::NotesEdit ||
+        !targetsProductRuntime->controller.notesEditorDirty()) {
+        return false;
+    }
+    return requestTargetsMutation(
+        TargetActionKind::SetNotes, false,
+        targetsProductRuntime->controller.notesEditorText(),
+        targetsProductRuntime->controller.notesEditorLength());
+}
+
 void serviceTargetsMutationWorker() {
     if (targetsMutationEvents == nullptr) return;
     TargetsMutationEvent event;
@@ -5203,6 +5231,12 @@ void serviceTargetsMutationWorker() {
         targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.openTagList();
+    } else if (rebuilt && event.actionKind == TargetActionKind::SetNotes &&
+               targetsProductRuntime != nullptr) {
+        targetsProductRuntime->controller.next();
+        targetsProductRuntime->controller.next();
+        targetsProductRuntime->controller.next();
+        targetsProductRuntime->controller.openNotesEditor();
     }
     delete targetsMutationCatalog;
     targetsMutationCatalog = nullptr;
@@ -7452,6 +7486,15 @@ NavigationFooter navigationFooterForCurrentState() {
                     {NavigationKey::RightAndSelect,
                      targetsProductRuntime->controller.selectedTagIsAdd()
                          ? UiTextId::NavEnter : UiTextId::NavDelete}};
+        }
+        if (targetsProductRuntime->controller.view() ==
+            TargetsView::NotesEdit) {
+            const std::size_t selection =
+                targetsProductRuntime->controller.notesEditorSelection();
+            return {{NavigationKey::Left, UiTextId::NavCancel}, choose,
+                    {NavigationKey::RightAndSelect,
+                     selection == 3 ? UiTextId::NavSave
+                                    : UiTextId::NavApply}};
         }
         if (targetsProductRuntime->controller.view() ==
             TargetsView::Actions) {
@@ -11614,6 +11657,50 @@ void renderTargetsPage(bool clearContent) {
         return;
     }
     TargetsController& controller = targetsProductRuntime->controller;
+    if (controller.view() == TargetsView::NotesEdit) {
+        renderHeader(tr(UiTextId::TargetsNotesEdit), clearContent);
+        char notes[TargetRecord::kNotesCapacity + 1] = {};
+        std::snprintf(notes, sizeof(notes), "%s", controller.notesEditorText());
+        if (notes[0] == '\0') {
+            std::snprintf(notes, sizeof(notes), "%s",
+                          tr(UiTextId::TargetsNotesEmpty));
+        }
+        fitTargetRowText(notes, sizeof(notes), UiTextRole::Body);
+        char note[48] = {};
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsNameSymbolFormat),
+                      controller.notesEditorGlyph());
+        renderMenuRow(Components::homeRow(0), notes, note,
+                      controller.notesEditorSelection() == 0, true,
+                      Tone::Positive);
+        char glyph[2] = {controller.notesEditorGlyph(), '\0'};
+        renderMenuRow(Components::homeRow(1),
+                      tr(UiTextId::TargetsNameAppend), glyph,
+                      controller.notesEditorSelection() == 1,
+                      controller.notesEditorCanAppend(), Tone::Positive);
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsNameLengthFormat),
+                      static_cast<unsigned>(controller.notesEditorLength()),
+                      static_cast<unsigned>(TargetRecord::kNotesCapacity));
+        renderMenuRow(Components::homeRow(2),
+                      tr(UiTextId::TargetsNameDelete), note,
+                      controller.notesEditorSelection() == 2,
+                      controller.notesEditorLength() != 0, Tone::Muted);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::TargetsNotesSave),
+                      tr(controller.notesEditorDirty()
+                             ? UiTextId::TargetsNameChanged
+                             : targetsMutationState == TargetsMutationState::Saved &&
+                                       targetsMutationReport.actionKind ==
+                                           TargetActionKind::SetNotes
+                                   ? UiTextId::TargetsSaved
+                                   : UiTextId::TargetsNameUnchanged),
+                      controller.notesEditorSelection() == 3,
+                      controller.notesEditorDirty(),
+                      controller.notesEditorDirty() ? Tone::Positive
+                                                    : Tone::Muted);
+        return;
+    }
     if (controller.view() == TargetsView::TagEdit) {
         renderHeader(tr(UiTextId::TargetsTagEdit), clearContent);
         char tag[TargetRecord::kTagCapacity + 1] = {};
@@ -11726,7 +11813,11 @@ void renderTargetsPage(bool clearContent) {
                       tr(UiTextId::TargetsNameSave),
                       tr(controller.nameEditorDirty()
                              ? UiTextId::TargetsNameChanged
-                             : UiTextId::TargetsNameUnchanged),
+                             : targetsMutationState == TargetsMutationState::Saved &&
+                                       targetsMutationReport.actionKind ==
+                                           TargetActionKind::SetName
+                                   ? UiTextId::TargetsSaved
+                                   : UiTextId::TargetsNameUnchanged),
                       controller.nameEditorSelection() == 3,
                       controller.nameEditorDirty(),
                       controller.nameEditorDirty() ? Tone::Positive
@@ -11760,12 +11851,27 @@ void renderTargetsPage(bool clearContent) {
             renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
             return;
         }
+        char favorite[48] = {};
+        const char* favoriteValue = tr(
+            target->favorite ? UiTextId::TargetsFavoriteOn
+                             : UiTextId::TargetsFavoriteOff);
+        if (targetsMutationState == TargetsMutationState::Saved &&
+            targetsMutationReport.actionKind == TargetActionKind::SetFavorite) {
+            std::snprintf(favorite, sizeof(favorite),
+                          tr(UiTextId::TargetsValueSavedFormat),
+                          favoriteValue);
+        } else {
+            std::snprintf(favorite, sizeof(favorite), "%s",
+                          targetsMutationState == TargetsMutationState::Failed
+                              ? tr(UiTextId::TargetsSaveFailed)
+                              : favoriteValue);
+        }
         renderMenuRow(Components::homeRow(0),
-                      tr(UiTextId::TargetsFavorite),
-                      tr(target->favorite ? UiTextId::TargetsFavoriteOn
-                                          : UiTextId::TargetsFavoriteOff),
+                      tr(UiTextId::TargetsFavorite), favorite,
                       controller.actionSelection() == 0, true,
-                      target->favorite ? Tone::Positive : Tone::Muted);
+                      targetsMutationState == TargetsMutationState::Failed
+                          ? Tone::Danger
+                          : target->favorite ? Tone::Positive : Tone::Muted);
         char name[TargetRecord::kNameCapacity + 1] = {};
         if (target->nameLength != 0) {
             std::memcpy(name, target->name.data(), target->nameLength);
@@ -11786,11 +11892,18 @@ void renderTargetsPage(bool clearContent) {
                       tr(UiTextId::TargetsTags), tags,
                       controller.actionSelection() == 2, true,
                       target->tagCount != 0 ? Tone::Positive : Tone::Muted);
-        if (targetsMutationState == TargetsMutationState::Saved) {
-            renderMetric(4, tr(UiTextId::TargetsSaved), Tone::Positive);
-        } else if (targetsMutationState == TargetsMutationState::Failed) {
-            renderMetric(4, tr(UiTextId::TargetsSaveFailed), Tone::Danger);
+        char notes[TargetRecord::kNotesCapacity + 1] = {};
+        if (target->notesLength != 0) {
+            std::memcpy(notes, target->notes.data(), target->notesLength);
+        } else {
+            std::snprintf(notes, sizeof(notes), "%s",
+                          tr(UiTextId::TargetsNotesEmpty));
         }
+        fitTargetRowText(notes, sizeof(notes), UiTextRole::Meta);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::TargetsNotes), notes,
+                      controller.actionSelection() == 3, true,
+                      target->notesLength != 0 ? Tone::Positive : Tone::Muted);
         return;
     }
     if (controller.view() == TargetsView::Detail) {
@@ -14867,6 +14980,8 @@ void emitTargetsState(Stream& reply) {
                     ? "tag_list"
               : controller->view() == TargetsView::TagEdit
                     ? "tag_edit"
+              : controller->view() == TargetsView::NotesEdit
+                    ? "notes_edit"
               : controller->view() == TargetsView::Compare
                     ? "compare"
                     : controller->view() == TargetsView::CompareDetail
@@ -14917,6 +15032,23 @@ void emitTargetsState(Stream& reply) {
         encodeHex(controller->tagEditorText(), controller->tagEditorLength(),
                   editorTagHex, sizeof(editorTagHex));
     }
+    constexpr std::size_t kNotesProbePrefix =
+        TargetRecord::kTagCapacity;
+    char selectedNotesPrefixHex[kNotesProbePrefix * 2U + 1U] = {};
+    if (selectedTarget != nullptr) {
+        const std::size_t length = selectedTarget->notesLength < kNotesProbePrefix
+            ? selectedTarget->notesLength : kNotesProbePrefix;
+        encodeHex(selectedTarget->notes.data(), length,
+                  selectedNotesPrefixHex, sizeof(selectedNotesPrefixHex));
+    }
+    char editorNotesPrefixHex[kNotesProbePrefix * 2U + 1U] = {};
+    if (controller != nullptr && controller->view() == TargetsView::NotesEdit) {
+        const std::size_t length = controller->notesEditorLength() <
+                kNotesProbePrefix
+            ? controller->notesEditorLength() : kNotesProbePrefix;
+        encodeHex(controller->notesEditorText(), length,
+                  editorNotesPrefixHex, sizeof(editorNotesPrefixHex));
+    }
     auto& line = diagnosticJson;
     std::memset(line, 0, sizeof(line));
     std::snprintf(
@@ -14953,6 +15085,11 @@ void emitTargetsState(Stream& reply) {
         "\"tag_editor_selection\":%u,\"tag_editor_length\":%u,"
         "\"tag_editor_hex\":\"%s\",\"tag_editor_glyph\":%u,"
         "\"tag_editor_can_save\":%s,"
+        "\"selected_notes_length\":%u,"
+        "\"selected_notes_prefix_hex\":\"%s\","
+        "\"notes_editor_selection\":%u,\"notes_editor_length\":%u,"
+        "\"notes_editor_prefix_hex\":\"%s\",\"notes_editor_glyph\":%u,"
+        "\"notes_editor_dirty\":%s,"
         "\"read_only\":false,\"write_enabled\":%s,"
         "\"target_state_generation\":%lu,\"target_state_head\":\"%s\","
         "\"mutation_state\":\"%s\",\"mutation_status\":\"%s\","
@@ -15059,6 +15196,18 @@ void emitTargetsState(Stream& reply) {
                                   ? 0 : controller->tagEditorGlyph()),
         controller != nullptr && controller->tagEditorCanSave()
             ? "true" : "false",
+        static_cast<unsigned>(selectedTarget == nullptr
+                                  ? 0 : selectedTarget->notesLength),
+        selectedNotesPrefixHex,
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->notesEditorSelection()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->notesEditorLength()),
+        editorNotesPrefixHex,
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->notesEditorGlyph()),
+        controller != nullptr && controller->notesEditorDirty()
+            ? "true" : "false",
         controller != nullptr &&
                 ((controller->view() == TargetsView::Actions &&
                   controller->selectedAction() == TargetActionItem::Favorite) ||
@@ -15067,7 +15216,9 @@ void emitTargetsState(Stream& reply) {
                  (controller->view() == TargetsView::TagList &&
                   !controller->selectedTagIsAdd()) ||
                  (controller->view() == TargetsView::TagEdit &&
-                  controller->tagEditorCanSave())) &&
+                  controller->tagEditorCanSave()) ||
+                 (controller->view() == TargetsView::NotesEdit &&
+                  controller->notesEditorDirty())) &&
                 targetsMutationState != TargetsMutationState::Saving
             ? "true" : "false",
         static_cast<unsigned long>(targetsStateGeneration), stateHead,
@@ -16532,6 +16683,7 @@ bool applyUiAction(UiAction action, bool render = true) {
              controller.view() == TargetsView::NameEdit ||
              controller.view() == TargetsView::TagList ||
              controller.view() == TargetsView::TagEdit ||
+             controller.view() == TargetsView::NotesEdit ||
              controller.view() == TargetsView::CompareDetail) &&
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
@@ -16561,6 +16713,9 @@ bool applyUiAction(UiAction action, bool render = true) {
                     break;
                 case TargetActionItem::Tags:
                     changed = controller.openTagList();
+                    break;
+                case TargetActionItem::Notes:
+                    changed = controller.openNotesEditor();
                     break;
             }
         } else if (controller.view() == TargetsView::NameEdit &&
@@ -16610,6 +16765,23 @@ bool applyUiAction(UiAction action, bool render = true) {
                 case 1: changed = controller.appendTagEditorGlyph(); break;
                 case 2: changed = controller.eraseTagEditorGlyph(); break;
                 case 3: changed = requestTargetsTagAddMutation(); break;
+            }
+        } else if (controller.view() == TargetsView::NotesEdit &&
+                   action == UiAction::Up) {
+            handled = true;
+            changed = controller.previous();
+        } else if (controller.view() == TargetsView::NotesEdit &&
+                   action == UiAction::Down) {
+            handled = true;
+            changed = controller.next();
+        } else if (controller.view() == TargetsView::NotesEdit &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            switch (controller.notesEditorSelection()) {
+                case 0: changed = controller.cycleNotesEditorGlyph(); break;
+                case 1: changed = controller.appendNotesEditorGlyph(); break;
+                case 2: changed = controller.eraseNotesEditorGlyph(); break;
+                case 3: changed = requestTargetsNotesMutation(); break;
             }
         } else if (controller.view() == TargetsView::List ||
                    controller.view() == TargetsView::Compare) {
@@ -17206,6 +17378,15 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         TargetsController::kTagEditControlCount)),
                 static_cast<std::uint8_t>(
                     targetsProductRuntime->controller.tagEditorSelection())};
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() == TargetsView::NotesEdit) {
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point, 0,
+                    static_cast<std::uint8_t>(
+                        TargetsController::kNotesEditControlCount)),
+                static_cast<std::uint8_t>(
+                    targetsProductRuntime->controller.notesEditorSelection())};
     }
     if (uiController.page() == 4 &&
         captureView == CaptureView::SourceMenu) {

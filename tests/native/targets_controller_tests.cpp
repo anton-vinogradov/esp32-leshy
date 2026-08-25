@@ -192,6 +192,28 @@ void pairIsUsefulFirstAndStable() {
     CHECK(controller.view() == TargetsView::TagList);
     CHECK(controller.back());
     CHECK(controller.view() == TargetsView::Actions);
+    CHECK(controller.next());
+    CHECK(controller.selectedAction() == TargetActionItem::Notes);
+    CHECK(controller.openNotesEditor());
+    CHECK(controller.view() == TargetsView::NotesEdit);
+    CHECK(controller.notesEditorLength() == 0);
+    CHECK(controller.notesEditorGlyph() == 'A');
+    CHECK(!controller.notesEditorDirty());
+    CHECK(controller.next());
+    CHECK(controller.appendNotesEditorGlyph());
+    CHECK(std::strcmp(controller.notesEditorText(), "A") == 0);
+    CHECK(controller.notesEditorDirty());
+    CHECK(controller.previous());
+    CHECK(controller.cycleNotesEditorGlyph());
+    CHECK(controller.notesEditorGlyph() == 'B');
+    CHECK(controller.next());
+    CHECK(controller.appendNotesEditorGlyph());
+    CHECK(std::strcmp(controller.notesEditorText(), "AB") == 0);
+    CHECK(controller.next());
+    CHECK(controller.eraseNotesEditorGlyph());
+    CHECK(std::strcmp(controller.notesEditorText(), "A") == 0);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::Actions);
     CHECK(controller.back());
     CHECK(controller.view() == TargetsView::Detail);
 }
@@ -297,6 +319,10 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
           TargetMutationStatus::Applied);
     CHECK(persisted.addTag(remembered->id, "LAB", 3) ==
           TargetMutationStatus::Applied);
+    constexpr const char kCyrillicNotes[] = u8"РЯДОМ";
+    CHECK(persisted.setNotes(remembered->id, kCyrillicNotes,
+                             std::strlen(kCyrillicNotes)) ==
+          TargetMutationStatus::Applied);
 
     SurveySession current = session(
         "current-visit", 300, {wifi(1, 310, 9, -30)});
@@ -316,6 +342,9 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
     CHECK(selected->tagCount == 1);
     CHECK(selected->tagLengths[0] == 3);
     CHECK(std::memcmp(selected->tags[0].data(), "LAB", 3) == 0);
+    CHECK(selected->notesLength == std::strlen(kCyrillicNotes));
+    CHECK(std::memcmp(selected->notes.data(), kCyrillicNotes,
+                      selected->notesLength) == 0);
     CHECK(selected->evidenceCount == 2);
     CHECK(currentController.row(0)->latest.rssiDbm == -30);
     CHECK(currentController.row(0)->evidence.sourceGeneration == 2);
@@ -338,6 +367,15 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
     CHECK(std::strcmp(currentController.selectedTagText(), "LAB") == 0);
     CHECK(currentController.next());
     CHECK(currentController.selectedTagIsAdd());
+    CHECK(currentController.back());
+    CHECK(currentController.view() == TargetsView::Actions);
+    CHECK(currentController.next());
+    CHECK(currentController.selectedAction() == TargetActionItem::Notes);
+    CHECK(currentController.openNotesEditor());
+    CHECK(!currentController.notesEditorDirty());
+    CHECK(currentController.eraseNotesEditorGlyph());
+    CHECK(std::strcmp(currentController.notesEditorText(), u8"РЯДО") == 0);
+    CHECK(currentController.notesEditorDirty());
 }
 
 }  // namespace
