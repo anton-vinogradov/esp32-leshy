@@ -363,6 +363,17 @@ workspace and explicit recovery scratch are lifecycle-owned objects and are not
 yet instantiated as permanent product globals; S6.4 product integration must
 measure their live heap/static placement. This is host/build evidence, not HIL.
 
+Host/build explainable-correlation measurement `RB-M142`: `E-CORR-001` uses
+3,090,892 B linked flash, 211,224 B static RAM and app/factory images
+3,091,392/3,156,928 B. This is +224 B linked flash, zero static-RAM growth and
++224/+224 B images versus `E-TARGET-002`; the correlation code is compiled but
+its bounded service/log are not yet permanent product globals. Dedicated DIRAM
+remains 294,404/341,760 B (86.14%, 47,356 B remaining), and dedicated IRAM
+remains exactly 16,384/16,384 B. `CorrelationDecisionLog` is host-guarded at
+≤16 KiB and contains at most 32 immutable decisions; S6.2 persistence and S6.4
+runtime integration must measure its retained-storage and live placement costs.
+This is host/build evidence, not HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

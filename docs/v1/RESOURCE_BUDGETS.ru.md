@@ -355,6 +355,17 @@ recovery scratch являются lifecycle-owned objects и ещё не instant
 permanent product globals; product integration S6.4 обязана измерить их live
 heap/static placement. Это host/build evidence, а не HIL.
 
+Host/build измерение explainable correlation `RB-M142`: `E-CORR-001` использует
+3 090 892 B linked flash, 211 224 B static RAM и app/factory images
+3 091 392/3 156 928 B. Это +224 B linked flash, zero static-RAM growth и
++224/+224 B images против `E-TARGET-002`; код correlation скомпилирован, но его
+bounded service/log ещё не являются permanent product globals. Dedicated DIRAM
+остаётся 294 404/341 760 B (86,14%, свободно 47 356 B), dedicated IRAM — ровно
+16 384/16 384 B. `CorrelationDecisionLog` host-ограничен ≤16 КиБ и содержит не
+более 32 immutable решений; persistence S6.2 и runtime integration S6.4 должны
+измерить его retained-storage и live placement costs. Это host/build evidence,
+а не HIL.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

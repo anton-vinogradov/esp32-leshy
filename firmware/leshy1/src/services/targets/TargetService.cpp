@@ -58,7 +58,6 @@ bool setTargetActionText(TargetAction* action, const char* value,
     for (std::size_t index = 0; index < length; ++index) {
         if (value[index] == '\0') return false;
     }
-    if (value[length] != '\0') return false;
     action->text.fill('\0');
     if (length != 0) std::memcpy(action->text.data(), value, length);
     action->textLength = static_cast<std::uint16_t>(length);
