@@ -4575,12 +4575,22 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         return true;
     }
 
+    // Reserve the large contiguous codec buffers before FatFs allocates and
+    // fragments its runtime heap.  The product has enough total free memory,
+    // but a post-mount 32 KiB allocation is not guaranteed on no-PSRAM
+    // boards.  Keep both objects outside the mounted interval's allocator
+    // churn and release them after recovery/UI hand-off.
+    auto* targetStateWorkspace = new (std::nothrow)
+        leshy1::storage::TargetStateStoreWorkspace();
+    TargetCatalog* persistedCatalog = new (std::nothrow) TargetCatalog();
     BoardSdFilesystem filesystem;
     const bool mounted = filesystem.beginReadOnly();
     targetsFilesystemMountError = filesystem.mountError();
     if (!mounted || !filesystem.readOnlyGuaranteed()) {
         if (filesystem.mounted()) filesystem.end();
         targetsCleanupComplete = filesystem.cleanupComplete();
+        delete targetStateWorkspace;
+        delete persistedCatalog;
         targetsProductStatus = "readonly_mount_failed";
         lastRuntimeEvent = targetsProductStatus;
         return true;
@@ -4610,7 +4620,6 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     std::uint32_t currentGeneration = 0;
     bool latestRecovered = false;
     std::uint32_t latestGeneration = 0;
-    TargetCatalog* persistedCatalog = nullptr;
     bool persistedCatalogAvailable = false;
     bool targetStateAccepted = true;
     if (!permit.allowed()) {
@@ -4647,19 +4656,14 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 filesystem.exists(
                     "/leshy/sessions/v1/target-state-head-b.bin");
             if (sessionReady && targetStatePresent) {
-                persistedCatalog = new (std::nothrow) TargetCatalog();
-                auto* targetWorkspace = new (std::nothrow)
-                    leshy1::storage::TargetStateStoreWorkspace();
-                if (persistedCatalog == nullptr || targetWorkspace == nullptr) {
-                    delete persistedCatalog;
-                    persistedCatalog = nullptr;
-                    delete targetWorkspace;
+                if (persistedCatalog == nullptr ||
+                    targetStateWorkspace == nullptr) {
                     targetStateAccepted = false;
                     targetsProductStatus = "target_state_workspace_unavailable";
                 } else {
                     const auto recovered =
                         leshy1::storage::recoverTargetCatalogState(
-                            io, *targetWorkspace, persistedCatalog);
+                            io, *targetStateWorkspace, persistedCatalog);
                     if (recovered.valid()) {
                         persistedCatalogAvailable = true;
                         targetsStateGeneration = recovered.generation;
@@ -4670,12 +4674,12 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                             leshy1::storage::targetStateStoreStatusName(
                                 recovered.status);
                     }
-                    delete targetWorkspace;
                 }
             }
         }
         io.end();
     }
+    delete targetStateWorkspace;
     targetsBlockedWriteAttempts = filesystem.blockedWriteAttempts();
     filesystem.end();
     targetsCleanupComplete = filesystem.cleanupComplete();
@@ -4843,6 +4847,12 @@ void runTargetsMutationWorker(void*) {
             heap_caps_get_free_size(MALLOC_CAP_8BIT));
         event.heapLargestBeforeMount = static_cast<std::uint32_t>(
             heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        workspace = new (std::nothrow)
+            leshy1::storage::TargetStateStoreWorkspace();
+        if (workspace == nullptr) {
+            event.status = "workspace_unavailable_before_mount";
+            break;
+        }
         filesystemAttempted = true;
         if (!filesystem.begin()) {
             event.filesystemMountError = filesystem.mountError();
@@ -4884,10 +4894,8 @@ void runTargetsMutationWorker(void*) {
         }
         io = new (std::nothrow) ArduinoFsSessionStoreIo(
             filesystem.driveNumber(), sdSessionStoreIoWorkspace);
-        workspace = new (std::nothrow)
-            leshy1::storage::TargetStateStoreWorkspace();
-        if (io == nullptr || workspace == nullptr) {
-            event.status = "workspace_unavailable";
+        if (io == nullptr) {
+            event.status = "io_workspace_unavailable";
             break;
         }
         if (!io->openExistingWritable(permit)) {
@@ -14604,6 +14612,8 @@ void emitTargetsState(Stream& reply) {
         "\"mutation_action_us\":%llu,\"mutation_elapsed_us\":%llu,"
         "\"mutation_bytes_written\":%llu,\"mutation_write_calls\":%lu,"
         "\"mutation_file_syncs\":%lu,\"mutation_directory_syncs\":%lu,"
+        "\"mutation_heap_free_before_mount\":%lu,"
+        "\"mutation_heap_largest_before_mount\":%lu,"
         "\"mutation_identity_attempts\":%u,"
         "\"mutation_identity_transient_retries\":%u,"
         "\"mutation_expected_cid\":\"%s\","
@@ -14684,6 +14694,10 @@ void emitTargetsState(Stream& reply) {
         static_cast<unsigned long>(targetsMutationReport.writeCalls),
         static_cast<unsigned long>(targetsMutationReport.fileSyncs),
         static_cast<unsigned long>(targetsMutationReport.directorySyncs),
+        static_cast<unsigned long>(
+            targetsMutationReport.heapFreeBeforeMount),
+        static_cast<unsigned long>(
+            targetsMutationReport.heapLargestBeforeMount),
         static_cast<unsigned>(targetsMutationReport.identityAttempts),
         static_cast<unsigned>(
             targetsMutationReport.identityTransientRetries),

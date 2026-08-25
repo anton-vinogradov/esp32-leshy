@@ -1,7 +1,7 @@
 {
   "schema": "leshy.hil.delta_scope.v1",
   "id": "targets-favorite-0.151",
-  "candidate_version": "0.151.0-targets-favorite",
+  "candidate_version": "0.151.1-targets-favorite-memory",
   "changed_surfaces": [
     "target_catalog_schema_v3_codec",
     "target_catalog_dual_head_atomic_store",
@@ -9,6 +9,7 @@
     "target_favorite_typed_action",
     "target_detail_actions_navigation",
     "target_store_worker_deadline",
+    "target_codec_workspace_pre_mount_reservation",
     "target_mutation_state_probe"
   ],
   "required_delta_regression": [

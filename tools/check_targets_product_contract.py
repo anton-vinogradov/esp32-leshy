@@ -26,6 +26,7 @@ def main() -> int:
     runner = (ROOT / "tools/run_1x_targets_hil.py").read_text()
     mount_runner = (ROOT / "tools/run_1x_targets_mount_regression_hil.py").read_text()
     evidence_runner = (ROOT / "tools/run_1x_targets_evidence_hil.py").read_text()
+    favorite_runner = (ROOT / "tools/run_1x_targets_favorite_hil.py").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -48,6 +49,18 @@ def main() -> int:
             "filesystem_mount_error" in entry,
             "persistent Sessions must mount/recover before Targets workspace "
             "allocation and expose the exact mount result")
+    mutation_start = entry.index("void runTargetsMutationWorker")
+    mutation_end = entry.index("bool requestTargetsFavoriteMutation")
+    mutation_worker = entry[mutation_start:mutation_end]
+    require(failures,
+            load_product.index("TargetStateStoreWorkspace();") <
+                load_product.index("filesystem.beginReadOnly()") and
+            mutation_worker.index("TargetStateStoreWorkspace();") <
+                mutation_worker.index("filesystem.begin()") and
+            "workspace_unavailable_before_mount" in mutation_worker and
+            r'\"mutation_heap_largest_before_mount\":%lu' in entry,
+            "large Target codec buffers must be reserved before FatFs can "
+            "fragment the no-PSRAM heap, with observable pre-mount capacity")
     require(failures,
             "new (std::nothrow) domain::targets::TargetCatalog" in controller and
             "delete scratch" in controller and
@@ -111,6 +124,15 @@ def main() -> int:
             "use a focused read-only exact-evidence delta when no new scans "
             "are needed")
     require(failures,
+            "leshy.targets_favorite_hil.run.v1" in favorite_runner and
+            "exact HIL requires clean committed HEAD" in favorite_runner and
+            "selected_favorite=not favorite_before" in favorite_runner and
+            "target_state_generation_after" in favorite_runner and
+            "targets-favorite-cold-reopen" in favorite_runner and
+            "mutation_directory_syncs" in favorite_runner,
+            "favorite mutation HIL must bind a clean exact candidate, atomic "
+            "sync evidence and cold recovery of the same stable Target ID")
+    require(failures,
             "renderTargetsPage" in entry and
             "renderTargetListRow" in entry and
             "renderTargetComparisonRow" in entry and
@@ -155,8 +177,9 @@ def main() -> int:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
-    print("Targets product contract passed: read-only exact-CID sessions, "
-          "bounded lifecycle, list/detail/compare, keypad/touch, state probe")
+    print("Targets product contract passed: exact-CID sessions, bounded "
+          "lifecycle, list/detail/compare/actions, pre-mount codec workspace, "
+          "keypad/touch and mutation state probe")
     return 0
 
 
