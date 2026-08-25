@@ -410,7 +410,10 @@ struct TargetsProductRuntime final {
           workspace(*workspaceValue),
           controller(*controllerValue) {}
     ~TargetsProductRuntime() {
-        delete controllerStorage;
+        if (controllerStorage != nullptr) {
+            controllerStorage->~TargetsController();
+            ::operator delete(static_cast<void*>(controllerStorage));
+        }
         delete workspaceStorage;
     }
 };
@@ -4513,16 +4516,21 @@ void releaseTargetsProduct() {
     targetsProductStatus = "not_loaded";
 }
 
-bool allocateTargetsProduct() {
+bool allocateTargetsProduct(void* reservedControllerStorage = nullptr) {
     targetsHeapFreeBefore = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    void* controllerMemory = reservedControllerStorage == nullptr
+        ? ::operator new(sizeof(TargetsController), std::nothrow)
+        : reservedControllerStorage;
     auto* workspace = new (std::nothrow) TargetsWorkspace();
-    auto* controller = workspace == nullptr ? nullptr
-        : new (std::nothrow) TargetsController(*workspace);
+    auto* controller = workspace == nullptr || controllerMemory == nullptr
+        ? nullptr
+        : new (controllerMemory) TargetsController(*workspace);
     targetsProductRuntime = controller == nullptr ? nullptr
         : new (std::nothrow) TargetsProductRuntime(workspace, controller);
     if (targetsProductRuntime != nullptr) return true;
-    delete controller;
+    if (controller != nullptr) controller->~TargetsController();
+    ::operator delete(controllerMemory);
     delete workspace;
     targetsProductStatus = "workspace_unavailable";
     lastRuntimeEvent = targetsProductStatus;
@@ -4621,6 +4629,17 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         return true;
     }
 
+    // Reserve the small controller block and large contiguous codec buffer
+    // before FatFs fragments the no-PSRAM heap. The controller is constructed
+    // in that raw block only after the runtime workspace exists.
+    void* reservedControllerStorage =
+        ::operator new(sizeof(TargetsController), std::nothrow);
+    if (reservedControllerStorage == nullptr) {
+        targetsProductStatus = "controller_workspace_unavailable";
+        lastRuntimeEvent = targetsProductStatus;
+        return false;
+    }
+
     // Reserve the large contiguous codec buffer before FatFs fragments the
     // no-PSRAM heap. Temporary catalog/decision objects validate both atomic
     // heads while mounted, then are released while the selected wire blob stays
@@ -4639,6 +4658,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     if (!mounted || !filesystem.readOnlyGuaranteed()) {
         if (filesystem.mounted()) filesystem.end();
         targetsCleanupComplete = filesystem.cleanupComplete();
+        ::operator delete(reservedControllerStorage);
         delete targetStateWorkspace;
         delete persistedCatalog;
         delete persistedDecisions;
@@ -4748,10 +4768,11 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     if (targetsCleanupComplete && targetsBlockedWriteAttempts == 0 &&
         targetStateAccepted &&
         (pairRecovered || latestRecovered)) {
-        if (!allocateTargetsProduct()) {
+        if (!allocateTargetsProduct(reservedControllerStorage)) {
             delete targetStateWorkspace;
             return false;
         }
+        reservedControllerStorage = nullptr;
         TargetsController& controller = targetsProductRuntime->controller;
         const TargetCatalog* persistedForLoad = nullptr;
         const CorrelationDecisionLog* decisionsForLoad = nullptr;
@@ -4791,6 +4812,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
     }
+    ::operator delete(reservedControllerStorage);
     delete targetStateWorkspace;
     lastRuntimeEvent = targetsProductStatus;
     return true;
