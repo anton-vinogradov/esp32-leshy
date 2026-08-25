@@ -230,18 +230,25 @@ def main() -> int:
         device.close()
         device = None
 
-        ready_after, recovery_after, reset_timing = reset_capture(
+        ready_after, _, reset_timing = reset_capture(
             args.port, args.output, "targets-favorite-cold-reopen", 20.0)
         require(ready_after, "cold candidate", version=args.expected_version,
                 app_elf_sha256=app_identity)
+        # Boot recovery is completed after the early ready marker.  The raw
+        # reset capture proves boot identity/timing, while the command reply is
+        # the authoritative post-recovery state (the same ordering used by the
+        # release Product Survey runner).
+        device = PassiveSerial(args.port, 115200, timeout=0.25)
+        synchronize_console(device, 20.0)
+        recovery_after = query(
+            device, b"storage.product.boot-recovery",
+            "leshy.storage.product_boot_recovery.v1", "state")
         require(recovery_after, "cold exact media", status="admitted",
                 expected_fingerprint=EXPECTED_CID,
                 observed_fingerprint=EXPECTED_CID,
                 fingerprint_matched=True, mounted_read_only=True,
                 read_only_guaranteed=True, blocked_write_attempts=0,
                 cleanup_complete=True, physical_write_calls=0)
-        device = PassiveSerial(args.port, 115200, timeout=0.25)
-        synchronize_console(device, 20.0)
         _, reopened = open_first_target(device)
         states["reopened"] = reopened
         require(reopened, "cold favorite reopen", status="ready",
