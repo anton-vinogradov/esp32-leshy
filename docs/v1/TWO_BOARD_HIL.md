@@ -259,6 +259,19 @@ profile/ID; first-flash versus later exact-reuse sequence; and terminal product
 Home/none/lease-0 plus fixture IR/nRF/CC inactivity and PA/FIFO cleanup. Any mismatch
 leaves the parent matrix failed even if an individual child claims success.
 
+After a passing matrix, re-verify the retained raw checkpoint without touching either
+board:
+
+```sh
+tools/check_s5_two_board_matrix.py \
+  --run work/outputs/s5-two-board-matrix/run.json
+```
+
+The verifier validates the parent, re-hashes all four child records and checks the
+parent runner, child runner and scenario sources against the commit recorded by that run. It therefore
+remains valid after the working tree advances and never requires a repeat physical run
+merely to review already captured evidence.
+
 An already accepted profile can instead be passed with `--fixture-profile`. Exact
 already-flashed bytes can be reused only through the explicit
 `--reuse-exact-candidate-flash` and `--reuse-exact-fixture-flash` options; normal

@@ -257,6 +257,19 @@ identity product и fixture; CID и разные role ports; fixture profile/ID;
 Home/none/lease 0, а также inactive IR/nRF/CC outputs fixture и очистку PA/FIFO.
 Любой mismatch оставляет parent matrix failed, даже если отдельный child заявил pass.
 
+После passing matrix сохранённый raw checkpoint перепроверяется без обращения к обеим
+платам:
+
+```sh
+tools/check_s5_two_board_matrix.py \
+  --run work/outputs/s5-two-board-matrix/run.json
+```
+
+Verifier валидирует parent, повторно хеширует четыре child record, а sources parent
+runner, child runner и scenarios сверяет с commit, записанным самим run. Поэтому проверка
+остаётся корректной после продвижения working tree и не требует повторного physical
+run только ради ревью уже собранного evidence.
+
 Ранее принятый profile можно передать через `--fixture-profile`. Уже прошитые exact
 bytes разрешено переиспользовать только явными options
 `--reuse-exact-candidate-flash` и `--reuse-exact-fixture-flash`; normal path прошивает
