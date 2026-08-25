@@ -13,6 +13,8 @@ namespace {
 
 constexpr char kTargetNameGlyphs[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_";
+constexpr char kTargetTagGlyphs[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_";
 
 bool bindingValid(const TargetProductBinding& binding) {
     return binding.session != nullptr && binding.generation != 0 &&
@@ -196,6 +198,11 @@ void TargetsController::reset() {
     originalName_.fill('\0');
     originalNameLength_ = 0;
     nameEditorGlyphSelection_ = 0;
+    tagSelection_ = 0;
+    tagEditorSelection_ = 0;
+    tagEditorText_.fill('\0');
+    tagEditorLength_ = 0;
+    tagEditorGlyphSelection_ = 0;
     view_ = TargetsView::List;
     status_ = TargetsLoadStatus::SessionUnavailable;
     comparisonAvailable_ = false;
@@ -492,6 +499,16 @@ bool TargetsController::next() {
         ++nameEditorSelection_;
         return true;
     }
+    if (view_ == TargetsView::TagList) {
+        if (tagSelection_ + 1 >= tagEntryCount()) return false;
+        ++tagSelection_;
+        return true;
+    }
+    if (view_ == TargetsView::TagEdit) {
+        if (tagEditorSelection_ + 1 >= kTagEditControlCount) return false;
+        ++tagEditorSelection_;
+        return true;
+    }
     return false;
 }
 
@@ -514,6 +531,16 @@ bool TargetsController::previous() {
     if (view_ == TargetsView::NameEdit) {
         if (nameEditorSelection_ == 0) return false;
         --nameEditorSelection_;
+        return true;
+    }
+    if (view_ == TargetsView::TagList) {
+        if (tagSelection_ == 0) return false;
+        --tagSelection_;
+        return true;
+    }
+    if (view_ == TargetsView::TagEdit) {
+        if (tagEditorSelection_ == 0) return false;
+        --tagEditorSelection_;
         return true;
     }
     return false;
@@ -560,6 +587,81 @@ bool TargetsController::openNameEditor() {
     nameEditorSelection_ = 0;
     nameEditorGlyphSelection_ = 0;
     view_ = TargetsView::NameEdit;
+    return true;
+}
+
+std::size_t TargetsController::tagEntryCount() const {
+    const auto* target = selectedTarget();
+    if (target == nullptr) return 0;
+    return target->tagCount +
+        (target->tagCount <
+                 domain::targets::TargetRecord::kTagCountCapacity
+             ? 1U : 0U);
+}
+
+bool TargetsController::selectedTagIsAdd() const {
+    const auto* target = selectedTarget();
+    return target != nullptr &&
+        target->tagCount <
+            domain::targets::TargetRecord::kTagCountCapacity &&
+        tagSelection_ == target->tagCount;
+}
+
+const char* TargetsController::selectedTagText() const {
+    const auto* target = selectedTarget();
+    return target != nullptr && tagSelection_ < target->tagCount
+        ? target->tags[tagSelection_].data() : "";
+}
+
+std::size_t TargetsController::selectedTagLength() const {
+    const auto* target = selectedTarget();
+    return target != nullptr && tagSelection_ < target->tagCount
+        ? target->tagLengths[tagSelection_] : 0U;
+}
+
+bool TargetsController::openTagList() {
+    if (view_ != TargetsView::Actions ||
+        selectedAction() != TargetActionItem::Tags ||
+        selectedTarget() == nullptr) {
+        return false;
+    }
+    tagSelection_ = 0;
+    view_ = TargetsView::TagList;
+    return true;
+}
+
+bool TargetsController::openTagEditor() {
+    if (view_ != TargetsView::TagList || !selectedTagIsAdd()) return false;
+    tagEditorText_.fill('\0');
+    tagEditorLength_ = 0;
+    tagEditorSelection_ = 0;
+    tagEditorGlyphSelection_ = 0;
+    view_ = TargetsView::TagEdit;
+    return true;
+}
+
+char TargetsController::tagEditorGlyph() const {
+    constexpr std::size_t count = sizeof(kTargetTagGlyphs) - 1U;
+    return kTargetTagGlyphs[tagEditorGlyphSelection_ % count];
+}
+
+bool TargetsController::cycleTagEditorGlyph() {
+    if (view_ != TargetsView::TagEdit) return false;
+    constexpr std::size_t count = sizeof(kTargetTagGlyphs) - 1U;
+    tagEditorGlyphSelection_ = (tagEditorGlyphSelection_ + 1U) % count;
+    return true;
+}
+
+bool TargetsController::appendTagEditorGlyph() {
+    if (view_ != TargetsView::TagEdit || !tagEditorCanAppend()) return false;
+    tagEditorText_[tagEditorLength_++] = tagEditorGlyph();
+    tagEditorText_[tagEditorLength_] = '\0';
+    return true;
+}
+
+bool TargetsController::eraseTagEditorGlyph() {
+    if (view_ != TargetsView::TagEdit || tagEditorLength_ == 0) return false;
+    tagEditorText_[--tagEditorLength_] = '\0';
     return true;
 }
 
@@ -614,6 +716,14 @@ bool TargetsController::openCompare() {
 bool TargetsController::back() {
     if (view_ == TargetsView::List) return false;
     if (view_ == TargetsView::NameEdit) {
+        view_ = TargetsView::Actions;
+        return true;
+    }
+    if (view_ == TargetsView::TagEdit) {
+        view_ = TargetsView::TagList;
+        return true;
+    }
+    if (view_ == TargetsView::TagList) {
         view_ = TargetsView::Actions;
         return true;
     }

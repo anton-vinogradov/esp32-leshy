@@ -28,6 +28,7 @@ def main() -> int:
     evidence_runner = (ROOT / "tools/run_1x_targets_evidence_hil.py").read_text()
     favorite_runner = (ROOT / "tools/run_1x_targets_favorite_hil.py").read_text()
     name_runner = (ROOT / "tools/run_1x_targets_name_hil.py").read_text()
+    tags_runner = (ROOT / "tools/run_1x_targets_tags_hil.py").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -108,8 +109,12 @@ def main() -> int:
             "recoverTargetCatalogState(" in entry and
             "TargetActionKind::SetFavorite" in entry and
             "TargetActionKind::SetName" in entry and
+            "TargetActionKind::AddTag" in entry and
+            "TargetActionKind::RemoveTag" in entry and
             r'\"selected_name_hex\":\"%s\"' in entry and
-            r'\"name_editor_dirty\":%s' in entry,
+            r'\"name_editor_dirty\":%s' in entry and
+            r'\"selected_tag_hex\":\"%s\"' in entry and
+            r'\"tag_editor_can_save\":%s' in entry,
             "Targets needs a machine-readable release-test state")
     require(failures,
             '"git", "rev-parse", "HEAD"' in runner and
@@ -147,6 +152,17 @@ def main() -> int:
             "name mutation HIL must bind a clean exact candidate, exercise the "
             "on-device editor, atomically sync and cold-reopen the same name")
     require(failures,
+            "leshy.targets_tags_hil.run.v1" in tags_runner and
+            "exact HIL requires clean committed HEAD" in tags_runner and
+            "tag_editor_can_save=True" in tags_runner and
+            "generation_added = generation_before + 1" in tags_runner and
+            "generation_removed = generation_added + 1" in tags_runner and
+            "targets-tags-added-cold-reopen" in tags_runner and
+            "targets-tags-removed-cold-reopen" in tags_runner and
+            "mutation_directory_syncs" in tags_runner,
+            "tag mutation HIL must bind a clean exact candidate, exercise "
+            "bounded add/remove and cold-reopen both durable outcomes")
+    require(failures,
             "renderTargetsPage" in entry and
             "renderTargetListRow" in entry and
             "renderTargetComparisonRow" in entry and
@@ -159,8 +175,12 @@ def main() -> int:
             "controller.openNameEditor()" in entry and
             "controller.appendNameEditorGlyph()" in entry and
             "requestTargetsNameMutation()" in entry and
+            "controller.openTagList()" in entry and
+            "controller.openTagEditor()" in entry and
+            "requestTargetsTagAddMutation()" in entry and
+            "requestTargetsTagRemoveMutation()" in entry and
             "TargetsView::CompareDetail" in entry,
-            "Targets list/detail/change/name rows must share keypad and touch "
+            "Targets list/detail/change/name/tag rows must share keypad and touch "
             "navigation while row-window redraws clear stale pixels")
     require(failures,
             "selectedIsCompare() ? TargetsView::Compare" in controller and
@@ -184,7 +204,9 @@ def main() -> int:
                     "TargetsCompareEvidence", "TargetsClassAdded",
                     "TargetsBeforeWifiFormat", "TargetsNowWifiFormat",
                     "TargetsChangesFormat", "TargetsNameEdit",
-                    "TargetsNameAppend", "TargetsNameSave", "NavChanges"):
+                    "TargetsNameAppend", "TargetsNameSave", "TargetsTagsList",
+                    "TargetsTagEdit", "TargetsTagAdd", "TargetsTagRemove",
+                    "TargetsTagSave", "NavDelete", "NavChanges"):
         require(failures, f"LESHY_UI_TEXT({text_id}," in strings,
                 f"bilingual UI string missing: {text_id}")
     for forbidden in ("esp_wifi_80211_tx", "STX", "SFTX", "tone("):

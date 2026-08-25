@@ -165,6 +165,33 @@ void pairIsUsefulFirstAndStable() {
     CHECK(std::strcmp(controller.nameEditorText(), "A") == 0);
     CHECK(controller.back());
     CHECK(controller.view() == TargetsView::Actions);
+    CHECK(controller.next());
+    CHECK(controller.selectedAction() == TargetActionItem::Tags);
+    CHECK(controller.openTagList());
+    CHECK(controller.view() == TargetsView::TagList);
+    CHECK(controller.tagEntryCount() == 1);
+    CHECK(controller.selectedTagIsAdd());
+    CHECK(controller.openTagEditor());
+    CHECK(controller.view() == TargetsView::TagEdit);
+    CHECK(controller.tagEditorGlyph() == 'A');
+    CHECK(!controller.tagEditorCanSave());
+    CHECK(controller.next());
+    CHECK(controller.appendTagEditorGlyph());
+    CHECK(std::strcmp(controller.tagEditorText(), "A") == 0);
+    CHECK(controller.tagEditorCanSave());
+    CHECK(controller.previous());
+    CHECK(controller.cycleTagEditorGlyph());
+    CHECK(controller.tagEditorGlyph() == 'B');
+    CHECK(controller.next());
+    CHECK(controller.appendTagEditorGlyph());
+    CHECK(std::strcmp(controller.tagEditorText(), "AB") == 0);
+    CHECK(controller.next());
+    CHECK(controller.eraseTagEditorGlyph());
+    CHECK(std::strcmp(controller.tagEditorText(), "A") == 0);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::TagList);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::Actions);
     CHECK(controller.back());
     CHECK(controller.view() == TargetsView::Detail);
 }
@@ -268,6 +295,8 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
     CHECK(persisted.setName(remembered->id, kCyrillicName,
                             std::strlen(kCyrillicName)) ==
           TargetMutationStatus::Applied);
+    CHECK(persisted.addTag(remembered->id, "LAB", 3) ==
+          TargetMutationStatus::Applied);
 
     SurveySession current = session(
         "current-visit", 300, {wifi(1, 310, 9, -30)});
@@ -284,6 +313,9 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
     CHECK(selected->nameLength == std::strlen(kCyrillicName));
     CHECK(std::memcmp(selected->name.data(), kCyrillicName,
                       selected->nameLength) == 0);
+    CHECK(selected->tagCount == 1);
+    CHECK(selected->tagLengths[0] == 3);
+    CHECK(std::memcmp(selected->tags[0].data(), "LAB", 3) == 0);
     CHECK(selected->evidenceCount == 2);
     CHECK(currentController.row(0)->latest.rssiDbm == -30);
     CHECK(currentController.row(0)->evidence.sourceGeneration == 2);
@@ -297,6 +329,15 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
     CHECK(currentController.nameEditorDirty());
     CHECK(currentController.back());
     CHECK(!currentController.nameEditorDirty());
+    CHECK(currentController.next());
+    CHECK(currentController.selectedAction() == TargetActionItem::Tags);
+    CHECK(currentController.openTagList());
+    CHECK(currentController.tagEntryCount() == 2);
+    CHECK(!currentController.selectedTagIsAdd());
+    CHECK(currentController.selectedTagLength() == 3);
+    CHECK(std::strcmp(currentController.selectedTagText(), "LAB") == 0);
+    CHECK(currentController.next());
+    CHECK(currentController.selectedTagIsAdd());
 }
 
 }  // namespace

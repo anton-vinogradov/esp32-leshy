@@ -4922,10 +4922,12 @@ void runTargetsMutationWorker(void*) {
         action.kind = event.actionKind;
         action.targetId = event.targetId;
         action.favorite = event.favorite;
-        if (event.actionKind == TargetActionKind::SetName &&
+        if ((event.actionKind == TargetActionKind::SetName ||
+             event.actionKind == TargetActionKind::AddTag ||
+             event.actionKind == TargetActionKind::RemoveTag) &&
             !leshy1::services::targets::setTargetActionText(
                 &action, event.name.data(), event.nameLength)) {
-            event.status = "name_invalid";
+            event.status = "text_invalid";
             break;
         }
         TargetService service(*catalog);
@@ -4973,13 +4975,33 @@ void runTargetsMutationWorker(void*) {
             event.head = recovered.choice;
         }
         const auto* reopened = catalog->find(event.targetId);
-        const bool valueReopened = reopened != nullptr &&
-            (event.actionKind == TargetActionKind::SetFavorite
-                 ? reopened->favorite == event.favorite
-                 : event.actionKind == TargetActionKind::SetName &&
-                       reopened->nameLength == event.nameLength &&
-                       std::memcmp(reopened->name.data(), event.name.data(),
-                                   event.nameLength) == 0);
+        bool tagReopened = false;
+        if (reopened != nullptr &&
+            (event.actionKind == TargetActionKind::AddTag ||
+             event.actionKind == TargetActionKind::RemoveTag)) {
+            for (std::size_t index = 0; index < reopened->tagCount; ++index) {
+                if (reopened->tagLengths[index] == event.nameLength &&
+                    std::memcmp(reopened->tags[index].data(),
+                                event.name.data(), event.nameLength) == 0) {
+                    tagReopened = true;
+                    break;
+                }
+            }
+        }
+        bool valueReopened = false;
+        if (reopened != nullptr) {
+            if (event.actionKind == TargetActionKind::SetFavorite) {
+                valueReopened = reopened->favorite == event.favorite;
+            } else if (event.actionKind == TargetActionKind::SetName) {
+                valueReopened = reopened->nameLength == event.nameLength &&
+                    std::memcmp(reopened->name.data(), event.name.data(),
+                                event.nameLength) == 0;
+            } else if (event.actionKind == TargetActionKind::AddTag) {
+                valueReopened = tagReopened;
+            } else if (event.actionKind == TargetActionKind::RemoveTag) {
+                valueReopened = !tagReopened;
+            }
+        }
         event.persisted = committed.complete() && recovered.valid() &&
             recovered.generation == committed.generation && valueReopened;
         event.status = event.persisted
@@ -5029,7 +5051,9 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (targetsProductRuntime == nullptr ||
         (targetsProductRuntime->controller.view() != TargetsView::Actions &&
-         targetsProductRuntime->controller.view() != TargetsView::NameEdit) ||
+         targetsProductRuntime->controller.view() != TargetsView::NameEdit &&
+         targetsProductRuntime->controller.view() != TargetsView::TagList &&
+         targetsProductRuntime->controller.view() != TargetsView::TagEdit) ||
         targetsMutationState == TargetsMutationState::Saving) {
         return false;
     }
@@ -5064,13 +5088,21 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
     targetsMutationFavorite = favorite;
     targetsMutationText.fill('\0');
     targetsMutationTextLength = 0;
-    if (kind == TargetActionKind::SetName) {
-        if (text == nullptr || textLength > TargetRecord::kNameCapacity) {
+    if (kind == TargetActionKind::SetName ||
+        kind == TargetActionKind::AddTag ||
+        kind == TargetActionKind::RemoveTag) {
+        const bool tagAction = kind == TargetActionKind::AddTag ||
+            kind == TargetActionKind::RemoveTag;
+        const std::size_t maximum = tagAction
+            ? TargetRecord::kTagCapacity : TargetRecord::kNameCapacity;
+        if (text == nullptr || textLength > maximum ||
+            (tagAction && textLength == 0)) {
             delete targetsMutationCatalog;
             targetsMutationCatalog = nullptr;
             targetsMutationState = TargetsMutationState::Failed;
-            targetsMutationStatus = "name_invalid";
-            lastRuntimeEvent = "targets_store_name_invalid";
+            targetsMutationStatus = tagAction ? "tag_invalid" : "name_invalid";
+            lastRuntimeEvent = tagAction
+                ? "targets_store_tag_invalid" : "targets_store_name_invalid";
             return true;
         }
         if (textLength != 0) {
@@ -5127,6 +5159,31 @@ bool requestTargetsNameMutation() {
         targetsProductRuntime->controller.nameEditorLength());
 }
 
+bool requestTargetsTagAddMutation() {
+    if (targetsProductRuntime == nullptr ||
+        targetsProductRuntime->controller.view() != TargetsView::TagEdit ||
+        !targetsProductRuntime->controller.tagEditorCanSave()) {
+        return false;
+    }
+    return requestTargetsMutation(
+        TargetActionKind::AddTag, false,
+        targetsProductRuntime->controller.tagEditorText(),
+        targetsProductRuntime->controller.tagEditorLength());
+}
+
+bool requestTargetsTagRemoveMutation() {
+    if (targetsProductRuntime == nullptr ||
+        targetsProductRuntime->controller.view() != TargetsView::TagList ||
+        targetsProductRuntime->controller.selectedTagIsAdd() ||
+        targetsProductRuntime->controller.selectedTagLength() == 0) {
+        return false;
+    }
+    return requestTargetsMutation(
+        TargetActionKind::RemoveTag, false,
+        targetsProductRuntime->controller.selectedTagText(),
+        targetsProductRuntime->controller.selectedTagLength());
+}
+
 void serviceTargetsMutationWorker() {
     if (targetsMutationEvents == nullptr) return;
     TargetsMutationEvent event;
@@ -5139,6 +5196,13 @@ void serviceTargetsMutationWorker() {
     if (rebuilt && event.actionKind == TargetActionKind::SetName &&
         targetsProductRuntime != nullptr) {
         targetsProductRuntime->controller.next();
+    } else if (rebuilt &&
+               (event.actionKind == TargetActionKind::AddTag ||
+                event.actionKind == TargetActionKind::RemoveTag) &&
+               targetsProductRuntime != nullptr) {
+        targetsProductRuntime->controller.next();
+        targetsProductRuntime->controller.next();
+        targetsProductRuntime->controller.openTagList();
     }
     delete targetsMutationCatalog;
     targetsMutationCatalog = nullptr;
@@ -7374,6 +7438,20 @@ NavigationFooter navigationFooterForCurrentState() {
                     {NavigationKey::RightAndSelect,
                      selection == 3 ? UiTextId::NavSave
                                     : UiTextId::NavApply}};
+        }
+        if (targetsProductRuntime->controller.view() == TargetsView::TagEdit) {
+            const std::size_t selection =
+                targetsProductRuntime->controller.tagEditorSelection();
+            return {{NavigationKey::Left, UiTextId::NavCancel}, choose,
+                    {NavigationKey::RightAndSelect,
+                     selection == 3 ? UiTextId::NavSave
+                                    : UiTextId::NavApply}};
+        }
+        if (targetsProductRuntime->controller.view() == TargetsView::TagList) {
+            return {{NavigationKey::Left, UiTextId::NavActions}, choose,
+                    {NavigationKey::RightAndSelect,
+                     targetsProductRuntime->controller.selectedTagIsAdd()
+                         ? UiTextId::NavEnter : UiTextId::NavDelete}};
         }
         if (targetsProductRuntime->controller.view() ==
             TargetsView::Actions) {
@@ -11536,6 +11614,85 @@ void renderTargetsPage(bool clearContent) {
         return;
     }
     TargetsController& controller = targetsProductRuntime->controller;
+    if (controller.view() == TargetsView::TagEdit) {
+        renderHeader(tr(UiTextId::TargetsTagEdit), clearContent);
+        char tag[TargetRecord::kTagCapacity + 1] = {};
+        std::snprintf(tag, sizeof(tag), "%s", controller.tagEditorText());
+        if (tag[0] == '\0') {
+            std::snprintf(tag, sizeof(tag), "%s",
+                          tr(UiTextId::TargetsTagNew));
+        }
+        fitTargetRowText(tag, sizeof(tag), UiTextRole::Body);
+        char note[48] = {};
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsNameSymbolFormat),
+                      controller.tagEditorGlyph());
+        renderMenuRow(Components::homeRow(0), tag, note,
+                      controller.tagEditorSelection() == 0, true,
+                      Tone::Positive);
+        char glyph[2] = {controller.tagEditorGlyph(), '\0'};
+        renderMenuRow(Components::homeRow(1),
+                      tr(UiTextId::TargetsNameAppend), glyph,
+                      controller.tagEditorSelection() == 1,
+                      controller.tagEditorCanAppend(), Tone::Positive);
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsNameLengthFormat),
+                      static_cast<unsigned>(controller.tagEditorLength()),
+                      static_cast<unsigned>(TargetRecord::kTagCapacity));
+        renderMenuRow(Components::homeRow(2),
+                      tr(UiTextId::TargetsNameDelete), note,
+                      controller.tagEditorSelection() == 2,
+                      controller.tagEditorLength() != 0, Tone::Muted);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::TargetsTagSave),
+                      tr(controller.tagEditorCanSave()
+                             ? UiTextId::TargetsNameChanged
+                             : UiTextId::TargetsNameUnchanged),
+                      controller.tagEditorSelection() == 3,
+                      controller.tagEditorCanSave(),
+                      controller.tagEditorCanSave() ? Tone::Positive
+                                                    : Tone::Muted);
+        return;
+    }
+    if (controller.view() == TargetsView::TagList) {
+        renderHeader(tr(UiTextId::TargetsTagsList), clearContent);
+        const auto* target = controller.selectedTarget();
+        if (target == nullptr || controller.tagEntryCount() == 0) {
+            renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+            return;
+        }
+        const std::size_t first = targetsFirstVisible(
+            controller.tagSelection());
+        const std::size_t end = controller.tagEntryCount() <
+                first + kVisibleTargetRows
+            ? controller.tagEntryCount() : first + kVisibleTargetRows;
+        for (std::size_t index = first; index < end; ++index) {
+            const bool add = index == target->tagCount;
+            char text[TargetRecord::kTagCapacity + 1] = {};
+            if (add) {
+                std::snprintf(text, sizeof(text), "%s",
+                              tr(UiTextId::TargetsTagAdd));
+            } else {
+                std::memcpy(text, target->tags[index].data(),
+                            target->tagLengths[index]);
+            }
+            char note[24] = {};
+            if (add) {
+                std::snprintf(note, sizeof(note),
+                              tr(UiTextId::TargetsTagsCountFormat),
+                              static_cast<unsigned>(target->tagCount),
+                              static_cast<unsigned>(
+                                  TargetRecord::kTagCountCapacity));
+            } else {
+                std::snprintf(note, sizeof(note), "%s",
+                              tr(UiTextId::TargetsTagRemove));
+            }
+            renderMenuRow(Components::homeRow(index - first), text, note,
+                          controller.tagSelection() == index, true,
+                          add ? Tone::Positive : Tone::Neutral);
+        }
+        return;
+    }
     if (controller.view() == TargetsView::NameEdit) {
         renderHeader(tr(UiTextId::TargetsNameEdit), clearContent);
         char name[TargetRecord::kNameCapacity + 1] = {};
@@ -11620,6 +11777,15 @@ void renderTargetsPage(bool clearContent) {
         renderMenuRow(Components::homeRow(1),
                       tr(UiTextId::TargetsName), name,
                       controller.actionSelection() == 1, true, Tone::Neutral);
+        char tags[24] = {};
+        std::snprintf(tags, sizeof(tags),
+                      tr(UiTextId::TargetsTagsCountFormat),
+                      static_cast<unsigned>(target->tagCount),
+                      static_cast<unsigned>(TargetRecord::kTagCountCapacity));
+        renderMenuRow(Components::homeRow(2),
+                      tr(UiTextId::TargetsTags), tags,
+                      controller.actionSelection() == 2, true,
+                      target->tagCount != 0 ? Tone::Positive : Tone::Muted);
         if (targetsMutationState == TargetsMutationState::Saved) {
             renderMetric(4, tr(UiTextId::TargetsSaved), Tone::Positive);
         } else if (targetsMutationState == TargetsMutationState::Failed) {
@@ -11661,9 +11827,10 @@ void renderTargetsPage(bool clearContent) {
                           row->evidence.sourceGeneration));
         renderMetric(3, line);
         std::snprintf(line, sizeof(line),
-                      tr(UiTextId::TargetsFavoriteFormat),
+                      tr(UiTextId::TargetsTagsDetailFormat),
                       tr(target->favorite ? UiTextId::TargetsFavoriteOn
-                                          : UiTextId::TargetsFavoriteOff));
+                                          : UiTextId::TargetsFavoriteOff),
+                      static_cast<unsigned>(target->tagCount));
         renderMetric(4, line,
                      target->favorite ? Tone::Positive : Tone::Muted);
         return;
@@ -14696,6 +14863,10 @@ void emitTargetsState(Stream& reply) {
                     ? "actions"
               : controller->view() == TargetsView::NameEdit
                     ? "name_edit"
+              : controller->view() == TargetsView::TagList
+                    ? "tag_list"
+              : controller->view() == TargetsView::TagEdit
+                    ? "tag_edit"
               : controller->view() == TargetsView::Compare
                     ? "compare"
                     : controller->view() == TargetsView::CompareDetail
@@ -14734,7 +14905,20 @@ void emitTargetsState(Stream& reply) {
         encodeHex(controller->nameEditorText(), controller->nameEditorLength(),
                   editorNameHex, sizeof(editorNameHex));
     }
-    char line[2560] = {};
+    char selectedTagHex[TargetRecord::kTagCapacity * 2U + 1U] = {};
+    if (controller != nullptr && controller->view() == TargetsView::TagList &&
+        !controller->selectedTagIsAdd()) {
+        encodeHex(controller->selectedTagText(),
+                  controller->selectedTagLength(), selectedTagHex,
+                  sizeof(selectedTagHex));
+    }
+    char editorTagHex[TargetRecord::kTagCapacity * 2U + 1U] = {};
+    if (controller != nullptr && controller->view() == TargetsView::TagEdit) {
+        encodeHex(controller->tagEditorText(), controller->tagEditorLength(),
+                  editorTagHex, sizeof(editorTagHex));
+    }
+    auto& line = diagnosticJson;
+    std::memset(line, 0, sizeof(line));
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.targets.product.v1\",\"kind\":\"state\","
@@ -14760,10 +14944,15 @@ void emitTargetsState(Stream& reply) {
         "\"selected_target_present\":%s,\"selected_target_id\":\"%s\","
         "\"selected_favorite\":%s,"
         "\"selected_name_length\":%u,\"selected_name_hex\":\"%s\","
+        "\"selected_tag_count\":%u,\"tag_selection\":%u,"
+        "\"selected_tag_length\":%u,\"selected_tag_hex\":\"%s\","
         "\"selected_revision\":%lu,"
         "\"action_selection\":%u,\"name_editor_selection\":%u,"
         "\"name_editor_length\":%u,\"name_editor_hex\":\"%s\","
         "\"name_editor_glyph\":%u,\"name_editor_dirty\":%s,"
+        "\"tag_editor_selection\":%u,\"tag_editor_length\":%u,"
+        "\"tag_editor_hex\":\"%s\",\"tag_editor_glyph\":%u,"
+        "\"tag_editor_can_save\":%s,"
         "\"read_only\":false,\"write_enabled\":%s,"
         "\"target_state_generation\":%lu,\"target_state_head\":\"%s\","
         "\"mutation_state\":\"%s\",\"mutation_status\":\"%s\","
@@ -14840,6 +15029,14 @@ void emitTargetsState(Stream& reply) {
         static_cast<unsigned>(selectedTarget == nullptr
                                   ? 0 : selectedTarget->nameLength),
         selectedNameHex,
+        static_cast<unsigned>(selectedTarget == nullptr
+                                  ? 0 : selectedTarget->tagCount),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->tagSelection()),
+        static_cast<unsigned>(controller == nullptr ||
+                                      controller->view() != TargetsView::TagList
+                                  ? 0 : controller->selectedTagLength()),
+        selectedTagHex,
         static_cast<unsigned long>(selectedTarget == nullptr
                                        ? 0 : selectedTarget->revision),
         static_cast<unsigned>(controller == nullptr
@@ -14853,11 +15050,24 @@ void emitTargetsState(Stream& reply) {
                                   ? 0 : controller->nameEditorGlyph()),
         controller != nullptr && controller->nameEditorDirty()
             ? "true" : "false",
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->tagEditorSelection()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->tagEditorLength()),
+        editorTagHex,
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->tagEditorGlyph()),
+        controller != nullptr && controller->tagEditorCanSave()
+            ? "true" : "false",
         controller != nullptr &&
                 ((controller->view() == TargetsView::Actions &&
                   controller->selectedAction() == TargetActionItem::Favorite) ||
                  (controller->view() == TargetsView::NameEdit &&
-                  controller->nameEditorDirty())) &&
+                  controller->nameEditorDirty()) ||
+                 (controller->view() == TargetsView::TagList &&
+                  !controller->selectedTagIsAdd()) ||
+                 (controller->view() == TargetsView::TagEdit &&
+                  controller->tagEditorCanSave())) &&
                 targetsMutationState != TargetsMutationState::Saving
             ? "true" : "false",
         static_cast<unsigned long>(targetsStateGeneration), stateHead,
@@ -16320,6 +16530,8 @@ bool applyUiAction(UiAction action, bool render = true) {
         if ((controller.view() == TargetsView::Detail ||
              controller.view() == TargetsView::Actions ||
              controller.view() == TargetsView::NameEdit ||
+             controller.view() == TargetsView::TagList ||
+             controller.view() == TargetsView::TagEdit ||
              controller.view() == TargetsView::CompareDetail) &&
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
@@ -16340,9 +16552,17 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (controller.view() == TargetsView::Actions &&
                    (action == UiAction::Select || action == UiAction::Right)) {
             handled = true;
-            changed = controller.selectedAction() == TargetActionItem::Favorite
-                ? requestTargetsFavoriteMutation()
-                : controller.openNameEditor();
+            switch (controller.selectedAction()) {
+                case TargetActionItem::Favorite:
+                    changed = requestTargetsFavoriteMutation();
+                    break;
+                case TargetActionItem::Name:
+                    changed = controller.openNameEditor();
+                    break;
+                case TargetActionItem::Tags:
+                    changed = controller.openTagList();
+                    break;
+            }
         } else if (controller.view() == TargetsView::NameEdit &&
                    action == UiAction::Up) {
             handled = true;
@@ -16359,6 +16579,37 @@ bool applyUiAction(UiAction action, bool render = true) {
                 case 1: changed = controller.appendNameEditorGlyph(); break;
                 case 2: changed = controller.eraseNameEditorGlyph(); break;
                 case 3: changed = requestTargetsNameMutation(); break;
+            }
+        } else if (controller.view() == TargetsView::TagList &&
+                   action == UiAction::Up) {
+            handled = true;
+            changed = controller.previous();
+        } else if (controller.view() == TargetsView::TagList &&
+                   action == UiAction::Down) {
+            handled = true;
+            changed = controller.next();
+        } else if (controller.view() == TargetsView::TagList &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            changed = controller.selectedTagIsAdd()
+                ? controller.openTagEditor()
+                : requestTargetsTagRemoveMutation();
+        } else if (controller.view() == TargetsView::TagEdit &&
+                   action == UiAction::Up) {
+            handled = true;
+            changed = controller.previous();
+        } else if (controller.view() == TargetsView::TagEdit &&
+                   action == UiAction::Down) {
+            handled = true;
+            changed = controller.next();
+        } else if (controller.view() == TargetsView::TagEdit &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            switch (controller.tagEditorSelection()) {
+                case 0: changed = controller.cycleTagEditorGlyph(); break;
+                case 1: changed = controller.appendTagEditorGlyph(); break;
+                case 2: changed = controller.eraseTagEditorGlyph(); break;
+                case 3: changed = requestTargetsTagAddMutation(); break;
             }
         } else if (controller.view() == TargetsView::List ||
                    controller.view() == TargetsView::Compare) {
@@ -16934,6 +17185,27 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         TargetsController::kNameEditControlCount)),
                 static_cast<std::uint8_t>(
                     targetsProductRuntime->controller.nameEditorSelection())};
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() == TargetsView::TagList) {
+        const TargetsController& controller =
+            targetsProductRuntime->controller;
+        const std::size_t first = targetsFirstVisible(
+            controller.tagSelection());
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point,
+                    static_cast<std::uint8_t>(first),
+                    static_cast<std::uint8_t>(controller.tagEntryCount())),
+                static_cast<std::uint8_t>(controller.tagSelection())};
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() == TargetsView::TagEdit) {
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point, 0,
+                    static_cast<std::uint8_t>(
+                        TargetsController::kTagEditControlCount)),
+                static_cast<std::uint8_t>(
+                    targetsProductRuntime->controller.tagEditorSelection())};
     }
     if (uiController.page() == 4 &&
         captureView == CaptureView::SourceMenu) {
