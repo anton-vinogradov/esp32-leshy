@@ -18,14 +18,14 @@
     "pending_candidate_remains_unowned_until_decision",
     "proposal_shows_known_and_candidate_exact_evidence",
     "proposal_shows_feature_score_and_confidence",
-    "reject_keeps_candidate_as_independent_target",
-    "accept_attaches_candidate_identity_only_after_confirmation",
+    "physical_accept_attaches_candidate_identity_only_after_confirmation",
+    "native_reject_keeps_candidate_independent_and_records_decision",
     "decision_and_catalog_publish_at_one_generation",
     "cold_reopen_preserves_decision_and_target_ownership",
     "workers_finish_inside_eight_second_deadline",
     "workspace_release_and_final_zero_lease"
   ],
-  "new_passive_scans_required": false,
+  "new_passive_scans_required": "bounded_zero_to_four_until_one_natural_unambiguous_proposal",
   "full_matrix_required": false,
   "cadence_after_acceptance": "10/15"
 }

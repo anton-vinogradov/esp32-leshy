@@ -30,6 +30,8 @@ def main() -> int:
     name_runner = (ROOT / "tools/run_1x_targets_name_hil.py").read_text()
     tags_runner = (ROOT / "tools/run_1x_targets_tags_hil.py").read_text()
     notes_runner = (ROOT / "tools/run_1x_targets_notes_hil.py").read_text()
+    correlation_runner = (
+        ROOT / "tools/run_1x_targets_correlation_hil.py").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -212,6 +214,21 @@ def main() -> int:
             "mutation_directory_syncs" in notes_runner,
             "notes mutation HIL must bind a clean exact candidate, exercise "
             "bounded set/clear and cold-reopen both durable outcomes")
+    require(failures,
+            "leshy.targets_correlation_hil.run.v1" in correlation_runner and
+            "exact HIL requires clean committed HEAD" in correlation_runner and
+            "MAX_FRESH_SURVEY_CYCLES = 4" in correlation_runner and
+            "validate_proposal" in correlation_runner and
+            "correlation_evidence_candidate=False" in correlation_runner and
+            "correlation_evidence_candidate=True" in correlation_runner and
+            'mutation_correlation_status="accepted"' in correlation_runner and
+            "correlation_decision_count=decisions_after" in
+                correlation_runner and
+            "targets-correlation-cold-reopen" in correlation_runner and
+            "mutation_directory_syncs" in correlation_runner,
+            "correlation HIL must find one bounded natural proposal, review "
+            "both exact observations, atomically accept and cold-reopen the "
+            "same decision log")
     require(failures,
             "renderTargetsPage" in entry and
             "renderTargetListRow" in entry and
