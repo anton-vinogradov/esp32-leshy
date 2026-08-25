@@ -677,18 +677,37 @@ def main() -> int:
         filesystem_release = product_start_body.find(
             "productSurveyFilesystem.end();", store_release
         )
-        source_start = product_start_body.find(
-            "const bool wifiBegun ="
+        source_admission = product_start_body.find(
+            "report.activeSourceMask = static_cast<std::uint8_t>("
         )
         if (
             store_open < 0
             or store_release < store_open
             or filesystem_release < store_release
-            or source_start < filesystem_release
+            or source_admission < filesystem_release
         ):
             errors.append(
                 "product Survey must validate and fully release SDSPI storage "
                 "before radio stacks consume DMA-capable heap"
+            )
+        if "wifiScanner->begin()" in product_start_body or \
+                "bleScanner->begin()" in product_start_body:
+            errors.append(
+                "product Survey preparation must not overlap Wi-Fi and BLE "
+                "stack lifetimes"
+            )
+
+        product_worker_body = entry[product_worker:entry.find(
+            "bool initializeProductSurveyWorker()", product_worker
+        )]
+        wifi_begin = product_worker_body.find("if (wifiScanner.begin())")
+        wifi_end = product_worker_body.find("wifiScanner.end()", wifi_begin)
+        ble_begin = product_worker_body.find("if (bleScanner.begin())")
+        ble_end = product_worker_body.find("bleScanner.end()", ble_begin)
+        if min(wifi_begin, wifi_end, ble_begin, ble_end) < 0:
+            errors.append(
+                "product Survey worker must own each radio stack only for its "
+                "serial scan window"
             )
 
     commit_reopen = entry.find("bool reopenProductSurveyBackendForCommit()")

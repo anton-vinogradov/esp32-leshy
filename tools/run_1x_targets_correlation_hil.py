@@ -365,6 +365,7 @@ def main() -> int:
             "decision_count_after": decisions_after,
             "states": states,
             "screens": screens,
+            "trace": trace,
             "reset": reset,
             "released_before_reset": released_before_reset,
             "released": released,
@@ -380,6 +381,7 @@ def main() -> int:
             "error": f"{type(error).__name__}: {error}",
             "states": states,
             "screens": screens,
+            "trace": trace,
             "cleanup": cleanup,
         })
         write_json(args.output / "run.json", record)

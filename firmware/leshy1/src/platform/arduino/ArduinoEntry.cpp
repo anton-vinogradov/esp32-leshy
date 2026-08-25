@@ -2512,14 +2512,13 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         leshy1::services::survey::sourceMask(RadioKind::Wifi);
     const std::uint8_t bleMask =
         leshy1::services::survey::sourceMask(RadioKind::Ble);
-    const bool wifiSelected = (selectedSourceMask & wifiMask) != 0;
-    const bool bleSelected = (selectedSourceMask & bleMask) != 0;
-    heartbeatProductSurveyPreparation();
-    const bool wifiBegun = wifiSelected ? wifiScanner->begin() : false;
-    const bool bleBegun = bleSelected ? bleScanner->begin() : false;
-    heartbeatProductSurveyPreparation();
+    // Admission records the selected built-in receivers, but deliberately does
+    // not start either radio stack.  Wi-Fi and BLE are measured serially below
+    // and each stack is fully released before the other one starts.  Keeping
+    // both initialized at once exhausts scarce DMA-capable internal RAM on the
+    // no-PSRAM DIV and can starve the ESP interrupt watchdog.
     report.activeSourceMask = static_cast<std::uint8_t>(
-        (wifiBegun ? wifiMask : 0U) | (bleBegun ? bleMask : 0U));
+        selectedSourceMask & static_cast<std::uint8_t>(wifiMask | bleMask));
     report.unavailableSourceMask = static_cast<std::uint8_t>(
         selectedSourceMask & ~report.activeSourceMask);
     leshy1::apps::survey::ProductSurveyRequest surveyRequest;
@@ -2533,9 +2532,9 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     surveyRequest.ownedResources = ownedResources;
     const leshy1::apps::survey::ProductSurveyPermit surveyPermit =
         leshy1::apps::survey::authorizeProductSurvey(surveyRequest);
-    heartbeatProductSurveyPreparation();
     report.admissionStatus = surveyPermit.status;
-    report.scannerCleanupComplete = !wifiBegun && !bleBegun;
+    report.scannerCleanupComplete =
+        wifiScanner->cleanupComplete() && bleScanner->cleanupComplete();
     if (!surveyPermit.allowed()) {
         report.status =
             leshy1::apps::survey::productSurveyAdmissionStatusName(
@@ -2693,15 +2692,27 @@ void runProductSurveyWorker(void*) {
                         static_cast<std::uint8_t>(
                             report.runtimeSourceFailureInjectedMask | mask);
                 } else if (source == RadioKind::Wifi) {
-                    wifiScan = wifiScanner.scan(
-                        leshy1::drivers::wifi::defaultPassivePlan(),
-                        enqueueProductSurveyWorkerRecord, nullptr);
+                    if (wifiScanner.begin()) {
+                        heartbeatProductSurveyWorker();
+                        wifiScan = wifiScanner.scan(
+                            leshy1::drivers::wifi::defaultPassivePlan(),
+                            enqueueProductSurveyWorkerRecord, nullptr);
+                    }
                 } else {
-                    bleScan = bleScanner.scan(
-                        leshy1::drivers::ble::defaultPassivePlan(),
-                        enqueueProductSurveyWorkerBleRecord, nullptr);
+                    if (bleScanner.begin()) {
+                        heartbeatProductSurveyWorker();
+                        bleScan = bleScanner.scan(
+                            leshy1::drivers::ble::defaultPassivePlan(),
+                            enqueueProductSurveyWorkerBleRecord, nullptr);
+                    }
                 }
                 setProductSurveyScanActive(false);
+                heartbeatProductSurveyWorker();
+                const bool sourceCleanup = source == RadioKind::Wifi
+                    ? wifiScanner.end() : bleScanner.end();
+                report.scannerCleanupComplete = sourceCleanup &&
+                    wifiScanner.cleanupComplete() &&
+                    bleScanner.cleanupComplete();
                 heartbeatProductSurveyWorker();
                 std::uint64_t scanEndedUs =
                     static_cast<std::uint64_t>(esp_timer_get_time());
@@ -2712,6 +2723,11 @@ void runProductSurveyWorker(void*) {
                 pendingScanEndedUs = scanEndedUs;
                 pendingScanDropped = source == RadioKind::Wifi
                     ? wifiScan.dropped : bleScan.dropped;
+                if (!report.scannerCleanupComplete) {
+                    report.status = "scanner_cleanup_failed";
+                    scanFailed = true;
+                    break;
+                }
                 if (productSurveyStopRequested()) break;
                 const bool valid = source == RadioKind::Wifi
                     ? wifiScan.valid() : bleScan.valid();

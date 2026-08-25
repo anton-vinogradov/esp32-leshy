@@ -9,7 +9,9 @@
     "target_correlation_decision_log_persistence",
     "target_decision_state_dual_head_atomic_store",
     "target_decision_state_catalog_only_migration",
-    "target_correlation_machine_state_probe"
+    "target_correlation_machine_state_probe",
+    "combined_visit_all_builtin_radios_default",
+    "serial_wifi_ble_stack_lifetimes"
   ],
   "required_delta_regression": [
     "one_exact_flash",
@@ -22,6 +24,7 @@
     "native_reject_keeps_candidate_independent_and_records_decision",
     "decision_and_catalog_publish_at_one_generation",
     "cold_reopen_preserves_decision_and_target_ownership",
+    "wifi_and_ble_each_collect_in_one_combined_visit_without_stack_overlap",
     "workers_finish_inside_eight_second_deadline",
     "workspace_release_and_final_zero_lease"
   ],
