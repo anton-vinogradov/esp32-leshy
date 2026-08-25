@@ -65,4 +65,10 @@ bool SurveySessionTargetEvidenceLookup::loadExact(
     return false;
 }
 
+bool SurveySessionTargetEvidenceLookup::containsExact(
+    const domain::targets::TargetEvidenceRef& evidence) const {
+    domain::observations::Observation observation{};
+    return loadExact(evidence, &observation);
+}
+
 }  // namespace leshy1::services::targets

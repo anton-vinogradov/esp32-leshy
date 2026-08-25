@@ -35,6 +35,23 @@ Observation wifi(std::uint64_t sequence, std::uint64_t us,
     return value;
 }
 
+Observation labeled(RadioKind radio, std::uint64_t sequence, std::uint64_t us,
+                    std::uint8_t suffix, std::int16_t rssi,
+                    const char* label) {
+    Observation value = wifi(sequence, us, suffix, rssi);
+    value.radio = radio;
+    value.labelLength = static_cast<std::uint8_t>(std::strlen(label));
+    std::memcpy(value.label.data(), label, value.labelLength);
+    if (radio == RadioKind::Ble) {
+        value.wifiNetwork.present = false;
+        value.bleAdvertisement.present = true;
+        value.bleAdvertisement.addressType = 1;
+        value.frequencyKhz = 0;
+        value.channel = 0;
+    }
+    return value;
+}
+
 SurveySession session(const char* id, std::uint64_t base,
                       std::initializer_list<Observation> observations) {
     SurveySession result;
@@ -378,6 +395,62 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
     CHECK(currentController.notesEditorDirty());
 }
 
+void correlationReviewKeepsCandidateUnownedUntilDecision() {
+    SurveySession baseline = session(
+        "corr-old", 100,
+        {labeled(RadioKind::Wifi, 1, 110, 40, -50, "Beacon")});
+    SurveySession current = session(
+        "corr-new", 300,
+        {labeled(RadioKind::Ble, 1, 310, 41, -55, "Beacon")});
+    TargetsWorkspace workspace;
+    TargetsController controller(workspace);
+    CHECK(controller.load({&baseline, 40}, {&current, 41}) ==
+          TargetsLoadStatus::Ready);
+    CHECK(controller.catalog().size() == 1);
+    CHECK(controller.size() == 1);
+    CHECK(controller.next());
+    CHECK(controller.openSelected());
+    CHECK(controller.openSelected());
+    for (std::size_t index = 0; index < 4; ++index) CHECK(controller.next());
+    CHECK(controller.selectedAction() == TargetActionItem::Correlations);
+    CHECK(controller.selectedCorrelationCount() == 1);
+    CHECK(controller.openCorrelationList());
+    CHECK(controller.view() == TargetsView::CorrelationList);
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == TargetsView::CorrelationReview);
+    Observation proof{};
+    CHECK(controller.correlationEvidence(false, &proof));
+    CHECK(proof.radio == RadioKind::Wifi);
+    CHECK(controller.next());
+    CHECK(controller.correlationEvidence(true, &proof));
+    CHECK(proof.radio == RadioKind::Ble);
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == TargetsView::CorrelationEvidence);
+    CHECK(controller.correlationEvidenceIsCandidate());
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::CorrelationReview);
+
+    const auto* rejected = controller.reviewedCorrelationProposal();
+    CHECK(rejected != nullptr);
+    const auto persisted = controller.catalog();
+    CorrelationDecisionLog decisions;
+    CHECK(decisions.record(*rejected, CorrelationDecision::Reject,
+                           persisted.find(rejected->targetId)->revision,
+                           persisted.find(rejected->targetId)->revision) ==
+          CorrelationDecisionStatus::Rejected);
+    TargetsWorkspace reopenedWorkspace;
+    TargetsController reopened(reopenedWorkspace);
+    const TargetsLoadStatus reopenedStatus = reopened.load(
+        {&baseline, 40}, {&current, 41}, persisted, decisions);
+    if (reopenedStatus != TargetsLoadStatus::Ready) {
+        std::cerr << "correlation reopen status: "
+                  << targetsLoadStatusName(reopenedStatus) << '\n';
+    }
+    CHECK(reopenedStatus == TargetsLoadStatus::Ready);
+    CHECK(reopened.catalog().size() == 2);
+    CHECK(reopened.size() == 2);
+}
+
 }  // namespace
 
 int main() {
@@ -388,6 +461,7 @@ int main() {
     currentEvidenceWinsAcrossMonotonicReset();
     comparisonClassesThenSignalAreStable();
     persistedMetadataFollowsIdentityAcrossVisits();
+    correlationReviewKeepsCandidateUnownedUntilDecision();
     if (failures != 0) {
         std::cerr << failures << " targets controller test(s) failed\n";
         return 1;

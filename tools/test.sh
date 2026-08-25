@@ -150,6 +150,25 @@ run_opaque_evidence_check() {
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/session_correlation_review_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Correlation.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/TargetComparison.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/ObservationTargetAdapter.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/SurveySessionTargetEvidenceLookup.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/CorrelationService.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/SessionCorrelationReview.cpp" \
+    -o "$test_tmp/session_correlation_review_tests"
+
+"$test_tmp/session_correlation_review_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/target_merge_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
@@ -166,6 +185,7 @@ run_opaque_evidence_check() {
     "$repo_dir/tests/native/target_comparison_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Correlation.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetComparison.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
     "$repo_dir/firmware/leshy1/src/services/targets/SurveySessionTargetEvidenceLookup.cpp" \
@@ -212,10 +232,13 @@ run_opaque_evidence_check() {
     "$repo_dir/firmware/leshy1/src/apps/targets/TargetsController.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Correlation.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetComparison.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
     "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
     "$repo_dir/firmware/leshy1/src/services/targets/ObservationTargetAdapter.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/CorrelationService.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/SessionCorrelationReview.cpp" \
     "$repo_dir/firmware/leshy1/src/services/targets/SessionTargetAdmission.cpp" \
     "$repo_dir/firmware/leshy1/src/services/targets/SurveySessionTargetEvidenceLookup.cpp" \
     "$repo_dir/firmware/leshy1/src/services/targets/TargetComparisonService.cpp" \

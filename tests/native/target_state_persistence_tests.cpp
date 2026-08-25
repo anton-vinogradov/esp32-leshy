@@ -588,6 +588,156 @@ void testCatalogOnlyStoreRetainsAtomicHeadRecovery() {
     CHECK(reopened.get(0) != nullptr && reopened.get(0)->favorite);
 }
 
+void testDecisionStoreMigratesCatalogOnlyAndRetainsReject() {
+    FakeStoreIo io;
+    TargetCatalogStateStoreWorkspace oldWorkspace;
+    TargetCatalog catalog;
+    TargetCatalog scratch;
+    const TargetId id = targetId(1);
+    const TargetEvidenceRef observed = evidence(1, 1);
+    CHECK(catalog.create(id, wifiIdentity(1), observed) ==
+          TargetMutationStatus::Created);
+    CHECK(commitNextTargetCatalogState(io, oldWorkspace, catalog, scratch)
+              .complete());
+
+    TargetDecisionStateStoreWorkspace workspace;
+    TargetCatalog reopened;
+    CorrelationDecisionLog decisions;
+    TargetStateStoreRecoveryResult recovery = recoverTargetDecisionState(
+        io, workspace, &reopened, &decisions);
+    CHECK(recovery.valid());
+    CHECK(recovery.generation == 1);
+    CHECK(recovery.targets == 1);
+    CHECK(recovery.decisions == 0);
+
+    const CorrelationProposal rejected = proposal(id, observed, 20);
+    CHECK(decisions.record(rejected, CorrelationDecision::Reject, 1, 1) ==
+          CorrelationDecisionStatus::Rejected);
+    CHECK(commitTargetDecisionState(io, workspace, reopened, decisions, 2,
+                                    HeadSlot::B).complete());
+    reopened.clear();
+    decisions.clear();
+    recovery = recoverTargetDecisionState(io, workspace, &reopened,
+                                          &decisions);
+    CHECK(recovery.valid());
+    CHECK(recovery.generation == 2);
+    CHECK(recovery.targets == 1);
+    CHECK(recovery.decisions == 1);
+    CHECK(decisions.get(0) != nullptr);
+    CHECK(decisions.get(0)->decision == CorrelationDecision::Reject);
+    CHECK(correlationProposalKeyEqual(decisions.get(0)->proposal, rejected));
+}
+
+void testDecisionProjectionFitsWorstCaseHistoryAndRejectsMerges() {
+    TargetCatalog catalog;
+    std::array<char, TargetRecord::kNameCapacity> name{};
+    std::array<char, TargetRecord::kNotesCapacity> notes{};
+    std::array<char, TargetRecord::kTagCapacity> tag{};
+    name.fill('N');
+    notes.fill('D');
+    tag.fill('T');
+    for (std::size_t targetIndex = 0;
+         targetIndex < TargetCatalog::kCapacity; ++targetIndex) {
+        const TargetId id = targetId(static_cast<std::uint8_t>(targetIndex + 1U));
+        const std::uint8_t identityBase = static_cast<std::uint8_t>(
+            targetIndex * TargetRecord::kIdentityCapacity + 1U);
+        const std::uint64_t evidenceBase =
+            targetIndex * TargetRecord::kEvidenceCapacity + 1U;
+        CHECK(catalog.create(id, wifiIdentity(identityBase),
+                             evidence(static_cast<std::uint8_t>(targetIndex + 1U),
+                                      evidenceBase)) ==
+              TargetMutationStatus::Created);
+        for (std::size_t identityIndex = 1;
+             identityIndex < TargetRecord::kIdentityCapacity;
+             ++identityIndex) {
+            CHECK(catalog.attachEvidence(
+                      id,
+                      wifiIdentity(static_cast<std::uint8_t>(
+                          identityBase + identityIndex)),
+                      evidence(static_cast<std::uint8_t>(targetIndex + 1U),
+                               evidenceBase + identityIndex)) ==
+                  TargetMutationStatus::Applied);
+        }
+        for (std::size_t evidenceIndex = TargetRecord::kIdentityCapacity;
+             evidenceIndex < TargetRecord::kEvidenceCapacity;
+             ++evidenceIndex) {
+            CHECK(catalog.attachEvidence(
+                      id, wifiIdentity(identityBase),
+                      evidence(static_cast<std::uint8_t>(targetIndex + 1U),
+                               evidenceBase + evidenceIndex)) ==
+                  TargetMutationStatus::Applied);
+        }
+        CHECK(catalog.setName(id, name.data(), name.size()) ==
+              TargetMutationStatus::Applied);
+        CHECK(catalog.setNotes(id, notes.data(), notes.size()) ==
+              TargetMutationStatus::Applied);
+        for (std::size_t tagIndex = 0;
+             tagIndex < TargetRecord::kTagCountCapacity; ++tagIndex) {
+            tag[0] = static_cast<char>('A' + tagIndex);
+            CHECK(catalog.addTag(id, tag.data(), tag.size()) ==
+                  TargetMutationStatus::Applied);
+        }
+        CHECK(catalog.setFavorite(id, true) ==
+              TargetMutationStatus::Applied);
+    }
+
+    CorrelationDecisionLog decisions;
+    for (std::size_t index = 0;
+         index < CorrelationDecisionLog::kCapacity; ++index) {
+        const CorrelationProposal rejected = proposal(
+            targetId(1), evidence(1, 1),
+            static_cast<std::uint8_t>(100U + index));
+        CHECK(decisions.record(rejected, CorrelationDecision::Reject,
+                               catalog.find(targetId(1))->revision,
+                               catalog.find(targetId(1))->revision) ==
+              CorrelationDecisionStatus::Rejected);
+    }
+    TargetDecisionStateStoreWorkspace workspace;
+    std::size_t stateSize = 0;
+    std::array<std::uint8_t, kTargetCatalogStateMaxBytes> catalogState{};
+    std::size_t catalogStateSize = 0;
+    CHECK(encodeTargetCatalogState(
+              catalog, catalogState.data(), catalogState.size(),
+              &catalogStateSize) == TargetCodecStatus::Valid);
+    CHECK(encodeTargetDecisionState(
+              catalog, decisions, workspace.state.data(),
+              workspace.state.size(), &stateSize) ==
+          TargetCodecStatus::Valid);
+    CHECK(stateSize > catalogStateSize);
+    CHECK(stateSize <= kTargetDecisionStateMaxBytes);
+    TargetCatalog reopened;
+    CorrelationDecisionLog reopenedDecisions;
+    CHECK(decodeTargetDecisionState(workspace.state.data(), stateSize,
+                                    &reopened, &reopenedDecisions) ==
+          TargetCodecStatus::Valid);
+    CHECK(reopened.size() == TargetCatalog::kCapacity);
+    CHECK(reopenedDecisions.size() == CorrelationDecisionLog::kCapacity);
+
+    TargetMergeHistory merges;
+    TargetCatalog merged;
+    CHECK(merged.create(targetId(1), wifiIdentity(1), evidence(1, 1)) ==
+          TargetMutationStatus::Created);
+    CHECK(merged.create(targetId(2), bleIdentity(2), evidence(2, 2)) ==
+          TargetMutationStatus::Created);
+    CHECK(merges.merge(merged, mergeId(1), targetId(1), targetId(2), 1, 1) ==
+          TargetMergeStatus::Merged);
+    std::array<std::uint8_t, kTargetStateMaxBytes> fullState{};
+    std::array<std::uint8_t, kTargetStateManifestMaxBytes> manifest{};
+    std::size_t fullStateSize = 0;
+    std::size_t manifestSize = 0;
+    CorrelationDecisionLog emptyDecisions;
+    CHECK(encodeTargetState(merged, emptyDecisions, merges, fullState.data(),
+                            fullState.size(), &fullStateSize) ==
+          TargetCodecStatus::Valid);
+    CHECK(encodeTargetStateManifest(
+              merged, emptyDecisions, merges, fullState.data(),
+              fullStateSize, manifest.data(), manifest.size(),
+              &manifestSize) == TargetCodecStatus::Valid);
+    CHECK(reopenTargetDecisionState(
+              manifest.data(), manifestSize, fullState.data(), fullStateSize,
+              &reopened, &reopenedDecisions) == TargetCodecStatus::Conflict);
+}
+
 void testCatalogOnlyWorkspaceFitsWorstCaseCatalog() {
     TargetCatalog catalog;
     std::array<char, TargetRecord::kNameCapacity> name{};
@@ -670,6 +820,8 @@ int main() {
     testPathsAndAliasingFailClosed();
     testCatalogOnlyStateUsesTheCanonicalWireFormatAndRejectsHistory();
     testCatalogOnlyStoreRetainsAtomicHeadRecovery();
+    testDecisionStoreMigratesCatalogOnlyAndRetainsReject();
+    testDecisionProjectionFitsWorstCaseHistoryAndRejectsMerges();
     testCatalogOnlyWorkspaceFitsWorstCaseCatalog();
     if (failures != 0) return EXIT_FAILURE;
     std::cout << "S6 Target graph/decision atomic persistence tests passed\n";

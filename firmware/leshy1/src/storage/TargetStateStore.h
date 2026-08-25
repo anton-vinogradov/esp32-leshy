@@ -36,9 +36,9 @@ struct TargetStateStoreWorkspace final {
     std::uint32_t generation = 0;
 };
 
-// Product metadata actions currently admit only catalog records and reject
-// decision/merge history.  Keep their canonical schema-v3 wire format while
-// avoiding a 32 KiB contiguous allocation that the N16 target cannot promise.
+// Legacy compact projection retained for decoding catalog-only schema-v3
+// generations written before on-device correlation decisions were admitted.
+// It rejects decision/merge history instead of silently discarding it.
 struct TargetCatalogStateStoreWorkspace final {
     std::array<std::uint8_t, kTargetCatalogStateMaxBytes> state{};
     std::array<std::uint8_t, kTargetStateManifestMaxBytes> manifest{};
@@ -49,7 +49,19 @@ struct TargetCatalogStateStoreWorkspace final {
     std::uint32_t generation = 0;
 };
 
+struct TargetDecisionStateStoreWorkspace final {
+    std::array<std::uint8_t, kTargetDecisionStateMaxBytes> state{};
+    std::array<std::uint8_t, kTargetStateManifestMaxBytes> manifest{};
+    std::array<std::uint8_t, kHeadWireSize> headA{};
+    std::array<std::uint8_t, kHeadWireSize> headB{};
+    std::size_t stateSize = 0;
+    std::size_t manifestSize = 0;
+    std::uint32_t generation = 0;
+};
+
 static_assert(sizeof(TargetCatalogStateStoreWorkspace) <
+              sizeof(TargetStateStoreWorkspace));
+static_assert(sizeof(TargetDecisionStateStoreWorkspace) <
               sizeof(TargetStateStoreWorkspace));
 
 enum class TargetStateStoreStatus : std::uint8_t {
@@ -125,5 +137,18 @@ TargetStateStoreCommitResult commitNextTargetCatalogState(
 TargetStateStoreRecoveryResult recoverTargetCatalogState(
     SessionStoreIo& io, TargetCatalogStateStoreWorkspace& workspace,
     domain::targets::TargetCatalog* catalog);
+
+// Product S6.4 projection: graph + full correlation decision history, while
+// merge history must remain empty.  It reads the existing catalog-only state
+// and upgrades the next atomic generation without changing the wire schema.
+TargetStateStoreCommitResult commitTargetDecisionState(
+    SessionStoreIo& io, TargetDecisionStateStoreWorkspace& workspace,
+    const domain::targets::TargetCatalog& catalog,
+    const domain::targets::CorrelationDecisionLog& decisions,
+    std::uint32_t generation, HeadSlot publishSlot);
+TargetStateStoreRecoveryResult recoverTargetDecisionState(
+    SessionStoreIo& io, TargetDecisionStateStoreWorkspace& workspace,
+    domain::targets::TargetCatalog* catalog,
+    domain::targets::CorrelationDecisionLog* decisions);
 
 }  // namespace leshy1::storage

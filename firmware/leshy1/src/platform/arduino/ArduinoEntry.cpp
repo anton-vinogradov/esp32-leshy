@@ -92,6 +92,9 @@
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
 #include "services/power/PowerSafetyPolicy.h"
+#include "services/targets/CorrelationService.h"
+#include "services/targets/SessionTargetAdmission.h"
+#include "services/targets/SurveySessionTargetEvidenceLookup.h"
 #include "services/targets/TargetService.h"
 #include "services/survey/IngressTiming.h"
 #include "services/survey/ObservationQueue.h"
@@ -219,6 +222,9 @@ using leshy1::domain::hardware::CapabilityRecord;
 using leshy1::domain::targets::TargetChangeKind;
 using leshy1::domain::targets::TargetComparisonClass;
 using leshy1::domain::targets::TargetCatalog;
+using leshy1::domain::targets::CorrelationDecisionLog;
+using leshy1::domain::targets::CorrelationProposal;
+using leshy1::domain::targets::CorrelationDecision;
 using leshy1::domain::targets::TargetId;
 using leshy1::domain::targets::TargetRecord;
 using leshy1::domain::hardware::CapabilityState;
@@ -253,6 +259,11 @@ using leshy1::services::power::PowerWriteDisposition;
 using leshy1::services::targets::TargetAction;
 using leshy1::services::targets::TargetActionKind;
 using leshy1::services::targets::TargetService;
+using leshy1::services::targets::CorrelationAction;
+using leshy1::services::targets::CorrelationActionKind;
+using leshy1::services::targets::CorrelationDecisionStatus;
+using leshy1::services::targets::CorrelationService;
+using leshy1::services::targets::SurveySessionTargetEvidenceLookup;
 using leshy1::apps::targets::TargetActionItem;
 using leshy1::kernel::safety::WorkerDeadlineSupervisor;
 using leshy1::platform::arduino::BoardSafeOutputs;
@@ -427,6 +438,10 @@ struct TargetsMutationEvent final {
     bool cleanupComplete = false;
     bool favorite = false;
     TargetActionKind actionKind = TargetActionKind::SetFavorite;
+    bool correlation = false;
+    CorrelationActionKind correlationKind = CorrelationActionKind::Accept;
+    CorrelationDecisionStatus correlationStatus =
+        CorrelationDecisionStatus::InvalidArgument;
     std::array<char, TargetRecord::kNotesCapacity + 1> name{};
     std::uint16_t nameLength = 0;
     TargetId targetId{};
@@ -454,9 +469,14 @@ TargetsMutationState targetsMutationState = TargetsMutationState::Idle;
 const char* targetsMutationStatus = "idle";
 TargetsMutationEvent targetsMutationReport{};
 TargetCatalog* targetsMutationCatalog = nullptr;
+CorrelationDecisionLog* targetsMutationDecisions = nullptr;
 TargetId targetsMutationTargetId{};
 bool targetsMutationFavorite = false;
 TargetActionKind targetsMutationKind = TargetActionKind::SetFavorite;
+bool targetsMutationCorrelation = false;
+CorrelationActionKind targetsMutationCorrelationKind =
+    CorrelationActionKind::Accept;
+CorrelationProposal targetsMutationProposal{};
 std::array<char, TargetRecord::kNotesCapacity + 1> targetsMutationText{};
 std::uint16_t targetsMutationTextLength = 0;
 std::uint64_t targetsMutationStartActionUs = 0;
@@ -4493,16 +4513,17 @@ bool allocateTargetsProduct() {
 }
 
 TargetsLoadStatus loadBoundTargetsProduct(
-    TargetsController& controller, const TargetCatalog* persisted = nullptr) {
+    TargetsController& controller, const TargetCatalog* persisted = nullptr,
+    const CorrelationDecisionLog* decisions = nullptr) {
     if (targetsComparisonLoaded) {
-        return persisted == nullptr
+        return persisted == nullptr || decisions == nullptr
             ? controller.load(targetsBaselineBinding, targetsCurrentBinding)
             : controller.load(targetsBaselineBinding, targetsCurrentBinding,
-                              *persisted);
+                              *persisted, *decisions);
     }
-    return persisted == nullptr
+    return persisted == nullptr || decisions == nullptr
         ? controller.load(targetsCurrentBinding)
-        : controller.load(targetsCurrentBinding, *persisted);
+        : controller.load(targetsCurrentBinding, *persisted, *decisions);
 }
 
 bool loadTargetsProduct(const AppMenuItem& item) {
@@ -4589,8 +4610,10 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     // boards.  Keep both objects outside the mounted interval's allocator
     // churn and release them after recovery/UI hand-off.
     auto* targetStateWorkspace = new (std::nothrow)
-        leshy1::storage::TargetCatalogStateStoreWorkspace();
+        leshy1::storage::TargetDecisionStateStoreWorkspace();
     TargetCatalog* persistedCatalog = new (std::nothrow) TargetCatalog();
+    CorrelationDecisionLog* persistedDecisions =
+        new (std::nothrow) CorrelationDecisionLog();
     BoardSdFilesystem filesystem;
     const bool mounted = filesystem.beginReadOnly();
     targetsFilesystemMountError = filesystem.mountError();
@@ -4599,6 +4622,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         targetsCleanupComplete = filesystem.cleanupComplete();
         delete targetStateWorkspace;
         delete persistedCatalog;
+        delete persistedDecisions;
         targetsProductStatus = "readonly_mount_failed";
         lastRuntimeEvent = targetsProductStatus;
         return true;
@@ -4664,14 +4688,15 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 filesystem.exists(
                     "/leshy/sessions/v1/target-state-head-b.bin");
             if (sessionReady && targetStatePresent) {
-                if (persistedCatalog == nullptr ||
+                if (persistedCatalog == nullptr || persistedDecisions == nullptr ||
                     targetStateWorkspace == nullptr) {
                     targetStateAccepted = false;
                     targetsProductStatus = "target_state_workspace_unavailable";
                 } else {
                     const auto recovered =
-                        leshy1::storage::recoverTargetCatalogState(
-                            io, *targetStateWorkspace, persistedCatalog);
+                        leshy1::storage::recoverTargetDecisionState(
+                            io, *targetStateWorkspace, persistedCatalog,
+                            persistedDecisions);
                     if (recovered.valid()) {
                         persistedCatalogAvailable = true;
                         targetsStateGeneration = recovered.generation;
@@ -4700,6 +4725,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         (pairRecovered || latestRecovered)) {
         if (!allocateTargetsProduct()) {
             delete persistedCatalog;
+            delete persistedDecisions;
             return false;
         }
         TargetsController& controller = targetsProductRuntime->controller;
@@ -4712,23 +4738,27 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             : TargetProductBinding{&surveySession, latestGeneration};
         const TargetsLoadStatus loaded = loadBoundTargetsProduct(
             controller,
-            persistedCatalogAvailable ? persistedCatalog : nullptr);
+            persistedCatalogAvailable ? persistedCatalog : nullptr,
+            persistedCatalogAvailable ? persistedDecisions : nullptr);
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
     }
     delete persistedCatalog;
+    delete persistedDecisions;
     lastRuntimeEvent = targetsProductStatus;
     return true;
 }
 
 bool rebuildTargetsProductFromCatalog(const TargetCatalog* persisted,
+                                      const CorrelationDecisionLog* decisions,
                                       const TargetId& selectedId,
                                       bool openActions) {
     if (!allocateTargetsProduct()) return false;
     TargetsController& controller = targetsProductRuntime->controller;
     const TargetsLoadStatus loaded = loadBoundTargetsProduct(
         controller, persisted != nullptr && persisted->size() != 0
-            ? persisted : nullptr);
+            ? persisted : nullptr,
+        decisions);
     if (loaded != TargetsLoadStatus::Ready) {
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
@@ -4748,19 +4778,22 @@ void runTargetsMutationWorker(void*) {
     event.status = "store_failed";
     event.favorite = targetsMutationFavorite;
     event.actionKind = targetsMutationKind;
+    event.correlation = targetsMutationCorrelation;
+    event.correlationKind = targetsMutationCorrelationKind;
     event.name = targetsMutationText;
     event.nameLength = targetsMutationTextLength;
     event.targetId = targetsMutationTargetId;
     const std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     TargetCatalog* catalog = targetsMutationCatalog;
+    CorrelationDecisionLog* decisions = targetsMutationDecisions;
     BoardSdFilesystem filesystem;
     bool identityCleanupComplete = true;
     bool filesystemAttempted = false;
     bool deadlineArmed = false;
     ArduinoFsSessionStoreIo* io = nullptr;
     auto* workspace = static_cast<
-        leshy1::storage::TargetCatalogStateStoreWorkspace*>(nullptr);
+        leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
     resetTargetsStoreDeadlineCancel();
     deadlineArmed = armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs);
     const auto supervisedCheckpoint = [&]() {
@@ -4772,7 +4805,8 @@ void runTargetsMutationWorker(void*) {
             event.status = "deadline_unavailable";
             break;
         }
-        if (catalog == nullptr || targetsMutationEvents == nullptr) {
+        if (catalog == nullptr || decisions == nullptr ||
+            targetsMutationEvents == nullptr) {
             event.status = "worker_invalid";
             break;
         }
@@ -4859,7 +4893,7 @@ void runTargetsMutationWorker(void*) {
         event.heapLargestBeforeMount = static_cast<std::uint32_t>(
             heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
         workspace = new (std::nothrow)
-            leshy1::storage::TargetCatalogStateStoreWorkspace();
+            leshy1::storage::TargetDecisionStateStoreWorkspace();
         if (workspace == nullptr) {
             event.status = "workspace_unavailable_before_mount";
             break;
@@ -4918,25 +4952,67 @@ void runTargetsMutationWorker(void*) {
             break;
         }
 
-        TargetAction action;
-        action.kind = event.actionKind;
-        action.targetId = event.targetId;
-        action.favorite = event.favorite;
-        if ((event.actionKind == TargetActionKind::SetName ||
-             event.actionKind == TargetActionKind::SetNotes ||
-             event.actionKind == TargetActionKind::AddTag ||
-             event.actionKind == TargetActionKind::RemoveTag) &&
-            !leshy1::services::targets::setTargetActionText(
-                &action, event.name.data(), event.nameLength)) {
-            event.status = "text_invalid";
-            break;
-        }
-        TargetService service(*catalog);
-        const auto applied = service.execute(action);
-        if (!applied.applied()) {
-            event.status = leshy1::domain::targets::targetMutationStatusName(
-                applied.status);
-            break;
+        if (event.correlation) {
+            if (!targetsComparisonLoaded ||
+                targetsBaselineBinding.session == nullptr ||
+                targetsCurrentBinding.session == nullptr) {
+                event.status = "correlation_sessions_unavailable";
+                break;
+            }
+            leshy1::domain::targets::TargetComparisonSource baselineSource{};
+            leshy1::domain::targets::TargetComparisonSource currentSource{};
+            if (!leshy1::services::targets::sourceIdForSession(
+                    *targetsBaselineBinding.session, &baselineSource.id) ||
+                !leshy1::services::targets::sourceIdForSession(
+                    *targetsCurrentBinding.session, &currentSource.id)) {
+                event.status = "correlation_sources_unavailable";
+                break;
+            }
+            baselineSource.generation = targetsBaselineBinding.generation;
+            currentSource.generation = targetsCurrentBinding.generation;
+            SurveySessionTargetEvidenceLookup lookup(
+                {baselineSource, targetsBaselineBinding.session},
+                {currentSource, targetsCurrentBinding.session});
+            CorrelationService service(*catalog, *decisions, lookup);
+            CorrelationAction action{};
+            action.kind = event.correlationKind;
+            action.proposal = targetsMutationProposal;
+            const auto* target = catalog->find(action.proposal.targetId);
+            action.expectedTargetRevision = target == nullptr
+                ? 0U : target->revision;
+            const auto applied = service.execute(action);
+            event.correlationStatus = applied.status;
+            if ((event.correlationKind == CorrelationActionKind::Accept &&
+                 applied.status != CorrelationDecisionStatus::Accepted) ||
+                (event.correlationKind == CorrelationActionKind::Reject &&
+                 applied.status != CorrelationDecisionStatus::Rejected)) {
+                event.status =
+                    leshy1::services::targets::correlationDecisionStatusName(
+                        applied.status);
+                break;
+            }
+        } else {
+            TargetAction action;
+            action.kind = event.actionKind;
+            action.targetId = event.targetId;
+            action.favorite = event.favorite;
+            if ((event.actionKind == TargetActionKind::SetName ||
+                 event.actionKind == TargetActionKind::SetNotes ||
+                 event.actionKind == TargetActionKind::AddTag ||
+                 event.actionKind == TargetActionKind::RemoveTag) &&
+                !leshy1::services::targets::setTargetActionText(
+                    &action, event.name.data(), event.nameLength)) {
+                event.status = "text_invalid";
+                break;
+            }
+            TargetService service(*catalog);
+            const auto applied = service.execute(action);
+            if (!applied.applied()) {
+                event.status =
+                    leshy1::domain::targets::targetMutationStatusName(
+                        applied.status);
+                break;
+            }
         }
         if (!supervisedCheckpoint()) {
             event.status = "safety_worker_deadline";
@@ -4956,16 +5032,16 @@ void runTargetsMutationWorker(void*) {
                     targetsStateHead == leshy1::storage::RecoveryChoice::B
                 ? leshy1::storage::HeadSlot::A
                 : leshy1::storage::HeadSlot::B;
-        const auto committed = leshy1::storage::commitTargetCatalogState(
-            *io, *workspace, *catalog, nextGeneration, nextHead);
+        const auto committed = leshy1::storage::commitTargetDecisionState(
+            *io, *workspace, *catalog, *decisions, nextGeneration, nextHead);
         event.storeStatus = committed.status;
         event.commitStage = committed.stage;
         if (!supervisedCheckpoint()) {
             event.status = "safety_worker_deadline";
             break;
         }
-        const auto recovered = leshy1::storage::recoverTargetCatalogState(
-            *io, *workspace, catalog);
+        const auto recovered = leshy1::storage::recoverTargetDecisionState(
+            *io, *workspace, catalog, decisions);
         if (!supervisedCheckpoint()) {
             event.status = "safety_worker_deadline";
             break;
@@ -4990,7 +5066,23 @@ void runTargetsMutationWorker(void*) {
             }
         }
         bool valueReopened = false;
-        if (reopened != nullptr) {
+        if (event.correlation) {
+            const auto* decision = decisions->find(targetsMutationProposal);
+            const auto* candidate = catalog->findByIdentity(
+                targetsMutationProposal.candidateIdentity);
+            const bool decisionReopened = decision != nullptr &&
+                decision->decision ==
+                    (event.correlationKind == CorrelationActionKind::Accept
+                         ? CorrelationDecision::Accept
+                         : CorrelationDecision::Reject);
+            const bool ownershipReopened =
+                event.correlationKind == CorrelationActionKind::Accept
+                ? candidate != nullptr &&
+                    leshy1::domain::targets::targetIdEqual(
+                        candidate->id, targetsMutationProposal.targetId)
+                : candidate == nullptr;
+            valueReopened = decisionReopened && ownershipReopened;
+        } else if (reopened != nullptr) {
             if (event.actionKind == TargetActionKind::SetFavorite) {
                 valueReopened = reopened->favorite == event.favorite;
             } else if (event.actionKind == TargetActionKind::SetName) {
@@ -5075,7 +5167,8 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
     }
     if (targetsMutationEvents == nullptr ||
         targetsMutationTaskHandle != nullptr ||
-        targetsMutationCatalog != nullptr) {
+        targetsMutationCatalog != nullptr ||
+        targetsMutationDecisions != nullptr) {
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "worker_unavailable";
         lastRuntimeEvent = "targets_store_worker_unavailable";
@@ -5083,13 +5176,21 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
     }
     targetsMutationCatalog = new (std::nothrow) TargetCatalog(
         targetsProductRuntime->controller.catalog());
-    if (targetsMutationCatalog == nullptr) {
+    targetsMutationDecisions = new (std::nothrow) CorrelationDecisionLog(
+        targetsProductRuntime->controller.decisions());
+    if (targetsMutationCatalog == nullptr || targetsMutationDecisions == nullptr) {
+        delete targetsMutationCatalog;
+        delete targetsMutationDecisions;
+        targetsMutationCatalog = nullptr;
+        targetsMutationDecisions = nullptr;
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "workspace_unavailable";
         lastRuntimeEvent = "targets_store_workspace_unavailable";
         return true;
     }
     targetsMutationTargetId = selected->id;
+    targetsMutationCorrelation = false;
+    targetsMutationProposal = {};
     targetsMutationKind = kind;
     targetsMutationFavorite = favorite;
     targetsMutationText.fill('\0');
@@ -5108,7 +5209,9 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
         if (text == nullptr || textLength > maximum ||
             (tagAction && textLength == 0)) {
             delete targetsMutationCatalog;
+            delete targetsMutationDecisions;
             targetsMutationCatalog = nullptr;
+            targetsMutationDecisions = nullptr;
             targetsMutationState = TargetsMutationState::Failed;
             targetsMutationStatus = tagAction
                 ? "tag_invalid"
@@ -5138,15 +5241,95 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
     if (!started) {
         targetsMutationTaskHandle = nullptr;
         rebuildTargetsProductFromCatalog(targetsMutationCatalog,
+                                         targetsMutationDecisions,
                                          targetsMutationTargetId, true);
         delete targetsMutationCatalog;
+        delete targetsMutationDecisions;
         targetsMutationCatalog = nullptr;
+        targetsMutationDecisions = nullptr;
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "worker_unavailable";
         lastRuntimeEvent = "targets_store_worker_unavailable";
     } else {
         targetsProductStatus = "saving";
         lastRuntimeEvent = "targets_store_saving";
+    }
+    return true;
+}
+
+bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
+    const std::uint64_t actionStartedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (targetsProductRuntime == nullptr ||
+        targetsProductRuntime->controller.view() !=
+            TargetsView::CorrelationReview ||
+        targetsProductRuntime->controller.correlationReviewSelection() < 2 ||
+        targetsMutationState == TargetsMutationState::Saving) {
+        return false;
+    }
+    const auto* proposal =
+        targetsProductRuntime->controller.reviewedCorrelationProposal();
+    if (proposal == nullptr) return false;
+    if (powerSafetyPolicy.writeDisposition() ==
+        PowerWriteDisposition::ProhibitedLowVoltage) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "power_unsafe";
+        lastRuntimeEvent = "targets_store_power_unsafe";
+        return true;
+    }
+    if (targetsMutationEvents == nullptr ||
+        targetsMutationTaskHandle != nullptr ||
+        targetsMutationCatalog != nullptr ||
+        targetsMutationDecisions != nullptr) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "worker_unavailable";
+        lastRuntimeEvent = "targets_store_worker_unavailable";
+        return true;
+    }
+    targetsMutationCatalog = new (std::nothrow) TargetCatalog(
+        targetsProductRuntime->controller.catalog());
+    targetsMutationDecisions = new (std::nothrow) CorrelationDecisionLog(
+        targetsProductRuntime->controller.decisions());
+    if (targetsMutationCatalog == nullptr || targetsMutationDecisions == nullptr) {
+        delete targetsMutationCatalog;
+        delete targetsMutationDecisions;
+        targetsMutationCatalog = nullptr;
+        targetsMutationDecisions = nullptr;
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "workspace_unavailable";
+        lastRuntimeEvent = "targets_store_workspace_unavailable";
+        return true;
+    }
+    targetsMutationCorrelation = true;
+    targetsMutationCorrelationKind = kind;
+    targetsMutationProposal = *proposal;
+    targetsMutationTargetId = proposal->targetId;
+    targetsMutationText.fill('\0');
+    targetsMutationTextLength = 0;
+    targetsMutationReport = {};
+    releaseTargetsProduct();
+    targetsMutationState = TargetsMutationState::Saving;
+    targetsMutationStatus = "saving";
+    const bool started = xTaskCreatePinnedToCore(
+        runTargetsMutationWorker, "leshy-targets-store", 8192, nullptr, 1,
+        &targetsMutationTaskHandle, 0) == pdPASS;
+    targetsMutationStartActionUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) - actionStartedUs;
+    if (!started) {
+        targetsMutationTaskHandle = nullptr;
+        rebuildTargetsProductFromCatalog(
+            targetsMutationCatalog, targetsMutationDecisions,
+            targetsMutationTargetId, true);
+        delete targetsMutationCatalog;
+        delete targetsMutationDecisions;
+        targetsMutationCatalog = nullptr;
+        targetsMutationDecisions = nullptr;
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "worker_unavailable";
+        lastRuntimeEvent = "targets_store_worker_unavailable";
+    } else {
+        targetsProductStatus = "saving";
+        lastRuntimeEvent = "targets_correlation_saving";
     }
     return true;
 }
@@ -5220,8 +5403,13 @@ void serviceTargetsMutationWorker() {
     targetsMutationReport = event;
     const bool rebuilt = rebuildTargetsProductFromCatalog(
         event.catalogRecovered ? targetsMutationCatalog : nullptr,
+        event.catalogRecovered ? targetsMutationDecisions : nullptr,
         event.targetId, true);
-    if (rebuilt && event.actionKind == TargetActionKind::SetName &&
+    if (rebuilt && event.correlation && targetsProductRuntime != nullptr) {
+        for (std::size_t index = 0; index < 4; ++index) {
+            targetsProductRuntime->controller.next();
+        }
+    } else if (rebuilt && event.actionKind == TargetActionKind::SetName &&
         targetsProductRuntime != nullptr) {
         targetsProductRuntime->controller.next();
     } else if (rebuilt &&
@@ -5239,7 +5427,9 @@ void serviceTargetsMutationWorker() {
         targetsProductRuntime->controller.openNotesEditor();
     }
     delete targetsMutationCatalog;
+    delete targetsMutationDecisions;
     targetsMutationCatalog = nullptr;
+    targetsMutationDecisions = nullptr;
     if (event.catalogRecovered) {
         targetsStateGeneration = event.generation;
         targetsStateHead = event.head;
@@ -7464,6 +7654,23 @@ NavigationFooter navigationFooterForCurrentState() {
         if (targetsProductRuntime->controller.view() ==
             TargetsView::CompareDetail) {
             return {{NavigationKey::Left, UiTextId::NavChanges}, {}, {}};
+        }
+        if (targetsProductRuntime->controller.view() ==
+            TargetsView::CorrelationList) {
+            return {{NavigationKey::Left, UiTextId::NavActions}, choose,
+                    {NavigationKey::RightAndSelect, UiTextId::NavEnter}};
+        }
+        if (targetsProductRuntime->controller.view() ==
+            TargetsView::CorrelationReview) {
+            return {{NavigationKey::Left, UiTextId::NavBack}, choose,
+                    {NavigationKey::RightAndSelect,
+                     targetsProductRuntime->controller
+                                 .correlationReviewSelection() < 2
+                         ? UiTextId::NavEnter : UiTextId::NavApply}};
+        }
+        if (targetsProductRuntime->controller.view() ==
+            TargetsView::CorrelationEvidence) {
+            return {{NavigationKey::Left, UiTextId::NavBack}, {}, {}};
         }
         if (targetsProductRuntime->controller.view() == TargetsView::NameEdit) {
             const std::size_t selection =
@@ -11416,6 +11623,28 @@ void fitTargetRowText(char* text, std::size_t capacity, UiTextRole role) {
     std::snprintf(text, capacity, "...");
 }
 
+void formatCorrelationObservation(
+    const Observation& observation,
+    const leshy1::domain::targets::TargetIdentity& identity,
+    char* text, std::size_t textCapacity,
+    char* note, std::size_t noteCapacity) {
+    if (text == nullptr || textCapacity == 0 || note == nullptr ||
+        noteCapacity == 0) {
+        return;
+    }
+    if (observation.labelLength != 0) {
+        std::snprintf(text, textCapacity, "%s", observation.label.data());
+    } else {
+        formatTargetIdentity(identity, text, textCapacity);
+    }
+    char identityText[24] = {};
+    formatTargetIdentity(identity, identityText, sizeof(identityText));
+    std::snprintf(note, noteCapacity,
+                  tr(UiTextId::TargetsCorrelationIdentityFormat),
+                  identityText, static_cast<int>(observation.rssiDbm));
+    fitTargetRowText(text, textCapacity, UiTextRole::Body);
+}
+
 void renderTargetListRow(std::size_t entryIndex, std::size_t firstVisible) {
     if (targetsProductRuntime == nullptr || entryIndex < firstVisible ||
         entryIndex >= firstVisible + kVisibleTargetRows) {
@@ -11657,6 +11886,129 @@ void renderTargetsPage(bool clearContent) {
         return;
     }
     TargetsController& controller = targetsProductRuntime->controller;
+    if (controller.view() == TargetsView::CorrelationEvidence) {
+        renderHeader(tr(UiTextId::TargetsCorrelationEvidence), clearContent);
+        const auto* proposal = controller.reviewedCorrelationProposal();
+        Observation observation{};
+        const bool candidate = controller.correlationEvidenceIsCandidate();
+        if (proposal == nullptr ||
+            !controller.correlationEvidence(candidate, &observation)) {
+            renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+            return;
+        }
+        const auto* selectedRow = controller.selectedRow();
+        if (!candidate && selectedRow == nullptr) {
+            renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+            return;
+        }
+        const auto& identity = candidate ? proposal->candidateIdentity
+                                         : selectedRow->identity;
+        char line[80] = {};
+        if (observation.labelLength != 0) {
+            std::snprintf(line, sizeof(line), "%s", observation.label.data());
+        } else {
+            formatTargetIdentity(identity, line, sizeof(line));
+        }
+        renderMetric(0, line, Tone::Positive);
+        char identityText[24] = {};
+        formatTargetIdentity(identity, identityText, sizeof(identityText));
+        std::snprintf(line, sizeof(line), tr(UiTextId::TargetsIdentityFormat),
+                      identityText);
+        renderMetric(1, line);
+        if (observation.radio == RadioKind::Wifi) {
+            std::snprintf(line, sizeof(line),
+                          tr(UiTextId::TargetsWifiRowFormat),
+                          static_cast<int>(observation.rssiDbm),
+                          static_cast<unsigned>(observation.channel));
+        } else {
+            std::snprintf(line, sizeof(line),
+                          tr(UiTextId::TargetsBleRowFormat),
+                          static_cast<int>(observation.rssiDbm));
+        }
+        renderMetric(2, line);
+        const auto& evidence = candidate
+            ? proposal->candidateEvidence
+            : proposal->features[0].targetEvidence;
+        std::snprintf(line, sizeof(line),
+                      tr(UiTextId::TargetsCorrelationSourceFormat),
+                      static_cast<unsigned long>(evidence.sourceGeneration),
+                      static_cast<unsigned long long>(
+                          evidence.observationSequence));
+        renderMetric(3, line);
+        renderMetric(4, candidate
+            ? tr(UiTextId::TargetsCorrelationCandidate)
+            : tr(UiTextId::TargetsCorrelationExisting), Tone::Muted);
+        return;
+    }
+    if (controller.view() == TargetsView::CorrelationReview) {
+        renderHeader(tr(UiTextId::TargetsCorrelationReview), clearContent);
+        const auto* proposal = controller.reviewedCorrelationProposal();
+        Observation known{};
+        Observation candidate{};
+        if (proposal == nullptr || !controller.correlationEvidence(false, &known) ||
+            !controller.correlationEvidence(true, &candidate)) {
+            renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+            return;
+        }
+        char text[48] = {};
+        char note[64] = {};
+        const auto* selectedRow = controller.selectedRow();
+        if (selectedRow == nullptr) {
+            renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+            return;
+        }
+        formatCorrelationObservation(known, selectedRow->identity,
+                                     text, sizeof(text), note, sizeof(note));
+        renderMenuRow(Components::homeRow(0),
+                      tr(UiTextId::TargetsCorrelationExisting), note,
+                      controller.correlationReviewSelection() == 0, true,
+                      Tone::Neutral);
+        formatCorrelationObservation(candidate, proposal->candidateIdentity,
+                                     text, sizeof(text), note, sizeof(note));
+        renderMenuRow(Components::homeRow(1),
+                      tr(UiTextId::TargetsCorrelationCandidate), note,
+                      controller.correlationReviewSelection() == 1, true,
+                      Tone::Positive);
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsCorrelationScoreFormat),
+                      static_cast<unsigned>(proposal->scorePermille / 10U));
+        renderMenuRow(Components::homeRow(2),
+                      tr(UiTextId::TargetsCorrelationAccept), note,
+                      controller.correlationReviewSelection() == 2, true,
+                      Tone::Positive);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::TargetsCorrelationReject), note,
+                      controller.correlationReviewSelection() == 3, true,
+                      Tone::Warning);
+        return;
+    }
+    if (controller.view() == TargetsView::CorrelationList) {
+        renderHeader(tr(UiTextId::TargetsCorrelationList), clearContent);
+        const std::size_t count = controller.selectedCorrelationCount();
+        if (count == 0) {
+            renderMetric(0, tr(UiTextId::TargetsCompareEmpty), Tone::Muted);
+            return;
+        }
+        const std::size_t first = targetsFirstVisible(
+            controller.correlationSelection());
+        const std::size_t end = count < first + kVisibleTargetRows
+            ? count : first + kVisibleTargetRows;
+        for (std::size_t index = first; index < end; ++index) {
+            const auto* proposal = controller.selectedCorrelationProposal(index);
+            if (proposal == nullptr) continue;
+            char identity[24] = {};
+            formatTargetIdentity(proposal->candidateIdentity, identity,
+                                 sizeof(identity));
+            char note[40] = {};
+            std::snprintf(note, sizeof(note),
+                          tr(UiTextId::TargetsCorrelationScoreFormat),
+                          static_cast<unsigned>(proposal->scorePermille / 10U));
+            renderMenuRow(Components::homeRow(index - first), identity, note,
+                          controller.correlationSelection() == index, true,
+                          Tone::Positive);
+        }
+        return;
+    }
     if (controller.view() == TargetsView::NotesEdit) {
         renderHeader(tr(UiTextId::TargetsNotesEdit), clearContent);
         char notes[TargetRecord::kNotesCapacity + 1] = {};
@@ -11851,59 +12203,80 @@ void renderTargetsPage(bool clearContent) {
             renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
             return;
         }
-        char favorite[48] = {};
-        const char* favoriteValue = tr(
-            target->favorite ? UiTextId::TargetsFavoriteOn
-                             : UiTextId::TargetsFavoriteOff);
-        if (targetsMutationState == TargetsMutationState::Saved &&
-            targetsMutationReport.actionKind == TargetActionKind::SetFavorite) {
-            std::snprintf(favorite, sizeof(favorite),
-                          tr(UiTextId::TargetsValueSavedFormat),
-                          favoriteValue);
-        } else {
-            std::snprintf(favorite, sizeof(favorite), "%s",
-                          targetsMutationState == TargetsMutationState::Failed
-                              ? tr(UiTextId::TargetsSaveFailed)
-                              : favoriteValue);
+        const std::size_t first = targetsFirstVisible(
+            controller.actionSelection());
+        const std::size_t end = TargetsController::kActionCount <
+                first + kVisibleTargetRows
+            ? TargetsController::kActionCount : first + kVisibleTargetRows;
+        for (std::size_t index = first; index < end; ++index) {
+            const char* label = "";
+            char note[TargetRecord::kNotesCapacity + 1] = {};
+            bool enabled = true;
+            Tone tone = Tone::Neutral;
+            switch (index) {
+                case 0: {
+                    label = tr(UiTextId::TargetsFavorite);
+                    const char* value = tr(target->favorite
+                        ? UiTextId::TargetsFavoriteOn
+                        : UiTextId::TargetsFavoriteOff);
+                    std::snprintf(note, sizeof(note), "%s",
+                                  targetsMutationState ==
+                                          TargetsMutationState::Failed
+                                      ? tr(UiTextId::TargetsSaveFailed)
+                                      : value);
+                    tone = target->favorite ? Tone::Positive : Tone::Muted;
+                    break;
+                }
+                case 1:
+                    label = tr(UiTextId::TargetsName);
+                    if (target->nameLength != 0) {
+                        std::memcpy(note, target->name.data(),
+                                    target->nameLength);
+                    } else {
+                        std::snprintf(note, sizeof(note), "%s",
+                                      tr(UiTextId::TargetsNameEmpty));
+                    }
+                    break;
+                case 2:
+                    label = tr(UiTextId::TargetsTags);
+                    std::snprintf(note, sizeof(note),
+                                  tr(UiTextId::TargetsTagsCountFormat),
+                                  static_cast<unsigned>(target->tagCount),
+                                  static_cast<unsigned>(
+                                      TargetRecord::kTagCountCapacity));
+                    tone = target->tagCount != 0
+                        ? Tone::Positive : Tone::Muted;
+                    break;
+                case 3:
+                    label = tr(UiTextId::TargetsNotes);
+                    if (target->notesLength != 0) {
+                        std::memcpy(note, target->notes.data(),
+                                    target->notesLength);
+                        tone = Tone::Positive;
+                    } else {
+                        std::snprintf(note, sizeof(note), "%s",
+                                      tr(UiTextId::TargetsNotesEmpty));
+                        tone = Tone::Muted;
+                    }
+                    break;
+                default: {
+                    label = tr(UiTextId::TargetsCorrelations);
+                    const std::size_t count =
+                        controller.selectedCorrelationCount();
+                    std::snprintf(
+                        note, sizeof(note),
+                        tr(UiTextId::TargetsCorrelationsCountFormat),
+                        static_cast<unsigned>(count));
+                    enabled = count != 0;
+                    tone = enabled ? Tone::Positive : Tone::Muted;
+                    break;
+                }
+            }
+            fitTargetRowText(note, sizeof(note), UiTextRole::Meta);
+            renderMenuRow(Components::homeRow(index - first), label, note,
+                          controller.actionSelection() == index, enabled,
+                          tone);
         }
-        renderMenuRow(Components::homeRow(0),
-                      tr(UiTextId::TargetsFavorite), favorite,
-                      controller.actionSelection() == 0, true,
-                      targetsMutationState == TargetsMutationState::Failed
-                          ? Tone::Danger
-                          : target->favorite ? Tone::Positive : Tone::Muted);
-        char name[TargetRecord::kNameCapacity + 1] = {};
-        if (target->nameLength != 0) {
-            std::memcpy(name, target->name.data(), target->nameLength);
-        } else {
-            std::snprintf(name, sizeof(name), "%s",
-                          tr(UiTextId::TargetsNameEmpty));
-        }
-        fitTargetRowText(name, sizeof(name), UiTextRole::Meta);
-        renderMenuRow(Components::homeRow(1),
-                      tr(UiTextId::TargetsName), name,
-                      controller.actionSelection() == 1, true, Tone::Neutral);
-        char tags[24] = {};
-        std::snprintf(tags, sizeof(tags),
-                      tr(UiTextId::TargetsTagsCountFormat),
-                      static_cast<unsigned>(target->tagCount),
-                      static_cast<unsigned>(TargetRecord::kTagCountCapacity));
-        renderMenuRow(Components::homeRow(2),
-                      tr(UiTextId::TargetsTags), tags,
-                      controller.actionSelection() == 2, true,
-                      target->tagCount != 0 ? Tone::Positive : Tone::Muted);
-        char notes[TargetRecord::kNotesCapacity + 1] = {};
-        if (target->notesLength != 0) {
-            std::memcpy(notes, target->notes.data(), target->notesLength);
-        } else {
-            std::snprintf(notes, sizeof(notes), "%s",
-                          tr(UiTextId::TargetsNotesEmpty));
-        }
-        fitTargetRowText(notes, sizeof(notes), UiTextRole::Meta);
-        renderMenuRow(Components::homeRow(3),
-                      tr(UiTextId::TargetsNotes), notes,
-                      controller.actionSelection() == 3, true,
-                      target->notesLength != 0 ? Tone::Positive : Tone::Muted);
         return;
     }
     if (controller.view() == TargetsView::Detail) {
@@ -14982,6 +15355,12 @@ void emitTargetsState(Stream& reply) {
                     ? "tag_edit"
               : controller->view() == TargetsView::NotesEdit
                     ? "notes_edit"
+              : controller->view() == TargetsView::CorrelationList
+                    ? "correlation_list"
+              : controller->view() == TargetsView::CorrelationReview
+                    ? "correlation_review"
+              : controller->view() == TargetsView::CorrelationEvidence
+                    ? "correlation_evidence"
               : controller->view() == TargetsView::Compare
                     ? "compare"
                     : controller->view() == TargetsView::CompareDetail
@@ -15090,9 +15469,14 @@ void emitTargetsState(Stream& reply) {
         "\"notes_editor_selection\":%u,\"notes_editor_length\":%u,"
         "\"notes_editor_prefix_hex\":\"%s\",\"notes_editor_glyph\":%u,"
         "\"notes_editor_dirty\":%s,"
+        "\"correlation_count\":%u,\"correlation_selection\":%u,"
+        "\"correlation_review_selection\":%u,"
         "\"read_only\":false,\"write_enabled\":%s,"
         "\"target_state_generation\":%lu,\"target_state_head\":\"%s\","
         "\"mutation_state\":\"%s\",\"mutation_status\":\"%s\","
+        "\"mutation_correlation\":%s,"
+        "\"mutation_correlation_kind\":\"%s\","
+        "\"mutation_correlation_status\":\"%s\","
         "\"mutation_persisted\":%s,\"mutation_generation\":%lu,"
         "\"mutation_action_us\":%llu,\"mutation_elapsed_us\":%llu,"
         "\"mutation_bytes_written\":%llu,\"mutation_write_calls\":%lu,"
@@ -15208,6 +15592,12 @@ void emitTargetsState(Stream& reply) {
                                   ? 0 : controller->notesEditorGlyph()),
         controller != nullptr && controller->notesEditorDirty()
             ? "true" : "false",
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->selectedCorrelationCount()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->correlationSelection()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->correlationReviewSelection()),
         controller != nullptr &&
                 ((controller->view() == TargetsView::Actions &&
                   controller->selectedAction() == TargetActionItem::Favorite) ||
@@ -15218,12 +15608,19 @@ void emitTargetsState(Stream& reply) {
                  (controller->view() == TargetsView::TagEdit &&
                   controller->tagEditorCanSave()) ||
                  (controller->view() == TargetsView::NotesEdit &&
-                  controller->notesEditorDirty())) &&
+                  controller->notesEditorDirty()) ||
+                 (controller->view() == TargetsView::CorrelationReview &&
+                  controller->correlationReviewSelection() >= 2)) &&
                 targetsMutationState != TargetsMutationState::Saving
             ? "true" : "false",
         static_cast<unsigned long>(targetsStateGeneration), stateHead,
         targetsMutationStateName(targetsMutationState),
         targetsMutationStatus,
+        targetsMutationReport.correlation ? "true" : "false",
+        targetsMutationReport.correlationKind == CorrelationActionKind::Accept
+            ? "accept" : "reject",
+        leshy1::services::targets::correlationDecisionStatusName(
+            targetsMutationReport.correlationStatus),
         targetsMutationReport.persisted ? "true" : "false",
         static_cast<unsigned long>(targetsMutationReport.generation),
         static_cast<unsigned long long>(targetsMutationStartActionUs),
@@ -16684,6 +17081,9 @@ bool applyUiAction(UiAction action, bool render = true) {
              controller.view() == TargetsView::TagList ||
              controller.view() == TargetsView::TagEdit ||
              controller.view() == TargetsView::NotesEdit ||
+             controller.view() == TargetsView::CorrelationList ||
+             controller.view() == TargetsView::CorrelationReview ||
+             controller.view() == TargetsView::CorrelationEvidence ||
              controller.view() == TargetsView::CompareDetail) &&
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
@@ -16716,6 +17116,9 @@ bool applyUiAction(UiAction action, bool render = true) {
                     break;
                 case TargetActionItem::Notes:
                     changed = controller.openNotesEditor();
+                    break;
+                case TargetActionItem::Correlations:
+                    changed = controller.openCorrelationList();
                     break;
             }
         } else if (controller.view() == TargetsView::NameEdit &&
@@ -16782,6 +17185,31 @@ bool applyUiAction(UiAction action, bool render = true) {
                 case 1: changed = controller.appendNotesEditorGlyph(); break;
                 case 2: changed = controller.eraseNotesEditorGlyph(); break;
                 case 3: changed = requestTargetsNotesMutation(); break;
+            }
+        } else if ((controller.view() == TargetsView::CorrelationList ||
+                    controller.view() == TargetsView::CorrelationReview) &&
+                   action == UiAction::Up) {
+            handled = true;
+            changed = controller.previous();
+        } else if ((controller.view() == TargetsView::CorrelationList ||
+                    controller.view() == TargetsView::CorrelationReview) &&
+                   action == UiAction::Down) {
+            handled = true;
+            changed = controller.next();
+        } else if (controller.view() == TargetsView::CorrelationList &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            changed = controller.openSelected();
+        } else if (controller.view() == TargetsView::CorrelationReview &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            if (controller.correlationReviewSelection() < 2) {
+                changed = controller.openSelected();
+            } else {
+                changed = requestTargetsCorrelationMutation(
+                    controller.correlationReviewSelection() == 2
+                        ? CorrelationActionKind::Accept
+                        : CorrelationActionKind::Reject);
             }
         } else if (controller.view() == TargetsView::List ||
                    controller.view() == TargetsView::Compare) {
@@ -17342,12 +17770,39 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
     }
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
         targetsProductRuntime->controller.view() == TargetsView::Actions) {
+        const std::size_t first = targetsFirstVisible(
+            targetsProductRuntime->controller.actionSelection());
         return {leshy1::ui::hitTouchTarget(
-                    TouchTargetLayout::HomeRows, point, 0,
+                    TouchTargetLayout::HomeRows, point,
+                    static_cast<std::uint8_t>(first),
                     static_cast<std::uint8_t>(
                         TargetsController::kActionCount)),
                 static_cast<std::uint8_t>(
                     targetsProductRuntime->controller.actionSelection())};
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() ==
+            TargetsView::CorrelationList) {
+        const TargetsController& controller =
+            targetsProductRuntime->controller;
+        const std::size_t first = targetsFirstVisible(
+            controller.correlationSelection());
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point,
+                    static_cast<std::uint8_t>(first),
+                    static_cast<std::uint8_t>(
+                        controller.selectedCorrelationCount())),
+                static_cast<std::uint8_t>(controller.correlationSelection())};
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() ==
+            TargetsView::CorrelationReview) {
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point, 0,
+                    static_cast<std::uint8_t>(
+                        TargetsController::kCorrelationReviewControlCount)),
+                static_cast<std::uint8_t>(targetsProductRuntime->controller
+                                              .correlationReviewSelection())};
     }
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
         targetsProductRuntime->controller.view() == TargetsView::NameEdit) {

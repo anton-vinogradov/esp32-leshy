@@ -19,6 +19,10 @@ constexpr std::size_t kTargetStateMaxBytes = 32768;
 // schema-v1 plus two empty arrays.  It never needs the full decision/merge
 // history buffer and therefore has a separate no-PSRAM product bound.
 constexpr std::size_t kTargetCatalogStateMaxBytes = 16384;
+// Catalog plus the complete bounded correlation decision log, while merge
+// history is still empty.  This is the on-device S6.4 profile for no-PSRAM
+// boards; it remains schema-v3 compatible with the full state codec.
+constexpr std::size_t kTargetDecisionStateMaxBytes = 24576;
 constexpr std::size_t kTargetStateManifestMaxBytes = 160;
 
 struct TargetManifest final {
@@ -113,5 +117,24 @@ TargetCodecStatus reopenTargetCatalogState(
     const std::uint8_t* manifestBytes, std::size_t manifestSize,
     const std::uint8_t* stateBytes, std::size_t stateSize,
     domain::targets::TargetCatalog* catalog);
+
+TargetCodecStatus encodeTargetDecisionState(
+    const domain::targets::TargetCatalog& catalog,
+    const domain::targets::CorrelationDecisionLog& decisions,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
+TargetCodecStatus encodeTargetDecisionStateManifest(
+    const domain::targets::TargetCatalog& catalog,
+    const domain::targets::CorrelationDecisionLog& decisions,
+    const std::uint8_t* stateBytes, std::size_t stateSize,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
+TargetCodecStatus decodeTargetDecisionState(
+    const std::uint8_t* input, std::size_t size,
+    domain::targets::TargetCatalog* catalog,
+    domain::targets::CorrelationDecisionLog* decisions);
+TargetCodecStatus reopenTargetDecisionState(
+    const std::uint8_t* manifestBytes, std::size_t manifestSize,
+    const std::uint8_t* stateBytes, std::size_t stateSize,
+    domain::targets::TargetCatalog* catalog,
+    domain::targets::CorrelationDecisionLog* decisions);
 
 }  // namespace leshy1::storage

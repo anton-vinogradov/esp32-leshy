@@ -56,9 +56,9 @@ def main() -> int:
     mutation_end = entry.index("bool requestTargetsFavoriteMutation")
     mutation_worker = entry[mutation_start:mutation_end]
     require(failures,
-            load_product.index("TargetCatalogStateStoreWorkspace();") <
+            load_product.index("TargetDecisionStateStoreWorkspace();") <
                 load_product.index("filesystem.beginReadOnly()") and
-            mutation_worker.index("TargetCatalogStateStoreWorkspace();") <
+            mutation_worker.index("TargetDecisionStateStoreWorkspace();") <
                 mutation_worker.index("filesystem.begin()") and
             "workspace_unavailable_before_mount" in mutation_worker and
             r'\"mutation_heap_largest_before_mount\":%lu' in entry,
@@ -106,8 +106,8 @@ def main() -> int:
             r'\"read_only\":false' in entry and
             r'\"write_enabled\":%s' in entry and
             r'\"mutation_state\":\"%s\"' in entry and
-            "commitTargetCatalogState(" in entry and
-            "recoverTargetCatalogState(" in entry and
+            "commitTargetDecisionState(" in entry and
+            "recoverTargetDecisionState(" in entry and
             "TargetActionKind::SetFavorite" in entry and
             "TargetActionKind::SetName" in entry and
             "TargetActionKind::SetNotes" in entry and
@@ -120,6 +120,16 @@ def main() -> int:
             r'\"selected_notes_prefix_hex\":\"%s\"' in entry and
             r'\"notes_editor_dirty\":%s' in entry,
             "Targets needs a machine-readable release-test state")
+    require(failures,
+            "buildSessionCorrelationReview(" in controller and
+            "sessionCorrelationCandidatePending(" in controller and
+            "CorrelationDecisionLog* targetsMutationDecisions" in entry and
+            "CorrelationService service(*catalog, *decisions, lookup)" in entry and
+            "requestTargetsCorrelationMutation(" in entry and
+            r'\"correlation_count\":%u' in entry and
+            r'\"mutation_correlation_status\":\"%s\"' in entry,
+            "Targets correlation review must keep candidates independent, "
+            "show explainable proposals and atomically persist accept/reject")
     require(failures,
             '"git", "rev-parse", "HEAD"' in runner and
             '"git", "status", "--porcelain"' in runner and
@@ -226,6 +236,11 @@ def main() -> int:
                     "TargetsTagEdit", "TargetsTagAdd", "TargetsTagRemove",
                     "TargetsTagSave", "TargetsNotes", "TargetsNotesEdit",
                     "TargetsNotesSave", "TargetsValueSavedFormat",
+                    "TargetsCorrelations", "TargetsCorrelationsCountFormat",
+                    "TargetsCorrelationList", "TargetsCorrelationReview",
+                    "TargetsCorrelationEvidence", "TargetsCorrelationExisting",
+                    "TargetsCorrelationCandidate", "TargetsCorrelationAccept",
+                    "TargetsCorrelationReject",
                     "NavDelete", "NavChanges"):
         require(failures, f"LESHY_UI_TEXT({text_id}," in strings,
                 f"bilingual UI string missing: {text_id}")
@@ -238,8 +253,8 @@ def main() -> int:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
     print("Targets product contract passed: exact-CID sessions, bounded "
-          "lifecycle, list/detail/compare/actions, pre-mount codec workspace, "
-          "keypad/touch and mutation state probe")
+          "lifecycle, list/detail/compare/actions/correlation review, "
+          "pre-mount codec workspace, keypad/touch and mutation state probe")
     return 0
 
 

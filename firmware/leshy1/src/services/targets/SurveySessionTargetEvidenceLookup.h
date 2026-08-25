@@ -4,6 +4,7 @@
 
 #include "domain/targets/TargetComparison.h"
 #include "services/survey/SurveySession.h"
+#include "services/targets/CorrelationService.h"
 
 namespace leshy1::services::targets {
 
@@ -15,7 +16,8 @@ struct TargetComparisonSessionBinding final {
 // Exact read-only bridge over the two recovered/retained Sessions selected by
 // the user. It never falls through to another generation or a newer record.
 class SurveySessionTargetEvidenceLookup final
-    : public domain::targets::TargetComparisonEvidenceLookup {
+    : public domain::targets::TargetComparisonEvidenceLookup,
+      public CorrelationEvidenceLookup {
 public:
     SurveySessionTargetEvidenceLookup(
         const TargetComparisonSessionBinding& baseline,
@@ -27,6 +29,8 @@ public:
     bool loadExact(
         const domain::targets::TargetEvidenceRef& evidence,
         domain::observations::Observation* output) const override;
+    bool containsExact(
+        const domain::targets::TargetEvidenceRef& evidence) const override;
 
 private:
     std::array<TargetComparisonSessionBinding, 2> bindings_{};

@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "services/targets/SessionTargetAdmission.h"
+#include "services/targets/SessionCorrelationReview.h"
 #include "services/targets/SurveySessionTargetEvidenceLookup.h"
 #include "services/targets/TargetComparisonService.h"
 
@@ -166,6 +167,23 @@ bool selectStrongestIdentities(
                         sourceIdentityCount));
 }
 
+void removePendingCorrelations(
+    const services::targets::SessionCorrelationProposalSet& proposals,
+    services::targets::SessionTargetIdentityFilter* filter) {
+    if (filter == nullptr) return;
+    const std::size_t originalSize = filter->size;
+    std::size_t output = 0;
+    for (std::size_t index = 0; index < originalSize; ++index) {
+        if (services::targets::sessionCorrelationCandidatePending(
+                proposals, filter->identities[index])) {
+            continue;
+        }
+        filter->identities[output++] = filter->identities[index];
+    }
+    filter->size = output;
+    while (output < originalSize) filter->identities[output++] = {};
+}
+
 }  // namespace
 
 const char* targetsLoadStatusName(TargetsLoadStatus status) {
@@ -185,6 +203,8 @@ const char* targetsLoadStatusName(TargetsLoadStatus status) {
 
 void TargetsController::reset() {
     workspace_.catalog.clear();
+    workspace_.decisions.clear();
+    workspace_.correlations = {};
     domain::targets::resetTargetComparisonResult(&workspace_.comparison);
     rows_.fill({});
     baseline_ = {};
@@ -211,6 +231,9 @@ void TargetsController::reset() {
     originalNotes_.fill('\0');
     originalNotesLength_ = 0;
     notesEditorGlyphSelection_ = 0;
+    correlationSelection_ = 0;
+    correlationReviewSelection_ = 0;
+    correlationEvidenceCandidate_ = false;
     view_ = TargetsView::List;
     status_ = TargetsLoadStatus::SessionUnavailable;
     comparisonAvailable_ = false;
@@ -230,6 +253,13 @@ TargetsLoadStatus TargetsController::load(
 }
 
 TargetsLoadStatus TargetsController::load(
+    const TargetProductBinding& current,
+    const domain::targets::TargetCatalog& persisted,
+    const domain::targets::CorrelationDecisionLog& decisions) {
+    return loadBindings({}, current, false, &persisted, &decisions);
+}
+
+TargetsLoadStatus TargetsController::load(
     const TargetProductBinding& baseline,
     const TargetProductBinding& current) {
     return loadBindings(baseline, current, true);
@@ -242,10 +272,19 @@ TargetsLoadStatus TargetsController::load(
     return loadBindings(baseline, current, true, &persisted);
 }
 
+TargetsLoadStatus TargetsController::load(
+    const TargetProductBinding& baseline,
+    const TargetProductBinding& current,
+    const domain::targets::TargetCatalog& persisted,
+    const domain::targets::CorrelationDecisionLog& decisions) {
+    return loadBindings(baseline, current, true, &persisted, &decisions);
+}
+
 TargetsLoadStatus TargetsController::loadBindings(
     const TargetProductBinding& baseline,
     const TargetProductBinding& current, bool compare,
-    const domain::targets::TargetCatalog* persisted) {
+    const domain::targets::TargetCatalog* persisted,
+    const domain::targets::CorrelationDecisionLog* decisions) {
     reset();
     if (!bindingValid(current) || (compare && !bindingValid(baseline)) ||
         (compare && baseline.session == current.session)) {
@@ -253,6 +292,7 @@ TargetsLoadStatus TargetsController::loadBindings(
         return status_;
     }
     if (persisted != nullptr) workspace_.catalog = *persisted;
+    if (decisions != nullptr) workspace_.decisions = *decisions;
     baseline_ = baseline;
     current_ = current;
     services::targets::SessionTargetIdentityFilter filter{};
@@ -279,6 +319,21 @@ TargetsLoadStatus TargetsController::loadBindings(
             status_ = TargetsLoadStatus::AdmissionRejected;
             return status_;
         }
+        const auto baselineSource = comparisonSource(baseline);
+        const auto currentSource = comparisonSource(current);
+        const auto correlationStatus =
+            services::targets::buildSessionCorrelationReview(
+                {baselineSource, baseline.session},
+                {currentSource, current.session}, workspace_.catalog,
+                workspace_.decisions, &workspace_.correlations);
+        if (correlationStatus !=
+            services::targets::SessionCorrelationReviewStatus::Ready) {
+            delete scratch;
+            reset();
+            status_ = TargetsLoadStatus::EvidenceUnavailable;
+            return status_;
+        }
+        removePendingCorrelations(workspace_.correlations, &filter);
     }
     const auto admittedCurrent = services::targets::admitSessionTargets(
         *current.session, current.generation, workspace_.catalog,
@@ -522,6 +577,21 @@ bool TargetsController::next() {
         ++notesEditorSelection_;
         return true;
     }
+    if (view_ == TargetsView::CorrelationList) {
+        if (correlationSelection_ + 1 >= selectedCorrelationCount()) {
+            return false;
+        }
+        ++correlationSelection_;
+        return true;
+    }
+    if (view_ == TargetsView::CorrelationReview) {
+        if (correlationReviewSelection_ + 1 >=
+            kCorrelationReviewControlCount) {
+            return false;
+        }
+        ++correlationReviewSelection_;
+        return true;
+    }
     return false;
 }
 
@@ -561,6 +631,16 @@ bool TargetsController::previous() {
         --notesEditorSelection_;
         return true;
     }
+    if (view_ == TargetsView::CorrelationList) {
+        if (correlationSelection_ == 0) return false;
+        --correlationSelection_;
+        return true;
+    }
+    if (view_ == TargetsView::CorrelationReview) {
+        if (correlationReviewSelection_ == 0) return false;
+        --correlationReviewSelection_;
+        return true;
+    }
     return false;
 }
 
@@ -578,6 +658,19 @@ bool TargetsController::openSelected() {
     if (view_ == TargetsView::Detail && selectedTarget() != nullptr) {
         view_ = TargetsView::Actions;
         actionSelection_ = 0;
+        return true;
+    }
+    if (view_ == TargetsView::CorrelationList &&
+        selectedCorrelationCount() != 0) {
+        view_ = TargetsView::CorrelationReview;
+        correlationReviewSelection_ = 0;
+        return true;
+    }
+    if (view_ == TargetsView::CorrelationReview &&
+        correlationReviewSelection_ < 2 &&
+        reviewedCorrelationProposal() != nullptr) {
+        correlationEvidenceCandidate_ = correlationReviewSelection_ == 1;
+        view_ = TargetsView::CorrelationEvidence;
         return true;
     }
     return false;
@@ -613,7 +706,8 @@ TargetActionItem TargetsController::selectedAction() const {
         case 0: return TargetActionItem::Favorite;
         case 1: return TargetActionItem::Name;
         case 2: return TargetActionItem::Tags;
-        default: return TargetActionItem::Notes;
+        case 3: return TargetActionItem::Notes;
+        default: return TargetActionItem::Correlations;
     }
 }
 
@@ -714,6 +808,17 @@ bool TargetsController::openNotesEditor() {
     notesEditorSelection_ = 0;
     notesEditorGlyphSelection_ = 0;
     view_ = TargetsView::NotesEdit;
+    return true;
+}
+
+bool TargetsController::openCorrelationList() {
+    if (view_ != TargetsView::Actions ||
+        selectedAction() != TargetActionItem::Correlations ||
+        selectedTarget() == nullptr || selectedCorrelationCount() == 0) {
+        return false;
+    }
+    correlationSelection_ = 0;
+    view_ = TargetsView::CorrelationList;
     return true;
 }
 
@@ -824,6 +929,18 @@ bool TargetsController::back() {
         view_ = TargetsView::Actions;
         return true;
     }
+    if (view_ == TargetsView::CorrelationEvidence) {
+        view_ = TargetsView::CorrelationReview;
+        return true;
+    }
+    if (view_ == TargetsView::CorrelationReview) {
+        view_ = TargetsView::CorrelationList;
+        return true;
+    }
+    if (view_ == TargetsView::CorrelationList) {
+        view_ = TargetsView::Actions;
+        return true;
+    }
     if (view_ == TargetsView::Actions) {
         view_ = TargetsView::Detail;
         return true;
@@ -861,6 +978,50 @@ const domain::targets::TargetRecord* TargetsController::selectedTarget() const {
     const TargetListRow* selected = selectedRow();
     return selected == nullptr ? nullptr
                                : workspace_.catalog.find(selected->targetId);
+}
+
+std::size_t TargetsController::selectedCorrelationCount() const {
+    const auto* target = selectedTarget();
+    if (target == nullptr) return 0;
+    std::size_t count = 0;
+    for (std::size_t index = 0; index < workspace_.correlations.size;
+         ++index) {
+        if (domain::targets::targetIdEqual(
+                workspace_.correlations.values[index].targetId, target->id)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+const domain::targets::CorrelationProposal*
+TargetsController::selectedCorrelationProposal(std::size_t index) const {
+    const auto* target = selectedTarget();
+    if (target == nullptr) return nullptr;
+    std::size_t found = 0;
+    for (std::size_t proposalIndex = 0;
+         proposalIndex < workspace_.correlations.size; ++proposalIndex) {
+        const auto& proposal = workspace_.correlations.values[proposalIndex];
+        if (!domain::targets::targetIdEqual(proposal.targetId, target->id)) {
+            continue;
+        }
+        if (found++ == index) return &proposal;
+    }
+    return nullptr;
+}
+
+const domain::targets::CorrelationProposal*
+TargetsController::reviewedCorrelationProposal() const {
+    return selectedCorrelationProposal(correlationSelection_);
+}
+
+bool TargetsController::correlationEvidence(
+    bool candidate, domain::observations::Observation* output) const {
+    const auto* proposal = reviewedCorrelationProposal();
+    if (proposal == nullptr || output == nullptr) return false;
+    if (candidate) return loadExact(proposal->candidateEvidence, output);
+    if (proposal->featureCount == 0) return false;
+    return loadExact(proposal->features[0].targetEvidence, output);
 }
 
 const domain::targets::TargetComparisonItem* TargetsController::comparisonItem(
