@@ -50,6 +50,8 @@ QUERY_PLACEHOLDERS = {
 STREAM_CONTRACTS = {
     "capture.ir.export.csv": (
         "leshy.capture.infrared_raw.csv.v1", "csv_begin", "csv_end"),
+    "capture.subghz.export.csv": (
+        "leshy.capture.subghz_raw.csv.v1", "csv_begin", "csv_end"),
     "library.export.csv": ("leshy.library.csv.v1", "begin", "end"),
 }
 
@@ -171,12 +173,17 @@ def fixture_admission_failures(record: dict[str, Any], version: str,
         "ir_tx_inactive": True,
         "nrf_ce_inactive": True,
         "nrf_powered_down": True,
+        "cc_transmit_active": False,
+        "cc_idle": True,
+        "cc_power_cleared": True,
+        "cc_tx_fifo_cleared": True,
         "buzzer_inactive": True,
         "fixed_vector_only": True,
         "auto_arm": False,
         "watchdog_armed": True,
         "maximum_ir_emission_us": 100000,
         "maximum_nrf_carrier_us": 2500000,
+        "maximum_cc1101_emission_us": 250000,
         "session_lifetime_ms": 5000,
     }
     return expect(record, expected, "fixture_admission")
@@ -224,7 +231,12 @@ def fixture_inactive_failures(record: dict[str, Any],
         "ir_tx_inactive": True,
         "nrf_ce_inactive": True,
         "nrf_powered_down": True,
+        "cc_transmit_active": False,
+        "cc_idle": True,
+        "cc_power_cleared": True,
+        "cc_tx_fifo_cleared": True,
         "buzzer_inactive": True,
+        "output_inactive": True,
     }, label)
 
 
@@ -827,6 +839,10 @@ def main() -> int:
                 if role == "fixture":
                     nrf_start = command.startswith(
                         "fixture.nrf24.carrier.start ")
+                    cc_ook_once = command.startswith(
+                        "fixture.cc1101.ook.once ")
+                    cc_fsk_once = command.startswith(
+                        "fixture.cc1101.fsk.once ")
                     if not nrf_start:
                         step_failures.extend(fixture_inactive_failures(
                             record, step_id))
@@ -855,6 +871,55 @@ def main() -> int:
                             step_failures.append(
                                 f"{step_id}: fixture vector repeated")
                         fixture_vector_executed = "infrared_nec"
+                    elif cc_ook_once or cc_fsk_once:
+                        signal = "cc1101_fsk" if cc_fsk_once else "cc1101_ook"
+                        vector = ("cc1101-fsk-433920-min" if cc_fsk_once else
+                                  "cc1101-ook-433920-min")
+                        packet_count = 1 if cc_fsk_once else 4
+                        step_failures.extend(expect(record, {
+                            "state": "complete",
+                            "signal": signal,
+                            "vector_id": vector,
+                            "armed": False,
+                            "start_count": int(
+                                fixture_identity.get("start_count", 0)) + 1,
+                            "stop_count": int(
+                                fixture_identity.get("stop_count", 0)) + 1,
+                            "emission_count": int(
+                                fixture_identity.get("emission_count", 0)) + 1,
+                            "cc_frequency_khz": 433920,
+                            "cc_power_dbm": -15,
+                            "cc_patable": 29,
+                            "cc_packet_length": 60,
+                            "cc_hardware_auto_idle": True,
+                            "cc_transmit_active": False,
+                            "cc_idle": True,
+                            "cc_power_cleared": True,
+                            "cc_tx_fifo_cleared": True,
+                            "cc_start_error": "none",
+                            "cc_part_number": 0,
+                            "cc_tx_strobes": packet_count,
+                            "cc_patable_writes": 2,
+                            "cc_tx_fifo_writes": packet_count,
+                            "cc_tx_fifo_bytes": packet_count * 60,
+                        }, step_id))
+                        step_failures.extend(evaluate_checks(record, [{
+                            "path": "last_duration_us", "op": "gt",
+                            "value": 0,
+                        }, {
+                            "path": "last_duration_us", "op": "lte",
+                            "value": 250000,
+                        }, {
+                            "path": "cc_version", "op": "ne",
+                            "value": 0,
+                        }, {
+                            "path": "cc_version", "op": "ne",
+                            "value": 255,
+                        }], step_id))
+                        if fixture_vector_executed:
+                            step_failures.append(
+                                f"{step_id}: fixture vector repeated")
+                        fixture_vector_executed = signal
                     elif nrf_start:
                         step_failures.extend(expect(record, {
                             "state": "running",

@@ -13,7 +13,7 @@
 #include "FixtureSession.h"
 
 #ifndef LESHY_FIXTURE_VERSION
-#define LESHY_FIXTURE_VERSION "0.2.5-shared-pin-safe"
+#define LESHY_FIXTURE_VERSION "0.3.0-subghz-safe"
 #endif
 
 namespace {
@@ -63,6 +63,38 @@ constexpr std::uint8_t kNrfMinimumPowerCarrierSetup = 0x90;
 constexpr std::uint8_t kCcReadPartNumber = 0xF0;
 constexpr std::uint8_t kCcReadVersion = 0xF1;
 constexpr std::uint32_t kCcReadyTimeoutUs = 2000;
+constexpr std::uint32_t kCcSpiHz = 4000000;
+constexpr std::uint32_t kCcCrystalKHz = 26000;
+constexpr std::uint32_t kCcFrequencyKHz = 433920;
+constexpr std::int8_t kCcPowerDbm = -15;
+constexpr std::uint8_t kCcMinimumPowerTable = 0x1D;
+constexpr std::uint8_t kCcPacketLength = 60;
+constexpr std::uint8_t kCcOokPacketCount = 4;
+constexpr std::uint8_t kCcFskPacketCount = 1;
+constexpr std::uint32_t kCcInterPacketGapUs = 4000;
+constexpr std::uint8_t kCcWriteBurst = 0x40;
+constexpr std::uint8_t kCcReadSingle = 0x80;
+constexpr std::uint8_t kCcReadStatus = 0xC0;
+constexpr std::uint8_t kCcRegisterPacketLength = 0x06;
+constexpr std::uint8_t kCcRegisterPacketControl0 = 0x08;
+constexpr std::uint8_t kCcRegisterFsControl1 = 0x0B;
+constexpr std::uint8_t kCcRegisterFrequency2 = 0x0D;
+constexpr std::uint8_t kCcRegisterModemConfig4 = 0x10;
+constexpr std::uint8_t kCcRegisterModemConfig3 = 0x11;
+constexpr std::uint8_t kCcRegisterModemConfig2 = 0x12;
+constexpr std::uint8_t kCcRegisterDeviation = 0x15;
+constexpr std::uint8_t kCcRegisterMainStateMachine1 = 0x17;
+constexpr std::uint8_t kCcRegisterMainStateMachine0 = 0x18;
+constexpr std::uint8_t kCcRegisterMarcState = 0x35;
+constexpr std::uint8_t kCcRegisterTxBytes = 0x3A;
+constexpr std::uint8_t kCcRegisterPowerTable = 0x3E;
+constexpr std::uint8_t kCcRegisterTxFifo = 0x3F;
+constexpr std::uint8_t kCcCommandReset = 0x30;
+constexpr std::uint8_t kCcCommandTransmit = 0x35;
+constexpr std::uint8_t kCcCommandIdle = 0x36;
+constexpr std::uint8_t kCcCommandFlushTx = 0x3B;
+constexpr std::uint8_t kCcMarcIdle = 0x01;
+constexpr std::uint8_t kCcMarcTransmit = 0x13;
 constexpr int kNrfCsnPins[3] = {
     kNrfCsn1Pin, kNrfCsn2Pin, kNrfCsn3Pin};
 
@@ -91,16 +123,33 @@ bool nrfBusStarted = false;
 bool nrfTransactionOpen = false;
 bool nrfCarrierActive = false;
 bool nrfPoweredDown = true;
+bool ccBusStarted = false;
+bool ccTransactionOpen = false;
+bool ccTransmitActive = false;
+bool ccIdle = true;
+bool ccPowerCleared = true;
+bool ccTxFifoCleared = true;
+volatile bool ccAbortRequested = false;
 std::uint32_t nrfCarrierStartedUs = 0;
 const char* nrfStartError = "not_attempted";
 std::uint8_t nrfStatusReadback = 0xFF;
 std::uint8_t nrfConfigReadback = 0xFF;
 std::uint8_t nrfChannelReadback = 0xFF;
 std::uint8_t nrfRfSetupReadback = 0xFF;
+const char* ccStartError = "not_attempted";
+std::uint8_t ccStatusReadback = 0xFF;
+std::uint8_t ccPartNumberReadback = 0xFF;
+std::uint8_t ccVersionReadback = 0xFF;
+std::uint8_t ccMarcStateReadback = 0xFF;
+std::uint32_t ccTxStrobes = 0;
+std::uint32_t ccPowerTableWrites = 0;
+std::uint32_t ccTxFifoWrites = 0;
+std::uint32_t ccTxFifoBytes = 0;
 NrfInventoryReadback nrfPrimaryInventory;
 NrfInventoryReadback nrfSwappedInventory;
 
 void IRAM_ATTR quiesceFromIsr() {
+    ccAbortRequested = true;
     GPIO.out_w1tc = (1U << kBuzzerPin) | (1U << kIrTxPin) |
                      (1U << kNrfCe1Pin);
     GPIO.out1_w1tc.val = (1U << (kNrfCe2Pin - 32U));
@@ -284,7 +333,10 @@ NrfInventoryReadback probeNrfOrientation(int miso, int mosi) {
 }
 
 bool probeNrfInventory() {
-    if (nrfBusStarted || nrfCarrierActive) return false;
+    if (nrfBusStarted || nrfCarrierActive || ccBusStarted ||
+        ccTransactionOpen || ccTransmitActive) {
+        return false;
+    }
     holdNrfCeLow();
     nrfPrimaryInventory = probeNrfOrientation(
         kRadioMisoPin, kRadioMosiPin);
@@ -294,18 +346,312 @@ bool probeNrfInventory() {
     return outputsInactive();
 }
 
+bool beginCcBus() {
+    if (ccBusStarted || ccTransactionOpen || nrfBusStarted ||
+        nrfCarrierActive || !nrfPoweredDown) {
+        ccStartError = "radio_bus_unavailable";
+        return false;
+    }
+    holdNrfCeLow();
+    for (const int pin : {kNrfCsn1Pin, kNrfCsn2Pin, kNrfCsn3Pin,
+                          kCc1101CsPin, kSdCsPin}) {
+        digitalWrite(pin, HIGH);
+        pinMode(pin, OUTPUT);
+    }
+    SPI.begin(kRadioSckPin, kRadioMisoPin, kRadioMosiPin, -1);
+    ccBusStarted = true;
+    SPI.beginTransaction(SPISettings(kCcSpiHz, MSBFIRST, SPI_MODE0));
+    ccTransactionOpen = true;
+    return true;
+}
+
+void endCcBus() {
+    digitalWrite(kCc1101CsPin, HIGH);
+    holdChipSelectsHigh();
+    if (ccTransactionOpen) {
+        SPI.endTransaction();
+        ccTransactionOpen = false;
+    }
+    if (ccBusStarted) {
+        SPI.end();
+        ccBusStarted = false;
+    }
+    pinMode(kNrfCsn3Pin, INPUT);
+}
+
+bool selectCc() {
+    if (!ccBusStarted || !ccTransactionOpen) return false;
+    digitalWrite(kCc1101CsPin, LOW);
+    const std::uint32_t started = micros();
+    while (digitalRead(kRadioMisoPin) != LOW) {
+        if (micros() - started > kCcReadyTimeoutUs) {
+            digitalWrite(kCc1101CsPin, HIGH);
+            ccStartError = "ready_timeout";
+            return false;
+        }
+    }
+    return true;
+}
+
+void deselectCc() {
+    digitalWrite(kCc1101CsPin, HIGH);
+}
+
+bool ccCommand(std::uint8_t command) {
+    if (!selectCc()) return false;
+    ccStatusReadback = SPI.transfer(command);
+    deselectCc();
+    return true;
+}
+
+bool ccWriteRegister(std::uint8_t address, std::uint8_t value) {
+    if (!selectCc()) return false;
+    SPI.transfer(address);
+    SPI.transfer(value);
+    deselectCc();
+    if (address == kCcRegisterPowerTable) {
+        ++ccPowerTableWrites;
+        ccPowerCleared = value == 0U;
+    }
+    return true;
+}
+
+bool ccReadRegister(std::uint8_t address, std::uint8_t* value) {
+    if (value == nullptr || !selectCc()) return false;
+    SPI.transfer(static_cast<std::uint8_t>(address | kCcReadSingle));
+    *value = SPI.transfer(0xFF);
+    deselectCc();
+    return true;
+}
+
+bool ccReadStatusRegister(std::uint8_t address, std::uint8_t* value) {
+    if (value == nullptr || !selectCc()) return false;
+    SPI.transfer(static_cast<std::uint8_t>(address | kCcReadStatus));
+    *value = SPI.transfer(0xFF);
+    deselectCc();
+    return true;
+}
+
+bool ccWriteTxFifo(const std::uint8_t* payload, std::size_t size) {
+    if (payload == nullptr || size != kCcPacketLength || !selectCc()) {
+        return false;
+    }
+    SPI.transfer(static_cast<std::uint8_t>(
+        kCcRegisterTxFifo | kCcWriteBurst));
+    for (std::size_t index = 0; index < size; ++index) {
+        SPI.transfer(payload[index]);
+    }
+    deselectCc();
+    ++ccTxFifoWrites;
+    ccTxFifoBytes += size;
+    ccTxFifoCleared = false;
+    return true;
+}
+
+bool ccWaitForMarc(std::uint8_t expected, std::uint32_t timeoutUs) {
+    const std::uint32_t started = micros();
+    do {
+        if (!ccReadStatusRegister(kCcRegisterMarcState,
+                                  &ccMarcStateReadback)) {
+            return false;
+        }
+        ccMarcStateReadback &= 0x1FU;
+        if (ccMarcStateReadback == expected) return true;
+    } while (micros() - started <= timeoutUs);
+    ccStartError = expected == kCcMarcTransmit
+                       ? "transmit_state_timeout"
+                       : "idle_state_timeout";
+    return false;
+}
+
+bool resetCc() {
+    digitalWrite(kCc1101CsPin, HIGH);
+    delayMicroseconds(5);
+    digitalWrite(kCc1101CsPin, LOW);
+    delayMicroseconds(10);
+    digitalWrite(kCc1101CsPin, HIGH);
+    delayMicroseconds(45);
+    if (!ccCommand(kCcCommandReset)) return false;
+    delayMicroseconds(2000);
+    ccIdle = ccWaitForMarc(kCcMarcIdle, 3000);
+    return ccIdle;
+}
+
+bool tuneCc(std::uint32_t frequencyKHz) {
+    const std::uint32_t word = static_cast<std::uint32_t>(
+        (static_cast<std::uint64_t>(frequencyKHz) << 16U) /
+        kCcCrystalKHz);
+    return ccWriteRegister(kCcRegisterFrequency2,
+                           static_cast<std::uint8_t>(word >> 16U)) &&
+           ccWriteRegister(kCcRegisterFrequency2 + 1U,
+                           static_cast<std::uint8_t>(word >> 8U)) &&
+           ccWriteRegister(kCcRegisterFrequency2 + 2U,
+                           static_cast<std::uint8_t>(word));
+}
+
+bool readCcIdentity() {
+    return ccReadStatusRegister(0x30, &ccPartNumberReadback) &&
+           ccReadStatusRegister(0x31, &ccVersionReadback) &&
+           ccVersionReadback != 0x00U && ccVersionReadback != 0xFFU;
+}
+
+bool configureFixedCc(bool fsk) {
+    const struct RegisterValue final {
+        std::uint8_t address;
+        std::uint8_t value;
+    } settings[] = {
+        {kCcRegisterFsControl1, 0x08},
+        {kCcRegisterModemConfig4, 0x8C},
+        {kCcRegisterModemConfig3, 0x22},
+        {kCcRegisterModemConfig2,
+         static_cast<std::uint8_t>(fsk ? 0x00 : 0x30)},
+        {kCcRegisterDeviation, 0x47},
+        {kCcRegisterMainStateMachine1, 0x30},
+        {kCcRegisterMainStateMachine0, 0x18},
+        {kCcRegisterPacketControl0, 0x00},
+        {kCcRegisterPacketLength, kCcPacketLength},
+        {kCcRegisterPowerTable, kCcMinimumPowerTable},
+    };
+    if (!tuneCc(kCcFrequencyKHz)) return false;
+    for (const RegisterValue& setting : settings) {
+        if (!ccWriteRegister(setting.address, setting.value)) return false;
+    }
+
+    std::uint8_t modem = 0xFF;
+    std::uint8_t packetLength = 0;
+    std::uint8_t power = 0;
+    if (!ccReadRegister(kCcRegisterModemConfig2, &modem) ||
+        !ccReadRegister(kCcRegisterPacketLength, &packetLength) ||
+        !ccReadStatusRegister(kCcRegisterPowerTable, &power) ||
+        modem != static_cast<std::uint8_t>(fsk ? 0x00 : 0x30) ||
+        packetLength != kCcPacketLength || power != kCcMinimumPowerTable) {
+        ccStartError = "configuration_readback_mismatch";
+        return false;
+    }
+    return true;
+}
+
+bool stopCcTransmitter() {
+    if (!ccBusStarted) {
+        ccTransmitActive = false;
+        return ccIdle;
+    }
+    const bool idled = ccCommand(kCcCommandIdle) &&
+        ccWaitForMarc(kCcMarcIdle, 3000);
+    ccTransmitActive = false;
+    ccIdle = idled;
+    std::uint8_t power = 0xFF;
+    std::uint8_t txBytes = 0xFF;
+    const bool powerCleared =
+        ccWriteRegister(kCcRegisterPowerTable, 0x00) &&
+        ccReadStatusRegister(kCcRegisterPowerTable, &power) && power == 0U;
+    const bool fifoCleared = ccCommand(kCcCommandFlushTx) &&
+        ccReadStatusRegister(kCcRegisterTxBytes, &txBytes) &&
+        (txBytes & 0x7FU) == 0U;
+    ccPowerCleared = powerCleared;
+    ccTxFifoCleared = fifoCleared;
+    endCcBus();
+    return idled && powerCleared && fifoCleared;
+}
+
+bool emitFixedCcPacket(const std::uint8_t* payload) {
+    if (ccAbortRequested || !ccCommand(kCcCommandFlushTx) ||
+        !ccWriteTxFifo(payload, kCcPacketLength)) {
+        ccStartError = ccAbortRequested ? "abort_requested" : "fifo_load_failed";
+        return false;
+    }
+    ccTransmitActive = true;
+    ccIdle = false;
+    if (!ccCommand(kCcCommandTransmit)) {
+        ccStartError = "transmit_strobe_failed";
+        ccTransmitActive = false;
+        return false;
+    }
+    ++ccTxStrobes;
+    if (!ccWaitForMarc(kCcMarcTransmit, 3000) ||
+        !ccWaitForMarc(kCcMarcIdle, 20000)) {
+        ccTransmitActive = false;
+        return false;
+    }
+    ccTransmitActive = false;
+    ccIdle = true;
+    return true;
+}
+
+std::uint32_t emitFixedCcVector(bool fsk) {
+    ccStartError = "configuring";
+    ccStatusReadback = 0xFF;
+    ccPartNumberReadback = 0xFF;
+    ccVersionReadback = 0xFF;
+    ccMarcStateReadback = 0xFF;
+    ccTxStrobes = 0;
+    ccPowerTableWrites = 0;
+    ccTxFifoWrites = 0;
+    ccTxFifoBytes = 0;
+    ccPowerCleared = true;
+    ccTxFifoCleared = true;
+    ccAbortRequested = false;
+    if (!beginCcBus() || !resetCc() || !readCcIdentity()) {
+        if (std::strcmp(ccStartError, "configuring") == 0) {
+            ccStartError = "identity_unavailable";
+        }
+        stopCcTransmitter();
+        return 0;
+    }
+    if (!configureFixedCc(fsk)) {
+        stopCcTransmitter();
+        return 0;
+    }
+
+    std::uint8_t payload[kCcPacketLength] = {};
+    for (std::size_t index = 0; index < sizeof(payload); ++index) {
+        // The product rejects FSK edges shorter than 60 us.  At the fixed
+        // 38.4-kbaud modem rate, 0xF0 creates deterministic four-bit runs
+        // (~104 us) while the all-ones tail keeps the bounded vector well
+        // below the product's 512-edge capture ceiling.
+        payload[index] = fsk && index < 16U ? 0xF0 : 0xFF;
+    }
+    const std::uint8_t packetCount =
+        fsk ? kCcFskPacketCount : kCcOokPacketCount;
+    const std::uint32_t started = micros();
+    bool complete = true;
+    for (std::uint8_t packet = 0; packet < packetCount; ++packet) {
+        if (!emitFixedCcPacket(payload)) {
+            complete = false;
+            break;
+        }
+        if (packet + 1U < packetCount) {
+            delayMicroseconds(kCcInterPacketGapUs);
+        }
+    }
+    const std::uint32_t durationUs =
+        static_cast<std::uint32_t>(micros() - started);
+    const bool stopped = stopCcTransmitter();
+    if (!complete || !stopped || ccAbortRequested || durationUs == 0U ||
+        durationUs > leshy::hil::fixture::kMaximumCc1101EmissionUs) {
+        if (std::strcmp(ccStartError, "configuring") == 0) {
+            ccStartError = "emission_out_of_bounds";
+        }
+        return 0;
+    }
+    ccStartError = "none";
+    return durationUs;
+}
+
 void quiesceOutputs() {
     ledcWrite(kIrTxPin, 0);
     digitalWrite(kBuzzerPin, LOW);
     digitalWrite(kIrTxPin, LOW);
     stopNrfCarrier();
+    stopCcTransmitter();
 }
 
 bool outputsInactive() {
     return gpio_get_level(static_cast<gpio_num_t>(kBuzzerPin)) == 0 &&
            gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0 &&
            gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
-           gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 0;
+           gpio_get_level(static_cast<gpio_num_t>(kNrfCe2Pin)) == 0 &&
+           !ccTransmitActive && ccIdle && ccPowerCleared && ccTxFifoCleared;
 }
 
 void establishBootInvariant() {
@@ -376,6 +722,17 @@ void emitState(const char* kind) {
         "\"nrf_start_error\":\"%s\",\"nrf_status_readback\":%u,"
         "\"nrf_config_readback\":%u,\"nrf_channel_readback\":%u,"
         "\"nrf_rf_setup_readback\":%u,"
+        "\"cc_frequency_khz\":433920,\"cc_power_dbm\":-15,"
+        "\"cc_patable\":29,\"cc_packet_length\":60,"
+        "\"cc_hardware_auto_idle\":true,"
+        "\"cc_transmit_active\":%s,\"cc_idle\":%s,"
+        "\"cc_power_cleared\":%s,\"cc_tx_fifo_cleared\":%s,"
+        "\"cc_start_error\":\"%s\",\"cc_status_readback\":%u,"
+        "\"cc_part_number\":%u,\"cc_version\":%u,"
+        "\"cc_marc_state\":%u,\"cc_tx_strobes\":%lu,"
+        "\"cc_patable_writes\":%lu,\"cc_tx_fifo_writes\":%lu,"
+        "\"cc_tx_fifo_bytes\":%lu,"
+        "\"maximum_cc1101_emission_us\":250000,"
         "\"session_lifetime_ms\":5000,"
         "\"fixed_vector_only\":true,\"auto_arm\":false,"
         "\"watchdog_armed\":%s,\"last_error\":\"%s\"}\n",
@@ -406,6 +763,18 @@ void emitState(const char* kind) {
         static_cast<unsigned>(nrfConfigReadback),
         static_cast<unsigned>(nrfChannelReadback),
         static_cast<unsigned>(nrfRfSetupReadback),
+        ccTransmitActive ? "true" : "false",
+        ccIdle ? "true" : "false",
+        ccPowerCleared ? "true" : "false",
+        ccTxFifoCleared ? "true" : "false", ccStartError,
+        static_cast<unsigned>(ccStatusReadback),
+        static_cast<unsigned>(ccPartNumberReadback),
+        static_cast<unsigned>(ccVersionReadback),
+        static_cast<unsigned>(ccMarcStateReadback),
+        static_cast<unsigned long>(ccTxStrobes),
+        static_cast<unsigned long>(ccPowerTableWrites),
+        static_cast<unsigned long>(ccTxFifoWrites),
+        static_cast<unsigned long>(ccTxFifoBytes),
         watchdogReady ? "true" : "false", report.lastError);
 }
 
@@ -419,7 +788,14 @@ void emitError(const char* reason) {
         "\"nrf_powered_down\":%s,\"buzzer_inactive\":%s,"
         "\"nrf_start_error\":\"%s\",\"nrf_status_readback\":%u,"
         "\"nrf_config_readback\":%u,\"nrf_channel_readback\":%u,"
-        "\"nrf_rf_setup_readback\":%u}\n",
+        "\"nrf_rf_setup_readback\":%u,"
+        "\"cc_transmit_active\":%s,\"cc_idle\":%s,"
+        "\"cc_power_cleared\":%s,\"cc_tx_fifo_cleared\":%s,"
+        "\"cc_start_error\":\"%s\",\"cc_status_readback\":%u,"
+        "\"cc_part_number\":%u,\"cc_version\":%u,"
+        "\"cc_marc_state\":%u,\"cc_tx_strobes\":%lu,"
+        "\"cc_patable_writes\":%lu,\"cc_tx_fifo_writes\":%lu,"
+        "\"cc_tx_fifo_bytes\":%lu}\n",
         reason, fixtureStateName(session.report().state),
         gpio_get_level(static_cast<gpio_num_t>(kIrTxPin)) == 0 ? "true" : "false",
         gpio_get_level(static_cast<gpio_num_t>(kNrfCe1Pin)) == 0 &&
@@ -433,7 +809,19 @@ void emitError(const char* reason) {
         nrfStartError, static_cast<unsigned>(nrfStatusReadback),
         static_cast<unsigned>(nrfConfigReadback),
         static_cast<unsigned>(nrfChannelReadback),
-        static_cast<unsigned>(nrfRfSetupReadback));
+        static_cast<unsigned>(nrfRfSetupReadback),
+        ccTransmitActive ? "true" : "false",
+        ccIdle ? "true" : "false",
+        ccPowerCleared ? "true" : "false",
+        ccTxFifoCleared ? "true" : "false", ccStartError,
+        static_cast<unsigned>(ccStatusReadback),
+        static_cast<unsigned>(ccPartNumberReadback),
+        static_cast<unsigned>(ccVersionReadback),
+        static_cast<unsigned>(ccMarcStateReadback),
+        static_cast<unsigned long>(ccTxStrobes),
+        static_cast<unsigned long>(ccPowerTableWrites),
+        static_cast<unsigned long>(ccTxFifoWrites),
+        static_cast<unsigned long>(ccTxFifoBytes));
 }
 
 void emitNrfInventory() {
@@ -546,7 +934,8 @@ bool startFixedNrf24Carrier() {
         nrfStartError = "already_active";
         return false;
     }
-    if (nrfBusStarted) {
+    if (nrfBusStarted || ccBusStarted || ccTransactionOpen ||
+        ccTransmitActive) {
         nrfStartError = "spi_already_active";
         return false;
     }
@@ -702,6 +1091,32 @@ void handleCommand(char* line) {
             return;
         }
         emitState("running");
+        return;
+    }
+    if (std::strcmp(command, "fixture.cc1101.ook.once") == 0 ||
+        std::strcmp(command, "fixture.cc1101.fsk.once") == 0) {
+        const bool fsk = std::strcmp(
+            command, "fixture.cc1101.fsk.once") == 0;
+        const char* sessionId = nextToken(&context);
+        const char* vectorId = nextToken(&context);
+        const bool authorized = fsk
+            ? session.authorizeCc1101FskOnce(
+                  sessionId, vectorId, millis())
+            : session.authorizeCc1101OokOnce(
+                  sessionId, vectorId, millis());
+        if (nextToken(&context) != nullptr || !authorized) {
+            emitError(session.report().lastError);
+            return;
+        }
+        const std::uint32_t durationUs = emitFixedCcVector(fsk);
+        if (durationUs == 0U ||
+            !session.complete(
+                durationUs, outputsInactive() && nrfPoweredDown)) {
+            emitError(durationUs == 0U ? ccStartError
+                                       : session.report().lastError);
+            return;
+        }
+        emitState("result");
         return;
     }
     if (std::strcmp(command, "fixture.stop") == 0) {

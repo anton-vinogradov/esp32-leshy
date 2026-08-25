@@ -132,9 +132,17 @@ def retain(args: argparse.Namespace) -> int:
         require(fixture_cleanup.get("attempted") is True and
                 fixture_cleanup.get("ir_tx_inactive") is True and
                 fixture_cleanup.get("nrf_ce_inactive") is True and
+                fixture_cleanup.get("nrf_powered_down") is True and
                 fixture_cleanup.get("buzzer_inactive") is True and
                 fixture_cleanup.get("state") == "stopped",
                 "fixture cleanup is incomplete")
+        if str(fixture.get("version", "")).startswith("0.3."):
+            require(fixture_cleanup.get("cc_transmit_active") is False and
+                    fixture_cleanup.get("cc_idle") is True and
+                    fixture_cleanup.get("cc_power_cleared") is True and
+                    fixture_cleanup.get("cc_tx_fifo_cleared") is True and
+                    fixture_cleanup.get("output_inactive") is True,
+                    "fixture CC1101 cleanup is incomplete")
         fixture_source_paths = (
             "firmware/leshy_fixture/platformio.ini",
             "firmware/leshy_fixture/src/FixtureSession.h",

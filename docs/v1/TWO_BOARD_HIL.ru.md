@@ -2,21 +2,21 @@
 
 *Читать на: [English](TWO_BOARD_HIL.md) · **Русский***
 
-Статус: **принятый physical IR checkpoint S5; bounded positive path nRF24 реализован
-и ожидает exact two-board run**.
+Статус: **принятый physical IR checkpoint S5; bounded positive paths nRF24 и
+Sub-GHz реализованы и ожидают qualified вторую RF board**.
 
 ## Роли и граница доверия
 
 | Роль | Прошивка | Полномочия |
 |---|---|---|
 | `candidate` / board-01 | exact product candidate | проверяемое устройство; product radio paths остаются RX-only и не имеют replay/TX authority |
-| `fixture` / board-02 | отдельный image `leshy_fixture` | выдаёт один admitted fixed NEC либо minimum-power/time-bounded nRF24 vector |
+| `fixture` / qualified source board | отдельный image `leshy_fixture` | выдаёт один admitted fixed NEC, minimum-power/time-bounded nRF24 либо finite minimum-power CC1101 vector |
 | host | signal-specific wrapper → `run_hil_scenario.py` | связывает physical roles, exact commits/images/ID, выполняет scenario, снимает TFT/data и fail-closed отвергает отклонения |
 
 Исходники fixture находятся вне product project. Source guards запрещают fixture
 code внутри `firmware/leshy1`. Fixture build не содержит Wi-Fi, BLE, SD,
-произвольного payload/replay или product-side transmitter path. SPI существует
-только для проверенного fixed nRF24 register vector из
+произвольного payload/replay или product-side transmitter path. SPI transmission
+существует только для проверенных fixed nRF24 и CC1101 register vectors из
 [ADR-006](adr/ADR-006-bounded-signal-fixture.ru.md).
 
 ## Реализованный первый positive scenario
@@ -69,6 +69,15 @@ parser failure и Task-WDT удерживают CE всех трёх модул�
 duration нет. Это доказывает configured settings и functional reception, но не
 radiated power, sensitivity, range, calibrated frequency или instrumented RF silence.
 
+Fixture `0.3.0-subghz-safe` добавляет ровно два CC1101 vector на 433,920 МГц. Оба
+используют fixed packet mode 60 bytes и проверенный minimum PATABLE `0x1D` (примерно
+−15 dBm). OOK выдаёт четыре finite packet с gap 4 ms; FSK — один packet с числом
+transitions заведомо ниже product capture ceiling. Hardware возвращается в IDLE после
+каждого packet, общая measured emission ограничена 250 ms, cleanup очищает PATABLE и
+TX FIFO. До первого STX обязательны read-back identity, modulation, packet length и
+PA value. Console не принимает arbitrary band, frequency, power, payload, modulation,
+packet count или duration.
+
 ## Реализованный positive scenario nRF24
 
 `tests/hil/scenarios/nrf24-carrier-positive.json`:
@@ -84,6 +93,16 @@ radiated power, sensitivity, range, calibrated frequency или instrumented RF 
 
 Scenario становится gate-eligible только после сохранения physical результата. До
 этого это реализованный test contract, а не принятое RF evidence.
+
+## Реализованные positive scenarios Sub-GHz
+
+`subghz-ook-positive.json` и `subghz-fsk-positive.json` независимо выполняют один
+product journey: `Home → Sub-GHz → RAW Capture → modulation → 433 MHz`, exact bounded
+signal, успешный physical capture, live CSV, explicit Save, cold reboot, metadata
+Library и byte-exact persisted CSV. Они требуют zero product TX/PATABLE/FIFO calls,
+отсутствия truncation/edge overflow, exact fixture counters и terminal
+IDLE/PA-clear/FIFO-clear. Это gate-eligible contracts, но не physical evidence до
+зелёного прогона обоих на отдельной profiled source board.
 
 Первый physical attempt с fixture `0.2.0` завершился fail-safe до emission и обнаружил
 реальную ошибку slot: сохранённый hardware code 0.x указывает populated slots 2/3 и
@@ -160,7 +179,7 @@ exact Leshy 0.130. Он остаётся недопустимым для automat
 source содержит maximum-power nRF24 constant-carrier paths, на observed modules есть
 внешние PA/LNA, а radiated power не измерена.
 
-## Read-only admission board-02
+## Read-only admission source board
 
 До любой fixture flash `profile_hil_board.py` запускает ROM esptool с `--no-stub` и
 только командами `chip-id`, `read-mac`, `flash-id`, `get-security-info`. Сохранённый
@@ -201,6 +220,37 @@ tools/run_nrf24_two_board_hil.py \
   --fixture-profile work/fixture-profile.json
 ```
 
+Две Sub-GHz delta используют эквивалентные one-command wrappers, например:
+
+```sh
+tools/run_subghz_ook_two_board_hil.py \
+  --candidate-port /dev/cu.CANDIDATE \
+  --fixture-port /dev/cu.FIXTURE \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output work/outputs/subghz-ook-positive \
+  --fixture-profile work/fixture-profile.json
+```
+
+Для FSK wrapper и output заменяются на `run_subghz_fsk_two_board_hil.py` и
+`subghz-fsk-positive`. На границе фазы предпочтительна одна команда: она
+последовательно запускает IR, nRF24, Sub-GHz OOK и Sub-GHz FSK, собирает оба image
+один раз, прошивает каждую роль только для первого scenario, а затем переиспользует
+те же проверенные bytes:
+
+```sh
+tools/run_s5_two_board_hil.py \
+  --candidate-port /dev/cu.CANDIDATE \
+  --fixture-port /dev/cu.FIXTURE \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output work/outputs/s5-two-board-matrix \
+  --profile-fixture-read-only \
+  --declare-standard-v2-no-extensions \
+  --declare-antennas-attached
+```
+
+Matrix до profiling, build или flash пишет fail-closed checkpoint в собственный
+`run.json` и обновляет его после каждого принятого child run.
+
 Ранее принятый profile можно передать через `--fixture-profile`. Уже прошитые exact
 bytes разрешено переиспользовать только явными options
 `--reuse-exact-candidate-flash` и `--reuse-exact-fixture-flash`; normal path прошивает
@@ -219,7 +269,9 @@ board-01, продвигает catalog generation 97→98 после явног�
 и побайтно сравнивает live/Library CSV. Обе платы заканчивают inactive, product
 owner/lease — `none`/`0`.
 
-Это закрывает только объявленную IR positive boundary. ADR-006 разрешает единственный
-bounded nRF24 vector в committed fixture source, но physical nRF24 claim не
-принимается до зелёного и сохранённого exact two-board evidence. Fixture TX Sub-GHz
-остаётся запрещён до отдельного region/band и vector contract.
+Это закрывает только объявленную IR positive boundary. ADR-006 теперь разрешает exact
+bounded nRF24 и два finite CC1101 vector 433,920 МГц в committed fixture source, но
+physical RF-positive claim не принимается до зелёного и сохранённого exact two-board
+evidence. Неисправный клон board-02 остаётся исключён из RF fixture duty; отдельный
+replacement source сначала обязан пройти read-only profile и plausible receiver
+identity.

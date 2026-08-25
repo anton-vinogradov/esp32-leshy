@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import run_ir_two_board_hil as flow  # noqa: E402
+import run_s5_two_board_hil as phase_flow  # noqa: E402
 
 
 class IrTwoBoardHilTests(unittest.TestCase):
@@ -23,7 +24,7 @@ class IrTwoBoardHilTests(unittest.TestCase):
                 ROOT / "firmware/leshy1/platformio.ini", "LESHY1_VERSION"),
             r"^0\.\d+\.\d+[-\w.]*$")
         self.assertEqual(
-            "0.2.5-shared-pin-safe",
+            "0.3.0-subghz-safe",
             flow.read_version(
                 ROOT / "firmware/leshy_fixture/platformio.ini",
                 "LESHY_FIXTURE_VERSION"))
@@ -92,6 +93,38 @@ class IrTwoBoardHilTests(unittest.TestCase):
         self.assertIn("--flash-fixture", command)
         self.assertIn("--source-commit", command)
         self.assertIn("--expected-fixture-id", command)
+
+    def test_s5_matrix_builds_once_then_reuses_exact_images(self) -> None:
+        self.assertEqual(
+            ("infrared-nec-positive", "nrf24-carrier-positive",
+             "subghz-ook-positive", "subghz-fsk-positive"),
+            phase_flow.MATRIX)
+        source_commit = "a" * 40
+        candidate_hash = "b" * 64
+        fixture_hash = "c" * 64
+        run = {
+            "passed": True,
+            "scenario": {"id": "subghz-ook-positive"},
+            "candidate": {
+                "source_commit": source_commit,
+                "firmware_sha256": candidate_hash,
+                "app_elf_sha256": "d" * 64,
+            },
+            "fixture": {
+                "source_commit": source_commit,
+                "firmware_sha256": fixture_hash,
+                "app_elf_sha256": "e" * 64,
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            run_path = Path(directory) / "run.json"
+            run_path.write_text(json.dumps(run), encoding="utf-8")
+            accepted = phase_flow.accepted_child(
+                run_path, "subghz-ook-positive", source_commit)
+        self.assertEqual(candidate_hash,
+                         accepted["candidate_firmware_sha256"])
+        self.assertEqual(fixture_hash,
+                         accepted["fixture_firmware_sha256"])
 
 
 if __name__ == "__main__":

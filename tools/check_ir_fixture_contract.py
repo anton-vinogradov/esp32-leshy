@@ -25,6 +25,14 @@ def main() -> int:
     runner = (ROOT / "tools/run_hil_scenario.py").read_text(encoding="utf-8")
     orchestrator = (ROOT / "tools/run_ir_two_board_hil.py").read_text(
         encoding="utf-8")
+    phase_orchestrator = (ROOT / "tools/run_s5_two_board_hil.py").read_text(
+        encoding="utf-8")
+    subghz_ook_wrapper = (
+        ROOT / "tools/run_subghz_ook_two_board_hil.py").read_text(
+            encoding="utf-8")
+    subghz_fsk_wrapper = (
+        ROOT / "tools/run_subghz_fsk_two_board_hil.py").read_text(
+            encoding="utf-8")
     profiler = (ROOT / "tools/profile_hil_board.py").read_text(
         encoding="utf-8")
     scenario = json.loads((
@@ -39,6 +47,12 @@ def main() -> int:
     nrf_inventory = json.loads((
         ROOT / "tests/hil/scenarios/nrf24-fixture-inventory.json"
     ).read_text(encoding="utf-8"))
+    subghz_ook = json.loads((
+        ROOT / "tests/hil/scenarios/subghz-ook-positive.json"
+    ).read_text(encoding="utf-8"))
+    subghz_fsk = json.loads((
+        ROOT / "tests/hil/scenarios/subghz-fsk-positive.json"
+    ).read_text(encoding="utf-8"))
     product_sources = "\n".join(
         path.read_text(encoding="utf-8", errors="replace")
         for path in (PRODUCT / "src").rglob("*") if path.is_file())
@@ -49,7 +63,7 @@ def main() -> int:
         "board_build.flash_size = 16MB",
         "-std=gnu++17",
         "ARDUINO_USB_CDC_ON_BOOT=1",
-        "LESHY_FIXTURE_VERSION=\\\"0.2.5-shared-pin-safe\\\"",
+        "LESHY_FIXTURE_VERSION=\\\"0.3.0-subghz-safe\\\"",
     )
     for marker in required_config:
         if marker not in config:
@@ -63,6 +77,8 @@ def main() -> int:
         'std::strcmp(command, "fixture.begin")',
         'std::strcmp(command, "fixture.ir.nec.once")',
         'std::strcmp(command, "fixture.nrf24.carrier.start")',
+        'std::strcmp(command, "fixture.cc1101.ook.once")',
+        'std::strcmp(command, "fixture.cc1101.fsk.once")',
         'std::strcmp(command, "fixture.nrf24.inventory")',
         'std::strcmp(command, "fixture.stop")',
         'std::strcmp(command, "fixture.panic")',
@@ -84,6 +100,15 @@ def main() -> int:
         "swapped_mask\\\":%u",
         "cc_identity_attempted\\\":true", "kCcReadPartNumber = 0xF0",
         "kCcReadVersion = 0xF1", "readCcIdentityRegister",
+        "kCcFrequencyKHz = 433920", "kCcPowerDbm = -15",
+        "kCcMinimumPowerTable = 0x1D", "kCcPacketLength = 60",
+        "kCcOokPacketCount = 4", "kCcFskPacketCount = 1",
+        "kCcRegisterTxBytes = 0x3A",
+        "cc_power_cleared", "cc_tx_fifo_cleared",
+        "emitFixedCcVector", "cc_hardware_auto_idle\\\":true",
+        "maximum_cc1101_emission_us\\\":250000",
+        "configuration_readback_mismatch", "transmit_state_timeout",
+        "idle_state_timeout",
     ):
         if marker not in entry:
             errors.append(f"fixture entry missing safety marker: {marker}")
@@ -91,8 +116,11 @@ def main() -> int:
         "kSessionLifetimeMs = 5000", "kMaximumIrEmissionUs = 100000",
         "kNrf24CarrierDurationUs = 2000000",
         "kMaximumNrf24CarrierUs = 2500000",
+        "kMaximumCc1101EmissionUs = 250000",
         'kNecVectorId = "nec-10-34"', "app_identity_mismatch",
         'kNrf24VectorId = "nrf24-ch42-min-2s"',
+        'kCc1101OokVectorId = "cc1101-ook-433920-min"',
+        'kCc1101FskVectorId = "cc1101-fsk-433920-min"',
         "fixture_identity_mismatch", "vector_not_allowed",
         "session_expired", "duration_out_of_bounds",
     ):
@@ -117,8 +145,10 @@ def main() -> int:
         if forbidden in entry or forbidden in config:
             errors.append(f"fixture contains forbidden capability: {forbidden}")
     for pattern in (
-        r"\b0x35\b", r"\bSTX\b", r"\bW_TX_PAYLOAD\b",
+        r"\bW_TX_PAYLOAD\b",
         r"\bledcWrite\s*\(\s*kBuzzerPin\s*,",
+        r"fixture\.cc1101\.(?:frequency|power|payload|duration)",
+        r"fixture\.cc1101\.tx",
     ):
         if re.search(pattern, entry):
             errors.append(f"fixture contains RF/buzzer TX path: {pattern}")
@@ -136,6 +166,7 @@ def main() -> int:
         "fixture.begin {run_id}", "fixture.stop {run_id}",
         'else "fixture.panic"', "fixture_admission_failures",
         "fixture_inactive_failures", "byte_exact_streams",
+        '"capture.subghz.export.csv"',
     ):
         if marker not in runner:
             errors.append(f"HIL runner missing fixture guard: {marker}")
@@ -188,6 +219,50 @@ def main() -> int:
                 f"nRF scenario limit {required_limit} is not {expected}")
     if nrf_scenario.get("gate_eligible") is not True:
         errors.append("complete nRF scenario is not gate eligible")
+    for modulation, scenario_value, command, vector in (
+            ("ook_envelope", subghz_ook,
+             "fixture.cc1101.ook.once ${session_id} "
+             "cc1101-ook-433920-min", "cc1101-ook-433920-min"),
+            ("fsk_async", subghz_fsk,
+             "fixture.cc1101.fsk.once ${session_id} "
+             "cc1101-fsk-433920-min", "cc1101-fsk-433920-min")):
+        sub_steps = {
+            step.get("id"): step for step in scenario_value.get("steps", [])
+            if isinstance(step, dict)
+        }
+        if scenario_value.get("gate_eligible") is not True:
+            errors.append(f"Sub-GHz {modulation} scenario is not gate eligible")
+        emission_id = "emit_ook" if modulation == "ook_envelope" else "emit_fsk"
+        if sub_steps.get(emission_id, {}).get("command") != command:
+            errors.append(
+                f"Sub-GHz {modulation} scenario lacks exact bounded vector")
+        for step_id, operation in (
+                ("live_csv", "stream"), ("cold_reopen", "reboot"),
+                ("library_metadata", "query"), ("library_csv", "stream")):
+            if sub_steps.get(step_id, {}).get("op") != operation:
+                errors.append(
+                    f"Sub-GHz {modulation} scenario lacks {step_id}/{operation}")
+        sub_limits = scenario_value.get("limits", {})
+        for field, expected in (
+                ("fixed_cc1101_vector", vector),
+                ("fixture_source_bound", True),
+                ("fixture_single_bounded_emission", True),
+                ("fixture_minimum_chip_tx_power_dbm", -15),
+                ("fixture_frequency_khz", 433920),
+                ("fixture_hardware_auto_idle", True),
+                ("fixture_maximum_emission_us", 250000),
+                ("product_rx_only", True),
+                ("successful_physical_signal_required", True),
+                ("physical_persistence_exercised", True),
+                ("cold_reopen_exercised", True),
+                ("byte_exact_csv_compared", True)):
+            if sub_limits.get(field) != expected:
+                errors.append(
+                    f"Sub-GHz {modulation} limit {field} is not {expected!r}")
+        if scenario_value.get("invariants", {}).get(
+                "byte_exact_streams") != ["live_csv", "library_csv"]:
+            errors.append(
+                f"Sub-GHz {modulation} lacks byte-exact persisted CSV proof")
     regression_steps = {
         step.get("id"): step for step in nrf_regression.get("steps", [])
         if isinstance(step, dict)
@@ -239,9 +314,26 @@ def main() -> int:
         "--declare-antennas-attached",
         "tools/build.sh", "tools/build_ir_fixture.sh",
         "--fixture-source-commit", "--flash-fixture",
+        '"subghz-ook-positive"', '"subghz-fsk-positive"',
     ):
         if marker not in orchestrator:
             errors.append(f"two-board orchestrator missing guard: {marker}")
+    if '"subghz-ook-positive"' not in subghz_ook_wrapper:
+        errors.append("Sub-GHz OOK wrapper is not scenario-pinned")
+    if '"subghz-fsk-positive"' not in subghz_fsk_wrapper:
+        errors.append("Sub-GHz FSK wrapper is not scenario-pinned")
+    for marker in (
+        '"infrared-nec-positive"', '"nrf24-carrier-positive"',
+        '"subghz-ook-positive"', '"subghz-fsk-positive"',
+        '"building_once"', "index > 0", "accepted_child",
+        '"candidate image identity drift across matrix"',
+        '"fixture image identity drift across matrix"',
+        '"status": "failed"', "require_clean_source",
+        "--profile-fixture-read-only", "--reuse-exact-candidate-flash",
+        "--reuse-exact-fixture-flash",
+    ):
+        if marker not in phase_orchestrator:
+            errors.append(f"S5 matrix orchestrator missing guard: {marker}")
     if "profile.get(\"port_at_profile\") != fixture_port" not in runner:
         errors.append("HIL runner does not bind fixture profile to exact port")
 
@@ -250,8 +342,9 @@ def main() -> int:
             print(f"FAIL: {error}")
         return 1
     print("Bounded signal fixture contract passed: separate image, inactive "
-          "boot, exact identity/session, fixed NEC and minimum-power nRF24 "
-          "vectors, bounded timeout and panic stop")
+          "boot, exact identity/session, fixed NEC, minimum-power nRF24, and "
+          "finite minimum-power CC1101 vectors with bounded timeout and "
+          "panic stop")
     return 0
 
 

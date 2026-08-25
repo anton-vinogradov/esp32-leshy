@@ -1,0 +1,180 @@
+{
+  "schema": "leshy.hil.scenario.v1",
+  "id": "subghz-fsk-positive",
+  "checkpoint": "physical_subghz_fsk_capture_save",
+  "gate_eligible": true,
+  "devices": {
+    "candidate": {"required": true},
+    "fixture": {"required": true, "kind": "bounded_signal_fixture"}
+  },
+  "steps": [
+    {"id": "home_subghz", "op": "select_home_app", "app_id": "subghz"},
+    {"id": "open_modes", "op": "action", "name": "right"},
+    {"id": "choose_finder", "op": "action", "name": "down"},
+    {"id": "choose_record", "op": "action", "name": "down"},
+    {"id": "open_modulation", "op": "action", "name": "right",
+      "expect": {"runtime_event": "subghz_raw_mode_menu"}},
+    {"id": "choose_fsk", "op": "action", "name": "down"},
+    {"id": "open_band", "op": "action", "name": "right",
+      "expect": {"runtime_event": "subghz_raw_band_menu"}},
+    {"id": "start", "op": "action", "name": "right"},
+    {
+      "id": "waiting", "op": "poll_query",
+      "command": "capture.subghz.state",
+      "response_schema": "leshy.capture.subghz_raw.v1",
+      "until": {"state": "waiting"}, "timeout": 3,
+      "expect": {
+        "state": "waiting", "passive_only": true, "rx_only": true,
+        "modulation": "fsk_async", "frequency_khz": 433920,
+        "minimum_fsk_pulse_us": 60, "maximum_pulses": 512,
+        "fsk_transport_active": true, "fsk_transport_overflows": 0,
+        "application_tx_calls": 0, "tx_strobes": 0,
+        "pa_table_writes": 0, "fifo_writes": 0,
+        "storage_written": false, "persist_state": "volatile",
+        "cleanup_complete": false, "lease_mask": 9
+      }
+    },
+    {
+      "id": "emit_fsk", "op": "query", "target": "fixture",
+      "command": "fixture.cc1101.fsk.once ${session_id} cc1101-fsk-433920-min",
+      "response_schema": "leshy.hil.fixture.signal.v1", "kind": "result",
+      "timeout": 3,
+      "expect": {
+        "state": "complete", "signal": "cc1101_fsk",
+        "vector_id": "cc1101-fsk-433920-min",
+        "cc_frequency_khz": 433920, "cc_power_dbm": -15,
+        "cc_hardware_auto_idle": true, "fixed_vector_only": true,
+        "auto_arm": false
+      }
+    },
+    {
+      "id": "captured", "op": "poll_query",
+      "command": "capture.subghz.state",
+      "response_schema": "leshy.capture.subghz_raw.v1",
+      "until": {"state": "complete"}, "timeout": 4,
+      "expect": {
+        "state": "complete", "passive_only": true, "rx_only": true,
+        "modulation": "fsk_async", "frequency_khz": 433920,
+        "truncated": false, "csv_available": true,
+        "fsk_transport_active": false, "fsk_transport_overflows": 0,
+        "application_tx_calls": 0, "tx_strobes": 0,
+        "pa_table_writes": 0, "fifo_writes": 0,
+        "physical_no_tx_verified": true, "cleanup_complete": true,
+        "storage_written": false, "persist_state": "volatile", "lease_mask": 9
+      },
+      "checks": [
+        {"path": "samples", "op": "gt", "value": 0},
+        {"path": "fsk_edges_drained", "op": "gt", "value": 0},
+        {"path": "pulses", "op": "gt", "value": 0},
+        {"path": "pulses", "op": "lte", "value": 512},
+        {"path": "driver_error", "op": "eq", "value": 0}
+      ]
+    },
+    {"id": "captured_screen", "op": "capture", "name": "subghz-fsk-captured"},
+    {
+      "id": "live_csv", "op": "stream",
+      "command": "capture.subghz.export.csv", "name": "subghz-fsk-live",
+      "timeout": 5,
+      "expect": {
+        "begin": {"frequency_khz": 433920, "modulation": "fsk_async", "streaming": true},
+        "end": {"status": "valid"}
+      },
+      "checks": [{"path": "bytes", "op": "gt", "value": 30}]
+    },
+    {"id": "save", "op": "action", "name": "right"},
+    {
+      "id": "saved", "op": "poll_query",
+      "command": "capture.subghz.state",
+      "response_schema": "leshy.capture.subghz_raw.v1",
+      "until": {"persist_state": "saved"}, "timeout": 35, "interval": 0.1,
+      "expect": {
+        "state": "complete", "modulation": "fsk_async",
+        "frequency_khz": 433920, "storage_written": true,
+        "persist_state": "saved", "persist_status": "saved",
+        "cleanup_complete": true, "lease_mask": 9
+      },
+      "checks": [{"path": "persist_generation", "op": "gte", "value": 1}]
+    },
+    {"id": "saved_screen", "op": "capture", "name": "subghz-fsk-saved"},
+    {"id": "back_to_band", "op": "action", "name": "left"},
+    {"id": "back_to_modulation", "op": "action", "name": "left"},
+    {"id": "back_to_modes", "op": "action", "name": "left"},
+    {"id": "back_home", "op": "action", "name": "left"},
+    {"id": "pre_reboot", "op": "query", "command": "ui.state",
+      "response_schema": "leshy.ui.v1",
+      "expect": {"page": "home", "runtime_owner": "none", "lease_mask": 0}},
+    {
+      "id": "cold_reopen", "op": "reboot", "capture_seconds": 30,
+      "timeout": 15,
+      "expect": {
+        "ready": {"kind": "ready"},
+        "recovery": {"status": "admitted", "mounted_read_only": true,
+          "physical_write_calls": 0, "cleanup_complete": true, "owned_after": 0}
+      },
+      "checks": [{"path": "recovery.generation", "op": "gte", "value": 1}]
+    },
+    {"id": "home_library", "op": "select_home_app", "app_id": "library"},
+    {"id": "open_library", "op": "action", "name": "right"},
+    {"id": "library_list", "op": "capture", "name": "subghz-fsk-library-list"},
+    {"id": "open_session", "op": "action", "name": "right"},
+    {"id": "open_export", "op": "action", "name": "right"},
+    {
+      "id": "library_metadata", "op": "query",
+      "command": "library.capture",
+      "response_schema": "leshy.capture.metadata.v1", "kind": "capture",
+      "expect": {
+        "status": "valid", "integrity": "valid", "persistent": true,
+        "immutable": true,
+        "receive": {"mode": "passive", "rx_only": true, "source": "cc1101",
+          "frequency_khz": 433920, "threshold_dbm": -72,
+          "modulation": "fsk_async"},
+        "payload": {"status": "captured_subghz_raw", "truncated": false},
+        "exports": {"json_summary": "available",
+          "pulse_csv": "available_from_validated_segment", "pcap": "not_applicable"},
+        "radio_touched": false
+      }
+    },
+    {
+      "id": "library_csv", "op": "stream",
+      "command": "library.export.csv", "name": "subghz-fsk-library",
+      "timeout": 5,
+      "expect": {
+        "begin": {"status": "valid", "format": "subghz_raw_pulses",
+          "columns": 3, "line_endings": "crlf", "radio_touched": false},
+        "end": {"status": "complete", "format": "subghz_raw_pulses",
+          "persistent": true, "radio_touched": false}
+      },
+      "checks": [{"path": "bytes", "op": "gt", "value": 30}]
+    },
+    {"id": "back_to_detail", "op": "action", "name": "left"},
+    {"id": "back_to_list", "op": "action", "name": "left"},
+    {"id": "back_from_library", "op": "action", "name": "left"},
+    {"id": "final", "op": "query", "command": "ui.state",
+      "response_schema": "leshy.ui.v1",
+      "expect": {"page": "home", "runtime_owner": "none", "lease_mask": 0}}
+  ],
+  "invariants": {
+    "final_home_zero_lease": true,
+    "storage_unchanged": false,
+    "storage_generation_from_report": "saved",
+    "byte_exact_streams": ["live_csv", "library_csv"],
+    "heap_free_unchanged": true,
+    "input_clean": true,
+    "safe_outputs": true
+  },
+  "limits": {
+    "fixed_cc1101_vector": "cc1101-fsk-433920-min",
+    "fixture_source_bound": true,
+    "fixture_single_bounded_emission": true,
+    "fixture_minimum_chip_tx_power_dbm": -15,
+    "fixture_frequency_khz": 433920,
+    "fixture_hardware_auto_idle": true,
+    "fixture_maximum_emission_us": 250000,
+    "product_rx_only": true,
+    "successful_physical_signal_required": true,
+    "physical_persistence_exercised": true,
+    "cold_reopen_exercised": true,
+    "byte_exact_csv_compared": true,
+    "gate_eligible_only_after_all_declared_checks": true
+  }
+}

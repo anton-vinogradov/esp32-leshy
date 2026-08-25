@@ -30,12 +30,19 @@ command surface:
    2,442 MHz, chip minimum
    power setting −18 dBm and a two-second continuous unmodulated carrier. Its hard
    software ceiling is 2.5 seconds.
-5. Completion, timeout, mismatch, parser failure, explicit stop, panic and Task-WDT
+5. Two Sub-GHz vectors use only 433.920 MHz, the CC1101 minimum reviewed PA-table
+   value `0x1D` (approximately −15 dBm), fixed 60-byte packet mode and fixed payloads.
+   OOK emits four packets separated by 4 ms; FSK emits one edge-bounded packet. The
+   chip returns to IDLE after every packet, the total measured emission must be no
+   more than 250 ms, PATABLE is cleared and the FIFO is flushed. There is no command
+   for arbitrary frequency, power, payload, modulation, packet count or duration.
+6. Completion, timeout, mismatch, parser failure, explicit stop, panic and Task-WDT
    drop CE and power the radio down. The runner accepts the result only after reading
-   those terminal facts back.
-6. The candidate product remains RX-only and listens on every detected antenna. The
-   fixture permission does not create product TX authority and does not generalize to
-   Sub-GHz.
+   terminal facts back. A CC1101 packet already admitted when Task-WDT fires is
+   hardware-finite and auto-idles; the ISR blocks subsequent packets and normal
+   cleanup explicitly strobes IDLE, clears PA and flushes TX FIFO.
+7. The candidate product remains RX-only and listens on every detected antenna. The
+   fixture permission does not create product TX authority.
 
 ## Alternatives
 
@@ -50,8 +57,10 @@ this binary functional checkpoint.
 
 ## Consequences
 
-- Board-02 is a bounded signal source, not a second product candidate while the
-  fixture image is installed.
+- A separately profiled, electrically qualified owned board is a bounded signal
+  source, not a second product candidate while the fixture image is installed.
+- The faulty clone board-02 is explicitly excluded: its shared RF bus has no plausible
+  receiver identity and it may not emit any RF vector.
 - Software bounds reduce exposure but are not an independent rail kill, RF shield or
   calibrated power measurement.
 - Evidence may claim exact register settings and successful physical detection only;
@@ -63,8 +72,12 @@ this binary functional checkpoint.
 - native tests reject wrong session/vector, repeat and duration overflow;
 - a source guard rejects general transmit paths and contract drift;
 - fixture build and scenario runner are pinned to exact committed source and images;
-- two-board HIL proves ambient `not found` → bounded fixture active → exact channel 42
-  found on the product's three receivers → both boards inactive and product lease 0;
+- nRF two-board HIL proves ambient `not found` → bounded fixture active → exact
+  channel 42 found on the product's three receivers → both boards inactive and
+  product lease 0;
+- OOK and FSK scenarios independently prove known 433.920 MHz signal → public
+  receive-only Capture → explicit Save → cold Library reopen → byte-exact CSV, with
+  zero product TX and terminal fixture IDLE/PA-clear/FIFO-clear telemetry;
 - intentional identity, state, duration or cleanup mismatch fails closed.
 
 The first [`0.2.0` physical attempt](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
@@ -103,3 +116,10 @@ main hardware, localization to its RF carrier or main board/ESP GPIO13, and a
 subsequent plausible same-image receiver identity are mandatory before this ADR
 permits any carrier start. Cross-swapping shields and stock-firmware diagnosis are
 not admitted.
+
+Fixture `0.3.0-subghz-safe` adds the two reviewed CC1101 vectors and their declarative
+gate-eligible scenarios. This is an implemented and build-checked contract only: it
+does not waive the read-only profile and plausible-identity admission gate, and it
+does not turn the faulty clone into an authorized source. Physical OOK/FSK claims
+remain open until a distinct qualified board runs both exact scenarios and retained
+evidence passes independently.

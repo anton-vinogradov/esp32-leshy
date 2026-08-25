@@ -8,13 +8,18 @@ constexpr std::uint32_t kSessionLifetimeMs = 5000;
 constexpr std::uint32_t kMaximumIrEmissionUs = 100000;
 constexpr std::uint32_t kNrf24CarrierDurationUs = 2000000;
 constexpr std::uint32_t kMaximumNrf24CarrierUs = 2500000;
+constexpr std::uint32_t kMaximumCc1101EmissionUs = 250000;
 constexpr const char* kNecVectorId = "nec-10-34";
 constexpr const char* kNrf24VectorId = "nrf24-ch42-min-2s";
+constexpr const char* kCc1101OokVectorId = "cc1101-ook-433920-min";
+constexpr const char* kCc1101FskVectorId = "cc1101-fsk-433920-min";
 
 enum class FixtureSignal : std::uint8_t {
     None,
     InfraredNec,
     Nrf24Carrier,
+    Cc1101Ook,
+    Cc1101Fsk,
 };
 
 const char* fixtureSignalName(FixtureSignal signal);
@@ -59,6 +64,12 @@ public:
     bool authorizeNrf24CarrierOnce(const char* sessionId,
                                    const char* vectorId,
                                    std::uint32_t nowMs);
+    bool authorizeCc1101OokOnce(const char* sessionId,
+                                const char* vectorId,
+                                std::uint32_t nowMs);
+    bool authorizeCc1101FskOnce(const char* sessionId,
+                                const char* vectorId,
+                                std::uint32_t nowMs);
     bool complete(std::uint32_t durationUs, bool outputInactive);
     bool stop(const char* sessionId, bool outputInactive);
     void panic(bool outputInactive);

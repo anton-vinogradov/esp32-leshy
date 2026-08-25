@@ -116,6 +116,42 @@ void acceptsOneExactMinimumPowerNrf24Window() {
     CHECK(excessive.report().state == FixtureState::Fault);
 }
 
+void acceptsOnlyExactMinimumPowerCc1101Vectors() {
+    FixtureSession ook;
+    CHECK(ook.begin(kSession, kApp, kApp, kFixture, kFixture, 10, true));
+    CHECK(ook.authorizeCc1101OokOnce(
+        kSession, leshy::hil::fixture::kCc1101OokVectorId, 11));
+    CHECK(ook.report().signal ==
+          leshy::hil::fixture::FixtureSignal::Cc1101Ook);
+    CHECK(ook.report().maximumDurationUs ==
+          leshy::hil::fixture::kMaximumCc1101EmissionUs);
+    CHECK(std::strcmp(ook.vectorId(),
+                      leshy::hil::fixture::kCc1101OokVectorId) == 0);
+    CHECK(ook.complete(50000, true));
+    CHECK(ook.report().state == FixtureState::Complete);
+    CHECK(!ook.authorizeCc1101OokOnce(
+        kSession, leshy::hil::fixture::kCc1101OokVectorId, 12));
+
+    FixtureSession fsk;
+    CHECK(fsk.begin(kSession, kApp, kApp, kFixture, kFixture, 20, true));
+    CHECK(fsk.authorizeCc1101FskOnce(
+        kSession, leshy::hil::fixture::kCc1101FskVectorId, 21));
+    CHECK(fsk.report().signal ==
+          leshy::hil::fixture::FixtureSignal::Cc1101Fsk);
+    CHECK(std::strcmp(fsk.vectorId(),
+                      leshy::hil::fixture::kCc1101FskVectorId) == 0);
+    CHECK(!fsk.complete(
+        leshy::hil::fixture::kMaximumCc1101EmissionUs + 1U, true));
+    CHECK(fsk.report().state == FixtureState::Fault);
+
+    FixtureSession wrong;
+    CHECK(wrong.begin(kSession, kApp, kApp, kFixture, kFixture, 30, true));
+    CHECK(!wrong.authorizeCc1101OokOnce(
+        kSession, leshy::hil::fixture::kCc1101FskVectorId, 31));
+    CHECK(std::strcmp(wrong.report().lastError, "vector_not_allowed") == 0);
+    CHECK(wrong.report().startCount == 0);
+}
+
 void supportsExplicitStopAndFreshSession() {
     FixtureSession session;
     CHECK(session.begin(kSession, kApp, kApp, kFixture, kFixture, 1, true));
@@ -135,6 +171,7 @@ int main() {
     panicAndFaultFailClosed();
     supportsExplicitStopAndFreshSession();
     acceptsOneExactMinimumPowerNrf24Window();
+    acceptsOnlyExactMinimumPowerCc1101Vectors();
     if (failures != 0) return 1;
     std::cout << "Bounded signal fixture controller tests passed\n";
     return 0;

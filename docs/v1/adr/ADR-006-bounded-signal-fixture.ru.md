@@ -29,12 +29,19 @@
    2 442 МГц, минимальную настройку
    мощности чипа −18 dBm и двухсекундную непрерывную немодулированную несущую. Hard
    software ceiling — 2,5 секунды.
-5. Completion, timeout, mismatch, parser failure, explicit stop, panic и Task-WDT
+5. Два Sub-GHz vector используют только 433,920 МГц, минимальное проверенное значение
+   PATABLE CC1101 `0x1D` (примерно −15 dBm), fixed packet mode 60 bytes и fixed
+   payload. OOK выдаёт четыре packet с gap 4 ms, FSK — один packet с ограниченным
+   числом edges. Чип возвращается в IDLE после каждого packet, общая измеренная
+   emission не может превышать 250 ms, PATABLE очищается, FIFO сбрасывается. Команд
+   произвольных frequency, power, payload, modulation, packet count или duration нет.
+6. Completion, timeout, mismatch, parser failure, explicit stop, panic и Task-WDT
    опускают CE и переводят radio в power-down. Runner принимает результат только
-   после чтения этих terminal facts.
-6. Product candidate остаётся RX-only и слушает всеми обнаруженными антеннами.
-   Полномочие fixture не создаёт product TX authority и не распространяется на
-   Sub-GHz.
+   после чтения terminal facts. Уже допущенный CC1101 packet при Task-WDT аппаратно
+   конечен и auto-idle; ISR запрещает следующие packets, а normal cleanup явно
+   выполняет IDLE, очищает PA и TX FIFO.
+7. Product candidate остаётся RX-only и слушает всеми обнаруженными антеннами.
+   Полномочие fixture не создаёт product TX authority.
 
 ## Альтернативы
 
@@ -49,8 +56,10 @@ Ambient evidence не проверяет positive detection; arbitrary/product T
 
 ## Последствия
 
-- Пока установлен fixture image, board-02 — bounded signal source, а не второй
-  product candidate.
+- Отдельно profiled и электрически qualified собственная board — bounded signal
+  source, а не второй product candidate, пока на ней установлен fixture image.
+- Неисправный клон board-02 явно исключён: shared RF bus не даёт plausible receiver
+  identity, поэтому ему нельзя выдавать никакой RF vector.
 - Software bounds уменьшают риск, но не являются независимым rail kill, RF shield
   или calibrated power measurement.
 - Evidence может утверждать exact register settings и успешное physical detection,
@@ -62,8 +71,11 @@ Ambient evidence не проверяет positive detection; arbitrary/product T
 - native tests отвергают wrong session/vector, repeat и duration overflow;
 - source guard отвергает general transmit paths и drift контракта;
 - fixture build и scenario runner связаны с exact committed source и images;
-- two-board HIL доказывает ambient `not found` → bounded fixture active → exact channel
-  42 найден product на трёх receivers → обе платы inactive и product lease 0;
+- nRF two-board HIL доказывает ambient `not found` → bounded fixture active → exact
+  channel 42 найден product на трёх receivers → обе платы inactive и product lease 0;
+- отдельные OOK и FSK scenarios доказывают known signal 433,920 МГц → public
+  receive-only Capture → explicit Save → cold Library reopen → byte-exact CSV при
+  zero product TX и terminal telemetry fixture IDLE/PA-clear/FIFO-clear;
 - intentional identity, state, duration или cleanup mismatch приводит к fail closed.
 
 Первый [physical attempt `0.2.0`](../../../tests/hil/evidence/board-01-nrf24-fixture-0.2.0-failed.json)
@@ -101,3 +113,10 @@ clamp. До разрешения carrier start этим ADR обязательн
 pull-characterization на isolated main hardware board-02, localization на RF carrier
 или main board/ESP GPIO13 и последующая plausible same-image receiver identity.
 Cross-swap shields и stock-firmware diagnosis не допускаются.
+
+Fixture `0.3.0-subghz-safe` добавляет два проверенных CC1101 vector и их declarative
+gate-eligible scenarios. Пока это только реализованный и build-checked contract: он
+не отменяет admission по read-only profile и plausible identity и не делает
+неисправный клон разрешённым source. Physical OOK/FSK claims остаются открыты до
+прогона обоих exact scenarios на отдельной qualified board и независимой проверки
+сохранённого evidence.

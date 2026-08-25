@@ -105,25 +105,28 @@ class HilScenarioTests(unittest.TestCase):
 
     def test_fixture_admission_is_exact_and_inactive(self) -> None:
         identity = {
-            "version": "0.2.4-bounded-signals",
+            "version": "0.3.0-subghz-safe",
             "role": "bounded_signal_fixture",
             "fixture_id": "0011223344556677",
             "app_elf_sha256": "a" * 64,
             "identity_ready": True,
             "ir_tx_inactive": True, "nrf_ce_inactive": True,
             "nrf_powered_down": True,
+            "cc_transmit_active": False, "cc_idle": True,
+            "cc_power_cleared": True, "cc_tx_fifo_cleared": True,
             "buzzer_inactive": True, "fixed_vector_only": True,
             "auto_arm": False, "watchdog_armed": True,
             "maximum_ir_emission_us": 100000,
             "maximum_nrf_carrier_us": 2500000,
+            "maximum_cc1101_emission_us": 250000,
             "session_lifetime_ms": 5000,
         }
         self.assertEqual([], hil.fixture_admission_failures(
-            identity, "0.2.4-bounded-signals",
+            identity, "0.3.0-subghz-safe",
             "0011223344556677", "a" * 64))
         identity["ir_tx_inactive"] = False
         self.assertEqual(1, len(hil.fixture_admission_failures(
-            identity, "0.2.4-bounded-signals",
+            identity, "0.3.0-subghz-safe",
             "0011223344556677", "a" * 64)))
 
     def test_fixture_profile_requires_read_only_accepted_board(self) -> None:

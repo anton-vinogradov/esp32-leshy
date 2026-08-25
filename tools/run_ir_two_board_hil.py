@@ -16,7 +16,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 from profile_hil_board import esptool_python  # noqa: E402
-from run_hil_scenario import validate_fixture_profile  # noqa: E402
 
 
 PRODUCT_ENV = "esp32-div-v2-clean"
@@ -35,11 +34,58 @@ SCENARIOS = {
         ROOT / "tests/hil/scenarios/nrf24-fixture-regression.json"),
     "nrf24-fixture-inventory": (
         ROOT / "tests/hil/scenarios/nrf24-fixture-inventory.json"),
+    "subghz-ook-positive": (
+        ROOT / "tests/hil/scenarios/subghz-ook-positive.json"),
+    "subghz-fsk-positive": (
+        ROOT / "tests/hil/scenarios/subghz-fsk-positive.json"),
 }
 DEADLINE_FLOW = "infrared-store-deadline"
 SCENARIO = SCENARIOS["infrared-nec-positive"]
 VERSION_VALUE = re.compile(
     r"-D\s+{symbol}=\\\"([^\"\r\n]+)\\\"")
+
+
+def validate_fixture_profile(profile: dict[str, Any], fixture_id: str,
+                             fixture_port: str | None = None) -> None:
+    expected = {
+        "schema": "leshy.hil.board_profile.v1",
+        "status": "accepted",
+        "accepted_for_fixture_flash": True,
+        "writes_performed": False,
+        "flash_erases_performed": 0,
+        "flash_bytes_written": 0,
+        "ram_stub_uploaded": False,
+    }
+    chip = profile.get("chip", {})
+    assembly = profile.get("assembly", {})
+    failures = [
+        f"fixture_profile.{key}: {profile.get(key)!r} != {value!r}"
+        for key, value in expected.items() if profile.get(key) != value]
+    for key, value in {
+            "family": "esp32-s3", "fixture_id": fixture_id,
+            "flash_size": "16MB"}.items():
+        if chip.get(key) != value:
+            failures.append(
+                f"fixture_profile.chip.{key}: {chip.get(key)!r} != {value!r}")
+    for key, value in {
+            "profile": "esp32-div-v2-n16", "extension_modules": "none",
+            "antennas_attached": True}.items():
+        if assembly.get(key) != value:
+            failures.append(
+                "fixture_profile.assembly."
+                f"{key}: {assembly.get(key)!r} != {value!r}")
+    operations = profile.get("operations")
+    if (not isinstance(operations, list) or len(operations) != 4 or
+            any(not isinstance(value, dict) or
+                value.get("read_only") is not True or
+                value.get("returncode") != 0 for value in operations)):
+        failures.append("fixture_profile.operations: read-only proof missing")
+    if fixture_port is not None and \
+            profile.get("port_at_profile") != fixture_port:
+        failures.append(
+            "fixture_profile.port_at_profile: fixture port mismatch")
+    if failures:
+        raise ValueError("; ".join(failures))
 
 
 def read_version(config: Path, symbol: str) -> str:

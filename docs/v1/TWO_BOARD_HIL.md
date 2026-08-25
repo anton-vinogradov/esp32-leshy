@@ -2,21 +2,22 @@
 
 *Read in: **English** · [Русский](TWO_BOARD_HIL.ru.md)*
 
-Status: **accepted physical S5 IR checkpoint; bounded nRF24 positive path implemented
-and awaiting its exact two-board run**.
+Status: **accepted physical S5 IR checkpoint; bounded nRF24 and Sub-GHz positive
+paths implemented and awaiting a qualified second RF board**.
 
 ## Roles and trust boundary
 
 | Role | Firmware | Authority |
 |---|---|---|
 | `candidate` / board-01 | exact product candidate | device under test; product radio paths remain RX-only and have no replay/TX authority |
-| `fixture` / board-02 | separate `leshy_fixture` image | emits one admitted fixed NEC or minimum-power/time-bounded nRF24 vector |
+| `fixture` / qualified source board | separate `leshy_fixture` image | emits one admitted fixed NEC, minimum-power/time-bounded nRF24 or finite minimum-power CC1101 vector |
 | host | signal-specific wrapper → `run_hil_scenario.py` | binds physical roles, exact commits/images/IDs, sequences the scenario, captures TFT/data and fails closed |
 
 Fixture sources live outside the product project. Source guards reject fixture code
 inside `firmware/leshy1`. The fixture build contains no Wi-Fi, BLE, SD, arbitrary
-payload/replay or product-side transmitter path. SPI exists only for the reviewed
-fixed nRF24 register vector in [ADR-006](adr/ADR-006-bounded-signal-fixture.md).
+payload/replay or product-side transmitter path. SPI transmission exists only for the
+reviewed fixed nRF24 and CC1101 register vectors in
+[ADR-006](adr/ADR-006-bounded-signal-fixture.md).
 
 ## Implemented first positive scenario
 
@@ -68,6 +69,15 @@ radio into power-down. There is no payload command or arbitrary channel, power o
 duration. This proves configured settings and functional reception only—not
 radiated power, sensitivity, range, calibrated frequency or instrumented RF silence.
 
+Fixture `0.3.0-subghz-safe` adds exactly two CC1101 vectors at 433.920 MHz. Both use
+fixed 60-byte packet mode and reviewed minimum PATABLE `0x1D` (approximately −15 dBm).
+OOK emits four finite packets with 4 ms gaps; FSK emits one packet whose transitions
+remain below the product capture ceiling. Hardware returns to IDLE after each packet,
+total measured emission is limited to 250 ms, and cleanup clears PATABLE and TX FIFO.
+Read-back of identity, modulation, packet length and PA value must pass before the
+first STX. No console surface accepts arbitrary band, frequency, power, payload,
+modulation, packet count or duration.
+
 ## Implemented nRF24 positive scenario
 
 `tests/hil/scenarios/nrf24-carrier-positive.json`:
@@ -83,6 +93,16 @@ radiated power, sensitivity, range, calibrated frequency or instrumented RF sile
 
 The scenario is gate-eligible only after the physical result is retained. Until then
 it is an implemented test contract, not accepted RF evidence.
+
+## Implemented Sub-GHz positive scenarios
+
+`subghz-ook-positive.json` and `subghz-fsk-positive.json` independently execute the
+same product journey: `Home → Sub-GHz → RAW Capture → modulation → 433 MHz`, exact
+bounded signal, successful physical capture, live CSV, explicit Save, cold reboot,
+Library metadata and byte-exact persisted CSV. They require zero product TX/PATABLE/
+FIFO calls, no truncation or edge overflow, exact fixture counters and terminal
+IDLE/PA-clear/FIFO-clear. They are gate-eligible contracts, but not physical evidence
+until both pass on a distinct profiled source board.
 
 The first physical attempt with fixture `0.2.0` failed safe before emission and
 exposed a real wrong-slot error: preserved 0.x hardware code identifies slots 2/3 as
@@ -161,7 +181,7 @@ was replaced by exact Leshy 0.130. Stock remains inadmissible for automated diag
 or fixture work because its source contains maximum-power nRF24 constant-carrier paths,
 the observed modules have external PA/LNA devices and radiated power is unmeasured.
 
-## Read-only board-02 admission
+## Read-only source-board admission
 
 Before any fixture flash, `profile_hil_board.py` invokes ROM esptool with `--no-stub`
 and only `chip-id`, `read-mac`, `flash-id` and `get-security-info`. The retained
@@ -203,6 +223,36 @@ tools/run_nrf24_two_board_hil.py \
   --fixture-profile work/fixture-profile.json
 ```
 
+The two Sub-GHz deltas use equivalent one-command wrappers, for example:
+
+```sh
+tools/run_subghz_ook_two_board_hil.py \
+  --candidate-port /dev/cu.CANDIDATE \
+  --fixture-port /dev/cu.FIXTURE \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output work/outputs/subghz-ook-positive \
+  --fixture-profile work/fixture-profile.json
+```
+
+Replace the wrapper and output name with `run_subghz_fsk_two_board_hil.py` and
+`subghz-fsk-positive` for FSK. At the phase boundary, the preferred command runs
+IR, nRF24, Sub-GHz OOK and Sub-GHz FSK in sequence, builds both images once, flashes
+each role only for the first scenario and reuses the exact verified bytes thereafter:
+
+```sh
+tools/run_s5_two_board_hil.py \
+  --candidate-port /dev/cu.CANDIDATE \
+  --fixture-port /dev/cu.FIXTURE \
+  --expected-cid FE343253440000002000000055019CB7 \
+  --output work/outputs/s5-two-board-matrix \
+  --profile-fixture-read-only \
+  --declare-standard-v2-no-extensions \
+  --declare-antennas-attached
+```
+
+The matrix writes a fail-closed checkpoint to its own `run.json` before profiling,
+building or flashing, and updates it after every accepted child run.
+
 An already accepted profile can instead be passed with `--fixture-profile`. Exact
 already-flashed bytes can be reused only through the explicit
 `--reuse-exact-candidate-flash` and `--reuse-exact-fixture-flash` options; normal
@@ -221,7 +271,9 @@ advances catalog generation 97→98 after explicit Save, cold-reopens the item a
 compares live/Library CSV byte-for-byte. Both boards finish inactive and product
 owner/lease is `none`/`0`.
 
-This closes the declared IR positive boundary only. ADR-006 authorizes the single
-bounded nRF24 vector in committed fixture source, but no physical nRF24 claim is
-accepted until its exact two-board evidence passes and is retained. Sub-GHz fixture
-transmission remains unauthorized pending a separate region/band and vector contract.
+This closes the declared IR positive boundary only. ADR-006 now authorizes the exact
+bounded nRF24 and two finite 433.920 MHz CC1101 vectors in committed fixture source,
+but no physical RF-positive claim is accepted until its exact two-board evidence
+passes and is retained. Faulty clone board-02 remains excluded from RF fixture duty;
+a distinct replacement source must pass read-only profile and plausible receiver
+identity first.

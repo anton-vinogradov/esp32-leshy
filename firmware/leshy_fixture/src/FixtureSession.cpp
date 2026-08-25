@@ -9,6 +9,8 @@ const char* fixtureSignalName(FixtureSignal signal) {
         case FixtureSignal::None: return "none";
         case FixtureSignal::InfraredNec: return "infrared_nec";
         case FixtureSignal::Nrf24Carrier: return "nrf24_carrier";
+        case FixtureSignal::Cc1101Ook: return "cc1101_ook";
+        case FixtureSignal::Cc1101Fsk: return "cc1101_fsk";
     }
     return "none";
 }
@@ -105,6 +107,22 @@ bool FixtureSession::authorizeNrf24CarrierOnce(const char* sessionId,
                               kMaximumNrf24CarrierUs, nowMs);
 }
 
+bool FixtureSession::authorizeCc1101OokOnce(const char* sessionId,
+                                            const char* vectorId,
+                                            std::uint32_t nowMs) {
+    return authorizeFixedOnce(sessionId, vectorId, kCc1101OokVectorId,
+                              FixtureSignal::Cc1101Ook,
+                              kMaximumCc1101EmissionUs, nowMs);
+}
+
+bool FixtureSession::authorizeCc1101FskOnce(const char* sessionId,
+                                            const char* vectorId,
+                                            std::uint32_t nowMs) {
+    return authorizeFixedOnce(sessionId, vectorId, kCc1101FskVectorId,
+                              FixtureSignal::Cc1101Fsk,
+                              kMaximumCc1101EmissionUs, nowMs);
+}
+
 bool FixtureSession::authorizeFixedOnce(const char* sessionId,
                                         const char* vectorId,
                                         const char* allowedVectorId,
@@ -163,6 +181,8 @@ const char* FixtureSession::vectorId() const {
     switch (report_.signal) {
         case FixtureSignal::InfraredNec: return kNecVectorId;
         case FixtureSignal::Nrf24Carrier: return kNrf24VectorId;
+        case FixtureSignal::Cc1101Ook: return kCc1101OokVectorId;
+        case FixtureSignal::Cc1101Fsk: return kCc1101FskVectorId;
         case FixtureSignal::None: return "none";
     }
     return "none";
