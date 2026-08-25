@@ -477,8 +477,9 @@ Exact linked disassembly proves stack frames of 256 B for controller reset,
 416 B for load bindings, 32 B for in-place result reset, 80 B for comparison
 and 1,104 B for the deepest evidence builder. Both physical runners perform
 this ELF check before flashing. The source contract rejects aggregate reset of
-the 7,736 B result. This is host/build evidence pending the one-flash short
-physical regression.
+the 7,736 B result. Exact 0.149 physical acceptance then preserves
+97,488/97,488 B before/after the short workspace and 96,452/96,452 B before/after
+the full-delta workspace; both finish with lease zero in `E-HIL-167`.
 
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while

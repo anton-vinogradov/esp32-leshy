@@ -469,7 +469,9 @@ Exact linked disassembly доказывает stack frames 256 B у controller r
 416 B у load bindings, 32 B у in-place result reset, 80 B у comparison и
 1 104 B у deepest evidence builder. Оба physical runner выполняют этот ELF
 check до прошивки. Source contract отклоняет aggregate reset result 7 736 B.
-Это host/build evidence до one-flash короткой physical regression.
+Physical acceptance exact 0.149 затем сохраняет 97 488/97 488 B до/после
+workspace короткой regression и 96 452/96 452 B до/после workspace full delta;
+оба завершаются с lease zero в `E-HIL-167`.
 
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как

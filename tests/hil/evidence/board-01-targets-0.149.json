@@ -1,0 +1,126 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-0.149",
+  "candidate": {
+    "app_elf_sha256": "3293c8328bf946843c0035df7516fa47b8363d207acface51416967d51be62e9",
+    "checked_stack_frames": {
+      "TargetsController::loadBindings(": 416,
+      "TargetsController::reset()": 256,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "3293c8328bf946843c0035df7516fa47b8363d207acface51416967d51be62e9",
+    "firmware_bytes": 3107968,
+    "firmware_sha256": "743f31614df8891667293fdf755c7e53b9b4fc6ce105bc48d8a84a76d1e9c653",
+    "map_sha256": "8fef982fadc2253d7a64ae01d272965d8bd29c701654d95b128c552f8c202051",
+    "version": "0.149.0-targets-inplace-reset"
+  },
+  "evidence_ids": [
+    "E-AUTO-107",
+    "E-HIL-167",
+    "E-UX-044"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final": {
+    "lease_mask": 0,
+    "library_generation": 114,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "flash_sequence": {
+    "full_reuse": 0,
+    "short": 1,
+    "total": 1
+  },
+  "full_delta": {
+    "comparison": {
+      "added": 2,
+      "changed": 0,
+      "removed": 0,
+      "unchanged": 14
+    },
+    "generation_before": 112,
+    "heap_free_after_release": 96452,
+    "heap_free_before": 96452,
+    "survey_generations": [
+      113,
+      114
+    ],
+    "survey_observations": [
+      21,
+      18
+    ],
+    "target_count": 16
+  },
+  "input": {
+    "ambiguous_presses": 0,
+    "queue_drops": 0,
+    "read_errors": 0,
+    "status": "ready"
+  },
+  "manifest_sha256": "4a7e8a74e23c6594388e93a964bb18962dcda8f153a8b6a9956648c2264b6073",
+  "radio_tx_commands": 0,
+  "raw_artifacts_manifest_sha256": {
+    "full": "a74ea271410bb20e15c0e23e65e844aaaa4cc0611cdfa02a36e1870a2eb2d630",
+    "short": "6b77e9b08d269b095c3090c64a27b5a417967ea6e9a30f4751ab1ac7d2ca9c20"
+  },
+  "raw_run_sha256": {
+    "full": "17135bc4f3403b2d9bfaaf77f53679747ee14f32a6df20dae5fc10e832a6448a",
+    "short": "3cc6ef3c160bced4fe8b7a7f3e552cfce4cc4761431e11379390f91bf3a882f8"
+  },
+  "read_only_targets": {
+    "blocked_write_attempts": 0,
+    "filesystem_mount_error": 0,
+    "write_enabled": false
+  },
+  "safe_outputs": {
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true
+  },
+  "schema": "leshy.targets_product_hil.summary.v1",
+  "screens": {
+    "full-compare": {
+      "png": "frames/full-compare.png",
+      "png_sha256": "cde2fc73e18570b76d2beb26b8ac35fb2e1d428358744130d3bc88da4410276d"
+    },
+    "full-detail": {
+      "png": "frames/full-detail.png",
+      "png_sha256": "a79678463457fcb032c840839fa03642add76224d3730c2100a080e4f30e9cae"
+    },
+    "full-list": {
+      "png": "frames/full-list.png",
+      "png_sha256": "b80b0c34ae1ac331f81e665fd6c6dfc2db6454d817cc44142aef8928f4c64442"
+    },
+    "short-compare": {
+      "png": "frames/short-compare.png",
+      "png_sha256": "705321ca4a157006547f8d9efe0db936719f1db9a575a97ab09e099f2f99d7ea"
+    },
+    "short-list": {
+      "png": "frames/short-list.png",
+      "png_sha256": "a3fdaf397c7a43413c99e453494e2374bb431030369c2ae4dcd70879fc773478"
+    }
+  },
+  "short_regression": {
+    "comparison": {
+      "added": 7,
+      "changed": 0,
+      "removed": 0,
+      "unchanged": 9
+    },
+    "generations": [
+      111,
+      112
+    ],
+    "heap_free_after_release": 97488,
+    "heap_free_before": 97488,
+    "storage_write_calls": 0,
+    "target_count": 16
+  },
+  "source_commit": "8d4a2e86d88807f0de21d5afd9680912d8b7797f",
+  "status": "pass"
+}
