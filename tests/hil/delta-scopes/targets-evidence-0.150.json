@@ -7,6 +7,7 @@
     "target_comparison_row_navigation",
     "target_comparison_exact_evidence_detail",
     "target_comparison_incremental_keypad_and_touch_render",
+    "target_row_pixel_cleanup_and_width_fit",
     "target_comparison_state_probe"
   ],
   "required_delta_regression": [
@@ -17,6 +18,7 @@
     "every_row_has_exact_baseline_or_current_observation_reference",
     "selected_row_opens_matching_compare_detail",
     "left_returns_to_same_comparison_selection_then_targets_list",
+    "first_and_scrolled_windows_have_no_stale_text_pixels",
     "keypad_and_tft_capture",
     "zero_tx_zero_writes_zero_input_drops",
     "workspace_release_and_final_zero_lease"

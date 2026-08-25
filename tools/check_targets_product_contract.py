@@ -110,12 +110,14 @@ def main() -> int:
             "renderTargetListRow" in entry and
             "renderTargetComparisonRow" in entry and
             "renderTargetComparisonDetail" in entry and
+            "fitTargetRowText" in entry and
+            "Layout::FooterDividerY - Layout::ContentTop" in entry and
             "targetsFirstVisible" in entry and
             "TouchTargetLayout::HomeRows" in entry and
             "controller.openSelected()" in entry and
             "TargetsView::CompareDetail" in entry,
             "Targets list/detail/change rows/evidence must share keypad and "
-            "touch navigation")
+            "touch navigation while row-window redraws clear stale pixels")
     require(failures,
             "selectedIsCompare() ? TargetsView::Compare" in controller and
             "entryCount()" in controller and

@@ -10620,6 +10620,30 @@ void formatTargetName(const TargetListRow& row, char* output,
     formatTargetIdentity(row.identity, output, capacity);
 }
 
+void fitTargetRowText(char* text, std::size_t capacity, UiTextRole role) {
+    if (text == nullptr || capacity < 4) return;
+    constexpr std::int16_t kRightInset = 6;
+    constexpr std::int16_t kMaximumWidth =
+        Layout::ContentWidth - kInteractiveRowTextInset - kRightInset;
+    selectUiFont(role);
+    if (display.textWidth(text) <= kMaximumWidth) return;
+    std::size_t length = std::strlen(text);
+    while (length > 0) {
+        std::size_t cut = length - 1;
+        while (cut > 0 &&
+               (static_cast<unsigned char>(text[cut]) & 0xc0U) == 0x80U) {
+            --cut;
+        }
+        text[cut] = '\0';
+        length = cut;
+        if (length + 3 >= capacity) continue;
+        std::memcpy(text + length, "...", 4);
+        if (display.textWidth(text) <= kMaximumWidth) return;
+        text[length] = '\0';
+    }
+    std::snprintf(text, capacity, "...");
+}
+
 void renderTargetListRow(std::size_t entryIndex, std::size_t firstVisible) {
     if (targetsProductRuntime == nullptr || entryIndex < firstVisible ||
         entryIndex >= firstVisible + kVisibleTargetRows) {
@@ -10659,6 +10683,8 @@ void renderTargetListRow(std::size_t entryIndex, std::size_t firstVisible) {
                       tr(UiTextId::TargetsBleRowFormat),
                       static_cast<int>(row->latest.rssiDbm));
     }
+    fitTargetRowText(name, sizeof(name), UiTextRole::Body);
+    fitTargetRowText(note, sizeof(note), UiTextRole::Meta);
     renderMenuRow(bounds, name, note, selected, true, Tone::Neutral);
 }
 
@@ -10727,6 +10753,8 @@ void renderTargetComparisonRow(std::size_t index, std::size_t firstVisible) {
                       classification,
                       static_cast<int>(visible.observation.rssiDbm));
     }
+    fitTargetRowText(name, sizeof(name), UiTextRole::Body);
+    fitTargetRowText(note, sizeof(note), UiTextRole::Meta);
     const Rect bounds = Components::homeRow(static_cast<std::uint8_t>(
         index - firstVisible));
     renderMenuRow(bounds, name, note,
@@ -11476,6 +11504,10 @@ bool renderSelectionDelta() {
             targetsFirstVisible(renderedUi.targetsSelection);
         const std::size_t currentFirst = targetsFirstVisible(current);
         if (oldFirst != currentFirst) {
+            display.fillRect(
+                Layout::Edge, Layout::ContentTop, Layout::ContentWidth,
+                Layout::FooterDividerY - Layout::ContentTop,
+                Palette::Canvas);
             renderTargetsPage(false);
             return true;
         }
