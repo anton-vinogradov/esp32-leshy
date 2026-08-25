@@ -243,6 +243,9 @@ tools/run_s5_two_board_hil.py \
   --fixture-port /dev/cu.FIXTURE \
   --expected-cid FE343253440000002000000055019CB7 \
   --output work/outputs/s5-two-board-matrix \
+  --retain-destination tests/hil/evidence/board-pair-s5-matrix \
+  --retain-summary tests/hil/evidence/board-pair-s5-matrix.json \
+  --retain-evidence-id E-HIL-S5-MATRIX \
   --profile-fixture-read-only \
   --declare-standard-v2-no-extensions \
   --declare-antennas-attached
@@ -270,12 +273,28 @@ runner, child runner и scenarios сверяет с commit, записанным
 остаётся корректной после продвижения working tree и не требует повторного physical
 run только ради ревью уже собранного evidence.
 
+При наличии options `--retain-*` та же passing-команда сразу создаёт компактный tracked
+bundle и acceptance summary. Он хранит по одному набору build product и fixture, все
+четыре machine record child, отрисованные PNG и streams, принятый fixture profile,
+точные committed runners/scenarios и полный SHA-256 index. Удаляются только дубликаты
+images в каждом child и raw RGB565 frames. Позже bundle проверяется без обеих плат:
+
+```sh
+tools/retain_s5_two_board_matrix.py verify \
+  --summary tests/hil/evidence/board-pair-s5-matrix.json
+```
+
+Opaque `.bin`, `.elf` и `.map` остаются локально восстанавливаемыми release artifacts,
+а их hash/size связаны tracked manifest даже когда Git policy не хранит bytes. Любой
+пропавший или изменённый tracked JSON, PNG, stream, profile либо committed source
+fail-close-ит проверку.
+
 Ранее принятый profile можно передать через `--fixture-profile`. Уже прошитые exact
 bytes разрешено переиспользовать только явными options
 `--reuse-exact-candidate-flash` и `--reuse-exact-fixture-flash`; normal path прошивает
 оба exact images. Затем raw passing run допускается в tracked evidence через
-`hil_evidence.py`, независимо проверяющий profile/source/image fixture и terminal
-inactive outputs.
+matrix-aware retention step выше, независимо проверяющий profile/source/image fixture
+и terminal inactive outputs.
 
 ## Текущая граница evidence
 

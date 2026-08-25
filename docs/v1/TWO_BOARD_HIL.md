@@ -245,6 +245,9 @@ tools/run_s5_two_board_hil.py \
   --fixture-port /dev/cu.FIXTURE \
   --expected-cid FE343253440000002000000055019CB7 \
   --output work/outputs/s5-two-board-matrix \
+  --retain-destination tests/hil/evidence/board-pair-s5-matrix \
+  --retain-summary tests/hil/evidence/board-pair-s5-matrix.json \
+  --retain-evidence-id E-HIL-S5-MATRIX \
   --profile-fixture-read-only \
   --declare-standard-v2-no-extensions \
   --declare-antennas-attached
@@ -272,12 +275,28 @@ parent runner, child runner and scenario sources against the commit recorded by 
 remains valid after the working tree advances and never requires a repeat physical run
 merely to review already captured evidence.
 
+When the `--retain-*` options are present, the same passing command also creates a
+compact tracked bundle and its acceptance summary. It keeps one product and one fixture
+build set, all four child machine records, rendered PNGs and streams, the admitted
+fixture profile, exact committed runners/scenarios and a complete SHA-256 index. It
+removes only duplicate per-child images and raw RGB565 frames. Verify that retained
+bundle at any later checkout without either board:
+
+```sh
+tools/retain_s5_two_board_matrix.py verify \
+  --summary tests/hil/evidence/board-pair-s5-matrix.json
+```
+
+Opaque `.bin`, `.elf` and `.map` files remain locally recoverable release artifacts and
+are hash/size-bound in the tracked manifest even when Git policy omits their bytes. Any
+missing or changed tracked JSON, PNG, stream, profile or committed source fails closed.
+
 An already accepted profile can instead be passed with `--fixture-profile`. Exact
 already-flashed bytes can be reused only through the explicit
 `--reuse-exact-candidate-flash` and `--reuse-exact-fixture-flash` options; normal
 operation flashes both exact images. The raw passing run is subsequently admitted
-to tracked evidence by `hil_evidence.py`, which independently verifies fixture
-profile/source/image identity and terminal inactive outputs.
+to tracked evidence by the matrix-aware retention step above, which independently
+verifies fixture profile/source/image identity and terminal inactive outputs.
 
 ## Current evidence boundary
 
