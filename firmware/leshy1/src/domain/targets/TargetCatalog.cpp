@@ -227,13 +227,17 @@ TargetMutationStatus TargetCatalog::attachEvidence(
     if (!identityKnown && record->identityCount >= record->identities.size()) {
         return TargetMutationStatus::IdentityFull;
     }
-    if (record->evidenceCount >= record->evidence.size()) {
-        return TargetMutationStatus::EvidenceFull;
-    }
     if (!identityKnown) {
         record->identities[record->identityCount++] = identity;
     }
-    record->evidence[record->evidenceCount++] = evidence;
+    if (record->evidenceCount >= record->evidence.size()) {
+        for (std::size_t index = 1; index < record->evidenceCount; ++index) {
+            record->evidence[index - 1U] = record->evidence[index];
+        }
+        record->evidence[record->evidenceCount - 1U] = evidence;
+    } else {
+        record->evidence[record->evidenceCount++] = evidence;
+    }
     ++record->revision;
     return TargetMutationStatus::Applied;
 }

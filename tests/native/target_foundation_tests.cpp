@@ -227,7 +227,7 @@ void testTargetMetadataIsBoundedIdempotentAndUnicodeSafe() {
     CHECK(catalog.find(id)->revision == revision + 1U);
 }
 
-void testTargetBoundsFailClosedWithoutPartialIdentityAttachment() {
+void testTargetBoundsKeepRecentEvidenceWithoutPartialIdentityAttachment() {
     TargetCatalog catalog;
     const TargetId id = targetId(4);
     const TargetIdentity identity = wifiIdentity(4);
@@ -244,13 +244,27 @@ void testTargetBoundsFailClosedWithoutPartialIdentityAttachment() {
     CHECK(before->evidenceCount == TargetRecord::kEvidenceCapacity);
     const std::uint8_t identityCount = before->identityCount;
     const std::uint32_t revision = before->revision;
+    const TargetEvidenceRef previousOldest = before->evidence[0];
+    const TargetEvidenceRef previousNewest =
+        before->evidence[TargetRecord::kEvidenceCapacity - 1U];
+    const TargetEvidenceRef nextEvidence = evidence(5, 41, 1);
     CHECK(catalog.attachEvidence(
-              id, bleIdentity(8, 0), evidence(5, 41, 1)) ==
-          TargetMutationStatus::EvidenceFull);
+              id, bleIdentity(8, 0), nextEvidence) ==
+          TargetMutationStatus::Applied);
     const TargetRecord* after = catalog.find(id);
-    CHECK(after->identityCount == identityCount);
-    CHECK(after->revision == revision);
-    CHECK(catalog.findByIdentity(bleIdentity(8, 0)) == nullptr);
+    CHECK(after->identityCount == identityCount + 1U);
+    CHECK(after->revision == revision + 1U);
+    CHECK(after->evidenceCount == TargetRecord::kEvidenceCapacity);
+    CHECK(targetEvidenceEqual(after->evidence[0], evidence(4, 40, 2)));
+    CHECK(targetEvidenceEqual(
+        after->evidence[TargetRecord::kEvidenceCapacity - 2U],
+        previousNewest));
+    CHECK(targetEvidenceEqual(
+        after->evidence[TargetRecord::kEvidenceCapacity - 1U],
+        nextEvidence));
+    CHECK(catalog.findByEvidence(previousOldest) == nullptr);
+    CHECK(catalog.findByEvidence(nextEvidence) == after);
+    CHECK(catalog.findByIdentity(bleIdentity(8, 0)) == after);
 }
 
 void testTypedTargetActionsHaveOneStableMutationBoundary() {
@@ -491,7 +505,7 @@ void testTargetStoreCommitBoundariesNeverLosePublishedCatalog() {
 int main() {
     testTargetOwnsExactIdentitiesAndImmutableEvidence();
     testTargetMetadataIsBoundedIdempotentAndUnicodeSafe();
-    testTargetBoundsFailClosedWithoutPartialIdentityAttachment();
+    testTargetBoundsKeepRecentEvidenceWithoutPartialIdentityAttachment();
     testTypedTargetActionsHaveOneStableMutationBoundary();
     testTargetWorkingSetHasAnExplicitNoEvictionBound();
     testObservationAdmissionKeepsExactSourceEvidence();
