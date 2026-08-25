@@ -250,6 +250,12 @@ tools/run_s5_two_board_hil.py \
 
 Matrix до profiling, build или flash пишет fail-closed checkpoint в собственный
 `run.json` и обновляет его после каждого принятого child run.
+Parent acceptance не доверяет одному флагу `passed` child. Он независимо связывает
+exact schema, checkpoint и committed scenario hash child; source/version/image/app
+identity product и fixture; CID и разные role ports; fixture profile/ID;
+последовательность first-flash и дальнейшего exact reuse; terminal product
+Home/none/lease 0, а также inactive IR/nRF/CC outputs fixture и очистку PA/FIFO.
+Любой mismatch оставляет parent matrix failed, даже если отдельный child заявил pass.
 
 Ранее принятый profile можно передать через `--fixture-profile`. Уже прошитые exact
 bytes разрешено переиспользовать только явными options

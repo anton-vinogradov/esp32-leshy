@@ -27,7 +27,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | S5.3 | Known nRF24 signal: source-bound 2,442 MHz minimum-power fixture → three-receiver finder result → safe cleanup; blocked until a repaired/replacement RF carrier is available | 🔴 blocked |
 | S5.4 | Known Sub-GHz signal: exact 0.140 accepts the bounded OOK/FSK UI, GDO0 receive implementation and one-flash no-signal delta. Source `4f97b3a` implements exact finite minimum-power OOK/FSK fixture vectors and automated capture→save→cold-export scenarios; their physical run remains source-blocked | 🟡 in progress |
 | S5.5 | Runtime completeness: exact 0.139 accepts Product Survey/worker safety inherited from 0.138 plus truthful stock assembly applicability, debounced low-voltage Store refusal, real light-sleep/resume and a public RX-only Sub-GHz software-fixture Store path; exact 0.145 adds persistent language/brightness/theme with safe unavailable Sound; physical positive RF remains owned by S5.3/S5.4 | ✅ complete |
-| S5.6 | Integrated S5 hardware gate: exact 0.144 already accepts the autonomous on-device Full receiver/artifact half with zero leaked leases/outputs. The one-build/one-flash-per-role IR→nRF24→OOK→FSK phase runner is build-checked at source `4f97b3a`; execute its qualified-source physical half after S5.3/S5.4 | ⬜ later |
+| S5.6 | Integrated S5 hardware gate: exact 0.144 already accepts the autonomous on-device Full receiver/artifact half with zero leaked leases/outputs. The one-build/one-flash-per-role IR→nRF24→OOK→FSK runner is build-checked at source `4f97b3a` and its strict cross-child acceptance is host-checked at `95079ec`; execute the qualified-source physical half after S5.3/S5.4 | ⬜ later |
 
 ### Roadmap
 

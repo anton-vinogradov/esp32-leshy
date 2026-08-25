@@ -252,6 +252,12 @@ tools/run_s5_two_board_hil.py \
 
 The matrix writes a fail-closed checkpoint to its own `run.json` before profiling,
 building or flashing, and updates it after every accepted child run.
+Parent acceptance does not trust a child's `passed` flag alone. It independently
+binds the exact child schema, checkpoint and committed scenario hash; product and
+fixture source/version/image/app identities; CID and distinct role ports; fixture
+profile/ID; first-flash versus later exact-reuse sequence; and terminal product
+Home/none/lease-0 plus fixture IR/nRF/CC inactivity and PA/FIFO cleanup. Any mismatch
+leaves the parent matrix failed even if an individual child claims success.
 
 An already accepted profile can instead be passed with `--fixture-profile`. Exact
 already-flashed bytes can be reused only through the explicit
