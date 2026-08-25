@@ -159,12 +159,50 @@ void failuresAreAtomic() {
           SessionTargetAdmissionStatus::InvalidArgument);
 }
 
+void fullCatalogKeepsOwnedTargetsAndSkipsNovelProjectionRows() {
+    SurveySession initial;
+    CHECK(initial.start("full", 1000) == SessionStatus::Started);
+    for (std::size_t index = 0; index < TargetCatalog::kCapacity; ++index) {
+        CHECK(initial.append(wifi(
+                  index + 1, 1010 + index,
+                  static_cast<std::uint8_t>(index + 1), -40)) ==
+              SessionStatus::Appended);
+    }
+    CHECK(initial.stop(1100) == SessionStatus::Stopped);
+    TargetCatalog catalog;
+    TargetCatalog scratch;
+    CHECK(admitSessionTargets(initial, 1, catalog, scratch).valid());
+    CHECK(catalog.size() == TargetCatalog::kCapacity);
+    const TargetCatalog before = catalog;
+
+    SurveySession current;
+    CHECK(current.start("overflow", 1200) == SessionStatus::Started);
+    CHECK(current.append(wifi(1, 1210, 1, -30)) == SessionStatus::Appended);
+    CHECK(current.append(wifi(2, 1220, 99, -20)) == SessionStatus::Appended);
+    CHECK(current.stop(1230) == SessionStatus::Stopped);
+    const auto admitted = admitSessionTargets(current, 2, catalog, scratch);
+    CHECK(admitted.valid());
+    CHECK(admitted.identities == 2);
+    CHECK(admitted.evidenceAttached == 1);
+    CHECK(admitted.capacitySkipped == 1);
+    CHECK(admitted.targetStatus == TargetMutationStatus::CatalogFull);
+    CHECK(catalog.size() == TargetCatalog::kCapacity);
+    CHECK(catalog.get(0)->evidenceCount ==
+          before.get(0)->evidenceCount + 1);
+    TargetIdentity novel{};
+    novel.kind = TargetIdentityKind::WifiBssid;
+    novel.value = {0x02, 0, 0, 0, 0, 99};
+    novel.length = 6;
+    CHECK(catalog.findByIdentity(novel) == nullptr);
+}
+
 }  // namespace
 
 int main() {
     stableIdsAndLatestEvidence();
     repeatedIdentityAcrossSessionsAttachesEvidence();
     failuresAreAtomic();
+    fullCatalogKeepsOwnedTargetsAndSkipsNovelProjectionRows();
     if (failures != 0) {
         std::cerr << failures << " session target admission test(s) failed\n";
         return 1;

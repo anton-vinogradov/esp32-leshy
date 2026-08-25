@@ -34,6 +34,7 @@ struct SessionTargetAdmissionResult final {
     std::size_t created = 0;
     std::size_t evidenceAttached = 0;
     std::size_t unchanged = 0;
+    std::size_t capacitySkipped = 0;
 
     bool valid() const {
         return status == SessionTargetAdmissionStatus::Valid;
@@ -63,7 +64,11 @@ bool targetIdForEvidence(const domain::targets::TargetEvidenceRef& evidence,
 
 // Imports only the latest retained Observation for each exact identity in one
 // Session. The caller provides a scratch catalog so the admission is
-// all-or-nothing without heap allocation or partial mutation on a bound/error.
+// all-or-nothing without heap allocation or partial mutation on malformed or
+// conflicting input. A novel identity encountered after the durable catalog
+// reaches its fixed capacity is omitted from this derived view and counted in
+// capacitySkipped: persisted user-owned Targets are never evicted, while the
+// complete immutable source Session remains available on storage.
 SessionTargetAdmissionResult admitSessionTargets(
     const survey::SurveySession& session, std::uint32_t generation,
     domain::targets::TargetCatalog& catalog,

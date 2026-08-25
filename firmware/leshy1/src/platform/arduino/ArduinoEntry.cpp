@@ -4666,7 +4666,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     // heads while mounted, then are released while the selected wire blob stays
     // in this workspace. After unmount the product runtime is allocated as
     // separate 11,272 B catalog, 11,272 B decision log, 7,736 B comparison,
-    // 2,704 B proposals and 4,232 B controller blocks, then the blob is decoded
+    // 2,704 B proposals and 4,240 B controller blocks, then the blob is decoded
     // directly into that one long-lived copy. A monolithic workspace or
     // overlapping transfer/runtime copies do not fit the board.
     auto* targetStateWorkspace = new (std::nothrow)
@@ -15600,7 +15600,7 @@ void emitTargetsState(Stream& reply) {
         "\"admission_target_status\":\"%s\","
         "\"admission_observations\":%u,\"admission_identities\":%u,"
         "\"admission_created\":%u,\"admission_evidence_attached\":%u,"
-        "\"admission_unchanged\":%u,"
+        "\"admission_unchanged\":%u,\"admission_capacity_skipped\":%u,"
         "\"truncated\":%s,\"entry_count\":%u,\"selection\":%u,"
         "\"compare_available\":%s,\"baseline_generation\":%lu,"
         "\"current_generation\":%lu,\"added\":%u,\"removed\":%u,"
@@ -15710,6 +15710,8 @@ void emitTargetsState(Stream& reply) {
                                   ? 0 : targetAdmission->evidenceAttached),
         static_cast<unsigned>(targetAdmission == nullptr
                                   ? 0 : targetAdmission->unchanged),
+        static_cast<unsigned>(targetAdmission == nullptr
+                                  ? 0 : targetAdmission->capacitySkipped),
         controller != nullptr && controller->truncated() ? "true" : "false",
         static_cast<unsigned>(controller == nullptr
                                   ? 0 : controller->entryCount()),

@@ -341,6 +341,7 @@ TargetsLoadStatus TargetsController::loadBindings(
         }
         lastAdmission_ = admittedBaseline;
         lastAdmissionStage_ = "baseline";
+        if (admittedBaseline.capacitySkipped != 0) truncated_ = true;
         const auto baselineSource = comparisonSource(baseline);
         const auto currentSource = comparisonSource(current);
         const auto correlationStatus =
@@ -370,6 +371,7 @@ TargetsLoadStatus TargetsController::loadBindings(
     }
     lastAdmission_ = admittedCurrent;
     lastAdmissionStage_ = "current";
+    if (admittedCurrent.capacitySkipped != 0) truncated_ = true;
     if (!rebuildRows()) {
         reset();
         status_ = TargetsLoadStatus::EvidenceUnavailable;

@@ -52,7 +52,7 @@ def main() -> int:
                 load_product.rfind("allocateTargetsProduct(") and
             "separate 11,272 B catalog, 11,272 B decision log, 7,736 B "
             "comparison" in load_product and
-            "2,704 B proposals and 4,232 B controller blocks" in
+            "2,704 B proposals and 4,240 B controller blocks" in
                 load_product and
             "overlapping transfer/runtime copies do not fit the board" in
                 load_product and
@@ -169,7 +169,8 @@ def main() -> int:
             r'\"admission_status\":\"%s\"' in entry and
             r'\"admission_target_status\":\"%s\"' in entry and
             r'\"admission_observations\":%u' in entry and
-            r'\"admission_identities\":%u' in entry,
+            r'\"admission_identities\":%u' in entry and
+            r'\"admission_capacity_skipped\":%u' in entry,
             "Targets must expose the exact admission stage and bounded "
             "mutation reason when a persisted projection cannot be loaded")
     require(failures,

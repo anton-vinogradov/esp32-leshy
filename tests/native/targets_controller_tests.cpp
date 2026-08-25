@@ -473,6 +473,33 @@ void correlationReviewKeepsCandidateUnownedUntilDecision() {
     CHECK(inPlace.size() == 2);
 }
 
+void fullPersistedCatalogDoesNotBlockCurrentView() {
+    SurveySession initial = rangeSession(
+        "persisted-full", 1000, 1, TargetCatalog::kCapacity, -30);
+    OwnedTargetsWorkspace initialWorkspace;
+    TargetsController initialController(initialWorkspace);
+    CHECK(initialController.load({&initial, 1}) == TargetsLoadStatus::Ready);
+    const TargetCatalog persisted = initialController.catalog();
+    CHECK(persisted.size() == TargetCatalog::kCapacity);
+
+    SurveySession current = session(
+        "current-overflow", 2000,
+        {wifi(1, 2010, 1, -50), wifi(2, 2020, 99, -20)});
+    OwnedTargetsWorkspace workspace;
+    TargetsController controller(workspace);
+    CHECK(controller.load({&current, 2}, persisted) ==
+          TargetsLoadStatus::Ready);
+    CHECK(controller.catalog().size() == TargetCatalog::kCapacity);
+    CHECK(controller.size() == 1);
+    CHECK(controller.sourceIdentityCount() == 2);
+    CHECK(controller.truncated());
+    CHECK(controller.lastAdmission().valid());
+    CHECK(controller.lastAdmission().capacitySkipped == 1);
+    CHECK(controller.lastAdmission().targetStatus ==
+          TargetMutationStatus::CatalogFull);
+    CHECK(controller.row(0)->identity.value[5] == 1);
+}
+
 }  // namespace
 
 int main() {
@@ -484,6 +511,7 @@ int main() {
     comparisonClassesThenSignalAreStable();
     persistedMetadataFollowsIdentityAcrossVisits();
     correlationReviewKeepsCandidateUnownedUntilDecision();
+    fullPersistedCatalogDoesNotBlockCurrentView();
     if (failures != 0) {
         std::cerr << failures << " targets controller test(s) failed\n";
         return 1;

@@ -198,6 +198,13 @@ SessionTargetAdmissionResult admitSessionTargets(
             scratch.findByIdentity(admitted.identity);
         domain::targets::TargetMutationStatus status{};
         if (existing == nullptr) {
+            if (scratch.size() >=
+                domain::targets::TargetCatalog::kCapacity) {
+                ++result.capacitySkipped;
+                result.targetStatus =
+                    domain::targets::TargetMutationStatus::CatalogFull;
+                continue;
+            }
             domain::targets::TargetId id{};
             if (!targetIdForEvidence(admitted.evidence, &id)) {
                 result.status = SessionTargetAdmissionStatus::TargetRejected;
@@ -224,7 +231,7 @@ SessionTargetAdmissionResult admitSessionTargets(
             result.targetStatus = status;
             return result;
         }
-        result.targetStatus = status;
+        if (result.capacitySkipped == 0) result.targetStatus = status;
     }
     catalog = scratch;
     result.status = SessionTargetAdmissionStatus::Valid;
