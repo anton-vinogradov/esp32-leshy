@@ -366,6 +366,184 @@ TargetCodecStatus decodeRecord(CborReader& reader,
     return TargetCodecStatus::Valid;
 }
 
+bool encodeCorrelationFeature(
+    CborWriter& writer,
+    const domain::targets::CorrelationFeature& feature) {
+    return writer.map(5) && writer.unsignedValue(0) &&
+        writer.unsignedValue(static_cast<std::uint8_t>(feature.kind)) &&
+        writer.unsignedValue(1) &&
+        writer.unsignedValue(feature.strengthPermille) &&
+        writer.unsignedValue(2) &&
+        writer.unsignedValue(feature.maximumPoints) &&
+        writer.unsignedValue(3) &&
+        writer.unsignedValue(feature.awardedPoints) &&
+        writer.unsignedValue(4) &&
+        encodeEvidence(writer, feature.targetEvidence);
+}
+
+bool encodeCorrelationProposal(
+    CborWriter& writer,
+    const domain::targets::CorrelationProposal& proposal) {
+    if (!writer.map(8) || !writer.unsignedValue(0) ||
+        !writer.bytes(proposal.id.bytes.data(), proposal.id.bytes.size()) ||
+        !writer.unsignedValue(1) ||
+        !writer.bytes(proposal.targetId.bytes.data(),
+                      proposal.targetId.bytes.size()) ||
+        !writer.unsignedValue(2) ||
+        !encodeIdentity(writer, proposal.candidateIdentity) ||
+        !writer.unsignedValue(3) ||
+        !encodeEvidence(writer, proposal.candidateEvidence) ||
+        !writer.unsignedValue(4) || !writer.array(proposal.featureCount)) {
+        return false;
+    }
+    for (std::size_t index = 0; index < proposal.featureCount; ++index) {
+        if (!encodeCorrelationFeature(writer, proposal.features[index])) {
+            return false;
+        }
+    }
+    return writer.unsignedValue(5) &&
+        writer.unsignedValue(proposal.scorePermille) &&
+        writer.unsignedValue(6) &&
+        writer.unsignedValue(static_cast<std::uint8_t>(proposal.confidence)) &&
+        writer.unsignedValue(7) && writer.boolean(proposal.stale);
+}
+
+bool encodeCorrelationDecision(
+    CborWriter& writer,
+    const domain::targets::CorrelationDecisionRecord& record) {
+    return writer.map(4) && writer.unsignedValue(0) &&
+        encodeCorrelationProposal(writer, record.proposal) &&
+        writer.unsignedValue(1) &&
+        writer.unsignedValue(static_cast<std::uint8_t>(record.decision)) &&
+        writer.unsignedValue(2) &&
+        writer.unsignedValue(record.targetRevisionBefore) &&
+        writer.unsignedValue(3) &&
+        writer.unsignedValue(record.targetRevisionAfter);
+}
+
+TargetCodecStatus decodeCorrelationFeature(
+    CborReader& reader, domain::targets::CorrelationFeature* output) {
+    if (output == nullptr) return TargetCodecStatus::InvalidArgument;
+    *output = {};
+    std::uint64_t count = 0;
+    std::uint64_t value = 0;
+    if (!reader.map(&count) || count != 5 || !key(reader, 0) ||
+        !reader.unsignedValue(&value) ||
+        value < static_cast<std::uint8_t>(
+            domain::targets::CorrelationFeatureKind::AssignedVendorMatch) ||
+        value > static_cast<std::uint8_t>(
+            domain::targets::CorrelationFeatureKind::SignalTrendMatch)) {
+        return TargetCodecStatus::Malformed;
+    }
+    output->kind =
+        static_cast<domain::targets::CorrelationFeatureKind>(value);
+    if (!key(reader, 1) || !reader.unsignedValue(&value) ||
+        value > 1000U) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->strengthPermille = static_cast<std::uint16_t>(value);
+    if (!key(reader, 2) || !reader.unsignedValue(&value) ||
+        value > 1000U) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->maximumPoints = static_cast<std::uint16_t>(value);
+    if (!key(reader, 3) || !reader.unsignedValue(&value) ||
+        value > 1000U) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->awardedPoints = static_cast<std::uint16_t>(value);
+    if (!key(reader, 4)) return TargetCodecStatus::Malformed;
+    return decodeEvidence(reader, &output->targetEvidence);
+}
+
+TargetCodecStatus decodeCorrelationProposal(
+    CborReader& reader, domain::targets::CorrelationProposal* output) {
+    if (output == nullptr) return TargetCodecStatus::InvalidArgument;
+    *output = {};
+    std::uint64_t count = 0;
+    std::uint64_t value = 0;
+    const std::uint8_t* bytes = nullptr;
+    std::size_t length = 0;
+    if (!reader.map(&count) || count != 8 || !key(reader, 0) ||
+        !reader.bytes(&bytes, &length) ||
+        length != output->id.bytes.size()) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    std::memcpy(output->id.bytes.data(), bytes, length);
+    if (!key(reader, 1) || !reader.bytes(&bytes, &length) ||
+        length != output->targetId.bytes.size()) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    std::memcpy(output->targetId.bytes.data(), bytes, length);
+    if (!key(reader, 2)) return TargetCodecStatus::Malformed;
+    TargetCodecStatus status =
+        decodeIdentity(reader, &output->candidateIdentity);
+    if (status != TargetCodecStatus::Valid) return status;
+    if (!key(reader, 3)) return TargetCodecStatus::Malformed;
+    status = decodeEvidence(reader, &output->candidateEvidence);
+    if (status != TargetCodecStatus::Valid) return status;
+    if (!key(reader, 4) || !reader.array(&count) || count == 0 ||
+        count > output->features.size()) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->featureCount = static_cast<std::uint8_t>(count);
+    for (std::size_t index = 0; index < output->featureCount; ++index) {
+        status = decodeCorrelationFeature(reader, &output->features[index]);
+        if (status != TargetCodecStatus::Valid) return status;
+    }
+    if (!key(reader, 5) || !reader.unsignedValue(&value) || value > 1000U) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->scorePermille = static_cast<std::uint16_t>(value);
+    if (!key(reader, 6) || !reader.unsignedValue(&value) ||
+        value > static_cast<std::uint8_t>(
+            domain::targets::CorrelationConfidence::Stale)) {
+        return TargetCodecStatus::Malformed;
+    }
+    output->confidence =
+        static_cast<domain::targets::CorrelationConfidence>(value);
+    if (!key(reader, 7) || !reader.boolean(&output->stale)) {
+        return TargetCodecStatus::Malformed;
+    }
+    return domain::targets::correlationProposalValid(*output)
+        ? TargetCodecStatus::Valid : TargetCodecStatus::Malformed;
+}
+
+TargetCodecStatus decodeCorrelationDecision(
+    CborReader& reader,
+    domain::targets::CorrelationDecisionRecord* output) {
+    if (output == nullptr) return TargetCodecStatus::InvalidArgument;
+    *output = {};
+    std::uint64_t count = 0;
+    std::uint64_t value = 0;
+    if (!reader.map(&count) || count != 4 || !key(reader, 0)) {
+        return TargetCodecStatus::Malformed;
+    }
+    TargetCodecStatus status =
+        decodeCorrelationProposal(reader, &output->proposal);
+    if (status != TargetCodecStatus::Valid) return status;
+    if (!key(reader, 1) || !reader.unsignedValue(&value) ||
+        value < static_cast<std::uint8_t>(
+            domain::targets::CorrelationDecision::Accept) ||
+        value > static_cast<std::uint8_t>(
+            domain::targets::CorrelationDecision::Reject)) {
+        return TargetCodecStatus::Malformed;
+    }
+    output->decision =
+        static_cast<domain::targets::CorrelationDecision>(value);
+    if (!key(reader, 2) || !reader.unsignedValue(&value) || value == 0 ||
+        value > std::numeric_limits<std::uint32_t>::max()) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->targetRevisionBefore = static_cast<std::uint32_t>(value);
+    if (!key(reader, 3) || !reader.unsignedValue(&value) || value == 0 ||
+        value > std::numeric_limits<std::uint32_t>::max()) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->targetRevisionAfter = static_cast<std::uint32_t>(value);
+    return TargetCodecStatus::Valid;
+}
+
 }  // namespace
 
 const char* targetCodecStatusName(TargetCodecStatus status) {
@@ -532,6 +710,215 @@ TargetCodecStatus reopenTargetCatalog(
     if (catalogStatus != TargetCodecStatus::Valid) return catalogStatus;
     if (output->size() != manifest.targetCount) {
         output->clear();
+        return TargetCodecStatus::Malformed;
+    }
+    return TargetCodecStatus::Valid;
+}
+
+TargetCodecStatus encodeTargetState(
+    const domain::targets::TargetCatalog& catalog,
+    const domain::targets::CorrelationDecisionLog& decisions,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr || catalog.size() == 0 ||
+        catalog.size() > domain::targets::TargetCatalog::kCapacity ||
+        decisions.size() > domain::targets::CorrelationDecisionLog::kCapacity) {
+        return TargetCodecStatus::InvalidArgument;
+    }
+    CborWriter writer(output, capacity);
+    writer.map(3);
+    writer.unsignedValue(0);
+    writer.unsignedValue(kTargetStateSchemaVersion);
+    writer.unsignedValue(1);
+    writer.array(catalog.size());
+    for (std::size_t index = 0; index < catalog.size(); ++index) {
+        const domain::targets::TargetRecord* record = catalog.get(index);
+        if (record == nullptr || !encodeRecord(writer, *record)) {
+            return writer.ok() ? TargetCodecStatus::InvalidArgument
+                               : TargetCodecStatus::BufferTooSmall;
+        }
+    }
+    writer.unsignedValue(2);
+    writer.array(decisions.size());
+    for (std::size_t index = 0; index < decisions.size(); ++index) {
+        const domain::targets::CorrelationDecisionRecord* record =
+            decisions.get(index);
+        if (record == nullptr ||
+            !domain::targets::correlationProposalValid(record->proposal) ||
+            !encodeCorrelationDecision(writer, *record)) {
+            return writer.ok() ? TargetCodecStatus::InvalidArgument
+                               : TargetCodecStatus::BufferTooSmall;
+        }
+    }
+    if (!writer.ok()) return TargetCodecStatus::BufferTooSmall;
+    *outputSize = writer.size();
+    return TargetCodecStatus::Valid;
+}
+
+TargetCodecStatus decodeTargetState(
+    const std::uint8_t* input, std::size_t size,
+    domain::targets::TargetCatalog* catalog,
+    domain::targets::CorrelationDecisionLog* decisions) {
+    if (input == nullptr || catalog == nullptr || decisions == nullptr ||
+        size == 0 || size > kTargetStateMaxBytes) {
+        return TargetCodecStatus::InvalidArgument;
+    }
+    catalog->clear();
+    decisions->clear();
+    CborReader reader(input, size);
+    std::uint64_t count = 0;
+    std::uint64_t version = 0;
+    if (!reader.map(&count) || count != 3 || !key(reader, 0) ||
+        !reader.unsignedValue(&version)) {
+        return TargetCodecStatus::Malformed;
+    }
+    if (version != kTargetStateSchemaVersion) {
+        return TargetCodecStatus::UnsupportedSchema;
+    }
+    if (!key(reader, 1) || !reader.array(&count) || count == 0 ||
+        count > domain::targets::TargetCatalog::kCapacity) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    for (std::size_t index = 0; index < count; ++index) {
+        domain::targets::TargetRecord record{};
+        const TargetCodecStatus status = decodeRecord(reader, &record);
+        if (status != TargetCodecStatus::Valid ||
+            catalog->restore(record) !=
+                domain::targets::TargetMutationStatus::Created) {
+            catalog->clear();
+            decisions->clear();
+            return status == TargetCodecStatus::Valid
+                ? TargetCodecStatus::Conflict : status;
+        }
+    }
+    if (!key(reader, 2) || !reader.array(&count) ||
+        count > domain::targets::CorrelationDecisionLog::kCapacity) {
+        catalog->clear();
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    for (std::size_t index = 0; index < count; ++index) {
+        domain::targets::CorrelationDecisionRecord record{};
+        const TargetCodecStatus status =
+            decodeCorrelationDecision(reader, &record);
+        if (status != TargetCodecStatus::Valid ||
+            (decisions->record(
+                 record.proposal, record.decision,
+                 record.targetRevisionBefore, record.targetRevisionAfter) !=
+             (record.decision == domain::targets::CorrelationDecision::Accept
+                  ? domain::targets::CorrelationDecisionStatus::Accepted
+                  : domain::targets::CorrelationDecisionStatus::Rejected))) {
+            catalog->clear();
+            decisions->clear();
+            return status == TargetCodecStatus::Valid
+                ? TargetCodecStatus::Conflict : status;
+        }
+    }
+    if (!reader.complete()) {
+        catalog->clear();
+        decisions->clear();
+        return TargetCodecStatus::TrailingData;
+    }
+    return TargetCodecStatus::Valid;
+}
+
+TargetCodecStatus encodeTargetStateManifest(
+    const domain::targets::TargetCatalog& catalog,
+    const domain::targets::CorrelationDecisionLog& decisions,
+    const std::uint8_t* stateBytes, std::size_t stateSize,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (catalog.size() == 0 ||
+        catalog.size() > domain::targets::TargetCatalog::kCapacity ||
+        decisions.size() > domain::targets::CorrelationDecisionLog::kCapacity ||
+        stateBytes == nullptr || stateSize == 0 ||
+        stateSize > kTargetStateMaxBytes || output == nullptr ||
+        outputSize == nullptr) {
+        return TargetCodecStatus::InvalidArgument;
+    }
+    CborWriter writer(output, capacity);
+    writer.map(5);
+    writer.unsignedValue(0);
+    writer.unsignedValue(kTargetStateSchemaVersion);
+    writer.unsignedValue(1);
+    writer.unsignedValue(catalog.size());
+    writer.unsignedValue(2);
+    writer.unsignedValue(decisions.size());
+    writer.unsignedValue(3);
+    writer.unsignedValue(stateSize);
+    writer.unsignedValue(4);
+    writer.unsignedValue(crc32c(stateBytes, stateSize));
+    if (!writer.ok()) return TargetCodecStatus::BufferTooSmall;
+    *outputSize = writer.size();
+    return TargetCodecStatus::Valid;
+}
+
+TargetCodecStatus decodeTargetStateManifest(
+    const std::uint8_t* input, std::size_t size,
+    TargetStateManifest* output) {
+    if (input == nullptr || output == nullptr || size == 0 ||
+        size > kTargetStateManifestMaxBytes) {
+        return TargetCodecStatus::InvalidArgument;
+    }
+    CborReader reader(input, size);
+    std::uint64_t count = 0;
+    std::uint64_t value = 0;
+    if (!reader.map(&count) || count != 5 || !key(reader, 0) ||
+        !reader.unsignedValue(&value)) {
+        return TargetCodecStatus::Malformed;
+    }
+    if (value != kTargetStateSchemaVersion) {
+        return TargetCodecStatus::UnsupportedSchema;
+    }
+    TargetStateManifest manifest{};
+    manifest.schemaVersion = static_cast<std::uint16_t>(value);
+    if (!key(reader, 1) || !reader.unsignedValue(&value) || value == 0 ||
+        value > domain::targets::TargetCatalog::kCapacity) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    manifest.targetCount = static_cast<std::uint16_t>(value);
+    if (!key(reader, 2) || !reader.unsignedValue(&value) ||
+        value > domain::targets::CorrelationDecisionLog::kCapacity) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    manifest.decisionCount = static_cast<std::uint16_t>(value);
+    if (!key(reader, 3) || !reader.unsignedValue(&value) || value == 0 ||
+        value > kTargetStateMaxBytes) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    manifest.stateLength = static_cast<std::uint32_t>(value);
+    if (!key(reader, 4) || !reader.unsignedValue(&value) ||
+        value > std::numeric_limits<std::uint32_t>::max()) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    manifest.stateCrc32c = static_cast<std::uint32_t>(value);
+    if (!reader.complete()) return TargetCodecStatus::TrailingData;
+    *output = manifest;
+    return TargetCodecStatus::Valid;
+}
+
+TargetCodecStatus reopenTargetState(
+    const std::uint8_t* manifestBytes, std::size_t manifestSize,
+    const std::uint8_t* stateBytes, std::size_t stateSize,
+    domain::targets::TargetCatalog* catalog,
+    domain::targets::CorrelationDecisionLog* decisions) {
+    if (catalog == nullptr || decisions == nullptr) {
+        return TargetCodecStatus::InvalidArgument;
+    }
+    catalog->clear();
+    decisions->clear();
+    TargetStateManifest manifest{};
+    const TargetCodecStatus manifestStatus = decodeTargetStateManifest(
+        manifestBytes, manifestSize, &manifest);
+    if (manifestStatus != TargetCodecStatus::Valid) return manifestStatus;
+    if (manifest.stateLength != stateSize || stateBytes == nullptr ||
+        manifest.stateCrc32c != crc32c(stateBytes, stateSize)) {
+        return TargetCodecStatus::ChecksumMismatch;
+    }
+    const TargetCodecStatus stateStatus =
+        decodeTargetState(stateBytes, stateSize, catalog, decisions);
+    if (stateStatus != TargetCodecStatus::Valid) return stateStatus;
+    if (catalog->size() != manifest.targetCount ||
+        decisions->size() != manifest.decisionCount) {
+        catalog->clear();
+        decisions->clear();
         return TargetCodecStatus::Malformed;
     }
     return TargetCodecStatus::Valid;

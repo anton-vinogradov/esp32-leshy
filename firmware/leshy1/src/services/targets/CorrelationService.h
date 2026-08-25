@@ -58,56 +58,11 @@ struct CorrelationProposalResult final {
     }
 };
 
-enum class CorrelationDecision : std::uint8_t {
-    Accept = 1,
-    Reject = 2,
-};
-
-struct CorrelationDecisionRecord final {
-    domain::targets::CorrelationProposal proposal{};
-    CorrelationDecision decision = CorrelationDecision::Reject;
-    std::uint32_t targetRevisionBefore = 0;
-    std::uint32_t targetRevisionAfter = 0;
-};
-
-enum class CorrelationDecisionStatus : std::uint8_t {
-    Accepted,
-    Rejected,
-    Unchanged,
-    InvalidArgument,
-    TargetChanged,
-    IdentityConflict,
-    EvidenceConflict,
-    EvidenceUnavailable,
-    LogFull,
-    ProposalIdConflict,
-    DecisionConflict,
-};
-
-const char* correlationDecisionStatusName(CorrelationDecisionStatus status);
-
-class CorrelationDecisionLog final {
-public:
-    static constexpr std::size_t kCapacity = 32;
-
-    void clear();
-    std::size_t size() const { return size_; }
-    const CorrelationDecisionRecord* get(std::size_t index) const;
-    const CorrelationDecisionRecord* findById(
-        const domain::targets::CorrelationProposalId& id) const;
-    const CorrelationDecisionRecord* find(
-        const domain::targets::CorrelationProposal& proposal) const;
-    bool canRecord(const domain::targets::CorrelationProposal& proposal,
-                   CorrelationDecision decision) const;
-    CorrelationDecisionStatus record(
-        const domain::targets::CorrelationProposal& proposal,
-        CorrelationDecision decision, std::uint32_t revisionBefore,
-        std::uint32_t revisionAfter);
-
-private:
-    std::array<CorrelationDecisionRecord, kCapacity> records_{};
-    std::size_t size_ = 0;
-};
+using domain::targets::CorrelationDecision;
+using domain::targets::CorrelationDecisionLog;
+using domain::targets::CorrelationDecisionRecord;
+using domain::targets::CorrelationDecisionStatus;
+using domain::targets::correlationDecisionStatusName;
 
 enum class CorrelationActionKind : std::uint8_t {
     Accept = 1,

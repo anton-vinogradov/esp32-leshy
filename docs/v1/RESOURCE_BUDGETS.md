@@ -374,6 +374,18 @@ remains exactly 16,384/16,384 B. `CorrelationDecisionLog` is host-guarded at
 runtime integration must measure its retained-storage and live placement costs.
 This is host/build evidence, not HIL.
 
+Host/build atomic Target-state measurement `RB-M143`: `E-CORR-002` uses
+3,091,340 B linked flash, 211,224 B static RAM and app/factory images
+3,091,840/3,157,376 B. This is +448 B linked flash, zero static-RAM growth and
++448/+448 B images versus `E-CORR-001` for deterministic schema-v2 encoding of
+the Target graph and full decision history plus a dedicated six-boundary
+dual-head journal. Dedicated DIRAM remains 294,404/341,760 B (86.14%, 47,356 B
+remaining), and dedicated IRAM remains exactly 16,384/16,384 B. The 32 KiB
+`TargetStateStoreWorkspace`, catalog and decision-log recovery scratch remain
+explicit lifecycle-owned objects rather than permanent product globals; S6.4
+runtime integration must measure their live placement and migration cost. This
+is host/build evidence, not HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

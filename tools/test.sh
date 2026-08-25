@@ -120,6 +120,7 @@ run_opaque_evidence_check() {
     "$repo_dir/tests/native/target_foundation_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Correlation.cpp" \
     "$repo_dir/firmware/leshy1/src/services/targets/ObservationTargetAdapter.cpp" \
     "$repo_dir/firmware/leshy1/src/services/targets/TargetService.cpp" \
     "$repo_dir/firmware/leshy1/src/storage/AtomicHead.cpp" \
@@ -143,6 +144,22 @@ run_opaque_evidence_check() {
     -o "$test_tmp/target_correlation_tests"
 
 "$test_tmp/target_correlation_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/target_state_persistence_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Correlation.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/AtomicHead.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/SessionStoreBoundary.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/TargetCodec.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/TargetStateStore.cpp" \
+    -o "$test_tmp/target_state_persistence_tests"
+
+"$test_tmp/target_state_persistence_tests"
 
 "${CXX:-c++}" \
     -std=c++17 \

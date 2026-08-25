@@ -4,6 +4,9 @@ namespace leshy1::services::targets {
 namespace {
 
 using domain::targets::CorrelationConfidence;
+using domain::targets::CorrelationDecision;
+using domain::targets::CorrelationDecisionRecord;
+using domain::targets::CorrelationDecisionStatus;
 using domain::targets::CorrelationFeatureKind;
 using domain::targets::CorrelationProposal;
 using domain::targets::TargetMutationStatus;
@@ -27,48 +30,6 @@ bool targetOwnsEvidence(const domain::targets::TargetRecord& target,
         }
     }
     return false;
-}
-
-bool proposalStructValid(const CorrelationProposal& proposal) {
-    if (!domain::targets::correlationProposalIdValid(proposal.id) ||
-        !domain::targets::targetIdValid(proposal.targetId) ||
-        !domain::targets::targetIdentityValid(proposal.candidateIdentity) ||
-        !domain::targets::targetEvidenceValid(proposal.candidateEvidence) ||
-        proposal.featureCount == 0 ||
-        proposal.featureCount > proposal.features.size() ||
-        proposal.scorePermille > 1000 ||
-        !domain::targets::correlationProposalIdEqual(
-            proposal.id, domain::targets::makeCorrelationProposalId(
-                proposal.targetId, proposal.candidateIdentity,
-                proposal.candidateEvidence))) {
-        return false;
-    }
-    std::uint16_t score = 0;
-    for (std::size_t index = 0; index < proposal.featureCount; ++index) {
-        const auto& feature = proposal.features[index];
-        const std::uint16_t maximum =
-            domain::targets::correlationFeatureMaximumPoints(feature.kind);
-        if (maximum == 0 || feature.maximumPoints != maximum ||
-            feature.strengthPermille == 0 ||
-            feature.strengthPermille > 1000 ||
-            feature.awardedPoints != static_cast<std::uint16_t>(
-                (static_cast<std::uint32_t>(maximum) *
-                 feature.strengthPermille) / 1000U) ||
-            !domain::targets::targetEvidenceValid(feature.targetEvidence)) {
-            return false;
-        }
-        score = static_cast<std::uint16_t>(score + feature.awardedPoints);
-        for (std::size_t prior = 0; prior < index; ++prior) {
-            if (proposal.features[prior].kind == feature.kind) return false;
-        }
-    }
-    if (score != proposal.scorePermille) return false;
-    const CorrelationConfidence expected = proposal.stale
-        ? CorrelationConfidence::Stale
-        : score >= 650 ? CorrelationConfidence::High
-        : score >= 350 ? CorrelationConfidence::Medium
-                       : CorrelationConfidence::Low;
-    return proposal.confidence == expected;
 }
 
 CorrelationDecisionStatus mutationStatus(TargetMutationStatus status) {
@@ -115,105 +76,6 @@ const char* correlationProposalStatusName(CorrelationProposalStatus status) {
             return "previously_rejected";
     }
     return "invalid_argument";
-}
-
-const char* correlationDecisionStatusName(CorrelationDecisionStatus status) {
-    switch (status) {
-        case CorrelationDecisionStatus::Accepted: return "accepted";
-        case CorrelationDecisionStatus::Rejected: return "rejected";
-        case CorrelationDecisionStatus::Unchanged: return "unchanged";
-        case CorrelationDecisionStatus::InvalidArgument:
-            return "invalid_argument";
-        case CorrelationDecisionStatus::TargetChanged:
-            return "target_changed";
-        case CorrelationDecisionStatus::IdentityConflict:
-            return "identity_conflict";
-        case CorrelationDecisionStatus::EvidenceConflict:
-            return "evidence_conflict";
-        case CorrelationDecisionStatus::EvidenceUnavailable:
-            return "evidence_unavailable";
-        case CorrelationDecisionStatus::LogFull: return "log_full";
-        case CorrelationDecisionStatus::ProposalIdConflict:
-            return "proposal_id_conflict";
-        case CorrelationDecisionStatus::DecisionConflict:
-            return "decision_conflict";
-    }
-    return "invalid_argument";
-}
-
-void CorrelationDecisionLog::clear() {
-    records_.fill(CorrelationDecisionRecord{});
-    size_ = 0;
-}
-
-const CorrelationDecisionRecord* CorrelationDecisionLog::get(
-    std::size_t index) const {
-    return index < size_ ? &records_[index] : nullptr;
-}
-
-const CorrelationDecisionRecord* CorrelationDecisionLog::findById(
-    const domain::targets::CorrelationProposalId& id) const {
-    for (std::size_t index = 0; index < size_; ++index) {
-        if (domain::targets::correlationProposalIdEqual(
-                records_[index].proposal.id, id)) {
-            return &records_[index];
-        }
-    }
-    return nullptr;
-}
-
-const CorrelationDecisionRecord* CorrelationDecisionLog::find(
-    const CorrelationProposal& proposal) const {
-    const CorrelationDecisionRecord* byId = findById(proposal.id);
-    return byId != nullptr && domain::targets::correlationProposalKeyEqual(
-        byId->proposal, proposal) ? byId : nullptr;
-}
-
-bool CorrelationDecisionLog::canRecord(
-    const CorrelationProposal& proposal, CorrelationDecision decision) const {
-    if (!proposalStructValid(proposal) ||
-        (decision != CorrelationDecision::Accept &&
-         decision != CorrelationDecision::Reject)) {
-        return false;
-    }
-    const CorrelationDecisionRecord* byId = findById(proposal.id);
-    if (byId != nullptr) {
-        return domain::targets::correlationProposalKeyEqual(
-                   byId->proposal, proposal) &&
-               byId->decision == decision;
-    }
-    return size_ < records_.size();
-}
-
-CorrelationDecisionStatus CorrelationDecisionLog::record(
-    const CorrelationProposal& proposal, CorrelationDecision decision,
-    std::uint32_t revisionBefore, std::uint32_t revisionAfter) {
-    if (!proposalStructValid(proposal) || revisionBefore == 0 ||
-        revisionAfter == 0 ||
-        (decision != CorrelationDecision::Accept &&
-         decision != CorrelationDecision::Reject) ||
-        (decision == CorrelationDecision::Accept &&
-         (revisionBefore == UINT32_MAX ||
-          revisionAfter != revisionBefore + 1U)) ||
-        (decision == CorrelationDecision::Reject &&
-         revisionAfter != revisionBefore)) {
-        return CorrelationDecisionStatus::InvalidArgument;
-    }
-    const CorrelationDecisionRecord* byId = findById(proposal.id);
-    if (byId != nullptr) {
-        if (!domain::targets::correlationProposalKeyEqual(
-                byId->proposal, proposal)) {
-            return CorrelationDecisionStatus::ProposalIdConflict;
-        }
-        return byId->decision == decision
-            ? CorrelationDecisionStatus::Unchanged
-            : CorrelationDecisionStatus::DecisionConflict;
-    }
-    if (size_ >= records_.size()) return CorrelationDecisionStatus::LogFull;
-    records_[size_++] = {proposal, decision, revisionBefore, revisionAfter};
-    return decision == CorrelationDecision::Accept
-        ? CorrelationDecisionStatus::Accepted
-        : CorrelationDecisionStatus::Rejected;
 }
 
 const CorrelationActionDescriptor* correlationActionDescriptor(
@@ -330,7 +192,7 @@ CorrelationActionResult CorrelationService::execute(
     result.proposalId = action.proposal.id;
     if (action.schemaVersion != kCorrelationActionSchemaVersion ||
         correlationActionDescriptor(action.kind) == nullptr ||
-        !proposalStructValid(action.proposal)) {
+        !domain::targets::correlationProposalValid(action.proposal)) {
         return result;
     }
     const CorrelationDecision decision =
