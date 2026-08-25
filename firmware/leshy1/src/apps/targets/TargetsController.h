@@ -15,8 +15,14 @@ enum class TargetsView : std::uint8_t {
     List,
     Detail,
     Actions,
+    NameEdit,
     Compare,
     CompareDetail,
+};
+
+enum class TargetActionItem : std::uint8_t {
+    Favorite,
+    Name,
 };
 
 enum class TargetsLoadStatus : std::uint8_t {
@@ -58,6 +64,9 @@ struct TargetsWorkspace final {
 
 class TargetsController final {
 public:
+    static constexpr std::size_t kActionCount = 2;
+    static constexpr std::size_t kNameEditControlCount = 4;
+
     explicit TargetsController(TargetsWorkspace& workspace)
         : workspace_(workspace) {}
 
@@ -75,9 +84,13 @@ public:
     bool next();
     bool previous();
     bool openSelected();
+    bool openNameEditor();
     bool openCompare();
     bool back();
     bool selectTarget(const domain::targets::TargetId& id);
+    bool cycleNameEditorGlyph();
+    bool appendNameEditorGlyph();
+    bool eraseNameEditorGlyph();
 
     TargetsView view() const { return view_; }
     TargetsLoadStatus status() const { return status_; }
@@ -87,6 +100,19 @@ public:
     }
     std::size_t selection() const { return selection_; }
     std::size_t comparisonSelection() const { return comparisonSelection_; }
+    std::size_t actionSelection() const { return actionSelection_; }
+    std::size_t nameEditorSelection() const { return nameEditorSelection_; }
+    TargetActionItem selectedAction() const {
+        return actionSelection_ == 0 ? TargetActionItem::Favorite
+                                     : TargetActionItem::Name;
+    }
+    const char* nameEditorText() const { return nameEditorText_.data(); }
+    std::size_t nameEditorLength() const { return nameEditorLength_; }
+    char nameEditorGlyph() const;
+    bool nameEditorDirty() const;
+    bool nameEditorCanAppend() const {
+        return nameEditorLength_ < domain::targets::TargetRecord::kNameCapacity;
+    }
     std::size_t navigationSelection() const {
         return view_ == TargetsView::Compare ||
                 view_ == TargetsView::CompareDetail
@@ -148,6 +174,15 @@ private:
     std::array<std::uint8_t, domain::targets::TargetComparisonResult::kCapacity>
         comparisonOrder_{};
     std::size_t comparisonSelection_ = 0;
+    std::size_t actionSelection_ = 0;
+    std::size_t nameEditorSelection_ = 0;
+    std::array<char, domain::targets::TargetRecord::kNameCapacity + 1>
+        nameEditorText_{};
+    std::size_t nameEditorLength_ = 0;
+    std::array<char, domain::targets::TargetRecord::kNameCapacity + 1>
+        originalName_{};
+    std::size_t originalNameLength_ = 0;
+    std::size_t nameEditorGlyphSelection_ = 0;
     TargetsView view_ = TargetsView::List;
     TargetsLoadStatus status_ = TargetsLoadStatus::SessionUnavailable;
     bool comparisonAvailable_ = false;

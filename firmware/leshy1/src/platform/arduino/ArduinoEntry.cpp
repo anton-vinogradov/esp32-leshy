@@ -220,6 +220,7 @@ using leshy1::domain::targets::TargetChangeKind;
 using leshy1::domain::targets::TargetComparisonClass;
 using leshy1::domain::targets::TargetCatalog;
 using leshy1::domain::targets::TargetId;
+using leshy1::domain::targets::TargetRecord;
 using leshy1::domain::hardware::CapabilityState;
 using leshy1::domain::hardware::HardwareInventory;
 using leshy1::domain::observations::Observation;
@@ -252,6 +253,7 @@ using leshy1::services::power::PowerWriteDisposition;
 using leshy1::services::targets::TargetAction;
 using leshy1::services::targets::TargetActionKind;
 using leshy1::services::targets::TargetService;
+using leshy1::apps::targets::TargetActionItem;
 using leshy1::kernel::safety::WorkerDeadlineSupervisor;
 using leshy1::platform::arduino::BoardSafeOutputs;
 using leshy1::platform::arduino::BoardInfraredReceiver;
@@ -424,6 +426,9 @@ struct TargetsMutationEvent final {
     bool catalogRecovered = false;
     bool cleanupComplete = false;
     bool favorite = false;
+    TargetActionKind actionKind = TargetActionKind::SetFavorite;
+    std::array<char, TargetRecord::kNameCapacity + 1> name{};
+    std::uint16_t nameLength = 0;
     TargetId targetId{};
     std::uint32_t generation = 0;
     leshy1::storage::RecoveryChoice head =
@@ -451,6 +456,9 @@ TargetsMutationEvent targetsMutationReport{};
 TargetCatalog* targetsMutationCatalog = nullptr;
 TargetId targetsMutationTargetId{};
 bool targetsMutationFavorite = false;
+TargetActionKind targetsMutationKind = TargetActionKind::SetFavorite;
+std::array<char, TargetRecord::kNameCapacity + 1> targetsMutationText{};
+std::uint16_t targetsMutationTextLength = 0;
 std::uint64_t targetsMutationStartActionUs = 0;
 QueueHandle_t targetsMutationEvents = nullptr;
 TaskHandle_t targetsMutationTaskHandle = nullptr;
@@ -4739,6 +4747,9 @@ void runTargetsMutationWorker(void*) {
     TargetsMutationEvent event;
     event.status = "store_failed";
     event.favorite = targetsMutationFavorite;
+    event.actionKind = targetsMutationKind;
+    event.name = targetsMutationText;
+    event.nameLength = targetsMutationTextLength;
     event.targetId = targetsMutationTargetId;
     const std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -4908,9 +4919,15 @@ void runTargetsMutationWorker(void*) {
         }
 
         TargetAction action;
-        action.kind = TargetActionKind::SetFavorite;
+        action.kind = event.actionKind;
         action.targetId = event.targetId;
         action.favorite = event.favorite;
+        if (event.actionKind == TargetActionKind::SetName &&
+            !leshy1::services::targets::setTargetActionText(
+                &action, event.name.data(), event.nameLength)) {
+            event.status = "name_invalid";
+            break;
+        }
         TargetService service(*catalog);
         const auto applied = service.execute(action);
         if (!applied.applied()) {
@@ -4956,9 +4973,15 @@ void runTargetsMutationWorker(void*) {
             event.head = recovered.choice;
         }
         const auto* reopened = catalog->find(event.targetId);
+        const bool valueReopened = reopened != nullptr &&
+            (event.actionKind == TargetActionKind::SetFavorite
+                 ? reopened->favorite == event.favorite
+                 : event.actionKind == TargetActionKind::SetName &&
+                       reopened->nameLength == event.nameLength &&
+                       std::memcmp(reopened->name.data(), event.name.data(),
+                                   event.nameLength) == 0);
         event.persisted = committed.complete() && recovered.valid() &&
-            recovered.generation == committed.generation &&
-            reopened != nullptr && reopened->favorite == event.favorite;
+            recovered.generation == committed.generation && valueReopened;
         event.status = event.persisted
             ? "saved"
             : (committed.complete()
@@ -5000,11 +5023,13 @@ void runTargetsMutationWorker(void*) {
     vTaskDelete(nullptr);
 }
 
-bool requestTargetsFavoriteMutation() {
+bool requestTargetsMutation(TargetActionKind kind, bool favorite,
+                            const char* text, std::size_t textLength) {
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (targetsProductRuntime == nullptr ||
-        targetsProductRuntime->controller.view() != TargetsView::Actions ||
+        (targetsProductRuntime->controller.view() != TargetsView::Actions &&
+         targetsProductRuntime->controller.view() != TargetsView::NameEdit) ||
         targetsMutationState == TargetsMutationState::Saving) {
         return false;
     }
@@ -5035,7 +5060,24 @@ bool requestTargetsFavoriteMutation() {
         return true;
     }
     targetsMutationTargetId = selected->id;
-    targetsMutationFavorite = !selected->favorite;
+    targetsMutationKind = kind;
+    targetsMutationFavorite = favorite;
+    targetsMutationText.fill('\0');
+    targetsMutationTextLength = 0;
+    if (kind == TargetActionKind::SetName) {
+        if (text == nullptr || textLength > TargetRecord::kNameCapacity) {
+            delete targetsMutationCatalog;
+            targetsMutationCatalog = nullptr;
+            targetsMutationState = TargetsMutationState::Failed;
+            targetsMutationStatus = "name_invalid";
+            lastRuntimeEvent = "targets_store_name_invalid";
+            return true;
+        }
+        if (textLength != 0) {
+            std::memcpy(targetsMutationText.data(), text, textLength);
+        }
+        targetsMutationTextLength = static_cast<std::uint16_t>(textLength);
+    }
     targetsMutationReport = {};
     releaseTargetsProduct();
     targetsMutationState = TargetsMutationState::Saving;
@@ -5061,6 +5103,30 @@ bool requestTargetsFavoriteMutation() {
     return true;
 }
 
+bool requestTargetsFavoriteMutation() {
+    if (targetsProductRuntime == nullptr ||
+        targetsProductRuntime->controller.view() != TargetsView::Actions ||
+        targetsProductRuntime->controller.selectedAction() !=
+            TargetActionItem::Favorite) {
+        return false;
+    }
+    const auto* selected = targetsProductRuntime->controller.selectedTarget();
+    return selected != nullptr && requestTargetsMutation(
+        TargetActionKind::SetFavorite, !selected->favorite, nullptr, 0);
+}
+
+bool requestTargetsNameMutation() {
+    if (targetsProductRuntime == nullptr ||
+        targetsProductRuntime->controller.view() != TargetsView::NameEdit ||
+        !targetsProductRuntime->controller.nameEditorDirty()) {
+        return false;
+    }
+    return requestTargetsMutation(
+        TargetActionKind::SetName, false,
+        targetsProductRuntime->controller.nameEditorText(),
+        targetsProductRuntime->controller.nameEditorLength());
+}
+
 void serviceTargetsMutationWorker() {
     if (targetsMutationEvents == nullptr) return;
     TargetsMutationEvent event;
@@ -5070,6 +5136,10 @@ void serviceTargetsMutationWorker() {
     const bool rebuilt = rebuildTargetsProductFromCatalog(
         event.catalogRecovered ? targetsMutationCatalog : nullptr,
         event.targetId, true);
+    if (rebuilt && event.actionKind == TargetActionKind::SetName &&
+        targetsProductRuntime != nullptr) {
+        targetsProductRuntime->controller.next();
+    }
     delete targetsMutationCatalog;
     targetsMutationCatalog = nullptr;
     if (event.catalogRecovered) {
@@ -7297,10 +7367,21 @@ NavigationFooter navigationFooterForCurrentState() {
             TargetsView::CompareDetail) {
             return {{NavigationKey::Left, UiTextId::NavChanges}, {}, {}};
         }
+        if (targetsProductRuntime->controller.view() == TargetsView::NameEdit) {
+            const std::size_t selection =
+                targetsProductRuntime->controller.nameEditorSelection();
+            return {{NavigationKey::Left, UiTextId::NavCancel}, choose,
+                    {NavigationKey::RightAndSelect,
+                     selection == 3 ? UiTextId::NavSave
+                                    : UiTextId::NavApply}};
+        }
         if (targetsProductRuntime->controller.view() ==
             TargetsView::Actions) {
-            return {{NavigationKey::Left, UiTextId::NavDetails}, {},
-                    {NavigationKey::RightAndSelect, UiTextId::NavToggle}};
+            return {{NavigationKey::Left, UiTextId::NavDetails}, choose,
+                    {NavigationKey::RightAndSelect,
+                     targetsProductRuntime->controller.selectedAction() ==
+                             TargetActionItem::Favorite
+                         ? UiTextId::NavToggle : UiTextId::NavEnter}};
         }
         return {{NavigationKey::Left, UiTextId::NavList}, {},
                 {NavigationKey::RightAndSelect, UiTextId::NavActions}};
@@ -11455,6 +11536,46 @@ void renderTargetsPage(bool clearContent) {
         return;
     }
     TargetsController& controller = targetsProductRuntime->controller;
+    if (controller.view() == TargetsView::NameEdit) {
+        renderHeader(tr(UiTextId::TargetsNameEdit), clearContent);
+        char name[TargetRecord::kNameCapacity + 1] = {};
+        std::snprintf(name, sizeof(name), "%s", controller.nameEditorText());
+        if (name[0] == '\0') {
+            std::snprintf(name, sizeof(name), "%s",
+                          tr(UiTextId::TargetsNameEmpty));
+        }
+        fitTargetRowText(name, sizeof(name), UiTextRole::Body);
+        char note[48] = {};
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsNameSymbolFormat),
+                      controller.nameEditorGlyph());
+        renderMenuRow(Components::homeRow(0), name, note,
+                      controller.nameEditorSelection() == 0, true,
+                      Tone::Positive);
+        char glyph[2] = {controller.nameEditorGlyph(), '\0'};
+        renderMenuRow(Components::homeRow(1),
+                      tr(UiTextId::TargetsNameAppend), glyph,
+                      controller.nameEditorSelection() == 1,
+                      controller.nameEditorCanAppend(), Tone::Positive);
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsNameLengthFormat),
+                      static_cast<unsigned>(controller.nameEditorLength()),
+                      static_cast<unsigned>(TargetRecord::kNameCapacity));
+        renderMenuRow(Components::homeRow(2),
+                      tr(UiTextId::TargetsNameDelete), note,
+                      controller.nameEditorSelection() == 2,
+                      controller.nameEditorLength() != 0, Tone::Muted);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::TargetsNameSave),
+                      tr(controller.nameEditorDirty()
+                             ? UiTextId::TargetsNameChanged
+                             : UiTextId::TargetsNameUnchanged),
+                      controller.nameEditorSelection() == 3,
+                      controller.nameEditorDirty(),
+                      controller.nameEditorDirty() ? Tone::Positive
+                                                   : Tone::Muted);
+        return;
+    }
     if (controller.view() == TargetsView::CompareDetail) {
         renderTargetComparisonDetail(clearContent);
         return;
@@ -11486,12 +11607,23 @@ void renderTargetsPage(bool clearContent) {
                       tr(UiTextId::TargetsFavorite),
                       tr(target->favorite ? UiTextId::TargetsFavoriteOn
                                           : UiTextId::TargetsFavoriteOff),
-                      true, true,
+                      controller.actionSelection() == 0, true,
                       target->favorite ? Tone::Positive : Tone::Muted);
+        char name[TargetRecord::kNameCapacity + 1] = {};
+        if (target->nameLength != 0) {
+            std::memcpy(name, target->name.data(), target->nameLength);
+        } else {
+            std::snprintf(name, sizeof(name), "%s",
+                          tr(UiTextId::TargetsNameEmpty));
+        }
+        fitTargetRowText(name, sizeof(name), UiTextRole::Meta);
+        renderMenuRow(Components::homeRow(1),
+                      tr(UiTextId::TargetsName), name,
+                      controller.actionSelection() == 1, true, Tone::Neutral);
         if (targetsMutationState == TargetsMutationState::Saved) {
-            renderMetric(2, tr(UiTextId::TargetsSaved), Tone::Positive);
+            renderMetric(4, tr(UiTextId::TargetsSaved), Tone::Positive);
         } else if (targetsMutationState == TargetsMutationState::Failed) {
-            renderMetric(2, tr(UiTextId::TargetsSaveFailed), Tone::Danger);
+            renderMetric(4, tr(UiTextId::TargetsSaveFailed), Tone::Danger);
         }
         return;
     }
@@ -14562,6 +14694,8 @@ void emitTargetsState(Stream& reply) {
               ? "detail"
               : controller->view() == TargetsView::Actions
                     ? "actions"
+              : controller->view() == TargetsView::NameEdit
+                    ? "name_edit"
               : controller->view() == TargetsView::Compare
                     ? "compare"
                     : controller->view() == TargetsView::CompareDetail
@@ -14579,7 +14713,28 @@ void emitTargetsState(Stream& reply) {
                               selectedTarget->id.bytes[index]));
         }
     }
-    char line[2048] = {};
+    const auto encodeHex = [](const char* input, std::size_t length,
+                              char* output, std::size_t capacity) {
+        if (output == nullptr || capacity == 0) return;
+        output[0] = '\0';
+        if (input == nullptr || capacity < length * 2U + 1U) return;
+        for (std::size_t index = 0; index < length; ++index) {
+            std::snprintf(output + index * 2U, 3, "%02X",
+                          static_cast<unsigned>(
+                              static_cast<unsigned char>(input[index])));
+        }
+    };
+    char selectedNameHex[TargetRecord::kNameCapacity * 2U + 1U] = {};
+    if (selectedTarget != nullptr) {
+        encodeHex(selectedTarget->name.data(), selectedTarget->nameLength,
+                  selectedNameHex, sizeof(selectedNameHex));
+    }
+    char editorNameHex[TargetRecord::kNameCapacity * 2U + 1U] = {};
+    if (controller != nullptr && controller->view() == TargetsView::NameEdit) {
+        encodeHex(controller->nameEditorText(), controller->nameEditorLength(),
+                  editorNameHex, sizeof(editorNameHex));
+    }
+    char line[2560] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.targets.product.v1\",\"kind\":\"state\","
@@ -14604,7 +14759,11 @@ void emitTargetsState(Stream& reply) {
         "\"selected_generation\":%lu,\"selected_rssi_dbm\":%d,"
         "\"selected_target_present\":%s,\"selected_target_id\":\"%s\","
         "\"selected_favorite\":%s,"
+        "\"selected_name_length\":%u,\"selected_name_hex\":\"%s\","
         "\"selected_revision\":%lu,"
+        "\"action_selection\":%u,\"name_editor_selection\":%u,"
+        "\"name_editor_length\":%u,\"name_editor_hex\":\"%s\","
+        "\"name_editor_glyph\":%u,\"name_editor_dirty\":%s,"
         "\"read_only\":false,\"write_enabled\":%s,"
         "\"target_state_generation\":%lu,\"target_state_head\":\"%s\","
         "\"mutation_state\":\"%s\",\"mutation_status\":\"%s\","
@@ -14678,9 +14837,27 @@ void emitTargetsState(Stream& reply) {
         selectedTargetId,
         selectedTarget != nullptr && selectedTarget->favorite
             ? "true" : "false",
+        static_cast<unsigned>(selectedTarget == nullptr
+                                  ? 0 : selectedTarget->nameLength),
+        selectedNameHex,
         static_cast<unsigned long>(selectedTarget == nullptr
                                        ? 0 : selectedTarget->revision),
-        controller != nullptr && controller->view() == TargetsView::Actions &&
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->actionSelection()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->nameEditorSelection()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->nameEditorLength()),
+        editorNameHex,
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->nameEditorGlyph()),
+        controller != nullptr && controller->nameEditorDirty()
+            ? "true" : "false",
+        controller != nullptr &&
+                ((controller->view() == TargetsView::Actions &&
+                  controller->selectedAction() == TargetActionItem::Favorite) ||
+                 (controller->view() == TargetsView::NameEdit &&
+                  controller->nameEditorDirty())) &&
                 targetsMutationState != TargetsMutationState::Saving
             ? "true" : "false",
         static_cast<unsigned long>(targetsStateGeneration), stateHead,
@@ -16142,6 +16319,7 @@ bool applyUiAction(UiAction action, bool render = true) {
         bool changed = false;
         if ((controller.view() == TargetsView::Detail ||
              controller.view() == TargetsView::Actions ||
+             controller.view() == TargetsView::NameEdit ||
              controller.view() == TargetsView::CompareDetail) &&
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
@@ -16152,10 +16330,36 @@ bool applyUiAction(UiAction action, bool render = true) {
             handled = true;
             changed = controller.openSelected();
         } else if (controller.view() == TargetsView::Actions &&
-                   (action == UiAction::Select ||
-                    action == UiAction::Right)) {
+                   action == UiAction::Up) {
             handled = true;
-            changed = requestTargetsFavoriteMutation();
+            changed = controller.previous();
+        } else if (controller.view() == TargetsView::Actions &&
+                   action == UiAction::Down) {
+            handled = true;
+            changed = controller.next();
+        } else if (controller.view() == TargetsView::Actions &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            changed = controller.selectedAction() == TargetActionItem::Favorite
+                ? requestTargetsFavoriteMutation()
+                : controller.openNameEditor();
+        } else if (controller.view() == TargetsView::NameEdit &&
+                   action == UiAction::Up) {
+            handled = true;
+            changed = controller.previous();
+        } else if (controller.view() == TargetsView::NameEdit &&
+                   action == UiAction::Down) {
+            handled = true;
+            changed = controller.next();
+        } else if (controller.view() == TargetsView::NameEdit &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            switch (controller.nameEditorSelection()) {
+                case 0: changed = controller.cycleNameEditorGlyph(); break;
+                case 1: changed = controller.appendNameEditorGlyph(); break;
+                case 2: changed = controller.eraseNameEditorGlyph(); break;
+                case 3: changed = requestTargetsNameMutation(); break;
+            }
         } else if (controller.view() == TargetsView::List ||
                    controller.view() == TargetsView::Compare) {
             if (action == UiAction::Up) {
@@ -16716,8 +16920,20 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
         targetsProductRuntime->controller.view() == TargetsView::Actions) {
         return {leshy1::ui::hitTouchTarget(
-                    TouchTargetLayout::HomeRows, point, 0, 1),
-                0};
+                    TouchTargetLayout::HomeRows, point, 0,
+                    static_cast<std::uint8_t>(
+                        TargetsController::kActionCount)),
+                static_cast<std::uint8_t>(
+                    targetsProductRuntime->controller.actionSelection())};
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() == TargetsView::NameEdit) {
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point, 0,
+                    static_cast<std::uint8_t>(
+                        TargetsController::kNameEditControlCount)),
+                static_cast<std::uint8_t>(
+                    targetsProductRuntime->controller.nameEditorSelection())};
     }
     if (uiController.page() == 4 &&
         captureView == CaptureView::SourceMenu) {

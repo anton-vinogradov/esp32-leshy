@@ -105,7 +105,10 @@ def main() -> int:
             r'\"mutation_state\":\"%s\"' in entry and
             "commitTargetCatalogState(" in entry and
             "recoverTargetCatalogState(" in entry and
-            "TargetActionKind::SetFavorite" in entry,
+            "TargetActionKind::SetFavorite" in entry and
+            "TargetActionKind::SetName" in entry and
+            r'\"selected_name_hex\":\"%s\"' in entry and
+            r'\"name_editor_dirty\":%s' in entry,
             "Targets needs a machine-readable release-test state")
     require(failures,
             '"git", "rev-parse", "HEAD"' in runner and
@@ -142,9 +145,12 @@ def main() -> int:
             "targetsFirstVisible" in entry and
             "TouchTargetLayout::HomeRows" in entry and
             "controller.openSelected()" in entry and
+            "controller.openNameEditor()" in entry and
+            "controller.appendNameEditorGlyph()" in entry and
+            "requestTargetsNameMutation()" in entry and
             "TargetsView::CompareDetail" in entry,
-            "Targets list/detail/change rows/evidence must share keypad and "
-            "touch navigation while row-window redraws clear stale pixels")
+            "Targets list/detail/change/name rows must share keypad and touch "
+            "navigation while row-window redraws clear stale pixels")
     require(failures,
             "selectedIsCompare() ? TargetsView::Compare" in controller and
             "entryCount()" in controller and
@@ -166,7 +172,8 @@ def main() -> int:
                     "TargetsLoadFailed", "TargetsDetail", "TargetsCompare",
                     "TargetsCompareEvidence", "TargetsClassAdded",
                     "TargetsBeforeWifiFormat", "TargetsNowWifiFormat",
-                    "TargetsChangesFormat", "NavChanges"):
+                    "TargetsChangesFormat", "TargetsNameEdit",
+                    "TargetsNameAppend", "TargetsNameSave", "NavChanges"):
         require(failures, f"LESHY_UI_TEXT({text_id}," in strings,
                 f"bilingual UI string missing: {text_id}")
     for forbidden in ("esp_wifi_80211_tx", "STX", "SFTX", "tone("):

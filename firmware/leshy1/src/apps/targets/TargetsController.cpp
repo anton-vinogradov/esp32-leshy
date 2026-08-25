@@ -1,5 +1,6 @@
 #include "TargetsController.h"
 
+#include <cstring>
 #include <new>
 #include <utility>
 
@@ -9,6 +10,9 @@
 
 namespace leshy1::apps::targets {
 namespace {
+
+constexpr char kTargetNameGlyphs[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -_";
 
 bool bindingValid(const TargetProductBinding& binding) {
     return binding.session != nullptr && binding.generation != 0 &&
@@ -185,6 +189,13 @@ void TargetsController::reset() {
     selection_ = 0;
     comparisonOrder_.fill(0xffU);
     comparisonSelection_ = 0;
+    actionSelection_ = 0;
+    nameEditorSelection_ = 0;
+    nameEditorText_.fill('\0');
+    nameEditorLength_ = 0;
+    originalName_.fill('\0');
+    originalNameLength_ = 0;
+    nameEditorGlyphSelection_ = 0;
     view_ = TargetsView::List;
     status_ = TargetsLoadStatus::SessionUnavailable;
     comparisonAvailable_ = false;
@@ -471,6 +482,16 @@ bool TargetsController::next() {
         ++comparisonSelection_;
         return true;
     }
+    if (view_ == TargetsView::Actions) {
+        if (actionSelection_ + 1 >= kActionCount) return false;
+        ++actionSelection_;
+        return true;
+    }
+    if (view_ == TargetsView::NameEdit) {
+        if (nameEditorSelection_ + 1 >= kNameEditControlCount) return false;
+        ++nameEditorSelection_;
+        return true;
+    }
     return false;
 }
 
@@ -483,6 +504,16 @@ bool TargetsController::previous() {
     if (view_ == TargetsView::Compare) {
         if (comparisonSelection_ == 0) return false;
         --comparisonSelection_;
+        return true;
+    }
+    if (view_ == TargetsView::Actions) {
+        if (actionSelection_ == 0) return false;
+        --actionSelection_;
+        return true;
+    }
+    if (view_ == TargetsView::NameEdit) {
+        if (nameEditorSelection_ == 0) return false;
+        --nameEditorSelection_;
         return true;
     }
     return false;
@@ -501,9 +532,76 @@ bool TargetsController::openSelected() {
     }
     if (view_ == TargetsView::Detail && selectedTarget() != nullptr) {
         view_ = TargetsView::Actions;
+        actionSelection_ = 0;
         return true;
     }
     return false;
+}
+
+bool TargetsController::openNameEditor() {
+    if (view_ != TargetsView::Actions ||
+        selectedAction() != TargetActionItem::Name) {
+        return false;
+    }
+    const auto* target = selectedTarget();
+    if (target == nullptr || target->nameLength > target->name.size() - 1U) {
+        return false;
+    }
+    nameEditorText_.fill('\0');
+    originalName_.fill('\0');
+    if (target->nameLength != 0) {
+        std::memcpy(nameEditorText_.data(), target->name.data(),
+                    target->nameLength);
+        std::memcpy(originalName_.data(), target->name.data(),
+                    target->nameLength);
+    }
+    nameEditorLength_ = target->nameLength;
+    originalNameLength_ = target->nameLength;
+    nameEditorSelection_ = 0;
+    nameEditorGlyphSelection_ = 0;
+    view_ = TargetsView::NameEdit;
+    return true;
+}
+
+char TargetsController::nameEditorGlyph() const {
+    constexpr std::size_t count = sizeof(kTargetNameGlyphs) - 1U;
+    return kTargetNameGlyphs[nameEditorGlyphSelection_ % count];
+}
+
+bool TargetsController::nameEditorDirty() const {
+    return view_ == TargetsView::NameEdit &&
+        (nameEditorLength_ != originalNameLength_ ||
+        std::memcmp(nameEditorText_.data(), originalName_.data(),
+                    nameEditorLength_) != 0);
+}
+
+bool TargetsController::cycleNameEditorGlyph() {
+    if (view_ != TargetsView::NameEdit) return false;
+    constexpr std::size_t count = sizeof(kTargetNameGlyphs) - 1U;
+    nameEditorGlyphSelection_ = (nameEditorGlyphSelection_ + 1U) % count;
+    return true;
+}
+
+bool TargetsController::appendNameEditorGlyph() {
+    if (view_ != TargetsView::NameEdit || !nameEditorCanAppend()) return false;
+    nameEditorText_[nameEditorLength_++] = nameEditorGlyph();
+    nameEditorText_[nameEditorLength_] = '\0';
+    return true;
+}
+
+bool TargetsController::eraseNameEditorGlyph() {
+    if (view_ != TargetsView::NameEdit || nameEditorLength_ == 0) return false;
+    std::size_t start = nameEditorLength_ - 1U;
+    while (start > 0U &&
+           (static_cast<unsigned char>(nameEditorText_[start]) & 0xc0U) ==
+               0x80U) {
+        --start;
+    }
+    for (std::size_t index = start; index <= nameEditorLength_; ++index) {
+        nameEditorText_[index] = '\0';
+    }
+    nameEditorLength_ = start;
+    return true;
 }
 
 bool TargetsController::openCompare() {
@@ -515,6 +613,10 @@ bool TargetsController::openCompare() {
 
 bool TargetsController::back() {
     if (view_ == TargetsView::List) return false;
+    if (view_ == TargetsView::NameEdit) {
+        view_ = TargetsView::Actions;
+        return true;
+    }
     if (view_ == TargetsView::Actions) {
         view_ = TargetsView::Detail;
         return true;

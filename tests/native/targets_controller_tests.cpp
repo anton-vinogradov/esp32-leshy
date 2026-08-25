@@ -1,3 +1,4 @@
+#include <cstring>
 #include <iostream>
 
 #include "apps/targets/TargetsController.h"
@@ -140,6 +141,30 @@ void pairIsUsefulFirstAndStable() {
     CHECK(controller.view() == TargetsView::Detail);
     CHECK(controller.openSelected());
     CHECK(controller.view() == TargetsView::Actions);
+    CHECK(controller.actionSelection() == 0);
+    CHECK(controller.selectedAction() == TargetActionItem::Favorite);
+    CHECK(controller.next());
+    CHECK(controller.selectedAction() == TargetActionItem::Name);
+    CHECK(controller.openNameEditor());
+    CHECK(controller.view() == TargetsView::NameEdit);
+    CHECK(controller.nameEditorLength() == 0);
+    CHECK(controller.nameEditorGlyph() == 'A');
+    CHECK(controller.next());
+    CHECK(controller.nameEditorSelection() == 1);
+    CHECK(controller.appendNameEditorGlyph());
+    CHECK(std::strcmp(controller.nameEditorText(), "A") == 0);
+    CHECK(controller.nameEditorDirty());
+    CHECK(controller.previous());
+    CHECK(controller.cycleNameEditorGlyph());
+    CHECK(controller.nameEditorGlyph() == 'B');
+    CHECK(controller.next());
+    CHECK(controller.appendNameEditorGlyph());
+    CHECK(std::strcmp(controller.nameEditorText(), "AB") == 0);
+    CHECK(controller.next());
+    CHECK(controller.eraseNameEditorGlyph());
+    CHECK(std::strcmp(controller.nameEditorText(), "A") == 0);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::Actions);
     CHECK(controller.back());
     CHECK(controller.view() == TargetsView::Detail);
 }
@@ -239,6 +264,10 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
     TargetCatalog persisted = priorController.catalog();
     CHECK(persisted.setFavorite(remembered->id, true) ==
           TargetMutationStatus::Applied);
+    constexpr const char kCyrillicName[] = u8"ЦЕЛЬ";
+    CHECK(persisted.setName(remembered->id, kCyrillicName,
+                            std::strlen(kCyrillicName)) ==
+          TargetMutationStatus::Applied);
 
     SurveySession current = session(
         "current-visit", 300, {wifi(1, 310, 9, -30)});
@@ -252,9 +281,22 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
     CHECK(selected != nullptr);
     CHECK(targetIdEqual(selected->id, remembered->id));
     CHECK(selected->favorite);
+    CHECK(selected->nameLength == std::strlen(kCyrillicName));
+    CHECK(std::memcmp(selected->name.data(), kCyrillicName,
+                      selected->nameLength) == 0);
     CHECK(selected->evidenceCount == 2);
     CHECK(currentController.row(0)->latest.rssiDbm == -30);
     CHECK(currentController.row(0)->evidence.sourceGeneration == 2);
+    CHECK(currentController.openSelected());
+    CHECK(currentController.openSelected());
+    CHECK(currentController.next());
+    CHECK(currentController.openNameEditor());
+    CHECK(!currentController.nameEditorDirty());
+    CHECK(currentController.eraseNameEditorGlyph());
+    CHECK(std::strcmp(currentController.nameEditorText(), u8"ЦЕЛ") == 0);
+    CHECK(currentController.nameEditorDirty());
+    CHECK(currentController.back());
+    CHECK(!currentController.nameEditorDirty());
 }
 
 }  // namespace
