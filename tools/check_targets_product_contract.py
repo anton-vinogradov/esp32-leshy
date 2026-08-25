@@ -27,6 +27,7 @@ def main() -> int:
     mount_runner = (ROOT / "tools/run_1x_targets_mount_regression_hil.py").read_text()
     evidence_runner = (ROOT / "tools/run_1x_targets_evidence_hil.py").read_text()
     favorite_runner = (ROOT / "tools/run_1x_targets_favorite_hil.py").read_text()
+    name_runner = (ROOT / "tools/run_1x_targets_name_hil.py").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -135,6 +136,16 @@ def main() -> int:
             "mutation_directory_syncs" in favorite_runner,
             "favorite mutation HIL must bind a clean exact candidate, atomic "
             "sync evidence and cold recovery of the same stable Target ID")
+    require(failures,
+            "leshy.targets_name_hil.run.v1" in name_runner and
+            "exact HIL requires clean committed HEAD" in name_runner and
+            "name_editor_dirty=True" in name_runner and
+            "selected_name_hex=name_after.hex().upper()" in name_runner and
+            "target_state_generation_after" in name_runner and
+            "targets-name-cold-reopen" in name_runner and
+            "mutation_directory_syncs" in name_runner,
+            "name mutation HIL must bind a clean exact candidate, exercise the "
+            "on-device editor, atomically sync and cold-reopen the same name")
     require(failures,
             "renderTargetsPage" in entry and
             "renderTargetListRow" in entry and

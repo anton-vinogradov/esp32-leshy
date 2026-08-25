@@ -1,0 +1,31 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "targets-name-0.152",
+  "candidate_version": "0.152.0-targets-name-edit",
+  "changed_surfaces": [
+    "target_actions_two_row_navigation",
+    "target_name_bounded_editor",
+    "target_name_keypad_and_touch_controls",
+    "target_name_typed_action",
+    "target_catalog_dual_head_atomic_store",
+    "target_catalog_exact_cid_write_admission",
+    "target_mutation_state_probe"
+  ],
+  "required_delta_regression": [
+    "one_exact_flash",
+    "reuse_existing_exact_cid_sessions_without_new_scan",
+    "open_first_stable_target_id",
+    "detail_to_actions_to_name_editor_navigation",
+    "bounded_name_edit_is_visible_before_write",
+    "exact_cid_writable_admission_only_during_commit",
+    "dual_head_commit_advances_exactly_one_generation",
+    "file_and_directory_syncs_complete",
+    "schema_v3_reopen_matches_mutated_name",
+    "cold_boot_reopen_preserves_name_and_target_id",
+    "worker_finishes_inside_eight_second_deadline",
+    "workspace_release_and_final_zero_lease"
+  ],
+  "new_passive_scans_required": false,
+  "full_matrix_required": false,
+  "cadence_after_acceptance": "7/15"
+}
