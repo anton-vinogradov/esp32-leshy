@@ -68,6 +68,7 @@ struct TargetStateStoreRecoveryResult final {
     std::uint32_t generation = 0;
     std::size_t targets = 0;
     std::size_t decisions = 0;
+    std::size_t merges = 0;
 
     bool valid() const { return status == TargetStateStoreStatus::Valid; }
 };
@@ -76,18 +77,22 @@ TargetStateStoreCommitResult commitTargetState(
     SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
     const domain::targets::TargetCatalog& catalog,
     const domain::targets::CorrelationDecisionLog& decisions,
+    const domain::targets::TargetMergeHistory& merges,
     std::uint32_t generation, HeadSlot publishSlot);
 
 TargetStateStoreCommitResult commitNextTargetState(
     SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
     const domain::targets::TargetCatalog& catalog,
     const domain::targets::CorrelationDecisionLog& decisions,
+    const domain::targets::TargetMergeHistory& merges,
     domain::targets::TargetCatalog& recoveryCatalogScratch,
-    domain::targets::CorrelationDecisionLog& recoveryDecisionScratch);
+    domain::targets::CorrelationDecisionLog& recoveryDecisionScratch,
+    domain::targets::TargetMergeHistory& recoveryMergeScratch);
 
 TargetStateStoreRecoveryResult recoverTargetState(
     SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
     domain::targets::TargetCatalog* catalog,
-    domain::targets::CorrelationDecisionLog* decisions);
+    domain::targets::CorrelationDecisionLog* decisions,
+    domain::targets::TargetMergeHistory* merges);
 
 }  // namespace leshy1::storage

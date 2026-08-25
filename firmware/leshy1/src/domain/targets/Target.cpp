@@ -62,4 +62,26 @@ bool targetEvidenceEqual(const TargetEvidenceRef& left,
         left.observedMonotonicUs == right.observedMonotonicUs;
 }
 
+bool targetRecordGraphEqual(const TargetRecord& left,
+                            const TargetRecord& right) {
+    if (!targetIdEqual(left.id, right.id) ||
+        left.identityCount != right.identityCount ||
+        left.evidenceCount != right.evidenceCount) {
+        return false;
+    }
+    for (std::size_t index = 0; index < left.identityCount; ++index) {
+        if (!targetIdentityEqual(left.identities[index],
+                                 right.identities[index])) {
+            return false;
+        }
+    }
+    for (std::size_t index = 0; index < left.evidenceCount; ++index) {
+        if (!targetEvidenceEqual(left.evidence[index],
+                                 right.evidence[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace leshy1::domain::targets

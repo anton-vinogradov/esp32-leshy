@@ -8,6 +8,7 @@
 
 #include "domain/targets/Correlation.h"
 #include "domain/targets/TargetCatalog.h"
+#include "domain/targets/TargetMerge.h"
 #include "storage/SessionStoreBoundary.h"
 #include "storage/TargetCodec.h"
 #include "storage/TargetStateStore.h"
@@ -66,6 +67,14 @@ TargetEvidenceRef evidence(std::uint8_t source, std::uint64_t sequence) {
     result.sourceGeneration = 9;
     result.observationSequence = sequence;
     result.observedMonotonicUs = 5000U + sequence;
+    return result;
+}
+
+TargetMergeId mergeId(std::uint8_t suffix) {
+    TargetMergeId result{};
+    result.bytes[0] = 0x4d;
+    result.bytes[1] = 0x47;
+    result.bytes.back() = suffix;
     return result;
 }
 
@@ -193,6 +202,7 @@ void checkGeneration(const TargetCatalog& catalog,
 void testStateCodecIsDeterministicAndBindsDecisionHistory() {
     TargetCatalog catalog;
     CorrelationDecisionLog decisions;
+    TargetMergeHistory merges;
     TargetId id{};
     TargetEvidenceRef observed{};
     prepareGenerationOne(&catalog, &decisions, &id, &observed);
@@ -205,21 +215,25 @@ void testStateCodecIsDeterministicAndBindsDecisionHistory() {
     std::size_t firstSize = 0;
     std::size_t secondSize = 0;
     std::size_t manifestSize = 0;
-    CHECK(encodeTargetState(catalog, decisions, first.data(), first.size(),
+    CHECK(encodeTargetState(catalog, decisions, merges,
+                            first.data(), first.size(),
                             &firstSize) == TargetCodecStatus::Valid);
-    CHECK(encodeTargetState(catalog, decisions, second.data(), second.size(),
+    CHECK(encodeTargetState(catalog, decisions, merges,
+                            second.data(), second.size(),
                             &secondSize) == TargetCodecStatus::Valid);
     CHECK(firstSize == secondSize);
     CHECK(std::memcmp(first.data(), second.data(), firstSize) == 0);
     CHECK(encodeTargetStateManifest(
-              catalog, decisions, first.data(), firstSize, manifest.data(),
+              catalog, decisions, merges, first.data(), firstSize, manifest.data(),
               manifest.size(), &manifestSize) == TargetCodecStatus::Valid);
 
     TargetCatalog reopenedCatalog;
     CorrelationDecisionLog reopenedDecisions;
+    TargetMergeHistory reopenedMerges;
     CHECK(reopenTargetState(
               manifest.data(), manifestSize, first.data(), firstSize,
-              &reopenedCatalog, &reopenedDecisions) == TargetCodecStatus::Valid);
+              &reopenedCatalog, &reopenedDecisions, &reopenedMerges) ==
+          TargetCodecStatus::Valid);
     checkGeneration(reopenedCatalog, reopenedDecisions, 2, 2);
     CHECK(reopenedDecisions.get(0)->decision == CorrelationDecision::Reject);
     CHECK(reopenedDecisions.get(1)->decision == CorrelationDecision::Accept);
@@ -230,13 +244,30 @@ void testStateCodecIsDeterministicAndBindsDecisionHistory() {
         reopenedDecisions.get(1)->proposal.features[0].targetEvidence,
         observed));
 
+    // Schema-v2 had the same graph/decision body and no merge-history key.
+    // Keep a direct migration fixture so v3 can open pre-merge host state.
+    std::array<std::uint8_t, kTargetStateMaxBytes> legacy = first;
+    CHECK(firstSize > 4);
+    CHECK(legacy[0] == 0xa4U);
+    CHECK(legacy[2] == kTargetStateSchemaVersion);
+    CHECK(legacy[firstSize - 2U] == 0x03U);
+    CHECK(legacy[firstSize - 1U] == 0x80U);
+    legacy[0] = 0xa3U;
+    legacy[2] = kTargetStatePreviousSchemaVersion;
+    CHECK(decodeTargetState(
+              legacy.data(), firstSize - 2U, &reopenedCatalog,
+              &reopenedDecisions, &reopenedMerges) == TargetCodecStatus::Valid);
+    checkGeneration(reopenedCatalog, reopenedDecisions, 2, 2);
+    CHECK(reopenedMerges.size() == 0);
+
     first[firstSize / 2U] ^= 0x01U;
     CHECK(reopenTargetState(
               manifest.data(), manifestSize, first.data(), firstSize,
-              &reopenedCatalog, &reopenedDecisions) ==
+              &reopenedCatalog, &reopenedDecisions, &reopenedMerges) ==
           TargetCodecStatus::ChecksumMismatch);
     CHECK(reopenedCatalog.size() == 0);
     CHECK(reopenedDecisions.size() == 0);
+    CHECK(reopenedMerges.size() == 0);
 }
 
 void testStateStoreRecoversOnlyMatchingGraphAndHistory() {
@@ -244,35 +275,42 @@ void testStateStoreRecoversOnlyMatchingGraphAndHistory() {
     TargetStateStoreWorkspace workspace;
     TargetCatalog catalog;
     CorrelationDecisionLog decisions;
+    TargetMergeHistory merges;
     TargetCatalog scratchCatalog;
     CorrelationDecisionLog scratchDecisions;
+    TargetMergeHistory scratchMerges;
     TargetId id{};
     TargetEvidenceRef observed{};
     prepareGenerationOne(&catalog, &decisions, &id, &observed);
     TargetStateStoreCommitResult commit = commitNextTargetState(
-        io, workspace, catalog, decisions, scratchCatalog, scratchDecisions);
+        io, workspace, catalog, decisions, merges, scratchCatalog,
+        scratchDecisions, scratchMerges);
     CHECK(commit.complete());
     CHECK(commit.generation == 1);
     CHECK(commit.publishedSlot == HeadSlot::A);
 
     advanceToGenerationTwo(&catalog, &decisions, id, observed);
     commit = commitNextTargetState(
-        io, workspace, catalog, decisions, scratchCatalog, scratchDecisions);
+        io, workspace, catalog, decisions, merges, scratchCatalog,
+        scratchDecisions, scratchMerges);
     CHECK(commit.complete());
     CHECK(commit.generation == 2);
     CHECK(commit.publishedSlot == HeadSlot::B);
 
     TargetCatalog recoveredCatalog;
     CorrelationDecisionLog recoveredDecisions;
+    TargetMergeHistory recoveredMerges;
     TargetStateStoreRecoveryResult recovery = recoverTargetState(
-        io, workspace, &recoveredCatalog, &recoveredDecisions);
+        io, workspace, &recoveredCatalog, &recoveredDecisions,
+        &recoveredMerges);
     CHECK(recovery.valid());
     CHECK(recovery.generation == 2);
     checkGeneration(recoveredCatalog, recoveredDecisions, 2, 2);
 
     CHECK(io.flipDurableByte("target-state-00000002.cbor", 0));
     recovery = recoverTargetState(
-        io, workspace, &recoveredCatalog, &recoveredDecisions);
+        io, workspace, &recoveredCatalog, &recoveredDecisions,
+        &recoveredMerges);
     CHECK(recovery.valid());
     CHECK(recovery.generation == 1);
     checkGeneration(recoveredCatalog, recoveredDecisions, 1, 1);
@@ -288,15 +326,18 @@ void testEveryInterruptedCommitKeepsGraphAndHistoryPaired() {
     TargetStateStoreWorkspace baseWorkspace;
     TargetCatalog generationTwo;
     CorrelationDecisionLog generationTwoDecisions;
+    TargetMergeHistory generationTwoMerges;
     TargetCatalog scratchCatalog;
     CorrelationDecisionLog scratchDecisions;
+    TargetMergeHistory scratchMerges;
     TargetId id{};
     TargetEvidenceRef observed{};
     prepareGenerationOne(&generationTwo, &generationTwoDecisions,
                          &id, &observed);
     CHECK(commitNextTargetState(
               baseline, baseWorkspace, generationTwo,
-              generationTwoDecisions, scratchCatalog, scratchDecisions)
+              generationTwoDecisions, generationTwoMerges, scratchCatalog,
+              scratchDecisions, scratchMerges)
               .complete());
     advanceToGenerationTwo(&generationTwo, &generationTwoDecisions,
                            id, observed);
@@ -306,10 +347,12 @@ void testEveryInterruptedCommitKeepsGraphAndHistoryPaired() {
         TargetStateStoreWorkspace workspace;
         TargetCatalog validationCatalog;
         CorrelationDecisionLog validationDecisions;
+        TargetMergeHistory validationMerges;
         SessionStoreBoundaryIo boundaryIo(interrupted, boundary);
         const TargetStateStoreCommitResult commit = commitNextTargetState(
             boundaryIo, workspace, generationTwo, generationTwoDecisions,
-            validationCatalog, validationDecisions);
+            generationTwoMerges, validationCatalog, validationDecisions,
+            validationMerges);
         CHECK(!commit.complete());
         CHECK(boundaryIo.stopped());
         CHECK(boundaryIo.sequenceValid());
@@ -317,8 +360,10 @@ void testEveryInterruptedCommitKeepsGraphAndHistoryPaired() {
 
         TargetCatalog recoveredCatalog;
         CorrelationDecisionLog recoveredDecisions;
+        TargetMergeHistory recoveredMerges;
         const TargetStateStoreRecoveryResult recovery = recoverTargetState(
-            interrupted, workspace, &recoveredCatalog, &recoveredDecisions);
+            interrupted, workspace, &recoveredCatalog, &recoveredDecisions,
+            &recoveredMerges);
         CHECK(recovery.valid());
         const std::uint32_t expectedGeneration =
             boundary == CommitStage::SyncHead ? 2U : 1U;
@@ -326,6 +371,117 @@ void testEveryInterruptedCommitKeepsGraphAndHistoryPaired() {
         checkGeneration(recoveredCatalog, recoveredDecisions,
                         expectedGeneration, expectedGeneration);
     }
+}
+
+void testMergeHistorySharesTheAtomicStateGeneration() {
+    FakeStoreIo baseline;
+    TargetStateStoreWorkspace baseWorkspace;
+    TargetCatalog mergedCatalog;
+    CorrelationDecisionLog decisions;
+    TargetMergeHistory merges;
+    TargetCatalog scratchCatalog;
+    CorrelationDecisionLog scratchDecisions;
+    TargetMergeHistory scratchMerges;
+    CHECK(mergedCatalog.create(targetId(1), wifiIdentity(1), evidence(1, 1)) ==
+          TargetMutationStatus::Created);
+    CHECK(mergedCatalog.create(targetId(2), bleIdentity(2), evidence(2, 2)) ==
+          TargetMutationStatus::Created);
+    const TargetCatalog unmergedCatalog = mergedCatalog;
+    CHECK(commitNextTargetState(
+              baseline, baseWorkspace, mergedCatalog, decisions, merges,
+              scratchCatalog, scratchDecisions, scratchMerges)
+              .complete());
+    CHECK(merges.merge(mergedCatalog, mergeId(1), targetId(1), targetId(2),
+                       1, 1) == TargetMergeStatus::Merged);
+
+    const std::array<CommitStage, 6> boundaries{{
+        CommitStage::WritePayloads, CommitStage::SyncPayloads,
+        CommitStage::WriteManifest, CommitStage::SyncManifest,
+        CommitStage::WriteHead, CommitStage::SyncHead,
+    }};
+    for (const CommitStage boundary : boundaries) {
+        FakeStoreIo interrupted = baseline;
+        TargetStateStoreWorkspace workspace;
+        TargetCatalog validationCatalog;
+        CorrelationDecisionLog validationDecisions;
+        TargetMergeHistory validationMerges;
+        SessionStoreBoundaryIo boundaryIo(interrupted, boundary);
+        CHECK(!commitNextTargetState(
+                   boundaryIo, workspace, mergedCatalog, decisions, merges,
+                   validationCatalog, validationDecisions, validationMerges)
+                   .complete());
+        interrupted.crash();
+
+        TargetCatalog recoveredCatalog;
+        CorrelationDecisionLog recoveredDecisions;
+        TargetMergeHistory recoveredMerges;
+        const TargetStateStoreRecoveryResult recovery = recoverTargetState(
+            interrupted, workspace, &recoveredCatalog, &recoveredDecisions,
+            &recoveredMerges);
+        CHECK(recovery.valid());
+        const bool newGeneration = boundary == CommitStage::SyncHead;
+        CHECK(recovery.generation == (newGeneration ? 2U : 1U));
+        CHECK(recoveredCatalog.size() == (newGeneration ? 1U : 2U));
+        CHECK(recoveredMerges.size() == (newGeneration ? 1U : 0U));
+        if (newGeneration) {
+            CHECK(recoveredCatalog.find(targetId(2)) == nullptr);
+            CHECK(recoveredMerges.get(0) != nullptr);
+            CHECK(!recoveredMerges.get(0)->split);
+        } else {
+            CHECK(recoveredCatalog.find(targetId(2)) != nullptr);
+            CHECK(targetRecordGraphEqual(
+                *recoveredCatalog.get(0), *unmergedCatalog.get(0)));
+            CHECK(targetRecordGraphEqual(
+                *recoveredCatalog.get(1), *unmergedCatalog.get(1)));
+        }
+    }
+
+    FakeStoreIo persisted = baseline;
+    TargetStateStoreWorkspace workspace;
+    CHECK(commitNextTargetState(
+              persisted, workspace, mergedCatalog, decisions, merges,
+              scratchCatalog, scratchDecisions, scratchMerges)
+              .complete());
+    TargetCatalog recoveredCatalog;
+    CorrelationDecisionLog recoveredDecisions;
+    TargetMergeHistory recoveredMerges;
+    CHECK(recoverTargetState(
+              persisted, workspace, &recoveredCatalog, &recoveredDecisions,
+              &recoveredMerges)
+              .generation == 2);
+    CHECK(recoveredMerges.size() == 1);
+    CHECK(recoveredMerges.split(recoveredCatalog, mergeId(1)) ==
+          TargetMergeStatus::Split);
+    CHECK(recoveredCatalog.size() == 2);
+    CHECK(targetRecordGraphEqual(
+        *recoveredCatalog.get(0), *unmergedCatalog.get(0)));
+    CHECK(targetRecordGraphEqual(
+        *recoveredCatalog.get(1), *unmergedCatalog.get(1)));
+
+    std::array<std::uint8_t, kTargetStateMaxBytes> state{};
+    std::array<std::uint8_t, kTargetStateManifestMaxBytes> manifest{};
+    std::size_t stateSize = 0;
+    std::size_t manifestSize = 0;
+    CHECK(encodeTargetState(recoveredCatalog, recoveredDecisions,
+                            recoveredMerges, state.data(), state.size(),
+                            &stateSize) == TargetCodecStatus::Valid);
+    CHECK(encodeTargetStateManifest(
+              recoveredCatalog, recoveredDecisions, recoveredMerges,
+              state.data(), stateSize, manifest.data(), manifest.size(),
+              &manifestSize) == TargetCodecStatus::Valid);
+    TargetCatalog reopenedCatalog;
+    CorrelationDecisionLog reopenedDecisions;
+    TargetMergeHistory reopenedMerges;
+    CHECK(reopenTargetState(
+              manifest.data(), manifestSize, state.data(), stateSize,
+              &reopenedCatalog, &reopenedDecisions, &reopenedMerges) ==
+          TargetCodecStatus::Valid);
+    CHECK(reopenedMerges.size() == 1);
+    CHECK(reopenedMerges.get(0)->split);
+    CHECK(targetRecordGraphEqual(
+        *reopenedCatalog.get(0), *unmergedCatalog.get(0)));
+    CHECK(targetRecordGraphEqual(
+        *reopenedCatalog.get(1), *unmergedCatalog.get(1)));
 }
 
 void testPathsAndAliasingFailClosed() {
@@ -339,16 +495,24 @@ void testPathsAndAliasingFailClosed() {
     TargetStateStoreWorkspace workspace;
     TargetCatalog catalog;
     CorrelationDecisionLog decisions;
+    TargetMergeHistory merges;
     TargetId id{};
     TargetEvidenceRef observed{};
     prepareGenerationOne(&catalog, &decisions, &id, &observed);
     CorrelationDecisionLog scratchDecisions;
+    TargetMergeHistory scratchMerges;
     CHECK(commitNextTargetState(
-              io, workspace, catalog, decisions, catalog, scratchDecisions)
+              io, workspace, catalog, decisions, merges, catalog,
+              scratchDecisions, scratchMerges)
               .status == TargetStateStoreStatus::InvalidArgument);
     TargetCatalog scratchCatalog;
     CHECK(commitNextTargetState(
-              io, workspace, catalog, decisions, scratchCatalog, decisions)
+              io, workspace, catalog, decisions, merges, scratchCatalog,
+              decisions, scratchMerges)
+              .status == TargetStateStoreStatus::InvalidArgument);
+    CHECK(commitNextTargetState(
+              io, workspace, catalog, decisions, merges, scratchCatalog,
+              scratchDecisions, merges)
               .status == TargetStateStoreStatus::InvalidArgument);
 }
 
@@ -358,6 +522,7 @@ int main() {
     testStateCodecIsDeterministicAndBindsDecisionHistory();
     testStateStoreRecoversOnlyMatchingGraphAndHistory();
     testEveryInterruptedCommitKeepsGraphAndHistoryPaired();
+    testMergeHistorySharesTheAtomicStateGeneration();
     testPathsAndAliasingFailClosed();
     if (failures != 0) return EXIT_FAILURE;
     std::cout << "S6 Target graph/decision atomic persistence tests passed\n";

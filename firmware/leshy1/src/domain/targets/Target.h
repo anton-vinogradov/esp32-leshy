@@ -79,4 +79,10 @@ struct TargetRecord final {
     std::uint32_t revision = 0;
 };
 
+// Graph equality deliberately ignores editable metadata and revision. It is
+// used to prove that merge/split preserves the exact Target-ID →
+// identity/evidence ownership graph without touching source observations.
+bool targetRecordGraphEqual(const TargetRecord& left,
+                            const TargetRecord& right);
+
 }  // namespace leshy1::domain::targets

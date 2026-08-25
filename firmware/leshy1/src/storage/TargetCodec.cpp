@@ -544,6 +544,72 @@ TargetCodecStatus decodeCorrelationDecision(
     return TargetCodecStatus::Valid;
 }
 
+bool encodeTargetMerge(
+    CborWriter& writer,
+    const domain::targets::TargetMergeRecord& record) {
+    return writer.map(8) && writer.unsignedValue(0) &&
+        writer.bytes(record.id.bytes.data(), record.id.bytes.size()) &&
+        writer.unsignedValue(1) &&
+        encodeRecord(writer, record.destinationBefore) &&
+        writer.unsignedValue(2) &&
+        encodeRecord(writer, record.sourceBefore) &&
+        writer.unsignedValue(3) &&
+        writer.unsignedValue(record.originalCatalogSize) &&
+        writer.unsignedValue(4) &&
+        writer.unsignedValue(record.destinationIndex) &&
+        writer.unsignedValue(5) && writer.unsignedValue(record.sourceIndex) &&
+        writer.unsignedValue(6) &&
+        writer.unsignedValue(record.mergedRevision) &&
+        writer.unsignedValue(7) && writer.boolean(record.split);
+}
+
+TargetCodecStatus decodeTargetMerge(
+    CborReader& reader, domain::targets::TargetMergeRecord* output) {
+    if (output == nullptr) return TargetCodecStatus::InvalidArgument;
+    *output = {};
+    std::uint64_t count = 0;
+    std::uint64_t value = 0;
+    const std::uint8_t* bytes = nullptr;
+    std::size_t length = 0;
+    if (!reader.map(&count) || count != 8 || !key(reader, 0) ||
+        !reader.bytes(&bytes, &length) ||
+        length != output->id.bytes.size()) {
+        return TargetCodecStatus::Malformed;
+    }
+    std::memcpy(output->id.bytes.data(), bytes, length);
+    if (!key(reader, 1)) return TargetCodecStatus::Malformed;
+    TargetCodecStatus status =
+        decodeRecord(reader, &output->destinationBefore);
+    if (status != TargetCodecStatus::Valid) return status;
+    if (!key(reader, 2)) return TargetCodecStatus::Malformed;
+    status = decodeRecord(reader, &output->sourceBefore);
+    if (status != TargetCodecStatus::Valid) return status;
+    if (!key(reader, 3) || !reader.unsignedValue(&value) || value < 2 ||
+        value > domain::targets::TargetCatalog::kCapacity) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->originalCatalogSize = static_cast<std::uint8_t>(value);
+    if (!key(reader, 4) || !reader.unsignedValue(&value) ||
+        value >= domain::targets::TargetCatalog::kCapacity) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->destinationIndex = static_cast<std::uint8_t>(value);
+    if (!key(reader, 5) || !reader.unsignedValue(&value) ||
+        value >= domain::targets::TargetCatalog::kCapacity) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->sourceIndex = static_cast<std::uint8_t>(value);
+    if (!key(reader, 6) || !reader.unsignedValue(&value) || value == 0 ||
+        value > std::numeric_limits<std::uint32_t>::max()) {
+        return TargetCodecStatus::BoundsExceeded;
+    }
+    output->mergedRevision = static_cast<std::uint32_t>(value);
+    if (!key(reader, 7) || !reader.boolean(&output->split)) {
+        return TargetCodecStatus::Malformed;
+    }
+    return TargetCodecStatus::Valid;
+}
+
 }  // namespace
 
 const char* targetCodecStatusName(TargetCodecStatus status) {
@@ -718,14 +784,16 @@ TargetCodecStatus reopenTargetCatalog(
 TargetCodecStatus encodeTargetState(
     const domain::targets::TargetCatalog& catalog,
     const domain::targets::CorrelationDecisionLog& decisions,
+    const domain::targets::TargetMergeHistory& merges,
     std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
     if (output == nullptr || outputSize == nullptr || catalog.size() == 0 ||
         catalog.size() > domain::targets::TargetCatalog::kCapacity ||
-        decisions.size() > domain::targets::CorrelationDecisionLog::kCapacity) {
+        decisions.size() > domain::targets::CorrelationDecisionLog::kCapacity ||
+        merges.size() > domain::targets::TargetMergeHistory::kCapacity) {
         return TargetCodecStatus::InvalidArgument;
     }
     CborWriter writer(output, capacity);
-    writer.map(3);
+    writer.map(4);
     writer.unsignedValue(0);
     writer.unsignedValue(kTargetStateSchemaVersion);
     writer.unsignedValue(1);
@@ -749,6 +817,15 @@ TargetCodecStatus encodeTargetState(
                                : TargetCodecStatus::BufferTooSmall;
         }
     }
+    writer.unsignedValue(3);
+    writer.array(merges.size());
+    for (std::size_t index = 0; index < merges.size(); ++index) {
+        const domain::targets::TargetMergeRecord* record = merges.get(index);
+        if (record == nullptr || !encodeTargetMerge(writer, *record)) {
+            return writer.ok() ? TargetCodecStatus::InvalidArgument
+                               : TargetCodecStatus::BufferTooSmall;
+        }
+    }
     if (!writer.ok()) return TargetCodecStatus::BufferTooSmall;
     *outputSize = writer.size();
     return TargetCodecStatus::Valid;
@@ -757,22 +834,30 @@ TargetCodecStatus encodeTargetState(
 TargetCodecStatus decodeTargetState(
     const std::uint8_t* input, std::size_t size,
     domain::targets::TargetCatalog* catalog,
-    domain::targets::CorrelationDecisionLog* decisions) {
+    domain::targets::CorrelationDecisionLog* decisions,
+    domain::targets::TargetMergeHistory* merges) {
     if (input == nullptr || catalog == nullptr || decisions == nullptr ||
+        merges == nullptr ||
         size == 0 || size > kTargetStateMaxBytes) {
         return TargetCodecStatus::InvalidArgument;
     }
     catalog->clear();
     decisions->clear();
+    merges->clear();
     CborReader reader(input, size);
     std::uint64_t count = 0;
     std::uint64_t version = 0;
-    if (!reader.map(&count) || count != 3 || !key(reader, 0) ||
+    if (!reader.map(&count) || (count != 3 && count != 4) || !key(reader, 0) ||
         !reader.unsignedValue(&version)) {
         return TargetCodecStatus::Malformed;
     }
-    if (version != kTargetStateSchemaVersion) {
+    if (version != kTargetStatePreviousSchemaVersion &&
+        version != kTargetStateSchemaVersion) {
         return TargetCodecStatus::UnsupportedSchema;
+    }
+    if ((version == kTargetStatePreviousSchemaVersion && count != 3) ||
+        (version == kTargetStateSchemaVersion && count != 4)) {
+        return TargetCodecStatus::Malformed;
     }
     if (!key(reader, 1) || !reader.array(&count) || count == 0 ||
         count > domain::targets::TargetCatalog::kCapacity) {
@@ -786,6 +871,7 @@ TargetCodecStatus decodeTargetState(
                 domain::targets::TargetMutationStatus::Created) {
             catalog->clear();
             decisions->clear();
+            merges->clear();
             return status == TargetCodecStatus::Valid
                 ? TargetCodecStatus::Conflict : status;
         }
@@ -793,6 +879,8 @@ TargetCodecStatus decodeTargetState(
     if (!key(reader, 2) || !reader.array(&count) ||
         count > domain::targets::CorrelationDecisionLog::kCapacity) {
         catalog->clear();
+        decisions->clear();
+        merges->clear();
         return TargetCodecStatus::BoundsExceeded;
     }
     for (std::size_t index = 0; index < count; ++index) {
@@ -808,13 +896,37 @@ TargetCodecStatus decodeTargetState(
                   : domain::targets::CorrelationDecisionStatus::Rejected))) {
             catalog->clear();
             decisions->clear();
+            merges->clear();
             return status == TargetCodecStatus::Valid
                 ? TargetCodecStatus::Conflict : status;
+        }
+    }
+    if (version == kTargetStateSchemaVersion) {
+        if (!key(reader, 3) || !reader.array(&count) ||
+            count > domain::targets::TargetMergeHistory::kCapacity) {
+            catalog->clear();
+            decisions->clear();
+            merges->clear();
+            return TargetCodecStatus::BoundsExceeded;
+        }
+        for (std::size_t index = 0; index < count; ++index) {
+            domain::targets::TargetMergeRecord record{};
+            const TargetCodecStatus status = decodeTargetMerge(reader, &record);
+            if (status != TargetCodecStatus::Valid ||
+                merges->restore(record) !=
+                    domain::targets::TargetMergeStatus::Merged) {
+                catalog->clear();
+                decisions->clear();
+                merges->clear();
+                return status == TargetCodecStatus::Valid
+                    ? TargetCodecStatus::Conflict : status;
+            }
         }
     }
     if (!reader.complete()) {
         catalog->clear();
         decisions->clear();
+        merges->clear();
         return TargetCodecStatus::TrailingData;
     }
     return TargetCodecStatus::Valid;
@@ -823,18 +935,20 @@ TargetCodecStatus decodeTargetState(
 TargetCodecStatus encodeTargetStateManifest(
     const domain::targets::TargetCatalog& catalog,
     const domain::targets::CorrelationDecisionLog& decisions,
+    const domain::targets::TargetMergeHistory& merges,
     const std::uint8_t* stateBytes, std::size_t stateSize,
     std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
     if (catalog.size() == 0 ||
         catalog.size() > domain::targets::TargetCatalog::kCapacity ||
         decisions.size() > domain::targets::CorrelationDecisionLog::kCapacity ||
+        merges.size() > domain::targets::TargetMergeHistory::kCapacity ||
         stateBytes == nullptr || stateSize == 0 ||
         stateSize > kTargetStateMaxBytes || output == nullptr ||
         outputSize == nullptr) {
         return TargetCodecStatus::InvalidArgument;
     }
     CborWriter writer(output, capacity);
-    writer.map(5);
+    writer.map(6);
     writer.unsignedValue(0);
     writer.unsignedValue(kTargetStateSchemaVersion);
     writer.unsignedValue(1);
@@ -842,8 +956,10 @@ TargetCodecStatus encodeTargetStateManifest(
     writer.unsignedValue(2);
     writer.unsignedValue(decisions.size());
     writer.unsignedValue(3);
-    writer.unsignedValue(stateSize);
+    writer.unsignedValue(merges.size());
     writer.unsignedValue(4);
+    writer.unsignedValue(stateSize);
+    writer.unsignedValue(5);
     writer.unsignedValue(crc32c(stateBytes, stateSize));
     if (!writer.ok()) return TargetCodecStatus::BufferTooSmall;
     *outputSize = writer.size();
@@ -860,12 +976,17 @@ TargetCodecStatus decodeTargetStateManifest(
     CborReader reader(input, size);
     std::uint64_t count = 0;
     std::uint64_t value = 0;
-    if (!reader.map(&count) || count != 5 || !key(reader, 0) ||
+    if (!reader.map(&count) || (count != 5 && count != 6) || !key(reader, 0) ||
         !reader.unsignedValue(&value)) {
         return TargetCodecStatus::Malformed;
     }
-    if (value != kTargetStateSchemaVersion) {
+    if (value != kTargetStatePreviousSchemaVersion &&
+        value != kTargetStateSchemaVersion) {
         return TargetCodecStatus::UnsupportedSchema;
+    }
+    if ((value == kTargetStatePreviousSchemaVersion && count != 5) ||
+        (value == kTargetStateSchemaVersion && count != 6)) {
+        return TargetCodecStatus::Malformed;
     }
     TargetStateManifest manifest{};
     manifest.schemaVersion = static_cast<std::uint16_t>(value);
@@ -879,12 +1000,22 @@ TargetCodecStatus decodeTargetStateManifest(
         return TargetCodecStatus::BoundsExceeded;
     }
     manifest.decisionCount = static_cast<std::uint16_t>(value);
-    if (!key(reader, 3) || !reader.unsignedValue(&value) || value == 0 ||
+    if (manifest.schemaVersion == kTargetStateSchemaVersion) {
+        if (!key(reader, 3) || !reader.unsignedValue(&value) ||
+            value > domain::targets::TargetMergeHistory::kCapacity) {
+            return TargetCodecStatus::BoundsExceeded;
+        }
+        manifest.mergeCount = static_cast<std::uint16_t>(value);
+    }
+    const std::uint64_t lengthKey =
+        manifest.schemaVersion == kTargetStateSchemaVersion ? 4U : 3U;
+    const std::uint64_t checksumKey = lengthKey + 1U;
+    if (!key(reader, lengthKey) || !reader.unsignedValue(&value) || value == 0 ||
         value > kTargetStateMaxBytes) {
         return TargetCodecStatus::BoundsExceeded;
     }
     manifest.stateLength = static_cast<std::uint32_t>(value);
-    if (!key(reader, 4) || !reader.unsignedValue(&value) ||
+    if (!key(reader, checksumKey) || !reader.unsignedValue(&value) ||
         value > std::numeric_limits<std::uint32_t>::max()) {
         return TargetCodecStatus::BoundsExceeded;
     }
@@ -898,12 +1029,14 @@ TargetCodecStatus reopenTargetState(
     const std::uint8_t* manifestBytes, std::size_t manifestSize,
     const std::uint8_t* stateBytes, std::size_t stateSize,
     domain::targets::TargetCatalog* catalog,
-    domain::targets::CorrelationDecisionLog* decisions) {
-    if (catalog == nullptr || decisions == nullptr) {
+    domain::targets::CorrelationDecisionLog* decisions,
+    domain::targets::TargetMergeHistory* merges) {
+    if (catalog == nullptr || decisions == nullptr || merges == nullptr) {
         return TargetCodecStatus::InvalidArgument;
     }
     catalog->clear();
     decisions->clear();
+    merges->clear();
     TargetStateManifest manifest{};
     const TargetCodecStatus manifestStatus = decodeTargetStateManifest(
         manifestBytes, manifestSize, &manifest);
@@ -913,12 +1046,14 @@ TargetCodecStatus reopenTargetState(
         return TargetCodecStatus::ChecksumMismatch;
     }
     const TargetCodecStatus stateStatus =
-        decodeTargetState(stateBytes, stateSize, catalog, decisions);
+        decodeTargetState(stateBytes, stateSize, catalog, decisions, merges);
     if (stateStatus != TargetCodecStatus::Valid) return stateStatus;
     if (catalog->size() != manifest.targetCount ||
-        decisions->size() != manifest.decisionCount) {
+        decisions->size() != manifest.decisionCount ||
+        merges->size() != manifest.mergeCount) {
         catalog->clear();
         decisions->clear();
+        merges->clear();
         return TargetCodecStatus::Malformed;
     }
     return TargetCodecStatus::Valid;

@@ -378,6 +378,18 @@ dual-head journal. Dedicated DIRAM остаётся 294 404/341 760 B (86,14%,
 globals; runtime integration S6.4 обязана измерить их live placement и цену
 migration. Это host/build evidence, а не HIL.
 
+Host/build измерение reversible Target `RB-M144`: `E-CORR-003` использует
+3 091 516 B linked flash, 211 224 B static RAM и app/factory images
+3 092 016/3 157 552 B. Это +176 B linked flash, zero static-RAM growth и
++176/+176 B images против `E-CORR-002` за Actions merge/split schema v1,
+bounded восстановление graph и atomic persistence merge history schema v3.
+Dedicated DIRAM остаётся 294 404/341 760 B (86,14%, свободно 47 356 B),
+dedicated IRAM — ровно 16 384/16 384 B. `TargetMergeHistory` занимает 11 528 B
+и ограничена восемью полными snapshots пар Targets; она, state workspace 32 КиБ,
+catalog и decision log остаются lifecycle-owned, а не permanent product globals.
+Runtime integration S6.4 обязана измерить их live placement и цену migration.
+Это host/build evidence, а не HIL.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

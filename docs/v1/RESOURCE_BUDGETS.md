@@ -386,6 +386,18 @@ explicit lifecycle-owned objects rather than permanent product globals; S6.4
 runtime integration must measure their live placement and migration cost. This
 is host/build evidence, not HIL.
 
+Host/build reversible-Target measurement `RB-M144`: `E-CORR-003` uses
+3,091,516 B linked flash, 211,224 B static RAM and app/factory images
+3,092,016/3,157,552 B. This is +176 B linked flash, zero static-RAM growth and
++176/+176 B images versus `E-CORR-002` for schema-v1 merge/split Actions,
+bounded graph restoration and schema-v3 atomic merge-history persistence.
+Dedicated DIRAM remains 294,404/341,760 B (86.14%, 47,356 B remaining), and
+dedicated IRAM remains exactly 16,384/16,384 B. `TargetMergeHistory` is 11,528 B
+and bounded to eight complete two-Target snapshots; it, the 32 KiB state
+workspace, catalog and decision log remain lifecycle-owned rather than permanent
+product globals. S6.4 runtime integration must measure their live placement and
+migration cost. This is host/build evidence, not HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

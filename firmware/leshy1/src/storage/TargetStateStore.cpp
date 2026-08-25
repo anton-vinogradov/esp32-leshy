@@ -79,7 +79,8 @@ struct CandidateLoad final {
 CandidateLoad loadCandidate(
     SessionStoreIo& io, TargetStateStoreWorkspace& workspace, HeadSlot slot,
     domain::targets::TargetCatalog* validationCatalog,
-    domain::targets::CorrelationDecisionLog* validationDecisions) {
+    domain::targets::CorrelationDecisionLog* validationDecisions,
+    domain::targets::TargetMergeHistory* validationMerges) {
     CandidateLoad loaded;
     std::array<std::uint8_t, kHeadWireSize>& wire =
         slot == HeadSlot::A ? workspace.headA : workspace.headB;
@@ -141,7 +142,8 @@ CandidateLoad loadCandidate(
                     &stateSize) != SessionStoreIo::ReadStatus::Ok ||
         reopenTargetState(workspace.manifest.data(), manifestSize,
                           workspace.state.data(), stateSize,
-                          validationCatalog, validationDecisions) !=
+                          validationCatalog, validationDecisions,
+                          validationMerges) !=
             TargetCodecStatus::Valid) {
         loaded.candidate.payloadValid = false;
         return loaded;
@@ -153,9 +155,11 @@ CandidateLoad loadCandidate(
 TargetStateStoreStatus reopenSelected(
     SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
     std::uint32_t generation, domain::targets::TargetCatalog* catalog,
-    domain::targets::CorrelationDecisionLog* decisions) {
+    domain::targets::CorrelationDecisionLog* decisions,
+    domain::targets::TargetMergeHistory* merges) {
     catalog->clear();
     decisions->clear();
+    merges->clear();
     char manifestPath[kTargetStateStorePathMax] = {};
     char statePath[kTargetStateStorePathMax] = {};
     if (!formatTargetStateStorePath(TargetStateStoreFileKind::Manifest,
@@ -177,7 +181,7 @@ TargetStateStoreStatus reopenSelected(
     }
     const bool valid = reopenTargetState(
         workspace.manifest.data(), manifestSize, workspace.state.data(),
-        stateSize, catalog, decisions) == TargetCodecStatus::Valid;
+        stateSize, catalog, decisions, merges) == TargetCodecStatus::Valid;
     workspace.manifestSize = valid ? manifestSize : 0;
     workspace.stateSize = valid ? stateSize : 0;
     return valid ? TargetStateStoreStatus::Valid
@@ -236,6 +240,7 @@ TargetStateStoreCommitResult commitTargetState(
     SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
     const domain::targets::TargetCatalog& catalog,
     const domain::targets::CorrelationDecisionLog& decisions,
+    const domain::targets::TargetMergeHistory& merges,
     std::uint32_t generation, HeadSlot publishSlot) {
     TargetStateStoreCommitResult result;
     result.generation = generation;
@@ -246,11 +251,11 @@ TargetStateStoreCommitResult commitTargetState(
     }
     std::size_t stateSize = 0;
     std::size_t manifestSize = 0;
-    if (encodeTargetState(catalog, decisions, workspace.state.data(),
+    if (encodeTargetState(catalog, decisions, merges, workspace.state.data(),
                           workspace.state.size(), &stateSize) !=
             TargetCodecStatus::Valid ||
         encodeTargetStateManifest(
-            catalog, decisions, workspace.state.data(), stateSize,
+            catalog, decisions, merges, workspace.state.data(), stateSize,
             workspace.manifest.data(), workspace.manifest.size(),
             &manifestSize) != TargetCodecStatus::Valid) {
         result.status = TargetStateStoreStatus::EncodeFailed;
@@ -280,18 +285,22 @@ TargetStateStoreCommitResult commitNextTargetState(
     SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
     const domain::targets::TargetCatalog& catalog,
     const domain::targets::CorrelationDecisionLog& decisions,
+    const domain::targets::TargetMergeHistory& merges,
     domain::targets::TargetCatalog& recoveryCatalogScratch,
-    domain::targets::CorrelationDecisionLog& recoveryDecisionScratch) {
+    domain::targets::CorrelationDecisionLog& recoveryDecisionScratch,
+    domain::targets::TargetMergeHistory& recoveryMergeScratch) {
     TargetStateStoreCommitResult result;
     if (&catalog == &recoveryCatalogScratch ||
-        &decisions == &recoveryDecisionScratch || catalog.size() == 0) {
+        &decisions == &recoveryDecisionScratch ||
+        &merges == &recoveryMergeScratch || catalog.size() == 0) {
         result.status = TargetStateStoreStatus::InvalidArgument;
         return result;
     }
     const TargetStateStoreRecoveryResult current = recoverTargetState(
-        io, workspace, &recoveryCatalogScratch, &recoveryDecisionScratch);
+        io, workspace, &recoveryCatalogScratch, &recoveryDecisionScratch,
+        &recoveryMergeScratch);
     if (current.status == TargetStateStoreStatus::Empty) {
-        return commitTargetState(io, workspace, catalog, decisions, 1,
+        return commitTargetState(io, workspace, catalog, decisions, merges, 1,
                                  HeadSlot::A);
     }
     if (!current.valid()) {
@@ -304,27 +313,29 @@ TargetStateStoreCommitResult commitNextTargetState(
     }
     const HeadSlot publish =
         current.choice == RecoveryChoice::A ? HeadSlot::B : HeadSlot::A;
-    return commitTargetState(io, workspace, catalog, decisions,
+    return commitTargetState(io, workspace, catalog, decisions, merges,
                              current.generation + 1U, publish);
 }
 
 TargetStateStoreRecoveryResult recoverTargetState(
     SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
     domain::targets::TargetCatalog* catalog,
-    domain::targets::CorrelationDecisionLog* decisions) {
+    domain::targets::CorrelationDecisionLog* decisions,
+    domain::targets::TargetMergeHistory* merges) {
     TargetStateStoreRecoveryResult result;
-    if (catalog == nullptr || decisions == nullptr) {
+    if (catalog == nullptr || decisions == nullptr || merges == nullptr) {
         result.status = TargetStateStoreStatus::InvalidArgument;
         return result;
     }
     CandidateLoad a = loadCandidate(io, workspace, HeadSlot::A,
-                                    catalog, decisions);
+                                    catalog, decisions, merges);
     CandidateLoad b = loadCandidate(io, workspace, HeadSlot::B,
-                                    catalog, decisions);
+                                    catalog, decisions, merges);
     if (a.headRead == SessionStoreIo::ReadStatus::NotFound &&
         b.headRead == SessionStoreIo::ReadStatus::NotFound) {
         catalog->clear();
         decisions->clear();
+        merges->clear();
         result.status = TargetStateStoreStatus::Empty;
         return result;
     }
@@ -335,6 +346,7 @@ TargetStateStoreRecoveryResult recoverTargetState(
     if (recovered.choice == RecoveryChoice::Conflict) {
         catalog->clear();
         decisions->clear();
+        merges->clear();
         result.status = TargetStateStoreStatus::Conflict;
         return result;
     }
@@ -342,15 +354,17 @@ TargetStateStoreRecoveryResult recoverTargetState(
         recovered.choice != RecoveryChoice::B) {
         catalog->clear();
         decisions->clear();
+        merges->clear();
         result.status = TargetStateStoreStatus::NoGeneration;
         return result;
     }
     result.generation = recovered.selected.generation;
     result.status = reopenSelected(io, workspace, result.generation,
-                                   catalog, decisions);
+                                   catalog, decisions, merges);
     if (result.status == TargetStateStoreStatus::Valid) {
         result.targets = catalog->size();
         result.decisions = decisions->size();
+        result.merges = merges->size();
         workspace.generation = result.generation;
     }
     return result;
