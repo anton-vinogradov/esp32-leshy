@@ -7,6 +7,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -59,12 +60,26 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def git_blob_sha256(commit: str, relative: str) -> str:
+    result = subprocess.run(
+        ["git", "show", f"{commit}:{relative}"], cwd=ROOT,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if result.returncode != 0:
+        raise ValueError(result.stderr.decode("utf-8", errors="replace"))
+    return hashlib.sha256(result.stdout).hexdigest()
+
+
 def save_summary(path: Path, summary: dict[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(
         json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8")
     temporary.replace(path)
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ValueError(message)
 
 
 def accepted_child(run_path: Path, scenario_id: str, source_commit: str, *,
@@ -77,7 +92,9 @@ def accepted_child(run_path: Path, scenario_id: str, source_commit: str, *,
                    candidate_firmware_sha256: str | None = None,
                    fixture_firmware_sha256: str | None = None,
                    candidate_reused: bool | None = None,
-                   fixture_reused: bool | None = None) -> dict[str, Any]:
+                   fixture_reused: bool | None = None,
+                   expected_scenario_sha256: str | None = None,
+                   expected_runner_sha256: str | None = None) -> dict[str, Any]:
     run = json.loads(run_path.read_text(encoding="utf-8"))
     candidate = run.get("candidate", {})
     fixture = run.get("fixture", {})
@@ -99,9 +116,15 @@ def accepted_child(run_path: Path, scenario_id: str, source_commit: str, *,
         failures.append("checkpoint mismatch")
     if scenario.get("id") != scenario_id:
         failures.append("scenario identity mismatch")
-    scenario_path = SCENARIOS[scenario_id]
-    if scenario.get("sha256") != sha256_file(scenario_path):
+    scenario_sha256 = expected_scenario_sha256
+    if scenario_sha256 is None:
+        scenario_sha256 = sha256_file(SCENARIOS[scenario_id])
+    if scenario.get("sha256") != scenario_sha256:
         failures.append("scenario source hash mismatch")
+    child_runner_sha256 = run.get("runner_source_sha256")
+    if expected_runner_sha256 is not None and \
+            child_runner_sha256 != expected_runner_sha256:
+        failures.append("child runner source hash mismatch")
     if candidate.get("source_commit") != source_commit or \
             fixture.get("source_commit") != source_commit:
         failures.append("source commit mismatch")
@@ -164,6 +187,7 @@ def accepted_child(run_path: Path, scenario_id: str, source_commit: str, *,
         "passed": True,
         "run": str(run_path),
         "run_sha256": sha256_file(run_path),
+        "runner_source_sha256": child_runner_sha256,
         "candidate_firmware_sha256": candidate.get("firmware_sha256"),
         "fixture_firmware_sha256": fixture.get("firmware_sha256"),
         "candidate_app_elf_sha256": candidate_app,
@@ -173,6 +197,117 @@ def accepted_child(run_path: Path, scenario_id: str, source_commit: str, *,
         "candidate_exact_flash_reused": candidate.get("exact_flash_reused"),
         "fixture_exact_flash_reused": fixture.get("exact_flash_reused"),
     }
+
+
+def verify_completed_matrix(summary_path: Path) -> dict[str, Any]:
+    """Re-read a completed matrix and independently verify every child."""
+    summary_path = summary_path.resolve()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    require(isinstance(summary, dict), "matrix summary must be an object")
+    require(summary.get("schema") == SCHEMA, "matrix schema mismatch")
+    require(summary.get("status") == "pass" and
+            summary.get("passed") is True, "matrix is not passing")
+    require(summary.get("matrix") == list(MATRIX), "matrix order mismatch")
+    require(isinstance(summary.get("completed_at"), str) and
+            bool(summary["completed_at"]), "matrix completion is missing")
+    require(summary.get("failure") is None, "matrix retains a failure")
+
+    source_commit = summary.get("source_commit")
+    product_version = summary.get("product_version")
+    fixture_version = summary.get("fixture_version")
+    expected_cid = summary.get("expected_cid")
+    candidate_port = summary.get("candidate_port")
+    fixture_port = summary.get("fixture_port")
+    fixture_id = summary.get("fixture_id")
+    candidate_hash = summary.get("product_firmware_sha256")
+    fixture_hash = summary.get("fixture_firmware_sha256")
+    require(isinstance(source_commit, str) and
+            re.fullmatch(r"[0-9a-f]{40}", source_commit) is not None,
+            "matrix source commit is invalid")
+    require(isinstance(product_version, str) and bool(product_version),
+            "matrix product version is invalid")
+    require(isinstance(fixture_version, str) and bool(fixture_version),
+            "matrix fixture version is invalid")
+    require(isinstance(expected_cid, str) and
+            re.fullmatch(r"[0-9A-F]{32}", expected_cid) is not None,
+            "matrix CID is invalid")
+    require(isinstance(candidate_port, str) and candidate_port and
+            isinstance(fixture_port, str) and fixture_port and
+            candidate_port != fixture_port, "matrix role ports are invalid")
+    require(isinstance(fixture_id, str) and
+            re.fullmatch(r"[0-9A-F]{16}", fixture_id) is not None,
+            "matrix fixture ID is invalid")
+    require(isinstance(candidate_hash, str) and
+            re.fullmatch(r"[0-9a-f]{64}", candidate_hash) is not None and
+            isinstance(fixture_hash, str) and
+            re.fullmatch(r"[0-9a-f]{64}", fixture_hash) is not None,
+            "matrix firmware hashes are invalid")
+    require(summary.get("runner_source_sha256") ==
+            git_blob_sha256(source_commit, "tools/run_s5_two_board_hil.py"),
+            "matrix runner source identity mismatch")
+    child_runner_sha256 = git_blob_sha256(
+        source_commit, "tools/run_hil_scenario.py")
+
+    entries = summary.get("runs")
+    require(isinstance(entries, list) and len(entries) == len(MATRIX),
+            "matrix child count mismatch")
+    accepted: list[dict[str, Any]] = []
+    for index, scenario_id in enumerate(MATRIX):
+        entry = entries[index]
+        require(isinstance(entry, dict) and
+                entry.get("scenario_id") == scenario_id,
+                f"{scenario_id}: parent child identity mismatch")
+        expected_path = (summary_path.parent / scenario_id / "run.json").resolve()
+        recorded_path = Path(str(entry.get("run", "")))
+        if not recorded_path.is_absolute():
+            recorded_path = ROOT / recorded_path
+        recorded_path = recorded_path.resolve()
+        require(recorded_path == expected_path and expected_path.is_file(),
+                f"{scenario_id}: child path mismatch")
+        require(entry.get("run_sha256") == sha256_file(expected_path),
+                f"{scenario_id}: child run hash mismatch")
+        candidate_reused = entry.get("candidate_exact_flash_reused")
+        fixture_reused = entry.get("fixture_exact_flash_reused")
+        require(isinstance(candidate_reused, bool) and
+                isinstance(fixture_reused, bool),
+                f"{scenario_id}: flash/reuse state is invalid")
+        if index > 0:
+            require(candidate_reused and fixture_reused,
+                    f"{scenario_id}: later child did not reuse exact images")
+        checked = accepted_child(
+            expected_path, scenario_id, source_commit,
+            product_version=product_version,
+            fixture_version=fixture_version,
+            expected_cid=expected_cid,
+            candidate_port=candidate_port,
+            fixture_port=fixture_port,
+            fixture_id=fixture_id,
+            candidate_firmware_sha256=candidate_hash,
+            fixture_firmware_sha256=fixture_hash,
+            candidate_reused=candidate_reused,
+            fixture_reused=fixture_reused,
+            expected_scenario_sha256=git_blob_sha256(
+                source_commit,
+                str(SCENARIOS[scenario_id].relative_to(ROOT))),
+            expected_runner_sha256=child_runner_sha256)
+        for key, value in checked.items():
+            if key != "run":
+                require(entry.get(key) == value,
+                        f"{scenario_id}: parent child {key} mismatch")
+        accepted.append(checked)
+
+    candidate_apps = {value["candidate_app_elf_sha256"] for value in accepted}
+    fixture_apps = {value["fixture_app_elf_sha256"] for value in accepted}
+    profiles = {value["fixture_profile_sha256"] for value in accepted}
+    fixture_ids = {value["fixture_id"] for value in accepted}
+    require(candidate_apps == {summary.get("product_app_elf_sha256")},
+            "matrix candidate app identity mismatch")
+    require(fixture_apps == {summary.get("fixture_app_elf_sha256")},
+            "matrix fixture app identity mismatch")
+    require(profiles == {summary.get("fixture_profile_sha256")},
+            "matrix fixture profile identity mismatch")
+    require(fixture_ids == {fixture_id}, "matrix fixture identity drift")
+    return summary
 
 
 def main() -> int:
@@ -209,6 +344,7 @@ def main() -> int:
     summary_path = args.output / "run.json"
     summary: dict[str, Any] = {
         "schema": SCHEMA,
+        "runner_source_sha256": sha256_file(Path(__file__).resolve()),
         "status": "initializing",
         "passed": False,
         "started_at": utc_now(),
@@ -265,6 +401,8 @@ def main() -> int:
             [str(ROOT / "tools/build_ir_fixture.sh")], cwd=ROOT, check=True)
         summary["product_firmware_sha256"] = sha256_file(PRODUCT_FIRMWARE)
         summary["fixture_firmware_sha256"] = sha256_file(FIXTURE_FIRMWARE)
+        child_runner_sha256 = sha256_file(
+            ROOT / "tools/run_hil_scenario.py")
 
         for index, scenario_id in enumerate(MATRIX):
             output = args.output / scenario_id
@@ -301,7 +439,8 @@ def main() -> int:
                 fixture_firmware_sha256=(
                     summary["fixture_firmware_sha256"]),
                 candidate_reused=reuse_candidate,
-                fixture_reused=reuse_fixture))
+                fixture_reused=reuse_fixture,
+                expected_runner_sha256=child_runner_sha256))
             save_summary(summary_path, summary)
 
         if len(summary["runs"]) != len(MATRIX):
@@ -334,6 +473,7 @@ def main() -> int:
             "fixture_profile_sha256": next(iter(fixture_profile_hashes)),
         })
         save_summary(summary_path, summary)
+        verify_completed_matrix(summary_path)
     except (OSError, ValueError, json.JSONDecodeError,
             subprocess.CalledProcessError) as error:
         summary.update({
