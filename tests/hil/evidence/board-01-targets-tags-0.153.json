@@ -1,0 +1,129 @@
+{
+  "atomic_add": {
+    "mutation_action_us": 158,
+    "mutation_bytes_written": 1691,
+    "mutation_directory_syncs": 3,
+    "mutation_elapsed_us": 2914830,
+    "mutation_file_syncs": 3,
+    "mutation_heap_free_before_mount": 75992,
+    "mutation_heap_largest_before_mount": 34804,
+    "mutation_identity_attempts": 1,
+    "mutation_identity_transient_retries": 0,
+    "mutation_write_calls": 3
+  },
+  "atomic_remove": {
+    "mutation_action_us": 141,
+    "mutation_bytes_written": 1689,
+    "mutation_directory_syncs": 3,
+    "mutation_elapsed_us": 2918739,
+    "mutation_file_syncs": 3,
+    "mutation_heap_free_before_mount": 75992,
+    "mutation_heap_largest_before_mount": 34804,
+    "mutation_identity_attempts": 1,
+    "mutation_identity_transient_retries": 0,
+    "mutation_write_calls": 3
+  },
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-tags-0.153",
+  "candidate": {
+    "app_elf_sha256": "49d9c7cbb058158bda4ef19c88e6cfbf56c05f38b4a055e616841cb4091a0d56",
+    "checked_stack_frames": {
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 416,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 256,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "49d9c7cbb058158bda4ef19c88e6cfbf56c05f38b4a055e616841cb4091a0d56",
+    "firmware_bytes": 3135872,
+    "firmware_sha256": "b9a49fe887baf595da01ea798eb1efa8dada57c5ac20af090f467fcb7b688651",
+    "map_sha256": "0cdaa2ec9f4874991d5c9738f876f7f87fe6e4f96064dd42f3c0685273a3adde",
+    "version": "0.153.0-targets-tags-edit"
+  },
+  "cold_reset_count": 2,
+  "cold_resets": [
+    {
+      "bytes": 8580,
+      "first_byte_ms": 0.06720796227455139,
+      "ready_marker_ms": 1204.12033284083,
+      "sha256": "299c1035d2c916d12debdc9fd6f58c84488b31bdee1800519eb386631d29d2d1"
+    },
+    {
+      "bytes": 8580,
+      "first_byte_ms": 0.048708170652389526,
+      "ready_marker_ms": 1198.8966660574079,
+      "sha256": "d73ebebb02e078898960cfbd4dead36393c3e4dbcb0cb3c92d76c286036ecc63"
+    }
+  ],
+  "evidence_ids": [
+    "E-AUTO-111",
+    "E-HIL-171",
+    "E-UX-048"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final": {
+    "lease_mask": 0,
+    "library_generation": 114,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "flash_count": 1,
+  "heap": {
+    "after_release": 96852,
+    "before": 85072
+  },
+  "manifest_sha256": "3fb590e8bfe5ca83c72794a17c6a15e6661a69f33857e89903c31da3e655c2c9",
+  "raw_artifacts_manifest_sha256": "490b721e723b45158a54c40e8c5f4eeaedcb2997a210e677eec787df16759039",
+  "raw_run_sha256": "0d47b9ae9fc98a0d864093b429b095db40a030e8adee2a63e867ec546ac38b5d",
+  "schema": "leshy.targets_tags_hil.summary.v1",
+  "screens": {
+    "detail-removed-reopened": {
+      "png": "frames/detail-removed-reopened.png",
+      "png_sha256": "09e108f90103aad848426404bf72bf4427716278efce318156f827627d077105"
+    },
+    "editor-before": {
+      "png": "frames/editor-before.png",
+      "png_sha256": "b0d4da6cad280e8c5613fc6adc8f6081f1cc7d82d45a57e5a8fc903d33c07e0e"
+    },
+    "editor-changed": {
+      "png": "frames/editor-changed.png",
+      "png_sha256": "b36d75db8968656821f2c1aeee07715f61b3d8b5f895c7c6a366473e17c30d15"
+    },
+    "list-added": {
+      "png": "frames/list-added.png",
+      "png_sha256": "8e32d58d90ea07957941b62eebb18256e12f6d09405a03c054ebc77f439d6ebc"
+    },
+    "list-added-reopened": {
+      "png": "frames/list-added-reopened.png",
+      "png_sha256": "8e32d58d90ea07957941b62eebb18256e12f6d09405a03c054ebc77f439d6ebc"
+    },
+    "list-before": {
+      "png": "frames/list-before.png",
+      "png_sha256": "0abf1eda0e99fe0db6810d46fc5eb63e5c37d5dec9e995c866f3beb07c234e88"
+    },
+    "list-removed": {
+      "png": "frames/list-removed.png",
+      "png_sha256": "0abf1eda0e99fe0db6810d46fc5eb63e5c37d5dec9e995c866f3beb07c234e88"
+    }
+  },
+  "session_generation": 114,
+  "source_commit": "042b120e85766d6d3762a7d07f8bf3c183f83cc5",
+  "status": "pass",
+  "tag": {
+    "cold_removed_count": 0,
+    "cold_reopened_hex": "41",
+    "count_before": 0,
+    "generation_added": 4,
+    "generation_before": 3,
+    "generation_removed": 5,
+    "hex": "41"
+  },
+  "target_id": "F37CBAC2BD0F95D9FA95F192DDE4C007",
+  "workspace_bytes": 16384
+}
