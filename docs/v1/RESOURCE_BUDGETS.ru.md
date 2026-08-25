@@ -332,6 +332,18 @@ RU/100%/Лесная снова сохраняются. Run выполняет z
 Home/none/lease 0. Эта focused interface delta не заменяет stage-end matrix или
 квалифицированный physical RF-positive gate.
 
+Test-only измерение fixture `RB-M140`: fixture `0.3.0-subghz-safe` на source
+`4f97b3a751b96c7573c056d4ac7562ef410c06cc` использует 335 955 B linked flash,
+22 876 B static RAM и app/factory images 336 352/401 888 B. Dedicated DIRAM
+равна 74 687/341 760 B, IRAM — ровно 16 384/16 384 B. Hashes firmware,
+factory, ELF и map:
+`32f3619f66beeacbd3e05b1148699494cc808a24b4779f4ded2d131c0f2ffb9c`,
+`98b712c4f1979506e010c37e748b4f7d4aba4fc2a7ebfb04874479483e4b6586`,
+`72dd88393fe1cbe9c3ef3f50e31f353ce6ffd883cd922429ed956b85d91c5798` и
+`bd4d6582339441c9818525713467b64c85cb5997755157c351718d7d3ce65b35`.
+Этот отдельный test image не меняет product budget, а его успешная сборка не
+является physical RF evidence.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

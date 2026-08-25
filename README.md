@@ -16,7 +16,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S5.4 — Sub-GHz OOK/FSK completion (physical positive gate hardware-blocked)`.
 - **Verified checkpoint:** exact `0.145.0-interface-settings` closes the executable part of CAP-005 on board-01. The public Device → Settings screen exposes four full-width rows for language, brightness, theme and sound; EN/RU, five brightness levels and Forest/High Contrast apply immediately and persist in NVS, while Sound stays truthfully unavailable and never energizes the buzzer pending HW-T09. One exact flash plus two physical hard resets proves RU/100%/Forest → EN/69%/High Contrast persistence → restored RU/100%/Forest. Three retained TFT frames, zero radio TX, zero input errors/drops and final Home/none/lease 0 are machine-checked by `E-HIL-163`. Exact 0.144 remains the accepted autonomous Full/Guided passive-receiver baseline; neither delta supplies the missing qualified physical RF-positive sources or closes the S5 exit gate.
-- **Next gate:** use a qualified owned RF source to close the physical S5.3 nRF24 result and S5.4 Sub-GHz frequency→OOK/FSK capture→save→cold export, then run the integrated S5.6 gate. The faulty clone is restored to stock for return and is not an authorized transmitter; without a replacement source those physical/two-board gates remain fail-closed.
+- **Next gate:** connect a qualified owned RF source, pass its read-only profile and plausible-identity checks, then run `tools/run_s5_two_board_hil.py`. The one-command runner builds each role once, flashes each role only for the first applicable scenario and executes the IR, nRF24, Sub-GHz OOK and Sub-GHz FSK matrix with fail-closed child checkpoints. This must close the physical S5.3 nRF24 result and S5.4 frequency→capture→save→cold export before S5.6 can pass. The faulty clone is restored to stock for return and is not an authorized transmitter; without a replacement source those gates remain fail-closed.
 
 ### Current stage phases
 
@@ -25,9 +25,9 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | S5.1 | Stock-radio passive product slices: all-antenna nRF24 overview/finder, robust CC1101 finder, bounded RAW/IR capture foundations | ✅ complete |
 | S5.2 | First physical two-board loop: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ complete |
 | S5.3 | Known nRF24 signal: source-bound 2,442 MHz minimum-power fixture → three-receiver finder result → safe cleanup; blocked until a repaired/replacement RF carrier is available | 🔴 blocked |
-| S5.4 | Known Sub-GHz signal: exact 0.140 accepts the bounded OOK/FSK UI, GDO0 receive implementation and one-flash no-signal delta; physical frequency→capture→save→cold export remains source-blocked | 🟡 in progress |
+| S5.4 | Known Sub-GHz signal: exact 0.140 accepts the bounded OOK/FSK UI, GDO0 receive implementation and one-flash no-signal delta. Source `4f97b3a` implements exact finite minimum-power OOK/FSK fixture vectors and automated capture→save→cold-export scenarios; their physical run remains source-blocked | 🟡 in progress |
 | S5.5 | Runtime completeness: exact 0.139 accepts Product Survey/worker safety inherited from 0.138 plus truthful stock assembly applicability, debounced low-voltage Store refusal, real light-sleep/resume and a public RX-only Sub-GHz software-fixture Store path; exact 0.145 adds persistent language/brightness/theme with safe unavailable Sound; physical positive RF remains owned by S5.3/S5.4 | ✅ complete |
-| S5.6 | Integrated S5 hardware gate: exact 0.144 already accepts the autonomous on-device Full receiver/artifact half with zero leaked leases/outputs; execute the qualified-source two-board half after S5.3/S5.4 | ⬜ later |
+| S5.6 | Integrated S5 hardware gate: exact 0.144 already accepts the autonomous on-device Full receiver/artifact half with zero leaked leases/outputs. The one-build/one-flash-per-role IR→nRF24→OOK→FSK phase runner is build-checked at source `4f97b3a`; execute its qualified-source physical half after S5.3/S5.4 | ⬜ later |
 
 ### Roadmap
 

@@ -16,7 +16,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 - **Текущая фаза:** `S5.4 — завершение Sub-GHz OOK/FSK (physical positive gate аппаратно заблокирован)`.
 - **Проверенный checkpoint:** exact `0.145.0-interface-settings` закрывает исполнимую часть CAP-005 на board-01. Публичный экран Устройство → Настройки содержит четыре полноширинные строки для языка, яркости, темы и звука; EN/RU, пять уровней яркости и Лесная/Контрастная применяются сразу и сохраняются в NVS, а Звук честно недоступен и не включает баззер до закрытия HW-T09. Один exact flash и два физических hard reset доказывают RU/100%/Лесная → EN/69%/Контрастная с сохранением → восстановленные RU/100%/Лесная. Три TFT frame, zero radio TX, zero input errors/drops и final Home/none/lease 0 машинно проверяются `E-HIL-163`. Exact 0.144 остаётся принятой автономной baseline Full/Guided passive receivers; ни одна delta не предоставляет отсутствующие qualified physical RF-positive sources и не закрывает exit gate S5.
-- **Следующий gate:** использовать квалифицированный собственный RF source, чтобы закрыть physical nRF24 result S5.3 и Sub-GHz frequency→OOK/FSK capture→save→cold export S5.4, затем выполнить integrated gate S5.6. Неисправный клон восстановлен в stock для возврата и не является разрешённым transmitter; без replacement source physical/two-board gates остаются fail-closed.
+- **Следующий gate:** подключить квалифицированный собственный RF source, пройти его read-only profile и проверку plausible identity, затем запустить `tools/run_s5_two_board_hil.py`. Один command собирает каждую роль один раз, прошивает каждую роль только для первого применимого scenario и выполняет матрицу IR, nRF24, Sub-GHz OOK и Sub-GHz FSK с fail-closed checkpoint каждого child run. Она должна закрыть physical result nRF24 S5.3 и frequency→capture→save→cold export S5.4 до принятия S5.6. Неисправный клон восстановлен в stock для возврата и не является разрешённым transmitter; без replacement source gates остаются fail-closed.
 
 ### Фазы текущего этапа
 
@@ -25,9 +25,9 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | S5.1 | Пассивные product slices штатных радио: all-antenna overview/finder nRF24, robust finder CC1101, основы bounded RAW/IR capture | ✅ готово |
 | S5.2 | Первый physical loop двух плат: fixed NEC receive → explicit save → cold Library byte-exact export → safe cleanup | ✅ готово |
 | S5.3 | Известный nRF24 signal: source-bound fixture 2 442 МГц на минимальной мощности → результат finder трёх приёмников → safe cleanup; заблокирован до появления исправного/заменённого RF carrier | 🔴 заблокировано |
-| S5.4 | Известный Sub-GHz signal: exact 0.140 принимает bounded OOK/FSK UI, реализацию receive GDO0 и one-flash no-signal delta; physical frequency→capture→save→cold export остаётся source-blocked | 🟡 в работе |
+| S5.4 | Известный Sub-GHz signal: exact 0.140 принимает bounded OOK/FSK UI, реализацию receive GDO0 и one-flash no-signal delta. Source `4f97b3a` реализует точные конечные minimum-power vectors fixture OOK/FSK и автоматические scenarios capture→save→cold export; их physical run остаётся source-blocked | 🟡 в работе |
 | S5.5 | Полнота runtime: exact 0.139 принимает унаследованную от 0.138 safety Product Survey/workers плюс truthful applicability stock assembly, debounced отказ Store при low voltage, реальный light-sleep/resume и public RX-only software-fixture path Store Sub-GHz; exact 0.145 добавляет сохраняемые язык/яркость/тему с безопасно недоступным Звуком; physical positive RF остаётся в S5.3/S5.4 | ✅ готово |
-| S5.6 | Интегральный hardware gate S5: exact 0.144 уже принимает автономную on-device половину Full receivers/artifacts без утечки leases/outputs; выполнить two-board половину с qualified source после S5.3/S5.4 | ⬜ дальше |
+| S5.6 | Интегральный hardware gate S5: exact 0.144 уже принимает автономную on-device половину Full receivers/artifacts без утечки leases/outputs. One-build/one-flash-per-role runner фазы IR→nRF24→OOK→FSK build-checked на source `4f97b3a`; выполнить его physical половину с qualified source после S5.3/S5.4 | ⬜ дальше |
 
 ### Роадмап
 

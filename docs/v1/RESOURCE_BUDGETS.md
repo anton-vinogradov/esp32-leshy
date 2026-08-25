@@ -340,6 +340,18 @@ keeps buzzer and nRF CE inactive, reports zero input errors/drops and finishes
 Home/none/lease 0. This focused interface delta does not replace the stage-end
 matrix or qualified physical RF-positive gate.
 
+Test-only fixture measurement `RB-M140`: fixture `0.3.0-subghz-safe` at source
+`4f97b3a751b96c7573c056d4ac7562ef410c06cc` uses 335,955 B linked flash,
+22,876 B static RAM and app/factory images 336,352/401,888 B. Dedicated
+DIRAM is 74,687/341,760 B and IRAM is exactly 16,384/16,384 B. Firmware,
+factory, ELF and map hashes are
+`32f3619f66beeacbd3e05b1148699494cc808a24b4779f4ded2d131c0f2ffb9c`,
+`98b712c4f1979506e010c37e748b4f7d4aba4fc2a7ebfb04874479483e4b6586`,
+`72dd88393fe1cbe9c3ef3f50e31f353ce6ffd883cd922429ed956b85d91c5798` and
+`bd4d6582339441c9818525713467b64c85cb5997755157c351718d7d3ce65b35`.
+This separate test image does not change the product budget and its passing build
+does not constitute physical RF evidence.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
