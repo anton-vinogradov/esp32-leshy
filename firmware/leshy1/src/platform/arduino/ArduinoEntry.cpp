@@ -4666,7 +4666,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     // heads while mounted, then are released while the selected wire blob stays
     // in this workspace. After unmount the product runtime is allocated as
     // separate 11,272 B catalog, 11,272 B decision log, 7,736 B comparison,
-    // 2,704 B proposals and 4,160 B controller blocks, then the blob is decoded
+    // 2,704 B proposals and 4,232 B controller blocks, then the blob is decoded
     // directly into that one long-lived copy. A monolithic workspace or
     // overlapping transfer/runtime copies do not fit the board.
     auto* targetStateWorkspace = new (std::nothrow)
@@ -15432,6 +15432,8 @@ void emitTargetsState(Stream& reply) {
         ? nullptr : controller->selectedRow();
     const auto* selectedTarget = controller == nullptr
         ? nullptr : controller->selectedTarget();
+    const auto* targetAdmission = controller == nullptr
+        ? nullptr : &controller->lastAdmission();
     const auto* comparison = controller != nullptr &&
             controller->compareAvailable()
         ? &controller->comparison() : nullptr;
@@ -15594,6 +15596,11 @@ void emitTargetsState(Stream& reply) {
         "\"status\":\"%s\",\"workspace_allocated\":%s,"
         "\"page_open\":%s,\"view\":\"%s\","
         "\"target_count\":%u,\"source_identity_count\":%u,"
+        "\"admission_stage\":\"%s\",\"admission_status\":\"%s\","
+        "\"admission_target_status\":\"%s\","
+        "\"admission_observations\":%u,\"admission_identities\":%u,"
+        "\"admission_created\":%u,\"admission_evidence_attached\":%u,"
+        "\"admission_unchanged\":%u,"
         "\"truncated\":%s,\"entry_count\":%u,\"selection\":%u,"
         "\"compare_available\":%s,\"baseline_generation\":%lu,"
         "\"current_generation\":%lu,\"added\":%u,\"removed\":%u,"
@@ -15684,6 +15691,25 @@ void emitTargetsState(Stream& reply) {
         static_cast<unsigned>(controller == nullptr ? 0 : controller->size()),
         static_cast<unsigned>(controller == nullptr
                                   ? 0 : controller->sourceIdentityCount()),
+        controller == nullptr ? "none" : controller->lastAdmissionStage(),
+        leshy1::services::targets::sessionTargetAdmissionStatusName(
+            targetAdmission == nullptr
+                ? leshy1::services::targets::SessionTargetAdmissionStatus::InvalidArgument
+                : targetAdmission->status),
+        leshy1::domain::targets::targetMutationStatusName(
+            targetAdmission == nullptr
+                ? leshy1::domain::targets::TargetMutationStatus::InvalidArgument
+                : targetAdmission->targetStatus),
+        static_cast<unsigned>(targetAdmission == nullptr
+                                  ? 0 : targetAdmission->observations),
+        static_cast<unsigned>(targetAdmission == nullptr
+                                  ? 0 : targetAdmission->identities),
+        static_cast<unsigned>(targetAdmission == nullptr
+                                  ? 0 : targetAdmission->created),
+        static_cast<unsigned>(targetAdmission == nullptr
+                                  ? 0 : targetAdmission->evidenceAttached),
+        static_cast<unsigned>(targetAdmission == nullptr
+                                  ? 0 : targetAdmission->unchanged),
         controller != nullptr && controller->truncated() ? "true" : "false",
         static_cast<unsigned>(controller == nullptr
                                   ? 0 : controller->entryCount()),

@@ -10,6 +10,7 @@
 #include "domain/targets/TargetComparison.h"
 #include "services/survey/SurveySession.h"
 #include "services/targets/SessionCorrelationReview.h"
+#include "services/targets/SessionTargetAdmission.h"
 
 namespace leshy1::apps::targets {
 
@@ -229,6 +230,9 @@ public:
     const domain::targets::CorrelationDecisionLog& decisions() const {
         return workspace_.decisions;
     }
+    const services::targets::SessionTargetAdmissionResult& lastAdmission()
+        const { return lastAdmission_; }
+    const char* lastAdmissionStage() const { return lastAdmissionStage_; }
 
 private:
     void resetTransient(bool clearPersistentState);
@@ -288,6 +292,8 @@ private:
     bool comparisonAvailable_ = false;
     std::size_t sourceIdentityCount_ = 0;
     bool truncated_ = false;
+    services::targets::SessionTargetAdmissionResult lastAdmission_{};
+    const char* lastAdmissionStage_ = "none";
 };
 
 }  // namespace leshy1::apps::targets

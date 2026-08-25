@@ -52,7 +52,7 @@ def main() -> int:
                 load_product.rfind("allocateTargetsProduct(") and
             "separate 11,272 B catalog, 11,272 B decision log, 7,736 B "
             "comparison" in load_product and
-            "2,704 B proposals and 4,160 B controller blocks" in
+            "2,704 B proposals and 4,232 B controller blocks" in
                 load_product and
             "overlapping transfer/runtime copies do not fit the board" in
                 load_product and
@@ -162,6 +162,16 @@ def main() -> int:
             r'\"mutation_correlation_status\":\"%s\"' in entry,
             "Targets correlation review must keep candidates independent, "
             "show explainable proposals and atomically persist accept/reject")
+    require(failures,
+            "lastAdmissionStage()" in entry and
+            "lastAdmission()" in entry and
+            r'\"admission_stage\":\"%s\"' in entry and
+            r'\"admission_status\":\"%s\"' in entry and
+            r'\"admission_target_status\":\"%s\"' in entry and
+            r'\"admission_observations\":%u' in entry and
+            r'\"admission_identities\":%u' in entry,
+            "Targets must expose the exact admission stage and bounded "
+            "mutation reason when a persisted projection cannot be loaded")
     require(failures,
             '"git", "rev-parse", "HEAD"' in runner and
             '"git", "status", "--porcelain"' in runner and

@@ -48,6 +48,9 @@ def open_targets(device: PassiveSerial) -> dict[str, Any]:
     action(device, "right")
     listed = query(device, b"targets.state",
                    "leshy.targets.product.v1", "state")
+    if listed.get("status") != "ready":
+        raise RuntimeError(
+            f"Targets load rejected with exact admission state: {listed}")
     require(listed, "Targets list", status="ready", page_open=True,
             workspace_allocated=True, view="list", compare_available=True,
             read_only=False, write_enabled=False,

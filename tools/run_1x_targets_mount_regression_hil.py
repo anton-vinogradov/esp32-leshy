@@ -129,6 +129,9 @@ def main() -> int:
                     runtime_owner="targets", lease_mask=13)
             listed = query(device, b"targets.state",
                            "leshy.targets.product.v1", "state")
+            if listed.get("status") != "ready":
+                raise RuntimeError(
+                    f"Targets load rejected with exact admission state: {listed}")
             require(listed, "Targets list", status="ready",
                     workspace_allocated=True, page_open=True, view="list",
                     compare_available=True,

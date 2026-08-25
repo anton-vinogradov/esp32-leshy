@@ -245,6 +245,8 @@ void TargetsController::resetTransient(bool clearPersistentState) {
     comparisonAvailable_ = false;
     sourceIdentityCount_ = 0;
     truncated_ = false;
+    lastAdmission_ = {};
+    lastAdmissionStage_ = "none";
 }
 
 TargetsLoadStatus TargetsController::load(
@@ -332,9 +334,13 @@ TargetsLoadStatus TargetsController::loadBindings(
         if (!admittedBaseline.valid()) {
             delete scratch;
             reset();
+            lastAdmission_ = admittedBaseline;
+            lastAdmissionStage_ = "baseline";
             status_ = TargetsLoadStatus::AdmissionRejected;
             return status_;
         }
+        lastAdmission_ = admittedBaseline;
+        lastAdmissionStage_ = "baseline";
         const auto baselineSource = comparisonSource(baseline);
         const auto currentSource = comparisonSource(current);
         const auto correlationStatus =
@@ -357,9 +363,13 @@ TargetsLoadStatus TargetsController::loadBindings(
     delete scratch;
     if (!admittedCurrent.valid()) {
         reset();
+        lastAdmission_ = admittedCurrent;
+        lastAdmissionStage_ = "current";
         status_ = TargetsLoadStatus::AdmissionRejected;
         return status_;
     }
+    lastAdmission_ = admittedCurrent;
+    lastAdmissionStage_ = "current";
     if (!rebuildRows()) {
         reset();
         status_ = TargetsLoadStatus::EvidenceUnavailable;
