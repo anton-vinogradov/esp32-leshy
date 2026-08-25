@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import select
 import shutil
 import subprocess
 import time
@@ -173,6 +174,14 @@ def main() -> int:
         "--fixture-port",
         help="optional external low-power Wi-Fi/BLE correlation beacon",
     )
+    parser.add_argument(
+        "--external-ble-label",
+        help="BLE local name advertised by --external-ble-executable",
+    )
+    parser.add_argument(
+        "--external-ble-executable", type=Path,
+        help="bounded macOS CoreBluetooth fixture executable",
+    )
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
         if not path.is_file():
@@ -181,6 +190,18 @@ def main() -> int:
         parser.error("output must not exist")
     if len(args.source_commit) != 40:
         parser.error("source commit must be full length")
+    if args.fixture_port is not None and args.external_ble_label is not None:
+        parser.error("choose at most one external fixture mechanism")
+    if ((args.external_ble_label is None) !=
+            (args.external_ble_executable is None)):
+        parser.error(
+            "--external-ble-label and --external-ble-executable are a pair")
+    if (args.external_ble_executable is not None and
+            not args.external_ble_executable.is_file()):
+        parser.error("external BLE fixture executable is missing")
+    if (args.external_ble_label is not None and
+            not 1 <= len(args.external_ble_label.encode("utf-8")) <= 29):
+        parser.error("external BLE label must occupy 1..29 UTF-8 bytes")
     root = Path(__file__).resolve().parents[1]
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=root, check=True,
@@ -208,6 +229,19 @@ def main() -> int:
     screens: dict[str, Any] = {}
     cleanup: dict[str, Any] = {"attempted": False}
     fixture_states: list[dict[str, Any]] = []
+    fixture_record: dict[str, Any] = {
+        "kind": "second_div" if args.fixture_port is not None else (
+            "macos_corebluetooth" if args.external_ble_label is not None else
+            "none"),
+        "port": args.fixture_port,
+        "label": ("LESHY-HIL-CORR" if args.fixture_port is not None else
+                  args.external_ble_label),
+        "states": fixture_states,
+        "dut_remained_passive": True,
+    }
+    if args.external_ble_executable is not None:
+        fixture_record["executable_sha256"] = sha256_file(
+            args.external_ble_executable)
     record: dict[str, Any] = {
         "schema": SCHEMA,
         "status": "in_progress",
@@ -226,6 +260,7 @@ def main() -> int:
 
     device: PassiveSerial | None = None
     fixture: PassiveSerial | None = None
+    fixture_process: subprocess.Popen[str] | None = None
     try:
         if not args.reuse_exact_flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
@@ -238,6 +273,26 @@ def main() -> int:
             fixture = PassiveSerial(
                 args.fixture_port, 115200, timeout=0.25)
             fixture_states.append(fixture_mode(fixture, "off"))
+        if args.external_ble_executable is not None:
+            fixture_process = subprocess.Popen(
+                [str(args.external_ble_executable.resolve()),
+                 str(args.external_ble_label)],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            if fixture_process.stdout is None:
+                raise RuntimeError("external BLE fixture has no stdout")
+            readable, _, _ = select.select(
+                [fixture_process.stdout], [], [], 10.0)
+            if not readable:
+                raise RuntimeError("external BLE fixture did not become ready")
+            fixture_state = json.loads(fixture_process.stdout.readline())
+            fixture_states.append(fixture_state)
+            if (fixture_state.get("schema") !=
+                    "leshy.hil.macos_ble_name_fixture.v1" or
+                    fixture_state.get("state") != "advertising" or
+                    fixture_state.get("label") != args.external_ble_label):
+                raise RuntimeError(
+                    f"external BLE fixture start failed: {fixture_state}")
         metrics = query(device, b"metrics", "leshy.boot.v1", "ready")
         require(metrics, "candidate", version=args.expected_version,
                 app_elf_sha256=app_identity)
@@ -410,12 +465,7 @@ def main() -> int:
             "cleanup": cleanup,
             "flash_count": 0 if args.reuse_exact_flash else 1,
             "radio_tx_commands": 0,
-            "external_fixture": {
-                "port": args.fixture_port,
-                "label": "LESHY-HIL-CORR",
-                "states": fixture_states,
-                "dut_remained_passive": True,
-            },
+            "external_fixture": fixture_record,
         })
     except Exception as error:
         if device is not None:
@@ -427,12 +477,7 @@ def main() -> int:
             "screens": screens,
             "trace": trace,
             "cleanup": cleanup,
-            "external_fixture": {
-                "port": args.fixture_port,
-                "label": "LESHY-HIL-CORR",
-                "states": fixture_states,
-                "dut_remained_passive": True,
-            },
+            "external_fixture": fixture_record,
         })
         write_json(args.output / "run.json", record)
         artifact_manifest(args.output)
@@ -446,6 +491,13 @@ def main() -> int:
             fixture.close()
         if device is not None:
             device.close()
+        if fixture_process is not None:
+            fixture_process.terminate()
+            try:
+                fixture_process.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                fixture_process.kill()
+                fixture_process.wait(timeout=5.0)
 
     write_json(args.output / "run.json", record)
     artifact_manifest(args.output)
