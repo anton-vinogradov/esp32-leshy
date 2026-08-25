@@ -146,6 +146,11 @@ def main() -> int:
             "CorrelationService service(*catalog, *decisions, lookup)" in entry and
             "requestTargetsCorrelationMutation(" in entry and
             r'\"correlation_count\":%u' in entry and
+            r'\"correlation_proposal_id\":\"%s\"' in entry and
+            r'\"correlation_candidate_identity_hex\":\"%s\"' in entry and
+            r'\"correlation_feature_kind\":\"%s\"' in entry and
+            r'\"correlation_known_generation\":%lu' in entry and
+            r'\"correlation_candidate_generation\":%lu' in entry and
             r'\"mutation_correlation_status\":\"%s\"' in entry,
             "Targets correlation review must keep candidates independent, "
             "show explainable proposals and atomically persist accept/reject")

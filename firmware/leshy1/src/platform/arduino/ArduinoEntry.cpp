@@ -15512,6 +15512,60 @@ void emitTargetsState(Stream& reply) {
         encodeHex(controller->notesEditorText(), length,
                   editorNotesPrefixHex, sizeof(editorNotesPrefixHex));
     }
+    const CorrelationProposal* correlationProposal = controller == nullptr
+        ? nullptr : controller->reviewedCorrelationProposal();
+    Observation correlationKnown{};
+    Observation correlationCandidate{};
+    const bool correlationKnownLoaded = correlationProposal != nullptr &&
+        controller->correlationEvidence(false, &correlationKnown);
+    const bool correlationCandidateLoaded = correlationProposal != nullptr &&
+        controller->correlationEvidence(true, &correlationCandidate);
+    char correlationProposalId[33] = {};
+    char correlationCandidateIdentityHex[
+        leshy1::domain::targets::TargetIdentity::kValueCapacity * 2U + 1U] = {};
+    if (correlationProposal != nullptr) {
+        for (std::size_t index = 0;
+             index < correlationProposal->id.bytes.size(); ++index) {
+            std::snprintf(correlationProposalId + index * 2U, 3, "%02X",
+                          static_cast<unsigned>(
+                              correlationProposal->id.bytes[index]));
+        }
+        for (std::size_t index = 0;
+             index < correlationProposal->candidateIdentity.length; ++index) {
+            std::snprintf(correlationCandidateIdentityHex + index * 2U, 3,
+                          "%02X", static_cast<unsigned>(
+                              correlationProposal->candidateIdentity
+                                  .value[index]));
+        }
+    }
+    const auto correlationConfidenceName = [](const CorrelationProposal* value) {
+        if (value == nullptr) return "none";
+        using leshy1::domain::targets::CorrelationConfidence;
+        switch (value->confidence) {
+            case CorrelationConfidence::Low: return "low";
+            case CorrelationConfidence::Medium: return "medium";
+            case CorrelationConfidence::High: return "high";
+            case CorrelationConfidence::Stale: return "stale";
+        }
+        return "unknown";
+    };
+    const auto correlationFeatureName = [](const CorrelationProposal* value) {
+        if (value == nullptr || value->featureCount == 0) return "none";
+        using leshy1::domain::targets::CorrelationFeatureKind;
+        switch (value->features[0].kind) {
+            case CorrelationFeatureKind::AssignedVendorMatch:
+                return "assigned_vendor";
+            case CorrelationFeatureKind::AdvertisedNameMatch:
+                return "advertised_name";
+            case CorrelationFeatureKind::CoOccurrencePattern:
+                return "co_occurrence";
+            case CorrelationFeatureKind::ChannelPatternMatch:
+                return "channel_pattern";
+            case CorrelationFeatureKind::SignalTrendMatch:
+                return "signal_trend";
+        }
+        return "unknown";
+    };
     auto& line = diagnosticJson;
     std::memset(line, 0, sizeof(line));
     std::snprintf(
@@ -15555,6 +15609,31 @@ void emitTargetsState(Stream& reply) {
         "\"notes_editor_dirty\":%s,"
         "\"correlation_count\":%u,\"correlation_selection\":%u,"
         "\"correlation_review_selection\":%u,"
+        "\"correlation_proposal_present\":%s,"
+        "\"correlation_proposal_id\":\"%s\","
+        "\"correlation_candidate_identity_kind\":%u,"
+        "\"correlation_candidate_identity_discriminator\":%u,"
+        "\"correlation_candidate_identity_hex\":\"%s\","
+        "\"correlation_score_permille\":%u,"
+        "\"correlation_confidence\":\"%s\","
+        "\"correlation_stale\":%s,\"correlation_feature_count\":%u,"
+        "\"correlation_feature_kind\":\"%s\","
+        "\"correlation_feature_strength_permille\":%u,"
+        "\"correlation_feature_maximum_points\":%u,"
+        "\"correlation_feature_awarded_points\":%u,"
+        "\"correlation_known_loaded\":%s,"
+        "\"correlation_known_generation\":%lu,"
+        "\"correlation_known_sequence\":%llu,"
+        "\"correlation_known_radio\":%u,"
+        "\"correlation_known_rssi_dbm\":%d,"
+        "\"correlation_known_channel\":%u,"
+        "\"correlation_candidate_loaded\":%s,"
+        "\"correlation_candidate_generation\":%lu,"
+        "\"correlation_candidate_sequence\":%llu,"
+        "\"correlation_candidate_radio\":%u,"
+        "\"correlation_candidate_rssi_dbm\":%d,"
+        "\"correlation_candidate_channel\":%u,"
+        "\"correlation_evidence_candidate\":%s,"
         "\"read_only\":false,\"write_enabled\":%s,"
         "\"target_state_generation\":%lu,\"target_state_head\":\"%s\","
         "\"mutation_state\":\"%s\",\"mutation_status\":\"%s\","
@@ -15682,6 +15761,67 @@ void emitTargetsState(Stream& reply) {
                                   ? 0 : controller->correlationSelection()),
         static_cast<unsigned>(controller == nullptr
                                   ? 0 : controller->correlationReviewSelection()),
+        correlationProposal == nullptr ? "false" : "true",
+        correlationProposalId,
+        correlationProposal == nullptr ? 0U : static_cast<unsigned>(
+            correlationProposal->candidateIdentity.kind),
+        static_cast<unsigned>(correlationProposal == nullptr ? 0 :
+            correlationProposal->candidateIdentity.discriminator),
+        correlationCandidateIdentityHex,
+        static_cast<unsigned>(correlationProposal == nullptr ? 0 :
+            correlationProposal->scorePermille),
+        correlationConfidenceName(correlationProposal),
+        correlationProposal != nullptr && correlationProposal->stale
+            ? "true" : "false",
+        static_cast<unsigned>(correlationProposal == nullptr ? 0 :
+            correlationProposal->featureCount),
+        correlationFeatureName(correlationProposal),
+        static_cast<unsigned>(correlationProposal == nullptr ||
+                                      correlationProposal->featureCount == 0
+                                  ? 0
+                                  : correlationProposal->features[0]
+                                        .strengthPermille),
+        static_cast<unsigned>(correlationProposal == nullptr ||
+                                      correlationProposal->featureCount == 0
+                                  ? 0
+                                  : correlationProposal->features[0]
+                                        .maximumPoints),
+        static_cast<unsigned>(correlationProposal == nullptr ||
+                                      correlationProposal->featureCount == 0
+                                  ? 0
+                                  : correlationProposal->features[0]
+                                        .awardedPoints),
+        correlationKnownLoaded ? "true" : "false",
+        static_cast<unsigned long>(correlationProposal == nullptr ||
+                                           correlationProposal->featureCount == 0
+                                       ? 0
+                                       : correlationProposal->features[0]
+                                             .targetEvidence.sourceGeneration),
+        static_cast<unsigned long long>(correlationProposal == nullptr ||
+                                                correlationProposal
+                                                        ->featureCount == 0
+                                            ? 0
+                                            : correlationProposal->features[0]
+                                                  .targetEvidence
+                                                  .observationSequence),
+        static_cast<unsigned>(correlationKnownLoaded
+                                  ? correlationKnown.radio : RadioKind{}),
+        static_cast<int>(correlationKnownLoaded ? correlationKnown.rssiDbm : 0),
+        static_cast<unsigned>(correlationKnownLoaded
+                                  ? correlationKnown.channel : 0),
+        correlationCandidateLoaded ? "true" : "false",
+        static_cast<unsigned long>(correlationProposal == nullptr ? 0 :
+            correlationProposal->candidateEvidence.sourceGeneration),
+        static_cast<unsigned long long>(correlationProposal == nullptr ? 0 :
+            correlationProposal->candidateEvidence.observationSequence),
+        static_cast<unsigned>(correlationCandidateLoaded
+                                  ? correlationCandidate.radio : RadioKind{}),
+        static_cast<int>(correlationCandidateLoaded
+                             ? correlationCandidate.rssiDbm : 0),
+        static_cast<unsigned>(correlationCandidateLoaded
+                                  ? correlationCandidate.channel : 0),
+        controller != nullptr && controller->correlationEvidenceIsCandidate()
+            ? "true" : "false",
         controller != nullptr &&
                 ((controller->view() == TargetsView::Actions &&
                   controller->selectedAction() == TargetActionItem::Favorite) ||
