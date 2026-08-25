@@ -73,6 +73,22 @@ def passing_matrix_child(scenario_id: str, source_commit: str,
     }
 
 
+def passing_build_artifacts(candidate_hash: str,
+                            fixture_hash: str) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for role, firmware_hash in (
+            ("product", candidate_hash), ("fixture", fixture_hash)):
+        result[role] = {
+            name: {
+                "bytes": 1024,
+                "sha256": firmware_hash if name == "firmware.bin"
+                else ("7" if role == "product" else "8") * 64,
+            }
+            for name in phase_flow.BUILD_ARTIFACTS[role]
+        }
+    return result
+
+
 class IrTwoBoardHilTests(unittest.TestCase):
     def test_versions_are_extracted_from_both_projects(self) -> None:
         self.assertRegex(
@@ -320,6 +336,8 @@ class IrTwoBoardHilTests(unittest.TestCase):
                 "failure": None,
                 "product_firmware_sha256": candidate_hash,
                 "fixture_firmware_sha256": fixture_hash,
+                "build_artifacts": passing_build_artifacts(
+                    candidate_hash, fixture_hash),
                 "product_app_elf_sha256": "d" * 64,
                 "fixture_app_elf_sha256": "e" * 64,
                 "fixture_profile_sha256": "f" * 64,
@@ -339,13 +357,24 @@ class IrTwoBoardHilTests(unittest.TestCase):
                     side_effect=committed_blob):
                 checked = phase_flow.verify_completed_matrix(summary_path)
             self.assertEqual(source_commit, checked["source_commit"])
+            relocated = Path(directory) / "relocated"
+            output.rename(relocated)
+            with mock.patch.object(
+                    phase_flow, "git_blob_sha256",
+                    side_effect=committed_blob):
+                checked = phase_flow.verify_completed_matrix(
+                    relocated / "run.json", allow_relocated_children=True)
+            self.assertEqual(source_commit, checked["source_commit"])
+            output = relocated
             summary["runs"][2]["run_sha256"] = "0" * 64
+            summary_path = output / "run.json"
             summary_path.write_text(json.dumps(summary), encoding="utf-8")
             with mock.patch.object(
                     phase_flow, "git_blob_sha256",
                     side_effect=committed_blob):
                 with self.assertRaisesRegex(ValueError, "child run hash"):
-                    phase_flow.verify_completed_matrix(summary_path)
+                    phase_flow.verify_completed_matrix(
+                        summary_path, allow_relocated_children=True)
 
 
 if __name__ == "__main__":

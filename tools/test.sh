@@ -268,7 +268,9 @@ python3 "$repo_dir/tools/test_sd_reset_runner.py"
 python3 "$repo_dir/tools/test_hil_scenario_runner.py"
 python3 "$repo_dir/tools/test_hil_board_profile.py"
 python3 "$repo_dir/tools/test_ir_two_board_hil.py"
+python3 "$repo_dir/tools/test_s5_two_board_retention.py"
 python3 "$repo_dir/tools/check_s5_two_board_matrix.py" --help >/dev/null
+python3 "$repo_dir/tools/retain_s5_two_board_matrix.py" --help >/dev/null
 python3 "$repo_dir/tools/test_sd_power_cut_runner.py"
 python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"

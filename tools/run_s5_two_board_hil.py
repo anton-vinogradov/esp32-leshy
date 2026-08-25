@@ -46,6 +46,20 @@ FINAL_REPORTS = {
     "subghz-ook-positive": "final",
     "subghz-fsk-positive": "final",
 }
+BUILD_ARTIFACTS = {
+    "product": {
+        name: PRODUCT_FIRMWARE.parent / name
+        for name in (
+            "firmware.bin", "firmware.factory.bin", "firmware.elf",
+            "firmware.map")
+    },
+    "fixture": {
+        name: FIXTURE_FIRMWARE.parent / name
+        for name in (
+            "firmware.bin", "firmware.factory.bin", "firmware.elf",
+            "firmware.map")
+    },
+}
 
 
 def utc_now() -> str:
@@ -80,6 +94,40 @@ def save_summary(path: Path, summary: dict[str, Any]) -> None:
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise ValueError(message)
+
+
+def build_artifact_inventory() -> dict[str, dict[str, dict[str, Any]]]:
+    inventory: dict[str, dict[str, dict[str, Any]]] = {}
+    for role, paths in BUILD_ARTIFACTS.items():
+        inventory[role] = {}
+        for name, path in paths.items():
+            require(path.is_file(), f"{role} build artifact missing: {name}")
+            inventory[role][name] = {
+                "bytes": path.stat().st_size,
+                "sha256": sha256_file(path),
+            }
+    return inventory
+
+
+def require_build_artifacts(summary: dict[str, Any]) -> None:
+    artifacts = summary.get("build_artifacts")
+    require(isinstance(artifacts, dict) and
+            set(artifacts) == set(BUILD_ARTIFACTS),
+            "matrix build artifact roles mismatch")
+    for role, paths in BUILD_ARTIFACTS.items():
+        records = artifacts.get(role)
+        require(isinstance(records, dict) and
+                set(records) == set(paths),
+                f"matrix {role} build artifact set mismatch")
+        for name in paths:
+            record = records.get(name)
+            require(isinstance(record, dict) and
+                    isinstance(record.get("bytes"), int) and
+                    record["bytes"] > 0 and
+                    isinstance(record.get("sha256"), str) and
+                    re.fullmatch(r"[0-9a-f]{64}", record["sha256"])
+                    is not None,
+                    f"matrix {role} build artifact identity invalid: {name}")
 
 
 def accepted_child(run_path: Path, scenario_id: str, source_commit: str, *,
@@ -199,7 +247,9 @@ def accepted_child(run_path: Path, scenario_id: str, source_commit: str, *,
     }
 
 
-def verify_completed_matrix(summary_path: Path) -> dict[str, Any]:
+def verify_completed_matrix(summary_path: Path, *,
+                            allow_relocated_children: bool = False
+                            ) -> dict[str, Any]:
     """Re-read a completed matrix and independently verify every child."""
     summary_path = summary_path.resolve()
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -245,6 +295,13 @@ def verify_completed_matrix(summary_path: Path) -> dict[str, Any]:
     require(summary.get("runner_source_sha256") ==
             git_blob_sha256(source_commit, "tools/run_s5_two_board_hil.py"),
             "matrix runner source identity mismatch")
+    require_build_artifacts(summary)
+    require(summary["build_artifacts"]["product"]["firmware.bin"]
+            ["sha256"] == candidate_hash,
+            "matrix product firmware/build identity mismatch")
+    require(summary["build_artifacts"]["fixture"]["firmware.bin"]
+            ["sha256"] == fixture_hash,
+            "matrix fixture firmware/build identity mismatch")
     child_runner_sha256 = git_blob_sha256(
         source_commit, "tools/run_hil_scenario.py")
 
@@ -262,8 +319,10 @@ def verify_completed_matrix(summary_path: Path) -> dict[str, Any]:
         if not recorded_path.is_absolute():
             recorded_path = ROOT / recorded_path
         recorded_path = recorded_path.resolve()
-        require(recorded_path == expected_path and expected_path.is_file(),
-                f"{scenario_id}: child path mismatch")
+        require(expected_path.is_file(), f"{scenario_id}: child is missing")
+        if not allow_relocated_children:
+            require(recorded_path == expected_path,
+                    f"{scenario_id}: child path mismatch")
         require(entry.get("run_sha256") == sha256_file(expected_path),
                 f"{scenario_id}: child run hash mismatch")
         candidate_reused = entry.get("candidate_exact_flash_reused")
@@ -324,6 +383,9 @@ def main() -> int:
     parser.add_argument("--declare-antennas-attached", action="store_true")
     parser.add_argument("--reuse-exact-candidate-flash", action="store_true")
     parser.add_argument("--reuse-exact-fixture-flash", action="store_true")
+    parser.add_argument("--retain-destination", type=Path)
+    parser.add_argument("--retain-summary", type=Path)
+    parser.add_argument("--retain-evidence-id", action="append", default=[])
     args = parser.parse_args()
 
     if args.candidate_port == args.fixture_port:
@@ -340,6 +402,12 @@ def main() -> int:
             args.declare_antennas_attached):
         parser.error(
             "assembly declarations apply only to a new read-only profile")
+    if (args.retain_destination is None) != (args.retain_summary is None):
+        parser.error(
+            "retain destination and summary must be supplied together")
+    if args.retain_destination is not None and (
+            args.retain_destination.exists() or args.retain_summary.exists()):
+        parser.error("retain destination and summary must not already exist")
 
     summary_path = args.output / "run.json"
     summary: dict[str, Any] = {
@@ -399,8 +467,11 @@ def main() -> int:
         subprocess.run([str(ROOT / "tools/build.sh")], cwd=ROOT, check=True)
         subprocess.run(
             [str(ROOT / "tools/build_ir_fixture.sh")], cwd=ROOT, check=True)
-        summary["product_firmware_sha256"] = sha256_file(PRODUCT_FIRMWARE)
-        summary["fixture_firmware_sha256"] = sha256_file(FIXTURE_FIRMWARE)
+        summary["build_artifacts"] = build_artifact_inventory()
+        summary["product_firmware_sha256"] = summary[
+            "build_artifacts"]["product"]["firmware.bin"]["sha256"]
+        summary["fixture_firmware_sha256"] = summary[
+            "build_artifacts"]["fixture"]["firmware.bin"]["sha256"]
         child_runner_sha256 = sha256_file(
             ROOT / "tools/run_hil_scenario.py")
 
@@ -474,6 +545,17 @@ def main() -> int:
         })
         save_summary(summary_path, summary)
         verify_completed_matrix(summary_path)
+        if args.retain_destination is not None:
+            retention_command = [
+                sys.executable,
+                str(ROOT / "tools/retain_s5_two_board_matrix.py"),
+                "retain", "--source", str(args.output),
+                "--destination", str(args.retain_destination),
+                "--summary", str(args.retain_summary),
+            ]
+            for evidence_id in args.retain_evidence_id:
+                retention_command.extend(["--evidence-id", evidence_id])
+            subprocess.run(retention_command, cwd=ROOT, check=True)
     except (OSError, ValueError, json.JSONDecodeError,
             subprocess.CalledProcessError) as error:
         summary.update({
