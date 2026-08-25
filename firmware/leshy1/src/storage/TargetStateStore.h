@@ -151,4 +151,12 @@ TargetStateStoreRecoveryResult recoverTargetDecisionState(
     domain::targets::TargetCatalog* catalog,
     domain::targets::CorrelationDecisionLog* decisions);
 
+// Low-memory product recovery. While FatFs is mounted this validates both
+// atomic heads, manifests and payload checksums and retains only the selected
+// wire generation in workspace. The caller must unmount, then call
+// reopenTargetDecisionState() into its one long-lived catalog/decision copy;
+// semantic decode failure remains fail-closed.
+TargetStateStoreRecoveryResult recoverTargetDecisionStateWire(
+    SessionStoreIo& io, TargetDecisionStateStoreWorkspace& workspace);
+
 }  // namespace leshy1::storage

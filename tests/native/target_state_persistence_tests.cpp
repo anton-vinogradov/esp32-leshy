@@ -626,6 +626,32 @@ void testDecisionStoreMigratesCatalogOnlyAndRetainsReject() {
     CHECK(decisions.get(0) != nullptr);
     CHECK(decisions.get(0)->decision == CorrelationDecision::Reject);
     CHECK(correlationProposalKeyEqual(decisions.get(0)->proposal, rejected));
+
+    // The physical no-PSRAM product selects the retained wire generation
+    // while FatFs is mounted, then semantically decodes it into its sole
+    // runtime copy only after unmount.
+    const TargetStateStoreRecoveryResult wireRecovery =
+        recoverTargetDecisionStateWire(io, workspace);
+    CHECK(wireRecovery.valid());
+    CHECK(wireRecovery.generation == 2);
+    CHECK(wireRecovery.targets == 1);
+    CHECK(wireRecovery.decisions == 1);
+    reopened.clear();
+    decisions.clear();
+    CHECK(reopenTargetDecisionState(
+              workspace.manifest.data(), workspace.manifestSize,
+              workspace.state.data(), workspace.stateSize, &reopened,
+              &decisions) == TargetCodecStatus::Valid);
+    CHECK(reopened.size() == 1);
+    CHECK(decisions.size() == 1);
+
+    CHECK(io.flipDurableByte("target-state-00000002.cbor", 0));
+    const TargetStateStoreRecoveryResult wireFallback =
+        recoverTargetDecisionStateWire(io, workspace);
+    CHECK(wireFallback.valid());
+    CHECK(wireFallback.generation == 1);
+    CHECK(wireFallback.targets == 1);
+    CHECK(wireFallback.decisions == 0);
 }
 
 void testDecisionProjectionFitsWorstCaseHistoryAndRejectsMerges() {

@@ -1,7 +1,7 @@
 {
   "schema": "leshy.hil.delta_scope.v1",
   "id": "targets-correlation-0.155",
-  "candidate_version": "0.155.0-targets-correlation-review",
+  "candidate_version": "0.155.1-targets-correlation-review",
   "changed_surfaces": [
     "target_correlation_unambiguous_proposal_rule",
     "target_correlation_exact_evidence_review",

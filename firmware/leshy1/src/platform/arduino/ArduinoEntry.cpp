@@ -4677,19 +4677,17 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         return true;
     }
 
-    // Reserve the large contiguous codec buffer before FatFs fragments the
-    // no-PSRAM heap. Temporary catalog/decision objects validate both atomic
-    // heads while mounted, then are released while the selected wire blob stays
-    // in this workspace. After unmount the product runtime is allocated as
+    // Reserve only the large contiguous codec buffer before FatFs fragments
+    // the no-PSRAM heap. Both atomic heads, manifests and payload checksums are
+    // validated while mounted; semantic decoding happens after unmount directly
+    // into the one long-lived runtime catalog and decision log. After unmount
+    // the product runtime is allocated as
     // separate 11,272 B catalog, 11,272 B decision log, 7,736 B comparison,
     // 2,704 B proposals and 4,240 B controller blocks, then the blob is decoded
     // directly into that one long-lived copy. A monolithic workspace or
     // overlapping transfer/runtime copies do not fit the board.
     auto* targetStateWorkspace = new (std::nothrow)
         leshy1::storage::TargetDecisionStateStoreWorkspace();
-    TargetCatalog* persistedCatalog = new (std::nothrow) TargetCatalog();
-    CorrelationDecisionLog* persistedDecisions =
-        new (std::nothrow) CorrelationDecisionLog();
     BoardSdFilesystem filesystem;
     bool mounted = false;
     constexpr std::uint8_t kTargetsMaximumMountAttempts = 3;
@@ -4713,8 +4711,6 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         if (filesystem.mounted()) filesystem.end();
         targetsCleanupComplete = filesystem.cleanupComplete();
         delete targetStateWorkspace;
-        delete persistedCatalog;
-        delete persistedDecisions;
         targetsProductStatus = "readonly_mount_failed";
         lastRuntimeEvent = targetsProductStatus;
         return true;
@@ -4780,15 +4776,13 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 filesystem.exists(
                     "/leshy/sessions/v1/target-state-head-b.bin");
             if (sessionReady && targetStatePresent) {
-                if (persistedCatalog == nullptr || persistedDecisions == nullptr ||
-                    targetStateWorkspace == nullptr) {
+                if (targetStateWorkspace == nullptr) {
                     targetStateAccepted = false;
                     targetsProductStatus = "target_state_workspace_unavailable";
                 } else {
                     const auto recovered =
-                        leshy1::storage::recoverTargetDecisionState(
-                            io, *targetStateWorkspace, persistedCatalog,
-                            persistedDecisions);
+                        leshy1::storage::recoverTargetDecisionStateWire(
+                            io, *targetStateWorkspace);
                     if (recovered.valid()) {
                         persistedStateBlobAvailable = true;
                         targetsStateGeneration = recovered.generation;
@@ -4804,13 +4798,9 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         }
         io.end();
     }
-    // Recovery left the selected, already validated wire generation in the
-    // codec workspace. Drop the decoded validation copies before asking the
-    // fragmented no-PSRAM heap for the foreground runtime.
-    delete persistedCatalog;
-    persistedCatalog = nullptr;
-    delete persistedDecisions;
-    persistedDecisions = nullptr;
+    // Recovery left the selected checksum-validated wire generation in the
+    // codec workspace; no duplicate decoded catalog or decision log overlapped
+    // FatFs. Decode it once after unmount into the foreground runtime.
     targetsBlockedWriteAttempts = filesystem.blockedWriteAttempts();
     filesystem.end();
     targetsCleanupComplete = filesystem.cleanupComplete();
