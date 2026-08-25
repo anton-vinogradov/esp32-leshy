@@ -352,6 +352,17 @@ factory, ELF and map hashes are
 This separate test image does not change the product budget and its passing build
 does not constitute physical RF evidence.
 
+Host/build Target-foundation measurement `RB-M141`: `E-TARGET-002` uses
+3,090,668 B linked flash, 211,224 B static RAM and app/factory images
+3,091,168/3,156,704 B. This is +800 B linked flash, zero static-RAM growth and
++800/+800 B images versus exact 0.145 for deterministic Target CBOR/manifest,
+exact Observation admission and the reusable two-head Target journal. Dedicated
+DIRAM remains 294,404/341,760 B (86.14%, 47,356 B remaining); dedicated IRAM
+remains exactly 16,384/16,384 B. The ≤16 KiB `TargetCatalog`, 16 KiB codec
+workspace and explicit recovery scratch are lifecycle-owned objects and are not
+yet instantiated as permanent product globals; S6.4 product integration must
+measure their live heap/static placement. This is host/build evidence, not HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

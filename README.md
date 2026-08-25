@@ -14,16 +14,16 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
 
-- **Current phase:** `S6.1 — Target foundation (stable identity, metadata, and source-evidence references)`.
-- **Verified checkpoint:** host checkpoint `E-TARGET-001` implements the first S6.1 foundation: stable Target IDs, exclusive exact Wi-Fi/BLE identity and source-Observation ownership, bounded editable metadata, no-eviction failure semantics and seven versioned typed mutation Actions. Dedicated allocation-free native tests pass; persistence, automatic correlation, compare and UI are explicitly not claimed. Exact `0.145.0-interface-settings` remains the latest physically accepted board-01 product baseline, and exact 0.144 remains the autonomous Full/Guided passive-receiver baseline; neither supplies the missing qualified RF-positive sources or closes S5.
-- **Next gate:** define and host-verify the bounded S6 Target domain: stable Target IDs independent of radio identifiers, exact identity ownership, mutable name/tags/notes/favorite metadata, and immutable references back to source Session observations. No automatic correlation claim is allowed in S6.1. The physical S5 gate is postponed, not waived: when the ordered replacement DIV arrives, its read-only profile must pass before the retained one-command IR→nRF24→OOK→FSK matrix can close S5.3/S5.4/S5.6.
+- **Current phase:** `S6.2 — explainable correlation and reversible identity decisions`.
+- **Verified checkpoint:** host/build checkpoint `E-TARGET-002` completes S6.1. The bounded Target catalog now persists through deterministic schema-v1 CBOR, a CRC32C manifest and the existing six-boundary two-head atomic protocol; recovery selects the newest valid generation and falls back after catalog corruption or a simulated interruption at every commit boundary. Exact stored Wi-Fi/BLE Observations are admitted as immutable Target evidence only when source ID/generation/sequence/time and the complete six-byte identity are available; BLE additionally requires a recorded address type. Native, ASan/UBSan and production builds pass. Automatic correlation, compare and UI remain explicitly unclaimed. Exact `0.145.0-interface-settings` remains the latest physically accepted board-01 product baseline, and exact 0.144 remains the autonomous Full/Guided passive-receiver baseline; neither closes the deferred S5 RF-positive gate.
+- **Next gate:** define and host-verify S6.2's explainable correlation proposal model: bounded features and confidence, explicit accept/reject, and reversible merge/split history that never edits source Observations or silently auto-merges Targets. The physical S5 gate is postponed, not waived: when the ordered replacement DIV arrives, its read-only profile must pass before the retained one-command IR→nRF24→OOK→FSK matrix can close S5.3/S5.4/S5.6.
 
 ### Current stage phases
 
 | Phase | Outcome / exit gate | Status |
 |---|---|---|
-| S6.1 | Target foundation: stable Target IDs, exact radio identities, editable name/tags/notes/favorite and immutable source-evidence references, all bounded and host-verified | 🟡 in progress |
-| S6.2 | Explainable correlation proposes links with features/confidence; accept/reject and reversible merge/split never destroy source evidence | ⬜ later |
+| S6.1 | Target foundation: stable Target IDs, exact radio identities, editable name/tags/notes/favorite and immutable source-evidence references, all bounded and host-verified | ✅ complete |
+| S6.2 | Explainable correlation proposes links with features/confidence; accept/reject and reversible merge/split never destroy source evidence | 🟡 in progress |
 | S6.3 | Baseline/diff compares two Sessions and classifies new, disappeared and changed Targets with every conclusion opening its evidence | ⬜ later |
 | S6.4 | On-device Targets and Compare workflows expose the useful result first, stable navigation and full-area detail views | ⬜ later |
 | S6.5 | Local USB/Web companion uses the same Actions and versioned schemas with scoped connectivity and secrets | ⬜ later |

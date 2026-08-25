@@ -5,12 +5,56 @@
 namespace leshy1::domain::targets {
 namespace {
 
-bool exactText(const char* value, std::size_t length) {
+bool textBytesValid(const char* value, std::size_t length) {
     if (value == nullptr) return false;
     for (std::size_t index = 0; index < length; ++index) {
         if (value[index] == '\0') return false;
     }
-    return value[length] == '\0';
+    return true;
+}
+
+bool validUtf8(const char* value, std::size_t length) {
+    std::size_t index = 0;
+    while (index < length) {
+        const std::uint8_t first = static_cast<std::uint8_t>(value[index++]);
+        if (first <= 0x7fU) continue;
+        if (first >= 0xc2U && first <= 0xdfU) {
+            if (index >= length) return false;
+            const std::uint8_t second = static_cast<std::uint8_t>(value[index++]);
+            if ((second & 0xc0U) != 0x80U) return false;
+            continue;
+        }
+        if (first >= 0xe0U && first <= 0xefU) {
+            if (length - index < 2U) return false;
+            const std::uint8_t second = static_cast<std::uint8_t>(value[index++]);
+            const std::uint8_t third = static_cast<std::uint8_t>(value[index++]);
+            const bool secondValid = first == 0xe0U
+                ? second >= 0xa0U && second <= 0xbfU
+                : first == 0xedU
+                    ? second >= 0x80U && second <= 0x9fU
+                    : (second & 0xc0U) == 0x80U;
+            if (!secondValid || (third & 0xc0U) != 0x80U) return false;
+            continue;
+        }
+        if (first >= 0xf0U && first <= 0xf4U) {
+            if (length - index < 3U) return false;
+            const std::uint8_t second = static_cast<std::uint8_t>(value[index++]);
+            const std::uint8_t third = static_cast<std::uint8_t>(value[index++]);
+            const std::uint8_t fourth = static_cast<std::uint8_t>(value[index++]);
+            const bool secondValid = first == 0xf0U
+                ? second >= 0x90U && second <= 0xbfU
+                : first == 0xf4U
+                    ? second >= 0x80U && second <= 0x8fU
+                    : (second & 0xc0U) == 0x80U;
+            if (!secondValid || (third & 0xc0U) != 0x80U ||
+                (fourth & 0xc0U) != 0x80U) {
+                return false;
+            }
+            continue;
+        }
+        return false;
+    }
+    return true;
 }
 
 bool sameEvidenceKey(const TargetEvidenceRef& left,
@@ -25,7 +69,7 @@ TargetMutationStatus setText(std::array<char, Capacity + 1>& target,
                              std::size_t* targetLength, const char* value,
                              std::size_t length) {
     if (length > Capacity) return TargetMutationStatus::TextTooLong;
-    if (!exactText(value, length)) {
+    if (!textBytesValid(value, length) || !validUtf8(value, length)) {
         return TargetMutationStatus::InvalidArgument;
     }
     if (*targetLength == length &&
@@ -62,6 +106,68 @@ const char* targetMutationStatusName(TargetMutationStatus status) {
 void TargetCatalog::clear() {
     records_.fill(TargetRecord{});
     size_ = 0;
+}
+
+TargetMutationStatus TargetCatalog::restore(const TargetRecord& record) {
+    if (!targetIdValid(record.id) || record.revision == 0 ||
+        record.identityCount == 0 ||
+        record.identityCount > record.identities.size() ||
+        record.evidenceCount == 0 ||
+        record.evidenceCount > record.evidence.size() ||
+        record.nameLength > TargetRecord::kNameCapacity ||
+        record.notesLength > TargetRecord::kNotesCapacity ||
+        record.tagCount > record.tags.size() ||
+        !textBytesValid(record.name.data(), record.nameLength) ||
+        record.name[record.nameLength] != '\0' ||
+        !validUtf8(record.name.data(), record.nameLength) ||
+        !textBytesValid(record.notes.data(), record.notesLength) ||
+        record.notes[record.notesLength] != '\0' ||
+        !validUtf8(record.notes.data(), record.notesLength)) {
+        return TargetMutationStatus::InvalidArgument;
+    }
+    if (find(record.id) != nullptr) return TargetMutationStatus::DuplicateId;
+    for (std::size_t index = 0; index < record.identityCount; ++index) {
+        if (!targetIdentityValid(record.identities[index]) ||
+            findByIdentity(record.identities[index]) != nullptr) {
+            return TargetMutationStatus::IdentityConflict;
+        }
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            if (targetIdentityEqual(record.identities[prior],
+                                    record.identities[index])) {
+                return TargetMutationStatus::IdentityConflict;
+            }
+        }
+    }
+    for (std::size_t index = 0; index < record.evidenceCount; ++index) {
+        if (!targetEvidenceValid(record.evidence[index]) ||
+            findByEvidence(record.evidence[index]) != nullptr) {
+            return TargetMutationStatus::EvidenceConflict;
+        }
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            if (sameEvidenceKey(record.evidence[prior], record.evidence[index])) {
+                return TargetMutationStatus::EvidenceConflict;
+            }
+        }
+    }
+    for (std::size_t index = 0; index < record.tagCount; ++index) {
+        const std::size_t length = record.tagLengths[index];
+        if (length == 0 || length > TargetRecord::kTagCapacity ||
+            !textBytesValid(record.tags[index].data(), length) ||
+            record.tags[index][length] != '\0' ||
+            !validUtf8(record.tags[index].data(), length)) {
+            return TargetMutationStatus::InvalidArgument;
+        }
+        for (std::size_t prior = 0; prior < index; ++prior) {
+            if (record.tagLengths[prior] == length &&
+                std::memcmp(record.tags[prior].data(),
+                            record.tags[index].data(), length) == 0) {
+                return TargetMutationStatus::InvalidArgument;
+            }
+        }
+    }
+    if (size_ >= records_.size()) return TargetMutationStatus::CatalogFull;
+    records_[size_++] = record;
+    return TargetMutationStatus::Created;
 }
 
 TargetMutationStatus TargetCatalog::create(
@@ -170,7 +276,8 @@ TargetMutationStatus TargetCatalog::addTag(const TargetId& id,
     if (length > TargetRecord::kTagCapacity) {
         return TargetMutationStatus::TextTooLong;
     }
-    if (!exactText(value, length) || length == 0) {
+    if (!textBytesValid(value, length) || !validUtf8(value, length) ||
+        length == 0) {
         return TargetMutationStatus::InvalidArgument;
     }
     for (std::size_t index = 0; index < record->tagCount; ++index) {
@@ -198,7 +305,8 @@ TargetMutationStatus TargetCatalog::removeTag(const TargetId& id,
     if (length > TargetRecord::kTagCapacity) {
         return TargetMutationStatus::TextTooLong;
     }
-    if (!exactText(value, length) || length == 0) {
+    if (!textBytesValid(value, length) || !validUtf8(value, length) ||
+        length == 0) {
         return TargetMutationStatus::InvalidArgument;
     }
     for (std::size_t index = 0; index < record->tagCount; ++index) {

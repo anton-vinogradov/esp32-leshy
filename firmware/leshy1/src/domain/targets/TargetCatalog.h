@@ -33,6 +33,7 @@ public:
     static constexpr std::size_t kCapacity = 16;
 
     void clear();
+    TargetMutationStatus restore(const TargetRecord& record);
     TargetMutationStatus create(const TargetId& id,
                                 const TargetIdentity& identity,
                                 const TargetEvidenceRef& evidence);

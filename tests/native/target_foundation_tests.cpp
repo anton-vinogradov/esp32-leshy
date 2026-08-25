@@ -2,12 +2,20 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <map>
+#include <string>
+#include <vector>
 
 #include "domain/targets/TargetCatalog.h"
+#include "services/targets/ObservationTargetAdapter.h"
 #include "services/targets/TargetService.h"
+#include "storage/SessionStoreBoundary.h"
+#include "storage/TargetCodec.h"
+#include "storage/TargetStore.h"
 
 using namespace leshy1::domain::targets;
 using namespace leshy1::services::targets;
+using namespace leshy1::storage;
 
 namespace {
 
@@ -65,6 +73,69 @@ TargetEvidenceRef evidence(std::uint8_t source, std::uint32_t generation,
     reference.observedMonotonicUs = 1000U + sequence;
     return reference;
 }
+
+class FakeTargetStoreIo final : public SessionStoreIo {
+public:
+    bool writeFile(const char* path, const std::uint8_t* data,
+                   std::size_t size) override {
+        if (path == nullptr || (data == nullptr && size != 0)) return false;
+        std::vector<std::uint8_t>& file = working_[path];
+        file.clear();
+        if (size != 0) file.assign(data, data + size);
+        return true;
+    }
+
+    ReadStatus readFile(const char* path, std::uint8_t* output,
+                        std::size_t capacity,
+                        std::size_t* outputSize) override {
+        if (path == nullptr || output == nullptr || outputSize == nullptr) {
+            return ReadStatus::IoError;
+        }
+        const auto found = working_.find(path);
+        if (found == working_.end()) return ReadStatus::NotFound;
+        if (found->second.size() > capacity) return ReadStatus::TooLarge;
+        std::memcpy(output, found->second.data(), found->second.size());
+        *outputSize = found->second.size();
+        return ReadStatus::Ok;
+    }
+
+    bool syncFile(const char* path) override {
+        if (path == nullptr || working_.find(path) == working_.end()) {
+            return false;
+        }
+        syncedPath_ = path;
+        return true;
+    }
+
+    bool syncDirectory() override {
+        if (syncedPath_.empty()) return false;
+        durable_[syncedPath_] = working_[syncedPath_];
+        syncedPath_.clear();
+        return true;
+    }
+
+    void crash() {
+        working_ = durable_;
+        syncedPath_.clear();
+    }
+
+    bool flipDurableByte(const char* path, std::size_t offset) {
+        const auto found = durable_.find(path);
+        if (found == durable_.end() || offset >= found->second.size()) {
+            return false;
+        }
+        found->second[offset] ^= 0x80U;
+        working_ = durable_;
+        return true;
+    }
+
+    std::size_t durableFileCount() const { return durable_.size(); }
+
+private:
+    std::map<std::string, std::vector<std::uint8_t>> working_{};
+    std::map<std::string, std::vector<std::uint8_t>> durable_{};
+    std::string syncedPath_{};
+};
 
 void testTargetOwnsExactIdentitiesAndImmutableEvidence() {
     TargetCatalog catalog;
@@ -144,6 +215,16 @@ void testTargetMetadataIsBoundedIdempotentAndUnicodeSafe() {
     CHECK(catalog.setName(id, tooLong.data(), tooLong.size() - 1U) ==
           TargetMutationStatus::TextTooLong);
     CHECK(catalog.find(id)->revision == revision);
+
+    const std::array<char, 3> exactBytes{{'A', 'P', '1'}};
+    CHECK(catalog.setName(id, exactBytes.data(), exactBytes.size()) ==
+          TargetMutationStatus::Applied);
+
+    const char malformedUtf8[] = {static_cast<char>(0xc0),
+                                  static_cast<char>(0xaf), '\0'};
+    CHECK(catalog.setName(id, malformedUtf8, 2) ==
+          TargetMutationStatus::InvalidArgument);
+    CHECK(catalog.find(id)->revision == revision + 1U);
 }
 
 void testTargetBoundsFailClosedWithoutPartialIdentityAttachment() {
@@ -237,6 +318,174 @@ void testTargetWorkingSetHasAnExplicitNoEvictionBound() {
     CHECK(sizeof(TargetCatalog) <= 16U * 1024U);
 }
 
+void testObservationAdmissionKeepsExactSourceEvidence() {
+    leshy1::domain::observations::Observation observation{};
+    observation.sequence = 44;
+    observation.monotonicUs = 123456;
+    observation.radio = leshy1::domain::observations::RadioKind::Wifi;
+    observation.identity = {0x02, 0x10, 0x20, 0x30, 0x40, 0x50};
+    observation.identityLength = observation.identity.size();
+    const SourceId source = sourceId(7);
+    ObservationTargetAdmission admitted =
+        admitObservationToTarget(source, 9, observation);
+    CHECK(admitted.valid());
+    CHECK(admitted.identity.kind == TargetIdentityKind::WifiBssid);
+    CHECK(admitted.identity.value == observation.identity);
+    CHECK(admitted.evidence.sourceId.bytes == source.bytes);
+    CHECK(admitted.evidence.sourceGeneration == 9);
+    CHECK(admitted.evidence.observationSequence == observation.sequence);
+    CHECK(admitted.evidence.observedMonotonicUs == observation.monotonicUs);
+
+    observation.radio = leshy1::domain::observations::RadioKind::Ble;
+    admitted = admitObservationToTarget(source, 9, observation);
+    CHECK(admitted.status ==
+          ObservationTargetStatus::BleAddressTypeUnavailable);
+    observation.bleAdvertisement.present = true;
+    observation.bleAdvertisement.addressType = 2;
+    admitted = admitObservationToTarget(source, 9, observation);
+    CHECK(admitted.valid());
+    CHECK(admitted.identity.kind == TargetIdentityKind::BleAddress);
+    CHECK(admitted.identity.discriminator == 2);
+
+    observation.identityLength = 5;
+    admitted = admitObservationToTarget(source, 9, observation);
+    CHECK(admitted.status == ObservationTargetStatus::IdentityUnavailable);
+}
+
+void testTargetCodecIsDeterministicAndRejectsCorruption() {
+    TargetCatalog catalog;
+    const TargetId id = targetId(8);
+    CHECK(catalog.create(id, wifiIdentity(8), evidence(8, 80, 4)) ==
+          TargetMutationStatus::Created);
+    CHECK(catalog.setName(id, "Точка", std::strlen("Точка")) ==
+          TargetMutationStatus::Applied);
+    CHECK(catalog.addTag(id, "важное", std::strlen("важное")) ==
+          TargetMutationStatus::Applied);
+
+    std::array<std::uint8_t, kTargetCatalogMaxBytes> first{};
+    std::array<std::uint8_t, kTargetCatalogMaxBytes> second{};
+    std::array<std::uint8_t, kTargetManifestMaxBytes> manifest{};
+    std::size_t firstSize = 0;
+    std::size_t secondSize = 0;
+    std::size_t manifestSize = 0;
+    CHECK(encodeTargetCatalog(catalog, first.data(), first.size(), &firstSize) ==
+          TargetCodecStatus::Valid);
+    CHECK(encodeTargetCatalog(catalog, second.data(), second.size(),
+                              &secondSize) == TargetCodecStatus::Valid);
+    CHECK(firstSize == secondSize);
+    CHECK(std::memcmp(first.data(), second.data(), firstSize) == 0);
+    CHECK(encodeTargetManifest(catalog, first.data(), firstSize,
+                               manifest.data(), manifest.size(),
+                               &manifestSize) == TargetCodecStatus::Valid);
+
+    TargetCatalog reopened;
+    CHECK(reopenTargetCatalog(manifest.data(), manifestSize, first.data(),
+                              firstSize, &reopened) == TargetCodecStatus::Valid);
+    const TargetRecord* restored = reopened.find(id);
+    CHECK(restored != nullptr);
+    CHECK(restored->revision == catalog.find(id)->revision);
+    CHECK(std::strcmp(restored->name.data(), "Точка") == 0);
+    CHECK(restored->evidenceCount == 1);
+    CHECK(targetEvidenceEqual(restored->evidence[0], evidence(8, 80, 4)));
+
+    first[firstSize / 2U] ^= 0x01U;
+    CHECK(reopenTargetCatalog(manifest.data(), manifestSize, first.data(),
+                              firstSize, &reopened) ==
+          TargetCodecStatus::ChecksumMismatch);
+}
+
+void testTargetStoreRecoversLatestAndFallsBackFromCorruption() {
+    char path[kTargetStorePathMax] = {};
+    CHECK(formatTargetStorePath(TargetStoreFileKind::Catalog, UINT32_MAX,
+                                path, sizeof(path)));
+    CHECK(std::strcmp(path, "target-catalog-4294967295.bin") == 0);
+    CHECK(std::strchr(path, '/') == nullptr);
+
+    FakeTargetStoreIo io;
+    TargetStoreWorkspace workspace;
+    TargetCatalog catalog;
+    TargetCatalog scratch;
+    const TargetId id = targetId(9);
+    CHECK(catalog.create(id, wifiIdentity(9), evidence(9, 90, 1)) ==
+          TargetMutationStatus::Created);
+    TargetStoreCommitResult committed =
+        commitNextTargetCatalog(io, workspace, catalog, scratch);
+    CHECK(committed.complete());
+    CHECK(committed.generation == 1);
+    CHECK(committed.publishedSlot == HeadSlot::A);
+
+    CHECK(catalog.setFavorite(id, true) == TargetMutationStatus::Applied);
+    committed = commitNextTargetCatalog(io, workspace, catalog, scratch);
+    CHECK(committed.complete());
+    CHECK(committed.generation == 2);
+    CHECK(committed.publishedSlot == HeadSlot::B);
+
+    TargetCatalog recovered;
+    TargetStoreRecoveryResult recovery =
+        recoverTargetCatalog(io, workspace, &recovered);
+    CHECK(recovery.valid());
+    CHECK(recovery.generation == 2);
+    CHECK(recovered.find(id) != nullptr);
+    CHECK(recovered.find(id)->favorite);
+
+    CHECK(io.flipDurableByte("target-catalog-00000002.bin", 0));
+    recovery = recoverTargetCatalog(io, workspace, &recovered);
+    CHECK(recovery.valid());
+    CHECK(recovery.generation == 1);
+    CHECK(recovered.find(id) != nullptr);
+    CHECK(!recovered.find(id)->favorite);
+}
+
+void testTargetStoreCommitBoundariesNeverLosePublishedCatalog() {
+    const std::array<CommitStage, 6> boundaries{{
+        CommitStage::WritePayloads, CommitStage::SyncPayloads,
+        CommitStage::WriteManifest, CommitStage::SyncManifest,
+        CommitStage::WriteHead, CommitStage::SyncHead,
+    }};
+    FakeTargetStoreIo baseline;
+    TargetStoreWorkspace baseWorkspace;
+    TargetCatalog catalog;
+    TargetCatalog scratch;
+    const TargetId id = targetId(10);
+    CHECK(catalog.create(id, wifiIdentity(10), evidence(10, 100, 1)) ==
+          TargetMutationStatus::Created);
+    CHECK(commitNextTargetCatalog(baseline, baseWorkspace, catalog, scratch)
+              .complete());
+    CHECK(catalog.setFavorite(id, true) == TargetMutationStatus::Applied);
+
+    for (const CommitStage boundary : boundaries) {
+        FakeTargetStoreIo interrupted = baseline;
+        TargetStoreWorkspace workspace;
+        TargetCatalog validation;
+        SessionStoreBoundaryIo boundaryIo(interrupted, boundary);
+        const TargetStoreCommitResult commit = commitNextTargetCatalog(
+            boundaryIo, workspace, catalog, validation);
+        CHECK(!commit.complete());
+        CHECK(boundaryIo.stopped());
+        CHECK(boundaryIo.sequenceValid());
+        interrupted.crash();
+
+        TargetCatalog recovered;
+        const TargetStoreRecoveryResult recovery =
+            recoverTargetCatalog(interrupted, workspace, &recovered);
+        CHECK(recovery.valid());
+        const std::uint32_t expectedGeneration =
+            boundary == CommitStage::SyncHead ? 2U : 1U;
+        CHECK(recovery.generation == expectedGeneration);
+        CHECK(recovered.find(id) != nullptr);
+        CHECK(recovered.find(id)->favorite == (expectedGeneration == 2U));
+    }
+
+    FakeTargetStoreIo empty;
+    TargetStoreWorkspace emptyWorkspace;
+    TargetCatalog emptyCatalog;
+    TargetCatalog emptyScratch;
+    CHECK(commitNextTargetCatalog(empty, emptyWorkspace, emptyCatalog,
+                                  emptyScratch).status ==
+          TargetStoreStatus::InvalidArgument);
+    CHECK(empty.durableFileCount() == 0);
+}
+
 }  // namespace
 
 int main() {
@@ -245,7 +494,11 @@ int main() {
     testTargetBoundsFailClosedWithoutPartialIdentityAttachment();
     testTypedTargetActionsHaveOneStableMutationBoundary();
     testTargetWorkingSetHasAnExplicitNoEvictionBound();
+    testObservationAdmissionKeepsExactSourceEvidence();
+    testTargetCodecIsDeterministicAndRejectsCorruption();
+    testTargetStoreRecoversLatestAndFallsBackFromCorruption();
+    testTargetStoreCommitBoundariesNeverLosePublishedCatalog();
     if (failures != 0) return EXIT_FAILURE;
-    std::cout << "S6 Target foundation contract tests passed\n";
+    std::cout << "S6 Target foundation and persistence tests passed\n";
     return EXIT_SUCCESS;
 }

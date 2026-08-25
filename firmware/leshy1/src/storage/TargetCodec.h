@@ -1,0 +1,52 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+
+#include "domain/targets/TargetCatalog.h"
+
+namespace leshy1::storage {
+
+constexpr std::uint16_t kTargetCatalogSchemaVersion = 1;
+constexpr std::size_t kTargetCatalogMaxBytes = 16384;
+constexpr std::size_t kTargetManifestMaxBytes = 128;
+
+struct TargetManifest final {
+    std::uint16_t schemaVersion = 0;
+    std::uint16_t targetCount = 0;
+    std::uint32_t catalogLength = 0;
+    std::uint32_t catalogCrc32c = 0;
+};
+
+enum class TargetCodecStatus : std::uint8_t {
+    Valid,
+    InvalidArgument,
+    BufferTooSmall,
+    Malformed,
+    UnsupportedSchema,
+    BoundsExceeded,
+    Conflict,
+    ChecksumMismatch,
+    TrailingData,
+};
+
+const char* targetCodecStatusName(TargetCodecStatus status);
+
+TargetCodecStatus encodeTargetCatalog(
+    const domain::targets::TargetCatalog& catalog,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
+TargetCodecStatus decodeTargetCatalog(
+    const std::uint8_t* input, std::size_t size,
+    domain::targets::TargetCatalog* output);
+TargetCodecStatus encodeTargetManifest(
+    const domain::targets::TargetCatalog& catalog,
+    const std::uint8_t* catalogBytes, std::size_t catalogSize,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
+TargetCodecStatus decodeTargetManifest(
+    const std::uint8_t* input, std::size_t size, TargetManifest* output);
+TargetCodecStatus reopenTargetCatalog(
+    const std::uint8_t* manifestBytes, std::size_t manifestSize,
+    const std::uint8_t* catalogBytes, std::size_t catalogSize,
+    domain::targets::TargetCatalog* output);
+
+}  // namespace leshy1::storage

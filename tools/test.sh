@@ -120,7 +120,12 @@ run_opaque_evidence_check() {
     "$repo_dir/tests/native/target_foundation_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/ObservationTargetAdapter.cpp" \
     "$repo_dir/firmware/leshy1/src/services/targets/TargetService.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/AtomicHead.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/SessionStoreBoundary.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/TargetCodec.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/TargetStore.cpp" \
     -o "$test_tmp/target_foundation_tests"
 
 "$test_tmp/target_foundation_tests"

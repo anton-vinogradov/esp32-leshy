@@ -14,16 +14,16 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
-- **Текущая фаза:** `S6.1 — фундамент Target (стабильная identity, metadata и ссылки на source evidence)`.
-- **Проверенный checkpoint:** host checkpoint `E-TARGET-001` реализует первый фундамент S6.1: стабильные Target ID, исключительное владение точными Wi-Fi/BLE identity и source Observation, bounded изменяемые metadata, no-eviction semantics отказов и семь versioned typed mutation Actions. Отдельные allocation-free native tests проходят; persistence, automatic correlation, compare и UI явно не заявляются. Exact `0.145.0-interface-settings` остаётся последней физически принятой product baseline board-01, а exact 0.144 — автономной baseline Full/Guided passive receivers; ни одна не предоставляет missing qualified RF-positive sources и не закрывает S5.
-- **Следующий gate:** определить и host-верифицировать bounded domain Target в S6: стабильные Target ID, не зависящие от radio identifiers, точное владение identity, изменяемые metadata name/tags/notes/favorite и неизменяемые ссылки обратно на source observations Session. В S6.1 запрещено заявлять automatic correlation. Physical gate S5 отложен, но не отменён: когда приедет заказанный replacement DIV, его read-only profile должен пройти до запуска сохранённой one-command матрицы IR→nRF24→OOK→FSK, закрывающей S5.3/S5.4/S5.6.
+- **Текущая фаза:** `S6.2 — объяснимая correlation и обратимые решения identity`.
+- **Проверенный checkpoint:** host/build checkpoint `E-TARGET-002` завершает S6.1. Bounded каталог Target теперь сохраняется через deterministic CBOR schema v1, manifest CRC32C и существующий six-boundary two-head atomic protocol; recovery выбирает новейшую валидную generation и откатывается после corruption каталога или имитации interruption на каждой границе commit. Exact сохранённые Observation Wi-Fi/BLE допускаются как immutable evidence Target только при наличии source ID/generation/sequence/time и полной six-byte identity; BLE дополнительно требует сохранённый address type. Native, ASan/UBSan и production builds проходят. Automatic correlation, compare и UI явно не заявляются. Exact `0.145.0-interface-settings` остаётся последней физически принятой product baseline board-01, а exact 0.144 — автономной baseline Full/Guided passive receivers; ни одна не закрывает отложенный RF-positive gate S5.
+- **Следующий gate:** определить и host-верифицировать модель explainable correlation proposals S6.2: bounded features и confidence, явные accept/reject и обратимая история merge/split, которая никогда не изменяет source Observations и не выполняет silent auto-merge Targets. Physical gate S5 отложен, но не отменён: когда приедет заказанный replacement DIV, его read-only profile должен пройти до запуска сохранённой one-command матрицы IR→nRF24→OOK→FSK, закрывающей S5.3/S5.4/S5.6.
 
 ### Фазы текущего этапа
 
 | Фаза | Результат / exit gate | Статус |
 |---|---|---|
-| S6.1 | Фундамент Target: стабильные Target ID, точные radio identities, изменяемые name/tags/notes/favorite и неизменяемые ссылки на source evidence; всё bounded и host-verified | 🟡 в работе |
-| S6.2 | Объяснимая correlation предлагает связи с features/confidence; accept/reject и обратимые merge/split никогда не уничтожают source evidence | ⬜ дальше |
+| S6.1 | Фундамент Target: стабильные Target ID, точные radio identities, изменяемые name/tags/notes/favorite и неизменяемые ссылки на source evidence; всё bounded и host-verified | ✅ готово |
+| S6.2 | Объяснимая correlation предлагает связи с features/confidence; accept/reject и обратимые merge/split никогда не уничтожают source evidence | 🟡 в работе |
 | S6.3 | Baseline/diff сравнивает две Session и классифицирует новые, исчезнувшие и изменившиеся Targets; каждый вывод открывает своё evidence | ⬜ дальше |
 | S6.4 | On-device workflows Targets и Compare сначала показывают полезный результат, сохраняют стабильную навигацию и полноэкранные detail views | ⬜ дальше |
 | S6.5 | Local companion USB/Web использует те же Actions и versioned schemas с ограниченными connectivity и secrets | ⬜ дальше |
