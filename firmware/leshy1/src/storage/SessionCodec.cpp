@@ -43,6 +43,9 @@ constexpr std::uint8_t kCaptureKnownFlags =
     kCaptureFlagPassive | kCaptureFlagWifiShowHidden |
     kCaptureFlagLocation | kCaptureFlagFramePayload |
     kCaptureFlagSubGhzRaw | kCaptureFlagInfraredRaw;
+constexpr std::uint8_t kObservationFactsWireVersion = 1;
+constexpr std::size_t kWifiObservationFactsBytes = 19;
+constexpr std::size_t kBleObservationFactsBytes = 29;
 
 void put16(std::uint8_t* output, std::uint16_t value) {
     output[0] = static_cast<std::uint8_t>(value >> 8U);
@@ -252,9 +255,9 @@ bool validSessionId(const std::uint8_t* value, std::size_t size) {
     return true;
 }
 
-SessionCodecStatus encodeObservation(const domain::observations::Observation& observation,
-                                     std::uint8_t* output, std::size_t capacity,
-                                     std::size_t* outputSize) {
+SessionCodecStatus encodeObservation(
+    const domain::observations::Observation& observation, bool enriched,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
     const bool wifi =
         observation.radio == domain::observations::RadioKind::Wifi;
     const bool ble = observation.radio == domain::observations::RadioKind::Ble;
@@ -271,7 +274,7 @@ SessionCodecStatus encodeObservation(const domain::observations::Observation& ob
         return SessionCodecStatus::InvalidArgument;
     }
     CborWriter writer(output, capacity);
-    writer.map(8);
+    writer.map(enriched ? 9 : 8);
     writer.unsignedValue(0);
     writer.unsignedValue(observation.sequence);
     writer.unsignedValue(1);
@@ -288,17 +291,87 @@ SessionCodecStatus encodeObservation(const domain::observations::Observation& ob
     writer.bytes(observation.identity.data(), observation.identityLength);
     writer.unsignedValue(7);
     writer.text(observation.label.data(), observation.labelLength);
+    if (enriched) {
+        std::uint8_t facts[kBleObservationFactsBytes] = {};
+        std::size_t factsSize = 0;
+        facts[0] = kObservationFactsWireVersion;
+        if (wifi) {
+            const auto& source = observation.wifiNetwork;
+            facts[1] = static_cast<std::uint8_t>(
+                (source.present ? 1U : 0U) |
+                (source.wps ? 1U << 1U : 0U) |
+                (source.ftmResponder ? 1U << 2U : 0U) |
+                (source.ftmInitiator ? 1U << 3U : 0U) |
+                (source.bssColorKnown ? 1U << 4U : 0U));
+            facts[2] = static_cast<std::uint8_t>(source.authentication);
+            facts[3] = static_cast<std::uint8_t>(source.pairwiseCipher);
+            facts[4] = static_cast<std::uint8_t>(source.groupCipher);
+            facts[5] = static_cast<std::uint8_t>(source.channelWidth);
+            put16(facts + 6, source.phyMask);
+            facts[8] = source.secondaryChannelDirection;
+            facts[9] = source.receiveAntenna;
+            std::memcpy(facts + 10, source.countryCode.data(),
+                        source.countryCode.size());
+            facts[13] = source.countryStartChannel;
+            facts[14] = source.countryChannelCount;
+            facts[15] = static_cast<std::uint8_t>(
+                source.countryMaximumTxPowerDbm);
+            facts[16] = source.bssColor;
+            facts[17] = source.vhtCenterChannel1;
+            facts[18] = source.vhtCenterChannel2;
+            factsSize = kWifiObservationFactsBytes;
+        } else {
+            const auto& source = observation.bleAdvertisement;
+            if (source.firstServiceUuidLength >
+                    domain::observations::BleAdvertisementFacts::
+                        kServiceUuidCapacity ||
+                source.addressType > 3U) {
+                return SessionCodecStatus::InvalidArgument;
+            }
+            facts[1] = static_cast<std::uint8_t>(
+                (source.present ? 1U : 0U) |
+                (source.legacy ? 1U << 1U : 0U) |
+                (source.scannable ? 1U << 2U : 0U) |
+                (source.connectable ? 1U << 3U : 0U) |
+                (source.txPowerKnown ? 1U << 4U : 0U) |
+                (source.appearanceKnown ? 1U << 5U : 0U) |
+                (source.companyKnown ? 1U << 6U : 0U));
+            facts[2] = source.addressType;
+            facts[3] = source.advertisementType;
+            facts[4] = static_cast<std::uint8_t>(source.txPowerDbm);
+            put16(facts + 5, source.appearance);
+            put16(facts + 7, source.companyId);
+            facts[9] = source.appleContinuityType;
+            put16(facts + 10, source.knownServiceMask);
+            facts[12] = source.firstServiceUuidLength;
+            std::memcpy(facts + 13, source.firstServiceUuid.data(),
+                        domain::observations::BleAdvertisementFacts::
+                            kServiceUuidCapacity);
+            put32(facts + 21, source.firstServiceUuidHash);
+            facts[25] = source.serviceUuidCount;
+            facts[26] = source.serviceDataCount;
+            facts[27] = source.manufacturerDataLength;
+            facts[28] = source.payloadLength;
+            factsSize = kBleObservationFactsBytes;
+        }
+        writer.unsignedValue(8);
+        writer.bytes(facts, factsSize);
+    }
     if (!writer.ok()) return SessionCodecStatus::BufferTooSmall;
     *outputSize = writer.size();
     return SessionCodecStatus::Valid;
 }
 
-SessionCodecStatus decodeObservation(const std::uint8_t* input, std::size_t size,
-                                     domain::observations::Observation* output) {
+SessionCodecStatus decodeObservation(
+    const std::uint8_t* input, std::size_t size, bool factsRequired,
+    domain::observations::Observation* output) {
     if (input == nullptr || output == nullptr) return SessionCodecStatus::InvalidArgument;
     CborReader reader(input, size);
     std::uint64_t count = 0;
-    if (!reader.map(&count) || count != 8) return SessionCodecStatus::Malformed;
+    if (!reader.map(&count) || (count != 8 && count != 9) ||
+        (factsRequired && count != 9)) {
+        return SessionCodecStatus::Malformed;
+    }
     domain::observations::Observation observation;
     std::uint64_t unsignedValue = 0;
     std::int64_t signedValue = 0;
@@ -343,6 +416,93 @@ SessionCodecStatus decodeObservation(const std::uint8_t* input, std::size_t size
     std::memcpy(observation.label.data(), bytes, length);
     observation.label[length] = '\0';
     observation.labelLength = static_cast<std::uint8_t>(length);
+    if (count == 9) {
+        if (!key(reader, 8) || !reader.bytes(&bytes, &length)) {
+            return SessionCodecStatus::Malformed;
+        }
+        if (observation.radio == domain::observations::RadioKind::Wifi) {
+            if (length != kWifiObservationFactsBytes ||
+                bytes[0] != kObservationFactsWireVersion ||
+                (bytes[1] & 0xe0U) != 0 ||
+                bytes[2] > static_cast<std::uint8_t>(
+                    domain::observations::WifiAuthentication::WpaEnterprise) ||
+                bytes[3] > static_cast<std::uint8_t>(
+                    domain::observations::WifiCipher::AesGmac256) ||
+                bytes[4] > static_cast<std::uint8_t>(
+                    domain::observations::WifiCipher::AesGmac256) ||
+                bytes[5] > static_cast<std::uint8_t>(
+                    domain::observations::WifiChannelWidth::Mhz80Plus80) ||
+                bytes[8] > 2U) {
+                return SessionCodecStatus::Malformed;
+            }
+            auto& facts = observation.wifiNetwork;
+            facts.present = (bytes[1] & 1U) != 0;
+            facts.wps = (bytes[1] & (1U << 1U)) != 0;
+            facts.ftmResponder = (bytes[1] & (1U << 2U)) != 0;
+            facts.ftmInitiator = (bytes[1] & (1U << 3U)) != 0;
+            facts.bssColorKnown = (bytes[1] & (1U << 4U)) != 0;
+            facts.authentication =
+                static_cast<domain::observations::WifiAuthentication>(bytes[2]);
+            facts.pairwiseCipher =
+                static_cast<domain::observations::WifiCipher>(bytes[3]);
+            facts.groupCipher =
+                static_cast<domain::observations::WifiCipher>(bytes[4]);
+            facts.channelWidth =
+                static_cast<domain::observations::WifiChannelWidth>(bytes[5]);
+            facts.phyMask = get16(bytes + 6);
+            facts.secondaryChannelDirection = bytes[8];
+            facts.receiveAntenna = bytes[9];
+            std::memcpy(facts.countryCode.data(), bytes + 10,
+                        facts.countryCode.size());
+            facts.countryStartChannel = bytes[13];
+            facts.countryChannelCount = bytes[14];
+            facts.countryMaximumTxPowerDbm =
+                static_cast<std::int8_t>(bytes[15]);
+            facts.bssColor = bytes[16];
+            facts.vhtCenterChannel1 = bytes[17];
+            facts.vhtCenterChannel2 = bytes[18];
+        } else {
+            if (length != kBleObservationFactsBytes ||
+                bytes[0] != kObservationFactsWireVersion ||
+                (bytes[1] & 0x80U) != 0 || bytes[2] > 3U ||
+                bytes[12] > domain::observations::BleAdvertisementFacts::
+                    kServiceUuidCapacity) {
+                return SessionCodecStatus::Malformed;
+            }
+            auto& facts = observation.bleAdvertisement;
+            facts.present = (bytes[1] & 1U) != 0;
+            facts.legacy = (bytes[1] & (1U << 1U)) != 0;
+            facts.scannable = (bytes[1] & (1U << 2U)) != 0;
+            facts.connectable = (bytes[1] & (1U << 3U)) != 0;
+            facts.txPowerKnown = (bytes[1] & (1U << 4U)) != 0;
+            facts.appearanceKnown = (bytes[1] & (1U << 5U)) != 0;
+            facts.companyKnown = (bytes[1] & (1U << 6U)) != 0;
+            facts.addressType = bytes[2];
+            facts.advertisementType = bytes[3];
+            facts.txPowerDbm = static_cast<std::int8_t>(bytes[4]);
+            facts.appearance = get16(bytes + 5);
+            facts.companyId = get16(bytes + 7);
+            facts.appleContinuityType = bytes[9];
+            facts.knownServiceMask = get16(bytes + 10);
+            facts.firstServiceUuidLength = bytes[12];
+            std::memcpy(facts.firstServiceUuid.data(), bytes + 13,
+                        domain::observations::BleAdvertisementFacts::
+                            kServiceUuidCapacity);
+            facts.firstServiceUuid[facts.firstServiceUuidLength] = '\0';
+            facts.firstServiceUuidHash = get32(bytes + 21);
+            facts.serviceUuidCount = bytes[25];
+            facts.serviceDataCount = bytes[26];
+            facts.manufacturerDataLength = bytes[27];
+            facts.payloadLength = bytes[28];
+        }
+    } else if (observation.radio ==
+               domain::observations::RadioKind::Ble) {
+        // Legacy schemas did not persist BLE facts. Preserve readability and
+        // deterministic cross-visit identity with a public-address fallback;
+        // every newly written product Session uses the enriched schema.
+        observation.bleAdvertisement.present = true;
+        observation.bleAdvertisement.addressType = 0;
+    }
     if (!reader.complete()) return SessionCodecStatus::TrailingData;
     const bool validRadioFields =
         (observation.radio == domain::observations::RadioKind::Wifi &&
@@ -985,7 +1145,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
         version != kSegmentSchemaVersion &&
         version != kWifiFrameSegmentSchemaVersion &&
         version != kSubGhzRawSegmentSchemaVersion &&
-        version != kInfraredRawSegmentSchemaVersion) {
+        version != kInfraredRawSegmentSchemaVersion &&
+        version != kEnrichedSegmentSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     if ((version == kLegacySegmentSchemaVersion &&
@@ -998,6 +1159,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
         (version == kSubGhzRawSegmentSchemaVersion &&
          decodedAdditionalRecords != 2) ||
         (version == kInfraredRawSegmentSchemaVersion &&
+         decodedAdditionalRecords != 2) ||
+        (version == kEnrichedSegmentSchemaVersion &&
          decodedAdditionalRecords != 2)) {
         return SessionCodecStatus::Malformed;
     }
@@ -1284,7 +1447,8 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
         std::uint8_t record[kObservationRecordMaxBytes] = {};
         std::size_t recordSize = 0;
         const SessionCodecStatus status =
-            encodeObservation(*observation, record, sizeof(record), &recordSize);
+            encodeObservation(*observation, hasCapture, record,
+                              sizeof(record), &recordSize);
         if (status != SessionCodecStatus::Valid) return status;
         writer.be32(static_cast<std::uint32_t>(recordSize));
         writer.be32(crc32c(record, recordSize));
@@ -1306,7 +1470,7 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
     const std::size_t bodySize = writer.size();
     std::uint8_t footer[kSegmentFooterBytes] = {};
     std::memcpy(footer, kSegmentMagic, sizeof(kSegmentMagic));
-    put16(footer + 4, hasCapture ? kSegmentSchemaVersion
+    put16(footer + 4, hasCapture ? kEnrichedSegmentSchemaVersion
                                 : hasTimeline ? kTimelineSegmentSchemaVersion
                                               : kLegacySegmentSchemaVersion);
     put16(footer + 6, hasCapture ? 2 : hasTimeline ? 1 : 0);
@@ -1499,7 +1663,9 @@ SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& 
     CborWriter writer(output, capacity);
     writer.map(8);
     writer.unsignedValue(0);
-    writer.unsignedValue(segmentVersion == kInfraredRawSegmentSchemaVersion
+    writer.unsignedValue(segmentVersion == kEnrichedSegmentSchemaVersion
+                             ? kEnrichedSessionSchemaVersion
+                         : segmentVersion == kInfraredRawSegmentSchemaVersion
                              ? kInfraredRawSessionSchemaVersion
                          : segmentVersion == kSubGhzRawSegmentSchemaVersion
                              ? kSubGhzRawSessionSchemaVersion
@@ -1547,7 +1713,8 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
         value != kSessionSchemaVersion &&
         value != kWifiFrameSessionSchemaVersion &&
         value != kSubGhzRawSessionSchemaVersion &&
-        value != kInfraredRawSessionSchemaVersion) {
+        value != kInfraredRawSessionSchemaVersion &&
+        value != kEnrichedSessionSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     const std::uint16_t decodedSchemaVersion =
@@ -1611,7 +1778,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
                                    &additionalRecords);
     if (status != SessionCodecStatus::Valid) return status;
     const std::uint16_t expectedSegmentVersion =
-        manifest.schemaVersion == kInfraredRawSessionSchemaVersion
+        manifest.schemaVersion == kEnrichedSessionSchemaVersion
+            ? kEnrichedSegmentSchemaVersion
+        : manifest.schemaVersion == kInfraredRawSessionSchemaVersion
             ? kInfraredRawSegmentSchemaVersion
         : manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
             ? kSubGhzRawSegmentSchemaVersion
@@ -1623,7 +1792,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         manifest.schemaVersion == kTimelineSessionSchemaVersion
             ? kTimelineSegmentSchemaVersion : expectedSegmentVersion;
     const std::uint16_t expectedAdditionalRecords =
-        manifest.schemaVersion == kInfraredRawSessionSchemaVersion
+        manifest.schemaVersion == kEnrichedSessionSchemaVersion
+            ? 2
+        : manifest.schemaVersion == kInfraredRawSessionSchemaVersion
             ? 2
         : manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
             ? 2
@@ -1644,7 +1815,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         return SessionCodecStatus::Malformed;
     }
     std::size_t position = 0;
-    if (manifest.schemaVersion == kSessionSchemaVersion ||
+    if (manifest.schemaVersion == kEnrichedSessionSchemaVersion ||
+        manifest.schemaVersion == kSessionSchemaVersion ||
         manifest.schemaVersion == kInfraredRawSessionSchemaVersion ||
         manifest.schemaVersion == kSubGhzRawSessionSchemaVersion ||
         manifest.schemaVersion == kWifiFrameSessionSchemaVersion) {
@@ -1694,7 +1866,10 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
             return SessionCodecStatus::ChecksumMismatch;
         }
         domain::observations::Observation observation;
-        status = decodeObservation(segment + position, recordLength, &observation);
+        status = decodeObservation(
+            segment + position, recordLength,
+            manifest.schemaVersion == kEnrichedSessionSchemaVersion,
+            &observation);
         if (status != SessionCodecStatus::Valid) {
             output->reset();
             return status;
@@ -1774,7 +1949,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         }
         position += recordLength;
     }
-    if (manifest.schemaVersion == kSessionSchemaVersion &&
+    if ((manifest.schemaVersion == kSessionSchemaVersion ||
+         manifest.schemaVersion == kEnrichedSessionSchemaVersion) &&
         (!output->captureMetadata().present || !output->timeline().present ||
          output->captureMetadata().selectedSourceMask !=
              output->timeline().selectedMask)) {

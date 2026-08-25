@@ -17,12 +17,17 @@ constexpr std::uint16_t kSessionSchemaVersion = 3;
 constexpr std::uint16_t kWifiFrameSessionSchemaVersion = 4;
 constexpr std::uint16_t kSubGhzRawSessionSchemaVersion = 5;
 constexpr std::uint16_t kInfraredRawSessionSchemaVersion = 6;
+// Version 7 preserves passive radio facts used by device intelligence and
+// stable Target identity (notably the BLE address type). Versions 1..6 remain
+// readable.
+constexpr std::uint16_t kEnrichedSessionSchemaVersion = 7;
 constexpr std::uint16_t kLegacySegmentSchemaVersion = 1;
 constexpr std::uint16_t kTimelineSegmentSchemaVersion = 2;
 constexpr std::uint16_t kSegmentSchemaVersion = 3;
 constexpr std::uint16_t kWifiFrameSegmentSchemaVersion = 4;
 constexpr std::uint16_t kSubGhzRawSegmentSchemaVersion = 5;
 constexpr std::uint16_t kInfraredRawSegmentSchemaVersion = 6;
+constexpr std::uint16_t kEnrichedSegmentSchemaVersion = 7;
 constexpr std::size_t kSessionManifestMaxBytes = 256;
 constexpr std::size_t kObservationRecordMaxBytes = 128;
 constexpr std::size_t kTimelineRecordMaxBytes = 1024;

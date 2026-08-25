@@ -938,6 +938,7 @@ def main() -> int:
     for marker in (
         "configureCaptureMetadata",
         "kSessionSchemaVersion = 3",
+        "kEnrichedSessionSchemaVersion = 7",
         "kWifiFrameSessionSchemaVersion = 4",
         "kTimelineSessionSchemaVersion = 2",
         "kCaptureMagic",

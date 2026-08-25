@@ -3809,7 +3809,7 @@ void testSessionCodecCommitsCanonicalDataAndReopensOffline() {
 
     std::array<std::uint8_t, kSessionManifestMaxBytes> futureManifest = manifest;
     CHECK(manifestSize > 2);
-    futureManifest[2] = kInfraredRawSessionSchemaVersion + 1U;
+    futureManifest[2] = kEnrichedSessionSchemaVersion + 1U;
     CHECK(decodeSessionManifest(futureManifest.data(), manifestSize, &decodedManifest) ==
           SessionCodecStatus::UnsupportedSchema);
     futureManifest = manifest;
@@ -3863,6 +3863,8 @@ void testSessionCodecRoundTripsBleWithoutInventingWifiFields() {
     CHECK(restored != nullptr && restored->identity == advertisement.identity);
     CHECK(restored != nullptr &&
           std::strcmp(restored->label.data(), "field-tag") == 0);
+    CHECK(restored != nullptr && restored->bleAdvertisement.present);
+    CHECK(restored != nullptr && restored->bleAdvertisement.addressType == 0);
 }
 
 void testCaptureMetadataV3AndCsvExportAreCanonical() {
@@ -3900,6 +3902,19 @@ void testCaptureMetadataV3AndCsvExportAreCanonical() {
     wifi.rssiDbm = -51;
     wifi.identity = {1, 2, 3, 4, 5, 6};
     wifi.identityLength = 6;
+    wifi.wifiNetwork.present = true;
+    wifi.wifiNetwork.authentication = WifiAuthentication::Wpa3Psk;
+    wifi.wifiNetwork.pairwiseCipher = WifiCipher::Ccmp;
+    wifi.wifiNetwork.groupCipher = WifiCipher::Ccmp;
+    wifi.wifiNetwork.channelWidth = WifiChannelWidth::Mhz40;
+    wifi.wifiNetwork.phyMask = WifiNetworkFacts::kPhy11n |
+        WifiNetworkFacts::kPhy11ax;
+    wifi.wifiNetwork.receiveAntenna = 1;
+    wifi.wifiNetwork.wps = true;
+    wifi.wifiNetwork.countryCode = {'R', 'U', ' '};
+    wifi.wifiNetwork.countryStartChannel = 1;
+    wifi.wifiNetwork.countryChannelCount = 13;
+    wifi.wifiNetwork.countryMaximumTxPowerDbm = 20;
     std::memcpy(wifi.label.data(), "alpha", 6);
     wifi.labelLength = 5;
     CHECK(original.append(wifi) == SessionStatus::Appended);
@@ -3909,6 +3924,21 @@ void testCaptureMetadataV3AndCsvExportAreCanonical() {
     ble.rssiDbm = -70;
     ble.identity = {10, 11, 12, 13, 14, 15};
     ble.identityLength = 6;
+    ble.bleAdvertisement.present = true;
+    ble.bleAdvertisement.addressType = 1;
+    ble.bleAdvertisement.legacy = true;
+    ble.bleAdvertisement.scannable = true;
+    ble.bleAdvertisement.txPowerKnown = true;
+    ble.bleAdvertisement.txPowerDbm = -8;
+    ble.bleAdvertisement.companyKnown = true;
+    ble.bleAdvertisement.companyId = 0x004c;
+    ble.bleAdvertisement.knownServiceMask =
+        BleAdvertisementFacts::kServiceHid;
+    std::memcpy(ble.bleAdvertisement.firstServiceUuid.data(), "0x1812", 7);
+    ble.bleAdvertisement.firstServiceUuidLength = 6;
+    ble.bleAdvertisement.firstServiceUuidHash = 0x12345678;
+    ble.bleAdvertisement.serviceUuidCount = 2;
+    ble.bleAdvertisement.payloadLength = 31;
     std::memcpy(ble.label.data(), "beacon", 7);
     ble.labelLength = 6;
     CHECK(original.append(ble) == SessionStatus::Appended);
@@ -3961,7 +3991,7 @@ void testCaptureMetadataV3AndCsvExportAreCanonical() {
     SessionManifest decodedManifest;
     CHECK(decodeSessionManifest(manifest.data(), manifestSize,
                                 &decodedManifest) == SessionCodecStatus::Valid);
-    CHECK(decodedManifest.schemaVersion == kSessionSchemaVersion);
+    CHECK(decodedManifest.schemaVersion == kEnrichedSessionSchemaVersion);
 
     SurveySession reopened;
     CHECK(reopenSession(manifest.data(), manifestSize, segment.data(),
@@ -3977,6 +4007,12 @@ void testCaptureMetadataV3AndCsvExportAreCanonical() {
     CHECK(reopened.captureMetadata().appIdentity == metadata.appIdentity);
     CHECK(!reopened.captureMetadata().framePayloadCaptured);
     CHECK(reopened.captureMetadata().framePayloadBytes == 0);
+    const Observation* reopenedWifi = reopened.get(0);
+    const Observation* reopenedBle = reopened.get(1);
+    CHECK(reopenedWifi != nullptr && wifiNetworkFactsEqual(
+              reopenedWifi->wifiNetwork, wifi.wifiNetwork));
+    CHECK(reopenedBle != nullptr && bleAdvertisementFactsEqual(
+              reopenedBle->bleAdvertisement, ble.bleAdvertisement));
 
     LibraryController library;
     CHECK(library.add(reopened, 82, SessionIntegrity::Valid, true, false));
