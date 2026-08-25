@@ -85,7 +85,42 @@ void pairIsUsefulFirstAndStable() {
     CHECK(controller.selectedIsCompare());
     CHECK(controller.openSelected());
     CHECK(controller.view() == TargetsView::Compare);
+    CHECK(controller.comparisonSize() == 3);
+    CHECK(controller.comparisonSelection() == 0);
+    CHECK(controller.comparisonItem(0)->classification ==
+          TargetComparisonClass::Added);
+    CHECK(controller.comparisonTargetRow(0)->identity.value[5] == 3);
+    TargetComparisonSide side{};
+    CHECK(controller.comparisonSide(0, true, &side));
+    CHECK(side.present);
+    CHECK(side.observation.rssiDbm == -55);
+    CHECK(side.evidence.sourceGeneration == 2);
+    CHECK(controller.comparisonSide(0, false, &side));
+    CHECK(!side.present);
+    CHECK(controller.next());
+    CHECK(controller.comparisonItem(1)->classification ==
+          TargetComparisonClass::Removed);
+    CHECK(controller.comparisonTargetRow(1)->identity.value[5] == 2);
+    CHECK(controller.comparisonSide(1, false, &side));
+    CHECK(side.present);
+    CHECK(side.observation.rssiDbm == -45);
+    CHECK(side.evidence.sourceGeneration == 1);
+    CHECK(controller.next());
+    CHECK(controller.comparisonItem(2)->classification ==
+          TargetComparisonClass::Changed);
+    CHECK(controller.comparisonTargetRow(2)->identity.value[5] == 1);
+    CHECK(controller.comparisonSide(2, true, &side));
+    CHECK(side.present);
+    CHECK(side.observation.rssiDbm == -30);
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == TargetsView::CompareDetail);
+    CHECK(controller.selectedComparisonItem()->classification ==
+          TargetComparisonClass::Changed);
     CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::Compare);
+    CHECK(controller.comparisonSelection() == 2);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::List);
     CHECK(controller.next());
     const TargetId selected = controller.selectedRow()->targetId;
     CHECK(controller.openSelected());
@@ -95,6 +130,7 @@ void pairIsUsefulFirstAndStable() {
     CHECK(controller.selection() == 1);
     CHECK(controller.openCompare());
     CHECK(controller.view() == TargetsView::Compare);
+    CHECK(controller.comparisonSelection() == 0);
     CHECK(controller.back());
     CHECK(controller.view() == TargetsView::List);
 }
@@ -159,6 +195,28 @@ void currentEvidenceWinsAcrossMonotonicReset() {
     CHECK(controller.row(0)->evidence.sourceGeneration == 21);
 }
 
+void comparisonClassesThenSignalAreStable() {
+    SurveySession baseline = session(
+        "sort-old", 2000, {wifi(1, 2010, 1, -80)});
+    SurveySession current = session(
+        "sort-new", 3000,
+        {wifi(1, 3010, 1, -80), wifi(2, 3020, 2, -60),
+         wifi(3, 3030, 3, -20), wifi(4, 3040, 4, -40)});
+    TargetsWorkspace workspace;
+    TargetsController controller(workspace);
+    CHECK(controller.load({&baseline, 30}, {&current, 31}) ==
+          TargetsLoadStatus::Ready);
+    CHECK(controller.comparisonSize() == 4);
+    CHECK(controller.comparisonItem(0)->classification ==
+          TargetComparisonClass::Added);
+    CHECK(controller.comparisonTargetRow(0)->identity.value[5] == 3);
+    CHECK(controller.comparisonTargetRow(1)->identity.value[5] == 4);
+    CHECK(controller.comparisonTargetRow(2)->identity.value[5] == 2);
+    CHECK(controller.comparisonItem(3)->classification ==
+          TargetComparisonClass::Unchanged);
+    CHECK(controller.comparisonTargetRow(3)->identity.value[5] == 1);
+}
+
 }  // namespace
 
 int main() {
@@ -167,6 +225,7 @@ int main() {
     rejectedLoadClearsPriorRows();
     denseAirKeepsStrongestCurrentSlice();
     currentEvidenceWinsAcrossMonotonicReset();
+    comparisonClassesThenSignalAreStable();
     if (failures != 0) {
         std::cerr << failures << " targets controller test(s) failed\n";
         return 1;

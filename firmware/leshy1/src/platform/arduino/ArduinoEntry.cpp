@@ -187,6 +187,7 @@ using leshy1::apps::survey::SurveyWorkflow;
 using leshy1::apps::survey::SurveyWorkflowState;
 using leshy1::apps::survey::SurveyWorkflowStatus;
 using leshy1::apps::targets::TargetListRow;
+using leshy1::apps::targets::TargetComparisonSide;
 using leshy1::apps::targets::TargetProductBinding;
 using leshy1::apps::targets::TargetsController;
 using leshy1::apps::targets::TargetsLoadStatus;
@@ -213,6 +214,8 @@ using leshy1::apps::wifi::WifiChannelLoadSnapshot;
 using leshy1::domain::apps::AppCatalog;
 using leshy1::domain::apps::AppMenuItem;
 using leshy1::domain::hardware::CapabilityRecord;
+using leshy1::domain::targets::TargetChangeKind;
+using leshy1::domain::targets::TargetComparisonClass;
 using leshy1::domain::hardware::CapabilityState;
 using leshy1::domain::hardware::HardwareInventory;
 using leshy1::domain::observations::Observation;
@@ -6719,6 +6722,17 @@ NavigationFooter navigationFooterForCurrentState() {
                 ? NavigationFooter{back, {}, {}}
                 : NavigationFooter{back, choose, enter};
         }
+        if (targetsProductRuntime->controller.view() == TargetsView::Compare) {
+            return targetsProductRuntime->controller.comparisonSize() == 0
+                ? NavigationFooter{
+                      {NavigationKey::Left, UiTextId::NavList}, {}, {}}
+                : NavigationFooter{
+                      {NavigationKey::Left, UiTextId::NavList}, choose, enter};
+        }
+        if (targetsProductRuntime->controller.view() ==
+            TargetsView::CompareDetail) {
+            return {{NavigationKey::Left, UiTextId::NavChanges}, {}, {}};
+        }
         return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
     }
     if (uiController.page() == kDevicePage) return {back, choose, enter};
@@ -10648,6 +10662,186 @@ void renderTargetListRow(std::size_t entryIndex, std::size_t firstVisible) {
     renderMenuRow(bounds, name, note, selected, true, Tone::Neutral);
 }
 
+UiTextId targetComparisonClassTextId(TargetComparisonClass classification) {
+    switch (classification) {
+        case TargetComparisonClass::Added: return UiTextId::TargetsClassAdded;
+        case TargetComparisonClass::Removed:
+            return UiTextId::TargetsClassRemoved;
+        case TargetComparisonClass::Changed:
+            return UiTextId::TargetsClassChanged;
+        case TargetComparisonClass::Unchanged:
+            return UiTextId::TargetsClassUnchanged;
+    }
+    return UiTextId::TargetsClassUnchanged;
+}
+
+Tone targetComparisonTone(TargetComparisonClass classification) {
+    switch (classification) {
+        case TargetComparisonClass::Added: return Tone::Positive;
+        case TargetComparisonClass::Removed: return Tone::Warning;
+        case TargetComparisonClass::Changed: return Tone::Warning;
+        case TargetComparisonClass::Unchanged: return Tone::Muted;
+    }
+    return Tone::Neutral;
+}
+
+void formatTargetComparisonName(const TargetsController& controller,
+                                std::size_t index, char* output,
+                                std::size_t capacity) {
+    if (output == nullptr || capacity == 0) return;
+    output[0] = '\0';
+    const TargetListRow* row = controller.comparisonTargetRow(index);
+    if (row != nullptr) formatTargetName(*row, output, capacity);
+}
+
+void renderTargetComparisonRow(std::size_t index, std::size_t firstVisible) {
+    if (targetsProductRuntime == nullptr || index < firstVisible ||
+        index >= firstVisible + kVisibleTargetRows) {
+        return;
+    }
+    TargetsController& controller = targetsProductRuntime->controller;
+    const auto* item = controller.comparisonItem(index);
+    if (item == nullptr) return;
+    TargetComparisonSide baseline{};
+    TargetComparisonSide current{};
+    if (!controller.comparisonSide(index, false, &baseline) ||
+        !controller.comparisonSide(index, true, &current)) {
+        return;
+    }
+    char name[49] = {};
+    char note[64] = {};
+    formatTargetComparisonName(controller, index, name, sizeof(name));
+    const char* classification = tr(targetComparisonClassTextId(
+        item->classification));
+    if (baseline.present && current.present) {
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsCompareSignalDeltaFormat),
+                      classification,
+                      static_cast<int>(baseline.observation.rssiDbm),
+                      static_cast<int>(current.observation.rssiDbm));
+    } else {
+        const TargetComparisonSide& visible = current.present
+            ? current : baseline;
+        std::snprintf(note, sizeof(note),
+                      tr(UiTextId::TargetsCompareSignalFormat),
+                      classification,
+                      static_cast<int>(visible.observation.rssiDbm));
+    }
+    const Rect bounds = Components::homeRow(static_cast<std::uint8_t>(
+        index - firstVisible));
+    renderMenuRow(bounds, name, note,
+                  controller.comparisonSelection() == index, true,
+                  targetComparisonTone(item->classification));
+}
+
+void appendTargetChange(char* output, std::size_t capacity, UiTextId id,
+                        std::uint8_t* count) {
+    if (output == nullptr || capacity == 0 || count == nullptr) return;
+    const char* token = tr(id);
+    const std::size_t length = std::strlen(output);
+    if (*count >= 2) {
+        if (length + 3 < capacity) std::snprintf(output + length,
+                                                capacity - length, " +");
+        ++*count;
+        return;
+    }
+    std::snprintf(output + length, capacity - length, "%s%s",
+                  length == 0 ? "" : ", ", token);
+    ++*count;
+}
+
+void formatTargetChanges(
+    leshy1::domain::targets::TargetChangeMask mask,
+    char* output, std::size_t capacity) {
+    if (output == nullptr || capacity == 0) return;
+    output[0] = '\0';
+    std::uint8_t count = 0;
+    const auto append = [&](TargetChangeKind kind, UiTextId id) {
+        if ((mask & leshy1::domain::targets::targetChangeMask(kind)) != 0 &&
+            count <= 2) {
+            appendTargetChange(output, capacity, id, &count);
+        }
+    };
+    append(TargetChangeKind::IdentitySet, UiTextId::TargetsChangeIdentity);
+    append(TargetChangeKind::Radio, UiTextId::TargetsChangeRadio);
+    append(TargetChangeKind::Frequency, UiTextId::TargetsChangeFrequency);
+    append(TargetChangeKind::Channel, UiTextId::TargetsChangeChannel);
+    append(TargetChangeKind::Signal, UiTextId::TargetsChangeSignal);
+    append(TargetChangeKind::Label, UiTextId::TargetsChangeLabel);
+    append(TargetChangeKind::WifiFacts, UiTextId::TargetsChangeWifi);
+    append(TargetChangeKind::BleFacts, UiTextId::TargetsChangeBle);
+}
+
+void formatTargetComparisonSide(bool current,
+                                const TargetComparisonSide& side,
+                                char* output, std::size_t capacity) {
+    if (output == nullptr || capacity == 0) return;
+    if (!side.present) {
+        std::snprintf(output, capacity, "%s",
+                      tr(current ? UiTextId::TargetsNowNone
+                                 : UiTextId::TargetsBeforeNone));
+        return;
+    }
+    if (side.observation.radio == RadioKind::Wifi) {
+        std::snprintf(output, capacity,
+                      tr(current ? UiTextId::TargetsNowWifiFormat
+                                 : UiTextId::TargetsBeforeWifiFormat),
+                      static_cast<int>(side.observation.rssiDbm),
+                      static_cast<unsigned>(side.observation.channel));
+    } else {
+        std::snprintf(output, capacity,
+                      tr(current ? UiTextId::TargetsNowBleFormat
+                                 : UiTextId::TargetsBeforeBleFormat),
+                      static_cast<int>(side.observation.rssiDbm));
+    }
+}
+
+void renderTargetComparisonDetail(bool clearContent) {
+    renderHeader(tr(UiTextId::TargetsCompareEvidence), clearContent);
+    if (targetsProductRuntime == nullptr) {
+        renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+        return;
+    }
+    TargetsController& controller = targetsProductRuntime->controller;
+    const std::size_t index = controller.comparisonSelection();
+    const auto* item = controller.selectedComparisonItem();
+    if (item == nullptr) {
+        renderMetric(0, tr(UiTextId::TargetsCompareEmpty), Tone::Muted);
+        return;
+    }
+    TargetComparisonSide baseline{};
+    TargetComparisonSide current{};
+    if (!controller.comparisonSide(index, false, &baseline) ||
+        !controller.comparisonSide(index, true, &current)) {
+        renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+        return;
+    }
+    char line[64] = {};
+    formatTargetComparisonName(controller, index, line, sizeof(line));
+    renderMetric(0, line, Tone::Positive);
+    std::snprintf(line, sizeof(line), tr(UiTextId::TargetsStatusFormat),
+                  tr(targetComparisonClassTextId(item->classification)));
+    renderMetric(1, line, targetComparisonTone(item->classification));
+    formatTargetComparisonSide(false, baseline, line, sizeof(line));
+    renderMetric(2, line);
+    formatTargetComparisonSide(true, current, line, sizeof(line));
+    renderMetric(3, line);
+    if (item->changes != 0) {
+        char changes[40] = {};
+        formatTargetChanges(item->changes, changes, sizeof(changes));
+        std::snprintf(line, sizeof(line), tr(UiTextId::TargetsChangesFormat),
+                      changes);
+    } else {
+        const auto& comparison = controller.comparison();
+        std::snprintf(line, sizeof(line), tr(UiTextId::TargetsVisitsFormat),
+                      static_cast<unsigned long>(
+                          comparison.baseline.generation),
+                      static_cast<unsigned long>(
+                          comparison.current.generation));
+    }
+    renderMetric(4, line);
+}
+
 void renderTargetsPage(bool clearContent) {
     if (targetsProductRuntime == nullptr) {
         renderHeader(tr(UiTextId::AppTargets), clearContent);
@@ -10655,31 +10849,24 @@ void renderTargetsPage(bool clearContent) {
         return;
     }
     TargetsController& controller = targetsProductRuntime->controller;
+    if (controller.view() == TargetsView::CompareDetail) {
+        renderTargetComparisonDetail(clearContent);
+        return;
+    }
     if (controller.view() == TargetsView::Compare) {
         renderHeader(tr(UiTextId::TargetsCompare), clearContent);
-        const auto& comparison = controller.comparison();
-        char line[64] = {};
-        std::snprintf(line, sizeof(line),
-                      tr(UiTextId::TargetsCompareGenerationFormat),
-                      static_cast<unsigned long>(
-                          comparison.baseline.generation),
-                      static_cast<unsigned long>(
-                          comparison.current.generation));
-        renderMetric(0, line, Tone::Positive);
-        std::snprintf(line, sizeof(line), tr(UiTextId::TargetsAddedFormat),
-                      static_cast<unsigned>(comparison.added));
-        renderMetric(1, line);
-        std::snprintf(line, sizeof(line), tr(UiTextId::TargetsRemovedFormat),
-                      static_cast<unsigned>(comparison.removed));
-        renderMetric(2, line);
-        std::snprintf(line, sizeof(line), tr(UiTextId::TargetsChangedFormat),
-                      static_cast<unsigned>(comparison.changed));
-        renderMetric(3, line, comparison.changed == 0
-                                  ? Tone::Neutral : Tone::Warning);
-        std::snprintf(line, sizeof(line),
-                      tr(UiTextId::TargetsUnchangedFormat),
-                      static_cast<unsigned>(comparison.unchanged));
-        renderMetric(4, line);
+        if (controller.comparisonSize() == 0) {
+            renderMetric(0, tr(UiTextId::TargetsCompareEmpty), Tone::Muted);
+            return;
+        }
+        const std::size_t first = targetsFirstVisible(
+            controller.comparisonSelection());
+        const std::size_t end = controller.comparisonSize() <
+                first + kVisibleTargetRows
+            ? controller.comparisonSize() : first + kVisibleTargetRows;
+        for (std::size_t index = first; index < end; ++index) {
+            renderTargetComparisonRow(index, first);
+        }
         return;
     }
     if (controller.view() == TargetsView::Detail) {
@@ -10853,9 +11040,9 @@ UiRenderSnapshot captureUiRenderSnapshot() {
             : static_cast<std::uint8_t>(
                 targetsProductRuntime->controller.view()),
         targetsProductRuntime == nullptr
-            ? 0U : targetsProductRuntime->controller.selection(),
+            ? 0U : targetsProductRuntime->controller.navigationSelection(),
         targetsProductRuntime == nullptr
-            ? 0U : targetsProductRuntime->controller.entryCount(),
+            ? 0U : targetsProductRuntime->controller.navigationCount(),
     };
 }
 
@@ -11275,13 +11462,15 @@ bool renderSelectionDelta() {
     }
 
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
-        targetsProductRuntime->controller.view() == TargetsView::List &&
-        renderedUi.targetsView ==
-            static_cast<std::uint8_t>(TargetsView::List) &&
+        (targetsProductRuntime->controller.view() == TargetsView::List ||
+         targetsProductRuntime->controller.view() == TargetsView::Compare) &&
+        renderedUi.targetsView == static_cast<std::uint8_t>(
+            targetsProductRuntime->controller.view()) &&
         renderedUi.targetsSize ==
-            targetsProductRuntime->controller.entryCount()) {
-        const std::size_t current =
-            targetsProductRuntime->controller.selection();
+            targetsProductRuntime->controller.navigationCount()) {
+        const TargetsController& controller =
+            targetsProductRuntime->controller;
+        const std::size_t current = controller.navigationSelection();
         if (renderedUi.targetsSelection == current) return false;
         const std::size_t oldFirst =
             targetsFirstVisible(renderedUi.targetsSelection);
@@ -11290,8 +11479,14 @@ bool renderSelectionDelta() {
             renderTargetsPage(false);
             return true;
         }
-        renderTargetListRow(renderedUi.targetsSelection, currentFirst);
-        renderTargetListRow(current, currentFirst);
+        if (controller.view() == TargetsView::Compare) {
+            renderTargetComparisonRow(renderedUi.targetsSelection,
+                                      currentFirst);
+            renderTargetComparisonRow(current, currentFirst);
+        } else {
+            renderTargetListRow(renderedUi.targetsSelection, currentFirst);
+            renderTargetListRow(current, currentFirst);
+        }
         return true;
     }
 
@@ -13716,13 +13911,25 @@ void emitTargetsState(Stream& reply) {
     const auto* comparison = controller != nullptr &&
             controller->compareAvailable()
         ? &controller->comparison() : nullptr;
+    const auto* selectedComparison = controller == nullptr
+        ? nullptr : controller->selectedComparisonItem();
+    TargetComparisonSide baselineSide{};
+    TargetComparisonSide currentSide{};
+    if (selectedComparison != nullptr) {
+        controller->comparisonSide(controller->comparisonSelection(), false,
+                                   &baselineSide);
+        controller->comparisonSide(controller->comparisonSelection(), true,
+                                   &currentSide);
+    }
     const char* view = controller == nullptr
         ? "none"
         : controller->view() == TargetsView::Detail
               ? "detail"
               : controller->view() == TargetsView::Compare
-                    ? "compare" : "list";
-    char line[768] = {};
+                    ? "compare"
+                    : controller->view() == TargetsView::CompareDetail
+                          ? "compare_detail" : "list";
+    char line[1280] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.targets.product.v1\",\"kind\":\"state\","
@@ -13733,6 +13940,17 @@ void emitTargetsState(Stream& reply) {
         "\"compare_available\":%s,\"baseline_generation\":%lu,"
         "\"current_generation\":%lu,\"added\":%u,\"removed\":%u,"
         "\"changed\":%u,\"unchanged\":%u,"
+        "\"comparison_count\":%u,\"comparison_selection\":%u,"
+        "\"selected_change_class\":\"%s\","
+        "\"selected_change_mask\":%u,"
+        "\"baseline_evidence_present\":%s,"
+        "\"baseline_evidence_generation\":%lu,"
+        "\"baseline_observation_sequence\":%llu,"
+        "\"baseline_rssi_dbm\":%d,\"baseline_channel\":%u,"
+        "\"current_evidence_present\":%s,"
+        "\"current_evidence_generation\":%lu,"
+        "\"current_observation_sequence\":%llu,"
+        "\"current_rssi_dbm\":%d,\"current_channel\":%u,"
         "\"selected_generation\":%lu,\"selected_rssi_dbm\":%d,"
         "\"read_only\":true,\"write_enabled\":false,"
         "\"blocked_write_attempts\":%lu,"
@@ -13760,6 +13978,34 @@ void emitTargetsState(Stream& reply) {
         static_cast<unsigned>(comparison == nullptr ? 0 : comparison->changed),
         static_cast<unsigned>(comparison == nullptr
                                   ? 0 : comparison->unchanged),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->comparisonSize()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->comparisonSelection()),
+        selectedComparison == nullptr
+            ? "none"
+            : leshy1::domain::targets::targetComparisonClassName(
+                  selectedComparison->classification),
+        static_cast<unsigned>(selectedComparison == nullptr
+                                  ? 0 : selectedComparison->changes),
+        baselineSide.present ? "true" : "false",
+        static_cast<unsigned long>(baselineSide.present
+            ? baselineSide.evidence.sourceGeneration : 0),
+        static_cast<unsigned long long>(baselineSide.present
+            ? baselineSide.evidence.observationSequence : 0),
+        static_cast<int>(baselineSide.present
+            ? baselineSide.observation.rssiDbm : 0),
+        static_cast<unsigned>(baselineSide.present
+            ? baselineSide.observation.channel : 0),
+        currentSide.present ? "true" : "false",
+        static_cast<unsigned long>(currentSide.present
+            ? currentSide.evidence.sourceGeneration : 0),
+        static_cast<unsigned long long>(currentSide.present
+            ? currentSide.evidence.observationSequence : 0),
+        static_cast<int>(currentSide.present
+            ? currentSide.observation.rssiDbm : 0),
+        static_cast<unsigned>(currentSide.present
+            ? currentSide.observation.channel : 0),
         static_cast<unsigned long>(selected == nullptr
                                        ? 0 : selected->evidence.sourceGeneration),
         static_cast<int>(selected == nullptr ? 0 : selected->latest.rssiDbm),
@@ -14433,7 +14679,8 @@ bool selectionCanRepaintInPlace(UiAction action) {
     }
     if (uiController.page() == 7) {
         return targetsProductRuntime != nullptr &&
-            targetsProductRuntime->controller.view() == TargetsView::List;
+            (targetsProductRuntime->controller.view() == TargetsView::List ||
+             targetsProductRuntime->controller.view() == TargetsView::Compare);
     }
     if (uiController.page() == 4) {
         return captureView == CaptureView::SourceMenu;
@@ -15194,11 +15441,13 @@ bool applyUiAction(UiAction action, bool render = true) {
         TargetsController& controller = targetsProductRuntime->controller;
         bool handled = false;
         bool changed = false;
-        if (controller.view() != TargetsView::List &&
+        if ((controller.view() == TargetsView::Detail ||
+             controller.view() == TargetsView::CompareDetail) &&
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
             changed = controller.back();
-        } else if (controller.view() == TargetsView::List) {
+        } else if (controller.view() == TargetsView::List ||
+                   controller.view() == TargetsView::Compare) {
             if (action == UiAction::Up) {
                 handled = true;
                 changed = controller.previous();
@@ -15209,6 +15458,11 @@ bool applyUiAction(UiAction action, bool render = true) {
                        action == UiAction::Right) {
                 handled = true;
                 changed = controller.openSelected();
+            } else if (controller.view() == TargetsView::Compare &&
+                       (action == UiAction::Back ||
+                        action == UiAction::Left)) {
+                handled = true;
+                changed = controller.back();
             }
         }
         if (handled) {
@@ -15735,16 +15989,19 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
         }
     }
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
-        targetsProductRuntime->controller.view() == TargetsView::List) {
+        (targetsProductRuntime->controller.view() == TargetsView::List ||
+         targetsProductRuntime->controller.view() == TargetsView::Compare)) {
+        const TargetsController& controller =
+            targetsProductRuntime->controller;
         const std::size_t first = targetsFirstVisible(
-            targetsProductRuntime->controller.selection());
+            controller.navigationSelection());
         return {leshy1::ui::hitTouchTarget(
                     TouchTargetLayout::HomeRows, point,
                     static_cast<std::uint8_t>(first),
                     static_cast<std::uint8_t>(
-                        targetsProductRuntime->controller.entryCount())),
+                        controller.navigationCount())),
                 static_cast<std::uint8_t>(
-                    targetsProductRuntime->controller.selection())};
+                    controller.navigationSelection())};
     }
     if (uiController.page() == 4 &&
         captureView == CaptureView::SourceMenu) {

@@ -14,6 +14,9 @@ from pathlib import Path
 LIMITS = {
     "TargetsController::reset()": 512,
     "TargetsController::loadBindings(": 1024,
+    "TargetsController::loadComparisonSide(": 512,
+    "TargetsController::comparisonItemBefore(": 768,
+    "TargetsController::rebuildComparisonOrder()": 512,
     "resetTargetComparisonResult(": 128,
     "compareTargetSessionsInto(": 512,
     "buildSide(": 1536,

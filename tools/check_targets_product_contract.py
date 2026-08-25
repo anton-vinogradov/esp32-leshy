@@ -25,6 +25,7 @@ def main() -> int:
     comparison_service_source = (ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.cpp").read_text()
     runner = (ROOT / "tools/run_1x_targets_hil.py").read_text()
     mount_runner = (ROOT / "tools/run_1x_targets_mount_regression_hil.py").read_text()
+    evidence_runner = (ROOT / "tools/run_1x_targets_evidence_hil.py").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -96,24 +97,47 @@ def main() -> int:
             "best_effort_cleanup(device)" in runner and
             "leshy.targets_mount_regression_hil.run.v1" in mount_runner and
             "checked_stack_frames = stack_frames(args.elf)" in mount_runner and
-            "storage_write_calls\": 0" in mount_runner,
+            "storage_write_calls\": 0" in mount_runner and
+            "leshy.targets_evidence_hil.run.v1" in evidence_runner and
+            "validate_evidence" in evidence_runner and
+            "comparison order is not class/signal stable" in evidence_runner and
+            "new_passive_scans_required" not in evidence_runner,
             "Targets HIL must bind exact clean HEAD, clean up failures and "
-            "run the read-only mount regression before exact-flash reuse")
+            "use a focused read-only exact-evidence delta when no new scans "
+            "are needed")
     require(failures,
             "renderTargetsPage" in entry and
             "renderTargetListRow" in entry and
+            "renderTargetComparisonRow" in entry and
+            "renderTargetComparisonDetail" in entry and
             "targetsFirstVisible" in entry and
             "TouchTargetLayout::HomeRows" in entry and
-            "controller.openSelected()" in entry,
-            "Targets list/detail/compare must share keypad and touch navigation")
+            "controller.openSelected()" in entry and
+            "TargetsView::CompareDetail" in entry,
+            "Targets list/detail/change rows/evidence must share keypad and "
+            "touch navigation")
     require(failures,
             "selectedIsCompare() ? TargetsView::Compare" in controller and
             "entryCount()" in controller and
             "selectStrongestIdentities" in controller and
-            "sourceIdentityCount_ > filter.size" in controller,
-            "Compare visits must be reachable as the first ordinary list entry")
+            "sourceIdentityCount_ > filter.size" in controller and
+            "comparisonClassRank" in controller and
+            "comparisonItemBefore" in controller and
+            "observation.rssiDbm >" in controller and
+            "TargetsView::CompareDetail" in controller,
+            "Compare visits must open stable class/signal-sorted rows and an "
+            "exact evidence detail without losing selection")
+    require(failures,
+            r'\"comparison_selection\":%u' in entry and
+            r'\"selected_change_class\":\"%s\"' in entry and
+            r'\"baseline_observation_sequence\":%llu' in entry and
+            r'\"current_observation_sequence\":%llu' in entry,
+            "Targets state must expose exact selected comparison evidence")
     for text_id in ("TargetsCompareVisits", "TargetsLimitedTitleFormat", "TargetsEmpty",
-                    "TargetsLoadFailed", "TargetsDetail", "TargetsCompare"):
+                    "TargetsLoadFailed", "TargetsDetail", "TargetsCompare",
+                    "TargetsCompareEvidence", "TargetsClassAdded",
+                    "TargetsBeforeWifiFormat", "TargetsNowWifiFormat",
+                    "TargetsChangesFormat", "NavChanges"):
         require(failures, f"LESHY_UI_TEXT({text_id}," in strings,
                 f"bilingual UI string missing: {text_id}")
     for forbidden in ("esp_wifi_80211_tx", "STX", "SFTX", "tone("):

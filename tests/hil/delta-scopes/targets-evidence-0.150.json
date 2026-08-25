@@ -1,0 +1,27 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "targets-evidence-0.150",
+  "candidate_version": "0.150.0-targets-evidence",
+  "changed_surfaces": [
+    "target_comparison_class_signal_order",
+    "target_comparison_row_navigation",
+    "target_comparison_exact_evidence_detail",
+    "target_comparison_incremental_keypad_and_touch_render",
+    "target_comparison_state_probe"
+  ],
+  "required_delta_regression": [
+    "one_exact_flash",
+    "reuse_existing_exact_cid_session_pair_read_only",
+    "all_comparison_rows_class_sorted",
+    "rows_within_each_class_descending_signal",
+    "every_row_has_exact_baseline_or_current_observation_reference",
+    "selected_row_opens_matching_compare_detail",
+    "left_returns_to_same_comparison_selection_then_targets_list",
+    "keypad_and_tft_capture",
+    "zero_tx_zero_writes_zero_input_drops",
+    "workspace_release_and_final_zero_lease"
+  ],
+  "new_passive_scans_required": false,
+  "full_matrix_required": false,
+  "cadence_after_acceptance": "5/15"
+}

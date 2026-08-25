@@ -35,6 +35,18 @@ bool rowBefore(const TargetListRow& left, const TargetListRow& right) {
     return left.targetId.bytes < right.targetId.bytes;
 }
 
+std::uint8_t comparisonClassRank(
+    domain::targets::TargetComparisonClass classification) {
+    using domain::targets::TargetComparisonClass;
+    switch (classification) {
+        case TargetComparisonClass::Added: return 0;
+        case TargetComparisonClass::Removed: return 1;
+        case TargetComparisonClass::Changed: return 2;
+        case TargetComparisonClass::Unchanged: return 3;
+    }
+    return 4;
+}
+
 struct RankedIdentity final {
     domain::targets::TargetIdentity identity{};
     std::int16_t rssiDbm = -128;
@@ -171,6 +183,8 @@ void TargetsController::reset() {
     current_ = {};
     rowCount_ = 0;
     selection_ = 0;
+    comparisonOrder_.fill(0xffU);
+    comparisonSelection_ = 0;
     view_ = TargetsView::List;
     status_ = TargetsLoadStatus::SessionUnavailable;
     comparisonAvailable_ = false;
@@ -254,6 +268,11 @@ TargetsLoadStatus TargetsController::loadBindings(
         if (!workspace_.comparison.compared()) {
             reset();
             status_ = TargetsLoadStatus::CompareRejected;
+            return status_;
+        }
+        if (!rebuildComparisonOrder()) {
+            reset();
+            status_ = TargetsLoadStatus::EvidenceUnavailable;
             return status_;
         }
         comparisonAvailable_ = true;
@@ -349,32 +368,135 @@ bool TargetsController::rebuildRows() {
     return true;
 }
 
-bool TargetsController::next() {
-    if (view_ != TargetsView::List || selection_ + 1 >= entryCount()) return false;
-    ++selection_;
+bool TargetsController::loadComparisonSide(
+    const domain::targets::TargetComparisonItem& item, bool current,
+    TargetComparisonSide* output) const {
+    if (output == nullptr) return false;
+    *output = {};
+    const auto& evidence = current ? item.currentEvidence
+                                   : item.baselineEvidence;
+    const std::size_t count = current ? item.currentEvidenceCount
+                                      : item.baselineEvidenceCount;
+    for (std::size_t index = 0; index < count; ++index) {
+        domain::observations::Observation observation{};
+        if (!loadExact(evidence[index].reference, &observation)) return false;
+        if (!output->present ||
+            observation.rssiDbm > output->observation.rssiDbm ||
+            (observation.rssiDbm == output->observation.rssiDbm &&
+             observation.monotonicUs > output->observation.monotonicUs)) {
+            output->identity = evidence[index].identity;
+            output->evidence = evidence[index].reference;
+            output->observation = observation;
+            output->present = true;
+        }
+    }
     return true;
+}
+
+bool TargetsController::comparisonItemBefore(std::uint8_t left,
+                                             std::uint8_t right) const {
+    const auto* leftItem = workspace_.comparison.get(left);
+    const auto* rightItem = workspace_.comparison.get(right);
+    if (leftItem == nullptr || rightItem == nullptr) return false;
+    const std::uint8_t leftRank = comparisonClassRank(leftItem->classification);
+    const std::uint8_t rightRank = comparisonClassRank(rightItem->classification);
+    if (leftRank != rightRank) return leftRank < rightRank;
+
+    TargetComparisonSide leftSignal{};
+    TargetComparisonSide rightSignal{};
+    if (!loadComparisonSide(*leftItem,
+                            leftItem->currentEvidenceCount != 0,
+                            &leftSignal) ||
+        !loadComparisonSide(*rightItem,
+                            rightItem->currentEvidenceCount != 0,
+                            &rightSignal)) {
+        return leftItem->targetId.bytes < rightItem->targetId.bytes;
+    }
+    if (leftSignal.observation.rssiDbm != rightSignal.observation.rssiDbm) {
+        return leftSignal.observation.rssiDbm >
+               rightSignal.observation.rssiDbm;
+    }
+    if (leftSignal.observation.monotonicUs !=
+        rightSignal.observation.monotonicUs) {
+        return leftSignal.observation.monotonicUs >
+               rightSignal.observation.monotonicUs;
+    }
+    return leftItem->targetId.bytes < rightItem->targetId.bytes;
+}
+
+bool TargetsController::rebuildComparisonOrder() {
+    comparisonOrder_.fill(0xffU);
+    comparisonSelection_ = 0;
+    for (std::size_t index = 0; index < workspace_.comparison.size; ++index) {
+        comparisonOrder_[index] = static_cast<std::uint8_t>(index);
+    }
+    for (std::size_t index = 1; index < workspace_.comparison.size; ++index) {
+        std::size_t current = index;
+        while (current > 0 && comparisonItemBefore(
+                   comparisonOrder_[current], comparisonOrder_[current - 1])) {
+            std::swap(comparisonOrder_[current],
+                      comparisonOrder_[current - 1]);
+            --current;
+        }
+    }
+    return true;
+}
+
+bool TargetsController::next() {
+    if (view_ == TargetsView::List) {
+        if (selection_ + 1 >= entryCount()) return false;
+        ++selection_;
+        return true;
+    }
+    if (view_ == TargetsView::Compare) {
+        if (comparisonSelection_ + 1 >= comparisonSize()) return false;
+        ++comparisonSelection_;
+        return true;
+    }
+    return false;
 }
 
 bool TargetsController::previous() {
-    if (view_ != TargetsView::List || selection_ == 0) return false;
-    --selection_;
-    return true;
+    if (view_ == TargetsView::List) {
+        if (selection_ == 0) return false;
+        --selection_;
+        return true;
+    }
+    if (view_ == TargetsView::Compare) {
+        if (comparisonSelection_ == 0) return false;
+        --comparisonSelection_;
+        return true;
+    }
+    return false;
 }
 
 bool TargetsController::openSelected() {
-    if (view_ != TargetsView::List || entryCount() == 0) return false;
-    view_ = selectedIsCompare() ? TargetsView::Compare : TargetsView::Detail;
-    return true;
+    if (view_ == TargetsView::List && entryCount() != 0) {
+        view_ = selectedIsCompare() ? TargetsView::Compare
+                                    : TargetsView::Detail;
+        if (view_ == TargetsView::Compare) comparisonSelection_ = 0;
+        return true;
+    }
+    if (view_ == TargetsView::Compare && comparisonSize() != 0) {
+        view_ = TargetsView::CompareDetail;
+        return true;
+    }
+    return false;
 }
 
 bool TargetsController::openCompare() {
     if (view_ != TargetsView::List || !comparisonAvailable_) return false;
     view_ = TargetsView::Compare;
+    comparisonSelection_ = 0;
     return true;
 }
 
 bool TargetsController::back() {
     if (view_ == TargetsView::List) return false;
+    if (view_ == TargetsView::CompareDetail) {
+        view_ = TargetsView::Compare;
+        return true;
+    }
     view_ = TargetsView::List;
     return true;
 }
@@ -394,6 +516,38 @@ const domain::targets::TargetRecord* TargetsController::selectedTarget() const {
     const TargetListRow* selected = selectedRow();
     return selected == nullptr ? nullptr
                                : workspace_.catalog.find(selected->targetId);
+}
+
+const domain::targets::TargetComparisonItem* TargetsController::comparisonItem(
+    std::size_t index) const {
+    if (!comparisonAvailable_ || index >= workspace_.comparison.size) {
+        return nullptr;
+    }
+    return workspace_.comparison.get(comparisonOrder_[index]);
+}
+
+const domain::targets::TargetComparisonItem*
+TargetsController::selectedComparisonItem() const {
+    return comparisonItem(comparisonSelection_);
+}
+
+const TargetListRow* TargetsController::comparisonTargetRow(
+    std::size_t index) const {
+    const auto* item = comparisonItem(index);
+    if (item == nullptr) return nullptr;
+    for (std::size_t rowIndex = 0; rowIndex < rowCount_; ++rowIndex) {
+        if (domain::targets::targetIdEqual(rows_[rowIndex].targetId,
+                                           item->targetId)) {
+            return &rows_[rowIndex];
+        }
+    }
+    return nullptr;
+}
+
+bool TargetsController::comparisonSide(std::size_t index, bool current,
+                                       TargetComparisonSide* output) const {
+    const auto* item = comparisonItem(index);
+    return item != nullptr && loadComparisonSide(*item, current, output);
 }
 
 }  // namespace leshy1::apps::targets
