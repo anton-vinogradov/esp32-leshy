@@ -11,7 +11,8 @@
     "target_decision_state_catalog_only_migration",
     "target_correlation_machine_state_probe",
     "combined_visit_all_builtin_radios_default",
-    "serial_wifi_ble_stack_lifetimes"
+    "serial_wifi_ble_stack_lifetimes",
+    "external_second_div_deterministic_wifi_ble_fixture"
   ],
   "required_delta_regression": [
     "one_exact_flash",
@@ -28,7 +29,7 @@
     "workers_finish_inside_eight_second_deadline",
     "workspace_release_and_final_zero_lease"
   ],
-  "new_passive_scans_required": "bounded_zero_to_four_until_one_natural_unambiguous_proposal",
+  "new_passive_scans_required": "two bounded scans against an external second-DIV Wi-Fi-then-BLE beacon; DUT remains passive",
   "full_matrix_required": false,
   "cadence_after_acceptance": "10/15"
 }

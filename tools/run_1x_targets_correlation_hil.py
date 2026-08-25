@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from capture_1x_ui import PassiveSerial, synchronize_console
+from capture_1x_ui import PassiveSerial, read_json, synchronize_console
 from check_targets_stack_elf_contract import stack_frames
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
@@ -31,6 +31,7 @@ from run_1x_ui_typography_hil import normalize_home
 SCHEMA = "leshy.targets_correlation_hil.run.v1"
 EXPECTED_CID = "FE343253440000002000000055019CB7"
 MAX_FRESH_SURVEY_CYCLES = 4
+FIXTURE_SCHEMA = "leshy.hil.correlation_fixture.v1"
 
 
 def require(state: dict[str, Any], label: str, **expected: Any) -> None:
@@ -91,7 +92,9 @@ def validate_proposal(state: dict[str, Any]) -> None:
         raise RuntimeError(f"invalid pending identity: {state}")
     if state.get("correlation_confidence") not in ("medium", "high"):
         raise RuntimeError(f"weak correlation escaped review: {state}")
-    if (int(state.get("correlation_score_permille", 0)) < 500 or
+    # Advertised-name (260) plus signal-trend (220) has a hard maximum of 480;
+    # medium confidence begins at the domain threshold of 350.
+    if (int(state.get("correlation_score_permille", 0)) < 350 or
             int(state.get("correlation_feature_count", 0)) != 2 or
             state.get("correlation_feature_kind") != "advertised_name" or
             int(state.get("correlation_feature_strength_permille", 0)) != 1000 or
@@ -113,6 +116,19 @@ def validate_proposal(state: dict[str, Any]) -> None:
     if abs(int(state.get("correlation_known_rssi_dbm", 0)) -
            int(state.get("correlation_candidate_rssi_dbm", 0))) > 20:
         raise RuntimeError(f"proposal exceeds the signal bound: {state}")
+
+
+def fixture_mode(device: PassiveSerial, mode: str) -> dict[str, Any]:
+    device.reset_input_buffer()
+    device.write(f"mode {mode}\n".encode("ascii"))
+    device.flush()
+    state = read_json(device, FIXTURE_SCHEMA, "state", timeout=8.0)
+    if (state.get("mode") != mode or
+            state.get("wifi_tx") != (mode == "wifi") or
+            state.get("ble_tx") != (mode == "ble")):
+        raise RuntimeError(f"external fixture mode failed: {state}")
+    time.sleep(0.5)
+    return state
 
 
 def check_atomic_accept(state: dict[str, Any], generation: int,
@@ -153,6 +169,10 @@ def main() -> int:
         help="reuse the already-running candidate after exact hash verification",
     )
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument(
+        "--fixture-port",
+        help="optional external low-power Wi-Fi/BLE correlation beacon",
+    )
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
         if not path.is_file():
@@ -187,6 +207,7 @@ def main() -> int:
     states: dict[str, Any] = {}
     screens: dict[str, Any] = {}
     cleanup: dict[str, Any] = {"attempted": False}
+    fixture_states: list[dict[str, Any]] = []
     record: dict[str, Any] = {
         "schema": SCHEMA,
         "status": "in_progress",
@@ -204,12 +225,19 @@ def main() -> int:
     write_json(args.output / "run.json", record)
 
     device: PassiveSerial | None = None
+    fixture: PassiveSerial | None = None
     try:
         if not args.reuse_exact_flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
             time.sleep(1.0)
         device = PassiveSerial(args.port, 115200, timeout=0.25)
         synchronize_console(device, 30.0)
+        if args.fixture_port is not None:
+            if args.fixture_port == args.port:
+                raise RuntimeError("fixture and DUT ports must be different")
+            fixture = PassiveSerial(
+                args.fixture_port, 115200, timeout=0.25)
+            fixture_states.append(fixture_mode(fixture, "off"))
         metrics = query(device, b"metrics", "leshy.boot.v1", "ready")
         require(metrics, "candidate", version=args.expected_version,
                 app_elf_sha256=app_identity)
@@ -235,6 +263,9 @@ def main() -> int:
             close_targets(device)
             if attempt == MAX_FRESH_SURVEY_CYCLES:
                 break
+            if fixture is not None:
+                fixture_states.append(fixture_mode(
+                    fixture, "wifi" if not scans else "ble"))
             committed = run_survey_cycle(device, latest_generation, trace)
             latest_generation = int(committed["survey_generation"])
             scans.append({
@@ -354,6 +385,8 @@ def main() -> int:
         cleanup = best_effort_cleanup(device)
         if not cleanup.get("complete"):
             raise RuntimeError(f"final cleanup failed: {cleanup}")
+        if fixture is not None:
+            fixture_states.append(fixture_mode(fixture, "off"))
 
         record.update({
             "status": "pass",
@@ -377,6 +410,12 @@ def main() -> int:
             "cleanup": cleanup,
             "flash_count": 0 if args.reuse_exact_flash else 1,
             "radio_tx_commands": 0,
+            "external_fixture": {
+                "port": args.fixture_port,
+                "label": "LESHY-HIL-CORR",
+                "states": fixture_states,
+                "dut_remained_passive": True,
+            },
         })
     except Exception as error:
         if device is not None:
@@ -388,11 +427,23 @@ def main() -> int:
             "screens": screens,
             "trace": trace,
             "cleanup": cleanup,
+            "external_fixture": {
+                "port": args.fixture_port,
+                "label": "LESHY-HIL-CORR",
+                "states": fixture_states,
+                "dut_remained_passive": True,
+            },
         })
         write_json(args.output / "run.json", record)
         artifact_manifest(args.output)
         raise
     finally:
+        if fixture is not None:
+            try:
+                fixture_mode(fixture, "off")
+            except Exception:
+                pass
+            fixture.close()
         if device is not None:
             device.close()
 
