@@ -148,6 +148,10 @@ def main() -> int:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--reuse-exact-flash", action="store_true",
+        help="reuse the already-running candidate after exact hash verification",
+    )
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
@@ -201,8 +205,9 @@ def main() -> int:
 
     device: PassiveSerial | None = None
     try:
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        time.sleep(1.0)
+        if not args.reuse_exact_flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            time.sleep(1.0)
         device = PassiveSerial(args.port, 115200, timeout=0.25)
         synchronize_console(device, 30.0)
         metrics = query(device, b"metrics", "leshy.boot.v1", "ready")
@@ -370,7 +375,7 @@ def main() -> int:
             "released_before_reset": released_before_reset,
             "released": released,
             "cleanup": cleanup,
-            "flash_count": 1,
+            "flash_count": 0 if args.reuse_exact_flash else 1,
             "radio_tx_commands": 0,
         })
     except Exception as error:
