@@ -385,6 +385,7 @@ const char* targetsProductStatus = "not_loaded";
 std::uint32_t targetsHeapFreeBefore = 0;
 std::uint32_t targetsHeapFreeAfter = 0;
 std::uint32_t targetsBlockedWriteAttempts = 0;
+int targetsFilesystemMountError = 0;
 bool targetsCleanupComplete = true;
 leshy1::services::survey::ObservationQueue surveyIngressQueue;
 leshy1::storage::SessionStoreWorkspace sessionStoreWorkspace;
@@ -4359,21 +4360,24 @@ void releaseTargetsProduct() {
     targetsProductStatus = "not_loaded";
 }
 
-bool loadTargetsProduct(const AppMenuItem& item) {
-    releaseTargetsProduct();
-    targetsBlockedWriteAttempts = 0;
-    targetsCleanupComplete = true;
+bool allocateTargetsProduct() {
     targetsHeapFreeBefore = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_8BIT));
     targetsProductRuntime = new (std::nothrow) TargetsProductRuntime();
-    if (targetsProductRuntime == nullptr) {
-        targetsProductStatus = "workspace_unavailable";
-        lastRuntimeEvent = targetsProductStatus;
-        return false;
-    }
+    if (targetsProductRuntime != nullptr) return true;
+    targetsProductStatus = "workspace_unavailable";
+    lastRuntimeEvent = targetsProductStatus;
+    return false;
+}
 
-    TargetsController& controller = targetsProductRuntime->controller;
+bool loadTargetsProduct(const AppMenuItem& item) {
+    releaseTargetsProduct();
+    targetsBlockedWriteAttempts = 0;
+    targetsFilesystemMountError = 0;
+    targetsCleanupComplete = true;
     if (item.simulated) {
+        if (!allocateTargetsProduct()) return false;
+        TargetsController& controller = targetsProductRuntime->controller;
         const LibraryEntry* entry = libraryController.selected();
         if (entry == nullptr || entry->session == nullptr ||
             entry->generation == 0) {
@@ -4437,6 +4441,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
 
     BoardSdFilesystem filesystem;
     const bool mounted = filesystem.beginReadOnly();
+    targetsFilesystemMountError = filesystem.mountError();
     if (!mounted || !filesystem.readOnlyGuaranteed()) {
         if (filesystem.mounted()) filesystem.end();
         targetsCleanupComplete = filesystem.cleanupComplete();
@@ -4464,6 +4469,11 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     request.ownedResources = owned;
     const auto permit = leshy1::storage::authorizeProductStore(media, request);
 
+    bool pairRecovered = false;
+    std::uint32_t baselineGeneration = 0;
+    std::uint32_t currentGeneration = 0;
+    bool latestRecovered = false;
+    std::uint32_t latestGeneration = 0;
     if (!permit.allowed()) {
         targetsProductStatus =
             leshy1::storage::productStoreAccessStatusName(permit.status);
@@ -4473,25 +4483,25 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         if (!io.openExistingReadOnly(permit)) {
             targetsProductStatus = "open_failed";
         } else {
+            targetsProductStatus =
+                leshy1::apps::targets::targetsLoadStatusName(
+                    TargetsLoadStatus::SessionUnavailable);
             const auto pair = leshy1::storage::recoverSessionPair(
                 io, sessionStoreWorkspace, &librarySession,
                 &surveySession);
-            TargetsLoadStatus loaded = TargetsLoadStatus::SessionUnavailable;
             if (pair.valid()) {
-                loaded = controller.load(
-                    {&librarySession, pair.baselineGeneration},
-                    {&surveySession, pair.currentGeneration});
+                pairRecovered = true;
+                baselineGeneration = pair.baselineGeneration;
+                currentGeneration = pair.currentGeneration;
             } else {
                 surveySession.reset();
                 const auto latest = leshy1::storage::recoverSession(
                     io, sessionStoreWorkspace, &surveySession);
                 if (latest.valid()) {
-                    loaded = controller.load(
-                        {&surveySession, latest.generation});
+                    latestRecovered = true;
+                    latestGeneration = latest.generation;
                 }
             }
-            targetsProductStatus =
-                leshy1::apps::targets::targetsLoadStatusName(loaded);
         }
         io.end();
     }
@@ -4499,8 +4509,19 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     filesystem.end();
     targetsCleanupComplete = filesystem.cleanupComplete();
     if (!targetsCleanupComplete || targetsBlockedWriteAttempts != 0) {
-        controller.reset();
         targetsProductStatus = "cleanup_failed";
+    }
+    // Release FAT/SPI heap before allocating the foreground Targets workspace.
+    if (targetsCleanupComplete && targetsBlockedWriteAttempts == 0 &&
+        (pairRecovered || latestRecovered)) {
+        if (!allocateTargetsProduct()) return false;
+        TargetsController& controller = targetsProductRuntime->controller;
+        const TargetsLoadStatus loaded = pairRecovered
+            ? controller.load({&librarySession, baselineGeneration},
+                              {&surveySession, currentGeneration})
+            : controller.load({&surveySession, latestGeneration});
+        targetsProductStatus =
+            leshy1::apps::targets::targetsLoadStatusName(loaded);
     }
     lastRuntimeEvent = targetsProductStatus;
     return true;
@@ -13714,7 +13735,8 @@ void emitTargetsState(Stream& reply) {
         "\"changed\":%u,\"unchanged\":%u,"
         "\"selected_generation\":%lu,\"selected_rssi_dbm\":%d,"
         "\"read_only\":true,\"write_enabled\":false,"
-        "\"blocked_write_attempts\":%lu,\"cleanup_complete\":%s,"
+        "\"blocked_write_attempts\":%lu,"
+        "\"filesystem_mount_error\":%d,\"cleanup_complete\":%s,"
         "\"lease_mask\":%lu,\"heap_free_before\":%lu,"
         "\"heap_free_now\":%lu,\"heap_free_after_release\":%lu}",
         targetsProductStatus,
@@ -13742,6 +13764,7 @@ void emitTargetsState(Stream& reply) {
                                        ? 0 : selected->evidence.sourceGeneration),
         static_cast<int>(selected == nullptr ? 0 : selected->latest.rssiDbm),
         static_cast<unsigned long>(targetsBlockedWriteAttempts),
+        targetsFilesystemMountError,
         targetsCleanupComplete ? "true" : "false",
         static_cast<unsigned long>(appRuntime.activeResources()),
         static_cast<unsigned long>(targetsHeapFreeBefore),

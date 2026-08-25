@@ -439,6 +439,23 @@ SHA-256 firmware/factory/ELF/map:
 `9873506a75583169c08de1ddd9ac3f8c401de6d0f33f51e4cf5048c15626cf9d`.
 Это host/build evidence до focused regression stack canary.
 
+Исправление порядка storage «Целей» `RB-M148`: production
+`0.148.0-targets-storage-order` использует 3 107 844 B linked flash,
+211 296 B static RAM и images app/factory 3 108 352/3 173 888 B. Dedicated
+DIRAM и IRAM остаются 294 476/341 760 B и 16 384/16 384 B. SHA-256
+firmware/factory/ELF/map:
+`6847673339df14538ddce4eb57f044088df825a20645f06f273e765187de066a`/
+`65b0711a5940a9a863870efe7c5b37578f9af89728c52ed96873c24051096222`/
+`57785567646cb45a2c885fbd71ca365b05e08084c34f56e4189ec4b1875f252f`/
+`393cffd5859ed61845192464484a031f37e3e49874e3f13efa7961f1572d7397`.
+Physical precursor 0.147 сначала доказал исправление stack, затем отказал на
+read-only mount после выделения workspace; отдельный результат сохранён
+fail-closed в
+[E-HIL-165](../../tests/hil/evidence/board-01-targets-readonly-mount-failure-0.147.json).
+Путь 0.148 восстанавливает exact-CID пару Sessions и закрывает FAT/SPI до
+выделения неизменного workspace Targets 22 544 B. Это host/build evidence до
+gated короткой physical regression mount.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

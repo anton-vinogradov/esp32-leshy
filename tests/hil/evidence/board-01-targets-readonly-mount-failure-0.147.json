@@ -1,0 +1,78 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "app_elf_sha256": "f7a87222d5720109b5149623b95f6a7c4f6070a1dedb66de163f9768f9e89aaf",
+    "elf_sha256": "f7a87222d5720109b5149623b95f6a7c4f6070a1dedb66de163f9768f9e89aaf",
+    "firmware_sha256": "57b5fea451ed957a68c67f98a2d7964dfcf64007261d3bc580f8ba71b6808164",
+    "map_sha256": "9873506a75583169c08de1ddd9ac3f8c401de6d0f33f51e4cf5048c15626cf9d",
+    "version": "0.147.0-targets-stack-safe"
+  },
+  "classification": "retained_fail_closed",
+  "evidence_id": "E-HIL-165",
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "failure": {
+    "actual_status": "readonly_mount_failed",
+    "baseline_generation": 0,
+    "compare_available": false,
+    "current_generation": 0,
+    "expected_generations": [
+      111,
+      112
+    ],
+    "stage": "open_targets_after_workspace_allocation"
+  },
+  "observations": {
+    "heap_free_before_targets_workspace": 96452,
+    "minimum_heap_free_during_run": 31896,
+    "reset_observed": false,
+    "stack_canary_observed": false
+  },
+  "post_failure_cleanup": {
+    "buzzer_inactive": true,
+    "complete": true,
+    "final_lease_mask": 0,
+    "final_owner": "none",
+    "final_page": "home",
+    "input_queue_drops": 0,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true
+  },
+  "precursor_fix": {
+    "failure_evidence": "tests/hil/evidence/board-01-targets-stack-failure-0.146.json",
+    "outcome": "no_stack_canary_or_reset"
+  },
+  "radio_tx_commands": 0,
+  "raw_run": {
+    "artifacts_manifest_sha256": "58328519c31f2c3a2cbcf9bd5f57e089423b04d68877e401e16ecfb5140aa0ea",
+    "run_json_sha256": "2f5e512cb1d3023d89d21c6f04e6ed7e3bb3a2780a508c2450f9da2edf1f6135"
+  },
+  "repair_gate": {
+    "candidate_version": "0.148.0-targets-storage-order",
+    "required_order": "read_only_mount_and_pair_recovery_then_filesystem_cleanup_then_targets_workspace_allocation",
+    "short_regression_required_before_full_delta": true
+  },
+  "schema": "leshy.targets_readonly_mount_failure.evidence.v1",
+  "source_binding": {
+    "actual_head": "d7cbc929b86e3e0f8278bad610fd5d6a302f745d",
+    "declared_source_commit": "d7cbc92ae0c365e555e36b23de96d3f831ef7107",
+    "valid": false
+  },
+  "status": "failed",
+  "visits": [
+    {
+      "cleanup_complete": true,
+      "generation": 111,
+      "observations": 15,
+      "scan_drops": 0
+    },
+    {
+      "cleanup_complete": true,
+      "generation": 112,
+      "observations": 17,
+      "scan_drops": 0
+    }
+  ]
+}

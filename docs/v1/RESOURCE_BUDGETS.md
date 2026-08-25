@@ -447,6 +447,23 @@ Record visit route leaves static RAM unchanged and reduces linked flash by
 `9873506a75583169c08de1ddd9ac3f8c401de6d0f33f51e4cf5048c15626cf9d`.
 This is host/build evidence pending the focused stack-canary regression.
 
+Targets storage-order correction `RB-M148`: production
+`0.148.0-targets-storage-order` uses 3,107,844 B linked flash, 211,296 B
+static RAM and 3,108,352/3,173,888 B app/factory images. Dedicated DIRAM and
+IRAM remain 294,476/341,760 B and 16,384/16,384 B. Firmware/factory/ELF/map
+SHA-256 are
+`6847673339df14538ddce4eb57f044088df825a20645f06f273e765187de066a`/
+`65b0711a5940a9a863870efe7c5b37578f9af89728c52ed96873c24051096222`/
+`57785567646cb45a2c885fbd71ca365b05e08084c34f56e4189ec4b1875f252f`/
+`393cffd5859ed61845192464484a031f37e3e49874e3f13efa7961f1572d7397`.
+The physical 0.147 precursor first proved the stack correction, then failed
+read-only mount after workspace allocation; that distinct result is retained
+fail-closed in
+[E-HIL-165](../../tests/hil/evidence/board-01-targets-readonly-mount-failure-0.147.json).
+The 0.148 path now recovers the exact-CID Session pair and closes FAT/SPI before
+allocating the unchanged 22,544 B Targets workspace. This is host/build
+evidence pending the gated short physical mount regression.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

@@ -22,6 +22,8 @@ def main() -> int:
     comparison = (ROOT / "firmware/leshy1/src/domain/targets/TargetComparison.cpp").read_text()
     comparison_header = (ROOT / "firmware/leshy1/src/domain/targets/TargetComparison.h").read_text()
     comparison_service = (ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.h").read_text()
+    runner = (ROOT / "tools/run_1x_targets_hil.py").read_text()
+    mount_runner = (ROOT / "tools/run_1x_targets_mount_regression_hil.py").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -34,6 +36,16 @@ def main() -> int:
             "delete targetsProductRuntime" in entry and
             "TargetsWorkspace targets" not in entry,
             "Targets workspace must have foreground-only bounded lifetime")
+    load_start = entry.index("bool loadTargetsProduct")
+    load_end = entry.index("bool IRAM_ATTR recordProductBootRecoveryTimeout")
+    load_product = entry[load_start:load_end]
+    require(failures,
+            load_product.rfind("filesystem.end();") <
+                load_product.rfind("allocateTargetsProduct()") and
+            "Release FAT/SPI heap before allocating" in load_product and
+            "filesystem_mount_error" in entry,
+            "persistent Sessions must mount/recover before Targets workspace "
+            "allocation and expose the exact mount result")
     require(failures,
             "new (std::nothrow) domain::targets::TargetCatalog" in controller and
             "delete scratch" in controller and
@@ -67,6 +79,15 @@ def main() -> int:
             "leshy.targets.product.v1" in entry and
             r'\"write_enabled\":false' in entry,
             "Targets needs a machine-readable release-test state")
+    require(failures,
+            '"git", "rev-parse", "HEAD"' in runner and
+            '"git", "status", "--porcelain"' in runner and
+            "--reuse-exact-flash" in runner and
+            "best_effort_cleanup(device)" in runner and
+            "leshy.targets_mount_regression_hil.run.v1" in mount_runner and
+            "storage_write_calls\": 0" in mount_runner,
+            "Targets HIL must bind exact clean HEAD, clean up failures and "
+            "run the read-only mount regression before exact-flash reuse")
     require(failures,
             "renderTargetsPage" in entry and
             "renderTargetListRow" in entry and
