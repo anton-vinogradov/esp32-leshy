@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from capture_1x_ui import PassiveSerial, synchronize_console
+from check_targets_stack_elf_contract import stack_frames
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import (
@@ -64,6 +65,10 @@ def main() -> int:
     ).stdout.strip()
     if head != args.source_commit or status:
         parser.error("exact HIL requires clean committed HEAD")
+    try:
+        checked_stack_frames = stack_frames(args.elf)
+    except (FileNotFoundError, subprocess.CalledProcessError, ValueError) as error:
+        parser.error(f"unsafe or unverifiable Targets stack: {error}")
 
     args.output.mkdir(parents=True)
     frames = args.output / "frames"
@@ -85,6 +90,7 @@ def main() -> int:
             "elf_sha256": sha256_file(args.elf),
             "map_sha256": sha256_file(args.map),
             "app_elf_sha256": app_identity,
+            "checked_stack_frames": checked_stack_frames,
         },
     }
     write_json(args.output / "run.json", record)

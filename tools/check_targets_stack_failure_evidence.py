@@ -12,6 +12,9 @@ EVIDENCE = ROOT / "tests/hil/evidence/board-01-targets-stack-failure-0.146.json"
 MOUNT_EVIDENCE = (
     ROOT / "tests/hil/evidence/board-01-targets-readonly-mount-failure-0.147.json"
 )
+RESET_EVIDENCE = (
+    ROOT / "tests/hil/evidence/board-01-targets-inplace-reset-failure-0.148.json"
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -63,7 +66,34 @@ def main() -> None:
         mount["repair_gate"]["short_regression_required_before_full_delta"] is True,
         "short regression gate missing",
     )
-    print("targets 0.146 stack and 0.147 mount failure evidence: OK")
+    reset = json.loads(RESET_EVIDENCE.read_text(encoding="utf-8"))
+    require(
+        reset["schema"] == "leshy.targets_inplace_reset_failure.evidence.v1",
+        "unexpected in-place-reset failure schema",
+    )
+    require(reset["status"] == "failed", "0.148 failure must not be accepted")
+    require(reset["classification"] == "retained_fail_closed", "0.148 failure hidden")
+    require(reset["source_commit"] == "e7eedd8225c5c736b7d3c752b4f89f76da910f84",
+            "0.148 exact source lost")
+    require(reset["short_regression"]["flash_count"] == 1, "wrong flash count")
+    require(reset["short_regression"]["storage_write_calls"] == 0, "write hidden")
+    require(reset["short_regression"]["radio_tx_commands"] == 0, "TX hidden")
+    require(reset["decoded_reproduction"]["stack_canary_observed"] is True,
+            "stack canary missing")
+    require(reset["decoded_reproduction"]["post_reset_reason_code"] == 4,
+            "panic reset missing")
+    require("TargetsController::reset():168" in
+            reset["decoded_reproduction"]["decoded_frames"],
+            "decoded reset frame missing")
+    require(reset["post_failure_cleanup"]["complete"] is True,
+            "0.148 cleanup incomplete")
+    require(reset["post_failure_cleanup"]["final_lease_mask"] == 0,
+            "0.148 lease leaked")
+    require(reset["repair_gate"]["candidate_version"] ==
+            "0.149.0-targets-inplace-reset", "repair version lost")
+    require(reset["repair_gate"]["automatic_full_delta_after_failure"] is False,
+            "failed short gate must forbid the full delta")
+    print("targets 0.146/0.147/0.148 fail-closed evidence: OK")
 
 
 if __name__ == "__main__":

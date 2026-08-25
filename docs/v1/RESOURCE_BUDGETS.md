@@ -464,6 +464,22 @@ The 0.148 path now recovers the exact-CID Session pair and closes FAT/SPI before
 allocating the unchanged 22,544 B Targets workspace. This is host/build
 evidence pending the gated short physical mount regression.
 
+Targets in-place reset correction `RB-M149`: production
+`0.149.0-targets-inplace-reset` uses 3,107,472 B linked flash, 211,296 B
+static RAM and 3,107,968/3,173,504 B app/factory images. Dedicated DIRAM and
+IRAM remain 294,476/341,760 B and 16,384/16,384 B. Firmware/factory/ELF/map
+SHA-256 are
+`743f31614df8891667293fdf755c7e53b9b4fc6ce105bc48d8a84a76d1e9c653`/
+`9eeca0ecd29c7fdefe2315428f2fd3f01d5f232829af5926250d9a4aab0e9a37`/
+`3293c8328bf946843c0035df7516fa47b8363d207acface51416967d51be62e9`/
+`8fef982fadc2253d7a64ae01d272965d8bd29c701654d95b128c552f8c202051`.
+Exact linked disassembly proves stack frames of 256 B for controller reset,
+416 B for load bindings, 32 B for in-place result reset, 80 B for comparison
+and 1,104 B for the deepest evidence builder. Both physical runners perform
+this ELF check before flashing. The source contract rejects aggregate reset of
+the 7,736 B result. This is host/build evidence pending the one-flash short
+physical regression.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

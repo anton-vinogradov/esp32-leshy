@@ -1,0 +1,73 @@
+{
+  "schema": "leshy.targets_inplace_reset_failure.evidence.v1",
+  "evidence_id": "E-HIL-166",
+  "status": "failed",
+  "classification": "retained_fail_closed",
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "source_commit": "e7eedd8225c5c736b7d3c752b4f89f76da910f84",
+  "candidate": {
+    "version": "0.148.0-targets-storage-order",
+    "firmware_sha256": "6847673339df14538ddce4eb57f044088df825a20645f06f273e765187de066a",
+    "app_elf_sha256": "57785567646cb45a2c885fbd71ca365b05e08084c34f56e4189ec4b1875f252f",
+    "elf_sha256": "57785567646cb45a2c885fbd71ca365b05e08084c34f56e4189ec4b1875f252f",
+    "map_sha256": "393cffd5859ed61845192464484a031f37e3e49874e3f13efa7961f1572d7397"
+  },
+  "short_regression": {
+    "status": "failed",
+    "error": "timed out waiting for leshy.ui.v1/state",
+    "flash_count": 1,
+    "home_navigation_actions_completed": 5,
+    "existing_generations": [111, 112],
+    "storage_write_calls": 0,
+    "radio_tx_commands": 0,
+    "run_json_sha256": "26d910054b8884bf50a53c12a4847c25be36935d4621a1739a84f0882e6c9d12",
+    "artifacts_manifest_sha256": "b4ec21fe05222e95ad81b6e41703c6a196471d054a899a71ef72a174c961e62c"
+  },
+  "decoded_reproduction": {
+    "exact_flash_reused": true,
+    "stack_canary_observed": true,
+    "reset_observed": true,
+    "post_reset_reason_code": 4,
+    "backtrace": [
+      "0x400570e5",
+      "0x42010859",
+      "0x42010d14",
+      "0x4201101a",
+      "0x42033b95",
+      "0x42035222",
+      "0x42036241",
+      "0x42036ea2",
+      "0x4204e20c",
+      "0x40383561"
+    ],
+    "decoded_frames": [
+      "TargetsController::reset():168",
+      "TargetsController::loadBindings():195",
+      "TargetsController::load():189",
+      "loadTargetsProduct()/applyUiAction",
+      "handleCommand",
+      "loop"
+    ],
+    "root_cause": "aggregate assignment workspace_.comparison = {} materialized the 7736-byte TargetComparisonResult temporary on the loop-task stack"
+  },
+  "post_failure_cleanup": {
+    "complete": true,
+    "final_page": "home",
+    "final_owner": "none",
+    "final_lease_mask": 0,
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true,
+    "input_read_errors": 0,
+    "input_queue_drops": 0
+  },
+  "repair_gate": {
+    "candidate_version": "0.149.0-targets-inplace-reset",
+    "required_change": "byte-clear the caller-owned comparison result in place and forbid aggregate assignment of the large result",
+    "short_regression_required_before_full_delta": true,
+    "automatic_full_delta_after_failure": false
+  }
+}

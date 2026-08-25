@@ -1,0 +1,38 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "targets-inplace-reset-0.149",
+  "candidate_version": "0.149.0-targets-inplace-reset",
+  "precursor_failure": {
+    "candidate_version": "0.148.0-targets-storage-order",
+    "outcome": "loop_task_stack_canary_in_targets_controller_reset",
+    "retained_evidence": "tests/hil/evidence/board-01-targets-inplace-reset-failure-0.148.json"
+  },
+  "changed_surfaces": [
+    "target_comparison_result_inplace_reset",
+    "target_controller_reset_stack_budget",
+    "invalid_schema_result_reset",
+    "source_contract_forbids_large_aggregate_reset"
+  ],
+  "required_short_regression": [
+    "one_exact_flash",
+    "reuse_existing_exact_cid_session_pair_read_only",
+    "targets_list_and_compare_open_without_reset",
+    "filesystem_mount_error_zero",
+    "zero_tx_zero_writes_zero_input_drops",
+    "workspace_release_and_final_zero_lease"
+  ],
+  "required_full_delta_after_short_regression": [
+    "reuse_exact_0_149_flash_without_reflash",
+    "two_new_real_passive_wifi_visit_commits",
+    "exact_cid_read_only_targets_reopen",
+    "bounded_strongest_first_list",
+    "compare_classifies_every_visible_target",
+    "detail_opens_exact_generation",
+    "keypad_and_tft_capture",
+    "zero_tx_zero_blocked_writes_zero_input_drops",
+    "comparison_scratch_and_foreground_workspace_release",
+    "final_zero_lease"
+  ],
+  "full_matrix_required": false,
+  "cadence_after_acceptance": "4/15"
+}

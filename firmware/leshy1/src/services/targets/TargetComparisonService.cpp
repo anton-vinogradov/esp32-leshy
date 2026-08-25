@@ -19,7 +19,7 @@ domain::targets::TargetComparisonStatus TargetComparisonService::executeInto(
     const TargetComparisonAction& action,
     domain::targets::TargetComparisonResult* output) const {
     if (action.schemaVersion != kTargetComparisonActionSchemaVersion) {
-        if (output != nullptr) *output = {};
+        domain::targets::resetTargetComparisonResult(output);
         return domain::targets::TargetComparisonStatus::InvalidArgument;
     }
     return domain::targets::compareTargetSessionsInto(

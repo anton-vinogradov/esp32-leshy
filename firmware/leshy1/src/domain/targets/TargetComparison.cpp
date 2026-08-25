@@ -3,6 +3,7 @@
 #include <cstring>
 #include <memory>
 #include <new>
+#include <type_traits>
 
 namespace leshy1::domain::targets {
 namespace {
@@ -24,20 +25,6 @@ struct ComparisonScratch final {
 
 static_assert(sizeof(ComparisonScratch) == 1616U,
               "comparison scratch budget changed");
-
-void resetResult(TargetComparisonResult* output,
-                 TargetComparisonStatus status) {
-    if (output == nullptr) return;
-    output->status = status;
-    output->baseline = {};
-    output->current = {};
-    output->items.fill({});
-    output->size = 0;
-    output->added = 0;
-    output->removed = 0;
-    output->changed = 0;
-    output->unchanged = 0;
-}
 
 bool evidenceBelongsTo(const TargetEvidenceRef& evidence,
                        const TargetComparisonSource& source) {
@@ -284,13 +271,25 @@ const char* targetComparisonClassName(
     return "unchanged";
 }
 
+void resetTargetComparisonResult(TargetComparisonResult* output,
+                                 TargetComparisonStatus status) {
+    if (output == nullptr) return;
+    static_assert(std::is_trivially_copyable_v<TargetComparisonResult>,
+                  "in-place reset requires byte-clearable result storage");
+    std::memset(static_cast<void*>(output), 0, sizeof(*output));
+    output->status = status;
+    for (auto& item : output->items) {
+        item.classification = TargetComparisonClass::Unchanged;
+    }
+}
+
 TargetComparisonStatus compareTargetSessionsInto(
     const TargetCatalog& catalog, const TargetComparisonSource& baseline,
     const TargetComparisonSource& current,
     const TargetComparisonEvidenceLookup& evidenceLookup,
     TargetComparisonResult* output) {
     if (output == nullptr) return TargetComparisonStatus::InvalidArgument;
-    resetResult(output, TargetComparisonStatus::InvalidArgument);
+    resetTargetComparisonResult(output, TargetComparisonStatus::InvalidArgument);
     if (!targetComparisonSourceValid(baseline) ||
         !targetComparisonSourceValid(current) ||
         targetComparisonSourceEqual(baseline, current)) {
@@ -317,7 +316,8 @@ TargetComparisonStatus compareTargetSessionsInto(
             target->identityCount > target->identities.size() ||
             target->evidenceCount == 0 ||
             target->evidenceCount > target->evidence.size()) {
-            resetResult(output, TargetComparisonStatus::InvalidArgument);
+            resetTargetComparisonResult(
+                output, TargetComparisonStatus::InvalidArgument);
             return output->status;
         }
         SideSnapshot& baselineSide = scratch->baseline;
@@ -325,18 +325,19 @@ TargetComparisonStatus compareTargetSessionsInto(
         const TargetComparisonStatus baselineStatus = buildSide(
             *target, baseline, evidenceLookup, &baselineSide);
         if (baselineStatus != TargetComparisonStatus::Compared) {
-            resetResult(output, baselineStatus);
+            resetTargetComparisonResult(output, baselineStatus);
             return output->status;
         }
         const TargetComparisonStatus currentStatus = buildSide(
             *target, current, evidenceLookup, &currentSide);
         if (currentStatus != TargetComparisonStatus::Compared) {
-            resetResult(output, currentStatus);
+            resetTargetComparisonResult(output, currentStatus);
             return output->status;
         }
         if (baselineSide.count == 0 && currentSide.count == 0) continue;
         if (output->size >= output->items.size()) {
-            resetResult(output, TargetComparisonStatus::ResultFull);
+            resetTargetComparisonResult(output,
+                                        TargetComparisonStatus::ResultFull);
             return output->status;
         }
 

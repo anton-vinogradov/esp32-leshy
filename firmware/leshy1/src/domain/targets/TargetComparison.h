@@ -107,6 +107,13 @@ struct TargetComparisonResult final {
     }
 };
 
+// Clears the several-KiB caller-owned result in place. Aggregate assignment is
+// forbidden on the ESP32 loop task because it may materialize a full temporary
+// object on the stack before copying it into the lifecycle workspace.
+void resetTargetComparisonResult(
+    TargetComparisonResult* output,
+    TargetComparisonStatus status = TargetComparisonStatus::InvalidArgument);
+
 // RSSI commonly moves a few dB between adjacent passive scans. A delta becomes
 // a user-visible Target change only at this explicit, shared threshold.
 constexpr std::int16_t kMeaningfulTargetSignalDeltaDb = 6;

@@ -22,6 +22,7 @@ def main() -> int:
     comparison = (ROOT / "firmware/leshy1/src/domain/targets/TargetComparison.cpp").read_text()
     comparison_header = (ROOT / "firmware/leshy1/src/domain/targets/TargetComparison.h").read_text()
     comparison_service = (ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.h").read_text()
+    comparison_service_source = (ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.cpp").read_text()
     runner = (ROOT / "tools/run_1x_targets_hil.py").read_text()
     mount_runner = (ROOT / "tools/run_1x_targets_mount_regression_hil.py").read_text()
 
@@ -62,6 +63,14 @@ def main() -> int:
             "on-device comparison must use caller-owned result storage and "
             "checked/released heap scratch, never a multi-KiB value return")
     require(failures,
+            "resetTargetComparisonResult" in comparison_header and
+            "std::memset(static_cast<void*>(output), 0, sizeof(*output))" in comparison and
+            "workspace_.comparison = {}" not in controller and
+            "resetTargetComparisonResult(&workspace_.comparison)" in controller and
+            "*output = {}" not in comparison_service_source,
+            "large comparison results must reset in place without aggregate "
+            "stack temporaries")
+    require(failures,
             "openWifiVisitProduct()" in entry and
             "WifiProductView::Visit" in entry and
             "UiTextId::WifiMenuVisit" in entry and
@@ -83,8 +92,10 @@ def main() -> int:
             '"git", "rev-parse", "HEAD"' in runner and
             '"git", "status", "--porcelain"' in runner and
             "--reuse-exact-flash" in runner and
+            "checked_stack_frames = stack_frames(args.elf)" in runner and
             "best_effort_cleanup(device)" in runner and
             "leshy.targets_mount_regression_hil.run.v1" in mount_runner and
+            "checked_stack_frames = stack_frames(args.elf)" in mount_runner and
             "storage_write_calls\": 0" in mount_runner,
             "Targets HIL must bind exact clean HEAD, clean up failures and "
             "run the read-only mount regression before exact-flash reuse")

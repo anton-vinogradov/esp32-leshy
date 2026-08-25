@@ -293,6 +293,10 @@ python3 "$repo_dir/tools/check_visual_system_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_targets_stack_failure_evidence.py"
+if [[ -f "$repo_dir/firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.elf" ]]; then
+    python3 "$repo_dir/tools/check_targets_stack_elf_contract.py" \
+        --elf "$repo_dir/firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.elf"
+fi
 python3 "$repo_dir/tools/check_full_guided_s5_rx_contract.py"
 python3 "$repo_dir/tools/check_full_guided_s5_rx_delta_acceptance.py"
 python3 "$repo_dir/tools/check_ui_components_acceptance.py"

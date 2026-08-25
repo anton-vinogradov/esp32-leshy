@@ -165,7 +165,7 @@ const char* targetsLoadStatusName(TargetsLoadStatus status) {
 
 void TargetsController::reset() {
     workspace_.catalog.clear();
-    workspace_.comparison = {};
+    domain::targets::resetTargetComparisonResult(&workspace_.comparison);
     rows_.fill({});
     baseline_ = {};
     current_ = {};

@@ -456,6 +456,21 @@ fail-closed в
 выделения неизменного workspace Targets 22 544 B. Это host/build evidence до
 gated короткой physical regression mount.
 
+Исправление in-place reset «Целей» `RB-M149`: production
+`0.149.0-targets-inplace-reset` использует 3 107 472 B linked flash,
+211 296 B static RAM и images app/factory 3 107 968/3 173 504 B. Dedicated
+DIRAM и IRAM остаются 294 476/341 760 B и 16 384/16 384 B. SHA-256
+firmware/factory/ELF/map:
+`743f31614df8891667293fdf755c7e53b9b4fc6ce105bc48d8a84a76d1e9c653`/
+`9eeca0ecd29c7fdefe2315428f2fd3f01d5f232829af5926250d9a4aab0e9a37`/
+`3293c8328bf946843c0035df7516fa47b8363d207acface51416967d51be62e9`/
+`8fef982fadc2253d7a64ae01d272965d8bd29c701654d95b128c552f8c202051`.
+Exact linked disassembly доказывает stack frames 256 B у controller reset,
+416 B у load bindings, 32 B у in-place result reset, 80 B у comparison и
+1 104 B у deepest evidence builder. Оба physical runner выполняют этот ELF
+check до прошивки. Source contract отклоняет aggregate reset result 7 736 B.
+Это host/build evidence до one-flash короткой physical regression.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
