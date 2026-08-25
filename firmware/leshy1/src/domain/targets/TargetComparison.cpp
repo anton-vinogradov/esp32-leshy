@@ -1,6 +1,8 @@
 #include "TargetComparison.h"
 
 #include <cstring>
+#include <memory>
+#include <new>
 
 namespace leshy1::domain::targets {
 namespace {
@@ -14,6 +16,28 @@ struct SideSnapshot final {
     std::array<EvidenceSnapshot, TargetRecord::kIdentityCapacity> values{};
     std::uint8_t count = 0;
 };
+
+struct ComparisonScratch final {
+    SideSnapshot baseline{};
+    SideSnapshot current{};
+};
+
+static_assert(sizeof(ComparisonScratch) == 1616U,
+              "comparison scratch budget changed");
+
+void resetResult(TargetComparisonResult* output,
+                 TargetComparisonStatus status) {
+    if (output == nullptr) return;
+    output->status = status;
+    output->baseline = {};
+    output->current = {};
+    output->items.fill({});
+    output->size = 0;
+    output->added = 0;
+    output->removed = 0;
+    output->changed = 0;
+    output->unchanged = 0;
+}
 
 bool evidenceBelongsTo(const TargetEvidenceRef& evidence,
                        const TargetComparisonSource& source) {
@@ -83,8 +107,6 @@ TargetComparisonStatus buildSide(
     const TargetComparisonEvidenceLookup& lookup, SideSnapshot* output) {
     if (output == nullptr) return TargetComparisonStatus::InvalidArgument;
     *output = {};
-    std::array<bool, TargetRecord::kIdentityCapacity> present{};
-    std::array<EvidenceSnapshot, TargetRecord::kIdentityCapacity> latest{};
     for (std::size_t index = 0; index < target.evidenceCount; ++index) {
         const TargetEvidenceRef& reference = target.evidence[index];
         if (!evidenceBelongsTo(reference, source)) continue;
@@ -104,20 +126,26 @@ TargetComparisonStatus buildSide(
         if (targetIdentityIndex >= target.identityCount) {
             return TargetComparisonStatus::EvidenceMismatch;
         }
-        if (!present[targetIdentityIndex] ||
-            newerEvidence(reference,
-                          latest[targetIdentityIndex].evidence.reference)) {
-            latest[targetIdentityIndex].evidence = {identity, reference};
-            latest[targetIdentityIndex].observation = observation;
-            present[targetIdentityIndex] = true;
+        EvidenceSnapshot* latest = nullptr;
+        for (std::size_t sideIndex = 0; sideIndex < output->count;
+             ++sideIndex) {
+            if (targetIdentityEqual(output->values[sideIndex].evidence.identity,
+                                    identity)) {
+                latest = &output->values[sideIndex];
+                break;
+            }
         }
-    }
-    for (std::size_t index = 0; index < target.identityCount; ++index) {
-        if (!present[index]) continue;
-        if (output->count >= output->values.size()) {
-            return TargetComparisonStatus::ResultFull;
+        if (latest == nullptr) {
+            if (output->count >= output->values.size()) {
+                return TargetComparisonStatus::ResultFull;
+            }
+            latest = &output->values[output->count++];
         }
-        output->values[output->count++] = latest[index];
+        if (!targetEvidenceValid(latest->evidence.reference) ||
+            newerEvidence(reference, latest->evidence.reference)) {
+            latest->evidence = {identity, reference};
+            latest->observation = observation;
+        }
     }
     return TargetComparisonStatus::Compared;
 }
@@ -239,6 +267,8 @@ const char* targetComparisonStatusName(TargetComparisonStatus status) {
         case TargetComparisonStatus::EvidenceMismatch:
             return "evidence_mismatch";
         case TargetComparisonStatus::ResultFull: return "result_full";
+        case TargetComparisonStatus::ScratchUnavailable:
+            return "scratch_unavailable";
     }
     return "invalid_argument";
 }
@@ -254,23 +284,31 @@ const char* targetComparisonClassName(
     return "unchanged";
 }
 
-TargetComparisonResult compareTargetSessions(
+TargetComparisonStatus compareTargetSessionsInto(
     const TargetCatalog& catalog, const TargetComparisonSource& baseline,
     const TargetComparisonSource& current,
-    const TargetComparisonEvidenceLookup& evidenceLookup) {
-    TargetComparisonResult result{};
+    const TargetComparisonEvidenceLookup& evidenceLookup,
+    TargetComparisonResult* output) {
+    if (output == nullptr) return TargetComparisonStatus::InvalidArgument;
+    resetResult(output, TargetComparisonStatus::InvalidArgument);
     if (!targetComparisonSourceValid(baseline) ||
         !targetComparisonSourceValid(current) ||
         targetComparisonSourceEqual(baseline, current)) {
-        return result;
+        return output->status;
     }
     if (!evidenceLookup.sourceAvailable(baseline) ||
         !evidenceLookup.sourceAvailable(current)) {
-        result.status = TargetComparisonStatus::SourceUnavailable;
-        return result;
+        output->status = TargetComparisonStatus::SourceUnavailable;
+        return output->status;
     }
-    result.baseline = baseline;
-    result.current = current;
+    std::unique_ptr<ComparisonScratch> scratch(
+        new (std::nothrow) ComparisonScratch());
+    if (!scratch) {
+        output->status = TargetComparisonStatus::ScratchUnavailable;
+        return output->status;
+    }
+    output->baseline = baseline;
+    output->current = current;
 
     for (std::size_t targetIndex = 0; targetIndex < catalog.size();
          ++targetIndex) {
@@ -279,32 +317,30 @@ TargetComparisonResult compareTargetSessions(
             target->identityCount > target->identities.size() ||
             target->evidenceCount == 0 ||
             target->evidenceCount > target->evidence.size()) {
-            return {};
+            resetResult(output, TargetComparisonStatus::InvalidArgument);
+            return output->status;
         }
-        SideSnapshot baselineSide{};
-        SideSnapshot currentSide{};
+        SideSnapshot& baselineSide = scratch->baseline;
+        SideSnapshot& currentSide = scratch->current;
         const TargetComparisonStatus baselineStatus = buildSide(
             *target, baseline, evidenceLookup, &baselineSide);
         if (baselineStatus != TargetComparisonStatus::Compared) {
-            TargetComparisonResult failed{};
-            failed.status = baselineStatus;
-            return failed;
+            resetResult(output, baselineStatus);
+            return output->status;
         }
         const TargetComparisonStatus currentStatus = buildSide(
             *target, current, evidenceLookup, &currentSide);
         if (currentStatus != TargetComparisonStatus::Compared) {
-            TargetComparisonResult failed{};
-            failed.status = currentStatus;
-            return failed;
+            resetResult(output, currentStatus);
+            return output->status;
         }
         if (baselineSide.count == 0 && currentSide.count == 0) continue;
-        if (result.size >= result.items.size()) {
-            TargetComparisonResult failed{};
-            failed.status = TargetComparisonStatus::ResultFull;
-            return failed;
+        if (output->size >= output->items.size()) {
+            resetResult(output, TargetComparisonStatus::ResultFull);
+            return output->status;
         }
 
-        TargetComparisonItem& item = result.items[result.size++];
+        TargetComparisonItem& item = output->items[output->size++];
         item.targetId = target->id;
         copyEvidence(baselineSide, &item.baselineEvidence,
                      &item.baselineEvidenceCount);
@@ -320,10 +356,10 @@ TargetComparisonResult compareTargetSessions(
                 ? TargetComparisonClass::Unchanged
                 : TargetComparisonClass::Changed;
         }
-        incrementClassCount(&result, item.classification);
+        incrementClassCount(output, item.classification);
     }
-    result.status = TargetComparisonStatus::Compared;
-    return result;
+    output->status = TargetComparisonStatus::Compared;
+    return output->status;
 }
 
 static_assert(sizeof(TargetComparisonResult) <= 12U * 1024U,

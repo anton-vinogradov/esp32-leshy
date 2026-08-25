@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail-closed source guard for the Wi-Fi packet recorder product route."""
+"""Fail-closed source guard for the Home Capture Wi-Fi packet recorder."""
 
 from pathlib import Path
 
@@ -22,13 +22,10 @@ def main() -> int:
     ).read_text()
 
     required_entry = (
-        "WifiProductView::Capture",
-        'case WifiProductView::Capture: return "capture";',
-        "openWifiCaptureProduct()",
-        "closeWifiCaptureProduct()",
-        "wifiProductSelection == 3",
-        "return index <= 3U;",
-        "UiTextId::WifiCaptureTitle",
+        'std::strcmp(selected->id, "capture") == 0',
+        "captureView = CaptureView::SourceMenu",
+        "captureSourceSelection == 0",
+        "captureView == CaptureView::Wifi",
         "renderWifiCaptureLiveData()",
         "wifiCaptureRenderedFrames != stats.framesAccepted",
         "wifiCaptureRenderedChannel != channel",
@@ -39,7 +36,6 @@ def main() -> int:
         "nextCaptureUiRefreshUs = nowUs + 500000ULL;",
         "display.startWrite();\n        renderWifiCaptureLiveData();\n"
         "        display.endWrite();",
-        "if (wifiProductView == WifiProductView::Capture) return;",
         "capturePersistState = CapturePersistState::Confirm;",
         "requestWifiFrameCapturePersist()",
         "kProductWifiFrameCapturePlan",
@@ -94,6 +90,11 @@ def main() -> int:
         f"user copy token missing: {token}"
         for token in required_strings if token not in strings
     )
+    for forbidden in ("WifiProductView::Capture", "WifiMenuCapture"):
+        if forbidden in entry or forbidden in strings:
+            failures.append(
+                f"Wi-Fi menu duplicates the Home Capture route: {forbidden}"
+            )
 
     service_start = entry.find("void serviceWifiFrameCapture()")
     service_end = entry.find("bool startInfraredCapture()", service_start)
@@ -101,7 +102,7 @@ def main() -> int:
     if service_start < 0 or service_end < 0:
         failures.append("capture service function not found")
     else:
-        periodic_start = service.find("else if ((productRoute || captureRoute)")
+        periodic_start = service.find("else if (captureRoute")
         periodic = service[periodic_start:]
         if periodic_start < 0:
             failures.append("bounded live-refresh branch missing")
@@ -113,7 +114,8 @@ def main() -> int:
             print(f"FAIL: {failure}")
         return 1
     print(
-        "Wi-Fi capture product contract passed: direct passive bounded PCAP "
+        "Wi-Fi capture product contract passed: Home Capture owns the direct "
+        "passive bounded PCAP "
         "workflow, explicit privacy confirmation, retained Wi-Fi ownership "
         "and changed-metric-only live refresh"
     )

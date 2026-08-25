@@ -82,6 +82,7 @@ enum class TargetComparisonStatus : std::uint8_t {
     EvidenceUnavailable,
     EvidenceMismatch,
     ResultFull,
+    ScratchUnavailable,
 };
 
 const char* targetComparisonStatusName(TargetComparisonStatus status);
@@ -110,9 +111,13 @@ struct TargetComparisonResult final {
 // a user-visible Target change only at this explicit, shared threshold.
 constexpr std::int16_t kMeaningfulTargetSignalDeltaDb = 6;
 
-TargetComparisonResult compareTargetSessions(
+// Writes into caller-owned lifecycle storage. The result is deliberately not
+// returned by value: it is several KiB and the ESP32-S3 loop task stack cannot
+// safely host a temporary copy while the comparison scratch is live.
+TargetComparisonStatus compareTargetSessionsInto(
     const TargetCatalog& catalog, const TargetComparisonSource& baseline,
     const TargetComparisonSource& current,
-    const TargetComparisonEvidenceLookup& evidenceLookup);
+    const TargetComparisonEvidenceLookup& evidenceLookup,
+    TargetComparisonResult* output);
 
 }  // namespace leshy1::domain::targets

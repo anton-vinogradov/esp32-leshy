@@ -681,7 +681,7 @@ enum class WifiProductView : std::uint8_t {
     Devices,
     DeviceDetail,
     Channels,
-    Capture,
+    Visit,
 };
 
 const char* wifiProductViewName(WifiProductView view) {
@@ -692,7 +692,7 @@ const char* wifiProductViewName(WifiProductView view) {
         case WifiProductView::Devices: return "devices";
         case WifiProductView::DeviceDetail: return "device_detail";
         case WifiProductView::Channels: return "channels";
-        case WifiProductView::Capture: return "capture";
+        case WifiProductView::Visit: return "visit";
         case WifiProductView::None:
         default: return "none";
     }
@@ -3498,11 +3498,7 @@ void serviceWifiFrameCapturePersist() {
     const auto storageResources =
         leshy1::kernel::runtime::resourceMask(Resource::Storage) |
         leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
-    if (!(uiController.page() == 2 &&
-          wifiProductView == WifiProductView::Capture)) {
-        resourceBroker.release(AppRuntime::kForegroundOwner,
-                               storageResources);
-    }
+    resourceBroker.release(AppRuntime::kForegroundOwner, storageResources);
     const bool admitted = event.valid && event.cleanupComplete &&
         libraryController.replaceWithOwnedCopy(
             sessionStoreWorkspace.validationSession, librarySession,
@@ -3516,9 +3512,7 @@ void serviceWifiFrameCapturePersist() {
     capturePersistFilesystemMountError = event.filesystemMountError;
     lastRuntimeEvent = admitted ? "capture_store_saved"
                                 : "capture_store_failed";
-    if (uiController.page() == 4 ||
-        (uiController.page() == 2 &&
-         wifiProductView == WifiProductView::Capture)) {
+    if (uiController.page() == 4) {
         renderInteractiveScreen();
     }
 }
@@ -3967,7 +3961,8 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
     lastRuntimeEvent = productSurveyRuntime.status;
     const bool returnToWifiMenu = returnHome && !uiController.isRoot() &&
         uiController.page() == 2 &&
-        wifiProductView == WifiProductView::Networks &&
+        (wifiProductView == WifiProductView::Networks ||
+         wifiProductView == WifiProductView::Visit) &&
         std::strcmp(appRuntime.activeApp(), "wifi") == 0;
     const bool returnFromBle = returnHome && !uiController.isRoot() &&
         uiController.page() == 2 &&
@@ -6504,31 +6499,6 @@ NavigationFooter navigationFooterForCurrentState() {
         if (wifiProductView == WifiProductView::Channels) {
             return {back, {}, {}};
         }
-        if (wifiProductView == WifiProductView::Capture) {
-            const auto state = wifiFrameCapture.stats().state;
-            if (state == WifiFrameCaptureState::Idle) {
-                return {back, {},
-                        {NavigationKey::RightAndSelect, UiTextId::NavStart}};
-            }
-            if (state == WifiFrameCaptureState::Running) {
-                return {{NavigationKey::Left, UiTextId::NavCancel}, {},
-                        {NavigationKey::RightAndSelect, UiTextId::NavStop}};
-            }
-            if (state == WifiFrameCaptureState::Complete &&
-                capturePersistState == CapturePersistState::Result) {
-                return {back, {},
-                        {NavigationKey::RightAndSelect, UiTextId::NavSave}};
-            }
-            if (state == WifiFrameCaptureState::Complete &&
-                capturePersistState == CapturePersistState::Confirm) {
-                return {{NavigationKey::Left, UiTextId::NavBack}, {},
-                        {NavigationKey::RightAndSelect, UiTextId::NavSave}};
-            }
-            if (capturePersistState == CapturePersistState::Saving) {
-                return {};
-            }
-            return {back, {}, {}};
-        }
         if (rfSpectrumView == RfSpectrumView::SourceMenu) {
             return {back, choose, enter};
         }
@@ -7444,11 +7414,8 @@ void renderSettingsPage(bool clearContent) {
 
 void renderWifiCapturePage(bool clearContent) {
     const auto stats = wifiFrameCapture.stats();
-    const bool productRoute = uiController.page() == 2 &&
-        wifiProductView == WifiProductView::Capture;
     const auto renderPageHeader = [&](UiTextId stateTitle) {
-        renderHeader(tr(productRoute ? UiTextId::WifiCaptureTitle : stateTitle),
-                     clearContent);
+        renderHeader(tr(stateTitle), clearContent);
     };
     char line[64] = {};
     if (stats.state == WifiFrameCaptureState::Idle) {
@@ -9338,7 +9305,7 @@ UiTextId wifiProductLabel(std::uint8_t index) {
         UiTextId::WifiMenuNetworks,
         UiTextId::WifiMenuDevices,
         UiTextId::WifiMenuChannels,
-        UiTextId::WifiMenuCapture,
+        UiTextId::WifiMenuVisit,
     };
     return labels[index < kWifiProductTaskCount ? index : 0];
 }
@@ -9348,7 +9315,7 @@ UiTextId wifiProductNote(std::uint8_t index) {
         UiTextId::WifiMenuNetworksNote,
         UiTextId::WifiMenuDevicesNote,
         UiTextId::WifiMenuChannelsNote,
-        UiTextId::WifiMenuCaptureNote,
+        UiTextId::WifiMenuVisitNote,
     };
     return notes[index < kWifiProductTaskCount ? index : 0];
 }
@@ -10193,10 +10160,6 @@ void renderInventoryPage(bool clearContent) {
         renderWifiChannels(clearContent);
         return;
     }
-    if (wifiProductView == WifiProductView::Capture) {
-        renderWifiCapturePage(clearContent);
-        return;
-    }
     if (wifiProductView == WifiProductView::Devices) {
         renderWifiDevices(clearContent);
         return;
@@ -10280,7 +10243,9 @@ void renderInventoryPage(bool clearContent) {
                 renderSurveySourceRow(index);
             }
         } else {
-            const UiTextId title = surveySourceController.scope() ==
+            const UiTextId title = wifiProductView == WifiProductView::Visit
+                ? UiTextId::WifiMenuVisit
+                : surveySourceController.scope() ==
                     SurveySourceScope::WifiOnly
                 ? UiTextId::WifiScanSetup
                 : (surveySourceController.scope() ==
@@ -13028,9 +12993,8 @@ void serviceFullGuidedRfChecks() {
 }
 
 void releaseWifiFrameCaptureRfLease() {
-    // The Wi-Fi product owns ESP RF for its whole menu lifetime. The separate
-    // Capture app releases RF immediately after a bounded recording.
-    if (wifiProductView == WifiProductView::Capture) return;
+    // The separate Capture app releases RF immediately after a bounded
+    // recording; the Wi-Fi menu no longer duplicates this workflow.
     resourceBroker.release(
         AppRuntime::kForegroundOwner,
         leshy1::kernel::runtime::resourceMask(Resource::EspRf));
@@ -13086,15 +13050,12 @@ void serviceWifiFrameCapture() {
                                ? "capture_complete"
                                : "capture_failed";
     }
-    const bool productRoute = uiController.page() == 2 &&
-        wifiProductView == WifiProductView::Capture;
     const bool captureRoute = uiController.page() == 4 &&
         captureView == CaptureView::Wifi;
-    if ((productRoute || captureRoute) && terminal) {
+    if (captureRoute && terminal) {
         nextCaptureUiRefreshUs = 0;
         renderInteractiveScreen(true);
-    } else if ((productRoute || captureRoute) &&
-               nowUs >= nextCaptureUiRefreshUs) {
+    } else if (captureRoute && nowUs >= nextCaptureUiRefreshUs) {
         nextCaptureUiRefreshUs = nowUs + 500000ULL;
         display.startWrite();
         renderWifiCaptureLiveData();
@@ -14359,6 +14320,33 @@ bool startWifiChannelsProduct() {
     return true;
 }
 
+bool openWifiVisitProduct() {
+    if (surveyWorkflow.state() != SurveyWorkflowState::Setup) {
+        surveyPipeline.resetToSetup();
+    }
+    const bool cleanup = closeProductSurveyBackend();
+    if (!cleanup) {
+        lastRuntimeEvent = "wifi_visit_cleanup_failed";
+        return false;
+    }
+    productSurveyRuntime = {};
+    productSurveyRuntime.selected = true;
+    productSurveyRuntime.workerReady = productSurveyWorkerReady;
+    productSurveyRuntime.cleanupComplete = true;
+    surveySourceController.rebuild(inventory, false,
+                                   SurveySourceScope::WifiOnly);
+    const SurveyWorkflowStatus configured =
+        surveyWorkflow.configure(true, false);
+    if (configured != SurveyWorkflowStatus::Ready) {
+        productSurveyRuntime.status = "workflow_config_failed";
+        lastRuntimeEvent = productSurveyRuntime.status;
+        return false;
+    }
+    wifiProductView = WifiProductView::Visit;
+    lastRuntimeEvent = "wifi_visit_setup";
+    return true;
+}
+
 bool stopWifiChannelsProduct() {
     std::uint64_t endedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -14387,46 +14375,6 @@ void serviceWifiChannelsProduct() {
         wifiProductView == WifiProductView::Channels) {
         renderInteractiveScreen(false);
     }
-}
-
-bool openWifiCaptureProduct() {
-    wifiFrameCapture.reset();
-    capturePersistState = CapturePersistState::Result;
-    capturePersistStatus = "volatile";
-    capturePersistGeneration = 0;
-    capturePersistHeapFreeBeforeMount = 0;
-    capturePersistHeapLargestBeforeMount = 0;
-    capturePersistFilesystemMountError = 0;
-    wifiCaptureRenderedFrames = UINT32_MAX;
-    wifiCaptureRenderedDrops = UINT32_MAX;
-    wifiCaptureRenderedChannel = 0xffU;
-    nextCaptureUiRefreshUs = 0;
-    wifiProductView = WifiProductView::Capture;
-    lastRuntimeEvent = "wifi_capture_setup";
-    return true;
-}
-
-bool closeWifiCaptureProduct() {
-    const auto state = wifiFrameCapture.stats().state;
-    bool cleanup = true;
-    if (state == WifiFrameCaptureState::Running) {
-        cleanup = stopWifiFrameCapture();
-    }
-    wifiFrameCapture.reset();
-    capturePersistState = CapturePersistState::Result;
-    capturePersistStatus = "volatile";
-    capturePersistGeneration = 0;
-    capturePersistHeapFreeBeforeMount = 0;
-    capturePersistHeapLargestBeforeMount = 0;
-    capturePersistFilesystemMountError = 0;
-    wifiCaptureRenderedFrames = UINT32_MAX;
-    wifiCaptureRenderedDrops = UINT32_MAX;
-    wifiCaptureRenderedChannel = 0xffU;
-    nextCaptureUiRefreshUs = 0;
-    wifiProductView = WifiProductView::Menu;
-    wifiProductSelection = 3;
-    lastRuntimeEvent = cleanup ? "wifi_menu" : "wifi_capture_cleanup_failed";
-    return true;
 }
 
 bool selectionCanRepaintInPlace(UiAction action) {
@@ -14578,7 +14526,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                 } else if (wifiProductSelection == 2) {
                     changed = startWifiChannelsProduct();
                 } else if (wifiProductSelection == 3) {
-                    changed = openWifiCaptureProduct();
+                    changed = openWifiVisitProduct();
                 }
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {
@@ -14954,43 +14902,6 @@ bool applyUiAction(UiAction action, bool render = true) {
             if (action == UiAction::Back || action == UiAction::Left) {
                 changed = stopWifiChannelsProduct();
             }
-        } else if (wifiProductView == WifiProductView::Capture) {
-            handled = true;
-            const auto state = wifiFrameCapture.stats().state;
-            if (state == WifiFrameCaptureState::Idle &&
-                (action == UiAction::Select || action == UiAction::Right)) {
-                changed = startWifiFrameCapture();
-            } else if (state == WifiFrameCaptureState::Running &&
-                       (action == UiAction::Select ||
-                        action == UiAction::Right)) {
-                changed = stopWifiFrameCapture();
-            } else if (state == WifiFrameCaptureState::Complete &&
-                       capturePersistState == CapturePersistState::Result &&
-                       (action == UiAction::Select ||
-                        action == UiAction::Right)) {
-                capturePersistState = CapturePersistState::Confirm;
-                capturePersistStatus = "awaiting_confirmation";
-                lastRuntimeEvent = "capture_store_confirm";
-                changed = true;
-            } else if (state == WifiFrameCaptureState::Complete &&
-                       capturePersistState == CapturePersistState::Confirm &&
-                       (action == UiAction::Select ||
-                        action == UiAction::Right)) {
-                changed = requestWifiFrameCapturePersist();
-            } else if (state == WifiFrameCaptureState::Complete &&
-                       capturePersistState == CapturePersistState::Confirm &&
-                       (action == UiAction::Back ||
-                        action == UiAction::Left)) {
-                capturePersistState = CapturePersistState::Result;
-                capturePersistStatus = "volatile";
-                lastRuntimeEvent = "capture_store_cancelled";
-                changed = true;
-            } else if (capturePersistState == CapturePersistState::Saving) {
-                changed = false;
-            } else if (action == UiAction::Back ||
-                       action == UiAction::Left) {
-                changed = closeWifiCaptureProduct();
-            }
         } else if (wifiProductView == WifiProductView::Networks &&
                    surveyWorkflow.state() == SurveyWorkflowState::Running) {
             handled = true;
@@ -15029,6 +14940,16 @@ bool applyUiAction(UiAction action, bool render = true) {
                        action == UiAction::Left) {
                 changed = requestProductSurveyWorkerStop(true);
             }
+        } else if (wifiProductView == WifiProductView::Visit &&
+                   (surveyWorkflow.state() == SurveyWorkflowState::Result ||
+                    surveyWorkflow.state() == SurveyWorkflowState::Error) &&
+                   (action == UiAction::Back || action == UiAction::Left)) {
+            handled = true;
+            surveyPipeline.resetToSetup();
+            wifiProductView = WifiProductView::Menu;
+            wifiProductSelection = 3;
+            lastRuntimeEvent = "wifi_menu";
+            changed = true;
         } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
             productSurveySourceUnavailableVisible() &&
             (action == UiAction::Select || action == UiAction::Right ||
@@ -15107,7 +15028,16 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
         } else if (surveyWorkflow.state() == SurveyWorkflowState::Setup &&
                    (action == UiAction::Back || action == UiAction::Left)) {
-            if (productSurveyRuntime.selected &&
+            if (wifiProductView == WifiProductView::Visit &&
+                surveySourceController.view() == SurveySetupView::Plan &&
+                productSurveyControl() == ProductSurveyWorkerControl::Idle) {
+                handled = true;
+                surveyPipeline.resetToSetup();
+                wifiProductView = WifiProductView::Menu;
+                wifiProductSelection = 3;
+                lastRuntimeEvent = "wifi_menu";
+                changed = true;
+            } else if (productSurveyRuntime.selected &&
                 productSurveyControl() != ProductSurveyWorkerControl::Idle) {
                 handled = true;
                 changed = requestProductSurveyWorkerStop(true);

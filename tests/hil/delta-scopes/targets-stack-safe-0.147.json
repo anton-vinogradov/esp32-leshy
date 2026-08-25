@@ -1,0 +1,32 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "targets-stack-safe-0.147",
+  "candidate_version": "0.147.0-targets-stack-safe",
+  "precursor_failure": {
+    "candidate_version": "0.146.0-targets",
+    "outcome": "stack_canary_on_targets_open",
+    "retained_evidence": "tests/hil/evidence/board-01-targets-stack-failure-0.146.json",
+    "raw_trace": "work/outputs/targets-0.146-open-panic.ndjson",
+    "failed_run": "work/outputs/targets-0.146-8ce12dd/run.json"
+  },
+  "changed_surfaces": [
+    "target_comparison_caller_owned_result",
+    "target_comparison_checked_heap_scratch",
+    "wifi_public_persistent_visit_route",
+    "targets_hil_public_navigation"
+  ],
+  "required_checks": [
+    "two_real_passive_wifi_visit_commits",
+    "exact_cid_read_only_targets_reopen",
+    "targets_open_without_stack_canary_or_reset",
+    "bounded_strongest_first_list",
+    "compare_classifies_every_visible_target",
+    "detail_opens_exact_generation",
+    "keypad_and_tft_capture",
+    "zero_tx_zero_blocked_writes_zero_input_drops",
+    "comparison_scratch_and_foreground_workspace_release",
+    "final_zero_lease"
+  ],
+  "full_matrix_required": false,
+  "cadence_after_acceptance": "4/15"
+}

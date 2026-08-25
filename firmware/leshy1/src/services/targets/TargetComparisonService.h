@@ -38,8 +38,9 @@ public:
         const domain::targets::TargetComparisonEvidenceLookup& evidenceLookup)
         : catalog_(catalog), evidenceLookup_(evidenceLookup) {}
 
-    domain::targets::TargetComparisonResult execute(
-        const TargetComparisonAction& action) const;
+    domain::targets::TargetComparisonStatus executeInto(
+        const TargetComparisonAction& action,
+        domain::targets::TargetComparisonResult* output) const;
 
 private:
     const domain::targets::TargetCatalog& catalog_;

@@ -19,6 +19,9 @@ def main() -> int:
     catalog = (ROOT / "firmware/leshy1/src/domain/apps/AppCatalog.cpp").read_text()
     strings = (ROOT / "firmware/leshy1/src/ui/UiStrings.def").read_text()
     controller = (ROOT / "firmware/leshy1/src/apps/targets/TargetsController.cpp").read_text()
+    comparison = (ROOT / "firmware/leshy1/src/domain/targets/TargetComparison.cpp").read_text()
+    comparison_header = (ROOT / "firmware/leshy1/src/domain/targets/TargetComparison.h").read_text()
+    comparison_service = (ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.h").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -36,6 +39,22 @@ def main() -> int:
             "delete scratch" in controller and
             "TargetCatalog scratch" not in controller,
             "large admission scratch must be transient, checked and released")
+    require(failures,
+            "compareTargetSessionsInto(" in comparison and
+            "new (std::nothrow) ComparisonScratch" in comparison and
+            "std::unique_ptr<ComparisonScratch>" in comparison and
+            "TargetComparisonResult compareTargetSessions(" not in
+                comparison_header and
+            "executeInto(" in comparison_service and
+            "workspace_.comparison = comparison.execute" not in controller,
+            "on-device comparison must use caller-owned result storage and "
+            "checked/released heap scratch, never a multi-KiB value return")
+    require(failures,
+            "openWifiVisitProduct()" in entry and
+            "WifiProductView::Visit" in entry and
+            "UiTextId::WifiMenuVisit" in entry and
+            "wifiProductSelection == 3" in entry,
+            "final Wi-Fi menu must expose a public persistent Visit path")
     require(failures,
             "filesystem.beginReadOnly()" in entry and
             "recoverSessionPair(" in entry and

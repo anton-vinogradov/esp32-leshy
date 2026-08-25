@@ -247,9 +247,10 @@ TargetsLoadStatus TargetsController::loadBindings(
             {currentSource, current.session});
         services::targets::TargetComparisonService comparison(
             workspace_.catalog, lookup);
-        workspace_.comparison = comparison.execute(
+        comparison.executeInto(
             {services::targets::kTargetComparisonActionSchemaVersion,
-             baselineSource, currentSource});
+             baselineSource, currentSource},
+            &workspace_.comparison);
         if (!workspace_.comparison.compared()) {
             reset();
             status_ = TargetsLoadStatus::CompareRejected;

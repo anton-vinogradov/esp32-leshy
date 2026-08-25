@@ -417,7 +417,27 @@ SHA-256 firmware/factory/ELF/map:
 `db8a396cf272e67662d31eb0ad13ddd890d36d85ed72e1402ad5e13ab32494c9`/
 `d8d364734661e0c0b18c700cce1e16600a8e51ca318cf20f1053cec4f206ab0a`/
 `b134c373147f553ba5aac2a8a511a726454c502a48ff82175bb9ecaf7fbba7ff`.
-Это host/build evidence до focused physical delta.
+Соответствующий physical reject сохранён как
+[E-HIL-164](../../tests/hil/evidence/board-01-targets-stack-failure-0.146.json);
+эти размеры остаются host/build evidence, а не acceptance claim.
+
+Исправление stack safety «Целей» `RB-M147`: exact production
+`0.147.0-targets-stack-safe` использует 3 107 636 B linked flash, 211 296 B
+static RAM и app/factory images 3 108 144/3 173 680 B. Dedicated DIRAM остаётся
+294 476/341 760 B (86,16%, свободно 47 284 B), dedicated IRAM —
+16 384/16 384 B. Result 7 736 B теперь остаётся в foreground workspace; два
+снимка сторон сравнения используют 1 616 B проверяемого transient heap с
+автоматическим освобождением. Native `-fstack-usage` измеряет 112 B у
+`compareTargetSessionsInto`, 1 088 B у `buildSide` и 496 B у вызывающего
+`TargetsController::loadBindings`. Удаление дублирующего PCAP route из меню
+Wi-Fi и добавление публичного persistent route «Записать визит» не меняет
+static RAM и уменьшает linked flash на 1 360 B против failed precursor 0.146.
+SHA-256 firmware/factory/ELF/map:
+`57b5fea451ed957a68c67f98a2d7964dfcf64007261d3bc580f8ba71b6808164`/
+`2716812e80c6a728b85c813f911aa9a6c25ce173eb4fec482bb61bf041441b31`/
+`f7a87222d5720109b5149623b95f6a7c4f6070a1dedb66de163f9768f9e89aaf`/
+`9873506a75583169c08de1ddd9ac3f8c401de6d0f33f51e4cf5048c15626cf9d`.
+Это host/build evidence до focused regression stack canary.
 
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как

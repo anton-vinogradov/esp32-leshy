@@ -21,7 +21,6 @@ from run_1x_product_survey_hil import (
     capture,
     committed_failures,
     expect,
-    focus_survey_start,
     paused_failures,
     query,
     running_failures,
@@ -44,12 +43,23 @@ def require(state: dict[str, Any], label: str, **expected: Any) -> None:
 def run_survey_cycle(device: PassiveSerial, before_generation: int,
                      trace: list[dict[str, Any]]) -> dict[str, Any]:
     normalize_home(device)
-    setup = action(device, "select")
+    wifi_menu = action(device, "select")
+    trace.append(wifi_menu)
+    require(wifi_menu, "open Wi-Fi menu", page="survey",
+            wifi_product_view="menu", runtime_owner="wifi")
+    for selection in range(1, 4):
+        selected = action(device, "down")
+        trace.append(selected)
+        require(selected, "select Record visit", page="survey",
+                wifi_product_view="menu", wifi_product_selection=selection)
+    setup = action(device, "right")
     trace.append(setup)
-    failures = setup_failures(setup)
+    failures = setup_failures(setup, "wifi")
     if failures:
         raise RuntimeError("; ".join(failures))
-    start_row = focus_survey_start(device)
+    require(setup, "Record visit Start", survey_setup_view="plan",
+            survey_setup_selection=0)
+    start_row = setup
     trace.append(start_row)
     started = action(device, "select")
     trace.append(started)
@@ -64,7 +74,7 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
         "Targets precursor Survey did not collect observations",
     )
     trace.append(running)
-    failures = running_failures(running, EXPECTED_CID)
+    failures = running_failures(running, EXPECTED_CID, "wifi")
     if failures:
         raise RuntimeError("; ".join(failures))
     observations = int(running["survey_observations"])
@@ -80,7 +90,7 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
         "Targets precursor Survey did not pause",
     )
     trace.append(paused)
-    failures = paused_failures(paused, observations, scan_cycles)
+    failures = paused_failures(paused, observations, scan_cycles, "wifi")
     if failures:
         raise RuntimeError("; ".join(failures))
     trace.append(action(device, "down"))
@@ -98,9 +108,13 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
             "Targets precursor Survey did not commit",
         )
         trace.append(committed)
-    failures = committed_failures(committed, before_generation)
+    failures = committed_failures(committed, before_generation, "wifi")
     if failures:
         raise RuntimeError("; ".join(failures))
+    menu = action(device, "back")
+    trace.append(menu)
+    require(menu, "Visit result cleanup", page="survey",
+            wifi_product_view="menu", runtime_owner="wifi")
     home = action(device, "back")
     trace.append(home)
     require(home, "Survey cleanup", page="home", runtime_owner="none",

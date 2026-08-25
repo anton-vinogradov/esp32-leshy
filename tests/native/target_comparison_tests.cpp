@@ -240,7 +240,9 @@ void checkGoldenComparison() {
     TargetComparisonAction action{};
     action.baseline = baseline;
     action.current = current;
-    const TargetComparisonResult result = service.execute(action);
+    TargetComparisonResult result{};
+    CHECK(service.executeInto(action, &result) ==
+          TargetComparisonStatus::Compared);
     CHECK(result.compared());
     CHECK(result.size == 4);
     CHECK(result.added == 1);
@@ -323,8 +325,10 @@ void checkLatestEvidenceAndIdentitySet() {
     addEvidence(&catalog, &lookup, targetId(5), ble, currentBle,
                 bleObservation(ble, 2, 2100, -55, "node"));
 
-    const TargetComparisonResult result = compareTargetSessions(
-        catalog, baseline, current, lookup);
+    TargetComparisonResult result{};
+    CHECK(compareTargetSessionsInto(catalog, baseline, current, lookup,
+                                    &result) ==
+          TargetComparisonStatus::Compared);
     CHECK(result.compared());
     CHECK(result.changed == 1);
     const TargetComparisonItem* item = result.get(0);
@@ -353,8 +357,10 @@ void checkFailureIsAllOrNothing() {
                 wifiObservation(wifi, 1, 2000, -60, 6, "node"));
 
     lookup.remove(after);
-    TargetComparisonResult result = compareTargetSessions(
-        catalog, baseline, current, lookup);
+    TargetComparisonResult result{};
+    CHECK(compareTargetSessionsInto(catalog, baseline, current, lookup,
+                                    &result) ==
+          TargetComparisonStatus::EvidenceUnavailable);
     CHECK(result.status == TargetComparisonStatus::EvidenceUnavailable);
     CHECK(result.size == 0);
     CHECK(result.added == 0 && result.removed == 0 && result.changed == 0 &&
@@ -362,7 +368,7 @@ void checkFailureIsAllOrNothing() {
 
     CHECK(lookup.add(after,
                      wifiObservation(wifi, 99, 2000, -60, 6, "node")));
-    result = compareTargetSessions(catalog, baseline, current, lookup);
+    compareTargetSessionsInto(catalog, baseline, current, lookup, &result);
     CHECK(result.status == TargetComparisonStatus::EvidenceMismatch);
     CHECK(result.size == 0);
 
@@ -371,9 +377,10 @@ void checkFailureIsAllOrNothing() {
     action.baseline = baseline;
     action.current = current;
     TargetComparisonService service(catalog, lookup);
-    CHECK(service.execute(action).status ==
+    CHECK(service.executeInto(action, &result) ==
           TargetComparisonStatus::InvalidArgument);
-    CHECK(compareTargetSessions(catalog, baseline, baseline, lookup).status ==
+    CHECK(compareTargetSessionsInto(catalog, baseline, baseline, lookup,
+                                    &result) ==
           TargetComparisonStatus::InvalidArgument);
 }
 
@@ -391,8 +398,10 @@ void checkMalformedObservationFailsClosed() {
     malformed.labelLength =
         static_cast<std::uint8_t>(Observation::kLabelCapacity + 1U);
     addEvidence(&catalog, &lookup, targetId(7), wifi, after, malformed);
-    const TargetComparisonResult result = compareTargetSessions(
-        catalog, baseline, current, lookup);
+    TargetComparisonResult result{};
+    CHECK(compareTargetSessionsInto(catalog, baseline, current, lookup,
+                                    &result) ==
+          TargetComparisonStatus::EvidenceMismatch);
     CHECK(result.status == TargetComparisonStatus::EvidenceMismatch);
     CHECK(result.size == 0);
 }
@@ -430,7 +439,9 @@ void checkRealSurveySessionLookup() {
     TargetComparisonAction action{};
     action.baseline = baselineSource;
     action.current = currentSource;
-    const TargetComparisonResult result = service.execute(action);
+    TargetComparisonResult result{};
+    CHECK(service.executeInto(action, &result) ==
+          TargetComparisonStatus::Compared);
     CHECK(result.compared());
     CHECK(result.size == 1);
     CHECK(result.changed == 1);
@@ -441,14 +452,14 @@ void checkRealSurveySessionLookup() {
     CHECK(running.start("running", 3000) == SessionStatus::Started);
     SurveySessionTargetEvidenceLookup unavailable(
         {baselineSource, &running}, {currentSource, &currentSession});
-    CHECK(compareTargetSessions(catalog, baselineSource, currentSource,
-                                unavailable).status ==
+    CHECK(compareTargetSessionsInto(catalog, baselineSource, currentSource,
+                                    unavailable, &result) ==
           TargetComparisonStatus::SourceUnavailable);
     SurveySessionTargetEvidenceLookup sameSession(
         {baselineSource, &baselineSession},
         {currentSource, &baselineSession});
-    CHECK(compareTargetSessions(catalog, baselineSource, currentSource,
-                                sameSession).status ==
+    CHECK(compareTargetSessionsInto(catalog, baselineSource, currentSource,
+                                    sameSession, &result) ==
           TargetComparisonStatus::SourceUnavailable);
 }
 

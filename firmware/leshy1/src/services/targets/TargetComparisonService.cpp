@@ -15,13 +15,15 @@ const TargetComparisonActionDescriptor& targetComparisonActionDescriptor() {
     return kDescriptor;
 }
 
-domain::targets::TargetComparisonResult TargetComparisonService::execute(
-    const TargetComparisonAction& action) const {
+domain::targets::TargetComparisonStatus TargetComparisonService::executeInto(
+    const TargetComparisonAction& action,
+    domain::targets::TargetComparisonResult* output) const {
     if (action.schemaVersion != kTargetComparisonActionSchemaVersion) {
-        return {};
+        if (output != nullptr) *output = {};
+        return domain::targets::TargetComparisonStatus::InvalidArgument;
     }
-    return domain::targets::compareTargetSessions(
-        catalog_, action.baseline, action.current, evidenceLookup_);
+    return domain::targets::compareTargetSessionsInto(
+        catalog_, action.baseline, action.current, evidenceLookup_, output);
 }
 
 }  // namespace leshy1::services::targets

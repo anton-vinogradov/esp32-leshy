@@ -126,10 +126,11 @@ def boot_failures(ready: dict[str, Any], recovery: dict[str, Any],
     return failures
 
 
-def setup_failures(state: dict[str, Any]) -> list[str]:
+def setup_failures(state: dict[str, Any],
+                   expected_owner: str = "survey") -> list[str]:
     return expect(state, {
         "page": "survey",
-        "runtime_owner": "survey",
+        "runtime_owner": expected_owner,
         "lease_mask": 15,
         "survey_simulated": False,
         "survey_persistent": True,
@@ -143,10 +144,11 @@ def setup_failures(state: dict[str, Any]) -> list[str]:
     }, "setup")
 
 
-def running_failures(state: dict[str, Any], expected_cid: str) -> list[str]:
+def running_failures(state: dict[str, Any], expected_cid: str,
+                     expected_owner: str = "survey") -> list[str]:
     failures = expect(state, {
         "page": "survey",
-        "runtime_owner": "survey",
+        "runtime_owner": expected_owner,
         "lease_mask": 15,
         "survey_simulated": False,
         "survey_persistent": True,
@@ -265,10 +267,11 @@ def list_after_detail_failures(state: dict[str, Any], minimum_observations: int,
     return failures
 
 
-def committed_failures(state: dict[str, Any], before_generation: int) -> list[str]:
+def committed_failures(state: dict[str, Any], before_generation: int,
+                       expected_owner: str = "survey") -> list[str]:
     failures = expect(state, {
         "page": "survey",
-        "runtime_owner": "survey",
+        "runtime_owner": expected_owner,
         "lease_mask": 15,
         "survey_workflow_state": "result",
         "survey_workflow_status": "committed",
@@ -337,10 +340,11 @@ def export_failures(artifact: dict[str, Any], generation: int,
 
 
 def paused_failures(state: dict[str, Any], observations: int,
-                    scan_cycles: int) -> list[str]:
+                    scan_cycles: int,
+                    expected_owner: str = "survey") -> list[str]:
     failures = expect(state, {
         "page": "survey",
-        "runtime_owner": "survey",
+        "runtime_owner": expected_owner,
         "lease_mask": 15,
         "survey_view": "list",
         "survey_workflow_state": "running",

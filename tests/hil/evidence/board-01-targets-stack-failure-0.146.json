@@ -1,0 +1,40 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "app_elf_sha256": "d8d364734661e0c0b18c700cce1e16600a8e51ca318cf20f1053cec4f206ab0a",
+    "elf_sha256": "d8d364734661e0c0b18c700cce1e16600a8e51ca318cf20f1053cec4f206ab0a",
+    "firmware_sha256": "f115f46b0e5e587ac1e1a4c83745c9f6d53818fd0c468de2adecf0bc99e1211c",
+    "map_sha256": "b134c373147f553ba5aac2a8a511a726454c502a48ff82175bb9ecaf7fbba7ff",
+    "version": "0.146.0-targets"
+  },
+  "classification": "retained_fail_closed",
+  "decoded_backtrace": [
+    "compareTargetSessions",
+    "TargetComparisonService::execute",
+    "TargetsController::loadBindings"
+  ],
+  "evidence_id": "E-HIL-164",
+  "failed_automated_run": {
+    "failure": "runner_expected_survey_owner_while_public_wifi_route_correctly_reported_wifi",
+    "run_json_sha256": "c235b3e61b806fc2c66bad97986086de2e629aa6202e186b08c83a45fc8ddeca",
+    "status": "failed"
+  },
+  "manual_reproduction": {
+    "backtrace": "0x40056f5d:0x3fce5090 0x42012bc9:0x3fce50a0 0x4203f42d:0x3fce93c0 0x42011019:0x3fce93e0 0x42011086:0x3fceb3a0 0x42033eee:0x3fceb3c0 0x420355bf:0x3fceb660 0x420365dd:0x3fcebd00 0x42037272:0x3fcebd20 0x4204e5bc:0x3fcebed0 0x40383561:0x3fcebef0",
+    "panic": "Stack canary watchpoint triggered (loopTask)",
+    "post_reset_reason_code": 4,
+    "raw_serial_sha256": "4e185268b0c39f19b8256e540fa64fff6cfc5c9b551e92cafde73bdb77658a4c",
+    "trigger": "open Targets from Home after two retained Sessions"
+  },
+  "radio_tx_commands": 0,
+  "repair_gate": {
+    "candidate_version": "0.147.0-targets-stack-safe",
+    "required_outcome": "open_targets_without_stack_canary_or_reset"
+  },
+  "schema": "leshy.targets_stack_failure.evidence.v1",
+  "source_commit": "8ce12dd3ce7a9d9c5b38813542f212140778d414",
+  "status": "failed"
+}
