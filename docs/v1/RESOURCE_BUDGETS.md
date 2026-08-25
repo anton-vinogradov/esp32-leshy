@@ -517,6 +517,26 @@ are `62a300adeb76514719a93de58757a78537a14766243140024920ebcd01d9dfee`/
 Two preceding 32 KiB allocation attempts fail before any write and are retained
 with the accepted run in `E-HIL-169`.
 
+Targets Name checkpoint `RB-M152`: exact production
+`0.152.0-targets-name-edit` uses 3,131,792 B linked flash, 211,624 B static RAM
+and 3,132,288/3,197,824 B app/factory images. This is +3,292 B linked flash,
++112 B static RAM and +3,280/+3,280 B images versus 0.151.2 for the bounded
+name editor, its touch/key rows, strings and state probe. Dedicated DIRAM is
+294,804/341,760 B (86.26%, 46,956 B remaining); dedicated IRAM remains
+16,384/16,384 B. Both the 22,544 B foreground Targets workspace and separate
+16,384 B catalog-only mutation workspace retain their existing lifecycle.
+Exact HIL sees 75,992 B free and a 34,804 B largest block before mount, returns
+heap from 85,072 B to 96,852 B after release, and records 155 µs UI
+acknowledgement, 2,824,907 µs worker time, 1,689 logical bytes, three writes,
+three file syncs and three directory syncs. Generation advances exactly 2→3
+and physical cold reopen preserves name bytes `41` on the same Target ID.
+Firmware/ELF/map SHA-256 are
+`0599cb880921ec5cb11d39a681e64a324acc84f048f7dedfacae4ff200703506`/
+`075a137a5b0cbe0dba1428e30f9fc223e59c940da87d3ca971406ea5f53941dd`/
+`c52778fcfd8619a5847de5fb04ceddfeeccb5fcd1ff546a75a00792f4817198f`.
+The exact one-flash delta and five reviewed TFT states are retained in
+`E-HIL-170`; the cadence advances to 7/15 without a full physical matrix.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

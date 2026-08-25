@@ -302,6 +302,9 @@ fi
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-favorite-0.151.json" ]]; then
     python3 "$repo_dir/tools/check_targets_favorite_hil_acceptance.py"
 fi
+if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-name-0.152.json" ]]; then
+    python3 "$repo_dir/tools/check_targets_name_hil_acceptance.py"
+fi
 if [[ -f "$repo_dir/firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.elf" ]]; then
     python3 "$repo_dir/tools/check_targets_stack_elf_contract.py" \
         --elf "$repo_dir/firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.elf"

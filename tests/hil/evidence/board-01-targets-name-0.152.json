@@ -1,0 +1,100 @@
+{
+  "atomic_write": {
+    "mutation_action_us": 155,
+    "mutation_bytes_written": 1689,
+    "mutation_directory_syncs": 3,
+    "mutation_elapsed_us": 2824907,
+    "mutation_file_syncs": 3,
+    "mutation_heap_free_before_mount": 75992,
+    "mutation_heap_largest_before_mount": 34804,
+    "mutation_identity_attempts": 1,
+    "mutation_identity_transient_retries": 0,
+    "mutation_write_calls": 3
+  },
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-name-0.152",
+  "candidate": {
+    "app_elf_sha256": "075a137a5b0cbe0dba1428e30f9fc223e59c940da87d3ca971406ea5f53941dd",
+    "checked_stack_frames": {
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 416,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 256,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "075a137a5b0cbe0dba1428e30f9fc223e59c940da87d3ca971406ea5f53941dd",
+    "firmware_bytes": 3132288,
+    "firmware_sha256": "0599cb880921ec5cb11d39a681e64a324acc84f048f7dedfacae4ff200703506",
+    "map_sha256": "c52778fcfd8619a5847de5fb04ceddfeeccb5fcd1ff546a75a00792f4817198f",
+    "version": "0.152.0-targets-name-edit"
+  },
+  "cold_reset": {
+    "bytes": 8580,
+    "first_byte_ms": 0.23779086768627167,
+    "ready_marker_ms": 1205.491665750742,
+    "sha256": "34f7b543342fdfdd80e0bd8f7a5ca4bfaf96e6e7cd5888819dcb542504b7ac83"
+  },
+  "evidence_ids": [
+    "E-AUTO-110",
+    "E-HIL-170",
+    "E-UX-047"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final": {
+    "lease_mask": 0,
+    "library_generation": 114,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "flash_count": 1,
+  "heap": {
+    "after_release": 96852,
+    "before": 85072
+  },
+  "manifest_sha256": "ee8fff773fc9e5e0f727e53eccfa048f574e13bd1a8d88da46da34458ca77343",
+  "name": {
+    "after_hex": "41",
+    "before_hex": "",
+    "cold_reopened_generation": 3,
+    "cold_reopened_hex": "41",
+    "edit_kind": "append_A",
+    "generation_after": 3,
+    "generation_before": 2
+  },
+  "raw_artifacts_manifest_sha256": "70fc83cb86d5442e42d78b1a5e96d747197d9d08d2e3f9dbf4f893d4cea36fef",
+  "raw_run_sha256": "40eb2527d264d8cbc19de3bfca00542c075b130af4b894ad680e9144dc3843f6",
+  "schema": "leshy.targets_name_hil.summary.v1",
+  "screens": {
+    "actions-saved": {
+      "png": "frames/actions-saved.png",
+      "png_sha256": "d903c9cc511af12371eca93dc3516a0901a670b1e6f11b123127074c6d469064"
+    },
+    "detail-before": {
+      "png": "frames/detail-before.png",
+      "png_sha256": "041588de34973f072eb794b28bb06fc9da335400e3d21af2cdf8f387ff2a56bd"
+    },
+    "detail-reopened": {
+      "png": "frames/detail-reopened.png",
+      "png_sha256": "85e5cee72a5b0c850dc1360bfd3f6cc8c9384fae40d6adb8f5fb835e0decd195"
+    },
+    "editor-before": {
+      "png": "frames/editor-before.png",
+      "png_sha256": "3228f8c360e41edd4ac4f8b0047bbf58aebb8c334190fd0bb9710248632afb19"
+    },
+    "editor-changed": {
+      "png": "frames/editor-changed.png",
+      "png_sha256": "0266bbde97f89bcadb62b7939dbe3061e1199bf013a24010c33afdc22e588f50"
+    }
+  },
+  "session_generation": 114,
+  "source_commit": "7c9e358493afcf0d4fbaf8b27d567745a7138e0e",
+  "status": "pass",
+  "target_id": "F37CBAC2BD0F95D9FA95F192DDE4C007",
+  "workspace_bytes": 16384
+}

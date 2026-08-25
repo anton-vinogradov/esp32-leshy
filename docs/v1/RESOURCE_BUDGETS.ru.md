@@ -510,6 +510,26 @@ SHA-256 firmware/ELF/map:
 Две предшествующие попытки allocation 32 КиБ отказывают до любой записи и
 сохранены вместе с accepted run в `E-HIL-169`.
 
+Checkpoint имени Target `RB-M152`: exact production
+`0.152.0-targets-name-edit` использует 3 131 792 B linked flash, 211 624 B
+static RAM и app/factory images 3 132 288/3 197 824 B. Это +3 292 B linked
+flash, +112 B static RAM и +3 280/+3 280 B images против 0.151.2 за bounded
+редактор имени, его touch/key rows, строки и state probe. Dedicated DIRAM равна
+294 804/341 760 B (86,26%, свободно 46 956 B); dedicated IRAM остаётся
+16 384/16 384 B. Foreground workspace Targets 22 544 B и отдельный
+catalog-only mutation workspace 16 384 B сохраняют существующий lifecycle.
+Exact HIL видит 75 992 B free и largest block 34 804 B до mount, возвращает
+heap с 85 072 B к 96 852 B после release и фиксирует UI acknowledgement
+155 µs, worker 2 824 907 µs, 1 689 logical bytes, три writes, три file syncs
+и три directory syncs. Generation продвигается ровно 2→3, а physical cold
+reopen сохраняет bytes имени `41` на том же Target ID. SHA-256
+firmware/ELF/map:
+`0599cb880921ec5cb11d39a681e64a324acc84f048f7dedfacae4ff200703506`/
+`075a137a5b0cbe0dba1428e30f9fc223e59c940da87d3ca971406ea5f53941dd`/
+`c52778fcfd8619a5847de5fb04ceddfeeccb5fcd1ff546a75a00792f4817198f`.
+Exact one-flash delta и пять просмотренных TFT states сохранены в `E-HIL-170`;
+cadence продвигается до 7/15 без полной physical matrix.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
