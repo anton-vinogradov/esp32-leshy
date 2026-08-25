@@ -163,6 +163,21 @@ run_opaque_evidence_check() {
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/target_comparison_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
+    "$repo_dir/firmware/leshy1/src/domain/targets/TargetComparison.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/SurveySessionTargetEvidenceLookup.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/targets/TargetComparisonService.cpp" \
+    -o "$test_tmp/target_comparison_tests"
+
+"$test_tmp/target_comparison_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/target_state_persistence_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \

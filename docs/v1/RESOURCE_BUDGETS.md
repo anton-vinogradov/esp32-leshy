@@ -398,6 +398,18 @@ workspace, catalog and decision log remain lifecycle-owned rather than permanent
 product globals. S6.4 runtime integration must measure their live placement and
 migration cost. This is host/build evidence, not HIL.
 
+Host/build Target-comparison measurement `RB-M145`: `E-CORR-004` uses
+3,091,760 B linked flash, 211,224 B static RAM and app/factory images
+3,092,256/3,157,792 B. This is +244 B linked flash, zero static-RAM growth and
++240/+240 B images versus `E-CORR-003` for the read-only schema-v1
+`target.compare` Action, exact two-Session lookup and bounded classification.
+Dedicated DIRAM remains 294,404/341,760 B (86.14%, 47,356 B remaining), and
+dedicated IRAM remains exactly 16,384/16,384 B. `TargetComparisonResult` is
+7,736 B and holds at most 16 rows with four exact evidence references per side;
+it remains lifecycle-owned and is not a permanent product global. S6.4 must
+measure the combined live placement of Target state, two recovered Sessions and
+the Compare view model. This is host/build evidence, not HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

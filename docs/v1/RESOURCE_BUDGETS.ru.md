@@ -390,6 +390,18 @@ catalog и decision log остаются lifecycle-owned, а не permanent prod
 Runtime integration S6.4 обязана измерить их live placement и цену migration.
 Это host/build evidence, а не HIL.
 
+Host/build измерение comparison Targets `RB-M145`: `E-CORR-004` использует
+3 091 760 B linked flash, 211 224 B static RAM и app/factory images
+3 092 256/3 157 792 B. Это +244 B linked flash, zero static-RAM growth и
++240/+240 B images против `E-CORR-003` за read-only Action `target.compare`
+schema v1, exact lookup двух Sessions и bounded classification. Dedicated DIRAM
+остаётся 294 404/341 760 B (86,14%, свободно 47 356 B), dedicated IRAM — ровно
+16 384/16 384 B. `TargetComparisonResult` занимает 7 736 B и хранит не более
+16 строк с четырьмя exact evidence references на каждой стороне; он остаётся
+lifecycle-owned, а не permanent product global. S6.4 обязана измерить совместное
+live placement Target state, двух recovered Sessions и view model Compare. Это
+host/build evidence, а не HIL.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
