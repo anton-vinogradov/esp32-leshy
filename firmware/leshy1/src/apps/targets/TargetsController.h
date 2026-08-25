@@ -69,10 +69,18 @@ struct TargetComparisonSide final {
 // Explicit heap/lifecycle working set. Arduino product code creates it only
 // while Targets owns the foreground; no member becomes permanent static RAM.
 struct TargetsWorkspace final {
-    domain::targets::TargetCatalog catalog{};
-    domain::targets::CorrelationDecisionLog decisions{};
-    services::targets::SessionCorrelationProposalSet correlations{};
-    domain::targets::TargetComparisonResult comparison{};
+    domain::targets::TargetCatalog& catalog;
+    domain::targets::CorrelationDecisionLog& decisions;
+    services::targets::SessionCorrelationProposalSet& correlations;
+    domain::targets::TargetComparisonResult& comparison;
+
+    TargetsWorkspace(
+        domain::targets::TargetCatalog& catalogValue,
+        domain::targets::CorrelationDecisionLog& decisionsValue,
+        services::targets::SessionCorrelationProposalSet& correlationsValue,
+        domain::targets::TargetComparisonResult& comparisonValue)
+        : catalog(catalogValue), decisions(decisionsValue),
+          correlations(correlationsValue), comparison(comparisonValue) {}
 };
 
 class TargetsController final {

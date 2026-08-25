@@ -398,23 +398,40 @@ SurveySession& littleFsResetSession = surveySession;
 LibraryController libraryController;
 SessionCatalog sessionCatalog;
 struct TargetsProductRuntime final {
+    TargetCatalog* catalogStorage = nullptr;
+    CorrelationDecisionLog* decisionsStorage = nullptr;
+    leshy1::services::targets::SessionCorrelationProposalSet*
+        correlationsStorage = nullptr;
+    leshy1::domain::targets::TargetComparisonResult* comparisonStorage =
+        nullptr;
     TargetsWorkspace* workspaceStorage = nullptr;
     TargetsController* controllerStorage = nullptr;
     TargetsWorkspace& workspace;
     TargetsController& controller;
 
-    TargetsProductRuntime(TargetsWorkspace* workspaceValue,
+    TargetsProductRuntime(TargetCatalog* catalogValue,
+                          CorrelationDecisionLog* decisionsValue,
+                          leshy1::services::targets::
+                              SessionCorrelationProposalSet* correlationsValue,
+                          leshy1::domain::targets::TargetComparisonResult*
+                              comparisonValue,
+                          TargetsWorkspace* workspaceValue,
                           TargetsController* controllerValue)
-        : workspaceStorage(workspaceValue),
+        : catalogStorage(catalogValue),
+          decisionsStorage(decisionsValue),
+          correlationsStorage(correlationsValue),
+          comparisonStorage(comparisonValue),
+          workspaceStorage(workspaceValue),
           controllerStorage(controllerValue),
           workspace(*workspaceValue),
           controller(*controllerValue) {}
     ~TargetsProductRuntime() {
-        if (controllerStorage != nullptr) {
-            controllerStorage->~TargetsController();
-            ::operator delete(static_cast<void*>(controllerStorage));
-        }
+        delete controllerStorage;
         delete workspaceStorage;
+        delete comparisonStorage;
+        delete correlationsStorage;
+        delete decisionsStorage;
+        delete catalogStorage;
     }
 };
 TargetsProductRuntime* targetsProductRuntime = nullptr;
@@ -4516,22 +4533,33 @@ void releaseTargetsProduct() {
     targetsProductStatus = "not_loaded";
 }
 
-bool allocateTargetsProduct(void* reservedControllerStorage = nullptr) {
+bool allocateTargetsProduct() {
     targetsHeapFreeBefore = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_8BIT));
-    void* controllerMemory = reservedControllerStorage == nullptr
-        ? ::operator new(sizeof(TargetsController), std::nothrow)
-        : reservedControllerStorage;
-    auto* workspace = new (std::nothrow) TargetsWorkspace();
-    auto* controller = workspace == nullptr || controllerMemory == nullptr
+    auto* catalog = new (std::nothrow) TargetCatalog();
+    auto* decisions = new (std::nothrow) CorrelationDecisionLog();
+    auto* correlations = new (std::nothrow)
+        leshy1::services::targets::SessionCorrelationProposalSet();
+    auto* comparison = new (std::nothrow)
+        leshy1::domain::targets::TargetComparisonResult();
+    auto* workspace = catalog == nullptr || decisions == nullptr ||
+            correlations == nullptr || comparison == nullptr
         ? nullptr
-        : new (controllerMemory) TargetsController(*workspace);
+        : new (std::nothrow) TargetsWorkspace(
+              *catalog, *decisions, *correlations, *comparison);
+    auto* controller = workspace == nullptr ? nullptr
+        : new (std::nothrow) TargetsController(*workspace);
     targetsProductRuntime = controller == nullptr ? nullptr
-        : new (std::nothrow) TargetsProductRuntime(workspace, controller);
+        : new (std::nothrow) TargetsProductRuntime(
+              catalog, decisions, correlations, comparison, workspace,
+              controller);
     if (targetsProductRuntime != nullptr) return true;
-    if (controller != nullptr) controller->~TargetsController();
-    ::operator delete(controllerMemory);
+    delete controller;
     delete workspace;
+    delete comparison;
+    delete correlations;
+    delete decisions;
+    delete catalog;
     targetsProductStatus = "workspace_unavailable";
     lastRuntimeEvent = targetsProductStatus;
     return false;
@@ -4629,24 +4657,14 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         return true;
     }
 
-    // Reserve the small controller block and large contiguous codec buffer
-    // before FatFs fragments the no-PSRAM heap. The controller is constructed
-    // in that raw block only after the runtime workspace exists.
-    void* reservedControllerStorage =
-        ::operator new(sizeof(TargetsController), std::nothrow);
-    if (reservedControllerStorage == nullptr) {
-        targetsProductStatus = "controller_workspace_unavailable";
-        lastRuntimeEvent = targetsProductStatus;
-        return false;
-    }
-
     // Reserve the large contiguous codec buffer before FatFs fragments the
     // no-PSRAM heap. Temporary catalog/decision objects validate both atomic
     // heads while mounted, then are released while the selected wire blob stays
     // in this workspace. After unmount the product runtime is allocated as
-    // separate 32,984 B workspace and 4,160 B controller blocks and the blob is
-    // decoded directly into that one long-lived copy. A monolithic 37 KiB
-    // runtime or overlapping transfer/runtime copies do not fit the board.
+    // separate 11,272 B catalog, 11,272 B decision log, 7,736 B comparison,
+    // 2,704 B proposals and 4,160 B controller blocks, then the blob is decoded
+    // directly into that one long-lived copy. A monolithic workspace or
+    // overlapping transfer/runtime copies do not fit the board.
     auto* targetStateWorkspace = new (std::nothrow)
         leshy1::storage::TargetDecisionStateStoreWorkspace();
     TargetCatalog* persistedCatalog = new (std::nothrow) TargetCatalog();
@@ -4658,7 +4676,6 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     if (!mounted || !filesystem.readOnlyGuaranteed()) {
         if (filesystem.mounted()) filesystem.end();
         targetsCleanupComplete = filesystem.cleanupComplete();
-        ::operator delete(reservedControllerStorage);
         delete targetStateWorkspace;
         delete persistedCatalog;
         delete persistedDecisions;
@@ -4768,11 +4785,10 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     if (targetsCleanupComplete && targetsBlockedWriteAttempts == 0 &&
         targetStateAccepted &&
         (pairRecovered || latestRecovered)) {
-        if (!allocateTargetsProduct(reservedControllerStorage)) {
+        if (!allocateTargetsProduct()) {
             delete targetStateWorkspace;
             return false;
         }
-        reservedControllerStorage = nullptr;
         TargetsController& controller = targetsProductRuntime->controller;
         const TargetCatalog* persistedForLoad = nullptr;
         const CorrelationDecisionLog* decisionsForLoad = nullptr;
@@ -4812,7 +4828,6 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
     }
-    ::operator delete(reservedControllerStorage);
     delete targetStateWorkspace;
     lastRuntimeEvent = targetsProductStatus;
     return true;

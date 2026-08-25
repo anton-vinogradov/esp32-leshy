@@ -10,6 +10,16 @@ using namespace leshy1::services::survey;
 
 namespace {
 
+struct OwnedTargetsWorkspace final {
+    TargetCatalog catalog{};
+    CorrelationDecisionLog decisions{};
+    leshy1::services::targets::SessionCorrelationProposalSet correlations{};
+    TargetComparisonResult comparison{};
+    TargetsWorkspace refs{catalog, decisions, correlations, comparison};
+
+    operator TargetsWorkspace&() { return refs; }
+};
+
 int failures = 0;
 #define CHECK(condition)                                                     \
     do {                                                                     \
@@ -85,7 +95,7 @@ void pairIsUsefulFirstAndStable() {
         "baseline", 100, {wifi(1, 110, 1, -70), wifi(2, 120, 2, -45)});
     SurveySession current = session(
         "current", 300, {wifi(1, 310, 1, -30), wifi(2, 320, 3, -55)});
-    TargetsWorkspace workspace;
+    OwnedTargetsWorkspace workspace;
     TargetsController controller(workspace);
     CHECK(controller.load({&baseline, 1}, {&current, 2}) ==
           TargetsLoadStatus::Ready);
@@ -238,7 +248,7 @@ void pairIsUsefulFirstAndStable() {
 void singleSessionStillListsTargets() {
     SurveySession current =
         session("only", 500, {wifi(1, 510, 4, -40)});
-    TargetsWorkspace workspace;
+    OwnedTargetsWorkspace workspace;
     TargetsController controller(workspace);
     CHECK(controller.load({&current, 7}) == TargetsLoadStatus::Ready);
     CHECK(controller.size() == 1);
@@ -251,7 +261,7 @@ void singleSessionStillListsTargets() {
 void rejectedLoadClearsPriorRows() {
     SurveySession current =
         session("good", 700, {wifi(1, 710, 5, -40)});
-    TargetsWorkspace workspace;
+    OwnedTargetsWorkspace workspace;
     TargetsController controller(workspace);
     CHECK(controller.load({&current, 1}) == TargetsLoadStatus::Ready);
     CHECK(controller.size() == 1);
@@ -266,7 +276,7 @@ void rejectedLoadClearsPriorRows() {
 void denseAirKeepsStrongestCurrentSlice() {
     SurveySession baseline = rangeSession("dense-old", 10000, 1, 8, -20);
     SurveySession current = rangeSession("dense-new", 100, 20, 20, -30);
-    TargetsWorkspace workspace;
+    OwnedTargetsWorkspace workspace;
     TargetsController controller(workspace);
     CHECK(controller.load({&baseline, 10}, {&current, 11}) ==
           TargetsLoadStatus::Ready);
@@ -286,7 +296,7 @@ void currentEvidenceWinsAcrossMonotonicReset() {
         "old-boot", 10000, {wifi(1, 10010, 42, -25)});
     SurveySession current = session(
         "new-boot", 100, {wifi(1, 110, 42, -70)});
-    TargetsWorkspace workspace;
+    OwnedTargetsWorkspace workspace;
     TargetsController controller(workspace);
     CHECK(controller.load({&baseline, 20}, {&current, 21}) ==
           TargetsLoadStatus::Ready);
@@ -302,7 +312,7 @@ void comparisonClassesThenSignalAreStable() {
         "sort-new", 3000,
         {wifi(1, 3010, 1, -80), wifi(2, 3020, 2, -60),
          wifi(3, 3030, 3, -20), wifi(4, 3040, 4, -40)});
-    TargetsWorkspace workspace;
+    OwnedTargetsWorkspace workspace;
     TargetsController controller(workspace);
     CHECK(controller.load({&baseline, 30}, {&current, 31}) ==
           TargetsLoadStatus::Ready);
@@ -320,7 +330,7 @@ void comparisonClassesThenSignalAreStable() {
 void persistedMetadataFollowsIdentityAcrossVisits() {
     SurveySession prior = session(
         "prior", 100, {wifi(1, 110, 9, -55), wifi(2, 120, 7, -80)});
-    TargetsWorkspace priorWorkspace;
+    OwnedTargetsWorkspace priorWorkspace;
     TargetsController priorController(priorWorkspace);
     CHECK(priorController.load({&prior, 1}) == TargetsLoadStatus::Ready);
     const TargetRecord* remembered =
@@ -343,7 +353,7 @@ void persistedMetadataFollowsIdentityAcrossVisits() {
 
     SurveySession current = session(
         "current-visit", 300, {wifi(1, 310, 9, -30)});
-    TargetsWorkspace currentWorkspace;
+    OwnedTargetsWorkspace currentWorkspace;
     TargetsController currentController(currentWorkspace);
     CHECK(currentController.load({&current, 2}, persisted) ==
           TargetsLoadStatus::Ready);
@@ -402,7 +412,7 @@ void correlationReviewKeepsCandidateUnownedUntilDecision() {
     SurveySession current = session(
         "corr-new", 300,
         {labeled(RadioKind::Ble, 1, 310, 41, -55, "Beacon")});
-    TargetsWorkspace workspace;
+    OwnedTargetsWorkspace workspace;
     TargetsController controller(workspace);
     CHECK(controller.load({&baseline, 40}, {&current, 41}) ==
           TargetsLoadStatus::Ready);
@@ -438,7 +448,7 @@ void correlationReviewKeepsCandidateUnownedUntilDecision() {
                            persisted.find(rejected->targetId)->revision,
                            persisted.find(rejected->targetId)->revision) ==
           CorrelationDecisionStatus::Rejected);
-    TargetsWorkspace reopenedWorkspace;
+    OwnedTargetsWorkspace reopenedWorkspace;
     TargetsController reopened(reopenedWorkspace);
     const TargetsLoadStatus reopenedStatus = reopened.load(
         {&baseline, 40}, {&current, 41}, persisted, decisions);
@@ -450,7 +460,7 @@ void correlationReviewKeepsCandidateUnownedUntilDecision() {
     CHECK(reopened.catalog().size() == 2);
     CHECK(reopened.size() == 2);
 
-    TargetsWorkspace inPlaceWorkspace;
+    OwnedTargetsWorkspace inPlaceWorkspace;
     inPlaceWorkspace.catalog = persisted;
     inPlaceWorkspace.decisions = decisions;
     TargetsController inPlace(inPlaceWorkspace);
@@ -478,8 +488,21 @@ int main() {
         std::cerr << failures << " targets controller test(s) failed\n";
         return 1;
     }
-    std::cout << "targets controller tests passed; workspace_bytes="
-              << sizeof(TargetsWorkspace) << "; controller_bytes="
-              << sizeof(TargetsController) << '\n';
+    std::cout << "targets controller tests passed; workspace_refs_bytes="
+              << sizeof(TargetsWorkspace) << "; runtime_component_bytes="
+              << sizeof(TargetCatalog) + sizeof(CorrelationDecisionLog) +
+                     sizeof(leshy1::services::targets::
+                                SessionCorrelationProposalSet) +
+                     sizeof(TargetComparisonResult)
+              << "; controller_bytes="
+              << sizeof(TargetsController) << "; catalog_bytes="
+              << sizeof(leshy1::domain::targets::TargetCatalog)
+              << "; decisions_bytes="
+              << sizeof(leshy1::domain::targets::CorrelationDecisionLog)
+              << "; correlations_bytes="
+              << sizeof(leshy1::services::targets::SessionCorrelationProposalSet)
+              << "; comparison_bytes="
+              << sizeof(leshy1::domain::targets::TargetComparisonResult)
+              << '\n';
     return 0;
 }

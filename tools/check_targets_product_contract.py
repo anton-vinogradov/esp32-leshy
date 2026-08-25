@@ -48,7 +48,9 @@ def main() -> int:
     require(failures,
             load_product.rfind("filesystem.end();") <
                 load_product.rfind("allocateTargetsProduct(") and
-            "separate 32,984 B workspace and 4,160 B controller blocks" in
+            "separate 11,272 B catalog, 11,272 B decision log, 7,736 B "
+            "comparison" in load_product and
+            "2,704 B proposals and 4,160 B controller blocks" in
                 load_product and
             "overlapping transfer/runtime copies do not fit the board" in
                 load_product and
@@ -59,11 +61,12 @@ def main() -> int:
             "reopenTargetDecisionState(" in load_product and
             "&targetsProductRuntime->workspace.catalog" in load_product and
             "&targetsProductRuntime->workspace.decisions" in load_product and
+            "new (std::nothrow) TargetCatalog" in entry and
+            "new (std::nothrow) CorrelationDecisionLog" in entry and
+            "SessionCorrelationProposalSet();" in entry and
+            "TargetComparisonResult();" in entry and
             "new (std::nothrow) TargetsWorkspace" in entry and
-            "::operator new(sizeof(TargetsController), std::nothrow)" in
-                load_product and
-            "new (controllerMemory) TargetsController" in entry and
-            "controllerStorage->~TargetsController()" in entry and
+            "new (std::nothrow) TargetsController" in entry and
             "filesystem_mount_error" in entry,
             "Targets must release validation copies and FatFs before "
             "allocating split no-PSRAM runtime blocks, decode the retained "
