@@ -117,8 +117,15 @@ def main() -> int:
             "openWifiVisitProduct()" in entry and
             "WifiProductView::Visit" in entry and
             "UiTextId::WifiMenuVisit" in entry and
-            "wifiProductSelection == 3" in entry,
-            "final Wi-Fi menu must expose a public persistent Visit path")
+            "wifiProductSelection == 3" in entry and
+            "Listen with every available built-in receiver" in
+                entry[entry.index("bool openWifiVisitProduct()"):
+                      entry.index("bool stopWifiChannelsProduct()")] and
+            "SurveySourceScope::All" in
+                entry[entry.index("bool openWifiVisitProduct()"):
+                      entry.index("bool stopWifiChannelsProduct()")],
+            "final Wi-Fi menu must expose a public persistent Visit path "
+            "that defaults to every available built-in receiver")
     require(failures,
             "filesystem.beginReadOnly()" in entry and
             "recoverSessionPair(" in entry and

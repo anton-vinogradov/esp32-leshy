@@ -59,10 +59,17 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
     failures = setup_failures(setup, "wifi")
     if failures:
         raise RuntimeError("; ".join(failures))
-    require(setup, "Record visit Start", survey_setup_view="plan",
-            survey_setup_selection=0)
-    start_row = setup
+    require(setup, "Record visit sources", survey_setup_view="plan",
+            survey_setup_selection=0, survey_source_selected_mask=3,
+            survey_source_selected_count=2,
+            survey_source_wifi_state="available",
+            survey_source_ble_state="available")
+    trace.append(action(device, "down"))
+    start_row = action(device, "down")
     trace.append(start_row)
+    require(start_row, "Record visit Start", survey_setup_view="plan",
+            survey_setup_selection=2, survey_source_selected_mask=3,
+            survey_source_selected_count=2)
     started = action(device, "select")
     trace.append(started)
     running = wait_ui_state(
@@ -70,7 +77,9 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
         lambda state: (
             state.get("survey_product_status") == "running" and
             state.get("survey_product_scan_cycles", 0) >= 1 and
-            state.get("survey_observations", 0) >= 1
+            state.get("survey_scan_accepted", 0) >= 1 and
+            state.get("survey_ble_scan_accepted", 0) >= 1 and
+            state.get("survey_observations", 0) >= 2
         ),
         20.0,
         "Targets precursor Survey did not collect observations",
@@ -79,6 +88,10 @@ def run_survey_cycle(device: PassiveSerial, before_generation: int,
     failures = running_failures(running, EXPECTED_CID, "wifi")
     if failures:
         raise RuntimeError("; ".join(failures))
+    require(running, "combined visit", survey_source_selected_mask=3,
+            survey_source_selected_count=2,
+            survey_product_selected_source_mask=3,
+            survey_product_active_source_mask=3)
     observations = int(running["survey_observations"])
     scan_cycles = int(running["survey_product_scan_cycles"])
     trace.append(action(device, "up"))

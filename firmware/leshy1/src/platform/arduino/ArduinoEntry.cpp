@@ -16511,8 +16511,11 @@ bool openWifiVisitProduct() {
     productSurveyRuntime.selected = true;
     productSurveyRuntime.workerReady = productSurveyWorkerReady;
     productSurveyRuntime.cleanupComplete = true;
+    // A retained visit is a device-level observation source, not merely a
+    // Wi-Fi list refresh. Listen with every available built-in receiver by
+    // default so consecutive visits can support cross-radio Target review.
     surveySourceController.rebuild(inventory, false,
-                                   SurveySourceScope::WifiOnly);
+                                   SurveySourceScope::All);
     const SurveyWorkflowStatus configured =
         surveyWorkflow.configure(true, false);
     if (configured != SurveyWorkflowStatus::Ready) {
