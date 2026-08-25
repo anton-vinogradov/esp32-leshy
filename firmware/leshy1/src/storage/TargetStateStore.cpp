@@ -10,10 +10,11 @@ const char* stateHeadPath(HeadSlot slot) {
                                : "target-state-head-b.bin";
 }
 
+template <typename Workspace>
 class TargetStateCommitBackend final : public CommitBackend {
 public:
     TargetStateCommitBackend(SessionStoreIo& io,
-                             TargetStateStoreWorkspace& workspace,
+                             Workspace& workspace,
                              std::size_t stateSize,
                              std::size_t manifestSize,
                              std::uint32_t generation, HeadSlot slot)
@@ -51,7 +52,7 @@ public:
 
 private:
     SessionStoreIo& io_;
-    TargetStateStoreWorkspace& workspace_;
+    Workspace& workspace_;
     std::size_t stateSize_ = 0;
     std::size_t manifestSize_ = 0;
     std::uint32_t generation_ = 0;
@@ -153,7 +154,8 @@ CandidateLoad loadCandidate(
 }
 
 CandidateLoad loadCatalogCandidate(
-    SessionStoreIo& io, TargetStateStoreWorkspace& workspace, HeadSlot slot,
+    SessionStoreIo& io, TargetCatalogStateStoreWorkspace& workspace,
+    HeadSlot slot,
     domain::targets::TargetCatalog* validationCatalog) {
     CandidateLoad loaded;
     std::array<std::uint8_t, kHeadWireSize>& wire =
@@ -259,7 +261,7 @@ TargetStateStoreStatus reopenSelected(
 }
 
 TargetStateStoreStatus reopenSelectedCatalog(
-    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    SessionStoreIo& io, TargetCatalogStateStoreWorkspace& workspace,
     std::uint32_t generation, domain::targets::TargetCatalog* catalog) {
     catalog->clear();
     char manifestPath[kTargetStateStorePathMax] = {};
@@ -365,8 +367,8 @@ TargetStateStoreCommitResult commitTargetState(
     }
     workspace.stateSize = stateSize;
     workspace.manifestSize = manifestSize;
-    TargetStateCommitBackend backend(io, workspace, stateSize, manifestSize,
-                                     generation, publishSlot);
+    TargetStateCommitBackend<TargetStateStoreWorkspace> backend(
+        io, workspace, stateSize, manifestSize, generation, publishSlot);
     if (!backend.pathsReady()) {
         result.status = TargetStateStoreStatus::PathError;
         return result;
@@ -473,7 +475,7 @@ TargetStateStoreRecoveryResult recoverTargetState(
 }
 
 TargetStateStoreCommitResult commitTargetCatalogState(
-    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    SessionStoreIo& io, TargetCatalogStateStoreWorkspace& workspace,
     const domain::targets::TargetCatalog& catalog,
     std::uint32_t generation, HeadSlot publishSlot) {
     TargetStateStoreCommitResult result;
@@ -497,8 +499,8 @@ TargetStateStoreCommitResult commitTargetCatalogState(
     }
     workspace.stateSize = stateSize;
     workspace.manifestSize = manifestSize;
-    TargetStateCommitBackend backend(io, workspace, stateSize, manifestSize,
-                                     generation, publishSlot);
+    TargetStateCommitBackend<TargetCatalogStateStoreWorkspace> backend(
+        io, workspace, stateSize, manifestSize, generation, publishSlot);
     if (!backend.pathsReady()) {
         result.status = TargetStateStoreStatus::PathError;
         return result;
@@ -516,7 +518,7 @@ TargetStateStoreCommitResult commitTargetCatalogState(
 }
 
 TargetStateStoreCommitResult commitNextTargetCatalogState(
-    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    SessionStoreIo& io, TargetCatalogStateStoreWorkspace& workspace,
     const domain::targets::TargetCatalog& catalog,
     domain::targets::TargetCatalog& recoveryCatalogScratch) {
     TargetStateStoreCommitResult result;
@@ -545,7 +547,7 @@ TargetStateStoreCommitResult commitNextTargetCatalogState(
 }
 
 TargetStateStoreRecoveryResult recoverTargetCatalogState(
-    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    SessionStoreIo& io, TargetCatalogStateStoreWorkspace& workspace,
     domain::targets::TargetCatalog* catalog) {
     TargetStateStoreRecoveryResult result;
     if (catalog == nullptr) {

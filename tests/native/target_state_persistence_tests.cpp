@@ -560,7 +560,7 @@ void testCatalogOnlyStateUsesTheCanonicalWireFormatAndRejectsHistory() {
 
 void testCatalogOnlyStoreRetainsAtomicHeadRecovery() {
     FakeStoreIo io;
-    TargetStateStoreWorkspace workspace;
+    TargetCatalogStateStoreWorkspace workspace;
     TargetCatalog catalog;
     TargetCatalog scratch;
     CHECK(catalog.create(targetId(1), wifiIdentity(1), evidence(1, 1)) ==
@@ -588,6 +588,78 @@ void testCatalogOnlyStoreRetainsAtomicHeadRecovery() {
     CHECK(reopened.get(0) != nullptr && reopened.get(0)->favorite);
 }
 
+void testCatalogOnlyWorkspaceFitsWorstCaseCatalog() {
+    TargetCatalog catalog;
+    std::array<char, TargetRecord::kNameCapacity> name{};
+    std::array<char, TargetRecord::kNotesCapacity> notes{};
+    std::array<char, TargetRecord::kTagCapacity> tag{};
+    name.fill('N');
+    notes.fill('D');
+    tag.fill('T');
+    for (std::size_t targetIndex = 0;
+         targetIndex < TargetCatalog::kCapacity; ++targetIndex) {
+        const std::uint8_t targetSuffix = static_cast<std::uint8_t>(
+            targetIndex + 1U);
+        const TargetId id = targetId(targetSuffix);
+        const std::uint8_t identityBase = static_cast<std::uint8_t>(
+            targetIndex * TargetRecord::kIdentityCapacity + 1U);
+        const std::uint64_t evidenceBase =
+            targetIndex * TargetRecord::kEvidenceCapacity + 1U;
+        CHECK(catalog.create(id, wifiIdentity(identityBase),
+                             evidence(targetSuffix, evidenceBase)) ==
+              TargetMutationStatus::Created);
+        for (std::size_t identityIndex = 1;
+             identityIndex < TargetRecord::kIdentityCapacity;
+             ++identityIndex) {
+            CHECK(catalog.attachEvidence(
+                      id,
+                      wifiIdentity(static_cast<std::uint8_t>(
+                          identityBase + identityIndex)),
+                      evidence(targetSuffix,
+                               evidenceBase + identityIndex)) ==
+                  TargetMutationStatus::Applied);
+        }
+        for (std::size_t evidenceIndex = TargetRecord::kIdentityCapacity;
+             evidenceIndex < TargetRecord::kEvidenceCapacity;
+             ++evidenceIndex) {
+            CHECK(catalog.attachEvidence(
+                      id, wifiIdentity(identityBase),
+                      evidence(targetSuffix,
+                               evidenceBase + evidenceIndex)) ==
+                  TargetMutationStatus::Applied);
+        }
+        CHECK(catalog.setName(id, name.data(), name.size()) ==
+              TargetMutationStatus::Applied);
+        CHECK(catalog.setNotes(id, notes.data(), notes.size()) ==
+              TargetMutationStatus::Applied);
+        for (std::size_t tagIndex = 0;
+             tagIndex < TargetRecord::kTagCountCapacity; ++tagIndex) {
+            tag[0] = static_cast<char>('A' + tagIndex);
+            CHECK(catalog.addTag(id, tag.data(), tag.size()) ==
+                  TargetMutationStatus::Applied);
+        }
+        CHECK(catalog.setFavorite(id, true) == TargetMutationStatus::Applied);
+    }
+    CHECK(catalog.size() == TargetCatalog::kCapacity);
+    TargetCatalogStateStoreWorkspace workspace;
+    std::size_t stateSize = 0;
+    CHECK(encodeTargetCatalogState(
+              catalog, workspace.state.data(), workspace.state.size(),
+              &stateSize) == TargetCodecStatus::Valid);
+    CHECK(stateSize > 0 && stateSize <= kTargetCatalogStateMaxBytes);
+    std::size_t manifestSize = 0;
+    CHECK(encodeTargetCatalogStateManifest(
+              catalog, workspace.state.data(), stateSize,
+              workspace.manifest.data(), workspace.manifest.size(),
+              &manifestSize) == TargetCodecStatus::Valid);
+    TargetCatalog reopened;
+    CHECK(reopenTargetCatalogState(
+              workspace.manifest.data(), manifestSize,
+              workspace.state.data(), stateSize, &reopened) ==
+          TargetCodecStatus::Valid);
+    CHECK(reopened.size() == TargetCatalog::kCapacity);
+}
+
 }  // namespace
 
 int main() {
@@ -598,6 +670,7 @@ int main() {
     testPathsAndAliasingFailClosed();
     testCatalogOnlyStateUsesTheCanonicalWireFormatAndRejectsHistory();
     testCatalogOnlyStoreRetainsAtomicHeadRecovery();
+    testCatalogOnlyWorkspaceFitsWorstCaseCatalog();
     if (failures != 0) return EXIT_FAILURE;
     std::cout << "S6 Target graph/decision atomic persistence tests passed\n";
     return EXIT_SUCCESS;

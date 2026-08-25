@@ -36,6 +36,22 @@ struct TargetStateStoreWorkspace final {
     std::uint32_t generation = 0;
 };
 
+// Product metadata actions currently admit only catalog records and reject
+// decision/merge history.  Keep their canonical schema-v3 wire format while
+// avoiding a 32 KiB contiguous allocation that the N16 target cannot promise.
+struct TargetCatalogStateStoreWorkspace final {
+    std::array<std::uint8_t, kTargetCatalogStateMaxBytes> state{};
+    std::array<std::uint8_t, kTargetStateManifestMaxBytes> manifest{};
+    std::array<std::uint8_t, kHeadWireSize> headA{};
+    std::array<std::uint8_t, kHeadWireSize> headB{};
+    std::size_t stateSize = 0;
+    std::size_t manifestSize = 0;
+    std::uint32_t generation = 0;
+};
+
+static_assert(sizeof(TargetCatalogStateStoreWorkspace) <
+              sizeof(TargetStateStoreWorkspace));
+
 enum class TargetStateStoreStatus : std::uint8_t {
     Valid,
     InvalidArgument,
@@ -99,15 +115,15 @@ TargetStateStoreRecoveryResult recoverTargetState(
 // are still empty. It uses the same files, manifests, heads and crash boundary
 // as the full store while avoiding empty-history RAM on no-PSRAM hardware.
 TargetStateStoreCommitResult commitTargetCatalogState(
-    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    SessionStoreIo& io, TargetCatalogStateStoreWorkspace& workspace,
     const domain::targets::TargetCatalog& catalog,
     std::uint32_t generation, HeadSlot publishSlot);
 TargetStateStoreCommitResult commitNextTargetCatalogState(
-    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    SessionStoreIo& io, TargetCatalogStateStoreWorkspace& workspace,
     const domain::targets::TargetCatalog& catalog,
     domain::targets::TargetCatalog& recoveryCatalogScratch);
 TargetStateStoreRecoveryResult recoverTargetCatalogState(
-    SessionStoreIo& io, TargetStateStoreWorkspace& workspace,
+    SessionStoreIo& io, TargetCatalogStateStoreWorkspace& workspace,
     domain::targets::TargetCatalog* catalog);
 
 }  // namespace leshy1::storage

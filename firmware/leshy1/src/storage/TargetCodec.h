@@ -15,6 +15,10 @@ constexpr std::size_t kTargetManifestMaxBytes = 128;
 constexpr std::uint16_t kTargetStatePreviousSchemaVersion = 2;
 constexpr std::uint16_t kTargetStateSchemaVersion = 3;
 constexpr std::size_t kTargetStateMaxBytes = 32768;
+// A catalog-only schema-v3 state contains the same bounded Target records as
+// schema-v1 plus two empty arrays.  It never needs the full decision/merge
+// history buffer and therefore has a separate no-PSRAM product bound.
+constexpr std::size_t kTargetCatalogStateMaxBytes = 16384;
 constexpr std::size_t kTargetStateManifestMaxBytes = 160;
 
 struct TargetManifest final {

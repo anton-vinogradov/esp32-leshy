@@ -53,9 +53,9 @@ def main() -> int:
     mutation_end = entry.index("bool requestTargetsFavoriteMutation")
     mutation_worker = entry[mutation_start:mutation_end]
     require(failures,
-            load_product.index("TargetStateStoreWorkspace();") <
+            load_product.index("TargetCatalogStateStoreWorkspace();") <
                 load_product.index("filesystem.beginReadOnly()") and
-            mutation_worker.index("TargetStateStoreWorkspace();") <
+            mutation_worker.index("TargetCatalogStateStoreWorkspace();") <
                 mutation_worker.index("filesystem.begin()") and
             "workspace_unavailable_before_mount" in mutation_worker and
             r'\"mutation_heap_largest_before_mount\":%lu' in entry,

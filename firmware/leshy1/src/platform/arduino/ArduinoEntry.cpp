@@ -4581,7 +4581,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     // boards.  Keep both objects outside the mounted interval's allocator
     // churn and release them after recovery/UI hand-off.
     auto* targetStateWorkspace = new (std::nothrow)
-        leshy1::storage::TargetStateStoreWorkspace();
+        leshy1::storage::TargetCatalogStateStoreWorkspace();
     TargetCatalog* persistedCatalog = new (std::nothrow) TargetCatalog();
     BoardSdFilesystem filesystem;
     const bool mounted = filesystem.beginReadOnly();
@@ -4748,8 +4748,8 @@ void runTargetsMutationWorker(void*) {
     bool filesystemAttempted = false;
     bool deadlineArmed = false;
     ArduinoFsSessionStoreIo* io = nullptr;
-    auto* workspace = static_cast<leshy1::storage::TargetStateStoreWorkspace*>(
-        nullptr);
+    auto* workspace = static_cast<
+        leshy1::storage::TargetCatalogStateStoreWorkspace*>(nullptr);
     resetTargetsStoreDeadlineCancel();
     deadlineArmed = armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs);
     const auto supervisedCheckpoint = [&]() {
@@ -4848,7 +4848,7 @@ void runTargetsMutationWorker(void*) {
         event.heapLargestBeforeMount = static_cast<std::uint32_t>(
             heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
         workspace = new (std::nothrow)
-            leshy1::storage::TargetStateStoreWorkspace();
+            leshy1::storage::TargetCatalogStateStoreWorkspace();
         if (workspace == nullptr) {
             event.status = "workspace_unavailable_before_mount";
             break;

@@ -965,7 +965,7 @@ TargetCodecStatus decodeTargetCatalogState(
     const std::uint8_t* input, std::size_t size,
     domain::targets::TargetCatalog* catalog) {
     if (input == nullptr || catalog == nullptr || size == 0 ||
-        size > kTargetStateMaxBytes) {
+        size > kTargetCatalogStateMaxBytes) {
         return TargetCodecStatus::InvalidArgument;
     }
     catalog->clear();
@@ -1059,7 +1059,7 @@ TargetCodecStatus encodeTargetCatalogStateManifest(
     if (catalog.size() == 0 ||
         catalog.size() > domain::targets::TargetCatalog::kCapacity ||
         stateBytes == nullptr || stateSize == 0 ||
-        stateSize > kTargetStateMaxBytes || output == nullptr ||
+        stateSize > kTargetCatalogStateMaxBytes || output == nullptr ||
         outputSize == nullptr) {
         return TargetCodecStatus::InvalidArgument;
     }

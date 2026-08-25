@@ -1,7 +1,7 @@
 {
   "schema": "leshy.hil.delta_scope.v1",
   "id": "targets-favorite-0.151",
-  "candidate_version": "0.151.1-targets-favorite-memory",
+  "candidate_version": "0.151.2-targets-favorite-compact",
   "changed_surfaces": [
     "target_catalog_schema_v3_codec",
     "target_catalog_dual_head_atomic_store",
