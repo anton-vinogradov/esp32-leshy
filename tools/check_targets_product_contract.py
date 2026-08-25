@@ -50,11 +50,21 @@ def main() -> int:
                 load_product.rfind("allocateTargetsProduct()") and
             "separate 32,984 B workspace and 4,160 B controller blocks" in
                 load_product and
+            "overlapping transfer/runtime copies do not fit the board" in
+                load_product and
+            load_product.index("delete persistedCatalog;") <
+                load_product.rfind("allocateTargetsProduct()") and
+            load_product.index("delete persistedDecisions;") <
+                load_product.rfind("allocateTargetsProduct()") and
+            "reopenTargetDecisionState(" in load_product and
+            "&targetsProductRuntime->workspace.catalog" in load_product and
+            "&targetsProductRuntime->workspace.decisions" in load_product and
             "new (std::nothrow) TargetsWorkspace" in entry and
             "new (std::nothrow) TargetsController" in entry and
             "filesystem_mount_error" in entry,
-            "Targets must release FatFs before allocating split no-PSRAM "
-            "runtime blocks and expose the exact mount result")
+            "Targets must release validation copies and FatFs before "
+            "allocating split no-PSRAM runtime blocks, decode the retained "
+            "wire blob in place and expose the exact mount result")
     mutation_start = entry.index("void runTargetsMutationWorker")
     mutation_end = entry.index("bool requestTargetsFavoriteMutation")
     mutation_worker = entry[mutation_start:mutation_end]

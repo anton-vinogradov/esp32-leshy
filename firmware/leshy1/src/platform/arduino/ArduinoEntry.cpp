@@ -4622,10 +4622,12 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     }
 
     // Reserve the large contiguous codec buffer before FatFs fragments the
-    // no-PSRAM heap. Catalog and decisions are recovered into bounded transfer
-    // objects; after unmount the product runtime is deliberately allocated as
-    // separate 32,984 B workspace and 4,160 B controller blocks. A monolithic
-    // 37 KiB runtime does not fit the physical post-mount largest block.
+    // no-PSRAM heap. Temporary catalog/decision objects validate both atomic
+    // heads while mounted, then are released while the selected wire blob stays
+    // in this workspace. After unmount the product runtime is allocated as
+    // separate 32,984 B workspace and 4,160 B controller blocks and the blob is
+    // decoded directly into that one long-lived copy. A monolithic 37 KiB
+    // runtime or overlapping transfer/runtime copies do not fit the board.
     auto* targetStateWorkspace = new (std::nothrow)
         leshy1::storage::TargetDecisionStateStoreWorkspace();
     TargetCatalog* persistedCatalog = new (std::nothrow) TargetCatalog();
@@ -4669,7 +4671,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     std::uint32_t currentGeneration = 0;
     bool latestRecovered = false;
     std::uint32_t latestGeneration = 0;
-    bool persistedCatalogAvailable = false;
+    bool persistedStateBlobAvailable = false;
     bool targetStateAccepted = true;
     if (!permit.allowed()) {
         targetsProductStatus =
@@ -4715,7 +4717,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                             io, *targetStateWorkspace, persistedCatalog,
                             persistedDecisions);
                     if (recovered.valid()) {
-                        persistedCatalogAvailable = true;
+                        persistedStateBlobAvailable = true;
                         targetsStateGeneration = recovered.generation;
                         targetsStateHead = recovered.choice;
                     } else {
@@ -4729,7 +4731,13 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         }
         io.end();
     }
-    delete targetStateWorkspace;
+    // Recovery left the selected, already validated wire generation in the
+    // codec workspace. Drop the decoded validation copies before asking the
+    // fragmented no-PSRAM heap for the foreground runtime.
+    delete persistedCatalog;
+    persistedCatalog = nullptr;
+    delete persistedDecisions;
+    persistedDecisions = nullptr;
     targetsBlockedWriteAttempts = filesystem.blockedWriteAttempts();
     filesystem.end();
     targetsCleanupComplete = filesystem.cleanupComplete();
@@ -4741,11 +4749,35 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         targetStateAccepted &&
         (pairRecovered || latestRecovered)) {
         if (!allocateTargetsProduct()) {
-            delete persistedCatalog;
-            delete persistedDecisions;
+            delete targetStateWorkspace;
             return false;
         }
         TargetsController& controller = targetsProductRuntime->controller;
+        const TargetCatalog* persistedForLoad = nullptr;
+        const CorrelationDecisionLog* decisionsForLoad = nullptr;
+        if (persistedStateBlobAvailable) {
+            const auto reopened = leshy1::storage::reopenTargetDecisionState(
+                targetStateWorkspace->manifest.data(),
+                targetStateWorkspace->manifestSize,
+                targetStateWorkspace->state.data(),
+                targetStateWorkspace->stateSize,
+                &targetsProductRuntime->workspace.catalog,
+                &targetsProductRuntime->workspace.decisions);
+            if (reopened != leshy1::storage::TargetCodecStatus::Valid) {
+                delete targetStateWorkspace;
+                delete targetsProductRuntime;
+                targetsProductRuntime = nullptr;
+                targetsHeapFreeAfter = static_cast<std::uint32_t>(
+                    heap_caps_get_free_size(MALLOC_CAP_8BIT));
+                targetsProductStatus = "target_state_reopen_failed";
+                lastRuntimeEvent = targetsProductStatus;
+                return false;
+            }
+            persistedForLoad = &targetsProductRuntime->workspace.catalog;
+            decisionsForLoad = &targetsProductRuntime->workspace.decisions;
+        }
+        delete targetStateWorkspace;
+        targetStateWorkspace = nullptr;
         targetsComparisonLoaded = pairRecovered;
         targetsBaselineBinding = pairRecovered
             ? TargetProductBinding{&librarySession, baselineGeneration}
@@ -4755,13 +4787,11 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             : TargetProductBinding{&surveySession, latestGeneration};
         const TargetsLoadStatus loaded = loadBoundTargetsProduct(
             controller,
-            persistedCatalogAvailable ? persistedCatalog : nullptr,
-            persistedCatalogAvailable ? persistedDecisions : nullptr);
+            persistedForLoad, decisionsForLoad);
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
     }
-    delete persistedCatalog;
-    delete persistedDecisions;
+    delete targetStateWorkspace;
     lastRuntimeEvent = targetsProductStatus;
     return true;
 }
