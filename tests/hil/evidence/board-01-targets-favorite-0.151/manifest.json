@@ -1,0 +1,15 @@
+{
+  "frames/actions-before.json": "e38b1da0ac179937aed4a63adea8c4a7009d4b1d32b172bdffd300d7deab883f",
+  "frames/actions-before.png": "e95f73931f8ae45beefb2b4d4e6c6bfa5f8564006d0ffae33779a75f01a9c8fb",
+  "frames/actions-saved.json": "beaf119654fabfa33f057fd413225d5388c59790ebdb39f66eb73c79f0cf9b9d",
+  "frames/actions-saved.png": "5b70edaf4ba9c8c2caefa365b42b143d5dc022c20392cf8c1f80ba70de0f1a64",
+  "frames/detail-before.json": "b0addff625328face07c1fa396159154350fb702aa133c96b909df36590d1257",
+  "frames/detail-before.png": "c8c24bdc3cd445516cfe7e1e258d9b39a2565183cdcf6f340aba086cf0138eae",
+  "frames/detail-reopened.json": "bb5389144264f1ad61c7bcdf0619b9f184b24e66d82720e096ab565457a70655",
+  "frames/detail-reopened.png": "041588de34973f072eb794b28bb06fc9da335400e3d21af2cdf8f387ff2a56bd",
+  "precursors/early-boot-harness.json": "a3069e90d6948f828ca552fb6d9c959b8d5aa63d68f91b10a6571facebe20d5b",
+  "precursors/workspace-after-mount.json": "4d18c6f4cf0b9072daa18a82d6b7c396c7f8e11e91e5199af967cccbf8a680c2",
+  "precursors/workspace-before-mount.json": "0ac3506b3d04d479f4a056e713d4e59c004e61f73d85a4f0860c8a680af3979e",
+  "provenance.json": "e310865f84bf70025eeedec6885a64bc8194352b31e12bdc103fd63f5ac84de9",
+  "run.json": "6f596f6a05153fc963c73bc5ba0aaec1b17656059d4497459a1b375952729412"
+}

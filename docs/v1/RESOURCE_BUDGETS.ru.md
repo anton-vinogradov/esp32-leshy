@@ -490,6 +490,26 @@ row ordering 32 B и row comparison 480 B; прежние frames 256/416/32/80/1
 22 544 B lifecycle-owned, удерживает 97 488/97 488 B до/после release и завершает
 run с lease zero в `E-HIL-168`.
 
+Checkpoint Favorite «Целей» `RB-M151`: exact production
+`0.151.2-targets-favorite-compact` использует 3 128 500 B linked flash,
+211 512 B static RAM и app/factory images 3 129 008/3 194 544 B. Это
++15 836 B linked flash, +216 B static RAM и +15 840/+15 840 B images против
+0.150 за view «Действия», typed mutation service, persistence catalog schema v3
+и supervised storage worker с deadline 8 s. Dedicated DIRAM равна
+294 692/341 760 B (86,23%, свободно 47 068 B); dedicated IRAM остаётся
+16 384/16 384 B. Существующий foreground workspace Targets 22 544 B остаётся
+lifecycle-owned. Mutation до mount FAT выделяет отдельный catalog-only workspace
+16 384 B; на реальной плате без PSRAM он видит 76 152 B free и largest block
+34 804 B, после выхода heap возвращается к 97 012 B. Exact HIL фиксирует UI
+acknowledgement 148 µs, worker 2 689 541 µs, 1 688 logical bytes, три writes,
+три file syncs и три directory syncs, generation 1→2 и cold reopen.
+SHA-256 firmware/ELF/map:
+`62a300adeb76514719a93de58757a78537a14766243140024920ebcd01d9dfee`/
+`bab922a10e4dd6d1ddf0215f0ec9cb97c85379da37cdebe61941884378ada0e5`/
+`7a7c598338633c0e6dae8ac7736be35021e6ecf6df36271e0510879583744c49`.
+Две предшествующие попытки allocation 32 КиБ отказывают до любой записи и
+сохранены вместе с accepted run в `E-HIL-169`.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

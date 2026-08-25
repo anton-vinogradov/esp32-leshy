@@ -1,0 +1,45 @@
+{
+  "candidate": {
+    "app_elf_sha256": "bab922a10e4dd6d1ddf0215f0ec9cb97c85379da37cdebe61941884378ada0e5",
+    "checked_stack_frames": {
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 416,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 256,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "bab922a10e4dd6d1ddf0215f0ec9cb97c85379da37cdebe61941884378ada0e5",
+    "firmware_bytes": 3129008,
+    "firmware_sha256": "62a300adeb76514719a93de58757a78537a14766243140024920ebcd01d9dfee",
+    "map_sha256": "7a7c598338633c0e6dae8ac7736be35021e6ecf6df36271e0510879583744c49",
+    "version": "0.151.2-targets-favorite-compact"
+  },
+  "raw_artifacts_manifest_sha256": "3e68b99a65eedfd8b494a7fb6db687d75614f6730790f57cbd3f40b94332919e",
+  "raw_run_sha256": "6f596f6a05153fc963c73bc5ba0aaec1b17656059d4497459a1b375952729412",
+  "retention_script": "tools/retain_1x_targets_favorite_hil.py",
+  "schema": "leshy.targets_favorite_hil.provenance.v1",
+  "source_commit": "02c55b61b0ec5e1efc82efce5423b5c34bf82bcb",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "e51a1f6a1b94ae8457895dbeb470ce6144d5f35438e49162d437ba38e884636d",
+    "firmware/leshy1/src/apps/targets/TargetsController.cpp": "5f2664d2ccf8d04c23ffe0e1f64e6d9e3c509bf0452684caf5d9fcba6a144100",
+    "firmware/leshy1/src/apps/targets/TargetsController.h": "92af1b5c3b12695c761bd95c75369afc5c1fc468383a071dd5d1c207ed212e65",
+    "firmware/leshy1/src/kernel/safety/WorkerDeadlineSupervisor.cpp": "856e6c5ac70585611891718259190acdada25e112f2fc04d7fac2d9c5fc7bac8",
+    "firmware/leshy1/src/kernel/safety/WorkerDeadlineSupervisor.h": "ec98c45893259637fbb667f37e77f728cd6e5c8d1a959ecb20612db483f3441f",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "73b204dfa01b75ab121b86de16061fdc0f0694fdf4eef27b32d2d99aa3841d71",
+    "firmware/leshy1/src/storage/TargetCodec.cpp": "5ed8410dccffbbab42a9bfd2a8c82c255bba62fb9a1dc42ce3daa126de55ef4b",
+    "firmware/leshy1/src/storage/TargetCodec.h": "1dcb38f32d2c14e98dab83ab74f04411550125c278571e004aefb5c90ce8af0f",
+    "firmware/leshy1/src/storage/TargetStateStore.cpp": "dd490a74a9dd9cf6651714989a6d2da38336f440097a6063c6dc217e5027cb1a",
+    "firmware/leshy1/src/storage/TargetStateStore.h": "0be3824ae8351dd8e836526250a57d7ae72c9b6e765d9ea990e9d29ca7aca72c",
+    "firmware/leshy1/src/ui/UiStrings.def": "f7af4a6d7d101a2bdab1ab5b8e9f22e88d0f34be9c72c5959f9329cbda63df6a",
+    "tests/hil/delta-scopes/targets-favorite-0.151.json": "c833eee83f87ef7e7ef915e7d633ad70c160ac3a85da456f0df62443681549ed",
+    "tests/native/clean_target_tests.cpp": "38bebd44a487bd49bdaaa71111b96e202abcbd77a3267c96b4ae17b59ef0a669",
+    "tests/native/target_state_persistence_tests.cpp": "5d28c829deb049644baa6775e800acfceb3254e758f026511d2db284a79e21a4",
+    "tests/native/targets_controller_tests.cpp": "2570b9613fea50cdbc2bd71bf204feb21dd0028afebe2d8705a16bf78257d3fe",
+    "tools/check_targets_product_contract.py": "ad320779d6dbf20d37938fd5929c4a708839e50d3a2668806b0c90694b401bfc",
+    "tools/check_worker_deadline_supervision.py": "0c5b16952f1bdd538dee7cdc9f7df749bfeefe5875ae338c63501cfe555f16a6",
+    "tools/run_1x_targets_favorite_hil.py": "9139e52820503fe2f1f179cdf007aa4453697f967ef56b5e0de5be73fb2c7cd3"
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "atomic_write": {
+    "mutation_action_us": 148,
+    "mutation_bytes_written": 1688,
+    "mutation_directory_syncs": 3,
+    "mutation_elapsed_us": 2689541,
+    "mutation_file_syncs": 3,
+    "mutation_heap_free_before_mount": 76152,
+    "mutation_heap_largest_before_mount": 34804,
+    "mutation_identity_attempts": 1,
+    "mutation_identity_transient_retries": 0,
+    "mutation_write_calls": 3
+  },
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-favorite-0.151",
+  "candidate": {
+    "app_elf_sha256": "bab922a10e4dd6d1ddf0215f0ec9cb97c85379da37cdebe61941884378ada0e5",
+    "checked_stack_frames": {
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 416,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 256,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "bab922a10e4dd6d1ddf0215f0ec9cb97c85379da37cdebe61941884378ada0e5",
+    "firmware_bytes": 3129008,
+    "firmware_sha256": "62a300adeb76514719a93de58757a78537a14766243140024920ebcd01d9dfee",
+    "map_sha256": "7a7c598338633c0e6dae8ac7736be35021e6ecf6df36271e0510879583744c49",
+    "version": "0.151.2-targets-favorite-compact"
+  },
+  "cold_reset": {
+    "bytes": 8587,
+    "first_byte_ms": 0.11754222214221954,
+    "ready_marker_ms": 1203.0590833164752,
+    "sha256": "1d9322e236ca0bd34409eca7909bfbe3fd72edcce4ab998da50e55b5f11d0edd"
+  },
+  "evidence_ids": [
+    "E-AUTO-109",
+    "E-HIL-169",
+    "E-UX-046"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "favorite": {
+    "after": false,
+    "before": true,
+    "cold_reopened": false,
+    "cold_reopened_generation": 2,
+    "generation_after": 2,
+    "generation_before": 1
+  },
+  "final": {
+    "lease_mask": 0,
+    "library_generation": 114,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "flash_count": 1,
+  "heap": {
+    "after_release": 97012,
+    "before": 85232
+  },
+  "manifest_sha256": "37ba6231b9e239b97c5a5ed03d8ce57cff370785d8670b4e54244d7dc8549aca",
+  "precursors": {
+    "early_boot_harness": {
+      "persisted_generation": 1,
+      "record": "precursors/early-boot-harness.json",
+      "source_commit": "d31ff8d66922bf490e54a5ff97e949cc056e2244",
+      "status": "rejected_harness_observation_order"
+    },
+    "workspace_after_mount": {
+      "record": "precursors/workspace-after-mount.json",
+      "source_commit": "595ff08098ebc0232b1891a099a10f43f8d931e3",
+      "status": "rejected_fail_closed_zero_writes"
+    },
+    "workspace_before_mount": {
+      "largest_block": 31732,
+      "record": "precursors/workspace-before-mount.json",
+      "source_commit": "ce6ba5b2ff2b1918c2bb761c87c4846f8dcaa9ff",
+      "status": "rejected_fail_closed_zero_writes"
+    }
+  },
+  "raw_artifacts_manifest_sha256": "3e68b99a65eedfd8b494a7fb6db687d75614f6730790f57cbd3f40b94332919e",
+  "raw_run_sha256": "6f596f6a05153fc963c73bc5ba0aaec1b17656059d4497459a1b375952729412",
+  "schema": "leshy.targets_favorite_hil.summary.v1",
+  "screens": {
+    "actions-before": {
+      "png": "frames/actions-before.png",
+      "png_sha256": "e95f73931f8ae45beefb2b4d4e6c6bfa5f8564006d0ffae33779a75f01a9c8fb"
+    },
+    "actions-saved": {
+      "png": "frames/actions-saved.png",
+      "png_sha256": "5b70edaf4ba9c8c2caefa365b42b143d5dc022c20392cf8c1f80ba70de0f1a64"
+    },
+    "detail-before": {
+      "png": "frames/detail-before.png",
+      "png_sha256": "c8c24bdc3cd445516cfe7e1e258d9b39a2565183cdcf6f340aba086cf0138eae"
+    },
+    "detail-reopened": {
+      "png": "frames/detail-reopened.png",
+      "png_sha256": "041588de34973f072eb794b28bb06fc9da335400e3d21af2cdf8f387ff2a56bd"
+    }
+  },
+  "session_generation": 114,
+  "source_commit": "02c55b61b0ec5e1efc82efce5423b5c34bf82bcb",
+  "status": "pass",
+  "target_id": "F37CBAC2BD0F95D9FA95F192DDE4C007",
+  "workspace_bytes": 16384
+}

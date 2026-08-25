@@ -498,6 +498,25 @@ frames remain within their gates. Exact one-flash physical acceptance keeps the
 22,544 B workspace lifecycle-owned, preserves 97,488/97,488 B before/after release
 and ends at lease zero in `E-HIL-168`.
 
+Targets Favorite checkpoint `RB-M151`: exact production
+`0.151.2-targets-favorite-compact` uses 3,128,500 B linked flash, 211,512 B
+static RAM and 3,129,008/3,194,544 B app/factory images. This is +15,836 B
+linked flash, +216 B static RAM and +15,840/+15,840 B images versus 0.150 for
+the Actions view, typed mutation service, schema-v3 catalog persistence and an
+8 s supervised storage worker. Dedicated DIRAM is 294,692/341,760 B (86.23%,
+47,068 B remaining); dedicated IRAM remains 16,384/16,384 B. The existing
+22,544 B foreground Targets workspace remains lifecycle-owned. The mutation
+allocates a separate 16,384 B catalog-only workspace before FAT mount; on the
+real no-PSRAM board it sees 76,152 B free and a 34,804 B largest block, then
+returns heap to 97,012 B after exit. Exact HIL records 148 µs UI acknowledgement,
+2,689,541 µs worker time, 1,688 logical bytes, three writes plus three file and
+three directory syncs, generation 1→2 and cold reopen. Firmware/ELF/map SHA-256
+are `62a300adeb76514719a93de58757a78537a14766243140024920ebcd01d9dfee`/
+`bab922a10e4dd6d1ddf0215f0ec9cb97c85379da37cdebe61941884378ada0e5`/
+`7a7c598338633c0e6dae8ac7736be35021e6ecf6df36271e0510879583744c49`.
+Two preceding 32 KiB allocation attempts fail before any write and are retained
+with the accepted run in `E-HIL-169`.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
