@@ -89,6 +89,7 @@ class MacWifiGuard:
         self.snapshot: WifiSnapshot | None = None
         self.restored = False
         self.restore_attempted = False
+        self.association_attempts = 0
         self._mutation_attempted = False
         self._temporary_ssid: str | None = None
 
@@ -171,26 +172,29 @@ class MacWifiGuard:
             time.sleep(0.25)
         raise RuntimeError("Wi-Fi association did not reach the expected SSID")
 
-    def _wait_for_hil_network(self) -> None:
-        deadline = time.monotonic() + self._wait_seconds
-        observed: tuple[str | None, str | None, str | None] = (
-            None, None, None)
-        while time.monotonic() < deadline:
-            observed = self._link_fingerprint()
-            address, router, subnet = observed
-            if (address is not None and address.startswith("192.168.4.") and
-                    address != "192.168.4.1" and
-                    router in (None, "192.168.4.1") and
-                    subnet == "255.255.255.0"):
-                return
-            time.sleep(0.25)
+    @staticmethod
+    def _is_hil_fingerprint(
+            observed: tuple[str | None, str | None, str | None]) -> bool:
+        address, router, subnet = observed
+        return (
+            address is not None and address.startswith("192.168.4.") and
+            address != "192.168.4.1" and
+            router in (None, "192.168.4.1") and
+            subnet == "255.255.255.0"
+        )
+
+    def _hil_failure(self, observed: tuple[str | None, str | None,
+                                           str | None],
+                     join_reported_failure: bool) -> RuntimeError:
         prior = None if self.snapshot is None else (
             self.snapshot.ipv4_address,
             self.snapshot.router,
             self.snapshot.subnet_mask,
         )
-        if observed == prior and prior != (None, None, None):
-            reason = "prior network remained active"
+        if join_reported_failure:
+            reason = "networksetup repeatedly reported join failure"
+        elif observed == prior and prior != (None, None, None):
+            reason = "prior network remained active after bounded retries"
         elif (observed[0] is not None and
               observed[0].startswith("192.168.4.")):
             reason = "the HIL subnet metadata was inconsistent"
@@ -201,8 +205,9 @@ class MacWifiGuard:
             reason = "no IPv4 link was established"
         else:
             reason = "an unexpected network fingerprint was established"
-        raise RuntimeError(
-            f"Wi-Fi did not reach the bounded HIL subnet: {reason}")
+        return RuntimeError(
+            "Wi-Fi did not reach the bounded HIL subnet after "
+            f"{self.association_attempts} attempts: {reason}")
 
     def _wait_for_fingerprint(self, snapshot: WifiSnapshot) -> None:
         deadline = time.monotonic() + self._wait_seconds
@@ -236,15 +241,34 @@ class MacWifiGuard:
         if not self._power():
             self._run(
                 ["-setairportpower", self.interface, "on"], "enable power")
-        join_output = self._run(
-            ["-setairportnetwork", self.interface, ssid, passphrase],
-            "join HIL network")
-        if "fail" in join_output.lower() or "error" in join_output.lower():
-            # networksetup may report a failed join in stdout while still
-            # returning exit status zero. Never echo the line: it can contain
-            # the temporary SSID, and the argv also contains the passphrase.
-            raise RuntimeError("networksetup reported HIL join failure")
-        self._wait_for_hil_network()
+        deadline = time.monotonic() + self._wait_seconds
+        observed = self._link_fingerprint()
+        join_reported_failure = False
+        while time.monotonic() < deadline:
+            self.association_attempts += 1
+            join_output = self._run(
+                ["-setairportnetwork", self.interface, ssid, passphrase],
+                "join HIL network")
+            this_join_reported_failure = (
+                "fail" in join_output.lower() or
+                "error" in join_output.lower())
+            join_reported_failure = (
+                join_reported_failure or this_join_reported_failure)
+            if this_join_reported_failure:
+                if time.monotonic() < deadline:
+                    time.sleep(0.25)
+                continue
+            # networksetup may need a fresh scan after the AP starts. Retry
+            # the join itself instead of merely polling a stale association.
+            attempt_deadline = min(deadline, time.monotonic() + 4.0)
+            while time.monotonic() < attempt_deadline:
+                observed = self._link_fingerprint()
+                if self._is_hil_fingerprint(observed):
+                    return
+                time.sleep(0.25)
+            if time.monotonic() < deadline:
+                time.sleep(0.25)
+        raise self._hil_failure(observed, join_reported_failure)
 
     def _remove_temporary_profile(self) -> None:
         if self._temporary_ssid is None:

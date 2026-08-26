@@ -30,6 +30,7 @@ class FakeNetworkSetup:
         self.commands: list[list[str]] = []
         self.fail_join = False
         self.soft_fail_join = False
+        self.soft_failures_remaining = 0
         self.hil_router: str | None = "192.168.4.1"
         self.address = "10.88.88.60" if power and ssid else None
         self.router = "10.88.88.1" if power and ssid else None
@@ -86,7 +87,9 @@ class FakeNetworkSetup:
         elif operation == "-setairportnetwork":
             if self.fail_join:
                 return subprocess.CompletedProcess(arguments, 1, "", "no")
-            if self.soft_fail_join:
+            if self.soft_fail_join or self.soft_failures_remaining > 0:
+                if self.soft_failures_remaining > 0:
+                    self.soft_failures_remaining -= 1
                 return subprocess.CompletedProcess(
                     arguments, 0, "Failed to join network\n", "")
             self.power = True
@@ -213,8 +216,19 @@ class CompanionWebHttpHilTests(unittest.TestCase):
         fake.soft_fail_join = True
         guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=0.01)
         guard.capture()
-        with self.assertRaisesRegex(RuntimeError, "reported HIL join failure"):
+        with self.assertRaisesRegex(RuntimeError, "reported join failure"):
             guard.connect("Leshy-8790D5", "temporary123")
+
+    def test_join_is_retried_within_one_bounded_budget(self) -> None:
+        fake = FakeNetworkSetup()
+        fake.soft_failures_remaining = 1
+        guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=1.0)
+        guard.capture()
+        guard.connect("Leshy-8790D5", "temporary123")
+        self.assertEqual(2, guard.association_attempts)
+        self.assertEqual("192.168.4.2", fake.address)
+        guard.restore()
+        self.assertTrue(guard.restored)
 
 
 if __name__ == "__main__":

@@ -1088,6 +1088,8 @@ def main() -> int:
                     }
                 finally:
                     expected_passphrase = ""
+                    host_wifi["association_attempts"] = (
+                        wifi_guard.association_attempts)
                     host_wifi["restore_attempted"] = True
                     try:
                         wifi_guard.restore()
