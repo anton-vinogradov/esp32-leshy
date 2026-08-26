@@ -128,6 +128,17 @@ class CompanionWebDeltaRunnerTests(unittest.TestCase):
             self.assertFalse(
                 runner.proven_clearable_runtime_watchdog(changed), field)
 
+    def test_target_id_requires_exact_uppercase_hex(self) -> None:
+        self.assertTrue(
+            runner.valid_target_id("D232CBB7B4489ABAABFAFD7163BB1D51"))
+        for invalid in (
+            "D232CBB7B4489ABAABFAFD7163BB1D5",
+            "d232cbb7b4489abaabfafd7163bb1d51",
+            "D232CBB7B4489ABAABFAFD7163BB1D5Z",
+            None,
+        ):
+            self.assertFalse(runner.valid_target_id(invalid), invalid)
+
     def test_runner_has_no_discovery_or_partition_write(self) -> None:
         source = (ROOT / "tools/run_1x_companion_web_delta_hil.py").read_text()
         self.assertNotIn("serial.tools.list_ports", source)
@@ -137,6 +148,10 @@ class CompanionWebDeltaRunnerTests(unittest.TestCase):
             'parser.add_argument("--partitions", required=True, type=Path)',
             source)
         self.assertIn('"clear_action_replays": 0', source)
+        self.assertIn(
+            'action(device, "down")  # comparison is row 0;', source)
+        self.assertIn('focused.get("selection") == 1', source)
+        self.assertIn('detail.get("view") == "detail"', source)
         self.assertLess(
             source.index("read_flash_with_retry("),
             source.index("flash_candidate(args.port"))

@@ -133,6 +133,52 @@ def proven_clearable_runtime_watchdog(state: dict[str, Any]) -> bool:
     )
 
 
+def valid_target_id(value: Any) -> bool:
+    return (
+        isinstance(value, str) and len(value) == 32 and
+        all(character in "0123456789ABCDEF" for character in value)
+    )
+
+
+def open_first_target_actions(
+    device: PassiveSerial,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Enter Actions through a real Target, never the comparison row."""
+    action(device, "down")  # comparison is row 0; first Target is row 1
+    focused = query(
+        device, b"targets.state", "leshy.targets.product.v1", "state")
+    require(
+        focused.get("view") == "list" and
+        focused.get("selection") == 1 and
+        focused.get("selected_target_present") is True and
+        valid_target_id(focused.get("selected_target_id")) and
+        focused.get("lease_mask") == 13,
+        f"first Target row is not focused: {focused}")
+    target_id = focused["selected_target_id"]
+
+    action(device, "right")
+    detail = query(
+        device, b"targets.state", "leshy.targets.product.v1", "state")
+    require(
+        detail.get("view") == "detail" and
+        detail.get("selected_target_present") is True and
+        detail.get("selected_target_id") == target_id and
+        detail.get("lease_mask") == 13,
+        f"first Target detail is not open: {detail}")
+
+    action(device, "right")
+    actions = query(
+        device, b"targets.state", "leshy.targets.product.v1", "state")
+    require(
+        actions.get("view") == "actions" and
+        actions.get("selected_target_present") is True and
+        actions.get("selected_target_id") == target_id and
+        actions.get("action_selection") == 0 and
+        actions.get("lease_mask") == 13,
+        f"first Target actions are not open: {actions}")
+    return focused, detail, actions
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -421,8 +467,7 @@ def main() -> int:
                     targets.get("blocked_write_attempts") == 0,
                     f"Targets snapshot unavailable: {targets}")
 
-            action(device, "right")
-            action(device, "right")
+            focused, detail, actions = open_first_target_actions(device)
             for _ in range(5):
                 action(device, "down")
             selected = query(
@@ -514,6 +559,9 @@ def main() -> int:
             "metrics_before": metrics_before,
             "metrics_after": metrics_after,
             "targets": targets,
+            "focused": focused,
+            "detail": detail,
+            "actions": actions,
             "selected": selected,
             "staged": staged,
             "active": active,
