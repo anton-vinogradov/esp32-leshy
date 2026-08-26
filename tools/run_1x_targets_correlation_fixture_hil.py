@@ -7,13 +7,20 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import Any
 
+import serial
+
+from capture_1x_ui import PassiveSerial, read_json
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import artifact_manifest
 
 
 SCHEMA = "leshy.targets_correlation_fixture_orchestration.v1"
+FIXTURE_SCHEMA = "leshy.hil.correlation_fixture.v1"
+FIXTURE_LABEL = "LESHY-HIL-CORR"
 
 
 def flash_with_openocd(executable: Path, scripts: Path, serial: str,
@@ -26,6 +33,51 @@ def flash_with_openocd(executable: Path, scripts: Path, serial: str,
         "-c", f"program_esp {image.resolve()} 0x10000 verify reset exit",
     ]
     subprocess.run(command, check=True)
+
+
+def wait_fixture_ready(port: str, timeout: float = 30.0) -> dict[str, Any]:
+    """Require two stable fixture replies after native-USB re-enumeration."""
+    started = time.monotonic()
+    deadline = started + timeout
+    attempts = 0
+    last_error = "fixture endpoint did not appear"
+    while time.monotonic() < deadline:
+        attempts += 1
+        device: PassiveSerial | None = None
+        try:
+            device = PassiveSerial()
+            device.port = port
+            device.baudrate = 115200
+            device.timeout = 0.25
+            device.open()
+            states = []
+            for _ in range(2):
+                device.reset_input_buffer()
+                device.write(b"state\n")
+                device.flush()
+                state = read_json(
+                    device, FIXTURE_SCHEMA, "state", timeout=2.0)
+                if state.get("label") != FIXTURE_LABEL:
+                    raise RuntimeError(f"unexpected fixture state: {state}")
+                states.append(state)
+                time.sleep(0.5)
+            return {
+                "fixture_ready_attempts": attempts,
+                "fixture_ready_elapsed_ms": round(
+                    (time.monotonic() - started) * 1000.0, 3),
+                "fixture_ready_state": states[-1],
+                "fixture_ready_stable_replies": len(states),
+            }
+        except (OSError, serial.SerialException, TimeoutError,
+                RuntimeError) as error:
+            last_error = f"{type(error).__name__}: {error}"
+            time.sleep(0.25)
+        finally:
+            if device is not None and device.is_open:
+                device.close()
+    raise TimeoutError(
+        f"fixture USB did not stabilize on {port} after {attempts} attempts: "
+        f"{last_error}")
 
 
 def main() -> int:
@@ -83,6 +135,10 @@ def main() -> int:
         "fixture_openocd_serial": args.fixture_openocd_serial,
         "fixture_restore_attempted": False,
         "fixture_restore_complete": False,
+        "fixture_ready_attempts": 0,
+        "fixture_ready_elapsed_ms": None,
+        "fixture_ready_state": None,
+        "fixture_ready_stable_replies": 0,
     }
     failure: BaseException | None = None
     try:
@@ -93,6 +149,7 @@ def main() -> int:
         else:
             flash_candidate(args.fixture_port, args.fixture_firmware, 0x10000,
                             args.flash_baud)
+        record.update(wait_fixture_ready(args.fixture_port))
         command = [
             sys.executable, "tools/run_1x_targets_correlation_hil.py",
             "--port", args.dut_port,

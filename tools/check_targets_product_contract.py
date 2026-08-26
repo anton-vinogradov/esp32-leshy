@@ -32,6 +32,8 @@ def main() -> int:
     notes_runner = (ROOT / "tools/run_1x_targets_notes_hil.py").read_text()
     correlation_runner = (
         ROOT / "tools/run_1x_targets_correlation_hil.py").read_text()
+    correlation_fixture_runner = (
+        ROOT / "tools/run_1x_targets_correlation_fixture_hil.py").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -252,6 +254,15 @@ def main() -> int:
             "correlation HIL must find one bounded natural proposal, review "
             "both exact observations, atomically accept and cold-reopen the "
             "same decision log")
+    require(failures,
+            "def wait_fixture_ready" in correlation_fixture_runner and
+            "fixture_ready_attempts" in correlation_fixture_runner and
+            "fixture_ready_elapsed_ms" in correlation_fixture_runner and
+            "fixture_ready_stable_replies" in correlation_fixture_runner and
+            "range(2)" in correlation_fixture_runner and
+            "record.update(wait_fixture_ready" in correlation_fixture_runner,
+            "correlation fixture orchestration must prove two stable native-USB "
+            "replies after JTAG reset before the product delta starts")
     require(failures,
             "renderTargetsPage" in entry and
             "renderTargetListRow" in entry and
