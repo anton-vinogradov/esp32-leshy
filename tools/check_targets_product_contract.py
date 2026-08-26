@@ -501,11 +501,15 @@ def main() -> int:
             "FR_TIMEOUT" in fs_io and
             littlefs_io.count("progress(\"") >= 12 and
             fs_io.count("progress(\"") >= 12 and
-            "vTaskDelay(pdMS_TO_TICKS(1))" in fixture_worker and
+            "supervisedCheckpoint = targetsStoreSupervisedCheckpoint" in
+                fixture_worker and
             "filesystem, supervisedCheckpoint" in fixture_worker and
-            "vTaskDelay(pdMS_TO_TICKS(1))" in mutation_worker and
+            "supervisedCheckpoint = targetsStoreSupervisedCheckpoint" in
+                mutation_worker and
             "sdSessionStoreIoWorkspace,\n            supervisedCheckpoint" in
-                mutation_worker,
+                mutation_worker and
+            "bool targetsStoreSupervisedCheckpoint()" in entry and
+            "if (accepted) vTaskDelay(pdMS_TO_TICKS(1));" in entry,
             "Targets atomic stores must heartbeat the bounded worker and yield "
             "the scheduler at every LittleFS/FatFs file boundary; callback "
             "cancellation remains a fail-closed storage error")

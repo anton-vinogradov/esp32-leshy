@@ -2082,6 +2082,13 @@ bool heartbeatTargetsStoreDeadline() {
     return accepted;
 }
 
+bool targetsStoreSupervisedCheckpoint() {
+    if (targetsStoreDeadlineCancelled()) return false;
+    const bool accepted = heartbeatTargetsStoreDeadline();
+    if (accepted) vTaskDelay(pdMS_TO_TICKS(1));
+    return accepted && !targetsStoreDeadlineCancelled();
+}
+
 bool disarmTargetsStoreDeadline() {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     const bool disarmed = workerDeadlineSupervisor.disarm(
@@ -5530,12 +5537,7 @@ void runTargetsMergeFixtureMutationWorker(void*) {
         leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
     resetTargetsStoreDeadlineCancel();
     deadlineArmed = armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs);
-    const auto supervisedCheckpoint = []() {
-        if (targetsStoreDeadlineCancelled()) return false;
-        const bool accepted = heartbeatTargetsStoreDeadline();
-        if (accepted) vTaskDelay(pdMS_TO_TICKS(1));
-        return accepted && !targetsStoreDeadlineCancelled();
-    };
+    const auto supervisedCheckpoint = targetsStoreSupervisedCheckpoint;
     do {
         if (!deadlineArmed) {
             event.status = "deadline_unavailable";
@@ -5776,12 +5778,7 @@ void runTargetsMutationWorker(void*) {
         leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
     resetTargetsStoreDeadlineCancel();
     deadlineArmed = armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs);
-    const auto supervisedCheckpoint = []() {
-        if (targetsStoreDeadlineCancelled()) return false;
-        const bool accepted = heartbeatTargetsStoreDeadline();
-        if (accepted) vTaskDelay(pdMS_TO_TICKS(1));
-        return accepted && !targetsStoreDeadlineCancelled();
-    };
+    const auto supervisedCheckpoint = targetsStoreSupervisedCheckpoint;
     do {
         if (!deadlineArmed) {
             event.status = "deadline_unavailable";

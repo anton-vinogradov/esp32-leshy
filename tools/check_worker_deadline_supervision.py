@@ -126,16 +126,14 @@ def main() -> int:
     targets_fixture_store = entry[targets_fixture_start:targets_start]
     targets_store = entry[targets_start:targets_end]
     require(targets_fixture_store, (
-        "heartbeatTargetsStoreDeadline()",
-        "vTaskDelay(pdMS_TO_TICKS(1))",
+        "supervisedCheckpoint = targetsStoreSupervisedCheckpoint",
         "ArduinoLittleFsSessionStoreIo(\n            filesystem, "
         "supervisedCheckpoint)",
     ), "Targets fixture cooperative storage supervision")
     require(targets_store, (
         "armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs)",
         "targetsStoreDeadlineCancelled()",
-        "heartbeatTargetsStoreDeadline()",
-        "vTaskDelay(pdMS_TO_TICKS(1))",
+        "supervisedCheckpoint = targetsStoreSupervisedCheckpoint",
         "sdSessionStoreIoWorkspace,\n            supervisedCheckpoint",
         "disarmTargetsStoreDeadline();",
         "xQueueOverwrite(targetsMutationEvents, &event)",
@@ -143,6 +141,13 @@ def main() -> int:
     if targets_store.count("supervisedCheckpoint()") < 6:
         raise AssertionError(
             "Targets Store lacks heartbeat coverage around storage boundaries")
+
+    require(entry, (
+        "bool targetsStoreSupervisedCheckpoint()",
+        "const bool accepted = heartbeatTargetsStoreDeadline();",
+        "if (accepted) vTaskDelay(pdMS_TO_TICKS(1));",
+        "return accepted && !targetsStoreDeadlineCancelled();",
+    ), "Targets Store cooperative checkpoint")
 
     require(entry, (
         "kProductSurveyPreparationDeadlineUs = 8000000ULL",

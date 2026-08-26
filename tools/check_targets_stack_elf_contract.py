@@ -54,6 +54,7 @@ LIMITS = {
     # under the bounded Arduino loop task, while mutation owns an explicit
     # 8-KiB worker stack. Keep both concrete ELF frames under review.
     "loadTargetsMergeFixture(": 1536,
+    "targetsStoreSupervisedCheckpoint()": 256,
     "runTargetsMergeFixtureMutationWorker(": 2048,
 }
 
