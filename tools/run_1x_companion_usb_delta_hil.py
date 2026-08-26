@@ -52,6 +52,7 @@ def companion_request(device: PassiveSerial, payload: bytes,
     device.write(payload + b"\n")
     device.flush()
     deadline = time.monotonic() + timeout
+    ignored: list[str] = []
     while time.monotonic() < deadline:
         line = device.readline()
         if not line:
@@ -59,11 +60,16 @@ def companion_request(device: PassiveSerial, payload: bytes,
         try:
             value = json.loads(line)
         except (UnicodeDecodeError, json.JSONDecodeError):
+            ignored.append(repr(line[:160]))
+            ignored = ignored[-8:]
             continue
         if (isinstance(value, dict) and
                 value.get("schema") == PROTOCOL_SCHEMA):
             return value
-    raise TimeoutError("timed out waiting for companion response")
+        ignored.append(repr(line[:160]))
+        ignored = ignored[-8:]
+    raise TimeoutError(
+        f"timed out waiting for companion response; ignored={ignored}")
 
 
 def request(kind: str, request_id: str, **fields: Any) -> bytes:
