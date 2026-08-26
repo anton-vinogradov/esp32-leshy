@@ -311,6 +311,15 @@ def main() -> int:
         scans: list[dict[str, Any]] = []
         for attempt in range(MAX_FRESH_SURVEY_CYCLES + 1):
             listed = open_targets(device)
+            # Boot recovery is an immutable startup snapshot. Earlier bounded
+            # diagnostics may have committed newer generations without a DUT
+            # reset, while this just-opened exact pair is authoritative for the
+            # next atomic generation.
+            latest_generation = max(
+                latest_generation,
+                int(listed.get("current_generation", 0)),
+                int(listed.get("selected_generation", 0)),
+            )
             selected = find_proposal(device, listed)
             if selected is not None:
                 states["proposal_selected"] = selected
