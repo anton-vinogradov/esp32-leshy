@@ -15546,6 +15546,22 @@ void emitTargetsState(Stream& reply) {
         encodeHex(controller->notesEditorText(), length,
                   editorNotesPrefixHex, sizeof(editorNotesPrefixHex));
     }
+    char selectedObservationIdentityHex[
+        Observation::kIdentityCapacity * 2U + 1U] = {};
+    char selectedObservationLabelHex[
+        Observation::kLabelCapacity * 2U + 1U] = {};
+    if (selected != nullptr) {
+        for (std::size_t index = 0;
+             index < selected->latest.identityLength; ++index) {
+            std::snprintf(selectedObservationIdentityHex + index * 2U, 3,
+                          "%02X", static_cast<unsigned>(
+                              selected->latest.identity[index]));
+        }
+        encodeHex(selected->latest.label.data(),
+                  selected->latest.labelLength,
+                  selectedObservationLabelHex,
+                  sizeof(selectedObservationLabelHex));
+    }
     const CorrelationProposal* correlationProposal = controller == nullptr
         ? nullptr : controller->reviewedCorrelationProposal();
     Observation correlationKnown{};
@@ -15629,6 +15645,9 @@ void emitTargetsState(Stream& reply) {
         "\"current_observation_sequence\":%llu,"
         "\"current_rssi_dbm\":%d,\"current_channel\":%u,"
         "\"selected_generation\":%lu,\"selected_rssi_dbm\":%d,"
+        "\"selected_observation_radio\":%u,"
+        "\"selected_observation_identity_hex\":\"%s\","
+        "\"selected_observation_label_hex\":\"%s\","
         "\"selected_target_present\":%s,\"selected_target_id\":\"%s\","
         "\"selected_favorite\":%s,"
         "\"selected_name_length\":%u,\"selected_name_hex\":\"%s\","
@@ -15770,6 +15789,10 @@ void emitTargetsState(Stream& reply) {
         static_cast<unsigned long>(selected == nullptr
                                        ? 0 : selected->evidence.sourceGeneration),
         static_cast<int>(selected == nullptr ? 0 : selected->latest.rssiDbm),
+        static_cast<unsigned>(selected == nullptr
+                                  ? RadioKind{} : selected->latest.radio),
+        selectedObservationIdentityHex,
+        selectedObservationLabelHex,
         selectedTarget == nullptr ? "false" : "true",
         selectedTargetId,
         selectedTarget != nullptr && selectedTarget->favorite

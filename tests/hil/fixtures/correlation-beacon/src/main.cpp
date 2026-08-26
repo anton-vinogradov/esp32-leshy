@@ -7,15 +7,16 @@
 namespace {
 
 constexpr const char* kSchema = "leshy.hil.correlation_fixture.v1";
-constexpr const char* kLabel = "LESHY-HIL-CORR";
 constexpr int kWifiTxDbm = -1;
-constexpr int kBleTxDbm = 6;
+constexpr int kBleTxDbm = -12;
+constexpr std::size_t kLabelCapacity = 20;
 
 enum class Mode : std::uint8_t { Off, Wifi, Ble };
 
 Mode mode = Mode::Off;
 BLEAdvertising* advertising = nullptr;
 bool bleInitialized = false;
+char label[kLabelCapacity + 1U] = "LESHY-HIL-CORR";
 
 const char* modeName() {
     switch (mode) {
@@ -31,7 +32,7 @@ void emitState() {
         "{\"schema\":\"%s\",\"kind\":\"state\",\"mode\":\"%s\","
         "\"label\":\"%s\",\"wifi_tx\":%s,\"ble_tx\":%s,"
         "\"wifi_tx_dbm\":%d,\"ble_tx_dbm\":%d}\n",
-        kSchema, modeName(), kLabel, mode == Mode::Wifi ? "true" : "false",
+        kSchema, modeName(), label, mode == Mode::Wifi ? "true" : "false",
         mode == Mode::Ble ? "true" : "false", kWifiTxDbm, kBleTxDbm);
 }
 
@@ -62,7 +63,7 @@ bool setWifi() {
     setOff();
     WiFi.mode(WIFI_AP);
     WiFi.setTxPower(WIFI_POWER_MINUS_1dBm);
-    if (!WiFi.softAP(kLabel, nullptr, 1, false, 1)) {
+    if (!WiFi.softAP(label, nullptr, 1, false, 1)) {
         setOff();
         return false;
     }
@@ -72,9 +73,9 @@ bool setWifi() {
 
 bool setBle() {
     setOff();
-    BLEDevice::init(kLabel);
+    BLEDevice::init(label);
     bleInitialized = true;
-    BLEDevice::setPower(ESP_PWR_LVL_P6, ESP_BLE_PWR_TYPE_ADV);
+    BLEDevice::setPower(ESP_PWR_LVL_N12, ESP_BLE_PWR_TYPE_ADV);
     advertising = BLEDevice::getAdvertising();
     if (advertising == nullptr) {
         setOff();
@@ -86,7 +87,7 @@ bool setBle() {
     // scan request that would be needed to recover a scan-response-only name.
     data.setFlags(ESP_BLE_ADV_FLAG_GEN_DISC |
                   ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
-    data.setName(kLabel);
+    data.setName(label);
     advertising->setScanResponse(false);
     if (!advertising->setAdvertisementData(data)) {
         setOff();
@@ -111,12 +112,45 @@ void reject(const char* reason) {
         "\"reason\":\"%s\"}\n", kSchema, reason);
 }
 
+bool setLabel(const char* hex) {
+    if (mode != Mode::Off || hex == nullptr) return false;
+    const std::size_t length = std::strlen(hex);
+    if (length == 0U || (length % 2U) != 0U ||
+        length > kLabelCapacity * 2U) {
+        return false;
+    }
+    char decoded[kLabelCapacity + 1U] = {};
+    const auto nibble = [](char value) -> int {
+        if (value >= '0' && value <= '9') return value - '0';
+        if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+        if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+        return -1;
+    };
+    for (std::size_t index = 0; index < length / 2U; ++index) {
+        const int high = nibble(hex[index * 2U]);
+        const int low = nibble(hex[index * 2U + 1U]);
+        if (high < 0 || low < 0) return false;
+        const char value = static_cast<char>((high << 4) | low);
+        if (value < 0x20 || value > 0x7e || value == '"' || value == '\\') {
+            return false;
+        }
+        decoded[index] = value;
+    }
+    std::strcpy(label, decoded);
+    return true;
+}
+
 void handleLine(char* line) {
     if (std::strcmp(line, "state") == 0) {
         emitState();
         return;
     }
-    if (std::strcmp(line, "mode off") == 0) {
+    if (std::strncmp(line, "label ", 6) == 0) {
+        if (!setLabel(line + 6)) {
+            reject("label_rejected");
+            return;
+        }
+    } else if (std::strcmp(line, "mode off") == 0) {
         setOff();
     } else if (std::strcmp(line, "mode wifi") == 0) {
         if (!setWifi()) {
@@ -144,7 +178,7 @@ void setup() {
 }
 
 void loop() {
-    static char line[32] = {};
+    static char line[64] = {};
     static std::size_t length = 0;
     while (Serial.available() > 0) {
         const char value = static_cast<char>(Serial.read());

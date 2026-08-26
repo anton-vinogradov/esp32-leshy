@@ -34,6 +34,8 @@ def main() -> int:
         ROOT / "tools/run_1x_targets_correlation_hil.py").read_text()
     correlation_fixture_runner = (
         ROOT / "tools/run_1x_targets_correlation_fixture_hil.py").read_text()
+    correlation_fixture = (
+        ROOT / "tests/hil/fixtures/correlation-beacon/src/main.cpp").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -168,6 +170,9 @@ def main() -> int:
             r'\"correlation_feature_kind\":\"%s\"' in entry and
             r'\"correlation_known_generation\":%lu' in entry and
             r'\"correlation_candidate_generation\":%lu' in entry and
+            r'\"selected_observation_radio\":%u' in entry and
+            r'\"selected_observation_identity_hex\":\"%s\"' in entry and
+            r'\"selected_observation_label_hex\":\"%s\"' in entry and
             r'\"mutation_correlation_status\":\"%s\"' in entry,
             "Targets correlation review must keep candidates independent, "
             "show explainable proposals and atomically persist accept/reject")
@@ -248,6 +253,10 @@ def main() -> int:
             "correlation_evidence_candidate=True" in correlation_runner and
             "host_reconnects" in correlation_runner and
             "device.open()" in correlation_runner and
+            "def fixture_label" in correlation_runner and
+            "def known_wifi_fixture_label" in correlation_runner and
+            'fixture_mode(fixture, "ble")' in correlation_runner and
+            'fixture_mode(fixture, "wifi")' not in correlation_runner and
             'mutation_correlation_status="accepted"' in correlation_runner and
             "correlation_decision_count=decisions_after" in
                 correlation_runner and
@@ -256,6 +265,14 @@ def main() -> int:
             "correlation HIL must find one bounded natural proposal, review "
             "both exact observations, atomically accept and cold-reopen the "
             "same decision log")
+    require(failures,
+            'constexpr int kBleTxDbm = -12' in correlation_fixture and
+            'ESP_PWR_LVL_N12' in correlation_fixture and
+            'bool setLabel(const char* hex)' in correlation_fixture and
+            'std::strncmp(line, "label ", 6)' in correlation_fixture and
+            'advertising->setScanResponse(false)' in correlation_fixture,
+            "the second-DIV fixture must use a bounded dynamic primary-PDU "
+            "name at minimum BLE power without requiring an active scan")
     require(failures,
             "def wait_fixture_ready" in correlation_fixture_runner and
             "fixture_ready_attempts" in correlation_fixture_runner and

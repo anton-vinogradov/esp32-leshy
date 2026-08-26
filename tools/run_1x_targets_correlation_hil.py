@@ -80,6 +80,9 @@ def find_proposal(device: PassiveSerial,
                 "selection", "selected_target_id", "selected_generation",
                 "selected_rssi_dbm", "correlation_count",
                 "correlation_proposal_present",
+                "selected_observation_radio",
+                "selected_observation_identity_hex",
+                "selected_observation_label_hex",
             )
         })
         if int(selected.get("correlation_count", 0)) > 0:
@@ -168,6 +171,76 @@ def fixture_mode(device: PassiveSerial, mode: str) -> dict[str, Any]:
     raise RuntimeError(
         f"external fixture mode did not converge to {mode}; "
         f"reconnects={reconnects}, last_error={last_error}, stale={stale}")
+
+
+def fixture_label(device: PassiveSerial, label_hex: str) -> dict[str, Any]:
+    if (not label_hex or len(label_hex) > 40 or len(label_hex) % 2 != 0 or
+            any(value not in "0123456789ABCDEF" for value in label_hex)):
+        raise RuntimeError(f"unsafe fixture label hex: {label_hex!r}")
+    expected = bytes.fromhex(label_hex).decode("ascii")
+    started = time.monotonic()
+    deadline = started + 20.0
+    reconnects = 0
+    send_label = True
+    last_error = "no fixture response"
+    stale: list[dict[str, Any]] = []
+    while time.monotonic() < deadline:
+        try:
+            if not device.is_open:
+                device.open()
+            device.reset_input_buffer()
+            command = f"label {label_hex}\n" if send_label else "state\n"
+            device.write(command.encode("ascii"))
+            device.flush()
+            send_label = False
+            state = read_json(
+                device, FIXTURE_SCHEMA, "state",
+                timeout=min(2.5, max(0.1, deadline - time.monotonic())))
+            if state.get("mode") == "off" and state.get("label") == expected:
+                state["host_reconnects"] = reconnects
+                state["host_transition_ms"] = round(
+                    (time.monotonic() - started) * 1000.0, 3)
+                return state
+            stale.append(state)
+            send_label = True
+        except (OSError, serial.SerialException, TimeoutError) as error:
+            last_error = f"{type(error).__name__}: {error}"
+            if device.is_open:
+                device.close()
+            reconnects += 1
+            send_label = False
+            time.sleep(0.25)
+    raise RuntimeError(
+        "external fixture label did not converge; "
+        f"reconnects={reconnects}, last_error={last_error}, stale={stale}")
+
+
+def known_wifi_fixture_label(
+        searched: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for state in searched:
+        label_hex = state.get("selected_observation_label_hex")
+        if (state.get("selected_observation_radio") != 1 or
+                not isinstance(label_hex, str) or not label_hex or
+                len(label_hex) > 40 or len(label_hex) % 2 != 0 or
+                any(value not in "0123456789ABCDEF" for value in label_hex)):
+            continue
+        try:
+            label = bytes.fromhex(label_hex).decode("ascii")
+        except (UnicodeDecodeError, ValueError):
+            continue
+        if (not label or any(ord(value) < 0x20 or ord(value) > 0x7e or
+                             value in '\"\\' for value in label)):
+            continue
+        return {
+            "label": label,
+            "label_hex": label_hex,
+            "known_target_id": state.get("selected_target_id"),
+            "known_identity_hex": state.get(
+                "selected_observation_identity_hex"),
+            "known_rssi_dbm": state.get("selected_rssi_dbm"),
+            "known_generation": state.get("selected_generation"),
+        }
+    return None
 
 
 def check_atomic_accept(state: dict[str, Any], generation: int,
@@ -273,7 +346,7 @@ def main() -> int:
             "macos_corebluetooth" if args.external_ble_label is not None else
             "none"),
         "port": args.fixture_port,
-        "label": ("LESHY-HIL-CORR" if args.fixture_port is not None else
+        "label": ("pending_known_target" if args.fixture_port is not None else
                   args.external_ble_label),
         "states": fixture_states,
         "dut_remained_passive": True,
@@ -347,6 +420,7 @@ def main() -> int:
 
         latest_generation = int(recovery["generation"])
         selected: dict[str, Any] | None = None
+        selected_fixture_label: dict[str, Any] | None = None
         for attempt in range(MAX_FRESH_SURVEY_CYCLES + 1):
             listed = open_targets(device)
             states[f"attempt_{attempt}_listed"] = listed
@@ -369,11 +443,16 @@ def main() -> int:
             if attempt == MAX_FRESH_SURVEY_CYCLES:
                 break
             if fixture is not None:
-                requested_mode = "wifi" if len(scans) % 2 == 0 else "ble"
-                if (not fixture_states or
-                        fixture_states[-1].get("mode") != requested_mode):
-                    fixture_states.append(fixture_mode(
-                        fixture, requested_mode))
+                if selected_fixture_label is None:
+                    selected_fixture_label = known_wifi_fixture_label(searched)
+                    if selected_fixture_label is None:
+                        raise RuntimeError(
+                            "no safe known Wi-Fi target label is available "
+                            "for the non-evicting BLE correlation fixture")
+                    fixture_states.append(fixture_label(
+                        fixture, selected_fixture_label["label_hex"]))
+                    fixture_record.update(selected_fixture_label)
+                fixture_states.append(fixture_mode(fixture, "ble"))
             committed = run_survey_cycle(device, latest_generation, trace)
             latest_generation = int(committed["survey_generation"])
             scans.append({

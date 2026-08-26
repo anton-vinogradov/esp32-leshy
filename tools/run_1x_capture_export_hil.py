@@ -32,6 +32,7 @@ from run_1x_product_survey_hil import (
     query,
     recovered_failures,
     reset_capture,
+    open_latest_library,
     valid_cid,
     wait_ui_state,
 )
@@ -562,10 +563,8 @@ def main() -> int:
                         recovery_after, generation, observations,
                         args.expected_cid,
                     ))
-                    trace.append(action(device, "down"))
-                    trace.append(action(device, "down"))
-                    trace.append(action(device, "select"))
-                    trace.append(action(device, "select"))
+                    open_latest_library(device, trace)
+                    trace.append(action(device, "right"))
                     captures["library_detail"] = capture(
                         device, frames, "library-detail"
                     )

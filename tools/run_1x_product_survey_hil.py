@@ -398,6 +398,44 @@ def action(device: Any, name: str, timeout: float = 15.0) -> dict[str, Any]:
     return read_json(device, "leshy.ui.v1", "state", timeout=timeout)
 
 
+def normalize_home(device: Any,
+                   trace: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    state = query(device, b"ui.state", "leshy.ui.v1", "state")
+    for _ in range(8):
+        if state.get("page") == "home":
+            break
+        state = action(device, "back")
+        if trace is not None:
+            trace.append(state)
+    if state.get("page") != "home":
+        raise RuntimeError(f"cannot normalize Home: {state}")
+    for _ in range(8):
+        if int(state.get("selection", -1)) == 0:
+            break
+        state = action(device, "up")
+        if trace is not None:
+            trace.append(state)
+    if int(state.get("selection", -1)) != 0:
+        raise RuntimeError(f"cannot normalize Home selection: {state}")
+    return state
+
+
+def open_latest_library(device: Any,
+                        trace: list[dict[str, Any]]) -> dict[str, Any]:
+    state = normalize_home(device, trace)
+    for _ in range(6):
+        state = action(device, "down")
+        trace.append(state)
+    if (state.get("page") != "home" or state.get("selection") != 6 or
+            state.get("selected_id") != "library"):
+        raise RuntimeError(f"cannot focus final Home Library row: {state}")
+    state = action(device, "right")
+    trace.append(state)
+    if state.get("page") != "library":
+        raise RuntimeError(f"cannot open Library: {state}")
+    return state
+
+
 def focus_survey_start(device: Any) -> dict[str, Any]:
     """Reach the public Start row after Sources and RF spectrum."""
     state = query(device, b"ui.state", "leshy.ui.v1", "state")
@@ -915,17 +953,14 @@ def main() -> int:
                     failures.extend(recovered_failures(
                         post_recovery, generation, observations, expected_cid
                     ))
-                    trace.append(action(device, "down"))
-                    trace.append(action(device, "down"))
-                    library = action(device, "select")
-                    trace.append(library)
+                    library = open_latest_library(device, trace)
                     failures.extend(expect(library, {
                         "page": "library", "runtime_owner": "library",
                         "lease_mask": 5, "library_persistent": True,
                         "library_simulated": False,
                         "library_generation": generation,
                     }, "library"))
-                    trace.append(action(device, "select"))
+                    trace.append(action(device, "right"))
                     trace.append(action(device, "right"))
                     captures["export"] = capture(device, frames, "export")
                     export = query(
