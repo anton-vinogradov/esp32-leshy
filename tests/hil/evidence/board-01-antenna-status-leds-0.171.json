@@ -7,10 +7,10 @@
     "E-HIL-178",
     "E-UX-053"
   ],
-  "firmware_source_commit": "c2413c9962998281dd54080a1fb67f54db8776b3",
+  "firmware_source_commit": "c2413c9e31b89efd646a0ca15d2eb2b574d90fe5",
   "harness_commits": [
     "496f7d90fe2317f3a7897bc12ba3cb3e4768cecf",
-    "fc689ef851cf8b80e8346a7e8e85600190fa7806"
+    "fc689ef5872950acc577d0ee9b8dae042b56fb74"
   ],
   "candidate": {
     "version": "0.171.0-antenna-status-leds",

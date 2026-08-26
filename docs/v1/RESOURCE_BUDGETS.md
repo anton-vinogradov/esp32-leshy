@@ -695,6 +695,25 @@ bounded load. Exact firmware/factory/ELF/map/partitions SHA-256 are
 released heap and zero storage writes, TX, drops or leaked lease. Cadence advances to
 14/15; the next accepted physical delta triggers the established full-matrix gate.
 
+Per-antenna LED and cadence-full checkpoint `RB-M161`: exact production
+`0.171.0-antenna-status-leds` at source
+`c2413c9e31b89efd646a0ca15d2eb2b574d90fe5` uses 214,696 B static RAM,
+3,175,040 B linked flash and 3,175,536/3,241,072 B app/factory images. This is
++32 B static RAM and +2,960/+2,960/+2,960 B linked/app/factory versus exact 0.170.
+The fixed four-pixel GPIO1 controller adds no frame buffer, heap allocation or timing
+loop: it writes only when receiver state or the persisted raw 0/2/3/5/8/12 preference
+changes. Exact firmware/factory/ELF/map/partitions SHA-256 are
+`77d14d9ac10f64cb60fb97f2f3b6b3986d2cdac71085b454d6d25267794e0784`/
+`04bb4a4fb78cd4de7e12e5a2c4b43311e8e1af097c8e5181173a0bc08500a0fe`/
+`e5189daa424da4e2ca04e5e94390f19e9ef3d483c894b10a62c8da9da08d247c`/
+`04e897a24e7bb68e1933bb95d19b9c30a546ae56a8a598f9138256ad9ac1a8b4`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+The periodic physical matrix returns heap total/free to 164,108/91,068 B after Home,
+RF, Targets and companion, preserves generation 161/59 observations, and adds zero
+flashes beyond the one already spent by the LED delta. `E-HIL-178` consumes delta
+15/15; `E-HIL-179` completes the immediately required full checkpoint and resets the
+cadence anchor to 0/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

@@ -14,7 +14,10 @@ from esp_app_identity import app_elf_sha256
 
 
 SCHEMA = "leshy.product_home_hil.run.v1"
-HOME_ITEMS = [
+LEGACY_HOME_ITEMS = [
+    "wifi", "ble", "spectrum24", "subghz", "capture", "library", "device",
+]
+CURRENT_HOME_ITEMS = [
     "wifi", "ble", "spectrum24", "subghz", "capture", "targets",
     "library", "device",
 ]
@@ -29,7 +32,6 @@ SCREENS = {
     "cc_spectrum": "cc-spectrum",
     "cc_waterfall": "cc-waterfall",
     "capture": "capture",
-    "targets": "targets",
     "library": "library",
     "device": "device",
     "home_final": "home-final",
@@ -42,6 +44,7 @@ PIXEL_WATERFALL_SCREENS = {
 IDENTITY_SCREENS = {"home_en": "home-en"}
 NRF_MODE_SCREENS = {"nrf_modes": "nrf-modes"}
 SUBGHZ_MODE_SCREENS = {"subghz_modes": "subghz-modes"}
+TARGETS_SCREENS = {"targets": "targets"}
 
 
 def digest(path: Path) -> str:
@@ -156,7 +159,8 @@ def main() -> int:
     require(failures, run.get("passed") is True and
             run.get("gate_eligible") is True and not run.get("failures"),
             "run is not a clean flashed pass")
-    require(failures, run.get("home_items") == HOME_ITEMS,
+    home_items = run.get("home_items")
+    require(failures, home_items in (LEGACY_HOME_ITEMS, CURRENT_HOME_ITEMS),
             "Home item order/content mismatch")
     candidate = run.get("candidate", {})
     firmware = root / "firmware.bin"
@@ -354,6 +358,8 @@ def main() -> int:
     identity_contract = scope.get("home_identity") == \
         "bilingual_brand_and_version"
     expected_screens = dict(SCREENS)
+    if home_items == CURRENT_HOME_ITEMS:
+        expected_screens.update(TARGETS_SCREENS)
     if "nrf_modes" in screens:
         expected_screens.update(NRF_MODE_SCREENS)
     if "subghz_modes" in screens:
@@ -435,7 +441,7 @@ def main() -> int:
         return 1
     print(json.dumps({
         "status": "pass", "version": args.expected_version,
-        "home_items": HOME_ITEMS, "screens": len(expected_screens),
+        "home_items": home_items, "screens": len(expected_screens),
         "nrf_history_rows": reports["nrf_waterfall"]["history_rows"],
         "cc_history_rows": reports["cc_waterfall"]["history_rows"],
         "final_lease_mask": run["cleanup_after"]["final_state"]["lease_mask"],

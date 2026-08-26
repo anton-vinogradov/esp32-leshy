@@ -24,7 +24,7 @@ def main() -> int:
                 "E-BUILD-148", "E-AUTO-119", "E-HIL-178", "E-UX-053"
             ]
             and value["firmware_source_commit"] ==
-            "c2413c9962998281dd54080a1fb67f54db8776b3"
+            "c2413c9e31b89efd646a0ca15d2eb2b574d90fe5"
             and candidate == {
                 "version": "0.171.0-antenna-status-leds",
                 "firmware_sha256":

@@ -206,6 +206,9 @@ Exact 0.145 `E-BUILD-145`/`E-HIL-163` дополнительно принима�
 `--stage-end` или `--release-candidate`. Planner возвращает `none`, `delta` или
 `full`, причину и flash policy. Интервал считает новые принятые retained HIL summary
 после текущего anchor, а не попытки или нажатия клавиш.
+Считается только root evidence с явным status `pass` или начинающимся с `pass_`;
+сохранённые fail-closed attempts никогда не продвигают интервал. Завершённая periodic
+matrix становится новым anchor и сбрасывает счётчик до нуля.
 Additive backward-compatible изменение внутри cross-cutting файла допускает delta HIL
 только с `--delta-review <manifest>`: manifest фиксирует точный SHA-256 каждого
 проверенного cross-cutting файла и перечисляет обязательные host checks и соседние

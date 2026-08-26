@@ -205,6 +205,9 @@ cadence-controlled delta and does not replace the final `DEMO-S5` matrix.
 or `--release-candidate` at those boundaries. The planner returns `none`, `delta` or
 `full`, the trigger and the flash policy. Its interval counts newly accepted retained
 HIL summaries after the current anchor, rather than attempts or button presses.
+Only root evidence whose explicit status is `pass` or starts with `pass_` counts;
+retained fail-closed attempts never advance the interval. A completed periodic matrix
+becomes the next anchor and resets the count to zero.
 An additive, backward-compatible edit inside a cross-cutting file may use delta HIL
 only with `--delta-review <manifest>`: the manifest pins the exact SHA-256 of every
 reviewed cross-cutting file and names the required host checks and adjacent physical

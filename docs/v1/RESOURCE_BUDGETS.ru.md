@@ -688,6 +688,26 @@ firmware/factory/ELF/map/partitions:
 released heap и zero storage writes, TX, drops или leaked lease. Cadence продвигается
 до 14/15; следующая принятая physical delta запускает установленный full-matrix gate.
 
+Checkpoint status LED каждой антенны и cadence-full `RB-M161`: exact production
+`0.171.0-antenna-status-leds` на source
+`c2413c9e31b89efd646a0ca15d2eb2b574d90fe5` использует 214 696 B static RAM,
+3 175 040 B linked flash и app/factory images 3 175 536/3 241 072 B. Это
++32 B static RAM и +2 960/+2 960/+2 960 B linked/app/factory против exact 0.170.
+Фиксированный controller четырёх пикселей GPIO1 не добавляет framebuffer, heap
+allocation или timing loop: запись выполняется только при смене состояния приёмника
+или persisted raw preference 0/2/3/5/8/12. Exact SHA-256
+firmware/factory/ELF/map/partitions:
+`77d14d9ac10f64cb60fb97f2f3b6b3986d2cdac71085b454d6d25267794e0784`/
+`04bb4a4fb78cd4de7e12e5a2c4b43311e8e1af097c8e5181173a0bc08500a0fe`/
+`e5189daa424da4e2ca04e5e94390f19e9ef3d483c894b10a62c8da9da08d247c`/
+`04e897a24e7bb68e1933bb95d19b9c30a546ae56a8a598f9138256ad9ac1a8b4`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+Периодическая physical matrix возвращает heap total/free к 164 108/91 068 B после
+Home, RF, Targets и companion, сохраняет generation 161/59 observations и не добавляет
+flash сверх одной прошивки LED-delta. `E-HIL-178` расходует delta 15/15;
+`E-HIL-179` завершает немедленно обязательный full checkpoint и сбрасывает cadence
+anchor до 0/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
