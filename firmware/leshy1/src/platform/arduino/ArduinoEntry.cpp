@@ -91,6 +91,7 @@
 #include "platform/arduino/DisposableOtaLittleFs.h"
 #include "platform/arduino/RamSessionStoreIo.h"
 #include "services/companion/CompanionProtocol.h"
+#include "services/companion/CompanionMutationAdapter.h"
 #include "services/companion/CompanionReadAdapter.h"
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
@@ -510,6 +511,17 @@ TargetProductBinding targetsBaselineBinding{};
 TargetProductBinding targetsCurrentBinding{};
 bool targetsComparisonLoaded = false;
 leshy1::services::companion::CompanionConnection usbCompanionConnection{};
+struct UsbCompanionMutation final {
+    leshy1::services::companion::CompanionMutationState state =
+        leshy1::services::companion::CompanionMutationState::None;
+    leshy1::services::companion::CompanionMutationStatus status =
+        leshy1::services::companion::CompanionMutationStatus::InvalidRequest;
+    leshy1::services::companion::CompanionMutationId id{};
+    TargetAction action{};
+    std::uint32_t targetRevision = 0;
+    std::uint32_t stateGeneration = 0;
+};
+UsbCompanionMutation usbCompanionMutation{};
 std::uint32_t targetsStateGeneration = 0;
 leshy1::storage::RecoveryChoice targetsStateHead =
     leshy1::storage::RecoveryChoice::None;
@@ -547,6 +559,9 @@ struct TargetsMutationEvent final {
     std::array<char, TargetRecord::kNotesCapacity + 1> name{};
     std::uint16_t nameLength = 0;
     TargetId targetId{};
+    std::uint32_t expectedRevision = 0;
+    std::uint32_t targetRevision = 0;
+    bool companion = false;
     std::uint32_t generation = 0;
     leshy1::storage::RecoveryChoice head =
         leshy1::storage::RecoveryChoice::None;
@@ -587,6 +602,8 @@ TargetMergeId targetsMutationMergeOperationId{};
 TargetId targetsMutationMergeSourceId{};
 std::array<char, TargetRecord::kNotesCapacity + 1> targetsMutationText{};
 std::uint16_t targetsMutationTextLength = 0;
+std::uint32_t targetsMutationExpectedRevision = 0;
+bool targetsMutationCompanion = false;
 std::uint64_t targetsMutationStartActionUs = 0;
 QueueHandle_t targetsMutationEvents = nullptr;
 TaskHandle_t targetsMutationTaskHandle = nullptr;
@@ -4744,6 +4761,7 @@ void releaseTargetsProduct() {
     // A companion grant is bound to this exact foreground snapshot. Leaving
     // Targets invalidates it; a later Targets instance requires a new connect.
     usbCompanionConnection = {};
+    usbCompanionMutation = {};
     delete targetsProductRuntime;
     targetsProductRuntime = nullptr;
     targetsHeapFreeAfter = static_cast<std::uint32_t>(
@@ -5283,6 +5301,8 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     targetsMutationState = TargetsMutationState::Idle;
     targetsMutationStatus = "idle";
     targetsMutationReport = {};
+    targetsMutationExpectedRevision = 0;
+    targetsMutationCompanion = false;
     targetsMutationCorrelation = false;
     targetsMutationMerge = false;
     targetsMutationMergeKind = TargetMergeActionKind::Merge;
@@ -5965,6 +5985,8 @@ void runTargetsMutationWorker(void*) {
     event.name = targetsMutationText;
     event.nameLength = targetsMutationTextLength;
     event.targetId = targetsMutationTargetId;
+    event.expectedRevision = targetsMutationExpectedRevision;
+    event.companion = targetsMutationCompanion;
     const std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     TargetCatalog* catalog = targetsMutationCatalog;
@@ -6201,6 +6223,7 @@ void runTargetsMutationWorker(void*) {
             TargetAction action;
             action.kind = event.actionKind;
             action.targetId = event.targetId;
+            action.expectedRevision = event.expectedRevision;
             action.favorite = event.favorite;
             if ((event.actionKind == TargetActionKind::SetName ||
                  event.actionKind == TargetActionKind::SetNotes ||
@@ -6259,6 +6282,7 @@ void runTargetsMutationWorker(void*) {
             event.head = recovered.choice;
         }
         const auto* reopened = catalog->find(event.targetId);
+        if (reopened != nullptr) event.targetRevision = reopened->revision;
         bool tagReopened = false;
         if (reopened != nullptr &&
             (event.actionKind == TargetActionKind::AddTag ||
@@ -6371,22 +6395,31 @@ void runTargetsMutationWorker(void*) {
     vTaskDelete(nullptr);
 }
 
-bool requestTargetsMutation(TargetActionKind kind, bool favorite,
-                            const char* text, std::size_t textLength) {
+bool requestTargetsMutationExact(const TargetAction& action,
+                                 bool companionRequest) {
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (targetsProductRuntime == nullptr ||
-        (targetsProductRuntime->controller.view() != TargetsView::Actions &&
-         targetsProductRuntime->controller.view() != TargetsView::NameEdit &&
-         targetsProductRuntime->controller.view() != TargetsView::TagList &&
-         targetsProductRuntime->controller.view() != TargetsView::TagEdit &&
-         targetsProductRuntime->controller.view() != TargetsView::NotesEdit) ||
         targetsMutationState == TargetsMutationState::Saving) {
         return false;
     }
-    const auto* selected =
-        targetsProductRuntime->controller.selectedTarget();
-    if (selected == nullptr) return false;
+    const bool basicAction = action.kind == TargetActionKind::SetFavorite ||
+        action.kind == TargetActionKind::SetName ||
+        action.kind == TargetActionKind::SetNotes ||
+        action.kind == TargetActionKind::AddTag ||
+        action.kind == TargetActionKind::RemoveTag;
+    if (!basicAction) return false;
+    TargetService previewService(
+        targetsProductRuntime->workspace.catalog);
+    const auto preview = previewService.preview(action);
+    if (preview.status !=
+        leshy1::domain::targets::TargetMutationStatus::Applied) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus =
+            leshy1::domain::targets::targetMutationStatusName(preview.status);
+        lastRuntimeEvent = "targets_store_preview_failed";
+        return true;
+    }
     if (targetsMergeFixtureRuntime) {
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "fixture_merge_split_only";
@@ -6410,47 +6443,46 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
         lastRuntimeEvent = "targets_store_worker_unavailable";
         return true;
     }
-    targetsMutationTargetId = selected->id;
+    targetsMutationTargetId = action.targetId;
     targetsMutationCorrelation = false;
     targetsMutationMerge = false;
     targetsMutationProposal = {};
-    targetsMutationKind = kind;
-    targetsMutationFavorite = favorite;
+    targetsMutationKind = action.kind;
+    targetsMutationFavorite = action.favorite;
+    targetsMutationExpectedRevision = action.expectedRevision;
+    targetsMutationCompanion = companionRequest;
     targetsMutationText.fill('\0');
     targetsMutationTextLength = 0;
-    if (kind == TargetActionKind::SetName ||
-        kind == TargetActionKind::SetNotes ||
-        kind == TargetActionKind::AddTag ||
-        kind == TargetActionKind::RemoveTag) {
-        const bool tagAction = kind == TargetActionKind::AddTag ||
-            kind == TargetActionKind::RemoveTag;
+    if (action.kind == TargetActionKind::SetName ||
+        action.kind == TargetActionKind::SetNotes ||
+        action.kind == TargetActionKind::AddTag ||
+        action.kind == TargetActionKind::RemoveTag) {
+        const bool tagAction = action.kind == TargetActionKind::AddTag ||
+            action.kind == TargetActionKind::RemoveTag;
         const std::size_t maximum = tagAction
             ? TargetRecord::kTagCapacity
-            : kind == TargetActionKind::SetNotes
+            : action.kind == TargetActionKind::SetNotes
                   ? TargetRecord::kNotesCapacity
                   : TargetRecord::kNameCapacity;
-        if (text == nullptr || textLength > maximum ||
-            (tagAction && textLength == 0)) {
-            delete targetsMutationCatalog;
-            delete targetsMutationDecisions;
-            targetsMutationCatalog = nullptr;
-            targetsMutationDecisions = nullptr;
+        if (action.textLength > maximum ||
+            (tagAction && action.textLength == 0)) {
             targetsMutationState = TargetsMutationState::Failed;
             targetsMutationStatus = tagAction
                 ? "tag_invalid"
-                : kind == TargetActionKind::SetNotes
+                : action.kind == TargetActionKind::SetNotes
                       ? "notes_invalid" : "name_invalid";
             lastRuntimeEvent = tagAction
                 ? "targets_store_tag_invalid"
-                : kind == TargetActionKind::SetNotes
+                : action.kind == TargetActionKind::SetNotes
                       ? "targets_store_notes_invalid"
                       : "targets_store_name_invalid";
             return true;
         }
-        if (textLength != 0) {
-            std::memcpy(targetsMutationText.data(), text, textLength);
+        if (action.textLength != 0) {
+            std::memcpy(targetsMutationText.data(), action.text.data(),
+                        action.textLength);
         }
-        targetsMutationTextLength = static_cast<std::uint16_t>(textLength);
+        targetsMutationTextLength = action.textLength;
     }
     targetsMutationReport = {};
     if (!detachTargetsProductState(targetsMutationCatalog,
@@ -6491,6 +6523,38 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
     return true;
 }
 
+bool requestTargetsMutation(TargetActionKind kind, bool favorite,
+                            const char* text, std::size_t textLength) {
+    if (targetsProductRuntime == nullptr ||
+        (targetsProductRuntime->controller.view() != TargetsView::Actions &&
+         targetsProductRuntime->controller.view() != TargetsView::NameEdit &&
+         targetsProductRuntime->controller.view() != TargetsView::TagList &&
+         targetsProductRuntime->controller.view() != TargetsView::TagEdit &&
+         targetsProductRuntime->controller.view() != TargetsView::NotesEdit)) {
+        return false;
+    }
+    const auto* selected =
+        targetsProductRuntime->controller.selectedTarget();
+    if (selected == nullptr) return false;
+    TargetAction action{};
+    action.kind = kind;
+    action.targetId = selected->id;
+    action.expectedRevision = selected->revision;
+    action.favorite = favorite;
+    if ((kind == TargetActionKind::SetName ||
+         kind == TargetActionKind::SetNotes ||
+         kind == TargetActionKind::AddTag ||
+         kind == TargetActionKind::RemoveTag) &&
+        !leshy1::services::targets::setTargetActionText(
+            &action, text, textLength)) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "text_invalid";
+        lastRuntimeEvent = "targets_store_text_invalid";
+        return true;
+    }
+    return requestTargetsMutationExact(action, false);
+}
+
 bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -6529,6 +6593,8 @@ bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
     }
     targetsMutationCorrelation = true;
     targetsMutationMerge = false;
+    targetsMutationCompanion = false;
+    targetsMutationExpectedRevision = 0;
     targetsMutationCorrelationKind = kind;
     targetsMutationProposal = *proposal;
     targetsMutationTargetId = proposal->targetId;
@@ -6618,6 +6684,8 @@ bool requestTargetsMergeMutation() {
                                      : TargetMergeActionKind::Merge;
     targetsMutationMerge = true;
     targetsMutationCorrelation = false;
+    targetsMutationCompanion = false;
+    targetsMutationExpectedRevision = 0;
     targetsMutationText.fill('\0');
     targetsMutationTextLength = 0;
     targetsMutationReport = {};
@@ -6739,27 +6807,30 @@ void serviceTargetsMutationWorker() {
     const bool rebuilt = rebuildTargetsProductFromCatalog(
         targetsMutationCatalog, targetsMutationDecisions, targetsMutationMerges,
         event.targetId, true, event.catalogRecovered);
-    if (rebuilt && event.merge && targetsProductRuntime != nullptr) {
+    if (!event.companion && rebuilt && event.merge &&
+        targetsProductRuntime != nullptr) {
         for (std::size_t index = 0;
              index < TargetsController::kActionCount - 1U; ++index) {
             targetsProductRuntime->controller.next();
         }
-    } else if (rebuilt && event.correlation &&
+    } else if (!event.companion && rebuilt && event.correlation &&
                targetsProductRuntime != nullptr) {
         for (std::size_t index = 0; index < 4; ++index) {
             targetsProductRuntime->controller.next();
         }
-    } else if (rebuilt && event.actionKind == TargetActionKind::SetName &&
+    } else if (!event.companion && rebuilt &&
+        event.actionKind == TargetActionKind::SetName &&
         targetsProductRuntime != nullptr) {
         targetsProductRuntime->controller.next();
-    } else if (rebuilt &&
+    } else if (!event.companion && rebuilt &&
                (event.actionKind == TargetActionKind::AddTag ||
                 event.actionKind == TargetActionKind::RemoveTag) &&
                targetsProductRuntime != nullptr) {
         targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.openTagList();
-    } else if (rebuilt && event.actionKind == TargetActionKind::SetNotes &&
+    } else if (!event.companion && rebuilt &&
+               event.actionKind == TargetActionKind::SetNotes &&
                targetsProductRuntime != nullptr) {
         targetsProductRuntime->controller.next();
         targetsProductRuntime->controller.next();
@@ -6783,6 +6854,21 @@ void serviceTargetsMutationWorker() {
     targetsProductStatus = rebuilt ? "ready" : targetsProductStatus;
     lastRuntimeEvent = targetsMutationState == TargetsMutationState::Saved
         ? "targets_store_saved" : "targets_store_failed";
+    if (event.companion &&
+        leshy1::services::companion::companionMutationIdValid(
+            usbCompanionMutation.id)) {
+        const bool saved = targetsMutationState == TargetsMutationState::Saved;
+        usbCompanionMutation.state = saved
+            ? leshy1::services::companion::CompanionMutationState::Saved
+            : leshy1::services::companion::CompanionMutationState::Failed;
+        usbCompanionMutation.status = saved
+            ? leshy1::services::companion::CompanionMutationStatus::Saved
+            : leshy1::services::companion::CompanionMutationStatus::Failed;
+        usbCompanionMutation.targetRevision = event.targetRevision;
+        usbCompanionMutation.stateGeneration = event.generation;
+    }
+    targetsMutationExpectedRevision = 0;
+    targetsMutationCompanion = false;
     if (uiController.page() == 7) renderInteractiveScreen();
 }
 
@@ -25198,6 +25284,13 @@ leshy1::services::companion::CompanionScopeMask companionAvailableScopes(
          companionCapabilityMask(CompanionCapability::TargetCompare)) != 0) {
         scopes |= companionScopeMask(CompanionScope::TargetCompare);
     }
+    if ((capabilities &
+         leshy1::services::companion::
+             kCompanionTargetMutationCapabilities) ==
+        leshy1::services::companion::
+            kCompanionTargetMutationCapabilities) {
+        scopes |= companionScopeMask(CompanionScope::TargetMutate);
+    }
     return scopes;
 }
 
@@ -25229,6 +25322,169 @@ void emitCompanionEncodingError(Stream& reply) {
         "\"reason\":\"response_encoding_failed\"}");
 }
 
+leshy1::services::companion::CompanionMutationId
+newCompanionMutationId() {
+    namespace companion = leshy1::services::companion;
+    companion::CompanionMutationId id{};
+    esp_fill_random(id.data(), id.size());
+    if (!companion::companionMutationIdValid(id)) {
+        id[0] = 0x4c;
+        id[1] = 0x53;
+        id[2] = static_cast<std::uint8_t>(targetsStateGeneration >> 24U);
+        id[3] = static_cast<std::uint8_t>(targetsStateGeneration >> 16U);
+        id[4] = static_cast<std::uint8_t>(targetsStateGeneration >> 8U);
+        id[5] = static_cast<std::uint8_t>(targetsStateGeneration);
+        id.back() = 1;
+    }
+    return id;
+}
+
+bool companionMutationIdEqual(
+    const leshy1::services::companion::CompanionMutationId& left,
+    const leshy1::services::companion::CompanionMutationId& right) {
+    return std::equal(left.begin(), left.end(), right.begin());
+}
+
+void setCompanionMutationRequestId(
+    const leshy1::services::companion::CompanionMutationRequest& request,
+    leshy1::services::companion::CompanionMutationResponse* response) {
+    if (response == nullptr) return;
+    response->requestId = request.requestId;
+    response->requestIdLength = request.requestIdLength;
+}
+
+void emitCompanionMutationResponse(
+    Stream& reply,
+    const leshy1::services::companion::CompanionMutationResponse& response,
+    char* frame, std::size_t frameCapacity) {
+    std::size_t responseLength = 0;
+    if (leshy1::services::companion::encodeCompanionMutationResponse(
+            response, frame, frameCapacity, &responseLength)) {
+        writeCompanionFrame(reply, frame, responseLength);
+    } else {
+        emitCompanionEncodingError(reply);
+    }
+}
+
+void handleUsbCompanionMutation(
+    Stream& reply,
+    const leshy1::services::companion::CompanionMutationRequest& request,
+    char* frame, std::size_t frameCapacity) {
+    namespace companion = leshy1::services::companion;
+    companion::CompanionMutationResponse response{};
+    response.kind = request.kind;
+    setCompanionMutationRequestId(request, &response);
+
+    if (request.kind == companion::CompanionMutationRequestKind::Preview) {
+        response.actionKind = request.action.kind;
+        response.targetId = request.action.targetId;
+        response.expectedRevision = request.action.expectedRevision;
+        if (targetsMutationState == TargetsMutationState::Saving ||
+            usbCompanionMutation.state ==
+                companion::CompanionMutationState::Saving) {
+            response.status = companion::CompanionMutationStatus::Busy;
+            emitCompanionMutationResponse(
+                reply, response, frame, frameCapacity);
+            return;
+        }
+        const companion::CompanionReadContext context = companionReadContext();
+        const auto assessment = companion::assessCompanionMutationPreview(
+            usbCompanionConnection, context.targets, request);
+        response.status = assessment.status;
+        response.targetRevision = assessment.action.revision;
+        response.stateGeneration = targetsStateGeneration;
+        if (assessment.ready()) {
+            usbCompanionMutation = {};
+            usbCompanionMutation.state =
+                companion::CompanionMutationState::Previewed;
+            usbCompanionMutation.status =
+                companion::CompanionMutationStatus::Ready;
+            usbCompanionMutation.id = newCompanionMutationId();
+            usbCompanionMutation.action = request.action;
+            usbCompanionMutation.targetRevision = assessment.action.revision;
+            usbCompanionMutation.stateGeneration = targetsStateGeneration;
+            response.state = usbCompanionMutation.state;
+            response.mutationId = usbCompanionMutation.id;
+        }
+        emitCompanionMutationResponse(reply, response, frame, frameCapacity);
+        return;
+    }
+
+    const bool known = companion::companionMutationIdValid(
+                           usbCompanionMutation.id) &&
+        companionMutationIdEqual(request.mutationId,
+                                 usbCompanionMutation.id);
+    if (!known) {
+        response.status = companion::CompanionMutationStatus::UnknownMutation;
+        emitCompanionMutationResponse(reply, response, frame, frameCapacity);
+        return;
+    }
+    response.mutationId = usbCompanionMutation.id;
+    response.actionKind = usbCompanionMutation.action.kind;
+    response.targetId = usbCompanionMutation.action.targetId;
+    response.expectedRevision =
+        usbCompanionMutation.action.expectedRevision;
+    response.targetRevision = usbCompanionMutation.targetRevision;
+    response.stateGeneration = usbCompanionMutation.stateGeneration;
+
+    if (!usbCompanionConnection.ready() ||
+        (usbCompanionConnection.grantedScopes &
+         companion::kCompanionS65MutationScopes) !=
+            companion::kCompanionS65MutationScopes) {
+        response.status = usbCompanionConnection.ready()
+            ? companion::CompanionMutationStatus::CapabilityDenied
+            : companion::CompanionMutationStatus::NotConnected;
+        emitCompanionMutationResponse(reply, response, frame, frameCapacity);
+        return;
+    }
+
+    if (request.kind == companion::CompanionMutationRequestKind::Status) {
+        response.status = usbCompanionMutation.status;
+        response.state = usbCompanionMutation.state;
+        emitCompanionMutationResponse(reply, response, frame, frameCapacity);
+        return;
+    }
+
+    if (usbCompanionMutation.state !=
+        companion::CompanionMutationState::Previewed) {
+        response.status = companion::CompanionMutationStatus::AlreadyConfirmed;
+        response.state = usbCompanionMutation.state;
+        emitCompanionMutationResponse(reply, response, frame, frameCapacity);
+        return;
+    }
+
+    companion::CompanionMutationRequest recheck{};
+    recheck.kind = companion::CompanionMutationRequestKind::Preview;
+    recheck.action = usbCompanionMutation.action;
+    const companion::CompanionReadContext context = companionReadContext();
+    const auto assessment = companion::assessCompanionMutationPreview(
+        usbCompanionConnection, context.targets, recheck);
+    if (!assessment.ready()) {
+        usbCompanionMutation.status = assessment.status;
+        usbCompanionMutation.state = companion::CompanionMutationState::Failed;
+        usbCompanionMutation.targetRevision = assessment.action.revision;
+        response.status = usbCompanionMutation.status;
+        response.state = usbCompanionMutation.state;
+        response.targetRevision = usbCompanionMutation.targetRevision;
+        emitCompanionMutationResponse(reply, response, frame, frameCapacity);
+        return;
+    }
+
+    const bool handled = requestTargetsMutationExact(
+        usbCompanionMutation.action, true);
+    if (handled && targetsMutationState == TargetsMutationState::Saving) {
+        usbCompanionMutation.status =
+            companion::CompanionMutationStatus::Accepted;
+        usbCompanionMutation.state = companion::CompanionMutationState::Saving;
+    } else {
+        usbCompanionMutation.status = companion::CompanionMutationStatus::Failed;
+        usbCompanionMutation.state = companion::CompanionMutationState::Failed;
+    }
+    response.status = usbCompanionMutation.status;
+    response.state = usbCompanionMutation.state;
+    emitCompanionMutationResponse(reply, response, frame, frameCapacity);
+}
+
 void handleUsbCompanionFrame(Stream& reply, char* frame,
                              std::size_t frameCapacity) {
     namespace companion = leshy1::services::companion;
@@ -25241,13 +25497,21 @@ void handleUsbCompanionFrame(Stream& reply, char* frame,
     if (connectStatus == companion::CompanionParseStatus::Parsed) {
         const companion::CompanionReadContext context = companionReadContext();
         const companion::CompanionCapabilityMask capabilities =
-            companion::companionReadCapabilities(context);
+            companion::companionReadCapabilities(context) |
+            companion::companionMutationCapabilities(context.targets);
         companion::CompanionConnectionPolicy policy{};
-        policy.deviceSessionScopes = companion::kCompanionS65ReadScopes;
+        policy.deviceSessionScopes = companion::kCompanionS65ReadScopes |
+            companion::companionScopeMask(
+                companion::CompanionScope::TargetMutate);
         policy.availableScopes = companionAvailableScopes(capabilities);
         policy.availableCapabilities = capabilities;
         usbCompanionConnection = companion::negotiateCompanionConnection(
             connectRequest, policy);
+        if (usbCompanionConnection.ready() &&
+            usbCompanionMutation.state !=
+                companion::CompanionMutationState::Saving) {
+            usbCompanionMutation = {};
+        }
         if (companion::encodeCompanionConnectResponse(
                 usbCompanionConnection,
                 companion::CompanionTransport::UsbSerial, frame,
@@ -25256,6 +25520,16 @@ void handleUsbCompanionFrame(Stream& reply, char* frame,
         } else {
             emitCompanionEncodingError(reply);
         }
+        return;
+    }
+
+    companion::CompanionMutationRequest mutationRequest{};
+    const companion::CompanionMutationParseStatus mutationStatus =
+        companion::parseCompanionMutationRequest(
+            frame, frameLength, &mutationRequest);
+    if (mutationStatus == companion::CompanionMutationParseStatus::Parsed) {
+        handleUsbCompanionMutation(
+            reply, mutationRequest, frame, frameCapacity);
         return;
     }
 
@@ -25279,6 +25553,11 @@ void handleUsbCompanionFrame(Stream& reply, char* frame,
     // authoritative before any scope can be granted or projection executed.
     if (std::strstr(frame, "\"kind\":\"connect\"") != nullptr) {
         emitCompanionConnectParseError(reply, connectStatus);
+    } else if (std::strstr(frame, "\"kind\":\"target.mutation.") !=
+                   nullptr &&
+               companion::encodeCompanionMutationParseError(
+                   mutationStatus, frame, frameCapacity, &responseLength)) {
+        writeCompanionFrame(reply, frame, responseLength);
     } else if (companion::encodeCompanionReadParseError(
                    readStatus, frame, frameCapacity, &responseLength)) {
         writeCompanionFrame(reply, frame, responseLength);

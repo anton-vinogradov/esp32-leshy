@@ -14,6 +14,14 @@ TEST = ROOT / "tests/native/companion_protocol_tests.cpp"
 READ_HEADER = ROOT / "firmware/leshy1/src/services/companion/CompanionReadAdapter.h"
 READ_SOURCE = ROOT / "firmware/leshy1/src/services/companion/CompanionReadAdapter.cpp"
 READ_TEST = ROOT / "tests/native/companion_read_adapter_tests.cpp"
+MUTATION_HEADER = (
+    ROOT / "firmware/leshy1/src/services/companion/CompanionMutationAdapter.h"
+)
+MUTATION_SOURCE = (
+    ROOT / "firmware/leshy1/src/services/companion/CompanionMutationAdapter.cpp"
+)
+MUTATION_TEST = ROOT / "tests/native/companion_mutation_adapter_tests.cpp"
+MUTATION_HIL = ROOT / "tools/run_1x_companion_mutation_delta_hil.py"
 ARDUINO = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 ACTION = ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.cpp"
 DOCS = (
@@ -36,6 +44,10 @@ def main() -> int:
         read_header = READ_HEADER.read_text(encoding="utf-8")
         read_source = READ_SOURCE.read_text(encoding="utf-8")
         read_tests = READ_TEST.read_text(encoding="utf-8")
+        mutation_header = MUTATION_HEADER.read_text(encoding="utf-8")
+        mutation_source = MUTATION_SOURCE.read_text(encoding="utf-8")
+        mutation_tests = MUTATION_TEST.read_text(encoding="utf-8")
+        mutation_hil = MUTATION_HIL.read_text(encoding="utf-8")
         arduino = ARDUINO.read_text(encoding="utf-8")
         action = ACTION.read_text(encoding="utf-8")
         docs = [path.read_text(encoding="utf-8") for path in DOCS]
@@ -75,6 +87,11 @@ def main() -> int:
         "target.list",
         "target.detail",
         "target.compare",
+        "target.favorite.set",
+        "target.name.set",
+        "target.notes.set",
+        "target.tag.add",
+        "target.tag.remove",
     ):
         require(failures, f'"{capability}"' in source,
                 f"missing truthful capability: {capability}")
@@ -148,6 +165,65 @@ def main() -> int:
         require(failures, marker in read_tests,
                 f"missing read adapter native coverage: {marker}")
 
+    mutation_combined = mutation_header + mutation_source
+    for forbidden in (
+        '#include "drivers/',
+        '#include "storage/',
+        '#include "platform/',
+        "Serial.",
+        "SPI.",
+        "SD.",
+        "WiFi.",
+    ):
+        require(failures, forbidden not in mutation_combined,
+                f"companion mutation adapter bypasses its boundary: {forbidden}")
+    for marker in (
+        "target.mutation.preview",
+        "target.mutation.confirm",
+        "target.mutation.status",
+        "expectedRevision",
+        "previewTargetAction",
+        "kCompanionS65MutationScopes",
+        "kCompanionTargetMutationCapabilities",
+        "CompanionMutationId",
+        "AlreadyConfirmed",
+        "RevisionConflict",
+        "decodeBase64",
+        "kCompanionMaxFrameBytes + 1U",
+    ):
+        require(failures, marker in mutation_combined,
+                f"missing mutation adapter contract: {marker}")
+    for marker in (
+        "testAllFiveTypedActionsAndFullNotesFitOneFrame",
+        "testStrictParserRejectsMalformedAndNeverPublishesPartialOutput",
+        "testPreviewUsesExactRevisionAndExplicitGrant",
+        "testDeterministicBoundedResponses",
+        "kCompanionMaxFrameBytes + 1U",
+        "RevisionConflict",
+        "CapabilityDenied",
+    ):
+        require(failures, marker in mutation_tests,
+                f"missing mutation adapter native coverage: {marker}")
+
+    for marker in (
+        'parser.add_argument("--port", required=True)',
+        '"serial_port_discovery_calls": 0',
+        '"cardputer_ports_opened": 0',
+        '"flash_count": 0',
+        'record["flash_count"] = 1',
+        'home_denied.get("reason") == "scope_unavailable"',
+        'no_op.get("reason") == "unchanged"',
+        'stale.get("reason") == "revision_conflict"',
+        'replay_confirm.get("reason") == "already_confirmed"',
+        'state.get("mutation_write_calls") == 3',
+        'state.get("mutation_file_syncs") == 3',
+        'state.get("mutation_directory_syncs") == 3',
+        'cold_target.get("revision") == revision_before + 2',
+        '"radio_tx_commands": 0',
+    ):
+        require(failures, marker in mutation_hil,
+                f"missing mutation delta HIL contract: {marker}")
+
     for marker in (
         "handleUsbCompanionFrame",
         "companionReadContext",
@@ -160,6 +236,13 @@ def main() -> int:
         "usbCommandOverflow",
         "response_encoding_failed",
         "targetsIdentityTransientRetries",
+        "handleUsbCompanionMutation",
+        "requestTargetsMutationExact",
+        "targetsMutationExpectedRevision",
+        "companionMutationCapabilities(context.targets)",
+        "CompanionMutationState::Previewed",
+        "CompanionMutationState::Saving",
+        "CompanionMutationStatus::AlreadyConfirmed",
         "poll(Serial, usbCommand",
         "poll(Serial0, uartCommand",
     ):
@@ -198,6 +281,13 @@ def main() -> int:
             "target.detail",
             "next_offset",
             "offset_out_of_range",
+            "target.mutation.preview",
+            "target.mutation.confirm",
+            "target.mutation.status",
+            "expected_revision",
+            "mutation_id",
+            "already_confirmed",
+            "revision",
             "Serial0",
         ):
             require(failures, marker in text,
@@ -210,7 +300,7 @@ def main() -> int:
         return 1
     print(
         "companion protocol contract passed: bounded v1 parser, exact scopes, "
-        "shared Action and zero direct driver/storage path"
+        "confirmed shared Actions and zero direct driver/storage path"
     )
     return 0
 

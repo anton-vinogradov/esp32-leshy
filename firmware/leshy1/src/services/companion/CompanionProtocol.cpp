@@ -192,7 +192,11 @@ CompanionParseStatus parseScopes(JsonCursor* cursor,
     return CompanionParseStatus::Parsed;
 }
 
-constexpr std::array<CompanionCapabilityDescriptor, 5> kCapabilities{{
+constexpr CompanionScopeMask kTargetMutationScopes =
+    companionScopeMask(CompanionScope::TargetRead) |
+    companionScopeMask(CompanionScope::TargetMutate);
+
+constexpr std::array<CompanionCapabilityDescriptor, 10> kCapabilities{{
     {"session.list", CompanionCapability::SessionList,
      companionScopeMask(CompanionScope::SessionRead),
      nullptr, 0, 0, true},
@@ -210,6 +214,16 @@ constexpr std::array<CompanionCapabilityDescriptor, 5> kCapabilities{{
          companionScopeMask(CompanionScope::TargetRead) |
          companionScopeMask(CompanionScope::TargetCompare),
      "target.compare", 1, 1, true},
+    {"target.favorite.set", CompanionCapability::TargetFavoriteSet,
+     kTargetMutationScopes, "target.favorite.set", 1, 1, false},
+    {"target.name.set", CompanionCapability::TargetNameSet,
+     kTargetMutationScopes, "target.name.set", 1, 1, false},
+    {"target.notes.set", CompanionCapability::TargetNotesSet,
+     kTargetMutationScopes, "target.notes.set", 1, 1, false},
+    {"target.tag.add", CompanionCapability::TargetTagAdd,
+     kTargetMutationScopes, "target.tag.add", 1, 1, false},
+    {"target.tag.remove", CompanionCapability::TargetTagRemove,
+     kTargetMutationScopes, "target.tag.remove", 1, 1, false},
 }};
 
 class BufferWriter final {

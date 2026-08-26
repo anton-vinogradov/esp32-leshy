@@ -42,7 +42,7 @@ CompanionConnection readyConnection() {
     CompanionConnectionPolicy policy{};
     policy.deviceSessionScopes = kCompanionS65ReadScopes;
     policy.availableScopes = kCompanionS65ReadScopes;
-    policy.availableCapabilities = kCompanionKnownCapabilities;
+    policy.availableCapabilities = kCompanionReadCapabilities;
     return negotiateCompanionConnection(request, policy);
 }
 
@@ -153,11 +153,11 @@ void testScopesNeverExceedTheBoundDeviceSession() {
 
     policy.deviceSessionScopes = kCompanionS65ReadScopes;
     policy.availableScopes = kCompanionS65ReadScopes;
-    policy.availableCapabilities = kCompanionKnownCapabilities;
+    policy.availableCapabilities = kCompanionReadCapabilities;
     CompanionConnection ready = negotiateCompanionConnection(request, policy);
     CHECK(ready.ready());
     CHECK(ready.grantedScopes == request.requestedScopes);
-    CHECK(ready.grantedCapabilities == kCompanionKnownCapabilities);
+    CHECK(ready.grantedCapabilities == kCompanionReadCapabilities);
 
     CompanionConnectRequest compareOnly = request;
     compareOnly.requestedScopes =
@@ -183,19 +183,32 @@ void testScopesNeverExceedTheBoundDeviceSession() {
 }
 
 void testCapabilitiesAreTruthfulAndActionBound() {
-    CHECK(companionCapabilityCount() == 5);
+    CHECK(companionCapabilityCount() == 10);
     const CompanionCapabilityDescriptor* compare = nullptr;
+    std::size_t readOnlyCount = 0;
+    std::size_t mutationCount = 0;
     for (std::size_t index = 0; index < companionCapabilityCount(); ++index) {
         const CompanionCapabilityDescriptor* capability =
             companionCapability(index);
         CHECK(capability != nullptr);
         CHECK(capability->id != nullptr);
-        CHECK(capability->readOnly);
+        if (capability->readOnly) {
+            ++readOnlyCount;
+        } else {
+            ++mutationCount;
+            CHECK(capability->actionId != nullptr);
+            CHECK(capability->requestSchemaVersion == 1);
+            CHECK(capability->resultSchemaVersion == 1);
+            CHECK((capability->requiredScopes & kCompanionS65MutationScopes) ==
+                  kCompanionS65MutationScopes);
+        }
         if (std::strcmp(capability->id, "target.compare") == 0) {
             compare = capability;
         }
     }
     CHECK(companionCapability(companionCapabilityCount()) == nullptr);
+    CHECK(readOnlyCount == 5);
+    CHECK(mutationCount == 5);
     CHECK(compare != nullptr);
     CHECK(std::strcmp(compare->actionId, "target.compare") == 0);
     CHECK(compare->requestSchemaVersion == 1);
@@ -242,6 +255,33 @@ void testDeterministicUsbAndWebResponses() {
         tooSmall.size(), &length));
     CHECK(length == 0);
     for (const char value : tooSmall) CHECK(value == 'Q');
+}
+
+void testMutationConnectionResponseFitsTheCommonFrame() {
+    const std::string frame =
+        "{\"schema\":\"leshy.companion.request.v1\",\"kind\":\"connect\","
+        "\"request_id\":\"mutate-1\",\"protocol\":1,\"scopes\":["
+        "\"target.read\",\"target.mutate\"]}";
+    const CompanionConnectRequest request = parse(frame);
+    CompanionConnectionPolicy policy{};
+    policy.deviceSessionScopes = kCompanionS65MutationScopes;
+    policy.availableScopes = kCompanionS65MutationScopes;
+    policy.availableCapabilities = kCompanionKnownCapabilities;
+    const CompanionConnection connection =
+        negotiateCompanionConnection(request, policy);
+    CHECK(connection.ready());
+    CHECK(connection.grantedCapabilities ==
+          (companionCapabilityMask(CompanionCapability::TargetList) |
+           companionCapabilityMask(CompanionCapability::TargetDetail) |
+           kCompanionTargetMutationCapabilities));
+    std::array<char, kCompanionMaxFrameBytes + 1U> output{};
+    std::size_t length = 0;
+    CHECK(encodeCompanionConnectResponse(
+        connection, CompanionTransport::UsbSerial,
+        output.data(), output.size(), &length));
+    CHECK(length <= kCompanionMaxFrameBytes);
+    CHECK(std::strstr(output.data(), "\"target.favorite.set\"") != nullptr);
+    CHECK(std::strstr(output.data(), "\"target.tag.remove\"") != nullptr);
 }
 
 void testDeniedResponseDisclosesNoCapabilities() {
@@ -291,6 +331,7 @@ int main() {
     testScopesNeverExceedTheBoundDeviceSession();
     testCapabilitiesAreTruthfulAndActionBound();
     testDeterministicUsbAndWebResponses();
+    testMutationConnectionResponseFitsTheCommonFrame();
     testDeniedResponseDisclosesNoCapabilities();
     testScopesDoNotInventUnwiredCapabilities();
     if (failures != 0) {

@@ -40,7 +40,7 @@ non-ASCII envelope strings, oversized/truncated/trailing input, другая sch
 | `session.read` | list/open immutable projections Session | доступен только из live ready snapshot экрана Targets |
 | `target.read` | list/open projections Target и evidence | доступен только из того же live catalog Targets |
 | `target.compare` | invoke/read `target.compare` над exact bindings Session | доступен только для уже вычисленной exact пары; также требует оба read scope |
-| `target.mutate` | typed mutations metadata/correlation/merge Target | известен, недоступен до slice confirmed mutation |
+| `target.mutate` | typed mutations metadata Target | доступен вместе с `target.read` для Favorite, Name, Notes и add/remove tag при ready Targets; correlation/merge пока недоступны |
 | `library.export` | versioned offline export | известен, недоступен до slice export |
 | `connectivity.manage` | lifecycle local connectivity/secrets | известен, недоступен до slice connectivity |
 
@@ -51,7 +51,7 @@ scope не может рекламировать operation, adapter которо
 принимается только целиком, granted scope mask точно равна requested mask. Partial или
 silent downgrade запрещены.
 
-Первый read-only catalog capabilities детерминирован; entry попадает в response
+Catalog capabilities детерминирован; entry попадает в response
 только при явно available adapter:
 
 | Capability | Нужный scope | Typed Action |
@@ -59,11 +59,50 @@ silent downgrade запрещены.
 | `session.list` / `session.detail` | `session.read` | read-only projection без mutation Action |
 | `target.list` / `target.detail` | `target.read` | read-only projection без mutation Action |
 | `target.compare` | все три read scope | существующие request/result schema v1 `target.compare` |
+| `target.favorite.set` | `target.read` + `target.mutate` | существующий Action `target.favorite.set` schema v1 |
+| `target.name.set` / `target.notes.set` | `target.read` + `target.mutate` | существующие metadata Actions schema v1 |
+| `target.tag.add` / `target.tag.remove` | `target.read` + `target.mutate` | существующие Actions tags schema v1 |
 
 Navigation не становится Action только потому, что её отображает remote view. Само
 сравнение уже проходит через общую typed Action boundary. Последующие mutations
 обязаны переиспользовать существующие descriptors Target/merge и не могут добавлять
 transport-only storage calls.
+
+## Подтверждаемые mutations metadata Target
+
+Connection для mutation явно запрашивает `target.read` и `target.mutate`. Client
+сначала получает stable Target ID, current revision и значение через read projection,
+затем отправляет preview. Preview ничего не меняет и не выдаёт confirmation ID, если
+typed Action не меняет exact current revision.
+
+```json
+{"schema":"leshy.companion.request.v1","kind":"target.mutation.preview","request_id":"p1","action":"target.favorite.set","target_id":"0123456789ABCDEF0123456789ABCDEF","expected_revision":7,"favorite":true}
+{"schema":"leshy.companion.request.v1","kind":"target.mutation.preview","request_id":"p2","action":"target.name.set","target_id":"0123456789ABCDEF0123456789ABCDEF","expected_revision":7,"value_base64":"TGVzaHk="}
+```
+
+Text Actions используют canonical Base64, поэтому полное значение Notes 160 bytes
+помещается в общий frame 512 bytes. Decoded значение проходит ту же bounded UTF-8
+validation record Target, что и TFT UI. Favorite использует только Boolean поле
+`favorite`, text Actions — только `value_base64`; лишние или смешанные поля
+fail-close-ятся.
+
+Успешный preview возвращает случайный ненулевой 128-bit `mutation_id`, состояние
+`previewed`, exact expected revision и предложенную следующую revision Target. Client
+обязан явно подтвердить этот ID:
+
+```json
+{"schema":"leshy.companion.request.v1","kind":"target.mutation.confirm","request_id":"c1","mutation_id":"0102030405060708090A0B0C0D0E0F10"}
+{"schema":"leshy.companion.request.v1","kind":"target.mutation.status","request_id":"s1","mutation_id":"0102030405060708090A0B0C0D0E0F10"}
+```
+
+Confirm повторяет общий preview на live revision, потребляет ID один раз и ставит в
+очередь тот же typed Action, который использует TFT UI. Только существующий
+supervised exact-CID worker владеет power admission, writable mount, публикацией
+dual-head schema v3, reopen verification и cleanup. Status сообщает `saving`, `saved`
+или `failed`; повторный confirm возвращает `already_confirmed`. Unknown ID, stale
+revision, no-op значение, отсутствующий scope/capability, параллельная mutation или
+отозванный при выходе из Targets grant отказываются без storage write. Adapter
+companion не включает storage/drivers и не может создать расширенный Action.
 
 ## Envelope response
 
@@ -108,10 +147,12 @@ Caller повторяет exact coordinates request с этим offset. Offset �
 возвращает `offset_out_of_range`. Отсутствие exact Session/Target, pair, grant или
 live capability возвращает стабильную error без projection payload.
 
-Adapter читает только две stopped Session bindings, Target catalog и существующий
+Read adapter читает только две stopped Session bindings, Target catalog и существующий
 comparison object, которыми уже владеет foreground product Targets. Он не mount-ит
 storage, не перечитывает catalog, не пересчитывает comparison, не меняет metadata и
-не касается radio. Выход из Targets уничтожает working set и сбрасывает USB grant;
+не касается radio. Mutation adapter только валидирует и ставит в очередь пять
+существующих metadata Actions; writable store и radio objects ему недоступны. Выход
+из Targets уничтожает working set и сбрасывает USB grant;
 для нового instance Targets обязателен новый connect. JSON companion frames
 принимаются только native USB CDC. `Serial0` остаётся legacy diagnostic console и не
 может negotiated этот protocol.
@@ -133,5 +174,6 @@ Exact `0.170.0-companion-usb-rx` физически принимает все п
 Sessions, 16 Targets, все пять detail sections Target, семь строк comparison, exact
 boundary accept/reject 512/513 bytes, отзыв grant после выхода из Targets, invariant
 released heap и zero storage writes, radio TX, input drops, port discovery или
-открытий Cardputer. Web, mutation, export или connectivity implementation этим не
-заявляются.
+открытий Cardputer. Candidate `0.172.0-companion-target-mutate` добавляет bounded
+contract preview/confirm/status и его host/build proof; physical acceptance остаётся
+отдельным gate. Web, export или connectivity implementation этим не заявляются.

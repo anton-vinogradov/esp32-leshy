@@ -24,6 +24,7 @@ enum class TargetMutationStatus : std::uint8_t {
     EvidenceFull,
     TagFull,
     TextTooLong,
+    RevisionConflict,
 };
 
 const char* targetMutationStatusName(TargetMutationStatus status);

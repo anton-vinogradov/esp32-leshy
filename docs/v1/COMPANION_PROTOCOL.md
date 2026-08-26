@@ -40,7 +40,7 @@ that is not implemented or granted yet.
 | `session.read` | list/open immutable Session projections | available only from the live, ready Targets snapshot |
 | `target.read` | list/open Target and evidence projections | available only from the same live Targets catalog |
 | `target.compare` | invoke/read `target.compare` over exact Session bindings | available only for the already-computed exact pair; also requires both read scopes |
-| `target.mutate` | typed Target metadata/correlation/merge mutations | known, unavailable until the confirmed-mutation slice |
+| `target.mutate` | typed Target metadata mutations | available with `target.read` for Favorite, Name, Notes and tag add/remove while Targets is ready; correlation/merge remain unavailable |
 | `library.export` | versioned offline export | known, unavailable until the export slice |
 | `connectivity.manage` | manage local connectivity/secrets lifecycle | known, unavailable until the connectivity slice |
 
@@ -51,7 +51,7 @@ an operation whose adapter has not been wired. A request is accepted only as a w
 and its granted scope mask exactly equals its requested mask. There is no partial or
 silent downgrade.
 
-The first read-only capability catalog is deterministic; an entry appears in a
+The capability catalog is deterministic; an entry appears in a
 response only when its adapter is explicitly marked available:
 
 | Capability | Required scope | Typed Action |
@@ -59,11 +59,50 @@ response only when its adapter is explicitly marked available:
 | `session.list` / `session.detail` | `session.read` | read-only projection; no mutation Action |
 | `target.list` / `target.detail` | `target.read` | read-only projection; no mutation Action |
 | `target.compare` | all three read scopes | existing `target.compare` request/result schema v1 |
+| `target.favorite.set` | `target.read` + `target.mutate` | existing `target.favorite.set` request/result schema v1 |
+| `target.name.set` / `target.notes.set` | `target.read` + `target.mutate` | existing metadata Actions schema v1 |
+| `target.tag.add` / `target.tag.remove` | `target.read` + `target.mutate` | existing tag Actions schema v1 |
 
 Navigation does not become an Action merely because a remote view renders it. The
 comparison itself already crosses the shared typed Action boundary. Later mutations
 must reuse the existing Target/merge descriptors and cannot introduce transport-only
 storage calls.
+
+## Confirmed Target metadata mutations
+
+A mutation connection explicitly requests `target.read` and `target.mutate`. The
+client first obtains the stable Target ID, current revision and value through the
+read projection. It then submits a preview; preview is read-only and returns no
+confirmation ID unless the typed Action would change the exact current revision.
+
+```json
+{"schema":"leshy.companion.request.v1","kind":"target.mutation.preview","request_id":"p1","action":"target.favorite.set","target_id":"0123456789ABCDEF0123456789ABCDEF","expected_revision":7,"favorite":true}
+{"schema":"leshy.companion.request.v1","kind":"target.mutation.preview","request_id":"p2","action":"target.name.set","target_id":"0123456789ABCDEF0123456789ABCDEF","expected_revision":7,"value_base64":"TGVzaHk="}
+```
+
+Text Actions use canonical Base64 so a complete 160-byte Notes value still fits the
+shared 512-byte frame. The decoded value must satisfy the same bounded UTF-8 Target
+record validation as the on-device UI. Favorite uses only the Boolean `favorite`
+field; text Actions use only `value_base64`. Wrong, extra or mixed fields fail
+closed.
+
+A successful preview returns a random non-zero 128-bit `mutation_id`, state
+`previewed`, the exact expected revision and proposed next Target revision. The
+client must explicitly confirm that one ID:
+
+```json
+{"schema":"leshy.companion.request.v1","kind":"target.mutation.confirm","request_id":"c1","mutation_id":"0102030405060708090A0B0C0D0E0F10"}
+{"schema":"leshy.companion.request.v1","kind":"target.mutation.status","request_id":"s1","mutation_id":"0102030405060708090A0B0C0D0E0F10"}
+```
+
+Confirm re-runs the shared preview against the live revision, consumes the ID once,
+and then queues the same typed Action used by the TFT UI. The existing supervised
+exact-CID worker alone owns power admission, writable mount, schema-v3 dual-head
+publication, reopen verification and cleanup. Status reports `saving`, `saved` or
+`failed`; a repeated confirm returns `already_confirmed`. Unknown IDs, stale
+revisions, no-op values, missing scope/capability, a concurrent mutation and a grant
+revoked by leaving Targets all fail without a storage write. The companion adapter
+has no storage or driver include and cannot manufacture a wider Action.
 
 ## Response envelope
 
@@ -108,9 +147,11 @@ The caller repeats the exact request coordinates with that offset. An offset bey
 the current section returns `offset_out_of_range`. A missing exact Session/Target,
 pair, grant, or live capability returns a stable error and no projection payload.
 
-The adapter reads only the two stopped Session bindings, Target catalog and existing
+The read adapter reads only the two stopped Session bindings, Target catalog and existing
 comparison object already owned by the foreground Targets product. It does not mount
 storage, reload a catalog, recompute comparison, mutate metadata, or touch a radio.
+The mutation adapter validates and queues only the five existing metadata Actions;
+it never receives the writable store or radio objects.
 Leaving Targets destroys that working set and resets the USB grant; reconnecting to a
 new Targets instance is mandatory. JSON companion frames are accepted by native USB
 CDC only. `Serial0` remains the legacy diagnostic console and cannot negotiate this
@@ -133,4 +174,6 @@ the explicitly selected original-DIV native USB port. The retained delta proves 
 Sessions, 16 Targets, all five Target-detail sections, seven comparison rows, the exact
 512/513-byte accept/reject boundary, grant revocation after leaving Targets, invariant
 released heap and zero storage writes, radio TX, input drops, port discovery or
-Cardputer opens. No Web, mutation, export, or connectivity implementation is implied.
+Cardputer opens. Candidate `0.172.0-companion-target-mutate` adds the bounded
+preview/confirm/status contract and its host/build proof; physical acceptance is a
+separate gate. No Web, export, or connectivity implementation is implied.

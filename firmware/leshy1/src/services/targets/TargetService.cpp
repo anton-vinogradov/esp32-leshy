@@ -41,6 +41,148 @@ bool actionTextValid(const TargetAction& action, std::size_t maximum,
     return true;
 }
 
+TargetActionResult previewMetadataAction(
+    const domain::targets::TargetCatalog& catalog,
+    const TargetAction& action) {
+    TargetActionResult result{};
+    result.kind = action.kind;
+    result.targetId = action.targetId;
+    const auto* current = catalog.find(action.targetId);
+    if (current == nullptr) {
+        result.status = TargetMutationStatus::NotFound;
+        return result;
+    }
+    result.revision = current->revision;
+    if (action.expectedRevision == 0 ||
+        action.expectedRevision != current->revision) {
+        result.status = TargetMutationStatus::RevisionConflict;
+        return result;
+    }
+
+    domain::targets::TargetRecord candidate = *current;
+    switch (action.kind) {
+        case TargetActionKind::SetName:
+            if (!actionTextValid(
+                    action, domain::targets::TargetRecord::kNameCapacity,
+                    true)) {
+                result.status = action.textLength >
+                        domain::targets::TargetRecord::kNameCapacity
+                    ? TargetMutationStatus::TextTooLong
+                    : TargetMutationStatus::InvalidArgument;
+                return result;
+            }
+            if (candidate.nameLength == action.textLength &&
+                std::memcmp(candidate.name.data(), action.text.data(),
+                            action.textLength) == 0) {
+                result.status = TargetMutationStatus::Unchanged;
+                return result;
+            }
+            candidate.name.fill('\0');
+            if (action.textLength != 0) {
+                std::memcpy(candidate.name.data(), action.text.data(),
+                            action.textLength);
+            }
+            candidate.nameLength = static_cast<std::uint8_t>(action.textLength);
+            break;
+        case TargetActionKind::SetNotes:
+            if (!actionTextValid(
+                    action, domain::targets::TargetRecord::kNotesCapacity,
+                    true)) {
+                result.status = action.textLength >
+                        domain::targets::TargetRecord::kNotesCapacity
+                    ? TargetMutationStatus::TextTooLong
+                    : TargetMutationStatus::InvalidArgument;
+                return result;
+            }
+            if (candidate.notesLength == action.textLength &&
+                std::memcmp(candidate.notes.data(), action.text.data(),
+                            action.textLength) == 0) {
+                result.status = TargetMutationStatus::Unchanged;
+                return result;
+            }
+            candidate.notes.fill('\0');
+            if (action.textLength != 0) {
+                std::memcpy(candidate.notes.data(), action.text.data(),
+                            action.textLength);
+            }
+            candidate.notesLength = action.textLength;
+            break;
+        case TargetActionKind::AddTag:
+        case TargetActionKind::RemoveTag: {
+            if (!actionTextValid(
+                    action, domain::targets::TargetRecord::kTagCapacity,
+                    false)) {
+                result.status = action.textLength >
+                        domain::targets::TargetRecord::kTagCapacity
+                    ? TargetMutationStatus::TextTooLong
+                    : TargetMutationStatus::InvalidArgument;
+                return result;
+            }
+            std::size_t found = candidate.tagCount;
+            for (std::size_t index = 0; index < candidate.tagCount; ++index) {
+                if (candidate.tagLengths[index] == action.textLength &&
+                    std::memcmp(candidate.tags[index].data(),
+                                action.text.data(), action.textLength) == 0) {
+                    found = index;
+                    break;
+                }
+            }
+            if (action.kind == TargetActionKind::AddTag) {
+                if (found != candidate.tagCount) {
+                    result.status = TargetMutationStatus::Unchanged;
+                    return result;
+                }
+                if (candidate.tagCount >= candidate.tags.size()) {
+                    result.status = TargetMutationStatus::TagFull;
+                    return result;
+                }
+                const std::size_t index = candidate.tagCount++;
+                candidate.tags[index].fill('\0');
+                std::memcpy(candidate.tags[index].data(), action.text.data(),
+                            action.textLength);
+                candidate.tagLengths[index] =
+                    static_cast<std::uint8_t>(action.textLength);
+            } else {
+                if (found == candidate.tagCount) {
+                    result.status = TargetMutationStatus::Unchanged;
+                    return result;
+                }
+                for (std::size_t index = found + 1U;
+                     index < candidate.tagCount; ++index) {
+                    candidate.tags[index - 1U] = candidate.tags[index];
+                    candidate.tagLengths[index - 1U] =
+                        candidate.tagLengths[index];
+                }
+                --candidate.tagCount;
+                candidate.tags[candidate.tagCount].fill('\0');
+                candidate.tagLengths[candidate.tagCount] = 0;
+            }
+            break;
+        }
+        case TargetActionKind::SetFavorite:
+            if (candidate.favorite == action.favorite) {
+                result.status = TargetMutationStatus::Unchanged;
+                return result;
+            }
+            candidate.favorite = action.favorite;
+            break;
+        case TargetActionKind::Create:
+        case TargetActionKind::AttachEvidence:
+            result.status = TargetMutationStatus::InvalidArgument;
+            return result;
+    }
+    ++candidate.revision;
+    const TargetMutationStatus validation =
+        domain::targets::validateTargetRecord(candidate);
+    if (validation != TargetMutationStatus::Created) {
+        result.status = validation;
+        return result;
+    }
+    result.status = TargetMutationStatus::Applied;
+    result.revision = candidate.revision;
+    return result;
+}
+
 }  // namespace
 
 const TargetActionDescriptor* targetActionDescriptor(TargetActionKind kind) {
@@ -73,6 +215,14 @@ TargetActionResult TargetService::execute(const TargetAction& action) {
     if (action.schemaVersion != kTargetActionSchemaVersion ||
         descriptor == nullptr) {
         return result;
+    }
+
+    if (action.kind != TargetActionKind::Create &&
+        action.kind != TargetActionKind::AttachEvidence) {
+        const TargetActionResult inspected = preview(action);
+        if (inspected.status != TargetMutationStatus::Applied) {
+            return inspected;
+        }
     }
 
     switch (action.kind) {
@@ -125,6 +275,26 @@ TargetActionResult TargetService::execute(const TargetAction& action) {
     const domain::targets::TargetRecord* record = catalog_.find(action.targetId);
     if (record != nullptr) result.revision = record->revision;
     return result;
+}
+
+TargetActionResult TargetService::preview(const TargetAction& action) const {
+    return previewTargetAction(catalog_, action);
+}
+
+TargetActionResult previewTargetAction(
+    const domain::targets::TargetCatalog& catalog,
+    const TargetAction& action) {
+    const TargetActionDescriptor* descriptor =
+        targetActionDescriptor(action.kind);
+    if (action.schemaVersion != kTargetActionSchemaVersion ||
+        descriptor == nullptr || action.kind == TargetActionKind::Create ||
+        action.kind == TargetActionKind::AttachEvidence) {
+        TargetActionResult result{};
+        result.kind = action.kind;
+        result.targetId = action.targetId;
+        return result;
+    }
+    return previewMetadataAction(catalog, action);
 }
 
 }  // namespace leshy1::services::targets

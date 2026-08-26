@@ -49,6 +49,10 @@ struct TargetAction final {
     domain::targets::TargetId targetId{};
     domain::targets::TargetIdentity identity{};
     domain::targets::TargetEvidenceRef evidence{};
+    // Existing-record mutations require the exact revision presented to the
+    // caller. Create and AttachEvidence retain their original identity/evidence
+    // conflict rules and leave this field zero.
+    std::uint32_t expectedRevision = 0;
     std::array<char, kTextCapacity + 1> text{};
     std::uint16_t textLength = 0;
     bool favorite = false;
@@ -76,6 +80,7 @@ public:
         : catalog_(catalog) {}
 
     TargetActionResult execute(const TargetAction& action);
+    TargetActionResult preview(const TargetAction& action) const;
 
 private:
     domain::targets::TargetCatalog& catalog_;
@@ -83,5 +88,12 @@ private:
 
 bool setTargetActionText(TargetAction* action, const char* value,
                          std::size_t length);
+
+// Const preview entry point for adapters that are intentionally given only a
+// read-only snapshot. It applies the same schema, value and optimistic-
+// revision validation as TargetService::execute without changing the catalog.
+TargetActionResult previewTargetAction(
+    const domain::targets::TargetCatalog& catalog,
+    const TargetAction& action);
 
 }  // namespace leshy1::services::targets

@@ -99,6 +99,7 @@ const char* targetMutationStatusName(TargetMutationStatus status) {
         case TargetMutationStatus::EvidenceFull: return "evidence_full";
         case TargetMutationStatus::TagFull: return "tag_full";
         case TargetMutationStatus::TextTooLong: return "text_too_long";
+        case TargetMutationStatus::RevisionConflict: return "revision_conflict";
     }
     return "invalid_argument";
 }

@@ -42,6 +42,10 @@ constexpr CompanionScopeMask kCompanionS65ReadScopes =
     companionScopeMask(CompanionScope::TargetRead) |
     companionScopeMask(CompanionScope::TargetCompare);
 
+constexpr CompanionScopeMask kCompanionS65MutationScopes =
+    companionScopeMask(CompanionScope::TargetRead) |
+    companionScopeMask(CompanionScope::TargetMutate);
+
 enum class CompanionParseStatus : std::uint8_t {
     Parsed,
     InvalidArgument,
@@ -115,6 +119,11 @@ enum class CompanionCapability : CompanionCapabilityMask {
     TargetList = 1U << 2U,
     TargetDetail = 1U << 3U,
     TargetCompare = 1U << 4U,
+    TargetFavoriteSet = 1U << 5U,
+    TargetNameSet = 1U << 6U,
+    TargetNotesSet = 1U << 7U,
+    TargetTagAdd = 1U << 8U,
+    TargetTagRemove = 1U << 9U,
 };
 
 constexpr CompanionCapabilityMask companionCapabilityMask(
@@ -127,7 +136,26 @@ constexpr CompanionCapabilityMask kCompanionKnownCapabilities =
     companionCapabilityMask(CompanionCapability::SessionDetail) |
     companionCapabilityMask(CompanionCapability::TargetList) |
     companionCapabilityMask(CompanionCapability::TargetDetail) |
+    companionCapabilityMask(CompanionCapability::TargetCompare) |
+    companionCapabilityMask(CompanionCapability::TargetFavoriteSet) |
+    companionCapabilityMask(CompanionCapability::TargetNameSet) |
+    companionCapabilityMask(CompanionCapability::TargetNotesSet) |
+    companionCapabilityMask(CompanionCapability::TargetTagAdd) |
+    companionCapabilityMask(CompanionCapability::TargetTagRemove);
+
+constexpr CompanionCapabilityMask kCompanionReadCapabilities =
+    companionCapabilityMask(CompanionCapability::SessionList) |
+    companionCapabilityMask(CompanionCapability::SessionDetail) |
+    companionCapabilityMask(CompanionCapability::TargetList) |
+    companionCapabilityMask(CompanionCapability::TargetDetail) |
     companionCapabilityMask(CompanionCapability::TargetCompare);
+
+constexpr CompanionCapabilityMask kCompanionTargetMutationCapabilities =
+    companionCapabilityMask(CompanionCapability::TargetFavoriteSet) |
+    companionCapabilityMask(CompanionCapability::TargetNameSet) |
+    companionCapabilityMask(CompanionCapability::TargetNotesSet) |
+    companionCapabilityMask(CompanionCapability::TargetTagAdd) |
+    companionCapabilityMask(CompanionCapability::TargetTagRemove);
 
 CompanionConnection negotiateCompanionConnection(
     const CompanionConnectRequest& request,

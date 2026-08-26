@@ -302,12 +302,19 @@ void testTypedTargetActionsHaveOneStableMutationBoundary() {
     TargetAction rename{};
     rename.kind = TargetActionKind::SetName;
     rename.targetId = create.targetId;
+    rename.expectedRevision = 1;
     CHECK(setTargetActionText(&rename, "Office AP", std::strlen("Office AP")));
     result = service.execute(rename);
     CHECK(result.applied());
     CHECK(result.revision == 2);
     CHECK(std::strcmp(catalog.find(create.targetId)->name.data(), "Office AP") == 0);
 
+    rename.expectedRevision = 1;
+    result = service.execute(rename);
+    CHECK(result.status == TargetMutationStatus::RevisionConflict);
+    CHECK(result.revision == 2);
+
+    rename.expectedRevision = 2;
     rename.schemaVersion = 2;
     result = service.execute(rename);
     CHECK(result.status == TargetMutationStatus::InvalidArgument);

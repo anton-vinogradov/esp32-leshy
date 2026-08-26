@@ -242,7 +242,7 @@ void testCapabilitiesReflectOnlyTheCurrentSharedSnapshot() {
 
     Fixture fixture;
     CHECK(companionReadCapabilities(fixture.context) ==
-          kCompanionKnownCapabilities);
+          kCompanionReadCapabilities);
     CompanionReadContext sessions = fixture.context;
     sessions.targets = nullptr;
     sessions.comparison = nullptr;
