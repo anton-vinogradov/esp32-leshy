@@ -75,6 +75,26 @@ def web_state(device: PassiveSerial) -> dict[str, Any]:
         device, b"companion.web.state", "leshy.companion.web.v1", "state")
 
 
+def query_expected_error(device: PassiveSerial, command: bytes, schema: str,
+                         timeout: float = 5.0) -> dict[str, Any]:
+    """Read an error response that is itself the expected test outcome."""
+    deadline = time.monotonic() + timeout
+    device.write(command + b"\n")
+    device.flush()
+    while time.monotonic() < deadline:
+        line = device.readline()
+        if not line:
+            continue
+        try:
+            value = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if (isinstance(value, dict) and value.get("schema") == schema and
+                value.get("kind") == "error"):
+            return value
+    raise TimeoutError(f"timed out waiting for {schema}/error")
+
+
 def protocol_request(kind: str, request_id: str,
                      **fields: Any) -> dict[str, Any]:
     value: dict[str, Any] = {
@@ -675,9 +695,9 @@ def main() -> int:
             seed_replay: dict[str, Any] = {}
             seeded_state: dict[str, Any] = {}
             if http_exchange_requested:
-                invalid_seed = query(
+                invalid_seed = query_expected_error(
                     device, b"companion.web.hil-seed " + b"0" * 32,
-                    "leshy.companion.web.seed.v1", "error")
+                    "leshy.companion.web.seed.v1")
                 require(
                     invalid_seed.get("status") == "invalid" and
                     invalid_seed.get("reason") == "invalid_entropy" and
@@ -700,10 +720,10 @@ def main() -> int:
                     args.softap_mac.lower() and
                     seed_armed.get("credential_exposed") is False,
                     f"one-shot Web HIL seed was not armed: {seed_armed}")
-                seed_replay = query(
+                seed_replay = query_expected_error(
                     device,
                     f"companion.web.hil-seed {entropy.hex()}".encode("ascii"),
-                    "leshy.companion.web.seed.v1", "error")
+                    "leshy.companion.web.seed.v1")
                 entropy = b""
                 require(
                     seed_replay.get("status") == "denied" and

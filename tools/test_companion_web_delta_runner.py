@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import struct
 import sys
 import tempfile
@@ -34,6 +35,37 @@ def partition_table(
 
 
 class CompanionWebDeltaRunnerTests(unittest.TestCase):
+    def test_expected_error_is_returned_as_evidence(self) -> None:
+        class Device:
+            def __init__(self) -> None:
+                self.writes: list[bytes] = []
+                self.lines = [
+                    b"not-json\n",
+                    json.dumps({
+                        "schema": "leshy.companion.web.seed.v1",
+                        "kind": "error",
+                        "status": "invalid",
+                        "reason": "invalid_entropy",
+                    }).encode("utf-8") + b"\n",
+                ]
+
+            def write(self, value: bytes) -> None:
+                self.writes.append(value)
+
+            def flush(self) -> None:
+                pass
+
+            def readline(self) -> bytes:
+                return self.lines.pop(0) if self.lines else b""
+
+        device = Device()
+        response = runner.query_expected_error(
+            device, b"companion.web.hil-seed 0000",
+            "leshy.companion.web.seed.v1")
+        self.assertEqual("invalid_entropy", response["reason"])
+        self.assertEqual(
+            [b"companion.web.hil-seed 0000\n"], device.writes)
+
     def test_reviewed_layout_accepts_fitting_candidate(self) -> None:
         entries = [
             (1, 0x02, 0x9000, 0x5000, "nvs"),
