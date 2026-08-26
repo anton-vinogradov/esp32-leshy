@@ -180,7 +180,7 @@ class MacWifiGuard:
             address, router, subnet = observed
             if (address is not None and address.startswith("192.168.4.") and
                     address != "192.168.4.1" and
-                    router == "192.168.4.1" and
+                    router in (None, "192.168.4.1") and
                     subnet == "255.255.255.0"):
                 return
             time.sleep(0.25)
@@ -191,6 +191,12 @@ class MacWifiGuard:
         )
         if observed == prior and prior != (None, None, None):
             reason = "prior network remained active"
+        elif (observed[0] is not None and
+              observed[0].startswith("192.168.4.")):
+            reason = "the HIL subnet metadata was inconsistent"
+        elif (observed[0] is not None and
+              observed[0].startswith("169.254.")):
+            reason = "only a link-local address was established"
         elif observed == (None, None, None):
             reason = "no IPv4 link was established"
         else:

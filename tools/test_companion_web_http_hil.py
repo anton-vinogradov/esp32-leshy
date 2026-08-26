@@ -30,6 +30,7 @@ class FakeNetworkSetup:
         self.commands: list[list[str]] = []
         self.fail_join = False
         self.soft_fail_join = False
+        self.hil_router: str | None = "192.168.4.1"
         self.address = "10.88.88.60" if power and ssid else None
         self.router = "10.88.88.1" if power and ssid else None
         self.subnet = "255.255.255.0" if power and ssid else None
@@ -40,7 +41,7 @@ class FakeNetworkSetup:
             self.address = self.router = self.subnet = None
         elif ssid.startswith("Leshy-"):
             self.address = "192.168.4.2"
-            self.router = "192.168.4.1"
+            self.router = self.hil_router
             self.subnet = "255.255.255.0"
         else:
             self.address = "10.88.88.60"
@@ -151,6 +152,17 @@ class CompanionWebHttpHilTests(unittest.TestCase):
         self.assertEqual("Home", fake.ssid)
         self.assertEqual("10.88.88.60", fake.address)
         self.assertNotIn("Leshy-8790D5", fake.preferred)
+        self.assertTrue(guard.restored)
+
+    def test_hil_local_link_does_not_require_a_default_router(self) -> None:
+        fake = FakeNetworkSetup(redact_ssid=True)
+        fake.hil_router = None
+        guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=0.01)
+        guard.capture()
+        guard.connect("Leshy-8790D5", "temporary123")
+        self.assertEqual("192.168.4.2", fake.address)
+        self.assertIsNone(fake.router)
+        guard.restore()
         self.assertTrue(guard.restored)
 
     def test_powered_off_state_is_restored(self) -> None:
