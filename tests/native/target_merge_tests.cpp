@@ -255,6 +255,50 @@ void checkMalformedHistoryFailsClosed() {
     CHECK(restored.size() == 0);
 }
 
+void checkPersistenceRestoreSlotIsTransactional() {
+    TargetCatalog catalog;
+    CHECK(catalog.create(targetId(1), identity(1), evidence(1)) ==
+          TargetMutationStatus::Created);
+    CHECK(catalog.create(targetId(2), identity(2), evidence(2)) ==
+          TargetMutationStatus::Created);
+    TargetMergeHistory source;
+    CHECK(source.merge(catalog, operationId(7), targetId(1), targetId(2),
+                       1, 1) == TargetMergeStatus::Merged);
+    const TargetMergeRecord valid = *source.get(0);
+
+    TargetMergeHistory restored;
+    TargetMergeRecord* slot = restored.beginPersistenceRestore();
+    CHECK(slot != nullptr);
+    CHECK(restored.size() == 0);
+    CHECK(restored.get(0) == nullptr);
+    CHECK(restored.beginPersistenceRestore() == nullptr);
+    CHECK(restored.restore(valid) == TargetMergeStatus::InvalidArgument);
+    restored.cancelPersistenceRestore();
+    CHECK(restored.size() == 0);
+
+    slot = restored.beginPersistenceRestore();
+    CHECK(slot != nullptr);
+    *slot = valid;
+    CHECK(restored.commitPersistenceRestore() == TargetMergeStatus::Merged);
+    CHECK(restored.size() == 1);
+    CHECK(restored.get(0) != nullptr);
+
+    slot = restored.beginPersistenceRestore();
+    CHECK(slot != nullptr);
+    *slot = valid;
+    CHECK(restored.commitPersistenceRestore() ==
+          TargetMergeStatus::OperationIdConflict);
+    CHECK(restored.size() == 1);
+
+    slot = restored.beginPersistenceRestore();
+    CHECK(slot != nullptr);
+    *slot = valid;
+    slot->originalCatalogSize = 1;
+    CHECK(restored.commitPersistenceRestore() ==
+          TargetMergeStatus::InvalidArgument);
+    CHECK(restored.size() == 1);
+}
+
 void checkHistoryBound() {
     TargetCatalog catalog;
     CHECK(catalog.create(targetId(1), identity(1), evidence(1)) ==
@@ -322,6 +366,7 @@ int main() {
     checkChangedTargetFailsClosed();
     checkBoundsFailWithoutMutation();
     checkMalformedHistoryFailsClosed();
+    checkPersistenceRestoreSlotIsTransactional();
     checkHistoryBound();
     checkEnumeratedRoundTrips();
     if (failures != 0) {

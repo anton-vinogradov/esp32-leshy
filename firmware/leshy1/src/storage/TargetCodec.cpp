@@ -2,11 +2,24 @@
 
 #include <cstring>
 #include <limits>
+#include <type_traits>
 
 #include "AtomicHead.h"
 
 namespace leshy1::storage {
 namespace {
+
+#if defined(__GNUC__) && !defined(__clang__)
+#define LESHY_CODEC_NOINLINE __attribute__((noinline, noclone))
+#else
+#define LESHY_CODEC_NOINLINE __attribute__((noinline))
+#endif
+
+template <typename Aggregate>
+void resetDecodedAggregate(Aggregate* output) {
+    static_assert(std::is_trivially_copyable_v<Aggregate>);
+    std::memset(static_cast<void*>(output), 0, sizeof(*output));
+}
 
 void put16(std::uint8_t* output, std::uint16_t value) {
     output[0] = static_cast<std::uint8_t>(value >> 8U);
@@ -298,10 +311,10 @@ TargetCodecStatus decodeText(CborReader& reader, std::uint64_t expectedKey,
     return TargetCodecStatus::Valid;
 }
 
-TargetCodecStatus decodeRecord(CborReader& reader,
-                               domain::targets::TargetRecord* output) {
+LESHY_CODEC_NOINLINE TargetCodecStatus decodeRecord(
+    CborReader& reader, domain::targets::TargetRecord* output) {
     if (output == nullptr) return TargetCodecStatus::InvalidArgument;
-    *output = {};
+    resetDecodedAggregate(output);
     std::uint64_t count = 0;
     const std::uint8_t* bytes = nullptr;
     std::size_t length = 0;
@@ -421,10 +434,10 @@ bool encodeCorrelationDecision(
         writer.unsignedValue(record.targetRevisionAfter);
 }
 
-TargetCodecStatus decodeCorrelationFeature(
+LESHY_CODEC_NOINLINE TargetCodecStatus decodeCorrelationFeature(
     CborReader& reader, domain::targets::CorrelationFeature* output) {
     if (output == nullptr) return TargetCodecStatus::InvalidArgument;
-    *output = {};
+    resetDecodedAggregate(output);
     std::uint64_t count = 0;
     std::uint64_t value = 0;
     if (!reader.map(&count) || count != 5 || !key(reader, 0) ||
@@ -456,10 +469,10 @@ TargetCodecStatus decodeCorrelationFeature(
     return decodeEvidence(reader, &output->targetEvidence);
 }
 
-TargetCodecStatus decodeCorrelationProposal(
+LESHY_CODEC_NOINLINE TargetCodecStatus decodeCorrelationProposal(
     CborReader& reader, domain::targets::CorrelationProposal* output) {
     if (output == nullptr) return TargetCodecStatus::InvalidArgument;
-    *output = {};
+    resetDecodedAggregate(output);
     std::uint64_t count = 0;
     std::uint64_t value = 0;
     const std::uint8_t* bytes = nullptr;
@@ -509,11 +522,11 @@ TargetCodecStatus decodeCorrelationProposal(
         ? TargetCodecStatus::Valid : TargetCodecStatus::Malformed;
 }
 
-TargetCodecStatus decodeCorrelationDecision(
+LESHY_CODEC_NOINLINE TargetCodecStatus decodeCorrelationDecision(
     CborReader& reader,
     domain::targets::CorrelationDecisionRecord* output) {
     if (output == nullptr) return TargetCodecStatus::InvalidArgument;
-    *output = {};
+    resetDecodedAggregate(output);
     std::uint64_t count = 0;
     std::uint64_t value = 0;
     if (!reader.map(&count) || count != 4 || !key(reader, 0)) {
@@ -563,10 +576,10 @@ bool encodeTargetMerge(
         writer.unsignedValue(7) && writer.boolean(record.split);
 }
 
-TargetCodecStatus decodeTargetMerge(
+LESHY_CODEC_NOINLINE TargetCodecStatus decodeTargetMerge(
     CborReader& reader, domain::targets::TargetMergeRecord* output) {
     if (output == nullptr) return TargetCodecStatus::InvalidArgument;
-    *output = {};
+    resetDecodedAggregate(output);
     std::uint64_t count = 0;
     std::uint64_t value = 0;
     const std::uint8_t* bytes = nullptr;
@@ -609,6 +622,55 @@ TargetCodecStatus decodeTargetMerge(
     }
     return TargetCodecStatus::Valid;
 }
+
+// Keep the three fixed-capacity record types out of one aggregate
+// decodeTargetState() stack frame.  In particular, TargetMergeRecord owns two
+// complete pre-merge TargetRecord snapshots.  Combining it with the target and
+// correlation-decision temporaries previously produced a 3,024-byte frame and
+// could trip the ESP32 Arduino loop-task canary while opening Targets.
+__attribute__((noinline)) TargetCodecStatus decodeAndRestoreTarget(
+    CborReader& reader, domain::targets::TargetCatalog& catalog) {
+    domain::targets::TargetRecord record{};
+    const TargetCodecStatus status = decodeRecord(reader, &record);
+    if (status != TargetCodecStatus::Valid) return status;
+    return catalog.restore(record) ==
+            domain::targets::TargetMutationStatus::Created
+        ? TargetCodecStatus::Valid : TargetCodecStatus::Conflict;
+}
+
+__attribute__((noinline)) TargetCodecStatus decodeAndRestoreDecision(
+    CborReader& reader,
+    domain::targets::CorrelationDecisionLog& decisions) {
+    domain::targets::CorrelationDecisionRecord record{};
+    const TargetCodecStatus status = decodeCorrelationDecision(reader, &record);
+    if (status != TargetCodecStatus::Valid) return status;
+    const auto restored = decisions.record(
+        record.proposal, record.decision, record.targetRevisionBefore,
+        record.targetRevisionAfter);
+    const auto expected =
+        record.decision == domain::targets::CorrelationDecision::Accept
+            ? domain::targets::CorrelationDecisionStatus::Accepted
+            : domain::targets::CorrelationDecisionStatus::Rejected;
+    return restored == expected ? TargetCodecStatus::Valid
+                                : TargetCodecStatus::Conflict;
+}
+
+__attribute__((noinline)) TargetCodecStatus decodeAndRestoreMerge(
+    CborReader& reader, domain::targets::TargetMergeHistory& merges) {
+    domain::targets::TargetMergeRecord* record =
+        merges.beginPersistenceRestore();
+    if (record == nullptr) return TargetCodecStatus::Conflict;
+    const TargetCodecStatus status = decodeTargetMerge(reader, record);
+    if (status != TargetCodecStatus::Valid) {
+        merges.cancelPersistenceRestore();
+        return status;
+    }
+    return merges.commitPersistenceRestore() ==
+            domain::targets::TargetMergeStatus::Merged
+        ? TargetCodecStatus::Valid : TargetCodecStatus::Conflict;
+}
+
+#undef LESHY_CODEC_NOINLINE
 
 }  // namespace
 
@@ -934,16 +996,13 @@ TargetCodecStatus decodeTargetState(
         return TargetCodecStatus::BoundsExceeded;
     }
     for (std::size_t index = 0; index < count; ++index) {
-        domain::targets::TargetRecord record{};
-        const TargetCodecStatus status = decodeRecord(reader, &record);
-        if (status != TargetCodecStatus::Valid ||
-            catalog->restore(record) !=
-                domain::targets::TargetMutationStatus::Created) {
+        const TargetCodecStatus status =
+            decodeAndRestoreTarget(reader, *catalog);
+        if (status != TargetCodecStatus::Valid) {
             catalog->clear();
             decisions->clear();
             merges->clear();
-            return status == TargetCodecStatus::Valid
-                ? TargetCodecStatus::Conflict : status;
+            return status;
         }
     }
     if (!key(reader, 2) || !reader.array(&count) ||
@@ -954,21 +1013,13 @@ TargetCodecStatus decodeTargetState(
         return TargetCodecStatus::BoundsExceeded;
     }
     for (std::size_t index = 0; index < count; ++index) {
-        domain::targets::CorrelationDecisionRecord record{};
         const TargetCodecStatus status =
-            decodeCorrelationDecision(reader, &record);
-        if (status != TargetCodecStatus::Valid ||
-            (decisions->record(
-                 record.proposal, record.decision,
-                 record.targetRevisionBefore, record.targetRevisionAfter) !=
-             (record.decision == domain::targets::CorrelationDecision::Accept
-                  ? domain::targets::CorrelationDecisionStatus::Accepted
-                  : domain::targets::CorrelationDecisionStatus::Rejected))) {
+            decodeAndRestoreDecision(reader, *decisions);
+        if (status != TargetCodecStatus::Valid) {
             catalog->clear();
             decisions->clear();
             merges->clear();
-            return status == TargetCodecStatus::Valid
-                ? TargetCodecStatus::Conflict : status;
+            return status;
         }
     }
     if (version == kTargetStateSchemaVersion) {
@@ -980,16 +1031,13 @@ TargetCodecStatus decodeTargetState(
             return TargetCodecStatus::BoundsExceeded;
         }
         for (std::size_t index = 0; index < count; ++index) {
-            domain::targets::TargetMergeRecord record{};
-            const TargetCodecStatus status = decodeTargetMerge(reader, &record);
-            if (status != TargetCodecStatus::Valid ||
-                merges->restore(record) !=
-                    domain::targets::TargetMergeStatus::Merged) {
+            const TargetCodecStatus status =
+                decodeAndRestoreMerge(reader, *merges);
+            if (status != TargetCodecStatus::Valid) {
                 catalog->clear();
                 decisions->clear();
                 merges->clear();
-                return status == TargetCodecStatus::Valid
-                    ? TargetCodecStatus::Conflict : status;
+                return status;
             }
         }
     }

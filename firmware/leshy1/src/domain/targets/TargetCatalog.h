@@ -26,6 +26,13 @@ enum class TargetMutationStatus : std::uint8_t {
 
 const char* targetMutationStatusName(TargetMutationStatus status);
 
+// Allocation-free validators shared by catalog admission and persistence.
+// Created means that the record is structurally valid, or that the pair is
+// mutually conflict-free; every other result is the exact rejection reason.
+TargetMutationStatus validateTargetRecord(const TargetRecord& record);
+TargetMutationStatus validateTargetRecordCompatibility(
+    const TargetRecord& existing, const TargetRecord& candidate);
+
 // Allocation-free working set. Identity ownership fails closed at its bound.
 // Evidence references use bounded oldest-first retention: immutable source
 // Sessions remain on storage, while a frequently seen Target keeps its eight

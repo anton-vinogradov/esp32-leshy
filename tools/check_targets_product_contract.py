@@ -44,6 +44,17 @@ def main() -> int:
         ROOT / "firmware/leshy1/src/services/targets/SessionCorrelationReview.h").read_text()
     correlation_review = (
         ROOT / "firmware/leshy1/src/services/targets/SessionCorrelationReview.cpp").read_text()
+    target_catalog = (
+        ROOT / "firmware/leshy1/src/domain/targets/TargetCatalog.cpp").read_text()
+    correlation = (
+        ROOT / "firmware/leshy1/src/domain/targets/Correlation.cpp").read_text()
+    target_merge = (
+        ROOT / "firmware/leshy1/src/domain/targets/TargetMerge.cpp").read_text()
+    target_codec = (
+        ROOT / "firmware/leshy1/src/storage/TargetCodec.cpp").read_text()
+    merge_decode_start = target_codec.index("decodeAndRestoreMerge(")
+    merge_decode_end = target_codec.index("}  // namespace", merge_decode_start)
+    merge_decode = target_codec[merge_decode_start:merge_decode_end]
     stack_checker = (
         ROOT / "tools/check_targets_stack_elf_contract.py").read_text()
 
@@ -219,6 +230,57 @@ def main() -> int:
             '"CorrelationService::propose(": 768' in stack_checker,
             "multi-KiB correlation proposal results must reset in place and "
             "the exact ELF gate must cover the complete proposal call chain")
+    require(failures,
+            "validateTargetRecord(record.destinationBefore)" in target_merge and
+            "validateTargetRecord(record.sourceBefore)" in target_merge and
+            "validateTargetRecordCompatibility(" in target_merge and
+            "TargetCatalog validation" not in target_merge and
+            "beginPersistenceRestore()" in target_merge and
+            "commitPersistenceRestore()" in target_merge and
+            "cancelPersistenceRestore()" in target_merge and
+            "merges.beginPersistenceRestore()" in target_codec and
+            "merges.cancelPersistenceRestore()" in target_codec and
+            "merges.commitPersistenceRestore()" in target_codec and
+            "TargetMergeRecord record{}" not in merge_decode and
+            "resetDecodedAggregate(output)" in target_codec and
+            "*output = {};" not in target_codec and
+            "#define LESHY_CODEC_NOINLINE "
+                "__attribute__((noinline, noclone))" in target_codec and
+            target_codec.count("LESHY_CODEC_NOINLINE TargetCodecStatus "
+                               "decode") >= 5 and
+            "std::memset(static_cast<void*>(records_.data()), 0, "
+                "sizeof(records_))" in target_catalog and
+            "std::memset(static_cast<void*>(records_.data()), 0, "
+                "sizeof(records_))" in target_merge and
+            "std::memset(static_cast<void*>(records_.data()), 0, "
+                "sizeof(records_))" in correlation,
+            "persisted merge decode must validate in place through one "
+            "invisible transactional history slot without a multi-KiB local "
+            "record or validation catalog")
+    require(failures,
+            "TargetMutationStatus validateTargetRecord(" in target_catalog and
+            "TargetMutationStatus validateTargetRecordCompatibility(" in
+                target_catalog and
+            '"decodeTargetState(": 256' in stack_checker and
+            '"decodeRecord(": 256' in stack_checker and
+            '"decodeCorrelationFeature(": 256' in stack_checker and
+            '"decodeCorrelationProposal(": 256' in stack_checker and
+            '"decodeCorrelationDecision(": 256' in stack_checker and
+            '"decodeTargetMerge(": 256' in stack_checker and
+            '"decodeAndRestoreTarget(": 1024' in stack_checker and
+            '"decodeAndRestoreDecision(": 768' in stack_checker and
+            '"decodeAndRestoreMerge(": 512' in stack_checker and
+            '"TargetMergeHistory::commitPersistenceRestore()": 512' in
+                stack_checker and
+            '"validateTargetRecord(": 512' in stack_checker and
+            '"validateTargetRecordCompatibility(": 256' in stack_checker and
+            '"TargetCatalog::clear()": 128' in stack_checker and
+            '"CorrelationDecisionLog::clear()": 128' in stack_checker and
+            '"TargetMergeHistory::clear()": 128' in stack_checker and
+            '"reopenTargetState(": 512' in stack_checker and
+            '"loadTargetsProduct(": 1024' in stack_checker,
+            "the exact production ELF gate must cover every frame in the "
+            "Targets persistence-decode call chain")
     require(failures,
             "lastAdmissionStage()" in entry and
             "lastAdmission()" in entry and

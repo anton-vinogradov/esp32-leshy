@@ -103,12 +103,7 @@ const char* targetMutationStatusName(TargetMutationStatus status) {
     return "invalid_argument";
 }
 
-void TargetCatalog::clear() {
-    records_.fill(TargetRecord{});
-    size_ = 0;
-}
-
-TargetMutationStatus TargetCatalog::restore(const TargetRecord& record) {
+TargetMutationStatus validateTargetRecord(const TargetRecord& record) {
     if (!targetIdValid(record.id) || record.revision == 0 ||
         record.identityCount == 0 ||
         record.identityCount > record.identities.size() ||
@@ -125,10 +120,8 @@ TargetMutationStatus TargetCatalog::restore(const TargetRecord& record) {
         !validUtf8(record.notes.data(), record.notesLength)) {
         return TargetMutationStatus::InvalidArgument;
     }
-    if (find(record.id) != nullptr) return TargetMutationStatus::DuplicateId;
     for (std::size_t index = 0; index < record.identityCount; ++index) {
-        if (!targetIdentityValid(record.identities[index]) ||
-            findByIdentity(record.identities[index]) != nullptr) {
+        if (!targetIdentityValid(record.identities[index])) {
             return TargetMutationStatus::IdentityConflict;
         }
         for (std::size_t prior = 0; prior < index; ++prior) {
@@ -139,12 +132,12 @@ TargetMutationStatus TargetCatalog::restore(const TargetRecord& record) {
         }
     }
     for (std::size_t index = 0; index < record.evidenceCount; ++index) {
-        if (!targetEvidenceValid(record.evidence[index]) ||
-            findByEvidence(record.evidence[index]) != nullptr) {
+        if (!targetEvidenceValid(record.evidence[index])) {
             return TargetMutationStatus::EvidenceConflict;
         }
         for (std::size_t prior = 0; prior < index; ++prior) {
-            if (sameEvidenceKey(record.evidence[prior], record.evidence[index])) {
+            if (sameEvidenceKey(record.evidence[prior],
+                                record.evidence[index])) {
                 return TargetMutationStatus::EvidenceConflict;
             }
         }
@@ -163,6 +156,56 @@ TargetMutationStatus TargetCatalog::restore(const TargetRecord& record) {
                             record.tags[index].data(), length) == 0) {
                 return TargetMutationStatus::InvalidArgument;
             }
+        }
+    }
+    return TargetMutationStatus::Created;
+}
+
+TargetMutationStatus validateTargetRecordCompatibility(
+    const TargetRecord& existing, const TargetRecord& candidate) {
+    if (targetIdEqual(existing.id, candidate.id)) {
+        return TargetMutationStatus::DuplicateId;
+    }
+    for (std::size_t candidateIndex = 0;
+         candidateIndex < candidate.identityCount; ++candidateIndex) {
+        for (std::size_t existingIndex = 0;
+             existingIndex < existing.identityCount; ++existingIndex) {
+            if (targetIdentityEqual(existing.identities[existingIndex],
+                                    candidate.identities[candidateIndex])) {
+                return TargetMutationStatus::IdentityConflict;
+            }
+        }
+    }
+    for (std::size_t candidateIndex = 0;
+         candidateIndex < candidate.evidenceCount; ++candidateIndex) {
+        for (std::size_t existingIndex = 0;
+             existingIndex < existing.evidenceCount; ++existingIndex) {
+            if (sameEvidenceKey(existing.evidence[existingIndex],
+                                candidate.evidence[candidateIndex])) {
+                return TargetMutationStatus::EvidenceConflict;
+            }
+        }
+    }
+    return TargetMutationStatus::Created;
+}
+
+void TargetCatalog::clear() {
+    std::memset(static_cast<void*>(records_.data()), 0, sizeof(records_));
+    size_ = 0;
+}
+
+TargetMutationStatus TargetCatalog::restore(const TargetRecord& record) {
+    const TargetMutationStatus validation = validateTargetRecord(record);
+    if (validation != TargetMutationStatus::Created) return validation;
+    if (find(record.id) != nullptr) return TargetMutationStatus::DuplicateId;
+    for (std::size_t index = 0; index < record.identityCount; ++index) {
+        if (findByIdentity(record.identities[index]) != nullptr) {
+            return TargetMutationStatus::IdentityConflict;
+        }
+    }
+    for (std::size_t index = 0; index < record.evidenceCount; ++index) {
+        if (findByEvidence(record.evidence[index]) != nullptr) {
+            return TargetMutationStatus::EvidenceConflict;
         }
     }
     if (size_ >= records_.size()) return TargetMutationStatus::CatalogFull;

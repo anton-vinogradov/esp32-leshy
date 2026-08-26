@@ -1,5 +1,7 @@
 #include "Correlation.h"
 
+#include <cstring>
+
 namespace leshy1::domain::targets {
 namespace {
 
@@ -149,7 +151,7 @@ const char* correlationDecisionStatusName(CorrelationDecisionStatus status) {
 }
 
 void CorrelationDecisionLog::clear() {
-    records_.fill(CorrelationDecisionRecord{});
+    std::memset(static_cast<void*>(records_.data()), 0, sizeof(records_));
     size_ = 0;
 }
 

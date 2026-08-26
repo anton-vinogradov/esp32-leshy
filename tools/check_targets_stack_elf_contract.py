@@ -29,6 +29,27 @@ LIMITS = {
     "resetTargetComparisonResult(": 128,
     "compareTargetSessionsInto(": 512,
     "buildSide(": 1536,
+    # Opening Targets decodes persisted state on Arduino's bounded loop-task
+    # stack. Each fixed-capacity record must live in its own small frame, and a
+    # merge record (two complete Target snapshots) is decoded directly into an
+    # invisible history slot instead of becoming a ~3 KiB local temporary.
+    "decodeTargetState(": 256,
+    "decodeRecord(": 256,
+    "decodeCorrelationFeature(": 256,
+    "decodeCorrelationProposal(": 256,
+    "decodeCorrelationDecision(": 256,
+    "decodeTargetMerge(": 256,
+    "decodeAndRestoreTarget(": 1024,
+    "decodeAndRestoreDecision(": 768,
+    "decodeAndRestoreMerge(": 512,
+    "TargetMergeHistory::commitPersistenceRestore()": 512,
+    "validateTargetRecord(": 512,
+    "validateTargetRecordCompatibility(": 256,
+    "TargetCatalog::clear()": 128,
+    "CorrelationDecisionLog::clear()": 128,
+    "TargetMergeHistory::clear()": 128,
+    "reopenTargetState(": 512,
+    "loadTargetsProduct(": 1024,
 }
 
 

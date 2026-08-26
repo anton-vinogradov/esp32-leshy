@@ -70,11 +70,19 @@ public:
     // The current catalog is checked separately when an actual split executes.
     TargetMergeStatus restore(const TargetMergeRecord& record);
 
+    // The decoder may populate one invisible bounded slot in place, avoiding a
+    // multi-KiB TargetMergeRecord on the ESP32 loop-task stack. It must commit
+    // or cancel the slot before beginning another restore.
+    TargetMergeRecord* beginPersistenceRestore();
+    TargetMergeStatus commitPersistenceRestore();
+    void cancelPersistenceRestore();
+
 private:
     TargetMergeRecord* findMutable(const TargetMergeId& id);
 
     std::array<TargetMergeRecord, kCapacity> records_{};
     std::size_t size_ = 0;
+    bool persistenceRestorePending_ = false;
 };
 
 static_assert(sizeof(TargetMergeHistory) <= 16U * 1024U,

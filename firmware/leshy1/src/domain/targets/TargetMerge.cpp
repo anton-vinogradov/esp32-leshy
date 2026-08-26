@@ -1,5 +1,6 @@
 #include "TargetMerge.h"
 
+#include <cstring>
 #include <limits>
 
 namespace leshy1::domain::targets {
@@ -115,10 +116,12 @@ bool recordStructurallyValid(const TargetMergeRecord& record) {
         record.destinationIndex == record.sourceIndex) {
         return false;
     }
-    TargetCatalog validation;
-    return validation.restore(record.destinationBefore) ==
+    return validateTargetRecord(record.destinationBefore) ==
             TargetMutationStatus::Created &&
-        validation.restore(record.sourceBefore) ==
+        validateTargetRecord(record.sourceBefore) ==
+            TargetMutationStatus::Created &&
+        validateTargetRecordCompatibility(record.destinationBefore,
+                                          record.sourceBefore) ==
             TargetMutationStatus::Created;
 }
 
@@ -156,8 +159,9 @@ const char* targetMergeStatusName(TargetMergeStatus status) {
 }
 
 void TargetMergeHistory::clear() {
-    records_.fill(TargetMergeRecord{});
+    std::memset(static_cast<void*>(records_.data()), 0, sizeof(records_));
     size_ = 0;
+    persistenceRestorePending_ = false;
 }
 
 const TargetMergeRecord* TargetMergeHistory::get(std::size_t index) const {
@@ -300,6 +304,9 @@ TargetMergeStatus TargetMergeHistory::split(
 
 TargetMergeStatus TargetMergeHistory::restore(
     const TargetMergeRecord& record) {
+    if (persistenceRestorePending_) {
+        return TargetMergeStatus::InvalidArgument;
+    }
     if (!recordStructurallyValid(record)) {
         return TargetMergeStatus::InvalidArgument;
     }
@@ -310,6 +317,41 @@ TargetMergeStatus TargetMergeHistory::restore(
     if (size_ >= records_.size()) return TargetMergeStatus::HistoryFull;
     records_[size_++] = record;
     return TargetMergeStatus::Merged;
+}
+
+TargetMergeRecord* TargetMergeHistory::beginPersistenceRestore() {
+    if (persistenceRestorePending_ || size_ >= records_.size()) {
+        return nullptr;
+    }
+    std::memset(static_cast<void*>(&records_[size_]), 0,
+                sizeof(records_[size_]));
+    persistenceRestorePending_ = true;
+    return &records_[size_];
+}
+
+TargetMergeStatus TargetMergeHistory::commitPersistenceRestore() {
+    if (!persistenceRestorePending_) {
+        return TargetMergeStatus::InvalidArgument;
+    }
+    TargetMergeRecord& record = records_[size_];
+    if (!recordStructurallyValid(record)) {
+        cancelPersistenceRestore();
+        return TargetMergeStatus::InvalidArgument;
+    }
+    if (find(record.id) != nullptr) {
+        cancelPersistenceRestore();
+        return TargetMergeStatus::OperationIdConflict;
+    }
+    ++size_;
+    persistenceRestorePending_ = false;
+    return TargetMergeStatus::Merged;
+}
+
+void TargetMergeHistory::cancelPersistenceRestore() {
+    if (!persistenceRestorePending_) return;
+    std::memset(static_cast<void*>(&records_[size_]), 0,
+                sizeof(records_[size_]));
+    persistenceRestorePending_ = false;
 }
 
 }  // namespace leshy1::domain::targets
