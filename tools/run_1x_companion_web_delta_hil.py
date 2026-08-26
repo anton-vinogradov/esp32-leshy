@@ -812,6 +812,9 @@ def main() -> int:
                     "snapshot_complete": True,
                     "prior_power_on": snapshot.power_on,
                     "prior_ssid_present": snapshot.ssid is not None,
+                    "prior_association_present": snapshot.associated,
+                    "association_verifier": "dhcp_fingerprint",
+                    "prior_link_identity_recorded": False,
                 })
                 record["host_wifi"] = host_wifi
                 write_json(args.output / "run.json", record)

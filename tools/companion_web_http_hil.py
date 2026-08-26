@@ -13,6 +13,7 @@ from typing import Any, Callable
 
 
 NETWORKSETUP = "/usr/sbin/networksetup"
+IPCONFIG = "/usr/sbin/ipconfig"
 CREDENTIAL_ALPHABET = (
     "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 
@@ -53,6 +54,13 @@ class WifiSnapshot:
     service: str
     power_on: bool
     ssid: str | None
+    ipv4_address: str | None
+    router: str | None
+    subnet_mask: str | None
+
+    @property
+    def associated(self) -> bool:
+        return self.ipv4_address is not None and self.router is not None
 
 
 CommandRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
@@ -84,13 +92,22 @@ class MacWifiGuard:
         self._mutation_attempted = False
         self._temporary_ssid: str | None = None
 
-    def _run(self, arguments: list[str], operation: str) -> str:
-        result = self._runner([NETWORKSETUP, *arguments])
+    def _run(self, arguments: list[str], operation: str,
+             executable: str = NETWORKSETUP) -> str:
+        result = self._runner([executable, *arguments])
         if result.returncode != 0:
             # Do not echo arguments: a transient connect command contains the
             # one-shot HIL passphrase.
             raise RuntimeError(f"networksetup {operation} failed")
         return result.stdout.strip()
+
+    def _run_optional(self, arguments: list[str],
+                      executable: str) -> str | None:
+        result = self._runner([executable, *arguments])
+        if result.returncode != 0:
+            return None
+        value = result.stdout.strip()
+        return value if value else None
 
     def _power(self) -> bool:
         output = self._run(
@@ -121,6 +138,16 @@ class MacWifiGuard:
                 "cannot unambiguously parse preferred Wi-Fi networks")
         return [line.strip() for line in lines[1:] if line.strip()]
 
+    def _link_fingerprint(self) -> tuple[str | None, str | None,
+                                         str | None]:
+        address = self._run_optional(
+            ["getifaddr", self.interface], IPCONFIG)
+        router = self._run_optional(
+            ["getoption", self.interface, "router"], IPCONFIG)
+        subnet = self._run_optional(
+            ["getoption", self.interface, "subnet_mask"], IPCONFIG)
+        return address, router, subnet
+
     def capture(self) -> WifiSnapshot:
         enabled = self._run(
             ["-getnetworkserviceenabled", self.service],
@@ -129,8 +156,11 @@ class MacWifiGuard:
             raise RuntimeError("explicit Wi-Fi service is not enabled")
         power_on = self._power()
         ssid = self._ssid() if power_on else None
+        address, router, subnet = (
+            self._link_fingerprint() if power_on else (None, None, None))
         self.snapshot = WifiSnapshot(
-            self.interface, self.service, power_on, ssid)
+            self.interface, self.service, power_on, ssid,
+            address, router, subnet)
         return self.snapshot
 
     def _wait_for(self, expected_ssid: str) -> None:
@@ -140,6 +170,30 @@ class MacWifiGuard:
                 return
             time.sleep(0.25)
         raise RuntimeError("Wi-Fi association did not reach the expected SSID")
+
+    def _wait_for_hil_network(self) -> None:
+        deadline = time.monotonic() + self._wait_seconds
+        while time.monotonic() < deadline:
+            address, router, subnet = self._link_fingerprint()
+            if (address is not None and address.startswith("192.168.4.") and
+                    address != "192.168.4.1" and
+                    router == "192.168.4.1" and
+                    subnet == "255.255.255.0"):
+                return
+            time.sleep(0.25)
+        raise RuntimeError(
+            "Wi-Fi association did not reach the bounded HIL subnet")
+
+    def _wait_for_fingerprint(self, snapshot: WifiSnapshot) -> None:
+        deadline = time.monotonic() + self._wait_seconds
+        expected = (
+            snapshot.ipv4_address, snapshot.router, snapshot.subnet_mask)
+        while time.monotonic() < deadline:
+            if self._link_fingerprint() == expected:
+                return
+            time.sleep(0.25)
+        raise RuntimeError(
+            "Wi-Fi did not restore the prior anonymous link fingerprint")
 
     def _wait_for_disconnected(self) -> None:
         deadline = time.monotonic() + self._wait_seconds
@@ -165,7 +219,7 @@ class MacWifiGuard:
         self._run(
             ["-setairportnetwork", self.interface, ssid, passphrase],
             "join HIL network")
-        self._wait_for(ssid)
+        self._wait_for_hil_network()
 
     def _remove_temporary_profile(self) -> None:
         if self._temporary_ssid is None:
@@ -184,7 +238,16 @@ class MacWifiGuard:
             return False
         if not self.snapshot.power_on:
             return True
-        return self._ssid() == self.snapshot.ssid
+        if self.snapshot.ssid is not None:
+            return self._ssid() == self.snapshot.ssid
+        if self.snapshot.associated:
+            return self._link_fingerprint() == (
+                self.snapshot.ipv4_address,
+                self.snapshot.router,
+                self.snapshot.subnet_mask,
+            )
+        return self._ssid() is None and self._link_fingerprint() == (
+            None, None, None)
 
     def restore(self) -> None:
         self.restore_attempted = True
@@ -209,6 +272,18 @@ class MacWifiGuard:
                 ["-setairportnetwork", self.interface, self.snapshot.ssid],
                 "restore saved network")
             self._wait_for(self.snapshot.ssid)
+        elif self.snapshot.associated:
+            # Some recent macOS builds redact the current SSID from
+            # networksetup even while the link is active. Rejoin through the
+            # existing saved-network policy, then prove the exact prior DHCP
+            # fingerprint without ever reading or recording that SSID.
+            self._run(
+                ["-setairportpower", self.interface, "off"],
+                "restore anonymous saved network")
+            self._run(
+                ["-setairportpower", self.interface, "on"],
+                "restore anonymous saved network")
+            self._wait_for_fingerprint(self.snapshot)
         else:
             # networksetup has no explicit disassociate verb. A bounded power
             # cycle is the only reversible operation that can restore the

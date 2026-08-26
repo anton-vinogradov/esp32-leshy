@@ -20,22 +20,56 @@ from companion_web_http_hil import (  # noqa: E402
 
 
 class FakeNetworkSetup:
-    def __init__(self, power: bool = True, ssid: str | None = "Home") -> None:
+    def __init__(self, power: bool = True, ssid: str | None = "Home",
+                 redact_ssid: bool = False) -> None:
         self.power = power
         self.ssid = ssid
+        self.home_ssid = ssid
+        self.redact_ssid = redact_ssid
         self.preferred = {ssid} if ssid is not None else set()
         self.commands: list[list[str]] = []
         self.fail_join = False
+        self.address = "10.88.88.60" if power and ssid else None
+        self.router = "10.88.88.1" if power and ssid else None
+        self.subnet = "255.255.255.0" if power and ssid else None
+
+    def _select_network(self, ssid: str | None) -> None:
+        self.ssid = ssid
+        if ssid is None:
+            self.address = self.router = self.subnet = None
+        elif ssid.startswith("Leshy-"):
+            self.address = "192.168.4.2"
+            self.router = "192.168.4.1"
+            self.subnet = "255.255.255.0"
+        else:
+            self.address = "10.88.88.60"
+            self.router = "10.88.88.1"
+            self.subnet = "255.255.255.0"
 
     def __call__(self, arguments: list[str]) -> subprocess.CompletedProcess[str]:
         self.commands.append(arguments)
+        if arguments[0] == "/usr/sbin/ipconfig":
+            operation = arguments[1]
+            if operation == "getifaddr":
+                value = self.address
+            elif operation == "getoption" and arguments[3] == "router":
+                value = self.router
+            elif (operation == "getoption" and
+                  arguments[3] == "subnet_mask"):
+                value = self.subnet
+            else:
+                value = None
+            return subprocess.CompletedProcess(
+                arguments, 0 if value else 1,
+                f"{value}\n" if value else "", "")
         operation = arguments[1]
         if operation == "-getnetworkserviceenabled":
             output = "Enabled\n"
         elif operation == "-getairportpower":
             output = f"Wi-Fi Power ({arguments[2]}): {'On' if self.power else 'Off'}\n"
         elif operation == "-getairportnetwork":
-            output = (f"Current Wi-Fi Network: {self.ssid}\n" if self.ssid
+            output = (f"Current Wi-Fi Network: {self.ssid}\n"
+                      if self.ssid and not self.redact_ssid
                       else "You are not associated with an AirPort network.\n")
         elif operation == "-listpreferredwirelessnetworks":
             entries = "".join(f"\t{name}\n" for name in sorted(self.preferred))
@@ -43,19 +77,21 @@ class FakeNetworkSetup:
         elif operation == "-setairportpower":
             self.power = arguments[3] == "on"
             if not self.power:
-                self.ssid = None
+                self._select_network(None)
+            elif self.home_ssid is not None:
+                self._select_network(self.home_ssid)
             output = ""
         elif operation == "-setairportnetwork":
             if self.fail_join:
                 return subprocess.CompletedProcess(arguments, 1, "", "no")
             self.power = True
-            self.ssid = arguments[3]
+            self._select_network(arguments[3])
             self.preferred.add(arguments[3])
             output = ""
         elif operation == "-removepreferredwirelessnetwork":
             self.preferred.discard(arguments[3])
             if self.ssid == arguments[3]:
-                self.ssid = None
+                self._select_network(None)
             output = ""
         else:
             return subprocess.CompletedProcess(arguments, 1, "", "unknown")
@@ -97,6 +133,21 @@ class CompanionWebHttpHilTests(unittest.TestCase):
             ["/usr/sbin/networksetup", "-setairportnetwork", "en0", "Home"],
             restore)
         self.assertEqual("Home", snapshot.ssid)
+
+    def test_redacted_connected_network_uses_dhcp_fingerprint(self) -> None:
+        fake = FakeNetworkSetup(redact_ssid=True)
+        guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=0.01)
+        snapshot = guard.capture()
+        self.assertIsNone(snapshot.ssid)
+        self.assertTrue(snapshot.associated)
+        self.assertEqual("10.88.88.60", snapshot.ipv4_address)
+        guard.connect("Leshy-8790D5", "temporary123")
+        self.assertEqual("192.168.4.2", fake.address)
+        guard.restore()
+        self.assertEqual("Home", fake.ssid)
+        self.assertEqual("10.88.88.60", fake.address)
+        self.assertNotIn("Leshy-8790D5", fake.preferred)
+        self.assertTrue(guard.restored)
 
     def test_powered_off_state_is_restored(self) -> None:
         fake = FakeNetworkSetup(power=False, ssid=None)
