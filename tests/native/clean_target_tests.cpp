@@ -5305,6 +5305,37 @@ void testStorageWritesRequireExactDisposableScope() {
     CHECK(std::strcmp(permitStatusName(PermitStatus::FingerprintMismatch),
                       "fingerprint_mismatch") == 0);
 
+    ExistingScratchWriteRequest existingWrite;
+    existingWrite.explicitlyDisposable = true;
+    existingWrite.expectedFingerprint = "CID-A1B2C3";
+    existingWrite.runId = "run_20260816";
+    existingWrite.scratchExists = true;
+    existingWrite.requiredBytes = 64U * 1024U;
+    MediaIdentity fixtureMedia = media;
+    fixtureMedia.kind = MediaKind::LittleFs;
+    WritePermit existingPermit = authorizeExistingScratchWrite(
+        fixtureMedia, existingWrite);
+    CHECK(existingPermit.allowed());
+    CHECK(existingPermit.byteLimit == existingWrite.requiredBytes);
+    CHECK(std::strcmp(existingPermit.scratchPath,
+                      "/leshy-hil/run_20260816") == 0);
+    ExistingScratchWriteRequest changedExisting = existingWrite;
+    changedExisting.explicitlyDisposable = false;
+    CHECK(authorizeExistingScratchWrite(fixtureMedia, changedExisting).status ==
+          PermitStatus::ExplicitAuthorizationRequired);
+    MediaIdentity productMedia = media;
+    productMedia.kind = MediaKind::Sd;
+    CHECK(authorizeExistingScratchWrite(productMedia, existingWrite).status ==
+          PermitStatus::UnsupportedMediaKind);
+    changedExisting = existingWrite;
+    changedExisting.scratchExists = false;
+    CHECK(authorizeExistingScratchWrite(fixtureMedia, changedExisting).status ==
+          PermitStatus::ScratchMissing);
+    changedExisting = existingWrite;
+    changedExisting.requiredBytes = 0;
+    CHECK(authorizeExistingScratchWrite(fixtureMedia, changedExisting).status ==
+          PermitStatus::InvalidSize);
+
     ExistingScratchReadRequest readRequest;
     readRequest.explicitlySelected = true;
     readRequest.expectedFingerprint = "CID-A1B2C3";

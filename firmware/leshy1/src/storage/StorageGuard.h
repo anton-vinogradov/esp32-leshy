@@ -36,10 +36,12 @@ enum class PermitStatus : std::uint8_t {
     Permitted,
     MissingMedia,
     ExplicitAuthorizationRequired,
+    UnsupportedMediaKind,
     InvalidFingerprint,
     FingerprintMismatch,
     InvalidRunId,
     ScratchAlreadyExists,
+    ScratchMissing,
     InvalidSize,
     InsufficientSpace,
 };
@@ -55,6 +57,21 @@ struct WritePermit final {
 };
 
 WritePermit authorizeScratchWrite(const MediaIdentity& media, const WriteRequest& request);
+
+struct ExistingScratchWriteRequest final {
+    bool explicitlyDisposable = false;
+    const char* expectedFingerprint = nullptr;
+    const char* runId = nullptr;
+    bool scratchExists = false;
+    std::uint64_t requiredBytes = 0;
+};
+
+// A second mutation in the same disposable HIL namespace must reopen the
+// already-created directory without weakening the original exact-media and
+// byte-bound authorization. Product storage is never accepted by this path.
+WritePermit authorizeExistingScratchWrite(
+    const MediaIdentity& media,
+    const ExistingScratchWriteRequest& request);
 
 enum class ReadPermitStatus : std::uint8_t {
     Permitted,

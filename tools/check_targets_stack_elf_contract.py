@@ -50,6 +50,11 @@ LIMITS = {
     "TargetMergeHistory::clear()": 128,
     "reopenTargetState(": 512,
     "loadTargetsProduct(": 1024,
+    # The isolated merge/split gate is still product code: loading it nests
+    # under the bounded Arduino loop task, while mutation owns an explicit
+    # 8-KiB worker stack. Keep both concrete ELF frames under review.
+    "loadTargetsMergeFixture(": 1536,
+    "runTargetsMergeFixtureMutationWorker(": 2048,
 }
 
 

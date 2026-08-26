@@ -57,6 +57,14 @@ def main() -> int:
     merge_decode = target_codec[merge_decode_start:merge_decode_end]
     stack_checker = (
         ROOT / "tools/check_targets_stack_elf_contract.py").read_text()
+    storage_guard = (
+        ROOT / "firmware/leshy1/src/storage/StorageGuard.cpp").read_text()
+    disposable_ota = (
+        ROOT / "firmware/leshy1/src/platform/arduino/DisposableOtaLittleFs.cpp"
+    ).read_text()
+    littlefs_io = (
+        ROOT / "firmware/leshy1/src/platform/arduino/ArduinoLittleFsSessionStoreIo.cpp"
+    ).read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -428,6 +436,62 @@ def main() -> int:
             "explicit confirmations, atomically publish both transitions and "
             "cold-reopen both exact pre-merge ownership graphs while the "
             "bounded synchronous load keeps the hardware watchdog live")
+    fixture_worker_start = entry.index(
+        "void runTargetsMergeFixtureMutationWorker")
+    fixture_worker_end = entry.index(
+        "void runTargetsMutationWorker", fixture_worker_start)
+    fixture_worker = entry[fixture_worker_start:fixture_worker_end]
+    require(failures,
+            "RTC_NOINIT_ATTR TargetsMergeFixtureRtcState" in entry and
+            "targetsMergeFixtureContinuityValid()" in entry and
+            "fixture_bypassed" in entry and
+            load_product.index("targetsMergeFixtureRtcState.magic") <
+                load_product.index("loadProductFingerprint(") and
+            "prepareTargetsMergeSyntheticSessions()" in entry and
+            "authorizeExistingScratchWrite(media, request)" in
+                fixture_worker and
+            "mountExistingWritable()" in fixture_worker and
+            "openExistingWritable(permit)" in fixture_worker and
+            "fixture_merge_split_only" in entry and
+            "targets.merge-split-fixture prepare disposable-ota1" in entry and
+            "targets.merge-split-fixture clear disposable-ota1" in entry,
+            "the deterministic merge/split fixture must survive cold resets "
+            "through authenticated RTC continuity, bypass product SD before "
+            "identity access, admit only merge/split and reopen only its "
+            "pre-created inactive-OTA1 scratch namespace")
+    require(failures,
+            "media.kind != MediaKind::LittleFs" in storage_guard and
+            "authorizeExistingScratchWrite(" in storage_guard and
+            "request.scratchExists" in storage_guard and
+            "request.requiredBytes == 0" in storage_guard and
+            "safeInactiveTarget()" in disposable_ota and
+            "mountExistingWritable()" in disposable_ota and
+            "openExistingPath(permit.scratchPath, permit.byteLimit, true)" in
+                littlefs_io and
+            "++writeCalls_" in littlefs_io,
+            "fixture writes must be exact-media, LittleFS-only, bounded, "
+            "pre-existing-scratch operations on the inactive OTA slot with "
+            "observable physical write calls")
+    require(failures,
+            "ota1-private-backup.bin" in merge_split_runner and
+            "ota1-private-backup-second.bin" in merge_split_runner and
+            "ota1_before_sha == ota1_second_sha" in merge_split_runner and
+            "restore_flash(" in merge_split_runner and
+            "partition_before_sha == partition_after_sha" in
+                merge_split_runner and
+            "targetsMergeFixture" not in merge_split_runner and
+            '"opened_ports": [args.port]' in merge_split_runner and
+            '"cardputer_ports_opened": 0' in merge_split_runner and
+            '"port_discovery_calls": 0' in merge_split_runner and
+            "list_ports" not in merge_split_runner and
+            'for key in ("generation", "observations")' in
+                merge_split_runner and
+            "private_backup_deleted_after_verified_restore" in
+                merge_split_runner,
+            "fixture HIL must use one explicit DUT port, prove two identical "
+            "inactive-OTA backups, restore it byte-for-byte in cleanup, prove "
+            "the partition table and product generations unchanged, and leave "
+            "a parallel Cardputer untouched")
     require(failures,
             'constexpr int kBleTxDbm = -12' in correlation_fixture and
             'ESP_PWR_LVL_N12' in correlation_fixture and

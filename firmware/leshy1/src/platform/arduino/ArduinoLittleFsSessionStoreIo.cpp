@@ -23,6 +23,7 @@ void ArduinoLittleFsSessionStoreIo::recordFailure(const char* stage) {
 void ArduinoLittleFsSessionStoreIo::resetCounters() {
     byteLimit_ = 0;
     bytesWritten_ = 0;
+    writeCalls_ = 0;
     fileSyncs_ = 0;
     directorySyncs_ = 0;
     pendingSize_ = 0;
@@ -109,6 +110,12 @@ bool ArduinoLittleFsSessionStoreIo::prepare(
     return true;
 }
 
+bool ArduinoLittleFsSessionStoreIo::openExistingWritable(
+    const storage::WritePermit& permit) {
+    return permit.allowed() && permit.byteLimit != 0 &&
+        openExistingPath(permit.scratchPath, permit.byteLimit, true);
+}
+
 bool ArduinoLittleFsSessionStoreIo::openExistingReadOnly(
     const storage::WritePermit& permit) {
     if (!permit.allowed()) {
@@ -129,16 +136,24 @@ bool ArduinoLittleFsSessionStoreIo::openExistingReadOnly(
 
 bool ArduinoLittleFsSessionStoreIo::openExistingReadOnlyPath(
     const char* path) {
-    if (ready_ || !filesystem_.mounted() || !filesystem_.readOnly() ||
-        path == nullptr || std::strlen(path) >= sizeof(rootPath_) ||
-        !directoryExists(path)) {
-        recordFailure("readonly_precondition");
+    return openExistingPath(path, 0, false);
+}
+
+bool ArduinoLittleFsSessionStoreIo::openExistingPath(
+    const char* path, std::uint64_t byteLimit, bool writable) {
+    if (ready_ || !filesystem_.mounted() ||
+        filesystem_.readOnly() == writable || path == nullptr ||
+        std::strlen(path) >= sizeof(rootPath_) || !directoryExists(path) ||
+        (writable && byteLimit == 0)) {
+        recordFailure(writable ? "writable_precondition"
+                               : "readonly_precondition");
         return false;
     }
     resetCounters();
     std::strcpy(rootPath_, path);
+    byteLimit_ = byteLimit;
     ready_ = true;
-    writable_ = false;
+    writable_ = writable;
     return true;
 }
 
@@ -187,6 +202,7 @@ bool ArduinoLittleFsSessionStoreIo::writeFile(
     std::strcpy(pendingRelative_, path);
     pendingSize_ = size;
     fileBarrierComplete_ = false;
+    ++writeCalls_;
     return true;
 }
 

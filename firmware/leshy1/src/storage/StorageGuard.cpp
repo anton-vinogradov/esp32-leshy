@@ -40,10 +40,12 @@ const char* permitStatusName(PermitStatus status) {
         case PermitStatus::Permitted: return "permitted";
         case PermitStatus::MissingMedia: return "missing_media";
         case PermitStatus::ExplicitAuthorizationRequired: return "explicit_authorization_required";
+        case PermitStatus::UnsupportedMediaKind: return "unsupported_media_kind";
         case PermitStatus::InvalidFingerprint: return "invalid_fingerprint";
         case PermitStatus::FingerprintMismatch: return "fingerprint_mismatch";
         case PermitStatus::InvalidRunId: return "invalid_run_id";
         case PermitStatus::ScratchAlreadyExists: return "scratch_already_exists";
+        case PermitStatus::ScratchMissing: return "scratch_missing";
         case PermitStatus::InvalidSize: return "invalid_size";
         case PermitStatus::InsufficientSpace: return "insufficient_space";
     }
@@ -86,6 +88,58 @@ WritePermit authorizeScratchWrite(const MediaIdentity& media, const WriteRequest
     const int written = std::snprintf(permit.scratchPath, sizeof(permit.scratchPath), "%s%s",
                                       kScratchRoot, request.runId);
     if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(permit.scratchPath)) {
+        permit.status = PermitStatus::InvalidRunId;
+        permit.scratchPath[0] = '\0';
+        return permit;
+    }
+    permit.status = PermitStatus::Permitted;
+    permit.byteLimit = request.requiredBytes;
+    return permit;
+}
+
+WritePermit authorizeExistingScratchWrite(
+    const MediaIdentity& media,
+    const ExistingScratchWriteRequest& request) {
+    WritePermit permit;
+    if (!media.present) return permit;
+    if (!request.explicitlyDisposable) {
+        permit.status = PermitStatus::ExplicitAuthorizationRequired;
+        return permit;
+    }
+    if (media.kind != MediaKind::LittleFs) {
+        permit.status = PermitStatus::UnsupportedMediaKind;
+        return permit;
+    }
+    if (!boundedToken(media.fingerprint, kFingerprintMax, false) ||
+        !boundedToken(request.expectedFingerprint, kFingerprintMax, false)) {
+        permit.status = PermitStatus::InvalidFingerprint;
+        return permit;
+    }
+    if (!boundedEqual(media.fingerprint, request.expectedFingerprint,
+                      kFingerprintMax)) {
+        permit.status = PermitStatus::FingerprintMismatch;
+        return permit;
+    }
+    if (!boundedToken(request.runId, kRunIdMax, true)) {
+        permit.status = PermitStatus::InvalidRunId;
+        return permit;
+    }
+    if (!request.scratchExists) {
+        permit.status = PermitStatus::ScratchMissing;
+        return permit;
+    }
+    if (request.requiredBytes == 0 ||
+        media.capacityBytes < media.freeBytes ||
+        media.freeBytes < request.requiredBytes) {
+        permit.status = request.requiredBytes == 0
+            ? PermitStatus::InvalidSize : PermitStatus::InsufficientSpace;
+        return permit;
+    }
+    const int written = std::snprintf(
+        permit.scratchPath, sizeof(permit.scratchPath), "%s%s",
+        kScratchRoot, request.runId);
+    if (written <= 0 || static_cast<std::size_t>(written) >=
+                            sizeof(permit.scratchPath)) {
         permit.status = PermitStatus::InvalidRunId;
         permit.scratchPath[0] = '\0';
         return permit;

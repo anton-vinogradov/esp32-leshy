@@ -19,6 +19,7 @@ public:
     ~ArduinoLittleFsSessionStoreIo() override { end(); }
 
     bool prepare(const storage::WritePermit& permit);
+    bool openExistingWritable(const storage::WritePermit& permit);
     bool openExistingReadOnly(const storage::WritePermit& permit);
     bool openExistingReadOnly(const storage::ReadPermit& permit);
     void end();
@@ -32,6 +33,7 @@ public:
     bool syncDirectory() override;
 
     std::uint64_t bytesWritten() const { return bytesWritten_; }
+    std::uint32_t writeCalls() const { return writeCalls_; }
     std::uint32_t fileSyncs() const { return fileSyncs_; }
     std::uint32_t directorySyncs() const { return directorySyncs_; }
     bool fileSyncCoversDirectory() const { return true; }
@@ -51,6 +53,8 @@ private:
     void resetCounters();
     void recordFailure(const char* stage);
     bool openExistingReadOnlyPath(const char* path);
+    bool openExistingPath(const char* path, std::uint64_t byteLimit,
+                          bool writable);
 
     DisposableOtaLittleFs& filesystem_;
     char rootPath_[storage::kScratchPathMax] = {};
@@ -58,6 +62,7 @@ private:
     std::size_t pendingSize_ = 0;
     std::uint64_t byteLimit_ = 0;
     std::uint64_t bytesWritten_ = 0;
+    std::uint32_t writeCalls_ = 0;
     std::uint32_t fileSyncs_ = 0;
     std::uint32_t directorySyncs_ = 0;
     int pendingDescriptor_ = -1;

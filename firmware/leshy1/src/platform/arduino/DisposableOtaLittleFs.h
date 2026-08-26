@@ -23,6 +23,7 @@ public:
     bool safeInactiveTarget() const;
     bool hashTarget(char* output, std::size_t capacity) const;
     bool formatAndMountWritable();
+    bool mountExistingWritable();
     bool mountReadOnly();
     void end();
 

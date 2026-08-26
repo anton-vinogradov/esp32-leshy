@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import secrets
 import shutil
 import subprocess
 import time
@@ -14,6 +15,14 @@ from typing import Any, Callable
 from capture_1x_ui import PassiveSerial, synchronize_console
 from check_targets_stack_elf_contract import stack_frames
 from esp_app_identity import app_elf_sha256
+from run_1x_littlefs_parity_hil import (
+    OTA1_OFFSET,
+    OTA1_SIZE,
+    PARTITION_TABLE_OFFSET,
+    PARTITION_TABLE_SIZE,
+    read_flash_with_retry,
+    restore_flash,
+)
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import (
     action,
@@ -201,8 +210,9 @@ def wait_mutation(device: Any, timeout: float = 20.0) -> dict[str, Any]:
 def require_atomic_save(state: dict[str, Any], label: str) -> None:
     attempts = int(state.get("mutation_identity_attempts", 0))
     retries = int(state.get("mutation_identity_transient_retries", -1))
-    if not 1 <= attempts <= 8 or retries != attempts - 1:
-        raise RuntimeError(f"{label}: invalid bounded identity retries: {state}")
+    if attempts != 0 or retries != 0:
+        raise RuntimeError(
+            f"{label}: disposable mutation touched SD identity: {state}")
     if (int(state.get("mutation_action_us", 0)) <= 0 or
             int(state.get("mutation_action_us", 0)) > 10000 or
             int(state.get("mutation_elapsed_us", 0)) <= 0 or
@@ -232,6 +242,7 @@ def cold_reopen(
     name: str,
     expected_version: str,
     app_identity: str,
+    run_id: str,
 ) -> tuple[PassiveSerial, dict[str, Any]]:
     ready, _, timing = reset_capture(port, output, name, 20.0)
     require(ready, f"{name} candidate", version=expected_version,
@@ -242,13 +253,19 @@ def cold_reopen(
     recovery = read_only_query(
         device, b"storage.product.boot-recovery",
         "leshy.storage.product_boot_recovery.v1", "state")
-    require(recovery, f"{name} exact media", status="admitted",
-            expected_fingerprint=EXPECTED_CID,
-            observed_fingerprint=EXPECTED_CID,
-            fingerprint_matched=True, mounted_read_only=True,
-            read_only_guaranteed=True, blocked_write_attempts=0,
-            cleanup_complete=True, physical_write_calls=0)
-    return device, {"timing": timing, "recovery": recovery}
+    require(recovery, f"{name} product SD bypass",
+            status="fixture_bypassed", cleanup_complete=True,
+            physical_write_calls=0)
+    fixture = read_only_query(
+        device, b"targets.merge-split-fixture state",
+        "leshy.targets_merge_split_fixture.v1", "state")
+    require(fixture, f"{name} fixture continuity", armed=True,
+            continuity_valid=True, runtime_active=False, run_id=run_id,
+            storage="disposable_ota1", ota1_restore_required=True,
+            sd_accessed=False, product_target_state_touched=False,
+            radio_touched=False, rf_tx_attempts=0)
+    return device, {
+        "timing": timing, "recovery": recovery, "fixture": fixture}
 
 
 def main() -> int:
@@ -347,6 +364,27 @@ def main() -> int:
             "retained_as": retained_predecessor.name,
         }
     app_identity = app_elf_sha256(candidate)
+    run_id = f"targets-merge-{secrets.token_hex(6)}"
+    ota1_backup = args.output / "ota1-private-backup.bin"
+    ota1_backup_second = args.output / "ota1-private-backup-second.bin"
+    ota1_restore_readback = args.output / "ota1-private-restore-readback.bin"
+    partition_before = args.output / "partition-table-before.bin"
+    partition_after = args.output / "partition-table-after.bin"
+    ota1_before_sha = ""
+    ota1_second_sha = ""
+    ota1_after_sha = ""
+    partition_before_sha = ""
+    partition_after_sha = ""
+    ota1_backup_attempts = 0
+    ota1_second_attempts = 0
+    partition_before_attempts = 0
+    partition_after_attempts = 0
+    restore_attempts = 0
+    backup_ready = False
+    restore_attempted = False
+    restore_verified = False
+    private_backup_deleted = False
+    workflow_error = ""
     cleanup: dict[str, Any] = {"attempted": False}
     states: dict[str, Any] = {}
     screens: dict[str, Any] = {}
@@ -355,6 +393,7 @@ def main() -> int:
         "schema": SCHEMA,
         "status": "in_progress",
         "source_commit": args.source_commit,
+        "run_id": run_id,
         "usb": {
             "opened_ports": [args.port],
             "cardputer_ports_opened": 0,
@@ -372,6 +411,13 @@ def main() -> int:
             "map_sha256": sha256_file(args.map),
             "app_elf_sha256": app_identity,
             "checked_stack_frames": checked_stack_frames,
+        },
+        "disposable_target": {
+            "kind": "inactive_ota1_littlefs",
+            "offset": OTA1_OFFSET,
+            "size": OTA1_SIZE,
+            "two_read_backup_verified": False,
+            "restore_verified": False,
         },
     }
     write_json(args.output / "run.json", record)
@@ -403,6 +449,69 @@ def main() -> int:
                 cleanup_complete=True, physical_write_calls=0)
         states["boot_recovery"] = recovery
 
+        # Preserve OTA1 twice before the explicit destructive command.  No
+        # serial-port discovery is performed: every esptool invocation receives
+        # the caller-selected DIV path verbatim, leaving a parallel Cardputer
+        # unopened.
+        device.close()
+        device = None
+        ota1_before_sha, ota1_backup_attempts = read_flash_with_retry(
+            args.port, args.flash_baud, OTA1_OFFSET, OTA1_SIZE, ota1_backup)
+        ota1_second_sha, ota1_second_attempts = read_flash_with_retry(
+            args.port, args.flash_baud, OTA1_OFFSET, OTA1_SIZE,
+            ota1_backup_second)
+        partition_before_sha, partition_before_attempts = (
+            read_flash_with_retry(
+                args.port, args.flash_baud, PARTITION_TABLE_OFFSET,
+                PARTITION_TABLE_SIZE, partition_before))
+        backup_ready = ota1_before_sha == ota1_second_sha
+        if not backup_ready:
+            raise RuntimeError("two independent OTA1 backup reads differ")
+        ota1_backup_second.unlink(missing_ok=True)
+
+        device = PassiveSerial(args.port, 115200, timeout=0.25)
+        synchronize_console(device, 20.0)
+        recovery_rechecked = read_only_query(
+            device, b"storage.product.boot-recovery",
+            "leshy.storage.product_boot_recovery.v1", "state")
+        require(recovery_rechecked, "pre-fixture exact media",
+                status="admitted", expected_fingerprint=EXPECTED_CID,
+                observed_fingerprint=EXPECTED_CID,
+                fingerprint_matched=True, mounted_read_only=True,
+                read_only_guaranteed=True, blocked_write_attempts=0,
+                cleanup_complete=True, physical_write_calls=0)
+        states["boot_recovery_rechecked"] = recovery_rechecked
+        prepare_command = (
+            "targets.merge-split-fixture prepare disposable-ota1 "
+            f"{ota1_before_sha} {run_id} confirm").encode("ascii")
+        prepared = query(
+            device, prepare_command,
+            "leshy.targets_merge_split_fixture.v1", "prepared",
+            timeout=120.0)
+        require(prepared, "fixture prepare", status="ready", run_id=run_id,
+                expected_fingerprint=ota1_before_sha,
+                observed_fingerprint=ota1_before_sha,
+                fingerprint_matched=True, target="ota1",
+                target_address=OTA1_OFFSET, target_size=OTA1_SIZE,
+                target_inactive=True, format_performed=True,
+                scratch_preexisting=False, scratch_created=True,
+                permit_status="permitted", byte_limit=256 * 1024,
+                continuity_armed=True, cleanup_complete=True,
+                owned_after=0, ota1_restore_required=True,
+                product_partition_touched=False, sd_accessed=False,
+                product_target_state_touched=False, nvs_touched=False,
+                radio_touched=False, rf_tx_attempts=0)
+        states["fixture_prepared"] = prepared
+        fixture_armed = read_only_query(
+            device, b"targets.merge-split-fixture state",
+            "leshy.targets_merge_split_fixture.v1", "state")
+        require(fixture_armed, "fixture armed", armed=True,
+                continuity_valid=True, runtime_active=False, run_id=run_id,
+                storage="disposable_ota1", ota1_restore_required=True,
+                sd_accessed=False, product_target_state_touched=False,
+                radio_touched=False, rf_tx_attempts=0)
+        states["fixture_armed"] = fixture_armed
+
         listed_before, destination_before, searched = find_target(
             device,
             lambda state: int(state.get("merge_candidate_count", 0)) > 0 and
@@ -410,6 +519,14 @@ def main() -> int:
         )
         states["destination_search"] = searched
         states["destination_before"] = destination_before
+        require(destination_before, "fixture Targets", fixture_mode=True,
+                fixture_run_id=run_id,
+                fixture_storage="disposable_ota1",
+                fixture_sd_accessed=False,
+                fixture_product_target_state_touched=False,
+                fixture_ota1_restore_required=True,
+                catalog_count=2, merge_candidate_count=1,
+                target_state_generation=0, target_state_head="none")
         destination_id = destination_before["selected_target_id"]
         destination_graph = destination_before["selected_graph_fingerprint"]
         destination_identities = int(
@@ -459,8 +576,11 @@ def main() -> int:
                 mutation_state="saved", mutation_status="saved",
                 mutation_merge=True, mutation_merge_kind="merge",
                 mutation_merge_status="merged", mutation_persisted=True,
-                mutation_expected_cid=EXPECTED_CID,
-                mutation_observed_cid=EXPECTED_CID,
+                mutation_expected_cid="", mutation_observed_cid="",
+                fixture_mode=True, fixture_run_id=run_id,
+                fixture_storage="disposable_ota1",
+                fixture_sd_accessed=False,
+                fixture_product_target_state_touched=False,
                 active_merge_available=True,
                 catalog_count=catalog_before - 1,
                 merge_history_count=history_before + 1,
@@ -492,7 +612,7 @@ def main() -> int:
 
         device, resets["merged"] = cold_reopen(
             args.port, args.output, "targets-merge-cold-reopen",
-            args.expected_version, app_identity)
+            args.expected_version, app_identity, run_id)
         _, merged_reopened, searched_merged = find_target_id(
             device, destination_id)
         states["merged_reopen_search"] = searched_merged
@@ -535,8 +655,11 @@ def main() -> int:
                 mutation_merge_status="split", mutation_persisted=True,
                 mutation_merge_operation_id=merge_operation_id,
                 mutation_merge_source_id=source_id,
-                mutation_expected_cid=EXPECTED_CID,
-                mutation_observed_cid=EXPECTED_CID,
+                mutation_expected_cid="", mutation_observed_cid="",
+                fixture_mode=True, fixture_run_id=run_id,
+                fixture_storage="disposable_ota1",
+                fixture_sd_accessed=False,
+                fixture_product_target_state_touched=False,
                 active_merge_available=False,
                 catalog_count=catalog_before,
                 merge_history_count=history_before + 1,
@@ -561,7 +684,7 @@ def main() -> int:
 
         device, resets["split"] = cold_reopen(
             args.port, args.output, "targets-split-cold-reopen",
-            args.expected_version, app_identity)
+            args.expected_version, app_identity, run_id)
         _, destination_reopened, destination_search = find_target_id(
             device, destination_id)
         states["destination_reopen_search"] = destination_search
@@ -602,6 +725,28 @@ def main() -> int:
                 released.get("heap_free_before", 0)):
             raise RuntimeError(
                 f"Targets workspace heap did not recover: {released}")
+        clear_command = (
+            "targets.merge-split-fixture clear disposable-ota1 "
+            f"{ota1_before_sha} {run_id} confirm").encode("ascii")
+        cleared = query(
+            device, clear_command,
+            "leshy.targets_merge_split_fixture.v1", "cleared")
+        require(cleared, "fixture clear", status="cleared", run_id=run_id,
+                identity_matched=True, continuity_disarmed=True,
+                ota1_restore_required=True, ota1_restored=False,
+                product_partition_touched=False, sd_accessed=False,
+                product_target_state_touched=False, nvs_touched=False,
+                radio_touched=False, rf_tx_attempts=0)
+        states["fixture_cleared"] = cleared
+        fixture_inactive = read_only_query(
+            device, b"targets.merge-split-fixture state",
+            "leshy.targets_merge_split_fixture.v1", "state")
+        require(fixture_inactive, "fixture inactive", armed=False,
+                continuity_valid=False, runtime_active=False, run_id="",
+                storage="product_sd", ota1_restore_required=False,
+                sd_accessed=False, product_target_state_touched=False,
+                radio_touched=False, rf_tx_attempts=0)
+        states["fixture_inactive"] = fixture_inactive
         cleanup = best_effort_cleanup(device)
         if not cleanup.get("complete"):
             raise RuntimeError(f"final cleanup failed: {cleanup}")
@@ -634,26 +779,177 @@ def main() -> int:
         })
     except Exception as error:
         if device is not None:
-            cleanup = best_effort_cleanup(device)
-        record.update({
-            "status": "failed",
-            "error": f"{type(error).__name__}: {error}",
-            "states": states,
-            "screens": screens,
-            "resets": resets,
-            "cleanup": cleanup,
-        })
-        write_json(args.output / "run.json", record)
-        artifact_manifest(args.output)
-        raise
+            try:
+                cleanup = best_effort_cleanup(device)
+            except Exception as cleanup_error:
+                cleanup = {
+                    "attempted": True, "complete": False,
+                    "error": (f"{type(cleanup_error).__name__}: "
+                              f"{cleanup_error}"),
+                }
+        workflow_error = f"{type(error).__name__}: {error}"
     finally:
         if device is not None:
             device.close()
+            device = None
+        if not backup_ready:
+            # The destructive prepare command is unreachable until both reads
+            # match, so a failed backup proof can discard its private partial
+            # artifacts without losing the original inactive partition.
+            ota1_backup.unlink(missing_ok=True)
+            ota1_backup_second.unlink(missing_ok=True)
+            partition_before.unlink(missing_ok=True)
+        if backup_ready and ota1_backup.is_file():
+            restore_attempted = True
+            try:
+                _, ota1_after_sha, restore_attempts = restore_flash(
+                    args.port, args.flash_baud, OTA1_OFFSET, ota1_backup,
+                    ota1_restore_readback)
+                partition_after_sha, partition_after_attempts = (
+                    read_flash_with_retry(
+                        args.port, args.flash_baud, PARTITION_TABLE_OFFSET,
+                        PARTITION_TABLE_SIZE, partition_after))
+                restore_verified = (
+                    ota1_after_sha == ota1_before_sha and
+                    partition_after_sha == partition_before_sha)
+                if restore_verified:
+                    ota1_backup.unlink(missing_ok=True)
+                    ota1_restore_readback.unlink(missing_ok=True)
+                    partition_before.unlink(missing_ok=True)
+                    partition_after.unlink(missing_ok=True)
+                    private_backup_deleted = True
+                elif not workflow_error:
+                    workflow_error = "OTA1 or partition-table restore mismatch"
+            except Exception as restore_error:
+                if not workflow_error:
+                    workflow_error = (
+                        f"restore {type(restore_error).__name__}: "
+                        f"{restore_error}")
+
+    final_boot: dict[str, Any] = {}
+    final_recovery: dict[str, Any] = {}
+    final_fixture: dict[str, Any] = {}
+    final_timing: dict[str, Any] = {}
+    final_cleanup: dict[str, Any] = {"attempted": False}
+    if backup_ready and restore_verified:
+        try:
+            final_boot, _, final_timing = reset_capture(
+                args.port, args.output, "targets-merge-split-final-boot", 20.0)
+            require(final_boot, "final candidate",
+                    version=args.expected_version,
+                    app_elf_sha256=app_identity)
+            require_non_watchdog_boot(final_boot, "final candidate")
+            device = PassiveSerial(args.port, 115200, timeout=0.25)
+            synchronize_console(device, 20.0)
+            final_fixture = read_only_query(
+                device, b"targets.merge-split-fixture state",
+                "leshy.targets_merge_split_fixture.v1", "state")
+            if final_fixture.get("armed") is True:
+                # An interrupted UI path may not have reached the normal clear,
+                # but the exact RTC identity still permits a bounded disarm
+                # after OTA1 has already been restored byte-for-byte.
+                normalize_home(device)
+                clear_command = (
+                    "targets.merge-split-fixture clear disposable-ota1 "
+                    f"{ota1_before_sha} {run_id} confirm").encode("ascii")
+                emergency_clear = query(
+                    device, clear_command,
+                    "leshy.targets_merge_split_fixture.v1", "cleared")
+                require(emergency_clear, "post-restore fixture clear",
+                        status="cleared", identity_matched=True,
+                        continuity_disarmed=True)
+                states["post_restore_emergency_clear"] = emergency_clear
+                device.close()
+                device = None
+                final_boot, _, final_timing = reset_capture(
+                    args.port, args.output,
+                    "targets-merge-split-final-product-boot", 20.0)
+                require(final_boot, "final product candidate",
+                        version=args.expected_version,
+                        app_elf_sha256=app_identity)
+                require_non_watchdog_boot(final_boot,
+                                          "final product candidate")
+                device = PassiveSerial(args.port, 115200, timeout=0.25)
+                synchronize_console(device, 20.0)
+            final_recovery = read_only_query(
+                device, b"storage.product.boot-recovery",
+                "leshy.storage.product_boot_recovery.v1", "state")
+            require(final_recovery, "final exact media", status="admitted",
+                    expected_fingerprint=EXPECTED_CID,
+                    observed_fingerprint=EXPECTED_CID,
+                    fingerprint_matched=True, mounted_read_only=True,
+                    read_only_guaranteed=True, blocked_write_attempts=0,
+                    cleanup_complete=True, physical_write_calls=0)
+            for key in ("generation", "observations"):
+                if final_recovery.get(key) != recovery.get(key):
+                    raise RuntimeError(
+                        f"product {key} changed: {recovery.get(key)} -> "
+                        f"{final_recovery.get(key)}")
+            final_fixture = read_only_query(
+                device, b"targets.merge-split-fixture state",
+                "leshy.targets_merge_split_fixture.v1", "state")
+            require(final_fixture, "final fixture state", armed=False,
+                    continuity_valid=False, runtime_active=False, run_id="",
+                    storage="product_sd", ota1_restore_required=False,
+                    sd_accessed=False, product_target_state_touched=False,
+                    radio_touched=False, rf_tx_attempts=0)
+            final_cleanup = best_effort_cleanup(device)
+            if not final_cleanup.get("complete"):
+                raise RuntimeError(
+                    f"final post-restore cleanup failed: {final_cleanup}")
+        except Exception as final_error:
+            if not workflow_error:
+                workflow_error = (
+                    f"final verification {type(final_error).__name__}: "
+                    f"{final_error}")
+        finally:
+            if device is not None:
+                device.close()
+                device = None
+    elif backup_ready and not workflow_error:
+        workflow_error = "private OTA1 restore was not verified"
+
+    record["disposable_target"] = {
+        "kind": "inactive_ota1_littlefs",
+        "offset": OTA1_OFFSET,
+        "size": OTA1_SIZE,
+        "two_read_backup_verified": backup_ready,
+        "before_sha256": ota1_before_sha,
+        "second_read_sha256": ota1_second_sha,
+        "backup_read_attempts": ota1_backup_attempts,
+        "second_read_attempts": ota1_second_attempts,
+        "restore_attempted": restore_attempted,
+        "restore_attempts": restore_attempts,
+        "after_sha256": ota1_after_sha,
+        "restore_verified": restore_verified,
+        "private_backup_deleted_after_verified_restore":
+            private_backup_deleted,
+        "partition_table_before_sha256": partition_before_sha,
+        "partition_table_after_sha256": partition_after_sha,
+        "partition_table_before_read_attempts": partition_before_attempts,
+        "partition_table_after_read_attempts": partition_after_attempts,
+        "partition_table_unchanged": (
+            bool(partition_before_sha) and
+            partition_before_sha == partition_after_sha),
+    }
+    record.update({
+        "status": "failed" if workflow_error else "pass",
+        "error": workflow_error or None,
+        "states": states,
+        "screens": screens,
+        "resets": resets,
+        "cleanup": cleanup,
+        "final_boot": final_boot,
+        "final_recovery": final_recovery,
+        "final_fixture": final_fixture,
+        "final_timing": final_timing,
+        "final_cleanup": final_cleanup,
+    })
 
     write_json(args.output / "run.json", record)
     artifact_manifest(args.output)
     print(str(args.output / "run.json"))
-    return 0
+    return 2 if workflow_error else 0
 
 
 if __name__ == "__main__":

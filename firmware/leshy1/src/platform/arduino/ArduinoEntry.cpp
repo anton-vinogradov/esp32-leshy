@@ -385,6 +385,11 @@ constexpr const char* kLittleFsResetPrefix =
     "storage.littlefs.reset disposable-ota1 ";
 constexpr const char* kLittleFsResetRecoverPrefix =
     "storage.littlefs.reset recover read-only ";
+constexpr const char* kTargetsMergeFixturePreparePrefix =
+    "targets.merge-split-fixture prepare disposable-ota1 ";
+constexpr const char* kTargetsMergeFixtureClearPrefix =
+    "targets.merge-split-fixture clear disposable-ota1 ";
+constexpr std::uint64_t kTargetsMergeFixtureByteLimit = 256U * 1024U;
 constexpr const char* kProductEnrollmentNamespace = "leshy1";
 constexpr const char* kProductEnrollmentKey = "sd.cid.v1";
 constexpr const char* kUiPreferencesNamespace = "leshy1-ui";
@@ -486,6 +491,9 @@ int targetsFilesystemMountError = 0;
 std::uint8_t targetsFilesystemMountAttempts = 0;
 std::uint8_t targetsFilesystemMountTransientRetries = 0;
 bool targetsCleanupComplete = true;
+bool targetsMergeFixtureRuntime = false;
+bool targetsMergeFixtureSdAccessed = false;
+bool targetsMergeFixtureProductStateTouched = false;
 TargetProductBinding targetsBaselineBinding{};
 TargetProductBinding targetsCurrentBinding{};
 bool targetsComparisonLoaded = false;
@@ -1332,6 +1340,14 @@ struct LittleFsResetRtcState final {
     std::uint8_t token[32];
 };
 RTC_NOINIT_ATTR LittleFsResetRtcState littleFsResetRtcState;
+constexpr std::uint32_t kTargetsMergeFixtureRtcMagic = 0x544D4631U;
+struct TargetsMergeFixtureRtcState final {
+    std::uint32_t magic;
+    char expectedFingerprint[65];
+    char runId[33];
+    std::uint8_t token[32];
+};
+RTC_NOINIT_ATTR TargetsMergeFixtureRtcState targetsMergeFixtureRtcState;
 TaskHandle_t productBootRecoveryWatchdogTask = nullptr;
 bool productBootRecoveryTaskWatchdogAdded = false;
 volatile std::uint32_t productBootRecoveryWatchdogArmed = 0;
@@ -4785,6 +4801,329 @@ private:
     std::uint64_t lastCheckpointUs_ = 0;
 };
 
+bool targetsMergeFixtureFingerprintValid(const char* value) {
+    if (value == nullptr || strnlen(value, 65) != 64) return false;
+    for (std::size_t index = 0; index < 64; ++index) {
+        const char current = value[index];
+        if (!((current >= '0' && current <= '9') ||
+              (current >= 'a' && current <= 'f') ||
+              (current >= 'A' && current <= 'F'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool targetsMergeFixtureRunIdValid(const char* value) {
+    if (value == nullptr) return false;
+    const std::size_t length = strnlen(value, 33);
+    if (length == 0 || length >= 33) return false;
+    for (std::size_t index = 0; index < length; ++index) {
+        const char current = value[index];
+        if (!((current >= 'a' && current <= 'z') ||
+              (current >= 'A' && current <= 'Z') ||
+              (current >= '0' && current <= '9') || current == '_' ||
+              current == '-')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool computeTargetsMergeFixtureToken(const char* fingerprint,
+                                     const char* runId,
+                                     std::uint8_t output[32]) {
+    static constexpr char kSchema[] =
+        "leshy.targets-merge-split-fixture.rtc.v1";
+    if (!targetsMergeFixtureFingerprintValid(fingerprint) ||
+        !targetsMergeFixtureRunIdValid(runId) || output == nullptr) {
+        return false;
+    }
+    const std::uint8_t separator = 0;
+    mbedtls_sha256_context context;
+    mbedtls_sha256_init(&context);
+    const bool valid = mbedtls_sha256_starts(&context, 0) == 0 &&
+        mbedtls_sha256_update(
+            &context, reinterpret_cast<const std::uint8_t*>(kSchema),
+            sizeof(kSchema) - 1U) == 0 &&
+        mbedtls_sha256_update(&context, &separator, 1) == 0 &&
+        mbedtls_sha256_update(
+            &context, reinterpret_cast<const std::uint8_t*>(fingerprint),
+            64) == 0 &&
+        mbedtls_sha256_update(&context, &separator, 1) == 0 &&
+        mbedtls_sha256_update(
+            &context, reinterpret_cast<const std::uint8_t*>(runId),
+            std::strlen(runId)) == 0 &&
+        mbedtls_sha256_finish(&context, output) == 0;
+    mbedtls_sha256_free(&context);
+    return valid;
+}
+
+void clearTargetsMergeFixtureContinuity() {
+    targetsMergeFixtureRtcState.magic = 0;
+    std::memset(targetsMergeFixtureRtcState.expectedFingerprint, 0,
+                sizeof(targetsMergeFixtureRtcState.expectedFingerprint));
+    std::memset(targetsMergeFixtureRtcState.runId, 0,
+                sizeof(targetsMergeFixtureRtcState.runId));
+    std::memset(targetsMergeFixtureRtcState.token, 0,
+                sizeof(targetsMergeFixtureRtcState.token));
+}
+
+bool armTargetsMergeFixtureContinuity(const char* fingerprint,
+                                      const char* runId) {
+    clearTargetsMergeFixtureContinuity();
+    if (!targetsMergeFixtureFingerprintValid(fingerprint) ||
+        !targetsMergeFixtureRunIdValid(runId)) {
+        return false;
+    }
+    std::memcpy(targetsMergeFixtureRtcState.expectedFingerprint, fingerprint,
+                64);
+    targetsMergeFixtureRtcState.expectedFingerprint[64] = '\0';
+    std::strcpy(targetsMergeFixtureRtcState.runId, runId);
+    if (!computeTargetsMergeFixtureToken(
+            targetsMergeFixtureRtcState.expectedFingerprint,
+            targetsMergeFixtureRtcState.runId,
+            targetsMergeFixtureRtcState.token)) {
+        clearTargetsMergeFixtureContinuity();
+        return false;
+    }
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    targetsMergeFixtureRtcState.magic = kTargetsMergeFixtureRtcMagic;
+    return true;
+}
+
+bool targetsMergeFixtureContinuityValid() {
+    if (targetsMergeFixtureRtcState.magic !=
+            kTargetsMergeFixtureRtcMagic ||
+        !targetsMergeFixtureFingerprintValid(
+            targetsMergeFixtureRtcState.expectedFingerprint) ||
+        !targetsMergeFixtureRunIdValid(targetsMergeFixtureRtcState.runId)) {
+        return false;
+    }
+    std::uint8_t expected[32] = {};
+    const bool computed = computeTargetsMergeFixtureToken(
+        targetsMergeFixtureRtcState.expectedFingerprint,
+        targetsMergeFixtureRtcState.runId, expected);
+    const bool valid = computed &&
+        std::memcmp(expected, targetsMergeFixtureRtcState.token,
+                    sizeof(expected)) == 0;
+    std::memset(expected, 0, sizeof(expected));
+    return valid;
+}
+
+bool prepareTargetsMergeSyntheticSessions() {
+    static constexpr std::uint8_t kBssids[2][6] = {
+        {0x02, 0x4c, 0x53, 0x48, 0x59, 0x01},
+        {0x02, 0x4c, 0x53, 0x48, 0x59, 0x02},
+    };
+    static constexpr const char* kSsids[2] = {
+        "fixture-alpha", "fixture-bravo"};
+    SurveySession* sessions[2] = {&librarySession, &surveySession};
+    static constexpr const char* kSessionIds[2] = {
+        "targets-merge-a", "targets-merge-b"};
+    for (std::size_t index = 0; index < 2; ++index) {
+        SurveySession& session = *sessions[index];
+        const std::uint64_t startedUs = 1000U + index * 2000U;
+        session.reset();
+        if (session.start(kSessionIds[index], startedUs) !=
+            SessionStatus::Started) {
+            return false;
+        }
+        WifiScanRecord record;
+        std::memcpy(record.bssid.data(), kBssids[index], record.bssid.size());
+        record.channel = index == 0 ? 1 : 11;
+        record.rssiDbm = index == 0 ? -47 : -53;
+        record.ssid = kSsids[index];
+        record.ssidLength = std::strlen(kSsids[index]);
+        Observation observation;
+        if (!leshy1::drivers::wifi::normalizePassiveRecord(
+                record, startedUs + 100U, &observation) ||
+            session.append(observation) != SessionStatus::Appended ||
+            session.stop(startedUs + 1000U) != SessionStatus::Stopped) {
+            return false;
+        }
+    }
+    return true;
+}
+
+__attribute__((noinline)) bool loadTargetsMergeFixture(
+    TargetsLoadWatchdogScope& loadWatchdog) {
+    targetsMergeFixtureRuntime = true;
+    targetsMergeFixtureSdAccessed = false;
+    targetsMergeFixtureProductStateTouched = false;
+    if (!targetsMergeFixtureContinuityValid()) {
+        targetsProductStatus = "fixture_continuity_invalid";
+        lastRuntimeEvent = targetsProductStatus;
+        return true;
+    }
+    loadWatchdog.checkpoint();
+    if (!prepareTargetsMergeSyntheticSessions()) {
+        targetsProductStatus = "fixture_sessions_failed";
+        lastRuntimeEvent = targetsProductStatus;
+        return true;
+    }
+    loadWatchdog.checkpoint();
+
+    DisposableOtaLittleFs filesystem;
+    const bool inspected = filesystem.inspect();
+    const bool targetSafe = inspected && filesystem.safeInactiveTarget();
+    const bool mounted = targetSafe && filesystem.mountReadOnly();
+    loadWatchdog.checkpoint();
+    char scratchPath[leshy1::storage::kScratchPathMax] = {};
+    const int scratchWritten = std::snprintf(
+        scratchPath, sizeof(scratchPath), "%s%s",
+        leshy1::storage::kScratchRoot, targetsMergeFixtureRtcState.runId);
+    const bool scratchPathValid = scratchWritten > 0 &&
+        static_cast<std::size_t>(scratchWritten) < sizeof(scratchPath);
+    const std::uint64_t capacityBytes = mounted ? filesystem.totalBytes() : 0;
+    const bool scratchExists = mounted && scratchPathValid &&
+        filesystem.exists(scratchPath);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = mounted && capacityBytes != 0;
+    media.kind = leshy1::storage::MediaKind::LittleFs;
+    media.fingerprint = targetsMergeFixtureRtcState.expectedFingerprint;
+    media.capacityBytes = capacityBytes;
+    // Read authorization does not need a free-space geometry query.
+    media.freeBytes = 0;
+    leshy1::storage::ExistingScratchReadRequest request;
+    request.explicitlySelected = true;
+    request.expectedFingerprint =
+        targetsMergeFixtureRtcState.expectedFingerprint;
+    request.runId = targetsMergeFixtureRtcState.runId;
+    request.scratchExists = scratchExists;
+    const auto permit = leshy1::storage::authorizeExistingScratchRead(
+        media, request);
+
+    auto* targetStateWorkspace = static_cast<
+        leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
+    bool opened = false;
+    bool statePresent = false;
+    bool persistedStateBlobAvailable = false;
+    bool targetStateAccepted = true;
+    if (!inspected) {
+        targetsProductStatus = "fixture_target_not_found";
+    } else if (!targetSafe) {
+        targetsProductStatus = "fixture_target_not_inactive_ota1";
+    } else if (!mounted) {
+        targetsProductStatus = "fixture_readonly_mount_failed";
+    } else if (!permit.allowed()) {
+        targetsProductStatus = leshy1::storage::readPermitStatusName(
+            permit.status);
+    } else {
+        ArduinoLittleFsSessionStoreIo io(filesystem);
+        opened = io.openExistingReadOnly(permit);
+        char headA[96] = {};
+        char headB[96] = {};
+        const int headAWritten = std::snprintf(
+            headA, sizeof(headA), "%s/target-state-head-a.bin", scratchPath);
+        const int headBWritten = std::snprintf(
+            headB, sizeof(headB), "%s/target-state-head-b.bin", scratchPath);
+        statePresent = opened && headAWritten > 0 && headBWritten > 0 &&
+            static_cast<std::size_t>(headAWritten) < sizeof(headA) &&
+            static_cast<std::size_t>(headBWritten) < sizeof(headB) &&
+            (filesystem.exists(headA) || filesystem.exists(headB));
+        if (!opened) {
+            targetsProductStatus = "fixture_open_failed";
+            targetStateAccepted = false;
+        } else if (statePresent) {
+            targetStateWorkspace = new (std::nothrow)
+                leshy1::storage::TargetDecisionStateStoreWorkspace();
+            if (targetStateWorkspace == nullptr) {
+                targetsProductStatus =
+                    "fixture_target_state_workspace_unavailable";
+                targetStateAccepted = false;
+            } else {
+                const auto recovered =
+                    leshy1::storage::recoverTargetProductStateWire(
+                        io, *targetStateWorkspace);
+                loadWatchdog.checkpoint();
+                if (recovered.valid()) {
+                    persistedStateBlobAvailable = true;
+                    targetsStateGeneration = recovered.generation;
+                    targetsStateHead = recovered.choice;
+                } else {
+                    targetsProductStatus =
+                        leshy1::storage::targetStateStoreStatusName(
+                            recovered.status);
+                    targetStateAccepted = false;
+                }
+            }
+        }
+        loadWatchdog.checkpoint();
+        io.end();
+    }
+    filesystem.end();
+    loadWatchdog.checkpoint();
+    targetsCleanupComplete = filesystem.cleanupComplete();
+    if (!targetsCleanupComplete) {
+        targetsProductStatus = "fixture_cleanup_failed";
+        targetStateAccepted = false;
+    }
+
+    if (targetStateAccepted && opened && targetsCleanupComplete) {
+        const TargetCatalog* persistedForLoad = nullptr;
+        const CorrelationDecisionLog* decisionsForLoad = nullptr;
+        if (persistedStateBlobAvailable) {
+            targetsHeapFreeBefore = static_cast<std::uint32_t>(
+                heap_caps_get_free_size(MALLOC_CAP_8BIT));
+            auto* catalog = new (std::nothrow) TargetCatalog();
+            auto* decisions = new (std::nothrow) CorrelationDecisionLog();
+            auto* merges = new (std::nothrow) TargetMergeHistory();
+            if (catalog == nullptr || decisions == nullptr ||
+                merges == nullptr) {
+                delete merges;
+                delete decisions;
+                delete catalog;
+                delete targetStateWorkspace;
+                targetsProductStatus = "fixture_workspace_unavailable";
+                lastRuntimeEvent = targetsProductStatus;
+                return false;
+            }
+            const auto reopened = leshy1::storage::reopenTargetState(
+                targetStateWorkspace->manifest.data(),
+                targetStateWorkspace->manifestSize,
+                targetStateWorkspace->state.data(),
+                targetStateWorkspace->stateSize,
+                catalog, decisions, merges);
+            delete targetStateWorkspace;
+            targetStateWorkspace = nullptr;
+            loadWatchdog.checkpoint();
+            if (reopened != leshy1::storage::TargetCodecStatus::Valid) {
+                delete merges;
+                delete decisions;
+                delete catalog;
+                targetsProductStatus = "fixture_target_state_reopen_failed";
+                lastRuntimeEvent = targetsProductStatus;
+                return false;
+            }
+            if (!finishTargetsProductAllocation(
+                    catalog, decisions, merges, true)) {
+                return false;
+            }
+            persistedForLoad = &targetsProductRuntime->workspace.catalog;
+            decisionsForLoad = &targetsProductRuntime->workspace.decisions;
+        } else {
+            delete targetStateWorkspace;
+            targetStateWorkspace = nullptr;
+            if (!allocateTargetsProduct()) return false;
+        }
+        loadWatchdog.checkpoint();
+        targetsComparisonLoaded = true;
+        targetsBaselineBinding = {&librarySession, 1};
+        targetsCurrentBinding = {&surveySession, 2};
+        const auto loaded = loadBoundTargetsProduct(
+            targetsProductRuntime->controller, persistedForLoad,
+            decisionsForLoad);
+        loadWatchdog.checkpoint();
+        targetsProductStatus =
+            leshy1::apps::targets::targetsLoadStatusName(loaded);
+    }
+    delete targetStateWorkspace;
+    lastRuntimeEvent = targetsProductStatus;
+    return true;
+}
+
 bool loadTargetsProduct(const AppMenuItem& item) {
     TargetsLoadWatchdogScope loadWatchdog;
     releaseTargetsProduct();
@@ -4806,6 +5145,9 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     targetsFilesystemMountAttempts = 0;
     targetsFilesystemMountTransientRetries = 0;
     targetsCleanupComplete = true;
+    targetsMergeFixtureRuntime = false;
+    targetsMergeFixtureSdAccessed = false;
+    targetsMergeFixtureProductStateTouched = false;
     if (item.simulated) {
         if (!allocateTargetsProduct()) return false;
         TargetsController& controller = targetsProductRuntime->controller;
@@ -4834,6 +5176,16 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         targetsProductStatus = "resources_missing";
         lastRuntimeEvent = targetsProductStatus;
         return true;
+    }
+    if (targetsMergeFixtureRtcState.magic ==
+        kTargetsMergeFixtureRtcMagic) {
+        if (!targetsMergeFixtureContinuityValid()) {
+            targetsMergeFixtureRuntime = true;
+            targetsProductStatus = "fixture_continuity_invalid";
+            lastRuntimeEvent = targetsProductStatus;
+            return true;
+        }
+        return loadTargetsMergeFixture(loadWatchdog);
     }
     if (!loadProductFingerprint(expectedFingerprint,
                                 sizeof(expectedFingerprint))) {
@@ -5155,6 +5507,242 @@ TargetMergeId newTargetMergeOperationId() {
         id.bytes.back() = 1;
     }
     return id;
+}
+
+void runTargetsMergeFixtureMutationWorker(void*) {
+    TargetsMutationEvent event;
+    event.status = "fixture_store_failed";
+    event.merge = true;
+    event.mergeKind = targetsMutationMergeKind;
+    event.mergeOperationId = targetsMutationMergeOperationId;
+    event.mergeSourceId = targetsMutationMergeSourceId;
+    event.targetId = targetsMutationTargetId;
+    const std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    TargetCatalog* catalog = targetsMutationCatalog;
+    CorrelationDecisionLog* decisions = targetsMutationDecisions;
+    TargetMergeHistory* merges = targetsMutationMerges;
+    DisposableOtaLittleFs filesystem;
+    bool filesystemAttempted = false;
+    bool deadlineArmed = false;
+    ArduinoLittleFsSessionStoreIo* io = nullptr;
+    auto* workspace = static_cast<
+        leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
+    resetTargetsStoreDeadlineCancel();
+    deadlineArmed = armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs);
+    const auto supervisedCheckpoint = [&]() {
+        return !targetsStoreDeadlineCancelled() &&
+            heartbeatTargetsStoreDeadline();
+    };
+    do {
+        if (!deadlineArmed) {
+            event.status = "deadline_unavailable";
+            break;
+        }
+        if (catalog == nullptr || decisions == nullptr || merges == nullptr ||
+            targetsMutationEvents == nullptr || !targetsMutationMerge) {
+            event.status = "worker_invalid";
+            break;
+        }
+        if (!targetsMergeFixtureRuntime ||
+            !targetsMergeFixtureContinuityValid()) {
+            event.status = "fixture_continuity_invalid";
+            break;
+        }
+        const auto required =
+            leshy1::kernel::runtime::resourceMask(Resource::Storage) |
+            leshy1::kernel::runtime::resourceMask(Resource::RadioSpi);
+        if ((appRuntime.activeResources() & required) != required) {
+            event.status = "resources_missing";
+            break;
+        }
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+
+        event.heapFreeBeforeMount = static_cast<std::uint32_t>(
+            heap_caps_get_free_size(MALLOC_CAP_8BIT));
+        event.heapLargestBeforeMount = static_cast<std::uint32_t>(
+            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+        filesystemAttempted = true;
+        if (!filesystem.inspect() || !filesystem.safeInactiveTarget()) {
+            event.status = "fixture_target_not_inactive_ota1";
+            break;
+        }
+        if (!filesystem.mountExistingWritable()) {
+            event.filesystemMountError = filesystem.lastError();
+            event.status = "fixture_mount_failed";
+            break;
+        }
+        event.filesystemMountError = filesystem.lastError();
+        workspace = acquireTargetsStoreCodecWorkspace();
+        if (workspace == nullptr) {
+            event.status = "shared_codec_unavailable_after_mount";
+            break;
+        }
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+
+        char scratchPath[leshy1::storage::kScratchPathMax] = {};
+        const int scratchWritten = std::snprintf(
+            scratchPath, sizeof(scratchPath), "%s%s",
+            leshy1::storage::kScratchRoot,
+            targetsMergeFixtureRtcState.runId);
+        const std::uint64_t capacityBytes = filesystem.totalBytes();
+        const bool scratchExists = scratchWritten > 0 &&
+            static_cast<std::size_t>(scratchWritten) < sizeof(scratchPath) &&
+            filesystem.exists(scratchPath);
+        leshy1::storage::MediaIdentity media;
+        media.present = capacityBytes != 0;
+        media.kind = leshy1::storage::MediaKind::LittleFs;
+        media.fingerprint =
+            targetsMergeFixtureRtcState.expectedFingerprint;
+        media.capacityBytes = capacityBytes;
+        // This host-backed target is freshly formatted for two bounded
+        // commits. The permit byte limit and LittleFS writes remain the
+        // authority, without an unrelated product-FAT geometry scan.
+        media.freeBytes = capacityBytes;
+        leshy1::storage::ExistingScratchWriteRequest request;
+        request.explicitlyDisposable = true;
+        request.expectedFingerprint =
+            targetsMergeFixtureRtcState.expectedFingerprint;
+        request.runId = targetsMergeFixtureRtcState.runId;
+        request.scratchExists = scratchExists;
+        request.requiredBytes = kTargetsMergeFixtureByteLimit;
+        const auto permit =
+            leshy1::storage::authorizeExistingScratchWrite(media, request);
+        if (!permit.allowed()) {
+            event.status = leshy1::storage::permitStatusName(permit.status);
+            break;
+        }
+        io = new (std::nothrow) ArduinoLittleFsSessionStoreIo(filesystem);
+        if (io == nullptr) {
+            event.status = "io_workspace_unavailable";
+            break;
+        }
+        if (!io->openExistingWritable(permit)) {
+            event.status = "fixture_open_failed";
+            break;
+        }
+
+        TargetMergeAction action{};
+        action.kind = event.mergeKind;
+        action.operationId = event.mergeOperationId;
+        action.destinationId = event.targetId;
+        action.sourceId = event.mergeSourceId;
+        const auto* destination = catalog->find(event.targetId);
+        const auto* source = catalog->find(event.mergeSourceId);
+        action.expectedDestinationRevision = destination == nullptr
+            ? 0U : destination->revision;
+        action.expectedSourceRevision = source == nullptr
+            ? 0U : source->revision;
+        TargetMergeService service(*catalog, *merges);
+        const auto applied = service.execute(action);
+        event.mergeStatus = applied.status;
+        if (!applied.applied()) {
+            event.status = leshy1::domain::targets::targetMergeStatusName(
+                applied.status);
+            break;
+        }
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+        if (targetsStateGeneration == UINT32_MAX ||
+            (targetsStateGeneration != 0 &&
+             targetsStateHead != leshy1::storage::RecoveryChoice::A &&
+             targetsStateHead != leshy1::storage::RecoveryChoice::B)) {
+            event.status = "state_generation_invalid";
+            break;
+        }
+        const std::uint32_t nextGeneration = targetsStateGeneration == 0
+            ? 1U : targetsStateGeneration + 1U;
+        const leshy1::storage::HeadSlot nextHead =
+            targetsStateGeneration == 0 ||
+                    targetsStateHead == leshy1::storage::RecoveryChoice::B
+                ? leshy1::storage::HeadSlot::A
+                : leshy1::storage::HeadSlot::B;
+        const auto committed = leshy1::storage::commitTargetProductState(
+            *io, *workspace, *catalog, *decisions, *merges, nextGeneration,
+            nextHead);
+        event.storeStatus = committed.status;
+        event.commitStage = committed.stage;
+        if (!supervisedCheckpoint()) {
+            event.status = "safety_worker_deadline";
+            break;
+        }
+        const auto recovered = leshy1::storage::recoverTargetProductState(
+            *io, *workspace, catalog, decisions, merges);
+        event.catalogRecovered = recovered.valid();
+        if (recovered.valid()) {
+            event.generation = recovered.generation;
+            event.head = recovered.choice;
+        }
+        bool graphReopened = false;
+        const auto* record = merges->find(event.mergeOperationId);
+        if (record != nullptr &&
+            event.mergeKind == TargetMergeActionKind::Merge) {
+            const auto* reopenedDestination = catalog->find(
+                record->destinationBefore.id);
+            const auto* reopenedSource = catalog->find(
+                record->sourceBefore.id);
+            graphReopened = !record->split &&
+                reopenedDestination != nullptr && reopenedSource == nullptr;
+        } else if (record != nullptr &&
+                   event.mergeKind == TargetMergeActionKind::Split) {
+            const auto* reopenedDestination = catalog->find(
+                record->destinationBefore.id);
+            const auto* reopenedSource = catalog->find(
+                record->sourceBefore.id);
+            graphReopened = record->split &&
+                reopenedDestination != nullptr && reopenedSource != nullptr &&
+                leshy1::domain::targets::targetRecordGraphEqual(
+                    *reopenedDestination, record->destinationBefore) &&
+                leshy1::domain::targets::targetRecordGraphEqual(
+                    *reopenedSource, record->sourceBefore);
+        }
+        event.persisted = committed.complete() && recovered.valid() &&
+            recovered.generation == committed.generation && graphReopened;
+        event.status = event.persisted
+            ? "saved"
+            : (committed.complete()
+                   ? "reopen_failed"
+                   : leshy1::storage::targetStateStoreStatusName(
+                         committed.status));
+    } while (false);
+
+    if (io != nullptr) {
+        event.bytesWritten = io->bytesWritten();
+        event.writeCalls = io->writeCalls();
+        event.fileSyncs = io->fileSyncs();
+        event.directorySyncs = io->directorySyncs();
+        io->end();
+    }
+    delete io;
+    releaseTargetsStoreCodecWorkspace(workspace);
+    if (filesystem.mounted()) filesystem.end();
+    event.cleanupComplete = !filesystemAttempted ||
+        filesystem.cleanupComplete();
+    if (!event.cleanupComplete) {
+        event.persisted = false;
+        event.status = "cleanup_failed";
+    }
+    if (targetsStoreDeadlineCancelled()) {
+        event.persisted = false;
+        event.status = "safety_worker_deadline";
+    }
+    if (deadlineArmed) disarmTargetsStoreDeadline();
+    resetTargetsStoreDeadlineCancel();
+    const std::uint64_t finishedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    event.elapsedUs = finishedUs >= startedUs ? finishedUs - startedUs : 0;
+    if (targetsMutationEvents != nullptr) {
+        xQueueOverwrite(targetsMutationEvents, &event);
+    }
+    vTaskDelete(nullptr);
 }
 
 void runTargetsMutationWorker(void*) {
@@ -5595,6 +6183,12 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
     const auto* selected =
         targetsProductRuntime->controller.selectedTarget();
     if (selected == nullptr) return false;
+    if (targetsMergeFixtureRuntime) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "fixture_merge_split_only";
+        lastRuntimeEvent = targetsMutationStatus;
+        return true;
+    }
     if (powerSafetyPolicy.writeDisposition() ==
         PowerWriteDisposition::ProhibitedLowVoltage) {
         targetsMutationState = TargetsMutationState::Failed;
@@ -5705,6 +6299,12 @@ bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
     const auto* proposal =
         targetsProductRuntime->controller.reviewedCorrelationProposal();
     if (proposal == nullptr) return false;
+    if (targetsMergeFixtureRuntime) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "fixture_merge_split_only";
+        lastRuntimeEvent = targetsMutationStatus;
+        return true;
+    }
     if (powerSafetyPolicy.writeDisposition() ==
         PowerWriteDisposition::ProhibitedLowVoltage) {
         targetsMutationState = TargetsMutationState::Failed;
@@ -5826,7 +6426,10 @@ bool requestTargetsMergeMutation() {
     targetsMutationState = TargetsMutationState::Saving;
     targetsMutationStatus = "saving";
     const bool started = xTaskCreatePinnedToCore(
-        runTargetsMutationWorker, "leshy-targets-store", 8192, nullptr, 1,
+        targetsMergeFixtureRuntime
+            ? runTargetsMergeFixtureMutationWorker
+            : runTargetsMutationWorker,
+        "leshy-targets-store", 8192, nullptr, 1,
         &targetsMutationTaskHandle, 0) == pdPASS;
     targetsMutationStartActionUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - actionStartedUs;
@@ -6269,6 +6872,18 @@ void feedRuntimeSafetyWatchdog() {
 }
 
 void recoverProductCatalogAtBoot() {
+    // The host-backed merge/split gate owns a complete disposable storage
+    // universe. While its authenticated RTC marker is present, even normal
+    // read-only SD recovery is bypassed so the retained proof can truthfully
+    // state that the user's card was never accessed during the workflow.
+    if (targetsMergeFixtureRtcState.magic ==
+        kTargetsMergeFixtureRtcMagic) {
+        productBootRecovery = {};
+        productBootRecovery.status = targetsMergeFixtureContinuityValid()
+            ? "fixture_bypassed" : "fixture_continuity_invalid";
+        productBootRecovery.cleanupComplete = true;
+        return;
+    }
     const bool softwareReset =
         bootMetrics.resetReason == static_cast<std::uint32_t>(ESP_RST_SW);
     const bool watchdogReset =
@@ -6626,6 +7241,221 @@ bool parseLittleFsResetCommand(const char* command, const char* prefix,
     }
     *boundaryNumber = parsedBoundary;
     return true;
+}
+
+bool parseTargetsMergeFixtureCommand(
+    const char* command, const char* prefix, char* fingerprint,
+    std::size_t fingerprintCapacity, char* runId,
+    std::size_t runIdCapacity) {
+    if (command == nullptr || prefix == nullptr || fingerprint == nullptr ||
+        runId == nullptr || fingerprintCapacity < 65 || runIdCapacity < 33 ||
+        std::strncmp(command, prefix, std::strlen(prefix)) != 0) {
+        return false;
+    }
+    char confirmation[8] = {};
+    char extra = '\0';
+    const int parsed = std::sscanf(
+        command + std::strlen(prefix),
+        "%64[0-9a-fA-F] %32[A-Za-z0-9_-] %7s %c", fingerprint, runId,
+        confirmation, &extra);
+    return parsed == 3 &&
+        targetsMergeFixtureFingerprintValid(fingerprint) &&
+        targetsMergeFixtureRunIdValid(runId) &&
+        std::strcmp(confirmation, "confirm") == 0;
+}
+
+void emitTargetsMergeFixtureState(Stream& reply) {
+    const bool armed = targetsMergeFixtureRtcState.magic ==
+        kTargetsMergeFixtureRtcMagic;
+    const bool continuityValid = armed &&
+        targetsMergeFixtureContinuityValid();
+    std::snprintf(
+        sdPhysicalEvidence.line, sizeof(sdPhysicalEvidence.line),
+        "{\"schema\":\"leshy.targets_merge_split_fixture.v1\","
+        "\"kind\":\"state\",\"armed\":%s,\"continuity_valid\":%s,"
+        "\"runtime_active\":%s,\"run_id\":\"%s\","
+        "\"storage\":\"%s\",\"ota1_restore_required\":%s,"
+        "\"sd_accessed\":%s,\"product_target_state_touched\":%s,"
+        "\"radio_touched\":false,\"rf_tx_attempts\":0}",
+        armed ? "true" : "false",
+        continuityValid ? "true" : "false",
+        targetsMergeFixtureRuntime ? "true" : "false",
+        continuityValid ? targetsMergeFixtureRtcState.runId : "",
+        armed ? "disposable_ota1" : "product_sd",
+        armed ? "true" : "false",
+        targetsMergeFixtureSdAccessed ? "true" : "false",
+        targetsMergeFixtureProductStateTouched ? "true" : "false");
+    reply.println(sdPhysicalEvidence.line);
+}
+
+void emitTargetsMergeFixturePrepare(Stream& reply,
+                                    const char* expectedFingerprint,
+                                    const char* runId) {
+    char observedFingerprint[65] = {};
+    const bool idleUi = uiController.isRoot() && !appRuntime.running() &&
+        productSurveyControl() == ProductSurveyWorkerControl::Idle &&
+        targetsMutationTaskHandle == nullptr;
+    DisposableOtaLittleFs filesystem;
+    const bool inspected = filesystem.inspect();
+    const bool targetSafe = inspected && filesystem.safeInactiveTarget();
+    const bool resourcesAcquired = idleUi && targetSafe &&
+        resourceBroker.acquire(
+            kLittleFsHilOwner,
+            leshy1::kernel::runtime::resourceMask(Resource::Storage));
+    const std::uint32_t ownedDuring =
+        resourceBroker.ownedBy(kLittleFsHilOwner);
+    const bool targetHashed = resourcesAcquired &&
+        filesystem.hashTarget(observedFingerprint,
+                              sizeof(observedFingerprint));
+    const bool fingerprintMatched = targetHashed &&
+        std::strcmp(expectedFingerprint, observedFingerprint) == 0;
+    const bool mounted = fingerprintMatched &&
+        filesystem.formatAndMountWritable();
+    const std::uint64_t capacityBytes = mounted ? filesystem.totalBytes() : 0;
+    const std::uint64_t freeBytes = mounted ? filesystem.freeBytes() : 0;
+    char scratchPath[leshy1::storage::kScratchPathMax] = {};
+    std::snprintf(scratchPath, sizeof(scratchPath), "%s%s",
+                  leshy1::storage::kScratchRoot, runId);
+    const bool scratchPreexisting = mounted &&
+        filesystem.exists(scratchPath);
+
+    leshy1::storage::MediaIdentity media;
+    media.present = mounted && capacityBytes != 0 && freeBytes <= capacityBytes;
+    media.kind = leshy1::storage::MediaKind::LittleFs;
+    media.fingerprint = observedFingerprint;
+    media.capacityBytes = capacityBytes;
+    media.freeBytes = freeBytes;
+    leshy1::storage::WriteRequest request;
+    request.explicitlyDisposable = true;
+    request.expectedFingerprint = expectedFingerprint;
+    request.runId = runId;
+    request.scratchExists = scratchPreexisting;
+    request.requiredBytes = kTargetsMergeFixtureByteLimit;
+    request.reserveBytes = 512U * 1024U;
+    const auto permit = leshy1::storage::authorizeScratchWrite(media, request);
+
+    const char* status = "target_not_inspected";
+    if (!idleUi) {
+        status = "ui_not_idle";
+    } else if (!inspected) {
+        status = "target_not_found";
+    } else if (!targetSafe) {
+        status = "target_not_inactive_ota1";
+    } else if (!resourcesAcquired) {
+        status = "resources_unavailable";
+    } else if (!targetHashed) {
+        status = "target_hash_failed";
+    } else if (!fingerprintMatched) {
+        status = "target_fingerprint_mismatch";
+    } else if (!mounted) {
+        status = "format_or_mount_failed";
+    } else if (!permit.allowed()) {
+        status = leshy1::storage::permitStatusName(permit.status);
+    } else {
+        status = "ready";
+    }
+
+    bool prepared = false;
+    bool scratchCreated = false;
+    const char* ioFailure = "not_started";
+    int ioErrno = 0;
+    if (std::strcmp(status, "ready") == 0) {
+        ArduinoLittleFsSessionStoreIo io(filesystem);
+        prepared = io.prepare(permit);
+        scratchCreated = prepared && filesystem.exists(permit.scratchPath);
+        ioFailure = io.lastFailure();
+        ioErrno = io.lastErrno();
+        io.end();
+        if (!scratchCreated) status = "scratch_prepare_failed";
+    }
+    filesystem.end();
+    resourceBroker.releaseAll(kLittleFsHilOwner);
+    const std::uint32_t ownedAfter =
+        resourceBroker.ownedBy(kLittleFsHilOwner);
+    const bool cleanupComplete = filesystem.cleanupComplete() &&
+        ownedAfter == 0;
+    bool continuityArmed = false;
+    if (std::strcmp(status, "ready") == 0 && cleanupComplete) {
+        continuityArmed = armTargetsMergeFixtureContinuity(
+            expectedFingerprint, runId);
+        if (!continuityArmed) status = "continuity_arm_failed";
+    } else if (!cleanupComplete && std::strcmp(status, "ready") == 0) {
+        status = "cleanup_failed";
+    }
+    targetsMergeFixtureRuntime = false;
+    targetsMergeFixtureSdAccessed = false;
+    targetsMergeFixtureProductStateTouched = false;
+
+    std::snprintf(
+        sdPhysicalEvidence.line, sizeof(sdPhysicalEvidence.line),
+        "{\"schema\":\"leshy.targets_merge_split_fixture.v1\","
+        "\"kind\":\"prepared\",\"status\":\"%s\",\"run_id\":\"%s\","
+        "\"expected_fingerprint\":\"%s\","
+        "\"observed_fingerprint\":\"%s\",\"fingerprint_matched\":%s,"
+        "\"target\":\"ota1\",\"target_address\":%lu,"
+        "\"target_size\":%lu,\"target_inactive\":%s,"
+        "\"format_performed\":%s,\"scratch_path\":\"%s\","
+        "\"scratch_preexisting\":%s,\"scratch_created\":%s,"
+        "\"permit_status\":\"%s\",\"byte_limit\":%llu,"
+        "\"continuity_armed\":%s,\"cleanup_complete\":%s,"
+        "\"owned_during\":%lu,\"owned_after\":%lu,"
+        "\"io_failure\":\"%s\",\"io_errno\":%d,"
+        "\"ota1_restore_required\":true,"
+        "\"product_partition_touched\":false,\"sd_accessed\":false,"
+        "\"product_target_state_touched\":false,\"nvs_touched\":false,"
+        "\"radio_touched\":false,\"rf_tx_attempts\":0}",
+        status, runId, expectedFingerprint, observedFingerprint,
+        fingerprintMatched ? "true" : "false",
+        static_cast<unsigned long>(filesystem.targetAddress()),
+        static_cast<unsigned long>(filesystem.targetSize()),
+        targetSafe ? "true" : "false",
+        filesystem.formatted() ? "true" : "false",
+        permit.allowed() ? permit.scratchPath : "",
+        scratchPreexisting ? "true" : "false",
+        scratchCreated ? "true" : "false",
+        leshy1::storage::permitStatusName(permit.status),
+        static_cast<unsigned long long>(permit.byteLimit),
+        continuityArmed ? "true" : "false",
+        cleanupComplete ? "true" : "false",
+        static_cast<unsigned long>(ownedDuring),
+        static_cast<unsigned long>(ownedAfter), ioFailure, ioErrno);
+    reply.println(sdPhysicalEvidence.line);
+}
+
+void emitTargetsMergeFixtureClear(Stream& reply,
+                                  const char* expectedFingerprint,
+                                  const char* runId) {
+    const bool idleUi = uiController.isRoot() && !appRuntime.running() &&
+        productSurveyControl() == ProductSurveyWorkerControl::Idle &&
+        targetsMutationTaskHandle == nullptr;
+    const bool continuityValid = targetsMergeFixtureContinuityValid();
+    const bool identityMatched = continuityValid &&
+        std::strcmp(expectedFingerprint,
+                    targetsMergeFixtureRtcState.expectedFingerprint) == 0 &&
+        std::strcmp(runId, targetsMergeFixtureRtcState.runId) == 0;
+    const char* status = "cleared";
+    if (!idleUi) {
+        status = "ui_not_idle";
+    } else if (!continuityValid) {
+        status = "continuity_invalid";
+    } else if (!identityMatched) {
+        status = "fixture_identity_mismatch";
+    } else {
+        clearTargetsMergeFixtureContinuity();
+        targetsMergeFixtureRuntime = false;
+    }
+    std::snprintf(
+        sdPhysicalEvidence.line, sizeof(sdPhysicalEvidence.line),
+        "{\"schema\":\"leshy.targets_merge_split_fixture.v1\","
+        "\"kind\":\"cleared\",\"status\":\"%s\",\"run_id\":\"%s\","
+        "\"identity_matched\":%s,\"continuity_disarmed\":%s,"
+        "\"ota1_restore_required\":true,\"ota1_restored\":false,"
+        "\"product_partition_touched\":false,\"sd_accessed\":false,"
+        "\"product_target_state_touched\":false,\"nvs_touched\":false,"
+        "\"radio_touched\":false,\"rf_tx_attempts\":0}",
+        status, runId, identityMatched ? "true" : "false",
+        std::strcmp(status, "cleared") == 0 ? "true" : "false");
+    reply.println(sdPhysicalEvidence.line);
 }
 
 void emitLittleFsParity(Stream& reply, const char* expectedFingerprint,
@@ -16367,6 +17197,11 @@ void emitTargetsState(Stream& reply) {
         "\"load_watchdog_feeds\":%lu,"
         "\"load_maximum_phase_us\":%llu,"
         "\"cleanup_complete\":%s,"
+        "\"fixture_mode\":%s,\"fixture_run_id\":\"%s\","
+        "\"fixture_storage\":\"%s\","
+        "\"fixture_sd_accessed\":%s,"
+        "\"fixture_product_target_state_touched\":%s,"
+        "\"fixture_ota1_restore_required\":%s,"
         "\"lease_mask\":%lu,\"heap_free_before\":%lu,"
         "\"heap_free_now\":%lu,\"heap_free_after_release\":%lu}",
         targetsProductStatus,
@@ -16645,6 +17480,13 @@ void emitTargetsState(Stream& reply) {
         static_cast<unsigned long>(targetsLoadWatchdogFeeds),
         static_cast<unsigned long long>(targetsLoadMaximumPhaseUs),
         targetsCleanupComplete ? "true" : "false",
+        targetsMergeFixtureRuntime ? "true" : "false",
+        targetsMergeFixtureRuntime && targetsMergeFixtureContinuityValid()
+            ? targetsMergeFixtureRtcState.runId : "",
+        targetsMergeFixtureRuntime ? "disposable_ota1" : "product_sd",
+        targetsMergeFixtureSdAccessed ? "true" : "false",
+        targetsMergeFixtureProductStateTouched ? "true" : "false",
+        targetsMergeFixtureRuntime ? "true" : "false",
         static_cast<unsigned long>(appRuntime.activeResources()),
         static_cast<unsigned long>(targetsHeapFreeBefore),
         static_cast<unsigned long>(heap_caps_get_free_size(MALLOC_CAP_8BIT)),
@@ -24011,6 +24853,39 @@ void handleCommand(Stream& reply, const char* command) {
         broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"pong\"}");
     } else if (std::strcmp(command, "ui.state") == 0) {
         emitUiState(reply, UiAction::Unknown, false);
+    } else if (std::strcmp(
+                   command, "targets.merge-split-fixture state") == 0) {
+        emitTargetsMergeFixtureState(reply);
+    } else if (std::strncmp(
+                   command, kTargetsMergeFixturePreparePrefix,
+                   std::strlen(kTargetsMergeFixturePreparePrefix)) == 0) {
+        char fingerprint[65] = {};
+        char runId[33] = {};
+        if (parseTargetsMergeFixtureCommand(
+                command, kTargetsMergeFixturePreparePrefix, fingerprint,
+                sizeof(fingerprint), runId, sizeof(runId))) {
+            emitTargetsMergeFixturePrepare(reply, fingerprint, runId);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.targets_merge_split_fixture.v1\","
+                "\"kind\":\"error\",\"mode\":\"prepare\","
+                "\"reason\":\"invalid_explicit_scope\"}");
+        }
+    } else if (std::strncmp(
+                   command, kTargetsMergeFixtureClearPrefix,
+                   std::strlen(kTargetsMergeFixtureClearPrefix)) == 0) {
+        char fingerprint[65] = {};
+        char runId[33] = {};
+        if (parseTargetsMergeFixtureCommand(
+                command, kTargetsMergeFixtureClearPrefix, fingerprint,
+                sizeof(fingerprint), runId, sizeof(runId))) {
+            emitTargetsMergeFixtureClear(reply, fingerprint, runId);
+        } else {
+            reply.println(
+                "{\"schema\":\"leshy.targets_merge_split_fixture.v1\","
+                "\"kind\":\"error\",\"mode\":\"clear\","
+                "\"reason\":\"invalid_explicit_scope\"}");
+        }
     } else if (std::strcmp(command, "targets.state") == 0) {
         emitTargetsState(reply);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {

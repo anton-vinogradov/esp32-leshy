@@ -102,6 +102,10 @@ bool DisposableOtaLittleFs::formatAndMountWritable() {
     return formatted_ && mount(false);
 }
 
+bool DisposableOtaLittleFs::mountExistingWritable() {
+    return mount(false);
+}
+
 bool DisposableOtaLittleFs::mountReadOnly() {
     return mount(true);
 }
