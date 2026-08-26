@@ -42,6 +42,11 @@ def require(value: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def checkpoint(path: Path, record: dict[str, Any], name: str) -> None:
+    record["checkpoint"] = name
+    write_json(path / "run.json", record)
+
+
 def companion_request(device: PassiveSerial, payload: bytes,
                       timeout: float = 5.0) -> dict[str, Any]:
     device.write(payload + b"\n")
@@ -199,7 +204,9 @@ def main() -> int:
             write_json(args.output / "run.json", record)
             time.sleep(1.0)
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
+            checkpoint(args.output, record, "console_sync")
             synchronize_console(device, 30.0)
+            checkpoint(args.output, record, "boot_identity")
             metrics_before = query(
                 device, b"metrics", "leshy.boot.v1", "ready")
             require(metrics_before.get("version") == args.expected_version and
@@ -219,6 +226,7 @@ def main() -> int:
                     recovery.get("cleanup_complete") is True,
                     f"exact product media unavailable: {recovery}")
 
+            checkpoint(args.output, record, "home_denials")
             before_connect = companion_request(device, request(
                 "session.list", "before-connect", offset=0))
             require(before_connect.get("reason") == "not_connected",
@@ -230,6 +238,7 @@ def main() -> int:
                     home_connect.get("capabilities") == [],
                     f"Home exposed Targets data: {home_connect}")
 
+            checkpoint(args.output, record, "open_targets")
             home = normalize_home(device)
             for _ in range(5):
                 home = action(device, "down")
@@ -250,6 +259,7 @@ def main() -> int:
                     targets_state.get("blocked_write_attempts") == 0,
                     f"Targets snapshot is not exact/read-only: {targets_state}")
 
+            checkpoint(args.output, record, "targets_connect")
             ready = connect(device, "targets-connect", READ_SCOPES)
             require(ready.get("status") == "ready" and
                     ready.get("reason") == "none" and
@@ -259,6 +269,7 @@ def main() -> int:
                     ready.get("max_frame_bytes") == 512,
                     f"read connection was not granted exactly: {ready}")
 
+            checkpoint(args.output, record, "session_list_detail")
             session_list = companion_request(device, request(
                 "session.list", "session-list", offset=0))
             sessions = session_list.get("items")
@@ -279,12 +290,14 @@ def main() -> int:
                         f"session.detail mismatch: {detail}")
                 session_details.append(detail)
 
+            checkpoint(args.output, record, "target_list")
             targets, target_pages = collect_pages(
                 device, "target.list", "target-list", {})
             require(1 <= len(targets) <= 16 and
                     len(targets) == targets_state.get("catalog_count"),
                     f"target.list count mismatch: {len(targets)} {targets_state}")
             first_target = targets[0]["target_id"]
+            checkpoint(args.output, record, "target_summary")
             summary = companion_request(device, request(
                 "target.detail", "target-summary", target_id=first_target,
                 section="summary", offset=0))
@@ -292,15 +305,18 @@ def main() -> int:
                     summary.get("section") == "summary" and
                     summary.get("target_id") == first_target,
                     f"target summary mismatch: {summary}")
+            checkpoint(args.output, record, "target_notes")
             notes_pages = collect_note_pages(device, first_target)
             detail_pages: dict[str, list[dict[str, Any]]] = {}
             for section in ("tags", "identities", "evidence"):
+                checkpoint(args.output, record, f"target_{section}")
                 _, pages = collect_pages(
                     device, "target.detail", section,
                     {"target_id": first_target, "section": section})
                 detail_pages[section] = pages
 
             baseline, current = sessions
+            checkpoint(args.output, record, "target_compare")
             compared, compare_pages = collect_pages(
                 device, "target.compare", "target-compare", {
                     "baseline_source_id": baseline["source_id"],
@@ -311,6 +327,7 @@ def main() -> int:
             require(len(compared) == targets_state.get("comparison_count"),
                     f"target.compare count mismatch: {len(compared)}")
 
+            checkpoint(args.output, record, "negative_frames")
             invalid_offset = companion_request(device, request(
                 "target.detail", "invalid-offset", target_id=first_target,
                 section="summary", offset=1))
@@ -340,6 +357,7 @@ def main() -> int:
             require(oversized.get("reason") == "frame_too_large",
                     f"513-byte frame did not fail closed: {oversized}")
 
+            checkpoint(args.output, record, "scope_denial")
             denied = connect(device, "mutation-denied", ["target.mutate"])
             require(denied.get("status") == "denied" and
                     denied.get("reason") == "scope_denied" and
@@ -349,6 +367,7 @@ def main() -> int:
             require(ready_again.get("status") == "ready",
                     f"read reconnect failed: {ready_again}")
 
+            checkpoint(args.output, record, "targets_teardown")
             exited = action(device, "left")
             require(exited.get("page") == "home" and
                     exited.get("runtime_owner") == "none" and
@@ -366,6 +385,7 @@ def main() -> int:
                     released.get("blocked_write_attempts") == 0 and
                     released.get("lease_mask") == 0,
                     f"Targets resources leaked: {released}")
+            checkpoint(args.output, record, "final_invariants")
             safe = query(device, b"hardware.safe-outputs",
                          "leshy.hardware.safe-outputs.v1", "state")
             require(safe.get("buzzer_inactive") is True and
@@ -386,6 +406,7 @@ def main() -> int:
 
         record.update({
             "status": "pass",
+            "checkpoint": "complete",
             "exact_cid": EXPECTED_CID,
             "boot_recovery": recovery,
             "metrics_before": metrics_before,
