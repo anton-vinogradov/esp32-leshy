@@ -1,6 +1,7 @@
 #include "CompanionConnectivity.h"
 
 #include <cstdio>
+#include <cstring>
 
 namespace leshy1::services::companion {
 namespace {
@@ -13,6 +14,13 @@ constexpr std::size_t kCredentialAlphabetSize =
 void secureClear(char* bytes, std::size_t size) {
     volatile char* cursor = bytes;
     while (size-- != 0U) *cursor++ = '\0';
+}
+
+int hexNibble(char value) {
+    if (value >= '0' && value <= '9') return value - '0';
+    if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+    if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+    return -1;
 }
 
 }  // namespace
@@ -86,6 +94,30 @@ bool makeCompanionLocalCredentials(
     *output = candidate;
     candidate.clear();
     return true;
+}
+
+bool parseCompanionHilEntropyHex(
+    const char* hex,
+    std::array<std::uint8_t, 16>* output) {
+    if (output == nullptr) return false;
+    output->fill(0);
+    if (hex == nullptr || std::strlen(hex) != output->size() * 2U) {
+        return false;
+    }
+    bool nonzero = false;
+    for (std::size_t index = 0; index < output->size(); ++index) {
+        const int high = hexNibble(hex[index * 2U]);
+        const int low = hexNibble(hex[index * 2U + 1U]);
+        if (high < 0 || low < 0) {
+            output->fill(0);
+            return false;
+        }
+        const auto byte = static_cast<std::uint8_t>((high << 4) | low);
+        (*output)[index] = byte;
+        nonzero = nonzero || byte != 0;
+    }
+    if (!nonzero) output->fill(0);
+    return nonzero;
 }
 
 bool CompanionConnectivity::authorize(std::uint64_t nowUs,

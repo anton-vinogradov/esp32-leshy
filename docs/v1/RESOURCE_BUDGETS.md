@@ -783,6 +783,22 @@ Installed partition preflight independently matches `339bda68…ba2`; no partiti
 flash occurs. `E-HIL-181` accepts lifecycle and cleanup only, advances cadence to 2/15
 and explicitly leaves actual HTTP traffic for the next physical gate.
 
+Pending HTTP-parity checkpoint `RB-M165`: production candidate
+`0.182.0-companion-web-http-parity` uses 222,816 B static RAM, 3,360,828 B linked
+flash and 3,361,328/3,426,864 B app/factory images. Versus exact 0.181 this is
++16 B static RAM, +1,220 B linked flash and +1,216/+1,216 B images. The firmware
+delta is one 16-byte one-shot HIL entropy buffer plus exact parse/scrub/scope guards;
+normal product starts retain hardware-RNG credentials. Host-only pagination, native
+USB comparison, HTTP and macOS Wi-Fi restoration state live outside the firmware
+budget. Exact firmware/factory/ELF/map/built-partitions SHA-256 are
+`b7a1eea19c73c2d4fbd2be6487564b5a92e0e5cabff12bbe4ac92f6618692c5c`/
+`bee589ee217579f3371c1ea2417ed78298ee0b716b2adfcb79e3e8baf5ad8a69`/
+`e7452bf96285200b315b27e1532e8607cf1edfaa6c72e985a1969f831ff1bbee`/
+`a2f8eb2aa6e5a3e3ac72cb894cf3be18fcbbb94a4f802aa13d12ab2edbbb95d2`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+This is host/build evidence only: no board was flashed, no host Wi-Fi state changed,
+runtime heap is not re-claimed and physical cadence remains 2/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

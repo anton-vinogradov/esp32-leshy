@@ -44,6 +44,23 @@ void testEphemeralCredentialsAreBoundedAndClearable() {
     CHECK(!makeCompanionLocalCredentials(mac, entropy, nullptr));
 }
 
+void testHilEntropyParsingIsExactAndFailClosed() {
+    std::array<std::uint8_t, 16> entropy{};
+    CHECK(parseCompanionHilEntropyHex(
+        "000102030405060708090A0B0C0D0E0F", &entropy));
+    for (std::size_t index = 0; index < entropy.size(); ++index) {
+        CHECK(entropy[index] == index);
+    }
+    CHECK(!parseCompanionHilEntropyHex(
+        "00000000000000000000000000000000", &entropy));
+    for (std::uint8_t value : entropy) CHECK(value == 0);
+    CHECK(!parseCompanionHilEntropyHex("00010203", &entropy));
+    CHECK(!parseCompanionHilEntropyHex(
+        "000102030405060708090A0B0C0D0E0Z", &entropy));
+    CHECK(!parseCompanionHilEntropyHex(
+        "000102030405060708090A0B0C0D0E0F", nullptr));
+}
+
 void testAuthorizationIsExplicitAndGenerationBound() {
     CompanionConnectivity session;
     CHECK(!session.authorized());
@@ -97,6 +114,7 @@ void testClockRollbackRevokesInsteadOfExtending() {
 
 int main() {
     testEphemeralCredentialsAreBoundedAndClearable();
+    testHilEntropyParsingIsExactAndFailClosed();
     testAuthorizationIsExplicitAndGenerationBound();
     testIdleAndAbsoluteTimeoutsFailClosed();
     testClockRollbackRevokesInsteadOfExtending();

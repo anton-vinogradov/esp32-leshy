@@ -560,6 +560,8 @@ CompanionMutationRuntime webCompanionMutation{};
 leshy1::services::companion::CompanionConnectivity webCompanionConnectivity;
 leshy1::services::companion::CompanionLocalCredentials
     webCompanionCredentials{};
+std::array<std::uint8_t, 16> webCompanionHilEntropy{};
+bool webCompanionHilEntropyPresent = false;
 leshy1::platform::arduino::ArduinoCompanionWebService
     arduinoCompanionWebService;
 bool webCompanionOverlay = false;
@@ -575,6 +577,20 @@ std::uint32_t webCompanionHeapAfterSuspend = 0;
 bool webCompanionSurveyWorkerSuspended = false;
 std::uint32_t webCompanionHeapBeforeWorkerSuspend = 0;
 std::uint32_t webCompanionHeapAfterWorkerSuspend = 0;
+
+void clearWebCompanionEntropy(std::array<std::uint8_t, 16>& entropy) {
+    volatile std::uint8_t* cursor = entropy.data();
+    for (std::size_t remaining = entropy.size();
+         remaining != 0U; --remaining) {
+        *cursor++ = 0;
+    }
+}
+
+void clearWebCompanionHilEntropy() {
+    clearWebCompanionEntropy(webCompanionHilEntropy);
+    webCompanionHilEntropyPresent = false;
+}
+
 std::uint32_t targetsStateGeneration = 0;
 leshy1::storage::RecoveryChoice targetsStateHead =
     leshy1::storage::RecoveryChoice::None;
@@ -4908,6 +4924,7 @@ void stopWebCompanion(
         webCompanionConnectivity.revoke(reason);
     }
     webCompanionCredentials.clear();
+    clearWebCompanionHilEntropy();
     webCompanionConnection = {};
     if (webCompanionMutation.state !=
         leshy1::services::companion::CompanionMutationState::Saving) {
@@ -4962,9 +4979,16 @@ bool startWebCompanion() {
     std::array<std::uint8_t, 6> mac{};
     std::array<std::uint8_t, 16> entropy{};
     esp_read_mac(mac.data(), ESP_MAC_WIFI_SOFTAP);
-    esp_fill_random(entropy.data(), entropy.size());
-    if (!companion::makeCompanionLocalCredentials(
-            mac, entropy, &webCompanionCredentials)) {
+    if (webCompanionHilEntropyPresent) {
+        entropy = webCompanionHilEntropy;
+    } else {
+        esp_fill_random(entropy.data(), entropy.size());
+    }
+    clearWebCompanionHilEntropy();
+    const bool credentialsReady = companion::makeCompanionLocalCredentials(
+        mac, entropy, &webCompanionCredentials);
+    clearWebCompanionEntropy(entropy);
+    if (!credentialsReady) {
         stopWebCompanion(companion::CompanionLocalStopReason::StartFailed,
                          true);
         lastRuntimeEvent = "companion_web_credentials_failed";
@@ -18330,7 +18354,7 @@ void emitTargetsState(Stream& reply) {
 
 void emitCompanionWebState(Stream& reply) {
     namespace companion = leshy1::services::companion;
-    char line[1056] = {};
+    char line[1152] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.companion.web.v1\",\"kind\":\"state\","
@@ -18339,6 +18363,7 @@ void emitCompanionWebState(Stream& reply) {
         "\"started_us\":%llu,\"last_activity_us\":%llu,"
         "\"stop_reason\":\"%s\",\"requests_handled\":%lu,"
         "\"requests_rejected\":%lu,\"credential_present\":%s,"
+        "\"hil_seed_armed\":%s,"
         "\"credential_persisted\":false,\"credential_exposed_over_diagnostic\":false,"
         "\"network_core_ready\":%s,\"begin_stage\":\"%s\","
         "\"driver_error\":%d,\"cleanup_complete\":%s,"
@@ -18368,6 +18393,7 @@ void emitCompanionWebState(Stream& reply) {
         static_cast<unsigned long>(
             arduinoCompanionWebService.requestsRejected()),
         webCompanionCredentials.valid() ? "true" : "false",
+        webCompanionHilEntropyPresent ? "true" : "false",
         arduinoCompanionWebService.networkCoreReady() ? "true" : "false",
         leshy1::platform::arduino::ArduinoCompanionWebService::beginStageName(
             arduinoCompanionWebService.beginStage()),
@@ -18392,6 +18418,52 @@ void emitCompanionWebState(Stream& reply) {
         static_cast<unsigned long long>(
             companion::kCompanionLocalMaximumLifetimeUs),
         static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
+void armCompanionWebHilEntropy(Stream& reply, const char* command) {
+    constexpr const char* prefix = "companion.web.hil-seed ";
+    namespace companion = leshy1::services::companion;
+    const bool admissible = hilSession.active() && webCompanionOverlay &&
+        uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        std::strcmp(targetsProductStatus, "ready") == 0 &&
+        !webCompanionConnectivity.authorized() &&
+        !arduinoCompanionWebService.active() &&
+        !webCompanionHilEntropyPresent;
+    if (!admissible) {
+        reply.println(
+            "{\"schema\":\"leshy.companion.web.seed.v1\","
+            "\"kind\":\"error\",\"status\":\"denied\","
+            "\"reason\":\"invalid_hil_scope\","
+            "\"credential_exposed\":false}");
+        return;
+    }
+    std::array<std::uint8_t, 16> parsed{};
+    if (!companion::parseCompanionHilEntropyHex(
+            command + std::strlen(prefix), &parsed)) {
+        reply.println(
+            "{\"schema\":\"leshy.companion.web.seed.v1\","
+            "\"kind\":\"error\",\"status\":\"invalid\","
+            "\"reason\":\"invalid_entropy\","
+            "\"credential_exposed\":false}");
+        return;
+    }
+    webCompanionHilEntropy = parsed;
+    clearWebCompanionEntropy(parsed);
+    webCompanionHilEntropyPresent = true;
+    std::array<std::uint8_t, 6> mac{};
+    esp_read_mac(mac.data(), ESP_MAC_WIFI_SOFTAP);
+    char line[256] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.companion.web.seed.v1\","
+        "\"kind\":\"armed\",\"status\":\"armed\",\"bytes\":16,"
+        "\"one_shot\":true,\"softap_mac\":"
+        "\"%02x:%02x:%02x:%02x:%02x:%02x\","
+        "\"credential_exposed\":false}",
+        static_cast<unsigned>(mac[0]), static_cast<unsigned>(mac[1]),
+        static_cast<unsigned>(mac[2]), static_cast<unsigned>(mac[3]),
+        static_cast<unsigned>(mac[4]), static_cast<unsigned>(mac[5]));
     reply.println(line);
 }
 
@@ -19889,6 +19961,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                     changed = controller.openCorrelationList();
                     break;
                 case TargetActionItem::CompanionWeb:
+                    clearWebCompanionHilEntropy();
                     webCompanionOverlay = true;
                     webCompanionConnection = {};
                     webCompanionMutation = {};
@@ -24607,6 +24680,9 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
     constexpr const char* prefix = "hil.end ";
     const char* sessionId = command + std::strlen(prefix);
     const HilSessionStatus status = hilSession.end(sessionId);
+    if (status == HilSessionStatus::Ended) {
+        clearWebCompanionHilEntropy();
+    }
     char line[256] = {};
     if (status == HilSessionStatus::Ended) {
         std::snprintf(
@@ -26271,6 +26347,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         }
     } else if (std::strcmp(command, "targets.state") == 0) {
         emitTargetsState(reply);
+    } else if (std::strncmp(command, "companion.web.hil-seed ", 23) == 0) {
+        armCompanionWebHilEntropy(reply, command);
     } else if (std::strcmp(command, "companion.web.state") == 0) {
         emitCompanionWebState(reply);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
@@ -26967,6 +27045,7 @@ void setup() {
               "\"capture.subghz.test-fixture fixed-rx-only\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"wifi.network.detail\","
+              "\"companion.web.hil-seed <32-hex-entropy>\","
               "\"companion.web.state\","
               "\"capture.state\",\"capture.export.pcap\","
               "\"capture.subghz.state\","

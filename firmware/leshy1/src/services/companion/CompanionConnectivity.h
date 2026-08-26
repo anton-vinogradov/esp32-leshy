@@ -40,6 +40,12 @@ bool makeCompanionLocalCredentials(
     const std::array<std::uint8_t, 16>& entropy,
     CompanionLocalCredentials* output);
 
+// Decodes the exact one-shot entropy shape accepted by the physical HIL
+// boundary. Invalid or all-zero input fails closed and leaves output zeroed.
+bool parseCompanionHilEntropyHex(
+    const char* hex,
+    std::array<std::uint8_t, 16>* output);
+
 class CompanionConnectivity final {
 public:
     bool authorize(std::uint64_t nowUs, std::uint32_t generation);

@@ -43,6 +43,7 @@ ARDUINO_WEB_SOURCE = (
 )
 MUTATION_HIL = ROOT / "tools/run_1x_companion_mutation_delta_hil.py"
 WEB_HIL = ROOT / "tools/run_1x_companion_web_delta_hil.py"
+WEB_HTTP_HIL = ROOT / "tools/companion_web_http_hil.py"
 ARDUINO = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 ACTION = ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.cpp"
 DOCS = (
@@ -78,6 +79,7 @@ def main() -> int:
         arduino_web_source = ARDUINO_WEB_SOURCE.read_text(encoding="utf-8")
         mutation_hil = MUTATION_HIL.read_text(encoding="utf-8")
         web_hil = WEB_HIL.read_text(encoding="utf-8")
+        web_http_hil = WEB_HTTP_HIL.read_text(encoding="utf-8")
         arduino = ARDUINO.read_text(encoding="utf-8")
         action = ACTION.read_text(encoding="utf-8")
         docs = [path.read_text(encoding="utf-8") for path in DOCS]
@@ -284,6 +286,7 @@ def main() -> int:
         "30ULL * 60ULL * 1000000ULL",
         "CompanionLocalCredentials",
         "makeCompanionLocalCredentials",
+        "parseCompanionHilEntropyHex",
         "secureClear",
         "CompanionConnectivity::authorize",
         "CompanionConnectivity::recordActivity",
@@ -312,6 +315,7 @@ def main() -> int:
         "testAuthorizationIsExplicitAndGenerationBound",
         "testIdleAndAbsoluteTimeoutsFailClosed",
         "testClockRollbackRevokesInsteadOfExtending",
+        "testHilEntropyParsingIsExactAndFailClosed",
     ):
         require(failures, marker in connectivity_tests,
                 f"missing connectivity native coverage: {marker}")
@@ -424,9 +428,34 @@ def main() -> int:
         'released.get("lease_mask") == 0',
         '"raw_radio_tx_commands": 0',
         'best_effort_cleanup(device)',
+        '"--allow-host-wifi-change"',
+        '"leshy.companion.web.seed.v1", "armed"',
+        'normalized_pages(web_session_pages)',
+        'normalized_pages(web_target_pages)',
+        'normalized_pages(web_compare_pages)',
+        '"target.mutation.preview", "web-first-preview"',
+        '"target.mutation.confirm", "web-restore-confirm"',
+        'assert_atomic_mutation_state(',
+        'host_wifi["restored"] is True',
     ):
         require(failures, marker in web_hil,
                 f"missing local Web delta HIL contract: {marker}")
+
+    for marker in (
+        'NETWORKSETUP = "/usr/sbin/networksetup"',
+        'derive_local_credentials',
+        '"-getairportpower"',
+        '"-getairportnetwork"',
+        '"-setairportnetwork"',
+        '"-setairportpower"',
+        '"-listpreferredwirelessnetworks"',
+        '"-removepreferredwirelessnetwork"',
+        'temporary HIL SSID already exists as a preferred network',
+        'self._wait_for_disconnected()',
+        'urllib.request.ProxyHandler({})',
+    ):
+        require(failures, marker in web_http_hil,
+                f"missing guarded host Web HIL boundary: {marker}")
 
     for marker in (
         "handleUsbCompanionFrame",
@@ -466,6 +495,10 @@ def main() -> int:
         "targetsMutationCompanionWeb",
         '"credential_persisted\\\":false',
         '"credential_exposed_over_diagnostic\\\":false',
+        "clearWebCompanionHilEntropy",
+        "armCompanionWebHilEntropy",
+        '"hil_seed_armed\\\":%s',
+        "leshy.companion.web.seed.v1",
     ):
         require(failures, marker in arduino,
                 f"missing native USB wiring contract: {marker}")

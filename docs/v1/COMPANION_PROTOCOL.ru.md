@@ -188,6 +188,27 @@ profile без PSRAM; Targets возвращается при Stop, worker — �
 One-time network core может остаться initialized, но не удерживает listener, AP,
 credential или grant.
 
+Candidate 0.182 добавляет observability boundary только для physical HIL, не меняя
+этот пользовательский contract. `companion.web.hil-seed` принимается только внутри
+exact active HIL session, после staging consent overlay Local Web, до authorization и
+только один раз. Он принимает ровно 16 ненулевых bytes entropy, возвращает только
+armed/not-armed и публичный SoftAP MAC и никогда не возвращает полученные SSID или
+passphrase. Start потребляет и очищает значение; Stop, HIL end и любой отказ также его
+очищают. Обычный пользовательский start по-прежнему вызывает hardware RNG ESP и не
+может выбрать этот path.
+
+Парный runner macOS требует явными arguments exact serial port, interface Wi-Fi,
+enabled network service и ожидаемый SoftAP MAC. Он сохраняет только power и
+association, подключается к derived temporary AP, отключает ambient HTTP proxies,
+проходит каждую страницу Session/Target/Compare по HTTP, сравнивает те же страницы по
+native USB и выполняет Favorite toggle/restore через две confirmed atomic mutations.
+Он не записывает entropy, temporary passphrase или прежний SSID, отказывается
+перезаписывать existing preferred network с temporary SSID и удаляет созданный HIL
+profile. Ветка `finally` обязана доказать восстановление прежнего состояния
+powered-off, saved-network или powered-on/disconnected, иначе run не может пройти.
+Пока это только готовое по
+host/build определение gate; physical HTTP parity не принята без retained passing run.
+
 ## Правила trust и lifecycle
 
 - Local cable или loopback socket задаёт locality transport, а не authorization.
@@ -238,3 +259,10 @@ discovery/Cardputer opens и final lease 0. Два failed precursor остают
 реальных дефектов Wi-Fi allocation и преждевременного восстановления worker. Host
 намеренно не подключается к temporary AP, поэтому этот checkpoint не заявляет physical
 HTTP request или parity payload USB/Web.
+
+`0.182.0-companion-web-http-parity` сейчас является host/build candidate. Host checks
+проходят для one-shot parser entropy HIL, zeroization и scope guards, deterministic test
+vector credential, явной state machine capture/restore сети macOS, HTTP client без
+proxy, collision/removal preferred-network, полной pagination/parity и confirmed
+mutation/restore assertions. Candidate checkpoint не заявляет flash board или
+изменение сети host.

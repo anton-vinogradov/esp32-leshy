@@ -4,16 +4,24 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import secrets
 import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import serial
 
 from capture_1x_ui import PassiveSerial, read_json
+from companion_web_http_hil import (
+    MacWifiGuard,
+    derive_local_credentials,
+    http_companion_request,
+    http_get,
+)
 from esp_app_identity import app_elf_sha256
 from partition_safety import (
     PARTITION_TABLE_OFFSET,
@@ -22,6 +30,9 @@ from partition_safety import (
     validated_partition_layout,
 )
 from run_1x_littlefs_parity_hil import read_flash_with_retry
+from run_1x_companion_usb_delta_hil import (
+    companion_request as usb_companion_exchange,
+)
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import (
     action,
@@ -36,6 +47,17 @@ SCHEMA = "leshy.companion_web_delta_hil.run.v1"
 EXPECTED_CID = "FE343253440000002000000055019CB7"
 IDLE_TIMEOUT_US = 10 * 60 * 1_000_000
 MAXIMUM_LIFETIME_US = 30 * 60 * 1_000_000
+READ_SCOPES = ["session.read", "target.read", "target.compare"]
+READ_CAPABILITIES = [
+    "session.list", "session.detail", "target.list", "target.detail",
+    "target.compare",
+]
+WEB_SCOPES = READ_SCOPES + ["target.mutate"]
+WEB_CAPABILITIES = READ_CAPABILITIES + [
+    "target.favorite.set", "target.name.set", "target.notes.set",
+    "target.tag.add", "target.tag.remove",
+]
+CompanionExchange = Callable[[dict[str, Any]], dict[str, Any]]
 
 
 def require(value: bool, message: str) -> None:
@@ -51,6 +73,103 @@ def checkpoint(output: Path, record: dict[str, Any], name: str) -> None:
 def web_state(device: PassiveSerial) -> dict[str, Any]:
     return query(
         device, b"companion.web.state", "leshy.companion.web.v1", "state")
+
+
+def protocol_request(kind: str, request_id: str,
+                     **fields: Any) -> dict[str, Any]:
+    value: dict[str, Any] = {
+        "schema": "leshy.companion.request.v1",
+        "kind": kind,
+        "request_id": request_id,
+    }
+    value.update(fields)
+    return value
+
+
+def without_request_id(value: dict[str, Any]) -> dict[str, Any]:
+    return {key: item for key, item in value.items() if key != "request_id"}
+
+
+def collect_companion_pages(
+        exchange: CompanionExchange, kind: str, request_prefix: str,
+        fixed: dict[str, Any], maximum_pages: int = 64,
+) -> tuple[list[Any], list[dict[str, Any]]]:
+    offset = 0
+    items: list[Any] = []
+    pages: list[dict[str, Any]] = []
+    for page_number in range(maximum_pages):
+        response = exchange(protocol_request(
+            kind, f"{request_prefix}-{page_number}", offset=offset,
+            **fixed))
+        require(
+            response.get("status") == "ok" and
+            response.get("reason") == "none",
+            f"{kind} page rejected: {response}")
+        page_items = response.get("items", [])
+        require(isinstance(page_items, list),
+                f"{kind} page does not contain a list: {response}")
+        items.extend(page_items)
+        pages.append(response)
+        next_offset = response.get("next_offset")
+        if next_offset is None:
+            return items, pages
+        require(
+            isinstance(next_offset, int) and next_offset > offset,
+            f"{kind} pagination did not advance: {response}")
+        offset = next_offset
+    raise RuntimeError(f"{kind} exceeded bounded pagination")
+
+
+def normalized_pages(pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [without_request_id(page) for page in pages]
+
+
+def target_from_items(items: list[Any], target_id: str) -> dict[str, Any]:
+    for item in items:
+        if isinstance(item, dict) and item.get("target_id") == target_id:
+            return item
+    raise RuntimeError(f"Target {target_id} disappeared from companion list")
+
+
+def wait_companion_mutation(
+        exchange: CompanionExchange, mutation_id: str,
+        request_prefix: str, timeout: float = 20.0,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    deadline = time.monotonic() + timeout
+    samples: list[dict[str, Any]] = []
+    while time.monotonic() < deadline:
+        response = exchange(protocol_request(
+            "target.mutation.status",
+            f"{request_prefix}-{len(samples)}", mutation_id=mutation_id))
+        samples.append(response)
+        if response.get("state") in ("saved", "failed"):
+            return response, samples
+        time.sleep(0.05)
+    raise TimeoutError(
+        f"companion mutation did not finish: {samples[-4:]}")
+
+
+def assert_atomic_mutation_state(
+        state: dict[str, Any], expected_generation: int) -> None:
+    require(
+        state.get("status") == "ready" and
+        state.get("mutation_state") == "saved" and
+        state.get("mutation_status") == "saved" and
+        state.get("mutation_persisted") is True and
+        state.get("mutation_generation") == expected_generation and
+        state.get("target_state_generation") == expected_generation and
+        state.get("mutation_expected_cid") == EXPECTED_CID and
+        state.get("mutation_observed_cid") == EXPECTED_CID and
+        state.get("mutation_write_calls") == 3 and
+        state.get("mutation_file_syncs") == 3 and
+        state.get("mutation_directory_syncs") == 3 and
+        state.get("cleanup_complete") is True and
+        state.get("lease_mask") == 15,
+        f"atomic Web companion save invariant failed: {state}")
+    attempts = int(state.get("mutation_identity_attempts", 0))
+    retries = int(state.get("mutation_identity_transient_retries", -1))
+    require(1 <= attempts <= 8 and retries == attempts - 1,
+            f"identity retry accounting invalid: {state}")
 
 
 def open_console_reconnecting(
@@ -191,12 +310,38 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--reuse-installed-from", type=Path)
     parser.add_argument(
+        "--allow-host-wifi-change", action="store_true",
+        help="explicitly authorize one guarded join and exact restoration")
+    parser.add_argument("--wifi-interface")
+    parser.add_argument("--wifi-service")
+    parser.add_argument("--softap-mac")
+    parser.add_argument(
+        "--web-base-url", default="http://192.168.4.1",
+        help="fixed local device origin; defaults to the SoftAP gateway")
+    parser.add_argument(
         "--clear-proven-preexisting-safety-latch", action="store_true",
         help=("explicitly clear only an idle, quiesced runtime-watchdog "
               "latch after exact candidate identity is proven"),
     )
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
+
+    wifi_arguments = (
+        args.wifi_interface, args.wifi_service, args.softap_mac)
+    http_exchange_requested = args.allow_host_wifi_change or any(
+        value is not None for value in wifi_arguments)
+    if http_exchange_requested and not (
+            args.allow_host_wifi_change and all(wifi_arguments)):
+        parser.error(
+            "physical HTTP requires --allow-host-wifi-change, "
+            "--wifi-interface, --wifi-service and --softap-mac together")
+    if args.web_base_url.rstrip("/") != "http://192.168.4.1":
+        parser.error("Web HIL origin must remain the fixed local SoftAP gateway")
+    if http_exchange_requested:
+        try:
+            derive_local_credentials(args.softap_mac, bytes(range(16)))
+        except ValueError as error:
+            parser.error(str(error))
 
     for path in (args.firmware, args.partitions, args.elf, args.map):
         if not path.is_file():
@@ -257,7 +402,9 @@ def main() -> int:
         "partition_flash_count": 0,
         "radio_tx_scope": "explicit_ephemeral_softap_only",
         "http_exchange_tested": False,
-        "http_exchange_reason": "host_wifi_state_not_modified",
+        "http_exchange_reason": (
+            "pending_guarded_host_wifi_exchange" if http_exchange_requested
+            else "host_wifi_state_not_modified"),
     }
     if args.reuse_installed_from is not None:
         precursor_path = args.reuse_installed_from / "run.json"
@@ -289,6 +436,19 @@ def main() -> int:
     write_json(args.output / "run.json", record)
     cleanup: dict[str, Any] = {"attempted": False}
     device: PassiveSerial | None = None
+    hil_session_id = secrets.token_hex(16) if http_exchange_requested else ""
+    hil_session_started = False
+    wifi_guard: MacWifiGuard | None = None
+    host_wifi: dict[str, Any] = {
+        "change_authorized": http_exchange_requested,
+        "interface_explicit": args.wifi_interface is not None,
+        "service_explicit": args.wifi_service is not None,
+        "snapshot_complete": False,
+        "restore_attempted": False,
+        "restored": False,
+        "prior_ssid_recorded": False,
+        "transient_passphrase_recorded": False,
+    }
 
     try:
         checkpoint(args.output, record, "partition_preflight")
@@ -446,6 +606,21 @@ def main() -> int:
                     recovery.get("cleanup_complete") is True,
                     f"product storage baseline is not safe: {recovery}")
 
+            if http_exchange_requested:
+                checkpoint(args.output, record, "hil_session_begin")
+                hil_begin = query(
+                    device,
+                    f"hil.begin {hil_session_id} {app_identity}".encode(
+                        "ascii"),
+                    "leshy.hil.session.v1", "begun")
+                require(
+                    hil_begin.get("status") == "begun" and
+                    hil_begin.get("session_id") == hil_session_id and
+                    hil_begin.get("active") is True and
+                    hil_begin.get("app_elf_sha256") == app_identity,
+                    f"exact HIL session was not admitted: {hil_begin}")
+                hil_session_started = True
+
             checkpoint(args.output, record, "open_targets")
             home = normalize_home(device)
             for _ in range(5):
@@ -484,6 +659,7 @@ def main() -> int:
                     staged.get("authorized") is False and
                     staged.get("server_active") is False and
                     staged.get("credential_present") is False and
+                    staged.get("hil_seed_armed") is False and
                     staged.get("network_core_ready") is False and
                     staged.get("begin_stage") == "idle" and
                     staged.get("cleanup_complete") is True and
@@ -491,6 +667,56 @@ def main() -> int:
                     staged.get("survey_worker_suspended") is False and
                     staged.get("lease_mask") == 13,
                     f"Web session started without confirmation: {staged}")
+
+            expected_ssid = ""
+            expected_passphrase = ""
+            invalid_seed: dict[str, Any] = {}
+            seed_armed: dict[str, Any] = {}
+            seed_replay: dict[str, Any] = {}
+            seeded_state: dict[str, Any] = {}
+            if http_exchange_requested:
+                invalid_seed = query(
+                    device, b"companion.web.hil-seed " + b"0" * 32,
+                    "leshy.companion.web.seed.v1", "error")
+                require(
+                    invalid_seed.get("status") == "invalid" and
+                    invalid_seed.get("reason") == "invalid_entropy" and
+                    invalid_seed.get("credential_exposed") is False,
+                    f"invalid HIL seed did not fail closed: {invalid_seed}")
+                entropy = secrets.token_bytes(16)
+                while not any(entropy):
+                    entropy = secrets.token_bytes(16)
+                expected_ssid, expected_passphrase = \
+                    derive_local_credentials(args.softap_mac, entropy)
+                seed_armed = query(
+                    device,
+                    f"companion.web.hil-seed {entropy.hex()}".encode("ascii"),
+                    "leshy.companion.web.seed.v1", "armed")
+                require(
+                    seed_armed.get("status") == "armed" and
+                    seed_armed.get("bytes") == 16 and
+                    seed_armed.get("one_shot") is True and
+                    seed_armed.get("softap_mac", "").lower() ==
+                    args.softap_mac.lower() and
+                    seed_armed.get("credential_exposed") is False,
+                    f"one-shot Web HIL seed was not armed: {seed_armed}")
+                seed_replay = query(
+                    device,
+                    f"companion.web.hil-seed {entropy.hex()}".encode("ascii"),
+                    "leshy.companion.web.seed.v1", "error")
+                entropy = b""
+                require(
+                    seed_replay.get("status") == "denied" and
+                    seed_replay.get("reason") == "invalid_hil_scope" and
+                    seed_replay.get("credential_exposed") is False,
+                    f"one-shot HIL seed replay was accepted: {seed_replay}")
+                seeded_state = web_state(device)
+                require(
+                    seeded_state.get("hil_seed_armed") is True and
+                    seeded_state.get("credential_present") is False and
+                    seeded_state.get("authorized") is False and
+                    seeded_state.get("lease_mask") == 13,
+                    f"armed seed escaped the staged boundary: {seeded_state}")
             action(device, "right")
             active = web_state(device)
             require(active.get("overlay_open") is True and
@@ -499,6 +725,7 @@ def main() -> int:
                     active.get("protocol_connected") is False and
                     int(active.get("generation", 0)) > 0 and
                     active.get("credential_present") is True and
+                    active.get("hil_seed_armed") is False and
                     active.get("credential_persisted") is False and
                     active.get("credential_exposed_over_diagnostic") is False and
                     active.get("network_core_ready") is True and
@@ -521,12 +748,313 @@ def main() -> int:
                     active.get("maximum_lifetime_us") == MAXIMUM_LIFETIME_US and
                     active.get("lease_mask") == 15,
                     f"explicit Web session is not bounded: {active}")
+
+            http_exchange: dict[str, Any] = {
+                "tested": False,
+                "reason": "host_wifi_state_not_modified",
+            }
+            if http_exchange_requested:
+                checkpoint(args.output, record, "host_wifi_snapshot")
+                wifi_guard = MacWifiGuard(
+                    args.wifi_interface, args.wifi_service)
+                snapshot = wifi_guard.capture()
+                host_wifi.update({
+                    "snapshot_complete": True,
+                    "prior_power_on": snapshot.power_on,
+                    "prior_ssid_present": snapshot.ssid is not None,
+                })
+                record["host_wifi"] = host_wifi
+                write_json(args.output / "run.json", record)
+                checkpoint(args.output, record, "physical_http_exchange")
+                try:
+                    wifi_guard.connect(expected_ssid, expected_passphrase)
+                    expected_passphrase = ""
+                    index_status, index_type, index_body = http_get(
+                        args.web_base_url.rstrip("/") + "/")
+                    require(
+                        index_status == 200 and index_type == "text/html" and
+                        b"LESHY \xc2\xb7 LOCAL" in index_body and
+                        b"/api/v1/companion" in index_body,
+                        "local Web index did not match the embedded UI")
+
+                    api_url = (args.web_base_url.rstrip("/") +
+                               "/api/v1/companion")
+                    connect_status, connect_type, web_connect = \
+                        http_companion_request(api_url, protocol_request(
+                            "connect", "web-connect", protocol=1,
+                            scopes=WEB_SCOPES))
+                    require(
+                        connect_status == 200 and
+                        connect_type == "application/json" and
+                        web_connect.get("status") == "ready" and
+                        web_connect.get("reason") == "none" and
+                        web_connect.get("transport") == "local_web_json" and
+                        web_connect.get("scopes") == WEB_SCOPES and
+                        web_connect.get("capabilities") == WEB_CAPABILITIES,
+                        f"local Web connection parity failed: {web_connect}")
+
+                    http_request_count = 2  # GET / and POST connect.
+
+                    def web_exchange(
+                            request_value: dict[str, Any]) -> dict[str, Any]:
+                        nonlocal http_request_count
+                        status, content_type, response = \
+                            http_companion_request(api_url, request_value)
+                        http_request_count += 1
+                        require(
+                            status == 200 and
+                            content_type == "application/json",
+                            "local Web companion response was not exact JSON")
+                        return response
+
+                    def usb_exchange(
+                            request_value: dict[str, Any]) -> dict[str, Any]:
+                        return usb_companion_exchange(
+                            device, json.dumps(
+                                request_value,
+                                separators=(",", ":")).encode("ascii"))
+
+                    web_sessions, web_session_pages = \
+                        collect_companion_pages(
+                            web_exchange, "session.list", "web-sessions", {})
+                    web_targets, web_target_pages = collect_companion_pages(
+                        web_exchange, "target.list", "web-targets", {})
+                    require(
+                        len(web_sessions) == 2 and
+                        len(web_targets) == targets.get("catalog_count"),
+                        "local Web projections are incomplete")
+                    baseline, current = web_sessions
+                    compare_fields = {
+                        "baseline_source_id": baseline["source_id"],
+                        "baseline_generation": baseline["generation"],
+                        "current_source_id": current["source_id"],
+                        "current_generation": current["generation"],
+                    }
+                    web_compared, web_compare_pages = \
+                        collect_companion_pages(
+                            web_exchange, "target.compare", "web-compare",
+                            compare_fields)
+                    require(
+                        len(web_compared) == targets.get("comparison_count"),
+                        "local Web comparison projection is incomplete")
+
+                    usb_connect = usb_exchange(protocol_request(
+                        "connect", "usb-parity-connect", protocol=1,
+                        scopes=WEB_SCOPES))
+                    usb_sessions, usb_session_pages = \
+                        collect_companion_pages(
+                            usb_exchange, "session.list", "usb-sessions", {})
+                    usb_targets, usb_target_pages = collect_companion_pages(
+                        usb_exchange, "target.list", "usb-targets", {})
+                    usb_compared, usb_compare_pages = \
+                        collect_companion_pages(
+                            usb_exchange, "target.compare", "usb-compare",
+                            compare_fields)
+                    require(
+                        usb_connect.get("status") == "ready" and
+                        usb_connect.get("transport") ==
+                        "usb_serial_ndjson" and
+                        usb_connect.get("scopes") == WEB_SCOPES and
+                        usb_connect.get("capabilities") == WEB_CAPABILITIES,
+                        f"USB parity connection failed: {usb_connect}")
+                    require(
+                        normalized_pages(web_session_pages) ==
+                        normalized_pages(usb_session_pages),
+                        "session.list differs between Web and native USB")
+                    require(
+                        normalized_pages(web_target_pages) ==
+                        normalized_pages(usb_target_pages),
+                        "target.list differs between Web and native USB")
+                    require(
+                        normalized_pages(web_compare_pages) ==
+                        normalized_pages(usb_compare_pages),
+                        "target.compare differs between Web and native USB")
+
+                    checkpoint(args.output, record,
+                               "physical_http_confirmed_mutation")
+                    generation_before = int(
+                        targets["target_state_generation"])
+                    target_before = web_targets[0]
+                    target_id = str(target_before["target_id"])
+                    revision_before = int(target_before["revision"])
+                    favorite_before = bool(target_before["favorite"])
+                    first_preview = web_exchange(protocol_request(
+                        "target.mutation.preview", "web-first-preview",
+                        action="target.favorite.set", target_id=target_id,
+                        expected_revision=revision_before,
+                        favorite=not favorite_before))
+                    mutation_id = first_preview.get("mutation_id")
+                    require(
+                        first_preview.get("status") == "ok" and
+                        first_preview.get("state") == "previewed" and
+                        isinstance(mutation_id, str) and
+                        len(mutation_id) == 32 and
+                        first_preview.get("target_revision") ==
+                        revision_before + 1,
+                        f"Web mutation preview failed: {first_preview}")
+                    first_confirm = web_exchange(protocol_request(
+                        "target.mutation.confirm", "web-first-confirm",
+                        mutation_id=mutation_id))
+                    require(
+                        first_confirm.get("status") == "ok" and
+                        first_confirm.get("state") == "saving",
+                        f"Web mutation confirm failed: {first_confirm}")
+                    first_replay = web_exchange(protocol_request(
+                        "target.mutation.confirm", "web-first-replay",
+                        mutation_id=mutation_id))
+                    require(
+                        first_replay.get("status") == "error" and
+                        first_replay.get("reason") == "already_confirmed",
+                        f"Web mutation confirmation replay succeeded: "
+                        f"{first_replay}")
+                    first_terminal, first_samples = wait_companion_mutation(
+                        web_exchange, mutation_id, "web-first-status")
+                    require(
+                        first_terminal.get("status") == "ok" and
+                        first_terminal.get("state") == "saved" and
+                        first_terminal.get("target_revision") ==
+                        revision_before + 1 and
+                        first_terminal.get("state_generation") ==
+                        generation_before + 1,
+                        f"Web mutation did not save: {first_terminal}")
+                    first_state = query(
+                        device, b"targets.state",
+                        "leshy.targets.product.v1", "state")
+                    assert_atomic_mutation_state(
+                        first_state, generation_before + 1)
+                    first_items, _ = collect_companion_pages(
+                        web_exchange, "target.list", "web-first-list", {})
+                    target_after = target_from_items(first_items, target_id)
+                    require(
+                        target_after.get("revision") == revision_before + 1 and
+                        target_after.get("favorite") is not favorite_before,
+                        f"Web mutation value did not reopen: {target_after}")
+
+                    restore_preview = web_exchange(protocol_request(
+                        "target.mutation.preview", "web-restore-preview",
+                        action="target.favorite.set", target_id=target_id,
+                        expected_revision=revision_before + 1,
+                        favorite=favorite_before))
+                    restore_id = restore_preview.get("mutation_id")
+                    require(
+                        restore_preview.get("status") == "ok" and
+                        restore_preview.get("state") == "previewed" and
+                        isinstance(restore_id, str) and len(restore_id) == 32,
+                        f"Web restore preview failed: {restore_preview}")
+                    restore_confirm = web_exchange(protocol_request(
+                        "target.mutation.confirm", "web-restore-confirm",
+                        mutation_id=restore_id))
+                    require(
+                        restore_confirm.get("status") == "ok" and
+                        restore_confirm.get("state") == "saving",
+                        f"Web restore confirm failed: {restore_confirm}")
+                    restore_terminal, restore_samples = \
+                        wait_companion_mutation(
+                            web_exchange, restore_id, "web-restore-status")
+                    require(
+                        restore_terminal.get("status") == "ok" and
+                        restore_terminal.get("state") == "saved" and
+                        restore_terminal.get("target_revision") ==
+                        revision_before + 2 and
+                        restore_terminal.get("state_generation") ==
+                        generation_before + 2,
+                        f"Web restore did not save: {restore_terminal}")
+                    restored_state = query(
+                        device, b"targets.state",
+                        "leshy.targets.product.v1", "state")
+                    assert_atomic_mutation_state(
+                        restored_state, generation_before + 2)
+                    restored_web_items, restored_web_pages = \
+                        collect_companion_pages(
+                            web_exchange, "target.list",
+                            "web-restored-list", {})
+                    restored_usb_items, restored_usb_pages = \
+                        collect_companion_pages(
+                            usb_exchange, "target.list",
+                            "usb-restored-list", {})
+                    target_restored = target_from_items(
+                        restored_web_items, target_id)
+                    require(
+                        target_restored.get("revision") ==
+                        revision_before + 2 and
+                        target_restored.get("favorite") is favorite_before,
+                        f"Web mutation did not restore value: "
+                        f"{target_restored}")
+                    require(
+                        normalized_pages(restored_web_pages) ==
+                        normalized_pages(restored_usb_pages) and
+                        restored_web_items == restored_usb_items,
+                        "restored Target projection differs between Web "
+                        "and native USB")
+                    http_exchange = {
+                        "tested": True,
+                        "reason": "none",
+                        "index_status": index_status,
+                        "index_content_type": index_type,
+                        "index_bytes": len(index_body),
+                        "api_status": connect_status,
+                        "api_content_type": connect_type,
+                        "transport": web_connect.get("transport"),
+                        "scopes": web_connect.get("scopes"),
+                        "capabilities": web_connect.get("capabilities"),
+                        "requests_handled": http_request_count,
+                        "session_projection": {
+                            "items": len(web_sessions),
+                            "pages": len(web_session_pages),
+                            "usb_parity": True,
+                        },
+                        "target_projection": {
+                            "items": len(web_targets),
+                            "pages": len(web_target_pages),
+                            "usb_parity": True,
+                        },
+                        "compare_projection": {
+                            "items": len(web_compared),
+                            "pages": len(web_compare_pages),
+                            "usb_parity": True,
+                        },
+                        "confirmed_mutation": {
+                            "target_id": target_id,
+                            "favorite_before": favorite_before,
+                            "favorite_restored": favorite_before,
+                            "revision_before": revision_before,
+                            "revision_after": revision_before + 2,
+                            "generation_before": generation_before,
+                            "generation_after": generation_before + 2,
+                            "first_status_samples": len(first_samples),
+                            "restore_status_samples": len(restore_samples),
+                            "confirmation_replay_rejected": True,
+                            "atomic_commits": 2,
+                            "write_calls_per_commit": 3,
+                            "exact_cid": EXPECTED_CID,
+                            "usb_projection_parity_after_restore": True,
+                        },
+                        "expected_ssid_sha256": hashlib.sha256(
+                            expected_ssid.encode("ascii")).hexdigest(),
+                        "credential_exposed": False,
+                    }
+                finally:
+                    expected_passphrase = ""
+                    host_wifi["restore_attempted"] = True
+                    try:
+                        wifi_guard.restore()
+                    finally:
+                        host_wifi["restored"] = wifi_guard.restored
+                        record["host_wifi"] = host_wifi
+                        write_json(args.output / "run.json", record)
+                require(host_wifi["restored"] is True,
+                        "host Wi-Fi restoration was not proven")
+                record["http_exchange_tested"] = True
+                record["http_exchange_reason"] = "none"
+                record["http_exchange"] = http_exchange
             time.sleep(1.0)
             stable = web_state(device)
             require(stable.get("authorized") is True and
                     stable.get("server_active") is True and
                     stable.get("generation") == active.get("generation") and
-                    stable.get("requests_handled") == 0 and
+                    stable.get("requests_handled") ==
+                    (http_exchange.get("requests_handled", 0)
+                     if http_exchange_requested else 0) and
                     stable.get("requests_rejected") == 0 and
                     stable.get("lease_mask") == 15,
                     f"idle Web session did not remain stable: {stable}")
@@ -539,6 +1067,7 @@ def main() -> int:
                     stopped.get("server_active") is False and
                     stopped.get("protocol_connected") is False and
                     stopped.get("credential_present") is False and
+                    stopped.get("hil_seed_armed") is False and
                     stopped.get("stop_reason") == "user" and
                     stopped.get("cleanup_complete") is True and
                     stopped.get("targets_suspended") is False and
@@ -554,10 +1083,22 @@ def main() -> int:
             require(released.get("authorized") is False and
                     released.get("server_active") is False and
                     released.get("credential_present") is False and
+                    released.get("hil_seed_armed") is False and
                     released.get("cleanup_complete") is True and
                     released.get("survey_worker_suspended") is False and
                     released.get("lease_mask") == 0,
                     f"Web resources survived Targets teardown: {released}")
+            hil_end: dict[str, Any] = {}
+            if http_exchange_requested:
+                hil_end = query(
+                    device, f"hil.end {hil_session_id}".encode("ascii"),
+                    "leshy.hil.session.v1", "ended")
+                require(
+                    hil_end.get("status") == "ended" and
+                    hil_end.get("session_id") == hil_session_id and
+                    hil_end.get("active") is False,
+                    f"HIL session was not closed: {hil_end}")
+                hil_session_started = False
             safe = query(device, b"hardware.safe-outputs",
                          "leshy.hardware.safe-outputs.v1", "state")
             require(safe.get("buzzer_inactive") is True and
@@ -597,9 +1138,26 @@ def main() -> int:
             "safe_outputs": safe,
             "input": inputs,
             "cleanup": cleanup,
-            "storage_write_commands": 0,
+            "host_wifi": host_wifi,
+            "http_exchange": http_exchange,
+            "storage_write_commands": (2 if http_exchange_requested else 0),
+            "expected_atomic_commits": (
+                2 if http_exchange_requested else 0),
+            "expected_write_calls_per_commit": (
+                3 if http_exchange_requested else 0),
             "raw_radio_tx_commands": 0,
         })
+        if http_exchange_requested:
+            record["hil_session"] = {
+                "begin": hil_begin,
+                "invalid_seed": invalid_seed,
+                "seed": seed_armed,
+                "seed_replay": seed_replay,
+                "seeded_state": seeded_state,
+                "end": hil_end,
+                "seed_recorded": False,
+                "credential_recorded": False,
+            }
         write_json(args.output / "run.json", record)
         artifact_manifest(args.output)
         print(json.dumps({
@@ -611,7 +1169,25 @@ def main() -> int:
         }, sort_keys=True))
         return 0
     except (Exception, KeyboardInterrupt) as error:
+        if (wifi_guard is not None and wifi_guard.snapshot is not None and
+                not wifi_guard.restored):
+            host_wifi["restore_attempted"] = True
+            try:
+                wifi_guard.restore()
+            except Exception as restore_error:
+                host_wifi["restore_error"] = type(restore_error).__name__
+            host_wifi["restored"] = wifi_guard.restored
+            record["host_wifi"] = host_wifi
         if device is not None:
+            if hil_session_started:
+                try:
+                    query(
+                        device,
+                        f"hil.end {hil_session_id}".encode("ascii"),
+                        "leshy.hil.session.v1", "ended", timeout=2.0)
+                    hil_session_started = False
+                except Exception:
+                    pass
             try:
                 device.close()
             except (OSError, serial.SerialException):

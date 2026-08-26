@@ -776,6 +776,22 @@ Installed partition preflight отдельно совпадает с `339bda68�
 выполняется. `E-HIL-181` принимает только lifecycle и cleanup, двигает cadence до 2/15
 и явно оставляет actual HTTP traffic следующему physical gate.
 
+Pending checkpoint HTTP parity `RB-M165`: production candidate
+`0.182.0-companion-web-http-parity` использует 222 816 B static RAM, 3 360 828 B
+linked flash и app/factory images 3 361 328/3 426 864 B. Против exact 0.181 это
++16 B static RAM, +1 220 B linked flash и +1 216/+1 216 B images. Firmware delta —
+один one-shot buffer entropy HIL 16 bytes и exact guards parse/scrub/scope; обычный
+product start сохраняет credentials от hardware RNG. Host-only pagination, сравнение
+native USB, HTTP и state machine восстановления Wi-Fi macOS не входят в firmware
+budget. Exact SHA-256 firmware/factory/ELF/map/built-partitions:
+`b7a1eea19c73c2d4fbd2be6487564b5a92e0e5cabff12bbe4ac92f6618692c5c`/
+`bee589ee217579f3371c1ea2417ed78298ee0b716b2adfcb79e3e8baf5ad8a69`/
+`e7452bf96285200b315b27e1532e8607cf1edfaa6c72e985a1969f831ff1bbee`/
+`a2f8eb2aa6e5a3e3ac72cb894cf3be18fcbbb94a4f802aa13d12ab2edbbb95d2`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+Это только host/build evidence: board не прошивалась, состояние Wi-Fi host не
+менялось, runtime heap повторно не заявляется, physical cadence остаётся 2/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

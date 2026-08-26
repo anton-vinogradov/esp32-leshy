@@ -187,6 +187,26 @@ to admit the Wi-Fi driver on the zero-PSRAM profile; Targets returns on stop and
 worker returns after leaving Targets. The one-time network core may remain initialized,
 but it retains no listener, AP, credential or grant.
 
+Candidate 0.182 adds a physical-HIL-only observability boundary without changing that
+user contract. `companion.web.hil-seed` is admitted only inside an exact active HIL
+session, after the Local Web consent overlay is staged, before authorization and only
+once. It accepts exactly 16 non-zero entropy bytes, returns only an armed/not-armed
+result plus the public SoftAP MAC, and never returns the resulting SSID or passphrase.
+Start consumes and scrubs the value; stop, HIL end and every failure also scrub it.
+Normal user starts still call the ESP hardware RNG and cannot select this path.
+
+The paired macOS runner requires the exact serial port, Wi-Fi interface, enabled
+network service and expected SoftAP MAC as explicit arguments. It snapshots only power
+and association, joins the derived temporary AP, disables ambient HTTP proxies, walks
+every page of Session/Target/Compare over HTTP, compares the same pages over native
+USB, and performs a Favorite toggle/restore through two confirmed atomic mutations.
+It never records the entropy, temporary passphrase or prior SSID, refuses to overwrite
+an existing preferred network with the temporary SSID and removes the HIL profile it
+created. A `finally` path must prove the prior powered-off, saved-network, or
+powered-on/disconnected state was restored before the run may pass. This is a
+host/build-ready gate definition only;
+physical HTTP parity is not accepted until its retained run passes.
+
 ## Trust and lifecycle rules
 
 - A local cable or loopback socket is transport locality, not authorization.
@@ -237,3 +257,10 @@ discovery/Cardputer opens and final lease 0. Two failed precursors remain eviden
 the real Wi-Fi allocation and premature worker-restore defects. The host deliberately
 does not join the temporary AP, so no physical HTTP request or USB/Web payload parity is
 claimed by this checkpoint.
+
+`0.182.0-companion-web-http-parity` is currently a host/build candidate. Its
+one-shot HIL entropy parser, zeroization, scope guards, deterministic credential test
+vector, explicit macOS network capture/restore state machine, proxy-free HTTP client,
+preferred-network collision/removal, full pagination/parity and confirmed
+mutation/restore assertions pass host checks. No board flash or host-network change is
+claimed by the candidate checkpoint.

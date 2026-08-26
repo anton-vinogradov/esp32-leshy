@@ -155,6 +155,27 @@ class CompanionWebDeltaRunnerTests(unittest.TestCase):
         self.assertLess(
             source.index("read_flash_with_retry("),
             source.index("flash_candidate(args.port"))
+        for marker in (
+            '"--allow-host-wifi-change"',
+            'parser.add_argument("--wifi-interface")',
+            'parser.add_argument("--wifi-service")',
+            'parser.add_argument("--softap-mac")',
+            '"pending_guarded_host_wifi_exchange"',
+            'f"companion.web.hil-seed {entropy.hex()}"',
+            '"leshy.companion.web.seed.v1", "armed"',
+            'wifi_guard.capture()',
+            'wifi_guard.connect(expected_ssid, expected_passphrase)',
+            'wifi_guard.restore()',
+            'normalized_pages(web_session_pages)',
+            'normalized_pages(web_target_pages)',
+            'normalized_pages(web_compare_pages)',
+            '"target.mutation.preview", "web-first-preview"',
+            '"target.mutation.confirm", "web-restore-confirm"',
+            'assert_atomic_mutation_state(',
+            '"transient_passphrase_recorded": False',
+            '"credential_recorded": False',
+        ):
+            self.assertIn(marker, source)
 
 
 if __name__ == "__main__":
