@@ -1,0 +1,178 @@
+{
+  "schema": "leshy.antenna_status_leds_hil.summary.v1",
+  "status": "pass",
+  "evidence_ids": [
+    "E-BUILD-148",
+    "E-AUTO-119",
+    "E-HIL-178",
+    "E-UX-053"
+  ],
+  "firmware_source_commit": "c2413c9962998281dd54080a1fb67f54db8776b3",
+  "harness_commits": [
+    "496f7d90fe2317f3a7897bc12ba3cb3e4768cecf",
+    "fc689ef851cf8b80e8346a7e8e85600190fa7806"
+  ],
+  "candidate": {
+    "version": "0.171.0-antenna-status-leds",
+    "firmware_sha256": "77d14d9ac10f64cb60fb97f2f3b6b3986d2cdac71085b454d6d25267794e0784",
+    "factory_sha256": "04bb4a4fb78cd4de7e12e5a2c4b43311e8e1af097c8e5181173a0bc08500a0fe",
+    "app_elf_sha256": "e5189daa424da4e2ca04e5e94390f19e9ef3d483c894b10a62c8da9da08d247c",
+    "map_sha256": "04e897a24e7bb68e1933bb95d19b9c30a546ae56a8a598f9138256ad9ac1a8b4",
+    "partitions_sha256": "325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3",
+    "firmware_bytes": 3175536,
+    "factory_bytes": 3241072,
+    "static_ram_bytes": 214696,
+    "linked_flash_bytes": 3175040
+  },
+  "board": {
+    "id": "board-01",
+    "port": "/dev/cu.usbmodem2101",
+    "mac": "1c:db:d4:87:90:d4",
+    "exact_cid": "FE343253440000002000000055019CB7",
+    "flash_count": 1,
+    "port_discovery_calls": 0,
+    "cardputer_ports_opened": 0
+  },
+  "contract": {
+    "gpio": 1,
+    "pixel_count": 4,
+    "pixels": [
+      {
+        "index": 0,
+        "receiver": "cc1101"
+      },
+      {
+        "index": 1,
+        "receiver": "nrf24-slot-1"
+      },
+      {
+        "index": 2,
+        "receiver": "nrf24-slot-2"
+      },
+      {
+        "index": 3,
+        "receiver": "nrf24-slot-3"
+      }
+    ],
+    "brightness_raw_ladder": [
+      0,
+      2,
+      3,
+      5,
+      8,
+      12
+    ],
+    "default_brightness_raw": 2,
+    "active_color": "green",
+    "fault_color": "red",
+    "inactive_color": "off",
+    "safe_mode": "all_off",
+    "update_policy": "state_change_only",
+    "rx_only": true
+  },
+  "runtime": {
+    "nrf24": {
+      "status": "ready",
+      "state": "running",
+      "modules": 3,
+      "active_slot_mask": 7,
+      "all_available_antennas": true,
+      "ui_receive_mask": 14,
+      "ui_fault_mask": 0,
+      "rx_only": true,
+      "tx_mode_entries": 0,
+      "tx_payload_commands": 0,
+      "cc_command_strobes": 0,
+      "storage_writes": 0
+    },
+    "cc1101": {
+      "status": "ready",
+      "state": "running",
+      "partnum": 0,
+      "version": 20,
+      "ui_receive_mask": 1,
+      "ui_fault_mask": 0,
+      "rx_only": true,
+      "tx_strobes": 0,
+      "pa_table_writes": 0,
+      "fifo_writes": 0,
+      "rejected_strobes": 0,
+      "storage_writes": 0
+    }
+  },
+  "preference": {
+    "first_observed_raw": 2,
+    "all_levels_exercised": [
+      0,
+      2,
+      3,
+      5,
+      8,
+      12
+    ],
+    "temporary_raw_after_interrupted_camera_attempt": 12,
+    "restore_only_requested_raw": 2,
+    "final_raw_after_hardware_reset": 2
+  },
+  "final": {
+    "page": "home",
+    "runtime_owner": "none",
+    "lease_mask": 0,
+    "antenna_led_brightness_raw": 2,
+    "antenna_led_receive_mask": 0,
+    "antenna_led_fault_mask": 0,
+    "input_status": "ready",
+    "input_read_errors": 0,
+    "input_queue_drops": 0,
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true,
+    "radio_tx_commands": 0,
+    "storage_generation": 161,
+    "storage_observations": 59,
+    "storage_physical_write_calls": 0,
+    "home_png_sha256": "80dc7705ee02c8d6934f3d36e8071556779e740e6b95b169cf4f4813ac4efc1e",
+    "home_rgb565_sha256": "20d4b662af75726c839f1013e08baeea20e4943042ac67f2342defbf235fc9b6"
+  },
+  "camera": {
+    "status": "unavailable_permission_denied",
+    "required_for_acceptance": false,
+    "physical_color_claim": false,
+    "reason": "AVFoundation camera access was not granted; receiver-to-pixel telemetry and the state-change driver contract are accepted, but no retained photon/color photograph is claimed."
+  },
+  "run_lineage": [
+    {
+      "run": "work/outputs/antenna-status-leds-0.171-c2413c9/run.json",
+      "run_sha256": "536f6504e1e109df5e166b6a61b5c62a326e670c369c3e69f62a079bb297df16",
+      "status": "failed",
+      "reason": "runner assumed a stale Home index; no neighboring function was opened",
+      "flash_count": 1
+    },
+    {
+      "run": "work/outputs/antenna-status-leds-0.171-496f7d9-02/run.json",
+      "run_sha256": "5fa471c790c6b3a4fcd8537113594c9a0e33ad5fc056ff6e03ea08df1c150ac5",
+      "status": "failed",
+      "reason": "optional AVFoundation capture was denied by macOS privacy",
+      "flash_count": 0
+    },
+    {
+      "run": "work/outputs/antenna-status-leds-0.171-496f7d9-03/run.json",
+      "run_sha256": "b8335c27924427006fa6bf29285224918e97cfcaa25f3a47527b713f83b7b3c5",
+      "status": "pass",
+      "reason": "brightness ladder and both receive-only runtime mappings",
+      "flash_count": 0
+    },
+    {
+      "run": "work/outputs/antenna-status-leds-0.171-fc689ef-04/run.json",
+      "run_sha256": "cafd5c0c3a4e1585217e66ebb939b6be7c995e13f6e4d8d3482272746948f957",
+      "status": "pass",
+      "reason": "restore-only stock brightness and reset persistence",
+      "flash_count": 0
+    }
+  ],
+  "physical_cadence": {
+    "accepted": 15,
+    "full_gate_at": 15,
+    "full_checkpoint_due": true
+  }
+}
