@@ -89,6 +89,8 @@
 #include "platform/arduino/BoardWifiPassiveCapture.h"
 #include "platform/arduino/DisposableOtaLittleFs.h"
 #include "platform/arduino/RamSessionStoreIo.h"
+#include "services/companion/CompanionProtocol.h"
+#include "services/companion/CompanionReadAdapter.h"
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
 #include "services/power/PowerSafetyPolicy.h"
@@ -497,6 +499,7 @@ bool targetsMergeFixtureProductStateTouched = false;
 TargetProductBinding targetsBaselineBinding{};
 TargetProductBinding targetsCurrentBinding{};
 bool targetsComparisonLoaded = false;
+leshy1::services::companion::CompanionConnection usbCompanionConnection{};
 std::uint32_t targetsStateGeneration = 0;
 leshy1::storage::RecoveryChoice targetsStateHead =
     leshy1::storage::RecoveryChoice::None;
@@ -1166,16 +1169,20 @@ const char* capturePersistStateName(CapturePersistState state) {
     return "failed";
 }
 constexpr std::size_t kConsoleCommandCapacity = 192;
+constexpr std::size_t kUsbCommandCapacity =
+    leshy1::services::companion::kCompanionMaxFrameBytes + 1U;
 constexpr char kLongestConsoleCommand[] =
     "storage.littlefs.reset recover read-only "
     "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff "
     "s3-littlefs-reset-20260818-b6 6";
 static_assert(sizeof(kLongestConsoleCommand) <= kConsoleCommandCapacity,
               "console command buffer cannot hold the longest command");
-char usbCommand[kConsoleCommandCapacity] = {};
+char usbCommand[kUsbCommandCapacity] = {};
 char uartCommand[kConsoleCommandCapacity] = {};
 std::size_t usbLength = 0;
 std::size_t uartLength = 0;
+bool usbCommandOverflow = false;
+bool uartCommandOverflow = false;
 std::uint8_t lastInputRaw = 0xFF;
 Pcf8574ButtonInput physicalButtonInput;
 
@@ -4685,6 +4692,9 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
 }
 
 void releaseTargetsProduct() {
+    // A companion grant is bound to this exact foreground snapshot. Leaving
+    // Targets invalidates it; a later Targets instance requires a new connect.
+    usbCompanionConnection = {};
     delete targetsProductRuntime;
     targetsProductRuntime = nullptr;
     targetsHeapFreeAfter = static_cast<std::uint32_t>(
@@ -24916,12 +24926,153 @@ bool commandAllowedDuringSafetyStop(const char* command) {
            std::strcmp(command, "storage.product.boot-recovery") == 0;
 }
 
-void handleCommand(Stream& reply, const char* command) {
+void addCompanionSessionBinding(
+    const TargetProductBinding& binding,
+    leshy1::services::companion::CompanionReadContext* context) {
+    if (context == nullptr || binding.session == nullptr ||
+        binding.generation == 0 ||
+        context->sessionCount >= context->sessions.size()) {
+        return;
+    }
+    leshy1::domain::targets::SourceId sourceId{};
+    if (!leshy1::services::targets::sourceIdForSession(
+            *binding.session, &sourceId)) {
+        return;
+    }
+    auto& output = context->sessions[context->sessionCount++];
+    output.source = {sourceId, binding.generation};
+    output.session = binding.session;
+}
+
+leshy1::services::companion::CompanionReadContext companionReadContext() {
+    leshy1::services::companion::CompanionReadContext context{};
+    if (uiController.page() != 7 || targetsProductRuntime == nullptr ||
+        std::strcmp(targetsProductStatus, "ready") != 0) {
+        return context;
+    }
+    if (targetsComparisonLoaded) {
+        addCompanionSessionBinding(targetsBaselineBinding, &context);
+    }
+    addCompanionSessionBinding(targetsCurrentBinding, &context);
+    context.targets = &targetsProductRuntime->workspace.catalog;
+    if (targetsComparisonLoaded && context.sessionCount == 2 &&
+        targetsProductRuntime->workspace.comparison.compared()) {
+        context.comparison = &targetsProductRuntime->workspace.comparison;
+    }
+    return context;
+}
+
+leshy1::services::companion::CompanionScopeMask companionAvailableScopes(
+    leshy1::services::companion::CompanionCapabilityMask capabilities) {
+    using leshy1::services::companion::CompanionCapability;
+    using leshy1::services::companion::CompanionScope;
+    using leshy1::services::companion::companionCapabilityMask;
+    using leshy1::services::companion::companionScopeMask;
+    leshy1::services::companion::CompanionScopeMask scopes = 0;
+    if ((capabilities &
+         companionCapabilityMask(CompanionCapability::SessionList)) != 0 &&
+        (capabilities &
+         companionCapabilityMask(CompanionCapability::SessionDetail)) != 0) {
+        scopes |= companionScopeMask(CompanionScope::SessionRead);
+    }
+    if ((capabilities &
+         companionCapabilityMask(CompanionCapability::TargetList)) != 0 &&
+        (capabilities &
+         companionCapabilityMask(CompanionCapability::TargetDetail)) != 0) {
+        scopes |= companionScopeMask(CompanionScope::TargetRead);
+    }
+    if ((capabilities &
+         companionCapabilityMask(CompanionCapability::TargetCompare)) != 0) {
+        scopes |= companionScopeMask(CompanionScope::TargetCompare);
+    }
+    return scopes;
+}
+
+void writeCompanionFrame(Stream& reply, const char* frame,
+                         std::size_t length) {
+    if (frame != nullptr && length != 0) {
+        reply.write(reinterpret_cast<const std::uint8_t*>(frame), length);
+    }
+}
+
+void emitCompanionConnectParseError(
+    Stream& reply,
+    leshy1::services::companion::CompanionParseStatus status) {
+    char frame[192] = {};
+    const int length = std::snprintf(
+        frame, sizeof(frame),
+        "{\"schema\":\"leshy.companion.response.v1\",\"kind\":\"error\","
+        "\"request_id\":\"\",\"status\":\"error\",\"reason\":\"%s\"}\n",
+        leshy1::services::companion::companionParseReason(status));
+    if (length > 0 && static_cast<std::size_t>(length) < sizeof(frame)) {
+        writeCompanionFrame(reply, frame, static_cast<std::size_t>(length));
+    }
+}
+
+void handleUsbCompanionFrame(Stream& reply, const char* frame) {
+    namespace companion = leshy1::services::companion;
+    const std::size_t frameLength = std::strlen(frame);
+    companion::CompanionConnectRequest connectRequest{};
+    const companion::CompanionParseStatus connectStatus =
+        companion::parseCompanionConnectRequest(
+            frame, frameLength, &connectRequest);
+    std::array<char, companion::kCompanionMaxFrameBytes + 1U> response{};
+    std::size_t responseLength = 0;
+    if (connectStatus == companion::CompanionParseStatus::Parsed) {
+        const companion::CompanionReadContext context = companionReadContext();
+        const companion::CompanionCapabilityMask capabilities =
+            companion::companionReadCapabilities(context);
+        companion::CompanionConnectionPolicy policy{};
+        policy.deviceSessionScopes = companion::kCompanionS65ReadScopes;
+        policy.availableScopes = companionAvailableScopes(capabilities);
+        policy.availableCapabilities = capabilities;
+        usbCompanionConnection = companion::negotiateCompanionConnection(
+            connectRequest, policy);
+        if (companion::encodeCompanionConnectResponse(
+                usbCompanionConnection,
+                companion::CompanionTransport::UsbSerial, response.data(),
+                response.size(), &responseLength)) {
+            writeCompanionFrame(reply, response.data(), responseLength);
+        }
+        return;
+    }
+
+    companion::CompanionReadRequest readRequest{};
+    const companion::CompanionReadParseStatus readStatus =
+        companion::parseCompanionReadRequest(
+            frame, frameLength, &readRequest);
+    if (readStatus == companion::CompanionReadParseStatus::Parsed) {
+        const companion::CompanionReadContext context = companionReadContext();
+        if (companion::encodeCompanionReadResponse(
+                usbCompanionConnection, context, readRequest, response.data(),
+                response.size(), &responseLength)) {
+            writeCompanionFrame(reply, response.data(), responseLength);
+        }
+        return;
+    }
+
+    // Routing only selects the most useful parse reason. Both parsers remain
+    // authoritative before any scope can be granted or projection executed.
+    if (std::strstr(frame, "\"kind\":\"connect\"") != nullptr) {
+        emitCompanionConnectParseError(reply, connectStatus);
+    } else if (companion::encodeCompanionReadParseError(
+                   readStatus, response.data(), response.size(),
+                   &responseLength)) {
+        writeCompanionFrame(reply, response.data(), responseLength);
+    }
+}
+
+void handleCommand(Stream& reply, const char* command,
+                   bool companionAllowed) {
     if (safetySupervisor.latched() &&
         !commandAllowedDuringSafetyStop(command)) {
         reply.println(
             "{\"schema\":\"leshy.safety.v1\",\"kind\":\"blocked\","
             "\"reason\":\"safety_latched\"}");
+        return;
+    }
+    if (companionAllowed && command[0] == '{') {
+        handleUsbCompanionFrame(reply, command);
         return;
     }
     if (std::strncmp(command, "hil.begin ", 10) == 0) {
@@ -25371,18 +25522,42 @@ void handleCommand(Stream& reply, const char* command) {
     }
 }
 
-void poll(Stream& stream, char* command, std::size_t& length, std::size_t capacity) {
+void poll(Stream& stream, char* command, std::size_t& length,
+          std::size_t capacity, bool companionAllowed, bool& overflow) {
     while (stream.available() > 0) {
         const char value = static_cast<char>(stream.read());
         if (value == '\r') continue;
         if (value == '\n') {
-            command[length] = '\0';
-            handleCommand(stream, command);
+            if (overflow) {
+                if (companionAllowed) {
+                    std::array<char,
+                               leshy1::services::companion::
+                                   kCompanionMaxFrameBytes + 1U> response{};
+                    std::size_t responseLength = 0;
+                    if (leshy1::services::companion::
+                            encodeCompanionReadParseError(
+                                leshy1::services::companion::
+                                    CompanionReadParseStatus::TooLarge,
+                                response.data(), response.size(),
+                                &responseLength)) {
+                        writeCompanionFrame(
+                            stream, response.data(), responseLength);
+                    }
+                } else {
+                    stream.println(
+                        "{\"schema\":\"leshy.boot.v1\",\"kind\":\"error\","
+                        "\"reason\":\"frame_too_large\"}");
+                }
+            } else {
+                command[length] = '\0';
+                handleCommand(stream, command, companionAllowed);
+            }
             length = 0;
+            overflow = false;
         } else if (length + 1 < capacity) {
-            command[length++] = value;
+            if (!overflow) command[length++] = value;
         } else {
-            length = 0;
+            overflow = true;
         }
     }
 }
@@ -25784,8 +25959,10 @@ void loop() {
     // fake pulse. Commands remain buffered by USB/UART and are answered after
     // the terminal gap; no evidence path is allowed to perturb the waveform.
     if (!rawPulseTimingCritical) {
-        poll(Serial, usbCommand, usbLength, sizeof(usbCommand));
-        poll(Serial0, uartCommand, uartLength, sizeof(uartCommand));
+        poll(Serial, usbCommand, usbLength, sizeof(usbCommand), true,
+             usbCommandOverflow);
+        poll(Serial0, uartCommand, uartLength, sizeof(uartCommand), false,
+             uartCommandOverflow);
     }
     TouchPoint touchPress;
     const std::uint64_t touchStartedUs =

@@ -11,6 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 HEADER = ROOT / "firmware/leshy1/src/services/companion/CompanionProtocol.h"
 SOURCE = ROOT / "firmware/leshy1/src/services/companion/CompanionProtocol.cpp"
 TEST = ROOT / "tests/native/companion_protocol_tests.cpp"
+READ_HEADER = ROOT / "firmware/leshy1/src/services/companion/CompanionReadAdapter.h"
+READ_SOURCE = ROOT / "firmware/leshy1/src/services/companion/CompanionReadAdapter.cpp"
+READ_TEST = ROOT / "tests/native/companion_read_adapter_tests.cpp"
+ARDUINO = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 ACTION = ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.cpp"
 DOCS = (
     ROOT / "docs/v1/COMPANION_PROTOCOL.md",
@@ -29,6 +33,10 @@ def main() -> int:
         header = HEADER.read_text(encoding="utf-8")
         source = SOURCE.read_text(encoding="utf-8")
         tests = TEST.read_text(encoding="utf-8")
+        read_header = READ_HEADER.read_text(encoding="utf-8")
+        read_source = READ_SOURCE.read_text(encoding="utf-8")
+        read_tests = READ_TEST.read_text(encoding="utf-8")
+        arduino = ARDUINO.read_text(encoding="utf-8")
         action = ACTION.read_text(encoding="utf-8")
         docs = [path.read_text(encoding="utf-8") for path in DOCS]
     except OSError as error:
@@ -102,6 +110,65 @@ def main() -> int:
         require(failures, forbidden not in combined,
                 f"companion envelope bypasses its boundary: {forbidden}")
 
+    read_combined = read_header + read_source
+    for forbidden in (
+        '#include "drivers/',
+        '#include "storage/',
+        '#include "platform/',
+        "Serial.",
+        "SPI.",
+        "SD.",
+        "WiFi.",
+    ):
+        require(failures, forbidden not in read_combined,
+                f"companion read adapter bypasses its boundary: {forbidden}")
+    for marker in (
+        "CompanionReadContext",
+        "TargetCatalog* targets",
+        "TargetComparisonResult* comparison",
+        "parseCompanionReadRequest",
+        "encodeCompanionReadResponse",
+        "session.list",
+        "session.detail",
+        "target.list",
+        "target.detail",
+        "target.compare",
+        "next_offset",
+        "OffsetOutOfRange",
+    ):
+        require(failures, marker in read_combined,
+                f"missing read adapter contract: {marker}")
+    for marker in (
+        "testEveryTruncatedFrameIsRejected",
+        "testAllReadOnlyProjectionsStayBounded",
+        "testAuthorizationAndExactCoordinatesFailClosed",
+        "testAllOrNothingEncodingAndParseErrors",
+        "offset_out_of_range",
+    ):
+        require(failures, marker in read_tests,
+                f"missing read adapter native coverage: {marker}")
+
+    for marker in (
+        "handleUsbCompanionFrame",
+        "companionReadContext",
+        'uiController.page() != 7',
+        'std::strcmp(targetsProductStatus, "ready") != 0',
+        "policy.availableCapabilities = capabilities",
+        "usbCompanionConnection = {}",
+        "kUsbCommandCapacity",
+        "usbCommandOverflow",
+        "poll(Serial, usbCommand",
+        "poll(Serial0, uartCommand",
+    ):
+        require(failures, marker in arduino,
+                f"missing native USB wiring contract: {marker}")
+    require(failures,
+            "sizeof(usbCommand), true" in arduino and
+            "sizeof(uartCommand), false" in arduino,
+            "companion JSON must be enabled only on native USB, not Serial0")
+    require(failures, "handleUsbCompanionFrame(Serial0" not in arduino,
+            "Serial0 must never enter the companion transport")
+
     for marker in (
         "testEveryTruncatedFrameIsRejected",
         "testParserFailsClosedWithoutPublishingPartialOutput",
@@ -125,6 +192,10 @@ def main() -> int:
             "scope_unavailable",
             "scope_dependency_missing",
             "target.compare",
+            "target.detail",
+            "next_offset",
+            "offset_out_of_range",
+            "Serial0",
         ):
             require(failures, marker in text,
                     f"{path.name} omits protocol marker {marker}")

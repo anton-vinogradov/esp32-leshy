@@ -35,11 +35,11 @@ non-ASCII envelope strings, oversized/truncated/trailing input, другая sch
 получает стабильный `scope_unavailable` для известной возможности, ещё не
 реализованной или не разрешённой.
 
-| Scope | Значение | Первый slice S6.5 |
+| Scope | Значение | Текущий USB slice S6.5 |
 |---|---|---|
-| `session.read` | list/open immutable projections Session | доступен, если выдан device session |
-| `target.read` | list/open projections Target и evidence | доступен, если выдан device session |
-| `target.compare` | invoke/read `target.compare` над exact bindings Session | доступен; также требует оба read scope |
+| `session.read` | list/open immutable projections Session | доступен только из live ready snapshot экрана Targets |
+| `target.read` | list/open projections Target и evidence | доступен только из того же live catalog Targets |
+| `target.compare` | invoke/read `target.compare` над exact bindings Session | доступен только для уже вычисленной exact пары; также требует оба read scope |
 | `target.mutate` | typed mutations metadata/correlation/merge Target | известен, недоступен до slice confirmed mutation |
 | `library.export` | versioned offline export | известен, недоступен до slice export |
 | `connectivity.manage` | lifecycle local connectivity/secrets | известен, недоступен до slice connectivity |
@@ -78,11 +78,49 @@ granted scopes/capabilities и одну стабильную reason: `scope_deni
 `scope_unavailable` или `scope_dependency_missing`. Encoding также all-or-nothing:
 при малом caller buffer length равна нулю и partial bytes не выдаются.
 
+## Набор read-only requests
+
+После успешного connect USB принимает следующие exact формы request. Порядок полей
+не важен, но у каждой operation exact набор полей: missing, duplicate, unknown или
+поля другой operation отклоняются. IDs содержат 32 hex digits в любом регистре,
+generations — ненулевые integers.
+
+```json
+{"schema":"leshy.companion.request.v1","kind":"session.list","request_id":"s1","offset":0}
+{"schema":"leshy.companion.request.v1","kind":"session.detail","request_id":"s2","source_id":"0123456789ABCDEF0123456789ABCDEF","generation":161}
+{"schema":"leshy.companion.request.v1","kind":"target.list","request_id":"t1","offset":0}
+{"schema":"leshy.companion.request.v1","kind":"target.detail","request_id":"t2","target_id":"0123456789ABCDEF0123456789ABCDEF","section":"summary","offset":0}
+{"schema":"leshy.companion.request.v1","kind":"target.compare","request_id":"c1","baseline_source_id":"0123456789ABCDEF0123456789ABCDEF","baseline_generation":160,"current_source_id":"FEDCBA9876543210FEDCBA9876543210","current_generation":161,"offset":0}
+```
+
+У `target.detail` пять sections: `summary`, `notes`, `tags`, `identities` и
+`evidence`. Variable text возвращается как hex (`name_hex` или `encoding:"hex"`),
+чтобы любые bytes оставались deterministic без роста JSON escapes. Lists и длинные
+sections page-bounded:
+
+- `session.list` возвращает целиком bounded пару из двух Sessions;
+- `target.list` и `target.compare` возвращают один item на frame;
+- `notes` возвращает не более 80 source bytes на frame;
+- `tags`, `identities` и `evidence` возвращают не более двух items на frame.
+
+Каждый paged success содержит `offset` и `next_offset`; `null` означает конец.
+Caller повторяет exact coordinates request с этим offset. Offset за текущей section
+возвращает `offset_out_of_range`. Отсутствие exact Session/Target, pair, grant или
+live capability возвращает стабильную error без projection payload.
+
+Adapter читает только две stopped Session bindings, Target catalog и существующий
+comparison object, которыми уже владеет foreground product Targets. Он не mount-ит
+storage, не перечитывает catalog, не пересчитывает comparison, не меняет metadata и
+не касается radio. Выход из Targets уничтожает working set и сбрасывает USB grant;
+для нового instance Targets обязателен новый connect. JSON companion frames
+принимаются только native USB CDC. `Serial0` остаётся legacy diagnostic console и не
+может negotiated этот protocol.
+
 ## Правила trust и lifecycle
 
 - Local cable или loopback socket задаёт locality transport, а не authorization.
-- Connection связан с одной явной permission mask device session и теряет все scopes
-  при закрытии, reset или revoke этой session.
+- Connection связан с одной явной permission mask device session и exact foreground
+  snapshot Targets; выход, reset или revoke удаляет grant.
 - Capabilities рекламируются только после exact negotiation scopes; будущие
   недоступные функции не выдаются за работающие.
 - Слой не владеет storage, driver, radio, secrets или teardown application.
@@ -90,5 +128,6 @@ granted scopes/capabilities и одну стабильную reason: `scope_deni
   truncation golden frame, size limits, scope dependency/permission tests и
   deterministic encoding USB/Web.
 
-Следующий slice подключает `session.list/detail`, `target.list/detail` и
-`target.compare` к принятому envelope через явно выбранный USB port.
+Этот source/build slice подключает все пять read-only projections к native USB.
+Physical acceptance всё ещё требует delta HIL на явно выбранных board/port; Web,
+mutation, export или connectivity implementation этим не заявляются.

@@ -35,11 +35,11 @@ Scope recognition and scope availability are deliberately separate. This lets an
 older v1 client receive a stable `scope_unavailable` result for a known capability
 that is not implemented or granted yet.
 
-| Scope | Meaning | S6.5 first slice |
+| Scope | Meaning | Current S6.5 USB slice |
 |---|---|---|
-| `session.read` | list/open immutable Session projections | available when the device session grants it |
-| `target.read` | list/open Target and evidence projections | available when the device session grants it |
-| `target.compare` | invoke/read `target.compare` over exact Session bindings | available; also requires both read scopes |
+| `session.read` | list/open immutable Session projections | available only from the live, ready Targets snapshot |
+| `target.read` | list/open Target and evidence projections | available only from the same live Targets catalog |
+| `target.compare` | invoke/read `target.compare` over exact Session bindings | available only for the already-computed exact pair; also requires both read scopes |
 | `target.mutate` | typed Target metadata/correlation/merge mutations | known, unavailable until the confirmed-mutation slice |
 | `library.export` | versioned offline export | known, unavailable until the export slice |
 | `connectivity.manage` | manage local connectivity/secrets lifecycle | known, unavailable until the connectivity slice |
@@ -78,11 +78,49 @@ granted scopes or capabilities and one stable reason: `scope_denied`,
 `scope_unavailable`, or `scope_dependency_missing`. Encoding is also all-or-nothing:
 an undersized caller buffer receives length zero and no partial bytes.
 
+## Read-only request set
+
+After a successful connect, USB accepts the following exact request shapes. Fields
+are order-independent, but every operation has an exact field set: missing,
+duplicate, unknown, or fields belonging to another operation are rejected. IDs are
+32 uppercase/lowercase hex digits and generations are non-zero integers.
+
+```json
+{"schema":"leshy.companion.request.v1","kind":"session.list","request_id":"s1","offset":0}
+{"schema":"leshy.companion.request.v1","kind":"session.detail","request_id":"s2","source_id":"0123456789ABCDEF0123456789ABCDEF","generation":161}
+{"schema":"leshy.companion.request.v1","kind":"target.list","request_id":"t1","offset":0}
+{"schema":"leshy.companion.request.v1","kind":"target.detail","request_id":"t2","target_id":"0123456789ABCDEF0123456789ABCDEF","section":"summary","offset":0}
+{"schema":"leshy.companion.request.v1","kind":"target.compare","request_id":"c1","baseline_source_id":"0123456789ABCDEF0123456789ABCDEF","baseline_generation":160,"current_source_id":"FEDCBA9876543210FEDCBA9876543210","current_generation":161,"offset":0}
+```
+
+`target.detail` has five sections: `summary`, `notes`, `tags`, `identities`, and
+`evidence`. Variable text is returned as hex (`name_hex`, or `encoding:"hex"`) so
+all byte values remain deterministic without JSON escape growth. Lists and long
+sections are page-bounded:
+
+- `session.list` returns the complete bounded two-session pair;
+- `target.list` and `target.compare` return one item per frame;
+- `notes` returns at most 80 source bytes per frame;
+- `tags`, `identities`, and `evidence` return at most two items per frame.
+
+Every paged success contains `offset` and `next_offset`; `null` means complete.
+The caller repeats the exact request coordinates with that offset. An offset beyond
+the current section returns `offset_out_of_range`. A missing exact Session/Target,
+pair, grant, or live capability returns a stable error and no projection payload.
+
+The adapter reads only the two stopped Session bindings, Target catalog and existing
+comparison object already owned by the foreground Targets product. It does not mount
+storage, reload a catalog, recompute comparison, mutate metadata, or touch a radio.
+Leaving Targets destroys that working set and resets the USB grant; reconnecting to a
+new Targets instance is mandatory. JSON companion frames are accepted by native USB
+CDC only. `Serial0` remains the legacy diagnostic console and cannot negotiate this
+protocol.
+
 ## Trust and lifecycle rules
 
 - A local cable or loopback socket is transport locality, not authorization.
-- A connection is bound to one explicit device-session permission mask and loses all
-  scopes when that session closes, resets, or revokes access.
+- A connection is bound to one explicit device-session permission mask and the exact
+  foreground Targets snapshot; leaving it, reset, or revoke removes the grant.
 - Capabilities are advertised only after exact scope negotiation; unavailable future
   functions are not presented as working.
 - This layer owns no storage, driver, radio, secret, or application teardown path.
@@ -90,5 +128,6 @@ an undersized caller buffer receives length zero and no partial bytes.
   every truncation of a golden frame, size limits, scope dependency/permission tests,
   and deterministic USB/Web encoding.
 
-The next slice wires `session.list/detail`, `target.list/detail`, and
-`target.compare` to this accepted envelope over an explicitly selected USB port.
+This source/build slice wires all five read-only projections to native USB. Physical
+acceptance still requires the explicitly selected board/port delta HIL; no Web,
+mutation, export, or connectivity implementation is implied.
