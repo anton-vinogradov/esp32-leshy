@@ -137,6 +137,9 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument(
+        "--reuse-exact-flash", action="store_true",
+        help="verify and reuse an already flashed exact candidate")
     args = parser.parse_args()
 
     for path in (args.firmware, args.elf, args.map):
@@ -184,15 +187,17 @@ def main() -> int:
             "app_elf_sha256": app_identity,
         },
         "flash_count": 0,
+        "exact_flash_reused": args.reuse_exact_flash,
     }
     write_json(args.output / "run.json", record)
     cleanup: dict[str, Any] = {"attempted": False}
 
     try:
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        record["flash_count"] = 1
-        write_json(args.output / "run.json", record)
-        time.sleep(1.0)
+        if not args.reuse_exact_flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            record["flash_count"] = 1
+            write_json(args.output / "run.json", record)
+            time.sleep(1.0)
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             synchronize_console(device, 30.0)
             metrics_before = query(
@@ -277,7 +282,7 @@ def main() -> int:
             targets, target_pages = collect_pages(
                 device, "target.list", "target-list", {})
             require(1 <= len(targets) <= 16 and
-                    len(targets) == targets_state.get("target_count"),
+                    len(targets) == targets_state.get("catalog_count"),
                     f"target.list count mismatch: {len(targets)} {targets_state}")
             first_target = targets[0]["target_id"]
             summary = companion_request(device, request(
@@ -303,7 +308,7 @@ def main() -> int:
                     "current_source_id": current["source_id"],
                     "current_generation": current["generation"],
                 })
-            require(len(compared) == targets_state.get("target_count"),
+            require(len(compared) == targets_state.get("comparison_count"),
                     f"target.compare count mismatch: {len(compared)}")
 
             invalid_offset = companion_request(device, request(
