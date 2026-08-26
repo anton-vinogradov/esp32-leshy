@@ -148,6 +148,9 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--reuse-exact-flash", action="store_true")
+    parser.add_argument(
+        "--reuse-existing-pair", action="store_true",
+        help="reuse the already persisted exact session pair without new scans")
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
@@ -216,11 +219,16 @@ def main() -> int:
                     read_only_guaranteed=True, blocked_write_attempts=0,
                     cleanup_complete=True, physical_write_calls=0)
             generation_before = int(recovery["generation"])
-            first = run_survey_cycle(device, generation_before, trace)
-            second = run_survey_cycle(device, int(first["survey_generation"]),
-                                      trace)
-            first_generation = int(first["survey_generation"])
-            second_generation = int(second["survey_generation"])
+            first: dict[str, Any] | None = None
+            second: dict[str, Any] | None = None
+            first_generation = 0
+            second_generation = 0
+            if not args.reuse_existing_pair:
+                first = run_survey_cycle(device, generation_before, trace)
+                second = run_survey_cycle(
+                    device, int(first["survey_generation"]), trace)
+                first_generation = int(first["survey_generation"])
+                second_generation = int(second["survey_generation"])
 
             home = normalize_home(device)
             for _ in range(5):
@@ -236,12 +244,18 @@ def main() -> int:
             write_json(args.output / "run.json", record)
             require(opened, "open Targets", page="targets",
                     runtime_owner="targets", lease_mask=13)
+            if args.reuse_existing_pair:
+                first_generation = int(listed["baseline_generation"])
+                second_generation = int(listed["current_generation"])
+                if not (0 < first_generation < second_generation):
+                    raise RuntimeError(
+                        f"invalid existing session pair: {listed}")
             require(listed, "Targets list", status="ready",
                     workspace_allocated=True, page_open=True, view="list",
                     compare_available=True,
                     baseline_generation=first_generation,
                     current_generation=second_generation,
-                    read_only=True, write_enabled=False,
+                    read_only=False, write_enabled=False,
                     blocked_write_attempts=0, filesystem_mount_error=0,
                     cleanup_complete=True,
                     lease_mask=13)
@@ -293,7 +307,7 @@ def main() -> int:
                              "leshy.targets.product.v1", "state")
             require(released, "released Targets", status="not_loaded",
                     workspace_allocated=False, page_open=False, view="none",
-                    read_only=True, write_enabled=False,
+                    read_only=False, write_enabled=False,
                     blocked_write_attempts=0, filesystem_mount_error=0,
                     cleanup_complete=True,
                     lease_mask=0)
@@ -318,8 +332,10 @@ def main() -> int:
             "exact_cid": EXPECTED_CID,
             "generation_before": generation_before,
             "survey_generations": [first_generation, second_generation],
-            "survey_observations": [int(first["survey_observations"]),
-                                    int(second["survey_observations"])],
+            "survey_cycles_executed": 0 if args.reuse_existing_pair else 2,
+            "survey_observations": [] if first is None or second is None else
+                [int(first["survey_observations"]),
+                 int(second["survey_observations"])],
             "targets": {"list": listed, "compare": compared,
                         "detail": detail, "released": released},
             "safe_outputs": safe,

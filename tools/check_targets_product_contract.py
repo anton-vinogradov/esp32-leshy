@@ -297,6 +297,9 @@ def main() -> int:
             '"git", "rev-parse", "HEAD"' in runner and
             '"git", "status", "--porcelain"' in runner and
             "--reuse-exact-flash" in runner and
+            "--reuse-existing-pair" in runner and
+            '"survey_cycles_executed": 0 if args.reuse_existing_pair else 2'
+                in runner and
             "checked_stack_frames = stack_frames(args.elf)" in runner and
             'record["targets_after_open"] = listed' in runner and
             'write_json(args.output / "run.json", record)' in runner and
