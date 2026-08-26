@@ -1,0 +1,109 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-load-memory-0.160",
+  "candidate": {
+    "app_elf_sha256": "af75ba520082f1491bee06dd741e77d2d17613e8edb1324d5ad58ff7c98d87d9",
+    "checked_stack_frames": {
+      "CorrelationDecisionLog::clear()": 32,
+      "CorrelationService::propose(": 416,
+      "TargetCatalog::clear()": 32,
+      "TargetMergeHistory::clear()": 32,
+      "TargetMergeHistory::commitPersistenceRestore()": 32,
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 432,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 32,
+      "buildSessionCorrelationReview(": 816,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "decodeAndRestoreDecision(": 400,
+      "decodeAndRestoreMerge(": 32,
+      "decodeAndRestoreTarget(": 752,
+      "decodeCorrelationDecision(": 48,
+      "decodeCorrelationFeature(": 48,
+      "decodeCorrelationProposal(": 80,
+      "decodeRecord(": 96,
+      "decodeTargetMerge(": 64,
+      "decodeTargetState(": 96,
+      "loadTargetsProduct(": 784,
+      "reopenTargetState(": 64,
+      "resetTargetComparisonResult(": 32,
+      "validateTargetRecord(": 64,
+      "validateTargetRecordCompatibility(": 48
+    },
+    "elf_sha256": "af75ba520082f1491bee06dd741e77d2d17613e8edb1324d5ad58ff7c98d87d9",
+    "firmware_bytes": 3147616,
+    "firmware_sha256": "a54d1509c01b1e6d77afed25e5cac74eb8d290221942391b45f65b44a50633cd",
+    "map_sha256": "5cf29818ec00b96e6d2e04d590b193d592d86dde55c7bda39fc1881b5d7455d8",
+    "version": "0.160.0-targets-load-memory"
+  },
+  "evidence_ids": [
+    "E-AUTO-115",
+    "E-HIL-175"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final": {
+    "lease_mask": 0,
+    "library_generation": 161,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "flash_count": 0,
+  "input": {
+    "ambiguous_presses": 0,
+    "queue_drops": 0,
+    "read_errors": 0,
+    "status": "ready"
+  },
+  "manifest_sha256": "140b42959634bc8d3ce9d776f4867edd832714b397714584b74ce0da35e96c0f",
+  "radio_tx_commands": 0,
+  "raw_run_sha256": "28767bbaa2bfb7c3730c2b029467d7d86dc51a5c70311c585472644edeb8a067",
+  "safe_outputs": {
+    "buzzer_inactive": true,
+    "nrf_ce_inactive": true,
+    "software_quiesce_complete": true
+  },
+  "schema": "leshy.targets_load_memory_hil.summary.v1",
+  "screens": {
+    "targets-compare": {
+      "png": "frames/targets-compare.png",
+      "png_sha256": "1c6587bd1473c2c12a99c6d6a6c9a29b358c74827a3aba08369133f9b8ef85b6"
+    },
+    "targets-detail": {
+      "png": "frames/targets-detail.png",
+      "png_sha256": "844c5a2b81b71d5c253fbcfe650823f4b29ba508e6381fe7cf18ed1ed1fda1cd"
+    },
+    "targets-list": {
+      "png": "frames/targets-list.png",
+      "png_sha256": "6791324268c3443f07f3b1114656996d23ae8d96ced61b0222f8c50d6dae116b"
+    }
+  },
+  "session_generations": [
+    160,
+    161
+  ],
+  "source_commit": "3846afbcae14dda8d2f5656da3a08c8a46c1c94d",
+  "status": "pass",
+  "survey_cycles_executed": 0,
+  "targets": {
+    "blocked_write_attempts": 0,
+    "catalog": 16,
+    "classification": {
+      "added": 2,
+      "changed": 0,
+      "removed": 1,
+      "unchanged": 4
+    },
+    "heap_free_after_release": 93040,
+    "heap_free_before": 67436,
+    "heap_free_loaded": 42496,
+    "load_elapsed_us": 2737485,
+    "load_maximum_phase_us": 1147781,
+    "load_watchdog_feeds": 11,
+    "visible": 7
+  }
+}

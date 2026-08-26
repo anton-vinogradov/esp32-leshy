@@ -615,6 +615,22 @@ SHA-256 firmware/ELF/map:
 Семь просмотренных TFT states и fail-closed precursor duplicate rebuild сохранены
 в `E-HIL-174`; cadence продвигается до 11/15 без полной matrix.
 
+Checkpoint load-memory Targets `RB-M157`: exact production
+`0.160.0-targets-load-memory` использует 214 272 B static RAM, 3 147 108 B
+app partition из 4 194 304 B и firmware image 3 147 616 B. Retained wire
+workspace target-state 24 КиБ теперь перекрывается только с финальными catalog
+11 272 B, decision log 11 272 B и merge history 11 528 B; он удаляется до фазы
+comparison 7 736 B, proposals 2 704 B и controller/runtime 4 240 B. На exact
+post-Survey boundary, где отказал 0.159, foreground load начинается с 67 436 B
+free, завершается с 40 496 B free и освобождается до 93 040 B. Полная persistence
+call chain проверяется production ELF gate; `loadTargetsProduct` использует 784 B,
+а вложенные decode frames — 32…752 B. SHA-256 firmware/ELF/map:
+`a54d1509c01b1e6d77afed25e5cac74eb8d290221942391b45f65b44a50633cd`/
+`af75ba520082f1491bee06dd741e77d2d17613e8edb1324d5ad58ff7c98d87d9`/
+`5cf29818ec00b96e6d2e04d590b193d592d86dde55c7bda39fc1881b5d7455d8`.
+Три просмотренных TFT state и exact no-flash/no-scan regression сохранены в
+`E-HIL-175`; cadence продвигается до 12/15 без полной matrix.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

@@ -623,6 +623,22 @@ unchanged. Firmware/ELF/map SHA-256 are
 Seven reviewed TFT states and the fail-closed duplicate-rebuild precursor are
 retained in `E-HIL-174`; cadence advances to 11/15 without a full matrix.
 
+Targets load-memory checkpoint `RB-M157`: exact production
+`0.160.0-targets-load-memory` uses 214,272 B static RAM, 3,147,108 B of the
+4,194,304 B app partition and a 3,147,616 B firmware image. The retained
+24 KiB target-state wire workspace now overlaps only the final 11,272 B
+catalog, 11,272 B decision log and 11,528 B merge history; it is deleted before
+the 7,736 B comparison, 2,704 B proposals and 4,240 B controller/runtime phase.
+Under the exact post-Survey boundary that failed in 0.159, foreground load starts
+with 67,436 B free, completes with 40,496 B free and releases to 93,040 B. The
+complete persistence call chain is production-ELF-gated; `loadTargetsProduct`
+uses 784 B and the nested decode frames use 32…752 B. Firmware/ELF/map SHA-256
+are `a54d1509c01b1e6d77afed25e5cac74eb8d290221942391b45f65b44a50633cd`/
+`af75ba520082f1491bee06dd741e77d2d17613e8edb1324d5ad58ff7c98d87d9`/
+`5cf29818ec00b96e6d2e04d590b193d592d86dde55c7bda39fc1881b5d7455d8`.
+Three reviewed TFT states and the exact no-flash/no-scan regression are retained
+in `E-HIL-175`; cadence advances to 12/15 without a full matrix.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

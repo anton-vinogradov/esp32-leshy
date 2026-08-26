@@ -326,6 +326,9 @@ python3 "$repo_dir/tools/check_targets_stack_failure_evidence.py"
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-0.149.json" ]]; then
     python3 "$repo_dir/tools/check_targets_hil_acceptance.py"
 fi
+if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-load-memory-0.160.json" ]]; then
+    python3 "$repo_dir/tools/check_targets_load_memory_hil_acceptance.py"
+fi
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-evidence-0.150.json" ]]; then
     python3 "$repo_dir/tools/check_targets_evidence_hil_acceptance.py"
 fi

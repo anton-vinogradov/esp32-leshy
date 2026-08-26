@@ -1,0 +1,51 @@
+{
+  "candidate": {
+    "app_elf_sha256": "af75ba520082f1491bee06dd741e77d2d17613e8edb1324d5ad58ff7c98d87d9",
+    "checked_stack_frames": {
+      "CorrelationDecisionLog::clear()": 32,
+      "CorrelationService::propose(": 416,
+      "TargetCatalog::clear()": 32,
+      "TargetMergeHistory::clear()": 32,
+      "TargetMergeHistory::commitPersistenceRestore()": 32,
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 432,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 32,
+      "buildSessionCorrelationReview(": 816,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "decodeAndRestoreDecision(": 400,
+      "decodeAndRestoreMerge(": 32,
+      "decodeAndRestoreTarget(": 752,
+      "decodeCorrelationDecision(": 48,
+      "decodeCorrelationFeature(": 48,
+      "decodeCorrelationProposal(": 80,
+      "decodeRecord(": 96,
+      "decodeTargetMerge(": 64,
+      "decodeTargetState(": 96,
+      "loadTargetsProduct(": 784,
+      "reopenTargetState(": 64,
+      "resetTargetComparisonResult(": 32,
+      "validateTargetRecord(": 64,
+      "validateTargetRecordCompatibility(": 48
+    },
+    "elf_sha256": "af75ba520082f1491bee06dd741e77d2d17613e8edb1324d5ad58ff7c98d87d9",
+    "firmware_bytes": 3147616,
+    "firmware_sha256": "a54d1509c01b1e6d77afed25e5cac74eb8d290221942391b45f65b44a50633cd",
+    "map_sha256": "5cf29818ec00b96e6d2e04d590b193d592d86dde55c7bda39fc1881b5d7455d8",
+    "version": "0.160.0-targets-load-memory"
+  },
+  "raw_artifacts_manifest_sha256": "432618ae3f8243704e26862d28497a0300cb819b356d3fb54be17e2fca386b70",
+  "raw_run_sha256": "28767bbaa2bfb7c3730c2b029467d7d86dc51a5c70311c585472644edeb8a067",
+  "schema": "leshy.targets_load_memory_hil.provenance.v1",
+  "source_commit": "3846afbcae14dda8d2f5656da3a08c8a46c1c94d",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "c872d9dd503fd0e60bc097e709c197631bc1a40f3858713a2722653e06581bd1",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "5f63cf1e609208955ad0974f61b8e83d2c9f8ac977a27c5cee3a6c6defcc3d4c",
+    "tools/check_targets_product_contract.py": "72a2ef956c49fac4397b49751e3df62be3ce407c2252f56110a80f206d8b1d0e",
+    "tools/check_targets_stack_elf_contract.py": "54451f1f32b6f47633e16d90b4faf7875ccfaac3512bc332c73395ee240d9cb6",
+    "tools/retain_1x_targets_load_memory_hil.py": "ee4962eb5783cc84e9a2fbba95c9f2fe786696b44770bbec30e9f29a8e46b3ae",
+    "tools/run_1x_targets_hil.py": "63f9b6b8178cfe8002a647c12bbc7a68fd1ead2f90971ef85849afef74f9f966"
+  }
+}
