@@ -91,6 +91,43 @@ class CompanionWebDeltaRunnerTests(unittest.TestCase):
         legacy["firmware_sha256"] = "different"
         self.assertFalse(runner.precursor_candidate_matches(legacy, candidate))
 
+    def test_only_quiesced_runtime_watchdog_latch_is_clearable(self) -> None:
+        state = {
+            "schema": "leshy.safety.v1",
+            "kind": "state",
+            "state": "latched",
+            "reason": "runtime_watchdog",
+            "armed": True,
+            "latched": True,
+            "clear_pending": False,
+            "automatic_clear": False,
+            "startup_guard_tripped": False,
+            "buzzer_inactive": True,
+            "nrf_ce_inactive": True,
+            "runtime_owner": "none",
+            "lease_mask": 0,
+            "worker_active": "none",
+            "worker_armed": False,
+            "worker_expired": False,
+            "worker_last_expired": "none",
+            "worker_trip_count": 0,
+            "trip_count": 2,
+            "emergency_quiesce_count": 2,
+        }
+        self.assertTrue(runner.proven_clearable_runtime_watchdog(state))
+        for field, unsafe in (
+            ("reason", "output_invariant"),
+            ("runtime_owner", "targets"),
+            ("lease_mask", 1),
+            ("worker_expired", True),
+            ("startup_guard_tripped", True),
+            ("nrf_ce_inactive", False),
+        ):
+            changed = dict(state)
+            changed[field] = unsafe
+            self.assertFalse(
+                runner.proven_clearable_runtime_watchdog(changed), field)
+
     def test_runner_has_no_discovery_or_partition_write(self) -> None:
         source = (ROOT / "tools/run_1x_companion_web_delta_hil.py").read_text()
         self.assertNotIn("serial.tools.list_ports", source)
@@ -99,6 +136,7 @@ class CompanionWebDeltaRunnerTests(unittest.TestCase):
         self.assertIn(
             'parser.add_argument("--partitions", required=True, type=Path)',
             source)
+        self.assertIn('"clear_action_replays": 0', source)
         self.assertLess(
             source.index("read_flash_with_retry("),
             source.index("flash_candidate(args.port"))

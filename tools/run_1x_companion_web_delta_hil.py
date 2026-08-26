@@ -103,6 +103,36 @@ def precursor_candidate_matches(
             precursor_partitions == candidate.get("partitions_sha256"))
 
 
+def proven_clearable_runtime_watchdog(state: dict[str, Any]) -> bool:
+    """Permit an explicit clear only for an idle, fully quiesced old latch."""
+    trip_count = state.get("trip_count")
+    quiesce_count = state.get("emergency_quiesce_count")
+    return (
+        state.get("schema") == "leshy.safety.v1" and
+        state.get("kind") == "state" and
+        state.get("state") == "latched" and
+        state.get("reason") == "runtime_watchdog" and
+        state.get("armed") is True and
+        state.get("latched") is True and
+        state.get("clear_pending") is False and
+        state.get("automatic_clear") is False and
+        state.get("startup_guard_tripped") is False and
+        state.get("buzzer_inactive") is True and
+        state.get("nrf_ce_inactive") is True and
+        state.get("runtime_owner") == "none" and
+        state.get("lease_mask") == 0 and
+        state.get("worker_active") == "none" and
+        state.get("worker_armed") is False and
+        state.get("worker_expired") is False and
+        state.get("worker_last_expired") == "none" and
+        state.get("worker_trip_count") == 0 and
+        isinstance(trip_count, int) and not isinstance(trip_count, bool) and
+        trip_count > 0 and
+        isinstance(quiesce_count, int) and
+        not isinstance(quiesce_count, bool) and quiesce_count >= trip_count
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -114,6 +144,11 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--reuse-installed-from", type=Path)
+    parser.add_argument(
+        "--clear-proven-preexisting-safety-latch", action="store_true",
+        help=("explicitly clear only an idle, quiesced runtime-watchdog "
+              "latch after exact candidate identity is proven"),
+    )
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
 
@@ -258,6 +293,102 @@ def main() -> int:
             require(metrics_before.get("version") == args.expected_version and
                     metrics_before.get("app_elf_sha256") == app_identity,
                     f"wrong candidate booted: {metrics_before}")
+            record["metrics_before"] = metrics_before
+            checkpoint(args.output, record, "safety_preflight")
+            safety_before = query(
+                device, b"safety.state", "leshy.safety.v1", "state")
+            safety_preflight: dict[str, Any] = {
+                "clear_authorized":
+                    args.clear_proven_preexisting_safety_latch,
+                "clear_performed": False,
+                "before": safety_before,
+            }
+            record["safety_preflight"] = safety_preflight
+            write_json(args.output / "run.json", record)
+            if safety_before.get("latched") is True:
+                require(args.clear_proven_preexisting_safety_latch,
+                        "preexisting safety latch requires explicit clear "
+                        f"authorization: {safety_before}")
+                require(proven_clearable_runtime_watchdog(safety_before),
+                        "preexisting safety latch is not proven clearable: "
+                        f"{safety_before}")
+                checkpoint(args.output, record, "explicit_safety_clear")
+                clear_confirmed: dict[str, Any] = {}
+                clear_ack_error = ""
+                try:
+                    clear_confirmed = query(
+                        device, b"safety.clear confirm",
+                        "leshy.safety.v1", "clear_confirmed", timeout=5.0)
+                    require(clear_confirmed.get("restart_required") is True,
+                            "safety clear acknowledgement is invalid: "
+                            f"{clear_confirmed}")
+                except (OSError, serial.SerialException, TimeoutError) as error:
+                    # The command is sent exactly once. Native USB may vanish
+                    # before its acknowledgement reaches macOS; recovery below
+                    # proves the resulting state read-only and never replays it.
+                    clear_ack_error = f"{type(error).__name__}: {error}"
+                safety_preflight.update({
+                    "clear_action_writes": 1,
+                    "clear_action_replays": 0,
+                    "clear_ack_received": bool(clear_confirmed),
+                    "clear_ack_error": clear_ack_error,
+                    "clear_confirmation": clear_confirmed,
+                })
+                safety_preflight["clear_performed"] = True
+                write_json(args.output / "run.json", record)
+                device.close()
+                device = None
+                device, clear_open_attempts, clear_disconnects = \
+                    open_console_reconnecting(args.port, 30.0)
+                metrics_after_clear = query(
+                    device, b"metrics", "leshy.boot.v1", "ready")
+                require(
+                    metrics_after_clear.get("version") ==
+                    args.expected_version and
+                    metrics_after_clear.get("app_elf_sha256") == app_identity,
+                    f"wrong candidate after safety clear: "
+                    f"{metrics_after_clear}")
+                safety_after = query(
+                    device, b"safety.state", "leshy.safety.v1", "state")
+                require(
+                    safety_after.get("state") == "armed" and
+                    safety_after.get("reason") == "none" and
+                    safety_after.get("armed") is True and
+                    safety_after.get("latched") is False and
+                    safety_after.get("clear_pending") is False and
+                    safety_after.get("buzzer_inactive") is True and
+                    safety_after.get("nrf_ce_inactive") is True and
+                    safety_after.get("runtime_owner") == "none" and
+                    safety_after.get("lease_mask") == 0 and
+                    safety_after.get("worker_active") == "none" and
+                    safety_after.get("worker_armed") is False and
+                    safety_after.get("worker_expired") is False,
+                    f"safety clear did not restore an armed idle state: "
+                    f"{safety_after}")
+                safety_preflight.update({
+                    "after": safety_after,
+                    "metrics_after": metrics_after_clear,
+                    "reopen_attempts": clear_open_attempts,
+                    "reopen_disconnects": clear_disconnects,
+                })
+                write_json(args.output / "run.json", record)
+            else:
+                require(
+                    safety_before.get("state") == "armed" and
+                    safety_before.get("reason") == "none" and
+                    safety_before.get("armed") is True and
+                    safety_before.get("buzzer_inactive") is True and
+                    safety_before.get("nrf_ce_inactive") is True and
+                    safety_before.get("runtime_owner") == "none" and
+                    safety_before.get("lease_mask") == 0 and
+                    safety_before.get("worker_active") == "none" and
+                    safety_before.get("worker_armed") is False and
+                    safety_before.get("worker_expired") is False,
+                    f"safety preflight is not an armed idle state: "
+                    f"{safety_before}")
+                safety_preflight["after"] = safety_before
+
+            checkpoint(args.output, record, "storage_baseline")
             recovery = query(
                 device, b"storage.product.boot-recovery",
                 "leshy.storage.product_boot_recovery.v1", "state")
@@ -379,6 +510,7 @@ def main() -> int:
             "checkpoint": "complete",
             "exact_cid": EXPECTED_CID,
             "boot_recovery": recovery,
+            "safety_preflight": safety_preflight,
             "metrics_before": metrics_before,
             "metrics_after": metrics_after,
             "targets": targets,
