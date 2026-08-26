@@ -35,7 +35,10 @@ void emitState() {
 void stopWifi() {
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_OFF);
-    delay(100);
+    // The next DUT scan must not retain a final AP beacon from the previous
+    // fixture mode.  The extra bounded guard time is fixture-only and keeps
+    // the two persisted Sessions unambiguous.
+    delay(750);
 }
 
 void stopBle() {
@@ -75,11 +78,26 @@ bool setBle() {
         return false;
     }
     BLEAdvertisementData data;
+    // Keep the complete local name in the primary advertising PDU.  Leshy is
+    // deliberately a passive observer and therefore never sends the active
+    // scan request that would be needed to recover a scan-response-only name.
+    data.setFlags(ESP_BLE_ADV_FLAG_GEN_DISC |
+                  ESP_BLE_ADV_FLAG_BREDR_NOT_SPT);
     data.setName(kLabel);
-    advertising->setAdvertisementData(data);
+    advertising->setScanResponse(false);
+    if (!advertising->setAdvertisementData(data)) {
+        setOff();
+        return false;
+    }
     advertising->setMinInterval(160);
     advertising->setMaxInterval(240);
-    advertising->start();
+    if (!advertising->start()) {
+        setOff();
+        return false;
+    }
+    // A successful GAP start request precedes the first over-air PDU.  Do not
+    // acknowledge the mode until several advertising intervals have elapsed.
+    delay(750);
     mode = Mode::Ble;
     return true;
 }

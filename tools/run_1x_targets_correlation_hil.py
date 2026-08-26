@@ -318,6 +318,7 @@ def main() -> int:
         scans: list[dict[str, Any]] = []
         for attempt in range(MAX_FRESH_SURVEY_CYCLES + 1):
             listed = open_targets(device)
+            states[f"attempt_{attempt}_listed"] = listed
             # Boot recovery is an immutable startup snapshot. Earlier bounded
             # diagnostics may have committed newer generations without a DUT
             # reset, while this just-opened exact pair is authoritative for the
@@ -335,8 +336,11 @@ def main() -> int:
             if attempt == MAX_FRESH_SURVEY_CYCLES:
                 break
             if fixture is not None:
-                fixture_states.append(fixture_mode(
-                    fixture, "wifi" if not scans else "ble"))
+                requested_mode = "wifi" if not scans else "ble"
+                if (not fixture_states or
+                        fixture_states[-1].get("mode") != requested_mode):
+                    fixture_states.append(fixture_mode(
+                        fixture, requested_mode))
             committed = run_survey_cycle(device, latest_generation, trace)
             latest_generation = int(committed["survey_generation"])
             scans.append({
