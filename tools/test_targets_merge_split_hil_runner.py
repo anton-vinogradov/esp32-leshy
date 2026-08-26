@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import struct
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -25,6 +28,47 @@ RUNNER = load_runner()
 
 
 class TargetsMergeSplitHilRunnerTests(unittest.TestCase):
+    @staticmethod
+    def partition_table(entries: list[tuple[int, int, int, int, str]]) -> bytes:
+        payload = bytearray(b"\xff" * RUNNER.PARTITION_TABLE_SIZE)
+        for index, (kind, subtype, offset, size, label) in enumerate(entries):
+            payload[index * 32:(index + 1) * 32] = struct.pack(
+                "<HBBLL16sL", RUNNER.PARTITION_MAGIC, kind, subtype,
+                offset, size, label.encode("ascii").ljust(16, b"\0"), 0)
+        md5_offset = len(entries) * 32
+        payload[md5_offset:md5_offset + 32] = (
+            struct.pack("<H", RUNNER.PARTITION_MD5_MAGIC) +
+            b"\xff" * 14 + hashlib.md5(payload[:md5_offset]).digest())
+        return bytes(payload)
+
+    def test_temporary_partition_layout_requires_exact_inactive_ota1(
+            self) -> None:
+        entries = [
+            (1, 0x02, 0x9000, 0x5000, "nvs"),
+            (1, 0x00, 0xE000, 0x2000, "otadata"),
+            (0, 0x10, 0x10000, 0x400000, "app0"),
+            (0, 0x11, 0x410000, 0x400000, "app1"),
+            (1, 0x82, 0x810000, 0x7D0000, "spiffs"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "partitions.bin"
+            path.write_bytes(self.partition_table(entries))
+            layout = RUNNER.validated_partition_layout(path, 3_200_000)
+        self.assertEqual(RUNNER.OTA1_OFFSET, layout["app1"]["offset"])
+        self.assertEqual(RUNNER.OTA1_SIZE, layout["app1"]["size"])
+
+    def test_factory_table_without_ota1_is_rejected(self) -> None:
+        entries = [
+            (0, 0x10, 0x10000, 0x330000, "app0"),
+            (1, 0x82, 0x340000, 0x230000, "font"),
+            (1, 0x82, 0x670000, 0x180000, "spiffs"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "factory-partitions.bin"
+            path.write_bytes(self.partition_table(entries))
+            with self.assertRaisesRegex(ValueError, "app0|app1"):
+                RUNNER.validated_partition_layout(path, 3_200_000)
+
     def test_read_only_query_retries_one_transport_timeout(self) -> None:
         device = types.SimpleNamespace(reset_input_buffer=lambda: None)
         expected = {"schema": "state.v1", "kind": "state"}

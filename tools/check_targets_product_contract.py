@@ -476,6 +476,13 @@ def main() -> int:
             "ota1-private-backup.bin" in merge_split_runner and
             "ota1-private-backup-second.bin" in merge_split_runner and
             "ota1_before_sha == ota1_second_sha" in merge_split_runner and
+            "partition-table-before-second.bin" in merge_split_runner and
+            "partition_before_sha == partition_second_sha" in
+                merge_split_runner and
+            "validated_partition_layout(" in merge_split_runner and
+            "candidate-partitions.bin" in merge_split_runner and
+            "partition_table_candidate_installed" in merge_split_runner and
+            "partition_table_original_restored" in merge_split_runner and
             "restore_flash(" in merge_split_runner and
             "partition_before_sha == partition_after_sha" in
                 merge_split_runner and
@@ -489,9 +496,10 @@ def main() -> int:
             "private_backup_deleted_after_verified_restore" in
                 merge_split_runner,
             "fixture HIL must use one explicit DUT port, prove two identical "
-            "inactive-OTA backups, restore it byte-for-byte in cleanup, prove "
-            "the partition table and product generations unchanged, and leave "
-            "a parallel Cardputer untouched")
+            "inactive-OTA and original-table backups, install only the exact "
+            "reviewed temporary app0/app1 map, restore both mutable regions "
+            "byte-for-byte in cleanup, prove product generations unchanged, "
+            "and leave a parallel Cardputer untouched")
     require(failures,
             'constexpr int kBleTxDbm = -12' in correlation_fixture and
             'ESP_PWR_LVL_N12' in correlation_fixture and

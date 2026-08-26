@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import secrets
 import shutil
+import struct
 import subprocess
 import time
 from pathlib import Path
@@ -37,6 +39,62 @@ from run_1x_product_survey_hil import (
 SCHEMA = "leshy.targets_merge_split_hil.run.v1"
 EXPECTED_CID = "FE343253440000002000000055019CB7"
 WATCHDOG_RESET_REASONS = {4, 5, 6, 7}
+PARTITION_MAGIC = 0x50AA
+PARTITION_MD5_MAGIC = 0xEBEB
+PARTITION_ARTIFACT_SIZE = 0xC00
+
+
+def validated_partition_layout(path: Path, firmware_size: int) -> dict[str, Any]:
+    """Fail closed unless the temporary table is the reviewed 16 MB layout."""
+    payload = path.read_bytes()
+    if len(payload) not in (PARTITION_ARTIFACT_SIZE, PARTITION_TABLE_SIZE):
+        raise ValueError(
+            f"partition table size {len(payload)} is not a reviewed artifact")
+    entries: dict[str, dict[str, int]] = {}
+    md5_verified = False
+    for offset in range(0, len(payload), 32):
+        block = payload[offset:offset + 32]
+        magic, kind, subtype, address, size, raw_label, flags = struct.unpack(
+            "<HBBLL16sL", block)
+        if magic == 0xFFFF:
+            break
+        if magic == PARTITION_MD5_MAGIC:
+            expected_md5 = block[16:32]
+            observed_md5 = hashlib.md5(payload[:offset]).digest()
+            if expected_md5 != observed_md5:
+                raise ValueError("partition table MD5 record does not match")
+            md5_verified = True
+            break
+        if magic != PARTITION_MAGIC:
+            raise ValueError(f"invalid partition magic at {offset:#x}")
+        label = raw_label.split(b"\0", 1)[0].decode("ascii")
+        if label in entries:
+            raise ValueError(f"duplicate partition label: {label}")
+        entries[label] = {
+            "type": kind, "subtype": subtype, "offset": address,
+            "size": size, "flags": flags,
+        }
+    if not md5_verified:
+        raise ValueError("partition table has no verified MD5 record")
+    expected = {
+        "app0": {"type": 0, "subtype": 0x10, "offset": 0x10000,
+                 "size": 0x400000, "flags": 0},
+        "app1": {"type": 0, "subtype": 0x11, "offset": OTA1_OFFSET,
+                 "size": OTA1_SIZE, "flags": 0},
+        "spiffs": {"type": 1, "subtype": 0x82, "offset": 0x810000,
+                   "size": 0x7D0000, "flags": 0},
+    }
+    for label, wanted in expected.items():
+        if entries.get(label) != wanted:
+            raise ValueError(
+                f"unsafe temporary partition {label}: "
+                f"{entries.get(label)} != {wanted}")
+    if firmware_size > entries["app0"]["size"]:
+        raise ValueError("candidate firmware does not fit temporary app0")
+    app0_end = entries["app0"]["offset"] + entries["app0"]["size"]
+    if app0_end != entries["app1"]["offset"]:
+        raise ValueError("temporary app0/app1 boundary is not exact")
+    return entries
 
 
 def require(state: dict[str, Any], label: str, **expected: Any) -> None:
@@ -272,6 +330,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
     parser.add_argument("--firmware", required=True, type=Path)
+    parser.add_argument("--partitions", required=True, type=Path)
     parser.add_argument("--elf", required=True, type=Path)
     parser.add_argument("--map", required=True, type=Path)
     parser.add_argument("--expected-version", required=True)
@@ -289,13 +348,18 @@ def main() -> int:
               "candidate reused by --reuse-exact-flash"),
     )
     args = parser.parse_args()
-    for path in (args.firmware, args.elf, args.map):
+    for path in (args.firmware, args.partitions, args.elf, args.map):
         if not path.is_file():
             parser.error(f"candidate artifact missing: {path}")
     if args.output.exists():
         parser.error("output must not exist")
     if len(args.source_commit) != 40:
         parser.error("source commit must be full length")
+    try:
+        temporary_partition_layout = validated_partition_layout(
+            args.partitions, args.firmware.stat().st_size)
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        parser.error(f"unsafe candidate partition table: {error}")
     predecessor_path: Path | None = None
     predecessor_record: dict[str, Any] = {}
     if args.reuse_exact_flash:
@@ -349,7 +413,10 @@ def main() -> int:
     frames = args.output / "frames"
     frames.mkdir()
     candidate = args.output / "firmware.bin"
+    candidate_partitions = args.output / "candidate-partitions.bin"
     shutil.copyfile(args.firmware, candidate)
+    candidate_partitions.write_bytes(
+        args.partitions.read_bytes().ljust(PARTITION_TABLE_SIZE, b"\xff"))
     predecessor: dict[str, Any] = {}
     if predecessor_path is not None:
         retained_predecessor = args.output / "predecessor-failed-run.json"
@@ -369,18 +436,33 @@ def main() -> int:
     ota1_backup_second = args.output / "ota1-private-backup-second.bin"
     ota1_restore_readback = args.output / "ota1-private-restore-readback.bin"
     partition_before = args.output / "partition-table-before.bin"
+    partition_before_second = (
+        args.output / "partition-table-before-second.bin")
+    partition_install_readback = (
+        args.output / "partition-table-install-readback.bin")
+    partition_restore_readback = (
+        args.output / "partition-table-restore-readback.bin")
     partition_after = args.output / "partition-table-after.bin"
     ota1_before_sha = ""
     ota1_second_sha = ""
     ota1_after_sha = ""
     partition_before_sha = ""
+    partition_second_sha = ""
+    partition_candidate_sha = sha256_file(candidate_partitions)
+    partition_installed_sha = ""
     partition_after_sha = ""
     ota1_backup_attempts = 0
     ota1_second_attempts = 0
     partition_before_attempts = 0
+    partition_second_attempts = 0
+    partition_install_attempts = 0
+    partition_restore_attempts = 0
     partition_after_attempts = 0
     restore_attempts = 0
     backup_ready = False
+    partition_mutation_attempted = False
+    partition_installed = False
+    partition_restored = False
     restore_attempted = False
     restore_verified = False
     private_backup_deleted = False
@@ -409,6 +491,8 @@ def main() -> int:
             "firmware_bytes": candidate.stat().st_size,
             "elf_sha256": sha256_file(args.elf),
             "map_sha256": sha256_file(args.map),
+            "partitions_sha256": partition_candidate_sha,
+            "temporary_partition_layout": temporary_partition_layout,
             "app_elf_sha256": app_identity,
             "checked_stack_frames": checked_stack_frames,
         },
@@ -449,10 +533,10 @@ def main() -> int:
                 cleanup_complete=True, physical_write_calls=0)
         states["boot_recovery"] = recovery
 
-        # Preserve OTA1 twice before the explicit destructive command.  No
-        # serial-port discovery is performed: every esptool invocation receives
-        # the caller-selected DIV path verbatim, leaving a parallel Cardputer
-        # unopened.
+        # Preserve both mutable regions twice before installing the temporary
+        # reviewed table. No serial-port discovery is performed: every esptool
+        # invocation receives the caller-selected DIV path verbatim, leaving a
+        # parallel Cardputer unopened.
         device.close()
         device = None
         ota1_before_sha, ota1_backup_attempts = read_flash_with_retry(
@@ -464,13 +548,41 @@ def main() -> int:
             read_flash_with_retry(
                 args.port, args.flash_baud, PARTITION_TABLE_OFFSET,
                 PARTITION_TABLE_SIZE, partition_before))
-        backup_ready = ota1_before_sha == ota1_second_sha
+        partition_second_sha, partition_second_attempts = (
+            read_flash_with_retry(
+                args.port, args.flash_baud, PARTITION_TABLE_OFFSET,
+                PARTITION_TABLE_SIZE, partition_before_second))
+        backup_ready = (
+            ota1_before_sha == ota1_second_sha and
+            partition_before_sha == partition_second_sha)
         if not backup_ready:
-            raise RuntimeError("two independent OTA1 backup reads differ")
+            raise RuntimeError(
+                "two independent OTA1 or partition-table backup reads differ")
         ota1_backup_second.unlink(missing_ok=True)
+        partition_before_second.unlink(missing_ok=True)
+
+        # The board may still carry the factory app0/font/spiffs table. Install
+        # the build's exact reviewed app0/app1 table only after both backups,
+        # verify the write immediately, and always restore the original table
+        # in finally after restoring the whole disposable OTA1 window.
+        partition_mutation_attempted = True
+        _, partition_installed_sha, partition_install_attempts = restore_flash(
+            args.port, args.flash_baud, PARTITION_TABLE_OFFSET,
+            candidate_partitions, partition_install_readback)
+        partition_installed = partition_installed_sha == partition_candidate_sha
+        if not partition_installed:
+            raise RuntimeError("temporary partition-table install mismatch")
+        partition_install_readback.unlink(missing_ok=True)
 
         device = PassiveSerial(args.port, 115200, timeout=0.25)
         synchronize_console(device, 20.0)
+        temporary_metrics = read_only_query(
+            device, b"metrics", "leshy.boot.v1", "ready")
+        require(temporary_metrics, "temporary-layout candidate",
+                version=args.expected_version, app_elf_sha256=app_identity)
+        require_non_watchdog_boot(
+            temporary_metrics, "temporary-layout candidate")
+        states["temporary_layout_boot_metrics"] = temporary_metrics
         recovery_rechecked = read_only_query(
             device, b"storage.product.boot-recovery",
             "leshy.storage.product_boot_recovery.v1", "state")
@@ -799,32 +911,55 @@ def main() -> int:
             ota1_backup.unlink(missing_ok=True)
             ota1_backup_second.unlink(missing_ok=True)
             partition_before.unlink(missing_ok=True)
-        if backup_ready and ota1_backup.is_file():
+            partition_before_second.unlink(missing_ok=True)
+        if (backup_ready and partition_mutation_attempted and
+                ota1_backup.is_file() and partition_before.is_file()):
             restore_attempted = True
+            restore_errors: list[str] = []
             try:
                 _, ota1_after_sha, restore_attempts = restore_flash(
                     args.port, args.flash_baud, OTA1_OFFSET, ota1_backup,
                     ota1_restore_readback)
+            except Exception as restore_error:
+                restore_errors.append(
+                    f"OTA1 {type(restore_error).__name__}: {restore_error}")
+            # Restore the original table even when OTA1 restoration reports an
+            # error. This minimizes the board's exposure to the temporary map;
+            # private backups remain retained unless both regions verify.
+            try:
+                _, partition_restore_sha, partition_restore_attempts = (
+                    restore_flash(
+                        args.port, args.flash_baud, PARTITION_TABLE_OFFSET,
+                        partition_before, partition_restore_readback))
+                partition_restored = (
+                    partition_restore_sha == partition_before_sha)
                 partition_after_sha, partition_after_attempts = (
                     read_flash_with_retry(
                         args.port, args.flash_baud, PARTITION_TABLE_OFFSET,
                         PARTITION_TABLE_SIZE, partition_after))
-                restore_verified = (
-                    ota1_after_sha == ota1_before_sha and
-                    partition_after_sha == partition_before_sha)
-                if restore_verified:
-                    ota1_backup.unlink(missing_ok=True)
-                    ota1_restore_readback.unlink(missing_ok=True)
-                    partition_before.unlink(missing_ok=True)
-                    partition_after.unlink(missing_ok=True)
-                    private_backup_deleted = True
-                elif not workflow_error:
-                    workflow_error = "OTA1 or partition-table restore mismatch"
             except Exception as restore_error:
-                if not workflow_error:
-                    workflow_error = (
-                        f"restore {type(restore_error).__name__}: "
-                        f"{restore_error}")
+                restore_errors.append(
+                    "partition table "
+                    f"{type(restore_error).__name__}: {restore_error}")
+            restore_verified = (
+                ota1_after_sha == ota1_before_sha and
+                partition_restored and
+                partition_after_sha == partition_before_sha)
+            if restore_verified:
+                ota1_backup.unlink(missing_ok=True)
+                ota1_restore_readback.unlink(missing_ok=True)
+                partition_before.unlink(missing_ok=True)
+                partition_restore_readback.unlink(missing_ok=True)
+                partition_after.unlink(missing_ok=True)
+                private_backup_deleted = True
+            else:
+                restore_errors.append(
+                    "OTA1 or partition-table restore mismatch")
+            if restore_errors:
+                restore_message = "restore " + "; ".join(restore_errors)
+                workflow_error = (
+                    f"{workflow_error} | {restore_message}"
+                    if workflow_error else restore_message)
 
     final_boot: dict[str, Any] = {}
     final_recovery: dict[str, Any] = {}
@@ -925,9 +1060,21 @@ def main() -> int:
         "private_backup_deleted_after_verified_restore":
             private_backup_deleted,
         "partition_table_before_sha256": partition_before_sha,
+        "partition_table_second_read_sha256": partition_second_sha,
+        "partition_table_candidate_sha256": partition_candidate_sha,
+        "partition_table_installed_sha256": partition_installed_sha,
         "partition_table_after_sha256": partition_after_sha,
         "partition_table_before_read_attempts": partition_before_attempts,
+        "partition_table_second_read_attempts": partition_second_attempts,
+        "partition_table_install_attempts": partition_install_attempts,
+        "partition_table_restore_attempts": partition_restore_attempts,
         "partition_table_after_read_attempts": partition_after_attempts,
+        "partition_table_two_read_backup_verified": (
+            bool(partition_before_sha) and
+            partition_before_sha == partition_second_sha),
+        "partition_table_mutation_attempted": partition_mutation_attempted,
+        "partition_table_candidate_installed": partition_installed,
+        "partition_table_original_restored": partition_restored,
         "partition_table_unchanged": (
             bool(partition_before_sha) and
             partition_before_sha == partition_after_sha),
