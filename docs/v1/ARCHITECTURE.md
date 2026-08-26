@@ -84,6 +84,13 @@ and records state/revision evidence; it never owns a second navigation model. Th
 binding transport and acceptance rules are in
 [`UI_AUTOMATION.md`](UI_AUTOMATION.md).
 
+The S6 companion is a separate local presentation adapter, not a second product API.
+Its [shared USB/Web envelope](COMPANION_PROTOCOL.md) negotiates explicit scopes no
+wider than the current device session, advertises only available capabilities and
+then maps requests to the same read projections and typed Actions. The bounded parser
+and encoder own no storage, driver, radio or secret path; both USB NDJSON and local
+Web JSON preserve the same schema and denial semantics.
+
 The touch adapter loads a versioned calibration from NVS and can import the legacy
 0.x `leshy/tcal` record without rewriting it. Its allocation-free frontend is
 edge-triggered with a 35 ms release debounce. A shared geometry mapper accepts only

@@ -52,6 +52,8 @@
   candidate/fixture, общий scenario/evidence engine и bounded stimulus safety
 - [HIL атомарности storage](STORAGE_HIL.ru.md) — dual-head recovery, fault boundaries
   и безопасность disposable media
+- [Протокол локального companion](COMPANION_PROTOCOL.ru.md) — общий envelope USB/Web,
+  явные scopes/capabilities и правила fail-closed parser
 
 ## Проектирование и реализация
 

@@ -656,6 +656,13 @@ Diagnostic client проходит через тот же Navigator и чита�
 держит отдельную тестовую модель экранов. Transport, evidence format и обязательные
 критерии определяет [`UI_AUTOMATION.ru.md`](UI_AUTOMATION.ru.md).
 
+Companion S6 является отдельным local presentation adapter, а не вторым product API.
+Его [общий envelope USB/Web](COMPANION_PROTOCOL.ru.md) согласовывает явные scopes не
+шире текущей device session, рекламирует только доступные capabilities, а затем
+связывает requests с теми же read projections и typed Actions. Bounded parser и
+encoder не владеют storage, driver, radio или secrets; USB NDJSON и local Web JSON
+сохраняют одинаковые schema и denial semantics.
+
 ## 9. Безопасность и обновления
 
 ### Пассивный поиск сигнала 2.4 ГГц

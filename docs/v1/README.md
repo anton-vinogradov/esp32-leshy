@@ -50,6 +50,8 @@ accepted decisions change.
   roles, common scenario/evidence engine, and bounded stimulus safety
 - [Storage atomicity HIL](STORAGE_HIL.md) — dual-head recovery, fault boundaries,
   and disposable-media safety
+- [Local companion protocol](COMPANION_PROTOCOL.md) — shared USB/Web envelope,
+  explicit scopes/capabilities, and fail-closed parser rules
 
 ## Design and delivery
 
