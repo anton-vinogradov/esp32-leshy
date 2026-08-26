@@ -14,9 +14,9 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
-- **Текущая фаза:** `S6.4 — on-device workflows Targets и Compare`.
-- **Проверенный checkpoint:** exact `0.160.0-targets-load-memory` на firmware source `117548b9c01252b1ea87ff386ae964067d80b2ec` физически принят в `E-AUTO-115`/`E-HIL-175`. Отклонённые 0.157/0.158 выявили reset на stack persistence decode; 0.159 ограничил всю вложенную цепочку и открыл Targets, после чего намеренно post-Survey run выявил второе fail-closed перекрытие allocation. Exact 0.160 декодирует graph в три долгоживущих state-блока, освобождает wire workspace 24 КиБ и лишь затем выделяет comparison/proposals/controller. При том же измеренном pre-load heap 67 436 B он открывает поколения 160/161 с 40 496 B free, показывает семь exact результатов List/Compare/Detail из полного каталога 16 Targets, освобождает до 93 040 B и завершает Home/none/lease 0. Focused verification переиспользует exact flash и Session pair: zero flash, scans, TX, input drops и Cardputer ports. Это принимает memory/load defect, но не reversible merge/split; отложенный RF-positive gate S5 остаётся открыт.
-- **Следующий gate:** показать reversible merge/split на устройстве с preview ownership, confirmation, immutable source evidence и cold-reopen точного reversal. Physical gate S5 остаётся отложенным до приезда replacement DIV и его read-only profile.
+- **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
+- **Проверенный checkpoint:** exact `0.165.0-targets-fixture-reopen` на firmware source `19a322c428d6efa52fe18f62041141e0cf6669d8` и verification source `b3a19e2a99b764d33b8de9eac802102a35fdb084` физически принят в `E-AUTO-116`/`E-HIL-176`/`E-UX-052`. Изолированный disposable fixture LittleFS показывает preview ownership и явное confirmation, атомарно сливает два Target с одной identity/evidence каждый 2→1 при generation 0→1, cold-reopen-ит тот же graph с двумя identities/evidence и immutable history, затем разделяет 1→2 при generation 1→2 и cold-reopen-ит оба исходных ID и exact fingerprints graph. Каждая mutation использует три writes, три file syncs и три directory syncs; оба reset records сохраняют 8 040 B minimum worker stack. Exact bytes OTA1 и partition table восстановлены, product SD не затронута, финальная exact-CID Session generation 161 открывается read-only с 59 observations, а устройство завершает Home/none/lease 0 с zero RF attempts. Exact flash переиспользован, открыт только `/dev/cu.usbmodem2101`; Cardputer ports и discovery calls равны нулю. Это закрывает S6.4; отложенный RF-positive gate S5 остаётся открыт.
+- **Следующий gate:** определить и проверить на host первый contract S6.5 companion: локальное явно scoped соединение перечисляет и открывает те же Session/Target/Compare records через versioned schemas и существующую typed Action boundary, без прямого доступа к drivers/storage и без permissions шире device session. Physical gate S5 остаётся отложенным до приезда replacement DIV и его read-only profile.
 
 ### Фазы текущего этапа
 
@@ -25,8 +25,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | S6.1 | Фундамент Target: стабильные Target ID, точные radio identities, изменяемые name/tags/notes/favorite и неизменяемые ссылки на source evidence; всё bounded и host-verified | ✅ готово |
 | S6.2 | Объяснимая correlation предлагает связи с features/confidence; accept/reject и обратимые merge/split никогда не уничтожают source evidence | ✅ готово |
 | S6.3 | Baseline/diff сравнивает две Session и классифицирует новые, исчезнувшие и изменившиеся Targets; каждый вывод открывает своё evidence | ✅ готово |
-| S6.4 | On-device workflows Targets и Compare сначала показывают полезный результат, сохраняют стабильную навигацию и полноэкранные detail views | 🟡 в работе |
-| S6.5 | Local companion USB/Web использует те же Actions и versioned schemas с ограниченными connectivity и secrets | ⬜ дальше |
+| S6.4 | On-device workflows Targets и Compare сначала показывают полезный результат, сохраняют стабильную навигацию и полноэкранные detail views | ✅ готово |
+| S6.5 | Local companion USB/Web использует те же Actions и versioned schemas с ограниченными connectivity и secrets | 🟡 в работе |
 | S6.6 | Интегральный DEMO-S6: записать и сравнить две survey, открыть каждый вывод на устройстве или локально и offline-export; перед принятием S6 вернуться к отложенному physical predecessor gate S5 и закрыть его | ⬜ дальше |
 
 ### Роадмап

@@ -639,6 +639,23 @@ are `a54d1509c01b1e6d77afed25e5cac74eb8d290221942391b45f65b44a50633cd`/
 Three reviewed TFT states and the exact no-flash/no-scan regression are retained
 in `E-HIL-175`; cadence advances to 12/15 without a full matrix.
 
+Targets merge/split checkpoint `RB-M158`: exact production
+`0.165.0-targets-fixture-reopen` uses 214,285 B static DRAM, 3,159,796 B linked
+flash and 3,160,304/3,225,840 B app/factory images. It adds the bounded fixture
+continuity path and complete on-device merge/split interaction without allocating a
+second graph: merge/split linked frames are 2,224/1,472 B, replacement helpers are
+768/64 B, and both physical reset records retain 8,040 B minimum worker stack. The
+isolated two-Target fixture opens with 67,896 B free, releases to 93,500 B and keeps
+lease 13 only while Targets owns UI+Storage+RadioSPI. Two atomic mutations each use
+three writes, three file syncs and three directory syncs. Firmware/ELF/map SHA-256
+are `40af5486e8525998e86aa3c864e0cb0e21e3aace0d3dc40c8dd4eb1923f01d4b`/
+`20968cb44e847c7e3b9338c462991b6710a2c23c1654e9b3692879c9f91a81ec`/
+`7acc6be8c106566de2d877acae572171e790983a421bd226b9c2070a2a7063f1`.
+Exact `E-HIL-176` restores the 4 MiB inactive OTA1 and original partition table
+byte-for-byte, deletes private backups after verification, reopens product generation
+161 read-only and ends Home/none/lease 0. Cadence advances to 13/15 without treating
+the disposable fixture or unavailable PSRAM as product capacity.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

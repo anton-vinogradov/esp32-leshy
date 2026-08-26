@@ -1,0 +1,105 @@
+{
+  "candidate": {
+    "app_elf_sha256": "20968cb44e847c7e3b9338c462991b6710a2c23c1654e9b3692879c9f91a81ec",
+    "checked_stack_frames": {
+      "CorrelationDecisionLog::clear()": 32,
+      "CorrelationService::propose(": 416,
+      "TargetCatalog::clear()": 32,
+      "TargetCatalog::replaceAndInsert(": 64,
+      "TargetCatalog::replaceAndRemove(": 768,
+      "TargetMergeHistory::clear()": 32,
+      "TargetMergeHistory::commitPersistenceRestore()": 32,
+      "TargetMergeHistory::merge(": 2224,
+      "TargetMergeHistory::split(": 1472,
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 432,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 32,
+      "buildSessionCorrelationReview(": 816,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "decodeAndRestoreDecision(": 400,
+      "decodeAndRestoreMerge(": 32,
+      "decodeAndRestoreTarget(": 752,
+      "decodeCorrelationDecision(": 48,
+      "decodeCorrelationFeature(": 48,
+      "decodeCorrelationProposal(": 80,
+      "decodeRecord(": 96,
+      "decodeTargetMerge(": 64,
+      "decodeTargetState(": 96,
+      "loadTargetsMergeFixture(": 672,
+      "loadTargetsProduct(": 784,
+      "reopenTargetState(": 64,
+      "resetTargetComparisonResult(": 32,
+      "runTargetsMergeFixtureMutationWorker(": 800,
+      "targetsStoreSupervisedCheckpoint()": 32,
+      "validateTargetRecord(": 64,
+      "validateTargetRecordCompatibility(": 48
+    },
+    "elf_sha256": "20968cb44e847c7e3b9338c462991b6710a2c23c1654e9b3692879c9f91a81ec",
+    "firmware_bytes": 3160304,
+    "firmware_sha256": "40af5486e8525998e86aa3c864e0cb0e21e3aace0d3dc40c8dd4eb1923f01d4b",
+    "map_sha256": "7acc6be8c106566de2d877acae572171e790983a421bd226b9c2070a2a7063f1",
+    "partitions_sha256": "339bda68b7470d5ad1482d10183514b88971c6f1f20ff87c7e2f3dad96235ba2",
+    "temporary_partition_layout": {
+      "app0": {
+        "flags": 0,
+        "offset": 65536,
+        "size": 4194304,
+        "subtype": 16,
+        "type": 0
+      },
+      "app1": {
+        "flags": 0,
+        "offset": 4259840,
+        "size": 4194304,
+        "subtype": 17,
+        "type": 0
+      },
+      "coredump": {
+        "flags": 0,
+        "offset": 16646144,
+        "size": 131072,
+        "subtype": 3,
+        "type": 1
+      },
+      "nvs": {
+        "flags": 0,
+        "offset": 36864,
+        "size": 20480,
+        "subtype": 2,
+        "type": 1
+      },
+      "otadata": {
+        "flags": 0,
+        "offset": 57344,
+        "size": 8192,
+        "subtype": 0,
+        "type": 1
+      },
+      "spiffs": {
+        "flags": 0,
+        "offset": 8454144,
+        "size": 8192000,
+        "subtype": 130,
+        "type": 1
+      }
+    },
+    "version": "0.165.0-targets-fixture-reopen"
+  },
+  "firmware_source_commit": "19a322c428d6efa52fe18f62041141e0cf6669d8",
+  "raw_artifacts_manifest_sha256": "eccd4239d80da7a5dac0bd210bb1e4ad54ebc1c74d1919cb073f09df290e799c",
+  "raw_run_sha256": "73e793ae48f1928c3dfc7be6c9b117332f3012f19d19963878e84e806201b88e",
+  "schema": "leshy.targets_merge_split_hil.provenance.v1",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "ba10e9fcbce1219e295d95408d04d8f0de10b119a73f6a79c8cb402c3019dd1c",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "acc82c0ebf6419d0e83eadfcd40172602e15eb8406326f2774dc7eb67f2637d2",
+    "tools/check_targets_product_contract.py": "f82c6e91b795fe4a9898464343dc141baec9dca601cba6e694dd98c9fa213a83",
+    "tools/check_targets_stack_elf_contract.py": "de02149453986d858145f8e4de28028fd197cf2211febfe0dfd541a0099a3730",
+    "tools/retain_1x_targets_merge_split_hil.py": "149a86cf8e379ddf2968d81af83f109fd9e886bd5ce99e854fcc294c0c57cde6",
+    "tools/run_1x_targets_merge_split_hil.py": "dda7e3c613e39b73b5ebbad597f66ca6952ca3dbf17efe7a671682d7d54b6c05",
+    "tools/test_targets_merge_split_hil_runner.py": "77eecf44207862cac0e0454f2e967860537abd4cbcf368e7c191d4795405a83f"
+  },
+  "verification_source_commit": "b3a19e2a99b764d33b8de9eac802102a35fdb084"
+}

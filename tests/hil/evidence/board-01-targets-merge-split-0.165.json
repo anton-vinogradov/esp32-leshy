@@ -1,0 +1,219 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-merge-split-0.165",
+  "candidate": {
+    "app_elf_sha256": "20968cb44e847c7e3b9338c462991b6710a2c23c1654e9b3692879c9f91a81ec",
+    "checked_stack_frames": {
+      "CorrelationDecisionLog::clear()": 32,
+      "CorrelationService::propose(": 416,
+      "TargetCatalog::clear()": 32,
+      "TargetCatalog::replaceAndInsert(": 64,
+      "TargetCatalog::replaceAndRemove(": 768,
+      "TargetMergeHistory::clear()": 32,
+      "TargetMergeHistory::commitPersistenceRestore()": 32,
+      "TargetMergeHistory::merge(": 2224,
+      "TargetMergeHistory::split(": 1472,
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 432,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 32,
+      "buildSessionCorrelationReview(": 816,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "decodeAndRestoreDecision(": 400,
+      "decodeAndRestoreMerge(": 32,
+      "decodeAndRestoreTarget(": 752,
+      "decodeCorrelationDecision(": 48,
+      "decodeCorrelationFeature(": 48,
+      "decodeCorrelationProposal(": 80,
+      "decodeRecord(": 96,
+      "decodeTargetMerge(": 64,
+      "decodeTargetState(": 96,
+      "loadTargetsMergeFixture(": 672,
+      "loadTargetsProduct(": 784,
+      "reopenTargetState(": 64,
+      "resetTargetComparisonResult(": 32,
+      "runTargetsMergeFixtureMutationWorker(": 800,
+      "targetsStoreSupervisedCheckpoint()": 32,
+      "validateTargetRecord(": 64,
+      "validateTargetRecordCompatibility(": 48
+    },
+    "elf_sha256": "20968cb44e847c7e3b9338c462991b6710a2c23c1654e9b3692879c9f91a81ec",
+    "firmware_bytes": 3160304,
+    "firmware_sha256": "40af5486e8525998e86aa3c864e0cb0e21e3aace0d3dc40c8dd4eb1923f01d4b",
+    "map_sha256": "7acc6be8c106566de2d877acae572171e790983a421bd226b9c2070a2a7063f1",
+    "partitions_sha256": "339bda68b7470d5ad1482d10183514b88971c6f1f20ff87c7e2f3dad96235ba2",
+    "temporary_partition_layout": {
+      "app0": {
+        "flags": 0,
+        "offset": 65536,
+        "size": 4194304,
+        "subtype": 16,
+        "type": 0
+      },
+      "app1": {
+        "flags": 0,
+        "offset": 4259840,
+        "size": 4194304,
+        "subtype": 17,
+        "type": 0
+      },
+      "coredump": {
+        "flags": 0,
+        "offset": 16646144,
+        "size": 131072,
+        "subtype": 3,
+        "type": 1
+      },
+      "nvs": {
+        "flags": 0,
+        "offset": 36864,
+        "size": 20480,
+        "subtype": 2,
+        "type": 1
+      },
+      "otadata": {
+        "flags": 0,
+        "offset": 57344,
+        "size": 8192,
+        "subtype": 0,
+        "type": 1
+      },
+      "spiffs": {
+        "flags": 0,
+        "offset": 8454144,
+        "size": 8192000,
+        "subtype": 130,
+        "type": 1
+      }
+    },
+    "version": "0.165.0-targets-fixture-reopen"
+  },
+  "disposable_restore": {
+    "ota1_sha256": "3bf012ed2a6f9ae7026ec8eb5a080dcd75e343b7073e337ea72900ed97da9e33",
+    "partition_table_sha256": "44539be51aeb592d44450059d7dbbb4d5a25d7fe5144cc68b8e85acba367ba87",
+    "private_backup_deleted": true,
+    "verified": true
+  },
+  "evidence_ids": [
+    "E-AUTO-116",
+    "E-HIL-176",
+    "E-UX-052"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final": {
+    "fixture_armed": false,
+    "generation": 161,
+    "lease_mask": 0,
+    "mounted_read_only": true,
+    "observations": 59,
+    "page": "home",
+    "physical_write_calls": 0,
+    "radio_touched": false,
+    "rf_tx_attempts": 0,
+    "runtime_owner": "none"
+  },
+  "firmware_source_commit": "19a322c428d6efa52fe18f62041141e0cf6669d8",
+  "flash_count": 0,
+  "manifest_sha256": "8b2594abc45856f9bdd1c55d5c250f602fabd287f081cf7cf69c964130974024",
+  "merge": {
+    "catalog": [
+      2,
+      1
+    ],
+    "cold_reopened": true,
+    "directory_syncs": 3,
+    "evidence": 2,
+    "file_syncs": 3,
+    "generation": [
+      0,
+      1
+    ],
+    "history": [
+      0,
+      1
+    ],
+    "identities": 2,
+    "writes": 3
+  },
+  "operation": {
+    "destination_id": "22ECF836F69680CD1BFA17C2315D7061",
+    "id": "E307D08718BB3565B013FC1A75D13D28",
+    "source_id": "152A66F76C89921178F582945AD5D1AD"
+  },
+  "raw_run_sha256": "73e793ae48f1928c3dfc7be6c9b117332f3012f19d19963878e84e806201b88e",
+  "released_heap": 93500,
+  "reset_stack_min_free": {
+    "merged": 8040,
+    "split": 8040
+  },
+  "schema": "leshy.targets_merge_split_hil.summary.v1",
+  "screens": {
+    "targets-merge-cold-reopened": {
+      "png": "frames/targets-merge-cold-reopened.png",
+      "png_sha256": "ba7f901b5abbb0970de108bf443303067c4035055109c4d596b0a6c47b33666b"
+    },
+    "targets-merge-confirm": {
+      "png": "frames/targets-merge-confirm.png",
+      "png_sha256": "820f788aa26f65a8d7e814b1eab1f2810417add662d8f9fef3b401b27d0e8826"
+    },
+    "targets-merge-destination-before": {
+      "png": "frames/targets-merge-destination-before.png",
+      "png_sha256": "bdd132bec595106fe1567332d331cb86c6810109fc14ddbc8f067b59cd0e9fc0"
+    },
+    "targets-merge-saved": {
+      "png": "frames/targets-merge-saved.png",
+      "png_sha256": "23d794d21eb07b09b89b397db9ec4d5eb7b177dd36da63ca39eac914045f6878"
+    },
+    "targets-merge-source-list": {
+      "png": "frames/targets-merge-source-list.png",
+      "png_sha256": "41a1fa8d90fba690c7b1ab384ad8a071868ddc3396b5f08bc4ee37e2635b3591"
+    },
+    "targets-split-confirm": {
+      "png": "frames/targets-split-confirm.png",
+      "png_sha256": "0cd80a59db7723b12f7cb29e2470aa4ad9f325520a14295d18efdea6acefd4c0"
+    },
+    "targets-split-destination-reopened": {
+      "png": "frames/targets-split-destination-reopened.png",
+      "png_sha256": "bdd132bec595106fe1567332d331cb86c6810109fc14ddbc8f067b59cd0e9fc0"
+    },
+    "targets-split-saved": {
+      "png": "frames/targets-split-saved.png",
+      "png_sha256": "ce7c9d432721690ffcce59ae24b7f9eb552e4ad1bf6efd75d231319f9811fc53"
+    },
+    "targets-split-source-reopened": {
+      "png": "frames/targets-split-source-reopened.png",
+      "png_sha256": "5485a46fa3c6ab9fd0e14a4a7627225b78d274656e646965e12d203b7fbf773f"
+    }
+  },
+  "split": {
+    "catalog": [
+      1,
+      2
+    ],
+    "cold_reopened": true,
+    "destination_fingerprint": "4E0F6E23113F2A27",
+    "directory_syncs": 3,
+    "file_syncs": 3,
+    "generation": [
+      1,
+      2
+    ],
+    "history": 1,
+    "source_fingerprint": "457C241F7BC2C2F5",
+    "writes": 3
+  },
+  "status": "pass",
+  "usb": {
+    "cardputer_ports_opened": 0,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "port_discovery_calls": 0
+  },
+  "verification_source_commit": "b3a19e2a99b764d33b8de9eac802102a35fdb084"
+}

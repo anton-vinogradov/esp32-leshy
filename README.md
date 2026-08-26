@@ -14,9 +14,9 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
 
-- **Current phase:** `S6.4 — on-device Targets and Compare workflows`.
-- **Verified checkpoint:** exact `0.160.0-targets-load-memory` at firmware source `117548b9c01252b1ea87ff386ae964067d80b2ec` is physically accepted in `E-AUTO-115`/`E-HIL-175`. Rejected 0.157/0.158 exposed a persistence-decode stack reset; 0.159 bounded the complete nested decode chain and opened Targets, then a deliberately post-Survey run exposed a second fail-closed allocation overlap. Exact 0.160 decodes the retained graph into its three long-lived state blocks, releases the 24 KiB wire workspace, and only then allocates comparison/proposal/controller state. Under the same measured 67,436 B pre-load heap it opens generations 160/161 with 40,496 B still free, renders seven exact List/Compare/Detail results from a full 16-Target catalog, releases to 93,040 B and finishes Home/none/lease 0. The focused verification reused the exact flash and existing Session pair: zero flash, scans, TX, input drops or Cardputer ports. This accepts the load-memory defect, not reversible merge/split; the deferred S5 RF-positive gate remains open.
-- **Next gate:** present reversible merge/split on-device with an ownership preview, explicit confirmation, immutable source evidence and a cold-reopened exact reversal. The physical S5 gate remains postponed, not waived, until the replacement DIV arrives and passes its read-only profile.
+- **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
+- **Verified checkpoint:** exact `0.165.0-targets-fixture-reopen` at firmware source `19a322c428d6efa52fe18f62041141e0cf6669d8` and verification source `b3a19e2a99b764d33b8de9eac802102a35fdb084` is physically accepted in `E-AUTO-116`/`E-HIL-176`/`E-UX-052`. An isolated disposable LittleFS fixture presents the ownership preview and explicit confirmation, atomically merges two one-identity/one-evidence Targets 2→1 at generation 0→1, cold-reopens the same two-identity/two-evidence graph and immutable history, then splits 1→2 at generation 1→2 and cold-reopens both original IDs and exact graph fingerprints. Each mutation uses three writes plus three file and directory syncs; both reset records retain 8,040 B minimum worker stack. Exact OTA1 and partition-table bytes are restored, the product SD remains untouched, final exact-CID Session generation 161 reopens read-only with 59 observations, and the device finishes Home/none/lease 0 with zero RF attempts. The exact flash is reused and only `/dev/cu.usbmodem2101` is opened; Cardputer ports and discovery calls remain zero. This closes S6.4; the deferred S5 RF-positive gate remains open.
+- **Next gate:** define and host-verify the first S6.5 companion contract: a local, explicitly scoped connection lists and opens the same Session/Target/Compare records through versioned schemas and the existing typed Action boundary, with no direct driver/storage access and no broader permission than the device session. The physical S5 gate remains postponed, not waived, until the replacement DIV arrives and passes its read-only profile.
 
 ### Current stage phases
 
@@ -25,8 +25,8 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | S6.1 | Target foundation: stable Target IDs, exact radio identities, editable name/tags/notes/favorite and immutable source-evidence references, all bounded and host-verified | ✅ complete |
 | S6.2 | Explainable correlation proposes links with features/confidence; accept/reject and reversible merge/split never destroy source evidence | ✅ complete |
 | S6.3 | Baseline/diff compares two Sessions and classifies new, disappeared and changed Targets with every conclusion opening its evidence | ✅ complete |
-| S6.4 | On-device Targets and Compare workflows expose the useful result first, stable navigation and full-area detail views | 🟡 in progress |
-| S6.5 | Local USB/Web companion uses the same Actions and versioned schemas with scoped connectivity and secrets | ⬜ later |
+| S6.4 | On-device Targets and Compare workflows expose the useful result first, stable navigation and full-area detail views | ✅ complete |
+| S6.5 | Local USB/Web companion uses the same Actions and versioned schemas with scoped connectivity and secrets | 🟡 in progress |
 | S6.6 | Integrated DEMO-S6: record and compare two surveys, inspect each conclusion on-device or locally, export offline, then return to and close the deferred S5 physical predecessor gate before S6 acceptance | ⬜ later |
 
 ### Roadmap

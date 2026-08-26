@@ -631,6 +631,24 @@ call chain проверяется production ELF gate; `loadTargetsProduct` ис
 Три просмотренных TFT state и exact no-flash/no-scan regression сохранены в
 `E-HIL-175`; cadence продвигается до 12/15 без полной matrix.
 
+Checkpoint merge/split Targets `RB-M158`: exact production
+`0.165.0-targets-fixture-reopen` использует 214 285 B static DRAM, 3 159 796 B
+linked flash и app/factory images 3 160 304/3 225 840 B. Он добавляет bounded path
+continuity fixture и полную on-device interaction merge/split без allocation второго
+graph: linked frames merge/split равны 2 224/1 472 B, helpers replacement — 768/64 B,
+а оба physical reset records сохраняют minimum stack worker 8 040 B. Isolated fixture
+двух Targets открывается при 67 896 B free, освобождается до 93 500 B и удерживает
+lease 13 только пока Targets владеет UI+Storage+RadioSPI. Две atomic mutations
+используют по три writes, три file syncs и три directory syncs. SHA-256
+firmware/ELF/map:
+`40af5486e8525998e86aa3c864e0cb0e21e3aace0d3dc40c8dd4eb1923f01d4b`/
+`20968cb44e847c7e3b9338c462991b6710a2c23c1654e9b3692879c9f91a81ec`/
+`7acc6be8c106566de2d877acae572171e790983a421bd226b9c2070a2a7063f1`.
+Exact `E-HIL-176` byte-for-byte восстанавливает inactive OTA1 4 MiB и исходную
+partition table, удаляет private backups после проверки, read-only открывает product
+generation 161 и заканчивает Home/none/lease 0. Cadence продвигается до 13/15 без
+учёта disposable fixture или недоступной PSRAM как product capacity.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
