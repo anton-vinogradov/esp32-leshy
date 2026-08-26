@@ -76,7 +76,7 @@ def main() -> int:
     mutation_end = entry.index("bool requestTargetsFavoriteMutation")
     mutation_worker = entry[mutation_start:mutation_end]
     require(failures,
-            load_product.index("TargetDecisionStateStoreWorkspace();") <
+            load_product.index("TargetDecisionStateStoreWorkspace();") >
                 load_product.index("filesystem.beginReadOnly()") and
             mutation_worker.index("TargetDecisionStateStoreWorkspace();") <
                 mutation_worker.index("filesystem.begin()") and
@@ -86,9 +86,10 @@ def main() -> int:
             "filesystem.cleanupComplete()" in load_product and
             r'\"filesystem_mount_attempts\":%u' in entry and
             r'\"filesystem_mount_transient_retries\":%u' in entry,
-            "large Target codec buffers must be reserved before FatFs can "
-            "fragment the no-PSRAM heap, with observable pre-mount capacity "
-            "and bounded fail-closed read-only remount recovery")
+            "Targets read recovery must mount before its optional codec "
+            "allocation so a saturated visit cannot starve FatFs; the proven "
+            "mutation path retains observable pre-mount contiguous-capacity "
+            "admission and read recovery remains bounded/fail-closed")
     require(failures,
             "new (std::nothrow) domain::targets::TargetCatalog" in controller and
             "delete scratch" in controller and
@@ -318,7 +319,7 @@ def main() -> int:
         return 1
     print("Targets product contract passed: exact-CID sessions, bounded "
           "lifecycle, list/detail/compare/actions/correlation review, "
-          "pre-mount codec workspace, keypad/touch and mutation state probe")
+          "mount-aware codec workspace, keypad/touch and mutation state probe")
     return 0
 
 

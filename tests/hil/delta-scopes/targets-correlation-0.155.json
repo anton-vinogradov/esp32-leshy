@@ -1,7 +1,7 @@
 {
   "schema": "leshy.hil.delta_scope.v1",
   "id": "targets-correlation-0.155",
-  "candidate_version": "0.155.1-targets-correlation-review",
+  "candidate_version": "0.155.2-targets-correlation-review",
   "changed_surfaces": [
     "target_correlation_unambiguous_proposal_rule",
     "target_correlation_exact_evidence_review",
@@ -12,7 +12,8 @@
     "target_correlation_machine_state_probe",
     "combined_visit_all_builtin_radios_default",
     "serial_wifi_ble_stack_lifetimes",
-    "external_second_div_deterministic_wifi_ble_fixture"
+    "external_wifi_ble_correlation_fixture",
+    "saturated_wifi_visit_targets_mount_order"
   ],
   "required_delta_regression": [
     "one_exact_flash",
@@ -26,10 +27,11 @@
     "decision_and_catalog_publish_at_one_generation",
     "cold_reopen_preserves_decision_and_target_ownership",
     "wifi_and_ble_each_collect_in_one_combined_visit_without_stack_overlap",
+    "targets_readonly_mount_precedes_optional_24k_codec_allocation",
     "workers_finish_inside_eight_second_deadline",
     "workspace_release_and_final_zero_lease"
   ],
-  "new_passive_scans_required": "two bounded scans against an external second-DIV Wi-Fi-then-BLE beacon; DUT remains passive",
+  "new_passive_scans_required": "bounded real Wi-Fi/BLE scans against either the second-DIV fixture or an explicitly authorized macOS BLE-name fixture; DUT remains passive",
   "full_matrix_required": false,
   "cadence_after_acceptance": "10/15"
 }

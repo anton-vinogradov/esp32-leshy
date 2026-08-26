@@ -4677,17 +4677,21 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         return true;
     }
 
-    // Reserve only the large contiguous codec buffer before FatFs fragments
-    // the no-PSRAM heap. Both atomic heads, manifests and payload checksums are
-    // validated while mounted; semantic decoding happens after unmount directly
-    // into the one long-lived runtime catalog and decision log. After unmount
-    // the product runtime is allocated as
+    // Mount before reserving the large codec buffer. A saturated Wi-Fi visit
+    // can leave enough aggregate heap for both operations but not enough for
+    // FatFs after a 24 KiB contiguous allocation. Session recovery uses the
+    // permanent bounded store workspace, so the target-state buffer is needed
+    // only after the filesystem and exact session pair are already available.
+    // Both atomic heads, manifests and payload checksums are then validated
+    // while mounted; semantic decoding happens after unmount directly into the
+    // one long-lived runtime catalog and decision log. After unmount the
+    // product runtime is allocated as
     // separate 11,272 B catalog, 11,272 B decision log, 7,736 B comparison,
     // 2,704 B proposals and 4,240 B controller blocks, then the blob is decoded
     // directly into that one long-lived copy. A monolithic workspace or
     // overlapping transfer/runtime copies do not fit the board.
-    auto* targetStateWorkspace = new (std::nothrow)
-        leshy1::storage::TargetDecisionStateStoreWorkspace();
+    auto* targetStateWorkspace = static_cast<
+        leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
     BoardSdFilesystem filesystem;
     bool mounted = false;
     constexpr std::uint8_t kTargetsMaximumMountAttempts = 3;
@@ -4776,6 +4780,8 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 filesystem.exists(
                     "/leshy/sessions/v1/target-state-head-b.bin");
             if (sessionReady && targetStatePresent) {
+                targetStateWorkspace = new (std::nothrow)
+                    leshy1::storage::TargetDecisionStateStoreWorkspace();
                 if (targetStateWorkspace == nullptr) {
                     targetStateAccepted = false;
                     targetsProductStatus = "target_state_workspace_unavailable";
