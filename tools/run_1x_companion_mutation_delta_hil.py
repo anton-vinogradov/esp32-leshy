@@ -79,6 +79,23 @@ def open_targets(device: PassiveSerial) -> dict[str, Any]:
     return state
 
 
+def leave_targets(device: PassiveSerial) -> tuple[dict[str, Any], int]:
+    """Return through bounded product navigation until the Home lease releases."""
+    state: dict[str, Any] = {}
+    for presses in range(1, 5):
+        state = action(device, "left")
+        if state.get("page") == "home":
+            require(state.get("runtime_owner") == "none" and
+                    state.get("lease_mask") == 0,
+                    f"Home retained Targets resources: {state}")
+            return state, presses
+        require(state.get("page") == "targets" and
+                state.get("runtime_owner") == "targets" and
+                state.get("lease_mask") == 13,
+                f"unexpected Targets exit state: {state}")
+    raise RuntimeError(f"Targets did not release after four Left actions: {state}")
+
+
 def target_by_id(device: PassiveSerial, target_id: str | None = None) \
         -> tuple[dict[str, Any], list[dict[str, Any]]]:
     targets, pages = collect_pages(device, "target.list", "target-list", {})
@@ -153,6 +170,7 @@ def main() -> int:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--reuse-installed-from", type=Path)
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
 
@@ -203,16 +221,37 @@ def main() -> int:
         },
         "flash_count": 0,
     }
+    if args.reuse_installed_from is not None:
+        precursor_path = args.reuse_installed_from / "run.json"
+        if not precursor_path.is_file():
+            parser.error("reuse precursor run.json is missing")
+        precursor = json.loads(precursor_path.read_text(encoding="utf-8"))
+        precursor_target = precursor.get("target", {})
+        precursor_candidate = precursor.get("candidate", {})
+        if (precursor.get("flash_count") != 1 or
+                precursor_target.get("port") != args.port or
+                precursor_target.get("ports_opened") != [args.port] or
+                precursor_candidate != record["candidate"] or
+                precursor.get("cleanup", {}).get("complete") is not True):
+            parser.error("reuse precursor does not prove this exact installed candidate")
+        record["installed_candidate_reused"] = True
+        record["installation_precursor"] = str(precursor_path)
+        record["installation_precursor_status"] = precursor.get("status")
+    else:
+        record["installed_candidate_reused"] = False
     write_json(args.output / "run.json", record)
     cleanup: dict[str, Any] = {"attempted": False}
     device: PassiveSerial | None = None
 
     try:
-        checkpoint(args.output, record, "flash_original_div")
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        record["flash_count"] = 1
-        write_json(args.output / "run.json", record)
-        time.sleep(1.0)
+        if args.reuse_installed_from is None:
+            checkpoint(args.output, record, "flash_original_div")
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            record["flash_count"] = 1
+            write_json(args.output / "run.json", record)
+            time.sleep(1.0)
+        else:
+            checkpoint(args.output, record, "reuse_installed_candidate")
         device = PassiveSerial(args.port, 115200, timeout=0.25)
         synchronize_console(device, 30.0)
         metrics_before = query(device, b"metrics", "leshy.boot.v1", "ready")
@@ -336,11 +375,7 @@ def main() -> int:
                 f"favorite was not restored: {target_restored}")
 
         checkpoint(args.output, record, "grant_revoke_and_cold_reopen")
-        exited = action(device, "left")
-        require(exited.get("page") == "home" and
-                exited.get("runtime_owner") == "none" and
-                exited.get("lease_mask") == 0,
-                f"Targets did not release: {exited}")
+        exited, exit_presses = leave_targets(device)
         revoked = companion_request(device, request(
             "target.mutation.status", "revoked", mutation_id=restore_id))
         require(revoked.get("reason") in ("not_connected", "unknown_mutation"),
@@ -374,11 +409,7 @@ def main() -> int:
         require(cold_target.get("revision") == revision_before + 2 and
                 cold_target.get("favorite") is favorite_before,
                 f"cold restored value mismatch: {cold_target}")
-        final_home = action(device, "left")
-        require(final_home.get("page") == "home" and
-                final_home.get("runtime_owner") == "none" and
-                final_home.get("lease_mask") == 0,
-                f"final Targets release failed: {final_home}")
+        final_home, final_exit_presses = leave_targets(device)
         released = query(device, b"targets.state",
                          "leshy.targets.product.v1", "state")
         require(released.get("status") == "not_loaded" and
@@ -449,6 +480,8 @@ def main() -> int:
             },
             "initial_list_pages": list_before,
             "released": released,
+            "exit_left_presses": exit_presses,
+            "final_exit_left_presses": final_exit_presses,
             "safe_outputs": safe,
             "input": inputs,
             "cleanup": cleanup,
