@@ -555,7 +555,9 @@ def main() -> int:
                 correlation_count=0,
                 correlation_proposal_present=False,
                 target_count=target_count_before,
-                source_identity_count=identities_before + 1)
+                # Accepting ownership changes the durable Target graph.  It
+                # must not rewrite the immutable source-session population.
+                source_identity_count=identities_before)
         states["accepted"] = saved
         screens["accepted"] = capture(
             device, frames, "targets-correlation-accepted")
@@ -574,7 +576,7 @@ def main() -> int:
                 target_state_generation=generation_after,
                 correlation_decision_count=decisions_after,
                 target_count=target_count_before,
-                source_identity_count=identities_before + 1)
+                source_identity_count=identities_before)
         states["reopened"] = reopened
         screens["reopened"] = capture(
             device, frames, "targets-correlation-cold-reopened")

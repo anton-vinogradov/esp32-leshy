@@ -32,6 +32,8 @@ def main() -> int:
     notes_runner = (ROOT / "tools/run_1x_targets_notes_hil.py").read_text()
     correlation_runner = (
         ROOT / "tools/run_1x_targets_correlation_hil.py").read_text()
+    correlation_recovery_runner = (
+        ROOT / "tools/run_1x_targets_correlation_recovery_hil.py").read_text()
     correlation_fixture_runner = (
         ROOT / "tools/run_1x_targets_correlation_fixture_hil.py").read_text()
     correlation_fixture = (
@@ -287,11 +289,33 @@ def main() -> int:
             'mutation_correlation_status="accepted"' in correlation_runner and
             "correlation_decision_count=decisions_after" in
                 correlation_runner and
+            "source_identity_count=identities_before" in
+                correlation_runner and
+            "source_identity_count=identities_before + 1" not in
+                correlation_runner and
             "targets-correlation-cold-reopen" in correlation_runner and
             "mutation_directory_syncs" in correlation_runner,
             "correlation HIL must find one bounded natural proposal, review "
             "both exact observations, atomically accept and cold-reopen the "
             "same decision log")
+    require(failures,
+            "leshy.targets_correlation_recovery_hil.run.v1" in
+                correlation_recovery_runner and
+            "exact HIL requires clean committed HEAD" in
+                correlation_recovery_runner and
+            "targets-correlation-recovery-cold-boot" in
+                correlation_recovery_runner and
+            "selected_revision=revision_before + 1" in
+                correlation_recovery_runner and
+            "correlation_decision_count=decisions_before + 1" in
+                correlation_recovery_runner and
+            "source_identity_count=identities_before" in
+                correlation_recovery_runner and
+            '"flash_count": 0' in correlation_recovery_runner and
+            '"cardputer_ports_opened": 0' in correlation_recovery_runner,
+            "correlation recovery HIL must bind the exact precursor, cold-open "
+            "the advanced Target and decision log, preserve immutable source "
+            "cardinality and touch only the explicit DUT port")
     require(failures,
             'constexpr int kBleTxDbm = -12' in correlation_fixture and
             'ESP_PWR_LVL_N12' in correlation_fixture and
