@@ -13,7 +13,10 @@ from pathlib import Path
 
 LIMITS = {
     "TargetsController::reset()": 512,
-    "TargetsController::loadBindings(": 1024,
+    # 0.155.3 proved that a 752-byte frame can trip loopTask's canary once
+    # correlation review adds its callees. Preserve the previously measured
+    # 416-byte product envelope instead of accepting a merely local frame.
+    "TargetsController::loadBindings(": 512,
     "TargetsController::loadComparisonSide(": 512,
     "TargetsController::comparisonItemBefore(": 768,
     "TargetsController::rebuildComparisonOrder()": 512,

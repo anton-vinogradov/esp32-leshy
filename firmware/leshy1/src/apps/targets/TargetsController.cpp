@@ -102,16 +102,23 @@ bool laterIdentityExists(const services::survey::SurveySession& session,
     return false;
 }
 
-bool appendStrongest(
+bool filterContainsIdentity(
+    const services::targets::SessionTargetIdentityFilter& filter,
+    const domain::targets::TargetIdentity& identity) {
+    for (std::size_t index = 0; index < filter.size; ++index) {
+        if (domain::targets::targetIdentityEqual(filter.identities[index],
+                                                  identity)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool countUniqueIdentities(
     const services::survey::SurveySession& session,
     const services::survey::SurveySession* exclude,
-    std::array<RankedIdentity,
-               domain::targets::TargetCatalog::kCapacity>* ranked,
-    std::size_t* rankedSize,
     std::size_t* uniqueCount) {
-    if (ranked == nullptr || rankedSize == nullptr || uniqueCount == nullptr) {
-        return false;
-    }
+    if (uniqueCount == nullptr) return false;
     domain::targets::SourceId sourceId{};
     if (!services::targets::sourceIdForSession(session, &sourceId)) return false;
     for (std::size_t index = 0; index < session.size(); ++index) {
@@ -126,21 +133,36 @@ bool appendStrongest(
             continue;
         }
         ++*uniqueCount;
-        RankedIdentity candidate{admitted.identity, observation->rssiDbm,
-                                 observation->monotonicUs};
-        std::size_t insert = *rankedSize;
-        while (insert > 0 &&
-               rankedBefore(candidate, (*ranked)[insert - 1])) {
-            --insert;
+    }
+    return true;
+}
+
+bool considerStrongestUnselected(
+    const services::survey::SurveySession& session,
+    const services::survey::SurveySession* exclude,
+    const services::targets::SessionTargetIdentityFilter& selected,
+    RankedIdentity* strongest, bool* found) {
+    if (strongest == nullptr || found == nullptr) return false;
+    domain::targets::SourceId sourceId{};
+    if (!services::targets::sourceIdForSession(session, &sourceId)) return false;
+    for (std::size_t index = 0; index < session.size(); ++index) {
+        const auto* observation = session.get(index);
+        if (observation == nullptr) return false;
+        const auto admitted = services::targets::admitObservationToTarget(
+            sourceId, 1, *observation);
+        if (!admitted.valid()) return false;
+        if (laterIdentityExists(session, index, sourceId, admitted.identity) ||
+            (exclude != nullptr &&
+             sessionContainsIdentity(*exclude, admitted.identity)) ||
+            filterContainsIdentity(selected, admitted.identity)) {
+            continue;
         }
-        if (insert >= ranked->size()) continue;
-        const std::size_t last = *rankedSize < ranked->size()
-            ? *rankedSize : ranked->size() - 1;
-        for (std::size_t move = last; move > insert; --move) {
-            (*ranked)[move] = (*ranked)[move - 1];
+        const RankedIdentity candidate{
+            admitted.identity, observation->rssiDbm, observation->monotonicUs};
+        if (!*found || rankedBefore(candidate, *strongest)) {
+            *strongest = candidate;
+            *found = true;
         }
-        (*ranked)[insert] = candidate;
-        if (*rankedSize < ranked->size()) ++*rankedSize;
     }
     return true;
 }
@@ -156,20 +178,32 @@ bool selectStrongestIdentities(
     }
     *filter = {};
     *sourceIdentityCount = 0;
-    std::array<RankedIdentity,
-               domain::targets::TargetCatalog::kCapacity> ranked{};
-    std::size_t rankedSize = 0;
-    if (!appendStrongest(*current.session, nullptr, &ranked, &rankedSize,
-                         sourceIdentityCount)) {
+    if (!countUniqueIdentities(*current.session, nullptr,
+                               sourceIdentityCount)) {
         return false;
     }
     if (compare && (baseline.session == nullptr ||
-        !appendStrongest(*baseline.session, current.session, &ranked,
-                         &rankedSize, sourceIdentityCount))) {
+        !countUniqueIdentities(*baseline.session, current.session,
+                               sourceIdentityCount))) {
         return false;
     }
-    for (std::size_t index = 0; index < rankedSize; ++index) {
-        filter->identities[filter->size++] = ranked[index].identity;
+
+    // Select the global top-N one identity at a time. This bounded rescan keeps
+    // the same dense-air ordering without placing another capacity-sized array
+    // on Arduino's loopTask stack while Targets already owns its foreground
+    // workspace.
+    while (filter->size < filter->identities.size()) {
+        RankedIdentity strongest{};
+        bool found = false;
+        if (!considerStrongestUnselected(*current.session, nullptr, *filter,
+                                         &strongest, &found) ||
+            (compare && !considerStrongestUnselected(
+                *baseline.session, current.session, *filter, &strongest,
+                &found))) {
+            return false;
+        }
+        if (!found) break;
+        filter->identities[filter->size++] = strongest.identity;
     }
     return true;
 }
