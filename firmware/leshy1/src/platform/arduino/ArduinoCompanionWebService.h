@@ -31,7 +31,8 @@ public:
     static constexpr int kDynamicRxBuffers = 4;
     static constexpr int kDynamicTxBuffers = 4;
     static constexpr int kRxManagementBuffers = 2;
-    static constexpr int kManagementShortBuffers = 4;
+    // ESP-IDF rejects values below six during driver initialization.
+    static constexpr int kManagementShortBuffers = 6;
 
     enum class BeginStage : std::uint8_t {
         Idle,

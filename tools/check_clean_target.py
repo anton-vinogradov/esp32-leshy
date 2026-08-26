@@ -1429,7 +1429,7 @@ def main() -> int:
             "kStaticRxBuffers = 2",
             "kDynamicRxBuffers = 4",
             "kDynamicTxBuffers = 4",
-            "kManagementShortBuffers = 4",
+            "kManagementShortBuffers = 6",
             "esp_netif_attach_wifi_ap",
             "esp_wifi_set_default_wifi_ap_handlers",
             "esp_wifi_set_storage(WIFI_STORAGE_RAM)",
