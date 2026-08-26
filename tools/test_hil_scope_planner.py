@@ -64,6 +64,25 @@ class HilScopePlannerTests(unittest.TestCase):
         )
         self.assertEqual(result["scope"], "none")
 
+    def test_only_explicit_pass_status_counts_as_accepted(self) -> None:
+        with tempfile.TemporaryDirectory(dir=MODULE.ROOT) as directory:
+            root = Path(directory)
+            passing = root / "passing.json"
+            partial = root / "partial.json"
+            failed = root / "failed.json"
+            malformed = root / "malformed.json"
+            passing.write_text('{"status":"pass"}', encoding="utf-8")
+            partial.write_text(
+                '{"status":"pass_delta_positive_source_open"}',
+                encoding="utf-8",
+            )
+            failed.write_text('{"status":"failed"}', encoding="utf-8")
+            malformed.write_text('{', encoding="utf-8")
+            self.assertTrue(MODULE.is_accepted_evidence(passing))
+            self.assertTrue(MODULE.is_accepted_evidence(partial))
+            self.assertFalse(MODULE.is_accepted_evidence(failed))
+            self.assertFalse(MODULE.is_accepted_evidence(malformed))
+
     def test_cross_cutting_change_selects_full(self) -> None:
         result = MODULE.plan(
             POLICY, ["firmware/leshy1/src/storage/SessionStore.cpp"],

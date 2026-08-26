@@ -45,6 +45,18 @@ def anchor_commit(anchor_evidence: str) -> str | None:
     return commits[-1] if commits else None
 
 
+def is_accepted_evidence(path: Path) -> bool:
+    """Count only explicit passing summaries, never fail-closed precursors."""
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    status = value.get("status") if isinstance(value, dict) else None
+    return isinstance(status, str) and (
+        status == "pass" or status.startswith("pass_")
+    )
+
+
 def accepted_evidence_since(anchor_evidence: str) -> list[str]:
     anchor = anchor_commit(anchor_evidence)
     if anchor is None:
@@ -60,7 +72,9 @@ def accepted_evidence_since(anchor_evidence: str) -> list[str]:
         and name.endswith(".json")
         and name != anchor_evidence
     }
-    return sorted(candidates)
+    return sorted(
+        name for name in candidates if is_accepted_evidence(ROOT / name)
+    )
 
 
 def load_policy(path: Path) -> dict:
