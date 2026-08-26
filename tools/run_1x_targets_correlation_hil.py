@@ -506,6 +506,10 @@ def main() -> int:
         revision_before = int(selected["selected_revision"])
         generation_before = int(selected["target_state_generation"])
         decisions_before = int(selected["correlation_decision_count"])
+        catalog_count_before = int(selected.get("catalog_count", 0))
+        catalog_capacity = int(selected.get("catalog_capacity", 0))
+        catalog_bounded = (catalog_capacity > 0 and
+                           catalog_count_before == catalog_capacity)
 
         action(device, "right")
         action(device, "right")
@@ -573,12 +577,16 @@ def main() -> int:
             f"targets-correlation-{args.decision}-selected")
         action(device, "right")
         saved = wait_mutation(device)
+        # Retain the exact terminal mutation state even when a fail-closed
+        # assertion below aborts the run. This made the prior transient rebuild
+        # failure diagnosable without repeating the physical write.
+        states["mutation_result"] = saved
         generation_after = generation_before + 1
         decisions_after = decisions_before + 1
         revision_after = revision_before + (
             1 if args.decision == "accept" else 0)
         target_count_after = target_count_before + (
-            0 if args.decision == "accept" else 1)
+            0 if args.decision == "accept" or catalog_bounded else 1)
         check_atomic_decision(
             saved, generation_after, decisions_after, args.decision)
         require(saved, f"{args.decision} ownership", status="ready",
@@ -591,6 +599,12 @@ def main() -> int:
                 # Decisions change the durable graph/history only. They must
                 # never rewrite the immutable source-session population.
                 source_identity_count=identities_before)
+        if (args.decision == "reject" and catalog_bounded and
+                (not bool(saved.get("truncated")) or
+                 int(saved.get("admission_capacity_skipped", 0)) == 0 or
+                 int(saved.get("catalog_count", 0)) != catalog_capacity)):
+            raise RuntimeError(
+                f"bounded reject did not retain its explicit truncation: {saved}")
         states[args.decision] = saved
         screens[args.decision] = capture(
             device, frames, f"targets-correlation-{args.decision}")
@@ -627,8 +641,13 @@ def main() -> int:
                     candidate_rows[0].get("selected_target_id") != target_id):
                 raise RuntimeError(
                     f"accepted identity ownership mismatch: {reopened_rows}")
-        elif (len(candidate_rows) != 1 or
-              candidate_rows[0].get("selected_target_id") == target_id):
+        elif catalog_bounded and candidate_rows:
+            raise RuntimeError(
+                f"bounded rejected identity acquired visible ownership: "
+                f"{reopened_rows}")
+        elif (not catalog_bounded and
+              (len(candidate_rows) != 1 or
+               candidate_rows[0].get("selected_target_id") == target_id)):
             raise RuntimeError(
                 f"rejected identity did not remain independent: "
                 f"{reopened_rows}")
@@ -659,6 +678,10 @@ def main() -> int:
             "target_revision_after": revision_after,
             "target_count_before": target_count_before,
             "target_count_after": target_count_after,
+            "catalog_count_before": catalog_count_before,
+            "catalog_count_after": int(reopened.get("catalog_count", 0)),
+            "catalog_capacity": catalog_capacity,
+            "catalog_bounded": catalog_bounded,
             "target_state_generation_before": generation_before,
             "target_state_generation_after": generation_after,
             "decision_count_before": decisions_before,

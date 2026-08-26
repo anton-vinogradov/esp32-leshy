@@ -155,6 +155,8 @@ def main() -> int:
     require(failures,
             'std::strcmp(command, "targets.state")' in entry and
             "leshy.targets.product.v1" in entry and
+            r'\"catalog_count\":%u' in entry and
+            r'\"catalog_capacity\":%u' in entry and
             r'\"read_only\":false' in entry and
             r'\"write_enabled\":%s' in entry and
             r'\"mutation_state\":\"%s\"' in entry and
@@ -176,6 +178,12 @@ def main() -> int:
             "buildSessionCorrelationReview(" in controller and
             "sessionCorrelationCandidatePending(" in controller and
             "CorrelationDecisionLog* targetsMutationDecisions" in entry and
+            "adoptTargetsProductState(" in entry and
+            "finishTargetsProductAllocation(catalog, decisions, false)" in
+                entry and
+            "catalog = nullptr;" in entry and
+            "decisions = nullptr;" in entry and
+            "event.targetId, true, event.catalogRecovered" in entry and
             "CorrelationService service(*catalog, *decisions, lookup)" in entry and
             "requestTargetsCorrelationMutation(" in entry and
             r'\"correlation_count\":%u' in entry and
@@ -190,7 +198,8 @@ def main() -> int:
             r'\"selected_observation_label_hex\":\"%s\"' in entry and
             r'\"mutation_correlation_status\":\"%s\"' in entry,
             "Targets correlation review must keep candidates independent, "
-            "show explainable proposals and atomically persist accept/reject")
+            "show explainable proposals, atomically persist accept/reject and "
+            "adopt the verified worker state without duplicate heap blocks")
     require(failures,
             "resetSessionCorrelationProposalSet(" in correlation_review_header and
             "resetSessionCorrelationProposalSet(" in correlation_review and

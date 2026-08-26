@@ -4590,11 +4590,9 @@ void releaseTargetsProduct() {
     targetsProductStatus = "not_loaded";
 }
 
-bool allocateTargetsProduct() {
-    targetsHeapFreeBefore = static_cast<std::uint32_t>(
-        heap_caps_get_free_size(MALLOC_CAP_8BIT));
-    auto* catalog = new (std::nothrow) TargetCatalog();
-    auto* decisions = new (std::nothrow) CorrelationDecisionLog();
+bool finishTargetsProductAllocation(TargetCatalog* catalog,
+                                    CorrelationDecisionLog* decisions,
+                                    bool deleteStateOnFailure) {
     auto* correlations = new (std::nothrow)
         leshy1::services::targets::SessionCorrelationProposalSet();
     auto* comparison = new (std::nothrow)
@@ -4615,11 +4613,45 @@ bool allocateTargetsProduct() {
     delete workspace;
     delete comparison;
     delete correlations;
-    delete decisions;
-    delete catalog;
+    if (deleteStateOnFailure) {
+        delete decisions;
+        delete catalog;
+    }
     targetsProductStatus = "workspace_unavailable";
     lastRuntimeEvent = targetsProductStatus;
     return false;
+}
+
+bool allocateTargetsProduct() {
+    targetsHeapFreeBefore = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    auto* catalog = new (std::nothrow) TargetCatalog();
+    auto* decisions = new (std::nothrow) CorrelationDecisionLog();
+    if (catalog == nullptr || decisions == nullptr) {
+        delete decisions;
+        delete catalog;
+        targetsProductStatus = "workspace_unavailable";
+        lastRuntimeEvent = targetsProductStatus;
+        return false;
+    }
+    return finishTargetsProductAllocation(catalog, decisions, true);
+}
+
+bool adoptTargetsProductState(TargetCatalog*& catalog,
+                              CorrelationDecisionLog*& decisions) {
+    if (catalog == nullptr || decisions == nullptr) return false;
+    targetsHeapFreeBefore = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    if (!finishTargetsProductAllocation(catalog, decisions, false)) {
+        return false;
+    }
+    // The runtime destructor now owns both recovered fixed-capacity blocks.
+    // Clearing the worker hand-off pointers prevents a second delete and,
+    // more importantly, avoids allocating duplicate 11,272-byte state blocks
+    // while the just-exited worker task stack still awaits idle-task cleanup.
+    catalog = nullptr;
+    decisions = nullptr;
+    return true;
 }
 
 TargetsLoadStatus loadBoundTargetsProduct(
@@ -4904,16 +4936,29 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     return true;
 }
 
-bool rebuildTargetsProductFromCatalog(const TargetCatalog* persisted,
-                                      const CorrelationDecisionLog* decisions,
+bool rebuildTargetsProductFromCatalog(TargetCatalog*& persisted,
+                                      CorrelationDecisionLog*& decisions,
                                       const TargetId& selectedId,
-                                      bool openActions) {
-    if (!allocateTargetsProduct()) return false;
+                                      bool openActions,
+                                      bool usePersistedState = true) {
+    const bool adopting = usePersistedState && persisted != nullptr &&
+        decisions != nullptr;
+    if (adopting ? !adoptTargetsProductState(persisted, decisions)
+                 : !allocateTargetsProduct()) {
+        return false;
+    }
     TargetsController& controller = targetsProductRuntime->controller;
+    // Adoption clears the hand-off pointers, so use the runtime-owned aliases
+    // for the controller's explicitly supported in-place reopen path.
+    const TargetCatalog* persistedForLoad = adopting
+        ? &targetsProductRuntime->workspace.catalog : nullptr;
+    const CorrelationDecisionLog* decisionsForLoad = adopting
+        ? &targetsProductRuntime->workspace.decisions : nullptr;
     const TargetsLoadStatus loaded = loadBoundTargetsProduct(
-        controller, persisted != nullptr && persisted->size() != 0
-            ? persisted : nullptr,
-        decisions);
+        controller,
+        persistedForLoad != nullptr && persistedForLoad->size() != 0
+            ? persistedForLoad : nullptr,
+        decisionsForLoad);
     if (loaded != TargetsLoadStatus::Ready) {
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
@@ -5563,9 +5608,8 @@ void serviceTargetsMutationWorker() {
     targetsMutationTaskHandle = nullptr;
     targetsMutationReport = event;
     const bool rebuilt = rebuildTargetsProductFromCatalog(
-        event.catalogRecovered ? targetsMutationCatalog : nullptr,
-        event.catalogRecovered ? targetsMutationDecisions : nullptr,
-        event.targetId, true);
+        targetsMutationCatalog, targetsMutationDecisions,
+        event.targetId, true, event.catalogRecovered);
     if (rebuilt && event.correlation && targetsProductRuntime != nullptr) {
         for (std::size_t index = 0; index < 4; ++index) {
             targetsProductRuntime->controller.next();
@@ -15668,7 +15712,8 @@ void emitTargetsState(Stream& reply) {
         "{\"schema\":\"leshy.targets.product.v1\",\"kind\":\"state\","
         "\"status\":\"%s\",\"workspace_allocated\":%s,"
         "\"page_open\":%s,\"view\":\"%s\","
-        "\"target_count\":%u,\"source_identity_count\":%u,"
+        "\"target_count\":%u,\"catalog_count\":%u,"
+        "\"catalog_capacity\":%u,\"source_identity_count\":%u,"
         "\"admission_stage\":\"%s\",\"admission_status\":\"%s\","
         "\"admission_target_status\":\"%s\","
         "\"admission_observations\":%u,\"admission_identities\":%u,"
@@ -15765,6 +15810,9 @@ void emitTargetsState(Stream& reply) {
         controller == nullptr ? "false" : "true",
         uiController.page() == 7 ? "true" : "false", view,
         static_cast<unsigned>(controller == nullptr ? 0 : controller->size()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->catalog().size()),
+        static_cast<unsigned>(TargetCatalog::kCapacity),
         static_cast<unsigned>(controller == nullptr
                                   ? 0 : controller->sourceIdentityCount()),
         controller == nullptr ? "none" : controller->lastAdmissionStage(),

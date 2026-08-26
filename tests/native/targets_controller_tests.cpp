@@ -544,6 +544,77 @@ void fullPersistedCatalogDoesNotBlockCurrentView() {
     CHECK(controller.row(0)->identity.value[5] == 1);
 }
 
+void rejectedCorrelationAtCatalogBoundReopensTruncated() {
+    SurveySession baseline = session(
+        "full-corr-old", 3000,
+        {labeled(RadioKind::Wifi, 1, 3010, 40, -50, "Beacon")});
+    OwnedTargetsWorkspace baselineWorkspace;
+    TargetsController baselineController(baselineWorkspace);
+    CHECK(baselineController.load({&baseline, 40}) ==
+          TargetsLoadStatus::Ready);
+
+    SurveySession filler = rangeSession(
+        "full-corr-filler", 4000, 1, TargetCatalog::kCapacity - 1, -60);
+    OwnedTargetsWorkspace fillerWorkspace;
+    TargetsController fillerController(fillerWorkspace);
+    CHECK(fillerController.load({&filler, 39},
+                                baselineController.catalog()) ==
+          TargetsLoadStatus::Ready);
+    const TargetCatalog persisted = fillerController.catalog();
+    CHECK(persisted.size() == TargetCatalog::kCapacity);
+
+    SurveySession current = session(
+        "full-corr-new", 5000,
+        {labeled(RadioKind::Ble, 1, 5010, 41, -55, "Beacon")});
+    OwnedTargetsWorkspace reviewWorkspace;
+    TargetsController review(reviewWorkspace);
+    CHECK(review.load({&baseline, 40}, {&current, 41}, persisted) ==
+          TargetsLoadStatus::Ready);
+    CHECK(review.size() == 1);
+    CHECK(review.next());
+    CHECK(review.openSelected());
+    CHECK(review.openSelected());
+    for (std::size_t index = 0; index < 4; ++index) CHECK(review.next());
+    CHECK(review.selectedCorrelationCount() == 1);
+    CHECK(review.openCorrelationList());
+    CHECK(review.openSelected());
+    const auto* proposal = review.reviewedCorrelationProposal();
+    CHECK(proposal != nullptr);
+
+    CorrelationDecisionLog decisions;
+    const auto* target = proposal == nullptr
+        ? nullptr : persisted.find(proposal->targetId);
+    CHECK(target != nullptr);
+    if (proposal != nullptr && target != nullptr) {
+        CHECK(decisions.record(*proposal, CorrelationDecision::Reject,
+                               target->revision, target->revision) ==
+              CorrelationDecisionStatus::Rejected);
+    }
+
+    OwnedTargetsWorkspace reopenedWorkspace;
+    reopenedWorkspace.catalog = persisted;
+    reopenedWorkspace.decisions = decisions;
+    TargetsController reopened(reopenedWorkspace);
+    CHECK(reopened.load({&baseline, 40}, {&current, 41},
+                        reopenedWorkspace.catalog,
+                        reopenedWorkspace.decisions) ==
+          TargetsLoadStatus::Ready);
+    CHECK(reopened.decisions().size() == 1);
+    CHECK(reopened.catalog().size() == TargetCatalog::kCapacity);
+    CHECK(reopened.catalog().findByIdentity(
+              review.reviewedCorrelationProposal() == nullptr
+                  ? TargetIdentity{}
+                  : review.reviewedCorrelationProposal()->candidateIdentity) ==
+          nullptr);
+    CHECK(reopened.selectedCorrelationCount() == 0);
+    CHECK(reopened.size() == 1);
+    CHECK(reopened.truncated());
+    CHECK(reopened.lastAdmission().valid());
+    CHECK(reopened.lastAdmission().capacitySkipped == 1);
+    CHECK(reopened.lastAdmission().targetStatus ==
+          TargetMutationStatus::CatalogFull);
+}
+
 }  // namespace
 
 int main() {
@@ -557,6 +628,7 @@ int main() {
     persistedMetadataFollowsIdentityAcrossVisits();
     correlationReviewKeepsCandidateUnownedUntilDecision();
     fullPersistedCatalogDoesNotBlockCurrentView();
+    rejectedCorrelationAtCatalogBoundReopensTruncated();
     if (failures != 0) {
         std::cerr << failures << " targets controller test(s) failed\n";
         return 1;
