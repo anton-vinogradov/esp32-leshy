@@ -89,6 +89,12 @@ void appendProposal(SessionCorrelationProposalSet* output,
 
 }  // namespace
 
+void resetSessionCorrelationProposalSet(
+    SessionCorrelationProposalSet* output) {
+    if (output == nullptr) return;
+    std::memset(static_cast<void*>(output), 0, sizeof(*output));
+}
+
 SessionCorrelationReviewStatus buildSessionCorrelationReview(
     const TargetComparisonSessionBinding& baseline,
     const TargetComparisonSessionBinding& current,
@@ -101,20 +107,20 @@ SessionCorrelationReviewStatus buildSessionCorrelationReview(
                                                       current.source)) {
         return SessionCorrelationReviewStatus::InvalidArgument;
     }
-    *output = {};
+    resetSessionCorrelationProposalSet(output);
     SurveySessionTargetEvidenceLookup lookup(baseline, current);
     CorrelationService service(catalog, decisions, lookup);
     for (std::size_t index = 0; index < current.session->size(); ++index) {
         const Observation* candidateObservation = current.session->get(index);
         if (candidateObservation == nullptr) {
-            *output = {};
+            resetSessionCorrelationProposalSet(output);
             return SessionCorrelationReviewStatus::EvidenceUnavailable;
         }
         const auto candidate = admitObservationToTarget(
             current.source.id, current.source.generation,
             *candidateObservation);
         if (!candidate.valid()) {
-            *output = {};
+            resetSessionCorrelationProposalSet(output);
             return SessionCorrelationReviewStatus::EvidenceUnavailable;
         }
         if (!latestIdentity(*current.session, index, current.source.id,
@@ -132,7 +138,7 @@ SessionCorrelationReviewStatus buildSessionCorrelationReview(
              targetIndex < catalog.size(); ++targetIndex) {
             const TargetRecord* target = catalog.get(targetIndex);
             if (target == nullptr) {
-                *output = {};
+                resetSessionCorrelationProposalSet(output);
                 return SessionCorrelationReviewStatus::EvidenceUnavailable;
             }
             bool targetMatched = false;

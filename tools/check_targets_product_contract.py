@@ -36,6 +36,12 @@ def main() -> int:
         ROOT / "tools/run_1x_targets_correlation_fixture_hil.py").read_text()
     correlation_fixture = (
         ROOT / "tests/hil/fixtures/correlation-beacon/src/main.cpp").read_text()
+    correlation_review_header = (
+        ROOT / "firmware/leshy1/src/services/targets/SessionCorrelationReview.h").read_text()
+    correlation_review = (
+        ROOT / "firmware/leshy1/src/services/targets/SessionCorrelationReview.cpp").read_text()
+    stack_checker = (
+        ROOT / "tools/check_targets_stack_elf_contract.py").read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -176,6 +182,16 @@ def main() -> int:
             r'\"mutation_correlation_status\":\"%s\"' in entry,
             "Targets correlation review must keep candidates independent, "
             "show explainable proposals and atomically persist accept/reject")
+    require(failures,
+            "resetSessionCorrelationProposalSet(" in correlation_review_header and
+            "resetSessionCorrelationProposalSet(" in correlation_review and
+            "std::memset(static_cast<void*>(output), 0, sizeof(*output))" in
+                correlation_review and
+            "*output = {}" not in correlation_review and
+            '"buildSessionCorrelationReview(": 1024' in stack_checker and
+            '"CorrelationService::propose(": 768' in stack_checker,
+            "multi-KiB correlation proposal results must reset in place and "
+            "the exact ELF gate must cover the complete proposal call chain")
     require(failures,
             "lastAdmissionStage()" in entry and
             "lastAdmission()" in entry and

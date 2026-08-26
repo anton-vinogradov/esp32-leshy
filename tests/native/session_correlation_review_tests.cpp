@@ -100,6 +100,8 @@ void uniqueCrossRadioNameProducesExplainableProposal() {
     createBaselineTarget(&catalog, target(1), oldBinding);
 
     SessionCorrelationProposalSet proposals;
+    proposals.size = proposals.values.size();
+    proposals.truncated = true;
     CHECK(buildSessionCorrelationReview(oldBinding, newBinding, catalog,
                                         decisions, &proposals) ==
           SessionCorrelationReviewStatus::Ready);

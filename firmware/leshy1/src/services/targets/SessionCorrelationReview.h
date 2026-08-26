@@ -24,6 +24,11 @@ struct SessionCorrelationProposalSet final {
     bool truncated = false;
 };
 
+// Reset the multi-KiB result in its caller-owned storage.  Aggregate
+// assignment creates an equally large loop-task stack temporary on ESP32-S3.
+void resetSessionCorrelationProposalSet(
+    SessionCorrelationProposalSet* output);
+
 // Builds explainable, non-mutating proposals only for an identity that is new
 // in the current Session and has one unambiguous retained Target match in the
 // baseline Session.  Exact advertised-name equality plus <=20 dB signal

@@ -17,6 +17,12 @@ LIMITS = {
     # correlation review adds its callees. Preserve the previously measured
     # 416-byte product envelope instead of accepting a merely local frame.
     "TargetsController::loadBindings(": 512,
+    # Enforce the complete proposal call chain that 0.155.4 reached for the
+    # first time with a real cross-radio fixture. A 2,704-byte aggregate reset
+    # previously inflated this review frame to 3,424 bytes and tripped the
+    # loopTask canary before the proposal could be rendered.
+    "buildSessionCorrelationReview(": 1024,
+    "CorrelationService::propose(": 768,
     "TargetsController::loadComparisonSide(": 512,
     "TargetsController::comparisonItemBefore(": 768,
     "TargetsController::rebuildComparisonOrder()": 512,
