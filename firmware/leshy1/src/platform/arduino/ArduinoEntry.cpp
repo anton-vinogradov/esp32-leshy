@@ -4916,9 +4916,10 @@ void stopWebCompanion(
     resourceBroker.release(
         AppRuntime::kForegroundOwner,
         leshy1::kernel::runtime::resourceMask(Resource::EspRf));
-    if (!restoreProductSurveyWorkerAfterWebCompanion()) {
-        lastRuntimeEvent = "companion_web_survey_worker_restore_failed";
-    }
+    // Keep the mutually exclusive survey worker unloaded while the heavy
+    // Targets foreground remains open. releaseTargetsProduct() restores it
+    // after that foreground graph has been freed, avoiding fragmented-heap
+    // failure without hiding or dropping any survey state.
     if (restoreTargets) restoreTargetsAfterWebCompanion();
     if (!leaveOverlay) webCompanionOverlay = false;
 }
@@ -5042,6 +5043,9 @@ void releaseTargetsProduct() {
     usbCompanionMutation = {};
     delete targetsProductRuntime;
     targetsProductRuntime = nullptr;
+    if (!restoreProductSurveyWorkerAfterWebCompanion()) {
+        lastRuntimeEvent = "companion_web_survey_worker_restore_failed";
+    }
     targetsHeapFreeAfter = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_8BIT));
     targetsProductStatus = "not_loaded";

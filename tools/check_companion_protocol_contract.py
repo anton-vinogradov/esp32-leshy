@@ -419,6 +419,8 @@ def main() -> int:
         'active.get("survey_worker_suspended") is True',
         'active.get("lease_mask") == 15',
         'stopped.get("credential_present") is False',
+        'stopped.get("survey_worker_suspended") is True',
+        'released.get("survey_worker_suspended") is False',
         'released.get("lease_mask") == 0',
         '"raw_radio_tx_commands": 0',
         'best_effort_cleanup(device)',

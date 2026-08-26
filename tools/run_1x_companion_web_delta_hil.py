@@ -542,7 +542,7 @@ def main() -> int:
                     stopped.get("stop_reason") == "user" and
                     stopped.get("cleanup_complete") is True and
                     stopped.get("targets_suspended") is False and
-                    stopped.get("survey_worker_suspended") is False and
+                    stopped.get("survey_worker_suspended") is True and
                     int(stopped.get("heap_free_after_stop", 0)) > 0 and
                     stopped.get("lease_mask") == 13,
                     f"Web stop did not revoke and scrub: {stopped}")
