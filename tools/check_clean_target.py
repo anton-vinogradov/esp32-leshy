@@ -1427,8 +1427,10 @@ def main() -> int:
         )
         for marker in (
             "kStaticRxBuffers = 2",
-            "kDynamicRxBuffers = 4",
-            "kDynamicTxBuffers = 4",
+            "kDynamicRxBuffers = 1",
+            "kDynamicTxBuffers = 1",
+            "kRxManagementBuffers = 1",
+            "kCacheTxBuffers = 1",
             "kManagementShortBuffers = 6",
             "esp_netif_attach_wifi_ap",
             "esp_wifi_set_default_wifi_ap_handlers",

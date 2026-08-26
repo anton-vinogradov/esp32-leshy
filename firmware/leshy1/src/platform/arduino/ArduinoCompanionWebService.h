@@ -28,9 +28,10 @@ public:
         kMaximumHeaderBytes + services::companion::kCompanionMaxFrameBytes;
     static constexpr std::uint64_t kClientDeadlineUs = 3000000ULL;
     static constexpr int kStaticRxBuffers = 2;
-    static constexpr int kDynamicRxBuffers = 4;
-    static constexpr int kDynamicTxBuffers = 4;
-    static constexpr int kRxManagementBuffers = 2;
+    static constexpr int kDynamicRxBuffers = 1;
+    static constexpr int kDynamicTxBuffers = 1;
+    static constexpr int kRxManagementBuffers = 1;
+    static constexpr int kCacheTxBuffers = 1;
     // ESP-IDF rejects values below six during driver initialization.
     static constexpr int kManagementShortBuffers = 6;
 

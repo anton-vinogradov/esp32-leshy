@@ -156,7 +156,7 @@ bool ArduinoCompanionWebService::begin(
     init.dynamic_tx_buf_num = kDynamicTxBuffers;
     init.rx_mgmt_buf_type = 1;
     init.rx_mgmt_buf_num = kRxManagementBuffers;
-    init.cache_tx_buf_num = 2;
+    init.cache_tx_buf_num = kCacheTxBuffers;
     init.ampdu_rx_enable = 0;
     init.ampdu_tx_enable = 0;
     init.amsdu_tx_enable = 0;
