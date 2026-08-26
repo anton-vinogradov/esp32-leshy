@@ -10,8 +10,9 @@ radio или permissions шире разрешённых.
 ## Envelope соединения v1
 
 Оба transport принимают один bounded JSON object. USB переносит по одному object в
-строке NDJSON; последующий local Web adapter переносит идентичный JSON body. Размер
-frame не превышает 512 bytes, parser использует только fixed storage caller.
+строке NDJSON; local Web presentation переносит идентичный JSON body в одном HTTP
+request. Размер frame не превышает 512 bytes, parser использует только fixed storage
+caller.
 
 ```json
 {"schema":"leshy.companion.request.v1","kind":"connect","request_id":"desktop-01","protocol":1,"scopes":["session.read","target.read","target.compare"]}
@@ -35,7 +36,7 @@ non-ASCII envelope strings, oversized/truncated/trailing input, другая sch
 получает стабильный `scope_unavailable` для известной возможности, ещё не
 реализованной или не разрешённой.
 
-| Scope | Значение | Текущий USB slice S6.5 |
+| Scope | Значение | Текущие transport slices S6.5 |
 |---|---|---|
 | `session.read` | list/open immutable projections Session | доступен только из live ready snapshot экрана Targets |
 | `target.read` | list/open projections Target и evidence | доступен только из того же live catalog Targets |
@@ -119,7 +120,8 @@ granted scopes/capabilities и одну стабильную reason: `scope_deni
 
 ## Набор read-only requests
 
-После успешного connect USB принимает следующие exact формы request. Порядок полей
+После успешного connect любой принятый transport использует следующие exact формы
+request. Порядок полей
 не важен, но у каждой operation exact набор полей: missing, duplicate, unknown или
 поля другой operation отклоняются. IDs содержат 32 hex digits в любом регистре,
 generations — ненулевые integers.
@@ -152,10 +154,30 @@ comparison object, которыми уже владеет foreground product Tar
 storage, не перечитывает catalog, не пересчитывает comparison, не меняет metadata и
 не касается radio. Mutation adapter только валидирует и ставит в очередь пять
 существующих metadata Actions; writable store и radio objects ему недоступны. Выход
-из Targets уничтожает working set и сбрасывает USB grant;
-для нового instance Targets обязателен новый connect. JSON companion frames
-принимаются только native USB CDC. `Serial0` остаётся legacy diagnostic console и не
-может negotiated этот protocol.
+из Targets уничтожает working set и сбрасывает transport grant; для нового instance
+Targets обязателен новый connect. Физически принят только runtime transport native
+USB CDC. `Serial0` остаётся legacy diagnostic console и не может согласовать этот
+protocol.
+
+## Boundary local Web presentation
+
+Принятый на host/build Web adapter отдаёт self-contained offline page по exact
+`GET /` и принимает общий request body только по exact
+`POST /api/v1/companion`. API требует exact `Content-Type: application/json`, известный
+ненулевой `Content-Length` не больше 512 bytes и явно авторизованную device session.
+Chunked body, body у GET, неизвестный route, неверные method/media type,
+empty/mismatched/oversized body и недоступная session fail-close-ятся до передачи
+байта companion parser. Ошибки transport используют bounded JSON schema v1 и не
+публикуют partial request.
+
+Responsive page не загружает внешние scripts, fonts, images или network resources.
+Она показывает Sessions, Targets, Compare и detail Target из тех же paged projections;
+первой mutation доступно только Favorite, всё ещё через
+preview -> явное browser confirmation -> одноразовый confirm -> status. Все данные
+device экранируются до вставки в HTML. Adapter не владеет listener, состоянием Wi-Fi,
+credentials, storage, drivers или radio: source `9ae7ee5` принимает только эту
+HTTP/UI presentation boundary. Для включения её на device всё ещё нужен следующий
+slice scoped local connectivity и lifecycle secrets.
 
 ## Правила trust и lifecycle
 
@@ -185,5 +207,15 @@ trip Favorite публикует два exact-CID поколения с трем
 Home отказывают до новой write. Retained failed precursors отделяют неверное ожидание
 navigation harness и stale descriptor native USB macOS от firmware failure. Общий reset
 helper теперь закрывается до re-enumeration ESP32-S3 и reconnect-ится к exact port;
-contract checker не даёт active runners вернуться к stale-descriptor path. Web, export
-или connectivity implementation этим не заявляются.
+contract checker не даёт active runners вернуться к stale-descriptor path. Running
+Web listener, export или connectivity implementation этим physical checkpoint не
+заявляются.
+
+Exact `0.173.0-companion-local-web` на source
+`9ae7ee5a6013f219cb0cdf406ef5cf1ce57934e3` добавляет описанную выше boundary local
+Web presentation. Native tests покрывают exact routes, boundary 512/513 bytes, denial
+без partial publication, bounded errors и contract offline page; embedded JavaScript
+проходит syntax check, а production image дважды собирается с идентичными hashes из
+workspace-local core PlatformIO. Это только host/build evidence: network listener не
+запускался, board и serial ports не затрагивались, accepted physical baseline остаётся
+0.172.

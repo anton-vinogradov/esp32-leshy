@@ -732,6 +732,25 @@ Cardputer opens и leaked lease. Verification source
 `48d296537a8eb358663420918b19151e2aa19c09` меняет только host reset transport. Cadence
 продвигается до 1/15.
 
+Checkpoint presentation local Web `RB-M163`: exact production
+`0.173.0-companion-local-web` на source
+`9ae7ee5a6013f219cb0cdf406ef5cf1ce57934e3` использует 214 992 B static RAM,
+3 183 140 B linked flash и app/factory images 3 183 296/3 248 832 B. Это zero роста
+static RAM и +96/+96/+96 B linked/app/factory против exact 0.172. Translation unit
+Web и его self-contained page компилируются и проходят native tests, но ещё не связаны
+с product runtime, поэтому linker GC удаляет payload presentation; оставшийся delta —
+build identity. Request view compile-time ограничен 32 B, общий body остаётся не больше
+512 B, ошибки transport используют staging не больше 192 B, offline page host-gated
+ниже 16 КиБ. Exact SHA-256 firmware/factory/ELF/map/partitions:
+`392d7e34f5625dee1762b28be6d75c164376b882bbd75f0f746ef2d891afbc78`/
+`187b0a17c3072312e3f3ca56f380fcd1eced78c050a867ed32885a0ecbdb4bd2`/
+`a45bc9fe70622a5d910902606609428a70a28fc555d19f53a0e8c5fdd53d1652`/
+`086cf6da062bf2b6c23807ed3f19377669e47138e58e72468d6f04ec5c65d330`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+Две последовательные сборки из workspace-local core PlatformIO дают те же exact
+hashes и изолированы от посторонних проектов. Physical cadence delta не расходуется;
+memory runtime listener/connectivity ещё не допущена и не заявляется.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

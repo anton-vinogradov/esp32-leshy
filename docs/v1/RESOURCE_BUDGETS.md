@@ -738,6 +738,26 @@ discovery, Cardputer opens or leaked lease. Verification source
 `48d296537a8eb358663420918b19151e2aa19c09` changes host reset transport only. Cadence
 advances to 1/15.
 
+Local Web presentation checkpoint `RB-M163`: exact production
+`0.173.0-companion-local-web` at source
+`9ae7ee5a6013f219cb0cdf406ef5cf1ce57934e3` uses 214,992 B static RAM,
+3,183,140 B linked flash and 3,183,296/3,248,832 B app/factory images. This is zero
+static-RAM growth and +96/+96/+96 B linked/app/factory versus exact 0.172. The Web
+translation unit and its self-contained page are compiled and native-tested but not
+yet referenced by product runtime, so linker GC removes the presentation payload; the
+remaining delta is build identity. Its request view is compile-time bounded to 32 B,
+the shared body remains at most 512 B, transport errors stage at most 192 B and the
+offline page is host-gated below 16 KiB. Exact firmware/factory/ELF/map/partitions
+SHA-256 are
+`392d7e34f5625dee1762b28be6d75c164376b882bbd75f0f746ef2d891afbc78`/
+`187b0a17c3072312e3f3ca56f380fcd1eced78c050a867ed32885a0ecbdb4bd2`/
+`a45bc9fe70622a5d910902606609428a70a28fc555d19f53a0e8c5fdd53d1652`/
+`086cf6da062bf2b6c23807ed3f19377669e47138e58e72468d6f04ec5c65d330`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+Two consecutive builds from the workspace-local PlatformIO core produce those exact
+hashes while remaining isolated from unrelated projects. No physical cadence delta is
+consumed; runtime listener/connection memory is not yet admitted or claimed.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

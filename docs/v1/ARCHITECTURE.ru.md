@@ -662,6 +662,11 @@ Companion S6 является отдельным local presentation adapter, а 
 связывает requests с теми же read projections и typed Actions. Bounded parser и
 encoder не владеют storage, driver, radio или secrets; USB NDJSON и local Web JSON
 сохраняют одинаковые schema и denial semantics.
+Первый Web presentation состоит из self-contained offline page и validator metadata
+HTTP: exact routes, method, media type, авторизованная device session и общий bound
+body 512 bytes проверяются до входа в неизменный companion parser. Network listener,
+lifecycle Wi-Fi и credentials остаются за пределами adapter и образуют следующую
+boundary S6.5.
 
 ## 9. Безопасность и обновления
 

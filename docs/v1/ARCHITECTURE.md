@@ -90,6 +90,11 @@ wider than the current device session, advertises only available capabilities an
 then maps requests to the same read projections and typed Actions. The bounded parser
 and encoder own no storage, driver, radio or secret path; both USB NDJSON and local
 Web JSON preserve the same schema and denial semantics.
+The first Web presentation is a self-contained offline page plus an HTTP metadata
+validator: exact routes, method, media type, authorized device session and the shared
+512-byte body bound are checked before the unchanged companion parser is entered.
+Network listener, Wi-Fi lifecycle and credentials remain outside this adapter and are
+the next S6.5 boundary.
 
 The touch adapter loads a versioned calibration from NVS and can import the legacy
 0.x `leshy/tcal` record without rewriting it. Its allocation-free frontend is

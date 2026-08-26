@@ -10,8 +10,8 @@ driver, filesystem, radio, or wider-permission API.
 ## Connection envelope v1
 
 Both transports accept the same bounded JSON object. USB carries one object per
-NDJSON line; the later local Web adapter carries the identical JSON body. A frame is
-at most 512 bytes and the parser uses caller-owned fixed storage.
+NDJSON line; the local Web presentation carries the identical JSON body in one HTTP
+request. A frame is at most 512 bytes and the parser uses caller-owned fixed storage.
 
 ```json
 {"schema":"leshy.companion.request.v1","kind":"connect","request_id":"desktop-01","protocol":1,"scopes":["session.read","target.read","target.compare"]}
@@ -35,7 +35,7 @@ Scope recognition and scope availability are deliberately separate. This lets an
 older v1 client receive a stable `scope_unavailable` result for a known capability
 that is not implemented or granted yet.
 
-| Scope | Meaning | Current S6.5 USB slice |
+| Scope | Meaning | Current S6.5 transport slices |
 |---|---|---|
 | `session.read` | list/open immutable Session projections | available only from the live, ready Targets snapshot |
 | `target.read` | list/open Target and evidence projections | available only from the same live Targets catalog |
@@ -119,7 +119,8 @@ an undersized caller buffer receives length zero and no partial bytes.
 
 ## Read-only request set
 
-After a successful connect, USB accepts the following exact request shapes. Fields
+After a successful connect, either accepted transport uses the following exact request
+shapes. Fields
 are order-independent, but every operation has an exact field set: missing,
 duplicate, unknown, or fields belonging to another operation are rejected. IDs are
 32 uppercase/lowercase hex digits and generations are non-zero integers.
@@ -152,10 +153,30 @@ comparison object already owned by the foreground Targets product. It does not m
 storage, reload a catalog, recompute comparison, mutate metadata, or touch a radio.
 The mutation adapter validates and queues only the five existing metadata Actions;
 it never receives the writable store or radio objects.
-Leaving Targets destroys that working set and resets the USB grant; reconnecting to a
-new Targets instance is mandatory. JSON companion frames are accepted by native USB
-CDC only. `Serial0` remains the legacy diagnostic console and cannot negotiate this
-protocol.
+Leaving Targets destroys that working set and resets the transport grant; reconnecting
+to a new Targets instance is mandatory. The physically accepted runtime transport is
+native USB CDC. `Serial0` remains the legacy diagnostic console and cannot negotiate
+this protocol.
+
+## Local Web presentation boundary
+
+The host/build-accepted Web adapter serves a self-contained offline page at exact
+`GET /` and accepts the shared request body only at exact
+`POST /api/v1/companion`. The API requires exact `Content-Type: application/json`, a
+known non-zero `Content-Length` no greater than 512 bytes and an explicitly authorized
+device session. Chunked bodies, GET bodies, unknown routes, wrong methods or media
+types, empty/mismatched/oversized bodies and an unavailable session fail closed before
+the companion parser sees a byte. Transport errors use bounded schema-v1 JSON and
+never publish a partial request.
+
+The responsive page loads no external scripts, fonts, images or network resources. It
+renders Sessions, Targets, Compare and Target details from the same paged projections;
+Favorite alone is exposed as a first mutation and still performs
+preview -> explicit browser confirmation -> one-time confirm -> status. All device
+text is escaped before HTML insertion. The adapter owns no listener, Wi-Fi state,
+credential, storage, driver or radio API: source `9ae7ee5` accepts only this HTTP/UI
+presentation boundary. Activating it on a device still requires the next scoped local
+connectivity and secret-lifecycle slice.
 
 ## Trust and lifecycle rules
 
@@ -186,4 +207,14 @@ fail before another write. Retained failed precursors distinguish a navigation-h
 assumption and a stale macOS native-USB descriptor from firmware failure. The shared
 reset helper now closes before ESP32-S3 re-enumeration and reconnects to the exact port;
 its contract checker prevents active runners from returning to the stale-descriptor
-path. No Web, export, or connectivity implementation is implied.
+path. No running Web listener, export, or connectivity implementation is implied by
+that physical checkpoint.
+
+Exact `0.173.0-companion-local-web` at source
+`9ae7ee5a6013f219cb0cdf406ef5cf1ce57934e3` adds the local Web presentation boundary
+described above. Native tests cover exact routes and the 512/513-byte boundary, denial
+without partial publication, bounded errors and the offline-page contract; the
+embedded JavaScript passes syntax checking and the production image builds twice with
+identical hashes from a workspace-local PlatformIO core. This is host/build evidence
+only: no network listener was started, no board or serial port was touched and the
+accepted physical baseline remains 0.172.
