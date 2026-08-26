@@ -127,8 +127,9 @@ def main() -> int:
     parser.add_argument("--seconds", type=float, default=5.0)
     args = parser.parse_args()
 
-    with serial.Serial(args.port, 115200, timeout=0.05) as device:
-        raw, first_byte_ms, ready_marker_ms = reset_and_capture(device, args.seconds)
+    (raw, ready_marker_ms, disconnects,
+     open_attempts) = reset_and_capture_reconnecting(args.port, args.seconds)
+    first_byte_ms = None
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(raw)
@@ -150,6 +151,8 @@ def main() -> int:
         "json_records": len(records),
         "first_serial_byte_ms_after_reset_release": first_byte_ms,
         "ready_marker_ms_after_reset_release": ready_marker_ms,
+        "usb_disconnects": disconnects,
+        "usb_open_attempts": open_attempts,
         "ready": ready,
     }
     print(json.dumps(summary, sort_keys=True))

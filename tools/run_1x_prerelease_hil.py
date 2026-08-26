@@ -280,8 +280,7 @@ def query(device: Any, command: bytes, schema: str, kind: str) -> dict[str, Any]
 
 
 def run_device(args: argparse.Namespace, suite: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
-    import serial
-    from capture_1x_boot import reset_and_capture
+    from capture_1x_boot import reset_and_capture_reconnecting
     from capture_1x_ui import PassiveSerial, rgb565be_to_png, synchronize_console
 
     output = args.output.resolve()
@@ -319,10 +318,10 @@ def run_device(args: argparse.Namespace, suite: dict[str, Any]) -> tuple[dict[st
     if args.flash:
         flash_candidate(args.port, bundled_firmware, args.flash_offset, args.flash_baud)
 
-    with serial.Serial(args.port, 115200, timeout=0.05) as reset_device:
-        raw_boot, first_byte_ms, ready_marker_ms = reset_and_capture(
-            reset_device, args.boot_seconds
-        )
+    (raw_boot, ready_marker_ms, boot_usb_disconnects,
+     boot_usb_open_attempts) = reset_and_capture_reconnecting(
+        args.port, args.boot_seconds)
+    first_byte_ms = None
     (output / "serial.ndjson").write_bytes(raw_boot)
     boot_records: list[dict[str, Any]] = []
     for line in raw_boot.splitlines():
@@ -484,6 +483,8 @@ def run_device(args: argparse.Namespace, suite: dict[str, Any]) -> tuple[dict[st
         "expected_version": args.expected_version,
         "scenario_filter": args.scenario,
         "boot": {"first_byte_ms": first_byte_ms, "ready_marker_ms": ready_marker_ms,
+                 "usb_disconnects": boot_usb_disconnects,
+                 "usb_open_attempts": boot_usb_open_attempts,
                  "ready": ready},
         "metrics": metrics, "safe_outputs": safe_outputs,
         "hil_session": {"begin": session_begin, "end": session_end},

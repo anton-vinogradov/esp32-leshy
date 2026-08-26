@@ -576,18 +576,22 @@ def capture(device: Any, output: Path, name: str,
 
 def reset_capture(port: str, output: Path, name: str,
                   seconds: float) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    import serial
-    from capture_1x_boot import reset_and_capture
+    from capture_1x_boot import reset_and_capture_reconnecting
 
-    with serial.Serial(port, 115200, timeout=0.05) as device:
-        raw, first_byte_ms, ready_marker_ms = reset_and_capture(device, seconds)
+    # Native USB disappears and re-enumerates during reset. Keeping the old
+    # descriptor open can wedge the macOS CDC endpoint until a physical power
+    # cycle, so every current HIL reset must close and reconnect by port name.
+    (raw, ready_marker_ms, usb_disconnects,
+     usb_open_attempts) = reset_and_capture_reconnecting(port, seconds)
     (output / f"{name}.ndjson").write_bytes(raw)
     ready, recovery = parse_boot_records(raw)
     return ready, recovery, {
         "bytes": len(raw),
         "sha256": hashlib.sha256(raw).hexdigest(),
-        "first_byte_ms": first_byte_ms,
+        "first_byte_ms": None,
         "ready_marker_ms": ready_marker_ms,
+        "usb_disconnects": usb_disconnects,
+        "usb_open_attempts": usb_open_attempts,
     }
 
 

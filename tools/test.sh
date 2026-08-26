@@ -364,6 +364,7 @@ python3 "$repo_dir/tools/check_visual_system_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_companion_protocol_contract.py"
+python3 "$repo_dir/tools/check_native_usb_reset_contract.py"
 python3 "$repo_dir/tools/check_targets_stack_failure_evidence.py"
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-0.149.json" ]]; then
     python3 "$repo_dir/tools/check_targets_hil_acceptance.py"

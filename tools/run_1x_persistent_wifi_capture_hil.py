@@ -12,10 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-import serial
-
 from capture_1x_ui import PassiveSerial, read_exact, read_json, synchronize_console
-from capture_1x_boot import reset_and_capture
+from capture_1x_boot import reset_and_capture_reconnecting
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import (
     flash_candidate,
@@ -231,8 +229,7 @@ def main() -> int:
                     failures.append("cleanup_before: terminal zero lease unproven")
 
         if not failures:
-            with serial.Serial(args.port, 115200, timeout=0.05) as reset_device:
-                reset_and_capture(reset_device, 8.0)
+            reset_and_capture_reconnecting(args.port, 20.0)
             with PassiveSerial(args.port, 115200, timeout=0.25) as device:
                 try:
                     synchronize_console(device, 30.0)
