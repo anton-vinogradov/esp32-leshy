@@ -123,13 +123,20 @@ def fixture_mode(device: PassiveSerial, mode: str) -> dict[str, Any]:
     device.reset_input_buffer()
     device.write(f"mode {mode}\n".encode("ascii"))
     device.flush()
-    state = read_json(device, FIXTURE_SCHEMA, "state", timeout=8.0)
-    if (state.get("mode") != mode or
-            state.get("wifi_tx") != (mode == "wifi") or
-            state.get("ble_tx") != (mode == "ble")):
-        raise RuntimeError(f"external fixture mode failed: {state}")
-    time.sleep(0.5)
-    return state
+    deadline = time.monotonic() + 8.0
+    stale: list[dict[str, Any]] = []
+    while time.monotonic() < deadline:
+        state = read_json(
+            device, FIXTURE_SCHEMA, "state",
+            timeout=max(0.1, deadline - time.monotonic()))
+        if (state.get("mode") == mode and
+                state.get("wifi_tx") == (mode == "wifi") and
+                state.get("ble_tx") == (mode == "ble")):
+            time.sleep(0.5)
+            return state
+        stale.append(state)
+    raise RuntimeError(
+        f"external fixture mode did not converge to {mode}: {stale}")
 
 
 def check_atomic_accept(state: dict[str, Any], generation: int,
