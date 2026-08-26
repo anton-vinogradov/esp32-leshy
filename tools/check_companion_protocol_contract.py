@@ -28,7 +28,21 @@ WEB_SOURCE = (
     ROOT / "firmware/leshy1/src/services/companion/CompanionWebAdapter.cpp"
 )
 WEB_TEST = ROOT / "tests/native/companion_web_adapter_tests.cpp"
+CONNECTIVITY_HEADER = (
+    ROOT / "firmware/leshy1/src/services/companion/CompanionConnectivity.h"
+)
+CONNECTIVITY_SOURCE = (
+    ROOT / "firmware/leshy1/src/services/companion/CompanionConnectivity.cpp"
+)
+CONNECTIVITY_TEST = ROOT / "tests/native/companion_connectivity_tests.cpp"
+ARDUINO_WEB_HEADER = (
+    ROOT / "firmware/leshy1/src/platform/arduino/ArduinoCompanionWebService.h"
+)
+ARDUINO_WEB_SOURCE = (
+    ROOT / "firmware/leshy1/src/platform/arduino/ArduinoCompanionWebService.cpp"
+)
 MUTATION_HIL = ROOT / "tools/run_1x_companion_mutation_delta_hil.py"
+WEB_HIL = ROOT / "tools/run_1x_companion_web_delta_hil.py"
 ARDUINO = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 ACTION = ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.cpp"
 DOCS = (
@@ -57,7 +71,13 @@ def main() -> int:
         web_header = WEB_HEADER.read_text(encoding="utf-8")
         web_source = WEB_SOURCE.read_text(encoding="utf-8")
         web_tests = WEB_TEST.read_text(encoding="utf-8")
+        connectivity_header = CONNECTIVITY_HEADER.read_text(encoding="utf-8")
+        connectivity_source = CONNECTIVITY_SOURCE.read_text(encoding="utf-8")
+        connectivity_tests = CONNECTIVITY_TEST.read_text(encoding="utf-8")
+        arduino_web_header = ARDUINO_WEB_HEADER.read_text(encoding="utf-8")
+        arduino_web_source = ARDUINO_WEB_SOURCE.read_text(encoding="utf-8")
         mutation_hil = MUTATION_HIL.read_text(encoding="utf-8")
+        web_hil = WEB_HIL.read_text(encoding="utf-8")
         arduino = ARDUINO.read_text(encoding="utf-8")
         action = ACTION.read_text(encoding="utf-8")
         docs = [path.read_text(encoding="utf-8") for path in DOCS]
@@ -256,6 +276,75 @@ def main() -> int:
         require(failures, marker in web_tests,
                 f"missing local Web native coverage: {marker}")
 
+    connectivity_combined = connectivity_header + connectivity_source
+    for marker in (
+        "kCompanionLocalIdleTimeoutUs",
+        "10ULL * 60ULL * 1000000ULL",
+        "kCompanionLocalMaximumLifetimeUs",
+        "30ULL * 60ULL * 1000000ULL",
+        "CompanionLocalCredentials",
+        "makeCompanionLocalCredentials",
+        "secureClear",
+        "CompanionConnectivity::authorize",
+        "CompanionConnectivity::recordActivity",
+        "CompanionConnectivity::service",
+        "CompanionConnectivity::revoke",
+        "generation != generation_",
+        "nowUs < startedUs_",
+    ):
+        require(failures, marker in connectivity_combined,
+                f"missing local connectivity lifecycle: {marker}")
+    for forbidden in (
+        "Preferences",
+        "nvs_",
+        "LittleFS",
+        "SPIFFS",
+        "SD.",
+        "Serial.",
+        "WiFi.",
+    ):
+        require(failures, forbidden not in connectivity_combined,
+                f"ephemeral connectivity persists or bypasses its boundary: {forbidden}")
+    for marker in (
+        "testEphemeralCredentialsAreBoundedAndClearable",
+        "testAuthorizationIsExplicitAndGenerationBound",
+        "testIdleAndAbsoluteTimeoutsFailClosed",
+        "testClockRollbackRevokesInsteadOfExtending",
+    ):
+        require(failures, marker in connectivity_tests,
+                f"missing connectivity native coverage: {marker}")
+
+    arduino_web = arduino_web_header + arduino_web_source
+    for marker in (
+        "kMaximumHeaderBytes = 768",
+        "kClientDeadlineUs = 3000000ULL",
+        "server_(80, 1)",
+        "WiFi.persistent(false)",
+        "WiFi.mode(WIFI_AP)",
+        "1, false, 1",
+        "WiFi.softAPdisconnect(true)",
+        "WiFi.mode(WIFI_OFF)",
+        "Cache-Control: no-store",
+        "Connection: close",
+        "X-Content-Type-Options: nosniff",
+        "validateCompanionWebRequest",
+        "kCompanionMaxFrameBytes",
+        "client_.stop()",
+    ):
+        require(failures, marker in arduino_web,
+                f"missing bounded Arduino Web runtime: {marker}")
+    for forbidden in (
+        "Preferences",
+        "nvs_",
+        "LittleFS",
+        "SPIFFS",
+        "WiFi.begin(",
+        "WIFI_STA",
+        "WIFI_AP_STA",
+    ):
+        require(failures, forbidden not in arduino_web,
+                f"Arduino Web runtime contains ambient/persistent path: {forbidden}")
+
     for marker in (
         'parser.add_argument("--port", required=True)',
         '"serial_port_discovery_calls": 0',
@@ -265,7 +354,7 @@ def main() -> int:
         'parser.add_argument("--reuse-installed-from", type=Path)',
         'precursor_candidate != record["candidate"]',
         'def leave_targets(',
-        'for presses in range(1, 5)',
+        'for presses in range(1, 6)',
         'reset_and_capture_reconnecting(',
         '"open_attempts": reset_open_attempts',
         'home_denied.get("reason") == "scope_unavailable"',
@@ -282,6 +371,26 @@ def main() -> int:
                 f"missing mutation delta HIL contract: {marker}")
 
     for marker in (
+        'parser.add_argument("--port", required=True)',
+        '"serial_port_discovery_calls": 0',
+        '"cardputer_ports_opened": 0',
+        '"flash_count": 0',
+        'record["flash_count"] = 1',
+        '"http_exchange_tested": False',
+        '"host_wifi_state_not_modified"',
+        'b"companion.web.state"',
+        'staged.get("authorized") is False',
+        'active.get("authorized") is True',
+        'active.get("lease_mask") == 15',
+        'stopped.get("credential_present") is False',
+        'released.get("lease_mask") == 0',
+        '"raw_radio_tx_commands": 0',
+        'best_effort_cleanup(device)',
+    ):
+        require(failures, marker in web_hil,
+                f"missing local Web delta HIL contract: {marker}")
+
+    for marker in (
         "handleUsbCompanionFrame",
         "companionReadContext",
         'uiController.page() != 7',
@@ -293,7 +402,7 @@ def main() -> int:
         "usbCommandOverflow",
         "response_encoding_failed",
         "targetsIdentityTransientRetries",
-        "handleUsbCompanionMutation",
+        "handleCompanionMutation",
         "requestTargetsMutationExact",
         "targetsMutationExpectedRevision",
         "companionMutationCapabilities(context.targets)",
@@ -302,6 +411,20 @@ def main() -> int:
         "CompanionMutationStatus::AlreadyConfirmed",
         "poll(Serial, usbCommand",
         "poll(Serial0, uartCommand",
+        "startWebCompanion",
+        "stopWebCompanion",
+        "serviceWebCompanion",
+        "CompanionLocalStopReason::LeftForeground",
+        "CompanionLocalStopReason::SafetyStop",
+        "resourceBroker.acquire(AppRuntime::kForegroundOwner, espRf)",
+        "resourceBroker.release(",
+        "arduinoCompanionWebService.poll(",
+        "CompanionTransport::LocalWeb",
+        "emitCompanionWebState",
+        "savingAuthorizedWebMutation",
+        "targetsMutationCompanionWeb",
+        '"credential_persisted\\\":false',
+        '"credential_exposed_over_diagnostic\\\":false',
     ):
         require(failures, marker in arduino,
                 f"missing native USB wiring contract: {marker}")
@@ -311,6 +434,8 @@ def main() -> int:
             "companion JSON must be enabled only on native USB, not Serial0")
     require(failures, "handleUsbCompanionFrame(Serial0" not in arduino,
             "Serial0 must never enter the companion transport")
+    require(failures, arduino.count("webCompanionCredentials.passphrase") == 1,
+            "local Web passphrase must only be rendered on the device display")
 
     for marker in (
         "testEveryTruncatedFrameIsRejected",

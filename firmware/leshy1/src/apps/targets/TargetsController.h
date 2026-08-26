@@ -38,6 +38,7 @@ enum class TargetActionItem : std::uint8_t {
     Tags,
     Notes,
     Correlations,
+    CompanionWeb,
     MergeSplit,
 };
 
@@ -90,7 +91,7 @@ struct TargetsWorkspace final {
 
 class TargetsController final {
 public:
-    static constexpr std::size_t kActionCount = 6;
+    static constexpr std::size_t kActionCount = 7;
     static constexpr std::size_t kCorrelationReviewControlCount = 4;
     static constexpr std::size_t kNameEditControlCount = 4;
     static constexpr std::size_t kTagEditControlCount = 4;

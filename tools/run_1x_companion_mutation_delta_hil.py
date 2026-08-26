@@ -84,7 +84,7 @@ def open_targets(device: PassiveSerial) -> dict[str, Any]:
 def leave_targets(device: PassiveSerial) -> tuple[dict[str, Any], int]:
     """Return through bounded product navigation until the Home lease releases."""
     state: dict[str, Any] = {}
-    for presses in range(1, 5):
+    for presses in range(1, 6):
         state = action(device, "left")
         if state.get("page") == "home":
             require(state.get("runtime_owner") == "none" and
@@ -95,7 +95,7 @@ def leave_targets(device: PassiveSerial) -> tuple[dict[str, Any], int]:
                 state.get("runtime_owner") == "targets" and
                 state.get("lease_mask") == 13,
                 f"unexpected Targets exit state: {state}")
-    raise RuntimeError(f"Targets did not release after four Left actions: {state}")
+    raise RuntimeError(f"Targets did not release after five Left actions: {state}")
 
 
 def target_by_id(device: PassiveSerial, target_id: str | None = None) \

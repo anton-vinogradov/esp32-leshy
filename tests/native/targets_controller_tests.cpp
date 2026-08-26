@@ -244,6 +244,8 @@ void pairIsUsefulFirstAndStable() {
     CHECK(controller.next());
     CHECK(controller.selectedAction() == TargetActionItem::Correlations);
     CHECK(controller.next());
+    CHECK(controller.selectedAction() == TargetActionItem::CompanionWeb);
+    CHECK(controller.next());
     CHECK(controller.selectedAction() == TargetActionItem::MergeSplit);
     CHECK(controller.mergeCandidateCount() + 1U == controller.size());
     CHECK(controller.openMerge(false));

@@ -879,6 +879,7 @@ TargetActionItem TargetsController::selectedAction() const {
         case 2: return TargetActionItem::Tags;
         case 3: return TargetActionItem::Notes;
         case 4: return TargetActionItem::Correlations;
+        case 5: return TargetActionItem::CompanionWeb;
         default: return TargetActionItem::MergeSplit;
     }
 }

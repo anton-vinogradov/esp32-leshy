@@ -398,13 +398,13 @@ def require_atomic_save(state: dict[str, Any], label: str) -> None:
 
 def enter_merge_action(device: Any, target_id: str) -> dict[str, Any]:
     navigation_action(device, "right")
-    for _ in range(5):
+    for _ in range(6):
         navigation_action(device, "down")
     state = read_only_query(device, b"targets.state",
                             "leshy.targets.product.v1", "state")
     require(state, "Target merge/split action", status="ready",
             view="actions", selected_target_id=target_id,
-            action_selection=5, lease_mask=13)
+            action_selection=6, lease_mask=13)
     return state
 
 
@@ -873,7 +873,7 @@ def main() -> int:
             states.pop("merge_failure_diagnostics")
         states["merged"] = merged
         require(merged, "merged state", status="ready", view="actions",
-                selected_target_id=destination_id, action_selection=5,
+                selected_target_id=destination_id, action_selection=6,
                 mutation_state="saved", mutation_status="saved",
                 mutation_merge=True, mutation_merge_kind="merge",
                 mutation_merge_status="merged", mutation_persisted=True,
@@ -955,7 +955,7 @@ def main() -> int:
             states.pop("split_failure_diagnostics")
         states["split"] = split
         require(split, "split state", status="ready", view="actions",
-                selected_target_id=destination_id, action_selection=5,
+                selected_target_id=destination_id, action_selection=6,
                 mutation_state="saved", mutation_status="saved",
                 mutation_merge=True, mutation_merge_kind="split",
                 mutation_merge_status="split", mutation_persisted=True,

@@ -227,6 +227,16 @@ run_opaque_evidence_check() {
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/companion_connectivity_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/companion/CompanionConnectivity.cpp" \
+    -o "$test_tmp/companion_connectivity_tests"
+
+"$test_tmp/companion_connectivity_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/companion_read_adapter_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/services/companion/CompanionProtocol.cpp" \
     "$repo_dir/firmware/leshy1/src/services/companion/CompanionReadAdapter.cpp" \

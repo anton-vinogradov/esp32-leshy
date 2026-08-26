@@ -19,6 +19,7 @@
 #include <esp_app_desc.h>
 #include <esp_attr.h>
 #include <esp_heap_caps.h>
+#include <esp_mac.h>
 #include <esp_private/startup_internal.h>
 #include <esp_private/system_internal.h>
 #include <esp_rom_sys.h>
@@ -80,6 +81,7 @@
 #include "platform/arduino/BoardNrf24PassiveSpectrum.h"
 #include "platform/arduino/BoardShieldReceiverProbe.h"
 #include "platform/arduino/ArduinoFsSessionStoreIo.h"
+#include "platform/arduino/ArduinoCompanionWebService.h"
 #include "platform/arduino/ArduinoLittleFsSessionStoreIo.h"
 #include "platform/arduino/BoardSdFilesystem.h"
 #include "platform/arduino/BoardStorageAdapter.h"
@@ -91,6 +93,8 @@
 #include "platform/arduino/DisposableOtaLittleFs.h"
 #include "platform/arduino/RamSessionStoreIo.h"
 #include "services/companion/CompanionProtocol.h"
+#include "services/companion/CompanionConnectivity.h"
+#include "services/companion/CompanionWebAdapter.h"
 #include "services/companion/CompanionMutationAdapter.h"
 #include "services/companion/CompanionReadAdapter.h"
 #include "services/diagnostics/BootReport.h"
@@ -511,7 +515,8 @@ TargetProductBinding targetsBaselineBinding{};
 TargetProductBinding targetsCurrentBinding{};
 bool targetsComparisonLoaded = false;
 leshy1::services::companion::CompanionConnection usbCompanionConnection{};
-struct UsbCompanionMutation final {
+leshy1::services::companion::CompanionConnection webCompanionConnection{};
+struct CompanionMutationRuntime final {
     leshy1::services::companion::CompanionMutationState state =
         leshy1::services::companion::CompanionMutationState::None;
     leshy1::services::companion::CompanionMutationStatus status =
@@ -521,7 +526,15 @@ struct UsbCompanionMutation final {
     std::uint32_t targetRevision = 0;
     std::uint32_t stateGeneration = 0;
 };
-UsbCompanionMutation usbCompanionMutation{};
+CompanionMutationRuntime usbCompanionMutation{};
+CompanionMutationRuntime webCompanionMutation{};
+leshy1::services::companion::CompanionConnectivity webCompanionConnectivity;
+leshy1::services::companion::CompanionLocalCredentials
+    webCompanionCredentials{};
+leshy1::platform::arduino::ArduinoCompanionWebService
+    arduinoCompanionWebService;
+bool webCompanionOverlay = false;
+std::uint32_t webCompanionGeneration = 0;
 std::uint32_t targetsStateGeneration = 0;
 leshy1::storage::RecoveryChoice targetsStateHead =
     leshy1::storage::RecoveryChoice::None;
@@ -562,6 +575,7 @@ struct TargetsMutationEvent final {
     std::uint32_t expectedRevision = 0;
     std::uint32_t targetRevision = 0;
     bool companion = false;
+    bool companionWeb = false;
     std::uint32_t generation = 0;
     leshy1::storage::RecoveryChoice head =
         leshy1::storage::RecoveryChoice::None;
@@ -604,6 +618,7 @@ std::array<char, TargetRecord::kNotesCapacity + 1> targetsMutationText{};
 std::uint16_t targetsMutationTextLength = 0;
 std::uint32_t targetsMutationExpectedRevision = 0;
 bool targetsMutationCompanion = false;
+bool targetsMutationCompanionWeb = false;
 std::uint64_t targetsMutationStartActionUs = 0;
 QueueHandle_t targetsMutationEvents = nullptr;
 TaskHandle_t targetsMutationTaskHandle = nullptr;
@@ -4757,9 +4772,125 @@ void recoverProductCatalogForFingerprint(const char* expectedFingerprint,
     }
 }
 
+bool handleWebCompanionRequest(
+    char* request, std::size_t requestLength, char* response,
+    std::size_t responseCapacity, std::size_t* responseLength,
+    void* context);
+
+void stopWebCompanion(
+    leshy1::services::companion::CompanionLocalStopReason reason,
+    bool leaveOverlay = false) {
+    arduinoCompanionWebService.stop();
+    if (webCompanionConnectivity.authorized()) {
+        webCompanionConnectivity.revoke(reason);
+    }
+    webCompanionCredentials.clear();
+    webCompanionConnection = {};
+    if (webCompanionMutation.state !=
+        leshy1::services::companion::CompanionMutationState::Saving) {
+        webCompanionMutation = {};
+    }
+    resourceBroker.release(
+        AppRuntime::kForegroundOwner,
+        leshy1::kernel::runtime::resourceMask(Resource::EspRf));
+    if (!leaveOverlay) webCompanionOverlay = false;
+}
+
+bool startWebCompanion() {
+    namespace companion = leshy1::services::companion;
+    if (!webCompanionOverlay || uiController.page() != 7 ||
+        targetsProductRuntime == nullptr ||
+        std::strcmp(targetsProductStatus, "ready") != 0 ||
+        safetySupervisor.latched() || arduinoCompanionWebService.active() ||
+        webCompanionConnectivity.authorized()) {
+        return false;
+    }
+    const auto espRf =
+        leshy1::kernel::runtime::resourceMask(Resource::EspRf);
+    if (!resourceBroker.acquire(AppRuntime::kForegroundOwner, espRf)) {
+        lastRuntimeEvent = "companion_web_resource_busy";
+        return false;
+    }
+    std::array<std::uint8_t, 6> mac{};
+    std::array<std::uint8_t, 16> entropy{};
+    esp_read_mac(mac.data(), ESP_MAC_WIFI_SOFTAP);
+    esp_fill_random(entropy.data(), entropy.size());
+    if (!companion::makeCompanionLocalCredentials(
+            mac, entropy, &webCompanionCredentials)) {
+        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        lastRuntimeEvent = "companion_web_credentials_failed";
+        return false;
+    }
+    ++webCompanionGeneration;
+    if (webCompanionGeneration == 0) ++webCompanionGeneration;
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0) nowUs = 1;
+    if (!arduinoCompanionWebService.begin(webCompanionCredentials) ||
+        !webCompanionConnectivity.authorize(nowUs,
+                                             webCompanionGeneration)) {
+        arduinoCompanionWebService.stop();
+        webCompanionCredentials.clear();
+        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        webCompanionConnectivity.revoke(
+            companion::CompanionLocalStopReason::StartFailed);
+        lastRuntimeEvent = "companion_web_start_failed";
+        return false;
+    }
+    webCompanionConnection = {};
+    webCompanionMutation = {};
+    lastRuntimeEvent = "companion_web_started";
+    return true;
+}
+
+bool serviceWebCompanion() {
+    namespace companion = leshy1::services::companion;
+    const bool active = arduinoCompanionWebService.active() ||
+        webCompanionConnectivity.authorized();
+    if (!active) return false;
+    if (safetySupervisor.latched()) {
+        stopWebCompanion(companion::CompanionLocalStopReason::SafetyStop);
+        return true;
+    }
+    // A confirmed Web mutation temporarily detaches the live Target graph
+    // while its atomic worker saves. Keep only that exact authorized Web
+    // session alive so the caller can observe the terminal mutation status.
+    const bool savingAuthorizedWebMutation =
+        targetsMutationState == TargetsMutationState::Saving &&
+        targetsMutationCompanion && targetsMutationCompanionWeb &&
+        webCompanionMutation.state ==
+            companion::CompanionMutationState::Saving;
+    if (!webCompanionOverlay || uiController.page() != 7 ||
+        (!savingAuthorizedWebMutation &&
+         (targetsProductRuntime == nullptr ||
+          std::strcmp(targetsProductStatus, "ready") != 0))) {
+        stopWebCompanion(
+            companion::CompanionLocalStopReason::LeftForeground);
+        return true;
+    }
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0) nowUs = 1;
+    if (webCompanionConnectivity.service(nowUs)) {
+        const auto reason = webCompanionConnectivity.stopReason();
+        stopWebCompanion(reason, true);
+        lastRuntimeEvent = companion::companionLocalStopReasonName(reason);
+        return true;
+    }
+    const bool handled = arduinoCompanionWebService.poll(
+        nowUs, webCompanionConnectivity.authorized(),
+        handleWebCompanionRequest, nullptr);
+    if (handled) {
+        webCompanionConnectivity.recordActivity(
+            nowUs, webCompanionGeneration);
+    }
+    return false;
+}
+
 void releaseTargetsProduct() {
     // A companion grant is bound to this exact foreground snapshot. Leaving
     // Targets invalidates it; a later Targets instance requires a new connect.
+    stopWebCompanion(
+        leshy1::services::companion::CompanionLocalStopReason::
+            LeftForeground);
     usbCompanionConnection = {};
     usbCompanionMutation = {};
     delete targetsProductRuntime;
@@ -5303,6 +5434,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     targetsMutationReport = {};
     targetsMutationExpectedRevision = 0;
     targetsMutationCompanion = false;
+    targetsMutationCompanionWeb = false;
     targetsMutationCorrelation = false;
     targetsMutationMerge = false;
     targetsMutationMergeKind = TargetMergeActionKind::Merge;
@@ -5987,6 +6119,7 @@ void runTargetsMutationWorker(void*) {
     event.targetId = targetsMutationTargetId;
     event.expectedRevision = targetsMutationExpectedRevision;
     event.companion = targetsMutationCompanion;
+    event.companionWeb = targetsMutationCompanionWeb;
     const std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     TargetCatalog* catalog = targetsMutationCatalog;
@@ -6396,7 +6529,8 @@ void runTargetsMutationWorker(void*) {
 }
 
 bool requestTargetsMutationExact(const TargetAction& action,
-                                 bool companionRequest) {
+                                 bool companionRequest,
+                                 bool companionWebRequest = false) {
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
     if (targetsProductRuntime == nullptr ||
@@ -6451,6 +6585,7 @@ bool requestTargetsMutationExact(const TargetAction& action,
     targetsMutationFavorite = action.favorite;
     targetsMutationExpectedRevision = action.expectedRevision;
     targetsMutationCompanion = companionRequest;
+    targetsMutationCompanionWeb = companionRequest && companionWebRequest;
     targetsMutationText.fill('\0');
     targetsMutationTextLength = 0;
     if (action.kind == TargetActionKind::SetName ||
@@ -6594,6 +6729,7 @@ bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
     targetsMutationCorrelation = true;
     targetsMutationMerge = false;
     targetsMutationCompanion = false;
+    targetsMutationCompanionWeb = false;
     targetsMutationExpectedRevision = 0;
     targetsMutationCorrelationKind = kind;
     targetsMutationProposal = *proposal;
@@ -6685,6 +6821,7 @@ bool requestTargetsMergeMutation() {
     targetsMutationMerge = true;
     targetsMutationCorrelation = false;
     targetsMutationCompanion = false;
+    targetsMutationCompanionWeb = false;
     targetsMutationExpectedRevision = 0;
     targetsMutationText.fill('\0');
     targetsMutationTextLength = 0;
@@ -6854,21 +6991,24 @@ void serviceTargetsMutationWorker() {
     targetsProductStatus = rebuilt ? "ready" : targetsProductStatus;
     lastRuntimeEvent = targetsMutationState == TargetsMutationState::Saved
         ? "targets_store_saved" : "targets_store_failed";
+    CompanionMutationRuntime* companionMutation = event.companionWeb
+        ? &webCompanionMutation : &usbCompanionMutation;
     if (event.companion &&
         leshy1::services::companion::companionMutationIdValid(
-            usbCompanionMutation.id)) {
+            companionMutation->id)) {
         const bool saved = targetsMutationState == TargetsMutationState::Saved;
-        usbCompanionMutation.state = saved
+        companionMutation->state = saved
             ? leshy1::services::companion::CompanionMutationState::Saved
             : leshy1::services::companion::CompanionMutationState::Failed;
-        usbCompanionMutation.status = saved
+        companionMutation->status = saved
             ? leshy1::services::companion::CompanionMutationStatus::Saved
             : leshy1::services::companion::CompanionMutationStatus::Failed;
-        usbCompanionMutation.targetRevision = event.targetRevision;
-        usbCompanionMutation.stateGeneration = event.generation;
+        companionMutation->targetRevision = event.targetRevision;
+        companionMutation->stateGeneration = event.generation;
     }
     targetsMutationExpectedRevision = 0;
     targetsMutationCompanion = false;
+    targetsMutationCompanionWeb = false;
     if (uiController.page() == 7) renderInteractiveScreen();
 }
 
@@ -9315,6 +9455,16 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{}, {}, {}};
         }
         if (targetsProductRuntime == nullptr) return {back, {}, {}};
+        if (webCompanionOverlay) {
+            return {{NavigationKey::Left,
+                     webCompanionConnectivity.authorized()
+                         ? UiTextId::NavStop : UiTextId::NavBack},
+                    {},
+                    webCompanionConnectivity.authorized()
+                        ? NavigationCell{}
+                        : NavigationCell{NavigationKey::RightAndSelect,
+                                         UiTextId::NavStart}};
+        }
         if (targetsProductRuntime->controller.view() == TargetsView::List) {
             return targetsProductRuntime->controller.entryCount() == 0
                 ? NavigationFooter{back, {}, {}}
@@ -13598,7 +13748,63 @@ void renderTargetComparisonDetail(bool clearContent) {
     renderMetric(4, line);
 }
 
+void renderWebCompanionPage(bool clearContent) {
+    renderHeader(tr(UiTextId::CompanionWebTitle), clearContent);
+    if (!webCompanionConnectivity.authorized() ||
+        !arduinoCompanionWebService.active()) {
+        renderMenuRow(Components::homeRow(0),
+                      tr(UiTextId::CompanionWebOff),
+                      tr(UiTextId::CompanionWebStartHint), true, true,
+                      Tone::Positive);
+        const auto reason = webCompanionConnectivity.stopReason();
+        if (reason != leshy1::services::companion::
+                          CompanionLocalStopReason::None &&
+            reason != leshy1::services::companion::
+                          CompanionLocalStopReason::User) {
+            UiTextId reasonText = UiTextId::CompanionWebSafetyEnded;
+            switch (reason) {
+                case leshy1::services::companion::
+                        CompanionLocalStopReason::StartFailed:
+                    reasonText = UiTextId::CompanionWebStartFailed;
+                    break;
+                case leshy1::services::companion::
+                        CompanionLocalStopReason::IdleTimeout:
+                    reasonText = UiTextId::CompanionWebIdleEnded;
+                    break;
+                case leshy1::services::companion::
+                        CompanionLocalStopReason::LifetimeTimeout:
+                    reasonText = UiTextId::CompanionWebLimitEnded;
+                    break;
+                default:
+                    break;
+            }
+            renderMetric(2, tr(reasonText), Tone::Warning);
+        }
+        return;
+    }
+    char line[96] = {};
+    std::snprintf(line, sizeof(line), tr(UiTextId::CompanionWebSsidFormat),
+                  webCompanionCredentials.ssid.data());
+    renderMetric(0, line, Tone::Positive);
+    std::snprintf(line, sizeof(line), tr(UiTextId::CompanionWebPassFormat),
+                  webCompanionCredentials.passphrase.data());
+    renderMetric(1, line, Tone::Warning);
+    renderMetric(2, tr(UiTextId::CompanionWebUrl), Tone::Positive);
+    renderMetric(3, tr(UiTextId::CompanionWebTimeout), Tone::Muted);
+    std::snprintf(
+        line, sizeof(line), tr(UiTextId::CompanionWebRequestsFormat),
+        static_cast<unsigned>(
+            arduinoCompanionWebService.requestsHandled()),
+        static_cast<unsigned>(
+            arduinoCompanionWebService.requestsRejected()));
+    renderMetric(4, line, Tone::Muted);
+}
+
 void renderTargetsPage(bool clearContent) {
+    if (webCompanionOverlay) {
+        renderWebCompanionPage(clearContent);
+        return;
+    }
     if (targetsProductRuntime == nullptr) {
         renderHeader(targetsMutationState == TargetsMutationState::Saving
                          ? tr(UiTextId::TargetsActions)
@@ -14093,6 +14299,12 @@ void renderTargetsPage(bool clearContent) {
                     tone = enabled ? Tone::Positive : Tone::Muted;
                     break;
                 }
+                case 5:
+                    label = tr(UiTextId::CompanionWebAction);
+                    std::snprintf(note, sizeof(note), "%s",
+                                  tr(UiTextId::CompanionWebActionNote));
+                    tone = Tone::Positive;
+                    break;
                 default: {
                     const bool split = activeTargetMerge(
                         targetsProductRuntime->merges, target->id) != nullptr;
@@ -14244,6 +14456,8 @@ struct UiRenderSnapshot final {
     std::uint8_t targetsView = 0;
     std::size_t targetsSelection = 0;
     std::size_t targetsSize = 0;
+    bool webCompanionOverlay = false;
+    bool webCompanionAuthorized = false;
 };
 
 UiRenderSnapshot renderedUi{};
@@ -14305,6 +14519,8 @@ UiRenderSnapshot captureUiRenderSnapshot() {
             ? 0U : targetsProductRuntime->controller.navigationSelection(),
         targetsProductRuntime == nullptr
             ? 0U : targetsProductRuntime->controller.navigationCount(),
+        webCompanionOverlay,
+        webCompanionConnectivity.authorized(),
     };
 }
 
@@ -14324,6 +14540,13 @@ bool renderSelectionDelta() {
         renderHomeRow(renderedUi.rootSelection, currentFirst);
         renderHomeRow(current, currentFirst);
         return true;
+    }
+
+    if (uiController.page() == 7 &&
+        (renderedUi.webCompanionOverlay != webCompanionOverlay ||
+         renderedUi.webCompanionAuthorized !=
+             webCompanionConnectivity.authorized())) {
+        return false;
     }
 
     if (uiController.page() == kDevicePage) {
@@ -17921,6 +18144,43 @@ void emitTargetsState(Stream& reply) {
     reply.println(line);
 }
 
+void emitCompanionWebState(Stream& reply) {
+    namespace companion = leshy1::services::companion;
+    char line[768] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.companion.web.v1\",\"kind\":\"state\","
+        "\"overlay_open\":%s,\"authorized\":%s,\"server_active\":%s,"
+        "\"protocol_connected\":%s,\"generation\":%lu,"
+        "\"started_us\":%llu,\"last_activity_us\":%llu,"
+        "\"stop_reason\":\"%s\",\"requests_handled\":%lu,"
+        "\"requests_rejected\":%lu,\"credential_present\":%s,"
+        "\"credential_persisted\":false,\"credential_exposed_over_diagnostic\":false,"
+        "\"maximum_clients\":1,\"idle_timeout_us\":%llu,"
+        "\"maximum_lifetime_us\":%llu,\"lease_mask\":%lu}",
+        webCompanionOverlay ? "true" : "false",
+        webCompanionConnectivity.authorized() ? "true" : "false",
+        arduinoCompanionWebService.active() ? "true" : "false",
+        webCompanionConnection.ready() ? "true" : "false",
+        static_cast<unsigned long>(webCompanionConnectivity.generation()),
+        static_cast<unsigned long long>(webCompanionConnectivity.startedUs()),
+        static_cast<unsigned long long>(
+            webCompanionConnectivity.lastActivityUs()),
+        companion::companionLocalStopReasonName(
+            webCompanionConnectivity.stopReason()),
+        static_cast<unsigned long>(
+            arduinoCompanionWebService.requestsHandled()),
+        static_cast<unsigned long>(
+            arduinoCompanionWebService.requestsRejected()),
+        webCompanionCredentials.valid() ? "true" : "false",
+        static_cast<unsigned long long>(
+            companion::kCompanionLocalIdleTimeoutUs),
+        static_cast<unsigned long long>(
+            companion::kCompanionLocalMaximumLifetimeUs),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    reply.println(line);
+}
+
 void emitWifiFrameCaptureState(Stream& reply) {
     const auto stats = wifiFrameCapture.stats();
     const auto& plan = wifiFrameCapture.capture().plan();
@@ -19351,7 +19611,22 @@ bool applyUiAction(UiAction action, bool render = true) {
         TargetsController& controller = targetsProductRuntime->controller;
         bool handled = false;
         bool changed = false;
-        if ((controller.view() == TargetsView::Detail ||
+        if (webCompanionOverlay &&
+            (action == UiAction::Back || action == UiAction::Left)) {
+            handled = true;
+            stopWebCompanion(
+                leshy1::services::companion::CompanionLocalStopReason::User);
+            changed = true;
+            lastRuntimeEvent = "companion_web_stopped";
+        } else if (webCompanionOverlay &&
+                   !webCompanionConnectivity.authorized() &&
+                   (action == UiAction::Select ||
+                    action == UiAction::Right)) {
+            handled = true;
+            changed = startWebCompanion();
+        } else if (webCompanionOverlay) {
+            handled = true;
+        } else if ((controller.view() == TargetsView::Detail ||
              controller.view() == TargetsView::Actions ||
              controller.view() == TargetsView::NameEdit ||
              controller.view() == TargetsView::TagList ||
@@ -19398,6 +19673,13 @@ bool applyUiAction(UiAction action, bool render = true) {
                     break;
                 case TargetActionItem::Correlations:
                     changed = controller.openCorrelationList();
+                    break;
+                case TargetActionItem::CompanionWeb:
+                    webCompanionOverlay = true;
+                    webCompanionConnection = {};
+                    webCompanionMutation = {};
+                    changed = true;
+                    lastRuntimeEvent = "companion_web_ready";
                     break;
                 case TargetActionItem::MergeSplit: {
                     const auto* selected = controller.selectedTarget();
@@ -20078,6 +20360,12 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         TouchTargetLayout::ThreeChoices, point),
                     static_cast<std::uint8_t>(surveyController.draftFilter())};
         }
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        webCompanionOverlay) {
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point, 0, 1),
+                0};
     }
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
         (targetsProductRuntime->controller.view() == TargetsView::List ||
@@ -25301,6 +25589,49 @@ void writeCompanionFrame(Stream& reply, const char* frame,
     }
 }
 
+class FixedCompanionResponse final : public Stream {
+public:
+    FixedCompanionResponse(char* output, std::size_t capacity)
+        : output_(output), capacity_(capacity) {
+        if (output_ != nullptr && capacity_ != 0) output_[0] = '\0';
+    }
+
+    std::size_t write(std::uint8_t value) override {
+        if (output_ == nullptr || length_ + 1U >= capacity_) {
+            overflow_ = true;
+            return 0;
+        }
+        output_[length_++] = static_cast<char>(value);
+        output_[length_] = '\0';
+        return 1;
+    }
+    std::size_t write(const std::uint8_t* data,
+                      std::size_t size) override {
+        if (data == nullptr || output_ == nullptr ||
+            length_ + size >= capacity_) {
+            overflow_ = true;
+            return 0;
+        }
+        std::memcpy(output_ + length_, data, size);
+        length_ += size;
+        output_[length_] = '\0';
+        return size;
+    }
+    int available() override { return 0; }
+    int read() override { return -1; }
+    int peek() override { return -1; }
+    void flush() override {}
+
+    bool valid() const { return !overflow_ && length_ != 0; }
+    std::size_t length() const { return length_; }
+
+private:
+    char* output_ = nullptr;
+    std::size_t capacity_ = 0;
+    std::size_t length_ = 0;
+    bool overflow_ = false;
+};
+
 void emitCompanionConnectParseError(
     Stream& reply,
     leshy1::services::companion::CompanionParseStatus status) {
@@ -25366,10 +25697,12 @@ void emitCompanionMutationResponse(
     }
 }
 
-void handleUsbCompanionMutation(
+void handleCompanionMutation(
     Stream& reply,
     const leshy1::services::companion::CompanionMutationRequest& request,
-    char* frame, std::size_t frameCapacity) {
+    char* frame, std::size_t frameCapacity,
+    leshy1::services::companion::CompanionConnection& connection,
+    CompanionMutationRuntime& mutation, bool webRequest) {
     namespace companion = leshy1::services::companion;
     companion::CompanionMutationResponse response{};
     response.kind = request.kind;
@@ -25380,7 +25713,7 @@ void handleUsbCompanionMutation(
         response.targetId = request.action.targetId;
         response.expectedRevision = request.action.expectedRevision;
         if (targetsMutationState == TargetsMutationState::Saving ||
-            usbCompanionMutation.state ==
+            mutation.state ==
                 companion::CompanionMutationState::Saving) {
             response.status = companion::CompanionMutationStatus::Busy;
             emitCompanionMutationResponse(
@@ -25389,49 +25722,49 @@ void handleUsbCompanionMutation(
         }
         const companion::CompanionReadContext context = companionReadContext();
         const auto assessment = companion::assessCompanionMutationPreview(
-            usbCompanionConnection, context.targets, request);
+            connection, context.targets, request);
         response.status = assessment.status;
         response.targetRevision = assessment.action.revision;
         response.stateGeneration = targetsStateGeneration;
         if (assessment.ready()) {
-            usbCompanionMutation = {};
-            usbCompanionMutation.state =
+            mutation = {};
+            mutation.state =
                 companion::CompanionMutationState::Previewed;
-            usbCompanionMutation.status =
+            mutation.status =
                 companion::CompanionMutationStatus::Ready;
-            usbCompanionMutation.id = newCompanionMutationId();
-            usbCompanionMutation.action = request.action;
-            usbCompanionMutation.targetRevision = assessment.action.revision;
-            usbCompanionMutation.stateGeneration = targetsStateGeneration;
-            response.state = usbCompanionMutation.state;
-            response.mutationId = usbCompanionMutation.id;
+            mutation.id = newCompanionMutationId();
+            mutation.action = request.action;
+            mutation.targetRevision = assessment.action.revision;
+            mutation.stateGeneration = targetsStateGeneration;
+            response.state = mutation.state;
+            response.mutationId = mutation.id;
         }
         emitCompanionMutationResponse(reply, response, frame, frameCapacity);
         return;
     }
 
     const bool known = companion::companionMutationIdValid(
-                           usbCompanionMutation.id) &&
+                           mutation.id) &&
         companionMutationIdEqual(request.mutationId,
-                                 usbCompanionMutation.id);
+                                 mutation.id);
     if (!known) {
         response.status = companion::CompanionMutationStatus::UnknownMutation;
         emitCompanionMutationResponse(reply, response, frame, frameCapacity);
         return;
     }
-    response.mutationId = usbCompanionMutation.id;
-    response.actionKind = usbCompanionMutation.action.kind;
-    response.targetId = usbCompanionMutation.action.targetId;
+    response.mutationId = mutation.id;
+    response.actionKind = mutation.action.kind;
+    response.targetId = mutation.action.targetId;
     response.expectedRevision =
-        usbCompanionMutation.action.expectedRevision;
-    response.targetRevision = usbCompanionMutation.targetRevision;
-    response.stateGeneration = usbCompanionMutation.stateGeneration;
+        mutation.action.expectedRevision;
+    response.targetRevision = mutation.targetRevision;
+    response.stateGeneration = mutation.stateGeneration;
 
-    if (!usbCompanionConnection.ready() ||
-        (usbCompanionConnection.grantedScopes &
+    if (!connection.ready() ||
+        (connection.grantedScopes &
          companion::kCompanionS65MutationScopes) !=
             companion::kCompanionS65MutationScopes) {
-        response.status = usbCompanionConnection.ready()
+        response.status = connection.ready()
             ? companion::CompanionMutationStatus::CapabilityDenied
             : companion::CompanionMutationStatus::NotConnected;
         emitCompanionMutationResponse(reply, response, frame, frameCapacity);
@@ -25439,54 +25772,58 @@ void handleUsbCompanionMutation(
     }
 
     if (request.kind == companion::CompanionMutationRequestKind::Status) {
-        response.status = usbCompanionMutation.status;
-        response.state = usbCompanionMutation.state;
+        response.status = mutation.status;
+        response.state = mutation.state;
         emitCompanionMutationResponse(reply, response, frame, frameCapacity);
         return;
     }
 
-    if (usbCompanionMutation.state !=
+    if (mutation.state !=
         companion::CompanionMutationState::Previewed) {
         response.status = companion::CompanionMutationStatus::AlreadyConfirmed;
-        response.state = usbCompanionMutation.state;
+        response.state = mutation.state;
         emitCompanionMutationResponse(reply, response, frame, frameCapacity);
         return;
     }
 
     companion::CompanionMutationRequest recheck{};
     recheck.kind = companion::CompanionMutationRequestKind::Preview;
-    recheck.action = usbCompanionMutation.action;
+    recheck.action = mutation.action;
     const companion::CompanionReadContext context = companionReadContext();
     const auto assessment = companion::assessCompanionMutationPreview(
-        usbCompanionConnection, context.targets, recheck);
+        connection, context.targets, recheck);
     if (!assessment.ready()) {
-        usbCompanionMutation.status = assessment.status;
-        usbCompanionMutation.state = companion::CompanionMutationState::Failed;
-        usbCompanionMutation.targetRevision = assessment.action.revision;
-        response.status = usbCompanionMutation.status;
-        response.state = usbCompanionMutation.state;
-        response.targetRevision = usbCompanionMutation.targetRevision;
+        mutation.status = assessment.status;
+        mutation.state = companion::CompanionMutationState::Failed;
+        mutation.targetRevision = assessment.action.revision;
+        response.status = mutation.status;
+        response.state = mutation.state;
+        response.targetRevision = mutation.targetRevision;
         emitCompanionMutationResponse(reply, response, frame, frameCapacity);
         return;
     }
 
     const bool handled = requestTargetsMutationExact(
-        usbCompanionMutation.action, true);
+        mutation.action, true, webRequest);
     if (handled && targetsMutationState == TargetsMutationState::Saving) {
-        usbCompanionMutation.status =
+        mutation.status =
             companion::CompanionMutationStatus::Accepted;
-        usbCompanionMutation.state = companion::CompanionMutationState::Saving;
+        mutation.state = companion::CompanionMutationState::Saving;
     } else {
-        usbCompanionMutation.status = companion::CompanionMutationStatus::Failed;
-        usbCompanionMutation.state = companion::CompanionMutationState::Failed;
+        mutation.status = companion::CompanionMutationStatus::Failed;
+        mutation.state = companion::CompanionMutationState::Failed;
     }
-    response.status = usbCompanionMutation.status;
-    response.state = usbCompanionMutation.state;
+    response.status = mutation.status;
+    response.state = mutation.state;
     emitCompanionMutationResponse(reply, response, frame, frameCapacity);
 }
 
-void handleUsbCompanionFrame(Stream& reply, char* frame,
-                             std::size_t frameCapacity) {
+void handleCompanionFrame(
+    Stream& reply, char* frame, std::size_t frameCapacity,
+    leshy1::services::companion::CompanionConnection& connection,
+    CompanionMutationRuntime& mutation,
+    leshy1::services::companion::CompanionTransport transport,
+    bool webRequest) {
     namespace companion = leshy1::services::companion;
     const std::size_t frameLength = std::strlen(frame);
     companion::CompanionConnectRequest connectRequest{};
@@ -25505,16 +25842,15 @@ void handleUsbCompanionFrame(Stream& reply, char* frame,
                 companion::CompanionScope::TargetMutate);
         policy.availableScopes = companionAvailableScopes(capabilities);
         policy.availableCapabilities = capabilities;
-        usbCompanionConnection = companion::negotiateCompanionConnection(
+        connection = companion::negotiateCompanionConnection(
             connectRequest, policy);
-        if (usbCompanionConnection.ready() &&
-            usbCompanionMutation.state !=
+        if (connection.ready() &&
+            mutation.state !=
                 companion::CompanionMutationState::Saving) {
-            usbCompanionMutation = {};
+            mutation = {};
         }
         if (companion::encodeCompanionConnectResponse(
-                usbCompanionConnection,
-                companion::CompanionTransport::UsbSerial, frame,
+                connection, transport, frame,
                 frameCapacity, &responseLength)) {
             writeCompanionFrame(reply, frame, responseLength);
         } else {
@@ -25528,8 +25864,9 @@ void handleUsbCompanionFrame(Stream& reply, char* frame,
         companion::parseCompanionMutationRequest(
             frame, frameLength, &mutationRequest);
     if (mutationStatus == companion::CompanionMutationParseStatus::Parsed) {
-        handleUsbCompanionMutation(
-            reply, mutationRequest, frame, frameCapacity);
+        handleCompanionMutation(
+            reply, mutationRequest, frame, frameCapacity, connection,
+            mutation, webRequest);
         return;
     }
 
@@ -25540,7 +25877,7 @@ void handleUsbCompanionFrame(Stream& reply, char* frame,
     if (readStatus == companion::CompanionReadParseStatus::Parsed) {
         const companion::CompanionReadContext context = companionReadContext();
         if (companion::encodeCompanionReadResponse(
-                usbCompanionConnection, context, readRequest, frame,
+                connection, context, readRequest, frame,
                 frameCapacity, &responseLength)) {
             writeCompanionFrame(reply, frame, responseLength);
         } else {
@@ -25564,6 +25901,38 @@ void handleUsbCompanionFrame(Stream& reply, char* frame,
     } else {
         emitCompanionEncodingError(reply);
     }
+}
+
+void handleUsbCompanionFrame(Stream& reply, char* frame,
+                             std::size_t frameCapacity) {
+    handleCompanionFrame(
+        reply, frame, frameCapacity, usbCompanionConnection,
+        usbCompanionMutation,
+        leshy1::services::companion::CompanionTransport::UsbSerial, false);
+}
+
+bool handleWebCompanionRequest(
+    char* request, std::size_t requestLength, char* response,
+    std::size_t responseCapacity, std::size_t* responseLength,
+    void* context) {
+    static_cast<void>(context);
+    if (request == nullptr || response == nullptr || responseLength == nullptr ||
+        requestLength == 0 ||
+        requestLength > leshy1::services::companion::kCompanionMaxFrameBytes) {
+        return false;
+    }
+    FixedCompanionResponse reply(response, responseCapacity);
+    handleCompanionFrame(
+        reply, request,
+        leshy1::services::companion::kCompanionMaxFrameBytes + 1U,
+        webCompanionConnection, webCompanionMutation,
+        leshy1::services::companion::CompanionTransport::LocalWeb, true);
+    if (!reply.valid()) {
+        *responseLength = 0;
+        return false;
+    }
+    *responseLength = reply.length();
+    return true;
 }
 
 void handleCommand(Stream& reply, char* command, std::size_t capacity,
@@ -25681,6 +26050,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         }
     } else if (std::strcmp(command, "targets.state") == 0) {
         emitTargetsState(reply);
+    } else if (std::strcmp(command, "companion.web.state") == 0) {
+        emitCompanionWebState(reply);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
         emitWifiNetworkDetailState(reply);
     } else if (std::strcmp(command, "ble.device.detail") == 0) {
@@ -26375,6 +26746,7 @@ void setup() {
               "\"capture.subghz.test-fixture fixed-rx-only\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"wifi.network.detail\","
+              "\"companion.web.state\","
               "\"capture.state\",\"capture.export.pcap\","
               "\"capture.subghz.state\","
               "\"capture.subghz.export.csv\","
@@ -26452,6 +26824,9 @@ void loop() {
         serviceSubGhzRawCapture();
         serviceInfraredCapture();
         serviceSpectrumWaterfallCadence();
+    }
+    if (serviceWebCompanion() && uiController.page() == 7) {
+        renderInteractiveScreen();
     }
     serviceAntennaStatusLeds();
     const auto rawCaptureState = subGhzRawCapture.stats().state;

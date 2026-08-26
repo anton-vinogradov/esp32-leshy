@@ -26,6 +26,10 @@ def main() -> int:
     session_store_router = TARGET / "src" / "storage" / "SessionStoreIoRouter.cpp"
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
     passive_wifi_capture_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveCapture.cpp"
+    companion_web_adapter = (
+        TARGET / "src" / "platform" / "arduino" /
+        "ArduinoCompanionWebService.cpp"
+    )
     passive_ble_adapter = TARGET / "src" / "platform" / "arduino" / "BoardBlePassiveScanner.cpp"
     shield_receiver_adapter = (
         TARGET / "src" / "platform" / "arduino" / "BoardShieldReceiverProbe.cpp"
@@ -76,6 +80,7 @@ def main() -> int:
             physical_sd_filesystem,
             passive_wifi_adapter,
             passive_wifi_capture_adapter,
+            companion_web_adapter,
             shield_receiver_adapter,
             nrf24_spectrum_adapter,
             cc1101_spectrum_adapter,
@@ -1407,6 +1412,41 @@ def main() -> int:
     for pattern in (r"#include\s*[<\"]WiFi\.h[>\"]", r"\besp_wifi_", r"\bWiFi\."):
         if re.search(pattern, implicit_sources):
             errors.append(f"measurement target starts an unapproved Wi-Fi path: {pattern}")
+
+    if not companion_web_adapter.is_file():
+        errors.append("explicit companion local Web adapter is missing")
+    else:
+        companion_web = companion_web_adapter.read_text(encoding="utf-8")
+        for marker in (
+            "WiFi.persistent(false)",
+            "WiFi.mode(WIFI_AP)",
+            "WiFi.softAP(credentials.ssid.data(), credentials.passphrase.data(),",
+            "1, false, 1",
+            "WiFi.softAPdisconnect(true)",
+            "WiFi.mode(WIFI_OFF)",
+            "kClientDeadlineUs",
+            "kMaximumHeaderBytes",
+            "kCompanionMaxFrameBytes",
+            "Cache-Control: no-store",
+            "Connection: close",
+        ):
+            if marker not in companion_web:
+                errors.append(
+                    f"companion local Web adapter is missing invariant: {marker}"
+                )
+        for pattern in (
+            r"\bWIFI_MODE_(?:STA|APSTA)\b",
+            r"\bWiFi\s*\.\s*begin\s*\(",
+            r"\bWiFi\s*\.\s*setAutoConnect\s*\(",
+            r"\bWiFi\s*\.\s*setAutoReconnect\s*\(",
+            r"\bPreferences\b",
+            r"\bnvs_",
+        ):
+            if re.search(pattern, companion_web):
+                errors.append(
+                    "companion local Web adapter contains ambient or persistent "
+                    f"connectivity path: {pattern}"
+                )
 
     if re.search(r"legacy_sources.{0,8}false", sources) is None:
         errors.append("boot evidence does not declare legacy_sources=false")

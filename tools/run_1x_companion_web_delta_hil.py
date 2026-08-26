@@ -1,0 +1,295 @@
+#!/usr/bin/env python3
+"""Focused one-flash HIL for the explicit ephemeral local Web runtime."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import subprocess
+import time
+from pathlib import Path
+from typing import Any
+
+from capture_1x_ui import PassiveSerial, synchronize_console
+from esp_app_identity import app_elf_sha256
+from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
+from run_1x_product_survey_hil import (
+    action,
+    artifact_manifest,
+    best_effort_cleanup,
+    query,
+)
+from run_1x_ui_typography_hil import normalize_home
+
+
+SCHEMA = "leshy.companion_web_delta_hil.run.v1"
+EXPECTED_CID = "FE343253440000002000000055019CB7"
+IDLE_TIMEOUT_US = 10 * 60 * 1_000_000
+MAXIMUM_LIFETIME_US = 30 * 60 * 1_000_000
+
+
+def require(value: bool, message: str) -> None:
+    if not value:
+        raise RuntimeError(message)
+
+
+def checkpoint(output: Path, record: dict[str, Any], name: str) -> None:
+    record["checkpoint"] = name
+    write_json(output / "run.json", record)
+
+
+def web_state(device: PassiveSerial) -> dict[str, Any]:
+    return query(
+        device, b"companion.web.state", "leshy.companion.web.v1", "state")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", required=True)
+    parser.add_argument("--firmware", required=True, type=Path)
+    parser.add_argument("--elf", required=True, type=Path)
+    parser.add_argument("--map", required=True, type=Path)
+    parser.add_argument("--expected-version", required=True)
+    parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--flash-baud", type=int, default=460800)
+    args = parser.parse_args()
+
+    for path in (args.firmware, args.elf, args.map):
+        if not path.is_file():
+            parser.error(f"candidate artifact missing: {path}")
+    if args.output.exists():
+        parser.error("output must not exist")
+    if len(args.source_commit) != 40:
+        parser.error("source commit must be full length")
+
+    root = Path(__file__).resolve().parents[1]
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, check=True,
+        stdout=subprocess.PIPE, text=True).stdout.strip()
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=root, check=True, stdout=subprocess.PIPE, text=True,
+    ).stdout.strip()
+    if status or head != args.source_commit:
+        parser.error("exact Web delta HIL requires the clean candidate commit")
+
+    args.output.mkdir(parents=True)
+    candidate = args.output / "firmware.bin"
+    retained_elf = args.output / "firmware.elf"
+    retained_map = args.output / "firmware.map"
+    shutil.copyfile(args.firmware, candidate)
+    shutil.copyfile(args.elf, retained_elf)
+    shutil.copyfile(args.map, retained_map)
+    app_identity = app_elf_sha256(candidate)
+    record: dict[str, Any] = {
+        "schema": SCHEMA,
+        "status": "in_progress",
+        "source_commit": args.source_commit,
+        "harness_commit": head,
+        "target": {
+            "port": args.port,
+            "serial_port_discovery_calls": 0,
+            "ports_opened": [args.port],
+            "cardputer_ports_opened": 0,
+        },
+        "candidate": {
+            "version": args.expected_version,
+            "firmware_sha256": sha256_file(candidate),
+            "firmware_bytes": candidate.stat().st_size,
+            "elf_sha256": sha256_file(retained_elf),
+            "map_sha256": sha256_file(retained_map),
+            "app_elf_sha256": app_identity,
+        },
+        "flash_count": 0,
+        "radio_tx_scope": "explicit_ephemeral_softap_only",
+        "http_exchange_tested": False,
+        "http_exchange_reason": "host_wifi_state_not_modified",
+    }
+    write_json(args.output / "run.json", record)
+    cleanup: dict[str, Any] = {"attempted": False}
+
+    try:
+        checkpoint(args.output, record, "flash")
+        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+        record["flash_count"] = 1
+        write_json(args.output / "run.json", record)
+        time.sleep(1.0)
+
+        with PassiveSerial(args.port, 115200, timeout=0.25) as device:
+            checkpoint(args.output, record, "console_sync")
+            synchronize_console(device, 30.0)
+            metrics_before = query(
+                device, b"metrics", "leshy.boot.v1", "ready")
+            require(metrics_before.get("version") == args.expected_version and
+                    metrics_before.get("app_elf_sha256") == app_identity,
+                    f"wrong candidate booted: {metrics_before}")
+            recovery = query(
+                device, b"storage.product.boot-recovery",
+                "leshy.storage.product_boot_recovery.v1", "state")
+            require(recovery.get("status") == "admitted" and
+                    recovery.get("expected_fingerprint") == EXPECTED_CID and
+                    recovery.get("observed_fingerprint") == EXPECTED_CID and
+                    recovery.get("mounted_read_only") is True and
+                    recovery.get("physical_write_calls") == 0 and
+                    recovery.get("cleanup_complete") is True,
+                    f"product storage baseline is not safe: {recovery}")
+
+            checkpoint(args.output, record, "open_targets")
+            home = normalize_home(device)
+            for _ in range(5):
+                home = action(device, "down")
+            require(home.get("page") == "home" and
+                    home.get("selection") == 5 and
+                    home.get("selected_id") == "targets",
+                    f"cannot focus Targets: {home}")
+            opened = action(device, "right", timeout=40.0)
+            require(opened.get("page") == "targets" and
+                    opened.get("runtime_owner") == "targets" and
+                    opened.get("lease_mask") == 13,
+                    f"cannot open Targets: {opened}")
+            targets = query(
+                device, b"targets.state", "leshy.targets.product.v1", "state")
+            require(targets.get("status") == "ready" and
+                    int(targets.get("target_count", 0)) > 0 and
+                    targets.get("cleanup_complete") is True and
+                    targets.get("blocked_write_attempts") == 0,
+                    f"Targets snapshot unavailable: {targets}")
+
+            action(device, "right")
+            action(device, "right")
+            for _ in range(5):
+                action(device, "down")
+            selected = query(
+                device, b"targets.state", "leshy.targets.product.v1", "state")
+            require(selected.get("view") == "actions" and
+                    selected.get("action_selection") == 5 and
+                    selected.get("lease_mask") == 13,
+                    f"local Web action is not selected: {selected}")
+
+            checkpoint(args.output, record, "explicit_authorization")
+            action(device, "right")
+            staged = web_state(device)
+            require(staged.get("overlay_open") is True and
+                    staged.get("authorized") is False and
+                    staged.get("server_active") is False and
+                    staged.get("credential_present") is False and
+                    staged.get("lease_mask") == 13,
+                    f"Web session started without confirmation: {staged}")
+            action(device, "right")
+            active = web_state(device)
+            require(active.get("overlay_open") is True and
+                    active.get("authorized") is True and
+                    active.get("server_active") is True and
+                    active.get("protocol_connected") is False and
+                    int(active.get("generation", 0)) > 0 and
+                    active.get("credential_present") is True and
+                    active.get("credential_persisted") is False and
+                    active.get("credential_exposed_over_diagnostic") is False and
+                    active.get("maximum_clients") == 1 and
+                    active.get("idle_timeout_us") == IDLE_TIMEOUT_US and
+                    active.get("maximum_lifetime_us") == MAXIMUM_LIFETIME_US and
+                    active.get("lease_mask") == 15,
+                    f"explicit Web session is not bounded: {active}")
+            time.sleep(1.0)
+            stable = web_state(device)
+            require(stable.get("authorized") is True and
+                    stable.get("server_active") is True and
+                    stable.get("generation") == active.get("generation") and
+                    stable.get("requests_handled") == 0 and
+                    stable.get("requests_rejected") == 0 and
+                    stable.get("lease_mask") == 15,
+                    f"idle Web session did not remain stable: {stable}")
+
+            checkpoint(args.output, record, "explicit_stop")
+            action(device, "left")
+            stopped = web_state(device)
+            require(stopped.get("overlay_open") is False and
+                    stopped.get("authorized") is False and
+                    stopped.get("server_active") is False and
+                    stopped.get("protocol_connected") is False and
+                    stopped.get("credential_present") is False and
+                    stopped.get("stop_reason") == "user" and
+                    stopped.get("lease_mask") == 13,
+                    f"Web stop did not revoke and scrub: {stopped}")
+
+            cleanup = best_effort_cleanup(device)
+            require(cleanup.get("complete") is True,
+                    f"final cleanup unproven: {cleanup}")
+            released = web_state(device)
+            require(released.get("authorized") is False and
+                    released.get("server_active") is False and
+                    released.get("credential_present") is False and
+                    released.get("lease_mask") == 0,
+                    f"Web resources survived Targets teardown: {released}")
+            safe = query(device, b"hardware.safe-outputs",
+                         "leshy.hardware.safe-outputs.v1", "state")
+            require(safe.get("buzzer_inactive") is True and
+                    safe.get("nrf_ce_inactive") is True and
+                    safe.get("software_quiesce_complete") is True,
+                    f"safe outputs violated: {safe}")
+            inputs = query(device, b"input.state",
+                           "leshy.input.frontend.v1", "state")
+            require(inputs.get("status") == "ready" and
+                    inputs.get("read_errors") == 0 and
+                    inputs.get("queue_drops") == 0,
+                    f"input regression: {inputs}")
+            metrics_after = query(
+                device, b"metrics", "leshy.boot.v1", "ready")
+
+        record.update({
+            "status": "pass",
+            "checkpoint": "complete",
+            "exact_cid": EXPECTED_CID,
+            "boot_recovery": recovery,
+            "metrics_before": metrics_before,
+            "metrics_after": metrics_after,
+            "targets": targets,
+            "selected": selected,
+            "staged": staged,
+            "active": active,
+            "stable": stable,
+            "stopped": stopped,
+            "released": released,
+            "safe_outputs": safe,
+            "input": inputs,
+            "cleanup": cleanup,
+            "storage_write_commands": 0,
+            "raw_radio_tx_commands": 0,
+        })
+        write_json(args.output / "run.json", record)
+        artifact_manifest(args.output)
+        print(json.dumps({
+            "schema": SCHEMA,
+            "status": "pass",
+            "run": str(args.output / "run.json"),
+            "generation": active["generation"],
+            "final_lease_mask": released["lease_mask"],
+        }, sort_keys=True))
+        return 0
+    except Exception as error:
+        try:
+            with PassiveSerial(args.port, 115200, timeout=0.25) as device:
+                synchronize_console(device, 10.0)
+                cleanup = best_effort_cleanup(device)
+        except Exception as cleanup_error:
+            cleanup = {
+                "attempted": True,
+                "complete": False,
+                "errors": [
+                    f"{type(cleanup_error).__name__}: {cleanup_error}"
+                ],
+            }
+        record.update({
+            "status": "failed",
+            "failure": f"{type(error).__name__}: {error}",
+            "cleanup": cleanup,
+        })
+        write_json(args.output / "run.json", record)
+        artifact_manifest(args.output)
+        raise
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
