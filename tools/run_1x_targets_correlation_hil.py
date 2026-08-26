@@ -12,6 +12,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+import serial
+
 from capture_1x_ui import PassiveSerial, read_json, synchronize_console
 from check_targets_stack_elf_contract import stack_frames
 from esp_app_identity import app_elf_sha256
@@ -128,23 +130,44 @@ def validate_proposal(state: dict[str, Any]) -> None:
 
 
 def fixture_mode(device: PassiveSerial, mode: str) -> dict[str, Any]:
-    device.reset_input_buffer()
-    device.write(f"mode {mode}\n".encode("ascii"))
-    device.flush()
-    deadline = time.monotonic() + 8.0
+    started = time.monotonic()
+    deadline = started + 20.0
     stale: list[dict[str, Any]] = []
+    reconnects = 0
+    last_error = "no fixture response"
+    send_mode = True
     while time.monotonic() < deadline:
-        state = read_json(
-            device, FIXTURE_SCHEMA, "state",
-            timeout=max(0.1, deadline - time.monotonic()))
-        if (state.get("mode") == mode and
-                state.get("wifi_tx") == (mode == "wifi") and
-                state.get("ble_tx") == (mode == "ble")):
-            time.sleep(0.5)
-            return state
-        stale.append(state)
+        try:
+            if not device.is_open:
+                device.open()
+            device.reset_input_buffer()
+            command = f"mode {mode}\n" if send_mode else "state\n"
+            device.write(command.encode("ascii"))
+            device.flush()
+            send_mode = False
+            state = read_json(
+                device, FIXTURE_SCHEMA, "state",
+                timeout=min(2.5, max(0.1, deadline - time.monotonic())))
+            if (state.get("mode") == mode and
+                    state.get("wifi_tx") == (mode == "wifi") and
+                    state.get("ble_tx") == (mode == "ble")):
+                state["host_reconnects"] = reconnects
+                state["host_transition_ms"] = round(
+                    (time.monotonic() - started) * 1000.0, 3)
+                time.sleep(0.5)
+                return state
+            stale.append(state)
+            send_mode = True
+        except (OSError, serial.SerialException, TimeoutError) as error:
+            last_error = f"{type(error).__name__}: {error}"
+            if device.is_open:
+                device.close()
+            reconnects += 1
+            send_mode = False
+            time.sleep(0.25)
     raise RuntimeError(
-        f"external fixture mode did not converge to {mode}: {stale}")
+        f"external fixture mode did not converge to {mode}; "
+        f"reconnects={reconnects}, last_error={last_error}, stale={stale}")
 
 
 def check_atomic_accept(state: dict[str, Any], generation: int,

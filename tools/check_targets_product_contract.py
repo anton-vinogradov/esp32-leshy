@@ -246,6 +246,8 @@ def main() -> int:
             "validate_proposal" in correlation_runner and
             "correlation_evidence_candidate=False" in correlation_runner and
             "correlation_evidence_candidate=True" in correlation_runner and
+            "host_reconnects" in correlation_runner and
+            "device.open()" in correlation_runner and
             'mutation_correlation_status="accepted"' in correlation_runner and
             "correlation_decision_count=decisions_after" in
                 correlation_runner and
