@@ -649,6 +649,25 @@ partition table, удаляет private backups после проверки, rea
 generation 161 и заканчивает Home/none/lease 0. Cadence продвигается до 13/15 без
 учёта disposable fixture или недоступной PSRAM как product capacity.
 
+Checkpoint contract companion `RB-M159`: exact production
+`0.166.0-companion-contract` на source
+`d34135677e984b710ef061ca6886d7f08cd264be` использует 214 288 B static RAM,
+3 159 808 B linked flash и app/factory images 3 160 304/3 225 840 B. Это
++3 B static RAM, +12 B linked flash и +0/+0 B images против exact 0.165;
+dedicated DIRAM равна 297 504/341 760 B (свободно 44 256 B), dedicated IRAM
+остаётся 16 384/16 384 B. `CompanionConnectRequest` и `CompanionConnection`
+compile-time ограничены 48 B каждый. Parse frames имеют максимум 512 B; staging
+response использует 513 B только на stack caller и не публикует partial bytes.
+Translation unit protocol компилируется и проходит native tests, но ещё не связан с
+product runtime, поэтому linker GC сохраняет прежнюю длину app/factory; этот budget
+не заявляет работающий USB adapter. SHA-256 firmware/factory/ELF/map/partitions:
+`200bf8f5c04f5815821503748aac549aadc422eb6268b3c700356fd3227cd9af`/
+`3f3729e6a71d539bb38d981213b895f0494e579bbb90cfd7fcb5cc8f00bd61c9`/
+`c86a2b60a9264f456b8d6d3f07c5e33b437f3f8ffec247de8f47c0465e00e6a7`/
+`e7416f269ad17c44324e9d0225fdfe23d7f4e82a20ea21795890538b18a14622`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+Physical cadence delta не расходуется.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

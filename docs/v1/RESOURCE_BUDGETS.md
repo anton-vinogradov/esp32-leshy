@@ -656,6 +656,25 @@ byte-for-byte, deletes private backups after verification, reopens product gener
 161 read-only and ends Home/none/lease 0. Cadence advances to 13/15 without treating
 the disposable fixture or unavailable PSRAM as product capacity.
 
+Companion-contract checkpoint `RB-M159`: exact production
+`0.166.0-companion-contract` at source
+`d34135677e984b710ef061ca6886d7f08cd264be` uses 214,288 B static RAM,
+3,159,808 B linked flash and 3,160,304/3,225,840 B app/factory images. This is
++3 B static RAM, +12 B linked flash and +0/+0 B images versus exact 0.165; dedicated
+DIRAM is 297,504/341,760 B (44,256 B remaining) and dedicated IRAM remains
+16,384/16,384 B. `CompanionConnectRequest` and `CompanionConnection` are each
+compile-time bounded to at most 48 B. Parse frames are at most 512 B; response staging
+uses 513 B only on the invoking stack and publishes no partial bytes. The protocol
+translation unit is compiled and native-tested but is not yet referenced by product
+runtime, so linker GC keeps the app/factory length unchanged; this budget does not
+claim a running USB adapter. Firmware/factory/ELF/map/partitions SHA-256 are
+`200bf8f5c04f5815821503748aac549aadc422eb6268b3c700356fd3227cd9af`/
+`3f3729e6a71d539bb38d981213b895f0494e579bbb90cfd7fcb5cc8f00bd61c9`/
+`c86a2b60a9264f456b8d6d3f07c5e33b437f3f8ffec247de8f47c0465e00e6a7`/
+`e7416f269ad17c44324e9d0225fdfe23d7f4e82a20ea21795890538b18a14622`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+No physical cadence delta is consumed.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
