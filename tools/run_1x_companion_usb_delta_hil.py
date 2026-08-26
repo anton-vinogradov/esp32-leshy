@@ -168,8 +168,18 @@ def main() -> int:
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=root, check=True, stdout=subprocess.PIPE, text=True,
     ).stdout.strip()
-    if head != args.source_commit or status:
-        parser.error("exact HIL requires clean committed HEAD")
+    candidate_exists = subprocess.run(
+        ["git", "cat-file", "-e", f"{args.source_commit}^{{commit}}"],
+        cwd=root, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL).returncode == 0
+    candidate_is_ancestor = candidate_exists and subprocess.run(
+        ["git", "merge-base", "--is-ancestor", args.source_commit, head],
+        cwd=root, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL).returncode == 0
+    if status or not candidate_is_ancestor:
+        parser.error(
+            "exact HIL requires a clean committed harness descended from "
+            "the candidate source commit")
 
     args.output.mkdir(parents=True)
     candidate = args.output / "firmware.bin"
@@ -183,6 +193,7 @@ def main() -> int:
         "schema": SCHEMA,
         "status": "in_progress",
         "source_commit": args.source_commit,
+        "harness_commit": head,
         "target": {
             "port": args.port,
             "serial_port_discovery_calls": 0,
