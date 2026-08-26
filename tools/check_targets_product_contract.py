@@ -423,6 +423,8 @@ def main() -> int:
             '"port_discovery_calls": 0' in merge_split_runner and
             "targets-merge-cold-reopen" in merge_split_runner and
             "targets-split-cold-reopen" in merge_split_runner and
+            "targets-merge-split-initial-boot" in merge_split_runner and
+            'states["controlled_initial_boot"]' in merge_split_runner and
             "selected_graph_fingerprint=destination_graph" in
                 merge_split_runner and
             "selected_graph_fingerprint=source_graph" in merge_split_runner and

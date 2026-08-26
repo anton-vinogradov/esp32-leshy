@@ -471,6 +471,7 @@ def main() -> int:
     states: dict[str, Any] = {}
     screens: dict[str, Any] = {}
     resets: dict[str, Any] = {}
+    initial_timing: dict[str, Any] = {}
     record: dict[str, Any] = {
         "schema": SCHEMA,
         "status": "in_progress",
@@ -514,6 +515,13 @@ def main() -> int:
         if not args.reuse_exact_flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
             time.sleep(1.0)
+        initial_ready, _, initial_timing = reset_capture(
+            args.port, args.output, "targets-merge-split-initial-boot", 20.0)
+        require(initial_ready, "controlled initial candidate",
+                version=args.expected_version, app_elf_sha256=app_identity)
+        require_non_watchdog_boot(
+            initial_ready, "controlled initial candidate")
+        states["controlled_initial_boot"] = initial_ready
         device = PassiveSerial(args.port, 115200, timeout=0.25)
         synchronize_console(device, 30.0)
         metrics = read_only_query(
@@ -1086,6 +1094,7 @@ def main() -> int:
         "screens": screens,
         "resets": resets,
         "cleanup": cleanup,
+        "initial_timing": initial_timing,
         "final_boot": final_boot,
         "final_recovery": final_recovery,
         "final_fixture": final_fixture,
