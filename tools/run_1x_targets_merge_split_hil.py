@@ -4,11 +4,9 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import secrets
 import shutil
-import struct
 import subprocess
 import time
 from pathlib import Path
@@ -17,6 +15,12 @@ from typing import Any, Callable
 from capture_1x_ui import PassiveSerial, synchronize_console
 from check_targets_stack_elf_contract import stack_frames
 from esp_app_identity import app_elf_sha256
+from partition_safety import (
+    PARTITION_ARTIFACT_SIZE,
+    PARTITION_MAGIC,
+    PARTITION_MD5_MAGIC,
+    validated_partition_layout,
+)
 from run_1x_littlefs_parity_hil import (
     OTA1_OFFSET,
     OTA1_SIZE,
@@ -40,62 +44,6 @@ SCHEMA = "leshy.targets_merge_split_hil.run.v1"
 EXPECTED_CID = "FE343253440000002000000055019CB7"
 WATCHDOG_RESET_REASONS = {4, 5, 6, 7}
 MUTATION_ACTION_ACK_TIMEOUT = 5.0
-PARTITION_MAGIC = 0x50AA
-PARTITION_MD5_MAGIC = 0xEBEB
-PARTITION_ARTIFACT_SIZE = 0xC00
-
-
-def validated_partition_layout(path: Path, firmware_size: int) -> dict[str, Any]:
-    """Fail closed unless the temporary table is the reviewed 16 MB layout."""
-    payload = path.read_bytes()
-    if len(payload) not in (PARTITION_ARTIFACT_SIZE, PARTITION_TABLE_SIZE):
-        raise ValueError(
-            f"partition table size {len(payload)} is not a reviewed artifact")
-    entries: dict[str, dict[str, int]] = {}
-    md5_verified = False
-    for offset in range(0, len(payload), 32):
-        block = payload[offset:offset + 32]
-        magic, kind, subtype, address, size, raw_label, flags = struct.unpack(
-            "<HBBLL16sL", block)
-        if magic == 0xFFFF:
-            break
-        if magic == PARTITION_MD5_MAGIC:
-            expected_md5 = block[16:32]
-            observed_md5 = hashlib.md5(payload[:offset]).digest()
-            if expected_md5 != observed_md5:
-                raise ValueError("partition table MD5 record does not match")
-            md5_verified = True
-            break
-        if magic != PARTITION_MAGIC:
-            raise ValueError(f"invalid partition magic at {offset:#x}")
-        label = raw_label.split(b"\0", 1)[0].decode("ascii")
-        if label in entries:
-            raise ValueError(f"duplicate partition label: {label}")
-        entries[label] = {
-            "type": kind, "subtype": subtype, "offset": address,
-            "size": size, "flags": flags,
-        }
-    if not md5_verified:
-        raise ValueError("partition table has no verified MD5 record")
-    expected = {
-        "app0": {"type": 0, "subtype": 0x10, "offset": 0x10000,
-                 "size": 0x400000, "flags": 0},
-        "app1": {"type": 0, "subtype": 0x11, "offset": OTA1_OFFSET,
-                 "size": OTA1_SIZE, "flags": 0},
-        "spiffs": {"type": 1, "subtype": 0x82, "offset": 0x810000,
-                   "size": 0x7D0000, "flags": 0},
-    }
-    for label, wanted in expected.items():
-        if entries.get(label) != wanted:
-            raise ValueError(
-                f"unsafe temporary partition {label}: "
-                f"{entries.get(label)} != {wanted}")
-    if firmware_size > entries["app0"]["size"]:
-        raise ValueError("candidate firmware does not fit temporary app0")
-    app0_end = entries["app0"]["offset"] + entries["app0"]["size"]
-    if app0_end != entries["app1"]["offset"]:
-        raise ValueError("temporary app0/app1 boundary is not exact")
-    return entries
 
 
 def require(record: dict[str, Any], label: str, **expected: Any) -> None:

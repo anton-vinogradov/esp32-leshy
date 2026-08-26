@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Host checks for partition-safe local Web delta HIL."""
+
+from __future__ import annotations
+
+import hashlib
+import struct
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+
+import partition_safety  # noqa: E402
+import run_1x_companion_web_delta_hil as runner  # noqa: E402
+
+
+def partition_table(
+    entries: list[tuple[int, int, int, int, str]],
+) -> bytes:
+    payload = bytearray(b"\xff" * partition_safety.PARTITION_TABLE_SIZE)
+    for index, (kind, subtype, offset, size, label) in enumerate(entries):
+        payload[index * 32:(index + 1) * 32] = struct.pack(
+            "<HBBLL16sL", partition_safety.PARTITION_MAGIC, kind, subtype,
+            offset, size, label.encode("ascii").ljust(16, b"\0"), 0)
+    md5_offset = len(entries) * 32
+    payload[md5_offset:md5_offset + 32] = (
+        struct.pack("<H", partition_safety.PARTITION_MD5_MAGIC) +
+        b"\xff" * 14 + hashlib.md5(payload[:md5_offset]).digest())
+    return bytes(payload)
+
+
+class CompanionWebDeltaRunnerTests(unittest.TestCase):
+    def test_reviewed_layout_accepts_fitting_candidate(self) -> None:
+        entries = [
+            (1, 0x02, 0x9000, 0x5000, "nvs"),
+            (1, 0x00, 0xE000, 0x2000, "otadata"),
+            (0, 0x10, 0x10000, 0x400000, "app0"),
+            (0, 0x11, 0x410000, 0x400000, "app1"),
+            (1, 0x82, 0x810000, 0x7D0000, "spiffs"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "partitions.bin"
+            path.write_bytes(partition_table(entries)[:0xC00])
+            layout = partition_safety.validated_partition_layout(
+                path, 3_387_952)
+            canonical = partition_safety.canonical_partition_table(path)
+        self.assertEqual(0x400000, layout["app0"]["size"])
+        self.assertEqual(0x1000, len(canonical))
+
+    def test_factory_layout_rejected_before_flash(self) -> None:
+        entries = [
+            (0, 0x10, 0x10000, 0x330000, "app0"),
+            (1, 0x82, 0x340000, 0x230000, "font"),
+            (1, 0x82, 0x670000, 0x180000, "spiffs"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "factory-partitions.bin"
+            path.write_bytes(partition_table(entries))
+            with self.assertRaisesRegex(ValueError, "app0|app1"):
+                partition_safety.validated_partition_layout(path, 3_387_952)
+
+    def test_oversize_candidate_rejected(self) -> None:
+        entries = [
+            (0, 0x10, 0x10000, 0x400000, "app0"),
+            (0, 0x11, 0x410000, 0x400000, "app1"),
+            (1, 0x82, 0x810000, 0x7D0000, "spiffs"),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "partitions.bin"
+            path.write_bytes(partition_table(entries))
+            with self.assertRaisesRegex(ValueError, "does not fit"):
+                partition_safety.validated_partition_layout(path, 0x400001)
+
+    def test_legacy_precursor_requires_exact_application_identity(self) -> None:
+        candidate = {
+            "version": "0.174.0-companion-web-runtime",
+            "firmware_sha256": "firmware",
+            "firmware_bytes": 3_387_952,
+            "elf_sha256": "elf",
+            "map_sha256": "map",
+            "app_elf_sha256": "app",
+            "partitions_sha256": "partitions",
+        }
+        legacy = {key: value for key, value in candidate.items()
+                  if key != "partitions_sha256"}
+        self.assertTrue(runner.precursor_candidate_matches(legacy, candidate))
+        legacy["firmware_sha256"] = "different"
+        self.assertFalse(runner.precursor_candidate_matches(legacy, candidate))
+
+    def test_runner_has_no_discovery_or_partition_write(self) -> None:
+        source = (ROOT / "tools/run_1x_companion_web_delta_hil.py").read_text()
+        self.assertNotIn("serial.tools.list_ports", source)
+        self.assertNotIn("write-flash", source)
+        self.assertIn('parser.add_argument("--port", required=True)', source)
+        self.assertIn(
+            'parser.add_argument("--partitions", required=True, type=Path)',
+            source)
+        self.assertLess(
+            source.index("read_flash_with_retry("),
+            source.index("flash_candidate(args.port"))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -15,6 +15,13 @@ import serial
 
 from capture_1x_ui import PassiveSerial, read_json
 from esp_app_identity import app_elf_sha256
+from partition_safety import (
+    PARTITION_TABLE_OFFSET,
+    PARTITION_TABLE_SIZE,
+    canonical_partition_table,
+    validated_partition_layout,
+)
+from run_1x_littlefs_parity_hil import read_flash_with_retry
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import (
     action,
@@ -81,10 +88,26 @@ def open_console_reconnecting(
         f"{last_error}")
 
 
+def precursor_candidate_matches(
+    precursor: dict[str, Any], candidate: dict[str, Any],
+) -> bool:
+    """Match an exact legacy installation while verifying layout separately."""
+    required = (
+        "version", "firmware_sha256", "firmware_bytes", "elf_sha256",
+        "map_sha256", "app_elf_sha256",
+    )
+    if any(precursor.get(field) != candidate.get(field) for field in required):
+        return False
+    precursor_partitions = precursor.get("partitions_sha256")
+    return (precursor_partitions is None or
+            precursor_partitions == candidate.get("partitions_sha256"))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
     parser.add_argument("--firmware", required=True, type=Path)
+    parser.add_argument("--partitions", required=True, type=Path)
     parser.add_argument("--elf", required=True, type=Path)
     parser.add_argument("--map", required=True, type=Path)
     parser.add_argument("--expected-version", required=True)
@@ -94,13 +117,18 @@ def main() -> int:
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
 
-    for path in (args.firmware, args.elf, args.map):
+    for path in (args.firmware, args.partitions, args.elf, args.map):
         if not path.is_file():
             parser.error(f"candidate artifact missing: {path}")
     if args.output.exists():
         parser.error("output must not exist")
     if len(args.source_commit) != 40:
         parser.error("source commit must be full length")
+    try:
+        partition_layout = validated_partition_layout(
+            args.partitions, args.firmware.stat().st_size)
+    except (OSError, UnicodeDecodeError, ValueError) as error:
+        parser.error(f"unsafe candidate partition table: {error}")
 
     root = Path(__file__).resolve().parents[1]
     head = subprocess.run(
@@ -115,9 +143,11 @@ def main() -> int:
 
     args.output.mkdir(parents=True)
     candidate = args.output / "firmware.bin"
+    candidate_partitions = args.output / "partitions.bin"
     retained_elf = args.output / "firmware.elf"
     retained_map = args.output / "firmware.map"
     shutil.copyfile(args.firmware, candidate)
+    candidate_partitions.write_bytes(canonical_partition_table(args.partitions))
     shutil.copyfile(args.elf, retained_elf)
     shutil.copyfile(args.map, retained_map)
     app_identity = app_elf_sha256(candidate)
@@ -138,9 +168,12 @@ def main() -> int:
             "firmware_bytes": candidate.stat().st_size,
             "elf_sha256": sha256_file(retained_elf),
             "map_sha256": sha256_file(retained_map),
+            "partitions_sha256": sha256_file(candidate_partitions),
+            "partition_layout": partition_layout,
             "app_elf_sha256": app_identity,
         },
         "flash_count": 0,
+        "partition_flash_count": 0,
         "radio_tx_scope": "explicit_ephemeral_softap_only",
         "http_exchange_tested": False,
         "http_exchange_reason": "host_wifi_state_not_modified",
@@ -161,7 +194,8 @@ def main() -> int:
         if (precursor.get("flash_count") != 1 or not safe_precursor or
                 precursor_target.get("port") != args.port or
                 precursor_target.get("ports_opened") != [args.port] or
-                precursor.get("candidate") != record["candidate"]):
+                not precursor_candidate_matches(
+                    precursor.get("candidate", {}), record["candidate"])):
             parser.error(
                 "reuse precursor does not prove this exact installed candidate")
         record["installed_candidate_reused"] = True
@@ -176,6 +210,29 @@ def main() -> int:
     device: PassiveSerial | None = None
 
     try:
+        checkpoint(args.output, record, "partition_preflight")
+        installed_partitions = args.output / "installed-partitions.bin"
+        installed_partition_sha, partition_read_attempts = \
+            read_flash_with_retry(
+                args.port, args.flash_baud, PARTITION_TABLE_OFFSET,
+                PARTITION_TABLE_SIZE, installed_partitions)
+        record["partition_preflight"] = {
+            "offset": PARTITION_TABLE_OFFSET,
+            "bytes": PARTITION_TABLE_SIZE,
+            "read_attempts": partition_read_attempts,
+            "expected_sha256": record["candidate"]["partitions_sha256"],
+            "observed_sha256": installed_partition_sha,
+            "matched": (
+                installed_partition_sha ==
+                record["candidate"]["partitions_sha256"]),
+            "performed_before_application_flash": True,
+        }
+        write_json(args.output / "run.json", record)
+        require(
+            record["partition_preflight"]["matched"] is True,
+            "installed partition table does not match the candidate; "
+            "migration must be backed up and explicitly authorized before HIL")
+
         if args.reuse_installed_from is None:
             checkpoint(args.output, record, "flash")
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
@@ -354,24 +411,33 @@ def main() -> int:
             except (OSError, serial.SerialException):
                 pass
             device = None
-        try:
-            device, cleanup_open_attempts, cleanup_disconnects = \
-                open_console_reconnecting(args.port, 10.0)
-            try:
-                cleanup = best_effort_cleanup(device)
-                cleanup["open_attempts"] = cleanup_open_attempts
-                cleanup["disconnects"] = cleanup_disconnects
-            finally:
-                device.close()
-                device = None
-        except Exception as cleanup_error:
+        checkpoint_name = record.get("checkpoint")
+        if (checkpoint_name == "partition_preflight" and
+                record.get("flash_count") == 0):
             cleanup = {
-                "attempted": True,
-                "complete": False,
-                "errors": [
-                    f"{type(cleanup_error).__name__}: {cleanup_error}"
-                ],
+                "attempted": False,
+                "complete": True,
+                "reason": "runtime_not_opened_before_partition_rejection",
             }
+        else:
+            try:
+                device, cleanup_open_attempts, cleanup_disconnects = \
+                    open_console_reconnecting(args.port, 10.0)
+                try:
+                    cleanup = best_effort_cleanup(device)
+                    cleanup["open_attempts"] = cleanup_open_attempts
+                    cleanup["disconnects"] = cleanup_disconnects
+                finally:
+                    device.close()
+                    device = None
+            except Exception as cleanup_error:
+                cleanup = {
+                    "attempted": True,
+                    "complete": False,
+                    "errors": [
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    ],
+                }
         record.update({
             "status": (
                 "interrupted" if isinstance(error, KeyboardInterrupt)

@@ -372,11 +372,17 @@ def main() -> int:
 
     for marker in (
         'parser.add_argument("--port", required=True)',
+        'parser.add_argument("--partitions", required=True, type=Path)',
         '"serial_port_discovery_calls": 0',
         '"cardputer_ports_opened": 0',
         '"flash_count": 0',
         'record["flash_count"] = 1',
+        '"partition_flash_count": 0',
+        '"performed_before_application_flash": True',
+        'read_flash_with_retry(',
+        '"installed partition table does not match the candidate',
         'parser.add_argument("--reuse-installed-from", type=Path)',
+        'precursor_candidate_matches(',
         'precursor.get("checkpoint") == "console_sync"',
         'def open_console_reconnecting(',
         'write_timeout=0.5',
