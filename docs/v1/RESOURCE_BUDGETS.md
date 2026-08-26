@@ -675,6 +675,26 @@ claim a running USB adapter. Firmware/factory/ELF/map/partitions SHA-256 are
 `325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
 No physical cadence delta is consumed.
 
+Companion-USB read checkpoint `RB-M160`: exact production
+`0.170.0-companion-usb-rx` at source
+`b58fbc054522cecfca5dd4afcd6ea61098cb05c0` uses 214,664 B static RAM,
+3,172,080 B linked flash and 3,172,576/3,238,112 B app/factory images. This is
++376 B static RAM and +12,272/+12,272/+12,272 B linked/app/factory versus exact
+0.166. The native adapter owns one 513-byte command/response workspace, keeps the
+protocol frame bound at 512 bytes and configures a 576-byte hardware CDC RX queue;
+the latter is required because the valid compare request exceeded the core's default
+256-byte queue before its newline arrived. Physical Targets opens with 92,972 B free
+heap before and after release; the minimum sampled free heap is 15,008 B during the
+bounded load. Exact firmware/factory/ELF/map/partitions SHA-256 are
+`6275e94fd34cf28018cb761dc877717a668e2fedb8b5f4d9de6a213dfe0583ad`/
+`8f0a7a1696069225a96984480e88d66f9beacb7530399e28291e8ffde1b66528`/
+`6c4da4273bfa0d11fc5b022125a320f61f45342ac34cc0ac870a3178fc0832cf`/
+`c18e76d32054cb0be139be73f3b55d085f55179858ae828dad8c68950b48adef`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+`E-HIL-177` accepts the exact 512-byte boundary, full read pagination, invariant
+released heap and zero storage writes, TX, drops or leaked lease. Cadence advances to
+14/15; the next accepted physical delta triggers the established full-matrix gate.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

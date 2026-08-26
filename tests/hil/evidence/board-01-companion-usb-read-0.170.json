@@ -1,0 +1,151 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "app_elf_sha256": "6c4da4273bfa0d11fc5b022125a320f61f45342ac34cc0ac870a3178fc0832cf",
+    "elf_sha256": "6c4da4273bfa0d11fc5b022125a320f61f45342ac34cc0ac870a3178fc0832cf",
+    "factory_bytes": 3238112,
+    "factory_sha256": "8f0a7a1696069225a96984480e88d66f9beacb7530399e28291e8ffde1b66528",
+    "firmware_bytes": 3172576,
+    "firmware_sha256": "6275e94fd34cf28018cb761dc877717a668e2fedb8b5f4d9de6a213dfe0583ad",
+    "linked_flash_bytes": 3172080,
+    "map_sha256": "c18e76d32054cb0be139be73f3b55d085f55179858ae828dad8c68950b48adef",
+    "partitions_sha256": "325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3",
+    "static_ram_bytes": 214664,
+    "total_image_bytes": 3172420,
+    "version": "0.170.0-companion-usb-rx"
+  },
+  "connection": {
+    "capabilities": [
+      "session.list",
+      "session.detail",
+      "target.list",
+      "target.detail",
+      "target.compare"
+    ],
+    "home_capabilities": [],
+    "home_reason": "scope_unavailable",
+    "max_frame_bytes": 512,
+    "scopes": [
+      "session.read",
+      "target.read",
+      "target.compare"
+    ],
+    "transport": "usb_serial_ndjson"
+  },
+  "evidence_ids": [
+    "E-BUILD-147",
+    "E-AUTO-118",
+    "E-HIL-177",
+    "E-COMPANION-002"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final": {
+    "buzzer_inactive": true,
+    "heap_free_after": 92972,
+    "heap_free_before": 92972,
+    "input_queue_drops": 0,
+    "lease_mask": 0,
+    "page": "home",
+    "radio_tx_commands": 0,
+    "runtime_owner": "none",
+    "safe_outputs_quiesced": true,
+    "storage_write_commands": 0
+  },
+  "firmware_source_commit": "b58fbc054522cecfca5dd4afcd6ea61098cb05c0",
+  "flash_count": 1,
+  "framing": {
+    "exact_512": "ok",
+    "invalid_offset": "offset_out_of_range",
+    "mutation_scope": "scope_denied",
+    "oversized_513": "frame_too_large",
+    "post_exit": "not_connected",
+    "truncated": "malformed_json",
+    "unknown_field": "unknown_field"
+  },
+  "media": {
+    "attempts": 1,
+    "blocked_write_attempts": 0,
+    "cleanup_complete": true,
+    "generation": 161,
+    "mounted_read_only": true,
+    "observations": 59,
+    "physical_write_calls": 0,
+    "transient_retries": 0
+  },
+  "physical_cadence": {
+    "accepted": 14,
+    "full_gate_at": 15
+  },
+  "raw_run_sha256": "2085e94e63f9a1f85bc8f7069703ae53ce38ede2ac328e1b77af5bf8830cf401",
+  "rejected_precursors": [
+    {
+      "checkpoint": "open_targets",
+      "reason": "single_attempt_sd_identity_failed",
+      "run_sha256": "8475fe4f5b4451069bc34cb36ea3bc6c2b350676c20a0adb2420ee9fd40821d2",
+      "version": "0.168.0-companion-usb-stack"
+    },
+    {
+      "checkpoint": "target_compare",
+      "reason": "native_usb_default_rx_queue_256",
+      "run_sha256": "918cde5ac3f5f93679306e0c554ce0c3336d4195e2aff748440a743cdfb2d9d9",
+      "version": "0.169.0-targets-identity-retry"
+    },
+    {
+      "checkpoint": "target_compare",
+      "reason": "native_usb_default_rx_queue_256_reproduced_without_flash",
+      "run_sha256": "b9d7c9c3bca696d41af0c032f2053142d2a1a6c1b635e2a4246da0857cb9f1b4",
+      "version": "0.169.0-targets-identity-retry"
+    }
+  ],
+  "schema": "leshy.companion_usb_delta_hil.summary.v1",
+  "sessions": [
+    {
+      "dropped": 0,
+      "generation": 160,
+      "observations": 49,
+      "source_id": "6097B09767B64D5064AC7C6050129303"
+    },
+    {
+      "dropped": 0,
+      "generation": 161,
+      "observations": 59,
+      "source_id": "F55E4440B07EDF00BBC2C84663B043F5"
+    }
+  ],
+  "status": "pass",
+  "targets": {
+    "catalog_count": 16,
+    "compare_counts": {
+      "added": 2,
+      "changed": 0,
+      "removed": 1,
+      "unchanged": 4
+    },
+    "compare_pages": 7,
+    "detail_sections": [
+      "summary",
+      "notes",
+      "tags",
+      "identities",
+      "evidence"
+    ],
+    "filesystem_mount_attempts": 1,
+    "filesystem_mount_transient_retries": 0,
+    "identity_attempts": 1,
+    "identity_cleanup_complete": true,
+    "identity_transient_retries": 0,
+    "list_pages": 16,
+    "released_heap": 92972
+  },
+  "usb": {
+    "cardputer_ports_opened": 0,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "port_discovery_calls": 0
+  },
+  "verification_source_commit": "b58fbc054522cecfca5dd4afcd6ea61098cb05c0"
+}

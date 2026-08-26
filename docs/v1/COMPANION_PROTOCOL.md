@@ -128,6 +128,9 @@ protocol.
   every truncation of a golden frame, size limits, scope dependency/permission tests,
   and deterministic USB/Web encoding.
 
-This source/build slice wires all five read-only projections to native USB. Physical
-acceptance still requires the explicitly selected board/port delta HIL; no Web,
-mutation, export, or connectivity implementation is implied.
+Exact `0.170.0-companion-usb-rx` physically accepts all five read-only projections on
+the explicitly selected original-DIV native USB port. The retained delta proves two
+Sessions, 16 Targets, all five Target-detail sections, seven comparison rows, the exact
+512/513-byte accept/reject boundary, grant revocation after leaving Targets, invariant
+released heap and zero storage writes, radio TX, input drops, port discovery or
+Cardputer opens. No Web, mutation, export, or connectivity implementation is implied.

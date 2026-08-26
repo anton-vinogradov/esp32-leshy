@@ -128,6 +128,10 @@ storage, не перечитывает catalog, не пересчитывает 
   truncation golden frame, size limits, scope dependency/permission tests и
   deterministic encoding USB/Web.
 
-Этот source/build slice подключает все пять read-only projections к native USB.
-Physical acceptance всё ещё требует delta HIL на явно выбранных board/port; Web,
-mutation, export или connectivity implementation этим не заявляются.
+Exact `0.170.0-companion-usb-rx` физически принимает все пять read-only projections
+на явно выбранном native-USB port оригинального DIV. Retained delta доказывает две
+Sessions, 16 Targets, все пять detail sections Target, семь строк comparison, exact
+boundary accept/reject 512/513 bytes, отзыв grant после выхода из Targets, invariant
+released heap и zero storage writes, radio TX, input drops, port discovery или
+открытий Cardputer. Web, mutation, export или connectivity implementation этим не
+заявляются.

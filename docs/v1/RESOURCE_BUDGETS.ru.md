@@ -668,6 +668,26 @@ product runtime, поэтому linker GC сохраняет прежнюю дл
 `325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
 Physical cadence delta не расходуется.
 
+Checkpoint read companion по USB `RB-M160`: exact production
+`0.170.0-companion-usb-rx` на source
+`b58fbc054522cecfca5dd4afcd6ea61098cb05c0` использует 214 664 B static RAM,
+3 172 080 B linked flash и app/factory images 3 172 576/3 238 112 B. Это
++376 B static RAM и +12 272/+12 272/+12 272 B linked/app/factory против exact
+0.166. Native adapter владеет одним workspace command/response 513 bytes, сохраняет
+protocol bound 512 bytes и настраивает hardware CDC RX queue 576 bytes; последнее
+необходимо, потому что valid compare request превышал default queue core 256 bytes до
+прихода newline. Physical Targets имеет 92 972 B free heap до и после release;
+минимальный sampled free heap во время bounded load равен 15 008 B. Exact SHA-256
+firmware/factory/ELF/map/partitions:
+`6275e94fd34cf28018cb761dc877717a668e2fedb8b5f4d9de6a213dfe0583ad`/
+`8f0a7a1696069225a96984480e88d66f9beacb7530399e28291e8ffde1b66528`/
+`6c4da4273bfa0d11fc5b022125a320f61f45342ac34cc0ac870a3178fc0832cf`/
+`c18e76d32054cb0be139be73f3b55d085f55179858ae828dad8c68950b48adef`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+`E-HIL-177` принимает exact boundary 512 bytes, полную read pagination, invariant
+released heap и zero storage writes, TX, drops или leaked lease. Cadence продвигается
+до 14/15; следующая принятая physical delta запускает установленный full-matrix gate.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
