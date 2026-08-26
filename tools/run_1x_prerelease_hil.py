@@ -227,8 +227,8 @@ def write_json(path: Path, value: Any) -> None:
 def flash_candidate(port: str, firmware: Path, offset: int, baud: int) -> None:
     flash_command = [
         sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port,
-        "--baud", str(baud), "--after", "no-reset",
-        "write-flash", hex(offset), str(firmware),
+        "--baud", str(baud), "--after", "no_reset",
+        "write_flash", hex(offset), str(firmware),
     ]
     subprocess.run(flash_command, check=True)
     # Native USB disappears while the S3 watchdog is armed.  Keeping that
@@ -237,7 +237,7 @@ def flash_candidate(port: str, firmware: Path, offset: int, baud: int) -> None:
     # Exit the stub first, then perform the reset as a separate ROM operation.
     reset_command = [
         sys.executable, "-m", "esptool", "--chip", "esp32s3", "--port", port,
-        "--before", "no-reset", "--after", "watchdog-reset", "read-mac",
+        "--before", "no_reset", "--after", "watchdog_reset", "read_mac",
     ]
     subprocess.run(reset_command, check=True)
 

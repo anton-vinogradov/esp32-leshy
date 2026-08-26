@@ -40,9 +40,18 @@ READ_BACKOFF_SECONDS = 1.0
 
 
 def esptool(port: str, baud: int, arguments: list[str]) -> None:
+    operations = {
+        "read-flash", "write-flash", "verify-flash", "erase-region",
+        "erase-flash", "read-mac", "chip-id", "flash-id",
+        "get-security-info",
+    }
+    normalized = [
+        value.replace("-", "_") if value in operations else value
+        for value in arguments
+    ]
     subprocess.run([
         sys.executable, "-m", "esptool", "--chip", "esp32s3",
-        "--port", port, "--baud", str(baud), *arguments,
+        "--port", port, "--baud", str(baud), *normalized,
     ], check=True)
 
 

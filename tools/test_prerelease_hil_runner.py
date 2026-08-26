@@ -35,24 +35,24 @@ class PrereleaseRunnerTests(unittest.TestCase):
         self.assertEqual(2, run.call_count)
         flash_command = run.call_args_list[0].args[0]
         self.assertIn(
-            ["--after", "no-reset"],
+            ["--after", "no_reset"],
             [flash_command[index:index + 2]
              for index in range(len(flash_command) - 1)],
         )
         self.assertEqual(
-            ["write-flash", "0x10000", str(firmware)], flash_command[-3:])
+            ["write_flash", "0x10000", str(firmware)], flash_command[-3:])
         reset_command = run.call_args_list[1].args[0]
         self.assertIn(
-            ["--before", "no-reset"],
+            ["--before", "no_reset"],
             [reset_command[index:index + 2]
              for index in range(len(reset_command) - 1)],
         )
         self.assertIn(
-            ["--after", "watchdog-reset"],
+            ["--after", "watchdog_reset"],
             [reset_command[index:index + 2]
              for index in range(len(reset_command) - 1)],
         )
-        self.assertEqual("read-mac", reset_command[-1])
+        self.assertEqual("read_mac", reset_command[-1])
         for call in run.call_args_list:
             self.assertTrue(call.kwargs["check"])
 

@@ -53,7 +53,7 @@ def run_read_only(port: str, command: str) -> dict[str, Any]:
     invocation = [
         str(esptool_python()), "-m", "esptool", "--chip", "esp32s3",
         "--port", port, "--connect-attempts", "3", "--no-stub",
-        "--after", "hard-reset", command,
+        "--after", "hard_reset", command.replace("-", "_"),
     ]
     result = subprocess.run(
         invocation, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
