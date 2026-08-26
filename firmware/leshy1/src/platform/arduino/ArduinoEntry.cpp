@@ -18354,7 +18354,7 @@ void emitTargetsState(Stream& reply) {
 
 void emitCompanionWebState(Stream& reply) {
     namespace companion = leshy1::services::companion;
-    char line[1152] = {};
+    char line[1280] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.companion.web.v1\",\"kind\":\"state\","
@@ -18366,7 +18366,9 @@ void emitCompanionWebState(Stream& reply) {
         "\"hil_seed_armed\":%s,"
         "\"credential_persisted\":false,\"credential_exposed_over_diagnostic\":false,"
         "\"network_core_ready\":%s,\"begin_stage\":\"%s\","
-        "\"driver_error\":%d,\"cleanup_complete\":%s,"
+        "\"driver_error\":%d,\"ap_ipv4_ready\":%s,"
+        "\"dhcp_server_started\":%s,\"associated_stations\":%u,"
+        "\"cleanup_complete\":%s,"
         "\"targets_suspended\":%s,"
         "\"heap_free_before_suspend\":%lu,"
         "\"heap_free_after_suspend\":%lu,"
@@ -18398,6 +18400,10 @@ void emitCompanionWebState(Stream& reply) {
         leshy1::platform::arduino::ArduinoCompanionWebService::beginStageName(
             arduinoCompanionWebService.beginStage()),
         static_cast<int>(arduinoCompanionWebService.lastError()),
+        arduinoCompanionWebService.apIpv4Ready() ? "true" : "false",
+        arduinoCompanionWebService.dhcpServerStarted() ? "true" : "false",
+        static_cast<unsigned>(
+            arduinoCompanionWebService.associatedStations()),
         arduinoCompanionWebService.cleanupComplete() ? "true" : "false",
         webCompanionTargetsSuspended() ? "true" : "false",
         static_cast<unsigned long>(webCompanionHeapBeforeSuspend),
@@ -18419,6 +18425,88 @@ void emitCompanionWebState(Stream& reply) {
             companion::kCompanionLocalMaximumLifetimeUs),
         static_cast<unsigned long>(appRuntime.activeResources()));
     reply.println(line);
+}
+
+bool computeCompanionWebHilProof(std::uint8_t output[32]) {
+    static constexpr char kSchema[] =
+        "leshy.companion.web.hil-proof.v1";
+    if (output == nullptr || !webCompanionCredentials.valid()) return false;
+    const std::uint8_t separator = 0;
+    const char* passphrase = webCompanionCredentials.passphrase.data();
+    mbedtls_sha256_context context;
+    mbedtls_sha256_init(&context);
+    const bool valid = mbedtls_sha256_starts(&context, 0) == 0 &&
+        mbedtls_sha256_update(
+            &context, reinterpret_cast<const std::uint8_t*>(kSchema),
+            sizeof(kSchema) - 1U) == 0 &&
+        mbedtls_sha256_update(&context, &separator, 1) == 0 &&
+        mbedtls_sha256_update(
+            &context, reinterpret_cast<const std::uint8_t*>(
+                webCompanionCredentials.ssid.data()),
+            std::strlen(webCompanionCredentials.ssid.data())) == 0 &&
+        mbedtls_sha256_update(&context, &separator, 1) == 0 &&
+        mbedtls_sha256_update(
+            &context, reinterpret_cast<const std::uint8_t*>(
+                passphrase),
+            std::strlen(passphrase)) == 0 &&
+        mbedtls_sha256_finish(&context, output) == 0;
+    mbedtls_sha256_free(&context);
+    return valid;
+}
+
+void emitCompanionWebHilProof(Stream& reply) {
+    const bool admissible = hilSession.active() && webCompanionOverlay &&
+        webCompanionConnectivity.authorized() &&
+        arduinoCompanionWebService.active() &&
+        webCompanionCredentials.valid();
+    if (!admissible) {
+        reply.println(
+            "{\"schema\":\"leshy.companion.web.hil-proof.v1\","
+            "\"kind\":\"error\",\"reason\":\"invalid_hil_scope\","
+            "\"credential_material_exposed\":false}");
+        return;
+    }
+    std::array<std::uint8_t, 32> digest{};
+    if (!computeCompanionWebHilProof(digest.data())) {
+        reply.println(
+            "{\"schema\":\"leshy.companion.web.hil-proof.v1\","
+            "\"kind\":\"error\",\"reason\":\"proof_failed\","
+            "\"credential_material_exposed\":false}");
+        return;
+    }
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::array<char, 65> encoded{};
+    for (std::size_t index = 0; index < digest.size(); ++index) {
+        encoded[index * 2U] = kHex[digest[index] >> 4U];
+        encoded[index * 2U + 1U] = kHex[digest[index] & 0x0fU];
+    }
+    char line[384] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.companion.web.hil-proof.v1\","
+        "\"kind\":\"state\",\"credential_sha256\":\"%s\","
+        "\"ap_ipv4_ready\":%s,\"dhcp_server_started\":%s,"
+        "\"associated_stations\":%u,"
+        "\"credential_material_exposed\":false,"
+        "\"proof_persisted\":false}",
+        encoded.data(),
+        arduinoCompanionWebService.apIpv4Ready() ? "true" : "false",
+        arduinoCompanionWebService.dhcpServerStarted() ? "true" : "false",
+        static_cast<unsigned>(
+            arduinoCompanionWebService.associatedStations()));
+    reply.println(line);
+    volatile std::uint8_t* digestCursor = digest.data();
+    for (std::size_t remaining = digest.size(); remaining != 0U; --remaining) {
+        *digestCursor++ = 0;
+    }
+    volatile char* encodedCursor = encoded.data();
+    for (std::size_t remaining = encoded.size(); remaining != 0U; --remaining) {
+        *encodedCursor++ = '\0';
+    }
+    volatile char* lineCursor = line;
+    for (std::size_t remaining = sizeof(line); remaining != 0U; --remaining) {
+        *lineCursor++ = '\0';
+    }
 }
 
 void armCompanionWebHilEntropy(Stream& reply, const char* command) {
@@ -26349,6 +26437,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitTargetsState(reply);
     } else if (std::strncmp(command, "companion.web.hil-seed ", 23) == 0) {
         armCompanionWebHilEntropy(reply, command);
+    } else if (std::strcmp(command, "companion.web.hil-proof") == 0) {
+        emitCompanionWebHilProof(reply);
     } else if (std::strcmp(command, "companion.web.state") == 0) {
         emitCompanionWebState(reply);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
@@ -27046,6 +27136,7 @@ void setup() {
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"wifi.network.detail\","
               "\"companion.web.hil-seed <32-hex-entropy>\","
+              "\"companion.web.hil-proof\","
               "\"companion.web.state\","
               "\"capture.state\",\"capture.export.pcap\","
               "\"capture.subghz.state\","

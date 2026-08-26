@@ -35,6 +35,26 @@ def partition_table(
 
 
 class CompanionWebDeltaRunnerTests(unittest.TestCase):
+    def test_credential_proof_is_exact_and_safe_to_retain(self) -> None:
+        ssid = "Leshy-8790D4"
+        password = "temporary123"
+        expected = hashlib.sha256(
+            b"leshy.companion.web.hil-proof.v1\0" + ssid.encode("ascii") +
+            b"\0" + password.encode("ascii")).hexdigest()
+        self.assertEqual(
+            expected, runner.credential_proof_sha256(ssid, password))
+        retained = runner.safe_credential_proof({
+            "credential_sha256": expected,
+            "ap_ipv4_ready": True,
+            "dhcp_server_started": True,
+            "associated_stations": 1,
+            "credential_material_exposed": False,
+            "proof_persisted": False,
+        }, expected)
+        self.assertTrue(retained["matched"])
+        self.assertFalse(retained["proof_hash_recorded"])
+        self.assertNotIn("credential_sha256", retained)
+
     def test_expected_error_is_returned_as_evidence(self) -> None:
         class Device:
             def __init__(self) -> None:
@@ -241,8 +261,11 @@ class CompanionWebDeltaRunnerTests(unittest.TestCase):
             '"pending_guarded_host_wifi_exchange"',
             'f"companion.web.hil-seed {entropy.hex()}"',
             '"leshy.companion.web.seed.v1", "armed"',
+            'b"companion.web.hil-proof"',
+            '"leshy.companion.web.hil-proof.v1", "state"',
+            'safe_credential_proof(',
             'wifi_guard.capture()',
-            'wifi_guard.connect(expected_ssid, expected_passphrase)',
+            'wifi_guard.connect(',
             'wifi_guard.restore()',
             'normalized_pages(web_session_pages)',
             'normalized_pages(web_target_pages)',

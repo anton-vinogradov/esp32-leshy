@@ -430,6 +430,10 @@ def main() -> int:
         'best_effort_cleanup(device)',
         '"--allow-host-wifi-change"',
         '"leshy.companion.web.seed.v1", "armed"',
+        'b"companion.web.hil-proof"',
+        'safe_credential_proof(',
+        'active.get("dhcp_server_started") is True',
+        'joined_proof.get("associated_stations") == 1',
         'normalized_pages(web_session_pages)',
         'normalized_pages(web_target_pages)',
         'normalized_pages(web_compare_pages)',
@@ -443,6 +447,7 @@ def main() -> int:
 
     for marker in (
         'NETWORKSETUP = "/usr/sbin/networksetup"',
+        'IPCONFIG = "/usr/sbin/ipconfig"',
         'derive_local_credentials',
         '"-getairportpower"',
         '"-getairportnetwork"',
@@ -451,6 +456,8 @@ def main() -> int:
         '"-listpreferredwirelessnetworks"',
         '"-removepreferredwirelessnetwork"',
         'temporary HIL SSID already exists as a preferred network',
+        'self.association_attempts += 1',
+        'self._is_hil_fingerprint(observed)',
         'self._wait_for_disconnected()',
         'urllib.request.ProxyHandler({})',
     ):
@@ -484,6 +491,10 @@ def main() -> int:
         "startWebCompanion",
         "stopWebCompanion",
         "serviceWebCompanion",
+        "computeCompanionWebHilProof",
+        "emitCompanionWebHilProof",
+        "dhcpServerStarted",
+        "associatedStations",
         "CompanionLocalStopReason::LeftForeground",
         "CompanionLocalStopReason::SafetyStop",
         "resourceBroker.acquire(AppRuntime::kForegroundOwner, espRf)",
@@ -497,6 +508,10 @@ def main() -> int:
         '"credential_exposed_over_diagnostic\\\":false',
         "clearWebCompanionHilEntropy",
         "armCompanionWebHilEntropy",
+        "computeCompanionWebHilProof",
+        "emitCompanionWebHilProof",
+        '"credential_material_exposed\\\":false',
+        '"proof_persisted\\\":false',
         '"hil_seed_armed\\\":%s',
         "leshy.companion.web.seed.v1",
     ):
@@ -508,8 +523,9 @@ def main() -> int:
             "companion JSON must be enabled only on native USB, not Serial0")
     require(failures, "handleUsbCompanionFrame(Serial0" not in arduino,
             "Serial0 must never enter the companion transport")
-    require(failures, arduino.count("webCompanionCredentials.passphrase") == 1,
-            "local Web passphrase must only be rendered on the device display")
+    require(failures, arduino.count("webCompanionCredentials.passphrase") == 2,
+            "local Web passphrase must only reach the display and the "
+            "active-HIL non-retained SHA-256 proof")
 
     for marker in (
         "testEveryTruncatedFrameIsRejected",

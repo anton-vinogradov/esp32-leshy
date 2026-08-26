@@ -65,6 +65,27 @@ def require(value: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def credential_proof_sha256(ssid: str, passphrase: str) -> str:
+    payload = (
+        b"leshy.companion.web.hil-proof.v1\0" + ssid.encode("ascii") +
+        b"\0" + passphrase.encode("ascii"))
+    return hashlib.sha256(payload).hexdigest()
+
+
+def safe_credential_proof(value: dict[str, Any], expected_hash: str) \
+        -> dict[str, Any]:
+    return {
+        "matched": value.get("credential_sha256") == expected_hash,
+        "ap_ipv4_ready": value.get("ap_ipv4_ready"),
+        "dhcp_server_started": value.get("dhcp_server_started"),
+        "associated_stations": value.get("associated_stations"),
+        "credential_material_exposed":
+            value.get("credential_material_exposed"),
+        "proof_persisted": value.get("proof_persisted"),
+        "proof_hash_recorded": False,
+    }
+
+
 def checkpoint(output: Path, record: dict[str, Any], name: str) -> None:
     record["checkpoint"] = name
     write_json(output / "run.json", record)
@@ -781,6 +802,9 @@ def main() -> int:
                     active.get("network_core_ready") is True and
                     active.get("begin_stage") == "ready" and
                     active.get("driver_error") == 0 and
+                    active.get("ap_ipv4_ready") is True and
+                    active.get("dhcp_server_started") is True and
+                    active.get("associated_stations") == 0 and
                     active.get("cleanup_complete") is False and
                     active.get("targets_suspended") is True and
                     int(active.get("heap_free_before_suspend", 0)) > 0 and
@@ -798,6 +822,28 @@ def main() -> int:
                     active.get("maximum_lifetime_us") == MAXIMUM_LIFETIME_US and
                     active.get("lease_mask") == 15,
                     f"explicit Web session is not bounded: {active}")
+
+            credential_proof: dict[str, Any] = {}
+            expected_credential_proof = ""
+            if http_exchange_requested:
+                expected_credential_proof = credential_proof_sha256(
+                    expected_ssid, expected_passphrase)
+                raw_proof = query(
+                    device, b"companion.web.hil-proof",
+                    "leshy.companion.web.hil-proof.v1", "state")
+                credential_proof = safe_credential_proof(
+                    raw_proof, expected_credential_proof)
+                require(
+                    credential_proof.get("matched") is True and
+                    credential_proof.get("ap_ipv4_ready") is True and
+                    credential_proof.get("dhcp_server_started") is True and
+                    credential_proof.get("associated_stations") == 0 and
+                    credential_proof.get("credential_material_exposed")
+                    is False and
+                    credential_proof.get("proof_persisted") is False,
+                    "pre-join Web credential/AP proof failed")
+                record["credential_proof"] = credential_proof
+                write_json(args.output / "run.json", record)
 
             http_exchange: dict[str, Any] = {
                 "tested": False,
@@ -820,7 +866,34 @@ def main() -> int:
                 write_json(args.output / "run.json", record)
                 checkpoint(args.output, record, "physical_http_exchange")
                 try:
-                    wifi_guard.connect(expected_ssid, expected_passphrase)
+                    try:
+                        wifi_guard.connect(
+                            expected_ssid, expected_passphrase)
+                    except Exception:
+                        failed_join_raw = query(
+                            device, b"companion.web.hil-proof",
+                            "leshy.companion.web.hil-proof.v1", "state")
+                        record["association_failure_probe"] = \
+                            safe_credential_proof(
+                                failed_join_raw, expected_credential_proof)
+                        write_json(args.output / "run.json", record)
+                        raise
+                    joined_raw = query(
+                        device, b"companion.web.hil-proof",
+                        "leshy.companion.web.hil-proof.v1", "state")
+                    joined_proof = safe_credential_proof(
+                        joined_raw, expected_credential_proof)
+                    require(
+                        joined_proof.get("matched") is True and
+                        joined_proof.get("ap_ipv4_ready") is True and
+                        joined_proof.get("dhcp_server_started") is True and
+                        joined_proof.get("associated_stations") == 1 and
+                        joined_proof.get("credential_material_exposed")
+                        is False and
+                        joined_proof.get("proof_persisted") is False,
+                        "post-join Web credential/AP proof failed")
+                    record["post_join_proof"] = joined_proof
+                    write_json(args.output / "run.json", record)
                     expected_passphrase = ""
                     index_status, index_type, index_body = http_get(
                         args.web_base_url.rstrip("/") + "/")
@@ -1124,6 +1197,9 @@ def main() -> int:
                     stopped.get("credential_present") is False and
                     stopped.get("hil_seed_armed") is False and
                     stopped.get("stop_reason") == "user" and
+                    stopped.get("ap_ipv4_ready") is False and
+                    stopped.get("dhcp_server_started") is False and
+                    stopped.get("associated_stations") == 0 and
                     stopped.get("cleanup_complete") is True and
                     stopped.get("targets_suspended") is False and
                     stopped.get("survey_worker_suspended") is True and
@@ -1139,6 +1215,9 @@ def main() -> int:
                     released.get("server_active") is False and
                     released.get("credential_present") is False and
                     released.get("hil_seed_armed") is False and
+                    released.get("ap_ipv4_ready") is False and
+                    released.get("dhcp_server_started") is False and
+                    released.get("associated_stations") == 0 and
                     released.get("cleanup_complete") is True and
                     released.get("survey_worker_suspended") is False and
                     released.get("lease_mask") == 0,

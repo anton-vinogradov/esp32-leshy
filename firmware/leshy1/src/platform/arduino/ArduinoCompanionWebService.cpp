@@ -88,6 +88,7 @@ const char* ArduinoCompanionWebService::beginStageName(BeginStage stage) {
         case BeginStage::ApMode: return "ap_mode";
         case BeginStage::ApConfig: return "ap_config";
         case BeginStage::WifiStart: return "wifi_start";
+        case BeginStage::Dhcp: return "dhcp";
         case BeginStage::Server: return "server";
         case BeginStage::Ready: return "ready";
     }
@@ -198,6 +199,21 @@ bool ArduinoCompanionWebService::begin(
     if (error != ESP_OK) return failBegin(BeginStage::WifiStart, error);
     wifiStarted_ = true;
 
+    beginStage_ = BeginStage::Dhcp;
+    esp_netif_dhcp_status_t dhcpStatus = ESP_NETIF_DHCP_INIT;
+    error = esp_netif_dhcps_get_status(apNetif_, &dhcpStatus);
+    if (error != ESP_OK) return failBegin(BeginStage::Dhcp, error);
+    if (dhcpStatus != ESP_NETIF_DHCP_STARTED) {
+        error = esp_netif_dhcps_start(apNetif_);
+        if (error != ESP_OK &&
+            error != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) {
+            return failBegin(BeginStage::Dhcp, error);
+        }
+    }
+    if (!apIpv4Ready() || !dhcpServerStarted()) {
+        return failBegin(BeginStage::Dhcp, ESP_ERR_INVALID_STATE);
+    }
+
     beginStage_ = BeginStage::Server;
     server_.setNoDelay(true);
     server_.begin();
@@ -210,6 +226,27 @@ bool ArduinoCompanionWebService::begin(
     heapFreeAfterBegin_ = static_cast<std::uint32_t>(
         heap_caps_get_free_size(MALLOC_CAP_8BIT));
     return true;
+}
+
+bool ArduinoCompanionWebService::apIpv4Ready() const {
+    if (apNetif_ == nullptr) return false;
+    esp_netif_ip_info_t info{};
+    return esp_netif_get_ip_info(apNetif_, &info) == ESP_OK &&
+        info.ip.addr != 0U && info.netmask.addr != 0U;
+}
+
+bool ArduinoCompanionWebService::dhcpServerStarted() const {
+    if (apNetif_ == nullptr) return false;
+    esp_netif_dhcp_status_t status = ESP_NETIF_DHCP_INIT;
+    return esp_netif_dhcps_get_status(apNetif_, &status) == ESP_OK &&
+        status == ESP_NETIF_DHCP_STARTED;
+}
+
+std::uint16_t ArduinoCompanionWebService::associatedStations() const {
+    if (!wifiStarted_) return 0;
+    wifi_sta_list_t stations{};
+    if (esp_wifi_ap_get_sta_list(&stations) != ESP_OK) return 0;
+    return static_cast<std::uint16_t>(stations.num);
 }
 
 bool ArduinoCompanionWebService::cleanupRuntime() {

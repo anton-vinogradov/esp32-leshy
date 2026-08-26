@@ -46,6 +46,7 @@ public:
         ApMode,
         ApConfig,
         WifiStart,
+        Dhcp,
         Server,
         Ready,
     };
@@ -72,6 +73,9 @@ public:
     }
     std::uint32_t heapFreeAfterBegin() const { return heapFreeAfterBegin_; }
     std::uint32_t heapFreeAfterStop() const { return heapFreeAfterStop_; }
+    bool apIpv4Ready() const;
+    bool dhcpServerStarted() const;
+    std::uint16_t associatedStations() const;
 
     static const char* beginStageName(BeginStage stage);
 
