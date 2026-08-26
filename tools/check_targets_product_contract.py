@@ -88,20 +88,25 @@ def main() -> int:
     require(failures,
             load_product.index("TargetDecisionStateStoreWorkspace();") >
                 load_product.index("filesystem.beginReadOnly()") and
-            mutation_worker.index("TargetDecisionStateStoreWorkspace();") >
+            mutation_worker.index("acquireTargetsStoreCodecWorkspace()") >
                 mutation_worker.index("filesystem.begin()") and
-            "workspace_unavailable_after_mount" in mutation_worker and
-            mutation_worker.index("TargetDecisionStateStoreWorkspace();") <
+            "shared_codec_unavailable_after_mount" in mutation_worker and
+            mutation_worker.index("acquireTargetsStoreCodecWorkspace()") <
                 mutation_worker.index("openExistingWritable") and
+            "new (std::nothrow)\n            leshy1::storage::TargetDecisionStateStoreWorkspace" not in
+                mutation_worker and
+            "releaseTargetsStoreCodecWorkspace(workspace)" in mutation_worker and
+            "union TargetsStoreCodecWorkspace final" in entry and
+            "SessionStoreWorkspace& sessionStoreWorkspace" in entry and
             r'\"mutation_heap_largest_before_mount\":%lu' in entry and
             "kTargetsMaximumMountAttempts = 3" in load_product and
             "filesystem.cleanupComplete()" in load_product and
             r'\"filesystem_mount_attempts\":%u' in entry and
             r'\"filesystem_mount_transient_retries\":%u' in entry,
-            "Targets read and mutation paths must mount before their optional "
-            "codec allocation so a saturated correlation visit cannot starve "
-            "FatFs; mutation still allocates before writable open, and both "
-            "paths remain bounded/fail-closed")
+            "Targets read and mutation paths must mount before activating the "
+            "shared session/decision codec so a saturated correlation visit "
+            "cannot starve FatFs; mutation still activates it before writable "
+            "open, releases it on every exit and remains fail-closed")
     require(failures,
             "new (std::nothrow) domain::targets::TargetCatalog" in controller and
             "delete scratch" in controller and

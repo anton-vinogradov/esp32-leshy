@@ -516,7 +516,46 @@ std::uint64_t targetsMutationStartActionUs = 0;
 QueueHandle_t targetsMutationEvents = nullptr;
 TaskHandle_t targetsMutationTaskHandle = nullptr;
 leshy1::services::survey::ObservationQueue surveyIngressQueue;
-leshy1::storage::SessionStoreWorkspace sessionStoreWorkspace;
+union TargetsStoreCodecWorkspace final {
+    leshy1::storage::SessionStoreWorkspace session;
+    leshy1::storage::TargetDecisionStateStoreWorkspace targetDecision;
+
+    TargetsStoreCodecWorkspace() : session{} {}
+    ~TargetsStoreCodecWorkspace() {}
+};
+static_assert(
+    sizeof(TargetsStoreCodecWorkspace) >=
+            sizeof(leshy1::storage::TargetDecisionStateStoreWorkspace) &&
+        sizeof(TargetsStoreCodecWorkspace) -
+                sizeof(leshy1::storage::TargetDecisionStateStoreWorkspace) <
+            alignof(TargetsStoreCodecWorkspace),
+    "shared store codec workspace must add only the larger member");
+TargetsStoreCodecWorkspace targetsStoreCodecWorkspace;
+bool targetsStoreCodecWorkspaceInUse = false;
+leshy1::storage::SessionStoreWorkspace& sessionStoreWorkspace =
+    targetsStoreCodecWorkspace.session;
+
+leshy1::storage::TargetDecisionStateStoreWorkspace*
+acquireTargetsStoreCodecWorkspace() {
+    if (targetsStoreCodecWorkspaceInUse) return nullptr;
+    sessionStoreWorkspace.~SessionStoreWorkspace();
+    auto* workspace = new (&targetsStoreCodecWorkspace.targetDecision)
+        leshy1::storage::TargetDecisionStateStoreWorkspace();
+    targetsStoreCodecWorkspaceInUse = true;
+    return workspace;
+}
+
+void releaseTargetsStoreCodecWorkspace(
+    leshy1::storage::TargetDecisionStateStoreWorkspace* workspace) {
+    if (!targetsStoreCodecWorkspaceInUse ||
+        workspace != &targetsStoreCodecWorkspace.targetDecision) {
+        return;
+    }
+    workspace->~TargetDecisionStateStoreWorkspace();
+    new (&targetsStoreCodecWorkspace.session)
+        leshy1::storage::SessionStoreWorkspace();
+    targetsStoreCodecWorkspaceInUse = false;
+}
 ArduinoFsSessionStoreWorkspace sdSessionStoreIoWorkspace;
 RamSessionStoreIo ramSessionStore;
 leshy1::storage::SessionStoreIoRouter surveyStoreRouter(ramSessionStore);
@@ -5020,10 +5059,9 @@ void runTargetsMutationWorker(void*) {
         // 29.7 KiB even though total free heap was sufficient.  Mount first,
         // then allocate the codec before opening a writable store or issuing
         // any physical write.
-        workspace = new (std::nothrow)
-            leshy1::storage::TargetDecisionStateStoreWorkspace();
+        workspace = acquireTargetsStoreCodecWorkspace();
         if (workspace == nullptr) {
-            event.status = "workspace_unavailable_after_mount";
+            event.status = "shared_codec_unavailable_after_mount";
             break;
         }
         if (!supervisedCheckpoint()) {
@@ -5239,7 +5277,8 @@ void runTargetsMutationWorker(void*) {
         io->end();
     }
     delete io;
-    delete workspace;
+    releaseTargetsStoreCodecWorkspace(workspace);
+    workspace = nullptr;
     if (filesystem.mounted()) filesystem.end();
     const bool filesystemCleanup = !filesystemAttempted ||
         filesystem.cleanupComplete();
