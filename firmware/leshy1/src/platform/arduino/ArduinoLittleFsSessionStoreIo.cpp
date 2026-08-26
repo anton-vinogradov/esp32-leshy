@@ -20,6 +20,13 @@ void ArduinoLittleFsSessionStoreIo::recordFailure(const char* stage) {
     lastErrno_ = errno;
 }
 
+bool ArduinoLittleFsSessionStoreIo::progress(const char* stage) {
+    if (progressCallback_ == nullptr || progressCallback_()) return true;
+    errno = ECANCELED;
+    recordFailure(stage);
+    return false;
+}
+
 void ArduinoLittleFsSessionStoreIo::resetCounters() {
     byteLimit_ = 0;
     bytesWritten_ = 0;
@@ -180,10 +187,16 @@ bool ArduinoLittleFsSessionStoreIo::writeFile(
         recordFailure("write_path");
         return false;
     }
+    if (!progress("write_open_progress")) return false;
     pendingDescriptor_ = ::open(
         fullPath, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (pendingDescriptor_ < 0) {
         recordFailure("write_open");
+        return false;
+    }
+    if (!progress("write_opened_progress")) {
+        ::close(pendingDescriptor_);
+        pendingDescriptor_ = -1;
         return false;
     }
     std::size_t offset = 0;
@@ -198,6 +211,11 @@ bool ArduinoLittleFsSessionStoreIo::writeFile(
         }
         offset += static_cast<std::size_t>(written);
         bytesWritten_ += static_cast<std::size_t>(written);
+        if (!progress("write_data_progress")) {
+            ::close(pendingDescriptor_);
+            pendingDescriptor_ = -1;
+            return false;
+        }
     }
     std::strcpy(pendingRelative_, path);
     pendingSize_ = size;
@@ -220,6 +238,7 @@ ArduinoLittleFsSessionStoreIo::readFile(
         recordFailure("read_path");
         return ReadStatus::IoError;
     }
+    if (!progress("read_stat_progress")) return ReadStatus::IoError;
     struct stat information {};
     if (::stat(fullPath, &information) != 0) {
         if (errno == ENOENT) return ReadStatus::NotFound;
@@ -230,6 +249,7 @@ ArduinoLittleFsSessionStoreIo::readFile(
         static_cast<std::uint64_t>(information.st_size) > capacity) {
         return ReadStatus::TooLarge;
     }
+    if (!progress("read_open_progress")) return ReadStatus::IoError;
     const int descriptor = ::open(fullPath, O_RDONLY);
     if (descriptor < 0) {
         recordFailure("read_open");
@@ -246,11 +266,16 @@ ArduinoLittleFsSessionStoreIo::readFile(
             return ReadStatus::IoError;
         }
         offset += static_cast<std::size_t>(read);
+        if (!progress("read_data_progress")) {
+            ::close(descriptor);
+            return ReadStatus::IoError;
+        }
     }
     if (::close(descriptor) != 0) {
         recordFailure("read_close");
         return ReadStatus::IoError;
     }
+    if (!progress("read_close_progress")) return ReadStatus::IoError;
     *outputSize = expected;
     return ReadStatus::Ok;
 }
@@ -261,8 +286,18 @@ bool ArduinoLittleFsSessionStoreIo::syncFile(const char* path) {
         recordFailure("sync_precondition");
         return false;
     }
+    if (!progress("sync_file_progress")) {
+        ::close(pendingDescriptor_);
+        pendingDescriptor_ = -1;
+        return false;
+    }
     if (::fsync(pendingDescriptor_) != 0) {
         recordFailure("sync_file");
+        ::close(pendingDescriptor_);
+        pendingDescriptor_ = -1;
+        return false;
+    }
+    if (!progress("sync_file_complete_progress")) {
         ::close(pendingDescriptor_);
         pendingDescriptor_ = -1;
         return false;
@@ -273,6 +308,7 @@ bool ArduinoLittleFsSessionStoreIo::syncFile(const char* path) {
         return false;
     }
     pendingDescriptor_ = -1;
+    if (!progress("sync_close_progress")) return false;
     char fullPath[kFullPathCapacity] = {};
     struct stat information {};
     const bool valid = formatFullPath(path, fullPath, sizeof(fullPath)) &&
@@ -295,11 +331,12 @@ bool ArduinoLittleFsSessionStoreIo::syncDirectory() {
         recordFailure("directory_sync_precondition");
         return false;
     }
+    if (!progress("directory_sync_progress")) return false;
     // LittleFS lfs_file_sync commits the file's metadata pair, including its
     // directory entry. There is no separate directory fd in esp_littlefs VFS.
     fileBarrierComplete_ = false;
     ++directorySyncs_;
-    return true;
+    return progress("directory_sync_complete_progress");
 }
 
 }  // namespace leshy1::platform::arduino

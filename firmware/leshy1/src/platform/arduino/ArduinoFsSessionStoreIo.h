@@ -21,11 +21,17 @@ struct ArduinoFsSessionStoreWorkspace final {
 // observable; Arduino FS::File hides the result of its flush barrier.
 class ArduinoFsSessionStoreIo final : public storage::SessionStoreIo {
 public:
-    explicit ArduinoFsSessionStoreIo(ArduinoFsSessionStoreWorkspace& workspace)
-        : workspace_(workspace) {}
+    using ProgressCallback = bool (*)();
+
+    explicit ArduinoFsSessionStoreIo(
+        ArduinoFsSessionStoreWorkspace& workspace,
+        ProgressCallback progressCallback = nullptr)
+        : workspace_(workspace), progressCallback_(progressCallback) {}
     ArduinoFsSessionStoreIo(std::uint8_t driveNumber,
-                            ArduinoFsSessionStoreWorkspace& workspace)
-        : workspace_(workspace), driveNumber_(driveNumber) {}
+                            ArduinoFsSessionStoreWorkspace& workspace,
+                            ProgressCallback progressCallback = nullptr)
+        : workspace_(workspace), driveNumber_(driveNumber),
+          progressCallback_(progressCallback) {}
     ~ArduinoFsSessionStoreIo() override { end(); }
 
     bool prepare(const storage::WritePermit& permit);
@@ -77,8 +83,10 @@ private:
     bool openExistingPath(const char* path, std::uint64_t byteLimit,
                           bool writable, bool productRoot);
     void recordFailure(const char* stage, FRESULT result);
+    bool progress(const char* stage);
 
     ArduinoFsSessionStoreWorkspace& workspace_;
+    ProgressCallback progressCallback_ = nullptr;
     std::uint8_t driveNumber_ = 0xFF;
     char rootPath_[storage::kScratchPathMax] = {};
     char pendingRelative_[storage::kSessionStorePathMax] = {};

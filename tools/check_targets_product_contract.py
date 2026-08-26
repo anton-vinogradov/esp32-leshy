@@ -65,6 +65,15 @@ def main() -> int:
     littlefs_io = (
         ROOT / "firmware/leshy1/src/platform/arduino/ArduinoLittleFsSessionStoreIo.cpp"
     ).read_text()
+    littlefs_io_header = (
+        ROOT / "firmware/leshy1/src/platform/arduino/ArduinoLittleFsSessionStoreIo.h"
+    ).read_text()
+    fs_io = (
+        ROOT / "firmware/leshy1/src/platform/arduino/ArduinoFsSessionStoreIo.cpp"
+    ).read_text()
+    fs_io_header = (
+        ROOT / "firmware/leshy1/src/platform/arduino/ArduinoFsSessionStoreIo.h"
+    ).read_text()
 
     require(failures,
             '"targets", "TARGETS"' in catalog and
@@ -483,6 +492,23 @@ def main() -> int:
             "fixture writes must be exact-media, LittleFS-only, bounded, "
             "pre-existing-scratch operations on the inactive OTA slot with "
             "observable physical write calls")
+    require(failures,
+            "using ProgressCallback = bool (*)();" in littlefs_io_header and
+            "using ProgressCallback = bool (*)();" in fs_io_header and
+            "progressCallback_()" in littlefs_io and
+            "progressCallback_()" in fs_io and
+            "ECANCELED" in littlefs_io and
+            "FR_TIMEOUT" in fs_io and
+            littlefs_io.count("progress(\"") >= 12 and
+            fs_io.count("progress(\"") >= 12 and
+            "vTaskDelay(pdMS_TO_TICKS(1))" in fixture_worker and
+            "filesystem, supervisedCheckpoint" in fixture_worker and
+            "vTaskDelay(pdMS_TO_TICKS(1))" in mutation_worker and
+            "sdSessionStoreIoWorkspace,\n            supervisedCheckpoint" in
+                mutation_worker,
+            "Targets atomic stores must heartbeat the bounded worker and yield "
+            "the scheduler at every LittleFS/FatFs file boundary; callback "
+            "cancellation remains a fail-closed storage error")
     require(failures,
             "ota1-private-backup.bin" in merge_split_runner and
             "ota1-private-backup-second.bin" in merge_split_runner and

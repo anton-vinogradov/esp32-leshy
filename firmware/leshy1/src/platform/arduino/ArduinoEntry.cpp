@@ -5530,9 +5530,11 @@ void runTargetsMergeFixtureMutationWorker(void*) {
         leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
     resetTargetsStoreDeadlineCancel();
     deadlineArmed = armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs);
-    const auto supervisedCheckpoint = [&]() {
-        return !targetsStoreDeadlineCancelled() &&
-            heartbeatTargetsStoreDeadline();
+    const auto supervisedCheckpoint = []() {
+        if (targetsStoreDeadlineCancelled()) return false;
+        const bool accepted = heartbeatTargetsStoreDeadline();
+        if (accepted) vTaskDelay(pdMS_TO_TICKS(1));
+        return accepted && !targetsStoreDeadlineCancelled();
     };
     do {
         if (!deadlineArmed) {
@@ -5618,7 +5620,8 @@ void runTargetsMergeFixtureMutationWorker(void*) {
             event.status = leshy1::storage::permitStatusName(permit.status);
             break;
         }
-        io = new (std::nothrow) ArduinoLittleFsSessionStoreIo(filesystem);
+        io = new (std::nothrow) ArduinoLittleFsSessionStoreIo(
+            filesystem, supervisedCheckpoint);
         if (io == nullptr) {
             event.status = "io_workspace_unavailable";
             break;
@@ -5773,9 +5776,11 @@ void runTargetsMutationWorker(void*) {
         leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
     resetTargetsStoreDeadlineCancel();
     deadlineArmed = armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs);
-    const auto supervisedCheckpoint = [&]() {
-        return !targetsStoreDeadlineCancelled() &&
-            heartbeatTargetsStoreDeadline();
+    const auto supervisedCheckpoint = []() {
+        if (targetsStoreDeadlineCancelled()) return false;
+        const bool accepted = heartbeatTargetsStoreDeadline();
+        if (accepted) vTaskDelay(pdMS_TO_TICKS(1));
+        return accepted && !targetsStoreDeadlineCancelled();
     };
     do {
         if (!deadlineArmed) {
@@ -5920,7 +5925,8 @@ void runTargetsMutationWorker(void*) {
             break;
         }
         io = new (std::nothrow) ArduinoFsSessionStoreIo(
-            filesystem.driveNumber(), sdSessionStoreIoWorkspace);
+            filesystem.driveNumber(), sdSessionStoreIoWorkspace,
+            supervisedCheckpoint);
         if (io == nullptr) {
             event.status = "io_workspace_unavailable";
             break;

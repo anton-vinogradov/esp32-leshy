@@ -117,14 +117,26 @@ def main() -> int:
         raise AssertionError(
             "pulse Capture Store injection must precede SD hardware")
 
-    targets_start = entry.index("void runTargetsMutationWorker(")
+    targets_fixture_start = entry.index(
+        "void runTargetsMergeFixtureMutationWorker(")
+    targets_start = entry.index("void runTargetsMutationWorker(",
+                                targets_fixture_start)
     targets_end = entry.index("bool requestTargetsFavoriteMutation()",
                               targets_start)
+    targets_fixture_store = entry[targets_fixture_start:targets_start]
     targets_store = entry[targets_start:targets_end]
+    require(targets_fixture_store, (
+        "heartbeatTargetsStoreDeadline()",
+        "vTaskDelay(pdMS_TO_TICKS(1))",
+        "ArduinoLittleFsSessionStoreIo(\n            filesystem, "
+        "supervisedCheckpoint)",
+    ), "Targets fixture cooperative storage supervision")
     require(targets_store, (
         "armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs)",
         "targetsStoreDeadlineCancelled()",
         "heartbeatTargetsStoreDeadline()",
+        "vTaskDelay(pdMS_TO_TICKS(1))",
+        "sdSessionStoreIoWorkspace,\n            supervisedCheckpoint",
         "disarmTargetsStoreDeadline();",
         "xQueueOverwrite(targetsMutationEvents, &event)",
     ), "Targets Store deadline integration")

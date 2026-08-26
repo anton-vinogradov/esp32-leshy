@@ -14,8 +14,12 @@ namespace leshy1::platform::arduino {
 // boundary; syncDirectory consumes that already-proven barrier.
 class ArduinoLittleFsSessionStoreIo final : public storage::SessionStoreIo {
 public:
-    explicit ArduinoLittleFsSessionStoreIo(DisposableOtaLittleFs& filesystem)
-        : filesystem_(filesystem) {}
+    using ProgressCallback = bool (*)();
+
+    explicit ArduinoLittleFsSessionStoreIo(
+        DisposableOtaLittleFs& filesystem,
+        ProgressCallback progressCallback = nullptr)
+        : filesystem_(filesystem), progressCallback_(progressCallback) {}
     ~ArduinoLittleFsSessionStoreIo() override { end(); }
 
     bool prepare(const storage::WritePermit& permit);
@@ -55,8 +59,10 @@ private:
     bool openExistingReadOnlyPath(const char* path);
     bool openExistingPath(const char* path, std::uint64_t byteLimit,
                           bool writable);
+    bool progress(const char* stage);
 
     DisposableOtaLittleFs& filesystem_;
+    ProgressCallback progressCallback_ = nullptr;
     char rootPath_[storage::kScratchPathMax] = {};
     char pendingRelative_[storage::kSessionStorePathMax] = {};
     std::size_t pendingSize_ = 0;

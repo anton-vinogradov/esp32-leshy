@@ -47,6 +47,12 @@ void ArduinoFsSessionStoreIo::recordFailure(const char* stage, FRESULT result) {
     lastFresult_ = result;
 }
 
+bool ArduinoFsSessionStoreIo::progress(const char* stage) {
+    if (progressCallback_ == nullptr || progressCallback_()) return true;
+    recordFailure(stage, FR_TIMEOUT);
+    return false;
+}
+
 bool ArduinoFsSessionStoreIo::safeRelativePath(const char* path) const {
     if (path == nullptr || path[0] == '\0') return false;
     for (std::size_t index = 0; index < storage::kSessionStorePathMax; ++index) {
@@ -334,6 +340,7 @@ bool ArduinoFsSessionStoreIo::writeFile(
         recordFailure("write_path", FR_INVALID_NAME);
         return false;
     }
+    if (!progress("write_open_progress")) return false;
     workspace_.file = {};
     FRESULT result = f_open(&workspace_.file, fullPath,
                             FA_WRITE | FA_CREATE_ALWAYS);
@@ -343,6 +350,11 @@ bool ArduinoFsSessionStoreIo::writeFile(
     }
     pendingOpen_ = true;
     ++writeCalls_;
+    if (!progress("write_opened_progress")) {
+        f_close(&workspace_.file);
+        pendingOpen_ = false;
+        return false;
+    }
     UINT written = 0;
     result = f_write(&workspace_.file, data, static_cast<UINT>(size), &written);
     bytesWritten_ += written;
@@ -350,6 +362,11 @@ bool ArduinoFsSessionStoreIo::writeFile(
         const FRESULT closeResult = f_close(&workspace_.file);
         pendingOpen_ = false;
         recordFailure("write_data", result != FR_OK ? result : closeResult);
+        return false;
+    }
+    if (!progress("write_data_progress")) {
+        f_close(&workspace_.file);
+        pendingOpen_ = false;
         return false;
     }
     std::strcpy(pendingRelative_, path);
@@ -368,6 +385,7 @@ ArduinoFsSessionStoreIo::ReadStatus ArduinoFsSessionStoreIo::readFile(
     if (!formatFullPath(path, fullPath, sizeof(fullPath))) {
         return ReadStatus::IoError;
     }
+    if (!progress("read_open_progress")) return ReadStatus::IoError;
     workspace_.file = {};
     FRESULT result = f_open(&workspace_.file, fullPath, FA_READ);
     if (result == FR_NO_FILE || result == FR_NO_PATH) return ReadStatus::NotFound;
@@ -380,6 +398,10 @@ ArduinoFsSessionStoreIo::ReadStatus ArduinoFsSessionStoreIo::readFile(
         f_close(&workspace_.file);
         return ReadStatus::TooLarge;
     }
+    if (!progress("read_data_progress")) {
+        f_close(&workspace_.file);
+        return ReadStatus::IoError;
+    }
     UINT read = 0;
     result = f_read(&workspace_.file, output, static_cast<UINT>(fileSize), &read);
     const FRESULT closeResult = f_close(&workspace_.file);
@@ -387,6 +409,7 @@ ArduinoFsSessionStoreIo::ReadStatus ArduinoFsSessionStoreIo::readFile(
         recordFailure("read_data", result != FR_OK ? result : closeResult);
         return ReadStatus::IoError;
     }
+    if (!progress("read_close_progress")) return ReadStatus::IoError;
     *outputSize = static_cast<std::size_t>(fileSize);
     return ReadStatus::Ok;
 }
@@ -397,11 +420,21 @@ bool ArduinoFsSessionStoreIo::syncFile(const char* path) {
         recordFailure("sync_precondition", FR_INVALID_PARAMETER);
         return false;
     }
+    if (!progress("sync_file_progress")) {
+        f_close(&workspace_.file);
+        pendingOpen_ = false;
+        return false;
+    }
     FRESULT result = f_sync(&workspace_.file);
     if (result != FR_OK) {
         f_close(&workspace_.file);
         pendingOpen_ = false;
         recordFailure("sync_file", result);
+        return false;
+    }
+    if (!progress("sync_file_complete_progress")) {
+        f_close(&workspace_.file);
+        pendingOpen_ = false;
         return false;
     }
     result = f_close(&workspace_.file);
@@ -410,6 +443,7 @@ bool ArduinoFsSessionStoreIo::syncFile(const char* path) {
         recordFailure("sync_close", result);
         return false;
     }
+    if (!progress("sync_close_progress")) return false;
     char fullPath[kFullPathCapacity] = {};
     if (!formatFullPath(path, fullPath, sizeof(fullPath))) {
         recordFailure("sync_path", FR_INVALID_NAME);
@@ -417,6 +451,7 @@ bool ArduinoFsSessionStoreIo::syncFile(const char* path) {
     }
     workspace_.information = {};
     result = f_stat(fullPath, &workspace_.information);
+    if (!progress("sync_verify_progress")) return false;
     const bool valid = result == FR_OK &&
                        (workspace_.information.fattrib & AM_DIR) == 0 &&
                        workspace_.information.fsize == pendingSize_;
@@ -433,11 +468,12 @@ bool ArduinoFsSessionStoreIo::syncFile(const char* path) {
 
 bool ArduinoFsSessionStoreIo::syncDirectory() {
     if (!ready_ || pendingOpen_ || !fileBarrierComplete_) return false;
+    if (!progress("directory_sync_progress")) return false;
     // FatFs f_sync persists the file, allocation metadata, and directory entry
     // together; this VFS has no independent directory-fd barrier.
     fileBarrierComplete_ = false;
     ++directorySyncs_;
-    return true;
+    return progress("directory_sync_complete_progress");
 }
 
 }  // namespace leshy1::platform::arduino
