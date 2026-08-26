@@ -35,6 +35,7 @@ SCHEMA = "leshy.targets_correlation_hil.run.v1"
 EXPECTED_CID = "FE343253440000002000000055019CB7"
 MAX_FRESH_SURVEY_CYCLES = 4
 FIXTURE_SCHEMA = "leshy.hil.correlation_fixture.v1"
+PREFERRED_FIXTURE_LABEL = "Keenetic-5070"
 
 
 def require(state: dict[str, Any], label: str, **expected: Any) -> None:
@@ -217,6 +218,7 @@ def fixture_label(device: PassiveSerial, label_hex: str) -> dict[str, Any]:
 
 def known_wifi_fixture_label(
         searched: list[dict[str, Any]]) -> dict[str, Any] | None:
+    candidates: list[dict[str, Any]] = []
     for state in searched:
         label_hex = state.get("selected_observation_label_hex")
         if (state.get("selected_observation_radio") != 1 or
@@ -231,7 +233,7 @@ def known_wifi_fixture_label(
         if (not label or any(ord(value) < 0x20 or ord(value) > 0x7e or
                              value in '\"\\' for value in label)):
             continue
-        return {
+        candidates.append({
             "label": label,
             "label_hex": label_hex,
             "known_target_id": state.get("selected_target_id"),
@@ -239,8 +241,13 @@ def known_wifi_fixture_label(
                 "selected_observation_identity_hex"),
             "known_rssi_dbm": state.get("selected_rssi_dbm"),
             "known_generation": state.get("selected_generation"),
-        }
-    return None
+        })
+    if not candidates:
+        return None
+    for candidate in candidates:
+        if candidate["label"] == PREFERRED_FIXTURE_LABEL:
+            return candidate
+    return max(candidates, key=lambda value: int(value["known_rssi_dbm"]))
 
 
 def check_atomic_accept(state: dict[str, Any], generation: int,
@@ -443,7 +450,10 @@ def main() -> int:
             if attempt == MAX_FRESH_SURVEY_CYCLES:
                 break
             if fixture is not None:
-                if selected_fixture_label is None:
+                # The first fresh visit is fixture-off: it gives the dense-air
+                # target projection a current, naturally observed Wi-Fi name
+                # before any synthetic cross-radio observation is introduced.
+                if selected_fixture_label is None and scans:
                     selected_fixture_label = known_wifi_fixture_label(searched)
                     if selected_fixture_label is None:
                         raise RuntimeError(
@@ -452,7 +462,10 @@ def main() -> int:
                     fixture_states.append(fixture_label(
                         fixture, selected_fixture_label["label_hex"]))
                     fixture_record.update(selected_fixture_label)
-                fixture_states.append(fixture_mode(fixture, "ble"))
+                    fixture_states.append(fixture_mode(fixture, "ble"))
+                # Do not re-enter an already active BLE mode. BLE teardown can
+                # re-enumerate native USB and would restore the fixture's boot
+                # label, invalidating later Sessions without a host error.
             committed = run_survey_cycle(device, latest_generation, trace)
             latest_generation = int(committed["survey_generation"])
             scans.append({

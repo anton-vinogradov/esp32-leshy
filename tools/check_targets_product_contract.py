@@ -255,6 +255,10 @@ def main() -> int:
             "device.open()" in correlation_runner and
             "def fixture_label" in correlation_runner and
             "def known_wifi_fixture_label" in correlation_runner and
+            'PREFERRED_FIXTURE_LABEL = "Keenetic-5070"' in
+                correlation_runner and
+            "selected_fixture_label is None and scans" in
+                correlation_runner and
             'fixture_mode(fixture, "ble")' in correlation_runner and
             'fixture_mode(fixture, "wifi")' not in correlation_runner and
             'mutation_correlation_status="accepted"' in correlation_runner and
