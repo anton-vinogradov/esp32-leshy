@@ -173,16 +173,30 @@ class MacWifiGuard:
 
     def _wait_for_hil_network(self) -> None:
         deadline = time.monotonic() + self._wait_seconds
+        observed: tuple[str | None, str | None, str | None] = (
+            None, None, None)
         while time.monotonic() < deadline:
-            address, router, subnet = self._link_fingerprint()
+            observed = self._link_fingerprint()
+            address, router, subnet = observed
             if (address is not None and address.startswith("192.168.4.") and
                     address != "192.168.4.1" and
                     router == "192.168.4.1" and
                     subnet == "255.255.255.0"):
                 return
             time.sleep(0.25)
+        prior = None if self.snapshot is None else (
+            self.snapshot.ipv4_address,
+            self.snapshot.router,
+            self.snapshot.subnet_mask,
+        )
+        if observed == prior and prior != (None, None, None):
+            reason = "prior network remained active"
+        elif observed == (None, None, None):
+            reason = "no IPv4 link was established"
+        else:
+            reason = "an unexpected network fingerprint was established"
         raise RuntimeError(
-            "Wi-Fi association did not reach the bounded HIL subnet")
+            f"Wi-Fi did not reach the bounded HIL subnet: {reason}")
 
     def _wait_for_fingerprint(self, snapshot: WifiSnapshot) -> None:
         deadline = time.monotonic() + self._wait_seconds
@@ -216,9 +230,14 @@ class MacWifiGuard:
         if not self._power():
             self._run(
                 ["-setairportpower", self.interface, "on"], "enable power")
-        self._run(
+        join_output = self._run(
             ["-setairportnetwork", self.interface, ssid, passphrase],
             "join HIL network")
+        if "fail" in join_output.lower() or "error" in join_output.lower():
+            # networksetup may report a failed join in stdout while still
+            # returning exit status zero. Never echo the line: it can contain
+            # the temporary SSID, and the argv also contains the passphrase.
+            raise RuntimeError("networksetup reported HIL join failure")
         self._wait_for_hil_network()
 
     def _remove_temporary_profile(self) -> None:

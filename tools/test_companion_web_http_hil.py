@@ -29,6 +29,7 @@ class FakeNetworkSetup:
         self.preferred = {ssid} if ssid is not None else set()
         self.commands: list[list[str]] = []
         self.fail_join = False
+        self.soft_fail_join = False
         self.address = "10.88.88.60" if power and ssid else None
         self.router = "10.88.88.1" if power and ssid else None
         self.subnet = "255.255.255.0" if power and ssid else None
@@ -84,6 +85,9 @@ class FakeNetworkSetup:
         elif operation == "-setairportnetwork":
             if self.fail_join:
                 return subprocess.CompletedProcess(arguments, 1, "", "no")
+            if self.soft_fail_join:
+                return subprocess.CompletedProcess(
+                    arguments, 0, "Failed to join network\n", "")
             self.power = True
             self._select_network(arguments[3])
             self.preferred.add(arguments[3])
@@ -191,6 +195,14 @@ class CompanionWebHttpHilTests(unittest.TestCase):
         with self.assertRaises(RuntimeError) as raised:
             guard.connect("Leshy-8790D5", "temporary123")
         self.assertNotIn("temporary123", str(raised.exception))
+
+    def test_zero_exit_join_failure_is_still_rejected(self) -> None:
+        fake = FakeNetworkSetup()
+        fake.soft_fail_join = True
+        guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=0.01)
+        guard.capture()
+        with self.assertRaisesRegex(RuntimeError, "reported HIL join failure"):
+            guard.connect("Leshy-8790D5", "temporary123")
 
 
 if __name__ == "__main__":
