@@ -23,6 +23,7 @@ from run_1x_product_survey_hil import (
     expect,
     query,
     valid_cid,
+    wait_ui_state,
 )
 
 
@@ -30,7 +31,8 @@ RUN_SCHEMA = "leshy.product_home_hil.run.v1"
 NRF_SCHEMA = "leshy.nrf24.spectrum.v1"
 CC_SCHEMA = "leshy.cc1101.spectrum.v1"
 HOME_ITEMS = (
-    "wifi", "ble", "spectrum24", "subghz", "capture", "library", "device",
+    "wifi", "ble", "spectrum24", "subghz", "capture", "targets",
+    "library", "device",
 )
 WATERFALL_ROWS = 224
 WATERFALL_GRAPH_Y = 54
@@ -286,10 +288,8 @@ def main() -> int:
                 require_exact(wifi, {
                     "page": "survey", "selected_id": "wifi",
                     "runtime_owner": "wifi", "lease_mask": 15,
-                    "survey_setup_view": "plan", "survey_setup_selection": 0,
-                    "survey_source_selected_mask": 1,
-                    "survey_source_selected_count": 1,
-                    "survey_source_can_start": True,
+                    "wifi_product_view": "menu",
+                    "wifi_product_selection": 0,
                 }, "wifi_entry")
                 screens["wifi"] = capture(device, frames, "wifi")
                 trace.append(action(device, "left"))
@@ -299,13 +299,19 @@ def main() -> int:
                 require_exact(ble, {
                     "page": "survey", "selected_id": "ble",
                     "runtime_owner": "ble", "lease_mask": 15,
-                    "survey_setup_view": "plan", "survey_setup_selection": 0,
-                    "survey_source_selected_mask": 2,
-                    "survey_source_selected_count": 1,
-                    "survey_source_can_start": True,
+                    "ble_product_view": "devices",
+                    "ble_device_selection": 0,
                 }, "ble_entry")
                 screens["ble"] = capture(device, frames, "ble")
                 trace.append(action(device, "left"))
+                trace.append(wait_ui_state(
+                    device,
+                    lambda state: state.get("page") == "home" and
+                    state.get("runtime_owner") == "none" and
+                    state.get("lease_mask") == 0,
+                    20.0,
+                    "BLE survey cancellation did not return Home/zero lease",
+                ))
 
                 home_selection(device, 2)
                 nrf_modes = action(device, "right")
@@ -505,8 +511,9 @@ def main() -> int:
 
                 for index, item, page, owner, lease in (
                     (4, "capture", "capture", "capture", 11),
-                    (5, "library", "library", "library", 5),
-                    (6, "device", "device", "device", 1),
+                    (5, "targets", "targets", "targets", 13),
+                    (6, "library", "library", "library", 5),
+                    (7, "device", "device", "device", 1),
                 ):
                     home_selection(device, index)
                     opened = action(device, "right")

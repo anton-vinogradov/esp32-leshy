@@ -15,7 +15,8 @@ from esp_app_identity import app_elf_sha256
 
 SCHEMA = "leshy.product_home_hil.run.v1"
 HOME_ITEMS = [
-    "wifi", "ble", "spectrum24", "subghz", "capture", "library", "device",
+    "wifi", "ble", "spectrum24", "subghz", "capture", "targets",
+    "library", "device",
 ]
 SCREENS = {
     "home_top": "home-top",
@@ -28,6 +29,7 @@ SCREENS = {
     "cc_spectrum": "cc-spectrum",
     "cc_waterfall": "cc-waterfall",
     "capture": "capture",
+    "targets": "targets",
     "library": "library",
     "device": "device",
     "home_final": "home-final",
@@ -38,6 +40,7 @@ PIXEL_WATERFALL_SCREENS = {
     "cc_waterfall_next": "cc-waterfall-next",
 }
 IDENTITY_SCREENS = {"home_en": "home-en"}
+NRF_MODE_SCREENS = {"nrf_modes": "nrf-modes"}
 SUBGHZ_MODE_SCREENS = {"subghz_modes": "subghz-modes"}
 
 
@@ -351,6 +354,8 @@ def main() -> int:
     identity_contract = scope.get("home_identity") == \
         "bilingual_brand_and_version"
     expected_screens = dict(SCREENS)
+    if "nrf_modes" in screens:
+        expected_screens.update(NRF_MODE_SCREENS)
     if "subghz_modes" in screens:
         expected_screens.update(SUBGHZ_MODE_SCREENS)
     if pixel_contract:
