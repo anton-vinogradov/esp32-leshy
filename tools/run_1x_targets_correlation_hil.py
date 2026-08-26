@@ -232,6 +232,7 @@ def main() -> int:
     shutil.copyfile(args.firmware, candidate)
     app_identity = app_elf_sha256(candidate)
     trace: list[dict[str, Any]] = []
+    scans: list[dict[str, Any]] = []
     states: dict[str, Any] = {}
     screens: dict[str, Any] = {}
     cleanup: dict[str, Any] = {"attempted": False}
@@ -315,7 +316,6 @@ def main() -> int:
 
         latest_generation = int(recovery["generation"])
         selected: dict[str, Any] | None = None
-        scans: list[dict[str, Any]] = []
         for attempt in range(MAX_FRESH_SURVEY_CYCLES + 1):
             listed = open_targets(device)
             states[f"attempt_{attempt}_listed"] = listed
@@ -493,6 +493,7 @@ def main() -> int:
         record.update({
             "status": "failed",
             "error": f"{type(error).__name__}: {error}",
+            "fresh_surveys": scans,
             "states": states,
             "screens": screens,
             "trace": trace,

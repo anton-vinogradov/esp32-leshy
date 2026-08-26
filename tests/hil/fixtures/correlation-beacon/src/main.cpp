@@ -8,6 +8,8 @@ namespace {
 
 constexpr const char* kSchema = "leshy.hil.correlation_fixture.v1";
 constexpr const char* kLabel = "LESHY-HIL-CORR";
+constexpr int kWifiTxDbm = -1;
+constexpr int kBleTxDbm = 6;
 
 enum class Mode : std::uint8_t { Off, Wifi, Ble };
 
@@ -27,9 +29,10 @@ const char* modeName() {
 void emitState() {
     Serial.printf(
         "{\"schema\":\"%s\",\"kind\":\"state\",\"mode\":\"%s\","
-        "\"label\":\"%s\",\"wifi_tx\":%s,\"ble_tx\":%s}\n",
+        "\"label\":\"%s\",\"wifi_tx\":%s,\"ble_tx\":%s,"
+        "\"wifi_tx_dbm\":%d,\"ble_tx_dbm\":%d}\n",
         kSchema, modeName(), kLabel, mode == Mode::Wifi ? "true" : "false",
-        mode == Mode::Ble ? "true" : "false");
+        mode == Mode::Ble ? "true" : "false", kWifiTxDbm, kBleTxDbm);
 }
 
 void stopWifi() {
@@ -58,7 +61,7 @@ void setOff() {
 bool setWifi() {
     setOff();
     WiFi.mode(WIFI_AP);
-    WiFi.setTxPower(WIFI_POWER_2dBm);
+    WiFi.setTxPower(WIFI_POWER_MINUS_1dBm);
     if (!WiFi.softAP(kLabel, nullptr, 1, false, 1)) {
         setOff();
         return false;
@@ -71,7 +74,7 @@ bool setBle() {
     setOff();
     BLEDevice::init(kLabel);
     bleInitialized = true;
-    BLEDevice::setPower(ESP_PWR_LVL_N0, ESP_BLE_PWR_TYPE_ADV);
+    BLEDevice::setPower(ESP_PWR_LVL_P6, ESP_BLE_PWR_TYPE_ADV);
     advertising = BLEDevice::getAdvertising();
     if (advertising == nullptr) {
         setOff();
