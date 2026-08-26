@@ -378,6 +378,9 @@ fi
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-companion-usb-read-0.170.json" ]]; then
     python3 "$repo_dir/tools/check_companion_usb_delta_acceptance.py"
 fi
+if [[ -f "$repo_dir/tests/hil/evidence/board-01-companion-target-mutate-0.172.json" ]]; then
+    python3 "$repo_dir/tools/check_companion_mutation_delta_acceptance.py"
+fi
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-evidence-0.150.json" ]]; then
     python3 "$repo_dir/tools/check_targets_evidence_hil_acceptance.py"
 fi

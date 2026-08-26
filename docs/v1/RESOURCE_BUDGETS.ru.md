@@ -708,6 +708,30 @@ flash сверх одной прошивки LED-delta. `E-HIL-178` расход
 `E-HIL-179` завершает немедленно обязательный full checkpoint и сбрасывает cadence
 anchor до 0/15.
 
+Checkpoint mutation Target через companion `RB-M162`: exact production
+`0.172.0-companion-target-mutate` на firmware source
+`6ec3a198562c2cffc998b18bbd5e0738dcae3428` использует 214 992 B static RAM,
+3 183 044 B linked flash и app/factory images 3 183 200/3 248 736 B. Это
++296 B static RAM, +8 004 B linked flash и +7 664/+7 664 B images против exact
+0.171. Bounded mutation adapter не добавляет второй catalog или storage path: его
+fixed record preview/status хранит ненулевой token 128 bit, exact optimistic revision
+и одно pending value, затем передаёт confirmation уже supervised worker Target.
+Physical round trip Favorite публикует два поколения; каждый commit фиксирует три
+writes, три file syncs и три directory syncs. Cold reset открывает generation 17
+Target-state и revision 12 с исходным false. Heap total/free возвращается к
+163 812/91 068 B; post-reset sampled minimum равен 17 344 B после полной bounded
+загрузки Targets. Exact SHA-256 firmware/factory/ELF/map/partitions:
+`7038ac9bd5995cea7b1dd203342e38514ced0b5b678fb625ef506c093b104e1c`/
+`edf50e23cf071428c29c3031a1ecee7510e605bdd6c96aa0d9f9a4f0cb1f6658`/
+`36ae2320517acf5625904aa5989d9253cce53c895ca6453ece39f81864df8da7`/
+`8abb1b91b2273838171604ac427bedb22a16144cd23f3d483d249a4e1d926210`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+`E-HIL-180` переиспользует одну exact installation, сохраняет оба rejected precursor
+harness и принимает reconnect-aware cold reopen с zero TX, input drops, port discovery,
+Cardputer opens и leaked lease. Verification source
+`48d296537a8eb358663420918b19151e2aa19c09` меняет только host reset transport. Cadence
+продвигается до 1/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

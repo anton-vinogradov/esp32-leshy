@@ -174,6 +174,16 @@ Exact `0.170.0-companion-usb-rx` физически принимает все п
 Sessions, 16 Targets, все пять detail sections Target, семь строк comparison, exact
 boundary accept/reject 512/513 bytes, отзыв grant после выхода из Targets, invariant
 released heap и zero storage writes, radio TX, input drops, port discovery или
-открытий Cardputer. Candidate `0.172.0-companion-target-mutate` добавляет bounded
-contract preview/confirm/status и его host/build proof; physical acceptance остаётся
-отдельным gate. Web, export или connectivity implementation этим не заявляются.
+открытий Cardputer. Exact `0.172.0-companion-target-mutate` физически принимает bounded
+mutation extension на том же port и foreground grant. Он рекламирует Favorite/Name/
+Notes/Tag add/remove Target, связывает случайный ненулевой mutation ID 128 bit с
+previewed value и exact revision, разрешает один confirm, наблюдает существующий
+supervised atomic worker через status и отзывает всё после выхода из Targets. Round
+trip Favorite публикует два exact-CID поколения с тремя writes, тремя file syncs и
+тремя directory syncs каждое, cold-reopen-ит восстановленное значение и оставляет Home
+без lease или TX. No-op, stale revision, unknown/changed token, replay и запросы из
+Home отказывают до новой write. Retained failed precursors отделяют неверное ожидание
+navigation harness и stale descriptor native USB macOS от firmware failure. Общий reset
+helper теперь закрывается до re-enumeration ESP32-S3 и reconnect-ится к exact port;
+contract checker не даёт active runners вернуться к stale-descriptor path. Web, export
+или connectivity implementation этим не заявляются.

@@ -174,6 +174,16 @@ the explicitly selected original-DIV native USB port. The retained delta proves 
 Sessions, 16 Targets, all five Target-detail sections, seven comparison rows, the exact
 512/513-byte accept/reject boundary, grant revocation after leaving Targets, invariant
 released heap and zero storage writes, radio TX, input drops, port discovery or
-Cardputer opens. Candidate `0.172.0-companion-target-mutate` adds the bounded
-preview/confirm/status contract and its host/build proof; physical acceptance is a
-separate gate. No Web, export, or connectivity implementation is implied.
+Cardputer opens. Exact `0.172.0-companion-target-mutate` physically accepts the bounded
+mutation extension on the same port and foreground grant. It advertises Target
+Favorite/Name/Notes/Tag add/remove, binds a random nonzero 128-bit mutation ID to the
+previewed value and exact revision, allows one confirm, observes the existing supervised
+atomic worker through status, and revokes everything after leaving Targets. A Favorite
+round trip publishes two exact-CID generations with three writes, three file syncs and
+three directory syncs each, cold-reopens the restored value, and leaves Home with no
+lease or TX. No-op, stale revision, unknown or changed token, replay and Home requests
+fail before another write. Retained failed precursors distinguish a navigation-harness
+assumption and a stale macOS native-USB descriptor from firmware failure. The shared
+reset helper now closes before ESP32-S3 re-enumeration and reconnects to the exact port;
+its contract checker prevents active runners from returning to the stale-descriptor
+path. No Web, export, or connectivity implementation is implied.

@@ -714,6 +714,30 @@ flashes beyond the one already spent by the LED delta. `E-HIL-178` consumes delt
 15/15; `E-HIL-179` completes the immediately required full checkpoint and resets the
 cadence anchor to 0/15.
 
+Companion Target-mutation checkpoint `RB-M162`: exact production
+`0.172.0-companion-target-mutate` at firmware source
+`6ec3a198562c2cffc998b18bbd5e0738dcae3428` uses 214,992 B static RAM,
+3,183,044 B linked flash and 3,183,200/3,248,736 B app/factory images. This is
++296 B static RAM, +8,004 B linked flash and +7,664/+7,664 B images versus exact
+0.171. The bounded mutation adapter adds no second catalog or storage path: its fixed
+preview/status record carries a nonzero 128-bit token, exact optimistic revision and
+one pending value, then delegates confirmation to the already supervised Target worker.
+The physical Favorite round trip publishes two generations; every commit records three
+writes, three file syncs and three directory syncs. Cold reset reopens Target-state
+generation 17 and revision 12 with the original false value. Heap total/free returns to
+163,812/91,068 B; the post-reset sampled minimum is 17,344 B after the full bounded
+Targets load. Exact firmware/factory/ELF/map/partitions SHA-256 are
+`7038ac9bd5995cea7b1dd203342e38514ced0b5b678fb625ef506c093b104e1c`/
+`edf50e23cf071428c29c3031a1ecee7510e605bdd6c96aa0d9f9a4f0cb1f6658`/
+`36ae2320517acf5625904aa5989d9253cce53c895ca6453ece39f81864df8da7`/
+`8abb1b91b2273838171604ac427bedb22a16144cd23f3d483d249a4e1d926210`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+`E-HIL-180` reuses the one exact installation, preserves both rejected harness
+precursors and accepts reconnect-aware cold reopen with zero TX, input drops, port
+discovery, Cardputer opens or leaked lease. Verification source
+`48d296537a8eb358663420918b19151e2aa19c09` changes host reset transport only. Cadence
+advances to 1/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

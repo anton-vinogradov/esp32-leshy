@@ -1,0 +1,176 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "app_elf_sha256": "36ae2320517acf5625904aa5989d9253cce53c895ca6453ece39f81864df8da7",
+    "elf_sha256": "36ae2320517acf5625904aa5989d9253cce53c895ca6453ece39f81864df8da7",
+    "factory_bytes": 3248736,
+    "factory_sha256": "edf50e23cf071428c29c3031a1ecee7510e605bdd6c96aa0d9f9a4f0cb1f6658",
+    "firmware_bytes": 3183200,
+    "firmware_sha256": "7038ac9bd5995cea7b1dd203342e38514ced0b5b678fb625ef506c093b104e1c",
+    "linked_flash_bytes": 3183044,
+    "map_sha256": "8abb1b91b2273838171604ac427bedb22a16144cd23f3d483d249a4e1d926210",
+    "partitions_sha256": "325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3",
+    "static_ram_bytes": 214992,
+    "version": "0.172.0-companion-target-mutate"
+  },
+  "cold_reopen": {
+    "boot_recovery_attempts": 1,
+    "boot_recovery_cleanup_complete": true,
+    "boot_recovery_timeout_restarts": 0,
+    "boot_recovery_transient_retries": 0,
+    "catalog_generation": 161,
+    "catalog_observations": 59,
+    "favorite": false,
+    "mounted_read_only": true,
+    "physical_write_calls": 0,
+    "reset_capture": {
+      "bytes": 8321,
+      "disconnects": 0,
+      "open_attempts": 1,
+      "ready_marker_ms": 1515.358,
+      "sha256": "7bf30d414df223a305df7a4a9c03cad30a793923597619b3cf3693f6a4aa85a7"
+    },
+    "target_revision": 12,
+    "target_state_generation": 17
+  },
+  "connection": {
+    "capabilities": [
+      "target.list",
+      "target.detail",
+      "target.favorite.set",
+      "target.name.set",
+      "target.notes.set",
+      "target.tag.add",
+      "target.tag.remove"
+    ],
+    "max_frame_bytes": 512,
+    "scopes": [
+      "target.read",
+      "target.mutate"
+    ],
+    "transport": "usb_serial_ndjson"
+  },
+  "evidence_ids": [
+    "E-BUILD-149",
+    "E-AUTO-121",
+    "E-HIL-180",
+    "E-COMPANION-003"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "failed_precursors": [
+    {
+      "checkpoint": "grant_revoke_and_cold_reopen",
+      "classification": "harness_navigation_assumption",
+      "cleanup_complete": true,
+      "firmware_failure": false,
+      "flash_count": 1,
+      "physical_power_cycle_required": false,
+      "reason": "single_left_press_did_not_exit_nested_targets_view",
+      "run_sha256": "f9a1339045dc8a400d6b31fbc48912507cfd381bc38853a4275e6ddaec3e685b",
+      "source_commit": "6ec3a198562c2cffc998b18bbd5e0738dcae3428"
+    },
+    {
+      "checkpoint": "grant_revoke_and_cold_reopen",
+      "classification": "stale_native_usb_descriptor",
+      "cleanup_complete": false,
+      "firmware_failure": false,
+      "flash_count": 0,
+      "physical_power_cycle_required": true,
+      "reason": "reset_handle_remained_open_across_esp32s3_native_usb_reenumeration",
+      "run_sha256": "84ff594ced778bbf4dcd017c329f6b632f595d1458e6a2247db56add3ab94619",
+      "source_commit": "d6cb2ead6f5264b5d8c8f04a264791a95da816fe"
+    }
+  ],
+  "final": {
+    "buzzer_inactive": true,
+    "heap_free_after": 91068,
+    "heap_free_before": 91068,
+    "heap_min_after_reset": 17344,
+    "heap_total": 163812,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "lease_mask": 0,
+    "nrf_ce_inactive": true,
+    "page": "home",
+    "radio_tx_commands": 0,
+    "runtime_owner": "none",
+    "software_quiesce_complete": true
+  },
+  "firmware_source_commit": "6ec3a198562c2cffc998b18bbd5e0738dcae3428",
+  "installation": {
+    "candidate_reused_by_pass": true,
+    "lineage_flash_count": 1,
+    "pass_flash_count": 0,
+    "precursor_run_sha256": "f9a1339045dc8a400d6b31fbc48912507cfd381bc38853a4275e6ddaec3e685b"
+  },
+  "mutation": {
+    "action": "target.favorite.set",
+    "atomic_commits": 2,
+    "directory_syncs_per_commit": [
+      3,
+      3
+    ],
+    "favorite_sequence": [
+      false,
+      true,
+      false
+    ],
+    "file_syncs_per_commit": [
+      3,
+      3
+    ],
+    "mutation_ids": [
+      "B30DB18189295C3C93B607ECA260E903",
+      "B09145501E383C7FE0B04E262F2D7AEC"
+    ],
+    "revision_sequence": [
+      10,
+      11,
+      12
+    ],
+    "state_generation_sequence": [
+      15,
+      16,
+      17
+    ],
+    "target_id": "3D62133018D6600F54F93D57F0CAD54A",
+    "write_calls_per_commit": [
+      3,
+      3
+    ]
+  },
+  "negative": {
+    "changed_token": "unknown_mutation",
+    "home_denied": "scope_unavailable",
+    "no_op": "unchanged",
+    "replayed_confirm": "already_confirmed",
+    "revoked_after_exit": "unknown_mutation",
+    "stale_revision": "revision_conflict",
+    "unknown_confirm": "unknown_mutation"
+  },
+  "physical_cadence": {
+    "accepted_since_full": 1,
+    "full_gate_at": 15
+  },
+  "raw_run_sha256": "022020c94992ccf8c016a2dfdc1c321cff2a7eaf6d59f8e0be9999318314851d",
+  "reset_transport_fix": {
+    "contract_checker": "tools/check_native_usb_reset_contract.py",
+    "firmware_change_required": false,
+    "fixed_source_commit": "48d296537a8eb358663420918b19151e2aa19c09",
+    "root_cause": "host_kept_stale_native_usb_descriptor_open_across_reset",
+    "strategy": "close_reset_handle_then_reopen_exact_port_until_ready"
+  },
+  "schema": "leshy.companion_target_mutation_hil.summary.v1",
+  "status": "pass",
+  "usb": {
+    "cardputer_ports_opened": 0,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "port_discovery_calls": 0
+  },
+  "verification_source_commit": "48d296537a8eb358663420918b19151e2aa19c09"
+}
