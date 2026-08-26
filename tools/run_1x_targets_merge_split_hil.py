@@ -178,7 +178,11 @@ def normalize_home(device: Any) -> dict[str, Any]:
     return state
 
 
-def open_targets(device: Any) -> dict[str, Any]:
+def open_targets(
+    device: Any, minimum_target_count: int = 2,
+) -> dict[str, Any]:
+    if minimum_target_count < 1:
+        raise ValueError("minimum_target_count must be positive")
     home = normalize_home(device)
     for _ in range(5):
         home = action(device, "down")
@@ -199,16 +203,19 @@ def open_targets(device: Any) -> dict[str, Any]:
             blocked_write_attempts=0, filesystem_mount_error=0,
             cleanup_complete=True, lease_mask=13)
     require_bounded_target_load(listed, "Targets list")
-    if int(listed.get("target_count", 0)) < 2:
-        raise RuntimeError(f"fewer than two Targets are available: {listed}")
+    if int(listed.get("target_count", 0)) < minimum_target_count:
+        raise RuntimeError(
+            f"fewer than {minimum_target_count} Targets are available: "
+            f"{listed}")
     return listed
 
 
 def find_target(
     device: Any,
     predicate: Callable[[dict[str, Any]], bool],
+    minimum_target_count: int = 2,
 ) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
-    listed = open_targets(device)
+    listed = open_targets(device, minimum_target_count)
     count = int(listed["target_count"])
     searched: list[dict[str, Any]] = []
     action(device, "down")  # comparison is row 0; the first Target is row 1
@@ -243,7 +250,8 @@ def find_target(
 def find_target_id(device: Any, target_id: str) -> tuple[
         dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     return find_target(
-        device, lambda state: state.get("selected_target_id") == target_id)
+        device, lambda state: state.get("selected_target_id") == target_id,
+        minimum_target_count=1)
 
 
 def close_targets(device: Any) -> dict[str, Any]:

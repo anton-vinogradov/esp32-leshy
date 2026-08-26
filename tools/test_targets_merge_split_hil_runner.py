@@ -127,6 +127,69 @@ class TargetsMergeSplitHilRunnerTests(unittest.TestCase):
                 "load_maximum_phase_us": 5_000_000,
             }, "Targets list")
 
+    def test_open_targets_allows_single_target_after_merge(self) -> None:
+        device = object()
+        homes = [
+            {"page": "home", "selection": selection,
+             "selected_id": "targets" if selection == 5 else "other"}
+            for selection in range(1, 6)
+        ]
+        opened = {
+            "page": "targets", "runtime_owner": "targets",
+            "lease_mask": 13,
+        }
+        listed = {
+            "status": "ready", "page_open": True,
+            "workspace_allocated": True, "view": "list",
+            "compare_available": True, "read_only": False,
+            "write_enabled": False, "blocked_write_attempts": 0,
+            "filesystem_mount_error": 0, "cleanup_complete": True,
+            "lease_mask": 13, "target_count": 1,
+            "load_elapsed_us": 1000, "load_watchdog_feeds": 8,
+            "load_maximum_phase_us": 500,
+        }
+        with patch.object(
+                RUNNER, "normalize_home",
+                return_value={"page": "home", "selection": 0}), \
+                patch.object(
+                    RUNNER, "action", side_effect=homes + [opened]), \
+                patch.object(
+                    RUNNER, "read_only_query", return_value=listed):
+            self.assertIs(
+                listed, RUNNER.open_targets(device, minimum_target_count=1))
+
+    def test_open_targets_still_requires_pair_before_merge(self) -> None:
+        device = object()
+        homes = [
+            {"page": "home", "selection": selection,
+             "selected_id": "targets" if selection == 5 else "other"}
+            for selection in range(1, 6)
+        ]
+        opened = {
+            "page": "targets", "runtime_owner": "targets",
+            "lease_mask": 13,
+        }
+        listed = {
+            "status": "ready", "page_open": True,
+            "workspace_allocated": True, "view": "list",
+            "compare_available": True, "read_only": False,
+            "write_enabled": False, "blocked_write_attempts": 0,
+            "filesystem_mount_error": 0, "cleanup_complete": True,
+            "lease_mask": 13, "target_count": 1,
+            "load_elapsed_us": 1000, "load_watchdog_feeds": 8,
+            "load_maximum_phase_us": 500,
+        }
+        with patch.object(
+                RUNNER, "normalize_home",
+                return_value={"page": "home", "selection": 0}), \
+                patch.object(
+                    RUNNER, "action", side_effect=homes + [opened]), \
+                patch.object(
+                    RUNNER, "read_only_query", return_value=listed):
+            with self.assertRaisesRegex(
+                    RuntimeError, "fewer than 2 Targets"):
+                RUNNER.open_targets(device)
+
     def test_mutation_trigger_never_replays_lost_ack(self) -> None:
         writes: list[bytes] = []
         device = types.SimpleNamespace(

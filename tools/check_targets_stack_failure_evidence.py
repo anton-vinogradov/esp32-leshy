@@ -21,6 +21,9 @@ MERGE_EVIDENCE = (
 FIXTURE_REOPEN_EVIDENCE = (
     ROOT / "tests/hil/evidence/board-01-targets-fixture-reopen-failure-0.164.json"
 )
+MERGED_REOPEN_RUNNER_EVIDENCE = (
+    ROOT / "tests/hil/evidence/board-01-targets-merged-reopen-runner-failure-0.165.json"
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -190,7 +193,62 @@ def main() -> None:
             "0.164 Cardputer isolation lost")
     require(reopen["repair_gate"]["candidate_version"] ==
             "0.165.0-targets-fixture-reopen", "0.165 repair link missing")
-    print("targets 0.146/0.147/0.148/0.163/0.164 fail-closed evidence: OK")
+    runner = json.loads(
+        MERGED_REOPEN_RUNNER_EVIDENCE.read_text(encoding="utf-8"))
+    require(
+        runner["schema"] ==
+        "leshy.targets_merged_reopen_runner_failure.evidence.v1",
+        "unexpected merged-reopen runner failure schema",
+    )
+    require(runner["status"] == "failed" and
+            runner["classification"] == "retained_fail_closed",
+            "0.165 runner failure hidden")
+    require(runner["source_commit"] ==
+            "19a322c428d6efa52fe18f62041141e0cf6669d8",
+            "0.165 exact source lost")
+    require(runner["failure"]["phase"] == "merged_cold_reopen_navigation" and
+            runner["failure"]["root_cause"] ==
+            "runner_reused_pre_merge_two_target_precondition_after_merge",
+            "0.165 runner root cause lost")
+    require(runner["merged_reopen_checkpoint"]["target_count"] == 1 and
+            runner["merged_reopen_checkpoint"]["catalog_count"] == 1 and
+            runner["merged_reopen_checkpoint"]["merge_history_count"] == 1 and
+            runner["merged_reopen_checkpoint"]["lease_mask"] == 13,
+            "0.165 successful cold reopen checkpoint lost")
+    require(runner["merge_checkpoint"]["mutation_persisted"] is True and
+            runner["merge_checkpoint"]["stack_min_free"] == 8040 and
+            runner["merge_checkpoint"]["write_calls"] == 3 and
+            runner["merge_checkpoint"]["file_syncs"] == 3 and
+            runner["merge_checkpoint"]["directory_syncs"] == 3,
+            "0.165 merge proof lost")
+    require(runner["post_failure_restore"]["ota1_restore_verified"] is True and
+            runner["post_failure_restore"]["ota1_before_sha256"] ==
+            runner["post_failure_restore"]["ota1_after_sha256"],
+            "0.165 OTA1 was not restored exactly")
+    require(runner["post_failure_restore"]
+            ["partition_table_restore_verified"] is True and
+            runner["post_failure_restore"]
+            ["partition_table_before_sha256"] ==
+            runner["post_failure_restore"]
+            ["partition_table_after_sha256"],
+            "0.165 partition table was not restored exactly")
+    require(runner["post_failure_restore"]["final_cid"] ==
+            "FE343253440000002000000055019CB7" and
+            runner["post_failure_restore"]["final_generation"] == 161 and
+            runner["post_failure_restore"]["final_observations"] == 59 and
+            runner["post_failure_restore"]["final_lease_mask"] == 0,
+            "0.165 final product continuity lost")
+    require(runner["usb"]["opened_ports"] == ["/dev/cu.usbmodem2101"] and
+            runner["usb"]["cardputer_ports_opened"] == 0 and
+            runner["usb"]["port_discovery_calls"] == 0,
+            "0.165 Cardputer isolation lost")
+    require(runner["repair_gate"]["firmware_change_required"] is False and
+            runner["repair_gate"]["reuse_exact_flash"] is True and
+            runner["repair_gate"]["minimum_target_count_after_merge"] == 1,
+            "0.165 runner-only repair gate lost")
+    print(
+        "targets 0.146/0.147/0.148/0.163/0.164/0.165 "
+        "fail-closed evidence: OK")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,72 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "elf_sha256": "20968cb44e847c7e3b9338c462991b6710a2c23c1654e9b3692879c9f91a81ec",
+    "firmware_sha256": "40af5486e8525998e86aa3c864e0cb0e21e3aace0d3dc40c8dd4eb1923f01d4b",
+    "map_sha256": "7acc6be8c106566de2d877acae572171e790983a421bd226b9c2070a2a7063f1",
+    "version": "0.165.0-targets-fixture-reopen"
+  },
+  "classification": "retained_fail_closed",
+  "failure": {
+    "error": "RuntimeError: fewer than two Targets are available after a successful merge",
+    "phase": "merged_cold_reopen_navigation",
+    "root_cause": "runner_reused_pre_merge_two_target_precondition_after_merge",
+    "run_json_sha256": "fcbc6658edcbb9edcb401148032d74049454eebf9604a240dd35f3b7c772a99e"
+  },
+  "merge_checkpoint": {
+    "catalog_count": 1,
+    "directory_syncs": 3,
+    "file_syncs": 3,
+    "history_count": 1,
+    "mutation_generation": 1,
+    "mutation_persisted": true,
+    "mutation_status": "saved",
+    "stack_min_free": 8040,
+    "worker_stack_observed": true,
+    "write_calls": 3
+  },
+  "merged_reopen_checkpoint": {
+    "catalog_count": 1,
+    "fixture_continuity_valid": true,
+    "lease_mask": 13,
+    "load_elapsed_us": 43631,
+    "load_maximum_phase_us": 38598,
+    "load_watchdog_feeds": 11,
+    "merge_history_count": 1,
+    "target_count": 1
+  },
+  "post_failure_restore": {
+    "cleanup_complete": true,
+    "final_cid": "FE343253440000002000000055019CB7",
+    "final_generation": 161,
+    "final_lease_mask": 0,
+    "final_observations": 59,
+    "ota1_after_sha256": "3bf012ed2a6f9ae7026ec8eb5a080dcd75e343b7073e337ea72900ed97da9e33",
+    "ota1_before_sha256": "3bf012ed2a6f9ae7026ec8eb5a080dcd75e343b7073e337ea72900ed97da9e33",
+    "ota1_restore_verified": true,
+    "partition_table_after_sha256": "44539be51aeb592d44450059d7dbbb4d5a25d7fe5144cc68b8e85acba367ba87",
+    "partition_table_before_sha256": "44539be51aeb592d44450059d7dbbb4d5a25d7fe5144cc68b8e85acba367ba87",
+    "partition_table_restore_verified": true,
+    "safety_latched": false
+  },
+  "repair_gate": {
+    "firmware_change_required": false,
+    "minimum_target_count_after_merge": 1,
+    "pre_merge_minimum_target_count": 2,
+    "reuse_exact_flash": true,
+    "short_regression_required": true
+  },
+  "schema": "leshy.targets_merged_reopen_runner_failure.evidence.v1",
+  "source_commit": "19a322c428d6efa52fe18f62041141e0cf6669d8",
+  "status": "failed",
+  "usb": {
+    "cardputer_ports_opened": 0,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "port_discovery_calls": 0
+  }
+}
