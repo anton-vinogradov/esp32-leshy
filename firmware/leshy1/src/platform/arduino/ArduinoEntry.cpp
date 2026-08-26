@@ -4811,6 +4811,14 @@ bool startWebCompanion() {
         lastRuntimeEvent = "companion_web_resource_busy";
         return false;
     }
+    // TCP/IP is deliberately initialized only after the second explicit
+    // confirmation. Keeping it alive from boot consumes enough internal heap
+    // to prevent the bounded Targets workspace from opening on non-PSRAM DIVs.
+    if (!arduinoCompanionWebService.prepareNetworkCore()) {
+        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        lastRuntimeEvent = "companion_web_network_core_failed";
+        return false;
+    }
     std::array<std::uint8_t, 6> mac{};
     std::array<std::uint8_t, 16> entropy{};
     esp_read_mac(mac.data(), ESP_MAC_WIFI_SOFTAP);
@@ -26468,10 +26476,6 @@ void setup() {
     // locks while the boot heap is unconstrained.
     std::fputc('\n', stdout);
     std::fflush(stdout);
-    // Initialize only the TCP/IP core while boot memory is contiguous. No
-    // network interface, Wi-Fi driver, credential, socket or RF mode exists
-    // until the user confirms Local Web inside a Target.
-    arduinoCompanionWebService.prepareNetworkCore();
     BoardSdSpiTransport::holdRadioTransmitPathsInactive();
 
     const bool flashMatches = ESP.getFlashChipSize() == BoardProfile::kExpectedFlashBytes;

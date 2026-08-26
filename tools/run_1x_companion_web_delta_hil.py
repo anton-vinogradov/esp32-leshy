@@ -484,7 +484,8 @@ def main() -> int:
                     staged.get("authorized") is False and
                     staged.get("server_active") is False and
                     staged.get("credential_present") is False and
-                    staged.get("network_core_ready") is True and
+                    staged.get("network_core_ready") is False and
+                    staged.get("begin_stage") == "idle" and
                     staged.get("cleanup_complete") is True and
                     staged.get("lease_mask") == 13,
                     f"Web session started without confirmation: {staged}")
