@@ -11,7 +11,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from capture_1x_ui import PassiveSerial, synchronize_console
+import serial
+
+from capture_1x_ui import PassiveSerial, read_json
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_survey_hil import (
@@ -44,6 +46,41 @@ def web_state(device: PassiveSerial) -> dict[str, Any]:
         device, b"companion.web.state", "leshy.companion.web.v1", "state")
 
 
+def open_console_reconnecting(
+        port: str, timeout: float) -> tuple[PassiveSerial, int, int]:
+    """Open native USB after reset without an unbounded tcdrain()."""
+    deadline = time.monotonic() + timeout
+    attempts = 0
+    disconnects = 0
+    last_error = "not opened"
+    while time.monotonic() < deadline:
+        attempts += 1
+        device: PassiveSerial | None = None
+        try:
+            device = PassiveSerial(
+                port, 115200, timeout=0.20, write_timeout=0.5)
+            device.reset_input_buffer()
+            # Five bytes fit atomically in the native-USB buffer.  Calling
+            # flush() here can block forever in termios.tcdrain() while the
+            # ESP32-S3 disconnects and re-enumerates after reset.
+            device.write(b"ping\n")
+            read_json(device, "leshy.boot.v1", "pong", timeout=0.75)
+            device.reset_input_buffer()
+            return device, attempts, disconnects
+        except (OSError, serial.SerialException, TimeoutError) as error:
+            last_error = f"{type(error).__name__}: {error}"
+            if device is not None:
+                disconnects += 1
+                try:
+                    device.close()
+                except (OSError, serial.SerialException):
+                    pass
+            time.sleep(0.10)
+    raise TimeoutError(
+        f"native USB console did not reconnect in {timeout:.1f}s: "
+        f"{last_error}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -53,6 +90,7 @@ def main() -> int:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--reuse-installed-from", type=Path)
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
 
@@ -107,19 +145,57 @@ def main() -> int:
         "http_exchange_tested": False,
         "http_exchange_reason": "host_wifi_state_not_modified",
     }
+    if args.reuse_installed_from is not None:
+        precursor_path = args.reuse_installed_from / "run.json"
+        if not precursor_path.is_file():
+            parser.error("reuse precursor run.json is missing")
+        precursor = json.loads(precursor_path.read_text(encoding="utf-8"))
+        precursor_target = precursor.get("target", {})
+        safe_precursor = (
+            precursor.get("status") == "pass" and
+            precursor.get("cleanup", {}).get("complete") is True
+        ) or (
+            precursor.get("status") == "interrupted" and
+            precursor.get("checkpoint") == "console_sync"
+        )
+        if (precursor.get("flash_count") != 1 or not safe_precursor or
+                precursor_target.get("port") != args.port or
+                precursor_target.get("ports_opened") != [args.port] or
+                precursor.get("candidate") != record["candidate"]):
+            parser.error(
+                "reuse precursor does not prove this exact installed candidate")
+        record["installed_candidate_reused"] = True
+        record["installation_precursor"] = str(precursor_path)
+        record["installation_precursor_status"] = precursor.get("status")
+        record["installation_flash_count"] = 1
+    else:
+        record["installed_candidate_reused"] = False
+        record["installation_flash_count"] = 0
     write_json(args.output / "run.json", record)
     cleanup: dict[str, Any] = {"attempted": False}
+    device: PassiveSerial | None = None
 
     try:
-        checkpoint(args.output, record, "flash")
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        record["flash_count"] = 1
-        write_json(args.output / "run.json", record)
-        time.sleep(1.0)
+        if args.reuse_installed_from is None:
+            checkpoint(args.output, record, "flash")
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            record["flash_count"] = 1
+            record["installation_flash_count"] = 1
+            write_json(args.output / "run.json", record)
+            time.sleep(1.0)
+        else:
+            checkpoint(args.output, record, "reuse_installed_candidate")
 
-        with PassiveSerial(args.port, 115200, timeout=0.25) as device:
-            checkpoint(args.output, record, "console_sync")
-            synchronize_console(device, 30.0)
+        checkpoint(args.output, record, "console_sync")
+        device, open_attempts, usb_disconnects = open_console_reconnecting(
+            args.port, 45.0)
+        record["console"] = {
+            "open_attempts": open_attempts,
+            "disconnects": usb_disconnects,
+            "flush_calls_during_reconnect": 0,
+        }
+        write_json(args.output / "run.json", record)
+        try:
             metrics_before = query(
                 device, b"metrics", "leshy.boot.v1", "ready")
             require(metrics_before.get("version") == args.expected_version and
@@ -237,6 +313,9 @@ def main() -> int:
                     f"input regression: {inputs}")
             metrics_after = query(
                 device, b"metrics", "leshy.boot.v1", "ready")
+        finally:
+            device.close()
+            device = None
 
         record.update({
             "status": "pass",
@@ -268,11 +347,23 @@ def main() -> int:
             "final_lease_mask": released["lease_mask"],
         }, sort_keys=True))
         return 0
-    except Exception as error:
+    except (Exception, KeyboardInterrupt) as error:
+        if device is not None:
+            try:
+                device.close()
+            except (OSError, serial.SerialException):
+                pass
+            device = None
         try:
-            with PassiveSerial(args.port, 115200, timeout=0.25) as device:
-                synchronize_console(device, 10.0)
+            device, cleanup_open_attempts, cleanup_disconnects = \
+                open_console_reconnecting(args.port, 10.0)
+            try:
                 cleanup = best_effort_cleanup(device)
+                cleanup["open_attempts"] = cleanup_open_attempts
+                cleanup["disconnects"] = cleanup_disconnects
+            finally:
+                device.close()
+                device = None
         except Exception as cleanup_error:
             cleanup = {
                 "attempted": True,
@@ -282,7 +373,10 @@ def main() -> int:
                 ],
             }
         record.update({
-            "status": "failed",
+            "status": (
+                "interrupted" if isinstance(error, KeyboardInterrupt)
+                else "failed"
+            ),
             "failure": f"{type(error).__name__}: {error}",
             "cleanup": cleanup,
         })
