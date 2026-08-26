@@ -97,8 +97,8 @@ def validated_partition_layout(path: Path, firmware_size: int) -> dict[str, Any]
     return entries
 
 
-def require(state: dict[str, Any], label: str, **expected: Any) -> None:
-    actual = {key: state.get(key) for key in expected}
+def require(record: dict[str, Any], label: str, **expected: Any) -> None:
+    actual = {key: record.get(key) for key in expected}
     if actual != expected:
         raise RuntimeError(f"{label}: expected={expected}, actual={actual}")
 

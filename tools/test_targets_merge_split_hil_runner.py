@@ -28,6 +28,9 @@ RUNNER = load_runner()
 
 
 class TargetsMergeSplitHilRunnerTests(unittest.TestCase):
+    def test_require_can_validate_device_state_field(self) -> None:
+        RUNNER.require({"state": "latched"}, "safety", state="latched")
+
     @staticmethod
     def partition_table(entries: list[tuple[int, int, int, int, str]]) -> bytes:
         payload = bytearray(b"\xff" * RUNNER.PARTITION_TABLE_SIZE)
