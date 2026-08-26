@@ -764,6 +764,79 @@ void testDecisionProjectionFitsWorstCaseHistoryAndRejectsMerges() {
               &reopened, &reopenedDecisions) == TargetCodecStatus::Conflict);
 }
 
+void testProductProjectionMigratesDecisionStateAndReopensMergeSplit() {
+    FakeStoreIo io;
+    TargetProductStateStoreWorkspace workspace;
+    TargetCatalog catalog;
+    CorrelationDecisionLog decisions;
+    CHECK(catalog.create(targetId(1), wifiIdentity(1), evidence(1, 1)) ==
+          TargetMutationStatus::Created);
+    CHECK(catalog.create(targetId(2), bleIdentity(2), evidence(2, 2)) ==
+          TargetMutationStatus::Created);
+    const CorrelationProposal rejected =
+        proposal(targetId(1), evidence(1, 1), 20);
+    CHECK(decisions.record(rejected, CorrelationDecision::Reject, 1, 1) ==
+          CorrelationDecisionStatus::Rejected);
+
+    // Existing decision-only schema-v3 generations remain readable by the
+    // complete product projection and acquire an empty merge history.
+    CHECK(commitTargetDecisionState(io, workspace, catalog, decisions, 1,
+                                    HeadSlot::A).complete());
+    TargetStateStoreRecoveryResult wire =
+        recoverTargetProductStateWire(io, workspace);
+    CHECK(wire.valid());
+    CHECK(wire.generation == 1);
+    CHECK(wire.targets == 2);
+    CHECK(wire.decisions == 1);
+    CHECK(wire.merges == 0);
+    TargetCatalog reopenedCatalog;
+    CorrelationDecisionLog reopenedDecisions;
+    TargetMergeHistory reopenedMerges;
+    CHECK(reopenTargetState(
+              workspace.manifest.data(), workspace.manifestSize,
+              workspace.state.data(), workspace.stateSize, &reopenedCatalog,
+              &reopenedDecisions, &reopenedMerges) == TargetCodecStatus::Valid);
+
+    CHECK(reopenedMerges.merge(reopenedCatalog, mergeId(1), targetId(1),
+                               targetId(2), 1, 1) ==
+          TargetMergeStatus::Merged);
+    CHECK(commitTargetProductState(io, workspace, reopenedCatalog,
+                                   reopenedDecisions, reopenedMerges, 2,
+                                   HeadSlot::B).complete());
+    reopenedCatalog.clear();
+    reopenedDecisions.clear();
+    reopenedMerges.clear();
+    TargetStateStoreRecoveryResult recovered = recoverTargetProductState(
+        io, workspace, &reopenedCatalog, &reopenedDecisions, &reopenedMerges);
+    CHECK(recovered.valid());
+    CHECK(recovered.generation == 2);
+    CHECK(recovered.targets == 1);
+    CHECK(recovered.decisions == 1);
+    CHECK(recovered.merges == 1);
+    CHECK(reopenedMerges.get(0) != nullptr &&
+          !reopenedMerges.get(0)->split);
+
+    CHECK(reopenedMerges.split(reopenedCatalog, mergeId(1)) ==
+          TargetMergeStatus::Split);
+    CHECK(commitTargetProductState(io, workspace, reopenedCatalog,
+                                   reopenedDecisions, reopenedMerges, 3,
+                                   HeadSlot::A).complete());
+    reopenedCatalog.clear();
+    reopenedDecisions.clear();
+    reopenedMerges.clear();
+    recovered = recoverTargetProductState(
+        io, workspace, &reopenedCatalog, &reopenedDecisions, &reopenedMerges);
+    CHECK(recovered.valid());
+    CHECK(recovered.generation == 3);
+    CHECK(recovered.targets == 2);
+    CHECK(recovered.decisions == 1);
+    CHECK(recovered.merges == 1);
+    CHECK(reopenedMerges.get(0) != nullptr && reopenedMerges.get(0)->split);
+    CHECK(targetRecordGraphEqual(*reopenedCatalog.get(0), *catalog.get(0)));
+    CHECK(targetRecordGraphEqual(*reopenedCatalog.get(1), *catalog.get(1)));
+    CHECK(workspace.stateSize <= kTargetDecisionStateMaxBytes);
+}
+
 void testCatalogOnlyWorkspaceFitsWorstCaseCatalog() {
     TargetCatalog catalog;
     std::array<char, TargetRecord::kNameCapacity> name{};
@@ -848,6 +921,7 @@ int main() {
     testCatalogOnlyStoreRetainsAtomicHeadRecovery();
     testDecisionStoreMigratesCatalogOnlyAndRetainsReject();
     testDecisionProjectionFitsWorstCaseHistoryAndRejectsMerges();
+    testProductProjectionMigratesDecisionStateAndReopensMergeSplit();
     testCatalogOnlyWorkspaceFitsWorstCaseCatalog();
     if (failures != 0) return EXIT_FAILURE;
     std::cout << "S6 Target graph/decision atomic persistence tests passed\n";

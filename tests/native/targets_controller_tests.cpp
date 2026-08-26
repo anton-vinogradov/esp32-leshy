@@ -241,6 +241,29 @@ void pairIsUsefulFirstAndStable() {
     CHECK(std::strcmp(controller.notesEditorText(), "A") == 0);
     CHECK(controller.back());
     CHECK(controller.view() == TargetsView::Actions);
+    CHECK(controller.next());
+    CHECK(controller.selectedAction() == TargetActionItem::Correlations);
+    CHECK(controller.next());
+    CHECK(controller.selectedAction() == TargetActionItem::MergeSplit);
+    CHECK(controller.mergeCandidateCount() + 1U == controller.size());
+    CHECK(controller.openMerge(false));
+    CHECK(controller.view() == TargetsView::MergeList);
+    CHECK(controller.selectedMergeCandidate() != nullptr);
+    if (controller.mergeCandidateCount() > 1U) {
+        CHECK(controller.next());
+        CHECK(controller.mergeSelection() == 1U);
+        CHECK(controller.previous());
+    }
+    CHECK(controller.openSelected());
+    CHECK(controller.view() == TargetsView::MergeConfirm);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::MergeList);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::Actions);
+    CHECK(controller.openMerge(true));
+    CHECK(controller.view() == TargetsView::SplitConfirm);
+    CHECK(controller.back());
+    CHECK(controller.view() == TargetsView::Actions);
     CHECK(controller.back());
     CHECK(controller.view() == TargetsView::Detail);
 }

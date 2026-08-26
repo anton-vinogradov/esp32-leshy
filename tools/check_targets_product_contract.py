@@ -34,6 +34,8 @@ def main() -> int:
         ROOT / "tools/run_1x_targets_correlation_hil.py").read_text()
     correlation_recovery_runner = (
         ROOT / "tools/run_1x_targets_correlation_recovery_hil.py").read_text()
+    merge_split_runner = (
+        ROOT / "tools/run_1x_targets_merge_split_hil.py").read_text()
     correlation_fixture_runner = (
         ROOT / "tools/run_1x_targets_correlation_fixture_hil.py").read_text()
     correlation_fixture = (
@@ -62,20 +64,22 @@ def main() -> int:
     require(failures,
             load_product.rfind("filesystem.end();") <
                 load_product.rfind("allocateTargetsProduct(") and
-            "separate 11,272 B catalog, 11,272 B decision log, 7,736 B "
-            "comparison" in load_product and
-            "2,704 B proposals and 4,240 B controller blocks" in
-                load_product and
-            "overlapping transfer/runtime copies do not fit the board" in
-                load_product and
-            "recoverTargetDecisionStateWire(" in load_product and
+            "separate 11,272 B catalog, 11,272 B decision log, 11,528 B merge"
+            in load_product and
+            "history, 7,736 B comparison" in load_product and
+            "2,704 B proposals and 4,240 B controller" in load_product and
+            "overlapping transfer/runtime copies do" in load_product and
+            "not fit the board" in load_product and
+            "recoverTargetProductStateWire(" in load_product and
             "persistedCatalog" not in load_product and
             "persistedDecisions" not in load_product and
-            "reopenTargetDecisionState(" in load_product and
+            "reopenTargetState(" in load_product and
             "&targetsProductRuntime->workspace.catalog" in load_product and
             "&targetsProductRuntime->workspace.decisions" in load_product and
+            "&targetsProductRuntime->merges" in load_product and
             "new (std::nothrow) TargetCatalog" in entry and
             "new (std::nothrow) CorrelationDecisionLog" in entry and
+            "new (std::nothrow) TargetMergeHistory" in entry and
             "SessionCorrelationProposalSet();" in entry and
             "TargetComparisonResult();" in entry and
             "new (std::nothrow) TargetsWorkspace" in entry and
@@ -160,8 +164,8 @@ def main() -> int:
             r'\"read_only\":false' in entry and
             r'\"write_enabled\":%s' in entry and
             r'\"mutation_state\":\"%s\"' in entry and
-            "commitTargetDecisionState(" in entry and
-            "recoverTargetDecisionState(" in entry and
+            "commitTargetProductState(" in entry and
+            "recoverTargetProductState(" in entry and
             "TargetActionKind::SetFavorite" in entry and
             "TargetActionKind::SetName" in entry and
             "TargetActionKind::SetNotes" in entry and
@@ -172,17 +176,22 @@ def main() -> int:
             r'\"selected_tag_hex\":\"%s\"' in entry and
             r'\"tag_editor_can_save\":%s' in entry and
             r'\"selected_notes_prefix_hex\":\"%s\"' in entry and
-            r'\"notes_editor_dirty\":%s' in entry,
+            r'\"notes_editor_dirty\":%s' in entry and
+            r'\"selected_graph_fingerprint\":\"%s\"' in entry and
+            r'\"merge_history_count\":%u' in entry and
+            r'\"mutation_merge_status\":\"%s\"' in entry,
             "Targets needs a machine-readable release-test state")
     require(failures,
             "buildSessionCorrelationReview(" in controller and
             "sessionCorrelationCandidatePending(" in controller and
             "CorrelationDecisionLog* targetsMutationDecisions" in entry and
+            "TargetMergeHistory* targetsMutationMerges" in entry and
             "adoptTargetsProductState(" in entry and
-            "finishTargetsProductAllocation(catalog, decisions, false)" in
+            "finishTargetsProductAllocation(catalog, decisions, merges, false)" in
                 entry and
             "catalog = nullptr;" in entry and
             "decisions = nullptr;" in entry and
+            "merges = nullptr;" in entry and
             "event.targetId, true, event.catalogRecovered" in entry and
             "CorrelationService service(*catalog, *decisions, lookup)" in entry and
             "requestTargetsCorrelationMutation(" in entry and
@@ -332,6 +341,22 @@ def main() -> int:
             "the advanced Target and decision log, preserve immutable source "
             "cardinality and touch only the explicit DUT port")
     require(failures,
+            "leshy.targets_merge_split_hil.run.v1" in merge_split_runner and
+            "exact HIL requires clean committed HEAD" in merge_split_runner and
+            '"cardputer_ports_opened": 0' in merge_split_runner and
+            '"port_discovery_calls": 0' in merge_split_runner and
+            "targets-merge-cold-reopen" in merge_split_runner and
+            "targets-split-cold-reopen" in merge_split_runner and
+            "selected_graph_fingerprint=destination_graph" in
+                merge_split_runner and
+            "selected_graph_fingerprint=source_graph" in merge_split_runner and
+            "mutation_merge_status=\"merged\"" in merge_split_runner and
+            "mutation_merge_status=\"split\"" in merge_split_runner and
+            "mutation_directory_syncs" in merge_split_runner,
+            "merge/split HIL must use only the explicit DUT port, require two "
+            "explicit confirmations, atomically publish both transitions and "
+            "cold-reopen both exact pre-merge ownership graphs")
+    require(failures,
             'constexpr int kBleTxDbm = -12' in correlation_fixture and
             'ESP_PWR_LVL_N12' in correlation_fixture and
             'bool setLabel(const char* hex)' in correlation_fixture and
@@ -402,6 +427,10 @@ def main() -> int:
                     "TargetsCorrelationEvidence", "TargetsCorrelationExisting",
                     "TargetsCorrelationCandidate", "TargetsCorrelationAccept",
                     "TargetsCorrelationReject",
+                    "TargetsMergeAction", "TargetsSplitAction",
+                    "TargetsSplitAvailable", "TargetsMergeList",
+                    "TargetsMergeConfirm", "TargetsSplitConfirm",
+                    "TargetsMergeConfirmAction", "TargetsSplitConfirmAction",
                     "NavDelete", "NavChanges"):
         require(failures, f"LESHY_UI_TEXT({text_id}," in strings,
                 f"bilingual UI string missing: {text_id}")
@@ -415,7 +444,8 @@ def main() -> int:
         return 1
     print("Targets product contract passed: exact-CID sessions, bounded "
           "lifecycle, list/detail/compare/actions/correlation review, "
-          "mount-aware codec workspace, keypad/touch and mutation state probe")
+          "reversible merge/split, mount-aware codec workspace, keypad/touch "
+          "and mutation state probe")
     return 0
 
 

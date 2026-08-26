@@ -27,6 +27,9 @@ enum class TargetsView : std::uint8_t {
     CorrelationEvidence,
     Compare,
     CompareDetail,
+    MergeList,
+    MergeConfirm,
+    SplitConfirm,
 };
 
 enum class TargetActionItem : std::uint8_t {
@@ -35,6 +38,7 @@ enum class TargetActionItem : std::uint8_t {
     Tags,
     Notes,
     Correlations,
+    MergeSplit,
 };
 
 enum class TargetsLoadStatus : std::uint8_t {
@@ -86,7 +90,7 @@ struct TargetsWorkspace final {
 
 class TargetsController final {
 public:
-    static constexpr std::size_t kActionCount = 5;
+    static constexpr std::size_t kActionCount = 6;
     static constexpr std::size_t kCorrelationReviewControlCount = 4;
     static constexpr std::size_t kNameEditControlCount = 4;
     static constexpr std::size_t kTagEditControlCount = 4;
@@ -123,6 +127,7 @@ public:
     bool openTagEditor();
     bool openNotesEditor();
     bool openCorrelationList();
+    bool openMerge(bool splitAvailable);
     bool openCompare();
     bool back();
     bool selectTarget(const domain::targets::TargetId& id);
@@ -153,6 +158,10 @@ public:
     std::size_t correlationReviewSelection() const {
         return correlationReviewSelection_;
     }
+    std::size_t mergeSelection() const { return mergeSelection_; }
+    std::size_t mergeCandidateCount() const;
+    const TargetListRow* mergeCandidate(std::size_t index) const;
+    const TargetListRow* selectedMergeCandidate() const;
     TargetActionItem selectedAction() const;
     const char* nameEditorText() const { return nameEditorText_.data(); }
     std::size_t nameEditorLength() const { return nameEditorLength_; }
@@ -286,6 +295,7 @@ private:
     std::size_t notesEditorGlyphSelection_ = 0;
     std::size_t correlationSelection_ = 0;
     std::size_t correlationReviewSelection_ = 0;
+    std::size_t mergeSelection_ = 0;
     bool correlationEvidenceCandidate_ = false;
     TargetsView view_ = TargetsView::List;
     TargetsLoadStatus status_ = TargetsLoadStatus::SessionUnavailable;

@@ -59,6 +59,13 @@ struct TargetDecisionStateStoreWorkspace final {
     std::uint32_t generation = 0;
 };
 
+// The product runtime deliberately reuses the 24 KiB decision workspace for
+// the complete schema-v3 graph.  The codec is length bounded and fails closed
+// when a particular catalog/decision/merge history does not fit; this avoids a
+// 32 KiB contiguous allocation that the no-PSRAM N16 board cannot guarantee
+// after FatFs is mounted.
+using TargetProductStateStoreWorkspace = TargetDecisionStateStoreWorkspace;
+
 static_assert(sizeof(TargetCatalogStateStoreWorkspace) <
               sizeof(TargetStateStoreWorkspace));
 static_assert(sizeof(TargetDecisionStateStoreWorkspace) <
@@ -158,5 +165,19 @@ TargetStateStoreRecoveryResult recoverTargetDecisionState(
 // semantic decode failure remains fail-closed.
 TargetStateStoreRecoveryResult recoverTargetDecisionStateWire(
     SessionStoreIo& io, TargetDecisionStateStoreWorkspace& workspace);
+
+TargetStateStoreCommitResult commitTargetProductState(
+    SessionStoreIo& io, TargetProductStateStoreWorkspace& workspace,
+    const domain::targets::TargetCatalog& catalog,
+    const domain::targets::CorrelationDecisionLog& decisions,
+    const domain::targets::TargetMergeHistory& merges,
+    std::uint32_t generation, HeadSlot publishSlot);
+TargetStateStoreRecoveryResult recoverTargetProductState(
+    SessionStoreIo& io, TargetProductStateStoreWorkspace& workspace,
+    domain::targets::TargetCatalog* catalog,
+    domain::targets::CorrelationDecisionLog* decisions,
+    domain::targets::TargetMergeHistory* merges);
+TargetStateStoreRecoveryResult recoverTargetProductStateWire(
+    SessionStoreIo& io, TargetProductStateStoreWorkspace& workspace);
 
 }  // namespace leshy1::storage

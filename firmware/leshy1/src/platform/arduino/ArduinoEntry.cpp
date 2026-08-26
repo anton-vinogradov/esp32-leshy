@@ -95,6 +95,7 @@
 #include "services/targets/CorrelationService.h"
 #include "services/targets/SessionTargetAdmission.h"
 #include "services/targets/SurveySessionTargetEvidenceLookup.h"
+#include "services/targets/TargetMergeService.h"
 #include "services/targets/TargetService.h"
 #include "services/survey/IngressTiming.h"
 #include "services/survey/ObservationQueue.h"
@@ -226,6 +227,10 @@ using leshy1::domain::targets::CorrelationDecisionLog;
 using leshy1::domain::targets::CorrelationProposal;
 using leshy1::domain::targets::CorrelationDecision;
 using leshy1::domain::targets::TargetId;
+using leshy1::domain::targets::TargetMergeHistory;
+using leshy1::domain::targets::TargetMergeId;
+using leshy1::domain::targets::TargetMergeRecord;
+using leshy1::domain::targets::TargetMergeStatus;
 using leshy1::domain::targets::TargetRecord;
 using leshy1::domain::hardware::CapabilityState;
 using leshy1::domain::hardware::HardwareInventory;
@@ -259,6 +264,9 @@ using leshy1::services::power::PowerWriteDisposition;
 using leshy1::services::targets::TargetAction;
 using leshy1::services::targets::TargetActionKind;
 using leshy1::services::targets::TargetService;
+using leshy1::services::targets::TargetMergeAction;
+using leshy1::services::targets::TargetMergeActionKind;
+using leshy1::services::targets::TargetMergeService;
 using leshy1::services::targets::CorrelationAction;
 using leshy1::services::targets::CorrelationActionKind;
 using leshy1::services::targets::CorrelationDecisionStatus;
@@ -400,6 +408,7 @@ SessionCatalog sessionCatalog;
 struct TargetsProductRuntime final {
     TargetCatalog* catalogStorage = nullptr;
     CorrelationDecisionLog* decisionsStorage = nullptr;
+    TargetMergeHistory* mergesStorage = nullptr;
     leshy1::services::targets::SessionCorrelationProposalSet*
         correlationsStorage = nullptr;
     leshy1::domain::targets::TargetComparisonResult* comparisonStorage =
@@ -408,9 +417,11 @@ struct TargetsProductRuntime final {
     TargetsController* controllerStorage = nullptr;
     TargetsWorkspace& workspace;
     TargetsController& controller;
+    TargetMergeHistory& merges;
 
     TargetsProductRuntime(TargetCatalog* catalogValue,
                           CorrelationDecisionLog* decisionsValue,
+                          TargetMergeHistory* mergesValue,
                           leshy1::services::targets::
                               SessionCorrelationProposalSet* correlationsValue,
                           leshy1::domain::targets::TargetComparisonResult*
@@ -419,12 +430,40 @@ struct TargetsProductRuntime final {
                           TargetsController* controllerValue)
         : catalogStorage(catalogValue),
           decisionsStorage(decisionsValue),
+          mergesStorage(mergesValue),
           correlationsStorage(correlationsValue),
           comparisonStorage(comparisonValue),
           workspaceStorage(workspaceValue),
           controllerStorage(controllerValue),
           workspace(*workspaceValue),
-          controller(*controllerValue) {}
+          controller(*controllerValue),
+          merges(*mergesValue) {}
+
+    bool detachState(TargetCatalog** catalog, CorrelationDecisionLog** decisions,
+                     TargetMergeHistory** mergesValue) {
+        if (catalog == nullptr || decisions == nullptr || mergesValue == nullptr ||
+            catalogStorage == nullptr || decisionsStorage == nullptr ||
+            mergesStorage == nullptr) {
+            return false;
+        }
+        // The UI/controller graph contains references into the state blocks, so
+        // destroy it before handing those blocks to the persistence worker.
+        delete controllerStorage;
+        controllerStorage = nullptr;
+        delete workspaceStorage;
+        workspaceStorage = nullptr;
+        delete comparisonStorage;
+        comparisonStorage = nullptr;
+        delete correlationsStorage;
+        correlationsStorage = nullptr;
+        *catalog = catalogStorage;
+        *decisions = decisionsStorage;
+        *mergesValue = mergesStorage;
+        catalogStorage = nullptr;
+        decisionsStorage = nullptr;
+        mergesStorage = nullptr;
+        return true;
+    }
     ~TargetsProductRuntime() {
         delete controllerStorage;
         delete workspaceStorage;
@@ -432,6 +471,7 @@ struct TargetsProductRuntime final {
         delete correlationsStorage;
         delete decisionsStorage;
         delete catalogStorage;
+        delete mergesStorage;
     }
 };
 TargetsProductRuntime* targetsProductRuntime = nullptr;
@@ -472,6 +512,11 @@ struct TargetsMutationEvent final {
     bool favorite = false;
     TargetActionKind actionKind = TargetActionKind::SetFavorite;
     bool correlation = false;
+    bool merge = false;
+    TargetMergeActionKind mergeKind = TargetMergeActionKind::Merge;
+    TargetMergeStatus mergeStatus = TargetMergeStatus::InvalidArgument;
+    TargetMergeId mergeOperationId{};
+    TargetId mergeSourceId{};
     CorrelationActionKind correlationKind = CorrelationActionKind::Accept;
     CorrelationDecisionStatus correlationStatus =
         CorrelationDecisionStatus::InvalidArgument;
@@ -503,6 +548,7 @@ const char* targetsMutationStatus = "idle";
 TargetsMutationEvent targetsMutationReport{};
 TargetCatalog* targetsMutationCatalog = nullptr;
 CorrelationDecisionLog* targetsMutationDecisions = nullptr;
+TargetMergeHistory* targetsMutationMerges = nullptr;
 TargetId targetsMutationTargetId{};
 bool targetsMutationFavorite = false;
 TargetActionKind targetsMutationKind = TargetActionKind::SetFavorite;
@@ -510,6 +556,11 @@ bool targetsMutationCorrelation = false;
 CorrelationActionKind targetsMutationCorrelationKind =
     CorrelationActionKind::Accept;
 CorrelationProposal targetsMutationProposal{};
+bool targetsMutationMerge = false;
+TargetMergeActionKind targetsMutationMergeKind =
+    TargetMergeActionKind::Merge;
+TargetMergeId targetsMutationMergeOperationId{};
+TargetId targetsMutationMergeSourceId{};
 std::array<char, TargetRecord::kNotesCapacity + 1> targetsMutationText{};
 std::uint16_t targetsMutationTextLength = 0;
 std::uint64_t targetsMutationStartActionUs = 0;
@@ -4592,12 +4643,14 @@ void releaseTargetsProduct() {
 
 bool finishTargetsProductAllocation(TargetCatalog* catalog,
                                     CorrelationDecisionLog* decisions,
+                                    TargetMergeHistory* merges,
                                     bool deleteStateOnFailure) {
     auto* correlations = new (std::nothrow)
         leshy1::services::targets::SessionCorrelationProposalSet();
     auto* comparison = new (std::nothrow)
         leshy1::domain::targets::TargetComparisonResult();
     auto* workspace = catalog == nullptr || decisions == nullptr ||
+            merges == nullptr ||
             correlations == nullptr || comparison == nullptr
         ? nullptr
         : new (std::nothrow) TargetsWorkspace(
@@ -4606,7 +4659,7 @@ bool finishTargetsProductAllocation(TargetCatalog* catalog,
         : new (std::nothrow) TargetsController(*workspace);
     targetsProductRuntime = controller == nullptr ? nullptr
         : new (std::nothrow) TargetsProductRuntime(
-              catalog, decisions, correlations, comparison, workspace,
+              catalog, decisions, merges, correlations, comparison, workspace,
               controller);
     if (targetsProductRuntime != nullptr) return true;
     delete controller;
@@ -4614,6 +4667,7 @@ bool finishTargetsProductAllocation(TargetCatalog* catalog,
     delete comparison;
     delete correlations;
     if (deleteStateOnFailure) {
+        delete merges;
         delete decisions;
         delete catalog;
     }
@@ -4627,30 +4681,52 @@ bool allocateTargetsProduct() {
         heap_caps_get_free_size(MALLOC_CAP_8BIT));
     auto* catalog = new (std::nothrow) TargetCatalog();
     auto* decisions = new (std::nothrow) CorrelationDecisionLog();
-    if (catalog == nullptr || decisions == nullptr) {
+    auto* merges = new (std::nothrow) TargetMergeHistory();
+    if (catalog == nullptr || decisions == nullptr || merges == nullptr) {
+        delete merges;
         delete decisions;
         delete catalog;
         targetsProductStatus = "workspace_unavailable";
         lastRuntimeEvent = targetsProductStatus;
         return false;
     }
-    return finishTargetsProductAllocation(catalog, decisions, true);
+    return finishTargetsProductAllocation(catalog, decisions, merges, true);
 }
 
 bool adoptTargetsProductState(TargetCatalog*& catalog,
-                              CorrelationDecisionLog*& decisions) {
-    if (catalog == nullptr || decisions == nullptr) return false;
-    targetsHeapFreeBefore = static_cast<std::uint32_t>(
-        heap_caps_get_free_size(MALLOC_CAP_8BIT));
-    if (!finishTargetsProductAllocation(catalog, decisions, false)) {
+                              CorrelationDecisionLog*& decisions,
+                              TargetMergeHistory*& merges) {
+    if (catalog == nullptr || decisions == nullptr || merges == nullptr) {
         return false;
     }
-    // The runtime destructor now owns both recovered fixed-capacity blocks.
+    targetsHeapFreeBefore = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    if (!finishTargetsProductAllocation(catalog, decisions, merges, false)) {
+        return false;
+    }
+    // The runtime destructor now owns all three recovered fixed-capacity
+    // state blocks.
     // Clearing the worker hand-off pointers prevents a second delete and,
     // more importantly, avoids allocating duplicate 11,272-byte state blocks
     // while the just-exited worker task stack still awaits idle-task cleanup.
     catalog = nullptr;
     decisions = nullptr;
+    merges = nullptr;
+    return true;
+}
+
+bool detachTargetsProductState(TargetCatalog*& catalog,
+                               CorrelationDecisionLog*& decisions,
+                               TargetMergeHistory*& merges) {
+    if (targetsProductRuntime == nullptr ||
+        !targetsProductRuntime->detachState(&catalog, &decisions, &merges)) {
+        return false;
+    }
+    delete targetsProductRuntime;
+    targetsProductRuntime = nullptr;
+    targetsHeapFreeAfter = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    targetsProductStatus = "not_loaded";
     return true;
 }
 
@@ -4678,6 +4754,11 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     targetsMutationState = TargetsMutationState::Idle;
     targetsMutationStatus = "idle";
     targetsMutationReport = {};
+    targetsMutationCorrelation = false;
+    targetsMutationMerge = false;
+    targetsMutationMergeKind = TargetMergeActionKind::Merge;
+    targetsMutationMergeOperationId = {};
+    targetsMutationMergeSourceId = {};
     targetsBlockedWriteAttempts = 0;
     targetsFilesystemMountError = 0;
     targetsFilesystemMountAttempts = 0;
@@ -4757,10 +4838,11 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     // while mounted; semantic decoding happens after unmount directly into the
     // one long-lived runtime catalog and decision log. After unmount the
     // product runtime is allocated as
-    // separate 11,272 B catalog, 11,272 B decision log, 7,736 B comparison,
-    // 2,704 B proposals and 4,240 B controller blocks, then the blob is decoded
-    // directly into that one long-lived copy. A monolithic workspace or
-    // overlapping transfer/runtime copies do not fit the board.
+    // separate 11,272 B catalog, 11,272 B decision log, 11,528 B merge
+    // history, 7,736 B comparison, 2,704 B proposals and 4,240 B controller
+    // blocks, then the blob is decoded directly into that one long-lived
+    // copy. A monolithic workspace or overlapping transfer/runtime copies do
+    // not fit the board.
     auto* targetStateWorkspace = static_cast<
         leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
     BoardSdFilesystem filesystem;
@@ -4858,7 +4940,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                     targetsProductStatus = "target_state_workspace_unavailable";
                 } else {
                     const auto recovered =
-                        leshy1::storage::recoverTargetDecisionStateWire(
+                        leshy1::storage::recoverTargetProductStateWire(
                             io, *targetStateWorkspace);
                     if (recovered.valid()) {
                         persistedStateBlobAvailable = true;
@@ -4896,13 +4978,14 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         const TargetCatalog* persistedForLoad = nullptr;
         const CorrelationDecisionLog* decisionsForLoad = nullptr;
         if (persistedStateBlobAvailable) {
-            const auto reopened = leshy1::storage::reopenTargetDecisionState(
+            const auto reopened = leshy1::storage::reopenTargetState(
                 targetStateWorkspace->manifest.data(),
                 targetStateWorkspace->manifestSize,
                 targetStateWorkspace->state.data(),
                 targetStateWorkspace->stateSize,
                 &targetsProductRuntime->workspace.catalog,
-                &targetsProductRuntime->workspace.decisions);
+                &targetsProductRuntime->workspace.decisions,
+                &targetsProductRuntime->merges);
             if (reopened != leshy1::storage::TargetCodecStatus::Valid) {
                 delete targetStateWorkspace;
                 delete targetsProductRuntime;
@@ -4938,12 +5021,13 @@ bool loadTargetsProduct(const AppMenuItem& item) {
 
 bool rebuildTargetsProductFromCatalog(TargetCatalog*& persisted,
                                       CorrelationDecisionLog*& decisions,
+                                      TargetMergeHistory*& merges,
                                       const TargetId& selectedId,
                                       bool openActions,
                                       bool usePersistedState = true) {
     const bool adopting = usePersistedState && persisted != nullptr &&
-        decisions != nullptr;
-    if (adopting ? !adoptTargetsProductState(persisted, decisions)
+        decisions != nullptr && merges != nullptr;
+    if (adopting ? !adoptTargetsProductState(persisted, decisions, merges)
                  : !allocateTargetsProduct()) {
         return false;
     }
@@ -4973,6 +5057,37 @@ bool rebuildTargetsProductFromCatalog(TargetCatalog*& persisted,
     return true;
 }
 
+const TargetMergeRecord* activeTargetMerge(
+    const TargetMergeHistory& history, const TargetId& targetId) {
+    for (std::size_t offset = 0; offset < history.size(); ++offset) {
+        const auto* record = history.get(history.size() - 1U - offset);
+        if (record != nullptr && !record->split &&
+            leshy1::domain::targets::targetIdEqual(
+                record->destinationBefore.id, targetId)) {
+            return record;
+        }
+    }
+    return nullptr;
+}
+
+TargetMergeId newTargetMergeOperationId() {
+    TargetMergeId id{};
+    esp_fill_random(id.bytes.data(), id.bytes.size());
+    // The all-zero identifier is invalid. This deterministic fallback remains
+    // unique for the current graph generation even if the entropy source were
+    // to return its one forbidden value.
+    if (!leshy1::domain::targets::targetMergeIdValid(id)) {
+        id.bytes[0] = 0x4c;
+        id.bytes[1] = 0x53;
+        id.bytes[2] = static_cast<std::uint8_t>(targetsStateGeneration >> 24U);
+        id.bytes[3] = static_cast<std::uint8_t>(targetsStateGeneration >> 16U);
+        id.bytes[4] = static_cast<std::uint8_t>(targetsStateGeneration >> 8U);
+        id.bytes[5] = static_cast<std::uint8_t>(targetsStateGeneration);
+        id.bytes.back() = 1;
+    }
+    return id;
+}
+
 void runTargetsMutationWorker(void*) {
     TargetsMutationEvent event;
     event.status = "store_failed";
@@ -4980,6 +5095,10 @@ void runTargetsMutationWorker(void*) {
     event.actionKind = targetsMutationKind;
     event.correlation = targetsMutationCorrelation;
     event.correlationKind = targetsMutationCorrelationKind;
+    event.merge = targetsMutationMerge;
+    event.mergeKind = targetsMutationMergeKind;
+    event.mergeOperationId = targetsMutationMergeOperationId;
+    event.mergeSourceId = targetsMutationMergeSourceId;
     event.name = targetsMutationText;
     event.nameLength = targetsMutationTextLength;
     event.targetId = targetsMutationTargetId;
@@ -4987,6 +5106,7 @@ void runTargetsMutationWorker(void*) {
         static_cast<std::uint64_t>(esp_timer_get_time());
     TargetCatalog* catalog = targetsMutationCatalog;
     CorrelationDecisionLog* decisions = targetsMutationDecisions;
+    TargetMergeHistory* merges = targetsMutationMerges;
     BoardSdFilesystem filesystem;
     bool identityCleanupComplete = true;
     bool filesystemAttempted = false;
@@ -5005,7 +5125,7 @@ void runTargetsMutationWorker(void*) {
             event.status = "deadline_unavailable";
             break;
         }
-        if (catalog == nullptr || decisions == nullptr ||
+        if (catalog == nullptr || decisions == nullptr || merges == nullptr ||
             targetsMutationEvents == nullptr) {
             event.status = "worker_invalid";
             break;
@@ -5157,7 +5277,27 @@ void runTargetsMutationWorker(void*) {
             break;
         }
 
-        if (event.correlation) {
+        if (event.merge) {
+            TargetMergeAction action{};
+            action.kind = event.mergeKind;
+            action.operationId = event.mergeOperationId;
+            action.destinationId = event.targetId;
+            action.sourceId = event.mergeSourceId;
+            const auto* destination = catalog->find(event.targetId);
+            const auto* source = catalog->find(event.mergeSourceId);
+            action.expectedDestinationRevision = destination == nullptr
+                ? 0U : destination->revision;
+            action.expectedSourceRevision = source == nullptr
+                ? 0U : source->revision;
+            TargetMergeService service(*catalog, *merges);
+            const auto applied = service.execute(action);
+            event.mergeStatus = applied.status;
+            if (!applied.applied()) {
+                event.status = leshy1::domain::targets::targetMergeStatusName(
+                    applied.status);
+                break;
+            }
+        } else if (event.correlation) {
             if (!targetsComparisonLoaded ||
                 targetsBaselineBinding.session == nullptr ||
                 targetsCurrentBinding.session == nullptr) {
@@ -5237,16 +5377,17 @@ void runTargetsMutationWorker(void*) {
                     targetsStateHead == leshy1::storage::RecoveryChoice::B
                 ? leshy1::storage::HeadSlot::A
                 : leshy1::storage::HeadSlot::B;
-        const auto committed = leshy1::storage::commitTargetDecisionState(
-            *io, *workspace, *catalog, *decisions, nextGeneration, nextHead);
+        const auto committed = leshy1::storage::commitTargetProductState(
+            *io, *workspace, *catalog, *decisions, *merges, nextGeneration,
+            nextHead);
         event.storeStatus = committed.status;
         event.commitStage = committed.stage;
         if (!supervisedCheckpoint()) {
             event.status = "safety_worker_deadline";
             break;
         }
-        const auto recovered = leshy1::storage::recoverTargetDecisionState(
-            *io, *workspace, catalog, decisions);
+        const auto recovered = leshy1::storage::recoverTargetProductState(
+            *io, *workspace, catalog, decisions, merges);
         if (!supervisedCheckpoint()) {
             event.status = "safety_worker_deadline";
             break;
@@ -5271,7 +5412,28 @@ void runTargetsMutationWorker(void*) {
             }
         }
         bool valueReopened = false;
-        if (event.correlation) {
+        if (event.merge) {
+            const auto* record = merges->find(event.mergeOperationId);
+            if (record != nullptr && event.mergeKind ==
+                                      TargetMergeActionKind::Merge) {
+                const auto* destination = catalog->find(
+                    record->destinationBefore.id);
+                const auto* source = catalog->find(record->sourceBefore.id);
+                valueReopened = !record->split && destination != nullptr &&
+                    source == nullptr;
+            } else if (record != nullptr && event.mergeKind ==
+                                             TargetMergeActionKind::Split) {
+                const auto* destination = catalog->find(
+                    record->destinationBefore.id);
+                const auto* source = catalog->find(record->sourceBefore.id);
+                valueReopened = record->split && destination != nullptr &&
+                    source != nullptr &&
+                    leshy1::domain::targets::targetRecordGraphEqual(
+                        *destination, record->destinationBefore) &&
+                    leshy1::domain::targets::targetRecordGraphEqual(
+                        *source, record->sourceBefore);
+            }
+        } else if (event.correlation) {
             const auto* decision = decisions->find(targetsMutationProposal);
             const auto* candidate = catalog->findByIdentity(
                 targetsMutationProposal.candidateIdentity);
@@ -5374,28 +5536,16 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
     if (targetsMutationEvents == nullptr ||
         targetsMutationTaskHandle != nullptr ||
         targetsMutationCatalog != nullptr ||
-        targetsMutationDecisions != nullptr) {
+        targetsMutationDecisions != nullptr ||
+        targetsMutationMerges != nullptr) {
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "worker_unavailable";
         lastRuntimeEvent = "targets_store_worker_unavailable";
         return true;
     }
-    targetsMutationCatalog = new (std::nothrow) TargetCatalog(
-        targetsProductRuntime->controller.catalog());
-    targetsMutationDecisions = new (std::nothrow) CorrelationDecisionLog(
-        targetsProductRuntime->controller.decisions());
-    if (targetsMutationCatalog == nullptr || targetsMutationDecisions == nullptr) {
-        delete targetsMutationCatalog;
-        delete targetsMutationDecisions;
-        targetsMutationCatalog = nullptr;
-        targetsMutationDecisions = nullptr;
-        targetsMutationState = TargetsMutationState::Failed;
-        targetsMutationStatus = "workspace_unavailable";
-        lastRuntimeEvent = "targets_store_workspace_unavailable";
-        return true;
-    }
     targetsMutationTargetId = selected->id;
     targetsMutationCorrelation = false;
+    targetsMutationMerge = false;
     targetsMutationProposal = {};
     targetsMutationKind = kind;
     targetsMutationFavorite = favorite;
@@ -5436,7 +5586,14 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
         targetsMutationTextLength = static_cast<std::uint16_t>(textLength);
     }
     targetsMutationReport = {};
-    releaseTargetsProduct();
+    if (!detachTargetsProductState(targetsMutationCatalog,
+                                   targetsMutationDecisions,
+                                   targetsMutationMerges)) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "workspace_unavailable";
+        lastRuntimeEvent = "targets_store_workspace_unavailable";
+        return true;
+    }
     targetsMutationState = TargetsMutationState::Saving;
     targetsMutationStatus = "saving";
     const bool started = xTaskCreatePinnedToCore(
@@ -5448,11 +5605,14 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
         targetsMutationTaskHandle = nullptr;
         rebuildTargetsProductFromCatalog(targetsMutationCatalog,
                                          targetsMutationDecisions,
+                                         targetsMutationMerges,
                                          targetsMutationTargetId, true);
         delete targetsMutationCatalog;
         delete targetsMutationDecisions;
         targetsMutationCatalog = nullptr;
         targetsMutationDecisions = nullptr;
+        delete targetsMutationMerges;
+        targetsMutationMerges = nullptr;
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "worker_unavailable";
         lastRuntimeEvent = "targets_store_worker_unavailable";
@@ -5486,34 +5646,29 @@ bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
     if (targetsMutationEvents == nullptr ||
         targetsMutationTaskHandle != nullptr ||
         targetsMutationCatalog != nullptr ||
-        targetsMutationDecisions != nullptr) {
+        targetsMutationDecisions != nullptr ||
+        targetsMutationMerges != nullptr) {
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "worker_unavailable";
         lastRuntimeEvent = "targets_store_worker_unavailable";
         return true;
     }
-    targetsMutationCatalog = new (std::nothrow) TargetCatalog(
-        targetsProductRuntime->controller.catalog());
-    targetsMutationDecisions = new (std::nothrow) CorrelationDecisionLog(
-        targetsProductRuntime->controller.decisions());
-    if (targetsMutationCatalog == nullptr || targetsMutationDecisions == nullptr) {
-        delete targetsMutationCatalog;
-        delete targetsMutationDecisions;
-        targetsMutationCatalog = nullptr;
-        targetsMutationDecisions = nullptr;
-        targetsMutationState = TargetsMutationState::Failed;
-        targetsMutationStatus = "workspace_unavailable";
-        lastRuntimeEvent = "targets_store_workspace_unavailable";
-        return true;
-    }
     targetsMutationCorrelation = true;
+    targetsMutationMerge = false;
     targetsMutationCorrelationKind = kind;
     targetsMutationProposal = *proposal;
     targetsMutationTargetId = proposal->targetId;
     targetsMutationText.fill('\0');
     targetsMutationTextLength = 0;
     targetsMutationReport = {};
-    releaseTargetsProduct();
+    if (!detachTargetsProductState(targetsMutationCatalog,
+                                   targetsMutationDecisions,
+                                   targetsMutationMerges)) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "workspace_unavailable";
+        lastRuntimeEvent = "targets_store_workspace_unavailable";
+        return true;
+    }
     targetsMutationState = TargetsMutationState::Saving;
     targetsMutationStatus = "saving";
     const bool started = xTaskCreatePinnedToCore(
@@ -5525,17 +5680,105 @@ bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
         targetsMutationTaskHandle = nullptr;
         rebuildTargetsProductFromCatalog(
             targetsMutationCatalog, targetsMutationDecisions,
+            targetsMutationMerges,
             targetsMutationTargetId, true);
         delete targetsMutationCatalog;
         delete targetsMutationDecisions;
         targetsMutationCatalog = nullptr;
         targetsMutationDecisions = nullptr;
+        delete targetsMutationMerges;
+        targetsMutationMerges = nullptr;
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "worker_unavailable";
         lastRuntimeEvent = "targets_store_worker_unavailable";
     } else {
         targetsProductStatus = "saving";
         lastRuntimeEvent = "targets_correlation_saving";
+    }
+    return true;
+}
+
+bool requestTargetsMergeMutation() {
+    const std::uint64_t actionStartedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (targetsProductRuntime == nullptr ||
+        (targetsProductRuntime->controller.view() != TargetsView::MergeConfirm &&
+         targetsProductRuntime->controller.view() != TargetsView::SplitConfirm) ||
+        targetsMutationState == TargetsMutationState::Saving) {
+        return false;
+    }
+    TargetsController& controller = targetsProductRuntime->controller;
+    const auto* destination = controller.selectedTarget();
+    if (destination == nullptr) return false;
+    const bool split = controller.view() == TargetsView::SplitConfirm;
+    const auto* active = activeTargetMerge(targetsProductRuntime->merges,
+                                           destination->id);
+    const auto* candidate = split ? nullptr : controller.selectedMergeCandidate();
+    if ((split && active == nullptr) || (!split && candidate == nullptr)) {
+        return false;
+    }
+    if (powerSafetyPolicy.writeDisposition() ==
+        PowerWriteDisposition::ProhibitedLowVoltage) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "power_unsafe";
+        lastRuntimeEvent = "targets_store_power_unsafe";
+        return true;
+    }
+    if (targetsMutationEvents == nullptr ||
+        targetsMutationTaskHandle != nullptr ||
+        targetsMutationCatalog != nullptr ||
+        targetsMutationDecisions != nullptr ||
+        targetsMutationMerges != nullptr) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "worker_unavailable";
+        lastRuntimeEvent = "targets_store_worker_unavailable";
+        return true;
+    }
+    targetsMutationTargetId = destination->id;
+    targetsMutationMergeSourceId = split
+        ? active->sourceBefore.id : candidate->targetId;
+    targetsMutationMergeOperationId = split
+        ? active->id : newTargetMergeOperationId();
+    targetsMutationMergeKind = split ? TargetMergeActionKind::Split
+                                     : TargetMergeActionKind::Merge;
+    targetsMutationMerge = true;
+    targetsMutationCorrelation = false;
+    targetsMutationText.fill('\0');
+    targetsMutationTextLength = 0;
+    targetsMutationReport = {};
+    if (!detachTargetsProductState(targetsMutationCatalog,
+                                   targetsMutationDecisions,
+                                   targetsMutationMerges)) {
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "workspace_unavailable";
+        lastRuntimeEvent = "targets_store_workspace_unavailable";
+        return true;
+    }
+    targetsMutationState = TargetsMutationState::Saving;
+    targetsMutationStatus = "saving";
+    const bool started = xTaskCreatePinnedToCore(
+        runTargetsMutationWorker, "leshy-targets-store", 8192, nullptr, 1,
+        &targetsMutationTaskHandle, 0) == pdPASS;
+    targetsMutationStartActionUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) - actionStartedUs;
+    if (!started) {
+        targetsMutationTaskHandle = nullptr;
+        rebuildTargetsProductFromCatalog(
+            targetsMutationCatalog, targetsMutationDecisions,
+            targetsMutationMerges, targetsMutationTargetId, true);
+        delete targetsMutationCatalog;
+        delete targetsMutationDecisions;
+        delete targetsMutationMerges;
+        targetsMutationCatalog = nullptr;
+        targetsMutationDecisions = nullptr;
+        targetsMutationMerges = nullptr;
+        targetsMutationState = TargetsMutationState::Failed;
+        targetsMutationStatus = "worker_unavailable";
+        lastRuntimeEvent = "targets_store_worker_unavailable";
+    } else {
+        targetsProductStatus = "saving";
+        lastRuntimeEvent = split ? "targets_split_saving"
+                                 : "targets_merge_saving";
     }
     return true;
 }
@@ -5608,9 +5851,15 @@ void serviceTargetsMutationWorker() {
     targetsMutationTaskHandle = nullptr;
     targetsMutationReport = event;
     const bool rebuilt = rebuildTargetsProductFromCatalog(
-        targetsMutationCatalog, targetsMutationDecisions,
+        targetsMutationCatalog, targetsMutationDecisions, targetsMutationMerges,
         event.targetId, true, event.catalogRecovered);
-    if (rebuilt && event.correlation && targetsProductRuntime != nullptr) {
+    if (rebuilt && event.merge && targetsProductRuntime != nullptr) {
+        for (std::size_t index = 0;
+             index < TargetsController::kActionCount - 1U; ++index) {
+            targetsProductRuntime->controller.next();
+        }
+    } else if (rebuilt && event.correlation &&
+               targetsProductRuntime != nullptr) {
         for (std::size_t index = 0; index < 4; ++index) {
             targetsProductRuntime->controller.next();
         }
@@ -5635,6 +5884,8 @@ void serviceTargetsMutationWorker() {
     delete targetsMutationDecisions;
     targetsMutationCatalog = nullptr;
     targetsMutationDecisions = nullptr;
+    delete targetsMutationMerges;
+    targetsMutationMerges = nullptr;
     if (event.catalogRecovered) {
         targetsStateGeneration = event.generation;
         targetsStateHead = event.head;
@@ -7876,6 +8127,17 @@ NavigationFooter navigationFooterForCurrentState() {
         if (targetsProductRuntime->controller.view() ==
             TargetsView::CorrelationEvidence) {
             return {{NavigationKey::Left, UiTextId::NavBack}, {}, {}};
+        }
+        if (targetsProductRuntime->controller.view() == TargetsView::MergeList) {
+            return {{NavigationKey::Left, UiTextId::NavActions}, choose,
+                    {NavigationKey::RightAndSelect, UiTextId::NavEnter}};
+        }
+        if (targetsProductRuntime->controller.view() ==
+                TargetsView::MergeConfirm ||
+            targetsProductRuntime->controller.view() ==
+                TargetsView::SplitConfirm) {
+            return {{NavigationKey::Left, UiTextId::NavBack}, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavApply}};
         }
         if (targetsProductRuntime->controller.view() == TargetsView::NameEdit) {
             const std::size_t selection =
@@ -11804,6 +12066,17 @@ void formatTargetName(const TargetListRow& row, char* output,
     formatTargetIdentity(row.identity, output, capacity);
 }
 
+void formatTargetRecordName(const TargetRecord& record, char* output,
+                            std::size_t capacity) {
+    if (output == nullptr || capacity == 0) return;
+    output[0] = '\0';
+    if (record.nameLength != 0) {
+        std::snprintf(output, capacity, "%s", record.name.data());
+    } else if (record.identityCount != 0) {
+        formatTargetIdentity(record.identities[0], output, capacity);
+    }
+}
+
 void fitTargetRowText(char* text, std::size_t capacity, UiTextRole role) {
     if (text == nullptr || capacity < 4) return;
     constexpr std::int16_t kRightInset = 6;
@@ -12401,6 +12674,101 @@ void renderTargetsPage(bool clearContent) {
         }
         return;
     }
+    if (controller.view() == TargetsView::MergeList) {
+        renderHeader(tr(UiTextId::TargetsMergeList), clearContent);
+        const std::size_t count = controller.mergeCandidateCount();
+        const std::size_t first = targetsFirstVisible(
+            controller.mergeSelection());
+        const std::size_t end = count < first + kVisibleTargetRows
+            ? count : first + kVisibleTargetRows;
+        for (std::size_t index = first; index < end; ++index) {
+            const auto* row = controller.mergeCandidate(index);
+            if (row == nullptr) continue;
+            char name[TargetRecord::kNameCapacity + 1] = {};
+            char note[48] = {};
+            formatTargetName(*row, name, sizeof(name));
+            const auto* target = controller.catalog().find(row->targetId);
+            std::snprintf(note, sizeof(note),
+                          tr(UiTextId::TargetsEvidenceFormat),
+                          static_cast<unsigned>(target == nullptr
+                                                    ? 0U
+                                                    : target->evidenceCount));
+            renderMenuRow(Components::homeRow(index - first), name, note,
+                          controller.mergeSelection() == index, true,
+                          Tone::Neutral);
+        }
+        return;
+    }
+    if (controller.view() == TargetsView::MergeConfirm) {
+        renderHeader(tr(UiTextId::TargetsMergeConfirm), clearContent);
+        const auto* destination = controller.selectedTarget();
+        const auto* sourceRow = controller.selectedMergeCandidate();
+        const auto* source = sourceRow == nullptr ? nullptr
+            : controller.catalog().find(sourceRow->targetId);
+        if (destination == nullptr || source == nullptr || sourceRow == nullptr) {
+            renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+            return;
+        }
+        char destinationName[TargetRecord::kNameCapacity + 1] = {};
+        char sourceName[TargetRecord::kNameCapacity + 1] = {};
+        const auto* destinationRow = controller.selectedRow();
+        if (destinationRow != nullptr) {
+            formatTargetName(*destinationRow, destinationName,
+                             sizeof(destinationName));
+        }
+        formatTargetName(*sourceRow, sourceName, sizeof(sourceName));
+        renderMenuRow(Components::homeRow(0),
+                      tr(UiTextId::TargetsMergeDestination), destinationName,
+                      false, true, Tone::Positive);
+        renderMenuRow(Components::homeRow(1),
+                      tr(UiTextId::TargetsMergeSource), sourceName,
+                      false, true, Tone::Warning);
+        char preview[80] = {};
+        std::snprintf(preview, sizeof(preview),
+                      tr(UiTextId::TargetsMergePreviewFormat),
+                      static_cast<unsigned>(destination->evidenceCount),
+                      static_cast<unsigned>(source->evidenceCount));
+        renderMenuRow(Components::homeRow(2), preview, "", false, true,
+                      Tone::Neutral);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::TargetsMergeConfirmAction), "", true, true,
+                      Tone::Positive);
+        return;
+    }
+    if (controller.view() == TargetsView::SplitConfirm) {
+        renderHeader(tr(UiTextId::TargetsSplitConfirm), clearContent);
+        const auto* destination = controller.selectedTarget();
+        const auto* record = destination == nullptr ? nullptr
+            : activeTargetMerge(targetsProductRuntime->merges,
+                                destination->id);
+        if (record == nullptr) {
+            renderMetric(0, tr(UiTextId::TargetsLoadFailed), Tone::Danger);
+            return;
+        }
+        char destinationName[TargetRecord::kNameCapacity + 1] = {};
+        char sourceName[TargetRecord::kNameCapacity + 1] = {};
+        formatTargetRecordName(record->destinationBefore, destinationName,
+                               sizeof(destinationName));
+        formatTargetRecordName(record->sourceBefore, sourceName,
+                               sizeof(sourceName));
+        renderMenuRow(Components::homeRow(0),
+                      tr(UiTextId::TargetsMergeDestination), destinationName,
+                      false, true, Tone::Neutral);
+        renderMenuRow(Components::homeRow(1),
+                      tr(UiTextId::TargetsMergeSource), sourceName,
+                      false, true, Tone::Positive);
+        char preview[64] = {};
+        std::snprintf(preview, sizeof(preview),
+                      tr(UiTextId::TargetsSplitPreviewFormat),
+                      static_cast<unsigned>(record->destinationBefore.evidenceCount),
+                      static_cast<unsigned>(record->sourceBefore.evidenceCount));
+        renderMenuRow(Components::homeRow(2), preview, "", false, true,
+                      Tone::Neutral);
+        renderMenuRow(Components::homeRow(3),
+                      tr(UiTextId::TargetsSplitConfirmAction), "", true, true,
+                      Tone::Warning);
+        return;
+    }
     if (controller.view() == TargetsView::Actions) {
         renderHeader(tr(UiTextId::TargetsActions), clearContent);
         const auto* target = controller.selectedTarget();
@@ -12464,7 +12832,7 @@ void renderTargetsPage(bool clearContent) {
                         tone = Tone::Muted;
                     }
                     break;
-                default: {
+                case 4: {
                     label = tr(UiTextId::TargetsCorrelations);
                     const std::size_t count =
                         controller.selectedCorrelationCount();
@@ -12474,6 +12842,30 @@ void renderTargetsPage(bool clearContent) {
                         static_cast<unsigned>(count));
                     enabled = count != 0;
                     tone = enabled ? Tone::Positive : Tone::Muted;
+                    break;
+                }
+                default: {
+                    const bool split = activeTargetMerge(
+                        targetsProductRuntime->merges, target->id) != nullptr;
+                    const bool historyAvailable =
+                        targetsProductRuntime->merges.size() <
+                            TargetMergeHistory::kCapacity;
+                    const std::size_t candidates =
+                        controller.mergeCandidateCount();
+                    label = tr(split ? UiTextId::TargetsSplitAction
+                                     : UiTextId::TargetsMergeAction);
+                    if (split) {
+                        std::snprintf(note, sizeof(note), "%s",
+                                      tr(UiTextId::TargetsSplitAvailable));
+                    } else {
+                        std::snprintf(
+                            note, sizeof(note),
+                            tr(UiTextId::TargetsMergeAvailableFormat),
+                            static_cast<unsigned>(candidates));
+                    }
+                    enabled = split || (historyAvailable && candidates != 0);
+                    tone = split ? Tone::Warning
+                                 : enabled ? Tone::Positive : Tone::Muted;
                     break;
                 }
             }
@@ -15568,6 +15960,12 @@ void emitTargetsState(Stream& reply) {
                     ? "correlation_review"
               : controller->view() == TargetsView::CorrelationEvidence
                     ? "correlation_evidence"
+              : controller->view() == TargetsView::MergeList
+                    ? "merge_list"
+              : controller->view() == TargetsView::MergeConfirm
+                    ? "merge_confirm"
+              : controller->view() == TargetsView::SplitConfirm
+                    ? "split_confirm"
               : controller->view() == TargetsView::Compare
                     ? "compare"
                     : controller->view() == TargetsView::CompareDetail
@@ -15595,6 +15993,49 @@ void emitTargetsState(Stream& reply) {
                           static_cast<unsigned>(
                               static_cast<unsigned char>(input[index])));
         }
+    };
+    const auto encodeBytesHex = [](const std::uint8_t* input,
+                                   std::size_t length, char* output,
+                                   std::size_t capacity) {
+        if (output == nullptr || capacity == 0) return;
+        output[0] = '\0';
+        if (input == nullptr || capacity < length * 2U + 1U) return;
+        for (std::size_t index = 0; index < length; ++index) {
+            std::snprintf(output + index * 2U, 3, "%02X",
+                          static_cast<unsigned>(input[index]));
+        }
+    };
+    const auto targetGraphFingerprint = [](const TargetRecord* record) {
+        std::uint64_t hash = 1469598103934665603ULL;
+        const auto byte = [&hash](std::uint8_t value) {
+            hash ^= value;
+            hash *= 1099511628211ULL;
+        };
+        const auto little = [&byte](std::uint64_t value,
+                                    std::size_t width) {
+            for (std::size_t index = 0; index < width; ++index) {
+                byte(static_cast<std::uint8_t>(value >> (index * 8U)));
+            }
+        };
+        if (record == nullptr) return std::uint64_t{0};
+        for (const std::uint8_t value : record->id.bytes) byte(value);
+        byte(record->identityCount);
+        for (std::size_t index = 0; index < record->identityCount; ++index) {
+            const auto& identity = record->identities[index];
+            byte(static_cast<std::uint8_t>(identity.kind));
+            byte(identity.length);
+            byte(identity.discriminator);
+            for (const std::uint8_t value : identity.value) byte(value);
+        }
+        byte(record->evidenceCount);
+        for (std::size_t index = 0; index < record->evidenceCount; ++index) {
+            const auto& evidence = record->evidence[index];
+            for (const std::uint8_t value : evidence.sourceId.bytes) byte(value);
+            little(evidence.sourceGeneration, 4);
+            little(evidence.observationSequence, 8);
+            little(evidence.observedMonotonicUs, 8);
+        }
+        return hash;
     };
     char selectedNameHex[TargetRecord::kNameCapacity * 2U + 1U] = {};
     if (selectedTarget != nullptr) {
@@ -15677,6 +16118,42 @@ void emitTargetsState(Stream& reply) {
                                   .value[index]));
         }
     }
+    const TargetMergeRecord* activeMerge = selectedTarget == nullptr ||
+            targetsProductRuntime == nullptr
+        ? nullptr : activeTargetMerge(targetsProductRuntime->merges,
+                                      selectedTarget->id);
+    const TargetListRow* mergeCandidateRow = controller == nullptr
+        ? nullptr : controller->selectedMergeCandidate();
+    const TargetRecord* mergeCandidateTarget = mergeCandidateRow == nullptr ||
+            controller == nullptr
+        ? nullptr : controller->catalog().find(mergeCandidateRow->targetId);
+    char activeMergeOperationId[TargetMergeId::kSize * 2U + 1U] = {};
+    if (activeMerge != nullptr) {
+        encodeBytesHex(activeMerge->id.bytes.data(), activeMerge->id.bytes.size(),
+                       activeMergeOperationId,
+                       sizeof(activeMergeOperationId));
+    }
+    char mergeCandidateTargetId[TargetId::kSize * 2U + 1U] = {};
+    if (mergeCandidateTarget != nullptr) {
+        encodeBytesHex(mergeCandidateTarget->id.bytes.data(),
+                       mergeCandidateTarget->id.bytes.size(),
+                       mergeCandidateTargetId,
+                       sizeof(mergeCandidateTargetId));
+    }
+    char mutationMergeOperationId[TargetMergeId::kSize * 2U + 1U] = {};
+    char mutationMergeSourceId[TargetId::kSize * 2U + 1U] = {};
+    encodeBytesHex(targetsMutationReport.mergeOperationId.bytes.data(),
+                   targetsMutationReport.mergeOperationId.bytes.size(),
+                   mutationMergeOperationId,
+                   sizeof(mutationMergeOperationId));
+    encodeBytesHex(targetsMutationReport.mergeSourceId.bytes.data(),
+                   targetsMutationReport.mergeSourceId.bytes.size(),
+                   mutationMergeSourceId, sizeof(mutationMergeSourceId));
+    char selectedGraphFingerprint[17] = {};
+    std::snprintf(selectedGraphFingerprint,
+                  sizeof(selectedGraphFingerprint), "%016llX",
+                  static_cast<unsigned long long>(
+                      targetGraphFingerprint(selectedTarget)));
     const auto correlationConfidenceName = [](const CorrelationProposal* value) {
         if (value == nullptr) return "none";
         using leshy1::domain::targets::CorrelationConfidence;
@@ -15744,6 +16221,16 @@ void emitTargetsState(Stream& reply) {
         "\"selected_tag_count\":%u,\"tag_selection\":%u,"
         "\"selected_tag_length\":%u,\"selected_tag_hex\":\"%s\","
         "\"selected_revision\":%lu,"
+        "\"selected_identity_count\":%u,\"selected_evidence_count\":%u,"
+        "\"selected_graph_fingerprint\":\"%s\","
+        "\"merge_candidate_count\":%u,\"merge_selection\":%u,"
+        "\"merge_candidate_target_id\":\"%s\","
+        "\"merge_candidate_identity_count\":%u,"
+        "\"merge_candidate_evidence_count\":%u,"
+        "\"merge_candidate_graph_fingerprint\":\"%016llX\","
+        "\"merge_history_count\":%u,\"merge_history_capacity\":%u,"
+        "\"active_merge_available\":%s,"
+        "\"active_merge_operation_id\":\"%s\","
         "\"action_selection\":%u,\"name_editor_selection\":%u,"
         "\"name_editor_length\":%u,\"name_editor_hex\":\"%s\","
         "\"name_editor_glyph\":%u,\"name_editor_dirty\":%s,"
@@ -15789,6 +16276,10 @@ void emitTargetsState(Stream& reply) {
         "\"mutation_correlation\":%s,"
         "\"mutation_correlation_kind\":\"%s\","
         "\"mutation_correlation_status\":\"%s\","
+        "\"mutation_merge\":%s,\"mutation_merge_kind\":\"%s\","
+        "\"mutation_merge_status\":\"%s\","
+        "\"mutation_merge_operation_id\":\"%s\","
+        "\"mutation_merge_source_id\":\"%s\","
         "\"mutation_persisted\":%s,\"mutation_generation\":%lu,"
         "\"mutation_action_us\":%llu,\"mutation_elapsed_us\":%llu,"
         "\"mutation_bytes_written\":%llu,\"mutation_write_calls\":%lu,"
@@ -15903,6 +16394,27 @@ void emitTargetsState(Stream& reply) {
         selectedTagHex,
         static_cast<unsigned long>(selectedTarget == nullptr
                                        ? 0 : selectedTarget->revision),
+        static_cast<unsigned>(selectedTarget == nullptr
+                                  ? 0 : selectedTarget->identityCount),
+        static_cast<unsigned>(selectedTarget == nullptr
+                                  ? 0 : selectedTarget->evidenceCount),
+        selectedGraphFingerprint,
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->mergeCandidateCount()),
+        static_cast<unsigned>(controller == nullptr
+                                  ? 0 : controller->mergeSelection()),
+        mergeCandidateTargetId,
+        static_cast<unsigned>(mergeCandidateTarget == nullptr
+                                  ? 0 : mergeCandidateTarget->identityCount),
+        static_cast<unsigned>(mergeCandidateTarget == nullptr
+                                  ? 0 : mergeCandidateTarget->evidenceCount),
+        static_cast<unsigned long long>(
+            targetGraphFingerprint(mergeCandidateTarget)),
+        static_cast<unsigned>(targetsProductRuntime == nullptr
+                                  ? 0 : targetsProductRuntime->merges.size()),
+        static_cast<unsigned>(TargetMergeHistory::kCapacity),
+        activeMerge == nullptr ? "false" : "true",
+        activeMergeOperationId,
         static_cast<unsigned>(controller == nullptr
                                   ? 0 : controller->actionSelection()),
         static_cast<unsigned>(controller == nullptr
@@ -16016,7 +16528,9 @@ void emitTargetsState(Stream& reply) {
                  (controller->view() == TargetsView::NotesEdit &&
                   controller->notesEditorDirty()) ||
                  (controller->view() == TargetsView::CorrelationReview &&
-                  controller->correlationReviewSelection() >= 2)) &&
+                  controller->correlationReviewSelection() >= 2) ||
+                 controller->view() == TargetsView::MergeConfirm ||
+                 controller->view() == TargetsView::SplitConfirm) &&
                 targetsMutationState != TargetsMutationState::Saving
             ? "true" : "false",
         static_cast<unsigned long>(targetsStateGeneration), stateHead,
@@ -16027,6 +16541,13 @@ void emitTargetsState(Stream& reply) {
             ? "accept" : "reject",
         leshy1::services::targets::correlationDecisionStatusName(
             targetsMutationReport.correlationStatus),
+        targetsMutationReport.merge ? "true" : "false",
+        targetsMutationReport.mergeKind == TargetMergeActionKind::Merge
+            ? "merge" : "split",
+        leshy1::domain::targets::targetMergeStatusName(
+            targetsMutationReport.mergeStatus),
+        mutationMergeOperationId,
+        mutationMergeSourceId,
         targetsMutationReport.persisted ? "true" : "false",
         static_cast<unsigned long>(targetsMutationReport.generation),
         static_cast<unsigned long long>(targetsMutationStartActionUs),
@@ -17495,6 +18016,9 @@ bool applyUiAction(UiAction action, bool render = true) {
              controller.view() == TargetsView::CorrelationList ||
              controller.view() == TargetsView::CorrelationReview ||
              controller.view() == TargetsView::CorrelationEvidence ||
+             controller.view() == TargetsView::MergeList ||
+             controller.view() == TargetsView::MergeConfirm ||
+             controller.view() == TargetsView::SplitConfirm ||
              controller.view() == TargetsView::CompareDetail) &&
             (action == UiAction::Back || action == UiAction::Left)) {
             handled = true;
@@ -17531,7 +18055,35 @@ bool applyUiAction(UiAction action, bool render = true) {
                 case TargetActionItem::Correlations:
                     changed = controller.openCorrelationList();
                     break;
+                case TargetActionItem::MergeSplit: {
+                    const auto* selected = controller.selectedTarget();
+                    const bool split = selected != nullptr &&
+                        activeTargetMerge(targetsProductRuntime->merges,
+                                          selected->id) != nullptr;
+                    changed = selected != nullptr &&
+                        (split || targetsProductRuntime->merges.size() <
+                                      TargetMergeHistory::kCapacity) &&
+                        controller.openMerge(split);
+                    break;
+                }
             }
+        } else if (controller.view() == TargetsView::MergeList &&
+                   action == UiAction::Up) {
+            handled = true;
+            changed = controller.previous();
+        } else if (controller.view() == TargetsView::MergeList &&
+                   action == UiAction::Down) {
+            handled = true;
+            changed = controller.next();
+        } else if (controller.view() == TargetsView::MergeList &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            changed = controller.openSelected();
+        } else if ((controller.view() == TargetsView::MergeConfirm ||
+                    controller.view() == TargetsView::SplitConfirm) &&
+                   (action == UiAction::Select || action == UiAction::Right)) {
+            handled = true;
+            changed = requestTargetsMergeMutation();
         } else if (controller.view() == TargetsView::NameEdit &&
                    action == UiAction::Up) {
             handled = true;
@@ -18190,6 +18742,27 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                         TargetsController::kActionCount)),
                 static_cast<std::uint8_t>(
                     targetsProductRuntime->controller.actionSelection())};
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        targetsProductRuntime->controller.view() == TargetsView::MergeList) {
+        const TargetsController& controller =
+            targetsProductRuntime->controller;
+        const std::size_t first = targetsFirstVisible(
+            controller.mergeSelection());
+        return {leshy1::ui::hitTouchTarget(
+                    TouchTargetLayout::HomeRows, point,
+                    static_cast<std::uint8_t>(first),
+                    static_cast<std::uint8_t>(
+                        controller.mergeCandidateCount())),
+                static_cast<std::uint8_t>(controller.mergeSelection())};
+    }
+    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
+        (targetsProductRuntime->controller.view() == TargetsView::MergeConfirm ||
+         targetsProductRuntime->controller.view() == TargetsView::SplitConfirm)) {
+        return leshy1::ui::visual::containsPoint(
+                   Components::homeRow(3), point.x, point.y)
+            ? TouchDispatchTarget{{true, 3}, 3}
+            : TouchDispatchTarget{};
     }
     if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
         targetsProductRuntime->controller.view() ==

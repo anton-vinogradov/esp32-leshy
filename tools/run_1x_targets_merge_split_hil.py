@@ -1,0 +1,518 @@
+#!/usr/bin/env python3
+"""One-flash delta HIL for reversible on-device Target merge/split."""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import time
+from pathlib import Path
+from typing import Any, Callable
+
+from capture_1x_ui import PassiveSerial, synchronize_console
+from check_targets_stack_elf_contract import stack_frames
+from esp_app_identity import app_elf_sha256
+from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
+from run_1x_product_survey_hil import (
+    action,
+    artifact_manifest,
+    best_effort_cleanup,
+    capture,
+    query,
+    reset_capture,
+)
+from run_1x_ui_typography_hil import normalize_home
+
+
+SCHEMA = "leshy.targets_merge_split_hil.run.v1"
+EXPECTED_CID = "FE343253440000002000000055019CB7"
+
+
+def require(state: dict[str, Any], label: str, **expected: Any) -> None:
+    actual = {key: state.get(key) for key in expected}
+    if actual != expected:
+        raise RuntimeError(f"{label}: expected={expected}, actual={actual}")
+
+
+def valid_hex(value: Any, width: int) -> bool:
+    return (isinstance(value, str) and len(value) == width and
+            all(character in "0123456789ABCDEF" for character in value))
+
+
+def open_targets(device: Any) -> dict[str, Any]:
+    home = normalize_home(device)
+    for _ in range(5):
+        home = action(device, "down")
+    require(home, "select Targets", page="home", selection=5,
+            selected_id="targets")
+    opened = action(device, "right")
+    require(opened, "open Targets", page="targets",
+            runtime_owner="targets", lease_mask=13)
+    listed = query(device, b"targets.state",
+                   "leshy.targets.product.v1", "state")
+    require(listed, "Targets list", status="ready", page_open=True,
+            workspace_allocated=True, view="list", compare_available=True,
+            read_only=False, write_enabled=False,
+            blocked_write_attempts=0, filesystem_mount_error=0,
+            cleanup_complete=True, lease_mask=13)
+    if int(listed.get("target_count", 0)) < 2:
+        raise RuntimeError(f"fewer than two Targets are available: {listed}")
+    return listed
+
+
+def find_target(
+    device: Any,
+    predicate: Callable[[dict[str, Any]], bool],
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    listed = open_targets(device)
+    count = int(listed["target_count"])
+    searched: list[dict[str, Any]] = []
+    action(device, "down")  # comparison is row 0; the first Target is row 1
+    for index in range(count):
+        action(device, "right")
+        detail = query(device, b"targets.state",
+                       "leshy.targets.product.v1", "state")
+        require(detail, f"Target detail {index}", status="ready",
+                view="detail", selected_target_present=True, lease_mask=13)
+        target_id = detail.get("selected_target_id")
+        graph = detail.get("selected_graph_fingerprint")
+        if not valid_hex(target_id, 32) or not valid_hex(graph, 16):
+            raise RuntimeError(f"invalid Target identity/graph: {detail}")
+        searched.append({
+            "target_id": target_id,
+            "graph_fingerprint": graph,
+            "identity_count": int(detail["selected_identity_count"]),
+            "evidence_count": int(detail["selected_evidence_count"]),
+            "merge_candidate_count": int(detail["merge_candidate_count"]),
+            "active_merge_available": bool(
+                detail["active_merge_available"]),
+        })
+        if predicate(detail):
+            return listed, detail, searched
+        action(device, "left")
+        if index + 1 < count:
+            action(device, "down")
+    normalize_home(device)
+    raise RuntimeError(f"requested Target not found: {searched}")
+
+
+def find_target_id(device: Any, target_id: str) -> tuple[
+        dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    return find_target(
+        device, lambda state: state.get("selected_target_id") == target_id)
+
+
+def close_targets(device: Any) -> dict[str, Any]:
+    home = normalize_home(device)
+    require(home, "Targets cleanup", page="home",
+            runtime_owner="none", lease_mask=0)
+    return query(device, b"targets.state",
+                 "leshy.targets.product.v1", "state")
+
+
+def wait_mutation(device: Any, timeout: float = 20.0) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    last: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        last = query(device, b"targets.state",
+                     "leshy.targets.product.v1", "state")
+        if last.get("mutation_state") in ("saved", "failed"):
+            return last
+        time.sleep(0.05)
+    raise TimeoutError(f"Target mutation did not finish: {last}")
+
+
+def require_atomic_save(state: dict[str, Any], label: str) -> None:
+    attempts = int(state.get("mutation_identity_attempts", 0))
+    retries = int(state.get("mutation_identity_transient_retries", -1))
+    if not 1 <= attempts <= 8 or retries != attempts - 1:
+        raise RuntimeError(f"{label}: invalid bounded identity retries: {state}")
+    if (int(state.get("mutation_action_us", 0)) <= 0 or
+            int(state.get("mutation_action_us", 0)) > 10000 or
+            int(state.get("mutation_elapsed_us", 0)) <= 0 or
+            int(state.get("mutation_elapsed_us", 0)) > 8000000 or
+            int(state.get("mutation_bytes_written", 0)) <= 0 or
+            int(state.get("mutation_write_calls", 0)) < 3 or
+            int(state.get("mutation_file_syncs", 0)) < 3 or
+            int(state.get("mutation_directory_syncs", 0)) < 3):
+        raise RuntimeError(f"{label}: incomplete atomic save: {state}")
+
+
+def enter_merge_action(device: Any, target_id: str) -> dict[str, Any]:
+    action(device, "right")
+    for _ in range(5):
+        action(device, "down")
+    state = query(device, b"targets.state",
+                  "leshy.targets.product.v1", "state")
+    require(state, "Target merge/split action", status="ready",
+            view="actions", selected_target_id=target_id,
+            action_selection=5, lease_mask=13)
+    return state
+
+
+def cold_reopen(
+    port: str,
+    output: Path,
+    name: str,
+    expected_version: str,
+    app_identity: str,
+) -> tuple[PassiveSerial, dict[str, Any]]:
+    ready, _, timing = reset_capture(port, output, name, 20.0)
+    require(ready, f"{name} candidate", version=expected_version,
+            app_elf_sha256=app_identity)
+    device = PassiveSerial(port, 115200, timeout=0.25)
+    synchronize_console(device, 20.0)
+    recovery = query(
+        device, b"storage.product.boot-recovery",
+        "leshy.storage.product_boot_recovery.v1", "state")
+    require(recovery, f"{name} exact media", status="admitted",
+            expected_fingerprint=EXPECTED_CID,
+            observed_fingerprint=EXPECTED_CID,
+            fingerprint_matched=True, mounted_read_only=True,
+            read_only_guaranteed=True, blocked_write_attempts=0,
+            cleanup_complete=True, physical_write_calls=0)
+    return device, {"timing": timing, "recovery": recovery}
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", required=True)
+    parser.add_argument("--firmware", required=True, type=Path)
+    parser.add_argument("--elf", required=True, type=Path)
+    parser.add_argument("--map", required=True, type=Path)
+    parser.add_argument("--expected-version", required=True)
+    parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--flash-baud", type=int, default=460800)
+    args = parser.parse_args()
+    for path in (args.firmware, args.elf, args.map):
+        if not path.is_file():
+            parser.error(f"candidate artifact missing: {path}")
+    if args.output.exists():
+        parser.error("output must not exist")
+    if len(args.source_commit) != 40:
+        parser.error("source commit must be full length")
+    root = Path(__file__).resolve().parents[1]
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=root, check=True,
+        stdout=subprocess.PIPE, text=True,
+    ).stdout.strip()
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=root, check=True, stdout=subprocess.PIPE, text=True,
+    ).stdout.strip()
+    if head != args.source_commit or status:
+        parser.error("exact HIL requires clean committed HEAD")
+    try:
+        checked_stack_frames = stack_frames(args.elf)
+    except (FileNotFoundError, subprocess.CalledProcessError,
+            ValueError) as error:
+        parser.error(f"unsafe or unverifiable Targets stack: {error}")
+
+    args.output.mkdir(parents=True)
+    frames = args.output / "frames"
+    frames.mkdir()
+    candidate = args.output / "firmware.bin"
+    shutil.copyfile(args.firmware, candidate)
+    app_identity = app_elf_sha256(candidate)
+    cleanup: dict[str, Any] = {"attempted": False}
+    states: dict[str, Any] = {}
+    screens: dict[str, Any] = {}
+    resets: dict[str, Any] = {}
+    record: dict[str, Any] = {
+        "schema": SCHEMA,
+        "status": "in_progress",
+        "source_commit": args.source_commit,
+        "usb": {
+            "opened_ports": [args.port],
+            "cardputer_ports_opened": 0,
+            "port_discovery_calls": 0,
+        },
+        "flash_count": 1,
+        "candidate": {
+            "version": args.expected_version,
+            "firmware_sha256": sha256_file(candidate),
+            "firmware_bytes": candidate.stat().st_size,
+            "elf_sha256": sha256_file(args.elf),
+            "map_sha256": sha256_file(args.map),
+            "app_elf_sha256": app_identity,
+            "checked_stack_frames": checked_stack_frames,
+        },
+    }
+    write_json(args.output / "run.json", record)
+
+    device: PassiveSerial | None = None
+    try:
+        # This runner never enumerates serial ports. The caller-selected DUT is
+        # the only path passed to esptool/pyserial; a parallel Cardputer remains
+        # unopened, unprobed and unflashed.
+        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+        time.sleep(1.0)
+        device = PassiveSerial(args.port, 115200, timeout=0.25)
+        synchronize_console(device, 30.0)
+        metrics = query(device, b"metrics", "leshy.boot.v1", "ready")
+        require(metrics, "candidate", version=args.expected_version,
+                app_elf_sha256=app_identity)
+        recovery = query(
+            device, b"storage.product.boot-recovery",
+            "leshy.storage.product_boot_recovery.v1", "state")
+        require(recovery, "exact media", status="admitted",
+                expected_fingerprint=EXPECTED_CID,
+                observed_fingerprint=EXPECTED_CID,
+                fingerprint_matched=True, mounted_read_only=True,
+                read_only_guaranteed=True, blocked_write_attempts=0,
+                cleanup_complete=True, physical_write_calls=0)
+
+        listed_before, destination_before, searched = find_target(
+            device,
+            lambda state: int(state.get("merge_candidate_count", 0)) > 0 and
+            not bool(state.get("active_merge_available")),
+        )
+        states["destination_search"] = searched
+        states["destination_before"] = destination_before
+        destination_id = destination_before["selected_target_id"]
+        destination_graph = destination_before["selected_graph_fingerprint"]
+        destination_identities = int(
+            destination_before["selected_identity_count"])
+        destination_evidence = int(
+            destination_before["selected_evidence_count"])
+        generation_before = int(
+            destination_before["target_state_generation"])
+        catalog_before = int(destination_before["catalog_count"])
+        history_before = int(destination_before["merge_history_count"])
+        screens["destination_before"] = capture(
+            device, frames, "targets-merge-destination-before")
+
+        enter_merge_action(device, destination_id)
+        action(device, "right")
+        merge_list = query(device, b"targets.state",
+                           "leshy.targets.product.v1", "state")
+        require(merge_list, "merge source list", status="ready",
+                view="merge_list", selected_target_id=destination_id,
+                merge_selection=0, lease_mask=13)
+        source_id = merge_list.get("merge_candidate_target_id")
+        source_graph = merge_list.get("merge_candidate_graph_fingerprint")
+        if not valid_hex(source_id, 32) or not valid_hex(source_graph, 16):
+            raise RuntimeError(f"invalid merge source state: {merge_list}")
+        source_identities = int(merge_list["merge_candidate_identity_count"])
+        source_evidence = int(merge_list["merge_candidate_evidence_count"])
+        states["merge_list"] = merge_list
+        screens["merge_list"] = capture(
+            device, frames, "targets-merge-source-list")
+        action(device, "right")
+        merge_confirm = query(device, b"targets.state",
+                              "leshy.targets.product.v1", "state")
+        require(merge_confirm, "merge explicit confirmation", status="ready",
+                view="merge_confirm", selected_target_id=destination_id,
+                merge_candidate_target_id=source_id, write_enabled=True,
+                lease_mask=13)
+        states["merge_confirm"] = merge_confirm
+        screens["merge_confirm"] = capture(
+            device, frames, "targets-merge-confirm")
+        action(device, "right")
+        merged = wait_mutation(device)
+        states["merged"] = merged
+        require(merged, "merged state", status="ready", view="actions",
+                selected_target_id=destination_id, action_selection=5,
+                mutation_state="saved", mutation_status="saved",
+                mutation_merge=True, mutation_merge_kind="merge",
+                mutation_merge_status="merged", mutation_persisted=True,
+                mutation_expected_cid=EXPECTED_CID,
+                mutation_observed_cid=EXPECTED_CID,
+                active_merge_available=True,
+                catalog_count=catalog_before - 1,
+                merge_history_count=history_before + 1,
+                selected_identity_count=(destination_identities +
+                                         source_identities),
+                selected_evidence_count=(destination_evidence +
+                                         source_evidence),
+                cleanup_complete=True, lease_mask=13)
+        merge_operation_id = merged.get("mutation_merge_operation_id")
+        if (not valid_hex(merge_operation_id, 32) or
+                merged.get("active_merge_operation_id") !=
+                merge_operation_id or
+                merged.get("mutation_merge_source_id") != source_id):
+            raise RuntimeError(f"merge operation identity mismatch: {merged}")
+        generation_merged = int(merged["target_state_generation"])
+        if (generation_merged != generation_before + 1 or
+                int(merged["mutation_generation"]) != generation_merged):
+            raise RuntimeError(f"merge generation mismatch: {merged}")
+        require_atomic_save(merged, "merge")
+        screens["merged"] = capture(
+            device, frames, "targets-merge-saved")
+        released_after_merge = close_targets(device)
+        require(released_after_merge, "release after merge",
+                status="not_loaded", workspace_allocated=False,
+                page_open=False, view="none", cleanup_complete=True,
+                lease_mask=0)
+        device.close()
+        device = None
+
+        device, resets["merged"] = cold_reopen(
+            args.port, args.output, "targets-merge-cold-reopen",
+            args.expected_version, app_identity)
+        _, merged_reopened, searched_merged = find_target_id(
+            device, destination_id)
+        states["merged_reopen_search"] = searched_merged
+        states["merged_reopened"] = merged_reopened
+        require(merged_reopened, "cold merged Target", status="ready",
+                view="detail", selected_target_id=destination_id,
+                target_state_generation=generation_merged,
+                active_merge_available=True,
+                active_merge_operation_id=merge_operation_id,
+                catalog_count=catalog_before - 1,
+                merge_history_count=history_before + 1,
+                selected_identity_count=(destination_identities +
+                                         source_identities),
+                selected_evidence_count=(destination_evidence +
+                                         source_evidence),
+                cleanup_complete=True, lease_mask=13)
+        screens["merged_reopened"] = capture(
+            device, frames, "targets-merge-cold-reopened")
+
+        enter_merge_action(device, destination_id)
+        action(device, "right")
+        split_confirm = query(device, b"targets.state",
+                              "leshy.targets.product.v1", "state")
+        require(split_confirm, "split explicit confirmation", status="ready",
+                view="split_confirm", selected_target_id=destination_id,
+                active_merge_available=True,
+                active_merge_operation_id=merge_operation_id,
+                write_enabled=True, lease_mask=13)
+        states["split_confirm"] = split_confirm
+        screens["split_confirm"] = capture(
+            device, frames, "targets-split-confirm")
+        action(device, "right")
+        split = wait_mutation(device)
+        states["split"] = split
+        require(split, "split state", status="ready", view="actions",
+                selected_target_id=destination_id, action_selection=5,
+                mutation_state="saved", mutation_status="saved",
+                mutation_merge=True, mutation_merge_kind="split",
+                mutation_merge_status="split", mutation_persisted=True,
+                mutation_merge_operation_id=merge_operation_id,
+                mutation_merge_source_id=source_id,
+                mutation_expected_cid=EXPECTED_CID,
+                mutation_observed_cid=EXPECTED_CID,
+                active_merge_available=False,
+                catalog_count=catalog_before,
+                merge_history_count=history_before + 1,
+                selected_identity_count=destination_identities,
+                selected_evidence_count=destination_evidence,
+                selected_graph_fingerprint=destination_graph,
+                cleanup_complete=True, lease_mask=13)
+        generation_split = int(split["target_state_generation"])
+        if (generation_split != generation_merged + 1 or
+                int(split["mutation_generation"]) != generation_split):
+            raise RuntimeError(f"split generation mismatch: {split}")
+        require_atomic_save(split, "split")
+        screens["split"] = capture(
+            device, frames, "targets-split-saved")
+        released_after_split = close_targets(device)
+        require(released_after_split, "release after split",
+                status="not_loaded", workspace_allocated=False,
+                page_open=False, view="none", cleanup_complete=True,
+                lease_mask=0)
+        device.close()
+        device = None
+
+        device, resets["split"] = cold_reopen(
+            args.port, args.output, "targets-split-cold-reopen",
+            args.expected_version, app_identity)
+        _, destination_reopened, destination_search = find_target_id(
+            device, destination_id)
+        states["destination_reopen_search"] = destination_search
+        states["destination_reopened"] = destination_reopened
+        require(destination_reopened, "cold split destination", status="ready",
+                view="detail", selected_target_id=destination_id,
+                target_state_generation=generation_split,
+                active_merge_available=False,
+                catalog_count=catalog_before,
+                merge_history_count=history_before + 1,
+                selected_identity_count=destination_identities,
+                selected_evidence_count=destination_evidence,
+                selected_graph_fingerprint=destination_graph,
+                cleanup_complete=True, lease_mask=13)
+        screens["destination_reopened"] = capture(
+            device, frames, "targets-split-destination-reopened")
+        normalize_home(device)
+        _, source_reopened, source_search = find_target_id(device, source_id)
+        states["source_reopen_search"] = source_search
+        states["source_reopened"] = source_reopened
+        require(source_reopened, "cold split source", status="ready",
+                view="detail", selected_target_id=source_id,
+                target_state_generation=generation_split,
+                active_merge_available=False,
+                catalog_count=catalog_before,
+                merge_history_count=history_before + 1,
+                selected_identity_count=source_identities,
+                selected_evidence_count=source_evidence,
+                selected_graph_fingerprint=source_graph,
+                cleanup_complete=True, lease_mask=13)
+        screens["source_reopened"] = capture(
+            device, frames, "targets-split-source-reopened")
+        released = close_targets(device)
+        require(released, "final release", status="not_loaded",
+                workspace_allocated=False, page_open=False, view="none",
+                cleanup_complete=True, lease_mask=0)
+        if int(released.get("heap_free_after_release", 0)) + 512 < int(
+                released.get("heap_free_before", 0)):
+            raise RuntimeError(
+                f"Targets workspace heap did not recover: {released}")
+        cleanup = best_effort_cleanup(device)
+        if not cleanup.get("complete"):
+            raise RuntimeError(f"final cleanup failed: {cleanup}")
+
+        record.update({
+            "status": "pass",
+            "exact_cid": EXPECTED_CID,
+            "session_generation": int(recovery["generation"]),
+            "destination_id": destination_id,
+            "source_id": source_id,
+            "merge_operation_id": merge_operation_id,
+            "target_state_generation_before": generation_before,
+            "target_state_generation_merged": generation_merged,
+            "target_state_generation_split": generation_split,
+            "catalog_count_before": catalog_before,
+            "merge_history_count_before": history_before,
+            "graph_fingerprints": {
+                "destination_before": destination_graph,
+                "destination_after_split":
+                    destination_reopened["selected_graph_fingerprint"],
+                "source_before": source_graph,
+                "source_after_split":
+                    source_reopened["selected_graph_fingerprint"],
+            },
+            "states": states,
+            "screens": screens,
+            "resets": resets,
+            "released": released,
+            "cleanup": cleanup,
+        })
+    except Exception as error:
+        if device is not None:
+            cleanup = best_effort_cleanup(device)
+        record.update({
+            "status": "failed",
+            "error": f"{type(error).__name__}: {error}",
+            "states": states,
+            "screens": screens,
+            "resets": resets,
+            "cleanup": cleanup,
+        })
+        write_json(args.output / "run.json", record)
+        artifact_manifest(args.output)
+        raise
+    finally:
+        if device is not None:
+            device.close()
+
+    write_json(args.output / "run.json", record)
+    artifact_manifest(args.output)
+    print(str(args.output / "run.json"))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

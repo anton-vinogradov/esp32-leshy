@@ -297,9 +297,82 @@ CandidateLoad loadDecisionCandidate(
     return loaded;
 }
 
+CandidateLoad loadProductCandidate(
+    SessionStoreIo& io, TargetProductStateStoreWorkspace& workspace,
+    HeadSlot slot, domain::targets::TargetCatalog* validationCatalog,
+    domain::targets::CorrelationDecisionLog* validationDecisions,
+    domain::targets::TargetMergeHistory* validationMerges) {
+    CandidateLoad loaded;
+    std::array<std::uint8_t, kHeadWireSize>& wire =
+        slot == HeadSlot::A ? workspace.headA : workspace.headB;
+    std::size_t wireSize = 0;
+    loaded.headRead = io.readFile(stateHeadPath(slot), wire.data(), wire.size(),
+                                  &wireSize);
+    if (loaded.headRead != SessionStoreIo::ReadStatus::Ok) {
+        loaded.candidate = {wire.data(), 0, {}, false};
+        return loaded;
+    }
+    loaded.candidate.wire = wire.data();
+    loaded.candidate.wireSize = wireSize;
+    if (decodeHead(wire.data(), wireSize, &loaded.record) !=
+            HeadDecodeStatus::Valid ||
+        loaded.record.generation == 0) {
+        loaded.candidate.payloadValid = false;
+        return loaded;
+    }
+    char manifestPath[kTargetStateStorePathMax] = {};
+    if (!formatTargetStateStorePath(TargetStateStoreFileKind::Manifest,
+                                    loaded.record.generation, manifestPath,
+                                    sizeof(manifestPath))) {
+        loaded.candidate.payloadValid = false;
+        return loaded;
+    }
+    std::size_t manifestSize = 0;
+    if (io.readFile(manifestPath, workspace.manifest.data(),
+                    workspace.manifest.size(), &manifestSize) !=
+        SessionStoreIo::ReadStatus::Ok) {
+        loaded.candidate.payloadValid = false;
+        return loaded;
+    }
+    loaded.candidate.manifest = {
+        true, static_cast<std::uint32_t>(manifestSize),
+        crc32c(workspace.manifest.data(), manifestSize)};
+    if (manifestSize != loaded.record.manifestLength ||
+        loaded.candidate.manifest.crc32c != loaded.record.manifestCrc32c) {
+        loaded.candidate.payloadValid = false;
+        return loaded;
+    }
+    TargetStateManifest manifest{};
+    if (decodeTargetStateManifest(workspace.manifest.data(), manifestSize,
+                                  &manifest) != TargetCodecStatus::Valid ||
+        manifest.stateLength > workspace.state.size()) {
+        loaded.candidate.payloadValid = false;
+        return loaded;
+    }
+    char statePath[kTargetStateStorePathMax] = {};
+    if (!formatTargetStateStorePath(TargetStateStoreFileKind::State,
+                                    loaded.record.generation, statePath,
+                                    sizeof(statePath))) {
+        loaded.candidate.payloadValid = false;
+        return loaded;
+    }
+    std::size_t stateSize = 0;
+    if (io.readFile(statePath, workspace.state.data(), workspace.state.size(),
+                    &stateSize) != SessionStoreIo::ReadStatus::Ok ||
+        reopenTargetState(workspace.manifest.data(), manifestSize,
+                          workspace.state.data(), stateSize,
+                          validationCatalog, validationDecisions,
+                          validationMerges) != TargetCodecStatus::Valid) {
+        loaded.candidate.payloadValid = false;
+        return loaded;
+    }
+    loaded.candidate.payloadValid = true;
+    return loaded;
+}
+
 CandidateLoad loadDecisionWireCandidate(
     SessionStoreIo& io, TargetDecisionStateStoreWorkspace& workspace,
-    HeadSlot slot) {
+    HeadSlot slot, bool allowMerges = false) {
     CandidateLoad loaded;
     std::array<std::uint8_t, kHeadWireSize>& wire =
         slot == HeadSlot::A ? workspace.headA : workspace.headB;
@@ -348,7 +421,7 @@ CandidateLoad loadDecisionWireCandidate(
     TargetStateManifest manifest{};
     if (decodeTargetStateManifest(workspace.manifest.data(), manifestSize,
                                   &manifest) != TargetCodecStatus::Valid ||
-        manifest.mergeCount != 0 ||
+        (!allowMerges && manifest.mergeCount != 0) ||
         manifest.stateLength > workspace.state.size()) {
         loaded.candidate.payloadValid = false;
         return loaded;
@@ -469,7 +542,8 @@ TargetStateStoreStatus reopenSelectedDecision(
 
 TargetStateStoreStatus reopenSelectedDecisionWire(
     SessionStoreIo& io, TargetDecisionStateStoreWorkspace& workspace,
-    std::uint32_t generation, TargetStateManifest* manifest) {
+    std::uint32_t generation, TargetStateManifest* manifest,
+    bool allowMerges = false) {
     if (manifest == nullptr) return TargetStateStoreStatus::InvalidArgument;
     char manifestPath[kTargetStateStorePathMax] = {};
     char statePath[kTargetStateStorePathMax] = {};
@@ -494,7 +568,7 @@ TargetStateStoreStatus reopenSelectedDecisionWire(
     const bool valid = decodeTargetStateManifest(
             workspace.manifest.data(), manifestSize, &decoded) ==
             TargetCodecStatus::Valid &&
-        decoded.mergeCount == 0 &&
+        (allowMerges || decoded.mergeCount == 0) &&
         decoded.stateLength == stateSize &&
         stateSize <= workspace.state.size() &&
         decoded.stateCrc32c == crc32c(workspace.state.data(), stateSize);
@@ -923,6 +997,168 @@ TargetStateStoreRecoveryResult recoverTargetDecisionStateWire(
         workspace.generation = result.generation;
         result.targets = manifest.targetCount;
         result.decisions = manifest.decisionCount;
+    }
+    return result;
+}
+
+TargetStateStoreCommitResult commitTargetProductState(
+    SessionStoreIo& io, TargetProductStateStoreWorkspace& workspace,
+    const domain::targets::TargetCatalog& catalog,
+    const domain::targets::CorrelationDecisionLog& decisions,
+    const domain::targets::TargetMergeHistory& merges,
+    std::uint32_t generation, HeadSlot publishSlot) {
+    TargetStateStoreCommitResult result;
+    result.generation = generation;
+    result.publishedSlot = publishSlot;
+    if (generation == 0 || catalog.size() == 0) {
+        result.status = TargetStateStoreStatus::InvalidArgument;
+        return result;
+    }
+    std::size_t stateSize = 0;
+    std::size_t manifestSize = 0;
+    if (encodeTargetState(catalog, decisions, merges, workspace.state.data(),
+                          workspace.state.size(), &stateSize) !=
+            TargetCodecStatus::Valid ||
+        encodeTargetStateManifest(
+            catalog, decisions, merges, workspace.state.data(), stateSize,
+            workspace.manifest.data(), workspace.manifest.size(),
+            &manifestSize) != TargetCodecStatus::Valid) {
+        result.status = TargetStateStoreStatus::EncodeFailed;
+        return result;
+    }
+    workspace.stateSize = stateSize;
+    workspace.manifestSize = manifestSize;
+    TargetStateCommitBackend<TargetProductStateStoreWorkspace> backend(
+        io, workspace, stateSize, manifestSize, generation, publishSlot);
+    if (!backend.pathsReady()) {
+        result.status = TargetStateStoreStatus::PathError;
+        return result;
+    }
+    const HeadRecord head{
+        generation, static_cast<std::uint32_t>(manifestSize),
+        crc32c(workspace.manifest.data(), manifestSize)};
+    const CommitResult committed = commitGeneration(backend, head);
+    result.stage = committed.stage;
+    result.status = committed.complete
+        ? TargetStateStoreStatus::Valid
+        : commitFailureStatus(committed.stage);
+    if (result.complete()) workspace.generation = generation;
+    return result;
+}
+
+TargetStateStoreRecoveryResult recoverTargetProductState(
+    SessionStoreIo& io, TargetProductStateStoreWorkspace& workspace,
+    domain::targets::TargetCatalog* catalog,
+    domain::targets::CorrelationDecisionLog* decisions,
+    domain::targets::TargetMergeHistory* merges) {
+    TargetStateStoreRecoveryResult result;
+    if (catalog == nullptr || decisions == nullptr || merges == nullptr) {
+        result.status = TargetStateStoreStatus::InvalidArgument;
+        return result;
+    }
+    CandidateLoad a = loadProductCandidate(io, workspace, HeadSlot::A,
+                                           catalog, decisions, merges);
+    CandidateLoad b = loadProductCandidate(io, workspace, HeadSlot::B,
+                                           catalog, decisions, merges);
+    if (a.headRead == SessionStoreIo::ReadStatus::NotFound &&
+        b.headRead == SessionStoreIo::ReadStatus::NotFound) {
+        catalog->clear();
+        decisions->clear();
+        merges->clear();
+        result.status = TargetStateStoreStatus::Empty;
+        return result;
+    }
+    const RecoveryResult recovered = recoverHead(a.candidate, b.candidate);
+    result.choice = recovered.choice;
+    result.aStatus = recovered.aStatus;
+    result.bStatus = recovered.bStatus;
+    if (recovered.choice == RecoveryChoice::Conflict) {
+        catalog->clear();
+        decisions->clear();
+        merges->clear();
+        result.status = TargetStateStoreStatus::Conflict;
+        return result;
+    }
+    if (recovered.choice != RecoveryChoice::A &&
+        recovered.choice != RecoveryChoice::B) {
+        catalog->clear();
+        decisions->clear();
+        merges->clear();
+        result.status = TargetStateStoreStatus::NoGeneration;
+        return result;
+    }
+    result.generation = recovered.selected.generation;
+    char manifestPath[kTargetStateStorePathMax] = {};
+    char statePath[kTargetStateStorePathMax] = {};
+    if (!formatTargetStateStorePath(TargetStateStoreFileKind::Manifest,
+                                    result.generation, manifestPath,
+                                    sizeof(manifestPath)) ||
+        !formatTargetStateStorePath(TargetStateStoreFileKind::State,
+                                    result.generation, statePath,
+                                    sizeof(statePath))) {
+        result.status = TargetStateStoreStatus::PathError;
+        return result;
+    }
+    std::size_t manifestSize = 0;
+    std::size_t stateSize = 0;
+    if (io.readFile(manifestPath, workspace.manifest.data(),
+                    workspace.manifest.size(), &manifestSize) !=
+            SessionStoreIo::ReadStatus::Ok ||
+        io.readFile(statePath, workspace.state.data(), workspace.state.size(),
+                    &stateSize) != SessionStoreIo::ReadStatus::Ok ||
+        reopenTargetState(workspace.manifest.data(), manifestSize,
+                          workspace.state.data(), stateSize, catalog, decisions,
+                          merges) != TargetCodecStatus::Valid) {
+        catalog->clear();
+        decisions->clear();
+        merges->clear();
+        result.status = TargetStateStoreStatus::CorruptGeneration;
+        return result;
+    }
+    workspace.manifestSize = manifestSize;
+    workspace.stateSize = stateSize;
+    workspace.generation = result.generation;
+    result.status = TargetStateStoreStatus::Valid;
+    result.targets = catalog->size();
+    result.decisions = decisions->size();
+    result.merges = merges->size();
+    return result;
+}
+
+TargetStateStoreRecoveryResult recoverTargetProductStateWire(
+    SessionStoreIo& io, TargetProductStateStoreWorkspace& workspace) {
+    TargetStateStoreRecoveryResult result;
+    CandidateLoad a = loadDecisionWireCandidate(io, workspace, HeadSlot::A,
+                                                true);
+    CandidateLoad b = loadDecisionWireCandidate(io, workspace, HeadSlot::B,
+                                                true);
+    if (a.headRead == SessionStoreIo::ReadStatus::NotFound &&
+        b.headRead == SessionStoreIo::ReadStatus::NotFound) {
+        result.status = TargetStateStoreStatus::Empty;
+        return result;
+    }
+    const RecoveryResult recovered = recoverHead(a.candidate, b.candidate);
+    result.choice = recovered.choice;
+    result.aStatus = recovered.aStatus;
+    result.bStatus = recovered.bStatus;
+    if (recovered.choice == RecoveryChoice::Conflict) {
+        result.status = TargetStateStoreStatus::Conflict;
+        return result;
+    }
+    if (recovered.choice != RecoveryChoice::A &&
+        recovered.choice != RecoveryChoice::B) {
+        result.status = TargetStateStoreStatus::NoGeneration;
+        return result;
+    }
+    result.generation = recovered.selected.generation;
+    TargetStateManifest manifest{};
+    result.status = reopenSelectedDecisionWire(
+        io, workspace, result.generation, &manifest, true);
+    if (result.status == TargetStateStoreStatus::Valid) {
+        workspace.generation = result.generation;
+        result.targets = manifest.targetCount;
+        result.decisions = manifest.decisionCount;
+        result.merges = manifest.mergeCount;
     }
     return result;
 }

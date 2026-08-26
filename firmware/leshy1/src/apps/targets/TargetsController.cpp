@@ -1,6 +1,7 @@
 #include "TargetsController.h"
 
 #include <cstring>
+#include <limits>
 #include <new>
 #include <utility>
 
@@ -116,6 +117,52 @@ bool filterContainsIdentity(
         }
     }
     return false;
+}
+
+bool mergeCandidateCompatible(
+    const domain::targets::TargetRecord& destination,
+    const domain::targets::TargetRecord& source) {
+    if (destination.revision == 0 || source.revision == 0 ||
+        destination.revision >=
+            std::numeric_limits<std::uint32_t>::max() - 1U ||
+        source.revision == std::numeric_limits<std::uint32_t>::max() ||
+        destination.identityCount + source.identityCount >
+            domain::targets::TargetRecord::kIdentityCapacity ||
+        destination.evidenceCount + source.evidenceCount >
+            domain::targets::TargetRecord::kEvidenceCapacity) {
+        return false;
+    }
+    for (std::size_t sourceIndex = 0;
+         sourceIndex < source.identityCount; ++sourceIndex) {
+        for (std::size_t destinationIndex = 0;
+             destinationIndex < destination.identityCount;
+             ++destinationIndex) {
+            if (domain::targets::targetIdentityEqual(
+                    destination.identities[destinationIndex],
+                    source.identities[sourceIndex])) {
+                return false;
+            }
+        }
+    }
+    for (std::size_t sourceIndex = 0;
+         sourceIndex < source.evidenceCount; ++sourceIndex) {
+        const auto& sourceEvidence = source.evidence[sourceIndex];
+        for (std::size_t destinationIndex = 0;
+             destinationIndex < destination.evidenceCount;
+             ++destinationIndex) {
+            const auto& destinationEvidence =
+                destination.evidence[destinationIndex];
+            if (destinationEvidence.sourceId.bytes ==
+                    sourceEvidence.sourceId.bytes &&
+                destinationEvidence.sourceGeneration ==
+                    sourceEvidence.sourceGeneration &&
+                destinationEvidence.observationSequence ==
+                    sourceEvidence.observationSequence) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 bool hasCrossRadioCorrelationCandidate(
@@ -320,6 +367,7 @@ void TargetsController::resetTransient(bool clearPersistentState) {
     notesEditorGlyphSelection_ = 0;
     correlationSelection_ = 0;
     correlationReviewSelection_ = 0;
+    mergeSelection_ = 0;
     correlationEvidenceCandidate_ = false;
     view_ = TargetsView::List;
     status_ = TargetsLoadStatus::SessionUnavailable;
@@ -701,6 +749,11 @@ bool TargetsController::next() {
         ++correlationReviewSelection_;
         return true;
     }
+    if (view_ == TargetsView::MergeList) {
+        if (mergeSelection_ + 1 >= mergeCandidateCount()) return false;
+        ++mergeSelection_;
+        return true;
+    }
     return false;
 }
 
@@ -750,6 +803,11 @@ bool TargetsController::previous() {
         --correlationReviewSelection_;
         return true;
     }
+    if (view_ == TargetsView::MergeList) {
+        if (mergeSelection_ == 0) return false;
+        --mergeSelection_;
+        return true;
+    }
     return false;
 }
 
@@ -780,6 +838,10 @@ bool TargetsController::openSelected() {
         reviewedCorrelationProposal() != nullptr) {
         correlationEvidenceCandidate_ = correlationReviewSelection_ == 1;
         view_ = TargetsView::CorrelationEvidence;
+        return true;
+    }
+    if (view_ == TargetsView::MergeList && selectedMergeCandidate() != nullptr) {
+        view_ = TargetsView::MergeConfirm;
         return true;
     }
     return false;
@@ -816,7 +878,8 @@ TargetActionItem TargetsController::selectedAction() const {
         case 1: return TargetActionItem::Name;
         case 2: return TargetActionItem::Tags;
         case 3: return TargetActionItem::Notes;
-        default: return TargetActionItem::Correlations;
+        case 4: return TargetActionItem::Correlations;
+        default: return TargetActionItem::MergeSplit;
     }
 }
 
@@ -928,6 +991,65 @@ bool TargetsController::openCorrelationList() {
     }
     correlationSelection_ = 0;
     view_ = TargetsView::CorrelationList;
+    return true;
+}
+
+std::size_t TargetsController::mergeCandidateCount() const {
+    const auto* destination = selectedTarget();
+    if (destination == nullptr) return 0;
+    std::size_t count = 0;
+    for (std::size_t index = 0; index < rowCount_; ++index) {
+        const TargetListRow* rowValue = row(index);
+        const auto* source = rowValue == nullptr
+            ? nullptr : workspace_.catalog.find(rowValue->targetId);
+        if (source != nullptr &&
+            !domain::targets::targetIdEqual(source->id, destination->id) &&
+            mergeCandidateCompatible(*destination, *source)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+const TargetListRow* TargetsController::mergeCandidate(
+    std::size_t requested) const {
+    const auto* destination = selectedTarget();
+    if (destination == nullptr) return nullptr;
+    std::size_t candidate = 0;
+    for (std::size_t index = 0; index < rowCount_; ++index) {
+        const TargetListRow* rowValue = row(index);
+        if (rowValue == nullptr ||
+            domain::targets::targetIdEqual(rowValue->targetId,
+                                            destination->id)) {
+            continue;
+        }
+        const auto* source = workspace_.catalog.find(rowValue->targetId);
+        if (source == nullptr ||
+            !mergeCandidateCompatible(*destination, *source)) {
+            continue;
+        }
+        if (candidate++ == requested) return rowValue;
+    }
+    return nullptr;
+}
+
+const TargetListRow* TargetsController::selectedMergeCandidate() const {
+    return mergeCandidate(mergeSelection_);
+}
+
+bool TargetsController::openMerge(bool splitAvailable) {
+    if (view_ != TargetsView::Actions ||
+        selectedAction() != TargetActionItem::MergeSplit ||
+        selectedTarget() == nullptr) {
+        return false;
+    }
+    mergeSelection_ = 0;
+    if (splitAvailable) {
+        view_ = TargetsView::SplitConfirm;
+        return true;
+    }
+    if (mergeCandidateCount() == 0) return false;
+    view_ = TargetsView::MergeList;
     return true;
 }
 
@@ -1047,6 +1169,15 @@ bool TargetsController::back() {
         return true;
     }
     if (view_ == TargetsView::CorrelationList) {
+        view_ = TargetsView::Actions;
+        return true;
+    }
+    if (view_ == TargetsView::MergeConfirm) {
+        view_ = TargetsView::MergeList;
+        return true;
+    }
+    if (view_ == TargetsView::MergeList ||
+        view_ == TargetsView::SplitConfirm) {
         view_ = TargetsView::Actions;
         return true;
     }
