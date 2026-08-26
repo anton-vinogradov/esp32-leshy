@@ -1,10 +1,13 @@
 #include "ArduinoCompanionWebService.h"
 
-#include <WiFi.h>
-
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+
+#include <esp_event.h>
+#include <esp_heap_caps.h>
+#include <esp_wifi.h>
+#include <esp_wifi_default.h>
 
 #include "services/companion/CompanionWebAdapter.h"
 
@@ -73,39 +76,192 @@ const char* httpReason(std::uint16_t status) {
 
 }  // namespace
 
+const char* ArduinoCompanionWebService::beginStageName(BeginStage stage) {
+    switch (stage) {
+        case BeginStage::Idle: return "idle";
+        case BeginStage::NetworkCore: return "network_core";
+        case BeginStage::EventLoop: return "event_loop";
+        case BeginStage::Netif: return "netif";
+        case BeginStage::WifiHandlers: return "wifi_handlers";
+        case BeginStage::WifiInit: return "wifi_init";
+        case BeginStage::RamStorage: return "ram_storage";
+        case BeginStage::ApMode: return "ap_mode";
+        case BeginStage::ApConfig: return "ap_config";
+        case BeginStage::WifiStart: return "wifi_start";
+        case BeginStage::Server: return "server";
+        case BeginStage::Ready: return "ready";
+    }
+    return "idle";
+}
+
+bool ArduinoCompanionWebService::prepareNetworkCore() {
+    if (networkCoreReady_) return true;
+    beginStage_ = BeginStage::NetworkCore;
+    lastError_ = esp_netif_init();
+    networkCoreReady_ = lastError_ == ESP_OK;
+    cleanupComplete_ = networkCoreReady_;
+    return networkCoreReady_;
+}
+
+bool ArduinoCompanionWebService::failBegin(BeginStage stage,
+                                           esp_err_t error) {
+    beginStage_ = stage;
+    lastError_ = error;
+    cleanupRuntime();
+    return false;
+}
+
 bool ArduinoCompanionWebService::begin(
     const services::companion::CompanionLocalCredentials& credentials) {
-    if (active_ || !credentials.valid()) return false;
-    WiFi.persistent(false);
-    if (!WiFi.mode(WIFI_AP) ||
-        !WiFi.softAP(credentials.ssid.data(), credentials.passphrase.data(),
-                     1, false, 1)) {
-        WiFi.softAPdisconnect(true);
-        WiFi.mode(WIFI_OFF);
-        return false;
+    if (active_ || !credentials.valid() || !networkCoreReady_ ||
+        !cleanupComplete_) {
+        return failBegin(BeginStage::NetworkCore, ESP_ERR_INVALID_STATE);
     }
+    heapFreeBeforeBegin_ = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    heapLargestBeforeBegin_ = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    heapFreeAfterBegin_ = 0;
+    heapFreeAfterStop_ = 0;
+    cleanupComplete_ = false;
+    lastError_ = ESP_OK;
+
+    beginStage_ = BeginStage::EventLoop;
+    esp_err_t error = esp_event_loop_create_default();
+    if (error == ESP_OK) {
+        eventLoopOwned_ = true;
+    } else if (error != ESP_ERR_INVALID_STATE) {
+        return failBegin(BeginStage::EventLoop, error);
+    }
+
+    beginStage_ = BeginStage::Netif;
+    esp_netif_config_t netifConfig = ESP_NETIF_DEFAULT_WIFI_AP();
+    apNetif_ = esp_netif_new(&netifConfig);
+    if (apNetif_ == nullptr) return failBegin(BeginStage::Netif, ESP_ERR_NO_MEM);
+    error = esp_netif_attach_wifi_ap(apNetif_);
+    if (error != ESP_OK) return failBegin(BeginStage::Netif, error);
+    wifiNetifAttached_ = true;
+
+    beginStage_ = BeginStage::WifiHandlers;
+    error = esp_wifi_set_default_wifi_ap_handlers();
+    if (error != ESP_OK) return failBegin(BeginStage::WifiHandlers, error);
+
+    beginStage_ = BeginStage::WifiInit;
+    wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
+    init.nvs_enable = 0;
+    init.static_rx_buf_num = kStaticRxBuffers;
+    init.dynamic_rx_buf_num = kDynamicRxBuffers;
+    init.tx_buf_type = 1;
+    init.static_tx_buf_num = 0;
+    init.dynamic_tx_buf_num = kDynamicTxBuffers;
+    init.rx_mgmt_buf_type = 1;
+    init.rx_mgmt_buf_num = kRxManagementBuffers;
+    init.cache_tx_buf_num = 2;
+    init.ampdu_rx_enable = 0;
+    init.ampdu_tx_enable = 0;
+    init.amsdu_tx_enable = 0;
+    init.rx_ba_win = 1;
+    init.mgmt_sbuf_num = kManagementShortBuffers;
+    init.espnow_max_encrypt_num = 0;
+    error = esp_wifi_init(&init);
+    if (error != ESP_OK) return failBegin(BeginStage::WifiInit, error);
+    wifiInitialized_ = true;
+
+    beginStage_ = BeginStage::RamStorage;
+    error = esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    if (error != ESP_OK) return failBegin(BeginStage::RamStorage, error);
+    beginStage_ = BeginStage::ApMode;
+    error = esp_wifi_set_mode(WIFI_MODE_AP);
+    if (error != ESP_OK) return failBegin(BeginStage::ApMode, error);
+
+    wifi_config_t config{};
+    const std::size_t ssidLength = std::strlen(credentials.ssid.data());
+    const std::size_t passphraseLength =
+        std::strlen(credentials.passphrase.data());
+    std::memcpy(config.ap.ssid, credentials.ssid.data(), ssidLength);
+    config.ap.ssid_len = static_cast<std::uint8_t>(ssidLength);
+    std::memcpy(config.ap.password, credentials.passphrase.data(),
+                passphraseLength);
+    config.ap.channel = 1;
+    config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    config.ap.ssid_hidden = false;
+    config.ap.max_connection = 1;
+    config.ap.beacon_interval = 100;
+    config.ap.pairwise_cipher = WIFI_CIPHER_TYPE_CCMP;
+    config.ap.pmf_cfg.capable = true;
+    config.ap.pmf_cfg.required = false;
+    beginStage_ = BeginStage::ApConfig;
+    error = esp_wifi_set_config(WIFI_IF_AP, &config);
+    if (error != ESP_OK) return failBegin(BeginStage::ApConfig, error);
+    beginStage_ = BeginStage::WifiStart;
+    error = esp_wifi_start();
+    if (error != ESP_OK) return failBegin(BeginStage::WifiStart, error);
+    wifiStarted_ = true;
+
+    beginStage_ = BeginStage::Server;
     server_.setNoDelay(true);
     server_.begin();
-    if (!server_) {
-        WiFi.softAPdisconnect(true);
-        WiFi.mode(WIFI_OFF);
-        return false;
-    }
+    if (!server_) return failBegin(BeginStage::Server, ESP_FAIL);
     active_ = true;
     requestsHandled_ = 0;
     requestsRejected_ = 0;
     resetClient();
+    beginStage_ = BeginStage::Ready;
+    heapFreeAfterBegin_ = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
     return true;
 }
 
-void ArduinoCompanionWebService::stop() {
+bool ArduinoCompanionWebService::cleanupRuntime() {
+    bool complete = true;
     resetClient();
     server_.end();
-    if (active_) {
-        WiFi.softAPdisconnect(true);
-        WiFi.mode(WIFI_OFF);
+    if (wifiStarted_) {
+        const esp_err_t error = esp_wifi_stop();
+        if (error != ESP_OK) {
+            complete = false;
+            lastError_ = error;
+        }
     }
+    wifiStarted_ = false;
+    if (apNetif_ != nullptr) {
+        if (wifiNetifAttached_) {
+            const esp_err_t error =
+                esp_wifi_clear_default_wifi_driver_and_handlers(apNetif_);
+            if (error != ESP_OK) {
+                complete = false;
+                lastError_ = error;
+            }
+        }
+        wifiNetifAttached_ = false;
+        esp_netif_destroy(apNetif_);
+        apNetif_ = nullptr;
+    }
+    if (wifiInitialized_) {
+        const esp_err_t error = esp_wifi_deinit();
+        if (error != ESP_OK) {
+            complete = false;
+            lastError_ = error;
+        }
+    }
+    wifiInitialized_ = false;
+    if (eventLoopOwned_) {
+        const esp_err_t error = esp_event_loop_delete_default();
+        if (error != ESP_OK) {
+            complete = false;
+            lastError_ = error;
+        }
+    }
+    eventLoopOwned_ = false;
     active_ = false;
+    cleanupComplete_ = complete;
+    heapFreeAfterStop_ = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    return complete;
+}
+
+bool ArduinoCompanionWebService::stop() {
+    return cleanupRuntime();
 }
 
 void ArduinoCompanionWebService::resetClient() {

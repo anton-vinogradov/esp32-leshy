@@ -30,6 +30,10 @@ def main() -> int:
         TARGET / "src" / "platform" / "arduino" /
         "ArduinoCompanionWebService.cpp"
     )
+    companion_web_header = (
+        TARGET / "src" / "platform" / "arduino" /
+        "ArduinoCompanionWebService.h"
+    )
     passive_ble_adapter = TARGET / "src" / "platform" / "arduino" / "BoardBlePassiveScanner.cpp"
     shield_receiver_adapter = (
         TARGET / "src" / "platform" / "arduino" / "BoardShieldReceiverProbe.cpp"
@@ -1413,17 +1417,30 @@ def main() -> int:
         if re.search(pattern, implicit_sources):
             errors.append(f"measurement target starts an unapproved Wi-Fi path: {pattern}")
 
-    if not companion_web_adapter.is_file():
+    if (not companion_web_adapter.is_file() or
+            not companion_web_header.is_file()):
         errors.append("explicit companion local Web adapter is missing")
     else:
-        companion_web = companion_web_adapter.read_text(encoding="utf-8")
+        companion_web = (
+            companion_web_header.read_text(encoding="utf-8") + "\n" +
+            companion_web_adapter.read_text(encoding="utf-8")
+        )
         for marker in (
-            "WiFi.persistent(false)",
-            "WiFi.mode(WIFI_AP)",
-            "WiFi.softAP(credentials.ssid.data(), credentials.passphrase.data(),",
-            "1, false, 1",
-            "WiFi.softAPdisconnect(true)",
-            "WiFi.mode(WIFI_OFF)",
+            "kStaticRxBuffers = 4",
+            "kDynamicRxBuffers = 8",
+            "kDynamicTxBuffers = 8",
+            "kManagementShortBuffers = 8",
+            "esp_netif_attach_wifi_ap",
+            "esp_wifi_set_default_wifi_ap_handlers",
+            "esp_wifi_set_storage(WIFI_STORAGE_RAM)",
+            "esp_wifi_set_mode(WIFI_MODE_AP)",
+            "config.ap.max_connection = 1",
+            "config.ap.authmode = WIFI_AUTH_WPA2_PSK",
+            "esp_wifi_start()",
+            "esp_wifi_stop()",
+            "esp_wifi_deinit()",
+            "esp_wifi_clear_default_wifi_driver_and_handlers",
+            "esp_netif_destroy(apNetif_)",
             "kClientDeadlineUs",
             "kMaximumHeaderBytes",
             "kCompanionMaxFrameBytes",
@@ -1440,7 +1457,7 @@ def main() -> int:
             r"\bWiFi\s*\.\s*setAutoConnect\s*\(",
             r"\bWiFi\s*\.\s*setAutoReconnect\s*\(",
             r"\bPreferences\b",
-            r"\bnvs_",
+            r"\bnvs_(?:open|set_|commit)",
         ):
             if re.search(pattern, companion_web):
                 errors.append(

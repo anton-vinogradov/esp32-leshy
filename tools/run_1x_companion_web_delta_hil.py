@@ -484,6 +484,8 @@ def main() -> int:
                     staged.get("authorized") is False and
                     staged.get("server_active") is False and
                     staged.get("credential_present") is False and
+                    staged.get("network_core_ready") is True and
+                    staged.get("cleanup_complete") is True and
                     staged.get("lease_mask") == 13,
                     f"Web session started without confirmation: {staged}")
             action(device, "right")
@@ -496,6 +498,13 @@ def main() -> int:
                     active.get("credential_present") is True and
                     active.get("credential_persisted") is False and
                     active.get("credential_exposed_over_diagnostic") is False and
+                    active.get("network_core_ready") is True and
+                    active.get("begin_stage") == "ready" and
+                    active.get("driver_error") == 0 and
+                    active.get("cleanup_complete") is False and
+                    int(active.get("heap_free_before_begin", 0)) > 0 and
+                    int(active.get("heap_largest_before_begin", 0)) > 0 and
+                    int(active.get("heap_free_after_begin", 0)) > 0 and
                     active.get("maximum_clients") == 1 and
                     active.get("idle_timeout_us") == IDLE_TIMEOUT_US and
                     active.get("maximum_lifetime_us") == MAXIMUM_LIFETIME_US and
@@ -520,6 +529,8 @@ def main() -> int:
                     stopped.get("protocol_connected") is False and
                     stopped.get("credential_present") is False and
                     stopped.get("stop_reason") == "user" and
+                    stopped.get("cleanup_complete") is True and
+                    int(stopped.get("heap_free_after_stop", 0)) > 0 and
                     stopped.get("lease_mask") == 13,
                     f"Web stop did not revoke and scrub: {stopped}")
 
@@ -530,6 +541,7 @@ def main() -> int:
             require(released.get("authorized") is False and
                     released.get("server_active") is False and
                     released.get("credential_present") is False and
+                    released.get("cleanup_complete") is True and
                     released.get("lease_mask") == 0,
                     f"Web resources survived Targets teardown: {released}")
             safe = query(device, b"hardware.safe-outputs",

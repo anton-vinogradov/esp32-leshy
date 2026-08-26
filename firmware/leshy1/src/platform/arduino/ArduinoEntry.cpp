@@ -8565,7 +8565,7 @@ void broadcast(const char* line) {
 }
 
 void emitMetrics() {
-    char line[768] = {};
+    char line[1024] = {};
     bootMetrics.heapFree = ESP.getFreeHeap();
     bootMetrics.heapMinimum = ESP.getMinFreeHeap();
     if (leshy1::services::diagnostics::formatBootMetrics(bootMetrics, line, sizeof(line))) {
@@ -18156,6 +18156,11 @@ void emitCompanionWebState(Stream& reply) {
         "\"stop_reason\":\"%s\",\"requests_handled\":%lu,"
         "\"requests_rejected\":%lu,\"credential_present\":%s,"
         "\"credential_persisted\":false,\"credential_exposed_over_diagnostic\":false,"
+        "\"network_core_ready\":%s,\"begin_stage\":\"%s\","
+        "\"driver_error\":%d,\"cleanup_complete\":%s,"
+        "\"heap_free_before_begin\":%lu,"
+        "\"heap_largest_before_begin\":%lu,"
+        "\"heap_free_after_begin\":%lu,\"heap_free_after_stop\":%lu,"
         "\"maximum_clients\":1,\"idle_timeout_us\":%llu,"
         "\"maximum_lifetime_us\":%llu,\"lease_mask\":%lu}",
         webCompanionOverlay ? "true" : "false",
@@ -18173,6 +18178,19 @@ void emitCompanionWebState(Stream& reply) {
         static_cast<unsigned long>(
             arduinoCompanionWebService.requestsRejected()),
         webCompanionCredentials.valid() ? "true" : "false",
+        arduinoCompanionWebService.networkCoreReady() ? "true" : "false",
+        leshy1::platform::arduino::ArduinoCompanionWebService::beginStageName(
+            arduinoCompanionWebService.beginStage()),
+        static_cast<int>(arduinoCompanionWebService.lastError()),
+        arduinoCompanionWebService.cleanupComplete() ? "true" : "false",
+        static_cast<unsigned long>(
+            arduinoCompanionWebService.heapFreeBeforeBegin()),
+        static_cast<unsigned long>(
+            arduinoCompanionWebService.heapLargestBeforeBegin()),
+        static_cast<unsigned long>(
+            arduinoCompanionWebService.heapFreeAfterBegin()),
+        static_cast<unsigned long>(
+            arduinoCompanionWebService.heapFreeAfterStop()),
         static_cast<unsigned long long>(
             companion::kCompanionLocalIdleTimeoutUs),
         static_cast<unsigned long long>(
@@ -26450,6 +26468,10 @@ void setup() {
     // locks while the boot heap is unconstrained.
     std::fputc('\n', stdout);
     std::fflush(stdout);
+    // Initialize only the TCP/IP core while boot memory is contiguous. No
+    // network interface, Wi-Fi driver, credential, socket or RF mode exists
+    // until the user confirms Local Web inside a Target.
+    arduinoCompanionWebService.prepareNetworkCore();
     BoardSdSpiTransport::holdRadioTransmitPathsInactive();
 
     const bool flashMatches = ESP.getFlashChipSize() == BoardProfile::kExpectedFlashBytes;

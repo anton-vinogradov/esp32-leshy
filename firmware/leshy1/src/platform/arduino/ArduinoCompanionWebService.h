@@ -4,6 +4,9 @@
 #include <NetworkClient.h>
 #include <NetworkServer.h>
 
+#include <esp_err.h>
+#include <esp_netif.h>
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -24,18 +27,51 @@ public:
     static constexpr std::size_t kRequestCapacity =
         kMaximumHeaderBytes + services::companion::kCompanionMaxFrameBytes;
     static constexpr std::uint64_t kClientDeadlineUs = 3000000ULL;
+    static constexpr int kStaticRxBuffers = 4;
+    static constexpr int kDynamicRxBuffers = 8;
+    static constexpr int kDynamicTxBuffers = 8;
+    static constexpr int kRxManagementBuffers = 3;
+    static constexpr int kManagementShortBuffers = 8;
+
+    enum class BeginStage : std::uint8_t {
+        Idle,
+        NetworkCore,
+        EventLoop,
+        Netif,
+        WifiHandlers,
+        WifiInit,
+        RamStorage,
+        ApMode,
+        ApConfig,
+        WifiStart,
+        Server,
+        Ready,
+    };
 
     ArduinoCompanionWebService() : server_(80, 1) {}
 
+    bool prepareNetworkCore();
     bool begin(
         const services::companion::CompanionLocalCredentials& credentials);
-    void stop();
+    bool stop();
     bool poll(std::uint64_t nowUs, bool deviceSessionAuthorized,
               CompanionWebFrameHandler handler, void* context);
 
     bool active() const { return active_; }
     std::uint32_t requestsHandled() const { return requestsHandled_; }
     std::uint32_t requestsRejected() const { return requestsRejected_; }
+    bool networkCoreReady() const { return networkCoreReady_; }
+    bool cleanupComplete() const { return cleanupComplete_; }
+    BeginStage beginStage() const { return beginStage_; }
+    esp_err_t lastError() const { return lastError_; }
+    std::uint32_t heapFreeBeforeBegin() const { return heapFreeBeforeBegin_; }
+    std::uint32_t heapLargestBeforeBegin() const {
+        return heapLargestBeforeBegin_;
+    }
+    std::uint32_t heapFreeAfterBegin() const { return heapFreeAfterBegin_; }
+    std::uint32_t heapFreeAfterStop() const { return heapFreeAfterStop_; }
+
+    static const char* beginStageName(BeginStage stage);
 
 private:
     void resetClient();
@@ -43,6 +79,8 @@ private:
                       const char* body, std::size_t bodyLength);
     bool processRequest(bool deviceSessionAuthorized,
                         CompanionWebFrameHandler handler, void* context);
+    bool cleanupRuntime();
+    bool failBegin(BeginStage stage, esp_err_t error);
 
     NetworkServer server_;
     NetworkClient client_;
@@ -54,6 +92,19 @@ private:
     std::uint64_t clientStartedUs_ = 0;
     std::uint32_t requestsHandled_ = 0;
     std::uint32_t requestsRejected_ = 0;
+    esp_netif_t* apNetif_ = nullptr;
+    esp_err_t lastError_ = ESP_OK;
+    BeginStage beginStage_ = BeginStage::Idle;
+    std::uint32_t heapFreeBeforeBegin_ = 0;
+    std::uint32_t heapLargestBeforeBegin_ = 0;
+    std::uint32_t heapFreeAfterBegin_ = 0;
+    std::uint32_t heapFreeAfterStop_ = 0;
+    bool networkCoreReady_ = false;
+    bool eventLoopOwned_ = false;
+    bool wifiNetifAttached_ = false;
+    bool wifiInitialized_ = false;
+    bool wifiStarted_ = false;
+    bool cleanupComplete_ = true;
     bool active_ = false;
 };
 
