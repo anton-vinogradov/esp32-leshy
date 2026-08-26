@@ -273,7 +273,7 @@ void rejectedLoadClearsPriorRows() {
     CHECK(controller.catalog().size() == 0);
 }
 
-void denseAirKeepsStrongestCurrentSlice() {
+void denseAirKeepsStrongestAcrossBothVisits() {
     SurveySession baseline = rangeSession("dense-old", 10000, 1, 8, -20);
     SurveySession current = rangeSession("dense-new", 100, 20, 20, -30);
     OwnedTargetsWorkspace workspace;
@@ -284,11 +284,55 @@ void denseAirKeepsStrongestCurrentSlice() {
     CHECK(controller.entryCount() == TargetCatalog::kCapacity + 1);
     CHECK(controller.sourceIdentityCount() == 28);
     CHECK(controller.truncated());
-    CHECK(controller.row(0)->identity.value[5] == 20);
-    CHECK(controller.row(0)->latest.rssiDbm == -30);
-    CHECK(controller.row(15)->identity.value[5] == 35);
-    CHECK(controller.comparison().added == TargetCatalog::kCapacity);
-    CHECK(controller.comparison().removed == 0);
+    CHECK(controller.row(0)->identity.value[5] == 1);
+    CHECK(controller.row(0)->latest.rssiDbm == -20);
+    CHECK(controller.row(7)->identity.value[5] == 8);
+    CHECK(controller.row(8)->identity.value[5] == 20);
+    CHECK(controller.row(15)->identity.value[5] == 27);
+    CHECK(controller.comparison().added == 8);
+    CHECK(controller.comparison().removed == 8);
+}
+
+void denseAirRetainsCrossRadioCorrelationPair() {
+    SurveySession baseline;
+    CHECK(baseline.start("dense-corr-old", 20000) == SessionStatus::Started);
+    CHECK(baseline.append(labeled(
+              RadioKind::Wifi, 1, 20001, 80, -26,
+              "LESHY-HIL-CORR")) == SessionStatus::Appended);
+    for (std::size_t index = 0; index < 20; ++index) {
+        CHECK(baseline.append(wifi(
+                  index + 2, 20002 + index,
+                  static_cast<std::uint8_t>(100 + index),
+                  static_cast<std::int16_t>(-50 - index))) ==
+              SessionStatus::Appended);
+    }
+    CHECK(baseline.stop(20100) == SessionStatus::Stopped);
+
+    SurveySession current;
+    CHECK(current.start("dense-corr-new", 30000) == SessionStatus::Started);
+    CHECK(current.append(labeled(
+              RadioKind::Ble, 1, 30001, 81, -40,
+              "LESHY-HIL-CORR")) == SessionStatus::Appended);
+    for (std::size_t index = 0; index < 20; ++index) {
+        CHECK(current.append(wifi(
+                  index + 2, 30002 + index,
+                  static_cast<std::uint8_t>(140 + index),
+                  static_cast<std::int16_t>(-55 - index))) ==
+              SessionStatus::Appended);
+    }
+    CHECK(current.stop(30100) == SessionStatus::Stopped);
+
+    OwnedTargetsWorkspace workspace;
+    TargetsController controller(workspace);
+    CHECK(controller.load({&baseline, 50}, {&current, 51}) ==
+          TargetsLoadStatus::Ready);
+    CHECK(controller.sourceIdentityCount() == 42);
+    CHECK(controller.truncated());
+    CHECK(workspace.correlations.size == 1);
+    CHECK(workspace.correlations.values[0].confidence ==
+          CorrelationConfidence::Medium);
+    CHECK(workspace.correlations.values[0].candidateIdentity.kind ==
+          TargetIdentityKind::BleAddress);
 }
 
 void currentEvidenceWinsAcrossMonotonicReset() {
@@ -506,7 +550,8 @@ int main() {
     pairIsUsefulFirstAndStable();
     singleSessionStillListsTargets();
     rejectedLoadClearsPriorRows();
-    denseAirKeepsStrongestCurrentSlice();
+    denseAirKeepsStrongestAcrossBothVisits();
+    denseAirRetainsCrossRadioCorrelationPair();
     currentEvidenceWinsAcrossMonotonicReset();
     comparisonClassesThenSignalAreStable();
     persistedMetadataFollowsIdentityAcrossVisits();

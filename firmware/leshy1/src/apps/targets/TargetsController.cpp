@@ -105,11 +105,13 @@ bool laterIdentityExists(const services::survey::SurveySession& session,
 bool appendStrongest(
     const services::survey::SurveySession& session,
     const services::survey::SurveySession* exclude,
-    services::targets::SessionTargetIdentityFilter* filter,
+    std::array<RankedIdentity,
+               domain::targets::TargetCatalog::kCapacity>* ranked,
+    std::size_t* rankedSize,
     std::size_t* uniqueCount) {
-    if (filter == nullptr || uniqueCount == nullptr) return false;
-    std::array<RankedIdentity, domain::targets::TargetCatalog::kCapacity> ranked{};
-    std::size_t rankedSize = 0;
+    if (ranked == nullptr || rankedSize == nullptr || uniqueCount == nullptr) {
+        return false;
+    }
     domain::targets::SourceId sourceId{};
     if (!services::targets::sourceIdForSession(session, &sourceId)) return false;
     for (std::size_t index = 0; index < session.size(); ++index) {
@@ -126,23 +128,19 @@ bool appendStrongest(
         ++*uniqueCount;
         RankedIdentity candidate{admitted.identity, observation->rssiDbm,
                                  observation->monotonicUs};
-        std::size_t insert = rankedSize;
-        while (insert > 0 && rankedBefore(candidate, ranked[insert - 1])) {
+        std::size_t insert = *rankedSize;
+        while (insert > 0 &&
+               rankedBefore(candidate, (*ranked)[insert - 1])) {
             --insert;
         }
-        if (insert >= ranked.size()) continue;
-        const std::size_t last = rankedSize < ranked.size()
-            ? rankedSize : ranked.size() - 1;
+        if (insert >= ranked->size()) continue;
+        const std::size_t last = *rankedSize < ranked->size()
+            ? *rankedSize : ranked->size() - 1;
         for (std::size_t move = last; move > insert; --move) {
-            ranked[move] = ranked[move - 1];
+            (*ranked)[move] = (*ranked)[move - 1];
         }
-        ranked[insert] = candidate;
-        if (rankedSize < ranked.size()) ++rankedSize;
-    }
-    const std::size_t available = filter->identities.size() - filter->size;
-    const std::size_t copyCount = rankedSize < available ? rankedSize : available;
-    for (std::size_t index = 0; index < copyCount; ++index) {
-        filter->identities[filter->size++] = ranked[index].identity;
+        (*ranked)[insert] = candidate;
+        if (*rankedSize < ranked->size()) ++*rankedSize;
     }
     return true;
 }
@@ -158,13 +156,22 @@ bool selectStrongestIdentities(
     }
     *filter = {};
     *sourceIdentityCount = 0;
-    if (!appendStrongest(*current.session, nullptr, filter,
+    std::array<RankedIdentity,
+               domain::targets::TargetCatalog::kCapacity> ranked{};
+    std::size_t rankedSize = 0;
+    if (!appendStrongest(*current.session, nullptr, &ranked, &rankedSize,
                          sourceIdentityCount)) {
         return false;
     }
-    return !compare || (baseline.session != nullptr &&
-        appendStrongest(*baseline.session, current.session, filter,
-                        sourceIdentityCount));
+    if (compare && (baseline.session == nullptr ||
+        !appendStrongest(*baseline.session, current.session, &ranked,
+                         &rankedSize, sourceIdentityCount))) {
+        return false;
+    }
+    for (std::size_t index = 0; index < rankedSize; ++index) {
+        filter->identities[filter->size++] = ranked[index].identity;
+    }
+    return true;
 }
 
 void removePendingCorrelations(
