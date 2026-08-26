@@ -242,6 +242,35 @@ def precursor_candidate_matches(
             precursor_partitions == candidate.get("partitions_sha256"))
 
 
+def failed_precursor_proves_safe_reuse(
+        precursor: dict[str, Any], candidate: dict[str, Any]) -> bool:
+    """Accept a failed run only after exact boot and proven safe cleanup."""
+    if precursor.get("status") != "failed":
+        return False
+    metrics = precursor.get("metrics_before", {})
+    cleanup = precursor.get("cleanup", {})
+    final_state = cleanup.get("final_state", {})
+    host_wifi = precursor.get("host_wifi")
+    host_restored = (
+        host_wifi is None or
+        (host_wifi.get("restore_attempted") is True and
+         host_wifi.get("restored") is True)
+    )
+    return (
+        metrics.get("version") == candidate.get("version") and
+        metrics.get("app_elf_sha256") == candidate.get("app_elf_sha256") and
+        cleanup.get("attempted") is True and
+        cleanup.get("complete") is True and
+        cleanup.get("errors") == [] and
+        final_state.get("page") == "home" and
+        final_state.get("runtime_owner") == "none" and
+        final_state.get("lease_mask") == 0 and
+        final_state.get("safety_state") == "armed" and
+        final_state.get("safety_latched") is False and
+        host_restored
+    )
+
+
 def proven_clearable_runtime_watchdog(state: dict[str, Any]) -> bool:
     """Permit an explicit clear only for an idle, fully quiesced old latch."""
     trip_count = state.get("trip_count")
@@ -438,7 +467,8 @@ def main() -> int:
         ) or (
             precursor.get("status") == "interrupted" and
             precursor.get("checkpoint") == "console_sync"
-        )
+        ) or failed_precursor_proves_safe_reuse(
+            precursor, record["candidate"])
         if (precursor.get("flash_count") != 1 or not safe_precursor or
                 precursor_target.get("port") != args.port or
                 precursor_target.get("ports_opened") != [args.port] or

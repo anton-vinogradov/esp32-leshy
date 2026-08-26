@@ -66,6 +66,52 @@ class CompanionWebDeltaRunnerTests(unittest.TestCase):
         self.assertEqual(
             [b"companion.web.hil-seed 0000\n"], device.writes)
 
+    def test_failed_precursor_requires_exact_boot_and_safe_cleanup(self) -> None:
+        candidate = {
+            "version": "0.182.0-companion-web-http-parity",
+            "app_elf_sha256": "app",
+        }
+        precursor = {
+            "status": "failed",
+            "metrics_before": dict(candidate),
+            "cleanup": {
+                "attempted": True,
+                "complete": True,
+                "errors": [],
+                "final_state": {
+                    "page": "home",
+                    "runtime_owner": "none",
+                    "lease_mask": 0,
+                    "safety_state": "armed",
+                    "safety_latched": False,
+                },
+            },
+        }
+        self.assertTrue(
+            runner.failed_precursor_proves_safe_reuse(precursor, candidate))
+        for path, unsafe in (
+            (("metrics_before", "app_elf_sha256"), "other"),
+            (("cleanup", "complete"), False),
+            (("cleanup", "final_state", "lease_mask"), 1),
+            (("cleanup", "final_state", "safety_latched"), True),
+        ):
+            changed = json.loads(json.dumps(precursor))
+            target = changed
+            for key in path[:-1]:
+                target = target[key]
+            target[path[-1]] = unsafe
+            self.assertFalse(
+                runner.failed_precursor_proves_safe_reuse(changed, candidate),
+                path)
+
+        changed = json.loads(json.dumps(precursor))
+        changed["host_wifi"] = {
+            "restore_attempted": True,
+            "restored": False,
+        }
+        self.assertFalse(
+            runner.failed_precursor_proves_safe_reuse(changed, candidate))
+
     def test_reviewed_layout_accepts_fitting_candidate(self) -> None:
         entries = [
             (1, 0x02, 0x9000, 0x5000, "nvs"),
