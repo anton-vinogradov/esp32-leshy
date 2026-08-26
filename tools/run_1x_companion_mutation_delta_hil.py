@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import subprocess
@@ -12,6 +13,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from capture_1x_boot import reset_and_capture_reconnecting
 from capture_1x_ui import PassiveSerial, synchronize_console
 from esp_app_identity import app_elf_sha256
 from run_1x_companion_usb_delta_hil import (
@@ -25,8 +27,8 @@ from run_1x_product_survey_hil import (
     action,
     artifact_manifest,
     best_effort_cleanup,
+    parse_boot_records,
     query,
-    reset_capture,
 )
 from run_1x_ui_typography_hil import normalize_home
 
@@ -383,8 +385,19 @@ def main() -> int:
         device.close()
         device = None
 
-        ready_after, _, reset_timing = reset_capture(
-            args.port, args.output, "companion-mutation-cold-reopen", 20.0)
+        reset_name = "companion-mutation-cold-reopen"
+        (reset_raw, reset_ready_ms, reset_disconnects,
+         reset_open_attempts) = reset_and_capture_reconnecting(
+            args.port, 30.0)
+        (args.output / f"{reset_name}.ndjson").write_bytes(reset_raw)
+        ready_after, _ = parse_boot_records(reset_raw)
+        reset_timing = {
+            "bytes": len(reset_raw),
+            "sha256": hashlib.sha256(reset_raw).hexdigest(),
+            "ready_marker_ms": reset_ready_ms,
+            "disconnects": reset_disconnects,
+            "open_attempts": reset_open_attempts,
+        }
         require(ready_after.get("version") == args.expected_version and
                 ready_after.get("app_elf_sha256") == app_identity,
                 f"cold reset booted wrong candidate: {ready_after}")

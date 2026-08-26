@@ -215,6 +215,8 @@ def main() -> int:
         'precursor_candidate != record["candidate"]',
         'def leave_targets(',
         'for presses in range(1, 5)',
+        'reset_and_capture_reconnecting(',
+        '"open_attempts": reset_open_attempts',
         'home_denied.get("reason") == "scope_unavailable"',
         'no_op.get("reason") == "unchanged"',
         'stale.get("reason") == "revision_conflict"',
