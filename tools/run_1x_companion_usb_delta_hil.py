@@ -256,6 +256,10 @@ def main() -> int:
             require(targets_state.get("status") == "ready" and
                     targets_state.get("compare_available") is True and
                     targets_state.get("write_enabled") is False and
+                    1 <= targets_state.get("identity_attempts", 0) <= 8 and
+                    targets_state.get("identity_transient_retries") ==
+                    targets_state.get("identity_attempts") - 1 and
+                    targets_state.get("identity_cleanup_complete") is True and
                     targets_state.get("blocked_write_attempts") == 0,
                     f"Targets snapshot is not exact/read-only: {targets_state}")
 

@@ -490,6 +490,9 @@ std::uint64_t targetsLoadMaximumPhaseUs = 0;
 std::uint32_t targetsLoadWatchdogFeeds = 0;
 std::uint32_t targetsBlockedWriteAttempts = 0;
 int targetsFilesystemMountError = 0;
+std::uint8_t targetsIdentityAttempts = 0;
+std::uint8_t targetsIdentityTransientRetries = 0;
+bool targetsIdentityCleanupComplete = true;
 std::uint8_t targetsFilesystemMountAttempts = 0;
 std::uint8_t targetsFilesystemMountTransientRetries = 0;
 bool targetsCleanupComplete = true;
@@ -5241,6 +5244,9 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     targetsMutationMergeSourceId = {};
     targetsBlockedWriteAttempts = 0;
     targetsFilesystemMountError = 0;
+    targetsIdentityAttempts = 0;
+    targetsIdentityTransientRetries = 0;
+    targetsIdentityCleanupComplete = true;
     targetsFilesystemMountAttempts = 0;
     targetsFilesystemMountTransientRetries = 0;
     targetsCleanupComplete = true;
@@ -5293,25 +5299,60 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         return true;
     }
 
-    BoardSdSpiTransport identityTransport;
-    const bool identityBegun = identityTransport.begin();
     leshy1::storage::SdTransportRunResult identity{};
-    if (identityBegun) {
-        leshy1::storage::SdTransportRunPolicy policy;
-        policy.allowPhysical = true;
-        policy.explicitlySelected = true;
-        policy.identificationOnly = true;
-        policy.ownedResources = owned;
-        identity = leshy1::storage::runSdIdentificationStateMachine(
-            leshy1::storage::defaultSdIdentificationPlan(),
-            identityTransport, policy);
-        identityTransport.end();
-    }
-    loadWatchdog.checkpoint();
     char observedFingerprint[33] = {};
-    formatCidFingerprint(identity.identity, observedFingerprint,
-                         sizeof(observedFingerprint));
-    if (!identityBegun || !identityTransport.cleanupComplete() ||
+    bool identityBegun = false;
+    for (std::uint8_t attempt = 1;
+         attempt <= leshy1::storage::kProductStartMaximumIdentityAttempts;
+         ++attempt) {
+        BoardSdSpiTransport identityTransport;
+        identityBegun = identityTransport.begin();
+        identity = {};
+        if (identityBegun) {
+            leshy1::storage::SdTransportRunPolicy policy;
+            policy.allowPhysical = true;
+            policy.explicitlySelected = true;
+            policy.identificationOnly = true;
+            policy.ownedResources = owned;
+            identity = leshy1::storage::runSdIdentificationStateMachine(
+                leshy1::storage::defaultSdIdentificationPlan(),
+                identityTransport, policy);
+            identityTransport.end();
+        }
+        targetsIdentityAttempts = attempt;
+        targetsIdentityTransientRetries =
+            static_cast<std::uint8_t>(attempt - 1U);
+        targetsIdentityCleanupComplete =
+            identityTransport.cleanupComplete();
+        formatCidFingerprint(identity.identity, observedFingerprint,
+                             sizeof(observedFingerprint));
+        loadWatchdog.checkpoint();
+        if (targetsIdentityCleanupComplete &&
+            identity.status ==
+                leshy1::storage::SdTransportRunStatus::Valid) {
+            break;
+        }
+        const leshy1::storage::ProductStartIdentityRetryEvidence evidence{
+            true,
+            true,
+            exactCidFingerprint(expectedFingerprint),
+            (owned & required) == required,
+            identityTransport.physicalSpiStarted(),
+            identity.status,
+            std::strcmp(observedFingerprint,
+                        "00000000000000000000000000000000") == 0,
+            targetsIdentityCleanupComplete,
+            false,
+        };
+        if (!leshy1::storage::shouldRetryProductStartIdentity(
+                evidence, attempt)) {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(
+            leshy1::storage::productStartIdentityRetryDelayMs(attempt)));
+        loadWatchdog.checkpoint();
+    }
+    if (!identityBegun || !targetsIdentityCleanupComplete ||
         identity.status != leshy1::storage::SdTransportRunStatus::Valid) {
         targetsProductStatus = "identity_failed";
         lastRuntimeEvent = targetsProductStatus;
@@ -17338,6 +17379,9 @@ void emitTargetsState(Stream& reply) {
         "\"mutation_expected_cid\":\"%s\","
         "\"mutation_observed_cid\":\"%s\","
         "\"blocked_write_attempts\":%lu,"
+        "\"identity_attempts\":%u,"
+        "\"identity_transient_retries\":%u,"
+        "\"identity_cleanup_complete\":%s,"
         "\"filesystem_mount_error\":%d,"
         "\"filesystem_mount_attempts\":%u,"
         "\"filesystem_mount_transient_retries\":%u,"
@@ -17621,6 +17665,9 @@ void emitTargetsState(Stream& reply) {
         targetsMutationReport.expectedFingerprint,
         targetsMutationReport.observedFingerprint,
         static_cast<unsigned long>(targetsBlockedWriteAttempts),
+        static_cast<unsigned>(targetsIdentityAttempts),
+        static_cast<unsigned>(targetsIdentityTransientRetries),
+        targetsIdentityCleanupComplete ? "true" : "false",
         targetsFilesystemMountError,
         static_cast<unsigned>(targetsFilesystemMountAttempts),
         static_cast<unsigned>(targetsFilesystemMountTransientRetries),

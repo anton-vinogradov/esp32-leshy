@@ -158,6 +158,7 @@ def main() -> int:
         "kUsbCommandCapacity",
         "usbCommandOverflow",
         "response_encoding_failed",
+        "targetsIdentityTransientRetries",
         "poll(Serial, usbCommand",
         "poll(Serial0, uartCommand",
     ):
