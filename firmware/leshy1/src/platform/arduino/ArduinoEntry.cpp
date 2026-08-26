@@ -7210,7 +7210,7 @@ void admitPersistentLibraryCapability(const char* evidence) {
         inventory.add({"library.persistent_session", CapabilityState::Available,
                        evidence, "validated_session_open"});
     }
-    appCatalog.rebuild(inventory);
+    appCatalog.rebuild(inventory, targetsMergeFixtureContinuityValid());
     renderInteractiveScreen();
 }
 
@@ -22351,7 +22351,7 @@ void emitProductStoreBootstrap(Stream& reply,
                            "explicit_product_bootstrap",
                            "validated_session_open"});
         }
-        appCatalog.rebuild(inventory);
+        appCatalog.rebuild(inventory, targetsMergeFixtureContinuityValid());
         renderInteractiveScreen();
     }
 
@@ -22833,7 +22833,7 @@ void emitPhysicalSdSessionStore(Stream& reply, const char* expectedFingerprint,
             persistentLibraryAdmitted =
                 libraryDemoReady && persistentCapabilityReady;
             if (persistentLibraryAdmitted) {
-                appCatalog.rebuild(inventory);
+                appCatalog.rebuild(inventory, targetsMergeFixtureContinuityValid());
                 renderInteractiveScreen();
             }
         }
@@ -25664,7 +25664,7 @@ void setup() {
                        ? "nrf1_nrf2_cc1101_read_only_probe_available"
                        : "rf_shield_not_declared"});
 
-    appCatalog.rebuild(inventory);
+    appCatalog.rebuild(inventory, targetsMergeFixtureContinuityValid());
     feedRuntimeSafetyWatchdog();
     renderInteractiveScreen();
     bootMetrics.interactiveReadyUs = static_cast<std::uint64_t>(esp_timer_get_time());

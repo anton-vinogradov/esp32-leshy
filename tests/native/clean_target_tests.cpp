@@ -2383,6 +2383,23 @@ void testAppCatalogProjectsCapabilityStatesBeforeLaunch() {
     CHECK(catalog.get(6)->simulated);
     CHECK(std::strcmp(catalog.get(6)->reason, "simulated / ram only") == 0);
 
+    // An armed disposable merge/split fixture deliberately bypasses product
+    // SD recovery across a cold boot. Targets must still retain the exact
+    // Storage + RadioSPI lease and select the fixture loader, while the
+    // unrelated Library entry remains an honest volatile simulation.
+    catalog.rebuild(simulatedLibraryInventory, true);
+    CHECK(catalog.get(5)->enabled);
+    CHECK(!catalog.get(5)->simulated);
+    CHECK(std::strcmp(catalog.get(5)->reason,
+                      "isolated merge / split verification") == 0);
+    CHECK(catalog.get(5)->resources ==
+          (resourceMask(Resource::UiForeground) |
+           resourceMask(Resource::Storage) |
+           resourceMask(Resource::RadioSpi)));
+    CHECK(catalog.get(6)->enabled);
+    CHECK(catalog.get(6)->simulated);
+    CHECK(catalog.get(6)->resources == resourceMask(Resource::UiForeground));
+
     HardwareInventory recoveredLibraryInventory;
     CHECK(recoveredLibraryInventory.add(
         {"board.profile", CapabilityState::Available, "runtime", "match"}));

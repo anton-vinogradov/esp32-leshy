@@ -259,6 +259,11 @@ def main() -> int:
                 target_catalog and
             "TargetMutationStatus TargetCatalog::replaceAndInsert(" in
                 target_catalog and
+            "appCatalog.rebuild(inventory, "
+                "targetsMergeFixtureContinuityValid())" in entry and
+            "bool targetsMergeFixture" in catalog and
+            "targetsAvailable" in catalog and
+            "targetsSimulated" in catalog and
             "TargetCatalog validation" not in target_merge and
             "beginPersistenceRestore()" in target_merge and
             "commitPersistenceRestore()" in target_merge and

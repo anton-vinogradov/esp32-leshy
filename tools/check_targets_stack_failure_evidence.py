@@ -18,6 +18,9 @@ RESET_EVIDENCE = (
 MERGE_EVIDENCE = (
     ROOT / "tests/hil/evidence/board-01-targets-merge-stack-failure-0.163.json"
 )
+FIXTURE_REOPEN_EVIDENCE = (
+    ROOT / "tests/hil/evidence/board-01-targets-fixture-reopen-failure-0.164.json"
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -142,7 +145,52 @@ def main() -> None:
             "0.163 Cardputer isolation lost")
     require(merge["repair_gate"]["candidate_version"] ==
             "0.164.0-targets-merge-inplace", "0.164 repair link missing")
-    print("targets 0.146/0.147/0.148/0.163 fail-closed evidence: OK")
+    reopen = json.loads(FIXTURE_REOPEN_EVIDENCE.read_text(encoding="utf-8"))
+    require(
+        reopen["schema"] ==
+        "leshy.targets_fixture_reopen_failure.evidence.v1",
+        "unexpected fixture-reopen failure schema",
+    )
+    require(reopen["status"] == "failed", "0.164 failure must not be accepted")
+    require(reopen["classification"] == "retained_fail_closed",
+            "0.164 failure hidden")
+    require(reopen["source_commit"] ==
+            "b5cb6f4e3210ad720fa5924175078fc476c506bf",
+            "0.164 exact source lost")
+    require(reopen["failure"]["phase"] == "merged_cold_reopen",
+            "0.164 failure phase lost")
+    require(reopen["failure"]["expected_lease_mask"] == 13 and
+            reopen["failure"]["actual_lease_mask"] == 1,
+            "0.164 lease mismatch lost")
+    require(reopen["merge_checkpoint"]["mutation_persisted"] is True and
+            reopen["merge_checkpoint"]["mutation_status"] == "saved",
+            "0.164 successful merge checkpoint lost")
+    require(reopen["merge_checkpoint"]["stack_min_free"] == 8040,
+            "0.164 repaired merge stack observation lost")
+    require(reopen["merge_checkpoint"]["write_calls"] == 3 and
+            reopen["merge_checkpoint"]["file_syncs"] == 3 and
+            reopen["merge_checkpoint"]["directory_syncs"] == 3,
+            "0.164 atomic merge save proof lost")
+    require(reopen["post_failure_restore"]["ota1_restore_verified"] is True and
+            reopen["post_failure_restore"]["ota1_before_sha256"] ==
+            reopen["post_failure_restore"]["ota1_after_sha256"],
+            "0.164 OTA1 was not restored exactly")
+    require(reopen["post_failure_restore"]["partition_table_restore_verified"]
+            is True and
+            reopen["post_failure_restore"]["partition_table_before_sha256"] ==
+            reopen["post_failure_restore"]["partition_table_after_sha256"],
+            "0.164 partition table was not restored exactly")
+    require(reopen["post_failure_restore"]["final_cid"] ==
+            "FE343253440000002000000055019CB7" and
+            reopen["post_failure_restore"]["final_lease_mask"] == 0,
+            "0.164 final product continuity lost")
+    require(reopen["usb"]["opened_ports"] == ["/dev/cu.usbmodem2101"] and
+            reopen["usb"]["cardputer_ports_opened"] == 0 and
+            reopen["usb"]["port_discovery_calls"] == 0,
+            "0.164 Cardputer isolation lost")
+    require(reopen["repair_gate"]["candidate_version"] ==
+            "0.165.0-targets-fixture-reopen", "0.165 repair link missing")
+    print("targets 0.146/0.147/0.148/0.163/0.164 fail-closed evidence: OK")
 
 
 if __name__ == "__main__":

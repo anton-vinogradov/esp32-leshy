@@ -23,7 +23,8 @@ class AppCatalog final {
 public:
     static constexpr std::size_t kCapacity = 8;
 
-    void rebuild(const hardware::HardwareInventory& inventory);
+    void rebuild(const hardware::HardwareInventory& inventory,
+                 bool targetsMergeFixture = false);
     const AppMenuItem* get(std::size_t index) const;
     std::size_t size() const { return size_; }
 

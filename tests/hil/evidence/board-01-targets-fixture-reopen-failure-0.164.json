@@ -1,0 +1,62 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "elf_sha256": "31462bf8211dfbfa158356ba9bac300dfd8276088553a6318aa15d6849f69bcf",
+    "firmware_sha256": "2967c029b839512f6000902cc8183429d0a6114e3f75e5c7facb3d8bf5898736",
+    "map_sha256": "325ab05770583554046ca3141f9fc4be8c8a7e7ab921262ec783a132ca464eb3",
+    "version": "0.164.0-targets-merge-inplace"
+  },
+  "classification": "retained_fail_closed",
+  "failure": {
+    "actual_lease_mask": 1,
+    "error": "RuntimeError: open Targets: expected={'page': 'targets', 'runtime_owner': 'targets', 'lease_mask': 13}, actual={'page': 'targets', 'runtime_owner': 'targets', 'lease_mask': 1}",
+    "expected_lease_mask": 13,
+    "phase": "merged_cold_reopen",
+    "root_cause": "fixture_sd_bypass_misclassified_targets_as_simulated_after_boot",
+    "run_json_sha256": "01a622a051c063d04da178b3d9cf80cbb1f7012d223de0ce42454fe3c3c2f2d3"
+  },
+  "merge_checkpoint": {
+    "catalog_count": 1,
+    "directory_syncs": 3,
+    "file_syncs": 3,
+    "history_count": 1,
+    "mutation_generation": 1,
+    "mutation_persisted": true,
+    "mutation_status": "saved",
+    "stack_min_free": 8040,
+    "worker_stack_observed": true,
+    "write_calls": 3
+  },
+  "post_failure_restore": {
+    "cleanup_complete": true,
+    "final_cid": "FE343253440000002000000055019CB7",
+    "final_generation": 161,
+    "final_lease_mask": 0,
+    "final_observations": 59,
+    "ota1_after_sha256": "3bf012ed2a6f9ae7026ec8eb5a080dcd75e343b7073e337ea72900ed97da9e33",
+    "ota1_before_sha256": "3bf012ed2a6f9ae7026ec8eb5a080dcd75e343b7073e337ea72900ed97da9e33",
+    "ota1_restore_verified": true,
+    "partition_table_after_sha256": "44539be51aeb592d44450059d7dbbb4d5a25d7fe5144cc68b8e85acba367ba87",
+    "partition_table_before_sha256": "44539be51aeb592d44450059d7dbbb4d5a25d7fe5144cc68b8e85acba367ba87",
+    "partition_table_restore_verified": true,
+    "safety_latched": false
+  },
+  "repair_gate": {
+    "candidate_version": "0.165.0-targets-fixture-reopen",
+    "exact_delta_required": true,
+    "required_outcome": "merge_and_split_survive_fixture_cold_reopens"
+  },
+  "schema": "leshy.targets_fixture_reopen_failure.evidence.v1",
+  "source_commit": "b5cb6f4e3210ad720fa5924175078fc476c506bf",
+  "status": "failed",
+  "usb": {
+    "cardputer_ports_opened": 0,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "port_discovery_calls": 0
+  }
+}

@@ -10,7 +10,8 @@ bool available(const hardware::HardwareInventory& inventory, const char* key) {
 
 }  // namespace
 
-void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
+void AppCatalog::rebuild(const hardware::HardwareInventory& inventory,
+                         bool targetsMergeFixture) {
     size_ = 0;
     const bool persistentSurvey =
         available(inventory, "survey.persistent_passive");
@@ -79,12 +80,16 @@ void AppCatalog::rebuild(const hardware::HardwareInventory& inventory) {
     const bool simulatedLibrary =
         !persistentLibrary && available(inventory, "library.simulated");
     const bool library = persistentLibrary || simulatedLibrary;
+    const bool targetsAvailable = library || targetsMergeFixture;
+    const bool targetsSimulated = simulatedLibrary && !targetsMergeFixture;
     items_[size_++] = {
         "targets", "TARGETS",
-        library ? "saved identities / compare visits"
-                : "saved sessions unavailable",
-        7, library, simulatedLibrary,
-        simulatedLibrary
+        targetsMergeFixture
+            ? "isolated merge / split verification"
+            : (library ? "saved identities / compare visits"
+                       : "saved sessions unavailable"),
+        7, targetsAvailable, targetsSimulated,
+        targetsSimulated
             ? kernel::runtime::resourceMask(
                   kernel::runtime::Resource::UiForeground)
             : kernel::runtime::resourceMask(
