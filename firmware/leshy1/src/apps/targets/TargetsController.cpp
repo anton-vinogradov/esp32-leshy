@@ -60,9 +60,13 @@ struct RankedIdentity final {
     domain::targets::TargetIdentity identity{};
     std::int16_t rssiDbm = -128;
     std::uint64_t monotonicUs = 0;
+    bool correlationSeed = false;
 };
 
 bool rankedBefore(const RankedIdentity& left, const RankedIdentity& right) {
+    if (left.correlationSeed != right.correlationSeed) {
+        return left.correlationSeed;
+    }
     if (left.rssiDbm != right.rssiDbm) return left.rssiDbm > right.rssiDbm;
     return left.monotonicUs > right.monotonicUs;
 }
@@ -114,6 +118,38 @@ bool filterContainsIdentity(
     return false;
 }
 
+bool hasCrossRadioCorrelationCandidate(
+    const domain::observations::Observation& known,
+    const services::survey::SurveySession& candidates) {
+    if (known.labelLength == 0) return false;
+    domain::targets::SourceId candidateSource{};
+    if (!services::targets::sourceIdForSession(candidates, &candidateSource)) {
+        return false;
+    }
+    for (std::size_t index = 0; index < candidates.size(); ++index) {
+        const auto* candidate = candidates.get(index);
+        if (candidate == nullptr) return false;
+        const auto admitted = services::targets::admitObservationToTarget(
+            candidateSource, 1, *candidate);
+        if (!admitted.valid()) return false;
+        if (laterIdentityExists(candidates, index, candidateSource,
+                                admitted.identity) ||
+            candidate->labelLength == 0 ||
+            candidate->labelLength != known.labelLength ||
+            std::memcmp(candidate->label.data(), known.label.data(),
+                        known.labelLength) != 0 ||
+            (known.radio == domain::observations::RadioKind::Wifi &&
+             candidate->radio == domain::observations::RadioKind::Wifi)) {
+            continue;
+        }
+        const std::int16_t difference = known.rssiDbm > candidate->rssiDbm
+            ? known.rssiDbm - candidate->rssiDbm
+            : candidate->rssiDbm - known.rssiDbm;
+        if (difference <= 20) return true;
+    }
+    return false;
+}
+
 bool countUniqueIdentities(
     const services::survey::SurveySession& session,
     const services::survey::SurveySession* exclude,
@@ -140,6 +176,7 @@ bool countUniqueIdentities(
 bool considerStrongestUnselected(
     const services::survey::SurveySession& session,
     const services::survey::SurveySession* exclude,
+    const services::survey::SurveySession* correlationCandidates,
     const services::targets::SessionTargetIdentityFilter& selected,
     RankedIdentity* strongest, bool* found) {
     if (strongest == nullptr || found == nullptr) return false;
@@ -158,7 +195,10 @@ bool considerStrongestUnselected(
             continue;
         }
         const RankedIdentity candidate{
-            admitted.identity, observation->rssiDbm, observation->monotonicUs};
+            admitted.identity, observation->rssiDbm, observation->monotonicUs,
+            correlationCandidates != nullptr &&
+                hasCrossRadioCorrelationCandidate(*observation,
+                                                   *correlationCandidates)};
         if (!*found || rankedBefore(candidate, *strongest)) {
             *strongest = candidate;
             *found = true;
@@ -195,11 +235,11 @@ bool selectStrongestIdentities(
     while (filter->size < filter->identities.size()) {
         RankedIdentity strongest{};
         bool found = false;
-        if (!considerStrongestUnselected(*current.session, nullptr, *filter,
-                                         &strongest, &found) ||
+        if (!considerStrongestUnselected(*current.session, nullptr, nullptr,
+                                         *filter, &strongest, &found) ||
             (compare && !considerStrongestUnselected(
-                *baseline.session, current.session, *filter, &strongest,
-                &found))) {
+                *baseline.session, current.session, current.session, *filter,
+                &strongest, &found))) {
             return false;
         }
         if (!found) break;

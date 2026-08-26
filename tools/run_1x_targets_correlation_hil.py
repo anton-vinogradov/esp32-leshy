@@ -67,11 +67,19 @@ def open_targets(device: PassiveSerial) -> dict[str, Any]:
 
 
 def find_proposal(device: PassiveSerial,
-                  listed: dict[str, Any]) -> dict[str, Any] | None:
+                  listed: dict[str, Any],
+                  searched: list[dict[str, Any]]) -> dict[str, Any] | None:
     for _ in range(int(listed.get("target_count", 0))):
         action(device, "down")
         selected = query(device, b"targets.state",
                          "leshy.targets.product.v1", "state")
+        searched.append({
+            key: selected.get(key) for key in (
+                "selection", "selected_target_id", "selected_generation",
+                "selected_rssi_dbm", "correlation_count",
+                "correlation_proposal_present",
+            )
+        })
         if int(selected.get("correlation_count", 0)) > 0:
             return selected
     return None
@@ -328,7 +336,9 @@ def main() -> int:
                 int(listed.get("current_generation", 0)),
                 int(listed.get("selected_generation", 0)),
             )
-            selected = find_proposal(device, listed)
+            searched: list[dict[str, Any]] = []
+            selected = find_proposal(device, listed, searched)
+            states[f"attempt_{attempt}_proposal_search"] = searched
             if selected is not None:
                 states["proposal_selected"] = selected
                 break
@@ -336,7 +346,7 @@ def main() -> int:
             if attempt == MAX_FRESH_SURVEY_CYCLES:
                 break
             if fixture is not None:
-                requested_mode = "wifi" if not scans else "ble"
+                requested_mode = "wifi" if len(scans) % 2 == 0 else "ble"
                 if (not fixture_states or
                         fixture_states[-1].get("mode") != requested_mode):
                     fixture_states.append(fixture_mode(

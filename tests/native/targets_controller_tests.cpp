@@ -317,7 +317,7 @@ void denseAirRetainsCrossRadioCorrelationPair() {
         CHECK(current.append(wifi(
                   index + 2, 30002 + index,
                   static_cast<std::uint8_t>(140 + index),
-                  static_cast<std::int16_t>(-55 - index))) ==
+                  static_cast<std::int16_t>(-5 - index))) ==
               SessionStatus::Appended);
     }
     CHECK(current.stop(30100) == SessionStatus::Stopped);
