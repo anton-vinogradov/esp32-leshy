@@ -478,6 +478,9 @@ TargetsProductRuntime* targetsProductRuntime = nullptr;
 const char* targetsProductStatus = "not_loaded";
 std::uint32_t targetsHeapFreeBefore = 0;
 std::uint32_t targetsHeapFreeAfter = 0;
+std::uint64_t targetsLoadElapsedUs = 0;
+std::uint64_t targetsLoadMaximumPhaseUs = 0;
+std::uint32_t targetsLoadWatchdogFeeds = 0;
 std::uint32_t targetsBlockedWriteAttempts = 0;
 int targetsFilesystemMountError = 0;
 std::uint8_t targetsFilesystemMountAttempts = 0;
@@ -1507,6 +1510,7 @@ void renderInteractiveScreen(bool clearContent = true);
 void broadcast(const char* line);
 bool boundedSleepReady();
 bool performBoundedLightSleep(std::uint64_t requestedUs);
+void feedRuntimeSafetyWatchdog();
 
 bool lastUiActionUsedIncrementalRender = false;
 bool lastUiRenderWasIncremental = false;
@@ -4744,7 +4748,45 @@ TargetsLoadStatus loadBoundTargetsProduct(
         : controller.load(targetsCurrentBinding, *persisted, *decisions);
 }
 
+class TargetsLoadWatchdogScope final {
+public:
+    TargetsLoadWatchdogScope() {
+        targetsLoadElapsedUs = 0;
+        targetsLoadMaximumPhaseUs = 0;
+        targetsLoadWatchdogFeeds = 0;
+        startedUs_ = static_cast<std::uint64_t>(esp_timer_get_time());
+        lastCheckpointUs_ = startedUs_;
+        checkpoint();
+    }
+
+    ~TargetsLoadWatchdogScope() {
+        checkpoint();
+        const std::uint64_t finishedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        targetsLoadElapsedUs = finishedUs >= startedUs_
+            ? finishedUs - startedUs_ : 0;
+    }
+
+    void checkpoint() {
+        const std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        const std::uint64_t phaseUs = nowUs >= lastCheckpointUs_
+            ? nowUs - lastCheckpointUs_ : 0;
+        if (phaseUs > targetsLoadMaximumPhaseUs) {
+            targetsLoadMaximumPhaseUs = phaseUs;
+        }
+        lastCheckpointUs_ = nowUs;
+        ++targetsLoadWatchdogFeeds;
+        feedRuntimeSafetyWatchdog();
+    }
+
+private:
+    std::uint64_t startedUs_ = 0;
+    std::uint64_t lastCheckpointUs_ = 0;
+};
+
 bool loadTargetsProduct(const AppMenuItem& item) {
+    TargetsLoadWatchdogScope loadWatchdog;
     releaseTargetsProduct();
     targetsBaselineBinding = {};
     targetsCurrentBinding = {};
@@ -4814,6 +4856,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             identityTransport, policy);
         identityTransport.end();
     }
+    loadWatchdog.checkpoint();
     char observedFingerprint[33] = {};
     formatCidFingerprint(identity.identity, observedFingerprint,
                          sizeof(observedFingerprint));
@@ -4852,6 +4895,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
          attempt <= kTargetsMaximumMountAttempts; ++attempt) {
         targetsFilesystemMountAttempts = attempt;
         mounted = filesystem.beginReadOnly();
+        loadWatchdog.checkpoint();
         targetsFilesystemMountError = filesystem.mountError();
         if (mounted && filesystem.readOnlyGuaranteed()) break;
         if (!filesystem.cleanupComplete()) break;
@@ -4914,6 +4958,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             const auto pair = leshy1::storage::recoverSessionPair(
                 io, sessionStoreWorkspace, &librarySession,
                 &surveySession);
+            loadWatchdog.checkpoint();
             if (pair.valid()) {
                 pairRecovered = true;
                 baselineGeneration = pair.baselineGeneration;
@@ -4922,6 +4967,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 surveySession.reset();
                 const auto latest = leshy1::storage::recoverSession(
                     io, sessionStoreWorkspace, &surveySession);
+                loadWatchdog.checkpoint();
                 if (latest.valid()) {
                     latestRecovered = true;
                     latestGeneration = latest.generation;
@@ -4942,6 +4988,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                     const auto recovered =
                         leshy1::storage::recoverTargetProductStateWire(
                             io, *targetStateWorkspace);
+                    loadWatchdog.checkpoint();
                     if (recovered.valid()) {
                         persistedStateBlobAvailable = true;
                         targetsStateGeneration = recovered.generation;
@@ -4956,12 +5003,14 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             }
         }
         io.end();
+        loadWatchdog.checkpoint();
     }
     // Recovery left the selected checksum-validated wire generation in the
     // codec workspace; no duplicate decoded catalog or decision log overlapped
     // FatFs. Decode it once after unmount into the foreground runtime.
     targetsBlockedWriteAttempts = filesystem.blockedWriteAttempts();
     filesystem.end();
+    loadWatchdog.checkpoint();
     targetsCleanupComplete = filesystem.cleanupComplete();
     if (!targetsCleanupComplete || targetsBlockedWriteAttempts != 0) {
         targetsProductStatus = "cleanup_failed";
@@ -4974,6 +5023,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             delete targetStateWorkspace;
             return false;
         }
+        loadWatchdog.checkpoint();
         TargetsController& controller = targetsProductRuntime->controller;
         const TargetCatalog* persistedForLoad = nullptr;
         const CorrelationDecisionLog* decisionsForLoad = nullptr;
@@ -4986,6 +5036,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 &targetsProductRuntime->workspace.catalog,
                 &targetsProductRuntime->workspace.decisions,
                 &targetsProductRuntime->merges);
+            loadWatchdog.checkpoint();
             if (reopened != leshy1::storage::TargetCodecStatus::Valid) {
                 delete targetStateWorkspace;
                 delete targetsProductRuntime;
@@ -5011,6 +5062,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         const TargetsLoadStatus loaded = loadBoundTargetsProduct(
             controller,
             persistedForLoad, decisionsForLoad);
+        loadWatchdog.checkpoint();
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
     }
@@ -16294,6 +16346,9 @@ void emitTargetsState(Stream& reply) {
         "\"filesystem_mount_error\":%d,"
         "\"filesystem_mount_attempts\":%u,"
         "\"filesystem_mount_transient_retries\":%u,"
+        "\"load_elapsed_us\":%llu,"
+        "\"load_watchdog_feeds\":%lu,"
+        "\"load_maximum_phase_us\":%llu,"
         "\"cleanup_complete\":%s,"
         "\"lease_mask\":%lu,\"heap_free_before\":%lu,"
         "\"heap_free_now\":%lu,\"heap_free_after_release\":%lu}",
@@ -16569,6 +16624,9 @@ void emitTargetsState(Stream& reply) {
         targetsFilesystemMountError,
         static_cast<unsigned>(targetsFilesystemMountAttempts),
         static_cast<unsigned>(targetsFilesystemMountTransientRetries),
+        static_cast<unsigned long long>(targetsLoadElapsedUs),
+        static_cast<unsigned long>(targetsLoadWatchdogFeeds),
+        static_cast<unsigned long long>(targetsLoadMaximumPhaseUs),
         targetsCleanupComplete ? "true" : "false",
         static_cast<unsigned long>(appRuntime.activeResources()),
         static_cast<unsigned long>(targetsHeapFreeBefore),

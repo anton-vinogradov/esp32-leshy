@@ -352,10 +352,14 @@ def main() -> int:
             "selected_graph_fingerprint=source_graph" in merge_split_runner and
             "mutation_merge_status=\"merged\"" in merge_split_runner and
             "mutation_merge_status=\"split\"" in merge_split_runner and
-            "mutation_directory_syncs" in merge_split_runner,
+            "mutation_directory_syncs" in merge_split_runner and
+            "TargetsLoadWatchdogScope" in entry and
+            "load_watchdog_feeds" in entry and
+            "load_maximum_phase_us" in entry,
             "merge/split HIL must use only the explicit DUT port, require two "
             "explicit confirmations, atomically publish both transitions and "
-            "cold-reopen both exact pre-merge ownership graphs")
+            "cold-reopen both exact pre-merge ownership graphs while the "
+            "bounded synchronous load keeps the hardware watchdog live")
     require(failures,
             'constexpr int kBleTxDbm = -12' in correlation_fixture and
             'ESP_PWR_LVL_N12' in correlation_fixture and

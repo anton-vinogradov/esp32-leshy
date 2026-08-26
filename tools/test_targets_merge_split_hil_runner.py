@@ -60,6 +60,26 @@ class TargetsMergeSplitHilRunnerTests(unittest.TestCase):
             device, b"ui.state", "leshy.ui.v1", "state")
         action.assert_not_called()
 
+    def test_watchdog_reset_is_rejected(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "watchdog/panic reset"):
+            RUNNER.require_non_watchdog_boot(
+                {"reset_reason_code": 4}, "cold reopen")
+        RUNNER.require_non_watchdog_boot(
+            {"reset_reason_code": 3}, "cold reopen")
+
+    def test_target_load_requires_sub_watchdog_phases(self) -> None:
+        RUNNER.require_bounded_target_load({
+            "load_elapsed_us": 8_100_000,
+            "load_watchdog_feeds": 11,
+            "load_maximum_phase_us": 1_700_000,
+        }, "Targets list")
+        with self.assertRaisesRegex(RuntimeError, "invalid load watchdog proof"):
+            RUNNER.require_bounded_target_load({
+                "load_elapsed_us": 8_100_000,
+                "load_watchdog_feeds": 1,
+                "load_maximum_phase_us": 5_000_000,
+            }, "Targets list")
+
 
 if __name__ == "__main__":
     unittest.main()

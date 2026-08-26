@@ -27,6 +27,7 @@ from run_1x_product_survey_hil import (
 
 SCHEMA = "leshy.targets_merge_split_hil.run.v1"
 EXPECTED_CID = "FE343253440000002000000055019CB7"
+WATCHDOG_RESET_REASONS = {4, 5, 6, 7}
 
 
 def require(state: dict[str, Any], label: str, **expected: Any) -> None:
@@ -38,6 +39,28 @@ def require(state: dict[str, Any], label: str, **expected: Any) -> None:
 def valid_hex(value: Any, width: int) -> bool:
     return (isinstance(value, str) and len(value) == width and
             all(character in "0123456789ABCDEF" for character in value))
+
+
+def require_non_watchdog_boot(state: dict[str, Any], label: str) -> None:
+    reason = state.get("reset_reason_code")
+    if not isinstance(reason, int) or isinstance(reason, bool):
+        raise RuntimeError(f"{label}: missing reset reason: {state}")
+    if reason in WATCHDOG_RESET_REASONS:
+        raise RuntimeError(f"{label}: watchdog/panic reset: {state}")
+
+
+def require_bounded_target_load(state: dict[str, Any], label: str) -> None:
+    elapsed = state.get("load_elapsed_us")
+    feeds = state.get("load_watchdog_feeds")
+    maximum_phase = state.get("load_maximum_phase_us")
+    if (not isinstance(elapsed, int) or isinstance(elapsed, bool) or
+            elapsed <= 0 or
+            not isinstance(feeds, int) or isinstance(feeds, bool) or
+            feeds < 8 or
+            not isinstance(maximum_phase, int) or
+            isinstance(maximum_phase, bool) or maximum_phase <= 0 or
+            maximum_phase >= 5_000_000 or maximum_phase > elapsed):
+        raise RuntimeError(f"{label}: invalid load watchdog proof: {state}")
 
 
 def read_only_query(
@@ -93,7 +116,11 @@ def open_targets(device: Any) -> dict[str, Any]:
         home = action(device, "down")
     require(home, "select Targets", page="home", selection=5,
             selected_id="targets")
-    opened = action(device, "right")
+    # Loading is deliberately segmented by the unchanged five-second hardware
+    # watchdog.  The aggregate of several bounded SD/decode phases may exceed
+    # the generic UI acknowledgement timeout, while each individual phase is
+    # still proven below the watchdog threshold by targets.state telemetry.
+    opened = action(device, "right", timeout=40.0)
     require(opened, "open Targets", page="targets",
             runtime_owner="targets", lease_mask=13)
     listed = read_only_query(device, b"targets.state",
@@ -103,6 +130,7 @@ def open_targets(device: Any) -> dict[str, Any]:
             read_only=False, write_enabled=False,
             blocked_write_attempts=0, filesystem_mount_error=0,
             cleanup_complete=True, lease_mask=13)
+    require_bounded_target_load(listed, "Targets list")
     if int(listed.get("target_count", 0)) < 2:
         raise RuntimeError(f"fewer than two Targets are available: {listed}")
     return listed
@@ -208,6 +236,7 @@ def cold_reopen(
     ready, _, timing = reset_capture(port, output, name, 20.0)
     require(ready, f"{name} candidate", version=expected_version,
             app_elf_sha256=app_identity)
+    require_non_watchdog_boot(ready, f"{name} candidate")
     device = PassiveSerial(port, 115200, timeout=0.25)
     synchronize_console(device, 20.0)
     recovery = read_only_query(
@@ -361,6 +390,7 @@ def main() -> int:
             device, b"metrics", "leshy.boot.v1", "ready")
         require(metrics, "candidate", version=args.expected_version,
                 app_elf_sha256=app_identity)
+        require_non_watchdog_boot(metrics, "candidate")
         states["boot_metrics"] = metrics
         recovery = read_only_query(
             device, b"storage.product.boot-recovery",
