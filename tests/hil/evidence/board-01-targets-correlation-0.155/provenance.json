@@ -1,0 +1,71 @@
+{
+  "candidate": {
+    "app_elf_sha256": "47f483e9a65ede473fa4c9b5a3541267fdf6ea6e04dd9fb66efe29e6772cb89a",
+    "checked_stack_frames": {
+      "CorrelationService::propose(": 416,
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 432,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 32,
+      "buildSessionCorrelationReview(": 816,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "47f483e9a65ede473fa4c9b5a3541267fdf6ea6e04dd9fb66efe29e6772cb89a",
+    "firmware_bytes": 3135296,
+    "firmware_sha256": "57cd9a4b2f84fbdd2ce7421f902497b1b57ea0a441adf64c20a6f37df93cdf2e",
+    "map_sha256": "17cdfbbfbe042a57c5b50eb31991015ca5a9b93ea72c49626c49132fe0020627",
+    "version": "0.155.7-targets-shared-codec"
+  },
+  "firmware_source_commit": "7328220c641e25ca8ae34ea311500990108a1a18",
+  "fixture_orchestration_sha256": "02184a9ec5c99554df081b10691b2097123778ea668fab9d284b029a4b8e5a05",
+  "raw": {
+    "correlation": {
+      "artifacts_manifest_sha256": "62e2bacdc266e29e9b0fbce2e491b52a3d373830fad7ba7429dfd1b1aa86a14f",
+      "run_sha256": "2742581e1b3d7339e4715bbaef0b73ee15b1216a834825a92544439155f43890"
+    },
+    "favorite": {
+      "artifacts_manifest_sha256": "7a37eeb2168e6388c225fa71dce298a0a5a64ceaba21832fb2531f2c34a26a80",
+      "run_sha256": "a42c3d63b516c28050938d2572bd6c73024d0202c5e6c1b422e27747b40a8005"
+    },
+    "mount_failure": {
+      "artifacts_manifest_sha256": "a41f3aa0aa284b61f30271e37018409718b0085a8fb782f9685a8124a2c16f6a",
+      "run_sha256": "3419690c08aa4407a05b401f9c7f68db3ca19dc75a3bfb80f429a1d603b0cc58"
+    },
+    "recovery": {
+      "artifacts_manifest_sha256": "dbf6ec96c091b889e446fb7f0a9e5b7de0ad2f701f1a457746a590b474d1b4dc",
+      "run_sha256": "90792ba5b3a73a27c35eb3571fd27ccb172f081a51128ce0ac098667e84ebd39"
+    },
+    "stack": {
+      "artifacts_manifest_sha256": "c7f46337fac73b118c675bc85aa3ce5a8ba9c3e7990924911f98ca2abdcab404",
+      "run_sha256": "562e4ca64fbf0284c1afa35941e61f897fbbc49005f82cd97c3e19ce3cacfcfd"
+    },
+    "workspace_failure": {
+      "artifacts_manifest_sha256": "9744ecbd9049eddf125f65902e12f6625cd0aec142b86026f13688ca93c40b6c",
+      "run_sha256": "f6ce32025a9c258d62547805e33bfb55d776345ec0b3eaf8c9475dce2eb85680"
+    }
+  },
+  "recovery_source_commit": "9ae9192803c96523ce0b76558494a8899fa88e4c",
+  "retention_script": "tools/retain_1x_targets_correlation_hil.py",
+  "retention_script_sha256": "d1ac0a453ad670895da882641837d0dd2e780115180cefe2c28e11527fa12819",
+  "schema": "leshy.targets_correlation_hil.provenance.v1",
+  "source_sha256": {
+    "firmware/leshy1/platformio.ini": "f72c93792172a98218cad7e2113a07f6c65cae2a4fbe4df5f239ce25a0d1b17f",
+    "firmware/leshy1/src/apps/targets/TargetsController.cpp": "e7a0f79a710c030a7cde4514a997b1a76e968cfb04aabc4554707d8da700a2df",
+    "firmware/leshy1/src/apps/targets/TargetsController.h": "ffac0e35834c7ddde18066922f93c48f1dcb7424adde2d1ff6df4b984816b5d2",
+    "firmware/leshy1/src/domain/targets/Correlation.cpp": "663f628f8cbbf8a6ae860bee4dc0d7552111265acf6231b5d2b7f0b79b8e6d85",
+    "firmware/leshy1/src/domain/targets/Correlation.h": "ea2eaa317ddd5c14a6eeb7d3af92b18d90ea5ced8495e8b3d353c565f842cfff",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "364c68dcdca151b029dd579501df18b9aa01f780cf9fd234b85f38d239cb759c",
+    "firmware/leshy1/src/services/targets/SessionCorrelationReview.cpp": "323e13df287e5e1e3f11d394202e4e94bf1bc77a98618a3d3d842193664fc5cf",
+    "firmware/leshy1/src/services/targets/SessionCorrelationReview.h": "d978fc7bfc8d20c4f3ee667f59d3eff559b4aeabd7becb3615ec5011fb19a0e3",
+    "firmware/leshy1/src/storage/TargetStateStore.cpp": "636ca4ac112c2bb8f65843eb8d11efbe5f4c88ff3585d7e25bb4b5caeb0f94a8",
+    "firmware/leshy1/src/storage/TargetStateStore.h": "01f7a83b4f6b01358243ab8c359f91e58df498b72eeb37f6021e5d3feb9db7c5",
+    "tools/check_targets_product_contract.py": "0843efdd8e80c905bd03815cad1793699099f60ae25ca37716294869f91cb993",
+    "tools/check_targets_stack_elf_contract.py": "d79473753a70d54c60527a43a1837b6248dbc1379f3f0cd1fe39c38cc4b14881",
+    "tools/run_1x_targets_correlation_hil.py": "9d97436989c2ed3a80ad39f537096fa121a3fd33e40bd441a5ab0f454de11520",
+    "tools/run_1x_targets_correlation_recovery_hil.py": "d402ee94db0bf576e61cc2abd0c105c5e15e338de26172fbe986217a996caece"
+  },
+  "source_snapshot_commit": "9ae9192803c96523ce0b76558494a8899fa88e4c"
+}

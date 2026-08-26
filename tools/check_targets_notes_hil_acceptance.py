@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,6 +16,18 @@ SUMMARY = ROOT / "tests/hil/evidence/board-01-targets-notes-0.154.json"
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def digest_git_blob(commit: str, relative: str) -> str | None:
+    try:
+        blob = subprocess.check_output(
+            ["git", "show", f"{commit}:{relative}"],
+            cwd=ROOT,
+            stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return hashlib.sha256(blob).hexdigest()
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -147,11 +160,12 @@ def main() -> int:
     provenance_path = bundle / "provenance.json"
     if provenance_path.is_file():
         provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+        source_commit = str(provenance.get("source_commit", ""))
         for relative, expected_hash in provenance.get(
                 "source_sha256", {}).items():
-            path = ROOT / relative
-            require(failures, path.is_file() and digest(path) == expected_hash,
-                    f"accepted source drift: {relative}")
+            require(failures,
+                    digest_git_blob(source_commit, relative) == expected_hash,
+                    f"accepted source snapshot mismatch: {relative}")
     if failures:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)

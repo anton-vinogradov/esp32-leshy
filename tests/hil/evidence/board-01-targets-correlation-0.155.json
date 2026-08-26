@@ -1,0 +1,152 @@
+{
+  "accepted_transition": {
+    "candidate_identity_hex": "E8F60A98CCBD",
+    "decision_count_after": 1,
+    "decision_count_before": 0,
+    "proposal_id": "0BCA18AD1AC37BE67ED0E2936E3B1C8C",
+    "source_identity_count_after": 69,
+    "source_identity_count_before": 69,
+    "target_id": "D232CBB7B4489ABAABFAFD7163BB1D51",
+    "target_revision_after": 4,
+    "target_revision_before": 3,
+    "target_state_generation_after": 9,
+    "target_state_generation_before": 8
+  },
+  "atomic_write_regression": {
+    "mutation_action_us": 212,
+    "mutation_bytes_written": 2079,
+    "mutation_directory_syncs": 3,
+    "mutation_elapsed_us": 3320152,
+    "mutation_file_syncs": 3,
+    "mutation_heap_free_before_mount": 61468,
+    "mutation_heap_largest_before_mount": 29684,
+    "mutation_identity_attempts": 1,
+    "mutation_identity_transient_retries": 0,
+    "mutation_write_calls": 3
+  },
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-correlation-0.155",
+  "candidate": {
+    "app_elf_sha256": "47f483e9a65ede473fa4c9b5a3541267fdf6ea6e04dd9fb66efe29e6772cb89a",
+    "checked_stack_frames": {
+      "CorrelationService::propose(": 416,
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 432,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 32,
+      "buildSessionCorrelationReview(": 816,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "47f483e9a65ede473fa4c9b5a3541267fdf6ea6e04dd9fb66efe29e6772cb89a",
+    "firmware_bytes": 3135296,
+    "firmware_sha256": "57cd9a4b2f84fbdd2ce7421f902497b1b57ea0a441adf64c20a6f37df93cdf2e",
+    "map_sha256": "17cdfbbfbe042a57c5b50eb31991015ca5a9b93ea72c49626c49132fe0020627",
+    "version": "0.155.7-targets-shared-codec"
+  },
+  "cardputer_ports_opened": 0,
+  "evidence_ids": [
+    "E-AUTO-113",
+    "E-HIL-173",
+    "E-UX-050"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final": {
+    "lease_mask": 0,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "firmware_source_commit": "7328220c641e25ca8ae34ea311500990108a1a18",
+  "fixture": {
+    "diagnostic_firmware_sha256": "faf515d51eb9c6f3128a3127949a171db099889a9eaafc8ce6627e564bab85b3",
+    "factory_restore_complete": true,
+    "factory_restore_sha256": "1338ed9f37812a432793688e5be6676f9ec2660711376faac3ea9a1d19b61bfd",
+    "id": "board-02",
+    "openocd_serial": "E8:F6:0A:98:CC:BC",
+    "orchestration": "fixture-orchestration.json",
+    "role": "bounded BLE name beacon",
+    "rom_mac": "90:70:69:0d:15:e0",
+    "terminal_ble_tx": false,
+    "terminal_mode": "off",
+    "terminal_stable_replies": 2,
+    "terminal_wifi_tx": false
+  },
+  "flash_count_recovery": 0,
+  "manifest_sha256": "891187e4edb8741f727761932125e4d9fe66aa77106dd415d90d4656d7cfc264",
+  "precursors": {
+    "accepted_then_harness_cardinality_abort": "precursors/correlation.json",
+    "mount_starvation_zero_write": "precursors/mount-failure.json",
+    "post_mount_workspace_zero_write": "precursors/workspace-failure.json",
+    "shared_codec_atomic_regression": "precursors/favorite.json",
+    "stack_frame_fixed": "precursors/stack.json"
+  },
+  "proposal": {
+    "candidate": {
+      "generation": 155,
+      "radio": "ble",
+      "rssi_dbm": -63
+    },
+    "candidate_identity_hex": "E8F60A98CCBD",
+    "confidence": "medium",
+    "features": [
+      "advertised_name",
+      "signal_trend"
+    ],
+    "id": "0BCA18AD1AC37BE67ED0E2936E3B1C8C",
+    "known": {
+      "channel": 8,
+      "generation": 154,
+      "radio": "wifi",
+      "rssi_dbm": -66
+    },
+    "score_permille": 463,
+    "target_id": "D232CBB7B4489ABAABFAFD7163BB1D51"
+  },
+  "radio_tx_commands_from_dut": 0,
+  "schema": "leshy.targets_correlation_hil.summary.v1",
+  "screens": {
+    "accept-selected": {
+      "png": "frames/accept-selected.png",
+      "png_sha256": "f37c60ed2ff6c2875b8d10c2a62bf2c09faf9c1670c7f2e2a6b76247a9da88e4"
+    },
+    "candidate-evidence": {
+      "png": "frames/candidate-evidence.png",
+      "png_sha256": "ac4ebd6d544143afd532139ed1146de8c0d31fc24db67ea23a2b7784df07f5a8"
+    },
+    "known-evidence": {
+      "png": "frames/known-evidence.png",
+      "png_sha256": "1e65add4962da9c12c95f7801b4f52d2d043755a11fcccd8ac1c9bca4401b177"
+    },
+    "proposal-list": {
+      "png": "frames/proposal-list.png",
+      "png_sha256": "8af71685a07dd7736997d4879d8eb912867c17cbff5bd5ec335d546260ddd4a1"
+    },
+    "proposal-review": {
+      "png": "frames/proposal-review.png",
+      "png_sha256": "ffcc9a54a05cce945a82eaeeba90cf2d861935038012314b69acc423f99cb27a"
+    },
+    "recovered-target": {
+      "png": "frames/recovered-target.png",
+      "png_sha256": "f31e197a16b4ba87e4889d57e9066b8219e339d179fb63a2c7dc48470d671caa"
+    }
+  },
+  "stack_frames": {
+    "CorrelationService::propose(": 416,
+    "TargetsController::comparisonItemBefore(": 480,
+    "TargetsController::loadBindings(": 432,
+    "TargetsController::loadComparisonSide(": 272,
+    "TargetsController::rebuildComparisonOrder()": 32,
+    "TargetsController::reset()": 32,
+    "buildSessionCorrelationReview(": 816,
+    "buildSide(": 1104,
+    "compareTargetSessionsInto(": 80,
+    "resetTargetComparisonResult(": 32
+  },
+  "status": "pass",
+  "verification_source_commit": "9ae9192803c96523ce0b76558494a8899fa88e4c"
+}

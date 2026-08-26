@@ -580,6 +580,30 @@ reopen after each transition. Firmware/ELF/map SHA-256 are
 The one-flash delta and seven reviewed TFT states are retained in `E-HIL-172`;
 the cadence advances to 9/15 without a full physical matrix.
 
+Targets Correlation checkpoint `RB-M155`: exact production
+`0.155.7-targets-shared-codec` uses 3,157,569 B linked flash, 214,165 B static
+RAM and 3,135,296/3,200,832 B app/factory images. Dedicated DIRAM is
+297,365/341,760 B (87.01%, 44,395 B remaining). The 24,800 B
+`TargetsStoreCodecWorkspace` union replaces the former permanent 22,824 B
+Session codec workspace, so full Target graph/history persistence costs only
+1,976 B additional permanent RAM rather than a second simultaneous allocation.
+It switches lifetime with placement construction only after writable FAT mount
+and restores the Session codec before releasing the worker. Linked stack
+preflight records 416 B for `CorrelationService::propose`, 816 B for
+`buildSessionCorrelationReview`, 432 B for `TargetsController::loadBindings`
+and 1,104 B for `buildSide`. The adjacent exact mutation regression succeeds at
+61,468 B free/29,684 B largest pre-mount heap, writes 2,079 logical bytes with
+three writes, three file syncs and three directory syncs, and completes in
+3,320,152 µs after a 212 µs UI callback. Exact Accept then advances state 8→9,
+decision count 0→1 and Target revision 3→4; a separate zero-flash physical reset
+reopens the same state with source identities invariant at 69. Firmware/ELF/map
+SHA-256 are
+`57cd9a4b2f84fbdd2ce7421f902497b1b57ea0a441adf64c20a6f37df93cdf2e`/
+`47f483e9a65ede473fa4c9b5a3541267fdf6ea6e04dd9fb66efe29e6772cb89a`/
+`17cdfbbfbe042a57c5b50eb31991015ca5a9b93ea72c49626c49132fe0020627`.
+Six reviewed TFT states and the two zero-write rejected precursors are retained
+in `E-HIL-173`; cadence advances to 10/15 without a full physical matrix.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

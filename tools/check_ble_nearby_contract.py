@@ -80,9 +80,10 @@ def main() -> int:
     )
     required_adapter = (
         "setActiveScan(false)",
-        "setDuplicateFilter(true)",
+        "setAdvertisedDeviceCallbacks(&callbacks, true, true)",
+        "seenAddresses_",
         "maximumRecords_",
-        "scanner_->erase",
+        "activeScan_->clearResults()",
         "populateAdvertisementFacts",
         "knownServiceMask",
         "kMaximumScanAttempts = 2U",
@@ -92,6 +93,7 @@ def main() -> int:
         "setActiveScan(true)",
         "BLEAdvertising",
         "startAdvertising",
+        "scanner_->erase(",
     )
     required_strings = (
         "BleDevicesTitle",

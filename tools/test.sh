@@ -2,6 +2,13 @@
 # Fast host-side tests for the hardware-independent firmware core.
 set -euo pipefail
 
+# HIL runner unit tests import pyserial even though they never open a device.
+# Prefer the already provisioned PlatformIO environment so this one-command
+# host suite behaves the same from an interactive shell and from automation.
+if [[ -x "$HOME/.platformio/penv/bin/python3" ]]; then
+    export PATH="$HOME/.platformio/penv/bin:$PATH"
+fi
+
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 test_tmp="$(mktemp -d "${TMPDIR:-/tmp}/leshy-tests.XXXXXX")"
 trap 'rm -rf "$test_tmp"' EXIT
@@ -333,6 +340,9 @@ if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-tags-0.153.json" ]]; the
 fi
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-notes-0.154.json" ]]; then
     python3 "$repo_dir/tools/check_targets_notes_hil_acceptance.py"
+fi
+if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-correlation-0.155.json" ]]; then
+    python3 "$repo_dir/tools/check_targets_correlation_hil_acceptance.py"
 fi
 if [[ -f "$repo_dir/firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.elf" ]]; then
     python3 "$repo_dir/tools/check_targets_stack_elf_contract.py" \

@@ -1,0 +1,27 @@
+{
+  "dut_port": "/dev/cu.usbmodem2101",
+  "error": "CalledProcessError: Command '['/Users/randoom/.platformio/penv/bin/python', 'tools/run_1x_targets_correlation_hil.py', '--port', '/dev/cu.usbmodem2101', '--fixture-port', '/dev/cu.usbmodem1101', '--firmware', 'firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.bin', '--elf', 'firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.elf', '--map', 'firmware/leshy1/.pio/build/esp32-div-v2-clean/firmware.map', '--expected-version', '0.155.7-targets-shared-codec', '--source-commit', '7328220c641e25ca8ae34ea311500990108a1a18', '--output', 'work/outputs/targets-correlation-0.155.7-jtag-7328220', '--flash-baud', '460800', '--reuse-exact-flash']' returned non-zero exit status 1.",
+  "fixture_firmware_sha256": "faf515d51eb9c6f3128a3127949a171db099889a9eaafc8ce6627e564bab85b3",
+  "fixture_flash_method": "usb_jtag",
+  "fixture_flash_offset": 65536,
+  "fixture_openocd_serial": "E8:F6:0A:98:CC:BC",
+  "fixture_port": "/dev/cu.usbmodem1101",
+  "fixture_ready_attempts": 1,
+  "fixture_ready_elapsed_ms": 2222.164,
+  "fixture_ready_stable_replies": 2,
+  "fixture_ready_state": {
+    "ble_tx": false,
+    "ble_tx_dbm": -12,
+    "kind": "state",
+    "label": "LESHY-HIL-CORR",
+    "mode": "off",
+    "schema": "leshy.hil.correlation_fixture.v1",
+    "wifi_tx": false,
+    "wifi_tx_dbm": -1
+  },
+  "fixture_restore_attempted": true,
+  "fixture_restore_complete": true,
+  "fixture_restore_sha256": "1338ed9f37812a432793688e5be6676f9ec2660711376faac3ea9a1d19b61bfd",
+  "schema": "leshy.targets_correlation_fixture_orchestration.v1",
+  "status": "failed"
+}

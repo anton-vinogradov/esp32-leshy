@@ -572,6 +572,30 @@ reopen после каждого перехода. SHA-256 firmware/ELF/map:
 One-flash delta и семь просмотренных TFT states сохранены в `E-HIL-172`;
 cadence продвигается до 9/15 без полной physical matrix.
 
+Checkpoint Correlation Target `RB-M155`: exact production
+`0.155.7-targets-shared-codec` использует 3 157 569 B linked flash, 214 165 B
+static RAM и app/factory images 3 135 296/3 200 832 B. Dedicated DIRAM равна
+297 365/341 760 B (87,01%, свободно 44 395 B). Union
+`TargetsStoreCodecWorkspace` размером 24 800 B заменяет прежний постоянный
+workspace codec Session 22 824 B, поэтому persistence полного graph/history
+Target добавляет только 1 976 B permanent RAM вместо второй одновременной
+allocation. Lifetime переключается placement construction только после writable
+mount FAT, а codec Session восстанавливается до release worker. Linked stack
+preflight фиксирует 416 B для `CorrelationService::propose`, 816 B для
+`buildSessionCorrelationReview`, 432 B для `TargetsController::loadBindings` и
+1 104 B для `buildSide`. Соседняя exact regression mutation проходит при
+61 468 B free/29 684 B largest pre-mount heap, записывает 2 079 logical bytes
+тремя writes, тремя file syncs и тремя directory syncs и завершается за
+3 320 152 µs после UI callback 212 µs. Затем exact Accept продвигает state 8→9,
+decision count 0→1 и Target revision 3→4; отдельный zero-flash physical reset
+открывает то же состояние с invariant source identities 69. SHA-256
+firmware/ELF/map:
+`57cd9a4b2f84fbdd2ce7421f902497b1b57ea0a441adf64c20a6f37df93cdf2e`/
+`47f483e9a65ede473fa4c9b5a3541267fdf6ea6e04dd9fb66efe29e6772cb89a`/
+`17cdfbbfbe042a57c5b50eb31991015ca5a9b93ea72c49626c49132fe0020627`.
+Шесть просмотренных TFT states и два rejected precursor с zero writes сохранены
+в `E-HIL-173`; cadence продвигается до 10/15 без полной physical matrix.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
