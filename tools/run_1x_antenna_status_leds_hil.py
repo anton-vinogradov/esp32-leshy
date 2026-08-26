@@ -128,6 +128,90 @@ def home_item(device: PassiveSerial, trace: list[dict[str, Any]],
     return state
 
 
+def restore_only(args: argparse.Namespace, record: dict[str, Any],
+                 app_identity: str, trace: list[dict[str, Any]],
+                 screens: dict[str, Any], frames: Path) -> int:
+    try:
+        with PassiveSerial(args.port, 115200, timeout=0.25) as device:
+            synchronize_console(device, 30.0)
+            boot, boot_samples = stabilized_boot_metrics(device)
+            recovery_before = query(
+                device, b"storage.product.boot-recovery",
+                "leshy.storage.product_boot_recovery.v1", "state")
+            failures = boot_failures(
+                boot, recovery_before, args.expected_version,
+                app_identity, args.expected_cid)
+            if failures:
+                raise RuntimeError("; ".join(failures))
+            cleanup = best_effort_cleanup(device)
+            if not cleanup.get("complete"):
+                raise RuntimeError("restore-only cleanup did not reach Home")
+            before = query(device, b"ui.state", "leshy.ui.v1", "state")
+            enter_settings(device, trace)
+            set_led_brightness(device, trace, args.restore_raw)
+            screens["settings_restored"] = capture(
+                device, frames, "settings-restored")
+
+        device = reset_and_reopen(args.port, args.output, "restore-only-reset")
+        with device:
+            final = query(device, b"ui.state", "leshy.ui.v1", "state")
+            require(final, "restore-only final", page="home",
+                    antenna_led_brightness_raw=args.restore_raw,
+                    antenna_led_receive_mask=0,
+                    antenna_led_fault_mask=0,
+                    runtime_owner="none", lease_mask=0)
+            safe = query(device, b"hardware.safe-outputs",
+                         "leshy.hardware.safe-outputs.v1", "state")
+            require(safe, "restore-only safe outputs", buzzer_inactive=True,
+                    nrf_ce_inactive=True, software_quiesce_complete=True)
+            inputs = query(device, b"input.state",
+                           "leshy.input.frontend.v1", "state")
+            require(inputs, "restore-only input", status="ready",
+                    read_errors=0, queue_drops=0)
+            recovery_after = query(
+                device, b"storage.product.boot-recovery",
+                "leshy.storage.product_boot_recovery.v1", "state")
+            if (recovery_after.get("generation") !=
+                    recovery_before.get("generation") or
+                    recovery_after.get("observations") !=
+                    recovery_before.get("observations") or
+                    recovery_after.get("physical_write_calls") != 0):
+                raise RuntimeError("restore-only changed persistent product data")
+            screens["home_restored"] = capture(
+                device, frames, "home-restored")
+
+        record.update({
+            "status": "pass", "mode": "restore_only",
+            "initial_brightness_raw": before["antenna_led_brightness_raw"],
+            "requested_restore_brightness_raw": args.restore_raw,
+            "final_brightness_raw": final["antenna_led_brightness_raw"],
+            "trace": trace, "screens": screens,
+            "safe_outputs": safe, "input": inputs,
+            "boot_samples": boot_samples, "flash_count": 0,
+            "hardware_reset_count": 1, "radio_tx_commands": 0,
+            "cardputer_ports_opened": [],
+            "storage_before": recovery_before,
+            "storage_after": recovery_after,
+        })
+        write_json(args.output / "run.json", record)
+        artifact_manifest(args.output)
+        print(json.dumps({
+            "schema": SCHEMA, "status": "pass", "mode": "restore_only",
+            "run": str(args.output / "run.json"),
+        }, sort_keys=True))
+        return 0
+    except Exception as error:
+        record.update({
+            "status": "failed", "mode": "restore_only",
+            "error": str(error), "trace": trace, "screens": screens,
+            "cardputer_ports_opened": [],
+        })
+        write_json(args.output / "run.json", record)
+        artifact_manifest(args.output)
+        print(f"FAIL: {error}", file=sys.stderr)
+        return 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", required=True)
@@ -141,6 +225,7 @@ def main() -> int:
     parser.add_argument("--camera-id")
     parser.add_argument("--restore-raw", type=int, choices=BRIGHTNESS_RAW,
                         default=2)
+    parser.add_argument("--restore-only", action="store_true")
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
@@ -180,6 +265,12 @@ def main() -> int:
         },
     }
     write_json(args.output / "run.json", record)
+
+    if args.restore_only:
+        if args.flash:
+            parser.error("--restore-only must reuse the exact installed image")
+        return restore_only(
+            args, record, app_identity, trace, screens, frames)
 
     initial_raw = 0
     persisted: dict[str, Any] = {}

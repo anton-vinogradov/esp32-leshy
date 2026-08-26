@@ -69,6 +69,7 @@ def main() -> int:
         "runner": (
             "BRIGHTNESS_RAW = (0, 2, 3, 5, 8, 12)",
             'parser.add_argument("--restore-raw"',
+            'parser.add_argument("--restore-only"',
             "antenna_led_receive_mask=(nrf_slots & 0x07) << 1",
             "antenna_led_receive_mask=1", "cardputer_ports_opened",
         ),
