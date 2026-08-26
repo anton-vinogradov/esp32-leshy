@@ -157,6 +157,7 @@ def main() -> int:
         "usbCompanionConnection = {}",
         "kUsbCommandCapacity",
         "usbCommandOverflow",
+        "response_encoding_failed",
         "poll(Serial, usbCommand",
         "poll(Serial0, uartCommand",
     ):

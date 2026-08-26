@@ -25009,14 +25009,21 @@ void emitCompanionConnectParseError(
     }
 }
 
-void handleUsbCompanionFrame(Stream& reply, const char* frame) {
+void emitCompanionEncodingError(Stream& reply) {
+    reply.println(
+        "{\"schema\":\"leshy.companion.response.v1\",\"kind\":\"error\","
+        "\"request_id\":\"\",\"status\":\"error\","
+        "\"reason\":\"response_encoding_failed\"}");
+}
+
+void handleUsbCompanionFrame(Stream& reply, char* frame,
+                             std::size_t frameCapacity) {
     namespace companion = leshy1::services::companion;
     const std::size_t frameLength = std::strlen(frame);
     companion::CompanionConnectRequest connectRequest{};
     const companion::CompanionParseStatus connectStatus =
         companion::parseCompanionConnectRequest(
             frame, frameLength, &connectRequest);
-    std::array<char, companion::kCompanionMaxFrameBytes + 1U> response{};
     std::size_t responseLength = 0;
     if (connectStatus == companion::CompanionParseStatus::Parsed) {
         const companion::CompanionReadContext context = companionReadContext();
@@ -25030,9 +25037,11 @@ void handleUsbCompanionFrame(Stream& reply, const char* frame) {
             connectRequest, policy);
         if (companion::encodeCompanionConnectResponse(
                 usbCompanionConnection,
-                companion::CompanionTransport::UsbSerial, response.data(),
-                response.size(), &responseLength)) {
-            writeCompanionFrame(reply, response.data(), responseLength);
+                companion::CompanionTransport::UsbSerial, frame,
+                frameCapacity, &responseLength)) {
+            writeCompanionFrame(reply, frame, responseLength);
+        } else {
+            emitCompanionEncodingError(reply);
         }
         return;
     }
@@ -25044,9 +25053,11 @@ void handleUsbCompanionFrame(Stream& reply, const char* frame) {
     if (readStatus == companion::CompanionReadParseStatus::Parsed) {
         const companion::CompanionReadContext context = companionReadContext();
         if (companion::encodeCompanionReadResponse(
-                usbCompanionConnection, context, readRequest, response.data(),
-                response.size(), &responseLength)) {
-            writeCompanionFrame(reply, response.data(), responseLength);
+                usbCompanionConnection, context, readRequest, frame,
+                frameCapacity, &responseLength)) {
+            writeCompanionFrame(reply, frame, responseLength);
+        } else {
+            emitCompanionEncodingError(reply);
         }
         return;
     }
@@ -25056,13 +25067,14 @@ void handleUsbCompanionFrame(Stream& reply, const char* frame) {
     if (std::strstr(frame, "\"kind\":\"connect\"") != nullptr) {
         emitCompanionConnectParseError(reply, connectStatus);
     } else if (companion::encodeCompanionReadParseError(
-                   readStatus, response.data(), response.size(),
-                   &responseLength)) {
-        writeCompanionFrame(reply, response.data(), responseLength);
+                   readStatus, frame, frameCapacity, &responseLength)) {
+        writeCompanionFrame(reply, frame, responseLength);
+    } else {
+        emitCompanionEncodingError(reply);
     }
 }
 
-void handleCommand(Stream& reply, const char* command,
+void handleCommand(Stream& reply, char* command, std::size_t capacity,
                    bool companionAllowed) {
     if (safetySupervisor.latched() &&
         !commandAllowedDuringSafetyStop(command)) {
@@ -25072,7 +25084,7 @@ void handleCommand(Stream& reply, const char* command,
         return;
     }
     if (companionAllowed && command[0] == '{') {
-        handleUsbCompanionFrame(reply, command);
+        handleUsbCompanionFrame(reply, command, capacity);
         return;
     }
     if (std::strncmp(command, "hil.begin ", 10) == 0) {
@@ -25530,18 +25542,16 @@ void poll(Stream& stream, char* command, std::size_t& length,
         if (value == '\n') {
             if (overflow) {
                 if (companionAllowed) {
-                    std::array<char,
-                               leshy1::services::companion::
-                                   kCompanionMaxFrameBytes + 1U> response{};
                     std::size_t responseLength = 0;
                     if (leshy1::services::companion::
                             encodeCompanionReadParseError(
                                 leshy1::services::companion::
                                     CompanionReadParseStatus::TooLarge,
-                                response.data(), response.size(),
-                                &responseLength)) {
+                                command, capacity, &responseLength)) {
                         writeCompanionFrame(
-                            stream, response.data(), responseLength);
+                            stream, command, responseLength);
+                    } else {
+                        emitCompanionEncodingError(stream);
                     }
                 } else {
                     stream.println(
@@ -25550,7 +25560,7 @@ void poll(Stream& stream, char* command, std::size_t& length,
                 }
             } else {
                 command[length] = '\0';
-                handleCommand(stream, command, companionAllowed);
+                handleCommand(stream, command, capacity, companionAllowed);
             }
             length = 0;
             overflow = false;
