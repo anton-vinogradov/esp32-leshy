@@ -74,6 +74,7 @@
 #include "kernel/safety/SafetySupervisor.h"
 #include "kernel/safety/WorkerDeadlineSupervisor.h"
 #include "platform/arduino/BoardSafeOutputs.h"
+#include "platform/arduino/BoardAntennaStatusLeds.h"
 #include "platform/arduino/BoardInfraredReceiver.h"
 #include "platform/arduino/BoardCc1101PassiveSpectrum.h"
 #include "platform/arduino/BoardNrf24PassiveSpectrum.h"
@@ -126,6 +127,7 @@
 #include "ui/Pcf8574ButtonInput.h"
 #include "ui/TouchTargets.h"
 #include "ui/InterfaceSettingsController.h"
+#include "ui/AntennaStatusController.h"
 #include "ui/LanguageController.h"
 #include "ui/UiComponents.h"
 #include "ui/UiController.h"
@@ -277,6 +279,7 @@ using leshy1::services::targets::SurveySessionTargetEvidenceLookup;
 using leshy1::apps::targets::TargetActionItem;
 using leshy1::kernel::safety::WorkerDeadlineSupervisor;
 using leshy1::platform::arduino::BoardSafeOutputs;
+using leshy1::platform::arduino::BoardAntennaStatusLeds;
 using leshy1::platform::arduino::BoardInfraredReceiver;
 using leshy1::platform::arduino::InfraredReceiverReport;
 using leshy1::platform::arduino::InfraredReceiverStatus;
@@ -322,6 +325,7 @@ using leshy1::ui::UiLanguage;
 using leshy1::ui::InterfaceSetting;
 using leshy1::ui::InterfaceSettingsController;
 using leshy1::ui::InterfaceTheme;
+using leshy1::ui::AntennaStatusController;
 using leshy1::ui::UiTextId;
 using leshy1::ui::UiTextRole;
 using leshy1::ui::LanguageController;
@@ -398,6 +402,9 @@ constexpr const char* kUiPreferencesNamespace = "leshy1-ui";
 constexpr const char* kUiLanguageKey = "lang.v1";
 constexpr const char* kUiBrightnessKey = "bright.v1";
 constexpr const char* kUiThemeKey = "theme.v1";
+constexpr const char* kStatusLedBrightnessKey = "led.v1";
+constexpr const char* kLegacyUiPreferencesNamespace = "leshy";
+constexpr const char* kLegacyStatusLedBrightnessKey = "led_br";
 HardwareInventory inventory;
 AppCatalog appCatalog;
 ResourceBroker resourceBroker;
@@ -653,6 +660,8 @@ bool touchCalibrationSucceededAtBoot = false;
 UiController uiController;
 LanguageController languageController;
 InterfaceSettingsController interfaceSettingsController;
+AntennaStatusController antennaStatusController;
+BoardAntennaStatusLeds boardAntennaStatusLeds;
 SelfTestController selfTestController;
 constexpr std::uint8_t kDevicePage = 9;
 constexpr std::uint8_t kAboutPage = 10;
@@ -1817,6 +1826,31 @@ InterfaceTheme loadUiTheme() {
                : InterfaceTheme::Forest;
 }
 
+std::uint8_t loadStatusLedBrightnessIndex() {
+    constexpr std::uint8_t kMissing = 0xffU;
+    Preferences preferences;
+    if (preferences.begin(kUiPreferencesNamespace, true)) {
+        const std::uint8_t stored = preferences.getUChar(
+            kStatusLedBrightnessKey, kMissing);
+        preferences.end();
+        if (stored < AntennaStatusController::kBrightnessCount) return stored;
+    }
+
+    // 0.x stored the raw WS2812 brightness byte in namespace "leshy". Keep
+    // that user choice when upgrading instead of silently treating it as an
+    // index in the new namespaced settings store.
+    Preferences legacy;
+    if (legacy.begin(kLegacyUiPreferencesNamespace, true)) {
+        const std::uint8_t raw = legacy.getUChar(
+            kLegacyStatusLedBrightnessKey, kMissing);
+        legacy.end();
+        if (raw != kMissing) {
+            return AntennaStatusController::brightnessIndexForRaw(raw);
+        }
+    }
+    return AntennaStatusController::kDefaultBrightnessIndex;
+}
+
 bool saveUiPreference(const char* key, std::uint8_t value) {
     Preferences preferences;
     if (!preferences.begin(kUiPreferencesNamespace, false)) return false;
@@ -1832,6 +1866,11 @@ bool saveUiBrightnessIndex(std::uint8_t index) {
 
 bool saveUiTheme(InterfaceTheme theme) {
     return saveUiPreference(kUiThemeKey, static_cast<std::uint8_t>(theme));
+}
+
+bool saveStatusLedBrightnessIndex(std::uint8_t index) {
+    if (index >= AntennaStatusController::kBrightnessCount) return false;
+    return saveUiPreference(kStatusLedBrightnessKey, index);
 }
 
 bool closeProductSurveyBackend() {
@@ -9943,11 +9982,30 @@ UiTextId settingsBrightnessNote() {
     }
 }
 
+std::uint8_t settingsFirstVisible(std::uint8_t selection) {
+    return selection < kVisibleHomeRows
+        ? 0
+        : static_cast<std::uint8_t>(selection - (kVisibleHomeRows - 1U));
+}
+
+UiTextId settingsAntennaLedsNote() {
+    switch (antennaStatusController.brightnessRaw()) {
+        case 0: return UiTextId::SettingsAntennaLedsOff;
+        case 3: return UiTextId::SettingsAntennaLeds3;
+        case 5: return UiTextId::SettingsAntennaLeds5;
+        case 8: return UiTextId::SettingsAntennaLeds8;
+        case 12: return UiTextId::SettingsAntennaLeds12;
+        default: return UiTextId::SettingsAntennaLeds2;
+    }
+}
+
 UiTextId settingsLabel(std::uint8_t index) {
     switch (static_cast<InterfaceSetting>(index)) {
         case InterfaceSetting::Language: return UiTextId::SettingsLanguage;
         case InterfaceSetting::Brightness: return UiTextId::SettingsBrightness;
         case InterfaceSetting::Theme: return UiTextId::SettingsTheme;
+        case InterfaceSetting::AntennaLeds:
+            return UiTextId::SettingsAntennaLeds;
         case InterfaceSetting::Sound: return UiTextId::SettingsSound;
     }
     return UiTextId::SettingsSound;
@@ -9965,16 +10023,21 @@ UiTextId settingsNote(std::uint8_t index) {
                            InterfaceTheme::HighContrast
                        ? UiTextId::SettingsThemeContrast
                        : UiTextId::SettingsThemeForest;
+        case InterfaceSetting::AntennaLeds:
+            return settingsAntennaLedsNote();
         case InterfaceSetting::Sound: return UiTextId::SettingsSoundLocked;
     }
     return UiTextId::SettingsSoundLocked;
 }
 
-void renderSettingsRow(std::uint8_t index) {
-    if (index >= InterfaceSettingsController::kItemCount) return;
+void renderSettingsRow(std::uint8_t index, std::uint8_t firstVisible) {
+    if (index >= InterfaceSettingsController::kItemCount ||
+        index < firstVisible ||
+        index >= firstVisible + kVisibleHomeRows) return;
     const bool enabled = static_cast<InterfaceSetting>(index) !=
                          InterfaceSetting::Sound;
-    renderMenuRow(Components::homeRow(index), tr(settingsLabel(index)),
+    renderMenuRow(Components::homeRow(index - firstVisible),
+                  tr(settingsLabel(index)),
                   tr(settingsNote(index)),
                   interfaceSettingsController.selection() == index, enabled,
                   enabled ? Tone::Positive : Tone::Muted);
@@ -9982,9 +10045,14 @@ void renderSettingsRow(std::uint8_t index) {
 
 void renderSettingsPage(bool clearContent) {
     renderHeader(tr(UiTextId::SettingsTitle), clearContent);
-    for (std::uint8_t index = 0;
-         index < InterfaceSettingsController::kItemCount; ++index) {
-        renderSettingsRow(index);
+    const std::uint8_t first = settingsFirstVisible(
+        interfaceSettingsController.selection());
+    const std::uint8_t end = static_cast<std::uint8_t>(
+        InterfaceSettingsController::kItemCount < first + kVisibleHomeRows
+            ? InterfaceSettingsController::kItemCount
+            : first + kVisibleHomeRows);
+    for (std::uint8_t index = first; index < end; ++index) {
+        renderSettingsRow(index, first);
     }
 }
 
@@ -14046,6 +14114,7 @@ struct UiRenderSnapshot final {
     std::uint8_t deviceSelection = 0;
     std::uint8_t settingsSelection = 0;
     std::uint8_t settingsBrightnessIndex = 0;
+    std::uint8_t settingsAntennaLedBrightnessIndex = 0;
     std::uint8_t settingsTheme = 0;
     std::uint8_t settingsLanguage = 0;
     std::uint8_t selfTestView = 0;
@@ -14101,6 +14170,7 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         deviceSelection,
         interfaceSettingsController.selection(),
         interfaceSettingsController.brightnessIndex(),
+        antennaStatusController.brightnessIndex(),
         static_cast<std::uint8_t>(interfaceSettingsController.theme()),
         static_cast<std::uint8_t>(languageController.active()),
         static_cast<std::uint8_t>(selfTestController.view()),
@@ -14609,14 +14679,28 @@ bool renderSelectionDelta() {
         }
         const std::uint8_t current = interfaceSettingsController.selection();
         if (renderedUi.settingsSelection != current) {
-            renderSettingsRow(renderedUi.settingsSelection);
-            renderSettingsRow(current);
+            const std::uint8_t oldFirst = settingsFirstVisible(
+                renderedUi.settingsSelection);
+            const std::uint8_t currentFirst = settingsFirstVisible(current);
+            if (oldFirst != currentFirst) {
+                renderSettingsPage(false);
+                return true;
+            }
+            renderSettingsRow(renderedUi.settingsSelection, currentFirst);
+            renderSettingsRow(current, currentFirst);
             return true;
         }
         if (renderedUi.settingsBrightnessIndex !=
             interfaceSettingsController.brightnessIndex()) {
             renderSettingsRow(static_cast<std::uint8_t>(
-                InterfaceSetting::Brightness));
+                InterfaceSetting::Brightness), settingsFirstVisible(current));
+            return true;
+        }
+        if (renderedUi.settingsAntennaLedBrightnessIndex !=
+            antennaStatusController.brightnessIndex()) {
+            renderSettingsRow(static_cast<std::uint8_t>(
+                InterfaceSetting::AntennaLeds),
+                settingsFirstVisible(current));
             return true;
         }
         return false;
@@ -15256,6 +15340,52 @@ bool activeReceiveSampling() {
         (uiController.page() == 4 && captureView == CaptureView::Infrared &&
          (irState == InfraredCaptureState::Waiting ||
           irState == InfraredCaptureState::Capturing));
+}
+
+void serviceAntennaStatusLeds() {
+    std::uint8_t receiveMask = 0;
+    std::uint8_t faultMask = 0;
+    if (!safetySupervisor.latched()) {
+        const std::uint8_t activeNrfMask =
+            AntennaStatusController::nrf24MaskFromSlots(
+                nrf24SpectrumReport.activeSlotMask);
+        const bool nrfRunning =
+            nrf24SpectrumController.state() ==
+                Nrf24SpectrumViewState::Running ||
+            nrf24SignalFinder.state() ==
+                Nrf24SignalFinderState::Calibrating ||
+            nrf24SignalFinder.state() ==
+                Nrf24SignalFinderState::Searching;
+        if (nrfRunning) receiveMask |= activeNrfMask;
+        if (nrf24SpectrumController.state() ==
+                Nrf24SpectrumViewState::Fault ||
+            nrf24SignalFinder.state() == Nrf24SignalFinderState::Fault) {
+            faultMask |= activeNrfMask == 0U ? 0x0eU : activeNrfMask;
+        }
+
+        const auto rawState = subGhzRawCapture.stats().state;
+        const bool ccRunning =
+            cc1101SpectrumController.state() ==
+                Cc1101SpectrumViewState::Running ||
+            cc1101SignalFinder.state() ==
+                Cc1101SignalFinderState::Calibrating ||
+            cc1101SignalFinder.state() ==
+                Cc1101SignalFinderState::Searching ||
+            rawState == SubGhzRawCaptureState::Waiting ||
+            rawState == SubGhzRawCaptureState::Capturing;
+        if (ccRunning) receiveMask |= AntennaStatusController::kCc1101Mask;
+        if (cc1101SpectrumController.state() ==
+                Cc1101SpectrumViewState::Fault ||
+            cc1101SignalFinder.state() == Cc1101SignalFinderState::Fault ||
+            rawState == SubGhzRawCaptureState::Failed) {
+            faultMask |= AntennaStatusController::kCc1101Mask;
+        }
+    }
+    antennaStatusController.setActivity(receiveMask, faultMask);
+    boardAntennaStatusLeds.apply(
+        antennaStatusController.brightnessRaw(),
+        antennaStatusController.receiveMask(),
+        antennaStatusController.faultMask());
 }
 
 std::uint32_t activeSpectrumSweeps() {
@@ -16490,7 +16620,10 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                   "\"selected_enabled\":%s,\"reason\":\"%s\","
                   "\"language\":\"%s\",\"language_selection\":%u,"
                   "\"settings_selection\":%u,\"brightness_percent\":%u,"
-                  "\"brightness_duty\":%u,\"theme\":\"%s\","
+                  "\"brightness_duty\":%u,"
+                  "\"antenna_led_brightness_raw\":%u,"
+                  "\"antenna_led_receive_mask\":%u,"
+                  "\"antenna_led_fault_mask\":%u,\"theme\":\"%s\","
                   "\"sound_available\":false,"
                   "\"revision\":%lu,\"safety_state\":\"%s\","
                   "\"safety_reason\":\"%s\",\"safety_latched\":%s,"
@@ -16513,6 +16646,12 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       interfaceSettingsController.brightnessPercent()),
                   static_cast<unsigned>(
                       interfaceSettingsController.brightnessDuty()),
+                  static_cast<unsigned>(
+                      antennaStatusController.brightnessRaw()),
+                  static_cast<unsigned>(
+                      antennaStatusController.receiveMask()),
+                  static_cast<unsigned>(
+                      antennaStatusController.faultMask()),
                   interfaceSettingsController.theme() ==
                           InterfaceTheme::HighContrast
                       ? "high_contrast" : "forest",
@@ -19543,6 +19682,21 @@ bool applyUiAction(UiAction action, bool render = true) {
                                                  : "theme_persist_failed";
                     break;
                 }
+                case InterfaceSetting::AntennaLeds: {
+                    const std::uint8_t previous =
+                        antennaStatusController.brightnessIndex();
+                    antennaStatusController.cycleBrightness();
+                    const bool persisted = saveStatusLedBrightnessIndex(
+                        antennaStatusController.brightnessIndex());
+                    if (!persisted) {
+                        antennaStatusController.restoreBrightness(previous);
+                    }
+                    changed = persisted;
+                    lastRuntimeEvent = persisted
+                        ? "antenna_led_brightness_persisted"
+                        : "antenna_led_brightness_persist_failed";
+                    break;
+                }
                 case InterfaceSetting::Sound:
                     changed = false;
                     lastRuntimeEvent = "sound_locked_hw_t09";
@@ -19957,9 +20111,14 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                 captureSourceSelection};
     }
     if (uiController.page() == 5) {
-        return {leshy1::ui::hitTouchTarget(
-                    TouchTargetLayout::TwoChoices, point),
-                languageController.selection()};
+        const std::uint8_t first = settingsFirstVisible(
+            interfaceSettingsController.selection());
+        return {
+            leshy1::ui::hitTouchTarget(
+                TouchTargetLayout::HomeRows, point, first,
+                InterfaceSettingsController::kItemCount),
+            interfaceSettingsController.selection(),
+        };
     }
     if (uiController.page() == kDevicePage) {
         const std::uint8_t first = deviceFirstVisible(deviceSelection);
@@ -25699,6 +25858,9 @@ void setup() {
     }
 
     interfaceSettingsController.restore(loadUiBrightnessIndex(), loadUiTheme());
+    antennaStatusController.restoreBrightness(
+        loadStatusLedBrightnessIndex());
+    boardAntennaStatusLeds.begin(antennaStatusController.brightnessRaw());
     leshy1::ui::visual::applyTheme(interfaceSettingsController.theme());
     ledcAttach(BoardProfile::kBacklightPin, 5000, 8);
     ledcWrite(BoardProfile::kBacklightPin,
@@ -26012,6 +26174,7 @@ void loop() {
         serviceInfraredCapture();
         serviceSpectrumWaterfallCadence();
     }
+    serviceAntennaStatusLeds();
     const auto rawCaptureState = subGhzRawCapture.stats().state;
     const auto infraredState = infraredCapture.stats().state;
     const bool rawPulseTimingCritical =

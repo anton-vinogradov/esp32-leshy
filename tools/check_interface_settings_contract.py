@@ -39,7 +39,7 @@ def main() -> int:
 
     required_header = (
         "enum class InterfaceTheme", "enum class InterfaceSetting",
-        "kItemCount = 4", "kBrightnessCount = 5",
+        "kItemCount = 5", "kBrightnessCount = 5",
         "static bool soundAvailable() { return false; }",
     )
     required_source = (
@@ -49,7 +49,7 @@ def main() -> int:
     )
     required_renderer = (
         'kUiBrightnessKey = "bright.v1"', 'kUiThemeKey = "theme.v1"',
-        "renderSettingsPage", "Components::homeRow(index)",
+        "renderSettingsPage", "Components::homeRow(index - firstVisible)",
         "saveUiBrightnessIndex", "saveUiTheme",
         "interfaceSettingsController.brightnessDuty()",
         'lastRuntimeEvent = "sound_locked_hw_t09"',
@@ -69,7 +69,7 @@ def main() -> int:
         if token not in renderer:
             failures.append(f"renderer missing: {token}")
     for identifier in ("SettingsLanguage", "SettingsBrightness",
-                       "SettingsTheme", "SettingsSound",
+                       "SettingsTheme", "SettingsAntennaLeds", "SettingsSound",
                        "SettingsSoundLocked"):
         if f"LESHY_UI_TEXT({identifier}," not in strings:
             failures.append(f"EN/RU string missing: {identifier}")
@@ -85,7 +85,7 @@ def main() -> int:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
-    print("interface-settings contract passed: persisted language/brightness/theme, sound fail-closed")
+    print("interface-settings contract passed: persisted language/brightness/theme/antenna LEDs, sound fail-closed")
     return 0
 
 

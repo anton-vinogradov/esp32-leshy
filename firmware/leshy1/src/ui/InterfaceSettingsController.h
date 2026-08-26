@@ -14,12 +14,13 @@ enum class InterfaceSetting : std::uint8_t {
     Language = 0,
     Brightness = 1,
     Theme = 2,
-    Sound = 3,
+    AntennaLeds = 3,
+    Sound = 4,
 };
 
 class InterfaceSettingsController final {
 public:
-    static constexpr std::uint8_t kItemCount = 4;
+    static constexpr std::uint8_t kItemCount = 5;
     static constexpr std::uint8_t kBrightnessCount = 5;
 
     void restore(std::uint8_t brightnessIndex, InterfaceTheme theme);

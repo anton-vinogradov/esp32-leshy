@@ -1,0 +1,20 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "antenna-status-leds-0.171",
+  "rationale": "Restore the proven 0.x four-pixel antenna status contract without changing any receiver or transmitter control path. Pixel 0 belongs to CC1101 and pixels 1..3 to nRF24 slots 1..3. The exact raw brightness ladder is 0/2/3/5/8/12 out of 255 with 2 as the first-install default and a legacy led_br migration. LEDs are updated only on state changes: green means that receiver is active, red means its receiver path faulted, and all pixels are cleared in Safe Mode.",
+  "required_host_checks": [
+    "native exact brightness ladder, invalid-value fallback and CC/N1/N2/N3 bit mapping",
+    "EN/RU generated-font fit and five-row scrolling Settings contract",
+    "state-change-only physical adapter with no timing loop or animation",
+    "exact firmware build and unchanged RX-only safety contracts"
+  ],
+  "required_hil_scenarios": [
+    "one changed-candidate flash on original board-01 only",
+    "all six brightness settings cycle and the selected value survives reset",
+    "nRF24 receive reports exactly the LEDs belonging to detected active slots",
+    "CC1101 receive reports only its dedicated LED",
+    "external camera retains the nRF24 and CC1101 physical LED states when available",
+    "original preference is restored across a final reset",
+    "zero radio TX, input drops, storage changes and final ownership"
+  ]
+}

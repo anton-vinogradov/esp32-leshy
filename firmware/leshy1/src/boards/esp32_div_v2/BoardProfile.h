@@ -17,6 +17,10 @@ struct BoardProfile final {
     // HW-U02: GPIO0 is BOOT-only until continuity evidence exists.
     static constexpr int kDisplayResetPin = -1;
     static constexpr int kBacklightPin = 7;
+    // Four WS2812 pixels form one chain under the antenna connectors:
+    // pixel 0 = CC1101, pixels 1..3 = nRF24 slots 1..3.
+    static constexpr int kStatusLedPin = 1;
+    static constexpr std::uint8_t kStatusLedCount = 4;
     // The v2 buzzer transistor is active-high on GPIO2. The same node is tied
     // into the stock battery-divider circuit, so an unconfigured input can
     // produce an audible false low-battery alarm. Clean 1.x owns the pin from

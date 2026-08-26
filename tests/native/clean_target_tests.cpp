@@ -78,6 +78,7 @@
 #include "ui/TouchInput.h"
 #include "ui/TouchTargets.h"
 #include "ui/InterfaceSettingsController.h"
+#include "ui/AntennaStatusController.h"
 #include "ui/LanguageController.h"
 #include "ui/UiController.h"
 #include "ui/UiStrings.h"
@@ -379,6 +380,8 @@ void testInterfaceSettingsAreBoundedAndFailClosed() {
     CHECK(controller.cycleTheme());
     CHECK(controller.theme() == InterfaceTheme::HighContrast);
     CHECK(controller.next());
+    CHECK(controller.selected() == InterfaceSetting::AntennaLeds);
+    CHECK(controller.next());
     CHECK(controller.selected() == InterfaceSetting::Sound);
     CHECK(!controller.next());
     CHECK(!InterfaceSettingsController::soundAvailable());
@@ -387,6 +390,36 @@ void testInterfaceSettingsAreBoundedAndFailClosed() {
     CHECK(controller.theme() == InterfaceTheme::Forest);
     controller.enter();
     CHECK(controller.selected() == InterfaceSetting::Language);
+}
+
+void testAntennaStatusMappingAndBrightnessMatchLegacyContract() {
+    using leshy1::ui::AntennaStatusController;
+
+    AntennaStatusController controller;
+    CHECK(controller.brightnessIndex() == 1);
+    CHECK(controller.brightnessRaw() == 2);
+    constexpr std::uint8_t expected[] = {3, 5, 8, 12, 0, 2};
+    for (const std::uint8_t raw : expected) {
+        CHECK(controller.cycleBrightness());
+        CHECK(controller.brightnessRaw() == raw);
+    }
+    controller.restoreBrightness(99);
+    CHECK(controller.brightnessIndex() == 1);
+    CHECK(controller.brightnessRaw() == 2);
+    CHECK(AntennaStatusController::brightnessIndexForRaw(0) == 0);
+    CHECK(AntennaStatusController::brightnessIndexForRaw(12) == 5);
+    CHECK(AntennaStatusController::brightnessIndexForRaw(99) == 1);
+
+    CHECK(AntennaStatusController::kCc1101Mask == 0x01);
+    CHECK(AntennaStatusController::nrf24Mask(0) == 0x02);
+    CHECK(AntennaStatusController::nrf24Mask(1) == 0x04);
+    CHECK(AntennaStatusController::nrf24Mask(2) == 0x08);
+    CHECK(AntennaStatusController::nrf24Mask(3) == 0x00);
+    CHECK(AntennaStatusController::nrf24MaskFromSlots(0x07) == 0x0e);
+    CHECK(controller.setActivity(0x0f, 0x04));
+    CHECK(controller.receiveMask() == 0x0b);
+    CHECK(controller.faultMask() == 0x04);
+    CHECK(!controller.setActivity(0x0f, 0x04));
 }
 
 void testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed() {
@@ -6242,6 +6275,7 @@ int main() {
     testTouchTargetsExposeRowsButNeverChrome();
     testLanguageCatalogAndControllerAreBounded();
     testInterfaceSettingsAreBoundedAndFailClosed();
+    testAntennaStatusMappingAndBrightnessMatchLegacyContract();
     testSelfTestQuickIsReadOnlyBoundedAndFullFailsClosed();
     testDisposableScratchCleanupPermitIsExactAndFailClosed();
     testShieldReceiverIdentityContractFailsClosed();

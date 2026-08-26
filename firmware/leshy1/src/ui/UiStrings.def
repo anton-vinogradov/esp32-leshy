@@ -74,6 +74,13 @@ LESHY_UI_TEXT(SettingsBrightness9, Meta, 196, "9% / SAVED", u8"9% / СОХРАН
 LESHY_UI_TEXT(SettingsTheme, Body, 196, "THEME", u8"ТЕМА")
 LESHY_UI_TEXT(SettingsThemeForest, Meta, 196, "FOREST / SAVED", u8"ЛЕС / СОХРАНЕНО")
 LESHY_UI_TEXT(SettingsThemeContrast, Meta, 196, "HIGH CONTRAST / SAVED", u8"КОНТРАСТ / СОХРАНЕНО")
+LESHY_UI_TEXT(SettingsAntennaLeds, Body, 196, "ANTENNA LEDS", u8"АНТЕННЫ / LED")
+LESHY_UI_TEXT(SettingsAntennaLedsOff, Meta, 196, "CC / N1 / N2 / N3 · OFF", u8"CC / N1 / N2 / N3 · ВЫКЛ")
+LESHY_UI_TEXT(SettingsAntennaLeds2, Meta, 196, "CC / N1 / N2 / N3 · 2/255", u8"CC / N1 / N2 / N3 · 2/255")
+LESHY_UI_TEXT(SettingsAntennaLeds3, Meta, 196, "CC / N1 / N2 / N3 · 3/255", u8"CC / N1 / N2 / N3 · 3/255")
+LESHY_UI_TEXT(SettingsAntennaLeds5, Meta, 196, "CC / N1 / N2 / N3 · 5/255", u8"CC / N1 / N2 / N3 · 5/255")
+LESHY_UI_TEXT(SettingsAntennaLeds8, Meta, 196, "CC / N1 / N2 / N3 · 8/255", u8"CC / N1 / N2 / N3 · 8/255")
+LESHY_UI_TEXT(SettingsAntennaLeds12, Meta, 196, "CC / N1 / N2 / N3 · 12/255", u8"CC / N1 / N2 / N3 · 12/255")
 LESHY_UI_TEXT(SettingsSound, Body, 196, "SOUND", u8"ЗВУК")
 LESHY_UI_TEXT(SettingsSoundLocked, Meta, 196, "QUIET / HARDWARE TEST NEEDED", u8"ТИХО / НУЖЕН HW-ТЕСТ")
 
