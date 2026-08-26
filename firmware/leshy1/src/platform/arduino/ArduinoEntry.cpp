@@ -5008,16 +5008,22 @@ void runTargetsMutationWorker(void*) {
             heap_caps_get_free_size(MALLOC_CAP_8BIT));
         event.heapLargestBeforeMount = static_cast<std::uint32_t>(
             heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-        workspace = new (std::nothrow)
-            leshy1::storage::TargetDecisionStateStoreWorkspace();
-        if (workspace == nullptr) {
-            event.status = "workspace_unavailable_before_mount";
-            break;
-        }
         filesystemAttempted = true;
         if (!filesystem.begin()) {
             event.filesystemMountError = filesystem.mountError();
             event.status = "mount_failed";
+            break;
+        }
+        // FatFs needs the largest contiguous heap block during mount.  The
+        // 24.8-KiB decision-state codec is not needed until after admission;
+        // allocating it first made the real correlation review path fail at
+        // 29.7 KiB even though total free heap was sufficient.  Mount first,
+        // then allocate the codec before opening a writable store or issuing
+        // any physical write.
+        workspace = new (std::nothrow)
+            leshy1::storage::TargetDecisionStateStoreWorkspace();
+        if (workspace == nullptr) {
+            event.status = "workspace_unavailable_after_mount";
             break;
         }
         if (!supervisedCheckpoint()) {

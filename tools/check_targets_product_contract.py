@@ -88,18 +88,20 @@ def main() -> int:
     require(failures,
             load_product.index("TargetDecisionStateStoreWorkspace();") >
                 load_product.index("filesystem.beginReadOnly()") and
-            mutation_worker.index("TargetDecisionStateStoreWorkspace();") <
+            mutation_worker.index("TargetDecisionStateStoreWorkspace();") >
                 mutation_worker.index("filesystem.begin()") and
-            "workspace_unavailable_before_mount" in mutation_worker and
+            "workspace_unavailable_after_mount" in mutation_worker and
+            mutation_worker.index("TargetDecisionStateStoreWorkspace();") <
+                mutation_worker.index("openExistingWritable") and
             r'\"mutation_heap_largest_before_mount\":%lu' in entry and
             "kTargetsMaximumMountAttempts = 3" in load_product and
             "filesystem.cleanupComplete()" in load_product and
             r'\"filesystem_mount_attempts\":%u' in entry and
             r'\"filesystem_mount_transient_retries\":%u' in entry,
-            "Targets read recovery must mount before its optional codec "
-            "allocation so a saturated visit cannot starve FatFs; the proven "
-            "mutation path retains observable pre-mount contiguous-capacity "
-            "admission and read recovery remains bounded/fail-closed")
+            "Targets read and mutation paths must mount before their optional "
+            "codec allocation so a saturated correlation visit cannot starve "
+            "FatFs; mutation still allocates before writable open, and both "
+            "paths remain bounded/fail-closed")
     require(failures,
             "new (std::nothrow) domain::targets::TargetCatalog" in controller and
             "delete scratch" in controller and
