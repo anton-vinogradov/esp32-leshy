@@ -254,7 +254,32 @@ def close_targets(device: Any) -> dict[str, Any]:
                            "leshy.targets.product.v1", "state")
 
 
-def wait_mutation(device: Any, timeout: float = 40.0) -> dict[str, Any]:
+def capture_mutation_loss_diagnostics(
+    device: Any, last: dict[str, Any],
+) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {"targets": last}
+    queries = (
+        ("boot", b"metrics", "leshy.boot.v1", "ready"),
+        ("safety", b"safety.state", "leshy.safety.v1", "state"),
+        ("fixture", b"targets.merge-split-fixture state",
+         "leshy.targets_merge_split_fixture.v1", "state"),
+        ("ui", b"ui.state", "leshy.ui.v1", "state"),
+    )
+    for label, command, schema, kind in queries:
+        try:
+            diagnostics[label] = read_only_query(
+                device, command, schema, kind, timeout=5.0)
+        except (RuntimeError, TimeoutError) as error:
+            diagnostics[label] = {
+                "error": f"{type(error).__name__}: {error}",
+            }
+    return diagnostics
+
+
+def wait_mutation(
+    device: Any, timeout: float = 40.0,
+    failure_diagnostics: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     last: dict[str, Any] = {}
     while time.monotonic() < deadline:
@@ -262,6 +287,23 @@ def wait_mutation(device: Any, timeout: float = 40.0) -> dict[str, Any]:
                                "leshy.targets.product.v1", "state")
         if last.get("mutation_state") in ("saved", "failed"):
             return last
+        # During the asynchronous hand-off, workspace_allocated=false is
+        # expected only while mutation_state=saving. Returning to the boot
+        # defaults (idle/not_loaded) means the worker context was lost. Capture
+        # reset reason plus retained RTC stage before cleanup restores OTA1.
+        if (last.get("status") == "not_loaded" and
+                last.get("workspace_allocated") is False and
+                last.get("mutation_state") == "idle"):
+            diagnostics = capture_mutation_loss_diagnostics(device, last)
+            if failure_diagnostics is not None:
+                failure_diagnostics.update(diagnostics)
+            fixture = diagnostics.get("fixture", {})
+            boot = diagnostics.get("boot", {})
+            raise RuntimeError(
+                "Targets mutation worker context lost: "
+                f"reset_reason={boot.get('reset_reason_code')}, "
+                f"stage={fixture.get('mutation_stage')}, "
+                f"stage_valid={fixture.get('mutation_stage_valid')}")
         time.sleep(0.05)
     raise TimeoutError(f"Target mutation did not finish: {last}")
 
@@ -786,7 +828,12 @@ def main() -> int:
         screens["merge_confirm"] = capture(
             device, frames, "targets-merge-confirm")
         states["merge_action_ack"] = trigger_mutation_once(device)
-        merged = wait_mutation(device)
+        merge_failure_diagnostics: dict[str, Any] = {}
+        states["merge_failure_diagnostics"] = merge_failure_diagnostics
+        merged = wait_mutation(
+            device, failure_diagnostics=merge_failure_diagnostics)
+        if not merge_failure_diagnostics:
+            states.pop("merge_failure_diagnostics")
         states["merged"] = merged
         require(merged, "merged state", status="ready", view="actions",
                 selected_target_id=destination_id, action_selection=5,
@@ -863,7 +910,12 @@ def main() -> int:
         screens["split_confirm"] = capture(
             device, frames, "targets-split-confirm")
         states["split_action_ack"] = trigger_mutation_once(device)
-        split = wait_mutation(device)
+        split_failure_diagnostics: dict[str, Any] = {}
+        states["split_failure_diagnostics"] = split_failure_diagnostics
+        split = wait_mutation(
+            device, failure_diagnostics=split_failure_diagnostics)
+        if not split_failure_diagnostics:
+            states.pop("split_failure_diagnostics")
         states["split"] = split
         require(split, "split state", status="ready", view="actions",
                 selected_target_id=destination_id, action_selection=5,

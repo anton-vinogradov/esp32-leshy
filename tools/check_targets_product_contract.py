@@ -449,6 +449,14 @@ def main() -> int:
             merge_split_runner.count(
                 "trigger_mutation_once(device)") == 2 and
             '"action_replays": 0' in merge_split_runner and
+            "capture_mutation_loss_diagnostics" in merge_split_runner and
+            'b"targets.merge-split-fixture state"' in merge_split_runner and
+            'b"safety.state"' in merge_split_runner and
+            "kTargetsStoreTaskStackBytes = 12288U" in entry and
+            entry.count("kTargetsStoreTaskStackBytes, nullptr, 1,") == 3 and
+            "TargetsMergeFixtureMutationStage::CommitStarted" in entry and
+            r'\"mutation_stage\":\"%s\"' in entry and
+            r'\"reset_reason_code\":%u' in entry and
             "TargetsLoadWatchdogScope" in entry and
             "load_watchdog_feeds" in entry and
             "load_maximum_phase_us" in entry,

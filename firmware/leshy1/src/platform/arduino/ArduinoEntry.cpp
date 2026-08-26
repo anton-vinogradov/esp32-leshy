@@ -1341,11 +1341,29 @@ struct LittleFsResetRtcState final {
 };
 RTC_NOINIT_ATTR LittleFsResetRtcState littleFsResetRtcState;
 constexpr std::uint32_t kTargetsMergeFixtureRtcMagic = 0x544D4631U;
+enum class TargetsMergeFixtureMutationStage : std::uint32_t {
+    Idle = 0,
+    Queued = 1,
+    WorkerStarted = 2,
+    TargetInspected = 3,
+    FilesystemMounted = 4,
+    WorkspaceAcquired = 5,
+    MergeApplied = 6,
+    CommitStarted = 7,
+    CommitComplete = 8,
+    RecoveryStarted = 9,
+    RecoveryComplete = 10,
+    CleanupStarted = 11,
+    EventQueued = 12,
+};
 struct TargetsMergeFixtureRtcState final {
     std::uint32_t magic;
     char expectedFingerprint[65];
     char runId[33];
     std::uint8_t token[32];
+    std::uint32_t mutationStage;
+    std::uint32_t mutationStageInverse;
+    std::uint32_t mutationWorkerStackMinimumFree;
 };
 RTC_NOINIT_ATTR TargetsMergeFixtureRtcState targetsMergeFixtureRtcState;
 TaskHandle_t productBootRecoveryWatchdogTask = nullptr;
@@ -1488,6 +1506,12 @@ constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kWifiCaptureStoreDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kPulseCaptureStoreDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kTargetsStoreDeadlineUs = 8000000ULL;
+// Target graph persistence nests the merge service, atomic codec and VFS
+// adapter on one worker. The 8-KiB generic store stack reproduced loss of the
+// worker context on the no-PSRAM DIV before an event could be returned. Keep a
+// dedicated bounded stack instead of weakening the loop-task or hardware
+// watchdogs.
+constexpr std::uint32_t kTargetsStoreTaskStackBytes = 12288U;
 constexpr std::uint32_t kProductSurveyPreparationDeadlineInjectionMs = 10000;
 constexpr std::uint32_t kProductSurveyWorkerDeadlineInjectionMs = 10000;
 constexpr std::uint32_t kWifiCaptureStoreDeadlineInjectionMs = 10000;
@@ -4874,6 +4898,64 @@ void clearTargetsMergeFixtureContinuity() {
                 sizeof(targetsMergeFixtureRtcState.runId));
     std::memset(targetsMergeFixtureRtcState.token, 0,
                 sizeof(targetsMergeFixtureRtcState.token));
+    targetsMergeFixtureRtcState.mutationStage =
+        static_cast<std::uint32_t>(TargetsMergeFixtureMutationStage::Idle);
+    targetsMergeFixtureRtcState.mutationStageInverse =
+        ~targetsMergeFixtureRtcState.mutationStage;
+    targetsMergeFixtureRtcState.mutationWorkerStackMinimumFree = UINT32_MAX;
+}
+
+const char* targetsMergeFixtureMutationStageName(
+    TargetsMergeFixtureMutationStage stage) {
+    switch (stage) {
+        case TargetsMergeFixtureMutationStage::Idle: return "idle";
+        case TargetsMergeFixtureMutationStage::Queued: return "queued";
+        case TargetsMergeFixtureMutationStage::WorkerStarted:
+            return "worker_started";
+        case TargetsMergeFixtureMutationStage::TargetInspected:
+            return "target_inspected";
+        case TargetsMergeFixtureMutationStage::FilesystemMounted:
+            return "filesystem_mounted";
+        case TargetsMergeFixtureMutationStage::WorkspaceAcquired:
+            return "workspace_acquired";
+        case TargetsMergeFixtureMutationStage::MergeApplied:
+            return "merge_applied";
+        case TargetsMergeFixtureMutationStage::CommitStarted:
+            return "commit_started";
+        case TargetsMergeFixtureMutationStage::CommitComplete:
+            return "commit_complete";
+        case TargetsMergeFixtureMutationStage::RecoveryStarted:
+            return "recovery_started";
+        case TargetsMergeFixtureMutationStage::RecoveryComplete:
+            return "recovery_complete";
+        case TargetsMergeFixtureMutationStage::CleanupStarted:
+            return "cleanup_started";
+        case TargetsMergeFixtureMutationStage::EventQueued:
+            return "event_queued";
+    }
+    return "invalid";
+}
+
+bool targetsMergeFixtureMutationStageValid() {
+    const std::uint32_t stage = targetsMergeFixtureRtcState.mutationStage;
+    return targetsMergeFixtureRtcState.mutationStageInverse == ~stage &&
+        stage <= static_cast<std::uint32_t>(
+            TargetsMergeFixtureMutationStage::EventQueued);
+}
+
+void recordTargetsMergeFixtureMutationStage(
+    TargetsMergeFixtureMutationStage stage, bool workerContext = true) {
+    const std::uint32_t value = static_cast<std::uint32_t>(stage);
+    targetsMergeFixtureRtcState.mutationStageInverse = ~value;
+    if (workerContext) {
+        const std::uint32_t free = static_cast<std::uint32_t>(
+            uxTaskGetStackHighWaterMark(nullptr));
+        if (free < targetsMergeFixtureRtcState.mutationWorkerStackMinimumFree) {
+            targetsMergeFixtureRtcState.mutationWorkerStackMinimumFree = free;
+        }
+    }
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    targetsMergeFixtureRtcState.mutationStage = value;
 }
 
 bool armTargetsMergeFixtureContinuity(const char* fingerprint,
@@ -5536,6 +5618,8 @@ void runTargetsMergeFixtureMutationWorker(void*) {
     auto* workspace = static_cast<
         leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
     resetTargetsStoreDeadlineCancel();
+    recordTargetsMergeFixtureMutationStage(
+        TargetsMergeFixtureMutationStage::WorkerStarted);
     deadlineArmed = armTargetsStoreDeadline(startedUs == 0 ? 1 : startedUs);
     const auto supervisedCheckpoint = targetsStoreSupervisedCheckpoint;
     do {
@@ -5574,17 +5658,23 @@ void runTargetsMergeFixtureMutationWorker(void*) {
             event.status = "fixture_target_not_inactive_ota1";
             break;
         }
+        recordTargetsMergeFixtureMutationStage(
+            TargetsMergeFixtureMutationStage::TargetInspected);
         if (!filesystem.mountExistingWritable()) {
             event.filesystemMountError = filesystem.lastError();
             event.status = "fixture_mount_failed";
             break;
         }
+        recordTargetsMergeFixtureMutationStage(
+            TargetsMergeFixtureMutationStage::FilesystemMounted);
         event.filesystemMountError = filesystem.lastError();
         workspace = acquireTargetsStoreCodecWorkspace();
         if (workspace == nullptr) {
             event.status = "shared_codec_unavailable_after_mount";
             break;
         }
+        recordTargetsMergeFixtureMutationStage(
+            TargetsMergeFixtureMutationStage::WorkspaceAcquired);
         if (!supervisedCheckpoint()) {
             event.status = "safety_worker_deadline";
             break;
@@ -5652,6 +5742,8 @@ void runTargetsMergeFixtureMutationWorker(void*) {
                 applied.status);
             break;
         }
+        recordTargetsMergeFixtureMutationStage(
+            TargetsMergeFixtureMutationStage::MergeApplied);
         if (!supervisedCheckpoint()) {
             event.status = "safety_worker_deadline";
             break;
@@ -5670,17 +5762,25 @@ void runTargetsMergeFixtureMutationWorker(void*) {
                     targetsStateHead == leshy1::storage::RecoveryChoice::B
                 ? leshy1::storage::HeadSlot::A
                 : leshy1::storage::HeadSlot::B;
+        recordTargetsMergeFixtureMutationStage(
+            TargetsMergeFixtureMutationStage::CommitStarted);
         const auto committed = leshy1::storage::commitTargetProductState(
             *io, *workspace, *catalog, *decisions, *merges, nextGeneration,
             nextHead);
+        recordTargetsMergeFixtureMutationStage(
+            TargetsMergeFixtureMutationStage::CommitComplete);
         event.storeStatus = committed.status;
         event.commitStage = committed.stage;
         if (!supervisedCheckpoint()) {
             event.status = "safety_worker_deadline";
             break;
         }
+        recordTargetsMergeFixtureMutationStage(
+            TargetsMergeFixtureMutationStage::RecoveryStarted);
         const auto recovered = leshy1::storage::recoverTargetProductState(
             *io, *workspace, catalog, decisions, merges);
+        recordTargetsMergeFixtureMutationStage(
+            TargetsMergeFixtureMutationStage::RecoveryComplete);
         event.catalogRecovered = recovered.valid();
         if (recovered.valid()) {
             event.generation = recovered.generation;
@@ -5719,6 +5819,8 @@ void runTargetsMergeFixtureMutationWorker(void*) {
                          committed.status));
     } while (false);
 
+    recordTargetsMergeFixtureMutationStage(
+        TargetsMergeFixtureMutationStage::CleanupStarted);
     if (io != nullptr) {
         event.bytesWritten = io->bytesWritten();
         event.writeCalls = io->writeCalls();
@@ -5747,6 +5849,8 @@ void runTargetsMergeFixtureMutationWorker(void*) {
     if (targetsMutationEvents != nullptr) {
         xQueueOverwrite(targetsMutationEvents, &event);
     }
+    recordTargetsMergeFixtureMutationStage(
+        TargetsMergeFixtureMutationStage::EventQueued);
     vTaskDelete(nullptr);
 }
 
@@ -6263,7 +6367,8 @@ bool requestTargetsMutation(TargetActionKind kind, bool favorite,
     targetsMutationState = TargetsMutationState::Saving;
     targetsMutationStatus = "saving";
     const bool started = xTaskCreatePinnedToCore(
-        runTargetsMutationWorker, "leshy-targets-store", 8192, nullptr, 1,
+        runTargetsMutationWorker, "leshy-targets-store",
+        kTargetsStoreTaskStackBytes, nullptr, 1,
         &targetsMutationTaskHandle, 0) == pdPASS;
     targetsMutationStartActionUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - actionStartedUs;
@@ -6344,7 +6449,8 @@ bool requestTargetsCorrelationMutation(CorrelationActionKind kind) {
     targetsMutationState = TargetsMutationState::Saving;
     targetsMutationStatus = "saving";
     const bool started = xTaskCreatePinnedToCore(
-        runTargetsMutationWorker, "leshy-targets-store", 8192, nullptr, 1,
+        runTargetsMutationWorker, "leshy-targets-store",
+        kTargetsStoreTaskStackBytes, nullptr, 1,
         &targetsMutationTaskHandle, 0) == pdPASS;
     targetsMutationStartActionUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - actionStartedUs;
@@ -6428,15 +6534,23 @@ bool requestTargetsMergeMutation() {
     }
     targetsMutationState = TargetsMutationState::Saving;
     targetsMutationStatus = "saving";
+    if (targetsMergeFixtureRuntime) {
+        recordTargetsMergeFixtureMutationStage(
+            TargetsMergeFixtureMutationStage::Queued, false);
+    }
     const bool started = xTaskCreatePinnedToCore(
         targetsMergeFixtureRuntime
             ? runTargetsMergeFixtureMutationWorker
             : runTargetsMutationWorker,
-        "leshy-targets-store", 8192, nullptr, 1,
+        "leshy-targets-store", kTargetsStoreTaskStackBytes, nullptr, 1,
         &targetsMutationTaskHandle, 0) == pdPASS;
     targetsMutationStartActionUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) - actionStartedUs;
     if (!started) {
+        if (targetsMergeFixtureRuntime) {
+            recordTargetsMergeFixtureMutationStage(
+                TargetsMergeFixtureMutationStage::Idle, false);
+        }
         targetsMutationTaskHandle = nullptr;
         rebuildTargetsProductFromCatalog(
             targetsMutationCatalog, targetsMutationDecisions,
@@ -7272,12 +7386,26 @@ void emitTargetsMergeFixtureState(Stream& reply) {
         kTargetsMergeFixtureRtcMagic;
     const bool continuityValid = armed &&
         targetsMergeFixtureContinuityValid();
+    const bool mutationStageValid =
+        targetsMergeFixtureMutationStageValid();
+    const auto mutationStage = mutationStageValid
+        ? static_cast<TargetsMergeFixtureMutationStage>(
+              targetsMergeFixtureRtcState.mutationStage)
+        : TargetsMergeFixtureMutationStage::Idle;
+    const bool mutationStackObserved = mutationStageValid &&
+        targetsMergeFixtureRtcState.mutationWorkerStackMinimumFree !=
+            UINT32_MAX;
     std::snprintf(
         sdPhysicalEvidence.line, sizeof(sdPhysicalEvidence.line),
         "{\"schema\":\"leshy.targets_merge_split_fixture.v1\","
         "\"kind\":\"state\",\"armed\":%s,\"continuity_valid\":%s,"
         "\"runtime_active\":%s,\"run_id\":\"%s\","
         "\"storage\":\"%s\",\"ota1_restore_required\":%s,"
+        "\"reset_reason_code\":%u,"
+        "\"mutation_stage\":\"%s\",\"mutation_stage_code\":%lu,"
+        "\"mutation_stage_valid\":%s,"
+        "\"mutation_worker_stack_observed\":%s,"
+        "\"mutation_worker_stack_min_free\":%lu,"
         "\"sd_accessed\":%s,\"product_target_state_touched\":%s,"
         "\"radio_touched\":false,\"rf_tx_attempts\":0}",
         armed ? "true" : "false",
@@ -7286,6 +7414,13 @@ void emitTargetsMergeFixtureState(Stream& reply) {
         continuityValid ? targetsMergeFixtureRtcState.runId : "",
         armed ? "disposable_ota1" : "product_sd",
         armed ? "true" : "false",
+        static_cast<unsigned>(esp_reset_reason()),
+        targetsMergeFixtureMutationStageName(mutationStage),
+        static_cast<unsigned long>(targetsMergeFixtureRtcState.mutationStage),
+        mutationStageValid ? "true" : "false",
+        mutationStackObserved ? "true" : "false",
+        static_cast<unsigned long>(mutationStackObserved
+            ? targetsMergeFixtureRtcState.mutationWorkerStackMinimumFree : 0),
         targetsMergeFixtureSdAccessed ? "true" : "false",
         targetsMergeFixtureProductStateTouched ? "true" : "false");
     reply.println(sdPhysicalEvidence.line);

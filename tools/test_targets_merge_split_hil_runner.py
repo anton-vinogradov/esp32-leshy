@@ -157,6 +157,45 @@ class TargetsMergeSplitHilRunnerTests(unittest.TestCase):
         self.assertIs(expected, result["state"])
         self.assertEqual(0, result["action_replays"])
 
+    def test_wait_mutation_captures_reset_before_cleanup(self) -> None:
+        lost = {
+            "status": "not_loaded", "workspace_allocated": False,
+            "mutation_state": "idle",
+        }
+        boot = {"reset_reason_code": 4}
+        safety = {"state": "armed"}
+        fixture = {
+            "mutation_stage": "commit_started",
+            "mutation_stage_valid": True,
+        }
+        ui = {"page": "home"}
+        diagnostics: dict[str, Any] = {}
+        with patch.object(
+                RUNNER, "read_only_query",
+                side_effect=[lost, boot, safety, fixture, ui]):
+            with self.assertRaisesRegex(
+                    RuntimeError,
+                    "reset_reason=4, stage=commit_started"):
+                RUNNER.wait_mutation(
+                    object(), timeout=1.0,
+                    failure_diagnostics=diagnostics)
+        self.assertIs(lost, diagnostics["targets"])
+        self.assertIs(boot, diagnostics["boot"])
+        self.assertIs(safety, diagnostics["safety"])
+        self.assertIs(fixture, diagnostics["fixture"])
+        self.assertIs(ui, diagnostics["ui"])
+
+    def test_wait_mutation_allows_normal_detached_saving_state(self) -> None:
+        saving = {
+            "status": "not_loaded", "workspace_allocated": False,
+            "mutation_state": "saving",
+        }
+        saved = {"mutation_state": "saved"}
+        with patch.object(
+                RUNNER, "read_only_query", side_effect=[saving, saved]), \
+                patch.object(RUNNER.time, "sleep"):
+            self.assertIs(saved, RUNNER.wait_mutation(object(), timeout=1.0))
+
 
 if __name__ == "__main__":
     unittest.main()
