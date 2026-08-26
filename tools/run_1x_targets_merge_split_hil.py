@@ -39,6 +39,7 @@ from run_1x_product_survey_hil import (
 SCHEMA = "leshy.targets_merge_split_hil.run.v1"
 EXPECTED_CID = "FE343253440000002000000055019CB7"
 WATCHDOG_RESET_REASONS = {4, 5, 6, 7}
+MUTATION_ACTION_ACK_TIMEOUT = 40.0
 PARTITION_MAGIC = 0x50AA
 PARTITION_MD5_MAGIC = 0xEBEB
 PARTITION_ARTIFACT_SIZE = 0xC00
@@ -253,7 +254,7 @@ def close_targets(device: Any) -> dict[str, Any]:
                            "leshy.targets.product.v1", "state")
 
 
-def wait_mutation(device: Any, timeout: float = 20.0) -> dict[str, Any]:
+def wait_mutation(device: Any, timeout: float = 40.0) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     last: dict[str, Any] = {}
     while time.monotonic() < deadline:
@@ -750,7 +751,7 @@ def main() -> int:
         states["merge_confirm"] = merge_confirm
         screens["merge_confirm"] = capture(
             device, frames, "targets-merge-confirm")
-        action(device, "right")
+        action(device, "right", timeout=MUTATION_ACTION_ACK_TIMEOUT)
         merged = wait_mutation(device)
         states["merged"] = merged
         require(merged, "merged state", status="ready", view="actions",
@@ -827,7 +828,7 @@ def main() -> int:
         states["split_confirm"] = split_confirm
         screens["split_confirm"] = capture(
             device, frames, "targets-split-confirm")
-        action(device, "right")
+        action(device, "right", timeout=MUTATION_ACTION_ACK_TIMEOUT)
         split = wait_mutation(device)
         states["split"] = split
         require(split, "split state", status="ready", view="actions",

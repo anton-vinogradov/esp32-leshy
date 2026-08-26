@@ -436,6 +436,10 @@ def main() -> int:
             "mutation_merge_status=\"merged\"" in merge_split_runner and
             "mutation_merge_status=\"split\"" in merge_split_runner and
             "mutation_directory_syncs" in merge_split_runner and
+            "MUTATION_ACTION_ACK_TIMEOUT = 40.0" in merge_split_runner and
+            merge_split_runner.count(
+                'action(device, "right", '
+                'timeout=MUTATION_ACTION_ACK_TIMEOUT)') == 2 and
             "TargetsLoadWatchdogScope" in entry and
             "load_watchdog_feeds" in entry and
             "load_maximum_phase_us" in entry,
