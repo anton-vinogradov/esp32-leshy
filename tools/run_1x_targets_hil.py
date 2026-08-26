@@ -230,10 +230,12 @@ def main() -> int:
                     selected_id="targets")
             opened = action(device, "right")
             trace.append(opened)
-            require(opened, "open Targets", page="targets",
-                    runtime_owner="targets", lease_mask=13)
             listed = query(device, b"targets.state",
                            "leshy.targets.product.v1", "state")
+            record["targets_after_open"] = listed
+            write_json(args.output / "run.json", record)
+            require(opened, "open Targets", page="targets",
+                    runtime_owner="targets", lease_mask=13)
             require(listed, "Targets list", status="ready",
                     workspace_allocated=True, page_open=True, view="list",
                     compare_available=True,

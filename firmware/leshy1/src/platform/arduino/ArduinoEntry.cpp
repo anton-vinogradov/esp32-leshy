@@ -4880,12 +4880,12 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     // Both atomic heads, manifests and payload checksums are then validated
     // while mounted; semantic decoding happens after unmount directly into the
     // one long-lived runtime catalog and decision log. After unmount the
-    // product runtime is allocated as
-    // separate 11,272 B catalog, 11,272 B decision log, 11,528 B merge
-    // history, 7,736 B comparison, 2,704 B proposals and 4,240 B controller
-    // blocks, then the blob is decoded directly into that one long-lived
-    // copy. A monolithic workspace or overlapping transfer/runtime copies do
-    // not fit the board.
+    // product state is first decoded into the three long-lived state blocks.
+    // The 24 KiB wire workspace is then released before the remaining runtime
+    // blocks (comparison, proposals, workspace and controller) are allocated.
+    // Building the complete runtime while the wire workspace is still alive
+    // exceeds the post-Survey contiguous heap even though both phases fit
+    // independently.
     auto* targetStateWorkspace = static_cast<
         leshy1::storage::TargetDecisionStateStoreWorkspace*>(nullptr);
     BoardSdFilesystem filesystem;
@@ -5019,39 +5019,56 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     if (targetsCleanupComplete && targetsBlockedWriteAttempts == 0 &&
         targetStateAccepted &&
         (pairRecovered || latestRecovered)) {
-        if (!allocateTargetsProduct()) {
-            delete targetStateWorkspace;
-            return false;
-        }
-        loadWatchdog.checkpoint();
-        TargetsController& controller = targetsProductRuntime->controller;
         const TargetCatalog* persistedForLoad = nullptr;
         const CorrelationDecisionLog* decisionsForLoad = nullptr;
         if (persistedStateBlobAvailable) {
+            targetsHeapFreeBefore = static_cast<std::uint32_t>(
+                heap_caps_get_free_size(MALLOC_CAP_8BIT));
+            auto* catalog = new (std::nothrow) TargetCatalog();
+            auto* decisions = new (std::nothrow) CorrelationDecisionLog();
+            auto* merges = new (std::nothrow) TargetMergeHistory();
+            if (catalog == nullptr || decisions == nullptr || merges == nullptr) {
+                delete merges;
+                delete decisions;
+                delete catalog;
+                delete targetStateWorkspace;
+                targetStateWorkspace = nullptr;
+                targetsProductStatus = "workspace_unavailable";
+                lastRuntimeEvent = targetsProductStatus;
+                return false;
+            }
             const auto reopened = leshy1::storage::reopenTargetState(
                 targetStateWorkspace->manifest.data(),
                 targetStateWorkspace->manifestSize,
                 targetStateWorkspace->state.data(),
                 targetStateWorkspace->stateSize,
-                &targetsProductRuntime->workspace.catalog,
-                &targetsProductRuntime->workspace.decisions,
-                &targetsProductRuntime->merges);
+                catalog, decisions, merges);
             loadWatchdog.checkpoint();
+            delete targetStateWorkspace;
+            targetStateWorkspace = nullptr;
             if (reopened != leshy1::storage::TargetCodecStatus::Valid) {
-                delete targetStateWorkspace;
-                delete targetsProductRuntime;
-                targetsProductRuntime = nullptr;
+                delete merges;
+                delete decisions;
+                delete catalog;
                 targetsHeapFreeAfter = static_cast<std::uint32_t>(
                     heap_caps_get_free_size(MALLOC_CAP_8BIT));
                 targetsProductStatus = "target_state_reopen_failed";
                 lastRuntimeEvent = targetsProductStatus;
                 return false;
             }
+            if (!finishTargetsProductAllocation(
+                    catalog, decisions, merges, true)) {
+                return false;
+            }
             persistedForLoad = &targetsProductRuntime->workspace.catalog;
             decisionsForLoad = &targetsProductRuntime->workspace.decisions;
+        } else {
+            delete targetStateWorkspace;
+            targetStateWorkspace = nullptr;
+            if (!allocateTargetsProduct()) return false;
         }
-        delete targetStateWorkspace;
-        targetStateWorkspace = nullptr;
+        loadWatchdog.checkpoint();
+        TargetsController& controller = targetsProductRuntime->controller;
         targetsComparisonLoaded = pairRecovered;
         targetsBaselineBinding = pairRecovered
             ? TargetProductBinding{&librarySession, baselineGeneration}
@@ -18661,12 +18678,16 @@ bool applyUiAction(UiAction action, bool render = true) {
         action, static_cast<std::uint8_t>(appCatalog.size()), openable,
         selected == nullptr ? UiController::kRootPage : selected->page);
     if (wantsLaunch && launchStatus == LaunchStatus::Started && !changed) {
+        const char* rollbackEvent = "launch_rolled_back";
         if (selected != nullptr &&
             std::strcmp(selected->id, "targets") == 0) {
+            // Preserve the exact fail-closed load cause for UI/HIL telemetry;
+            // releaseTargetsProduct() intentionally resets the product status.
+            rollbackEvent = lastRuntimeEvent;
             releaseTargetsProduct();
         }
         appRuntime.stop();
-        lastRuntimeEvent = "launch_rolled_back";
+        lastRuntimeEvent = rollbackEvent;
     } else if (!wasRoot && uiController.isRoot() && changed) {
         if (pageBefore == 7) releaseTargetsProduct();
         appRuntime.stop();

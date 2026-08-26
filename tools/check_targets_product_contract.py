@@ -75,19 +75,19 @@ def main() -> int:
     require(failures,
             load_product.rfind("filesystem.end();") <
                 load_product.rfind("allocateTargetsProduct(") and
-            "separate 11,272 B catalog, 11,272 B decision log, 11,528 B merge"
+            "product state is first decoded into the three long-lived state "
+            "blocks" in load_product and
+            "wire workspace is then released before the remaining runtime"
             in load_product and
-            "history, 7,736 B comparison" in load_product and
-            "2,704 B proposals and 4,240 B controller" in load_product and
-            "overlapping transfer/runtime copies do" in load_product and
-            "not fit the board" in load_product and
+            load_product.index("delete targetStateWorkspace;",
+                               load_product.index("reopenTargetState(")) <
+                load_product.index("finishTargetsProductAllocation(",
+                                   load_product.index("reopenTargetState(")) and
             "recoverTargetProductStateWire(" in load_product and
             "persistedCatalog" not in load_product and
             "persistedDecisions" not in load_product and
             "reopenTargetState(" in load_product and
-            "&targetsProductRuntime->workspace.catalog" in load_product and
-            "&targetsProductRuntime->workspace.decisions" in load_product and
-            "&targetsProductRuntime->merges" in load_product and
+            "catalog, decisions, merges);" in load_product and
             "new (std::nothrow) TargetCatalog" in entry and
             "new (std::nothrow) CorrelationDecisionLog" in entry and
             "new (std::nothrow) TargetMergeHistory" in entry and
@@ -97,8 +97,9 @@ def main() -> int:
             "new (std::nothrow) TargetsController" in entry and
             "filesystem_mount_error" in entry,
             "Targets must checksum-select wire state without duplicate decoded "
-            "copies, release FatFs before allocating split no-PSRAM runtime "
-            "blocks, decode in place and expose the exact mount result")
+            "copies, release FatFs, decode into the three retained state blocks, "
+            "release the wire workspace before completing the split no-PSRAM "
+            "runtime, and expose the exact mount result")
     mutation_start = entry.index("void runTargetsMutationWorker")
     mutation_end = entry.index("bool requestTargetsFavoriteMutation")
     mutation_worker = entry[mutation_start:mutation_end]
@@ -297,6 +298,8 @@ def main() -> int:
             '"git", "status", "--porcelain"' in runner and
             "--reuse-exact-flash" in runner and
             "checked_stack_frames = stack_frames(args.elf)" in runner and
+            'record["targets_after_open"] = listed' in runner and
+            'write_json(args.output / "run.json", record)' in runner and
             "best_effort_cleanup(device)" in runner and
             "leshy.targets_mount_regression_hil.run.v1" in mount_runner and
             "checked_stack_frames = stack_frames(args.elf)" in mount_runner and
