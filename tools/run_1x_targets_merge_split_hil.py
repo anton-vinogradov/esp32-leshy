@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import time
@@ -22,7 +23,6 @@ from run_1x_product_survey_hil import (
     query,
     reset_capture,
 )
-from run_1x_ui_typography_hil import normalize_home
 
 
 SCHEMA = "leshy.targets_merge_split_hil.run.v1"
@@ -40,6 +40,53 @@ def valid_hex(value: Any, width: int) -> bool:
             all(character in "0123456789ABCDEF" for character in value))
 
 
+def read_only_query(
+    device: Any,
+    command: bytes,
+    schema: str,
+    kind: str,
+    timeout: float = 5.0,
+    maximum_attempts: int = 2,
+) -> dict[str, Any]:
+    """Retry a diagnostic query once without ever replaying an action."""
+    if maximum_attempts < 1:
+        raise ValueError("maximum_attempts must be positive")
+    errors: list[str] = []
+    for attempt in range(1, maximum_attempts + 1):
+        try:
+            record = query(
+                device, command, schema, kind, timeout=timeout)
+            record["host_transport_attempts"] = attempt
+            record["host_transport_transient_retries"] = attempt - 1
+            record["host_transport_transient_errors"] = errors
+            return record
+        except TimeoutError as error:
+            if attempt == maximum_attempts:
+                raise
+            errors.append(str(error))
+            device.reset_input_buffer()
+            synchronize_console(device, 10.0)
+    raise RuntimeError("unreachable state-query retry state")
+
+
+def normalize_home(device: Any) -> dict[str, Any]:
+    state = read_only_query(
+        device, b"ui.state", "leshy.ui.v1", "state")
+    for _ in range(8):
+        if state.get("page") == "home":
+            break
+        state = action(device, "back")
+    if state.get("page") != "home":
+        raise RuntimeError(f"cannot normalize Home: {state}")
+    for _ in range(8):
+        if int(state.get("selection", -1)) == 0:
+            break
+        state = action(device, "up")
+    if int(state.get("selection", -1)) != 0:
+        raise RuntimeError(f"cannot normalize Home selection: {state}")
+    return state
+
+
 def open_targets(device: Any) -> dict[str, Any]:
     home = normalize_home(device)
     for _ in range(5):
@@ -49,8 +96,8 @@ def open_targets(device: Any) -> dict[str, Any]:
     opened = action(device, "right")
     require(opened, "open Targets", page="targets",
             runtime_owner="targets", lease_mask=13)
-    listed = query(device, b"targets.state",
-                   "leshy.targets.product.v1", "state")
+    listed = read_only_query(device, b"targets.state",
+                             "leshy.targets.product.v1", "state")
     require(listed, "Targets list", status="ready", page_open=True,
             workspace_allocated=True, view="list", compare_available=True,
             read_only=False, write_enabled=False,
@@ -71,8 +118,8 @@ def find_target(
     action(device, "down")  # comparison is row 0; the first Target is row 1
     for index in range(count):
         action(device, "right")
-        detail = query(device, b"targets.state",
-                       "leshy.targets.product.v1", "state")
+        detail = read_only_query(device, b"targets.state",
+                                 "leshy.targets.product.v1", "state")
         require(detail, f"Target detail {index}", status="ready",
                 view="detail", selected_target_present=True, lease_mask=13)
         target_id = detail.get("selected_target_id")
@@ -107,16 +154,16 @@ def close_targets(device: Any) -> dict[str, Any]:
     home = normalize_home(device)
     require(home, "Targets cleanup", page="home",
             runtime_owner="none", lease_mask=0)
-    return query(device, b"targets.state",
-                 "leshy.targets.product.v1", "state")
+    return read_only_query(device, b"targets.state",
+                           "leshy.targets.product.v1", "state")
 
 
 def wait_mutation(device: Any, timeout: float = 20.0) -> dict[str, Any]:
     deadline = time.monotonic() + timeout
     last: dict[str, Any] = {}
     while time.monotonic() < deadline:
-        last = query(device, b"targets.state",
-                     "leshy.targets.product.v1", "state")
+        last = read_only_query(device, b"targets.state",
+                               "leshy.targets.product.v1", "state")
         if last.get("mutation_state") in ("saved", "failed"):
             return last
         time.sleep(0.05)
@@ -143,8 +190,8 @@ def enter_merge_action(device: Any, target_id: str) -> dict[str, Any]:
     action(device, "right")
     for _ in range(5):
         action(device, "down")
-    state = query(device, b"targets.state",
-                  "leshy.targets.product.v1", "state")
+    state = read_only_query(device, b"targets.state",
+                            "leshy.targets.product.v1", "state")
     require(state, "Target merge/split action", status="ready",
             view="actions", selected_target_id=target_id,
             action_selection=5, lease_mask=13)
@@ -163,7 +210,7 @@ def cold_reopen(
             app_elf_sha256=app_identity)
     device = PassiveSerial(port, 115200, timeout=0.25)
     synchronize_console(device, 20.0)
-    recovery = query(
+    recovery = read_only_query(
         device, b"storage.product.boot-recovery",
         "leshy.storage.product_boot_recovery.v1", "state")
     require(recovery, f"{name} exact media", status="admitted",
@@ -185,6 +232,16 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument(
+        "--reuse-exact-flash", action="store_true",
+        help=("skip flashing and prove the already-installed candidate by "
+              "version and app ELF identity"),
+    )
+    parser.add_argument(
+        "--predecessor-failed-run", type=Path,
+        help=("failed run.json (or its directory) that installed the exact "
+              "candidate reused by --reuse-exact-flash"),
+    )
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
         if not path.is_file():
@@ -193,6 +250,38 @@ def main() -> int:
         parser.error("output must not exist")
     if len(args.source_commit) != 40:
         parser.error("source commit must be full length")
+    predecessor_path: Path | None = None
+    predecessor_record: dict[str, Any] = {}
+    if args.reuse_exact_flash:
+        if args.predecessor_failed_run is None:
+            parser.error(
+                "--reuse-exact-flash requires --predecessor-failed-run")
+        predecessor_path = args.predecessor_failed_run
+        if predecessor_path.is_dir():
+            predecessor_path = predecessor_path / "run.json"
+        if not predecessor_path.is_file():
+            parser.error("predecessor failed run.json is missing")
+        try:
+            loaded = json.loads(predecessor_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            parser.error(f"invalid predecessor failed run: {error}")
+        if not isinstance(loaded, dict):
+            parser.error("predecessor failed run must be a JSON object")
+        predecessor_record = loaded
+        predecessor_firmware = predecessor_record.get("candidate", {}).get(
+            "firmware_sha256")
+        if (predecessor_record.get("status") != "failed" or
+                predecessor_firmware != sha256_file(args.firmware) or
+                predecessor_record.get("usb", {}).get("opened_ports") !=
+                [args.port] or
+                predecessor_record.get("usb", {}).get(
+                    "cardputer_ports_opened") != 0):
+            parser.error(
+                "predecessor must be a failed exact-candidate run on the "
+                "same sole DUT port")
+    elif args.predecessor_failed_run is not None:
+        parser.error(
+            "--predecessor-failed-run is only valid with --reuse-exact-flash")
     root = Path(__file__).resolve().parents[1]
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=root, check=True,
@@ -215,6 +304,19 @@ def main() -> int:
     frames.mkdir()
     candidate = args.output / "firmware.bin"
     shutil.copyfile(args.firmware, candidate)
+    predecessor: dict[str, Any] = {}
+    if predecessor_path is not None:
+        retained_predecessor = args.output / "predecessor-failed-run.json"
+        shutil.copyfile(predecessor_path, retained_predecessor)
+        predecessor = {
+            "status": predecessor_record["status"],
+            "error": predecessor_record.get("error"),
+            "source_commit": predecessor_record.get("source_commit"),
+            "firmware_sha256": predecessor_record["candidate"][
+                "firmware_sha256"],
+            "run_sha256": sha256_file(retained_predecessor),
+            "retained_as": retained_predecessor.name,
+        }
     app_identity = app_elf_sha256(candidate)
     cleanup: dict[str, Any] = {"attempted": False}
     states: dict[str, Any] = {}
@@ -229,7 +331,10 @@ def main() -> int:
             "cardputer_ports_opened": 0,
             "port_discovery_calls": 0,
         },
-        "flash_count": 1,
+        "flash_count": 0 if args.reuse_exact_flash else 1,
+        "candidate_installation": (
+            "reused_exact_flash" if args.reuse_exact_flash else "flashed"),
+        "predecessor_failed_run": predecessor,
         "candidate": {
             "version": args.expected_version,
             "firmware_sha256": sha256_file(candidate),
@@ -247,14 +352,17 @@ def main() -> int:
         # This runner never enumerates serial ports. The caller-selected DUT is
         # the only path passed to esptool/pyserial; a parallel Cardputer remains
         # unopened, unprobed and unflashed.
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        time.sleep(1.0)
+        if not args.reuse_exact_flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            time.sleep(1.0)
         device = PassiveSerial(args.port, 115200, timeout=0.25)
         synchronize_console(device, 30.0)
-        metrics = query(device, b"metrics", "leshy.boot.v1", "ready")
+        metrics = read_only_query(
+            device, b"metrics", "leshy.boot.v1", "ready")
         require(metrics, "candidate", version=args.expected_version,
                 app_elf_sha256=app_identity)
-        recovery = query(
+        states["boot_metrics"] = metrics
+        recovery = read_only_query(
             device, b"storage.product.boot-recovery",
             "leshy.storage.product_boot_recovery.v1", "state")
         require(recovery, "exact media", status="admitted",
@@ -263,6 +371,7 @@ def main() -> int:
                 fingerprint_matched=True, mounted_read_only=True,
                 read_only_guaranteed=True, blocked_write_attempts=0,
                 cleanup_complete=True, physical_write_calls=0)
+        states["boot_recovery"] = recovery
 
         listed_before, destination_before, searched = find_target(
             device,
@@ -286,8 +395,9 @@ def main() -> int:
 
         enter_merge_action(device, destination_id)
         action(device, "right")
-        merge_list = query(device, b"targets.state",
-                           "leshy.targets.product.v1", "state")
+        merge_list = read_only_query(
+            device, b"targets.state",
+            "leshy.targets.product.v1", "state")
         require(merge_list, "merge source list", status="ready",
                 view="merge_list", selected_target_id=destination_id,
                 merge_selection=0, lease_mask=13)
@@ -301,8 +411,9 @@ def main() -> int:
         screens["merge_list"] = capture(
             device, frames, "targets-merge-source-list")
         action(device, "right")
-        merge_confirm = query(device, b"targets.state",
-                              "leshy.targets.product.v1", "state")
+        merge_confirm = read_only_query(
+            device, b"targets.state",
+            "leshy.targets.product.v1", "state")
         require(merge_confirm, "merge explicit confirmation", status="ready",
                 view="merge_confirm", selected_target_id=destination_id,
                 merge_candidate_target_id=source_id, write_enabled=True,
@@ -373,8 +484,9 @@ def main() -> int:
 
         enter_merge_action(device, destination_id)
         action(device, "right")
-        split_confirm = query(device, b"targets.state",
-                              "leshy.targets.product.v1", "state")
+        split_confirm = read_only_query(
+            device, b"targets.state",
+            "leshy.targets.product.v1", "state")
         require(split_confirm, "split explicit confirmation", status="ready",
                 view="split_confirm", selected_target_id=destination_id,
                 active_merge_available=True,
