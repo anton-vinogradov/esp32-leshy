@@ -596,6 +596,25 @@ firmware/ELF/map:
 Шесть просмотренных TFT states и два rejected precursor с zero writes сохранены
 в `E-HIL-173`; cadence продвигается до 10/15 без полной physical matrix.
 
+Checkpoint Reject rebuild Target `RB-M156`: exact production
+`0.156.0-targets-reject-rebuild` использует 214 168 B static RAM, 3 135 096 B
+app partition из 4 194 304 B и firmware image 3 135 600 B. Mutation worker
+больше не дублирует полный catalog 11 272 B и decision log 11 272 B, пока его
+завершившийся stack FreeRTOS 8 КиБ ожидает cleanup idle task: после atomic write
+и проверенного reopen runtime принимает эти две allocation worker на месте. На
+жёстком пределе каталога 16/16 physical Reject проходит с 69 632 B free до mount
+mutation, 60 552/32 756 B free/largest перед записью и полностью освобождает heap
+до измеренных terminal 94 108 B после reset. Времена UI/worker —
+231/3 960 944 µs; 2 878 logical bytes используют три writes, три file syncs и
+три directory syncs. Target state продвигается 10→11, decision log 2→3, а
+revision Target 5, visible ownership count 4 и catalog count 16 не меняются.
+SHA-256 firmware/ELF/map:
+`68c809d0a529c76b629c2723c5f918c5288413fe7791d68e98b67dcab74c98b9`/
+`e0bffd74505ed266cb6a48d9646fdf47c0290b462c9fb5234b5a4b010c8a50a7`/
+`37e6fa1e70d3fe210324b13b3deb302741ec29ff36a2aff8b78a66c47ee50750`.
+Семь просмотренных TFT states и fail-closed precursor duplicate rebuild сохранены
+в `E-HIL-174`; cadence продвигается до 11/15 без полной matrix.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

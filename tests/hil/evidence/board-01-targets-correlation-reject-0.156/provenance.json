@@ -1,0 +1,51 @@
+{
+  "candidate": {
+    "app_elf_sha256": "e0bffd74505ed266cb6a48d9646fdf47c0290b462c9fb5234b5a4b010c8a50a7",
+    "checked_stack_frames": {
+      "CorrelationService::propose(": 416,
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 432,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 32,
+      "buildSessionCorrelationReview(": 816,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "e0bffd74505ed266cb6a48d9646fdf47c0290b462c9fb5234b5a4b010c8a50a7",
+    "firmware_bytes": 3135600,
+    "firmware_sha256": "68c809d0a529c76b629c2723c5f918c5288413fe7791d68e98b67dcab74c98b9",
+    "map_sha256": "37e6fa1e70d3fe210324b13b3deb302741ec29ff36a2aff8b78a66c47ee50750",
+    "version": "0.156.0-targets-reject-rebuild"
+  },
+  "failure_source_commit": "1f2c7b6647a84a2b5c5f6063b0395e4c8746b0cf",
+  "firmware_source_commit": "0559fc632f8a1dc856000d57113d24b61ab801aa",
+  "raw": {
+    "failure": {
+      "artifacts_manifest_sha256": "02f69a99102414e9c180f9a6610278be1e4b874472f4448f08744390fb758ef1",
+      "run_sha256": "63e0bdcdd915492d70a9e1740c53714923f20ca4b57705a1bc67205046513ea9"
+    },
+    "passed": {
+      "artifacts_manifest_sha256": "1ba19b32bf60742bb67abea44571612713251c220011b5ad7fe6106cd7856b4a",
+      "run_sha256": "f8f6650ac7f986a275b35d01e00074ab5114ee0b49cb3fe1c8a4a16e944e9327"
+    }
+  },
+  "retention_script": "tools/retain_1x_targets_correlation_reject_hil.py",
+  "retention_script_sha256": "46df49d7d096dc64ced1178949919c716e8bf92b234309be41acecd1b1bba7ae",
+  "schema": "leshy.targets_correlation_reject_hil.provenance.v1",
+  "source_blob_sha256": {
+    "firmware/leshy1/platformio.ini": "a72b0cb708640481bf1c87fc69bacf3adc6cb8f258c1eeffb1be0b2b28f0bf60",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp": "a5fd9c2f7db5e46dab4605df73928a95ff5ee9de53e2e93fd23cf2256bcef091",
+    "tests/native/targets_controller_tests.cpp": "aaf23ca41e438fd6a52b0ddd27ffe49f1693042047b8d8467c2e1a0a21d36070",
+    "tools/check_targets_product_contract.py": "8b7d8928e80c1d31a466f646a1f445101a99908ee98ee57ffd1ba9b248154bd3",
+    "tools/run_1x_targets_correlation_hil.py": "0cbd3a47717f8281ed4d41ec19be238c46adf2b48cde77a67dce990e32ae71e0"
+  },
+  "source_paths": [
+    "firmware/leshy1/platformio.ini",
+    "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp",
+    "tests/native/targets_controller_tests.cpp",
+    "tools/check_targets_product_contract.py",
+    "tools/run_1x_targets_correlation_hil.py"
+  ]
+}

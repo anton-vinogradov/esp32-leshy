@@ -604,6 +604,25 @@ SHA-256 are
 Six reviewed TFT states and the two zero-write rejected precursors are retained
 in `E-HIL-173`; cadence advances to 10/15 without a full physical matrix.
 
+Targets Reject rebuild checkpoint `RB-M156`: exact production
+`0.156.0-targets-reject-rebuild` uses 214,168 B static RAM, 3,135,096 B of the
+4,194,304 B app partition and a 3,135,600 B firmware image. The mutation worker
+no longer duplicates the full 11,272 B catalog plus 11,272 B decision log while
+its just-exited 8 KiB FreeRTOS stack awaits idle-task cleanup: after the atomic
+write and verified reopen, runtime adopts those two worker allocations in place.
+At the hard catalog bound 16/16 the physical Reject succeeds with 69,632 B free
+before mutation mount, 60,552/32,756 B free/largest before the write, and fully
+releases to the measured post-reset 94,108 B terminal heap. UI/worker times are
+231/3,960,944 µs; 2,878 logical bytes use three writes, three file syncs and
+three directory syncs. Target state advances 10→11 and the decision log 2→3,
+while Target revision 5, visible ownership count 4 and catalog count 16 remain
+unchanged. Firmware/ELF/map SHA-256 are
+`68c809d0a529c76b629c2723c5f918c5288413fe7791d68e98b67dcab74c98b9`/
+`e0bffd74505ed266cb6a48d9646fdf47c0290b462c9fb5234b5a4b010c8a50a7`/
+`37e6fa1e70d3fe210324b13b3deb302741ec29ff36a2aff8b78a66c47ee50750`.
+Seven reviewed TFT states and the fail-closed duplicate-rebuild precursor are
+retained in `E-HIL-174`; cadence advances to 11/15 without a full matrix.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

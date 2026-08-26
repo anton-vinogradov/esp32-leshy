@@ -1,0 +1,150 @@
+{
+  "atomic_reject": {
+    "mutation_action_us": 231,
+    "mutation_bytes_written": 2878,
+    "mutation_directory_syncs": 3,
+    "mutation_elapsed_us": 3960944,
+    "mutation_file_syncs": 3,
+    "mutation_heap_free_before_mount": 60552,
+    "mutation_heap_largest_before_mount": 32756,
+    "mutation_identity_attempts": 1,
+    "mutation_identity_transient_retries": 0,
+    "mutation_write_calls": 3
+  },
+  "board": {
+    "dut_port": "/dev/cu.usbmodem2101",
+    "id": "board-01"
+  },
+  "bundle": "tests/hil/evidence/board-01-targets-correlation-reject-0.156",
+  "candidate": {
+    "app_elf_sha256": "e0bffd74505ed266cb6a48d9646fdf47c0290b462c9fb5234b5a4b010c8a50a7",
+    "checked_stack_frames": {
+      "CorrelationService::propose(": 416,
+      "TargetsController::comparisonItemBefore(": 480,
+      "TargetsController::loadBindings(": 432,
+      "TargetsController::loadComparisonSide(": 272,
+      "TargetsController::rebuildComparisonOrder()": 32,
+      "TargetsController::reset()": 32,
+      "buildSessionCorrelationReview(": 816,
+      "buildSide(": 1104,
+      "compareTargetSessionsInto(": 80,
+      "resetTargetComparisonResult(": 32
+    },
+    "elf_sha256": "e0bffd74505ed266cb6a48d9646fdf47c0290b462c9fb5234b5a4b010c8a50a7",
+    "firmware_bytes": 3135600,
+    "firmware_sha256": "68c809d0a529c76b629c2723c5f918c5288413fe7791d68e98b67dcab74c98b9",
+    "map_sha256": "37e6fa1e70d3fe210324b13b3deb302741ec29ff36a2aff8b78a66c47ee50750",
+    "version": "0.156.0-targets-reject-rebuild"
+  },
+  "cold_reopened": {
+    "capacity_skipped": 7,
+    "catalog_capacity": 16,
+    "catalog_count": 16,
+    "decision_count": 3,
+    "source_identity_count": 84,
+    "target_state_generation": 11,
+    "truncated": true,
+    "visible_target_count": 4
+  },
+  "evidence_ids": [
+    "E-AUTO-114",
+    "E-HIL-174",
+    "E-UX-051"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "failure_source_commit": "1f2c7b6647a84a2b5c5f6063b0395e4c8746b0cf",
+  "final": {
+    "lease_mask": 0,
+    "page": "home",
+    "runtime_owner": "none"
+  },
+  "firmware_source_commit": "0559fc632f8a1dc856000d57113d24b61ab801aa",
+  "fixture": {
+    "dut_remained_passive": true,
+    "executable_sha256": "da3cec0a11116e563b8d34d7c3ef042b5aeba0978db069b2b7c89bce6d64106d",
+    "kind": "macos_corebluetooth",
+    "label": "Keenetic-5070",
+    "port": null,
+    "states": [
+      {
+        "label": "Keenetic-5070",
+        "pid": 24335,
+        "schema": "leshy.hil.macos_ble_name_fixture.v1",
+        "state": "advertising"
+      }
+    ]
+  },
+  "flash_count": 1,
+  "manifest_sha256": "9e1f5f8c2cc6aa74654d679231c3216093477f236173fb53236fc51d27fbda3d",
+  "precursor": "precursors/immediate-rebuild-failure.json",
+  "proposal": {
+    "candidate_identity_hex": "603E5F4AC819",
+    "decision": "reject",
+    "id": "57C9339425F9BD8F205B604236540911",
+    "target_id": "D232CBB7B4489ABAABFAFD7163BB1D51"
+  },
+  "radio_tx_commands_from_dut": 0,
+  "schema": "leshy.targets_correlation_reject_hil.summary.v1",
+  "screens": {
+    "candidate-evidence": {
+      "png": "frames/candidate-evidence.png",
+      "png_sha256": "f1bb9949bf3f8de864fd007e76decfd77004127f615a606cf83d8f81954d0a27"
+    },
+    "cold-reopened": {
+      "png": "frames/cold-reopened.png",
+      "png_sha256": "01291e9e714912983b0eef7c6f9f0e4fcf8099fb317dbe2f1d171eafb3456d35"
+    },
+    "known-evidence": {
+      "png": "frames/known-evidence.png",
+      "png_sha256": "6df23a25782c297144dcdcd89493ed3372277f5f9995406558d35ebf7cb31f9d"
+    },
+    "proposal-list": {
+      "png": "frames/proposal-list.png",
+      "png_sha256": "c6fa8dc7a09410728861accbeac92099a8d21b4c75a549ec24f9f0589d4b1aa1"
+    },
+    "proposal-review": {
+      "png": "frames/proposal-review.png",
+      "png_sha256": "af2cf7ba7f83109f6014c7bbde6f0a76a575b67d23bcdedb8ab3843b02b20b9c"
+    },
+    "reject-saved": {
+      "png": "frames/reject-saved.png",
+      "png_sha256": "e3757e2474b0d2a1e31619ee69f7dfcf0f2270854c3a4ed1c171b15886c19cd2"
+    },
+    "reject-selected": {
+      "png": "frames/reject-selected.png",
+      "png_sha256": "50c91e9c7e8b919b1a59fc42602b8963a3cfe910653f6cf9eb981913fb22bf16"
+    }
+  },
+  "status": "pass",
+  "transition": {
+    "catalog_capacity": 16,
+    "catalog_count": [
+      16,
+      16
+    ],
+    "decision_count": [
+      2,
+      3
+    ],
+    "target_count": [
+      4,
+      4
+    ],
+    "target_revision": [
+      5,
+      5
+    ],
+    "target_state_generation": [
+      10,
+      11
+    ]
+  },
+  "usb_scope": {
+    "cardputer_ports_opened": 0,
+    "external_fixture_port": null,
+    "port_enumeration_by_runner": false,
+    "ports_opened_by_runner": [
+      "/dev/cu.usbmodem2101"
+    ]
+  }
+}
