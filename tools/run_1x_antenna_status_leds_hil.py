@@ -45,12 +45,7 @@ def require(state: dict[str, Any], label: str, **expected: Any) -> None:
 
 def enter_settings(device: PassiveSerial,
                    trace: list[dict[str, Any]]) -> dict[str, Any]:
-    state = normalize_home(device)
-    while int(state.get("selection", -1)) < 6:
-        state = action(device, "down")
-        trace.append(state)
-    require(state, "select Device", page="home", selection=6,
-            selected_id="device")
+    state = home_item(device, trace, "device")
     state = action(device, "right")
     trace.append(state)
     require(state, "open Device", page="device", device_selection=0)
@@ -121,15 +116,14 @@ def external_camera(camera_id: str | None, output: Path) -> dict[str, Any]:
 
 
 def home_item(device: PassiveSerial, trace: list[dict[str, Any]],
-              selection: int, selected_id: str) -> dict[str, Any]:
+              selected_id: str) -> dict[str, Any]:
     state = normalize_home(device)
-    while int(state.get("selection", -1)) < selection:
+    for _ in range(8):
+        if state.get("selected_id") == selected_id:
+            break
         state = action(device, "down")
         trace.append(state)
-    while int(state.get("selection", -1)) > selection:
-        state = action(device, "up")
-        trace.append(state)
-    require(state, f"Home {selected_id}", page="home", selection=selection,
+    require(state, f"Home {selected_id}", page="home",
             selected_id=selected_id, runtime_owner="none", lease_mask=0)
     return state
 
@@ -245,7 +239,7 @@ def main() -> int:
             if not cleanup.get("complete"):
                 raise RuntimeError("post-reset cleanup failed")
 
-            home_item(device, trace, 2, "spectrum24")
+            home_item(device, trace, "spectrum24")
             trace.append(action(device, "right"))
             started = action(device, "right")
             trace.append(started)
@@ -275,7 +269,7 @@ def main() -> int:
             if not cleanup.get("complete"):
                 raise RuntimeError("nRF24 cleanup failed")
 
-            home_item(device, trace, 3, "subghz")
+            home_item(device, trace, "subghz")
             trace.append(action(device, "right"))
             trace.append(action(device, "right"))
             started = action(device, "right")
