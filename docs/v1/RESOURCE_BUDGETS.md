@@ -758,6 +758,31 @@ Two consecutive builds from the workspace-local PlatformIO core produce those ex
 hashes while remaining isolated from unrelated projects. No physical cadence delta is
 consumed; runtime listener/connection memory is not yet admitted or claimed.
 
+Physical local-Web lifecycle checkpoint `RB-M164`: exact production
+`0.181.0-companion-web-deferred-worker-restore` at source
+`6e0f2be76240e38d12805cfd654a7d70c61ae3d8` uses 222,800 B static RAM,
+3,359,608 B linked flash and 3,360,112/3,425,648 B app/factory images. Versus exact
+0.173 this is +7,808 B static RAM, +176,468 B linked flash and +176,816/+176,816 B
+images because the ESP-IDF Wi-Fi/AP and HTTP runtime are now reachable instead of
+linker-collected. The portable board still has zero usable PSRAM. Ready Targets has
+32,660 B free; releasing its heavy foreground objects raises this to 39,924 B and
+releasing the idle Survey worker/queues raises it to 60,788 B. Immediately before
+`esp_wifi_start`, free/largest heap is 54,764/23,540 B and after start it is 16,868 B.
+Stop returns 53,424 B while Targets is restored and the Survey worker remains deferred;
+leaving Targets restores that worker, and the final boot metric is 75,972 B free with
+156,004 B total and 14,088 B sampled minimum. Admission is fixed at one client, two
+static RX buffers, one dynamic RX, one dynamic TX, one management buffer, six short
+management buffers, one cached TX buffer, 600 s idle and 1,800 s absolute lifetime.
+Exact firmware/factory/ELF/map/built-partitions SHA-256 are
+`7491f450026c864f228df3164155afd1c388d1faa0b8a60bf9a9ef652933cd9d`/
+`b1a391215039621da8f7acc3d8cba5311d3d19bae10100b8ead1748d5ab98abb3`/
+`eb42e6f9002a708329cb2498b0b37dc7be4d26f74bd40676e331ca599a56c31e`/
+`585c0b9ec83193e1d8d239119359a934e111b1b3d7ce15b75a2f499004f92c84`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+Installed partition preflight independently matches `339bda68…ba2`; no partition
+flash occurs. `E-HIL-181` accepts lifecycle and cleanup only, advances cadence to 2/15
+and explicitly leaves actual HTTP traffic for the next physical gate.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

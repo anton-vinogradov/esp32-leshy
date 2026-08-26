@@ -7,6 +7,7 @@ import ast
 import hashlib
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / "tests/hil/evidence/board-01-littlefs-parity-0.69.json"
 BUNDLE = ROOT / "tests/hil/evidence/board-01-littlefs-parity-0.69"
 RUNNER = ROOT / "tools/run_1x_littlefs_parity_hil.py"
+RUNNER_COMMIT = "a1dfcb3369bd312637c0b0a5ebe00d2c3ab8bc05"
 RUNNER_TEST = ROOT / "tools/test_littlefs_parity_hil_runner.py"
 ENTRY = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 PARTITION_ADAPTER = (
@@ -39,6 +41,16 @@ DOCS = (
 
 def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def git_blob(commit: str, path: Path) -> bytes:
+    relative = path.relative_to(ROOT).as_posix()
+    return subprocess.run(
+        ["git", "show", f"{commit}:{relative}"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    ).stdout
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -120,9 +132,13 @@ def main() -> int:
     if run_path.is_file():
         require(failures, digest(run_path) == physical.get("run_sha256"),
                 "retained run hash mismatch")
-    require(failures, RUNNER.is_file() and
-            digest(RUNNER) == physical.get("runner_sha256"),
-            "runner hash mismatch")
+    require(failures, RUNNER.is_file(), "runner missing")
+    require(
+        failures,
+        hashlib.sha256(git_blob(RUNNER_COMMIT, RUNNER)).hexdigest() ==
+            physical.get("runner_sha256"),
+        "executed runner commit/hash mismatch",
+    )
     run = json.loads(run_path.read_text(encoding="utf-8")) \
         if run_path.is_file() else {}
     require(failures, exact(run, {

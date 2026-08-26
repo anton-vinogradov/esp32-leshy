@@ -751,6 +751,31 @@ build identity. Request view compile-time ограничен 32 B, общий bo
 hashes и изолированы от посторонних проектов. Physical cadence delta не расходуется;
 memory runtime listener/connectivity ещё не допущена и не заявляется.
 
+Physical checkpoint lifecycle local Web `RB-M164`: exact production
+`0.181.0-companion-web-deferred-worker-restore` на source
+`6e0f2be76240e38d12805cfd654a7d70c61ae3d8` использует 222 800 B static RAM,
+3 359 608 B linked flash и app/factory images 3 360 112/3 425 648 B. Против exact
+0.173 это +7 808 B static RAM, +176 468 B linked flash и +176 816/+176 816 B images,
+потому что runtime ESP-IDF Wi-Fi/AP и HTTP теперь reachable, а не удалён linker GC.
+Portable board всё ещё имеет zero usable PSRAM. Ready Targets оставляет 32 660 B free;
+release тяжёлых foreground objects поднимает значение до 39 924 B, а idle worker/queues
+Survey — до 60 788 B. Непосредственно перед `esp_wifi_start` free/largest heap равны
+54 764/23 540 B, после старта — 16 868 B. Stop возвращает 53 424 B при восстановленных
+Targets и ещё deferred worker Survey; выход из Targets восстанавливает worker, а final
+boot metric равен 75 972 B free при total 156 004 B и sampled minimum 14 088 B.
+Admission фиксирован: один client, два static RX buffers, по одному dynamic RX/TX,
+один management buffer, шесть short management buffers, один cached TX buffer,
+600 s idle и 1 800 s absolute lifetime. Exact SHA-256
+firmware/factory/ELF/map/built-partitions:
+`7491f450026c864f228df3164155afd1c388d1faa0b8a60bf9a9ef652933cd9d`/
+`b1a391215039621da8f7acc3d8cba5311d3d19bae10100b8ead1748d5ab98abb3`/
+`eb42e6f9002a708329cb2498b0b37dc7be4d26f74bd40676e331ca599a56c31e`/
+`585c0b9ec83193e1d8d239119359a934e111b1b3d7ce15b75a2f499004f92c84`/
+`325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3`.
+Installed partition preflight отдельно совпадает с `339bda68…ba2`; partition flash не
+выполняется. `E-HIL-181` принимает только lifecycle и cleanup, двигает cadence до 2/15
+и явно оставляет actual HTTP traffic следующему physical gate.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

@@ -1,0 +1,169 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "app_elf_sha256": "eb42e6f9002a708329cb2498b0b37dc7be4d26f74bd40676e331ca599a56c31e",
+    "built_partitions_sha256": "325d90a7000bdb14af736b3fdb08cfa17406889abf8a135c4cfe00cd33f7abb3",
+    "factory_bytes": 3425648,
+    "factory_sha256": "b1a391215039621da8f7acc3d8cba5311d3d19bae10100b8ead1748d5ab98abb3",
+    "firmware_bytes": 3360112,
+    "firmware_sha256": "7491f450026c864f228df3164155afd1c388d1faa0b8a60bf9a9ef652933cd9d",
+    "linked_flash_bytes": 3359608,
+    "map_sha256": "585c0b9ec83193e1d8d239119359a934e111b1b3d7ce15b75a2f499004f92c84",
+    "static_ram_bytes": 222800,
+    "version": "0.181.0-companion-web-deferred-worker-restore"
+  },
+  "evidence_ids": [
+    "E-BUILD-151",
+    "E-AUTO-123",
+    "E-HIL-181",
+    "E-COMPANION-005"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "failed_precursors": [
+    {
+      "checkpoint": "explicit_authorization",
+      "classification": "insufficient_contiguous_internal_heap_for_wifi_driver",
+      "cleanup_complete": true,
+      "firmware_failure": true,
+      "reason": "esp_wifi_init_returned_ESP_ERR_NO_MEM_before_listener_start",
+      "run_sha256": "728157522a9feb3426a94c4721c70e4f186007d3565db3c91891811d535fd259",
+      "source_commit": "df046096f085d04b9dcf2dff107b340cb54e9ac0",
+      "version": "0.179.0-companion-web-single-client"
+    },
+    {
+      "checkpoint": "explicit_stop",
+      "classification": "survey_worker_restored_too_early_under_targets_heap_pressure",
+      "cleanup_complete": true,
+      "firmware_failure": true,
+      "reason": "network_cleanup_succeeded_but_immediate_worker_recreation_failed_before_targets_exit",
+      "run_sha256": "a297ad14429eaa50e6acc824544db250b9bc320c5ed77ce552070d4bd846eac8",
+      "source_commit": "327cf78ae3965f7b8f158142668c68d41b5c6c75",
+      "version": "0.180.0-companion-web-worker-suspend"
+    }
+  ],
+  "firmware_source_commit": "6e0f2be76240e38d12805cfd654a7d70c61ae3d8",
+  "http_exchange": {
+    "reason": "host_wifi_state_not_modified",
+    "tested": false
+  },
+  "installation": {
+    "application_flash_count": 1,
+    "candidate_reused": false,
+    "partition_flash_count": 0,
+    "partition_preflight": {
+      "bytes": 4096,
+      "expected_sha256": "339bda68b7470d5ad1482d10183514b88971c6f1f20ff87c7e2f3dad96235ba2",
+      "matched": true,
+      "observed_sha256": "339bda68b7470d5ad1482d10183514b88971c6f1f20ff87c7e2f3dad96235ba2",
+      "performed_before_application_flash": true,
+      "read_attempts": 1
+    }
+  },
+  "lifecycle": {
+    "active": {
+      "authorized": true,
+      "begin_stage": "ready",
+      "credential_exposed_over_diagnostic": false,
+      "credential_persisted": false,
+      "credential_present": true,
+      "driver_error": 0,
+      "generation": 1,
+      "heap_free_after_begin": 16868,
+      "heap_free_after_targets_suspend": 39924,
+      "heap_free_after_worker_suspend": 60788,
+      "heap_free_before_begin": 54764,
+      "heap_free_before_targets_suspend": 32660,
+      "heap_free_before_worker_suspend": 39924,
+      "heap_largest_before_begin": 23540,
+      "lease_mask": 15,
+      "network_core_ready": true,
+      "server_active": true,
+      "survey_worker_suspended": true,
+      "targets_suspended": true
+    },
+    "limits": {
+      "idle_timeout_us": 600000000,
+      "maximum_clients": 1,
+      "maximum_lifetime_us": 1800000000
+    },
+    "released": {
+      "authorized": false,
+      "cleanup_complete": true,
+      "credential_present": false,
+      "heap_free_after_stop_marker": 46160,
+      "lease_mask": 0,
+      "server_active": false,
+      "survey_worker_suspended": false,
+      "targets_suspended": false
+    },
+    "staged": {
+      "authorized": false,
+      "credential_present": false,
+      "lease_mask": 13,
+      "network_core_ready": false,
+      "overlay_open": true,
+      "server_active": false,
+      "survey_worker_suspended": false,
+      "targets_suspended": false
+    },
+    "stopped": {
+      "authorized": false,
+      "cleanup_complete": true,
+      "credential_present": false,
+      "heap_free_after_stop": 53424,
+      "lease_mask": 13,
+      "server_active": false,
+      "stop_reason": "user",
+      "survey_worker_suspended": true,
+      "targets_suspended": false
+    }
+  },
+  "physical_cadence": {
+    "accepted_since_full": 2,
+    "full_gate_at": 15
+  },
+  "product_state": {
+    "boot_recovery_attempts": 1,
+    "boot_recovery_cleanup_complete": true,
+    "boot_recovery_timeout_restarts": 0,
+    "boot_recovery_transient_retries": 0,
+    "catalog_generation": 161,
+    "catalog_observations": 59,
+    "mounted_read_only": true,
+    "physical_write_calls": 0,
+    "target_state_generation": 17
+  },
+  "raw_run_sha256": "78bfb037ef15f4a9a81a51f2ee7c916efab2c5b520e25792a9fdefff727f3158",
+  "safety_and_final": {
+    "buzzer_inactive": true,
+    "heap_free_after": 75972,
+    "heap_free_before": 83204,
+    "heap_min_after": 14088,
+    "heap_min_before": 69520,
+    "heap_total": 156004,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "lease_mask": 0,
+    "nrf_ce_inactive": true,
+    "radio_tx_commands": 0,
+    "radio_tx_scope": "explicit_ephemeral_softap_only",
+    "safety_armed": true,
+    "safety_clear_performed": false,
+    "safety_latched": false,
+    "software_quiesce_complete": true,
+    "storage_write_commands": 0
+  },
+  "schema": "leshy.hil.companion_web_lifecycle.acceptance.v1",
+  "status": "pass",
+  "transport": {
+    "cardputer_ports_opened": 0,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "serial_port_discovery_calls": 0
+  },
+  "verification_source_commit": "6e0f2be76240e38d12805cfd654a7d70c61ae3d8"
+}

@@ -159,9 +159,9 @@ Targets обязателен новый connect. Физически принят
 USB CDC. `Serial0` остаётся legacy diagnostic console и не может согласовать этот
 protocol.
 
-## Boundary local Web presentation
+## Presentation local Web и runtime lifecycle
 
-Принятый на host/build Web adapter отдаёт self-contained offline page по exact
+Web adapter отдаёт self-contained offline page по exact
 `GET /` и принимает общий request body только по exact
 `POST /api/v1/companion`. API требует exact `Content-Type: application/json`, известный
 ненулевой `Content-Length` не больше 512 bytes и явно авторизованную device session.
@@ -174,10 +174,19 @@ Responsive page не загружает внешние scripts, fonts, images и
 Она показывает Sessions, Targets, Compare и detail Target из тех же paged projections;
 первой mutation доступно только Favorite, всё ещё через
 preview -> явное browser confirmation -> одноразовый confirm -> status. Все данные
-device экранируются до вставки в HTML. Adapter не владеет listener, состоянием Wi-Fi,
-credentials, storage, drivers или radio: source `9ae7ee5` принимает только эту
-HTTP/UI presentation boundary. Для включения её на device всё ещё нужен следующий
-slice scoped local connectivity и lifecycle secrets.
+device экранируются до вставки в HTML. Presentation adapter не владеет Wi-Fi,
+credentials, storage, drivers или radio API.
+
+Runtime activation exact 0.181 намеренно отделена. В ready Targets пользователь
+открывает Detail -> Actions -> Local Web. Первое Right показывает consent overlay и
+не запускает сеть; второе Right создаёт случайный RAM-only credential WPA2/CCMP и
+запускает одну local AP/listener. Credentials не сохраняются и не выдаются diagnostic
+protocol. Admission ограничен одним client, 10 минутами idle и 30 минутами absolute.
+Back/Stop уничтожает listener, AP, authorization и credential. Foreground memory
+Targets и idle worker Survey suspend-ятся только на время admission Wi-Fi driver на
+profile без PSRAM; Targets возвращается при Stop, worker — после выхода из Targets.
+One-time network core может остаться initialized, но не удерживает listener, AP,
+credential или grant.
 
 ## Правила trust и lifecycle
 
@@ -219,3 +228,13 @@ Web presentation. Native tests покрывают exact routes, boundary 512/513
 workspace-local core PlatformIO. Это только host/build evidence: network listener не
 запускался, board и serial ports не затрагивались, accepted physical baseline остаётся
 0.172.
+
+Exact `0.181.0-companion-web-deferred-worker-restore` на source
+`6e0f2be76240e38d12805cfd654a7d70c61ae3d8` физически принимает этот lifecycle на
+оригинальном DIV. Matching installed partition table проверяется до единственной
+application flash. Run сохраняет exact CID, Session generation 161/59, bounded memory
+transitions, zero storage writes, zero raw radio TX commands, отсутствие port
+discovery/Cardputer opens и final lease 0. Два failed precursor остаются evidence
+реальных дефектов Wi-Fi allocation и преждевременного восстановления worker. Host
+намеренно не подключается к temporary AP, поэтому этот checkpoint не заявляет physical
+HTTP request или parity payload USB/Web.

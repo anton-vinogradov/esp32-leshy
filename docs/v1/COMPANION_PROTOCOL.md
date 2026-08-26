@@ -158,9 +158,9 @@ to a new Targets instance is mandatory. The physically accepted runtime transpor
 native USB CDC. `Serial0` remains the legacy diagnostic console and cannot negotiate
 this protocol.
 
-## Local Web presentation boundary
+## Local Web presentation and runtime lifecycle
 
-The host/build-accepted Web adapter serves a self-contained offline page at exact
+The Web adapter serves a self-contained offline page at exact
 `GET /` and accepts the shared request body only at exact
 `POST /api/v1/companion`. The API requires exact `Content-Type: application/json`, a
 known non-zero `Content-Length` no greater than 512 bytes and an explicitly authorized
@@ -173,10 +173,19 @@ The responsive page loads no external scripts, fonts, images or network resource
 renders Sessions, Targets, Compare and Target details from the same paged projections;
 Favorite alone is exposed as a first mutation and still performs
 preview -> explicit browser confirmation -> one-time confirm -> status. All device
-text is escaped before HTML insertion. The adapter owns no listener, Wi-Fi state,
-credential, storage, driver or radio API: source `9ae7ee5` accepts only this HTTP/UI
-presentation boundary. Activating it on a device still requires the next scoped local
-connectivity and secret-lifecycle slice.
+text is escaped before HTML insertion. The presentation adapter owns no Wi-Fi,
+credential, storage, driver or radio API.
+
+Exact 0.181 runtime activation is intentionally separate. In ready Targets, the user
+opens Detail -> Actions -> Local Web. The first Right opens a consent overlay and does
+not start a network; a second Right creates a random RAM-only WPA2/CCMP credential and
+starts one local AP/listener. Credentials are neither persisted nor emitted by the
+diagnostic protocol. Admission is one client with a 10-minute idle and 30-minute
+absolute lifetime. Back/stop destroys the listener, AP, authorization and credential.
+Targets foreground memory and the idle Survey worker are suspended only while needed
+to admit the Wi-Fi driver on the zero-PSRAM profile; Targets returns on stop and the
+worker returns after leaving Targets. The one-time network core may remain initialized,
+but it retains no listener, AP, credential or grant.
 
 ## Trust and lifecycle rules
 
@@ -218,3 +227,13 @@ embedded JavaScript passes syntax checking and the production image builds twice
 identical hashes from a workspace-local PlatformIO core. This is host/build evidence
 only: no network listener was started, no board or serial port was touched and the
 accepted physical baseline remains 0.172.
+
+Exact `0.181.0-companion-web-deferred-worker-restore` at source
+`6e0f2be76240e38d12805cfd654a7d70c61ae3d8` physically accepts the lifecycle above on
+the original DIV. The matching installed partition table is preflighted before the
+single application flash. The run retains exact CID, Session generation 161/59,
+bounded memory transitions, zero storage writes, zero raw radio TX commands, no port
+discovery/Cardputer opens and final lease 0. Two failed precursors remain evidence of
+the real Wi-Fi allocation and premature worker-restore defects. The host deliberately
+does not join the temporary AP, so no physical HTTP request or USB/Web payload parity is
+claimed by this checkpoint.
