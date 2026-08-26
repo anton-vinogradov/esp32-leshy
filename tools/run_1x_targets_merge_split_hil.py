@@ -39,7 +39,7 @@ from run_1x_product_survey_hil import (
 SCHEMA = "leshy.targets_merge_split_hil.run.v1"
 EXPECTED_CID = "FE343253440000002000000055019CB7"
 WATCHDOG_RESET_REASONS = {4, 5, 6, 7}
-MUTATION_ACTION_ACK_TIMEOUT = 40.0
+MUTATION_ACTION_ACK_TIMEOUT = 5.0
 PARTITION_MAGIC = 0x50AA
 PARTITION_MD5_MAGIC = 0xEBEB
 PARTITION_ARTIFACT_SIZE = 0xC00
@@ -264,6 +264,40 @@ def wait_mutation(device: Any, timeout: float = 40.0) -> dict[str, Any]:
             return last
         time.sleep(0.05)
     raise TimeoutError(f"Target mutation did not finish: {last}")
+
+
+def trigger_mutation_once(
+    device: Any,
+    timeout: float = MUTATION_ACTION_ACK_TIMEOUT,
+) -> dict[str, Any]:
+    """Send one irreversible UI action without treating its UI ACK as truth.
+
+    Internal-flash work may temporarily delay the generic UI response.  The
+    action must never be replayed after that ambiguous transport boundary;
+    callers determine the outcome only through read-only targets.state polls.
+    """
+    from capture_1x_ui import read_json
+
+    device.write(b"ui.key right\n")
+    device.flush()
+    try:
+        state = read_json(
+            device, "leshy.ui.v1", "state", timeout=timeout)
+    except TimeoutError as error:
+        return {
+            "received": False,
+            "error": str(error),
+            "timeout_seconds": timeout,
+            "action_writes": 1,
+            "action_replays": 0,
+        }
+    return {
+        "received": True,
+        "state": state,
+        "timeout_seconds": timeout,
+        "action_writes": 1,
+        "action_replays": 0,
+    }
 
 
 def require_atomic_save(state: dict[str, Any], label: str) -> None:
@@ -751,7 +785,7 @@ def main() -> int:
         states["merge_confirm"] = merge_confirm
         screens["merge_confirm"] = capture(
             device, frames, "targets-merge-confirm")
-        action(device, "right", timeout=MUTATION_ACTION_ACK_TIMEOUT)
+        states["merge_action_ack"] = trigger_mutation_once(device)
         merged = wait_mutation(device)
         states["merged"] = merged
         require(merged, "merged state", status="ready", view="actions",
@@ -828,7 +862,7 @@ def main() -> int:
         states["split_confirm"] = split_confirm
         screens["split_confirm"] = capture(
             device, frames, "targets-split-confirm")
-        action(device, "right", timeout=MUTATION_ACTION_ACK_TIMEOUT)
+        states["split_action_ack"] = trigger_mutation_once(device)
         split = wait_mutation(device)
         states["split"] = split
         require(split, "split state", status="ready", view="actions",

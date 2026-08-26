@@ -127,6 +127,36 @@ class TargetsMergeSplitHilRunnerTests(unittest.TestCase):
                 "load_maximum_phase_us": 5_000_000,
             }, "Targets list")
 
+    def test_mutation_trigger_never_replays_lost_ack(self) -> None:
+        writes: list[bytes] = []
+        device = types.SimpleNamespace(
+            write=writes.append,
+            flush=lambda: None,
+        )
+        with patch("capture_1x_ui.read_json",
+                   side_effect=TimeoutError("lost UI ACK")) as read_json:
+            result = RUNNER.trigger_mutation_once(device, timeout=1.0)
+        self.assertEqual([b"ui.key right\n"], writes)
+        self.assertFalse(result["received"])
+        self.assertEqual(1, result["action_writes"])
+        self.assertEqual(0, result["action_replays"])
+        read_json.assert_called_once_with(
+            device, "leshy.ui.v1", "state", timeout=1.0)
+
+    def test_mutation_trigger_records_optional_ack(self) -> None:
+        writes: list[bytes] = []
+        device = types.SimpleNamespace(
+            write=writes.append,
+            flush=lambda: None,
+        )
+        expected = {"schema": "leshy.ui.v1", "kind": "state"}
+        with patch("capture_1x_ui.read_json", return_value=expected):
+            result = RUNNER.trigger_mutation_once(device, timeout=1.0)
+        self.assertEqual([b"ui.key right\n"], writes)
+        self.assertTrue(result["received"])
+        self.assertIs(expected, result["state"])
+        self.assertEqual(0, result["action_replays"])
+
 
 if __name__ == "__main__":
     unittest.main()
