@@ -286,18 +286,24 @@ def main() -> int:
                 correlation_runner and
             'fixture_mode(fixture, "ble")' in correlation_runner and
             'fixture_mode(fixture, "wifi")' not in correlation_runner and
-            'mutation_correlation_status="accepted"' in correlation_runner and
+            'choices=("accept", "reject")' in correlation_runner and
+            'status = "accepted" if decision == "accept" else "rejected"' in
+                correlation_runner and
+            'target_count_before + (' in correlation_runner and
+            'rejected identity did not remain independent' in
+                correlation_runner and
             "correlation_decision_count=decisions_after" in
                 correlation_runner and
             "source_identity_count=identities_before" in
                 correlation_runner and
             "source_identity_count=identities_before + 1" not in
                 correlation_runner and
-            "targets-correlation-cold-reopen" in correlation_runner and
+            'f"targets-correlation-{args.decision}-cold-reopen"' in
+                correlation_runner and
             "mutation_directory_syncs" in correlation_runner,
             "correlation HIL must find one bounded natural proposal, review "
-            "both exact observations, atomically accept and cold-reopen the "
-            "same decision log")
+            "both exact observations, atomically accept or reject and "
+            "cold-reopen exact ownership plus the same decision log")
     require(failures,
             "leshy.targets_correlation_recovery_hil.run.v1" in
                 correlation_recovery_runner and

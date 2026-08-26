@@ -1,0 +1,29 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "targets-correlation-reject-0.155",
+  "candidate_version": "0.155.7-targets-shared-codec",
+  "changed_surfaces": [
+    "target_correlation_reject_physical_coverage",
+    "target_correlation_exact_cold_ownership_audit",
+    "correlation_hil_accept_reject_parameterization",
+    "retained_hil_source_snapshot_verification"
+  ],
+  "required_delta_regression": [
+    "reuse_exact_flash_without_firmware_change",
+    "explicitly_authorized_macos_ble_name_fixture",
+    "dut_port_usbmodem2101_only",
+    "cardputer_ports_never_opened",
+    "proposal_shows_known_and_candidate_exact_evidence",
+    "explicit_reject_row_selected",
+    "reject_records_one_immutable_decision",
+    "reject_keeps_known_target_revision_unchanged",
+    "reject_materializes_candidate_as_independent_target",
+    "source_identity_population_unchanged",
+    "decision_and_catalog_publish_at_one_generation",
+    "cold_reopen_preserves_exact_independent_ownership",
+    "workspace_release_and_final_zero_lease"
+  ],
+  "new_passive_scans_required": "at most four bounded combined visits while the explicitly authorized macOS fixture advertises Keenetic-5070 over BLE; DUT remains passive",
+  "full_matrix_required": false,
+  "cadence_after_acceptance": "11/15"
+}

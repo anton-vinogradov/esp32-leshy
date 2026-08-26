@@ -91,6 +91,21 @@ def find_proposal(device: PassiveSerial,
     return None
 
 
+def scan_target_rows(device: PassiveSerial,
+                     listed: dict[str, Any]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for _ in range(int(listed.get("target_count", 0))):
+        state = query(device, b"targets.state",
+                      "leshy.targets.product.v1", "state")
+        rows.append({key: state.get(key) for key in (
+            "selection", "selected_target_id", "selected_revision",
+            "selected_observation_identity_hex", "selected_generation",
+            "source_identity_count", "target_count",
+        )})
+        action(device, "down")
+    return rows
+
+
 def validate_proposal(state: dict[str, Any]) -> None:
     require(state, "correlation proposal", status="ready",
             correlation_proposal_present=True,
@@ -250,12 +265,13 @@ def known_wifi_fixture_label(
     return max(candidates, key=lambda value: int(value["known_rssi_dbm"]))
 
 
-def check_atomic_accept(state: dict[str, Any], generation: int,
-                        decision_count: int) -> None:
-    require(state, "atomic correlation accept", mutation_state="saved",
+def check_atomic_decision(state: dict[str, Any], generation: int,
+                          decision_count: int, decision: str) -> None:
+    status = "accepted" if decision == "accept" else "rejected"
+    require(state, f"atomic correlation {decision}", mutation_state="saved",
             mutation_status="saved", mutation_correlation=True,
-            mutation_correlation_kind="accept",
-            mutation_correlation_status="accepted",
+            mutation_correlation_kind=decision,
+            mutation_correlation_status=status,
             mutation_persisted=True, mutation_generation=generation,
             target_state_generation=generation,
             correlation_decision_count=decision_count,
@@ -283,6 +299,10 @@ def main() -> int:
     parser.add_argument("--expected-version", required=True)
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--decision", choices=("accept", "reject"), default="accept",
+        help="explicit correlation decision to exercise",
+    )
     parser.add_argument(
         "--reuse-exact-flash", action="store_true",
         help="reuse the already-running candidate after exact hash verification",
@@ -483,6 +503,7 @@ def main() -> int:
         target_id = str(selected["selected_target_id"])
         target_count_before = int(selected["target_count"])
         identities_before = int(selected["source_identity_count"])
+        revision_before = int(selected["selected_revision"])
         generation_before = int(selected["target_state_generation"])
         decisions_before = int(selected["correlation_decision_count"])
 
@@ -538,35 +559,48 @@ def main() -> int:
 
         action(device, "left")
         action(device, "down")
-        accept = query(device, b"targets.state",
-                       "leshy.targets.product.v1", "state")
-        require(accept, "accept selected", view="correlation_review",
-                correlation_review_selection=2, write_enabled=True,
-                correlation_proposal_id=proposal_id)
-        screens["accept_selected"] = capture(
-            device, frames, "targets-correlation-accept-selected")
+        if args.decision == "reject":
+            action(device, "down")
+        decision_selection = 2 if args.decision == "accept" else 3
+        decision_selected = query(device, b"targets.state",
+                                  "leshy.targets.product.v1", "state")
+        require(decision_selected, f"{args.decision} selected",
+                view="correlation_review",
+                correlation_review_selection=decision_selection,
+                write_enabled=True, correlation_proposal_id=proposal_id)
+        screens[f"{args.decision}_selected"] = capture(
+            device, frames,
+            f"targets-correlation-{args.decision}-selected")
         action(device, "right")
         saved = wait_mutation(device)
         generation_after = generation_before + 1
         decisions_after = decisions_before + 1
-        check_atomic_accept(saved, generation_after, decisions_after)
-        require(saved, "accepted ownership", status="ready", view="actions",
+        revision_after = revision_before + (
+            1 if args.decision == "accept" else 0)
+        target_count_after = target_count_before + (
+            0 if args.decision == "accept" else 1)
+        check_atomic_decision(
+            saved, generation_after, decisions_after, args.decision)
+        require(saved, f"{args.decision} ownership", status="ready",
+                view="actions",
                 selected_target_id=target_id,
+                selected_revision=revision_after,
                 correlation_count=0,
                 correlation_proposal_present=False,
-                target_count=target_count_before,
-                # Accepting ownership changes the durable Target graph.  It
-                # must not rewrite the immutable source-session population.
+                target_count=target_count_after,
+                # Decisions change the durable graph/history only. They must
+                # never rewrite the immutable source-session population.
                 source_identity_count=identities_before)
-        states["accepted"] = saved
-        screens["accepted"] = capture(
-            device, frames, "targets-correlation-accepted")
+        states[args.decision] = saved
+        screens[args.decision] = capture(
+            device, frames, f"targets-correlation-{args.decision}")
         released_before_reset = close_targets(device)
         device.close()
         device = None
 
         ready, _, reset = reset_capture(
-            args.port, args.output, "targets-correlation-cold-reopen", 20.0)
+            args.port, args.output,
+            f"targets-correlation-{args.decision}-cold-reopen", 20.0)
         require(ready, "cold candidate", version=args.expected_version,
                 app_elf_sha256=app_identity)
         device = PassiveSerial(args.port, 115200, timeout=0.25)
@@ -575,9 +609,31 @@ def main() -> int:
         require(reopened, "cold decision log", status="ready", view="list",
                 target_state_generation=generation_after,
                 correlation_decision_count=decisions_after,
-                target_count=target_count_before,
+                target_count=target_count_after,
                 source_identity_count=identities_before)
+        reopened_rows = scan_target_rows(device, reopened)
+        known_rows = [row for row in reopened_rows
+                      if row.get("selected_target_id") == target_id]
+        if (len(known_rows) != 1 or
+                int(known_rows[0].get("selected_revision", 0)) !=
+                revision_after):
+            raise RuntimeError(
+                f"cold known Target revision mismatch: {reopened_rows}")
+        candidate_rows = [row for row in reopened_rows
+                          if row.get("selected_observation_identity_hex") ==
+                          candidate_identity]
+        if args.decision == "accept":
+            if (len(candidate_rows) != 1 or
+                    candidate_rows[0].get("selected_target_id") != target_id):
+                raise RuntimeError(
+                    f"accepted identity ownership mismatch: {reopened_rows}")
+        elif (len(candidate_rows) != 1 or
+              candidate_rows[0].get("selected_target_id") == target_id):
+            raise RuntimeError(
+                f"rejected identity did not remain independent: "
+                f"{reopened_rows}")
         states["reopened"] = reopened
+        states["reopened_rows"] = reopened_rows
         screens["reopened"] = capture(
             device, frames, "targets-correlation-cold-reopened")
         released = close_targets(device)
@@ -598,7 +654,11 @@ def main() -> int:
             "proposal_id": proposal_id,
             "target_id": target_id,
             "candidate_identity_hex": candidate_identity,
-            "decision": "accept",
+            "decision": args.decision,
+            "target_revision_before": revision_before,
+            "target_revision_after": revision_after,
+            "target_count_before": target_count_before,
+            "target_count_after": target_count_after,
             "target_state_generation_before": generation_before,
             "target_state_generation_after": generation_after,
             "decision_count_before": decisions_before,
