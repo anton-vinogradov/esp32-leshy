@@ -32,65 +32,6 @@ std::size_t catalogIndex(const TargetCatalog& catalog, const TargetId& id) {
     return catalog.size();
 }
 
-TargetMergeStatus rebuildMergedCatalog(
-    TargetCatalog& catalog, std::size_t destinationIndex,
-    std::size_t sourceIndex, const TargetRecord& merged) {
-    TargetCatalog candidate;
-    for (std::size_t index = 0; index < catalog.size(); ++index) {
-        if (index == sourceIndex) continue;
-        const TargetRecord* current = catalog.get(index);
-        const TargetRecord& selected =
-            index == destinationIndex ? merged : *current;
-        if (candidate.restore(selected) != TargetMutationStatus::Created) {
-            return TargetMergeStatus::CatalogConflict;
-        }
-    }
-    catalog = candidate;
-    return TargetMergeStatus::Merged;
-}
-
-TargetMergeStatus rebuildSplitCatalog(TargetCatalog& catalog,
-                                      const TargetMergeRecord& merge) {
-    if (catalog.size() + 1U != merge.originalCatalogSize) {
-        return TargetMergeStatus::CatalogConflict;
-    }
-    TargetCatalog candidate;
-    std::size_t currentIndex = 0;
-    const std::size_t restoredSize = catalog.size() + 1U;
-    for (std::size_t index = 0; index < restoredSize; ++index) {
-        TargetRecord selected{};
-        if (index == merge.destinationIndex) {
-            selected = merge.destinationBefore;
-            selected.revision = merge.mergedRevision + 1U;
-        } else if (index == merge.sourceIndex) {
-            selected = merge.sourceBefore;
-            selected.revision = merge.sourceBefore.revision + 1U;
-        } else {
-            const TargetRecord* current = catalog.get(currentIndex);
-            if (current != nullptr && targetIdEqual(
-                    current->id, merge.destinationBefore.id)) {
-                current = catalog.get(++currentIndex);
-            }
-            if (current == nullptr) return TargetMergeStatus::CatalogConflict;
-            selected = *current;
-            ++currentIndex;
-        }
-        if (candidate.restore(selected) != TargetMutationStatus::Created) {
-            return TargetMergeStatus::CatalogConflict;
-        }
-    }
-    const TargetRecord* remaining = catalog.get(currentIndex);
-    if (remaining != nullptr && targetIdEqual(
-            remaining->id, merge.destinationBefore.id)) {
-        ++currentIndex;
-    }
-    if (currentIndex != catalog.size()) {
-        return TargetMergeStatus::CatalogConflict;
-    }
-    catalog = candidate;
-    return TargetMergeStatus::Split;
-}
-
 bool recordStructurallyValid(const TargetMergeRecord& record) {
     if (!targetMergeIdValid(record.id) ||
         targetIdEqual(record.destinationBefore.id, record.sourceBefore.id) ||
@@ -259,9 +200,10 @@ TargetMergeStatus TargetMergeHistory::merge(
         static_cast<std::uint8_t>(catalog.size()),
         static_cast<std::uint8_t>(destinationIndex),
         static_cast<std::uint8_t>(sourceIndex), merged.revision, false};
-    const TargetMergeStatus rebuilt = rebuildMergedCatalog(
-        catalog, destinationIndex, sourceIndex, merged);
-    if (rebuilt != TargetMergeStatus::Merged) return rebuilt;
+    if (catalog.replaceAndRemove(destinationIndex, merged, sourceIndex) !=
+        TargetMutationStatus::Applied) {
+        return TargetMergeStatus::CatalogConflict;
+    }
     records_[size_++] = history;
     return TargetMergeStatus::Merged;
 }
@@ -296,8 +238,27 @@ TargetMergeStatus TargetMergeHistory::split(
     if (!targetRecordGraphEqual(*destination, expectedMerged)) {
         return TargetMergeStatus::TargetChanged;
     }
-    const TargetMergeStatus rebuilt = rebuildSplitCatalog(catalog, *merge);
-    if (rebuilt != TargetMergeStatus::Split) return rebuilt;
+    if (catalog.size() + 1U != merge->originalCatalogSize) {
+        return TargetMergeStatus::CatalogConflict;
+    }
+    const std::size_t mergedIndex =
+        catalogIndex(catalog, merge->destinationBefore.id);
+    if (mergedIndex >= catalog.size()) {
+        return TargetMergeStatus::CatalogConflict;
+    }
+    // Reuse the already bounded expected-merge local for the restored
+    // destination.  Split therefore needs only two TargetRecord frames, never
+    // a second fixed-capacity TargetCatalog.
+    expectedMerged = merge->destinationBefore;
+    expectedMerged.revision = merge->mergedRevision + 1U;
+    TargetRecord restoredSource = merge->sourceBefore;
+    restoredSource.revision = merge->sourceBefore.revision + 1U;
+    if (catalog.replaceAndInsert(
+            mergedIndex, merge->destinationIndex, expectedMerged,
+            merge->sourceIndex, restoredSource) !=
+        TargetMutationStatus::Applied) {
+        return TargetMergeStatus::CatalogConflict;
+    }
     merge->split = true;
     return TargetMergeStatus::Split;
 }

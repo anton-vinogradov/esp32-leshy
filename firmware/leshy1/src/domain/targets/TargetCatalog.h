@@ -8,6 +8,8 @@
 
 namespace leshy1::domain::targets {
 
+class TargetMergeHistory;
+
 enum class TargetMutationStatus : std::uint8_t {
     Created,
     Applied,
@@ -66,6 +68,20 @@ public:
     const TargetRecord* findByEvidence(const TargetEvidenceRef& evidence) const;
 
 private:
+    friend class TargetMergeHistory;
+
+    // Merge/split rebuild the catalog in place only after validating the
+    // complete resulting graph.  Keeping these bounded transactions inside
+    // TargetCatalog avoids ever placing a second ~11-KiB catalog on an ESP32
+    // task stack.
+    TargetMutationStatus replaceAndRemove(
+        std::size_t replacementIndex, const TargetRecord& replacement,
+        std::size_t removalIndex);
+    TargetMutationStatus replaceAndInsert(
+        std::size_t currentIndex, std::size_t replacementIndex,
+        const TargetRecord& replacement,
+        std::size_t insertionIndex, const TargetRecord& insertion);
+
     TargetRecord* findMutable(const TargetId& id);
     TargetRecord* findMutableByIdentity(const TargetIdentity& identity);
     TargetRecord* findMutableByEvidence(const TargetEvidenceRef& evidence);

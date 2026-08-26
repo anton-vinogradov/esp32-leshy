@@ -1,0 +1,67 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "elf_sha256": "925470f712e3b4e615cd4c93d0f120e9aba1b4b991957af02c9b4270c7215c55",
+    "firmware_sha256": "2067efcf1d3b9ebfd75576de445c066786d7f4e9f463bbc8a0a63d9392c0220b",
+    "map_sha256": "999e83286793c4859bd98f1e6c896462bee6e8e77d76876aca2b21eb135a7ec2",
+    "partitions_sha256": "339bda68b7470d5ad1482d10183514b88971c6f1f20ff87c7e2f3dad96235ba2",
+    "version": "0.163.0-targets-worker-stack"
+  },
+  "classification": "retained_fail_closed",
+  "failure": {
+    "coredump_elf_sha256": "a27f0b03cd28d010f3dd7a68349a61dbdf91b2eeb03a687b258230047e7d6efa",
+    "decoded_backtrace": [
+      "rebuildMergedCatalog:TargetMerge.cpp:38",
+      "TargetMergeHistory::merge",
+      "TargetMergeService::execute",
+      "runTargetsMergeFixtureMutationWorker"
+    ],
+    "error": "RuntimeError: Targets mutation worker context lost: reset_reason=4, stage=workspace_acquired, stage_valid=True",
+    "mutation_stage": "workspace_acquired",
+    "mutation_stage_code": 5,
+    "panic_reset_reason_code": 4,
+    "root_cause": "unchecked_local_target_catalog_exhausted_worker_stack",
+    "run_json_sha256": "f306bb7a18ac3961815b19b534cb4f29c3efa1aaca75f0930662066bbe0ab20c",
+    "worker_stack_min_free_before_merge": 9896,
+    "worker_stack_observed": true
+  },
+  "fixture_isolation": {
+    "product_target_state_touched": false,
+    "radio_touched": false,
+    "rf_tx_attempts": 0,
+    "sd_accessed": false,
+    "storage": "disposable_ota1"
+  },
+  "post_failure_restore": {
+    "cleanup_complete": true,
+    "final_cid": "FE343253440000002000000055019CB7",
+    "final_generation": 161,
+    "final_lease_mask": 0,
+    "final_observations": 59,
+    "ota1_after_sha256": "a2e8054f9743e7534c35531f32a25f9cf6fc39ed6f7da2c78cdec9a3367f5172",
+    "ota1_before_sha256": "a2e8054f9743e7534c35531f32a25f9cf6fc39ed6f7da2c78cdec9a3367f5172",
+    "ota1_restore_verified": true,
+    "partition_table_after_sha256": "44539be51aeb592d44450059d7dbbb4d5a25d7fe5144cc68b8e85acba367ba87",
+    "partition_table_before_sha256": "44539be51aeb592d44450059d7dbbb4d5a25d7fe5144cc68b8e85acba367ba87",
+    "partition_table_restore_verified": true,
+    "safety_latched": false
+  },
+  "repair_gate": {
+    "candidate_version": "0.164.0-targets-merge-inplace",
+    "exact_delta_required": true,
+    "required_outcome": "reversible_merge_split_without_reset"
+  },
+  "schema": "leshy.targets_merge_stack_failure.evidence.v1",
+  "source_commit": "16834b2837302dd916fc4ffa7713e2285cf71f8f",
+  "status": "failed",
+  "usb": {
+    "cardputer_ports_opened": 0,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "port_discovery_calls": 0
+  }
+}

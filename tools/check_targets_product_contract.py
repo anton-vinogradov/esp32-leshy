@@ -252,6 +252,13 @@ def main() -> int:
             "validateTargetRecord(record.destinationBefore)" in target_merge and
             "validateTargetRecord(record.sourceBefore)" in target_merge and
             "validateTargetRecordCompatibility(" in target_merge and
+            "TargetCatalog candidate;" not in target_merge and
+            "catalog.replaceAndRemove(" in target_merge and
+            "catalog.replaceAndInsert(" in target_merge and
+            "TargetMutationStatus TargetCatalog::replaceAndRemove(" in
+                target_catalog and
+            "TargetMutationStatus TargetCatalog::replaceAndInsert(" in
+                target_catalog and
             "TargetCatalog validation" not in target_merge and
             "beginPersistenceRestore()" in target_merge and
             "commitPersistenceRestore()" in target_merge and
@@ -292,6 +299,10 @@ def main() -> int:
                 stack_checker and
             '"validateTargetRecord(": 512' in stack_checker and
             '"validateTargetRecordCompatibility(": 256' in stack_checker and
+            '"TargetMergeHistory::merge(": 3072' in stack_checker and
+            '"TargetMergeHistory::split(": 2048' in stack_checker and
+            '"TargetCatalog::replaceAndRemove(": 1024' in stack_checker and
+            '"TargetCatalog::replaceAndInsert(": 768' in stack_checker and
             '"TargetCatalog::clear()": 128' in stack_checker and
             '"CorrelationDecisionLog::clear()": 128' in stack_checker and
             '"TargetMergeHistory::clear()": 128' in stack_checker and

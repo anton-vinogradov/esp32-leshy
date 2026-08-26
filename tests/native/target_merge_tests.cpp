@@ -358,6 +358,32 @@ void checkEnumeratedRoundTrips() {
     }
 }
 
+void checkFullCatalogBoundaryRoundTrips() {
+    constexpr std::uint8_t pairs[][2] = {
+        {1, 16}, {16, 1}, {8, 9}, {9, 8},
+    };
+    for (const auto& pair : pairs) {
+        TargetCatalog catalog;
+        for (std::uint8_t suffix = 1;
+             suffix <= TargetCatalog::kCapacity; ++suffix) {
+            CHECK(catalog.create(targetId(suffix), identity(suffix),
+                                 evidence(suffix, suffix)) ==
+                  TargetMutationStatus::Created);
+        }
+        const TargetCatalog before = catalog;
+        TargetMergeHistory history;
+        const TargetMergeId id = operationId(
+            static_cast<std::uint8_t>(0x80U + pair[0] + pair[1]));
+        CHECK(history.merge(catalog, id, targetId(pair[0]),
+                            targetId(pair[1]), 1, 1) ==
+              TargetMergeStatus::Merged);
+        CHECK(catalog.size() == TargetCatalog::kCapacity - 1U);
+        CHECK(history.split(catalog, id) == TargetMergeStatus::Split);
+        CHECK(catalog.size() == TargetCatalog::kCapacity);
+        checkSameGraph(catalog, before);
+    }
+}
+
 }  // namespace
 
 int main() {
@@ -369,6 +395,7 @@ int main() {
     checkPersistenceRestoreSlotIsTransactional();
     checkHistoryBound();
     checkEnumeratedRoundTrips();
+    checkFullCatalogBoundaryRoundTrips();
     if (failures != 0) {
         std::cerr << failures << " target merge test(s) failed\n";
         return EXIT_FAILURE;

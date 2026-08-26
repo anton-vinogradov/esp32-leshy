@@ -15,6 +15,9 @@ MOUNT_EVIDENCE = (
 RESET_EVIDENCE = (
     ROOT / "tests/hil/evidence/board-01-targets-inplace-reset-failure-0.148.json"
 )
+MERGE_EVIDENCE = (
+    ROOT / "tests/hil/evidence/board-01-targets-merge-stack-failure-0.163.json"
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -93,7 +96,53 @@ def main() -> None:
             "0.149.0-targets-inplace-reset", "repair version lost")
     require(reset["repair_gate"]["automatic_full_delta_after_failure"] is False,
             "failed short gate must forbid the full delta")
-    print("targets 0.146/0.147/0.148 fail-closed evidence: OK")
+    merge = json.loads(MERGE_EVIDENCE.read_text(encoding="utf-8"))
+    require(
+        merge["schema"] == "leshy.targets_merge_stack_failure.evidence.v1",
+        "unexpected merge-stack failure schema",
+    )
+    require(merge["status"] == "failed", "0.163 failure must not be accepted")
+    require(merge["classification"] == "retained_fail_closed",
+            "0.163 failure hidden")
+    require(merge["source_commit"] ==
+            "16834b2837302dd916fc4ffa7713e2285cf71f8f",
+            "0.163 exact source lost")
+    require(merge["failure"]["panic_reset_reason_code"] == 4,
+            "0.163 panic reset missing")
+    require(merge["failure"]["mutation_stage"] == "workspace_acquired",
+            "0.163 last valid mutation stage lost")
+    require(merge["failure"]["worker_stack_min_free_before_merge"] == 9896,
+            "0.163 pre-merge worker stack observation lost")
+    require(any("rebuildMergedCatalog:TargetMerge.cpp:38" in frame for frame in
+                merge["failure"]["decoded_backtrace"]),
+            "0.163 decoded failing frame missing")
+    require(merge["fixture_isolation"]["product_target_state_touched"] is False,
+            "0.163 touched product Targets state")
+    require(merge["fixture_isolation"]["rf_tx_attempts"] == 0,
+            "0.163 RF transmission hidden")
+    require(merge["post_failure_restore"]["ota1_restore_verified"] is True,
+            "0.163 OTA1 restore missing")
+    require(merge["post_failure_restore"]["ota1_before_sha256"] ==
+            merge["post_failure_restore"]["ota1_after_sha256"],
+            "0.163 OTA1 was not restored exactly")
+    require(merge["post_failure_restore"]["partition_table_restore_verified"] is True,
+            "0.163 partition-table restore missing")
+    require(merge["post_failure_restore"]["partition_table_before_sha256"] ==
+            merge["post_failure_restore"]["partition_table_after_sha256"],
+            "0.163 partition table was not restored exactly")
+    require(merge["post_failure_restore"]["final_lease_mask"] == 0,
+            "0.163 leaked a final lease")
+    require(merge["post_failure_restore"]["final_cid"] ==
+            "FE343253440000002000000055019CB7",
+            "0.163 final product CID lost")
+    require(merge["usb"]["opened_ports"] == ["/dev/cu.usbmodem2101"],
+            "0.163 opened an unexpected serial port")
+    require(merge["usb"]["cardputer_ports_opened"] == 0 and
+            merge["usb"]["port_discovery_calls"] == 0,
+            "0.163 Cardputer isolation lost")
+    require(merge["repair_gate"]["candidate_version"] ==
+            "0.164.0-targets-merge-inplace", "0.164 repair link missing")
+    print("targets 0.146/0.147/0.148/0.163 fail-closed evidence: OK")
 
 
 if __name__ == "__main__":

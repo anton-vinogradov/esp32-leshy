@@ -213,6 +213,96 @@ TargetMutationStatus TargetCatalog::restore(const TargetRecord& record) {
     return TargetMutationStatus::Created;
 }
 
+TargetMutationStatus TargetCatalog::replaceAndRemove(
+    std::size_t replacementIndex, const TargetRecord& replacement,
+    std::size_t removalIndex) {
+    if (replacementIndex >= size_ || removalIndex >= size_ ||
+        replacementIndex == removalIndex) {
+        return TargetMutationStatus::InvalidArgument;
+    }
+    const TargetMutationStatus validation =
+        validateTargetRecord(replacement);
+    if (validation != TargetMutationStatus::Created) return validation;
+    for (std::size_t index = 0; index < size_; ++index) {
+        if (index == replacementIndex || index == removalIndex) continue;
+        const TargetMutationStatus compatibility =
+            validateTargetRecordCompatibility(records_[index], replacement);
+        if (compatibility != TargetMutationStatus::Created) {
+            return compatibility;
+        }
+    }
+
+    // No fallible operation remains after this point.  If the removed record
+    // precedes the replacement, the left shift naturally carries the new
+    // record to its final index while preserving every unrelated record.
+    records_[replacementIndex] = replacement;
+    for (std::size_t index = removalIndex + 1U; index < size_; ++index) {
+        records_[index - 1U] = records_[index];
+    }
+    --size_;
+    records_[size_] = {};
+    return TargetMutationStatus::Applied;
+}
+
+TargetMutationStatus TargetCatalog::replaceAndInsert(
+    std::size_t currentIndex, std::size_t replacementIndex,
+    const TargetRecord& replacement,
+    std::size_t insertionIndex, const TargetRecord& insertion) {
+    const std::size_t finalSize = size_ + 1U;
+    if (currentIndex >= size_ || finalSize > records_.size() ||
+        replacementIndex >= finalSize || insertionIndex >= finalSize ||
+        replacementIndex == insertionIndex) {
+        return TargetMutationStatus::InvalidArgument;
+    }
+    const TargetMutationStatus replacementValidation =
+        validateTargetRecord(replacement);
+    if (replacementValidation != TargetMutationStatus::Created) {
+        return replacementValidation;
+    }
+    const TargetMutationStatus insertionValidation =
+        validateTargetRecord(insertion);
+    if (insertionValidation != TargetMutationStatus::Created) {
+        return insertionValidation;
+    }
+    const TargetMutationStatus pairCompatibility =
+        validateTargetRecordCompatibility(replacement, insertion);
+    if (pairCompatibility != TargetMutationStatus::Created) {
+        return pairCompatibility;
+    }
+    for (std::size_t index = 0; index < size_; ++index) {
+        if (index == currentIndex) continue;
+        const TargetMutationStatus replacementCompatibility =
+            validateTargetRecordCompatibility(records_[index], replacement);
+        if (replacementCompatibility != TargetMutationStatus::Created) {
+            return replacementCompatibility;
+        }
+        const TargetMutationStatus insertionCompatibility =
+            validateTargetRecordCompatibility(records_[index], insertion);
+        if (insertionCompatibility != TargetMutationStatus::Created) {
+            return insertionCompatibility;
+        }
+    }
+
+    // First compact away the merged record.  Expanding from the end then
+    // keeps every source read below its destination write, so the operation
+    // needs neither a second catalog nor a heap allocation.
+    for (std::size_t index = currentIndex + 1U; index < size_; ++index) {
+        records_[index - 1U] = records_[index];
+    }
+    std::size_t read = size_ - 1U;
+    for (std::size_t write = finalSize; write-- > 0;) {
+        if (write == replacementIndex) {
+            records_[write] = replacement;
+        } else if (write == insertionIndex) {
+            records_[write] = insertion;
+        } else {
+            records_[write] = records_[--read];
+        }
+    }
+    size_ = finalSize;
+    return TargetMutationStatus::Applied;
+}
+
 TargetMutationStatus TargetCatalog::create(
     const TargetId& id, const TargetIdentity& identity,
     const TargetEvidenceRef& evidence) {

@@ -45,6 +45,14 @@ LIMITS = {
     "TargetMergeHistory::commitPersistenceRestore()": 512,
     "validateTargetRecord(": 512,
     "validateTargetRecordCompatibility(": 256,
+    # 0.163 reached the real merge for the first time and panicked in an
+    # unchecked ~11-KiB local TargetCatalog rebuild.  Merge/split now validate
+    # and compact/expand the retained catalog in place; cover both public
+    # operations and their bounded catalog transactions in the exact ELF.
+    "TargetMergeHistory::merge(": 3072,
+    "TargetMergeHistory::split(": 2048,
+    "TargetCatalog::replaceAndRemove(": 1024,
+    "TargetCatalog::replaceAndInsert(": 768,
     "TargetCatalog::clear()": 128,
     "CorrelationDecisionLog::clear()": 128,
     "TargetMergeHistory::clear()": 128,
