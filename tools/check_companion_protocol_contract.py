@@ -416,6 +416,7 @@ def main() -> int:
         'staged.get("authorized") is False',
         'active.get("authorized") is True',
         'active.get("targets_suspended") is True',
+        'active.get("survey_worker_suspended") is True',
         'active.get("lease_mask") == 15',
         'stopped.get("credential_present") is False',
         'released.get("lease_mask") == 0',
@@ -428,6 +429,9 @@ def main() -> int:
     for marker in (
         "handleUsbCompanionFrame",
         "companionReadContext",
+        "suspendProductSurveyWorkerForWebCompanion",
+        "restoreProductSurveyWorkerAfterWebCompanion",
+        "survey_worker_suspended",
         'uiController.page() != 7',
         'std::strcmp(targetsProductStatus, "ready") != 0',
         "policy.availableCapabilities = capabilities",

@@ -1453,6 +1453,15 @@ def main() -> int:
                 errors.append(
                     f"companion local Web adapter is missing invariant: {marker}"
                 )
+        for marker in (
+            "suspendProductSurveyWorkerForWebCompanion",
+            "restoreProductSurveyWorkerAfterWebCompanion",
+            "survey_worker_suspended",
+        ):
+            if marker not in privacy_sources:
+                errors.append(
+                    f"companion local Web worker lifecycle is missing: {marker}"
+                )
         for pattern in (
             r"\bWIFI_MODE_(?:STA|APSTA)\b",
             r"\bWiFi\s*\.\s*begin\s*\(",

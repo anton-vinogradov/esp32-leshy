@@ -572,6 +572,9 @@ leshy1::domain::targets::TargetComparisonResult* webCompanionComparison =
 TargetId webCompanionSelectedTargetId{};
 std::uint32_t webCompanionHeapBeforeSuspend = 0;
 std::uint32_t webCompanionHeapAfterSuspend = 0;
+bool webCompanionSurveyWorkerSuspended = false;
+std::uint32_t webCompanionHeapBeforeWorkerSuspend = 0;
+std::uint32_t webCompanionHeapAfterWorkerSuspend = 0;
 std::uint32_t targetsStateGeneration = 0;
 leshy1::storage::RecoveryChoice targetsStateHead =
     leshy1::storage::RecoveryChoice::None;
@@ -3165,6 +3168,46 @@ bool initializeProductSurveyWorker() {
     return started;
 }
 
+bool suspendProductSurveyWorkerForWebCompanion() {
+    if (webCompanionSurveyWorkerSuspended) return true;
+    if (!productSurveyWorkerReady ||
+        productSurveyControl() != ProductSurveyWorkerControl::Idle ||
+        productSurveyWorkerTaskHandle == nullptr) {
+        return false;
+    }
+    webCompanionHeapBeforeWorkerSuspend = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    TaskHandle_t task = productSurveyWorkerTaskHandle;
+    productSurveyWorkerTaskHandle = nullptr;
+    productSurveyWorkerReady = false;
+    vTaskDelete(task);
+    if (productSurveyWorkerEvents != nullptr) {
+        vQueueDelete(productSurveyWorkerEvents);
+        productSurveyWorkerEvents = nullptr;
+    }
+    if (productSurveyObservations != nullptr) {
+        vQueueDelete(productSurveyObservations);
+        productSurveyObservations = nullptr;
+    }
+    productSurveyScanStartGate = nullptr;
+    // A task deleted by another task is reclaimed by the idle task. Yield once
+    // before measuring or asking the Wi-Fi driver for contiguous internal RAM.
+    vTaskDelay(1);
+    webCompanionHeapAfterWorkerSuspend = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    webCompanionSurveyWorkerSuspended = true;
+    return true;
+}
+
+bool restoreProductSurveyWorkerAfterWebCompanion() {
+    if (!webCompanionSurveyWorkerSuspended) return true;
+    productSurveyWorkerReady = initializeProductSurveyWorker();
+    if (productSurveyWorkerReady) {
+        webCompanionSurveyWorkerSuspended = false;
+    }
+    return productSurveyWorkerReady;
+}
+
 bool failProductSurveyStart(const char* status) {
     if (surveyWorkflow.state() == SurveyWorkflowState::Running) {
         surveyPipeline.cancel();
@@ -4873,6 +4916,9 @@ void stopWebCompanion(
     resourceBroker.release(
         AppRuntime::kForegroundOwner,
         leshy1::kernel::runtime::resourceMask(Resource::EspRf));
+    if (!restoreProductSurveyWorkerAfterWebCompanion()) {
+        lastRuntimeEvent = "companion_web_survey_worker_restore_failed";
+    }
     if (restoreTargets) restoreTargetsAfterWebCompanion();
     if (!leaveOverlay) webCompanionOverlay = false;
 }
@@ -4895,6 +4941,12 @@ bool startWebCompanion() {
     if (!suspendTargetsForWebCompanion()) {
         resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
         lastRuntimeEvent = "companion_web_suspend_failed";
+        return false;
+    }
+    if (!suspendProductSurveyWorkerForWebCompanion()) {
+        stopWebCompanion(companion::CompanionLocalStopReason::StartFailed,
+                         true);
+        lastRuntimeEvent = "companion_web_survey_worker_suspend_failed";
         return false;
     }
     // TCP/IP is deliberately initialized only after the second explicit
@@ -18274,7 +18326,7 @@ void emitTargetsState(Stream& reply) {
 
 void emitCompanionWebState(Stream& reply) {
     namespace companion = leshy1::services::companion;
-    char line[896] = {};
+    char line[1056] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.companion.web.v1\",\"kind\":\"state\","
@@ -18289,6 +18341,9 @@ void emitCompanionWebState(Stream& reply) {
         "\"targets_suspended\":%s,"
         "\"heap_free_before_suspend\":%lu,"
         "\"heap_free_after_suspend\":%lu,"
+        "\"survey_worker_suspended\":%s,"
+        "\"heap_free_before_worker_suspend\":%lu,"
+        "\"heap_free_after_worker_suspend\":%lu,"
         "\"heap_free_before_begin\":%lu,"
         "\"heap_largest_before_begin\":%lu,"
         "\"heap_free_after_begin\":%lu,\"heap_free_after_stop\":%lu,"
@@ -18317,6 +18372,9 @@ void emitCompanionWebState(Stream& reply) {
         webCompanionTargetsSuspended() ? "true" : "false",
         static_cast<unsigned long>(webCompanionHeapBeforeSuspend),
         static_cast<unsigned long>(webCompanionHeapAfterSuspend),
+        webCompanionSurveyWorkerSuspended ? "true" : "false",
+        static_cast<unsigned long>(webCompanionHeapBeforeWorkerSuspend),
+        static_cast<unsigned long>(webCompanionHeapAfterWorkerSuspend),
         static_cast<unsigned long>(
             arduinoCompanionWebService.heapFreeBeforeBegin()),
         static_cast<unsigned long>(
