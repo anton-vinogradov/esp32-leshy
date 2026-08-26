@@ -27,11 +27,11 @@ public:
     static constexpr std::size_t kRequestCapacity =
         kMaximumHeaderBytes + services::companion::kCompanionMaxFrameBytes;
     static constexpr std::uint64_t kClientDeadlineUs = 3000000ULL;
-    static constexpr int kStaticRxBuffers = 4;
-    static constexpr int kDynamicRxBuffers = 8;
-    static constexpr int kDynamicTxBuffers = 8;
-    static constexpr int kRxManagementBuffers = 3;
-    static constexpr int kManagementShortBuffers = 8;
+    static constexpr int kStaticRxBuffers = 2;
+    static constexpr int kDynamicRxBuffers = 4;
+    static constexpr int kDynamicTxBuffers = 4;
+    static constexpr int kRxManagementBuffers = 2;
+    static constexpr int kManagementShortBuffers = 4;
 
     enum class BeginStage : std::uint8_t {
         Idle,

@@ -487,6 +487,7 @@ def main() -> int:
                     staged.get("network_core_ready") is False and
                     staged.get("begin_stage") == "idle" and
                     staged.get("cleanup_complete") is True and
+                    staged.get("targets_suspended") is False and
                     staged.get("lease_mask") == 13,
                     f"Web session started without confirmation: {staged}")
             action(device, "right")
@@ -503,6 +504,10 @@ def main() -> int:
                     active.get("begin_stage") == "ready" and
                     active.get("driver_error") == 0 and
                     active.get("cleanup_complete") is False and
+                    active.get("targets_suspended") is True and
+                    int(active.get("heap_free_before_suspend", 0)) > 0 and
+                    int(active.get("heap_free_after_suspend", 0)) >
+                    int(active.get("heap_free_before_suspend", 0)) and
                     int(active.get("heap_free_before_begin", 0)) > 0 and
                     int(active.get("heap_largest_before_begin", 0)) > 0 and
                     int(active.get("heap_free_after_begin", 0)) > 0 and
@@ -531,6 +536,7 @@ def main() -> int:
                     stopped.get("credential_present") is False and
                     stopped.get("stop_reason") == "user" and
                     stopped.get("cleanup_complete") is True and
+                    stopped.get("targets_suspended") is False and
                     int(stopped.get("heap_free_after_stop", 0)) > 0 and
                     stopped.get("lease_mask") == 13,
                     f"Web stop did not revoke and scrub: {stopped}")

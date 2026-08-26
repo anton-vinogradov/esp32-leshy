@@ -483,6 +483,35 @@ struct TargetsProductRuntime final {
         mergesStorage = nullptr;
         return true;
     }
+    bool detachForWeb(
+        TargetCatalog** catalog, CorrelationDecisionLog** decisions,
+        TargetMergeHistory** mergesValue,
+        leshy1::domain::targets::TargetComparisonResult** comparisonValue) {
+        if (catalog == nullptr || decisions == nullptr ||
+            mergesValue == nullptr || comparisonValue == nullptr ||
+            catalogStorage == nullptr || decisionsStorage == nullptr ||
+            mergesStorage == nullptr || comparisonStorage == nullptr) {
+            return false;
+        }
+        // The local AP needs contiguous internal heap. Keep only the immutable
+        // read/mutation state needed by Companion and release the controller,
+        // editing workspaces and correlation proposals while Web is active.
+        delete controllerStorage;
+        controllerStorage = nullptr;
+        delete workspaceStorage;
+        workspaceStorage = nullptr;
+        delete correlationsStorage;
+        correlationsStorage = nullptr;
+        *catalog = catalogStorage;
+        *decisions = decisionsStorage;
+        *mergesValue = mergesStorage;
+        *comparisonValue = comparisonStorage;
+        catalogStorage = nullptr;
+        decisionsStorage = nullptr;
+        mergesStorage = nullptr;
+        comparisonStorage = nullptr;
+        return true;
+    }
     ~TargetsProductRuntime() {
         delete controllerStorage;
         delete workspaceStorage;
@@ -535,6 +564,14 @@ leshy1::platform::arduino::ArduinoCompanionWebService
     arduinoCompanionWebService;
 bool webCompanionOverlay = false;
 std::uint32_t webCompanionGeneration = 0;
+TargetCatalog* webCompanionCatalog = nullptr;
+CorrelationDecisionLog* webCompanionDecisions = nullptr;
+TargetMergeHistory* webCompanionMerges = nullptr;
+leshy1::domain::targets::TargetComparisonResult* webCompanionComparison =
+    nullptr;
+TargetId webCompanionSelectedTargetId{};
+std::uint32_t webCompanionHeapBeforeSuspend = 0;
+std::uint32_t webCompanionHeapAfterSuspend = 0;
 std::uint32_t targetsStateGeneration = 0;
 leshy1::storage::RecoveryChoice targetsStateHead =
     leshy1::storage::RecoveryChoice::None;
@@ -4777,9 +4814,52 @@ bool handleWebCompanionRequest(
     std::size_t responseCapacity, std::size_t* responseLength,
     void* context);
 
+bool webCompanionTargetsSuspended() {
+    return webCompanionCatalog != nullptr &&
+        webCompanionDecisions != nullptr && webCompanionMerges != nullptr &&
+        webCompanionComparison != nullptr;
+}
+
+bool suspendTargetsForWebCompanion() {
+    if (webCompanionTargetsSuspended()) return true;
+    if (targetsProductRuntime == nullptr ||
+        std::strcmp(targetsProductStatus, "ready") != 0) {
+        return false;
+    }
+    const auto* selected = targetsProductRuntime->controller.selectedTarget();
+    webCompanionSelectedTargetId = selected == nullptr
+        ? TargetId{} : selected->id;
+    webCompanionHeapBeforeSuspend = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    if (!targetsProductRuntime->detachForWeb(
+            &webCompanionCatalog, &webCompanionDecisions,
+            &webCompanionMerges, &webCompanionComparison)) {
+        return false;
+    }
+    delete targetsProductRuntime;
+    targetsProductRuntime = nullptr;
+    targetsProductStatus = "web_suspended";
+    webCompanionHeapAfterSuspend = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    return true;
+}
+
+bool restoreTargetsAfterWebCompanion();
+
+void discardSuspendedWebCompanionTargets() {
+    delete webCompanionComparison;
+    delete webCompanionMerges;
+    delete webCompanionDecisions;
+    delete webCompanionCatalog;
+    webCompanionComparison = nullptr;
+    webCompanionMerges = nullptr;
+    webCompanionDecisions = nullptr;
+    webCompanionCatalog = nullptr;
+}
+
 void stopWebCompanion(
     leshy1::services::companion::CompanionLocalStopReason reason,
-    bool leaveOverlay = false) {
+    bool leaveOverlay = false, bool restoreTargets = true) {
     arduinoCompanionWebService.stop();
     if (webCompanionConnectivity.authorized()) {
         webCompanionConnectivity.revoke(reason);
@@ -4793,6 +4873,7 @@ void stopWebCompanion(
     resourceBroker.release(
         AppRuntime::kForegroundOwner,
         leshy1::kernel::runtime::resourceMask(Resource::EspRf));
+    if (restoreTargets) restoreTargetsAfterWebCompanion();
     if (!leaveOverlay) webCompanionOverlay = false;
 }
 
@@ -4811,11 +4892,17 @@ bool startWebCompanion() {
         lastRuntimeEvent = "companion_web_resource_busy";
         return false;
     }
+    if (!suspendTargetsForWebCompanion()) {
+        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        lastRuntimeEvent = "companion_web_suspend_failed";
+        return false;
+    }
     // TCP/IP is deliberately initialized only after the second explicit
     // confirmation. Keeping it alive from boot consumes enough internal heap
     // to prevent the bounded Targets workspace from opening on non-PSRAM DIVs.
     if (!arduinoCompanionWebService.prepareNetworkCore()) {
-        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        stopWebCompanion(companion::CompanionLocalStopReason::StartFailed,
+                         true);
         lastRuntimeEvent = "companion_web_network_core_failed";
         return false;
     }
@@ -4825,7 +4912,8 @@ bool startWebCompanion() {
     esp_fill_random(entropy.data(), entropy.size());
     if (!companion::makeCompanionLocalCredentials(
             mac, entropy, &webCompanionCredentials)) {
-        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
+        stopWebCompanion(companion::CompanionLocalStopReason::StartFailed,
+                         true);
         lastRuntimeEvent = "companion_web_credentials_failed";
         return false;
     }
@@ -4836,11 +4924,8 @@ bool startWebCompanion() {
     if (!arduinoCompanionWebService.begin(webCompanionCredentials) ||
         !webCompanionConnectivity.authorize(nowUs,
                                              webCompanionGeneration)) {
-        arduinoCompanionWebService.stop();
-        webCompanionCredentials.clear();
-        resourceBroker.release(AppRuntime::kForegroundOwner, espRf);
-        webCompanionConnectivity.revoke(
-            companion::CompanionLocalStopReason::StartFailed);
+        stopWebCompanion(companion::CompanionLocalStopReason::StartFailed,
+                         true);
         lastRuntimeEvent = "companion_web_start_failed";
         return false;
     }
@@ -4869,6 +4954,7 @@ bool serviceWebCompanion() {
             companion::CompanionMutationState::Saving;
     if (!webCompanionOverlay || uiController.page() != 7 ||
         (!savingAuthorizedWebMutation &&
+         !webCompanionTargetsSuspended() &&
          (targetsProductRuntime == nullptr ||
           std::strcmp(targetsProductStatus, "ready") != 0))) {
         stopWebCompanion(
@@ -4898,7 +4984,8 @@ void releaseTargetsProduct() {
     // Targets invalidates it; a later Targets instance requires a new connect.
     stopWebCompanion(
         leshy1::services::companion::CompanionLocalStopReason::
-            LeftForeground);
+            LeftForeground, false, false);
+    discardSuspendedWebCompanionTargets();
     usbCompanionConnection = {};
     usbCompanionMutation = {};
     delete targetsProductRuntime;
@@ -5824,6 +5911,22 @@ bool rebuildTargetsProductFromCatalog(TargetCatalog*& persisted,
     return true;
 }
 
+bool restoreTargetsAfterWebCompanion() {
+    if (!webCompanionTargetsSuspended()) return true;
+    // Reopening the controller deterministically recomputes comparison from
+    // the retained sessions, so the snapshot used by Web can be released first.
+    delete webCompanionComparison;
+    webCompanionComparison = nullptr;
+    const bool rebuilt = rebuildTargetsProductFromCatalog(
+        webCompanionCatalog, webCompanionDecisions, webCompanionMerges,
+        webCompanionSelectedTargetId, true, true);
+    if (!rebuilt) {
+        targetsProductStatus = "web_restore_failed";
+        lastRuntimeEvent = targetsProductStatus;
+    }
+    return rebuilt;
+}
+
 const TargetMergeRecord* activeTargetMerge(
     const TargetMergeHistory& history, const TargetId& targetId) {
     for (std::size_t offset = 0; offset < history.size(); ++offset) {
@@ -6541,7 +6644,10 @@ bool requestTargetsMutationExact(const TargetAction& action,
                                  bool companionWebRequest = false) {
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
-    if (targetsProductRuntime == nullptr ||
+    TargetCatalog* activeCatalog = targetsProductRuntime == nullptr
+        ? (companionWebRequest ? webCompanionCatalog : nullptr)
+        : &targetsProductRuntime->workspace.catalog;
+    if (activeCatalog == nullptr ||
         targetsMutationState == TargetsMutationState::Saving) {
         return false;
     }
@@ -6551,8 +6657,7 @@ bool requestTargetsMutationExact(const TargetAction& action,
         action.kind == TargetActionKind::AddTag ||
         action.kind == TargetActionKind::RemoveTag;
     if (!basicAction) return false;
-    TargetService previewService(
-        targetsProductRuntime->workspace.catalog);
+    TargetService previewService(*activeCatalog);
     const auto preview = previewService.preview(action);
     if (preview.status !=
         leshy1::domain::targets::TargetMutationStatus::Applied) {
@@ -6628,9 +6733,24 @@ bool requestTargetsMutationExact(const TargetAction& action,
         targetsMutationTextLength = action.textLength;
     }
     targetsMutationReport = {};
-    if (!detachTargetsProductState(targetsMutationCatalog,
-                                   targetsMutationDecisions,
-                                   targetsMutationMerges)) {
+    const bool detached = companionWebRequest &&
+            targetsProductRuntime == nullptr &&
+            webCompanionTargetsSuspended()
+        ? ([&]() {
+              targetsMutationCatalog = webCompanionCatalog;
+              targetsMutationDecisions = webCompanionDecisions;
+              targetsMutationMerges = webCompanionMerges;
+              webCompanionCatalog = nullptr;
+              webCompanionDecisions = nullptr;
+              webCompanionMerges = nullptr;
+              delete webCompanionComparison;
+              webCompanionComparison = nullptr;
+              return true;
+          })()
+        : detachTargetsProductState(targetsMutationCatalog,
+                                    targetsMutationDecisions,
+                                    targetsMutationMerges);
+    if (!detached) {
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "workspace_unavailable";
         lastRuntimeEvent = "targets_store_workspace_unavailable";
@@ -9462,7 +9582,6 @@ NavigationFooter navigationFooterForCurrentState() {
         if (targetsMutationState == TargetsMutationState::Saving) {
             return {{}, {}, {}};
         }
-        if (targetsProductRuntime == nullptr) return {back, {}, {}};
         if (webCompanionOverlay) {
             return {{NavigationKey::Left,
                      webCompanionConnectivity.authorized()
@@ -9473,6 +9592,7 @@ NavigationFooter navigationFooterForCurrentState() {
                         : NavigationCell{NavigationKey::RightAndSelect,
                                          UiTextId::NavStart}};
         }
+        if (targetsProductRuntime == nullptr) return {back, {}, {}};
         if (targetsProductRuntime->controller.view() == TargetsView::List) {
             return targetsProductRuntime->controller.entryCount() == 0
                 ? NavigationFooter{back, {}, {}}
@@ -18154,7 +18274,7 @@ void emitTargetsState(Stream& reply) {
 
 void emitCompanionWebState(Stream& reply) {
     namespace companion = leshy1::services::companion;
-    char line[768] = {};
+    char line[896] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.companion.web.v1\",\"kind\":\"state\","
@@ -18166,6 +18286,9 @@ void emitCompanionWebState(Stream& reply) {
         "\"credential_persisted\":false,\"credential_exposed_over_diagnostic\":false,"
         "\"network_core_ready\":%s,\"begin_stage\":\"%s\","
         "\"driver_error\":%d,\"cleanup_complete\":%s,"
+        "\"targets_suspended\":%s,"
+        "\"heap_free_before_suspend\":%lu,"
+        "\"heap_free_after_suspend\":%lu,"
         "\"heap_free_before_begin\":%lu,"
         "\"heap_largest_before_begin\":%lu,"
         "\"heap_free_after_begin\":%lu,\"heap_free_after_stop\":%lu,"
@@ -18191,6 +18314,9 @@ void emitCompanionWebState(Stream& reply) {
             arduinoCompanionWebService.beginStage()),
         static_cast<int>(arduinoCompanionWebService.lastError()),
         arduinoCompanionWebService.cleanupComplete() ? "true" : "false",
+        webCompanionTargetsSuspended() ? "true" : "false",
+        static_cast<unsigned long>(webCompanionHeapBeforeSuspend),
+        static_cast<unsigned long>(webCompanionHeapAfterSuspend),
         static_cast<unsigned long>(
             arduinoCompanionWebService.heapFreeBeforeBegin()),
         static_cast<unsigned long>(
@@ -19632,27 +19758,27 @@ bool applyUiAction(UiAction action, bool render = true) {
         uiController.recordHandledAction(action);
         return finish(false);
     }
+    if (!wasRoot && uiController.page() == 7 && webCompanionOverlay) {
+        bool changed = false;
+        if (action == UiAction::Back || action == UiAction::Left) {
+            stopWebCompanion(
+                leshy1::services::companion::CompanionLocalStopReason::User);
+            changed = true;
+            lastRuntimeEvent = "companion_web_stopped";
+        } else if (!webCompanionConnectivity.authorized() &&
+                   (action == UiAction::Select ||
+                    action == UiAction::Right)) {
+            changed = startWebCompanion();
+        }
+        uiController.recordHandledAction(action);
+        return finish(changed);
+    }
     if (!wasRoot && uiController.page() == 7 &&
         targetsProductRuntime != nullptr) {
         TargetsController& controller = targetsProductRuntime->controller;
         bool handled = false;
         bool changed = false;
-        if (webCompanionOverlay &&
-            (action == UiAction::Back || action == UiAction::Left)) {
-            handled = true;
-            stopWebCompanion(
-                leshy1::services::companion::CompanionLocalStopReason::User);
-            changed = true;
-            lastRuntimeEvent = "companion_web_stopped";
-        } else if (webCompanionOverlay &&
-                   !webCompanionConnectivity.authorized() &&
-                   (action == UiAction::Select ||
-                    action == UiAction::Right)) {
-            handled = true;
-            changed = startWebCompanion();
-        } else if (webCompanionOverlay) {
-            handled = true;
-        } else if ((controller.view() == TargetsView::Detail ||
+        if ((controller.view() == TargetsView::Detail ||
              controller.view() == TargetsView::Actions ||
              controller.view() == TargetsView::NameEdit ||
              controller.view() == TargetsView::TagList ||
@@ -20387,8 +20513,7 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                     static_cast<std::uint8_t>(surveyController.draftFilter())};
         }
     }
-    if (uiController.page() == 7 && targetsProductRuntime != nullptr &&
-        webCompanionOverlay) {
+    if (uiController.page() == 7 && webCompanionOverlay) {
         return {leshy1::ui::hitTouchTarget(
                     TouchTargetLayout::HomeRows, point, 0, 1),
                 0};
@@ -25559,18 +25684,26 @@ void addCompanionSessionBinding(
 
 leshy1::services::companion::CompanionReadContext companionReadContext() {
     leshy1::services::companion::CompanionReadContext context{};
-    if (uiController.page() != 7 || targetsProductRuntime == nullptr ||
-        std::strcmp(targetsProductStatus, "ready") != 0) {
+    const bool runtimeReady = targetsProductRuntime != nullptr &&
+        std::strcmp(targetsProductStatus, "ready") == 0;
+    const bool webReady = webCompanionTargetsSuspended() &&
+        std::strcmp(targetsProductStatus, "web_suspended") == 0;
+    if (uiController.page() != 7 || (!runtimeReady && !webReady)) {
         return context;
     }
     if (targetsComparisonLoaded) {
         addCompanionSessionBinding(targetsBaselineBinding, &context);
     }
     addCompanionSessionBinding(targetsCurrentBinding, &context);
-    context.targets = &targetsProductRuntime->workspace.catalog;
+    context.targets = runtimeReady
+        ? &targetsProductRuntime->workspace.catalog : webCompanionCatalog;
     if (targetsComparisonLoaded && context.sessionCount == 2 &&
-        targetsProductRuntime->workspace.comparison.compared()) {
-        context.comparison = &targetsProductRuntime->workspace.comparison;
+        ((runtimeReady &&
+          targetsProductRuntime->workspace.comparison.compared()) ||
+         (webReady && webCompanionComparison->compared()))) {
+        context.comparison = runtimeReady
+            ? &targetsProductRuntime->workspace.comparison
+            : webCompanionComparison;
     }
     return context;
 }

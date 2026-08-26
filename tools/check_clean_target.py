@@ -1426,10 +1426,10 @@ def main() -> int:
             companion_web_adapter.read_text(encoding="utf-8")
         )
         for marker in (
-            "kStaticRxBuffers = 4",
-            "kDynamicRxBuffers = 8",
-            "kDynamicTxBuffers = 8",
-            "kManagementShortBuffers = 8",
+            "kStaticRxBuffers = 2",
+            "kDynamicRxBuffers = 4",
+            "kDynamicTxBuffers = 4",
+            "kManagementShortBuffers = 4",
             "esp_netif_attach_wifi_ap",
             "esp_wifi_set_default_wifi_ap_handlers",
             "esp_wifi_set_storage(WIFI_STORAGE_RAM)",
