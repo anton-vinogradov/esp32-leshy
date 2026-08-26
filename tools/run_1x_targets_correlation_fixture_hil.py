@@ -16,6 +16,18 @@ from run_1x_product_survey_hil import artifact_manifest
 SCHEMA = "leshy.targets_correlation_fixture_orchestration.v1"
 
 
+def flash_with_openocd(executable: Path, scripts: Path, serial: str,
+                       image: Path) -> None:
+    command = [
+        str(executable.resolve()), "-s", str(scripts.resolve()),
+        "-f", "board/esp32s3-builtin.cfg",
+        "-c", f"adapter serial {serial}",
+        "-c", "init",
+        "-c", f"program_esp {image.resolve()} 0x10000 verify reset exit",
+    ]
+    subprocess.run(command, check=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dut-port", required=True)
@@ -31,6 +43,9 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--reuse-exact-dut-flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument("--fixture-openocd", type=Path)
+    parser.add_argument("--fixture-openocd-scripts", type=Path)
+    parser.add_argument("--fixture-openocd-serial")
     args = parser.parse_args()
     if args.dut_port == args.fixture_port:
         parser.error("DUT and fixture ports must differ")
@@ -42,6 +57,19 @@ def main() -> int:
     if actual_restore_hash != args.fixture_restore_sha256:
         parser.error(
             f"fixture restore hash mismatch: {actual_restore_hash}")
+    openocd_values = (
+        args.fixture_openocd,
+        args.fixture_openocd_scripts,
+        args.fixture_openocd_serial,
+    )
+    if any(value is not None for value in openocd_values) and not all(
+            value is not None for value in openocd_values):
+        parser.error("all fixture OpenOCD arguments must be supplied together")
+    use_openocd = args.fixture_openocd is not None
+    if use_openocd and (
+            not args.fixture_openocd.is_file() or
+            not args.fixture_openocd_scripts.is_dir()):
+        parser.error("fixture OpenOCD executable/scripts are unavailable")
 
     record = {
         "schema": SCHEMA,
@@ -51,13 +79,20 @@ def main() -> int:
         "fixture_firmware_sha256": sha256_file(args.fixture_firmware),
         "fixture_restore_sha256": actual_restore_hash,
         "fixture_flash_offset": 0x10000,
+        "fixture_flash_method": "usb_jtag" if use_openocd else "rom_serial",
+        "fixture_openocd_serial": args.fixture_openocd_serial,
         "fixture_restore_attempted": False,
         "fixture_restore_complete": False,
     }
     failure: BaseException | None = None
     try:
-        flash_candidate(args.fixture_port, args.fixture_firmware, 0x10000,
-                        args.flash_baud)
+        if use_openocd:
+            flash_with_openocd(
+                args.fixture_openocd, args.fixture_openocd_scripts,
+                args.fixture_openocd_serial, args.fixture_firmware)
+        else:
+            flash_candidate(args.fixture_port, args.fixture_firmware, 0x10000,
+                            args.flash_baud)
         command = [
             sys.executable, "tools/run_1x_targets_correlation_hil.py",
             "--port", args.dut_port,
@@ -81,8 +116,14 @@ def main() -> int:
     finally:
         record["fixture_restore_attempted"] = True
         try:
-            flash_candidate(args.fixture_port, args.fixture_restore, 0x10000,
-                            args.flash_baud)
+            if use_openocd:
+                flash_with_openocd(
+                    args.fixture_openocd, args.fixture_openocd_scripts,
+                    args.fixture_openocd_serial, args.fixture_restore)
+            else:
+                flash_candidate(
+                    args.fixture_port, args.fixture_restore, 0x10000,
+                    args.flash_baud)
             record["fixture_restore_complete"] = True
         except BaseException as restore_error:
             record["status"] = "failed"
