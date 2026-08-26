@@ -1174,6 +1174,13 @@ const char* capturePersistStateName(CapturePersistState state) {
 constexpr std::size_t kConsoleCommandCapacity = 192;
 constexpr std::size_t kUsbCommandCapacity =
     leshy1::services::companion::kCompanionMaxFrameBytes + 1U;
+// The Arduino HW-CDC default RX queue is only 256 bytes.  A valid bounded
+// target.compare request is larger than that, so the ISR can otherwise drop
+// its trailing bytes (including the newline) before poll() sees the frame.
+// Keep one complete 512-byte frame plus CRLF and USB packet slack bounded.
+constexpr std::size_t kUsbRxBufferCapacity = 576;
+static_assert(kUsbRxBufferCapacity >= kUsbCommandCapacity + 1U,
+              "USB RX queue must hold a maximum frame and CRLF");
 constexpr char kLongestConsoleCommand[] =
     "storage.littlefs.reset recover read-only "
     "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff "
@@ -25624,6 +25631,7 @@ void poll(Stream& stream, char* command, std::size_t& length,
 void setup() {
     bootMetrics.setupEnterUs = static_cast<std::uint64_t>(esp_timer_get_time());
     BoardSafeOutputs::establishBootInvariant();
+    Serial.setRxBufferSize(kUsbRxBufferCapacity);
     Serial.begin(kConsoleBaud);
     Serial0.begin(kConsoleBaud);
     // ESP-IDF lazily allocates the newlib stream and UART VFS locks on the

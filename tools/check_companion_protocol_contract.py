@@ -156,6 +156,7 @@ def main() -> int:
         "policy.availableCapabilities = capabilities",
         "usbCompanionConnection = {}",
         "kUsbCommandCapacity",
+        "Serial.setRxBufferSize(kUsbRxBufferCapacity)",
         "usbCommandOverflow",
         "response_encoding_failed",
         "targetsIdentityTransientRetries",
