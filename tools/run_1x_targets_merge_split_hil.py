@@ -137,9 +137,9 @@ def read_only_query(
     schema: str,
     kind: str,
     timeout: float = 5.0,
-    maximum_attempts: int = 2,
+    maximum_attempts: int = 3,
 ) -> dict[str, Any]:
-    """Retry a diagnostic query once without ever replaying an action."""
+    """Retry a diagnostic query within a fixed bound; never replay actions."""
     if maximum_attempts < 1:
         raise ValueError("maximum_attempts must be positive")
     errors: list[str] = []
@@ -160,19 +160,47 @@ def read_only_query(
     raise RuntimeError("unreachable state-query retry state")
 
 
+def navigation_action(
+    device: Any, name: str, timeout: float = 15.0,
+) -> dict[str, Any]:
+    """Send a reversible UI action once and recover only its lost reply.
+
+    A timed-out acknowledgement is never grounds to replay the key.  The
+    current UI state is queried read-only instead; the caller's semantic
+    checkpoint decides whether the original key took effect.  Every
+    irreversible merge/split confirmation continues to use
+    trigger_mutation_once(), which has its own stricter no-replay contract.
+    """
+    try:
+        state = action(device, name, timeout=timeout)
+        state["host_navigation_ack_received"] = True
+        state["host_navigation_action_writes"] = 1
+        state["host_navigation_action_replays"] = 0
+        return state
+    except TimeoutError as error:
+        state = read_only_query(
+            device, b"ui.state", "leshy.ui.v1", "state",
+            timeout=5.0, maximum_attempts=3)
+        state["host_navigation_ack_received"] = False
+        state["host_navigation_ack_error"] = str(error)
+        state["host_navigation_action_writes"] = 1
+        state["host_navigation_action_replays"] = 0
+        return state
+
+
 def normalize_home(device: Any) -> dict[str, Any]:
     state = read_only_query(
         device, b"ui.state", "leshy.ui.v1", "state")
     for _ in range(8):
         if state.get("page") == "home":
             break
-        state = action(device, "back")
+        state = navigation_action(device, "back")
     if state.get("page") != "home":
         raise RuntimeError(f"cannot normalize Home: {state}")
     for _ in range(8):
         if int(state.get("selection", -1)) == 0:
             break
-        state = action(device, "up")
+        state = navigation_action(device, "up")
     if int(state.get("selection", -1)) != 0:
         raise RuntimeError(f"cannot normalize Home selection: {state}")
     return state
@@ -185,14 +213,14 @@ def open_targets(
         raise ValueError("minimum_target_count must be positive")
     home = normalize_home(device)
     for _ in range(5):
-        home = action(device, "down")
+        home = navigation_action(device, "down")
     require(home, "select Targets", page="home", selection=5,
             selected_id="targets")
     # Loading is deliberately segmented by the unchanged five-second hardware
     # watchdog.  The aggregate of several bounded SD/decode phases may exceed
     # the generic UI acknowledgement timeout, while each individual phase is
     # still proven below the watchdog threshold by targets.state telemetry.
-    opened = action(device, "right", timeout=40.0)
+    opened = navigation_action(device, "right", timeout=40.0)
     require(opened, "open Targets", page="targets",
             runtime_owner="targets", lease_mask=13)
     listed = read_only_query(device, b"targets.state",
@@ -218,9 +246,10 @@ def find_target(
     listed = open_targets(device, minimum_target_count)
     count = int(listed["target_count"])
     searched: list[dict[str, Any]] = []
-    action(device, "down")  # comparison is row 0; the first Target is row 1
+    navigation_action(
+        device, "down")  # comparison is row 0; the first Target is row 1
     for index in range(count):
-        action(device, "right")
+        navigation_action(device, "right")
         detail = read_only_query(device, b"targets.state",
                                  "leshy.targets.product.v1", "state")
         require(detail, f"Target detail {index}", status="ready",
@@ -240,9 +269,9 @@ def find_target(
         })
         if predicate(detail):
             return listed, detail, searched
-        action(device, "left")
+        navigation_action(device, "left")
         if index + 1 < count:
-            action(device, "down")
+            navigation_action(device, "down")
     normalize_home(device)
     raise RuntimeError(f"requested Target not found: {searched}")
 
@@ -368,9 +397,9 @@ def require_atomic_save(state: dict[str, Any], label: str) -> None:
 
 
 def enter_merge_action(device: Any, target_id: str) -> dict[str, Any]:
-    action(device, "right")
+    navigation_action(device, "right")
     for _ in range(5):
-        action(device, "down")
+        navigation_action(device, "down")
     state = read_only_query(device, b"targets.state",
                             "leshy.targets.product.v1", "state")
     require(state, "Target merge/split action", status="ready",
@@ -808,7 +837,7 @@ def main() -> int:
             device, frames, "targets-merge-destination-before")
 
         enter_merge_action(device, destination_id)
-        action(device, "right")
+        navigation_action(device, "right")
         merge_list = read_only_query(
             device, b"targets.state",
             "leshy.targets.product.v1", "state")
@@ -824,7 +853,7 @@ def main() -> int:
         states["merge_list"] = merge_list
         screens["merge_list"] = capture(
             device, frames, "targets-merge-source-list")
-        action(device, "right")
+        navigation_action(device, "right")
         merge_confirm = read_only_query(
             device, b"targets.state",
             "leshy.targets.product.v1", "state")
@@ -905,7 +934,7 @@ def main() -> int:
             device, frames, "targets-merge-cold-reopened")
 
         enter_merge_action(device, destination_id)
-        action(device, "right")
+        navigation_action(device, "right")
         split_confirm = read_only_query(
             device, b"targets.state",
             "leshy.targets.product.v1", "state")

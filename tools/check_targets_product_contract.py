@@ -334,6 +334,10 @@ def main() -> int:
             '"survey_cycles_executed": 0 if args.reuse_existing_pair else 2'
                 in runner and
             "checked_stack_frames = stack_frames(args.elf)" in runner and
+            "def navigation_action(" in merge_split_runner and
+            'state["host_navigation_action_replays"] = 0' in
+                merge_split_runner and
+            "minimum_target_count=1" in merge_split_runner and
             'record["targets_after_open"] = listed' in runner and
             'write_json(args.output / "run.json", record)' in runner and
             "best_effort_cleanup(device)" in runner and

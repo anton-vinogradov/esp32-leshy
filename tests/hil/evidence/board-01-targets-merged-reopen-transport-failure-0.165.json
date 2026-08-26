@@ -1,0 +1,71 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "elf_sha256": "20968cb44e847c7e3b9338c462991b6710a2c23c1654e9b3692879c9f91a81ec",
+    "firmware_sha256": "40af5486e8525998e86aa3c864e0cb0e21e3aace0d3dc40c8dd4eb1923f01d4b",
+    "map_sha256": "7acc6be8c106566de2d877acae572171e790983a421bd226b9c2070a2a7063f1",
+    "version": "0.165.0-targets-fixture-reopen"
+  },
+  "classification": "retained_fail_closed",
+  "failure": {
+    "error": "TimeoutError: timed out waiting for leshy.ui.v1/state",
+    "phase": "merged_cold_reopen_navigation",
+    "root_cause": "transient_usb_serial_response_loss",
+    "run_json_sha256": "b4c4f366d00fe56bc5238a8b57290b48a47c0fd396562302fd88b497997e21c7"
+  },
+  "merge_checkpoint": {
+    "catalog_count": 1,
+    "directory_syncs": 3,
+    "file_syncs": 3,
+    "history_count": 1,
+    "lease_mask": 13,
+    "mutation_generation": 1,
+    "mutation_persisted": true,
+    "mutation_status": "saved",
+    "stack_min_free": 8040,
+    "worker_stack_observed": true,
+    "write_calls": 3
+  },
+  "post_failure_restore": {
+    "cleanup_complete": true,
+    "final_cid": "FE343253440000002000000055019CB7",
+    "final_generation": 161,
+    "final_lease_mask": 0,
+    "final_observations": 59,
+    "ota1_after_sha256": "3bf012ed2a6f9ae7026ec8eb5a080dcd75e343b7073e337ea72900ed97da9e33",
+    "ota1_before_sha256": "3bf012ed2a6f9ae7026ec8eb5a080dcd75e343b7073e337ea72900ed97da9e33",
+    "ota1_restore_verified": true,
+    "partition_table_after_sha256": "44539be51aeb592d44450059d7dbbb4d5a25d7fe5144cc68b8e85acba367ba87",
+    "partition_table_before_sha256": "44539be51aeb592d44450059d7dbbb4d5a25d7fe5144cc68b8e85acba367ba87",
+    "partition_table_restore_verified": true,
+    "safety_latched": false
+  },
+  "repair_gate": {
+    "firmware_change_required": false,
+    "navigation_action_replays": 0,
+    "read_only_ack_recovery": true,
+    "read_only_query_maximum_attempts": 3,
+    "reuse_exact_flash": true,
+    "short_regression_required": true
+  },
+  "schema": "leshy.targets_merged_reopen_transport_failure.evidence.v1",
+  "source_commit": "520fcd3107a4d95580c7521a18c4558318a2dd41",
+  "status": "failed",
+  "transport": {
+    "flash_count": 0,
+    "mutation_action_replays": 0,
+    "ota1_backup_read_attempts": 2,
+    "predecessor_run_sha256": "fcbc6658edcbb9edcb401148032d74049454eebf9604a240dd35f3b7c772a99e",
+    "ui_timeout": true
+  },
+  "usb": {
+    "cardputer_ports_opened": 0,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "port_discovery_calls": 0
+  }
+}

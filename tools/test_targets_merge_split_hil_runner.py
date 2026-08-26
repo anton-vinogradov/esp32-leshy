@@ -90,11 +90,45 @@ class TargetsMergeSplitHilRunnerTests(unittest.TestCase):
     def test_read_only_query_never_exceeds_bound(self) -> None:
         device = types.SimpleNamespace(reset_input_buffer=lambda: None)
         with patch.object(
-                RUNNER, "query", side_effect=TimeoutError("offline")), \
+                RUNNER, "query",
+                side_effect=TimeoutError("offline")) as query_state, \
                 patch.object(RUNNER, "synchronize_console"):
             with self.assertRaisesRegex(TimeoutError, "offline"):
                 RUNNER.read_only_query(
                     device, b"read-only.state", "state.v1", "state")
+        self.assertEqual(3, query_state.call_count)
+
+    def test_navigation_action_recovers_lost_ack_without_replay(self) -> None:
+        device = object()
+        recovered = {"page": "targets", "selection": 1}
+        with patch.object(
+                RUNNER, "action",
+                side_effect=TimeoutError("lost navigation ACK")) as action, \
+                patch.object(
+                    RUNNER, "read_only_query",
+                    return_value=recovered) as read_state:
+            state = RUNNER.navigation_action(device, "right")
+        action.assert_called_once_with(device, "right", timeout=15.0)
+        read_state.assert_called_once_with(
+            device, b"ui.state", "leshy.ui.v1", "state",
+            timeout=5.0, maximum_attempts=3)
+        self.assertIs(recovered, state)
+        self.assertFalse(state["host_navigation_ack_received"])
+        self.assertEqual(1, state["host_navigation_action_writes"])
+        self.assertEqual(0, state["host_navigation_action_replays"])
+
+    def test_navigation_action_records_normal_ack(self) -> None:
+        device = object()
+        acknowledged = {"page": "targets", "selection": 1}
+        with patch.object(
+                RUNNER, "action", return_value=acknowledged) as action, \
+                patch.object(RUNNER, "read_only_query") as read_state:
+            state = RUNNER.navigation_action(device, "down", timeout=2.0)
+        action.assert_called_once_with(device, "down", timeout=2.0)
+        read_state.assert_not_called()
+        self.assertIs(acknowledged, state)
+        self.assertTrue(state["host_navigation_ack_received"])
+        self.assertEqual(0, state["host_navigation_action_replays"])
 
     def test_normalize_home_uses_bounded_read_only_query(self) -> None:
         device = object()

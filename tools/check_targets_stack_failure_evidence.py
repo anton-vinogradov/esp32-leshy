@@ -24,6 +24,9 @@ FIXTURE_REOPEN_EVIDENCE = (
 MERGED_REOPEN_RUNNER_EVIDENCE = (
     ROOT / "tests/hil/evidence/board-01-targets-merged-reopen-runner-failure-0.165.json"
 )
+MERGED_REOPEN_TRANSPORT_EVIDENCE = (
+    ROOT / "tests/hil/evidence/board-01-targets-merged-reopen-transport-failure-0.165.json"
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -246,8 +249,57 @@ def main() -> None:
             runner["repair_gate"]["reuse_exact_flash"] is True and
             runner["repair_gate"]["minimum_target_count_after_merge"] == 1,
             "0.165 runner-only repair gate lost")
+    transport = json.loads(
+        MERGED_REOPEN_TRANSPORT_EVIDENCE.read_text(encoding="utf-8"))
+    require(
+        transport["schema"] ==
+        "leshy.targets_merged_reopen_transport_failure.evidence.v1",
+        "unexpected merged-reopen transport failure schema",
+    )
+    require(transport["status"] == "failed" and
+            transport["classification"] == "retained_fail_closed",
+            "0.165 transport failure hidden")
+    require(transport["source_commit"] ==
+            "520fcd3107a4d95580c7521a18c4558318a2dd41",
+            "0.165 transport-runner exact source lost")
+    require(transport["failure"]["phase"] ==
+            "merged_cold_reopen_navigation" and
+            transport["failure"]["root_cause"] ==
+            "transient_usb_serial_response_loss",
+            "0.165 transport root cause lost")
+    require(transport["transport"]["ota1_backup_read_attempts"] == 2 and
+            transport["transport"]["mutation_action_replays"] == 0 and
+            transport["transport"]["flash_count"] == 0,
+            "0.165 transport/no-replay proof lost")
+    require(transport["merge_checkpoint"]["mutation_persisted"] is True and
+            transport["merge_checkpoint"]["stack_min_free"] == 8040 and
+            transport["merge_checkpoint"]["lease_mask"] == 13,
+            "0.165 transport run merge proof lost")
+    require(transport["post_failure_restore"]["ota1_restore_verified"] is True
+            and transport["post_failure_restore"]["ota1_before_sha256"] ==
+            transport["post_failure_restore"]["ota1_after_sha256"],
+            "0.165 transport run OTA1 restore lost")
+    require(transport["post_failure_restore"]
+            ["partition_table_restore_verified"] is True and
+            transport["post_failure_restore"]
+            ["partition_table_before_sha256"] ==
+            transport["post_failure_restore"]
+            ["partition_table_after_sha256"],
+            "0.165 transport run partition restore lost")
+    require(transport["post_failure_restore"]["final_generation"] == 161 and
+            transport["post_failure_restore"]["final_observations"] == 59 and
+            transport["post_failure_restore"]["final_lease_mask"] == 0,
+            "0.165 transport run product continuity lost")
+    require(transport["usb"]["opened_ports"] == ["/dev/cu.usbmodem2101"] and
+            transport["usb"]["cardputer_ports_opened"] == 0 and
+            transport["usb"]["port_discovery_calls"] == 0,
+            "0.165 transport run Cardputer isolation lost")
+    require(transport["repair_gate"]["navigation_action_replays"] == 0 and
+            transport["repair_gate"]["read_only_ack_recovery"] is True and
+            transport["repair_gate"]["reuse_exact_flash"] is True,
+            "0.165 transport resilience gate lost")
     print(
-        "targets 0.146/0.147/0.148/0.163/0.164/0.165 "
+        "targets 0.146/0.147/0.148/0.163/0.164/0.165x2 "
         "fail-closed evidence: OK")
 
 
