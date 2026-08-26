@@ -347,6 +347,11 @@ def main() -> int:
         help=("failed run.json (or its directory) that installed the exact "
               "candidate reused by --reuse-exact-flash"),
     )
+    parser.add_argument(
+        "--clear-proven-preexisting-safety-latch", action="store_true",
+        help=("explicitly clear only an exact runtime-watchdog latch proven "
+              "by --predecessor-failed-run before any flash backup/mutation"),
+    )
     args = parser.parse_args()
     for path in (args.firmware, args.partitions, args.elf, args.map):
         if not path.is_file():
@@ -392,6 +397,14 @@ def main() -> int:
     elif args.predecessor_failed_run is not None:
         parser.error(
             "--predecessor-failed-run is only valid with --reuse-exact-flash")
+    if args.clear_proven_preexisting_safety_latch:
+        predecessor_error = predecessor_record.get("error", "")
+        if (not args.reuse_exact_flash or
+                not isinstance(predecessor_error, str) or
+                "safety_latched" not in predecessor_error):
+            parser.error(
+                "safety-latch clear requires an exact failed predecessor "
+                "whose terminal error proves safety_latched")
     root = Path(__file__).resolve().parents[1]
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=root, check=True,
@@ -472,6 +485,10 @@ def main() -> int:
     screens: dict[str, Any] = {}
     resets: dict[str, Any] = {}
     initial_timing: dict[str, Any] = {}
+    preflight_safety: dict[str, Any] = {
+        "clear_authorized": args.clear_proven_preexisting_safety_latch,
+        "clear_performed": False,
+    }
     record: dict[str, Any] = {
         "schema": SCHEMA,
         "status": "in_progress",
@@ -530,6 +547,51 @@ def main() -> int:
                 app_elf_sha256=app_identity)
         require_non_watchdog_boot(metrics, "candidate")
         states["boot_metrics"] = metrics
+        safety_before = read_only_query(
+            device, b"safety.state", "leshy.safety.v1", "state")
+        preflight_safety["before"] = safety_before
+        if safety_before.get("latched") is True:
+            if not args.clear_proven_preexisting_safety_latch:
+                raise RuntimeError(
+                    f"preexisting safety latch requires explicit proof: "
+                    f"{safety_before}")
+            require(safety_before, "proven preexisting safety latch",
+                    state="latched", reason="runtime_watchdog", armed=True,
+                    latched=True, clear_pending=False, runtime_owner="none",
+                    lease_mask=0, automatic_clear=False,
+                    buzzer_inactive=True, nrf_ce_inactive=True)
+            clear_confirmed = query(
+                device, b"safety.clear confirm",
+                "leshy.safety.v1", "clear_confirmed", timeout=5.0)
+            require(clear_confirmed, "explicit safety clear",
+                    restart_required=True)
+            preflight_safety["clear_confirmation"] = clear_confirmed
+            preflight_safety["clear_performed"] = True
+            device.close()
+            device = None
+            cleared_ready, _, cleared_timing = reset_capture(
+                args.port, args.output,
+                "targets-merge-split-safety-cleared-boot", 20.0)
+            require(cleared_ready, "safety-cleared candidate",
+                    version=args.expected_version,
+                    app_elf_sha256=app_identity)
+            require_non_watchdog_boot(
+                cleared_ready, "safety-cleared candidate")
+            preflight_safety["cleared_boot"] = cleared_ready
+            preflight_safety["cleared_timing"] = cleared_timing
+            device = PassiveSerial(args.port, 115200, timeout=0.25)
+            synchronize_console(device, 20.0)
+            safety_after = read_only_query(
+                device, b"safety.state", "leshy.safety.v1", "state")
+            require(safety_after, "safety clear result", state="armed",
+                    reason="none", armed=True, latched=False,
+                    clear_pending=False, runtime_owner="none", lease_mask=0)
+            preflight_safety["after"] = safety_after
+        else:
+            require(safety_before, "preflight safety", state="armed",
+                    reason="none", armed=True, latched=False,
+                    clear_pending=False, runtime_owner="none", lease_mask=0)
+            preflight_safety["after"] = safety_before
         recovery = read_only_query(
             device, b"storage.product.boot-recovery",
             "leshy.storage.product_boot_recovery.v1", "state")
@@ -1095,6 +1157,7 @@ def main() -> int:
         "resets": resets,
         "cleanup": cleanup,
         "initial_timing": initial_timing,
+        "preflight_safety": preflight_safety,
         "final_boot": final_boot,
         "final_recovery": final_recovery,
         "final_fixture": final_fixture,

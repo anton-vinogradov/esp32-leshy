@@ -425,6 +425,11 @@ def main() -> int:
             "targets-split-cold-reopen" in merge_split_runner and
             "targets-merge-split-initial-boot" in merge_split_runner and
             'states["controlled_initial_boot"]' in merge_split_runner and
+            "--clear-proven-preexisting-safety-latch" in merge_split_runner and
+            '"safety_latched" not in predecessor_error' in
+                merge_split_runner and
+            'b"safety.clear confirm"' in merge_split_runner and
+            "targets-merge-split-safety-cleared-boot" in merge_split_runner and
             "selected_graph_fingerprint=destination_graph" in
                 merge_split_runner and
             "selected_graph_fingerprint=source_graph" in merge_split_runner and
