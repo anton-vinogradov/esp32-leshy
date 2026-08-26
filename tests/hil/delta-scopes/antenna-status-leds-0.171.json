@@ -14,7 +14,7 @@
     "nRF24 receive reports exactly the LEDs belonging to detected active slots",
     "CC1101 receive reports only its dedicated LED",
     "external camera retains the nRF24 and CC1101 physical LED states when available",
-    "original preference is restored across a final reset",
+    "the requested stock 2/255 preference is restored across a final reset",
     "zero radio TX, input drops, storage changes and final ownership"
   ]
 }

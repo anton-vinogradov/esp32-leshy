@@ -139,6 +139,8 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--camera-id")
+    parser.add_argument("--restore-raw", type=int, choices=BRIGHTNESS_RAW,
+                        default=2)
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
     args = parser.parse_args()
@@ -293,13 +295,13 @@ def main() -> int:
                 raise RuntimeError("CC1101 cleanup failed")
 
             enter_settings(device, trace)
-            set_led_brightness(device, trace, initial_raw)
+            set_led_brightness(device, trace, args.restore_raw)
 
         device = reset_and_reopen(args.port, args.output, "restore-reset")
         with device:
             final = query(device, b"ui.state", "leshy.ui.v1", "state")
             require(final, "restored LED brightness", page="home",
-                    antenna_led_brightness_raw=initial_raw,
+                    antenna_led_brightness_raw=args.restore_raw,
                     antenna_led_receive_mask=0,
                     antenna_led_fault_mask=0,
                     runtime_owner="none", lease_mask=0)
@@ -328,6 +330,7 @@ def main() -> int:
             "initial_brightness_raw": initial_raw,
             "persisted_brightness_raw": persisted["antenna_led_brightness_raw"],
             "final_brightness_raw": final["antenna_led_brightness_raw"],
+            "requested_restore_brightness_raw": args.restore_raw,
             "brightness_ladder": list(BRIGHTNESS_RAW),
             "reports": reports,
             "camera": camera,
