@@ -4,6 +4,7 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 firmware_dir="$repo_dir/firmware/leshy1"
+export PLATFORMIO_CORE_DIR="${LESHY_PLATFORMIO_CORE_DIR:-$repo_dir/work/platformio-core/leshy1}"
 pio_bin="${PIO_BIN:-$HOME/.platformio/penv/bin/pio}"
 python_bin="${HIL_PYTHON:-$HOME/.platformio/penv/bin/python}"
 expected_cid="${LESHY_BOARD_CID:-FE343253440000002000000055019CB7}"

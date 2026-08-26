@@ -7,5 +7,6 @@
 set -euo pipefail
 export PATH="$HOME/.platformio/penv/bin:$PATH"
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
+export PLATFORMIO_CORE_DIR="${LESHY_PLATFORMIO_CORE_DIR:-$repo_dir/work/platformio-core/leshy1}"
 pio run -d "$repo_dir/firmware/leshy1" -e esp32-div-v2-clean -t upload
 echo "-- clean 1.x flashed; port released. --"

@@ -216,6 +216,17 @@ run_opaque_evidence_check() {
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/companion_web_adapter_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/companion/CompanionProtocol.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/companion/CompanionWebAdapter.cpp" \
+    -o "$test_tmp/companion_web_adapter_tests"
+
+"$test_tmp/companion_web_adapter_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/companion_read_adapter_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/services/companion/CompanionProtocol.cpp" \
     "$repo_dir/firmware/leshy1/src/services/companion/CompanionReadAdapter.cpp" \
@@ -365,6 +376,7 @@ python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_companion_protocol_contract.py"
 python3 "$repo_dir/tools/check_native_usb_reset_contract.py"
+python3 "$repo_dir/tools/check_platformio_workspace_isolation.py"
 python3 "$repo_dir/tools/check_targets_stack_failure_evidence.py"
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-0.149.json" ]]; then
     python3 "$repo_dir/tools/check_targets_hil_acceptance.py"

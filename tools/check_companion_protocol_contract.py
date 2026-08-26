@@ -21,6 +21,13 @@ MUTATION_SOURCE = (
     ROOT / "firmware/leshy1/src/services/companion/CompanionMutationAdapter.cpp"
 )
 MUTATION_TEST = ROOT / "tests/native/companion_mutation_adapter_tests.cpp"
+WEB_HEADER = (
+    ROOT / "firmware/leshy1/src/services/companion/CompanionWebAdapter.h"
+)
+WEB_SOURCE = (
+    ROOT / "firmware/leshy1/src/services/companion/CompanionWebAdapter.cpp"
+)
+WEB_TEST = ROOT / "tests/native/companion_web_adapter_tests.cpp"
 MUTATION_HIL = ROOT / "tools/run_1x_companion_mutation_delta_hil.py"
 ARDUINO = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 ACTION = ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.cpp"
@@ -47,6 +54,9 @@ def main() -> int:
         mutation_header = MUTATION_HEADER.read_text(encoding="utf-8")
         mutation_source = MUTATION_SOURCE.read_text(encoding="utf-8")
         mutation_tests = MUTATION_TEST.read_text(encoding="utf-8")
+        web_header = WEB_HEADER.read_text(encoding="utf-8")
+        web_source = WEB_SOURCE.read_text(encoding="utf-8")
+        web_tests = WEB_TEST.read_text(encoding="utf-8")
         mutation_hil = MUTATION_HIL.read_text(encoding="utf-8")
         arduino = ARDUINO.read_text(encoding="utf-8")
         action = ACTION.read_text(encoding="utf-8")
@@ -204,6 +214,47 @@ def main() -> int:
     ):
         require(failures, marker in mutation_tests,
                 f"missing mutation adapter native coverage: {marker}")
+
+    web_combined = web_header + web_source
+    for forbidden in (
+        '#include "drivers/',
+        '#include "storage/',
+        '#include "platform/',
+        "Serial.",
+        "SPI.",
+        "SD.",
+        "WiFi.",
+        "WebServer",
+        "http://",
+        "https://",
+    ):
+        require(failures, forbidden not in web_combined,
+                f"companion Web presentation bypasses its boundary: {forbidden}")
+    for marker in (
+        'kCompanionWebApiPath = "/api/v1/companion"',
+        "validateCompanionWebRequest",
+        "kCompanionMaxFrameBytes",
+        "deviceSessionAuthorized",
+        "ChunkedUnsupported",
+        "encodeCompanionWebError",
+        "companionWebIndexHtml",
+        "leshy.companion.request.v1",
+        "target.mutation.preview",
+        "target.mutation.confirm",
+        "target.mutation.status",
+    ):
+        require(failures, marker in web_combined,
+                f"missing local Web contract: {marker}")
+    for marker in (
+        "testExactIndexAndApiRoutes",
+        "testBoundaryFailsClosedWithoutPublishingPartialRequest",
+        "testExact512ByteBodyLimit",
+        "testBoundedErrorsAndHttpMapping",
+        "testOfflinePageUsesOnlyTheSharedContract",
+        "parseCompanionConnectRequest",
+    ):
+        require(failures, marker in web_tests,
+                f"missing local Web native coverage: {marker}")
 
     for marker in (
         'parser.add_argument("--port", required=True)',
