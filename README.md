@@ -29,7 +29,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | S6.5 | Local USB/Web companion uses the same Actions and versioned schemas with scoped connectivity and secrets | 🟡 in progress |
 | S6.6 | Integrated DEMO-S6 device/offline path is physically accepted; final phase completion waits for the deferred S5 physical predecessor gate before S6 acceptance | 🔴 blocked |
 
-### User functionality
+### User functionality in implementation order
 
 | Functionality | Delivery stage | Status |
 |---|---|---|
@@ -38,47 +38,47 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Device → Self-Test/Diagnostics safely checks applicable hardware without TX and exports a report | S2 + S5 | ✅ complete |
 | TFT, five keys and touch share Actions, calibration, stable selection and an accessible Back path | S2 | ✅ complete |
 | Locally persisted EN/RU language, brightness, theme, quiet/sound and screen behavior | S2 + S5 | ✅ complete |
-| Visible power/charge/reset reason, low-voltage safe write and verifiable sleep/resume | S5 | 🔴 blocked |
-| Browser install and Device → Update: signed stable/beta OTA, rollback and recovery image | S8 | ⬜ later |
-| Local logs, crash journal and exportable diagnostic bundle without a cloud dependency | S6 + S8 | 🟡 in progress |
 | Explicit Start/Stop creates a bounded multi-radio Survey Session with configuration and provenance | S3 + S6.6 | ✅ complete |
 | Passive Wi-Fi scan: networks, hidden-name enrichment, security/channel/vendor facts and normalized Observations | S3 + S4 | ✅ complete |
+| Shared stable List/Detail/filter behavior for Wi-Fi, BLE and other radios with all useful facts | S3 + S4 | ✅ complete |
+| Immutable Capture preserves raw source, time, frequency/channel, RSSI, coordinates and receive settings | S3 + S4 | ✅ complete |
+| Session/Capture commits are atomic and recover after reset and controlled power loss | S3 + S5 | 🔴 blocked |
+| Library opens Sessions/Captures offline with list/detail/search/filter and visible integrity state | S3 + S6 | ✅ complete |
+| Export provides JSON/CSV summaries, PCAP and portable radio formats with exact provenance | S3 + S5 | 🟡 in progress |
+| SD/LittleFS exposes identity, capacity, recovery, integrity and degraded behavior | S3 + S5 | ✅ complete |
 | Passive BLE scan: strongest-first devices, company/service facts and normalized Observations without active probes | S4 | ✅ complete |
 | Three nRF24 receivers: RX-only spectrum, receiver-paced one-pixel waterfall and background-calibrated 2.4 GHz signal finder | S4 + S5.3 | 🔴 blocked |
 | CC1101: RX-only Sub-GHz spectrum/activity, one-pixel waterfalls and frequency/RSSI finder for 315/433/868/915 MHz | S4 + S5.4 | 🔴 blocked |
 | GPS adds fix, satellites, time and track to a Session only for an explicit compatible assembly | S4 + S5 | ⬜ later |
 | Shared timeline exposes sources, duty cycle, temporary unavailability, degradation and dropped events | S4 + S6.6 | ✅ complete |
-| Shared stable List/Detail/filter behavior for Wi-Fi, BLE and other radios with all useful facts | S3 + S4 | ✅ complete |
 | Network/device Radar/localize: RSSI history, trend/range and honest proximity limits | S4 + S6 | 🟡 in progress |
+| Wi-Fi channel/packet monitor: current/mean load for 1–13, explainable free channel and bounded PCAP with drop counters | S4 | ✅ complete |
+| Visible power/charge/reset reason, low-voltage safe write and verifiable sleep/resume | S5 | 🔴 blocked |
+| SD, USB and local-companion import/export uses versioned schemas and a fail-closed parser | S5 + S6 | 🟡 in progress |
+| IR receive/decode preserves original and derived data, cold-reopens in Library and exports CSV | S5.2 | ✅ complete |
+| Sub-GHz RAW/OOK/FSK Capture preserves pulses, radio parameters and derived decodes | S5.4 | 🔴 blocked |
+| PN532 reads tag/NDEF facts and a versioned dump only for an explicit non-conflicting assembly | S5 | 🔴 blocked |
+| User saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | S5 | ⬜ later |
+| One feedback service owns antenna LEDs and buzzer: default 2/255, quiet mode, bounded tones and non-color-only cues | S5 + S6 | ✅ complete |
+| Local logs, crash journal and exportable diagnostic bundle without a cloud dependency | S6 + S8 | 🟡 in progress |
 | A Target preserves stable identities, Observation history and links to immutable source evidence | S6.1 + S6.4 | ✅ complete |
 | Target name, tags, notes and favorite are bounded edits that survive cold reopen | S6.1 + S6.4 | ✅ complete |
 | Explainable correlation shows features/confidence; review, accept/reject and merge/split are reversible | S6.2 + S6.4 | ✅ complete |
 | Session baseline/diff shows new, disappeared and changed Targets | S6.3 + S6.4 | ✅ complete |
 | Every compare/correlation conclusion opens its exact source evidence | S6.3 + S6.4 | ✅ complete |
-| Immutable Capture preserves raw source, time, frequency/channel, RSSI, coordinates and receive settings | S3 + S4 | ✅ complete |
-| Session/Capture commits are atomic and recover after reset and controlled power loss | S3 + S5 | 🔴 blocked |
-| Library opens Sessions/Captures offline with list/detail/search/filter and visible integrity state | S3 + S6 | ✅ complete |
-| Export provides JSON/CSV summaries, PCAP and portable radio formats with exact provenance | S3 + S5 | 🟡 in progress |
-| SD, USB and local-companion import/export uses versioned schemas and a fail-closed parser | S5 + S6 | 🟡 in progress |
-| SD/LittleFS exposes identity, capacity, recovery, integrity and degraded behavior | S3 + S5 | ✅ complete |
-| IR receive/decode preserves original and derived data, cold-reopens in Library and exports CSV | S5.2 | ✅ complete |
-| Sub-GHz RAW/OOK/FSK Capture preserves pulses, radio parameters and derived decodes | S5.4 | 🔴 blocked |
-| PN532 reads tag/NDEF facts and a versioned dump only for an explicit non-conflicting assembly | S5 | 🔴 blocked |
+| Scoped local USB/Web companion browses, searches, compares and exports through shared Actions/schemas | S6.5 | 🟡 in progress |
+| Offline OUI/BLE company/service/protocol profiles enrich facts with version/provenance without replacing raw evidence | S6 | ✅ complete |
+| Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | 🟡 in progress |
 | Separate Lab exposes authorized scope, source, frequency, power, duration and permanently visible TX state | S7 | ⬜ later |
 | Back, timeout, panic, fault or loss of control/telemetry physically stops every TX path | S7 | ⬜ later |
 | IR replay is available only from a selected immutable Capture after preview and explicit confirmation | S7 | ⬜ later |
 | Sub-GHz replay/TX from an immutable Capture passes ResourceBroker, bounds, confirmation, countdown and stop result | S7 | ⬜ later |
 | NFC write/restore of a supported owned tag exposes preview, verify and the original recovery dump | S7, conditional hardware | ⬜ later |
 | Protocol Workbench compares pulses/waveforms, annotates fields and stores a derived decode without changing raw source | S7 | ⬜ later |
-| Scoped local USB/Web companion browses, searches, compares and exports through shared Actions/schemas | S6.5 | 🟡 in progress |
 | Permissioned app descriptor declares capabilities, resources, permissions, safety policy and UI strings before launch | S7 | ⬜ later |
 | Versioned decoder/profile packages have a compatibility gate, integrity/signature and scoped storage | S7 + S8 | ⬜ later |
 | SDK, sample extension and simulator trace kit cannot bypass ResourceBroker, permissions or Safety Supervisor | S7 | ⬜ later |
-| Wi-Fi channel/packet monitor: current/mean load for 1–13, explainable free channel and bounded PCAP with drop counters | S4 | ✅ complete |
-| User saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | S5 | ⬜ later |
-| Offline OUI/BLE company/service/protocol profiles enrich facts with version/provenance without replacing raw evidence | S6 | ✅ complete |
-| One feedback service owns antenna LEDs and buzzer: default 2/255, quiet mode, bounded tones and non-color-only cues | S5 + S6 | ✅ complete |
-| Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | 🟡 in progress |
+| Browser install and Device → Update: signed stable/beta OTA, rollback and recovery image | S8 | ⬜ later |
 | Versioned backup/restore and factory reset show scope/preview/checksum and never overwrite raw Capture without confirmation | S8 | ⬜ later |
 
 ### Roadmap

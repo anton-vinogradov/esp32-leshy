@@ -66,7 +66,7 @@ CONFIGS = (
         ),
         phases_heading="Current stage phases",
         phase_columns=("Phase", "Outcome / exit gate", "Status"),
-        functions_heading="User functionality",
+        functions_heading="User functionality in implementation order",
         function_columns=("Functionality", "Delivery stage", "Status"),
     ),
     LanguageConfig(
@@ -94,7 +94,7 @@ CONFIGS = (
         ),
         phases_heading="Фазы текущего этапа",
         phase_columns=("Фаза", "Результат / exit gate", "Статус"),
-        functions_heading="Пользовательские возможности",
+        functions_heading="Пользовательские возможности по очереди реализации",
         function_columns=("Возможность", "Этап поставки", "Статус"),
     ),
 )
@@ -223,12 +223,22 @@ def parse_functionality(config: LanguageConfig) -> list[tuple[str, str, str, str
     return rows
 
 
+def functionality_implementation_key(
+        row: tuple[str, str, str, str]) -> tuple[int, int]:
+    """Sort by the first owning stage without changing the stable FUNC identity."""
+    stage = re.search(r"\bS(\d)", row[2])
+    if stage is None:
+        raise ValueError(f"{row[0]} has no implementation stage in {row[2]!r}")
+    return int(stage.group(1)), int(row[0].split("-")[1])
+
+
 def render(config: LanguageConfig) -> str:
     names = parse_stage_names(config.delivery_plan)
     states = parse_stage_states(config.status)
     active = next(stage for stage in EXPECTED_STAGES if states[stage] == "active")
     phases = parse_active_phases(config, active)
-    functionality = parse_functionality(config)
+    functionality = sorted(
+        parse_functionality(config), key=functionality_implementation_key)
     active_phase = next(row[0] for row in phases if row[2] == "active")
     snapshot = parse_snapshot(config, active_phase)
     done = sum(state == "done" for state in states.values())

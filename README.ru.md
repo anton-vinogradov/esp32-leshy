@@ -29,7 +29,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | S6.5 | Local companion USB/Web использует те же Actions и versioned schemas с ограниченными connectivity и secrets | 🟡 в работе |
 | S6.6 | Integrated device/offline path DEMO-S6 физически принят; завершение фазы ждёт отложенный physical predecessor gate S5 перед acceptance S6 | 🔴 заблокировано |
 
-### Пользовательские возможности
+### Пользовательские возможности по очереди реализации
 
 | Возможность | Этап поставки | Статус |
 |---|---|---|
@@ -38,47 +38,47 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Устройство → Самопроверка/Диагностика безопасно проверяет применимое железо без TX и экспортирует отчёт | S2 + S5 | ✅ готово |
 | TFT, пять клавиш и touch используют единые Actions, калибровку, стабильный выбор и доступный Back | S2 | ✅ готово |
 | Локально сохраняемые EN/RU, яркость, тема, quiet/sound и поведение экрана | S2 + S5 | ✅ готово |
-| Видимые питание/заряд/reset reason, low-voltage safe-write и проверяемые sleep/resume | S5 | 🔴 заблокировано |
-| Browser install и Устройство → Обновление: signed stable/beta OTA, rollback и recovery image | S8 | ⬜ дальше |
-| Локальные логи, crash journal и экспортируемый diagnostic bundle без облака | S6 + S8 | 🟡 в работе |
 | Явные Start/Stop создают bounded multi-radio Survey Session с конфигурацией и provenance | S3 + S6.6 | ✅ готово |
 | Пассивный Wi-Fi scan: сети, hidden-name enrichment, security/channel/vendor facts и нормализованные Observation | S3 + S4 | ✅ готово |
+| Общие стабильные List/Detail/filter для Wi-Fi/BLE/других радио с полной полезной информацией | S3 + S4 | ✅ готово |
+| Immutable Capture хранит raw source, время, частоту/канал, RSSI, координаты и настройки приёма | S3 + S4 | ✅ готово |
+| Session/Capture сохраняются атомарно и восстанавливаются после reset и controlled power loss | S3 + S5 | 🔴 заблокировано |
+| Библиотека офлайн открывает Сессии/Захваты и поддерживает list/detail/search/filter и integrity state | S3 + S6 | ✅ готово |
+| Экспорт JSON/CSV summary, PCAP и переносимых radio formats с точным provenance | S3 + S5 | 🟡 в работе |
+| SD/LittleFS показывают identity, capacity, recovery, integrity и degraded behavior | S3 + S5 | ✅ готово |
 | Пассивный BLE scan: strongest-first устройства, company/services facts и нормализованные Observation без active probe | S4 | ✅ готово |
 | Три nRF24: RX-only spectrum, receiver-paced однопиксельный waterfall и калиброванный по фону поиск сигнала 2,4 ГГц | S4 + S5.3 | 🔴 заблокировано |
 | CC1101: RX-only Sub-GHz spectrum/activity, однопиксельные waterfalls и поиск частоты/RSSI 315/433/868/915 МГц | S4 + S5.4 | 🔴 заблокировано |
 | GPS добавляет fix, satellites, time и track к Session только для explicit compatible assembly | S4 + S5 | ⬜ дальше |
 | Общая timeline показывает источники, duty cycle, временную недоступность, degradation и dropped events | S4 + S6.6 | ✅ готово |
-| Общие стабильные List/Detail/filter для Wi-Fi/BLE/других радио с полной полезной информацией | S3 + S4 | ✅ готово |
 | Radar/localize для сети или устройства: RSSI history, trend/range и честные пределы оценки близости | S4 + S6 | 🟡 в работе |
+| Wi-Fi channel/packet monitor: текущая/средняя загрузка 1–13, объяснимый свободный канал и bounded PCAP с drop counters | S4 | ✅ готово |
+| Видимые питание/заряд/reset reason, low-voltage safe-write и проверяемые sleep/resume | S5 | 🔴 заблокировано |
+| Import/export через SD, USB и local companion использует versioned schemas и fail-closed parser | S5 + S6 | 🟡 в работе |
+| ИК receive/decode сохраняет оригинал и производные данные, cold-reopen-ит их в Библиотеке и экспортирует CSV | S5.2 | ✅ готово |
+| Sub-GHz RAW/OOK/FSK Capture сохраняет pulses, radio parameters и производные decode | S5.4 | 🔴 заблокировано |
+| PN532 читает tag/NDEF info и versioned dump только при explicit non-conflicting assembly | S5 | 🔴 заблокировано |
+| Пользователь сохраняет screenshot реального TFT с build/state/time provenance и открывает его в Library/export | S5 | ⬜ дальше |
+| Единый feedback service владеет status LED антенн и buzzer: default 2/255, quiet mode, bounded tones и доступные без цвета cues | S5 + S6 | ✅ готово |
+| Локальные логи, crash journal и экспортируемый diagnostic bundle без облака | S6 + S8 | 🟡 в работе |
 | Цель хранит стабильные identities, историю Observation и ссылки на immutable source evidence | S6.1 + S6.4 | ✅ готово |
 | Имя, теги, заметки и избранное Цели редактируются bounded и переживают cold reopen | S6.1 + S6.4 | ✅ готово |
 | Explainable correlation показывает признаки/confidence; review, accept/reject и merge/split обратимы | S6.2 + S6.4 | ✅ готово |
 | Baseline/diff Сессий показывает новые, исчезнувшие и изменившиеся Цели | S6.3 + S6.4 | ✅ готово |
 | Каждый вывод compare/correlation открывает точное исходное evidence | S6.3 + S6.4 | ✅ готово |
-| Immutable Capture хранит raw source, время, частоту/канал, RSSI, координаты и настройки приёма | S3 + S4 | ✅ готово |
-| Session/Capture сохраняются атомарно и восстанавливаются после reset и controlled power loss | S3 + S5 | 🔴 заблокировано |
-| Библиотека офлайн открывает Сессии/Захваты и поддерживает list/detail/search/filter и integrity state | S3 + S6 | ✅ готово |
-| Экспорт JSON/CSV summary, PCAP и переносимых radio formats с точным provenance | S3 + S5 | 🟡 в работе |
-| Import/export через SD, USB и local companion использует versioned schemas и fail-closed parser | S5 + S6 | 🟡 в работе |
-| SD/LittleFS показывают identity, capacity, recovery, integrity и degraded behavior | S3 + S5 | ✅ готово |
-| ИК receive/decode сохраняет оригинал и производные данные, cold-reopen-ит их в Библиотеке и экспортирует CSV | S5.2 | ✅ готово |
-| Sub-GHz RAW/OOK/FSK Capture сохраняет pulses, radio parameters и производные decode | S5.4 | 🔴 заблокировано |
-| PN532 читает tag/NDEF info и versioned dump только при explicit non-conflicting assembly | S5 | 🔴 заблокировано |
+| Scoped local USB/Web companion просматривает, ищет, сравнивает и экспортирует через общие Actions/schemas | S6.5 | 🟡 в работе |
+| Offline OUI/BLE company/services/protocol profiles обогащают факты с version/provenance, не подменяя raw evidence | S6 | ✅ готово |
+| Scoped Wi-Fi/USB setup изолирует secrets, не экспортирует их и не делает сеть условием Survey/Library | S6 + S8 | 🟡 в работе |
 | Отдельная Лаборатория показывает разрешённый scope, source, frequency, power, duration и постоянно видимый TX state | S7 | ⬜ дальше |
 | Назад, timeout, panic, fault или потеря control/telemetry физически прекращает каждый TX path | S7 | ⬜ дальше |
 | IR replay доступен только из выбранного immutable Capture после preview и явного подтверждения | S7 | ⬜ дальше |
 | Sub-GHz replay/TX из immutable Capture проходит ResourceBroker, bounds, confirm, countdown и stop result | S7 | ⬜ дальше |
 | NFC write/restore поддерживаемой собственной метки показывает preview, verify и исходный dump для восстановления | S7, conditional hardware | ⬜ дальше |
 | Protocol Workbench сравнивает pulses/waveforms, аннотирует поля и сохраняет derived decode без изменения raw source | S7 | ⬜ дальше |
-| Scoped local USB/Web companion просматривает, ищет, сравнивает и экспортирует через общие Actions/schemas | S6.5 | 🟡 в работе |
 | Permissioned app descriptor до запуска объявляет capabilities, ресурсы, permissions, safety policy и строки UI | S7 | ⬜ дальше |
 | Versioned decoder/profile packages имеют compatibility gate, integrity/signature и scoped storage | S7 + S8 | ⬜ дальше |
 | SDK, sample extension и simulator trace kit не позволяют обойти ResourceBroker, permissions или Safety Supervisor | S7 | ⬜ дальше |
-| Wi-Fi channel/packet monitor: текущая/средняя загрузка 1–13, объяснимый свободный канал и bounded PCAP с drop counters | S4 | ✅ готово |
-| Пользователь сохраняет screenshot реального TFT с build/state/time provenance и открывает его в Library/export | S5 | ⬜ дальше |
-| Offline OUI/BLE company/services/protocol profiles обогащают факты с version/provenance, не подменяя raw evidence | S6 | ✅ готово |
-| Единый feedback service владеет status LED антенн и buzzer: default 2/255, quiet mode, bounded tones и доступные без цвета cues | S5 + S6 | ✅ готово |
-| Scoped Wi-Fi/USB setup изолирует secrets, не экспортирует их и не делает сеть условием Survey/Library | S6 + S8 | 🟡 в работе |
+| Browser install и Устройство → Обновление: signed stable/beta OTA, rollback и recovery image | S8 | ⬜ дальше |
 | Versioned backup/restore и factory reset показывают scope/preview/checksum и не перезаписывают raw Capture без confirm | S8 | ⬜ дальше |
 
 ### Роадмап

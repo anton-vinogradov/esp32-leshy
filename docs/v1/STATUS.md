@@ -115,9 +115,10 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 This is the complete front-page user checklist. `FUNC-NN` deliberately mirrors
 `CAP-0NN` in the [capability catalog](CAPABILITY_CATALOG.md), so CI can prove
-coverage of all 47 capabilities without hand-maintained grouping. A `done` row has
-accepted evidence for its stated boundary; `blocked` means its software/UI or
-conditional path awaits the named physical proof.
+coverage of all 47 capabilities without changing their stable identities. The
+front-page projection sorts rows by first implementation stage and then by stable
+ID. A `done` row has accepted evidence for its stated boundary; `blocked` means its
+software/UI or conditional path awaits the named physical proof.
 
 <!-- LESHY-FUNCTIONS:START -->
 | ID | Functionality | Delivery stage | State |
