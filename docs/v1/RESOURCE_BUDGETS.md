@@ -940,8 +940,23 @@ Firmware/factory/ELF SHA-256 are
 The optimized host compiler reports 2,640 B static stack use for the complete
 detector call after disconnect and identity scratch lifetimes were separated and
 the identity pass was changed to bounded rereads. This is a review aid rather than
-Xtensa HIL proof. The identity detector is disabled on the current incomplete live
-retention path, so this build makes no new live-heap or physical-radio claim.
+Xtensa HIL proof. At this checkpoint the identity detector is disabled on its
+incomplete live-retention path, so this build makes no new live-heap or physical-radio
+claim.
+
+Airspace Guard bounded live identity retention `RB-M176`: exact
+`1.0.0-dev.216` reuses the same 16-frame capture and adds only eight fixed exact
+identity keys; there is still no second frame buffer, task or radio owner. Static RAM
+is 228,432 B (+352 B) and linked flash is 3,335,404 B (+1,252 B).
+App/factory/ELF sizes are 3,335,904/3,401,440/22,429,812 B
+(+1,248/+1,248/−17,476 B). Firmware/factory/ELF SHA-256 are
+`2c9eecfef8f65067f5e1104189a6de1d8f34ce1c7365b926a5cfd58dc751d081`/
+`abb1cfd2aca3d48fb647b518535082cbd7a89476b3b82c36284278846ad9e276`/
+`49eb21f5c3be4e15bd3a4512bb5cf8025aea7624d4fa3bd0e5251c4084401813`.
+The optimized host stack report is 2,592 B for `inspectWifi`, 176 B for identity
+decode and 144 B for the ingress key helper. Live heap/cleanup remains unclaimed
+until physical HIL; incomplete identity retention disables the detector and is
+reported as source loss rather than a clear result.
 
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while

@@ -934,9 +934,23 @@ SHA-256 firmware/factory/ELF:
 `f70492ea627c4499d5b217e52063e6737058c395afa067423c2630da1427412f`.
 Оптимизированный host compiler показывает 2 640 B static stack use для полного
 вызова detector после разделения lifetime scratch disconnect/identity и замены
-identity pass на bounded rereads. Это review aid, а не Xtensa HIL proof. Identity
-detector выключен на текущем incomplete live-retention path, поэтому build не
-добавляет claim по live heap или physical radio.
+identity pass на bounded rereads. Это review aid, а не Xtensa HIL proof. В этом
+checkpoint identity detector выключен на его incomplete live-retention path, поэтому
+build не добавляет claim по live heap или physical radio.
+
+Bounded live retention identity Защиты эфира `RB-M176`: exact
+`1.0.0-dev.216` переиспользует тот же capture на 16 frames и добавляет только восемь
+fixed exact identity keys; второго frame buffer, task или radio owner по-прежнему
+нет. Static RAM равна 228 432 B (+352 B), linked flash — 3 335 404 B (+1 252 B).
+Размеры app/factory/ELF — 3 335 904/3 401 440/22 429 812 B
+(+1 248/+1 248/−17 476 B). SHA-256 firmware/factory/ELF:
+`2c9eecfef8f65067f5e1104189a6de1d8f34ce1c7365b926a5cfd58dc751d081`/
+`abb1cfd2aca3d48fb647b518535082cbd7a89476b3b82c36284278846ad9e276`/
+`49eb21f5c3be4e15bd3a4512bb5cf8025aea7624d4fa3bd0e5251c4084401813`.
+Оптимизированный host stack report показывает 2 592 B для `inspectWifi`, 176 B для
+identity decode и 144 B для ingress key helper. Live heap/cleanup не заявляются до
+physical HIL; incomplete identity retention выключает detector и учитывается как
+source loss, а не clean result.
 
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как

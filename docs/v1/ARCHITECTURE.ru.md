@@ -788,6 +788,18 @@ opt-in и на этом path выключен; source guard запрещает �
 готовности retention. Существующий live clear сохраняет disconnect-only semantics,
 нового physical claim нет.
 
+Exact `1.0.0-dev.216` закрывает этот bounded live-retention boundary без второго
+frame buffer, task или Wi-Fi owner. Существующий capture на 16 frames делится
+динамически: восемь slots всегда резервируются под evidence отключений, а доступная
+половина сохраняет до восьми уникальных exact profiles BSSID + видимый SSID +
+security. Повторные advertisements не занимают новый frame. Слишком длинный или
+malformed advertisement, invalid ingress frame либо любой исчерпанный retention
+limit помечают coverage identity неполным; detector включается только после остановки
+adapter, полного cleanup и при нулевой такой loss. Running page EN/RU показывает
+счётчики отключений и identities одной стабильной строкой и по-прежнему обновляет
+только data bands. Это закрывает source/build prerequisite live retention, но до
+physical acceptance всё ещё нужны golden/negative evidence TFT и cleanup.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

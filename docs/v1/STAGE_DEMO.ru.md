@@ -44,14 +44,15 @@ capture, route и inspection results не подменяют active fixture proo
 fixture остаётся blocker, не simulated pass.
 
 Detector `1.0.0-dev.210` и evidence/UI slices по `1.0.0-dev.213` вместе с bounded
-one-adapter live passive Wi-Fi capture `1.0.0-dev.214` и complete-evidence
-SSID/security identity-conflict indicator `1.0.0-dev.215` — только host/build
+one-adapter live passive Wi-Fi capture `1.0.0-dev.214`, complete-evidence
+SSID/security identity-conflict indicator `1.0.0-dev.215` и fail-closed bounded live
+identity retention `1.0.0-dev.216` — только host/build
 foundations CAP-048. Их golden/negative corpus, receive-only guard, strongest-first
 ordering, exact drilldown, контракт текста не только цветом, no-clear repaint, явный
 учёт capture loss и publication только после cleanup ещё не закрывают DEMO-S7.
-Identity detector остаётся отключённым на текущем неполном live retention; нужны
-полное bounded retention, physical evidence TFT/navigation/cleanup, остальные
-detector families и их negative corpora.
+Identity detector теперь включается только после complete live retention и cleanup;
+нужны physical golden/negative evidence TFT/navigation/cleanup, остальные detector
+families и их negative corpora.
 
 `DEMO-S2` принят evidence `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 выполнил 29 public Action/query steps и совпал с

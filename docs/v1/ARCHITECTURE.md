@@ -708,6 +708,18 @@ source guard prevents accidental enablement before retention is complete. Thus t
 existing live clear result keeps its disconnect-only meaning and no physical claim is
 added.
 
+Exact `1.0.0-dev.216` completes that bounded live-retention boundary without adding
+a second frame buffer, task or Wi-Fi owner. The existing 16-frame capture is
+partitioned dynamically: eight slots remain reserved for disconnect evidence while
+the available half retains up to eight unique exact BSSID + visible SSID + security
+profiles. Duplicate advertisements do not consume another frame. An oversized or
+malformed advertisement, an invalid ingress frame, or either retention limit marks
+identity coverage incomplete; only a stopped adapter with complete cleanup and zero
+such loss enables the identity detector. The running EN/RU page exposes disconnect
+and identity counts in one stable row and still repaints data bands only. This closes
+the source/build live-retention prerequisite, but physical golden/negative TFT and
+cleanup evidence remains required before the live detector is accepted on hardware.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.
