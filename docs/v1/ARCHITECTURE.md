@@ -630,6 +630,23 @@ immediate stop. A shared regulatory policy blocks disallowed bands. Firmware and
 manifest should be signed; SHA-256 verifies integrity but not origin. File and network
 parsers are host-fuzzed, and credentials never enter session exports.
 
+### Passive Airspace Guard foundation
+
+Exact `1.0.0-dev.210` starts CAP-048 with an allocation-free, receive-evidence-only
+detector over the existing `WifiFrameSource`; it does not own a radio, a resource
+lease, an Action, or any response path. The first detector groups deauthentication
+and disassociation management frames by valid unicast transmitter and reports a
+bounded burst when at least four matching frames occur within two seconds. The
+policy is explicit and validated, no more than 64 source frames are inspected, and
+each finding retains detector version, threshold, confidence, counts, transmitter,
+time span, and up to eight exact frame/time/channel/RSSI references.
+
+Empty, unreadable, malformed, or truncated evidence is `inconclusive`, not clear.
+Native golden/negative tests and a source guard pin those semantics and reject any
+driver/platform/TX dependency. This is only the host/build foundation: live Survey
+wiring, BLE and evil-twin/loss indicators, user-facing explanation/evidence views,
+and physical DEMO-S7 remain open.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

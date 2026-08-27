@@ -867,6 +867,16 @@ comparisons; он не расходует firmware storage budget и не раз
 Поскольку это selective reuse того же принятого candidate, а не новый delta,
 cadence остаётся 5/15.
 
+Foundation Защиты эфира `RB-M170`: exact `1.0.0-dev.210` добавляет только fixed
+stack/caller-owned detector state, без resident task, radio owner или static buffer.
+Поэтому static RAM остаётся 225 688 B; linked flash равен 3 317 732 B, а размеры
+app/factory — 3 318 240/3 383 776 B. SHA-256 firmware/factory/ELF:
+`835beabb6f47c5dcb51ceb3524a0a47a0d21596132f83230169b682863dd58c6`/
+`fb52489d182af4c2111a8eafb1e25b2aa0a54cddf73befa39ac9e201f48c897d`/
+`44d1106b24dc5e17d09ca442e1df3cb67e9dbcced1e7c2f2cd288a7afd97c8a4`.
+Это только source/build evidence; изменение physical heap budget или cadence HIL не
+заявляется.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

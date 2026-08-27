@@ -872,6 +872,16 @@ comparisons; it does not consume firmware storage budget or authorize a device w
 Because this is selective reuse of the same accepted candidate rather than a new
 delta, cadence remains 5/15.
 
+Airspace Guard foundation `RB-M170`: exact `1.0.0-dev.210` adds only fixed stack/
+caller-owned detector state and does not add a resident task, radio owner or static
+buffer. Static RAM therefore remains 225,688 B; linked flash is 3,317,732 B and
+app/factory sizes are 3,318,240/3,383,776 B. Firmware/factory/ELF SHA-256 are
+`835beabb6f47c5dcb51ceb3524a0a47a0d21596132f83230169b682863dd58c6`/
+`fb52489d182af4c2111a8eafb1e25b2aa0a54cddf73befa39ac9e201f48c897d`/
+`44d1106b24dc5e17d09ca442e1df3cb67e9dbcced1e7c2f2cd288a7afd97c8a4`.
+This is source/build evidence only; no physical heap budget or HIL cadence change is
+claimed.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

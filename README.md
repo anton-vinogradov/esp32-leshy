@@ -16,7 +16,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Verified checkpoint:** exact `1.0.0-dev.209` at firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` now physically passes the **integrated DEMO-S6 device/offline path** in `E-AUTO-132`/`E-HIL-189`/`E-DEMO-006`. The already accepted no-flash Surveys form contiguous generations 164/165 with 52/49 observations; the corrected harness opens all five real comparison conclusions and their exact evidence, exports the same pair as a canonical 11,882-byte offline USB snapshot containing two Sessions, 16 Targets and five comparisons, then ends Home/none/lease 0 with safety armed. No additional flash, DUT TX, storage write, serial discovery, Cardputer access, SoftAP, host-network command or active Mac Wi-Fi change occurs.
-- **Next gate:** close physical HTTP payload parity through a dedicated idle adapter or external client without touching active Mac Wi-Fi. The integrated S6.6 device/offline path is accepted, but final S6 acceptance still waits for this S6.5 proof and for the postponed physical S5 predecessor gate after the replacement DIV arrives and passes its read-only profile.
+- **Next gate:** close physical HTTP payload parity through a dedicated idle adapter or external client without touching active Mac Wi-Fi. Passive host inventory found only the active `en0` Wi-Fi interface; inactive `en4`/`en6`/`en9` are Ethernet adapters and cannot provide an isolated client. The integrated S6.6 device/offline path is accepted, but final S6 acceptance still waits for this S6.5 proof and for the postponed physical S5 predecessor gate after the replacement DIV arrives and passes its read-only profile.
 
 ### Current stage phases
 
@@ -78,7 +78,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Permissioned app descriptor declares capabilities, resources, permissions, safety policy and UI strings before launch | S7 | ⬜ later |
 | Versioned decoder/profile packages have a compatibility gate, integrity/signature and scoped storage | S7 + S8 | ⬜ later |
 | SDK, sample extension and simulator trace kit cannot bypass ResourceBroker, permissions or Safety Supervisor | S7 | ⬜ later |
-| Airspace Guard passively detects/explains suspicious Wi-Fi/BLE conditions and opens exact evidence/uncertainty for every finding | S7 | ⬜ later |
+| Airspace Guard passively detects/explains suspicious Wi-Fi/BLE conditions and opens exact evidence/uncertainty for every finding | S7 | 🟡 in progress |
 | Focused Wi-Fi authentication Capture reports EAPOL/PMKID and complete/incomplete handshakes, then exports PCAP and `hc22000` | S7 | ⬜ later |
 | Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, revisit comparison and WiGLE-compatible export | S7 | ⬜ later |
 | BLE Inspector preserves raw compatible packets and enters connected GATT only after explicit target/permission/lease confirmation | S7 | ⬜ later |

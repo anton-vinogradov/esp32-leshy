@@ -16,7 +16,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Проверенный checkpoint:** exact `1.0.0-dev.209` на firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` теперь физически проходит **integrated device/offline path DEMO-S6** в `E-AUTO-132`/`E-HIL-189`/`E-DEMO-006`. Уже принятые no-flash Survey образуют contiguous generations 164/165 с 52/49 observations; исправленный harness открывает все пять реальных conclusions сравнения и их exact evidence, экспортирует ту же пару в canonical offline USB snapshot 11 882 byte с двумя Sessions, 16 Targets и пятью comparisons и завершает Home/none/lease 0 с safety armed. Дополнительной flash, DUT TX, storage write, serial discovery, доступа к Cardputer, SoftAP, host-network command или изменения активного Wi-Fi Mac нет.
-- **Следующий gate:** закрыть physical HTTP payload parity через отдельный idle adapter или внешний client без затрагивания активного Wi-Fi Mac. Integrated device/offline path S6.6 принят, но final acceptance S6 всё ещё ждёт это proof S6.5 и отложенный physical predecessor gate S5 после приезда replacement DIV и прохождения его read-only profile.
+- **Следующий gate:** закрыть physical HTTP payload parity через отдельный idle adapter или внешний client без затрагивания активного Wi-Fi Mac. Passive inventory host нашёл только активный Wi-Fi interface `en0`; неактивные `en4`/`en6`/`en9` являются Ethernet adapters и не дают изолированного client. Integrated device/offline path S6.6 принят, но final acceptance S6 всё ещё ждёт это proof S6.5 и отложенный physical predecessor gate S5 после приезда replacement DIV и прохождения его read-only profile.
 
 ### Фазы текущего этапа
 
@@ -78,7 +78,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Permissioned app descriptor до запуска объявляет capabilities, ресурсы, permissions, safety policy и строки UI | S7 | ⬜ дальше |
 | Versioned decoder/profile packages имеют compatibility gate, integrity/signature и scoped storage | S7 + S8 | ⬜ дальше |
 | SDK, sample extension и simulator trace kit не позволяют обойти ResourceBroker, permissions или Safety Supervisor | S7 | ⬜ дальше |
-| Защита эфира пассивно обнаруживает/объясняет подозрительные Wi-Fi/BLE conditions и открывает exact evidence/uncertainty каждой находки | S7 | ⬜ дальше |
+| Защита эфира пассивно обнаруживает/объясняет подозрительные Wi-Fi/BLE conditions и открывает exact evidence/uncertainty каждой находки | S7 | 🟡 в работе |
 | Focused Wi-Fi authentication Capture показывает EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует PCAP и `hc22000` | S7 | ⬜ дальше |
 | Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, revisit comparison и WiGLE-compatible export | S7 | ⬜ дальше |
 | BLE Inspector сохраняет raw compatible packets и входит в connected GATT только после explicit target/permission/lease confirmation | S7 | ⬜ дальше |

@@ -711,6 +711,23 @@ PATABLE, FIFO или storage operations. Принятый evidence board-01 по
 ambient receive/search/restart/cleanup; controlled source board-02 всё ещё нужен для
 physical found-state и любых заявлений calibrated accuracy.
 
+### Пассивный фундамент Защиты эфира
+
+Exact `1.0.0-dev.210` начинает CAP-048 allocation-free детектором только над
+receive evidence существующего `WifiFrameSource`; он не владеет radio, resource
+lease, Action или response path. Первый detector группирует management frames
+deauthentication/disassociation по valid unicast transmitter и сообщает bounded
+burst, когда не менее четырёх matching frames попадают в окно две секунды. Policy
+явна и валидируется, просматривается не более 64 source frames, а каждая находка
+сохраняет detector version, threshold, confidence, counts, transmitter, time span и
+до восьми exact references frame/time/channel/RSSI.
+
+Пустой, unreadable, malformed или truncated evidence даёт `inconclusive`, а не
+clear. Native golden/negative tests и source guard фиксируют эти semantics и
+отвергают любую dependency на driver/platform/TX. Это только host/build foundation:
+live wiring Survey, BLE и evil-twin/loss indicators, пользовательские explanation/
+evidence views и physical DEMO-S7 остаются открыты.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;
