@@ -824,6 +824,8 @@ BoardCc1101PassiveSpectrum boardCc1101Spectrum;
 SpectrumViewport spectrumViewport;
 std::array<std::uint8_t, SpectrumViewport::kMaxBins> spectrumIntensity{};
 std::array<std::uint16_t, Layout::ScreenWidth> spectrumScanline{};
+constexpr std::uint16_t kSpectrumRenderedIntensityInvalid = UINT16_MAX;
+std::array<std::uint16_t, Layout::ScreenWidth> spectrumRenderedIntensity{};
 enum class FullGuidedRfStep : std::uint8_t {
     Idle,
     Nrf24Sweep,
@@ -11131,7 +11133,8 @@ UiTextId radioSignalQualityText(std::int16_t rssiDbm) {
 void renderRadioSignalCard(
         std::int16_t rssiDbm,
         const Rect& bounds = {
-            Layout::Edge, 128, Layout::ContentWidth, 104}) {
+            Layout::Edge, 128, Layout::ContentWidth, 104},
+        bool force = true) {
     constexpr std::int16_t kTrackInset = 10;
     const bool compact = bounds.height < 100;
     const std::int16_t kTrackY = bounds.y + (compact ? 50 : 59);
@@ -11141,11 +11144,15 @@ void renderRadioSignalCard(
     const std::uint16_t tone = level >= 3U
         ? Palette::Positive : (level == 2U ? Palette::Warning
                                            : Palette::Danger);
-    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                          Layout::Radius, Palette::Surface);
-    display.setTextColor(Palette::TextSecondary, Palette::Surface);
-    setUiCursor(UiTextRole::Meta, bounds.x + 10, bounds.y + 9);
-    display.print(tr(UiTextId::RadioSignalLabel));
+    if (force) {
+        display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                              Layout::Radius, Palette::Surface);
+        display.setTextColor(Palette::TextSecondary, Palette::Surface);
+        setUiCursor(UiTextRole::Meta, bounds.x + 10, bounds.y + 9);
+        display.print(tr(UiTextId::RadioSignalLabel));
+    }
+    display.fillRect(bounds.x + 6, bounds.y + 25, bounds.width - 12, 24,
+                     Palette::Surface);
     display.setTextColor(tone, Palette::Surface);
     setUiCursor(UiTextRole::Body, bounds.x + 10, bounds.y + 29);
     display.print(tr(radioSignalQualityText(rssiDbm)));
@@ -11169,7 +11176,7 @@ void renderRadioSignalCard(
         display.fillRect(bounds.x + kTrackInset + 1, kTrackY + 1,
                          fillWidth, kTrackHeight - 2, tone);
     }
-    if (!compact) {
+    if (!compact && force) {
         display.setTextColor(Palette::TextMuted, Palette::Surface);
         const std::int16_t scaleY = bounds.y + 79;
         setUiCursor(UiTextRole::Meta, bounds.x + kTrackInset, scaleY);
@@ -11266,7 +11273,8 @@ UiTextId wifiNetworkTrendText(std::int16_t trendDb) {
 }
 
 void renderWifiNetworkRadar(const Observation& network,
-                            const WifiNetworkSignalStats& signal) {
+                            const WifiNetworkSignalStats& signal,
+                            bool force = true) {
     constexpr Rect kRadar = {
         Layout::Edge, 222, Layout::ContentWidth, 67};
     constexpr std::int16_t kInset = 10;
@@ -11277,13 +11285,17 @@ void renderWifiNetworkRadar(const Observation& network,
     const std::uint16_t tone = level >= 3U
         ? Palette::Positive : (level == 2U ? Palette::Warning
                                            : Palette::Danger);
-    display.fillRect(kRadar.x, kRadar.y, kRadar.width, kRadar.height,
-                     Palette::Canvas);
-    display.fillRoundRect(kRadar.x, kRadar.y, kRadar.width, kRadar.height,
-                          Layout::Radius, Palette::Surface);
-    display.setTextColor(Palette::TextSecondary, Palette::Surface);
-    setUiCursor(UiTextRole::Meta, kRadar.x + kInset, 228);
-    display.print(tr(UiTextId::RadioSignalLabel));
+    if (force) {
+        display.fillRect(kRadar.x, kRadar.y, kRadar.width, kRadar.height,
+                         Palette::Canvas);
+        display.fillRoundRect(kRadar.x, kRadar.y, kRadar.width, kRadar.height,
+                              Layout::Radius, Palette::Surface);
+        display.setTextColor(Palette::TextSecondary, Palette::Surface);
+        setUiCursor(UiTextRole::Meta, kRadar.x + kInset, 228);
+        display.print(tr(UiTextId::RadioSignalLabel));
+    }
+    display.fillRect(kRadar.x + 108, 226, kRadar.width - 118, 16,
+                     Palette::Surface);
     char line[32] = {};
     std::snprintf(line, sizeof(line), tr(UiTextId::RadioSignalDbmFormat),
                   static_cast<int>(network.rssiDbm));
@@ -11292,6 +11304,8 @@ void renderWifiNetworkRadar(const Observation& network,
                                 display.textWidth(line);
     setUiCursor(UiTextRole::Meta, valueX, 228);
     display.print(line);
+    display.fillRect(kRadar.x + kInset, 243, trackWidth, 15,
+                     Palette::Surface);
     setUiCursor(UiTextRole::Body, kRadar.x + kInset, 243);
     display.print(tr(radioSignalQualityText(network.rssiDbm)));
 
@@ -11307,6 +11321,8 @@ void renderWifiNetworkRadar(const Observation& network,
         display.fillRect(kRadar.x + kInset + 1, kTrackY + 1,
                          fillWidth, kTrackHeight - 2, tone);
     }
+    display.fillRect(kRadar.x + kInset, 273, trackWidth, 14,
+                     Palette::Surface);
     std::snprintf(line, sizeof(line), tr(UiTextId::WifiNetworkRangeFormat),
                   static_cast<int>(signal.minimumRssiDbm),
                   static_cast<int>(signal.maximumRssiDbm));
@@ -11688,13 +11704,18 @@ bool bleDeviceDetailStaticFieldsDiffer(const Observation& left,
 }
 
 void renderBleDeviceRadar(const Observation& device,
-                          const BleDeviceSignalStats& signal) {
+                          const BleDeviceSignalStats& signal,
+                          bool force = true) {
     constexpr std::int16_t kRadarTop = 170;
-    display.fillRect(Layout::Edge, kRadarTop, Layout::ContentWidth,
-                     Layout::FooterDividerY - kRadarTop, Palette::Canvas);
+    if (force) {
+        display.fillRect(Layout::Edge, kRadarTop, Layout::ContentWidth,
+                         Layout::FooterDividerY - kRadarTop, Palette::Canvas);
+    }
     renderRadioSignalCard(
         device.rssiDbm,
-        {Layout::Edge, kRadarTop, Layout::ContentWidth, 68});
+        {Layout::Edge, kRadarTop, Layout::ContentWidth, 68}, force);
+    display.fillRect(Layout::Edge, 242, Layout::ContentWidth,
+                     Layout::FooterDividerY - 242, Palette::Canvas);
     char line[64] = {};
     std::snprintf(line, sizeof(line),
                   tr(UiTextId::WifiDeviceRssiRangeFormat),
@@ -11950,7 +11971,7 @@ void renderWifiDevices(bool clearContent) {
     renderWifiDevicesData();
 }
 
-void renderWifiDeviceDetailLiveData();
+void renderWifiDeviceDetailLiveData(bool force = true);
 
 void renderWifiDeviceDetail(bool clearContent) {
     renderHeader(tr(UiTextId::WifiDeviceDetailTitle), clearContent);
@@ -12013,10 +12034,15 @@ void renderWifiDeviceDetail(bool clearContent) {
     renderWifiDeviceDetailLiveData();
 }
 
-void renderWifiDeviceDetailLiveData() {
+void renderWifiDeviceDetailLiveData(bool force) {
     constexpr std::int16_t kLiveTop = 101;
-    display.fillRect(Layout::Edge, kLiveTop, Layout::ContentWidth,
-                     Layout::FooterDividerY - kLiveTop, Palette::Canvas);
+    if (force) {
+        display.fillRect(Layout::Edge, kLiveTop, Layout::ContentWidth,
+                         Layout::FooterDividerY - kLiveTop, Palette::Canvas);
+    } else {
+        display.fillRect(Layout::Edge, kLiveTop, Layout::ContentWidth, 47,
+                         Palette::Canvas);
+    }
     char line[96] = {};
     std::snprintf(
         line, sizeof(line), tr(UiTextId::WifiDeviceRadioFormat),
@@ -12057,7 +12083,9 @@ void renderWifiDeviceDetailLiveData() {
     }
     renderRadioSignalCard(
         wifiDeviceDetail.rssiDbm,
-        {Layout::Edge, 150, Layout::ContentWidth, 88});
+        {Layout::Edge, 150, Layout::ContentWidth, 88}, force);
+    display.fillRect(Layout::Edge, 242, Layout::ContentWidth,
+                     Layout::FooterDividerY - 242, Palette::Canvas);
     std::snprintf(line, sizeof(line), tr(UiTextId::WifiDeviceRssiRangeFormat),
                   static_cast<int>(wifiDeviceDetail.minimumRssiDbm),
                   static_cast<int>(wifiDeviceDetail.maximumRssiDbm));
@@ -12801,31 +12829,26 @@ void renderWaterfallSlot(std::size_t row) {
     }
 }
 
-void renderWaterfallCursor() {
-    const std::int16_t y = kSpectrumGraphY +
-        static_cast<std::int32_t>(spectrumViewport.nextRow()) *
-            kSpectrumGraphHeight / SpectrumViewport::kHistoryRows;
-    display.drawFastHLine(0, y < kSpectrumAxisY ? y : kSpectrumGraphY,
-                          Layout::ScreenWidth, Palette::Divider);
-}
-
 void renderSpectrumWaterfall() {
     display.fillRect(0, kSpectrumGraphY, Layout::ScreenWidth,
                      kSpectrumGraphHeight, kSpectrumNoSignal);
     for (std::size_t row = 0; row < SpectrumViewport::kHistoryRows; ++row) {
         renderWaterfallSlot(row);
     }
-    renderWaterfallCursor();
 }
 
 void renderLatestWaterfallRow() {
     renderWaterfallSlot(spectrumViewport.latestRow());
-    renderWaterfallCursor();
 }
 
-void renderSpectrumBars() {
-    display.fillRect(0, kSpectrumGraphY, Layout::ScreenWidth,
-                     kSpectrumGraphHeight, Palette::Surface);
+void renderSpectrumBars(bool force = false) {
+    const bool fullRender = force ||
+        spectrumRenderedIntensity[0] == kSpectrumRenderedIntensityInvalid;
+    if (fullRender) {
+        display.fillRect(0, kSpectrumGraphY, Layout::ScreenWidth,
+                         kSpectrumGraphHeight, Palette::Surface);
+        spectrumRenderedIntensity.fill(kSpectrumRenderedIntensityInvalid);
+    }
     const std::size_t bins = activeSpectrumBins();
     for (std::size_t bin = 0; bin < bins; ++bin) {
         spectrumIntensity[bin] = activeSpectrumIntensity(bin);
@@ -12833,13 +12856,30 @@ void renderSpectrumBars() {
     for (std::int16_t x = 0; x < Layout::ScreenWidth; ++x) {
         const std::uint8_t intensity = SpectrumViewport::resample(
             spectrumIntensity.data(), bins, static_cast<std::size_t>(x));
+        const std::size_t column = static_cast<std::size_t>(x);
+        const std::uint16_t previous = spectrumRenderedIntensity[column];
+        if (previous == intensity) continue;
+
         const std::int16_t height = intensity == 0
             ? 1
             : static_cast<std::int16_t>(1 +
                   static_cast<std::uint32_t>(intensity) *
                       (kSpectrumGraphHeight - 1) / 255U);
+        if (previous != kSpectrumRenderedIntensityInvalid) {
+            const std::int16_t previousHeight = previous == 0
+                ? 1
+                : static_cast<std::int16_t>(1 +
+                      static_cast<std::uint32_t>(previous) *
+                          (kSpectrumGraphHeight - 1) / 255U);
+            if (previousHeight > height) {
+                display.drawFastVLine(
+                    x, kSpectrumAxisY - previousHeight,
+                    previousHeight - height, Palette::Surface);
+            }
+        }
         display.drawFastVLine(x, kSpectrumAxisY - height, height,
                               spectrumTone(intensity));
+        spectrumRenderedIntensity[column] = intensity;
     }
 }
 
@@ -12847,7 +12887,7 @@ void renderActiveSpectrumData() {
     if (spectrumViewport.mode() == SpectrumDisplayMode::Waterfall) {
         renderSpectrumWaterfall();
     } else {
-        renderSpectrumBars();
+        renderSpectrumBars(true);
     }
 }
 
@@ -14843,7 +14883,7 @@ bool renderSelectionDelta() {
                 bleDeviceRenderedDetail, live)) {
             renderBleDeviceDetailData();
         } else {
-            renderBleDeviceRadar(live, signal);
+            renderBleDeviceRadar(live, signal, false);
             bleDeviceDetail = live;
             bleDeviceDetailSignal = signal;
             bleDeviceRenderedDetail = live;
@@ -14976,7 +15016,7 @@ bool renderSelectionDelta() {
                 wifiNetworkRenderedDetail, live)) {
             renderWifiNetworkDetailData();
         } else {
-            renderWifiNetworkRadar(live, signal);
+            renderWifiNetworkRadar(live, signal, false);
             wifiNetworkDetail = live;
             wifiNetworkDetailSignal = signal;
             wifiNetworkRenderedDetail = live;
@@ -14991,7 +15031,7 @@ bool renderSelectionDelta() {
         if (renderedUi.wifiDeviceRevision == wifiDeviceCatalog.revision()) {
             return false;
         }
-        renderWifiDeviceDetailLiveData();
+        renderWifiDeviceDetailLiveData(false);
         return true;
     }
 
@@ -15346,6 +15386,7 @@ bool startNrf24Receiver(bool finder) {
     nrf24SpectrumController.reset();
     nrf24SignalFinder.reset();
     spectrumViewport.reset(Nrf24SpectrumController::kChannelCount);
+    spectrumRenderedIntensity.fill(kSpectrumRenderedIntensityInvalid);
     nrf24SpectrumReport = {};
     std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -15463,6 +15504,7 @@ bool startCc1101Spectrum(
     leshy1::drivers::radio::Cc1101SpectrumBand band) {
     cc1101SpectrumController.reset();
     spectrumViewport.reset(Cc1101SpectrumController::kBinCount);
+    spectrumRenderedIntensity.fill(kSpectrumRenderedIntensityInvalid);
     cc1101SpectrumReport = {};
     std::uint64_t startedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
