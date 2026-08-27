@@ -95,6 +95,97 @@ def connect(device: PassiveSerial, request_id: str,
         "connect", request_id, protocol=1, scopes=scopes))
 
 
+def web_state(device: PassiveSerial) -> dict[str, Any]:
+    return query(
+        device, b"companion.web.state", "leshy.companion.web.v1", "state")
+
+
+def exercise_device_web_lifecycle(device: PassiveSerial) -> dict[str, Any]:
+    """Start/stop only the DIV SoftAP; never inspect or mutate host networking."""
+    home = normalize_home(device)
+    for _ in range(5):
+        home = action(device, "down")
+    require(home.get("selected_id") == "targets",
+            f"cannot focus Targets for Web lifecycle: {home}")
+    opened = action(device, "right", timeout=40.0)
+    targets = query(
+        device, b"targets.state", "leshy.targets.product.v1", "state")
+    require(opened.get("page") == "targets" and
+            targets.get("status") == "ready",
+            f"cannot open initial Targets: {opened} {targets}")
+
+    action(device, "down")  # comparison row -> first real Target
+    action(device, "right")  # Detail
+    action(device, "right")  # Actions
+    for _ in range(5):
+        action(device, "down")
+    selected = query(
+        device, b"targets.state", "leshy.targets.product.v1", "state")
+    require(selected.get("view") == "actions" and
+            selected.get("action_selection") == 5,
+            f"Local Web action is not selected: {selected}")
+
+    action(device, "right")
+    staged = web_state(device)
+    require(staged.get("overlay_open") is True and
+            staged.get("authorized") is False and
+            staged.get("server_active") is False and
+            staged.get("credential_present") is False and
+            staged.get("network_core_ready") is False and
+            staged.get("associated_stations") == 0,
+            f"Web staged boundary is not inert: {staged}")
+
+    action(device, "right", timeout=10.0)
+    active = web_state(device)
+    require(active.get("authorized") is True and
+            active.get("server_active") is True and
+            active.get("network_core_ready") is True and
+            active.get("ap_ipv4_ready") is True and
+            active.get("dhcp_server_started") is True and
+            active.get("associated_stations") == 0 and
+            active.get("targets_suspended") is True and
+            active.get("survey_worker_suspended") is True and
+            active.get("lease_mask") == 15,
+            f"device-only Web lifecycle did not start safely: {active}")
+
+    action(device, "left")
+    stopped = web_state(device)
+    require(stopped.get("authorized") is False and
+            stopped.get("server_active") is False and
+            stopped.get("credential_present") is False and
+            stopped.get("ap_ipv4_ready") is False and
+            stopped.get("dhcp_server_started") is False and
+            stopped.get("associated_stations") == 0 and
+            stopped.get("cleanup_complete") is True and
+            stopped.get("targets_suspended") is False and
+            stopped.get("survey_worker_suspended") is True and
+            stopped.get("network_core_ready") is True and
+            stopped.get("lease_mask") == 13,
+            f"device-only Web lifecycle did not stop safely: {stopped}")
+
+    cleanup = best_effort_cleanup(device)
+    require(cleanup.get("complete") is True,
+            f"initial Targets teardown failed: {cleanup}")
+    released = web_state(device)
+    require(released.get("network_core_ready") is True and
+            released.get("survey_worker_suspended") is False and
+            released.get("authorized") is False and
+            released.get("server_active") is False and
+            released.get("lease_mask") == 0,
+            f"initial Targets teardown did not restore worker: {released}")
+    return {
+        "host_network_tools_invoked": False,
+        "active_mac_wifi_touched": False,
+        "associated_stations": 0,
+        "raw_radio_tx_commands": 0,
+        "wifi_softap_started": True,
+        "staged": staged,
+        "active": active,
+        "stopped": stopped,
+        "released": released,
+    }
+
+
 def collect_pages(device: PassiveSerial, kind: str, request_prefix: str,
                   fixed: dict[str, Any], item_key: str = "items",
                   maximum_pages: int = 64) -> tuple[list[Any], list[dict[str, Any]]]:
@@ -160,6 +251,9 @@ def main() -> int:
     parser.add_argument(
         "--reuse-exact-flash", action="store_true",
         help="verify and reuse an already flashed exact candidate")
+    parser.add_argument(
+        "--exercise-device-web-lifecycle", action="store_true",
+        help="start/stop only the DIV SoftAP before the offline USB export")
     args = parser.parse_args()
 
     for path in (args.firmware, args.elf, args.map):
@@ -219,6 +313,8 @@ def main() -> int:
         },
         "flash_count": 0,
         "exact_flash_reused": args.reuse_exact_flash,
+        "host_network_tools_invoked": False,
+        "active_mac_wifi_touched": False,
     }
     write_json(args.output / "run.json", record)
     cleanup: dict[str, Any] = {"attempted": False}
@@ -264,6 +360,16 @@ def main() -> int:
                     home_connect.get("capabilities") == [],
                     f"Home exposed Targets data: {home_connect}")
 
+            post_web_lifecycle: dict[str, Any] = {
+                "tested": False,
+                "reason": "not_requested",
+            }
+            if args.exercise_device_web_lifecycle:
+                checkpoint(args.output, record, "device_web_lifecycle")
+                post_web_lifecycle = exercise_device_web_lifecycle(device)
+                post_web_lifecycle["tested"] = True
+                post_web_lifecycle["reason"] = "none"
+
             checkpoint(args.output, record, "open_targets")
             home = normalize_home(device)
             for _ in range(5):
@@ -288,6 +394,15 @@ def main() -> int:
                     targets_state.get("identity_cleanup_complete") is True and
                     targets_state.get("blocked_write_attempts") == 0,
                     f"Targets snapshot is not exact/read-only: {targets_state}")
+            post_web_targets = web_state(device)
+            if args.exercise_device_web_lifecycle:
+                require(post_web_targets.get("network_core_ready") is True and
+                        post_web_targets.get("survey_worker_suspended") is True and
+                        post_web_targets.get("authorized") is False and
+                        post_web_targets.get("server_active") is False and
+                        post_web_targets.get("lease_mask") == 13,
+                        "post-Web Targets did not admit sticky network-core "
+                        f"memory safely: {post_web_targets}")
 
             checkpoint(args.output, record, "targets_connect")
             ready = connect(device, "targets-connect", READ_SCOPES)
@@ -515,6 +630,15 @@ def main() -> int:
                     released.get("blocked_write_attempts") == 0 and
                     released.get("lease_mask") == 0,
                     f"Targets resources leaked: {released}")
+            post_web_final = web_state(device)
+            if args.exercise_device_web_lifecycle:
+                require(post_web_final.get("network_core_ready") is True and
+                        post_web_final.get("survey_worker_suspended") is False and
+                        post_web_final.get("authorized") is False and
+                        post_web_final.get("server_active") is False and
+                        post_web_final.get("lease_mask") == 0,
+                        "post-Web Targets teardown did not restore worker: "
+                        f"{post_web_final}")
             checkpoint(args.output, record, "final_invariants")
             safe = query(device, b"hardware.safe-outputs",
                          "leshy.hardware.safe-outputs.v1", "state")
@@ -542,6 +666,9 @@ def main() -> int:
             "metrics_before": metrics_before,
             "metrics_after": metrics_after,
             "home_denial": home_connect,
+            "post_web_lifecycle": post_web_lifecycle,
+            "post_web_targets": post_web_targets,
+            "post_web_final": post_web_final,
             "connection": ready,
             "sessions": {"list": session_list, "details": session_details},
             "targets": {
@@ -573,7 +700,8 @@ def main() -> int:
             "safe_outputs": safe,
             "input": inputs,
             "cleanup": cleanup,
-            "radio_tx_commands": 0,
+            "raw_radio_tx_commands": 0,
+            "wifi_softap_started": args.exercise_device_web_lifecycle,
             "storage_write_commands": 0,
         })
         write_json(args.output / "run.json", record)

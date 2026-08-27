@@ -3224,6 +3224,20 @@ bool restoreProductSurveyWorkerAfterWebCompanion() {
     return productSurveyWorkerReady;
 }
 
+bool admitTargetsWithStickyNetworkCore() {
+    // esp_netif_deinit() is unsupported by the pinned ESP-IDF, so the first
+    // explicitly authorized Local Web lifecycle leaves the TCP/IP core as a
+    // process-lifetime allocation. Clean boot has enough memory for Targets
+    // plus the idle Survey worker; post-Web does not. Keep those two heavy
+    // components lifecycle-exclusive after network-core admission and restore
+    // the worker in releaseTargetsProduct(). No network is started here.
+    if (!arduinoCompanionWebService.networkCoreReady() ||
+        webCompanionSurveyWorkerSuspended) {
+        return true;
+    }
+    return suspendProductSurveyWorkerForWebCompanion();
+}
+
 bool failProductSurveyStart(const char* status) {
     if (surveyWorkflow.state() == SurveyWorkflowState::Running) {
         surveyPipeline.cancel();
@@ -5626,6 +5640,11 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     targetsMergeFixtureRuntime = false;
     targetsMergeFixtureSdAccessed = false;
     targetsMergeFixtureProductStateTouched = false;
+    if (!admitTargetsWithStickyNetworkCore()) {
+        targetsProductStatus = "post_web_memory_admission_failed";
+        lastRuntimeEvent = targetsProductStatus;
+        return true;
+    }
     if (item.simulated) {
         if (!allocateTargetsProduct()) return false;
         TargetsController& controller = targetsProductRuntime->controller;

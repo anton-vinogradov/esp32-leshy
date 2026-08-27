@@ -317,6 +317,11 @@ bool ArduinoCompanionWebService::cleanupRuntime() {
         }
     }
     eventLoopOwned_ = false;
+    // The pinned ESP-IDF explicitly documents esp_netif_deinit() as not
+    // supported. networkCoreReady_ therefore describes a process-lifetime
+    // allocation after the first explicit Web start, not an omitted cleanup
+    // call. Later heavy foregrounds must account for this sticky core rather
+    // than pretending Stop can return those bytes.
     active_ = false;
     cleanupComplete_ = complete;
     heapFreeAfterStop_ = static_cast<std::uint32_t>(
