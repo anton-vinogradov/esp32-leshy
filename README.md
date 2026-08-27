@@ -15,8 +15,8 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts.
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
-- **Verified checkpoint:** exact `1.0.0-dev.209` at firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` is physically accepted for the **lifecycle-disjoint real Wi-Fi+BLE Product Survey** boundary in `E-BUILD-158`/`E-AUTO-131`/`E-HIL-188`/`E-SURVEY-017`. One exact application flash plus one no-flash rerun after a runner-only navigation correction proves exact-CID boot, one cycle per source, 12 Wi-Fi + 35 BLE observations with zero drops/errors, six persisted timeline windows, generation 162→163 commit, cold reopen/export of all 47 observations, invariant boot heap and final Home/none/lease 0 with safety armed. The first run already passed the product boundary and independently cleaned up; only its obsolete one-Back Home assertion was rejected. No host network tool runs and active Mac Wi-Fi/Cardputer are untouched.
-- **Next gate:** run the prepared no-second-flash integrated DEMO-S6 continuity over the accepted Survey/Targets/Compare/offline-USB chain. Physical HTTP parity remains deferred to a dedicated idle adapter or external client, and the physical S5 gate remains postponed, not waived, until the replacement DIV arrives and passes its read-only profile.
+- **Verified checkpoint:** exact `1.0.0-dev.209` at firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` now physically passes the **integrated DEMO-S6 device/offline path** in `E-AUTO-132`/`E-HIL-189`/`E-DEMO-006`. The already accepted no-flash Surveys form contiguous generations 164/165 with 52/49 observations; the corrected harness opens all five real comparison conclusions and their exact evidence, exports the same pair as a canonical 11,882-byte offline USB snapshot containing two Sessions, 16 Targets and five comparisons, then ends Home/none/lease 0 with safety armed. No additional flash, DUT TX, storage write, serial discovery, Cardputer access, SoftAP, host-network command or active Mac Wi-Fi change occurs.
+- **Next gate:** close physical HTTP payload parity through a dedicated idle adapter or external client without touching active Mac Wi-Fi. The integrated S6.6 device/offline path is accepted, but final S6 acceptance still waits for this S6.5 proof and for the postponed physical S5 predecessor gate after the replacement DIV arrives and passes its read-only profile.
 
 ### Current stage phases
 
@@ -27,7 +27,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | S6.3 | Baseline/diff compares two Sessions and classifies new, disappeared and changed Targets with every conclusion opening its evidence | ✅ complete |
 | S6.4 | On-device Targets and Compare workflows expose the useful result first, stable navigation and full-area detail views | ✅ complete |
 | S6.5 | Local USB/Web companion uses the same Actions and versioned schemas with scoped connectivity and secrets | 🟡 in progress |
-| S6.6 | Integrated DEMO-S6: record and compare two surveys, inspect each conclusion on-device or locally, export offline, then return to and close the deferred S5 physical predecessor gate before S6 acceptance | ⬜ later |
+| S6.6 | Integrated DEMO-S6 device/offline path is physically accepted; final phase completion waits for the deferred S5 physical predecessor gate before S6 acceptance | 🔴 blocked |
 
 ### User functionality
 
@@ -41,13 +41,13 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Visible power/charge/reset reason, low-voltage safe write and verifiable sleep/resume | S5 | 🔴 blocked |
 | Browser install and Device → Update: signed stable/beta OTA, rollback and recovery image | S8 | ⬜ later |
 | Local logs, crash journal and exportable diagnostic bundle without a cloud dependency | S6 + S8 | 🟡 in progress |
-| Explicit Start/Stop creates a bounded multi-radio Survey Session with configuration and provenance | S3 + S6.6 | 🟡 in progress |
+| Explicit Start/Stop creates a bounded multi-radio Survey Session with configuration and provenance | S3 + S6.6 | ✅ complete |
 | Passive Wi-Fi scan: networks, hidden-name enrichment, security/channel/vendor facts and normalized Observations | S3 + S4 | ✅ complete |
 | Passive BLE scan: strongest-first devices, company/service facts and normalized Observations without active probes | S4 | ✅ complete |
 | Three nRF24 receivers: RX-only spectrum, receiver-paced one-pixel waterfall and background-calibrated 2.4 GHz signal finder | S4 + S5.3 | 🔴 blocked |
 | CC1101: RX-only Sub-GHz spectrum/activity, one-pixel waterfalls and frequency/RSSI finder for 315/433/868/915 MHz | S4 + S5.4 | 🔴 blocked |
 | GPS adds fix, satellites, time and track to a Session only for an explicit compatible assembly | S4 + S5 | ⬜ later |
-| Shared timeline exposes sources, duty cycle, temporary unavailability, degradation and dropped events | S4 + S6.6 | 🟡 in progress |
+| Shared timeline exposes sources, duty cycle, temporary unavailability, degradation and dropped events | S4 + S6.6 | ✅ complete |
 | Shared stable List/Detail/filter behavior for Wi-Fi, BLE and other radios with all useful facts | S3 + S4 | ✅ complete |
 | Network/device Radar/localize: RSSI history, trend/range and honest proximity limits | S4 + S6 | 🟡 in progress |
 | A Target preserves stable identities, Observation history and links to immutable source evidence | S6.1 + S6.4 | ✅ complete |

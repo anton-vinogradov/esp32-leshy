@@ -15,8 +15,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
-- **Проверенный checkpoint:** exact `1.0.0-dev.209` на firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` физически принят для boundary **реальный Product Survey Wi-Fi+BLE с непересекающимися lifecycle** в `E-BUILD-158`/`E-AUTO-131`/`E-HIL-188`/`E-SURVEY-017`. Одна exact application flash плюс один no-flash rerun после исправления только навигации runner доказывают boot exact CID, один cycle каждого source, 12 Wi-Fi + 35 BLE observations с zero drops/errors, шесть persisted timeline windows, commit generation 162→163, cold reopen/export всех 47 observations, invariant boot heap и final Home/none/lease 0 с safety armed. Первый run уже прошёл product boundary и независимо очистился; отклонён был только устаревший assertion одного Back до Home. Host network tools не запускаются, активный Wi-Fi Mac и Cardputer не затрагиваются.
-- **Следующий gate:** запустить подготовленную integrated continuity DEMO-S6 без второй прошивки по принятой цепочке Survey/Targets/Compare/offline USB. Physical HTTP parity остаётся отложенной до отдельного idle adapter или внешнего client, а physical gate S5 — отложенным, но не отменённым, до приезда replacement DIV и прохождения его read-only profile.
+- **Проверенный checkpoint:** exact `1.0.0-dev.209` на firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` теперь физически проходит **integrated device/offline path DEMO-S6** в `E-AUTO-132`/`E-HIL-189`/`E-DEMO-006`. Уже принятые no-flash Survey образуют contiguous generations 164/165 с 52/49 observations; исправленный harness открывает все пять реальных conclusions сравнения и их exact evidence, экспортирует ту же пару в canonical offline USB snapshot 11 882 byte с двумя Sessions, 16 Targets и пятью comparisons и завершает Home/none/lease 0 с safety armed. Дополнительной flash, DUT TX, storage write, serial discovery, доступа к Cardputer, SoftAP, host-network command или изменения активного Wi-Fi Mac нет.
+- **Следующий gate:** закрыть physical HTTP payload parity через отдельный idle adapter или внешний client без затрагивания активного Wi-Fi Mac. Integrated device/offline path S6.6 принят, но final acceptance S6 всё ещё ждёт это proof S6.5 и отложенный physical predecessor gate S5 после приезда replacement DIV и прохождения его read-only profile.
 
 ### Фазы текущего этапа
 
@@ -27,7 +27,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | S6.3 | Baseline/diff сравнивает две Session и классифицирует новые, исчезнувшие и изменившиеся Targets; каждый вывод открывает своё evidence | ✅ готово |
 | S6.4 | On-device workflows Targets и Compare сначала показывают полезный результат, сохраняют стабильную навигацию и полноэкранные detail views | ✅ готово |
 | S6.5 | Local companion USB/Web использует те же Actions и versioned schemas с ограниченными connectivity и secrets | 🟡 в работе |
-| S6.6 | Интегральный DEMO-S6: записать и сравнить две survey, открыть каждый вывод на устройстве или локально и offline-export; перед принятием S6 вернуться к отложенному physical predecessor gate S5 и закрыть его | ⬜ дальше |
+| S6.6 | Integrated device/offline path DEMO-S6 физически принят; завершение фазы ждёт отложенный physical predecessor gate S5 перед acceptance S6 | 🔴 заблокировано |
 
 ### Пользовательские возможности
 
@@ -41,13 +41,13 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Видимые питание/заряд/reset reason, low-voltage safe-write и проверяемые sleep/resume | S5 | 🔴 заблокировано |
 | Browser install и Устройство → Обновление: signed stable/beta OTA, rollback и recovery image | S8 | ⬜ дальше |
 | Локальные логи, crash journal и экспортируемый diagnostic bundle без облака | S6 + S8 | 🟡 в работе |
-| Явные Start/Stop создают bounded multi-radio Survey Session с конфигурацией и provenance | S3 + S6.6 | 🟡 в работе |
+| Явные Start/Stop создают bounded multi-radio Survey Session с конфигурацией и provenance | S3 + S6.6 | ✅ готово |
 | Пассивный Wi-Fi scan: сети, hidden-name enrichment, security/channel/vendor facts и нормализованные Observation | S3 + S4 | ✅ готово |
 | Пассивный BLE scan: strongest-first устройства, company/services facts и нормализованные Observation без active probe | S4 | ✅ готово |
 | Три nRF24: RX-only spectrum, receiver-paced однопиксельный waterfall и калиброванный по фону поиск сигнала 2,4 ГГц | S4 + S5.3 | 🔴 заблокировано |
 | CC1101: RX-only Sub-GHz spectrum/activity, однопиксельные waterfalls и поиск частоты/RSSI 315/433/868/915 МГц | S4 + S5.4 | 🔴 заблокировано |
 | GPS добавляет fix, satellites, time и track к Session только для explicit compatible assembly | S4 + S5 | ⬜ дальше |
-| Общая timeline показывает источники, duty cycle, временную недоступность, degradation и dropped events | S4 + S6.6 | 🟡 в работе |
+| Общая timeline показывает источники, duty cycle, временную недоступность, degradation и dropped events | S4 + S6.6 | ✅ готово |
 | Общие стабильные List/Detail/filter для Wi-Fi/BLE/других радио с полной полезной информацией | S3 + S4 | ✅ готово |
 | Radar/localize для сети или устройства: RSSI history, trend/range и честные пределы оценки близости | S4 + S6 | 🟡 в работе |
 | Цель хранит стабильные identities, историю Observation и ссылки на immutable source evidence | S6.1 + S6.4 | ✅ готово |

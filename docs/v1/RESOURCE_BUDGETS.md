@@ -863,6 +863,15 @@ recovers all 47 observations and final state is Home/none/lease 0 with safety ar
 The first exact-flash run and accepted no-flash rerun form one one-flash lineage;
 cadence advances to 5/15.
 
+Integrated-demo acceptance `E-HIL-189` reuses that exact installed candidate and
+the already accepted no-flash Survey pair, so it adds zero application flashes and
+no RAM/linked-flash/image-size delta. Targets opens every one of five comparison
+evidence views and releases heap invariant at 80,316→80,316 B. The 11,882-byte
+canonical snapshot is host-side output containing two Sessions, 16 Targets and five
+comparisons; it does not consume firmware storage budget or authorize a device write.
+Because this is selective reuse of the same accepted candidate rather than a new
+delta, cadence remains 5/15.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

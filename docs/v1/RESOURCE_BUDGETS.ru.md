@@ -858,6 +858,15 @@ zero errors/drops, generation 162→163 commit-ит 3 801 B, cold reopen/export
 Первый exact-flash run и принятый no-flash rerun образуют один one-flash lineage;
 cadence двигается до 5/15.
 
+Acceptance integrated demo `E-HIL-189` переиспользует тот же exact установленный
+candidate и уже принятую no-flash pair Survey, поэтому добавляет zero application
+flash и не меняет RAM/linked-flash/image-size. Targets открывает каждый из пяти
+evidence views сравнения и освобождает heap invariant 80 316→80 316 B. Canonical
+snapshot 11 882 byte является host-side output с двумя Sessions, 16 Targets и пятью
+comparisons; он не расходует firmware storage budget и не разрешает device write.
+Поскольку это selective reuse того же принятого candidate, а не новый delta,
+cadence остаётся 5/15.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

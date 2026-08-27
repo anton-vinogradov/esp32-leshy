@@ -1,0 +1,125 @@
+{
+  "board": "board-01",
+  "cadence": {
+    "accepted_deltas_since_full": 5,
+    "advanced_by_demo_reuse": false,
+    "full_gate_at": 15
+  },
+  "candidate": {
+    "app_elf_sha256": "38d3cf0242707a13407c3123a207ab0c8e942242336ec396b31ccfc89083d868",
+    "firmware_sha256": "63f55328d23082943945659fb63d55a771d388b427f5eca29dcecd2178aa3bab",
+    "version": "1.0.0-dev.209"
+  },
+  "evidence_ids": [
+    "E-AUTO-132",
+    "E-HIL-189",
+    "E-DEMO-006"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "final_safety": {
+    "companion_cleanup_complete": true,
+    "lease_mask": 0,
+    "page": "home",
+    "runtime_owner": "none",
+    "safety_latched": false,
+    "safety_state": "armed",
+    "targets_cleanup_complete": true
+  },
+  "firmware_source_commit": "e04d98dd3c5e5d494c615e12f2897dc3207272a9",
+  "installation": {
+    "application_flashes_for_demo_continuation": 0,
+    "candidate_application_flashes_total": 1,
+    "exact_flash_reused": true,
+    "survey_children_reused": true
+  },
+  "isolation": {
+    "active_mac_wifi_touched": false,
+    "cardputer_ports_opened": 0,
+    "host_network_tools_invoked": false,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "serial_port_discovery_calls": 0,
+    "wifi_softap_started": false
+  },
+  "offline_companion": {
+    "canonical_round_trip": true,
+    "comparison_items": 5,
+    "protocol": 1,
+    "search_fields": [
+      "identities",
+      "name"
+    ],
+    "search_matches": [
+      1,
+      10
+    ],
+    "sessions": 2,
+    "snapshot_bytes": 11882,
+    "snapshot_id": "840f77ecf3ba46febd1517cb331bbfb9f32ecc0b0eae08e97a3e96ca65e1d035",
+    "snapshot_sha256": "4f7c61bcd7ea24730f202b343345581f92979627d7f4f18da59ba8519dae5be5",
+    "targets": 16,
+    "transport": "usb_serial_ndjson"
+  },
+  "port": "/dev/cu.usbmodem2101",
+  "raw_hashes": {
+    "companion_run_sha256": "726c3328a98a5975d60db0a098a169cb0d0ba5c19280fecd4567e7aaa452fb4a",
+    "companion_runner_sha256": "686b810f3dabf45c37a162c103b0da62826d739e9a0a516ad7e04e21688159ca",
+    "manifest_sha256": "66cd37cde91e0e7f2c9410f99459cefcc41ec772cd9cba8b0e9a483bb82ddc67",
+    "parent_run_sha256": "62bb3d093c6f7d3b255adc5bcf0b5e84c5a3db5b179133e998d821903147d286",
+    "stage_runner_sha256": "f0549235170e639ae2f9529c55b6378fcfae51daa9d1ec8656b74bfeb2bb6266",
+    "targets_run_sha256": "b12ab0542ceb2bc44144600a5acfcf2c830dc6ba5be6cf31d4d1fa79efb0ea3a",
+    "targets_runner_sha256": "af842756ae2774e389c02d0b9bf6cccae204f8279d4db43a6042510387be970c"
+  },
+  "remaining_blockers": [
+    "physical_http_parity_requires_dedicated_client",
+    "s5_predecessor_physical_gate_requires_replacement_div"
+  ],
+  "rom_mac": "1c:db:d4:87:90:d4",
+  "s6_exit_eligible": false,
+  "schema": "leshy.hil.stage_demo_s6.acceptance.v1",
+  "status": "pass_demo_path",
+  "survey_pair": {
+    "baseline_run_sha256": "445a2dc8627f71b3e0d405fdc27c9f3bd954d3abbc19b72260cf5f320b727e80",
+    "both_final_cleanup_complete": true,
+    "both_no_flash": true,
+    "both_passed": true,
+    "generation_pair": [
+      164,
+      165
+    ],
+    "observations": [
+      52,
+      49
+    ],
+    "repeat_run_sha256": "a5b322562f4afa213a4fd5f83f5ab31dc9e87e7f72fd009d21f50675cdf6e465"
+  },
+  "targets": {
+    "blocked_write_attempts": 0,
+    "catalog_targets": 16,
+    "comparison_classes": [
+      "removed",
+      "unchanged",
+      "unchanged",
+      "unchanged",
+      "unchanged"
+    ],
+    "comparison_items": 5,
+    "evidence_selections": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "evidence_views_opened": 5,
+    "filesystem_mount_error": 0,
+    "heap_free_after_release": 80316,
+    "heap_free_before": 80316,
+    "mutation_capable": true,
+    "radio_tx_commands": 0,
+    "storage_write_calls": 0,
+    "write_in_flight": false
+  },
+  "verification_source_commit": "410bac40d862ab29c3349a89fa2a026755cdb8fd"
+}

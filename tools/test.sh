@@ -388,6 +388,9 @@ python3 "$repo_dir/tools/check_companion_protocol_contract.py"
 python3 "$repo_dir/tools/check_companion_post_web_memory_contract.py"
 python3 "$repo_dir/tools/check_companion_post_web_acceptance.py"
 python3 "$repo_dir/tools/check_stage_demo_s6_contract.py"
+if [[ -f "$repo_dir/tests/hil/evidence/board-01-stage-demo-s6-1.0.0-dev.209.json" ]]; then
+    python3 "$repo_dir/tools/check_stage_demo_s6_acceptance.py"
+fi
 python3 "$repo_dir/tools/generate_companion_web_asset.py" --check
 python3 "$repo_dir/tools/check_native_usb_reset_contract.py"
 python3 "$repo_dir/tools/check_platformio_workspace_isolation.py"
