@@ -42,7 +42,7 @@ non-ASCII envelope strings, oversized/truncated/trailing input, другая sch
 | `target.read` | list/open projections Target и evidence | доступен только из того же live catalog Targets |
 | `target.compare` | invoke/read `target.compare` над exact bindings Session | доступен только для уже вычисленной exact пары; также требует оба read scope |
 | `target.mutate` | typed mutations metadata Target | доступен вместе с `target.read` для Favorite, Name, Notes и add/remove tag при ready Targets; correlation/merge пока недоступны |
-| `library.export` | versioned offline export | известен, недоступен до slice export |
+| `library.export` | device-side Action export | остаётся недоступным; первый offline export companion собирает из выданных read projections |
 | `connectivity.manage` | lifecycle local connectivity/secrets | известен, недоступен до slice connectivity |
 
 Ambient scope не существует. Transport передаёт scopes, выданные текущей device
@@ -159,6 +159,33 @@ Targets обязателен новый connect. Физически принят
 USB CDC. `Serial0` остаётся legacy diagnostic console и не может согласовать этот
 protocol.
 
+## Offline snapshot и локальный поиск v1
+
+Первый slice export намеренно не добавляет устройству более широкую capability. Host
+companion обходит все bounded страницы `session.*`, `target.*` и `target.compare` в
+уже разрешённой read-only native-USB session, проверяет каждую границу summary/count и
+собирает один локальный snapshot `leshy.companion.offline.v1`. Поэтому device-side
+scope `library.export` остаётся недоступным, а exporter не получает path к filesystem,
+storage, network или radio.
+
+Artifact имеет точный top-level набор полей: schema/kind/protocol/source transport,
+`complete:true`, counts, две остановленные Sessions, 1…16 полных Targets, coordinates/
+counts/items comparison и `snapshot_id`. Текст Target остаётся canonical uppercase
+hex UTF-8; identities и evidence сохраняют typed bounded records. Unknown fields,
+partial snapshot, malformed либо over-bound text/ID, duplicate ID Target/comparison,
+несогласованные counts/coordinates Session, non-canonical JSON и неверный digest
+fail-close-ятся. `snapshot_id` — lowercase SHA-256 compact sorted-key JSON полного
+payload без самого ID; export file — тот же canonical JSON с одним финальным newline.
+
+Локальный поиск сначала валидирует snapshot целиком, затем case-fold-ит name, notes и
+tags. Radio identity ищется по kind, exact hex либо hex без знаков пунктуации, поэтому
+показанный MAC с двоеточиями совпадает с хранимой identity. Результаты сохраняют
+стабильный порядок Target и сообщают только классы совпавших полей. Snapshot может
+содержать пользовательские имена/заметки и наблюдавшиеся identities устройств: это
+локальный пользовательский artifact, его нельзя переносить в retained/public HIL
+evidence. Compact evidence сохраняет только hashes, counts, классы поисковых полей и
+Boolean результаты совпадений.
+
 ## Presentation local Web и runtime lifecycle
 
 Web adapter отдаёт self-contained offline page по exact
@@ -218,6 +245,8 @@ host/build определение gate; physical HTTP parity не принята
   snapshot Targets; выход, reset или revoke удаляет grant.
 - Capabilities рекламируются только после exact negotiation scopes; будущие
   недоступные функции не выдаются за работающие.
+- Host-сборка offline snapshot не рекламирует и не подразумевает недоступный
+  device-side scope `library.export`.
 - Слой не владеет storage, driver, radio, secrets или teardown application.
 - Parser проверяется exact valid frames, malformed/duplicate/unknown cases, каждым
   truncation golden frame, size limits, scope dependency/permission tests и

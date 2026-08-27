@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import subprocess
@@ -12,6 +13,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+from companion_offline import (
+    build_snapshot,
+    read_snapshot,
+    search_snapshot,
+    write_snapshot,
+)
 from capture_1x_ui import PassiveSerial, synchronize_console
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
@@ -114,12 +121,14 @@ def collect_pages(device: PassiveSerial, kind: str, request_prefix: str,
     raise RuntimeError(f"{kind} exceeded bounded pagination")
 
 
-def collect_note_pages(device: PassiveSerial, target_id: str) -> list[dict[str, Any]]:
+def collect_note_pages(device: PassiveSerial, target_id: str,
+                       request_prefix: str = "notes") -> list[dict[str, Any]]:
     offset = 0
     pages: list[dict[str, Any]] = []
     for page_number in range(4):
         response = companion_request(device, request(
-            "target.detail", f"notes-{page_number}", target_id=target_id,
+            "target.detail", f"{request_prefix}-{page_number}",
+            target_id=target_id,
             section="notes", offset=offset))
         require(response.get("status") == "ok" and
                 response.get("encoding") == "hex",
@@ -317,24 +326,59 @@ def main() -> int:
             require(1 <= len(targets) <= 16 and
                     len(targets) == targets_state.get("catalog_count"),
                     f"target.list count mismatch: {len(targets)} {targets_state}")
+            offline_targets: list[dict[str, Any]] = []
+            raw_target_details: list[dict[str, Any]] = []
+            for target_index, listed_target in enumerate(targets):
+                target_id = listed_target["target_id"]
+                checkpoint(
+                    args.output, record,
+                    f"target_detail_{target_index + 1}_of_{len(targets)}")
+                summary = companion_request(device, request(
+                    "target.detail", f"target-{target_index}-summary",
+                    target_id=target_id, section="summary", offset=0))
+                require(summary.get("status") == "ok" and
+                        summary.get("section") == "summary" and
+                        summary.get("target_id") == target_id and
+                        all(summary.get(key) == listed_target.get(key)
+                            for key in ("revision", "favorite", "name_hex",
+                                        "tag_count", "identity_count",
+                                        "evidence_count")),
+                        f"target summary mismatch: {summary} {listed_target}")
+                notes_pages = collect_note_pages(
+                    device, target_id, f"target-{target_index}-notes")
+                notes_hex = "".join(page["value"] for page in notes_pages)
+                detail_items: dict[str, list[Any]] = {}
+                detail_pages: dict[str, list[dict[str, Any]]] = {}
+                for section in ("tags", "identities", "evidence"):
+                    items, pages = collect_pages(
+                        device, "target.detail",
+                        f"target-{target_index}-{section}",
+                        {"target_id": target_id, "section": section})
+                    detail_items[section] = items
+                    detail_pages[section] = pages
+                require(len(detail_items["tags"]) == summary["tag_count"] and
+                        len(detail_items["identities"]) ==
+                        summary["identity_count"] and
+                        len(detail_items["evidence"]) ==
+                        summary["evidence_count"],
+                        f"target detail count mismatch: {target_id}")
+                offline_targets.append({
+                    "target_id": target_id,
+                    "revision": summary["revision"],
+                    "favorite": summary["favorite"],
+                    "name_hex": summary["name_hex"],
+                    "notes_hex": notes_hex,
+                    "tags_hex": detail_items["tags"],
+                    "identities": detail_items["identities"],
+                    "evidence": detail_items["evidence"],
+                })
+                raw_target_details.append({
+                    "summary": summary,
+                    "notes_pages": notes_pages,
+                    "detail_pages": detail_pages,
+                })
+
             first_target = targets[0]["target_id"]
-            checkpoint(args.output, record, "target_summary")
-            summary = companion_request(device, request(
-                "target.detail", "target-summary", target_id=first_target,
-                section="summary", offset=0))
-            require(summary.get("status") == "ok" and
-                    summary.get("section") == "summary" and
-                    summary.get("target_id") == first_target,
-                    f"target summary mismatch: {summary}")
-            checkpoint(args.output, record, "target_notes")
-            notes_pages = collect_note_pages(device, first_target)
-            detail_pages: dict[str, list[dict[str, Any]]] = {}
-            for section in ("tags", "identities", "evidence"):
-                checkpoint(args.output, record, f"target_{section}")
-                _, pages = collect_pages(
-                    device, "target.detail", section,
-                    {"target_id": first_target, "section": section})
-                detail_pages[section] = pages
 
             baseline, current = sessions
             checkpoint(args.output, record, "target_compare")
@@ -347,6 +391,70 @@ def main() -> int:
                 })
             require(len(compared) == targets_state.get("comparison_count"),
                     f"target.compare count mismatch: {len(compared)}")
+
+            checkpoint(args.output, record, "offline_snapshot")
+            require(compare_pages and
+                    isinstance(compare_pages[0].get("counts"), dict),
+                    "target.compare omitted class counts")
+            snapshot = build_snapshot(
+                session_details,
+                offline_targets,
+                {
+                    "baseline": {
+                        "source_id": baseline["source_id"],
+                        "generation": baseline["generation"],
+                    },
+                    "current": {
+                        "source_id": current["source_id"],
+                        "generation": current["generation"],
+                    },
+                    "counts": compare_pages[0]["counts"],
+                    "items": compared,
+                },
+            )
+            snapshot_path = args.output / "companion-snapshot.v1.json"
+            write_snapshot(snapshot_path, snapshot)
+            reloaded_snapshot = read_snapshot(snapshot_path)
+            require(reloaded_snapshot == snapshot,
+                    "offline snapshot did not round-trip exactly")
+
+            search_proofs: list[dict[str, Any]] = []
+            probe_candidates: list[tuple[str, str, str]] = []
+            for target in snapshot["targets"]:
+                for field, key in (("name", "name_hex"),
+                                   ("notes", "notes_hex")):
+                    if target[key]:
+                        probe_candidates.append((
+                            field, bytes.fromhex(target[key]).decode("utf-8"),
+                            target["target_id"]))
+                for tag in target["tags_hex"]:
+                    probe_candidates.append((
+                        "tags", bytes.fromhex(tag).decode("utf-8"),
+                        target["target_id"]))
+                for identity in target["identities"]:
+                    probe_candidates.append((
+                        "identities", identity["value"], target["target_id"]))
+            seen_fields: set[str] = set()
+            for field, search_query, expected_target_id in probe_candidates:
+                if field in seen_fields:
+                    continue
+                matches = search_snapshot(snapshot, search_query)
+                expected = next((item for item in matches
+                                 if item["target_id"] == expected_target_id),
+                                None)
+                require(expected is not None and
+                        field in expected["matched_fields"],
+                        f"offline search missed {field}")
+                search_proofs.append({
+                    "field": field,
+                    "query_sha256": hashlib.sha256(
+                        search_query.encode("utf-8")).hexdigest(),
+                    "matches": len(matches),
+                    "expected_target_matched": True,
+                })
+                seen_fields.add(field)
+            require("identities" in seen_fields,
+                    "offline snapshot has no searchable radio identity")
 
             checkpoint(args.output, record, "negative_frames")
             invalid_offset = companion_request(device, request(
@@ -438,12 +546,19 @@ def main() -> int:
             "targets": {
                 "count": len(targets),
                 "list_pages": target_pages,
-                "summary": summary,
-                "notes_pages": notes_pages,
-                "detail_pages": detail_pages,
+                "details": raw_target_details,
                 "compare_count": len(compared),
                 "compare_pages": compare_pages,
                 "released": released,
+            },
+            "offline_snapshot": {
+                "path": snapshot_path.name,
+                "snapshot_id": snapshot["snapshot_id"],
+                "sha256": sha256_file(snapshot_path),
+                "bytes": snapshot_path.stat().st_size,
+                "counts": snapshot["counts"],
+                "canonical_round_trip": True,
+                "search_proofs": search_proofs,
             },
             "negative": {
                 "invalid_offset": invalid_offset,
@@ -469,6 +584,7 @@ def main() -> int:
             "sessions": len(sessions),
             "targets": len(targets),
             "compare_items": len(compared),
+            "snapshot_id": snapshot["snapshot_id"],
             "ports_opened": [args.port],
         }, sort_keys=True))
         return 0

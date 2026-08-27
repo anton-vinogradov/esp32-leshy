@@ -41,7 +41,7 @@ that is not implemented or granted yet.
 | `target.read` | list/open Target and evidence projections | available only from the same live Targets catalog |
 | `target.compare` | invoke/read `target.compare` over exact Session bindings | available only for the already-computed exact pair; also requires both read scopes |
 | `target.mutate` | typed Target metadata mutations | available with `target.read` for Favorite, Name, Notes and tag add/remove while Targets is ready; correlation/merge remain unavailable |
-| `library.export` | versioned offline export | known, unavailable until the export slice |
+| `library.export` | device-side export Action | remains unavailable; the first offline export is assembled by the companion from the granted read projections |
 | `connectivity.manage` | manage local connectivity/secrets lifecycle | known, unavailable until the connectivity slice |
 
 No scope is ambient. The transport supplies both the scopes granted by the current
@@ -158,6 +158,33 @@ to a new Targets instance is mandatory. The physically accepted runtime transpor
 native USB CDC. `Serial0` remains the legacy diagnostic console and cannot negotiate
 this protocol.
 
+## Offline snapshot and local search v1
+
+The first export slice deliberately adds no wider device capability. A host companion
+walks every bounded `session.*`, `target.*` and `target.compare` page over an already
+granted read-only native-USB session, verifies each summary/count boundary, and then
+creates one local `leshy.companion.offline.v1` snapshot. The device-side
+`library.export` scope therefore remains unavailable and the exporter receives no
+filesystem, storage, network or radio path.
+
+The artifact has exact top-level fields: schema/kind/protocol/source transport,
+`complete:true`, counts, two stopped Sessions, 1…16 complete Targets, comparison
+coordinates/counts/items, and `snapshot_id`. Target text remains canonical uppercase
+hex UTF-8; identities and evidence retain their typed, bounded records. Unknown
+fields, partial snapshots, malformed or over-bound text/IDs, duplicate Target or
+comparison IDs, inconsistent counts/session coordinates, non-canonical JSON and a
+mismatched digest all fail closed. `snapshot_id` is lowercase SHA-256 over compact
+sorted-key JSON of the complete payload without the ID itself; the export file is
+that same canonical JSON with one final newline.
+
+Local search validates the whole snapshot before use and then case-folds name, notes
+and tags. Radio identities can be searched by kind, exact hex, or punctuation-free
+hex, so a displayed colon-separated MAC matches its stored identity. Results preserve
+the stable Target order and report only the matched field classes. The snapshot can
+contain user-authored names/notes and observed device identities: it is a local user
+artifact and must not be copied into retained/public HIL evidence. Compact evidence
+retains only hashes, counts, searched field classes and Boolean match results.
+
 ## Local Web presentation and runtime lifecycle
 
 The Web adapter serves a self-contained offline page at exact
@@ -217,6 +244,8 @@ physical HTTP parity is not accepted until its retained run passes.
   foreground Targets snapshot; leaving it, reset, or revoke removes the grant.
 - Capabilities are advertised only after exact scope negotiation; unavailable future
   functions are not presented as working.
+- Host assembly of an offline snapshot does not advertise or imply the unavailable
+  device-side `library.export` scope.
 - This layer owns no storage, driver, radio, secret, or application teardown path.
 - Parsers are exercised with exact valid frames, malformed/duplicate/unknown cases,
   every truncation of a golden frame, size limits, scope dependency/permission tests,

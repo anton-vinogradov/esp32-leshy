@@ -100,6 +100,12 @@ class CompanionUsbDeltaRunnerTests(unittest.TestCase):
         self.assertIn("PassiveSerial(args.port", source)
         self.assertIn('"serial_port_discovery_calls": 0', source)
         self.assertIn('"cardputer_ports_opened": 0', source)
+        self.assertNotIn("networksetup", source)
+        self.assertNotIn("airport", source.lower())
+        self.assertNotIn("en0", source)
+        self.assertIn("build_snapshot", source)
+        self.assertIn("write_snapshot", source)
+        self.assertIn('"canonical_round_trip": True', source)
 
 
 if __name__ == "__main__":
