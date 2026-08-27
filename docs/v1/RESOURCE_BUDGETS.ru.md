@@ -910,6 +910,19 @@ linked flash к dev.212. Размеры app/factory/ELF —
 Live capture buffer, task или radio owner не добавлены; physical heap остаётся
 неизмеренным до готовности live adapter и одного delta HIL.
 
+Bounded live capture Защиты эфира `RB-M174`: exact `1.0.0-dev.214` переиспользует
+единственный resident `BoardWifiPassiveCapture`, его fixed buffer на 16 frames и
+существующий lifecycle Wi-Fi driver; второй buffer capture или task не добавляется.
+Monitor/report state увеличивает static RAM на 64 B до 227 760 B. Linked flash равен
+3 330 584 B (+4 000 B); размеры app/factory/ELF —
+3 331 088/3 396 624/22 410 600 B (+4 336/+4 336/+25 076 B).
+SHA-256 firmware/factory/ELF:
+`cc97e4ef5236105df17dc8a52c14e9bf72b08ebe28dc6e26afc27ce8cedc53ba`/
+`91bff6744cf1c32cc2b0942eb909e02dd85d0ee6685053b5ce489b462ee195e5`/
+`6e34eafe189f37cccb1c54abc5c35c32a103e3c3af85df0c7750a4af83957e1f`.
+Это source/build evidence; live recovery heap и cleanup driver остаются physical
+delta measurement, а не inferred budget claim.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

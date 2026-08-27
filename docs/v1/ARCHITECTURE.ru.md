@@ -759,6 +759,20 @@ network operation или lifecycle capture. Это закрывает тольк
 integration; bounded live passive capture и physical screen/navigation evidence
 остаются открыты.
 
+Exact `1.0.0-dev.214` подключает этот экран к единственному существующему
+`BoardWifiPassiveCapture`; второй Wi-Fi owner или buffer не создаётся. Открытие пункта
+запускает один bounded management-only sweep на десять секунд по каналам 1…13 с
+dwell 120 ms. Ingress сохраняет один benign management frame как proof coverage, а
+оставшиеся fixed slots capture резервирует для candidates deauthentication или
+disassociation. Общие observed, invalid и capacity-dropped frames считаются отдельно
+от retained evidence. Любая loss, malformed/read-failed input, truncation или zero
+coverage даёт inconclusive, а не clean. Immutable report публикуется только после
+остановки promiscuous mode и Wi-Fi driver; Back и safety latch quiesce-ят тот же
+adapter. С cadence 250 ms перерисовываются только channel, remaining time и counters,
+поэтому header, explanation и footer не мерцают. Это принимает bounded live Wi-Fi
+source/build path; HIL real-TFT navigation/cleanup, detectors BLE/evil-twin/loss и
+physical DEMO-S7 остаются открыты.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

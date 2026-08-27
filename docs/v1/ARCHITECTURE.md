@@ -678,6 +678,20 @@ The entry path owns no radio, lease, network operation or capture lifecycle. Thi
 closes source/build TFT integration only; bounded live passive capture and physical
 screen/navigation evidence remain open.
 
+Exact `1.0.0-dev.214` connects that screen to the one existing
+`BoardWifiPassiveCapture`; it does not create another Wi-Fi owner or buffer. Opening
+the task starts one bounded ten-second management-only sweep over channels 1…13 with
+120 ms dwell. The ingress path retains one benign management frame as proof of
+coverage and then reserves the remaining fixed capture slots for deauthentication or
+disassociation candidates. Total observed, invalid and capacity-dropped frames stay
+separate from retained evidence. Any loss, malformed/read-failed input, truncation or
+zero coverage makes the result inconclusive rather than clean. The immutable report
+is published only after promiscuous mode and the Wi-Fi driver are stopped; Back and
+the safety latch quiesce the same adapter. At 250 ms cadence only channel, remaining
+time and counters repaint, so the header, explanation and footer do not flash. This
+accepts the bounded live Wi-Fi source/build path; real-TFT navigation and cleanup HIL,
+BLE/evil-twin/loss detectors and physical DEMO-S7 remain open.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

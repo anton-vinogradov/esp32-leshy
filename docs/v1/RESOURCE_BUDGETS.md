@@ -916,6 +916,18 @@ linked flash versus dev.212. App/factory/ELF sizes are
 No live capture buffer, task or radio owner is added; physical heap remains
 unmeasured until the live adapter and one delta HIL are ready.
 
+Airspace Guard bounded live capture `RB-M174`: exact `1.0.0-dev.214` reuses the one
+resident `BoardWifiPassiveCapture`, its fixed 16-frame buffer and the existing Wi-Fi
+driver lifecycle; no second capture buffer or task is introduced. Added monitor/report
+state raises static RAM by 64 B to 227,760 B. Linked flash is 3,330,584 B (+4,000 B);
+app/factory/ELF sizes are 3,331,088/3,396,624/22,410,600 B
+(+4,336/+4,336/+25,076 B). Firmware/factory/ELF SHA-256 are
+`cc97e4ef5236105df17dc8a52c14e9bf72b08ebe28dc6e26afc27ce8cedc53ba`/
+`91bff6744cf1c32cc2b0942eb909e02dd85d0ee6685053b5ce489b462ee195e5`/
+`6e34eafe189f37cccb1c54abc5c35c32a103e3c3af85df0c7750a4af83957e1f`.
+This is source/build evidence; live heap recovery and driver cleanup remain a physical
+delta measurement rather than an inferred budget claim.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
