@@ -218,10 +218,11 @@ def running_failures(state: dict[str, Any], expected_cid: str,
 
 
 def detail_failures(state: dict[str, Any], minimum_observations: int,
-                    minimum_scan_cycles: int) -> list[str]:
+                    minimum_scan_cycles: int,
+                    expected_owner: str = "survey") -> list[str]:
     failures = expect(state, {
         "page": "survey",
-        "runtime_owner": "survey",
+        "runtime_owner": expected_owner,
         "lease_mask": 15,
         "survey_view": "detail",
         "survey_workflow_state": "running",
@@ -243,10 +244,11 @@ def detail_failures(state: dict[str, Any], minimum_observations: int,
 
 
 def list_after_detail_failures(state: dict[str, Any], minimum_observations: int,
-                               back_ack_ms: float) -> list[str]:
+                               back_ack_ms: float,
+                               expected_owner: str = "survey") -> list[str]:
     failures = expect(state, {
         "page": "survey",
-        "runtime_owner": "survey",
+        "runtime_owner": expected_owner,
         "lease_mask": 15,
         "survey_view": "list",
         "survey_workflow_state": "running",
@@ -369,10 +371,11 @@ def paused_failures(state: dict[str, Any], observations: int,
 
 
 def paused_detail_failures(state: dict[str, Any], observations: int,
-                           scan_cycles: int) -> list[str]:
+                           scan_cycles: int,
+                           expected_owner: str = "survey") -> list[str]:
     failures = expect(state, {
         "page": "survey",
-        "runtime_owner": "survey",
+        "runtime_owner": expected_owner,
         "lease_mask": 15,
         "survey_view": "detail",
         "survey_workflow_state": "running",
@@ -745,9 +748,8 @@ def main() -> int:
                 before_generation = int(before_recovery.get("generation", 0))
                 if not failures:
                     setup = open_product_survey_visit(device, trace)
-                    # The current product route is owned by Wi-Fi while the
-                    # retained Visit plan is being configured. Ownership is
-                    # handed to Survey only when Start is acknowledged below.
+                    # The retained Visit route remains owned by Wi-Fi for its
+                    # complete setup, running, detail and result lifecycle.
                     failures.extend(setup_failures(setup, "wifi"))
                     captures["setup"] = capture(device, frames, "setup")
                 if not failures:
@@ -766,7 +768,7 @@ def main() -> int:
                     start_ack_ms = (time.monotonic() - started) * 1000.0
                     trace.append(start_ack)
                     failures.extend(expect(start_ack, {
-                        "page": "survey", "runtime_owner": "survey",
+                        "page": "survey", "runtime_owner": "wifi",
                         "lease_mask": 15,
                         "survey_workflow_state": "setup",
                         "survey_product_status": "preparing",
@@ -783,7 +785,9 @@ def main() -> int:
                         "product Survey did not reach live running state",
                     )
                     trace.append(running)
-                    failures.extend(running_failures(running, expected_cid))
+                    failures.extend(running_failures(
+                        running, expected_cid, "wifi"
+                    ))
                     if not args.release_cycle:
                         captures["running"] = capture(
                             device, frames, "running"
@@ -809,7 +813,7 @@ def main() -> int:
                     )
                     trace.append(paused)
                     failures.extend(paused_failures(
-                        paused, observations, scan_cycles
+                        paused, observations, scan_cycles, "wifi"
                     ))
                     paused_browser = query(
                         device, b"survey.browser",
@@ -835,7 +839,7 @@ def main() -> int:
                     right_detail_ack = action(device, "right")
                     trace.append(right_detail_ack)
                     failures.extend(paused_detail_failures(
-                        right_detail_ack, observations, scan_cycles
+                        right_detail_ack, observations, scan_cycles, "wifi"
                     ))
                     stop_ack = action(device, "select", timeout=40.0)
                     trace.append(stop_ack)
@@ -855,7 +859,7 @@ def main() -> int:
                         )
                         trace.append(committed)
                     failures.extend(committed_failures(
-                        committed, before_generation
+                        committed, before_generation, "wifi"
                     ))
                     captures["committed"] = capture(
                         device, frames, "committed"
@@ -877,7 +881,7 @@ def main() -> int:
                     detail_ack = action(device, "select")
                     trace.append(detail_ack)
                     failures.extend(detail_failures(
-                        detail_ack, observations, scan_cycles
+                        detail_ack, observations, scan_cycles, "wifi"
                     ))
                     running_detail = wait_ui_state(
                         device,
@@ -891,7 +895,7 @@ def main() -> int:
                     )
                     trace.append(running_detail)
                     failures.extend(detail_failures(
-                        running_detail, observations, scan_cycles + 1
+                        running_detail, observations, scan_cycles + 1, "wifi"
                     ))
                     captures["detail"] = capture(device, frames, "detail")
                 if not failures and not args.release_cycle:
@@ -905,6 +909,7 @@ def main() -> int:
                         running_list_after_detail,
                         int(running_detail["survey_observations"]),
                         detail_back_ack_ms,
+                        "wifi",
                     ))
                 if not failures and not args.release_cycle:
                     right_detail_started = time.monotonic()
@@ -917,6 +922,7 @@ def main() -> int:
                         right_detail_ack,
                         int(running_list_after_detail["survey_observations"]),
                         int(running_list_after_detail["survey_product_scan_cycles"]),
+                        "wifi",
                     ))
                     if right_detail_ack_ms <= 0 or right_detail_ack_ms > 150:
                         failures.append(
@@ -929,7 +935,7 @@ def main() -> int:
                     stop_ack_ms = (time.monotonic() - stop_started) * 1000.0
                     trace.append(stop_ack)
                     failures.extend(expect(stop_ack, {
-                        "page": "survey", "runtime_owner": "survey",
+                        "page": "survey", "runtime_owner": "wifi",
                         "lease_mask": 15,
                         "survey_workflow_state": "running",
                         "survey_product_status": "stopping",
@@ -945,7 +951,7 @@ def main() -> int:
                     )
                     trace.append(committed)
                     failures.extend(committed_failures(
-                        committed, before_generation
+                        committed, before_generation, "wifi"
                     ))
                     captures["committed"] = capture(
                         device, frames, "committed"

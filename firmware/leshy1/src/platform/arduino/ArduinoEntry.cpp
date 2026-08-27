@@ -2958,6 +2958,16 @@ void runProductSurveyWorker(void*) {
         std::uint32_t wifiScanCycles = 0;
         std::uint32_t bleScanCycles = 0;
         bool scanFailed = false;
+        const std::uint8_t bleSourceMask =
+            leshy1::services::survey::sourceMask(RadioKind::Ble);
+        const bool bleStackPrepared =
+            (report.activeSourceMask & bleSourceMask) == 0 ||
+            bleScanner.begin();
+        // Start the bounded passive BLE host before the first Wi-Fi driver
+        // lifecycle. Repeated controller initialization after a Wi-Fi scan can
+        // enter the framework's fixed 1024-byte ipc0 stack without sufficient
+        // headroom. The BLE host is kept initialized but scan-idle between
+        // source windows and is fully released by every terminal path below.
         bool pendingScanWindow = false;
         RadioKind pendingScanSource = RadioKind::Wifi;
         std::uint64_t pendingScanStartedUs = 0;
@@ -3007,7 +3017,7 @@ void runProductSurveyWorker(void*) {
                             enqueueProductSurveyWorkerRecord, nullptr);
                     }
                 } else {
-                    if (bleScanner.begin()) {
+                    if (bleStackPrepared && bleScanner.initialized()) {
                         heartbeatProductSurveyWorker();
                         bleScan = bleScanner.scan(
                             leshy1::drivers::ble::defaultPassivePlan(),
@@ -3017,10 +3027,13 @@ void runProductSurveyWorker(void*) {
                 setProductSurveyScanActive(false);
                 heartbeatProductSurveyWorker();
                 const bool sourceCleanup = source == RadioKind::Wifi
-                    ? wifiScanner.end() : bleScanner.end();
+                    ? wifiScanner.end()
+                    : BoardBlePassiveScanner::cancelActiveScan();
+                const bool bleQuiescent =
+                    !bleScanner.initialized() ||
+                    BoardBlePassiveScanner::cancelActiveScan();
                 report.scannerCleanupComplete = sourceCleanup &&
-                    wifiScanner.cleanupComplete() &&
-                    bleScanner.cleanupComplete();
+                    wifiScanner.cleanupComplete() && bleQuiescent;
                 heartbeatProductSurveyWorker();
                 std::uint64_t scanEndedUs =
                     static_cast<std::uint64_t>(esp_timer_get_time());

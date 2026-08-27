@@ -721,14 +721,22 @@ def main() -> int:
         product_worker_body = entry[product_worker:entry.find(
             "bool initializeProductSurveyWorker()", product_worker
         )]
+        ble_begin = product_worker_body.find("bleScanner.begin();")
         wifi_begin = product_worker_body.find("if (wifiScanner.begin())")
         wifi_end = product_worker_body.find("wifiScanner.end()", wifi_begin)
-        ble_begin = product_worker_body.find("if (bleScanner.begin())")
         ble_end = product_worker_body.find("bleScanner.end()", ble_begin)
-        if min(wifi_begin, wifi_end, ble_begin, ble_end) < 0:
+        ble_quiesce = product_worker_body.find(
+            "BoardBlePassiveScanner::cancelActiveScan();", ble_begin
+        )
+        if (
+            min(wifi_begin, wifi_end, ble_begin, ble_quiesce, ble_end) < 0
+            or not (ble_begin < wifi_begin < wifi_end < ble_end)
+            or "if (bleScanner.begin())" in product_worker_body
+        ):
             errors.append(
-                "product Survey worker must own each radio stack only for its "
-                "serial scan window"
+                "product Survey must initialize bounded passive BLE before "
+                "the first Wi-Fi lifecycle, quiesce it between windows and "
+                "release both stacks at the terminal boundary"
             )
 
     commit_reopen = entry.find("bool reopenProductSurveyBackendForCommit()")

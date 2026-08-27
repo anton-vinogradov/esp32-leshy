@@ -32,9 +32,9 @@ def main() -> int:
         return 1
 
     require(
-        'LESHY1_VERSION=\\"0.197.0-survey-bounded-ble\\"'
+        'LESHY1_VERSION=\\"0.198.0-survey-radio-lifecycle\\"'
         in platformio,
-        "current bounded-BLE version is missing", failures)
+        "current bounded-BLE lifecycle version is missing", failures)
     require("const esp_err_t error = esp_netif_deinit();" not in service,
             "unsupported esp_netif_deinit must not be called", failures)
     require("process-lifetime" in service and

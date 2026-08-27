@@ -61,6 +61,11 @@ def main() -> int:
         "bleDeviceVisibleSize()",
         "bleDeviceAt(bleDeviceSelection)",
         "renderRadioSignalCard(",
+        "const bool bleStackPrepared =",
+        "bleScanner.begin();",
+        "bleStackPrepared && bleScanner.initialized()",
+        "BoardBlePassiveScanner::cancelActiveScan();",
+        "Repeated controller initialization after a Wi-Fi scan can",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
