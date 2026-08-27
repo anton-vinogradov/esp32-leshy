@@ -1343,6 +1343,22 @@ def main() -> int:
             host_wifi["restored"] = wifi_guard.restored
             record["host_wifi"] = host_wifi
         if device is not None:
+            try:
+                failed_web = web_state(device)
+                record["failure_web_state"] = {
+                    key: failed_web.get(key) for key in (
+                        "authorized", "server_active", "generation",
+                        "requests_handled", "requests_rejected",
+                        "tx_backpressure_events", "last_send_errno",
+                        "last_response_body_bytes",
+                        "last_response_body_length", "associated_stations",
+                        "lease_mask", "safety_state", "safety_latched",
+                    )
+                }
+            except Exception as probe_error:
+                record["failure_web_state_probe_error"] = \
+                    type(probe_error).__name__
+        if device is not None:
             if hil_session_started:
                 try:
                     query(
