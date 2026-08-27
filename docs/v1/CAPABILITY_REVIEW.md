@@ -5,6 +5,8 @@
 Date: 17 August 2026. Result: **product scope coherent; catalog baseline reviewed;
 the PRD technical baseline is accepted by `E-GATE-001`**.
 
+Competitor-feature addendum: **27 August 2026**.
+
 ## Inputs and review rules
 
 The review maps [Vision](VISION.md), J-01…J-06 and PR/NFR in the
@@ -56,6 +58,15 @@ must fail closed when its assembly/evidence is absent.
 Product review accepts CAP-001…CAP-047 as the complete working 1.0 boundary. A new
 major capability after this review needs a separate `J/PR/CAP`, risk impact, and
 stage proposal; wording and acceptance may be refined without hidden scope growth.
+
+The later [feature-level competitor audit](COMPETITIVE_ANALYSIS.md#feature-level-parity-audit)
+found nine useful or strategically relevant families (`CF-001…CF-009`) that this
+baseline either leaves implicit or does not contain. Therefore “complete working
+boundary” means complete for the agreed 17 August jobs and requirements, **not**
+complete competitor-feature parity. None of the candidates is silently promoted to
+a `CAP-*`; accepting one requires the same product and safety traceability as any
+other scope change. Deliberately disruptive and unrelated-hardware features remain
+explicit non-goals rather than hidden omissions.
 
 Together with constrained hardware/resource evidence, this scope review closes S1
 through `E-GATE-001`. It does not mark capabilities implemented or verified; those

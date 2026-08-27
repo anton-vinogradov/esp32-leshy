@@ -12,7 +12,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 >
 > Закрыто этапов: 5 из 9.
 
-Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон.
+Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 47 capabilities; девять candidates конкурентного паритета ждут явного решения о scope в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Проверенный checkpoint:** exact `1.0.0-dev.209` на firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` теперь физически проходит **integrated device/offline path DEMO-S6** в `E-AUTO-132`/`E-HIL-189`/`E-DEMO-006`. Уже принятые no-flash Survey образуют contiguous generations 164/165 с 52/49 observations; исправленный harness открывает все пять реальных conclusions сравнения и их exact evidence, экспортирует ту же пару в canonical offline USB snapshot 11 882 byte с двумя Sessions, 16 Targets и пятью comparisons и завершает Home/none/lease 0 с safety armed. Дополнительной flash, DUT TX, storage write, serial discovery, доступа к Cardputer, SoftAP, host-network command или изменения активного Wi-Fi Mac нет.

@@ -20,6 +20,14 @@
 - **Текущий source checkpoint:** `1.0.0-dev.209` принят на source/build/physical. Exact 208 остаётся retained fail-closed, потому что его resident host NimBLE лишает Wi-Fi памяти для init, а degraded run позже latch-ит runtime watchdog. Exact 209 делает каждый lifecycle source непересекающимся. Полный tracked host suite проходит; clean build занимает 225 688 B static RAM, 3 317 692 B linked flash и 3 318 192/3 383 728 B app/factory. Hashes firmware/app — `63f55328…3bab` / `38d3cf02…d868`; combined Survey generation 162→163 и integrated generations 164/165, all-evidence traversal, canonical offline export и final safety cleanup проходят.
 - **Cadence HIL:** обычная правка запускает только затронутый scenario плюс соседние negative/cleanup assertions и прошивает изменившийся candidate максимум один раз. Full matrix обязателен в конце этапа, на RC, при непроверенном cross-cutting change или после 15 принятых deltas. Exact 0.171 завершил предыдущий interval checkpoint; принятые exact 0.172, 0.181, offline-only 0.195, post-Web continuity 0.196.2 и combined Survey `1.0.0-dev.209` — deltas **5/15**. Считаются только retained summary со status `pass` или `pass_*`; fail-closed precursors не двигают интервал. Delta evidence компактно сохраняет run/source hashes; periodic full checkpoint сохраняет компактную machine-checked matrix и сбрасывает anchor.
 - **Релизный статус:** выпущенная линейка `v0.*` остаётся замороженным PoC; бинарник 1.x ещё не выпускался. Исторические checkpoints редизайна по exact 0.207 включительно сохраняют неизменяемые evidence names. Первая source-bearing сборка 1.x — `1.0.0-dev.208`; текущий candidate — `1.0.0-dev.209`, phase-complete candidates имеют вид `1.0.0-rc.N`, а первый stable релиз редизайна — `1.0.0`.
+- **Review конкурентного паритета:** официальный пофункциональный аудит от 27
+  августа подтверждает, что принятый baseline `CAP-001…CAP-047` внутренне цельный,
+  но не является полным перечнем функций конкурентов. `CF-001…CF-009` описывают
+  девять полезных или стратегически значимых семейств, которых нет или которые
+  слишком неявны; ни одно не попадает скрытно в 1.0 без решения о scope и обычной
+  трассировки `J/PR/CAP/risk/stage`. Disruptive, social-engineering и требующие
+  другого железа функции остаются explicit non-goals. См.
+  [пофункциональный аудит](COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 - **Главная цель текущего этапа:** закрыть physical HTTP parity через отдельный client
   и сохранять принятым integrated device/offline path S6.6; никогда не затрагивать
   активную сеть ноутбука или Cardputer и не объявлять predecessor gate S5 пройденным.
@@ -112,12 +120,17 @@
 
 ### Статус пользовательских возможностей
 
-Это полный пользовательский чек-лист для главной страницы. Номер `FUNC-NN`
-намеренно соответствует `CAP-0NN` в [каталоге возможностей](CAPABILITY_CATALOG.ru.md),
-поэтому CI может доказать покрытие всех 47 возможностей без изменения их стабильных
-идентификаторов. Проекция на главную сортирует строки по первому этапу реализации, а внутри
-этапа — по стабильному ID. Строка `done` имеет принятое evidence в указанной границе;
-`blocked` означает, что software/UI или conditional path ожидают названное physical proof.
+Это полный front-page checklist для принятого baseline из 47 capabilities, а не
+заявление, что в scope уже есть каждая полезная функция конкурентов. `FUNC-NN`
+намеренно соответствует `CAP-0NN` в
+[каталоге возможностей](CAPABILITY_CATALOG.ru.md), поэтому CI может доказать
+покрытие всех принятых capability без изменения их стабильных идентификаторов.
+Девять `CF-*` candidates остаются в
+[пофункциональном аудите](COMPETITIVE_ANALYSIS.ru.md#candidate-пробелы-требующие-явного-решения-о-scope),
+пока product decision не повысит или не отклонит их. Проекция на главную сортирует
+строки по первому этапу реализации, а внутри этапа — по стабильному ID. Строка
+`done` имеет принятое evidence в указанной границе; `blocked` означает, что
+software/UI или conditional path ожидают названное physical proof.
 
 <!-- LESHY-FUNCTIONS:START -->
 | ID | Возможность | Этап поставки | Состояние |

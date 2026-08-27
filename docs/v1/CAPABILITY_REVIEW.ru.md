@@ -5,6 +5,8 @@
 Дата: 17 августа 2026 года. Результат: **product scope coherent; catalog baseline
 reviewed; PRD technical baseline принят `E-GATE-001`**.
 
+Дополнение по competitor features: **27 августа 2026 года**.
+
 ## Входы и правила проверки
 
 Review сопоставляет [Vision](VISION.ru.md), J-01…J-06 и PR/NFR из
@@ -57,6 +59,15 @@ Product review принимает CAP-001…CAP-047 как полную рабо
 крупная возможность после этого review требует отдельного `J/PR/CAP`, risk impact и
 stage proposal; формулировки и acceptance могут уточняться без скрытого расширения
 scope.
+
+Более поздний [пофункциональный аудит конкурентов](COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета)
+нашёл девять полезных или стратегически значимых семейств (`CF-001…CF-009`), которые
+baseline оставляет неявными или не содержит. Поэтому «полная рабочая граница»
+означает полноту для согласованных 17 августа jobs/requirements, **но не** полный
+competitor-feature parity. Ни один candidate не повышается скрытно до `CAP-*`:
+принятие требует той же product/safety traceability, что и любое изменение scope.
+Сознательно disruptive функции и функции для отсутствующего железа остаются
+explicit non-goals, а не скрытыми пропусками.
 
 Scope review вместе с constrained hardware/resource evidence закрывает S1 через
 `E-GATE-001`. Это не объявляет возможности реализованными или verified: такие статусы

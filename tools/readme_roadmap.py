@@ -50,7 +50,10 @@ CONFIGS = (
         progress="Stage gates complete: {done} of {total}.",
         source_note=(
             "This front-page snapshot is generated from the authoritative 1.x "
-            "documentation; CI rejects it if it drifts."
+            "documentation; CI rejects it if it drifts. The checklist is complete "
+            "for the accepted 47-capability baseline, while nine competitor-parity "
+            "candidates await an explicit scope decision in the "
+            "[feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit)."
         ),
         detailed_status="live status and next evidence gate",
         stage_plan="stage outcomes and exit gates",
@@ -78,7 +81,10 @@ CONFIGS = (
         progress="Закрыто этапов: {done} из {total}.",
         source_note=(
             "Этот срез главной страницы генерируется из документации-точки-истины "
-            "1.x; CI отклоняет рассинхрон."
+            "1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline "
+            "из 47 capabilities; девять candidates конкурентного паритета ждут "
+            "явного решения о scope в "
+            "[пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета)."
         ),
         detailed_status="живой статус и ближайший evidence gate",
         stage_plan="результаты и exit gates этапов",

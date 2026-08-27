@@ -20,6 +20,13 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Working source checkpoint:** `1.0.0-dev.209` is source/build/physical accepted. Exact 208 remains retained fail-closed because its resident NimBLE host starves Wi-Fi init and the degraded run later latches the runtime watchdog. Exact 209 makes every source lifecycle disjoint. The full tracked host suite passes; the clean build is 225,688 B static RAM, 3,317,692 B linked flash and 3,318,192/3,383,728 B app/factory. Firmware/app hashes are `63f55328…3bab` / `38d3cf02…d868`; combined Survey generation 162→163 and integrated generations 164/165, all-evidence traversal, canonical offline export and final safety cleanup pass.
 - **HIL cadence:** routine fixes run only the affected scenario plus adjacent negative/cleanup assertions and flash a changed candidate at most once. A full matrix is mandatory at stage end, RC, an unreviewed cross-cutting change, or after 15 accepted deltas. Exact 0.171 completed the last interval checkpoint; accepted exact 0.172, 0.181, offline-only 0.195, post-Web continuity 0.196.2 and combined-Survey `1.0.0-dev.209` are deltas **5/15**. Only retained summaries whose status is `pass` or `pass_*` count; fail-closed precursors do not advance the interval. Delta evidence retains run/source hashes compactly; periodic full checkpoints retain a compact machine-checked matrix and reset the anchor.
 - **Release state:** released `v0.*` remains the frozen PoC line; no 1.x binary has been released. Historic redesign checkpoints through exact 0.207 remain immutable evidence names. The first source-bearing 1.x build is `1.0.0-dev.208`; current candidate is `1.0.0-dev.209`, phase-complete candidates use `1.0.0-rc.N`, and the first stable redesign release is `1.0.0`.
+- **Competitor parity review:** the 27 August official-source audit confirms the
+  accepted `CAP-001…CAP-047` baseline is internally coherent but not a complete
+  competitor-feature inventory. `CF-001…CF-009` cover nine useful or strategically
+  relevant families that are missing or too implicit; none is silently in 1.0 until
+  a scope decision creates normal `J/PR/CAP/risk/stage` traceability. Disruptive,
+  social-engineering and unrelated-hardware features are explicit non-goals. See the
+  [feature-level audit](COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 - **Current objective:** close physical HTTP parity through a dedicated client and
   preserve the accepted integrated S6.6 device/offline path; never use the active
   laptop network or Cardputer and do not claim the blocked S5 predecessor gate.
@@ -113,12 +120,16 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 ### User functionality status
 
-This is the complete front-page user checklist. `FUNC-NN` deliberately mirrors
-`CAP-0NN` in the [capability catalog](CAPABILITY_CATALOG.md), so CI can prove
-coverage of all 47 capabilities without changing their stable identities. The
-front-page projection sorts rows by first implementation stage and then by stable
-ID. A `done` row has accepted evidence for its stated boundary; `blocked` means its
-software/UI or conditional path awaits the named physical proof.
+This is the complete front-page checklist for the accepted 47-capability baseline,
+not a claim that every useful competitor feature is already in scope. `FUNC-NN`
+deliberately mirrors `CAP-0NN` in the [capability catalog](CAPABILITY_CATALOG.md), so
+CI can prove coverage of all accepted capabilities without changing their stable
+identities. The nine `CF-*` candidates remain in the
+[feature-level audit](COMPETITIVE_ANALYSIS.md#candidate-gaps-that-need-an-explicit-scope-decision)
+until a product decision promotes or rejects them. The front-page projection sorts
+rows by first implementation stage and then by stable ID. A `done` row has accepted
+evidence for its stated boundary; `blocked` means its software/UI or conditional path
+awaits the named physical proof.
 
 <!-- LESHY-FUNCTIONS:START -->
 | ID | Functionality | Delivery stage | State |

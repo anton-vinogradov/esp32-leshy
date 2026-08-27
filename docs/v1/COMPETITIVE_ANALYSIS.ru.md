@@ -2,6 +2,8 @@
 
 Срез рынка: **15 августа 2026 года**.
 
+Пофункциональный аудит паритета: **27 августа 2026 года**.
+
 Этот документ задаёт направление продукта, а не рейтинг прошивок. Мы сравниваем
 решения по тому, насколько хорошо они помогают пройти полный рабочий сценарий:
 
@@ -124,6 +126,78 @@ GhostLink, Lua и нативные приложения с разрешения�
 | ESP32 Marauder | ограниченная | сильная | сильная | ограниченная | есть | сильный в своей нише |
 | Flipper Zero | другой hardware | ограниченная | сильная | сильная | сильная экосистема | сильный |
 | Leshy 1.x, цель | сильная глубина | сильная | сильная | сильная после 1.0 | сильная | единый cross-radio UX |
+
+## Пофункциональный аудит паритета
+
+Качественная матрица выше задаёт направление продукта, но **не** доказывает, что
+в каталоге Leshy есть каждый полезный сценарий конкурентов. Второе review проверило
+актуальные официальные списки возможностей
+[ESP32-DIV](https://github.com/cifertech/ESP32-DIV/wiki/Features),
+[GhostESP](https://github.com/GhostESP-Revival/GhostESP),
+[Bruce](https://github.com/brucedevices/firmware),
+[ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder/wiki/marauder-versions),
+[Flipper Zero](https://github.com/flipperdevices/flipperzero-firmware/blob/dev/applications/ReadMe.md)
+и, как дополнительный defensive-ориентир,
+[NEMO](https://github.com/n0xa/m5stick-nemo/blob/main/README.md). Сравнивались
+пользовательские результаты, а не написание пунктов меню и не каждый protocol
+toggle.
+
+Вердикт: **CAP-001…CAP-047 образуют цельную ранее замороженную границу, но не
+являются полным перечнем конкурентных функций.** Девять семейств отсутствуют или
+описаны слишком неявно, чтобы заявлять паритет. Review не добавляет их в 1.0
+скрытно: candidate-строки ниже требуют явного решения о границе, а затем обычной
+трассировки `J/PR/CAP/risk/stage`.
+
+| Семейство из официальных документов конкурентов | Текущее покрытие Leshy | Результат аудита |
+|---|---|---|
+| Boot probe, capability-aware UI, настройки, питание, диагностика, установка/update/recovery | CAP-001…008, CAP-045…047 | явно покрыто и собрано в более цельный lifecycle |
+| Кнопки/touch, стабильная навигация, темы, яркость и доступная обратная связь | CAP-004/005/045 | явно покрыто |
+| Session, Capture, Library, целостность SD/LittleFS, переносимые форматы и backup | CAP-009/023…031/040/043/047 | явно покрыто; произвольный raw file manager сознательно не нужен |
+| Одна command model для устройства, automation, USB и local Web | CR-001, PR-012, CAP-038/041 | platform contract есть; пользовательского serial monitor/UART bridge нет (`CF-007`) |
+| Wi-Fi network/client discovery, vendor/facts, раскрытие hidden name и radar | CAP-010/016/017/044 | явно покрыто |
+| Wi-Fi channels, packet monitor, raw frame Capture и PCAP | CAP-023/026/042 | явно покрыто |
+| Распознавание EAPOL/PMKID/4-way handshake, focused capture и экспорт `hc22000`/live analysis | только общий raw Capture/PCAP | законченный workflow отсутствует (`CF-002`) |
+| Wardriving Wi-Fi AP/station и BLE с GPS track и локальным WiGLE-compatible результатом | CAP-009/011/014/023/026 дают части | законченный field workflow отсутствует (`CF-003`) |
+| Passive deauth/PineAP/evil-twin/WPS, tracker/skimmer/drone и jamming-warning views | отдельные observations могут существовать | defensive detection и объяснимый alert workflow отсутствуют (`CF-001`) |
+| BLE scan, identity/vendor/service advertisement facts и radar | CAP-011/016/017/044 | явно покрыто |
+| BLE raw packet Capture/Wireshark и opt-in GATT/service/characteristic inspection | только общая формулировка sniff/export | raw acceptance нужно уточнить; connected GATT отсутствует (`CF-004`) |
+| nRF24/Sub-GHz spectrum, waterfall, finder, RAW/decode/library и bounded replay | CAP-012/013/030/035/037/040 | явно покрыто |
+| IR learn/decode/library/replay и переносимые/universal profile packages | CAP-029/034/040 | покрыто общей моделью профилей; TV-B-Gone — профиль, а не отдельная архитектура |
+| NFC read/dump/decode, переносимые данные и verified write/restore | CAP-031/036/040 | явно покрыто для declared PN532 assembly |
+| Authenticated peer operation, remote receiver/source и обмен two-device evidence | пользовательской возможности нет | отсутствует (`CF-005`) |
+| First-run setup, local PIN/lock и защита captures/secrets при потере устройства | secret storage есть, access control нет | отсутствует (`CF-006`) |
+| Исполняемые SD apps/scripts, USB/BLE HID и defensive BadUSB inspection | descriptors/SDK есть, runtime/HID outcome нет | отсутствует в 1.0 (`CF-008`) |
+| Конкретные authorized Wi-Fi/BLE/nRF Lab recipes | CAP-032/033 задают safety; CAP-034…036 дают только IR/Sub-GHz/NFC actions | набор wireless Lab действий не решён (`CF-009`) |
+| Общий LAN discovery, port/service/banner scan, SSH/Telnet, ARP tools и VPN | покрытия нет | соседняя задача network toolkit, сознательно вне текущего core |
+| LF RFID/iButton, FM, Zigbee/802.15.4, Ethernet, camera, microphone/audio и printer | штатный ESP32-DIV не имеет нужных assemblies | conditional expansion, не паритет 1.0 |
+| Jammers, широкие flood/spam, credential-harvesting portals и disruptive clone/crash actions | покрытия нет | сознательно отклонено как цель feature-count parity |
+| U2F, игры, декоративные часы и общие QR utilities | покрытия нет | полезно в других продуктах, но не относится к задаче radio observation Leshy |
+
+### Candidate-пробелы, требующие явного решения о scope
+
+| ID | Candidate user outcome | Чем он существенно отличается от существующей строки | Рекомендованное решение |
+|---|---|---|---|
+| CF-001 | **Защита эфира** пассивно обнаруживает и объясняет deauth/disassociation bursts, признаки PineAP/evil twin, подозрительные BLE tracker/skimmer/drone IDs и loss/jamming indicators; alert всегда открывает source evidence | CAP-042 записывает frames, но не формирует defensive conclusion | добавить в 1.x как RX-only и evidence-backed |
+| CF-002 | **Захват Wi-Fi-аутентификации** распознаёт EAPOL, PMKID и complete/incomplete handshakes, сохраняет focused evidence и экспортирует PCAP плюс `hc22000`; live host streaming остаётся local и bounded | общий PCAP не отвечает пользователю, получено ли пригодное authentication evidence | добавить passive path в 1.x; active provocation допустим только как отдельно принятый Lab action |
+| CF-003 | **Полевой обзор** записывает Wi-Fi AP/station и BLE с GPS track, deduplication, сравнением повторного визита и локальным WiGLE-compatible экспортом | GPS metadata плюс общий CSV не образуют end-to-end wardriving job | добавить в 1.x; direct cloud upload оставить optional/post-1.0 |
+| CF-004 | **BLE Inspector** сохраняет совместимые raw packets и после явного перехода в connected mode перечисляет GATT services/characteristics с provenance | service IDs из advertisements не равны GATT inspection | добавить passive raw Capture; решить, относится ли connected GATT к 1.x или Lab |
+| CF-005 | **Peer Link** безопасно связывает два DIV для remote receiver/source control, evidence transfer и повторяемых two-device test scenarios | нынешний companion связывает host и device, но не позволяет одному DIV проверять другой | добавить после single-device core 1.x, если функция не станет обязательной для automation S5/S8 |
+| CF-006 | **Блокировка устройства** даёт first-run security setup, local PIN/lock, bounded retry/recovery и защищает secrets/saved evidence без нарушения safe capture cleanup | scoped secrets запрещают экспорт, но не закрывают physical UI | добавить до публичного релиза, который хранит credentials или чувствительные captures |
+| CF-007 | **Serial Console** даёт bounded on-device serial monitor/UART bridge и документированный Actions CLI без обхода policy/leases | diagnostics/logs не работают с внешним UART target | оставить Device/Tools P1; raw GPIO control не включать в base product |
+| CF-008 | **Automation/HID** запускает permissioned signed scripts и явно scoped USB/BLE HID или BadUSB-inspection workflows | CAP-039…041 описывают extension contracts, но не исполняемый user outcome | после 1.0, если не будет принят конкретный безопасный user job |
+| CF-009 | **Authorized wireless Lab recipes** дают именованные bounded Wi-Fi/BLE/nRF fixture workflows вместо пустой общей TX-оболочки | CAP-032/033 делают TX безопасным, но не определяют существующие wireless experiments | принимать recipes по одному; никогда не допускать wideband jamming, indiscriminate flood, crash или credential harvest |
+
+### Итог аудита
+
+- **Явно представлены:** полный passive multi-radio foundation, on-device analysis,
+  durable evidence, owned-lab пути IR/NFC/Sub-GHz, update, recovery, companion,
+  настройки, feedback и extension boundaries.
+- **Слишком неявны и требуют решения по каталогу:** `CF-001…CF-009`.
+- **Сознательно не копируются:** broad disruption, social-engineering credential
+  capture, generic LAN attack tooling и функции для отсутствующего железа.
+- **Заявлять полный паритет пока нельзя:** до принятия disposition и трассировки
+  candidates проект может заявлять цельный baseline из 47 capability, но не «все
+  полезные функции конкурентов включены».
 
 Матрица не утверждает отсутствия конкретной функции. Она показывает, что является
 документированной продуктовой опорой каждого проекта.
