@@ -106,6 +106,7 @@ class CompanionUsbDeltaRunnerTests(unittest.TestCase):
         self.assertIn("build_snapshot", source)
         self.assertIn("write_snapshot", source)
         self.assertIn('"canonical_round_trip": True', source)
+        self.assertIn('"scope_dependency_missing"', source)
 
 
 if __name__ == "__main__":
