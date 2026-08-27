@@ -162,6 +162,39 @@ def validate_reused_flash_lineage(
         lineage: Path, expected: dict[str, Any], port: str
 ) -> tuple[dict[str, Any], list[str]]:
     failures: list[str] = []
+    if lineage.is_file():
+        retained_evidence = load_json(lineage)
+        candidate = retained_evidence.get("candidate", {})
+        flash = retained_evidence.get("one_flash_lineage", {})
+        final = retained_evidence.get("final_safety", {})
+        if retained_evidence.get("schema") == "leshy.hil.delta_evidence.v1":
+            if not (
+                retained_evidence.get("status") == "pass"
+                and retained_evidence.get("gate_eligible") is True
+                and retained_evidence.get("port") == port
+                and candidate.get("version") == expected["version"]
+                and candidate.get("firmware_sha256") == expected["firmware_sha256"]
+                and candidate.get("app_elf_sha256") == expected["app_elf_sha256"]
+                and flash.get("candidate_application_flashes") == 1
+                and flash.get("accepted_run_reported_pass") is True
+                and flash.get("accepted_run_failures") == []
+                and final.get("page") == "home"
+                and final.get("runtime_owner") == "none"
+                and final.get("lease_mask") == 0
+                and final.get("state") == "armed"
+                and final.get("latched") is False
+                and final.get("cleanup_final_complete") is True
+            ):
+                failures.append("accepted delta exact-flash lineage mismatch")
+            return {
+                "path": str(lineage),
+                "run_sha256": digest(lineage),
+                "baseline_run_sha256": flash.get(
+                    "accepted_no_flash_run_sha256"
+                ),
+                "source_commit": candidate.get("firmware_source"),
+                "failure_stage": "none_accepted_physical_delta",
+            }, failures
     root = lineage if lineage.is_dir() else lineage.parent
     parent_path = root / "run.json" if lineage.is_dir() else lineage
     baseline_path = root / "baseline-survey/run.json"

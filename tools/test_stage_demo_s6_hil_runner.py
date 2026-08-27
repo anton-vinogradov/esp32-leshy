@@ -190,6 +190,41 @@ class StageDemoS6RunnerTests(unittest.TestCase):
         self.assertEqual(failures, [])
         self.assertEqual(retained["failure_stage"], "baseline-survey-pre-workflow")
 
+    def test_reused_flash_accepts_gate_eligible_physical_delta(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "accepted.json"
+            retained_delta = {
+                "schema": "leshy.hil.delta_evidence.v1",
+                "status": "pass",
+                "gate_eligible": True,
+                "port": "/dev/cu.test",
+                "candidate": {
+                    **EXPECTED,
+                    "firmware_source": "d" * 40,
+                },
+                "one_flash_lineage": {
+                    "candidate_application_flashes": 1,
+                    "accepted_run_reported_pass": True,
+                    "accepted_run_failures": [],
+                    "accepted_no_flash_run_sha256": "b" * 64,
+                },
+                "final_safety": {
+                    "page": "home",
+                    "runtime_owner": "none",
+                    "lease_mask": 0,
+                    "state": "armed",
+                    "latched": False,
+                    "cleanup_final_complete": True,
+                },
+            }
+            path.write_text(json.dumps(retained_delta))
+            retained, failures = MODULE.validate_reused_flash_lineage(
+                path, EXPECTED, "/dev/cu.test"
+            )
+        self.assertEqual(failures, [])
+        self.assertEqual(retained["failure_stage"], "none_accepted_physical_delta")
+        self.assertEqual(retained["baseline_run_sha256"], "b" * 64)
+
 
 if __name__ == "__main__":
     unittest.main()
