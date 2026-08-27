@@ -96,6 +96,7 @@ class MacWifiGuard:
         self.restore_attempted = False
         self.association_attempts = 0
         self.dhcp_requests = 0
+        self.radio_refreshes = 0
         self._mutation_attempted = False
         self._temporary_ssid: str | None = None
 
@@ -283,6 +284,22 @@ class MacWifiGuard:
             join_reported_failure = (
                 join_reported_failure or this_join_reported_failure)
             if this_join_reported_failure:
+                # Recent macOS releases can repeatedly reuse a stale scan
+                # result after a short-lived WPA network changes identity.
+                # Refresh the radio once inside the already-authorized,
+                # bounded mutation window; exact snapshot restoration still
+                # runs in the caller's finally path.
+                if (self.radio_refreshes == 0 and
+                        deadline - time.monotonic() > 1.0):
+                    self._run(
+                        ["-setairportpower", self.interface, "off"],
+                        "refresh Wi-Fi scan off")
+                    time.sleep(0.2)
+                    self._run(
+                        ["-setairportpower", self.interface, "on"],
+                        "refresh Wi-Fi scan on")
+                    self.radio_refreshes += 1
+                    time.sleep(0.5)
                 if time.monotonic() < deadline:
                     time.sleep(0.25)
                 continue

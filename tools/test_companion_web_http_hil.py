@@ -248,10 +248,11 @@ class CompanionWebHttpHilTests(unittest.TestCase):
     def test_join_is_retried_within_one_bounded_budget(self) -> None:
         fake = FakeNetworkSetup()
         fake.soft_failures_remaining = 1
-        guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=1.0)
+        guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=2.0)
         guard.capture()
         guard.connect("Leshy-8790D5", "temporary123")
         self.assertEqual(2, guard.association_attempts)
+        self.assertEqual(1, guard.radio_refreshes)
         self.assertEqual("192.168.4.2", fake.address)
         guard.restore()
         self.assertTrue(guard.restored)
