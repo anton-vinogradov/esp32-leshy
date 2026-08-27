@@ -381,14 +381,14 @@ def _opener() -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
-def http_get(url: str, timeout: float = 5.0) -> tuple[int, str, bytes]:
+def http_get(url: str, timeout: float = 10.0) -> tuple[int, str, bytes]:
     request = urllib.request.Request(url, method="GET")
     with _opener().open(request, timeout=timeout) as response:
         return response.status, response.headers.get_content_type(), response.read()
 
 
 def http_companion_request(
-    url: str, payload: dict[str, Any], timeout: float = 5.0,
+    url: str, payload: dict[str, Any], timeout: float = 10.0,
 ) -> tuple[int, str, dict[str, Any]]:
     encoded = json.dumps(payload, separators=(",", ":")).encode("ascii")
     request = urllib.request.Request(

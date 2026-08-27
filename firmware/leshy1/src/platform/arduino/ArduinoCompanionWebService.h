@@ -26,7 +26,7 @@ public:
     static constexpr std::size_t kMaximumHeaderBytes = 768;
     static constexpr std::size_t kRequestCapacity =
         kMaximumHeaderBytes + services::companion::kCompanionMaxFrameBytes;
-    static constexpr std::uint64_t kClientDeadlineUs = 3000000ULL;
+    static constexpr std::uint64_t kClientDeadlineUs = 8000000ULL;
     static constexpr int kStaticRxBuffers = 2;
     static constexpr int kDynamicRxBuffers = 1;
     // The pinned ESP-IDF libraries are compiled for static TX buffers.

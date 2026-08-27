@@ -323,7 +323,7 @@ def main() -> int:
     arduino_web = arduino_web_header + arduino_web_source
     for marker in (
         "kMaximumHeaderBytes = 768",
-        "kClientDeadlineUs = 3000000ULL",
+        "kClientDeadlineUs = 8000000ULL",
         "server_(80, 1)",
         "kStaticRxBuffers = 2",
         "kDynamicRxBuffers = 1",

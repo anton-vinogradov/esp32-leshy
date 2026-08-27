@@ -95,6 +95,8 @@ def main() -> int:
 
     required = (
         "55.03.39/platform-espressif32.zip",
+        "esp32-core-3.3.9.tar.xz",
+        "esp32-core-3.3.9-libs.tar.xz",
         "board_build.flash_size = 16MB",
         "board_build.partitions = partitions_16MB.csv",
         "-std=gnu++17",
