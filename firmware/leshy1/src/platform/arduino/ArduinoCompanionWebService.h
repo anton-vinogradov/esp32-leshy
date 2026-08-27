@@ -39,7 +39,8 @@ public:
     static constexpr std::uint32_t kApReadyTimeoutMs = 2000;
     static constexpr std::uint32_t kApReadyPollMs = 10;
     static constexpr std::size_t kResponseHeaderCapacity = 256;
-    static constexpr std::size_t kWriteChunkBytes = 512;
+    // Exact CONFIG_LWIP_TCP_MSS in the pinned ESP32-S3 Arduino libraries.
+    static constexpr std::size_t kWriteChunkBytes = 1436;
 
     enum class BeginStage : std::uint8_t {
         Idle,

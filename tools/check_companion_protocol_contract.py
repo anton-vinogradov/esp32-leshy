@@ -332,7 +332,7 @@ def main() -> int:
         "kDynamicTxBuffers = 0",
         "init.tx_buf_type = 0",
         "init.static_tx_buf_num = kStaticTxBuffers",
-        "kWriteChunkBytes = 512",
+        "kWriteChunkBytes = 1436",
         "MSG_DONTWAIT",
         "errno == ENOBUFS",
         "errno == ENOMEM",

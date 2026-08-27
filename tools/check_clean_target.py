@@ -1432,7 +1432,7 @@ def main() -> int:
             "kDynamicRxBuffers = 1",
             "kStaticTxBuffers = 2",
             "kDynamicTxBuffers = 0",
-            "kWriteChunkBytes = 512",
+            "kWriteChunkBytes = 1436",
             "MSG_DONTWAIT",
             "responsePending_",
             "kRxManagementBuffers = 1",
