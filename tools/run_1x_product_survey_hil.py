@@ -745,7 +745,10 @@ def main() -> int:
                 before_generation = int(before_recovery.get("generation", 0))
                 if not failures:
                     setup = open_product_survey_visit(device, trace)
-                    failures.extend(setup_failures(setup))
+                    # The current product route is owned by Wi-Fi while the
+                    # retained Visit plan is being configured. Ownership is
+                    # handed to Survey only when Start is acknowledged below.
+                    failures.extend(setup_failures(setup, "wifi"))
                     captures["setup"] = capture(device, frames, "setup")
                 if not failures:
                     start_row = focus_survey_start(device)

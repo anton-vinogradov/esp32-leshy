@@ -285,7 +285,7 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             },
             {
                 "page": "survey", "wifi_product_view": "visit",
-                "wifi_product_selection": 3, "runtime_owner": "survey",
+                "wifi_product_selection": 3, "runtime_owner": "wifi",
                 "lease_mask": 15, "survey_simulated": False,
                 "survey_persistent": True, "survey_product_selected": True,
                 "survey_workflow_state": "setup",
@@ -307,7 +307,7 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
                 patch.object(RUNNER, "action", side_effect=fake_action):
             setup = RUNNER.open_product_survey_visit(object(), trace)
         self.assertEqual(["right", "down", "down", "down", "right"], calls)
-        self.assertEqual([], RUNNER.setup_failures(setup))
+        self.assertEqual([], RUNNER.setup_failures(setup, "wifi"))
         self.assertEqual(states, trace)
 
     def test_current_product_route_rejects_non_wifi_home(self) -> None:
