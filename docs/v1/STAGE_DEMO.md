@@ -43,13 +43,15 @@ independent physical-stop contract for every admitted active path. Passive detec
 capture, route and inspection results never substitute for an active fixture proof,
 and an unavailable fixture remains a blocker rather than a simulated pass.
 
-The `1.0.0-dev.210` detector through `1.0.0-dev.213` evidence/UI slices and
-`1.0.0-dev.214` bounded one-adapter live passive Wi-Fi capture are host/build CAP-048
+The `1.0.0-dev.210` detector through `1.0.0-dev.213` evidence/UI slices,
+`1.0.0-dev.214` bounded one-adapter live passive Wi-Fi capture and `1.0.0-dev.215`
+complete-evidence SSID/security identity-conflict indicator are host/build CAP-048
 foundations only. Their golden/negative corpus, receive-only guard, strongest-first
 ordering, exact drilldown, non-color-only text, no-clear repaint, explicit capture-loss
-accounting and cleanup-before-publication do not yet satisfy DEMO-S7: physical
-TFT/navigation/cleanup evidence, the remaining detector families and their negative
-corpora are still required.
+accounting and cleanup-before-publication do not yet satisfy DEMO-S7. The identity
+detector remains disabled on the current incomplete live retention; complete bounded
+retention, physical TFT/navigation/cleanup evidence, the remaining detector families
+and their negative corpora are still required.
 
 `DEMO-S2` is accepted by `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 completed 29 public Action/query steps and matched nine

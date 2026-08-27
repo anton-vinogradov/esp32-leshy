@@ -773,6 +773,21 @@ adapter. С cadence 250 ms перерисовываются только channel
 source/build path; HIL real-TFT navigation/cleanup, detectors BLE/evil-twin/loss и
 physical DEMO-S7 остаются открыты.
 
+Exact `1.0.0-dev.215` добавляет второй detector CAP-048 над полным immutable
+источником Wi-Fi frames. Он bounded-парсит information elements Beacon и Probe
+Response и выдаёт один investigation indicator со средней confidence, когда один
+видимый SSID в пределах десяти секунд объявляют два разных valid BSSID с разными
+профилями защиты (open, legacy privacy, WPA или RSN/WPA2/3). Это явно конфликт
+identity/security, а не доказательство evil twin. Находка сохраняет оба BSSID, оба
+профиля защиты и две exact ссылки frame/time/channel/RSSI; controller проверяет эти
+kind-specific invariants, а UI EN/RU показывает SSID, пару профилей и exact детали
+каждого advertisement. Hidden names, multi-AP с одинаковой защитой, разные имена,
+malformed IE и пары за пределами окна находкой не становятся. Live adapter на 16
+frames пока не может сохранить полный bounded набор advertisements, поэтому detector
+opt-in и на этом path выключен; source guard запрещает случайно включить его до
+готовности retention. Существующий live clear сохраняет disconnect-only semantics,
+нового physical claim нет.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

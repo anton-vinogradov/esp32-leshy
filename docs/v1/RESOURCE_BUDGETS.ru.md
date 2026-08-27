@@ -923,6 +923,21 @@ SHA-256 firmware/factory/ELF:
 Это source/build evidence; live recovery heap и cleanup driver остаются physical
 delta measurement, а не inferred budget claim.
 
+Wi-Fi identity detector Защиты эфира `RB-M175`: exact `1.0.0-dev.215` расширяет
+существующий bounded report и каталог EN/RU без task, radio owner или второго
+capture buffer. Static RAM равна 228 080 B (+320 B), linked flash — 3 334 152 B
+(+3 568 B). Размеры app/factory/ELF —
+3 334 656/3 400 192/22 447 288 B (+3 568/+3 568/+36 688 B).
+SHA-256 firmware/factory/ELF:
+`f0363d45d50603a1cbf2881a85b78d6eb6e5bcf61f25791b6801548711d07b5f`/
+`7b8d1126502341f14e7cd01ade8b07e80766ce464363f25d31b19030c4aa0e4c`/
+`f70492ea627c4499d5b217e52063e6737058c395afa067423c2630da1427412f`.
+Оптимизированный host compiler показывает 2 640 B static stack use для полного
+вызова detector после разделения lifetime scratch disconnect/identity и замены
+identity pass на bounded rereads. Это review aid, а не Xtensa HIL proof. Identity
+detector выключен на текущем incomplete live-retention path, поэтому build не
+добавляет claim по live heap или physical radio.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

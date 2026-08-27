@@ -692,6 +692,22 @@ time and counters repaint, so the header, explanation and footer do not flash. T
 accepts the bounded live Wi-Fi source/build path; real-TFT navigation and cleanup HIL,
 BLE/evil-twin/loss detectors and physical DEMO-S7 remain open.
 
+Exact `1.0.0-dev.215` adds the second CAP-048 detector over a complete immutable
+Wi-Fi frame source. It parses bounded Beacon and Probe Response information elements
+and reports one medium-confidence investigation indicator when the same visible SSID
+is advertised by two distinct valid BSSIDs with different security profiles
+(open, legacy privacy, WPA or RSN/WPA2/3) inside ten seconds. This is explicitly an
+identity/security conflict, not proof of an evil twin. The finding retains both
+BSSIDs, both security profiles and the two exact frame/time/channel/RSSI references;
+the controller validates those kind-specific invariants and the EN/RU UI exposes the
+SSID, profile pair and exact per-advertisement detail. Hidden names, same-security
+multi-AP networks, different names, malformed IEs and out-of-window pairs do not
+become findings. The live 16-frame adapter cannot yet retain a complete bounded set
+of advertisements, so the detector is opt-in and remains disabled on that path; a
+source guard prevents accidental enablement before retention is complete. Thus the
+existing live clear result keeps its disconnect-only meaning and no physical claim is
+added.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

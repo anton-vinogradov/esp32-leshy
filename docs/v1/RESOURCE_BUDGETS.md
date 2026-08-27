@@ -928,6 +928,21 @@ app/factory/ELF sizes are 3,331,088/3,396,624/22,410,600 B
 This is source/build evidence; live heap recovery and driver cleanup remain a physical
 delta measurement rather than an inferred budget claim.
 
+Airspace Guard Wi-Fi identity detector `RB-M175`: exact `1.0.0-dev.215` extends the
+existing bounded report and EN/RU catalog without a task, radio owner or second
+capture buffer. Static RAM is 228,080 B (+320 B) and linked flash is 3,334,152 B
+(+3,568 B). App/factory/ELF sizes are
+3,334,656/3,400,192/22,447,288 B (+3,568/+3,568/+36,688 B).
+Firmware/factory/ELF SHA-256 are
+`f0363d45d50603a1cbf2881a85b78d6eb6e5bcf61f25791b6801548711d07b5f`/
+`7b8d1126502341f14e7cd01ade8b07e80766ce464363f25d31b19030c4aa0e4c`/
+`f70492ea627c4499d5b217e52063e6737058c395afa067423c2630da1427412f`.
+The optimized host compiler reports 2,640 B static stack use for the complete
+detector call after disconnect and identity scratch lifetimes were separated and
+the identity pass was changed to bounded rereads. This is a review aid rather than
+Xtensa HIL proof. The identity detector is disabled on the current incomplete live
+retention path, so this build makes no new live-heap or physical-radio claim.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
