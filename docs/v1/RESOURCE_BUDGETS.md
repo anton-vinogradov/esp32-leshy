@@ -958,6 +958,21 @@ decode and 144 B for the ingress key helper. Live heap/cleanup remains unclaimed
 until physical HIL; incomplete identity retention disables the detector and is
 reported as source loss rather than a clear result.
 
+Airspace Guard rapid identity-churn detector `RB-M177`: exact
+`1.0.0-dev.217` reuses the complete bounded identity evidence and the existing
+report/UI path; it adds no task, radio owner, second capture buffer or static-RAM
+allocation. Static RAM remains 228,432 B and linked flash is 3,336,748 B
+(+1,344 B). App/factory/ELF sizes are
+3,337,248/3,402,784/22,471,948 B (+1,344/+1,344/+42,136 B).
+Firmware/factory/ELF SHA-256 are
+`d89ec463004b1c325af2655bac717bb699fc1da7ba3d15a6bba574f0840bee08`/
+`5f19d2112b8ce7ebe61b18d2270ec205daf1ff9a85e1aae178a4643c8f091564`/
+`bc9bdba79c75ed9b1c8be84ab2eeefdb105d8a9784d5065b33e55e79bebc0838`.
+The optimized host stack report is 2,656 B for `inspectWifi` (+64 B), 176 B for
+identity decode and 144 B for the ingress key helper. Live heap and physical-radio
+behavior remain unclaimed until HIL; the detector is disabled when identity
+retention is incomplete.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

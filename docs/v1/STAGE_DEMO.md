@@ -46,11 +46,12 @@ and an unavailable fixture remains a blocker rather than a simulated pass.
 The `1.0.0-dev.210` detector through `1.0.0-dev.213` evidence/UI slices,
 `1.0.0-dev.214` bounded one-adapter live passive Wi-Fi capture, `1.0.0-dev.215`
 complete-evidence SSID/security identity-conflict indicator and `1.0.0-dev.216`
-fail-closed bounded live identity retention are host/build CAP-048
+fail-closed bounded live identity retention, plus the `1.0.0-dev.217` rapid
+visible-name-change indicator for one BSSID, are host/build CAP-048
 foundations only. Their golden/negative corpus, receive-only guard, strongest-first
 ordering, exact drilldown, non-color-only text, no-clear repaint, explicit capture-loss
 accounting and cleanup-before-publication do not yet satisfy DEMO-S7. The identity
-detector is now enabled only after complete live retention and cleanup; physical
+identity detectors are now enabled only after complete live retention and cleanup; physical
 golden/negative TFT/navigation/cleanup evidence, the remaining detector families and
 their negative corpora are still required.
 

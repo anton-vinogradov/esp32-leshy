@@ -952,6 +952,21 @@ identity decode и 144 B для ingress key helper. Live heap/cleanup не за�
 physical HIL; incomplete identity retention выключает detector и учитывается как
 source loss, а не clean result.
 
+Детектор быстрой смены identity Защиты эфира `RB-M177`: exact
+`1.0.0-dev.217` переиспользует complete bounded identity evidence и существующий
+путь report/UI; он не добавляет task, radio owner, второй capture buffer или
+static-RAM allocation. Static RAM остаётся 228 432 B, linked flash равен
+3 336 748 B (+1 344 B). Размеры app/factory/ELF —
+3 337 248/3 402 784/22 471 948 B (+1 344/+1 344/+42 136 B).
+SHA-256 firmware/factory/ELF:
+`d89ec463004b1c325af2655bac717bb699fc1da7ba3d15a6bba574f0840bee08`/
+`5f19d2112b8ce7ebe61b18d2270ec205daf1ff9a85e1aae178a4643c8f091564`/
+`bc9bdba79c75ed9b1c8be84ab2eeefdb105d8a9784d5065b33e55e79bebc0838`.
+Оптимизированный host stack report показывает 2 656 B для `inspectWifi` (+64 B),
+176 B для identity decode и 144 B для ingress key helper. Live heap и поведение
+physical radio не заявляются до HIL; при incomplete identity retention detector
+выключен.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

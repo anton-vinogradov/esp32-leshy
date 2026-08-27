@@ -800,6 +800,20 @@ adapter, полного cleanup и при нулевой такой loss. Runnin
 только data bands. Это закрывает source/build prerequisite live retention, но до
 physical acceptance всё ещё нужны golden/negative evidence TFT и cleanup.
 
+Exact `1.0.0-dev.217` добавляет третий bounded Wi-Fi detector над тем же полным
+набором identities. Для каждого valid BSSID он удерживает не более восьми разных
+advertisements видимого SSID в validated окне десять секунд; повтор одного имени
+deduplicate-ится даже при изменении профиля security. Четыре разных имени создают
+medium-confidence находку для проверки с version detector, threshold, interval и
+exact immutable references frame/time/channel/RSSI. Имена, разделённые между BSSID,
+менее четырёх имён, устаревшее окно и malformed либо incomplete evidence находкой не
+становятся. Такой pattern допустим у легитимной multi-SSID сети, поэтому ни source,
+ни UI EN/RU не называют его PineAP или доказательством атаки, а response не
+запускается. Оба identity detectors могут ссылаться на одни source frames, сохраняя
+общий prerequisite complete retention и cleanup. Реализация не добавляет buffer,
+task или radio owner; physical golden/negative evidence TFT/navigation/cleanup
+остаётся открытым.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

@@ -720,6 +720,19 @@ and identity counts in one stable row and still repaints data bands only. This c
 the source/build live-retention prerequisite, but physical golden/negative TFT and
 cleanup evidence remains required before the live detector is accepted on hardware.
 
+Exact `1.0.0-dev.217` adds a third bounded Wi-Fi detector over that same complete
+identity set. For each valid BSSID it retains at most eight distinct visible SSID
+advertisements inside a validated ten-second window; one repeated name is deduplicated
+even when its security profile changes. Four distinct names create a medium-confidence
+investigation finding with detector version, threshold, interval and exact immutable
+frame/time/channel/RSSI references. Names split across BSSIDs, fewer than four names,
+stale windows and malformed or incomplete evidence do not create the finding. This
+pattern can be legitimate multi-SSID operation, so neither source nor EN/RU UI calls
+it PineAP or proof of an attack, and no response is started. Both identity detectors
+may reference the same source frames, while complete-retention and cleanup remain a
+shared prerequisite. The implementation adds no buffer, task or radio owner; physical
+golden/negative TFT/navigation/cleanup evidence is still open.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.
