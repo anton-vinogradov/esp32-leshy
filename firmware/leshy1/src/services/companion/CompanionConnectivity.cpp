@@ -65,15 +65,6 @@ bool makeCompanionLocalCredentials(
     CompanionLocalCredentials* output) {
     if (output == nullptr) return false;
     CompanionLocalCredentials candidate{};
-    const int ssidLength = std::snprintf(
-        candidate.ssid.data(), candidate.ssid.size(), "Leshy-%02X%02X%02X",
-        static_cast<unsigned>(deviceMac[3]),
-        static_cast<unsigned>(deviceMac[4]),
-        static_cast<unsigned>(deviceMac[5]));
-    if (ssidLength <= 0 ||
-        static_cast<std::size_t>(ssidLength) >= candidate.ssid.size()) {
-        return false;
-    }
     std::uint32_t accumulator = 0x6c657368U;
     for (std::size_t index = 0; index < entropy.size(); ++index) {
         accumulator ^= static_cast<std::uint32_t>(entropy[index])
@@ -85,6 +76,22 @@ bool makeCompanionLocalCredentials(
                 (accumulator ^ (accumulator >> 16U)) %
                 kCredentialAlphabetSize];
         }
+    }
+    // macOS and other clients may retain WPA metadata after a temporary
+    // profile is removed. A per-run SSID prevents a new one-shot passphrase
+    // from colliding with stale security metadata for the same network name.
+    const unsigned ssidTag = static_cast<unsigned>(
+        (accumulator ^ (accumulator >> 16U)) & 0xffffU);
+    const int ssidLength = std::snprintf(
+        candidate.ssid.data(), candidate.ssid.size(),
+        "Leshy-%02X%02X%02X-%04X",
+        static_cast<unsigned>(deviceMac[3]),
+        static_cast<unsigned>(deviceMac[4]),
+        static_cast<unsigned>(deviceMac[5]), ssidTag);
+    if (ssidLength <= 0 ||
+        static_cast<std::size_t>(ssidLength) >= candidate.ssid.size()) {
+        candidate.clear();
+        return false;
     }
     candidate.passphrase[kCompanionLocalPassphraseCapacity] = '\0';
     if (!candidate.valid()) {

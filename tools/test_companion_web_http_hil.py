@@ -125,7 +125,7 @@ class CompanionWebHttpHilTests(unittest.TestCase):
         entropy = bytes(range(16))
         ssid, password = derive_local_credentials(
             "1c:db:d4:87:90:d5", entropy)
-        self.assertEqual("Leshy-8790D5", ssid)
+        self.assertEqual("Leshy-8790D5-2351", ssid)
         self.assertEqual("2qzq5Rh3Txd9", password)
         self.assertEqual(
             (ssid, password), derive_local_credentials(

@@ -31,11 +31,13 @@ void testEphemeralCredentialsAreBoundedAndClearable() {
     CompanionLocalCredentials second{};
     CHECK(makeCompanionLocalCredentials(mac, entropy, &first));
     CHECK(first.valid());
-    CHECK(std::strcmp(first.ssid.data(), "Leshy-8790D4") == 0);
+    CHECK(std::strncmp(first.ssid.data(), "Leshy-8790D4-", 13U) == 0);
+    CHECK(std::strlen(first.ssid.data()) == 17U);
     CHECK(std::strlen(first.passphrase.data()) ==
           kCompanionLocalPassphraseCapacity);
     entropy[0] ^= 0x5aU;
     CHECK(makeCompanionLocalCredentials(mac, entropy, &second));
+    CHECK(std::strcmp(first.ssid.data(), second.ssid.data()) != 0);
     CHECK(std::strcmp(first.passphrase.data(), second.passphrase.data()) != 0);
     first.clear();
     for (char value : first.ssid) CHECK(value == '\0');

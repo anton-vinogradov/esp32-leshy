@@ -286,6 +286,7 @@ def main() -> int:
         "30ULL * 60ULL * 1000000ULL",
         "CompanionLocalCredentials",
         "makeCompanionLocalCredentials",
+        '"Leshy-%02X%02X%02X-%04X"',
         "parseCompanionHilEntropyHex",
         "secureClear",
         "CompanionConnectivity::authorize",

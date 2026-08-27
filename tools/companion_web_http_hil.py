@@ -45,7 +45,11 @@ def derive_local_credentials(softap_mac: str, entropy: bytes) -> tuple[str, str]
             password.append(CREDENTIAL_ALPHABET[
                 (accumulator ^ (accumulator >> 16)) %
                 len(CREDENTIAL_ALPHABET)])
-    return f"Leshy-{mac[3]:02X}{mac[4]:02X}{mac[5]:02X}", "".join(password)
+    ssid_tag = (accumulator ^ (accumulator >> 16)) & 0xFFFF
+    return (
+        f"Leshy-{mac[3]:02X}{mac[4]:02X}{mac[5]:02X}-{ssid_tag:04X}",
+        "".join(password),
+    )
 
 
 @dataclass(frozen=True)
