@@ -29,8 +29,10 @@ public:
     static constexpr std::uint64_t kClientDeadlineUs = 3000000ULL;
     static constexpr int kStaticRxBuffers = 2;
     static constexpr int kDynamicRxBuffers = 1;
-    // The pinned ESP-IDF libraries are compiled for static TX buffers.
-    static constexpr int kStaticTxBuffers = 2;
+    // The pinned ESP-IDF libraries are compiled for static TX buffers. Six
+    // buffers cover the bounded 6.6 KiB index response without stalling the
+    // supervised main loop while the single local client acknowledges it.
+    static constexpr int kStaticTxBuffers = 6;
     static constexpr int kDynamicTxBuffers = 0;
     static constexpr int kRxManagementBuffers = 1;
     static constexpr int kCacheTxBuffers = 1;

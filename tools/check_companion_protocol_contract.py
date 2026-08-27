@@ -327,7 +327,7 @@ def main() -> int:
         "server_(80, 1)",
         "kStaticRxBuffers = 2",
         "kDynamicRxBuffers = 1",
-        "kStaticTxBuffers = 2",
+        "kStaticTxBuffers = 6",
         "kDynamicTxBuffers = 0",
         "init.tx_buf_type = 0",
         "init.static_tx_buf_num = kStaticTxBuffers",

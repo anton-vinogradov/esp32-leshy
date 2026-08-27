@@ -1428,7 +1428,7 @@ def main() -> int:
         for marker in (
             "kStaticRxBuffers = 2",
             "kDynamicRxBuffers = 1",
-            "kStaticTxBuffers = 2",
+            "kStaticTxBuffers = 6",
             "kDynamicTxBuffers = 0",
             "kRxManagementBuffers = 1",
             "kCacheTxBuffers = 1",
