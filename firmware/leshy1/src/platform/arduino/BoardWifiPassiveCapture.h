@@ -10,6 +10,7 @@
 #include "apps/capture/WifiFrameCapture.h"
 #include "apps/wifi/WifiChannelLoad.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
+#include "services/guard/AirspaceGuard.h"
 
 namespace leshy1::platform::arduino {
 
@@ -34,15 +35,25 @@ public:
     };
 
     struct AirspaceGuardMonitorStats final {
+        static constexpr std::size_t kDisconnectRetentionCapacity =
+            services::guard::kWifiDisconnectLiveRetentionCapacity;
+        static constexpr std::size_t kIdentityRetentionCapacity =
+            services::guard::kWifiIdentityLiveRetentionCapacity;
+
         std::uint32_t framesReported = 0;
         std::uint32_t framesRetained = 0;
         std::uint32_t disconnectFramesRetained = 0;
         std::uint32_t disconnectFramesDropped = 0;
+        std::uint32_t identityAdvertisementsObserved = 0;
+        std::uint32_t identityProfilesRetained = 0;
+        std::uint32_t identityProfilesDeduplicated = 0;
+        std::uint32_t identityProfilesDropped = 0;
         std::uint32_t invalidFrames = 0;
         std::uint32_t ignoredFrames = 0;
         std::uint32_t channelHops = 0;
         bool active = false;
         bool cleanupComplete = true;
+        bool identityRetentionComplete = false;
     };
 
     ~BoardWifiPassiveCapture() { stop(0); }
@@ -94,6 +105,10 @@ private:
     DeviceMonitorStats deviceStats_{};
     ChannelMonitorStats channelStats_{};
     AirspaceGuardMonitorStats airspaceGuardStats_{};
+    std::array<services::guard::WifiIdentityRetentionKey,
+               AirspaceGuardMonitorStats::kIdentityRetentionCapacity>
+        airspaceGuardIdentityKeys_{};
+    std::size_t airspaceGuardIdentityKeyCount_ = 0;
     apps::wifi::WifiChannelLoad channelLoad_{};
     std::size_t deviceQueueHead_ = 0;
     std::size_t deviceQueueTail_ = 0;

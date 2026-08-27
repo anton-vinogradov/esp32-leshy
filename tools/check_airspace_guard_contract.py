@@ -70,6 +70,13 @@ def main() -> int:
         "ssidSecurityConflictWindowUs = 10000000ULL",
         "WifiSsidSecurityConflict",
         "isWifiIdentityAdvertisementCandidate",
+        "WifiIdentityRetentionKey",
+        "wifiIdentityRetentionKey",
+        "sameWifiIdentityRetentionKey",
+        "kWifiDisconnectLiveRetentionCapacity = 8",
+        "kWifiIdentityLiveRetentionCapacity = 8",
+        "wifiDisconnectRetentionSlotAvailable",
+        "wifiIdentityRetentionSlotAvailable",
         "kWifiIdentityDetectorVersion = 1",
         "AirspaceWifiSecurity::Rsn",
         "WifiFrameSource& source",
@@ -90,6 +97,8 @@ def main() -> int:
         "testIngressClassifiersStayManagementOnly",
         "testExternalCaptureLossMakesClearEvidenceInconclusive",
         "testIdentityConflictIsOptInUntilLiveRetentionIsComplete",
+        "testLiveIdentityRetentionKeyIsExactAndFailClosed",
+        "testLiveRetentionPartitionKeepsDisconnectCapacity",
         "testIdentityConflictRetainsTwoExactAdvertisements",
         "testIdentityDetectorRejectsLookalikesAndMalformedEvidence",
         "testIdentityParserExcludesCapturedFcsFromInformationElements",
@@ -195,6 +204,7 @@ def main() -> int:
         "AirspaceGuardPassiveOnly",
         "AirspaceGuardCaptureNotStarted",
         "AirspaceGuardListening",
+        "AirspaceGuardEvidenceKindsFormat",
         "AirspaceGuardCaptureLossFormat",
         "AirspaceGuardIdentityConflict",
         "AirspaceGuardSecurityPairFormat",
@@ -231,6 +241,7 @@ def main() -> int:
         "airspaceGuardDetector.inspectWifi",
         "kAirspaceGuardCaptureDurationMs = 10000U",
         "kAirspaceGuardChannelDwellMs = 120U",
+        "UiTextId::AirspaceGuardEvidenceKindsFormat",
     ):
         require(failures, marker in arduino_entry,
                 f"missing Airspace Guard product integration: {marker}")
@@ -252,6 +263,16 @@ def main() -> int:
         "WIFI_PROMIS_FILTER_MASK_MGMT",
         "isWifiDisconnectFrameCandidate",
         "disconnectFramesDropped",
+        "kDisconnectRetentionCapacity =",
+        "kIdentityRetentionCapacity =",
+        "wifiDisconnectRetentionSlotAvailable",
+        "wifiIdentityRetentionSlotAvailable",
+        "identityProfilesDeduplicated",
+        "identityProfilesDropped",
+        "identityRetentionComplete",
+        "wifiIdentityRetentionKey",
+        "sameWifiIdentityRetentionKey",
+        "packet->rx_ctrl.sig_len > capture_.plan().snapLength",
         "capture_.size() == 0U",
         "airspaceGuardStats_.cleanupComplete",
         "return stop(nowUs)",
@@ -272,9 +293,10 @@ def main() -> int:
     )
     require(
         failures,
-        "isWifiIdentityAdvertisementCandidate" not in board_capture and
-        "ssidSecurityConflictEnabled" not in arduino_entry,
-        "live identity detector enabled before bounded complete retention",
+        "policy.ssidSecurityConflictEnabled =" in arduino_entry and
+        "monitor.identityRetentionComplete" in arduino_entry and
+        "monitor.identityProfilesDropped" in arduino_entry,
+        "live identity detector is not gated by complete bounded retention",
     )
 
     if failures:

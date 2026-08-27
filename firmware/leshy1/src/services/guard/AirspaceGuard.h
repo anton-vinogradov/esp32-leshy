@@ -34,6 +34,25 @@ enum class AirspaceWifiSecurity : std::uint8_t {
     Rsn,
 };
 
+enum class WifiIdentityIngressStatus : std::uint8_t {
+    NotAdvertisement,
+    IgnoredAdvertisement,
+    RetainableAdvertisement,
+    MalformedAdvertisement,
+};
+
+struct WifiIdentityRetentionKey final {
+    static constexpr std::size_t kNetworkNameCapacity = 32;
+
+    std::array<std::uint8_t, 6> transmitter{};
+    std::array<std::uint8_t, kNetworkNameCapacity> networkName{};
+    std::uint8_t networkNameLength = 0;
+    AirspaceWifiSecurity security = AirspaceWifiSecurity::Unknown;
+};
+
+inline constexpr std::size_t kWifiDisconnectLiveRetentionCapacity = 8;
+inline constexpr std::size_t kWifiIdentityLiveRetentionCapacity = 8;
+
 const char* airspaceGuardStatusName(AirspaceGuardStatus status);
 const char* airspaceFindingKindName(AirspaceFindingKind kind);
 const char* airspaceConfidenceName(AirspaceConfidence confidence);
@@ -42,9 +61,10 @@ const char* airspaceWifiSecurityName(AirspaceWifiSecurity security);
 struct AirspaceGuardPolicy final {
     std::uint8_t disconnectBurstThreshold = 4;
     std::uint64_t disconnectWindowUs = 2000000ULL;
-    // Disabled until the live adapter retains a complete bounded set of
-    // identity advertisements. Complete imported/captured sources may enable
-    // it explicitly without weakening live clear-result semantics.
+    // Off by default: a caller may enable this only after proving that its
+    // source retains a complete bounded set of identity advertisements. The
+    // live adapter makes that decision after cleanup; imported sources opt in
+    // explicitly without weakening clear-result semantics.
     bool ssidSecurityConflictEnabled = false;
     std::uint64_t ssidSecurityConflictWindowUs = 10000000ULL;
 };
@@ -58,6 +78,18 @@ bool isWifiDisconnectFrameCandidate(const std::uint8_t* payload,
                                     std::size_t length);
 bool isWifiIdentityAdvertisementCandidate(const std::uint8_t* payload,
                                           std::size_t length);
+WifiIdentityIngressStatus wifiIdentityRetentionKey(
+    const std::uint8_t* payload, std::size_t length, bool fcsIncluded,
+    WifiIdentityRetentionKey* output);
+bool sameWifiIdentityRetentionKey(const WifiIdentityRetentionKey& left,
+                                  const WifiIdentityRetentionKey& right);
+bool wifiDisconnectRetentionSlotAvailable(std::size_t totalCapacity,
+                                          std::size_t retainedFrames,
+                                          std::size_t disconnectFrames);
+bool wifiIdentityRetentionSlotAvailable(std::size_t totalCapacity,
+                                        std::size_t retainedFrames,
+                                        std::size_t disconnectFrames,
+                                        std::size_t identityProfiles);
 
 struct AirspaceEvidenceRef final {
     std::size_t frameIndex = 0;

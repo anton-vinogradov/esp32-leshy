@@ -298,6 +298,76 @@ bool isWifiIdentityAdvertisementCandidate(const std::uint8_t* payload,
     return type == 0U && (subtype == 5U || subtype == 8U);
 }
 
+WifiIdentityIngressStatus wifiIdentityRetentionKey(
+    const std::uint8_t* payload, std::size_t length, bool fcsIncluded,
+    WifiIdentityRetentionKey* output) {
+    if (output == nullptr) {
+        return WifiIdentityIngressStatus::MalformedAdvertisement;
+    }
+    *output = {};
+    if (!isWifiIdentityAdvertisementCandidate(payload, length)) {
+        return WifiIdentityIngressStatus::NotAdvertisement;
+    }
+    if (length > 0xffffU) {
+        return WifiIdentityIngressStatus::MalformedAdvertisement;
+    }
+    WifiFrameView frame{};
+    frame.monotonicUs = 1U;
+    frame.capturedLength = static_cast<std::uint16_t>(length);
+    frame.originalLength = frame.capturedLength;
+    frame.channel = 1U;
+    frame.kind = WifiFrameKind::Management;
+    frame.fcsIncluded = fcsIncluded;
+    frame.payload = payload;
+    IdentityAdvertisement advertisement{};
+    switch (decodeIdentityAdvertisement(frame, &advertisement, 0U)) {
+        case IdentityDecode::NotAdvertisement:
+            return WifiIdentityIngressStatus::NotAdvertisement;
+        case IdentityDecode::IgnoredAdvertisement:
+            return WifiIdentityIngressStatus::IgnoredAdvertisement;
+        case IdentityDecode::Malformed:
+            return WifiIdentityIngressStatus::MalformedAdvertisement;
+        case IdentityDecode::Advertisement:
+            output->transmitter = advertisement.transmitter;
+            output->networkName = advertisement.networkName;
+            output->networkNameLength = advertisement.networkNameLength;
+            output->security = advertisement.security;
+            return WifiIdentityIngressStatus::RetainableAdvertisement;
+    }
+    return WifiIdentityIngressStatus::MalformedAdvertisement;
+}
+
+bool sameWifiIdentityRetentionKey(const WifiIdentityRetentionKey& left,
+                                  const WifiIdentityRetentionKey& right) {
+    return left.transmitter == right.transmitter &&
+        left.networkNameLength == right.networkNameLength &&
+        left.security == right.security && left.networkNameLength != 0U &&
+        std::memcmp(left.networkName.data(), right.networkName.data(),
+                    left.networkNameLength) == 0;
+}
+
+bool wifiDisconnectRetentionSlotAvailable(std::size_t totalCapacity,
+                                          std::size_t retainedFrames,
+                                          std::size_t disconnectFrames) {
+    return disconnectFrames < kWifiDisconnectLiveRetentionCapacity &&
+        retainedFrames < totalCapacity;
+}
+
+bool wifiIdentityRetentionSlotAvailable(std::size_t totalCapacity,
+                                        std::size_t retainedFrames,
+                                        std::size_t disconnectFrames,
+                                        std::size_t identityProfiles) {
+    if (disconnectFrames > kWifiDisconnectLiveRetentionCapacity ||
+        identityProfiles >= kWifiIdentityLiveRetentionCapacity ||
+        retainedFrames > totalCapacity) {
+        return false;
+    }
+    const std::size_t disconnectReservation =
+        kWifiDisconnectLiveRetentionCapacity - disconnectFrames;
+    return disconnectReservation <= totalCapacity &&
+        retainedFrames < totalCapacity - disconnectReservation;
+}
+
 AirspaceGuardReport AirspaceGuard::inspectWifi(
     const domain::captures::WifiFrameSource& source,
     const AirspaceGuardPolicy& policy,

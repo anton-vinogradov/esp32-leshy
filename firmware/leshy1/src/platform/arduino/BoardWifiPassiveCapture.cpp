@@ -67,6 +67,9 @@ bool BoardWifiPassiveCapture::beginCapture(
     channelMonitor_ = false;
     airspaceGuardMonitor_ = airspaceGuardMonitor;
     airspaceGuardStats_ = {};
+    airspaceGuardIdentityKeys_.fill(
+        services::guard::WifiIdentityRetentionKey{});
+    airspaceGuardIdentityKeyCount_ = 0U;
     airspaceGuardStats_.cleanupComplete = !airspaceGuardMonitor;
     cleanupComplete_ = false;
     lastError_ = 0;
@@ -434,6 +437,9 @@ void BoardWifiPassiveCapture::reset() {
     deviceStats_ = {};
     channelStats_ = {};
     airspaceGuardStats_ = {};
+    airspaceGuardIdentityKeys_.fill(
+        services::guard::WifiIdentityRetentionKey{});
+    airspaceGuardIdentityKeyCount_ = 0U;
     channelLoad_.reset();
     portEXIT_CRITICAL(&mux_);
     deviceMonitor_ = false;
@@ -482,6 +488,9 @@ BoardWifiPassiveCapture::airspaceGuardMonitorStats() const {
     result.framesRetained = capture_.stats().framesAccepted;
     result.cleanupComplete = airspaceGuardMonitor_
         ? cleanupComplete_ : airspaceGuardStats_.cleanupComplete;
+    result.identityRetentionComplete = !result.active &&
+        result.cleanupComplete && result.identityProfilesDropped == 0U &&
+        result.invalidFrames == 0U;
     portEXIT_CRITICAL(&mux_);
     return result;
 }
@@ -596,27 +605,92 @@ void BoardWifiPassiveCapture::accept(void* buffer,
         const bool disconnectCandidate = receiveValid &&
             leshy1::services::guard::isWifiDisconnectFrameCandidate(
                 packet->payload, packet->rx_ctrl.sig_len);
+        leshy1::services::guard::WifiIdentityRetentionKey identityKey{};
+        const auto identityStatus = receiveValid
+            ? leshy1::services::guard::wifiIdentityRetentionKey(
+                  packet->payload, packet->rx_ctrl.sig_len, true,
+                  &identityKey)
+            : leshy1::services::guard::
+                  WifiIdentityIngressStatus::NotAdvertisement;
+        std::uint64_t receivedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (receivedUs == 0U) receivedUs = 1U;
         portENTER_CRITICAL(&mux_);
         ++airspaceGuardStats_.framesReported;
         if (!receiveValid || packet->rx_ctrl.channel < 1U ||
             packet->rx_ctrl.channel > 13U || packet->rx_ctrl.sig_len < 2U) {
             ++airspaceGuardStats_.invalidFrames;
-        } else if (disconnectCandidate || capture_.size() == 0U) {
-            const std::uint32_t capacityDropsBefore =
-                capture_.stats().framesDroppedCapacity;
+        } else if (disconnectCandidate) {
+            if (!leshy1::services::guard::
+                    wifiDisconnectRetentionSlotAvailable(
+                        apps::capture::WifiFrameCapture::kFrameCapacity,
+                        capture_.size(),
+                        airspaceGuardStats_.disconnectFramesRetained)) {
+                ++airspaceGuardStats_.disconnectFramesDropped;
+                portEXIT_CRITICAL(&mux_);
+                return;
+            }
             const bool retained = capture_.append(
                 packet->payload, packet->rx_ctrl.sig_len,
-                static_cast<std::uint64_t>(esp_timer_get_time()),
+                receivedUs,
                 packet->rx_ctrl.rssi, packet->rx_ctrl.channel,
                 WifiFrameKind::Management, true);
-            if (disconnectCandidate) {
-                if (retained) {
-                    ++airspaceGuardStats_.disconnectFramesRetained;
-                } else if (capture_.stats().framesDroppedCapacity >
-                           capacityDropsBefore) {
-                    ++airspaceGuardStats_.disconnectFramesDropped;
+            if (retained) {
+                ++airspaceGuardStats_.disconnectFramesRetained;
+            } else {
+                ++airspaceGuardStats_.disconnectFramesDropped;
+            }
+        } else if (identityStatus == leshy1::services::guard::
+                       WifiIdentityIngressStatus::RetainableAdvertisement) {
+            ++airspaceGuardStats_.identityAdvertisementsObserved;
+            if (packet->rx_ctrl.sig_len > capture_.plan().snapLength) {
+                ++airspaceGuardStats_.identityProfilesDropped;
+                portEXIT_CRITICAL(&mux_);
+                return;
+            }
+            bool duplicate = false;
+            for (std::size_t index = 0U;
+                 index < airspaceGuardIdentityKeyCount_; ++index) {
+                if (leshy1::services::guard::sameWifiIdentityRetentionKey(
+                        airspaceGuardIdentityKeys_[index], identityKey)) {
+                    duplicate = true;
+                    break;
                 }
             }
+            if (duplicate) {
+                ++airspaceGuardStats_.identityProfilesDeduplicated;
+                portEXIT_CRITICAL(&mux_);
+                return;
+            }
+            if (!leshy1::services::guard::wifiIdentityRetentionSlotAvailable(
+                    apps::capture::WifiFrameCapture::kFrameCapacity,
+                    capture_.size(),
+                    airspaceGuardStats_.disconnectFramesRetained,
+                    airspaceGuardIdentityKeyCount_)) {
+                ++airspaceGuardStats_.identityProfilesDropped;
+                portEXIT_CRITICAL(&mux_);
+                return;
+            }
+            const bool retained = capture_.append(
+                packet->payload, packet->rx_ctrl.sig_len, receivedUs,
+                packet->rx_ctrl.rssi, packet->rx_ctrl.channel,
+                WifiFrameKind::Management, true);
+            if (retained) {
+                airspaceGuardIdentityKeys_[airspaceGuardIdentityKeyCount_++] =
+                    identityKey;
+                ++airspaceGuardStats_.identityProfilesRetained;
+            } else {
+                ++airspaceGuardStats_.identityProfilesDropped;
+            }
+        } else if (identityStatus == leshy1::services::guard::
+                       WifiIdentityIngressStatus::MalformedAdvertisement) {
+            ++airspaceGuardStats_.invalidFrames;
+        } else if (capture_.size() == 0U) {
+            const bool retained = capture_.append(
+                packet->payload, packet->rx_ctrl.sig_len, receivedUs,
+                packet->rx_ctrl.rssi, packet->rx_ctrl.channel,
+                WifiFrameKind::Management, true);
+            if (!retained) ++airspaceGuardStats_.invalidFrames;
         } else {
             ++airspaceGuardStats_.ignoredFrames;
         }

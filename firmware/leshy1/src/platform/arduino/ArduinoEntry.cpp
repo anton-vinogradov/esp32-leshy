@@ -12639,8 +12639,9 @@ void renderAirspaceGuardPage(bool clearContent, bool liveDataOnly = false) {
                       static_cast<unsigned long>(monitor.framesReported));
         std::snprintf(
             model.rows[2].text.data(), model.rows[2].text.size(),
-            tr(UiTextId::AirspaceGuardDisconnectsFormat),
-            static_cast<unsigned long>(monitor.disconnectFramesRetained));
+            tr(UiTextId::AirspaceGuardEvidenceKindsFormat),
+            static_cast<unsigned long>(monitor.disconnectFramesRetained),
+            static_cast<unsigned long>(monitor.identityProfilesRetained));
         std::snprintf(model.rows[3].text.data(), model.rows[3].text.size(),
                       tr(UiTextId::AirspaceGuardRetainedFormat),
                       static_cast<unsigned long>(monitor.framesRetained));
@@ -19538,9 +19539,13 @@ void serviceAirspaceGuardProduct() {
         if (complete) {
             const std::size_t dropped =
                 static_cast<std::size_t>(monitor.disconnectFramesDropped) +
+                static_cast<std::size_t>(monitor.identityProfilesDropped) +
                 static_cast<std::size_t>(monitor.invalidFrames);
+            leshy1::services::guard::AirspaceGuardPolicy policy{};
+            policy.ssidSecurityConflictEnabled =
+                monitor.identityRetentionComplete;
             report = airspaceGuardDetector.inspectWifi(
-                wifiFrameCapture.capture(), {}, dropped,
+                wifiFrameCapture.capture(), policy, dropped,
                 static_cast<std::size_t>(monitor.framesReported));
         } else {
             report.status =

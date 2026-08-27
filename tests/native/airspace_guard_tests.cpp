@@ -189,6 +189,76 @@ void testIdentityConflictIsOptInUntilLiveRetentionIsComplete() {
     CHECK(report.findingCount == 0U);
 }
 
+void testLiveIdentityRetentionKeyIsExactAndFailClosed() {
+    FixtureSource source;
+    source.addIdentityAdvertisement(8U, 1000000ULL, kTransmitterA,
+                                    "Workshop", AirspaceWifiSecurity::Rsn);
+    FixtureFrame& first = source.mutableAt(0U);
+    WifiIdentityRetentionKey firstKey{};
+    CHECK(wifiIdentityRetentionKey(
+              first.payload.data(), first.length, false, &firstKey) ==
+          WifiIdentityIngressStatus::RetainableAdvertisement);
+    CHECK(firstKey.transmitter == kTransmitterA);
+    CHECK(firstKey.networkNameLength == 8U);
+    CHECK(firstKey.security == AirspaceWifiSecurity::Rsn);
+
+    FixtureSource duplicate;
+    duplicate.addIdentityAdvertisement(5U, 1100000ULL, kTransmitterA,
+                                       "Workshop",
+                                       AirspaceWifiSecurity::Rsn);
+    FixtureFrame& second = duplicate.mutableAt(0U);
+    WifiIdentityRetentionKey secondKey{};
+    CHECK(wifiIdentityRetentionKey(
+              second.payload.data(), second.length, false, &secondKey) ==
+          WifiIdentityIngressStatus::RetainableAdvertisement);
+    CHECK(sameWifiIdentityRetentionKey(firstKey, secondKey));
+
+    second.payload[34] = 0U;
+    second.length = 46U;
+    WifiIdentityRetentionKey changedKey{};
+    CHECK(wifiIdentityRetentionKey(
+              second.payload.data(), second.length, false, &changedKey) ==
+          WifiIdentityIngressStatus::RetainableAdvertisement);
+    CHECK(!sameWifiIdentityRetentionKey(firstKey, changedKey));
+
+    FixtureSource hidden;
+    hidden.addIdentityAdvertisement(8U, 1200000ULL, kTransmitterB, "",
+                                    AirspaceWifiSecurity::Open);
+    FixtureFrame& hiddenFrame = hidden.mutableAt(0U);
+    WifiIdentityRetentionKey ignored{};
+    CHECK(wifiIdentityRetentionKey(hiddenFrame.payload.data(),
+                                   hiddenFrame.length, false, &ignored) ==
+          WifiIdentityIngressStatus::IgnoredAdvertisement);
+
+    first.length = 37U;
+    CHECK(wifiIdentityRetentionKey(first.payload.data(), first.length, false,
+                                   &firstKey) ==
+          WifiIdentityIngressStatus::MalformedAdvertisement);
+    CHECK(wifiIdentityRetentionKey(nullptr, 0U, false, &firstKey) ==
+          WifiIdentityIngressStatus::NotAdvertisement);
+    CHECK(wifiIdentityRetentionKey(first.payload.data(), first.length, false,
+                                   nullptr) ==
+          WifiIdentityIngressStatus::MalformedAdvertisement);
+}
+
+void testLiveRetentionPartitionKeepsDisconnectCapacity() {
+    constexpr std::size_t total = 16U;
+    CHECK(wifiIdentityRetentionSlotAvailable(total, 0U, 0U, 0U));
+    CHECK(wifiIdentityRetentionSlotAvailable(total, 7U, 0U, 7U));
+    CHECK(!wifiIdentityRetentionSlotAvailable(total, 8U, 0U, 7U));
+    CHECK(!wifiIdentityRetentionSlotAvailable(total, 8U, 0U, 8U));
+    CHECK(wifiIdentityRetentionSlotAvailable(total, 10U, 3U, 7U));
+    CHECK(!wifiIdentityRetentionSlotAvailable(total, 11U, 3U, 8U));
+    CHECK(!wifiIdentityRetentionSlotAvailable(7U, 0U, 0U, 0U));
+    CHECK(!wifiIdentityRetentionSlotAvailable(total, 17U, 0U, 0U));
+    CHECK(!wifiIdentityRetentionSlotAvailable(total, 0U, 9U, 0U));
+
+    CHECK(wifiDisconnectRetentionSlotAvailable(total, 8U, 0U));
+    CHECK(wifiDisconnectRetentionSlotAvailable(total, 15U, 7U));
+    CHECK(!wifiDisconnectRetentionSlotAvailable(total, 16U, 7U));
+    CHECK(!wifiDisconnectRetentionSlotAvailable(total, 15U, 8U));
+}
+
 void testIdentityConflictRetainsTwoExactAdvertisements() {
     FixtureSource source;
     source.addIdentityAdvertisement(8U, 1000000ULL, kTransmitterA,
@@ -410,6 +480,8 @@ int main() {
     testPolicyAndEmptyEvidenceFailClosed();
     testIngressClassifiersStayManagementOnly();
     testIdentityConflictIsOptInUntilLiveRetentionIsComplete();
+    testLiveIdentityRetentionKeyIsExactAndFailClosed();
+    testLiveRetentionPartitionKeepsDisconnectCapacity();
     testIdentityConflictRetainsTwoExactAdvertisements();
     testIdentityDetectorRejectsLookalikesAndMalformedEvidence();
     testIdentityParserExcludesCapturedFcsFromInformationElements();

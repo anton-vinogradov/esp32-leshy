@@ -52,7 +52,7 @@ LESHY_UI_TEXT(AirspaceGuardListening, Body, 212, "LISTENING TO WI-FI", u8"СЛУ
 LESHY_UI_TEXT(AirspaceGuardChannelFormat, Meta, 212, "CHANNEL %u OF 13", u8"КАНАЛ %u ИЗ 13")
 LESHY_UI_TEXT(AirspaceGuardTimeFormat, Meta, 212, "TIME LEFT %u.%u S", u8"ОСТАЛОСЬ %u.%u С")
 LESHY_UI_TEXT(AirspaceGuardSeenFormat, Meta, 212, "MANAGEMENT FRAMES %lu", u8"СЛУЖЕБНЫХ КАДРОВ %lu")
-LESHY_UI_TEXT(AirspaceGuardDisconnectsFormat, Meta, 212, "DISCONNECTS KEPT %lu", u8"ОТКЛЮЧЕНИЙ СОХРАНЕНО %lu")
+LESHY_UI_TEXT(AirspaceGuardEvidenceKindsFormat, Meta, 212, "DISCONNECTS %lu · IDENTITIES %lu", u8"ОТКЛЮЧЕНИЯ %lu · СЕТИ %lu")
 LESHY_UI_TEXT(AirspaceGuardRetainedFormat, Meta, 212, "EVIDENCE %lu OF 16", u8"ДОКАЗАТЕЛЬСТВА %lu ИЗ 16")
 LESHY_UI_TEXT(AirspaceGuardConfidenceHigh, Meta, 80, "HIGH", u8"ВЫСОКАЯ")
 LESHY_UI_TEXT(AirspaceGuardConfidenceMedium, Meta, 80, "MEDIUM", u8"СРЕДНЯЯ")
