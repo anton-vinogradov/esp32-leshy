@@ -57,7 +57,9 @@ def main() -> int:
     runner_source = RUNNER.read_text(encoding="utf-8")
     targets_source = TARGETS_RUNNER.read_text(encoding="utf-8")
     required_runner = (
-        '"application_flash_count": 1',
+        '"application_flash_count": 0 if args.reuse_exact_flash else 1',
+        '"exact_flash_reused": args.reuse_exact_flash',
+        "validate_reused_flash_lineage(",
         '"host_network_tools_invoked": False',
         '"active_mac_wifi_touched": False',
         '"wifi_softap_started": False',

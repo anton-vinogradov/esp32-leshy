@@ -261,6 +261,62 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "public Survey Start"):
                 RUNNER.focus_survey_start(object())
 
+    def test_current_product_route_opens_wifi_visit(self) -> None:
+        home = {
+            "page": "home", "selection": 0, "selected_id": "wifi",
+            "runtime_owner": "none", "lease_mask": 0,
+        }
+        states = [
+            {
+                "page": "survey", "wifi_product_view": "menu",
+                "wifi_product_selection": 0, "runtime_owner": "wifi",
+            },
+            {
+                "page": "survey", "wifi_product_view": "menu",
+                "wifi_product_selection": 1, "runtime_owner": "wifi",
+            },
+            {
+                "page": "survey", "wifi_product_view": "menu",
+                "wifi_product_selection": 2, "runtime_owner": "wifi",
+            },
+            {
+                "page": "survey", "wifi_product_view": "menu",
+                "wifi_product_selection": 3, "runtime_owner": "wifi",
+            },
+            {
+                "page": "survey", "wifi_product_view": "visit",
+                "wifi_product_selection": 3, "runtime_owner": "survey",
+                "lease_mask": 15, "survey_simulated": False,
+                "survey_persistent": True, "survey_product_selected": True,
+                "survey_workflow_state": "setup",
+                "survey_product_backend_open": False,
+                "survey_product_storage_mounted": False,
+                "survey_product_cleanup_complete": True,
+                "survey_product_worker_ready": True,
+                "survey_product_source_active": False,
+            },
+        ]
+        calls: list[str] = []
+
+        def fake_action(_: Any, name: str) -> dict[str, Any]:
+            calls.append(name)
+            return states[len(calls) - 1]
+
+        trace: list[dict[str, Any]] = []
+        with patch.object(RUNNER, "normalize_home", return_value=home), \
+                patch.object(RUNNER, "action", side_effect=fake_action):
+            setup = RUNNER.open_product_survey_visit(object(), trace)
+        self.assertEqual(["right", "down", "down", "down", "right"], calls)
+        self.assertEqual([], RUNNER.setup_failures(setup))
+        self.assertEqual(states, trace)
+
+    def test_current_product_route_rejects_non_wifi_home(self) -> None:
+        with patch.object(
+                RUNNER, "normalize_home",
+                return_value={"page": "home", "selected_id": "ble"}):
+            with self.assertRaisesRegex(RuntimeError, "Home Wi-Fi"):
+                RUNNER.open_product_survey_visit(object())
+
     def test_capture_retries_one_transient_usb_timeout(self) -> None:
         class Device:
             resets = 0

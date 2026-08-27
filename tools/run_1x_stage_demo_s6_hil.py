@@ -158,12 +158,55 @@ def _product_failures(run: dict[str, Any], expected: dict[str, Any],
     return failures
 
 
+def validate_reused_flash_lineage(
+        lineage: Path, expected: dict[str, Any], port: str
+) -> tuple[dict[str, Any], list[str]]:
+    failures: list[str] = []
+    root = lineage if lineage.is_dir() else lineage.parent
+    parent_path = root / "run.json" if lineage.is_dir() else lineage
+    baseline_path = root / "baseline-survey/run.json"
+    if not parent_path.is_file() or not baseline_path.is_file():
+        return {}, ["reused flash lineage run/baseline record missing"]
+    parent = load_json(parent_path)
+    baseline = load_json(baseline_path)
+    candidate = parent.get("candidate", {})
+    child_candidate = baseline.get("candidate", {})
+    ready = baseline.get("boot_before", {}).get("ready", {})
+    if not (
+        parent.get("schema") == SCHEMA
+        and parent.get("status") == "failed"
+        and parent.get("installation", {}).get("application_flash_count") == 1
+        and parent.get("target", {}).get("port") == port
+        and candidate == expected
+        and child_candidate.get("flashed") is True
+        and child_candidate.get("version") == expected["version"]
+        and child_candidate.get("firmware_sha256") == expected["firmware_sha256"]
+        and child_candidate.get("app_elf_sha256") == expected["app_elf_sha256"]
+        and ready.get("version") == expected["version"]
+        and ready.get("app_elf_sha256") == expected["app_elf_sha256"]
+        and baseline.get("committed") == {}
+        and baseline.get("cleanup_before_reboot", {}).get("complete") is True
+    ):
+        failures.append("reused exact-flash lineage mismatch")
+    retained = {
+        "path": str(root),
+        "run_sha256": digest(parent_path),
+        "baseline_run_sha256": digest(baseline_path),
+        "source_commit": parent.get("source_commit"),
+        "failure_stage": "baseline-survey-pre-workflow",
+    }
+    return retained, failures
+
+
 def validate_children(baseline: dict[str, Any], repeat: dict[str, Any],
                       targets: dict[str, Any], companion: dict[str, Any],
                       expected: dict[str, Any], expected_cid: str,
-                      source_commit: str) -> tuple[dict[str, Any], list[str]]:
+                      source_commit: str, *,
+                      baseline_flashed: bool = True
+                      ) -> tuple[dict[str, Any], list[str]]:
     failures = _product_failures(
-        baseline, expected, expected_cid, flashed=True, label="baseline"
+        baseline, expected, expected_cid, flashed=baseline_flashed,
+        label="baseline"
     )
     failures.extend(_product_failures(
         repeat, expected, expected_cid, flashed=False, label="repeat"
@@ -259,6 +302,14 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument(
+        "--reuse-exact-flash", action="store_true",
+        help="reuse the exact image from a retained pre-workflow flash lineage",
+    )
+    parser.add_argument(
+        "--reused-flash-lineage", type=Path,
+        help="failed DEMO-S6 output whose exact flash and clean cleanup are retained",
+    )
     args = parser.parse_args()
     args.firmware = args.firmware.resolve()
     args.elf = args.elf.resolve()
@@ -273,6 +324,10 @@ def main() -> int:
         parser.error("DEMO-S6 is bound to the enrolled original-DIV CID")
     if len(args.source_commit) != 40:
         parser.error("source commit must be full length")
+    if args.reuse_exact_flash != (args.reused_flash_lineage is not None):
+        parser.error(
+            "--reuse-exact-flash and --reused-flash-lineage are required together"
+        )
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
         stdout=subprocess.PIPE, text=True,
@@ -284,10 +339,19 @@ def main() -> int:
     if head != args.source_commit or status:
         parser.error("exact DEMO-S6 requires clean committed HEAD")
 
+    expected = expected_candidate(args)
+    flash_lineage: dict[str, Any] = {}
+    failures: list[str] = []
+    if args.reuse_exact_flash:
+        flash_lineage, lineage_failures = validate_reused_flash_lineage(
+            args.reused_flash_lineage.resolve(), expected, args.port
+        )
+        failures.extend(lineage_failures)
+
     args.output.mkdir(parents=True)
     child_specs = [
         ("baseline-survey", product_command(
-            args, args.output / "baseline-survey", True)),
+            args, args.output / "baseline-survey", not args.reuse_exact_flash)),
         ("repeat-survey", product_command(
             args, args.output / "repeat-survey", False)),
         ("targets-evidence", targets_command(
@@ -296,13 +360,13 @@ def main() -> int:
             args, args.output / "companion-offline")),
     ]
     child_exits: dict[str, int] = {}
-    failures: list[str] = []
-    for name, command in child_specs:
-        exit_code = run_child(command, args.output / f"{name}.log")
-        child_exits[name] = exit_code
-        if exit_code != 0:
-            failures.append(f"{name}: child exit {exit_code}")
-            break
+    if not failures:
+        for name, command in child_specs:
+            exit_code = run_child(command, args.output / f"{name}.log")
+            child_exits[name] = exit_code
+            if exit_code != 0:
+                failures.append(f"{name}: child exit {exit_code}")
+                break
 
     runs: dict[str, dict[str, Any]] = {}
     for name, _ in child_specs:
@@ -315,12 +379,12 @@ def main() -> int:
             failures.append(f"{name}: run.json missing")
 
     summary: dict[str, Any] = {}
-    expected = expected_candidate(args)
     if not failures and len(runs) == len(child_specs):
         summary, validation_failures = validate_children(
             runs["baseline-survey"], runs["repeat-survey"],
             runs["targets-evidence"], runs["companion-offline"],
             expected, args.expected_cid, args.source_commit,
+            baseline_flashed=not args.reuse_exact_flash,
         )
         failures.extend(validation_failures)
 
@@ -343,7 +407,11 @@ def main() -> int:
             "targets": digest(TARGETS_RUNNER),
             "companion": digest(COMPANION_RUNNER),
         },
-        "installation": {"application_flash_count": 1},
+        "installation": {
+            "application_flash_count": 0 if args.reuse_exact_flash else 1,
+            "exact_flash_reused": args.reuse_exact_flash,
+            "reused_flash_lineage": flash_lineage,
+        },
         "target": {
             "port": args.port,
             "serial_port_discovery_calls": 0,

@@ -420,6 +420,36 @@ def normalize_home(device: Any,
     return state
 
 
+def open_product_survey_visit(
+        device: Any,
+        trace: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Open the retained Survey through the current Wi-Fi -> Visit route."""
+    state = normalize_home(device, trace)
+    if state.get("selected_id") != "wifi":
+        raise RuntimeError(f"cannot focus Home Wi-Fi row: {state}")
+    state = action(device, "right")
+    if trace is not None:
+        trace.append(state)
+    if not (
+        state.get("page") == "survey"
+        and state.get("wifi_product_view") == "menu"
+        and state.get("runtime_owner") == "wifi"
+    ):
+        raise RuntimeError(f"cannot open Wi-Fi product menu: {state}")
+    for _ in range(4):
+        if int(state.get("wifi_product_selection", -1)) == 3:
+            break
+        state = action(device, "down")
+        if trace is not None:
+            trace.append(state)
+    if int(state.get("wifi_product_selection", -1)) != 3:
+        raise RuntimeError(f"cannot focus Wi-Fi Visit row: {state}")
+    state = action(device, "right")
+    if trace is not None:
+        trace.append(state)
+    return state
+
+
 def open_latest_library(device: Any,
                         trace: list[dict[str, Any]]) -> dict[str, Any]:
     state = normalize_home(device, trace)
@@ -714,8 +744,7 @@ def main() -> int:
                 ))
                 before_generation = int(before_recovery.get("generation", 0))
                 if not failures:
-                    setup = action(device, "select")
-                    trace.append(setup)
+                    setup = open_product_survey_visit(device, trace)
                     failures.extend(setup_failures(setup))
                     captures["setup"] = capture(device, frames, "setup")
                 if not failures:

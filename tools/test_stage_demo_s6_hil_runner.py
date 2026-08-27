@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
+import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -117,6 +119,16 @@ class StageDemoS6RunnerTests(unittest.TestCase):
         self.assertTrue(any("contiguous" in item for item in failures))
         self.assertEqual(summary["baseline_generation"], 11)
 
+    def test_valid_reuse_path_requires_no_second_flash(self) -> None:
+        summary, failures = MODULE.validate_children(
+            product(10, 11, flashed=False),
+            product(11, 12, flashed=False),
+            targets(), companion(), EXPECTED, CID, SOURCE,
+            baseline_flashed=False,
+        )
+        self.assertEqual(failures, [])
+        self.assertEqual(summary["repeat_generation"], 12)
+
     def test_unopened_comparison_evidence_fails_closed(self) -> None:
         broken_targets = copy.deepcopy(targets())
         broken_targets["targets"]["evidence_details"].pop()
@@ -147,6 +159,36 @@ class StageDemoS6RunnerTests(unittest.TestCase):
         self.assertIn("--reuse-exact-flash", commands[3])
         forbidden = {"networksetup", "airport", "ifconfig", "route", "scutil"}
         self.assertFalse(any(forbidden.intersection(command) for command in commands))
+
+    def test_reused_flash_lineage_binds_exact_candidate_and_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "baseline-survey").mkdir()
+            parent = {
+                "schema": MODULE.SCHEMA, "status": "failed",
+                "candidate": EXPECTED.copy(),
+                "source_commit": "a" * 40,
+                "installation": {"application_flash_count": 1},
+                "target": {"port": "/dev/cu.test"},
+            }
+            baseline = product(10, 11, flashed=True)
+            baseline["passed"] = False
+            baseline["committed"] = {}
+            baseline["boot_before"] = {
+                "ready": {
+                    "version": EXPECTED["version"],
+                    "app_elf_sha256": EXPECTED["app_elf_sha256"],
+                }
+            }
+            (root / "run.json").write_text(json.dumps(parent))
+            (root / "baseline-survey/run.json").write_text(
+                json.dumps(baseline)
+            )
+            retained, failures = MODULE.validate_reused_flash_lineage(
+                root, EXPECTED, "/dev/cu.test"
+            )
+        self.assertEqual(failures, [])
+        self.assertEqual(retained["failure_stage"], "baseline-survey-pre-workflow")
 
 
 if __name__ == "__main__":
