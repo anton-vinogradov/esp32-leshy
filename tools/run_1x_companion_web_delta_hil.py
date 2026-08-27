@@ -1173,6 +1173,10 @@ def main() -> int:
                         wifi_guard.association_attempts)
                     host_wifi["dhcp_requests"] = wifi_guard.dhcp_requests
                     host_wifi["radio_refreshes"] = wifi_guard.radio_refreshes
+                    host_wifi["visibility_scans"] = \
+                        wifi_guard.visibility_scans
+                    host_wifi["visibility_confirmed"] = \
+                        wifi_guard.visibility_confirmed
                     host_wifi["restore_attempted"] = True
                     try:
                         wifi_guard.restore()
@@ -1336,6 +1340,9 @@ def main() -> int:
                 wifi_guard.association_attempts)
             host_wifi["dhcp_requests"] = wifi_guard.dhcp_requests
             host_wifi["radio_refreshes"] = wifi_guard.radio_refreshes
+            host_wifi["visibility_scans"] = wifi_guard.visibility_scans
+            host_wifi["visibility_confirmed"] = \
+                wifi_guard.visibility_confirmed
             try:
                 wifi_guard.restore()
             except Exception as restore_error:

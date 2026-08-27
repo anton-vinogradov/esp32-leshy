@@ -44,6 +44,7 @@ ARDUINO_WEB_SOURCE = (
 MUTATION_HIL = ROOT / "tools/run_1x_companion_mutation_delta_hil.py"
 WEB_HIL = ROOT / "tools/run_1x_companion_web_delta_hil.py"
 WEB_HTTP_HIL = ROOT / "tools/companion_web_http_hil.py"
+MAC_WIFI_SCAN = ROOT / "tools/macos_wifi_scan.m"
 ARDUINO = ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 ACTION = ROOT / "firmware/leshy1/src/services/targets/TargetComparisonService.cpp"
 DOCS = (
@@ -80,6 +81,7 @@ def main() -> int:
         mutation_hil = MUTATION_HIL.read_text(encoding="utf-8")
         web_hil = WEB_HIL.read_text(encoding="utf-8")
         web_http_hil = WEB_HTTP_HIL.read_text(encoding="utf-8")
+        mac_wifi_scan = MAC_WIFI_SCAN.read_text(encoding="utf-8")
         arduino = ARDUINO.read_text(encoding="utf-8")
         action = ACTION.read_text(encoding="utf-8")
         docs = [path.read_text(encoding="utf-8") for path in DOCS]
@@ -459,6 +461,8 @@ def main() -> int:
         '"target.mutation.confirm", "web-restore-confirm"',
         'assert_atomic_mutation_state(',
         'host_wifi["dhcp_requests"] = wifi_guard.dhcp_requests',
+        'host_wifi["visibility_scans"]',
+        'wifi_guard.visibility_confirmed',
         'host_wifi["restored"] is True',
     ):
         require(failures, marker in web_hil,
@@ -467,6 +471,11 @@ def main() -> int:
     for marker in (
         'NETWORKSETUP = "/usr/sbin/networksetup"',
         'IPCONFIG = "/usr/sbin/ipconfig"',
+        'XCRUN = "/usr/bin/xcrun"',
+        'WIFI_SCAN_SOURCE',
+        'WIFI_SCAN_HELPER = "/tmp/leshy-macos-wifi-scan"',
+        'self._scan_for_target(ssid)',
+        'self.visibility_confirmed',
         'derive_local_credentials',
         '"-getairportpower"',
         '"-getairportnetwork"',
@@ -485,6 +494,18 @@ def main() -> int:
     ):
         require(failures, marker in web_http_hil,
                 f"missing guarded host Web HIL boundary: {marker}")
+
+    for marker in (
+        "#import <CoreWLAN/CoreWLAN.h>",
+        "interfaceWithName:interfaceName",
+        "scanForNetworksWithName:expectedName",
+        "return networks.count == 0 ? 1 : 0",
+    ):
+        require(failures, marker in mac_wifi_scan,
+                f"missing targeted CoreWLAN scan boundary: {marker}")
+    for forbidden in ("printf(", "NSLog(", "writeToFile"):
+        require(failures, forbidden not in mac_wifi_scan,
+                f"CoreWLAN helper exposes scan data: {forbidden}")
 
     for marker in (
         "handleUsbCompanionFrame",

@@ -9,11 +9,15 @@ import subprocess
 import time
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 
 NETWORKSETUP = "/usr/sbin/networksetup"
 IPCONFIG = "/usr/sbin/ipconfig"
+XCRUN = "/usr/bin/xcrun"
+WIFI_SCAN_SOURCE = str(Path(__file__).with_name("macos_wifi_scan.m"))
+WIFI_SCAN_HELPER = "/tmp/leshy-macos-wifi-scan"
 CREDENTIAL_ALPHABET = (
     "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 
@@ -97,6 +101,9 @@ class MacWifiGuard:
         self.association_attempts = 0
         self.dhcp_requests = 0
         self.radio_refreshes = 0
+        self.visibility_scans = 0
+        self.visibility_confirmed = False
+        self._scan_helper_ready = False
         self._mutation_attempted = False
         self._temporary_ssid: str | None = None
 
@@ -176,6 +183,23 @@ class MacWifiGuard:
             ["-setdhcp", self.service, client_id],
             "request HIL DHCP lease")
         self.dhcp_requests += 1
+
+    def _scan_for_target(self, ssid: str) -> bool:
+        self.visibility_scans += 1
+        if not self._scan_helper_ready:
+            compiled = self._runner([
+                XCRUN, "clang", "-fobjc-arc",
+                "-fmodules-cache-path=/tmp/leshy-macos-wifi-scan-modules",
+                "-framework", "Foundation",
+                "-framework", "CoreWLAN", WIFI_SCAN_SOURCE,
+                "-o", WIFI_SCAN_HELPER])
+            if compiled.returncode != 0:
+                return False
+            self._scan_helper_ready = True
+        result = self._runner([WIFI_SCAN_HELPER, self.interface, ssid])
+        visible = result.returncode == 0
+        self.visibility_confirmed = self.visibility_confirmed or visible
+        return visible
 
     def capture(self) -> WifiSnapshot:
         enabled = self._run(
@@ -270,6 +294,9 @@ class MacWifiGuard:
         if not self._power():
             self._run(
                 ["-setairportpower", self.interface, "on"], "enable power")
+        # Force a targeted CoreWLAN scan before asking networksetup to join.
+        # The helper returns only a boolean and never emits nearby SSIDs.
+        self._scan_for_target(ssid)
         deadline = time.monotonic() + self._wait_seconds
         observed = self._link_fingerprint()
         join_reported_failure = False
@@ -300,6 +327,7 @@ class MacWifiGuard:
                         "refresh Wi-Fi scan on")
                     self.radio_refreshes += 1
                     time.sleep(0.5)
+                    self._scan_for_target(ssid)
                 if time.monotonic() < deadline:
                     time.sleep(0.25)
                 continue

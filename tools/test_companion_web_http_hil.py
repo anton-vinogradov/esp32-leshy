@@ -33,6 +33,7 @@ class FakeNetworkSetup:
         self.soft_failures_remaining = 0
         self.defer_hil_dhcp = False
         self.dhcp_requests = 0
+        self.scan_visible = True
         self.hil_router: str | None = "192.168.4.1"
         self.address = "10.88.88.60" if power and ssid else None
         self.router = "10.88.88.1" if power and ssid else None
@@ -56,6 +57,11 @@ class FakeNetworkSetup:
 
     def __call__(self, arguments: list[str]) -> subprocess.CompletedProcess[str]:
         self.commands.append(arguments)
+        if arguments[0] == "/usr/bin/xcrun":
+            return subprocess.CompletedProcess(arguments, 0, "", "")
+        if arguments[0] == "/tmp/leshy-macos-wifi-scan":
+            return subprocess.CompletedProcess(
+                arguments, 0 if self.scan_visible else 1, "", "")
         if arguments[0] == "/usr/sbin/ipconfig":
             operation = arguments[1]
             if operation == "getifaddr":
@@ -155,6 +161,13 @@ class CompanionWebHttpHilTests(unittest.TestCase):
             ["/usr/sbin/networksetup", "-setairportnetwork", "en0", "Home"],
             restore)
         self.assertEqual("Home", snapshot.ssid)
+        scans = [command for command in fake.commands
+                 if command[0] == "/tmp/leshy-macos-wifi-scan"]
+        self.assertEqual(1, len(scans))
+        self.assertEqual("en0", scans[0][-2])
+        self.assertEqual("Leshy-8790D5", scans[0][-1])
+        self.assertNotIn("temporary123", scans[0])
+        self.assertTrue(guard.visibility_confirmed)
 
     def test_redacted_connected_network_uses_dhcp_fingerprint(self) -> None:
         fake = FakeNetworkSetup(redact_ssid=True)
@@ -253,7 +266,19 @@ class CompanionWebHttpHilTests(unittest.TestCase):
         guard.connect("Leshy-8790D5", "temporary123")
         self.assertEqual(2, guard.association_attempts)
         self.assertEqual(1, guard.radio_refreshes)
+        self.assertEqual(2, guard.visibility_scans)
         self.assertEqual("192.168.4.2", fake.address)
+        guard.restore()
+        self.assertTrue(guard.restored)
+
+    def test_scan_failure_falls_back_to_bounded_join(self) -> None:
+        fake = FakeNetworkSetup()
+        fake.scan_visible = False
+        guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=0.01)
+        guard.capture()
+        guard.connect("Leshy-8790D5", "temporary123")
+        self.assertEqual(1, guard.visibility_scans)
+        self.assertFalse(guard.visibility_confirmed)
         guard.restore()
         self.assertTrue(guard.restored)
 
