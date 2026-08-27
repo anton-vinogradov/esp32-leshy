@@ -504,6 +504,8 @@ def main() -> int:
         "#import <CoreWLAN/CoreWLAN.h>",
         "interfaceWithName:interfaceName",
         "scanForNetworksWithName:expectedName",
+        "[interface disassociate]",
+        "sleepForTimeInterval:0.25",
         "associateToNetwork:network",
         "return associated && error == nil ? 0 : 3",
     ):

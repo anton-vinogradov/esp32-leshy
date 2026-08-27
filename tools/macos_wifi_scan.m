@@ -23,6 +23,11 @@ int main(int argc, const char* argv[]) {
         NSString* passphrase = [NSString stringWithUTF8String:argv[4]];
         if (passphrase.length < 8) return 65;
         CWNetwork* network = networks.anyObject;
+        // CoreWLAN is materially more reliable for a short-lived WPA AP when
+        // the previous association is released explicitly. The caller owns a
+        // captured snapshot and restores it in a fail-closed finally path.
+        [interface disassociate];
+        [NSThread sleepForTimeInterval:0.25];
         error = nil;
         BOOL associated = [interface associateToNetwork:network
                                                 password:passphrase
