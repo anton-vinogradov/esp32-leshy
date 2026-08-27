@@ -887,6 +887,18 @@ garbage collection сохраняет те же 225 688 B static RAM, 3 317 732 
 Live wiring обязано заново измерить lifetime controller/report, а не наследовать
 этот zero-growth source/build result.
 
+Presentation Защиты эфира `RB-M172`: exact `1.0.0-dev.212` добавляет 27 bounded
+записей каталога EN/RU и caller-owned состояние presentation на четыре строки.
+Static RAM остаётся 225 688 B; linked flash равен 3 319 744 B, а размеры app/factory
+— 3 319 904/3 385 440 B: +2 012 B linked flash и +1 664/+1 664 B images к dev.211,
+полностью внутри source/build delta presentation. SHA-256 firmware/factory/ELF:
+`300c8b748d7640bfa21cc54fc8cefd6164d980514f4ea433050e3052dfefbe56`/
+`565494baab59a5004e9951d49efa84bd0ed7d00c553f38b8383a10cf1ef893fa`/
+`8054fc7b82242721948379e53a5f2d725b8ea0241e3c892153373e10c7435dbc`.
+Размеры app/factory/ELF — 3 319 904/3 385 440/22 332 172 B. Live capture и TFT
+wiring всё ещё обязаны заново измерить foreground/report lifetime; zero роста
+resident RAM здесь не является physical runtime budget claim.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

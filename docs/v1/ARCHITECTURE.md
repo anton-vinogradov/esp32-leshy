@@ -657,6 +657,17 @@ findings or truncated inspection remain a visible uncertainty flag. Outcome-only
 clear/inconclusive states cannot open invented evidence, and malformed reports fail
 closed. This still does not render a TFT screen or wire live capture.
 
+Exact `1.0.0-dev.212` adds an allocation-free, renderer-independent EN/RU product
+model above that controller. Four stable rows expose only user-actionable facts:
+the source MAC, finding position, confidence plus detector version, observed events
+plus threshold, exact frame/channel/RSSI evidence and time offset. Incomplete input
+is written explicitly rather than encoded only by color, and omitted findings replace
+the less important subtype mix when screen space is exhausted. Before presentation,
+the controller now also proves detector-status and bounded-counter consistency, exact
+inspection coverage, evidence-frame bounds, plausible RSSI and the maximum detector
+window; any contradiction rejects the whole report. This model still is not wired to
+live capture or the TFT renderer, so no user-visible or physical claim follows yet.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

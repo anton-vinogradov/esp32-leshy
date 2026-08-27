@@ -43,11 +43,13 @@ physical-stop contract WF-05 для каждого admitted active path. Passive
 capture, route и inspection results не подменяют active fixture proof, а unavailable
 fixture остаётся blocker, не simulated pass.
 
-Detector `1.0.0-dev.210` и immutable evidence-navigation controller
-`1.0.0-dev.211` — только host/build foundations CAP-048. Их bounded golden/negative
-corpus, receive-only source guard, strongest-first stable ordering и exact drilldown
-contract ещё не закрывают DEMO-S7: требуются live capture, real TFT presentation,
-остальные семейства detectors и physical cleanup evidence.
+Detector `1.0.0-dev.210`, immutable evidence-navigation controller
+`1.0.0-dev.211` и bounded модель presentation EN/RU на четыре строки
+`1.0.0-dev.212` — только host/build foundations CAP-048. Их bounded golden/negative
+corpus, receive-only source guard, strongest-first stable ordering, exact drilldown и
+контракт текста не только цветом ещё не закрывают DEMO-S7: требуются live capture,
+интеграция с real TFT renderer, остальные семейства detectors и physical cleanup
+evidence.
 
 `DEMO-S2` принят evidence `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 выполнил 29 public Action/query steps и совпал с

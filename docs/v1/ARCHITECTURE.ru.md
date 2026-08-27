@@ -738,6 +738,17 @@ frames, dropped findings или truncated inspection остаются видим
 flag. Outcome-only состояния clear/inconclusive не открывают выдуманное evidence, а
 malformed reports fail closed. TFT screen и live capture этим ещё не подключены.
 
+Exact `1.0.0-dev.212` добавляет над этим controller allocation-free и независимую
+от renderer продуктовую модель EN/RU. Четыре стабильные строки показывают только
+полезные пользователю факты: MAC источника, позицию находки, confidence с версией
+detector, число событий с threshold, exact evidence frame/channel/RSSI и временной
+offset. Неполные данные явно описаны текстом, а не только цветом; при нехватке места
+число пропущенных находок заменяет менее важную смесь subtype. До presentation
+controller теперь также проверяет согласованность detector status и bounded counters,
+exact inspection coverage, границы evidence frame, правдоподобный RSSI и максимальное
+окно detector; любое противоречие отклоняет весь report. Модель всё ещё не подключена
+к live capture или TFT renderer, поэтому user-visible или physical claim пока нет.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;
