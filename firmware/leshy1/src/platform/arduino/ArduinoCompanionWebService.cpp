@@ -347,7 +347,7 @@ void ArduinoCompanionWebService::resetClient() {
 
 void ArduinoCompanionWebService::sendResponse(
     std::uint16_t status, const char* contentType, const char* body,
-    std::size_t bodyLength) {
+    std::size_t bodyLength, bool gzipEncoded) {
     if (!client_ || responsePending_ || contentType == nullptr ||
         body == nullptr) {
         return;
@@ -356,9 +356,10 @@ void ArduinoCompanionWebService::sendResponse(
         responseHeader_.data(), responseHeader_.size(),
         "HTTP/1.1 %u %s\r\nContent-Type: %s\r\nContent-Length: %u\r\n"
         "Cache-Control: no-store\r\nConnection: close\r\n"
-        "X-Content-Type-Options: nosniff\r\n\r\n",
+        "X-Content-Type-Options: nosniff\r\n%s\r\n",
         static_cast<unsigned>(status), httpReason(status), contentType,
-        static_cast<unsigned>(bodyLength));
+        static_cast<unsigned>(bodyLength),
+        gzipEncoded ? "Content-Encoding: gzip\r\n" : "");
     if (length <= 0 ||
         static_cast<std::size_t>(length) >= responseHeader_.size()) {
         return;
@@ -542,10 +543,10 @@ bool ArduinoCompanionWebService::processRequest(
 
     if (webRequest.route == CompanionWebRoute::Index) {
         std::size_t pageLength = 0;
-        const char* page = services::companion::companionWebIndexHtml(
-            &pageLength);
+        const std::uint8_t* page =
+            services::companion::companionWebIndexGzip(&pageLength);
         sendResponse(200, services::companion::kCompanionWebHtmlContentType,
-                     page, pageLength);
+                     reinterpret_cast<const char*>(page), pageLength, true);
         ++requestsHandled_;
         return true;
     }

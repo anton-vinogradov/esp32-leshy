@@ -79,4 +79,8 @@ bool encodeCompanionWebError(
 // calls only kCompanionWebApiPath with the versioned companion JSON contract.
 const char* companionWebIndexHtml(std::size_t* length);
 
+// Deterministic gzip representation used on the wire. It expands byte-for-byte
+// to companionWebIndexHtml() and remains below the two-buffer HTTP window.
+const std::uint8_t* companionWebIndexGzip(std::size_t* length);
+
 }  // namespace leshy1::services::companion

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import gzip
 import os
 import subprocess
 import time
@@ -487,7 +488,11 @@ def http_get(url: str, timeout: float = 15.0) -> tuple[int, str, bytes]:
         if len(body) != expected:
             raise RuntimeError(
                 f"HTTP body closed after {len(body)}/{expected} bytes")
-        return response.status, response.headers.get_content_type(), bytes(body)
+        encoding = response.headers.get("Content-Encoding", "")
+        if encoding not in ("", "gzip"):
+            raise RuntimeError("unexpected HTTP content encoding")
+        decoded = gzip.decompress(body) if encoding == "gzip" else bytes(body)
+        return response.status, response.headers.get_content_type(), decoded
 
 
 def http_companion_request(

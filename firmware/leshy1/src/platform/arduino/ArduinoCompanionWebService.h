@@ -29,10 +29,10 @@ public:
     static constexpr std::uint64_t kClientDeadlineUs = 12000000ULL;
     static constexpr int kStaticRxBuffers = 2;
     static constexpr int kDynamicRxBuffers = 1;
-    // The pinned ESP-IDF libraries are compiled for static TX buffers. Four
-    // buffers give the bounded HTTP response enough acknowledgement headroom
-    // while remaining far below the ESP-IDF default allocation.
-    static constexpr int kStaticTxBuffers = 4;
+    // The pinned ESP-IDF libraries are compiled for static TX buffers. Keep
+    // the proven two-buffer admission profile; large immutable presentation
+    // content is gzip-compressed below its bounded transport window.
+    static constexpr int kStaticTxBuffers = 2;
     static constexpr int kDynamicTxBuffers = 0;
     static constexpr int kRxManagementBuffers = 1;
     static constexpr int kCacheTxBuffers = 1;
@@ -109,7 +109,8 @@ private:
 
     void resetClient();
     void sendResponse(std::uint16_t status, const char* contentType,
-                      const char* body, std::size_t bodyLength);
+                      const char* body, std::size_t bodyLength,
+                      bool gzipEncoded = false);
     DrainResult drainResponse();
     bool processRequest(bool deviceSessionAuthorized,
                         CompanionWebFrameHandler handler, void* context);

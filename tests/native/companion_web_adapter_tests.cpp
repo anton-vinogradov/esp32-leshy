@@ -194,6 +194,15 @@ void testOfflinePageUsesOnlyTheSharedContract() {
     CHECK(page.find("https://") == std::string::npos);
     CHECK(page.find("<script src=") == std::string::npos);
     CHECK(page.find("<link") == std::string::npos);
+
+    std::size_t gzipLength = 0;
+    const std::uint8_t* gzip = companionWebIndexGzip(&gzipLength);
+    CHECK(gzip != nullptr);
+    CHECK(gzipLength > 18);
+    CHECK(gzipLength < 4096);
+    CHECK(gzip[0] == 0x1f);
+    CHECK(gzip[1] == 0x8b);
+    CHECK(gzip[2] == 0x08);
 }
 
 }  // namespace

@@ -36,6 +36,8 @@ async function favorite(index){const t=targets[index],preview=await call({kind:'
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.view).catch(fail));function fail(error){status.textContent=error.message;status.className='status bad';el.className='empty';el.textContent='Unavailable: '+error.message}connect().catch(fail);
 </script></body></html>)LESHYHTML";
 
+#include "CompanionWebIndexGzip.inc"
+
 }  // namespace
 
 const char* companionWebReason(CompanionWebStatus status) {
@@ -156,6 +158,11 @@ bool encodeCompanionWebError(
 const char* companionWebIndexHtml(std::size_t* length) {
     if (length != nullptr) *length = sizeof(kIndexHtml) - 1U;
     return kIndexHtml;
+}
+
+const std::uint8_t* companionWebIndexGzip(std::size_t* length) {
+    if (length != nullptr) *length = sizeof(kIndexHtmlGzip);
+    return kIndexHtmlGzip;
 }
 
 }  // namespace leshy1::services::companion
