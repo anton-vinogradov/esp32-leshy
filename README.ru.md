@@ -29,6 +29,26 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | S6.5 | Local companion USB/Web использует те же Actions и versioned schemas с ограниченными connectivity и secrets | 🟡 в работе |
 | S6.6 | Интегральный DEMO-S6: записать и сравнить две survey, открыть каждый вывод на устройстве или локально и offline-export; перед принятием S6 вернуться к отложенному physical predecessor gate S5 и закрыть его | ⬜ дальше |
 
+### Пользовательские возможности
+
+| Возможность | Этап поставки | Статус |
+|---|---|---|
+| Home, пять клавиш, touch, EN/RU UI и доступные общие компоненты | S2 | ✅ готово |
+| Хаб «Устройство»: Питание, Настройки, Самопроверка, Диагностика и О системе | S2 | ✅ готово |
+| Постоянное пассивное сканирование и переиспользуемые сессии | S3 + S6.6 | 🟡 в работе |
+| Сети, устройства и каналы Wi-Fi, подробности, радар и захват пакетов | S4 | ✅ готово |
+| Устройства Bluetooth, сведения об identity/vendor и радар | S4 | ✅ готово |
+| Спектр nRF24 2,4 ГГц, однопиксельный водопад и поиск сигнала | S5 | 🔴 заблокировано |
+| Спектр Sub-GHz, однопиксельный водопад, поиск и захват OOK/FSK | S5 | 🔴 заблокировано |
+| Приём и декодирование ИК, сохранение и экспорт через Библиотеку | S5 | ✅ готово |
+| Библиотека, offline reopen, экспорт CSV/PCAP и provenance evidence | S4 + S5 | ✅ готово |
+| Цели, сравнение, evidence, metadata и обратимая correlation | S6.1–S6.4 | ✅ готово |
+| Scoped local companion USB/Web и offline search/export | S6.5 | 🟡 в работе |
+| Авторизованная Лаборатория: bounded TX/replay с panic stop | S7 | ⬜ дальше |
+| Permissioned extensions и optional hardware profiles GPS/NFC | S7 | ⬜ дальше |
+| Устройство → Обновление: signed stable/beta OTA, rollback и recovery | S8 | ⬜ дальше |
+| Browser install, backup/restore и автоматическая часовая release qualification | S8 | ⬜ дальше |
+
 ### Роадмап
 
 - ✅ **S0 — Governance и граница поколений** · готово

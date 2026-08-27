@@ -112,6 +112,33 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 | S6.6 | Integrated DEMO-S6: record and compare two surveys, inspect each conclusion on-device or locally, export offline, then return to and close the deferred S5 physical predecessor gate before S6 acceptance | `planned` |
 <!-- LESHY-ACTIVE-PHASES:END -->
 
+### User functionality status
+
+This compact list is the front-page view of user value. A `done` row has accepted
+evidence for its stated boundary; `blocked` means its UI/software exists but the
+named physical proof is still unavailable. Detailed requirements remain in the
+[capability catalog](CAPABILITY_CATALOG.md).
+
+<!-- LESHY-FUNCTIONS:START -->
+| ID | Functionality | Delivery stage | State |
+|---|---|---|---|
+| FUNC-01 | Home, five keys, touch, EN/RU UI and accessible common components | S2 | `done` |
+| FUNC-02 | Device hub: Power, Settings, Self-Test, Diagnostics and About | S2 | `done` |
+| FUNC-03 | Persistent passive Survey and reusable Sessions | S3 + S6.6 | `active` |
+| FUNC-04 | Wi-Fi networks, devices, channels, details, radar and packet capture | S4 | `done` |
+| FUNC-05 | Bluetooth devices, identity/vendor details and radar | S4 | `done` |
+| FUNC-06 | 2.4 GHz nRF24 spectrum, one-pixel waterfall and signal finder | S5 | `blocked` |
+| FUNC-07 | Sub-GHz spectrum, one-pixel waterfall, finder and OOK/FSK capture | S5 | `blocked` |
+| FUNC-08 | Infrared receive, decode, save and Library export | S5 | `done` |
+| FUNC-09 | Library, offline reopen, CSV/PCAP export and evidence provenance | S4 + S5 | `done` |
+| FUNC-10 | Targets, comparison, evidence, metadata and reversible correlation | S6.1–S6.4 | `done` |
+| FUNC-11 | Scoped local USB/Web companion and offline search/export | S6.5 | `active` |
+| FUNC-12 | Authorized Lab: bounded transmit/replay with panic stop | S7 | `planned` |
+| FUNC-13 | Permissioned extensions and optional GPS/NFC hardware profiles | S7 | `planned` |
+| FUNC-14 | Device → Update: signed stable/beta OTA, rollback and recovery | S8 | `planned` |
+| FUNC-15 | Browser install, backup/restore and automated one-hour release qualification | S8 | `planned` |
+<!-- LESHY-FUNCTIONS:END -->
+
 S6.4 is deliberately split into reviewable user interactions:
 
 | S6.4 slice | State |

@@ -15,6 +15,8 @@ START_MARKER = "<!-- LESHY-ROADMAP:START -->"
 END_MARKER = "<!-- LESHY-ROADMAP:END -->"
 PHASES_START_MARKER = "<!-- LESHY-ACTIVE-PHASES:START -->"
 PHASES_END_MARKER = "<!-- LESHY-ACTIVE-PHASES:END -->"
+FUNCTIONS_START_MARKER = "<!-- LESHY-FUNCTIONS:START -->"
+FUNCTIONS_END_MARKER = "<!-- LESHY-FUNCTIONS:END -->"
 EXPECTED_STAGES = tuple(f"S{index}" for index in range(9))
 
 
@@ -34,6 +36,8 @@ class LanguageConfig:
     snapshot_fields: tuple[tuple[str, str], ...]
     phases_heading: str
     phase_columns: tuple[str, str, str]
+    functions_heading: str
+    function_columns: tuple[str, str, str]
 
 
 CONFIGS = (
@@ -62,6 +66,8 @@ CONFIGS = (
         ),
         phases_heading="Current stage phases",
         phase_columns=("Phase", "Outcome / exit gate", "Status"),
+        functions_heading="User functionality",
+        function_columns=("Functionality", "Delivery stage", "Status"),
     ),
     LanguageConfig(
         readme=ROOT / "README.ru.md",
@@ -88,6 +94,8 @@ CONFIGS = (
         ),
         phases_heading="Фазы текущего этапа",
         phase_columns=("Фаза", "Результат / exit gate", "Статус"),
+        functions_heading="Пользовательские возможности",
+        function_columns=("Возможность", "Этап поставки", "Статус"),
     ),
 )
 
@@ -186,11 +194,41 @@ def parse_snapshot(config: LanguageConfig,
     return snapshot
 
 
+def parse_functionality(config: LanguageConfig) -> list[tuple[str, str, str, str]]:
+    text = config.status.read_text(encoding="utf-8")
+    pattern = re.compile(
+        rf"{re.escape(FUNCTIONS_START_MARKER)}(.*?){re.escape(FUNCTIONS_END_MARKER)}",
+        re.DOTALL,
+    )
+    blocks = pattern.findall(text)
+    if len(blocks) != 1:
+        raise ValueError(
+            f"{config.status}: expected exactly one functionality table")
+    rows = re.findall(
+        r"^\| (FUNC-\d{2}) \| (.+?) \| (.+?) \| `([^`]+)` \|$",
+        blocks[0], re.MULTILINE)
+    if not rows:
+        raise ValueError(f"{config.status}: functionality table is empty")
+    expected_ids = [f"FUNC-{index:02d}" for index in range(1, len(rows) + 1)]
+    actual_ids = [row[0] for row in rows]
+    if actual_ids != expected_ids:
+        raise ValueError(
+            f"{config.status}: expected sequential functionality IDs "
+            f"{expected_ids}, got {actual_ids}")
+    unknown = sorted(
+        {row[3] for row in rows} - {"done", "active", "blocked", "planned"})
+    if unknown:
+        raise ValueError(
+            f"{config.status}: unsupported functionality states {unknown}")
+    return rows
+
+
 def render(config: LanguageConfig) -> str:
     names = parse_stage_names(config.delivery_plan)
     states = parse_stage_states(config.status)
     active = next(stage for stage in EXPECTED_STAGES if states[stage] == "active")
     phases = parse_active_phases(config, active)
+    functionality = parse_functionality(config)
     active_phase = next(row[0] for row in phases if row[2] == "active")
     snapshot = parse_snapshot(config, active_phase)
     done = sum(state == "done" for state in states.values())
@@ -221,6 +259,18 @@ def render(config: LanguageConfig) -> str:
         lines.append(
             f"| {phase_id} | {phase_outcome} | "
             f"{icon[phase_state]} {config.status_labels[phase_state]} |")
+    function, delivery, function_status = config.function_columns
+    lines.extend((
+        "",
+        f"### {config.functions_heading}",
+        "",
+        f"| {function} | {delivery} | {function_status} |",
+        "|---|---|---|",
+    ))
+    for _function_id, label, stage, state in functionality:
+        lines.append(
+            f"| {label} | {stage} | "
+            f"{icon[state]} {config.status_labels[state]} |")
     lines.extend(("", "### Roadmap" if config.readme.name == "README.md"
                   else "### Роадмап", ""))
     for stage in EXPECTED_STAGES:
@@ -256,6 +306,7 @@ def drift_errors() -> list[str]:
     errors: list[str] = []
     try:
         phase_shapes = []
+        function_shapes = []
         for config in CONFIGS:
             states = parse_stage_states(config.status)
             active = next(
@@ -265,9 +316,17 @@ def drift_errors() -> list[str]:
                 (phase_id, state) for phase_id, _outcome, state
                 in parse_active_phases(config, active)
             ])
+            function_shapes.append([
+                (function_id, stage, state)
+                for function_id, _label, stage, state
+                in parse_functionality(config)
+            ])
         if phase_shapes[0] != phase_shapes[1]:
             errors.append(
                 "EN/RU active-phase IDs or states differ in canonical STATUS")
+        if function_shapes[0] != function_shapes[1]:
+            errors.append(
+                "EN/RU functionality IDs, stages or states differ in canonical STATUS")
     except (OSError, ValueError) as error:
         errors.append(str(error))
     for config in CONFIGS:

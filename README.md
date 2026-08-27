@@ -29,6 +29,26 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | S6.5 | Local USB/Web companion uses the same Actions and versioned schemas with scoped connectivity and secrets | 🟡 in progress |
 | S6.6 | Integrated DEMO-S6: record and compare two surveys, inspect each conclusion on-device or locally, export offline, then return to and close the deferred S5 physical predecessor gate before S6 acceptance | ⬜ later |
 
+### User functionality
+
+| Functionality | Delivery stage | Status |
+|---|---|---|
+| Home, five keys, touch, EN/RU UI and accessible common components | S2 | ✅ complete |
+| Device hub: Power, Settings, Self-Test, Diagnostics and About | S2 | ✅ complete |
+| Persistent passive Survey and reusable Sessions | S3 + S6.6 | 🟡 in progress |
+| Wi-Fi networks, devices, channels, details, radar and packet capture | S4 | ✅ complete |
+| Bluetooth devices, identity/vendor details and radar | S4 | ✅ complete |
+| 2.4 GHz nRF24 spectrum, one-pixel waterfall and signal finder | S5 | 🔴 blocked |
+| Sub-GHz spectrum, one-pixel waterfall, finder and OOK/FSK capture | S5 | 🔴 blocked |
+| Infrared receive, decode, save and Library export | S5 | ✅ complete |
+| Library, offline reopen, CSV/PCAP export and evidence provenance | S4 + S5 | ✅ complete |
+| Targets, comparison, evidence, metadata and reversible correlation | S6.1–S6.4 | ✅ complete |
+| Scoped local USB/Web companion and offline search/export | S6.5 | 🟡 in progress |
+| Authorized Lab: bounded transmit/replay with panic stop | S7 | ⬜ later |
+| Permissioned extensions and optional GPS/NFC hardware profiles | S7 | ⬜ later |
+| Device → Update: signed stable/beta OTA, rollback and recovery | S8 | ⬜ later |
+| Browser install, backup/restore and automated one-hour release qualification | S8 | ⬜ later |
+
 ### Roadmap
 
 - ✅ **S0 — Governance and generation boundary** · complete

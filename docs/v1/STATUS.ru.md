@@ -111,6 +111,33 @@
 | S6.6 | Интегральный DEMO-S6: записать и сравнить две survey, открыть каждый вывод на устройстве или локально и offline-export; перед принятием S6 вернуться к отложенному physical predecessor gate S5 и закрыть его | `planned` |
 <!-- LESHY-ACTIVE-PHASES:END -->
 
+### Статус пользовательских возможностей
+
+Это компактное представление пользовательской ценности для главной страницы.
+Строка `done` имеет принятое evidence в указанной границе; `blocked` означает, что
+UI/software существуют, но названное physical proof пока недоступно. Подробные
+требования остаются в [каталоге возможностей](CAPABILITY_CATALOG.ru.md).
+
+<!-- LESHY-FUNCTIONS:START -->
+| ID | Возможность | Этап поставки | Состояние |
+|---|---|---|---|
+| FUNC-01 | Home, пять клавиш, touch, EN/RU UI и доступные общие компоненты | S2 | `done` |
+| FUNC-02 | Хаб «Устройство»: Питание, Настройки, Самопроверка, Диагностика и О системе | S2 | `done` |
+| FUNC-03 | Постоянное пассивное сканирование и переиспользуемые сессии | S3 + S6.6 | `active` |
+| FUNC-04 | Сети, устройства и каналы Wi-Fi, подробности, радар и захват пакетов | S4 | `done` |
+| FUNC-05 | Устройства Bluetooth, сведения об identity/vendor и радар | S4 | `done` |
+| FUNC-06 | Спектр nRF24 2,4 ГГц, однопиксельный водопад и поиск сигнала | S5 | `blocked` |
+| FUNC-07 | Спектр Sub-GHz, однопиксельный водопад, поиск и захват OOK/FSK | S5 | `blocked` |
+| FUNC-08 | Приём и декодирование ИК, сохранение и экспорт через Библиотеку | S5 | `done` |
+| FUNC-09 | Библиотека, offline reopen, экспорт CSV/PCAP и provenance evidence | S4 + S5 | `done` |
+| FUNC-10 | Цели, сравнение, evidence, metadata и обратимая correlation | S6.1–S6.4 | `done` |
+| FUNC-11 | Scoped local companion USB/Web и offline search/export | S6.5 | `active` |
+| FUNC-12 | Авторизованная Лаборатория: bounded TX/replay с panic stop | S7 | `planned` |
+| FUNC-13 | Permissioned extensions и optional hardware profiles GPS/NFC | S7 | `planned` |
+| FUNC-14 | Устройство → Обновление: signed stable/beta OTA, rollback и recovery | S8 | `planned` |
+| FUNC-15 | Browser install, backup/restore и автоматическая часовая release qualification | S8 | `planned` |
+<!-- LESHY-FUNCTIONS:END -->
+
 S6.4 намеренно разбита на пользовательские interactions, которые можно ревьюить отдельно:
 
 | Slice S6.4 | Состояние |
