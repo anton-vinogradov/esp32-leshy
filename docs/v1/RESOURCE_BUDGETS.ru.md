@@ -823,6 +823,19 @@ Home/none/lease 0 и продвигает cadence до 4/15. Fail-closed 0.196/0
 boundaries duplicate codec и dynamic scratch allocation. Host network tools и активный
 Wi-Fi Mac не используются.
 
+Correction bounded BLE `RB-M168`: отклонённый exact 0.207 использует 225 680 B
+static RAM и достигает interactive ready лишь с 29 576 B free после запуска NimBLE
+при boot. Независимая read-only identity доказывает enrolled SD объёмом
+62 534 975 488 byte и exact CID, тогда как FAT mount возвращает `ESP_ERR_NO_MEM`
+(257). Это не missing media и не принятый сниженный heap budget. Candidate
+`1.0.0-dev.208` использует 225 688 B static RAM, 3 318 064 B linked flash и
+3 318 224/3 383 760 B app/factory: +8 B static RAM при переносе той же обязательной
+allocation NimBLE за пределы boot/storage lifetimes. Host обязан остановиться,
+завершить task и деинициализироваться перед mount FAT для commit; physical recovery
+free heap остаётся следующим delta gate. Hashes firmware/app:
+`1b72d9cc05353ba5f36b815a21af1e5d91224ccae451174508915dbb8858380f`/
+`598dc7e8de07ac2dd8509a7e3e1d2fac154de98c20b27241cb449cd174e1fb09`.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

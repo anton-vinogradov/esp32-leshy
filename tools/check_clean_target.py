@@ -442,9 +442,13 @@ def main() -> int:
             "nimble_port_init()",
             "nimble_port_freertos_init(runProcessNimbleHost)",
             "ble_hs_synced()",
-            "processControllerInitializationAttempted",
-            "prewarmProcessController",
-            "scan-idle",
+            "processControllerInitialized",
+            "processNimbleHostRunning",
+            "shutdownProcessControllerObserver",
+            "nimble_port_stop()",
+            "nimble_port_deinit()",
+            "kHostShutdownTimeoutMs",
+            "complete host lifecycle is bounded",
             "parameters.passive = 1U",
             "passive scan: never transmit scan requests",
             "no RF-TX operation",
@@ -478,6 +482,7 @@ def main() -> int:
             "esp_bt_controller_init",
             "ble_gap_adv_start",
             "ble_gap_connect",
+            "process-lifetime",
         ):
             if marker in passive_ble:
                 errors.append(

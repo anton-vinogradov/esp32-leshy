@@ -46,6 +46,7 @@ public:
     static constexpr std::uint16_t kMaximumScanAttempts = 2U;
     static constexpr std::uint32_t kCompletionGraceMs = 1000U;
     static constexpr std::uint32_t kRetryDelayMs = 100U;
+    static constexpr std::uint32_t kHostShutdownTimeoutMs = 2000U;
 
     static constexpr std::uint64_t worstCaseScanDurationUs(
         const drivers::ble::BleScanPlan& plan) {
@@ -58,10 +59,6 @@ public:
 
     ~BoardBlePassiveScanner() { end(); }
 
-    // Initialize the receive-only minimal NimBLE observer while the boot heap
-    // is still contiguous. Its controller and host task are intentionally
-    // process-lifetime; scanner instances only own passive scan windows.
-    static bool prewarmProcessController();
     static bool processControllerReady();
     bool begin();
     BoardBlePassiveScanResult scan(

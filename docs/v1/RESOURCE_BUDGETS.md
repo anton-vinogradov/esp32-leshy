@@ -829,6 +829,18 @@ cadence to 4/15. Fail-closed 0.196/0.196.1 preserve the duplicate-codec and
 dynamic-scratch allocation boundaries. No host network tool or active Mac Wi-Fi is
 used.
 
+Bounded-BLE correction `RB-M168`: rejected exact 0.207 uses 225,680 B static RAM
+and reaches interactive ready with only 29,576 B free after starting NimBLE at boot.
+Independent read-only identity proves the 62,534,975,488-byte enrolled SD and exact
+CID, while FAT mount returns `ESP_ERR_NO_MEM` (257). This is not missing media and
+is not an accepted lower heap budget. Candidate `1.0.0-dev.208` uses 225,688 B static
+RAM, 3,318,064 B linked flash and 3,318,224/3,383,760 B app/factory: +8 B static RAM
+while moving the same required NimBLE allocation out of boot/storage lifetimes. The
+host must stop, exit and deinitialize before commit FAT can mount; physical free-heap
+recovery remains the next delta gate. Firmware/app hashes are
+`1b72d9cc05353ba5f36b815a21af1e5d91224ccae451174508915dbb8858380f`/
+`598dc7e8de07ac2dd8509a7e3e1d2fac154de98c20b27241cb449cd174e1fb09`.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

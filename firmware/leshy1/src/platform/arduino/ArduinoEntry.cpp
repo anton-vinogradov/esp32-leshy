@@ -760,7 +760,6 @@ leshy1::storage::MediaDiscovery storageDiscovery;
 bool storageDiscoveryReady = false;
 bool surveyDemoReady = false;
 bool libraryDemoReady = false;
-bool bleProcessObserverReady = false;
 const char* lastRuntimeEvent = "idle";
 BootMetrics bootMetrics;
 char runningAppElfSha256[65] = {};
@@ -2825,8 +2824,8 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         leshy1::services::survey::sourceMask(RadioKind::Ble);
     // Admission records the selected built-in receivers, but deliberately does
     // not start either radio. Wi-Fi and BLE are measured serially below. The
-    // controller-only BLE observer remains scan-idle across Wi-Fi windows; it
-    // has no NimBLE host task/pools and is fully released by terminal paths.
+    // bounded BLE observer is initialized only after this storage release and
+    // is fully stopped/deinitialized before any terminal event can reopen FAT.
     report.activeSourceMask = static_cast<std::uint8_t>(
         selectedSourceMask & static_cast<std::uint8_t>(wifiMask | bleMask));
     report.unavailableSourceMask = static_cast<std::uint8_t>(
@@ -2965,9 +2964,9 @@ void runProductSurveyWorker(void*) {
         const bool bleStackPrepared =
             (report.activeSourceMask & bleSourceMask) == 0 ||
             bleScanner.begin();
-        // The process-lifetime controller was initialized during early boot,
-        // before any Wi-Fi lifecycle. This local adapter only owns bounded
-        // passive scan windows and returns the observer to scan-idle.
+        // The complete NimBLE host lifecycle is bounded by this worker run.
+        // Terminal cleanup must release it before the UI task can reopen FAT
+        // to commit the captured session.
         bool pendingScanWindow = false;
         RadioKind pendingScanSource = RadioKind::Wifi;
         std::uint64_t pendingScanStartedUs = 0;
@@ -3130,6 +3129,10 @@ void runProductSurveyWorker(void*) {
         const bool bleCleanup = bleScanner.end();
         report.scannerCleanupComplete = wifiCleanup && bleCleanup;
         report.sourceActive = false;
+        if (!report.scannerCleanupComplete) {
+            report.status = "scanner_cleanup_failed";
+            scanFailed = true;
+        }
         std::uint64_t terminalUs =
             static_cast<std::uint64_t>(esp_timer_get_time());
         if (terminalUs == 0) terminalUs = 1;
@@ -26952,13 +26955,6 @@ void setup() {
     std::fputc('\n', stdout);
     std::fflush(stdout);
     BoardSdSpiTransport::holdRadioTransmitPathsInactive();
-    // Prewarm the process-lifetime controller before any Wi-Fi or product
-    // allocation. Late controller init can panic inside the framework after a
-    // Wi-Fi lifecycle has consumed or fragmented internal RAM. This observer
-    // remains scan-idle until an explicitly selected passive BLE window.
-    bleProcessObserverReady =
-        BoardBlePassiveScanner::prewarmProcessController();
-
     const bool flashMatches = ESP.getFlashChipSize() == BoardProfile::kExpectedFlashBytes;
     const bool psramMatches = psramFound() == BoardProfile::kExpectedPsram;
 
@@ -27156,14 +27152,12 @@ void setup() {
             : "capture_worker_or_exact_media_unavailable"});
     inventory.add({
         "radio.ble",
-        bleProcessObserverReady && productSurveyWorkerReady &&
-                productBootRecovery.catalogAdmitted
+        productSurveyWorkerReady && productBootRecovery.catalogAdmitted
             ? CapabilityState::Available : CapabilityState::Declared,
-        "esp32_s3_builtin_receive_only",
-        bleProcessObserverReady && productSurveyWorkerReady &&
-                productBootRecovery.catalogAdmitted
+        "esp32_s3_builtin_receive_only_bounded_lifecycle",
+        productSurveyWorkerReady && productBootRecovery.catalogAdmitted
             ? "passive_ble_worker_ready"
-            : "controller_worker_or_media_unavailable"});
+            : "worker_or_media_unavailable"});
     inventory.add({"survey.simulated",
                    surveyDemoReady ? CapabilityState::Available : CapabilityState::Fault,
                    "E-SURVEY-001_golden_trace",

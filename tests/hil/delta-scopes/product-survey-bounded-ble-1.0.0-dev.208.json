@@ -1,0 +1,21 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "product-survey-bounded-ble-1.0.0-dev.208",
+  "rationale": "Correct the exact 0.207 resource-lifecycle failure without changing Product Survey schemas, storage format, passive scan plans, UI, radio safety or the accepted 0.196.2 baseline. The Arduino BLE allocation marker remains present, but NimBLE is no longer started at boot or kept process-lifetime: it starts only after initial exact-CID FAT admission and must stop, exit its host task and deinitialize before the terminal event permits FAT commit. The platformio.ini cross-cutting classification is caused only by the already-agreed transition from historical checkpoint 0.207 to 1.0.0-dev.208.",
+  "reviewed_cross_cutting_sha256": {
+    "firmware/leshy1/platformio.ini": "efa4a66f6d3ab8a2fe303ee3935ec7c883e77565402835944a707eebb9813fff"
+  },
+  "required_host_checks": [
+    "passive BLE contract requires bounded init/stop/host-exit/deinit and forbids process-lifetime BLE, advertising, initiating, connecting, active scan and direct controller paths",
+    "clean-target source contract and exact production build",
+    "boot recovery remains before any BLE initialization and terminal cleanup fail-closes before commit",
+    "SD identity and read-only mount diagnosis is retained with exact hashes and zero writes"
+  ],
+  "required_hil_scenarios": [
+    "one changed-candidate application flash on original board-01 only",
+    "boot exact-CID catalog admission succeeds without ESP_ERR_NO_MEM",
+    "one contiguous passive Wi-Fi plus BLE Product Survey cycle completes",
+    "stop commits after bounded BLE teardown, then cold reboot reopens the new exact generation",
+    "final Home, owner none, lease zero, zero DUT TX, zero input drops, zero Cardputer opens and zero Mac Wi-Fi changes"
+  ]
+}

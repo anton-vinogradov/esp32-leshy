@@ -48,9 +48,10 @@ struct NimbleObserverState final {
 };
 
 NimbleObserverState nimbleObserver;
-bool processControllerInitializationAttempted = false;
+bool processControllerInitialized = false;
 std::atomic_bool processControllerAvailable{false};
 std::atomic_bool processNimbleSynced{false};
+std::atomic_bool processNimbleHostRunning{false};
 
 struct RawScanContext final {
     std::array<std::array<std::uint8_t, 6>, 128> seenAddresses{};
@@ -475,18 +476,47 @@ void handleNimbleSync() {
 }
 
 void runProcessNimbleHost(void*) {
+    processNimbleHostRunning = true;
     nimble_port_run();
     processNimbleSynced = false;
     processControllerAvailable = false;
+    // The FreeRTOS port deinitializer deletes the current host task and is not
+    // required to return. Publish the exit path before handing it ownership.
+    processNimbleHostRunning = false;
     nimble_port_freertos_deinit();
 }
 
+bool shutdownProcessControllerObserver() {
+    setAcceptingReports(false);
+    clearReportQueue();
+    processControllerAvailable = false;
+    processNimbleSynced = false;
+    if (!processControllerInitialized) return true;
+
+    const bool stopRequested = nimble_port_stop() == ESP_OK;
+    const std::uint64_t deadlineUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) +
+        static_cast<std::uint64_t>(
+            BoardBlePassiveScanner::kHostShutdownTimeoutMs) * 1000ULL;
+    while (processNimbleHostRunning &&
+           static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
+        vTaskDelay(pdMS_TO_TICKS(1U));
+    }
+    if (processNimbleHostRunning) return false;
+    // Let the host task execute its immediate self-delete before deinitializing
+    // the controller/host pools from this worker task on a different core.
+    vTaskDelay(pdMS_TO_TICKS(1U));
+
+    const bool deinitialized = nimble_port_deinit() == ESP_OK;
+    if (deinitialized) processControllerInitialized = false;
+    return stopRequested && deinitialized;
+}
+
 bool initializeProcessControllerObserver() {
-    if (processControllerInitializationAttempted) {
+    if (processControllerInitialized) {
         return processControllerAvailable && processNimbleSynced &&
             ble_hs_synced();
     }
-    processControllerInitializationAttempted = true;
     clearReportQueue();
     setAcceptingReports(false);
 
@@ -497,13 +527,15 @@ bool initializeProcessControllerObserver() {
     // Arduino-ESP32 3.3.9 is built with NimBLE, not Bluedroid. The Arduino
     // controller-only shortcut enters a lifecycle that crashes on this S3;
     // nimble_port_init() is the framework's supported controller + transport
-    // bootstrap. Keep one minimal host task process-lifetime and scan-idle
-    // between bounded receive windows. This adapter never calls advertising,
-    // initiating, connecting or active-scan APIs, so no RF-TX operation is
-    // reachable from the product observer.
+    // bootstrap. The complete host lifecycle is bounded by one Product Survey
+    // run so FAT/SDSPI can mount before and after radio observation without
+    // competing for the same internal heap. This adapter never calls
+    // advertising, initiating, connecting or active-scan APIs, so no RF-TX operation
+    // is reachable from the product observer.
     if (nimble_port_init() != ESP_OK) {
         return false;
     }
+    processControllerInitialized = true;
 
     ble_hs_cfg.reset_cb = handleNimbleReset;
     ble_hs_cfg.sync_cb = handleNimbleSync;
@@ -512,6 +544,7 @@ bool initializeProcessControllerObserver() {
     ble_hs_cfg.sm_mitm = 0U;
     ble_hs_cfg.sm_sc = 0U;
     processNimbleSynced = false;
+    processNimbleHostRunning = false;
     nimble_port_freertos_init(runProcessNimbleHost);
 
     const std::uint64_t deadlineUs =
@@ -521,7 +554,10 @@ bool initializeProcessControllerObserver() {
            static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
         vTaskDelay(pdMS_TO_TICKS(1U));
     }
-    if (!processNimbleSynced || !ble_hs_synced()) return false;
+    if (!processNimbleSynced || !ble_hs_synced()) {
+        shutdownProcessControllerObserver();
+        return false;
+    }
     processControllerAvailable = true;
     return true;
 }
@@ -550,10 +586,10 @@ bool BoardBlePassiveScanner::begin() {
     clearReportQueue();
     setAcceptingReports(false);
 
-    // The process-lifetime minimal NimBLE observer was prewarmed before any
-    // Wi-Fi use. Only passive ble_gap_disc() is exposed by this adapter; no
+    // Storage admission and its FAT mount have already completed and released
+    // their heap. Only passive ble_gap_disc() is exposed by this adapter; no
     // advertising, initiating, connecting or active scanning is representable.
-    if (!prewarmProcessController()) {
+    if (!initializeProcessControllerObserver()) {
         cleanupComplete_ = true;
         return false;
     }
@@ -630,24 +666,18 @@ bool BoardBlePassiveScanner::cancelActiveScan() {
     return cancelled;
 }
 
-bool BoardBlePassiveScanner::prewarmProcessController() {
-    return initializeProcessControllerObserver();
-}
-
 bool BoardBlePassiveScanner::processControllerReady() {
     return processControllerAvailable && processNimbleSynced &&
         ble_hs_synced();
 }
 
 bool BoardBlePassiveScanner::end() {
-    if (!initialized_) {
-        activeScan_ = false;
-        return cleanupComplete_;
-    }
     bool complete = cancelActiveScan();
     initialized_ = false;
     activeScan_ = false;
-    cleanupComplete_ = complete && processControllerReady();
+    complete = shutdownProcessControllerObserver() && complete;
+    cleanupComplete_ = complete && !processControllerReady() &&
+        !processNimbleHostRunning && !processControllerInitialized;
     return cleanupComplete_;
 }
 

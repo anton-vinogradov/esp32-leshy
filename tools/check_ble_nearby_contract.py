@@ -65,8 +65,10 @@ def main() -> int:
         "bleScanner.begin();",
         "bleStackPrepared && bleScanner.initialized()",
         "BoardBlePassiveScanner::cancelActiveScan();",
-        "process-lifetime controller was initialized during early boot",
-        "BoardBlePassiveScanner::prewarmProcessController()",
+        "The complete NimBLE host lifecycle is bounded by this worker run.",
+        "if (!report.scannerCleanupComplete)",
+        'report.status = "scanner_cleanup_failed";',
+        "bounded BLE observer is initialized only after this storage release",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -90,9 +92,13 @@ def main() -> int:
         "nimble_port_init()",
         "nimble_port_freertos_init(runProcessNimbleHost)",
         "ble_hs_synced()",
-        "processControllerInitializationAttempted",
-        "prewarmProcessController",
-        "scan-idle",
+        "processControllerInitialized",
+        "processNimbleHostRunning",
+        "shutdownProcessControllerObserver",
+        "nimble_port_stop()",
+        "nimble_port_deinit()",
+        "kHostShutdownTimeoutMs",
+        "complete host lifecycle is bounded",
         "parameters.passive = 1U",
         "passive scan: never transmit scan requests",
         "no RF-TX operation",
@@ -126,6 +132,7 @@ def main() -> int:
         "esp_bt_controller_init",
         "ble_gap_adv_start",
         "ble_gap_connect",
+        "process-lifetime",
     )
     required_strings = (
         "BleDevicesTitle",

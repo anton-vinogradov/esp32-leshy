@@ -18,6 +18,8 @@ def main() -> int:
     parser.add_argument("--command", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--timeout", type=float, default=60.0)
+    parser.add_argument("--schema")
+    parser.add_argument("--kind")
     args = parser.parse_args()
 
     device = PassiveSerial()
@@ -32,7 +34,23 @@ def main() -> int:
         deadline = time.monotonic() + args.timeout
         raw = b""
         while time.monotonic() < deadline and not raw:
-            raw = device.readline()
+            candidate = device.readline()
+            if not candidate:
+                continue
+            if args.schema is None and args.kind is None:
+                raw = candidate
+                continue
+            try:
+                value = json.loads(candidate)
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            if not isinstance(value, dict):
+                continue
+            if args.schema is not None and value.get("schema") != args.schema:
+                continue
+            if args.kind is not None and value.get("kind") != args.kind:
+                continue
+            raw = candidate
     if not raw:
         raise TimeoutError("timed out waiting for a raw serial line")
 
