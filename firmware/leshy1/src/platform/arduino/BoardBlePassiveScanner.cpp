@@ -462,7 +462,10 @@ void releaseCommandSlot() {
 bool sendHciCommand(std::uint16_t opcode,
                     const std::uint8_t* parameters,
                     std::size_t parameterLength) {
-    if (parameterLength > 12U) return false;
+    const bool observerCommand = opcode == kHciReset ||
+        opcode == kHciLeSetScanParameters ||
+        opcode == kHciLeSetScanEnable;
+    if (!observerCommand || parameterLength > 12U) return false;
     const std::uint64_t deadlineUs =
         static_cast<std::uint64_t>(esp_timer_get_time()) +
         static_cast<std::uint64_t>(kHciCommandTimeoutMs) * 1000ULL;
@@ -639,19 +642,11 @@ bool BoardBlePassiveScanner::begin() {
 
     esp_bt_controller_config_t config =
         BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    // The observer needs one legacy scan activity only. Do not reserve the
-    // NimBLE host task, connections, advertising, encryption, DTM, or ACL TX.
-    config.ble_max_act = 1U;
-    config.ble_st_acl_tx_buf_nb = 0U;
-    config.ble_adv_dup_filt_max = 10U;
-    config.normal_adv_size = 10U;
-    config.mesh_adv_size = 0U;
-    config.ble_50_feat_supp = false;
-    config.dtm_en = false;
-    config.enc_en = false;
-    config.connect_en = false;
-    config.scan_en = true;
-    config.adv_en = false;
+    // Keep the precompiled Espressif controller's validated matching config.
+    // The memory-heavy NimBLE host is not initialized, and sendHciCommand()
+    // admits only reset and legacy passive-scan control opcodes. No HCI RF-TX
+    // operation (advertising, initiating, connecting, or active scanning) is
+    // representable through this adapter.
 
     if (esp_bt_controller_init(&config) != ESP_OK ||
         esp_bt_controller_enable(ESP_BT_MODE_BLE) != ESP_OK ||

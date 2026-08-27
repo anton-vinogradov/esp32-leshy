@@ -65,7 +65,7 @@ def main() -> int:
         "bleScanner.begin();",
         "bleStackPrepared && bleScanner.initialized()",
         "BoardBlePassiveScanner::cancelActiveScan();",
-        "Repeated controller initialization after a Wi-Fi scan can",
+        "controller-only observer before the first Wi-Fi",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -85,10 +85,10 @@ def main() -> int:
     )
     required_adapter = (
         "BT_CONTROLLER_INIT_CONFIG_DEFAULT()",
-        "config.ble_max_act = 1U",
-        "config.connect_en = false",
-        "config.scan_en = true",
-        "config.adv_en = false",
+        "observerCommand = opcode == kHciReset",
+        "opcode == kHciLeSetScanParameters",
+        "opcode == kHciLeSetScanEnable",
+        "No HCI RF-TX",
         "esp_vhci_host_register_callback",
         "kHciLeSetScanParameters",
         "passive scan: never transmit scan requests",

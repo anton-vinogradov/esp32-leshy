@@ -2821,10 +2821,9 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     const std::uint8_t bleMask =
         leshy1::services::survey::sourceMask(RadioKind::Ble);
     // Admission records the selected built-in receivers, but deliberately does
-    // not start either radio stack.  Wi-Fi and BLE are measured serially below
-    // and each stack is fully released before the other one starts.  Keeping
-    // both initialized at once exhausts scarce DMA-capable internal RAM on the
-    // no-PSRAM DIV and can starve the ESP interrupt watchdog.
+    // not start either radio. Wi-Fi and BLE are measured serially below. The
+    // controller-only BLE observer remains scan-idle across Wi-Fi windows; it
+    // has no NimBLE host task/pools and is fully released by terminal paths.
     report.activeSourceMask = static_cast<std::uint8_t>(
         selectedSourceMask & static_cast<std::uint8_t>(wifiMask | bleMask));
     report.unavailableSourceMask = static_cast<std::uint8_t>(
@@ -2963,11 +2962,11 @@ void runProductSurveyWorker(void*) {
         const bool bleStackPrepared =
             (report.activeSourceMask & bleSourceMask) == 0 ||
             bleScanner.begin();
-        // Start the bounded passive BLE host before the first Wi-Fi driver
+        // Start the bounded controller-only observer before the first Wi-Fi
         // lifecycle. Repeated controller initialization after a Wi-Fi scan can
         // enter the framework's fixed 1024-byte ipc0 stack without sufficient
-        // headroom. The BLE host is kept initialized but scan-idle between
-        // source windows and is fully released by every terminal path below.
+        // headroom. It remains scan-idle between source windows and is fully
+        // released by every terminal path below.
         bool pendingScanWindow = false;
         RadioKind pendingScanSource = RadioKind::Wifi;
         std::uint64_t pendingScanStartedUs = 0;

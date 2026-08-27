@@ -438,10 +438,10 @@ def main() -> int:
         passive_ble = passive_ble_adapter.read_text(encoding="utf-8")
         for marker in (
             "BT_CONTROLLER_INIT_CONFIG_DEFAULT()",
-            "config.ble_max_act = 1U",
-            "config.connect_en = false",
-            "config.scan_en = true",
-            "config.adv_en = false",
+            "observerCommand = opcode == kHciReset",
+            "opcode == kHciLeSetScanParameters",
+            "opcode == kHciLeSetScanEnable",
+            "No HCI RF-TX",
             "esp_vhci_host_register_callback",
             "kHciLeSetScanParameters",
             "passive scan: never transmit scan requests",
