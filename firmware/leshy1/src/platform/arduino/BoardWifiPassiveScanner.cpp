@@ -141,6 +141,21 @@ bool BoardWifiPassiveScanner::begin() {
         return false;
     }
     wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
+    // The SDK defaults reserve buffers for association and sustained data TX.
+    // Survey performs passive management-frame reception only, so use the
+    // documented small-buffer shape also used by Arduino's dynamic-buffer
+    // mode, then bound the dynamic pools and disable aggregation that a scan
+    // cannot use. cache_tx_buf_num remains at the SDK's non-zero default.
+    init.static_rx_buf_num = kPassiveStaticRxBuffers;
+    init.dynamic_rx_buf_num = kPassiveDynamicRxBuffers;
+    init.tx_buf_type = 1;
+    init.static_tx_buf_num = kPassiveStaticTxBuffers;
+    init.dynamic_tx_buf_num = kPassiveDynamicTxBuffers;
+    init.ampdu_rx_enable = 0;
+    init.ampdu_tx_enable = 0;
+    init.amsdu_tx_enable = 0;
+    init.rx_ba_win = 0;
+    init.mgmt_sbuf_num = kPassiveManagementShortBuffers;
     init.nvs_enable = 0;
     error = esp_wifi_init(&init);
     if (error != ESP_OK) {

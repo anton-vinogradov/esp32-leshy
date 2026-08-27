@@ -44,6 +44,15 @@ struct BoardWifiPassiveScanResult final {
 class BoardWifiPassiveScanner final {
 public:
     static constexpr std::uint16_t kMaximumRecordsVisited = 128;
+    // A passive scan never associates, exchanges user data, or emits probe
+    // requests. Keep only the driver buffers required to receive management
+    // frames so the no-PSRAM DIV can keep the passive BLE controller resident
+    // without starving Wi-Fi initialization.
+    static constexpr int kPassiveStaticRxBuffers = 4;
+    static constexpr int kPassiveDynamicRxBuffers = 8;
+    static constexpr int kPassiveStaticTxBuffers = 0;
+    static constexpr int kPassiveDynamicTxBuffers = 4;
+    static constexpr int kPassiveManagementShortBuffers = 6;
 
     ~BoardWifiPassiveScanner() { end(); }
 

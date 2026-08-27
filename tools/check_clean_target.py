@@ -25,6 +25,7 @@ def main() -> int:
     littlefs_session_store = TARGET / "src" / "platform" / "arduino" / "ArduinoLittleFsSessionStoreIo.cpp"
     session_store_router = TARGET / "src" / "storage" / "SessionStoreIoRouter.cpp"
     passive_wifi_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.cpp"
+    passive_wifi_header = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveScanner.h"
     passive_wifi_capture_adapter = TARGET / "src" / "platform" / "arduino" / "BoardWifiPassiveCapture.cpp"
     companion_web_adapter = (
         TARGET / "src" / "platform" / "arduino" /
@@ -738,6 +739,33 @@ def main() -> int:
                 "the first Wi-Fi lifecycle, quiesce it between windows and "
                 "release both stacks at the terminal boundary"
             )
+
+        wifi_adapter = passive_wifi_adapter.read_text(encoding="utf-8")
+        for marker in (
+            "init.static_rx_buf_num = kPassiveStaticRxBuffers",
+            "init.dynamic_rx_buf_num = kPassiveDynamicRxBuffers",
+            "init.static_tx_buf_num = kPassiveStaticTxBuffers",
+            "init.dynamic_tx_buf_num = kPassiveDynamicTxBuffers",
+            "init.ampdu_rx_enable = 0",
+            "init.ampdu_tx_enable = 0",
+            "init.rx_ba_win = 0",
+            "init.mgmt_sbuf_num = kPassiveManagementShortBuffers",
+        ):
+            if marker not in wifi_adapter:
+                errors.append(
+                    "passive Wi-Fi coexistence budget is missing: " + marker
+                )
+        for marker in (
+            "kPassiveStaticRxBuffers = 4",
+            "kPassiveDynamicRxBuffers = 8",
+            "kPassiveStaticTxBuffers = 0",
+            "kPassiveDynamicTxBuffers = 4",
+            "kPassiveManagementShortBuffers = 6",
+        ):
+            if marker not in passive_wifi_header.read_text(encoding="utf-8"):
+                errors.append(
+                    "passive Wi-Fi buffer bound is missing: " + marker
+                )
 
     commit_reopen = entry.find("bool reopenProductSurveyBackendForCommit()")
     product_stop = entry.find("SurveyPipelineStatus stopProductSurvey()")

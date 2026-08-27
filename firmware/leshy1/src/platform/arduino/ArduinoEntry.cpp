@@ -3015,6 +3015,11 @@ void runProductSurveyWorker(void*) {
                         wifiScan = wifiScanner.scan(
                             leshy1::drivers::wifi::defaultPassivePlan(),
                             enqueueProductSurveyWorkerRecord, nullptr);
+                    } else {
+                        // Preserve the exact driver init/start error even
+                        // though NotStarted intentionally classifies this
+                        // source as unavailable rather than a session fault.
+                        wifiScan.driverError = wifiScanner.lastError();
                     }
                 } else {
                     if (bleStackPrepared && bleScanner.initialized()) {
@@ -17324,6 +17329,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_capacity_bytes\":%llu,"
                       "\"survey_product_cached_free_bytes\":%llu,"
                       "\"survey_scan_status\":\"%s\","
+                      "\"survey_scan_driver_error\":%d,"
                       "\"survey_scan_reported\":%u,"
                       "\"survey_scan_read\":%u,"
                       "\"survey_scan_accepted\":%u,"
@@ -17553,6 +17559,7 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.cachedFreeBytes),
                       leshy1::platform::arduino::boardWifiScanStatusName(
                           productSurveyRuntime.scan.status),
+                      productSurveyRuntime.scan.driverError,
                       static_cast<unsigned>(
                           productSurveyRuntime.scan.recordsReported),
                       static_cast<unsigned>(
