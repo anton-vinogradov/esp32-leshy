@@ -18354,7 +18354,7 @@ void emitTargetsState(Stream& reply) {
 
 void emitCompanionWebState(Stream& reply) {
     namespace companion = leshy1::services::companion;
-    char line[1280] = {};
+    char line[1536] = {};
     std::snprintf(
         line, sizeof(line),
         "{\"schema\":\"leshy.companion.web.v1\",\"kind\":\"state\","
@@ -18362,7 +18362,9 @@ void emitCompanionWebState(Stream& reply) {
         "\"protocol_connected\":%s,\"generation\":%lu,"
         "\"started_us\":%llu,\"last_activity_us\":%llu,"
         "\"stop_reason\":\"%s\",\"requests_handled\":%lu,"
-        "\"requests_rejected\":%lu,\"credential_present\":%s,"
+        "\"requests_rejected\":%lu,\"tx_backpressure_events\":%lu,"
+        "\"last_send_errno\":%d,\"last_response_body_bytes\":%u,"
+        "\"last_response_body_length\":%u,\"credential_present\":%s,"
         "\"hil_seed_armed\":%s,"
         "\"credential_persisted\":false,\"credential_exposed_over_diagnostic\":false,"
         "\"network_core_ready\":%s,\"begin_stage\":\"%s\","
@@ -18394,6 +18396,13 @@ void emitCompanionWebState(Stream& reply) {
             arduinoCompanionWebService.requestsHandled()),
         static_cast<unsigned long>(
             arduinoCompanionWebService.requestsRejected()),
+        static_cast<unsigned long>(
+            arduinoCompanionWebService.sendBackpressureEvents()),
+        arduinoCompanionWebService.lastSendErrno(),
+        static_cast<unsigned>(
+            arduinoCompanionWebService.lastResponseBodyBytes()),
+        static_cast<unsigned>(
+            arduinoCompanionWebService.lastResponseBodyLength()),
         webCompanionCredentials.valid() ? "true" : "false",
         webCompanionHilEntropyPresent ? "true" : "false",
         arduinoCompanionWebService.networkCoreReady() ? "true" : "false",

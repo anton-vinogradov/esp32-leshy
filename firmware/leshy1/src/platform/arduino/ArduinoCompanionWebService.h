@@ -69,6 +69,16 @@ public:
     bool active() const { return active_; }
     std::uint32_t requestsHandled() const { return requestsHandled_; }
     std::uint32_t requestsRejected() const { return requestsRejected_; }
+    std::uint32_t sendBackpressureEvents() const {
+        return sendBackpressureEvents_;
+    }
+    int lastSendErrno() const { return lastSendErrno_; }
+    std::size_t lastResponseBodyBytes() const {
+        return lastResponseBodyBytes_;
+    }
+    std::size_t lastResponseBodyLength() const {
+        return lastResponseBodyLength_;
+    }
     bool networkCoreReady() const { return networkCoreReady_; }
     bool cleanupComplete() const { return cleanupComplete_; }
     BeginStage beginStage() const { return beginStage_; }
@@ -117,6 +127,10 @@ private:
     std::uint64_t clientStartedUs_ = 0;
     std::uint32_t requestsHandled_ = 0;
     std::uint32_t requestsRejected_ = 0;
+    std::uint32_t sendBackpressureEvents_ = 0;
+    int lastSendErrno_ = 0;
+    std::size_t lastResponseBodyBytes_ = 0;
+    std::size_t lastResponseBodyLength_ = 0;
     esp_netif_t* apNetif_ = nullptr;
     esp_err_t lastError_ = ESP_OK;
     BeginStage beginStage_ = BeginStage::Idle;

@@ -244,6 +244,10 @@ bool ArduinoCompanionWebService::begin(
     active_ = true;
     requestsHandled_ = 0;
     requestsRejected_ = 0;
+    sendBackpressureEvents_ = 0;
+    lastSendErrno_ = 0;
+    lastResponseBodyBytes_ = 0;
+    lastResponseBodyLength_ = 0;
     resetClient();
     beginStage_ = BeginStage::Ready;
     heapFreeAfterBegin_ = static_cast<std::uint32_t>(
@@ -364,6 +368,9 @@ void ArduinoCompanionWebService::sendResponse(
     responseHeaderOffset_ = 0;
     responseBodyLength_ = bodyLength;
     responseBodyOffset_ = 0;
+    lastResponseBodyBytes_ = 0;
+    lastResponseBodyLength_ = bodyLength;
+    lastSendErrno_ = 0;
     responsePending_ = true;
 }
 
@@ -393,13 +400,21 @@ ArduinoCompanionWebService::drainResponse() {
         client_.fd(), data + *offset, chunk, MSG_DONTWAIT);
     if (written > 0) {
         *offset += static_cast<std::size_t>(written);
+        if (offset == &responseBodyOffset_) {
+            lastResponseBodyBytes_ = responseBodyOffset_;
+        }
         return responseHeaderOffset_ == responseHeaderLength_ &&
                 responseBodyOffset_ == responseBodyLength_
             ? DrainResult::Complete
             : DrainResult::Pending;
     }
-    if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-        return DrainResult::Pending;
+    if (written < 0) {
+        lastSendErrno_ = errno;
+        if (errno == EAGAIN || errno == EWOULDBLOCK ||
+            errno == ENOBUFS || errno == ENOMEM) {
+            ++sendBackpressureEvents_;
+            return DrainResult::Pending;
+        }
     }
     return DrainResult::Failed;
 }

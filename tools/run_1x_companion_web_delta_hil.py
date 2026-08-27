@@ -806,6 +806,10 @@ def main() -> int:
                     active.get("ap_ipv4_ready") is True and
                     active.get("dhcp_server_started") is True and
                     active.get("associated_stations") == 0 and
+                    active.get("tx_backpressure_events") == 0 and
+                    active.get("last_send_errno") == 0 and
+                    active.get("last_response_body_bytes") == 0 and
+                    active.get("last_response_body_length") == 0 and
                     active.get("cleanup_complete") is False and
                     active.get("targets_suspended") is True and
                     int(active.get("heap_free_before_suspend", 0)) > 0 and
@@ -1190,8 +1194,24 @@ def main() -> int:
                     (http_exchange.get("requests_handled", 0)
                      if http_exchange_requested else 0) and
                     stable.get("requests_rejected") == 0 and
+                    int(stable.get("last_response_body_length", 0)) > 0 and
+                    stable.get("last_response_body_bytes") ==
+                    stable.get("last_response_body_length") and
                     stable.get("lease_mask") == 15,
                     f"idle Web session did not remain stable: {stable}")
+            if http_exchange_requested:
+                http_exchange["tx_delivery"] = {
+                    "backpressure_events":
+                        stable.get("tx_backpressure_events"),
+                    "last_send_errno": stable.get("last_send_errno"),
+                    "last_body_bytes":
+                        stable.get("last_response_body_bytes"),
+                    "last_body_length":
+                        stable.get("last_response_body_length"),
+                    "complete": True,
+                }
+                record["http_exchange"] = http_exchange
+                write_json(args.output / "run.json", record)
 
             checkpoint(args.output, record, "explicit_stop")
             action(device, "left")
