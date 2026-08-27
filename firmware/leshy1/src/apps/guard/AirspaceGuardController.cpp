@@ -79,6 +79,8 @@ bool duplicateFinding(const AirspaceFinding& left,
             return left.transmitter == right.transmitter;
         case AirspaceFindingKind::WifiSsidSecurityConflict:
             return sameNetworkName(left, right);
+        case AirspaceFindingKind::WifiSsidChurn:
+            return left.transmitter == right.transmitter;
     }
     return true;
 }
@@ -167,7 +169,9 @@ bool AirspaceGuardController::validateReport(
                : AirspaceGuardStatus::Clear);
     if (report.status != expectedStatus) return false;
     std::size_t reportedDisconnectFrames = 0U;
-    std::size_t reportedIdentityFrames = 0U;
+    // Identity findings may intentionally reference the same source frames:
+    // each detector validates against the retained identity population rather
+    // than inventing mutually exclusive ownership of immutable evidence.
     for (std::size_t index = 0; index < report.findingCount; ++index) {
         const AirspaceFinding& finding = report.findings[index];
         for (std::size_t previous = 0; previous < index; ++previous) {
@@ -224,9 +228,23 @@ bool AirspaceGuardController::validateReport(
                     finding.primarySecurity == finding.relatedSecurity) {
                     return false;
                 }
-                reportedIdentityFrames += finding.observed;
-                if (reportedIdentityFrames >
-                    report.identityAdvertisementFrames) {
+                if (finding.observed > report.identityAdvertisementFrames) {
+                    return false;
+                }
+                break;
+            case AirspaceFindingKind::WifiSsidChurn:
+                if (finding.detectorVersion !=
+                        AirspaceFinding::kWifiSsidChurnDetectorVersion ||
+                    finding.confidence == AirspaceConfidence::Low ||
+                    finding.threshold < 3U ||
+                    finding.evidenceCount != finding.observed ||
+                    finding.deauthenticationFrames != 0U ||
+                    finding.disassociationFrames != 0U ||
+                    !emptyTransmitter(finding.relatedTransmitter) ||
+                    finding.networkNameLength != 0U ||
+                    finding.primarySecurity != AirspaceWifiSecurity::Unknown ||
+                    finding.relatedSecurity != AirspaceWifiSecurity::Unknown ||
+                    finding.observed > report.identityAdvertisementFrames) {
                     return false;
                 }
                 break;

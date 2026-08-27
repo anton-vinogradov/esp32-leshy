@@ -268,6 +268,8 @@ AirspaceGuardUiModel presentFinding(const AirspaceGuardController& controller,
     if (finding->kind ==
         AirspaceFindingKind::WifiSsidSecurityConflict) {
         model.headline = UiTextId::AirspaceGuardIdentityConflict;
+    } else if (finding->kind == AirspaceFindingKind::WifiSsidChurn) {
+        model.headline = UiTextId::AirspaceGuardSsidChurn;
     }
     formatFindingContext(model.context, language, *finding);
     formatText(model.rows[0].text, language,
@@ -309,6 +311,13 @@ AirspaceGuardUiModel presentFinding(const AirspaceGuardController& controller,
                    static_cast<unsigned>(finding->relatedTransmitter[3]),
                    static_cast<unsigned>(finding->relatedTransmitter[4]),
                    static_cast<unsigned>(finding->relatedTransmitter[5]));
+    } else if (finding->kind == AirspaceFindingKind::WifiSsidChurn) {
+        const std::uint64_t spanTenths =
+            (finding->lastUs - finding->firstUs + 99999ULL) / 100000ULL;
+        formatText(model.rows[3].text, language,
+                   UiTextId::AirspaceGuardChurnSpanFormat,
+                   static_cast<unsigned>(spanTenths / 10U),
+                   static_cast<unsigned>(spanTenths % 10U));
     } else {
         formatText(model.rows[3].text, language,
                    UiTextId::AirspaceGuardDisconnectMixFormat,
@@ -385,6 +394,15 @@ AirspaceGuardUiModel presentEvidenceDetail(
         formatText(model.rows[1].text, language,
                    UiTextId::AirspaceGuardSecurityChannelSignalFormat,
                    uiText(language, securityText(security)),
+                   static_cast<unsigned>(evidence->channel),
+                   static_cast<int>(evidence->rssiDbm));
+        formatText(model.rows[2].text, language,
+                   UiTextId::AirspaceGuardFindingOffsetFormat,
+                   static_cast<unsigned long long>(
+                       (evidence->monotonicUs - finding->firstUs) / 1000ULL));
+    } else if (finding->kind == AirspaceFindingKind::WifiSsidChurn) {
+        formatText(model.rows[1].text, language,
+                   UiTextId::AirspaceGuardChannelSignalFormat,
                    static_cast<unsigned>(evidence->channel),
                    static_cast<int>(evidence->rssiDbm));
         formatText(model.rows[2].text, language,

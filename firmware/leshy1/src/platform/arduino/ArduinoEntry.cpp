@@ -19544,6 +19544,7 @@ void serviceAirspaceGuardProduct() {
             leshy1::services::guard::AirspaceGuardPolicy policy{};
             policy.ssidSecurityConflictEnabled =
                 monitor.identityRetentionComplete;
+            policy.ssidChurnEnabled = monitor.identityRetentionComplete;
             report = airspaceGuardDetector.inspectWifi(
                 wifiFrameCapture.capture(), policy, dropped,
                 static_cast<std::size_t>(monitor.framesReported));

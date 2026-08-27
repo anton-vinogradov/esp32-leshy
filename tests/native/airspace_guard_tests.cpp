@@ -144,6 +144,15 @@ void testPolicyAndEmptyEvidenceFailClosed() {
     invalid = {};
     invalid.ssidSecurityConflictWindowUs = 10000001ULL;
     CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
+    invalid.ssidChurnThreshold = 2U;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
+    invalid.ssidChurnThreshold = 9U;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
+    invalid.ssidChurnWindowUs = 99999ULL;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
 
     const AirspaceGuardReport report = guard.inspectWifi(empty);
     CHECK(report.status == AirspaceGuardStatus::Inconclusive);
@@ -174,6 +183,12 @@ void testIngressClassifiersStayManagementOnly() {
 AirspaceGuardPolicy identityPolicy() {
     AirspaceGuardPolicy policy{};
     policy.ssidSecurityConflictEnabled = true;
+    return policy;
+}
+
+AirspaceGuardPolicy churnPolicy() {
+    AirspaceGuardPolicy policy{};
+    policy.ssidChurnEnabled = true;
     return policy;
 }
 
@@ -295,6 +310,112 @@ void testIdentityConflictRetainsTwoExactAdvertisements() {
     CHECK(finding.evidence[1].frameIndex == 1U);
     CHECK(finding.evidence[1].channel == 11U);
     CHECK(finding.evidence[1].rssiDbm == -52);
+}
+
+void testSsidChurnRetainsDistinctNamesFromOneBssid() {
+    FixtureSource source;
+    source.addIdentityAdvertisement(8U, 1000000ULL, kTransmitterA,
+                                    "Cafe", AirspaceWifiSecurity::Open,
+                                    1U, -35);
+    source.addIdentityAdvertisement(5U, 1050000ULL, kTransmitterA,
+                                    "Cafe", AirspaceWifiSecurity::Rsn,
+                                    1U, -36);
+    source.addIdentityAdvertisement(8U, 1100000ULL, kTransmitterA,
+                                    "Airport", AirspaceWifiSecurity::Rsn,
+                                    6U, -42);
+    source.addIdentityAdvertisement(8U, 1200000ULL, kTransmitterA,
+                                    "Hotel", AirspaceWifiSecurity::Wpa,
+                                    11U, -48);
+    source.addIdentityAdvertisement(5U, 1300000ULL, kTransmitterA,
+                                    "Free WiFi", AirspaceWifiSecurity::Open,
+                                    13U, -53);
+
+    const AirspaceGuardReport report =
+        AirspaceGuard{}.inspectWifi(source, churnPolicy());
+    CHECK(report.status == AirspaceGuardStatus::Finding);
+    CHECK(report.identityAdvertisementFrames == 5U);
+    CHECK(report.findingCount == 1U);
+    const AirspaceFinding& finding = report.findings[0];
+    CHECK(finding.kind == AirspaceFindingKind::WifiSsidChurn);
+    CHECK(finding.confidence == AirspaceConfidence::Medium);
+    CHECK(finding.detectorVersion ==
+          AirspaceFinding::kWifiSsidChurnDetectorVersion);
+    CHECK(finding.threshold == 4U);
+    CHECK(finding.observed == 4U);
+    CHECK(finding.transmitter == kTransmitterA);
+    CHECK((finding.relatedTransmitter ==
+           std::array<std::uint8_t, 6>{}));
+    CHECK(finding.networkNameLength == 0U);
+    CHECK(finding.firstUs == 1000000ULL);
+    CHECK(finding.lastUs == 1300000ULL);
+    CHECK(finding.evidenceCount == 4U);
+    CHECK(finding.evidence[0].frameIndex == 0U);
+    CHECK(finding.evidence[1].frameIndex == 2U);
+    CHECK(finding.evidence[2].frameIndex == 3U);
+    CHECK(finding.evidence[3].frameIndex == 4U);
+    CHECK(finding.evidence[3].channel == 13U);
+    CHECK(finding.evidence[3].rssiDbm == -53);
+}
+
+void testSsidChurnRejectsLookalikesAndIncompleteEvidence() {
+    FixtureSource belowThreshold;
+    belowThreshold.addIdentityAdvertisement(
+        8U, 1000000ULL, kTransmitterA, "One", AirspaceWifiSecurity::Open);
+    belowThreshold.addIdentityAdvertisement(
+        8U, 1100000ULL, kTransmitterA, "Two", AirspaceWifiSecurity::Rsn);
+    belowThreshold.addIdentityAdvertisement(
+        8U, 1200000ULL, kTransmitterA, "Three", AirspaceWifiSecurity::Wpa);
+    CHECK(AirspaceGuard{}.inspectWifi(belowThreshold, churnPolicy()).status ==
+          AirspaceGuardStatus::Clear);
+
+    FixtureSource splitTransmitters;
+    splitTransmitters.addIdentityAdvertisement(
+        8U, 1000000ULL, kTransmitterA, "One", AirspaceWifiSecurity::Open);
+    splitTransmitters.addIdentityAdvertisement(
+        8U, 1100000ULL, kTransmitterA, "Two", AirspaceWifiSecurity::Open);
+    splitTransmitters.addIdentityAdvertisement(
+        8U, 1200000ULL, kTransmitterB, "Three", AirspaceWifiSecurity::Open);
+    splitTransmitters.addIdentityAdvertisement(
+        8U, 1300000ULL, kTransmitterB, "Four", AirspaceWifiSecurity::Open);
+    CHECK(AirspaceGuard{}.inspectWifi(splitTransmitters, churnPolicy()).status ==
+          AirspaceGuardStatus::Clear);
+
+    FixtureSource outsideWindow;
+    outsideWindow.addIdentityAdvertisement(
+        8U, 1000000ULL, kTransmitterA, "One", AirspaceWifiSecurity::Open);
+    outsideWindow.addIdentityAdvertisement(
+        8U, 12000000ULL, kTransmitterA, "Two", AirspaceWifiSecurity::Open);
+    outsideWindow.addIdentityAdvertisement(
+        8U, 23000000ULL, kTransmitterA, "Three", AirspaceWifiSecurity::Open);
+    outsideWindow.addIdentityAdvertisement(
+        8U, 34000000ULL, kTransmitterA, "Four", AirspaceWifiSecurity::Open);
+    CHECK(AirspaceGuard{}.inspectWifi(outsideWindow, churnPolicy()).status ==
+          AirspaceGuardStatus::Clear);
+
+    FixtureSource repeatedName;
+    repeatedName.addIdentityAdvertisement(
+        8U, 1000000ULL, kTransmitterA, "Workshop",
+        AirspaceWifiSecurity::Open);
+    repeatedName.addIdentityAdvertisement(
+        5U, 1100000ULL, kTransmitterA, "Workshop",
+        AirspaceWifiSecurity::LegacyPrivacy);
+    repeatedName.addIdentityAdvertisement(
+        8U, 1200000ULL, kTransmitterA, "Workshop",
+        AirspaceWifiSecurity::Wpa);
+    repeatedName.addIdentityAdvertisement(
+        5U, 1300000ULL, kTransmitterA, "Workshop",
+        AirspaceWifiSecurity::Rsn);
+    CHECK(AirspaceGuard{}.inspectWifi(repeatedName, churnPolicy()).status ==
+          AirspaceGuardStatus::Clear);
+
+    FixtureSource malformed;
+    malformed.addIdentityAdvertisement(
+        8U, 1000000ULL, kTransmitterA, "One", AirspaceWifiSecurity::Open);
+    malformed.mutableAt(0U).length = 37U;
+    const AirspaceGuardReport malformedReport =
+        AirspaceGuard{}.inspectWifi(malformed, churnPolicy());
+    CHECK(malformedReport.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(malformedReport.malformedFrames == 1U);
 }
 
 void testIdentityDetectorRejectsLookalikesAndMalformedEvidence() {
@@ -468,6 +589,9 @@ void testStableNames() {
     CHECK(std::strcmp(airspaceFindingKindName(
                           AirspaceFindingKind::WifiSsidSecurityConflict),
                       "wifi_ssid_security_conflict") == 0);
+    CHECK(std::strcmp(airspaceFindingKindName(
+                          AirspaceFindingKind::WifiSsidChurn),
+                      "wifi_ssid_churn") == 0);
     CHECK(std::strcmp(airspaceWifiSecurityName(AirspaceWifiSecurity::Rsn),
                       "rsn") == 0);
     CHECK(std::strcmp(airspaceConfidenceName(AirspaceConfidence::Medium),
@@ -483,6 +607,8 @@ int main() {
     testLiveIdentityRetentionKeyIsExactAndFailClosed();
     testLiveRetentionPartitionKeepsDisconnectCapacity();
     testIdentityConflictRetainsTwoExactAdvertisements();
+    testSsidChurnRetainsDistinctNamesFromOneBssid();
+    testSsidChurnRejectsLookalikesAndIncompleteEvidence();
     testIdentityDetectorRejectsLookalikesAndMalformedEvidence();
     testIdentityParserExcludesCapturedFcsFromInformationElements();
     testExternalCaptureLossMakesClearEvidenceInconclusive();

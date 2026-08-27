@@ -85,6 +85,29 @@ AirspaceFinding makeIdentityFinding(
     return finding;
 }
 
+AirspaceFinding makeChurnFinding(
+    const std::array<std::uint8_t, 6>& source,
+    std::uint64_t firstUs = 1000000ULL,
+    std::uint64_t lastUs = 1300000ULL) {
+    AirspaceFinding finding{};
+    finding.kind = AirspaceFindingKind::WifiSsidChurn;
+    finding.confidence = AirspaceConfidence::Medium;
+    finding.detectorVersion = AirspaceFinding::kWifiSsidChurnDetectorVersion;
+    finding.threshold = 4U;
+    finding.observed = 4U;
+    finding.transmitter = source;
+    finding.firstUs = firstUs;
+    finding.lastUs = lastUs;
+    finding.evidenceCount = 4U;
+    for (std::size_t index = 0U; index < finding.evidenceCount; ++index) {
+        finding.evidence[index] = {
+            index, firstUs + index * 100000ULL,
+            static_cast<std::uint8_t>(1U + index),
+            static_cast<std::int16_t>(-35 - index)};
+    }
+    return finding;
+}
+
 void setCompleteCounters(AirspaceGuardReport& report,
                          std::size_t frames,
                          std::size_t disconnectFrames) {
@@ -355,6 +378,59 @@ void testDifferentDetectorKindsMayReferenceTheSameTransmitter() {
           AirspaceGuardLoadStatus::InvalidReport);
 }
 
+void testSsidChurnReportIsKindAwareAndFailClosed() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 1U;
+    report.findings[0] = makeChurnFinding(kSourceA);
+    report.sourceFramesObserved = 4U;
+    report.framesAvailable = 4U;
+    report.framesInspected = 4U;
+    report.identityAdvertisementFrames = 4U;
+
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    CHECK(controller.selectedFinding() != nullptr);
+    CHECK(controller.selectedFinding()->kind ==
+          AirspaceFindingKind::WifiSsidChurn);
+
+    AirspaceGuardReport invalid = report;
+    invalid.findings[0].confidence = AirspaceConfidence::Low;
+    CHECK(controller.load(invalid) ==
+          AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].relatedTransmitter = kSourceB;
+    CHECK(controller.load(invalid) ==
+          AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].evidenceCount = 3U;
+    CHECK(controller.load(invalid) ==
+          AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.identityAdvertisementFrames = 3U;
+    CHECK(controller.load(invalid) ==
+          AirspaceGuardLoadStatus::InvalidReport);
+}
+
+void testIdentityDetectorsMayShareExactSourceEvidence() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 2U;
+    report.findings[0] = makeIdentityFinding(kSourceA, kSourceB);
+    report.findings[1] = makeChurnFinding(kSourceA);
+    report.sourceFramesObserved = 4U;
+    report.framesAvailable = 4U;
+    report.framesInspected = 4U;
+    report.identityAdvertisementFrames = 4U;
+
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    CHECK(controller.findingCount() == 2U);
+}
+
 void testStableNames() {
     CHECK(std::strcmp(airspaceGuardViewName(AirspaceGuardView::Finding),
                       "finding") == 0);
@@ -375,6 +451,8 @@ int main() {
     testOutOfBoundsEvidenceFailsClosed();
     testIdentityConflictReportIsKindAwareAndFailClosed();
     testDifferentDetectorKindsMayReferenceTheSameTransmitter();
+    testSsidChurnReportIsKindAwareAndFailClosed();
+    testIdentityDetectorsMayShareExactSourceEvidence();
     testStableNames();
     std::puts("Airspace Guard controller tests passed");
     return 0;

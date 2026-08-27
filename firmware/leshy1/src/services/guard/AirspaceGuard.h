@@ -18,6 +18,7 @@ enum class AirspaceGuardStatus : std::uint8_t {
 enum class AirspaceFindingKind : std::uint8_t {
     WifiDisconnectBurst,
     WifiSsidSecurityConflict,
+    WifiSsidChurn,
 };
 
 enum class AirspaceConfidence : std::uint8_t {
@@ -61,19 +62,23 @@ const char* airspaceWifiSecurityName(AirspaceWifiSecurity security);
 struct AirspaceGuardPolicy final {
     std::uint8_t disconnectBurstThreshold = 4;
     std::uint64_t disconnectWindowUs = 2000000ULL;
-    // Off by default: a caller may enable this only after proving that its
-    // source retains a complete bounded set of identity advertisements. The
-    // live adapter makes that decision after cleanup; imported sources opt in
-    // explicitly without weakening clear-result semantics.
+    // Identity indicators are off by default: a caller may enable them only
+    // after proving that its source retains a complete bounded set of identity
+    // advertisements. The live adapter decides after cleanup; imported sources
+    // opt in explicitly without weakening clear-result semantics.
     bool ssidSecurityConflictEnabled = false;
     std::uint64_t ssidSecurityConflictWindowUs = 10000000ULL;
+    bool ssidChurnEnabled = false;
+    std::uint8_t ssidChurnThreshold = 4;
+    std::uint64_t ssidChurnWindowUs = 10000000ULL;
 };
 
 bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy);
 
 // Cheap ingress classifiers for bounded passive adapters. Full structural
-// validation remains the detector's responsibility; a caller must not enable a
-// detector unless its retention policy keeps complete evidence for that class.
+// validation remains the detector's responsibility; a caller must not enable an
+// identity detector unless its retention policy keeps complete evidence for
+// that class.
 bool isWifiDisconnectFrameCandidate(const std::uint8_t* payload,
                                     std::size_t length);
 bool isWifiIdentityAdvertisementCandidate(const std::uint8_t* payload,
@@ -103,6 +108,7 @@ struct AirspaceFinding final {
     static constexpr std::size_t kNetworkNameCapacity = 32;
     static constexpr std::uint16_t kWifiDisconnectDetectorVersion = 1;
     static constexpr std::uint16_t kWifiIdentityDetectorVersion = 1;
+    static constexpr std::uint16_t kWifiSsidChurnDetectorVersion = 1;
     static constexpr std::uint16_t kDetectorVersion =
         kWifiDisconnectDetectorVersion;
 

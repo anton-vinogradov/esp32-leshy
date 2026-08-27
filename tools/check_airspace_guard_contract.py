@@ -69,6 +69,10 @@ def main() -> int:
         "ssidSecurityConflictEnabled = false",
         "ssidSecurityConflictWindowUs = 10000000ULL",
         "WifiSsidSecurityConflict",
+        "ssidChurnEnabled = false",
+        "ssidChurnThreshold = 4",
+        "ssidChurnWindowUs = 10000000ULL",
+        "WifiSsidChurn",
         "isWifiIdentityAdvertisementCandidate",
         "WifiIdentityRetentionKey",
         "wifiIdentityRetentionKey",
@@ -78,6 +82,7 @@ def main() -> int:
         "wifiDisconnectRetentionSlotAvailable",
         "wifiIdentityRetentionSlotAvailable",
         "kWifiIdentityDetectorVersion = 1",
+        "kWifiSsidChurnDetectorVersion = 1",
         "AirspaceWifiSecurity::Rsn",
         "WifiFrameSource& source",
         "frameIndex = event.frameIndex",
@@ -102,6 +107,8 @@ def main() -> int:
         "testIdentityConflictRetainsTwoExactAdvertisements",
         "testIdentityDetectorRejectsLookalikesAndMalformedEvidence",
         "testIdentityParserExcludesCapturedFcsFromInformationElements",
+        "testSsidChurnRetainsDistinctNamesFromOneBssid",
+        "testSsidChurnRejectsLookalikesAndIncompleteEvidence",
     ):
         require(failures, marker in tests,
                 f"missing Airspace Guard native coverage: {marker}")
@@ -144,6 +151,8 @@ def main() -> int:
         "testOutOfBoundsEvidenceFailsClosed",
         "testIdentityConflictReportIsKindAwareAndFailClosed",
         "testDifferentDetectorKindsMayReferenceTheSameTransmitter",
+        "testSsidChurnReportIsKindAwareAndFailClosed",
+        "testIdentityDetectorsMayShareExactSourceEvidence",
     ):
         require(failures, marker in controller_tests,
                 f"missing Airspace Guard controller coverage: {marker}")
@@ -178,6 +187,8 @@ def main() -> int:
         "AirspaceGuardIdentityConflict",
         "AirspaceGuardSecurityPairFormat",
         "networkNameFingerprint",
+        "AirspaceGuardSsidChurn",
+        "AirspaceGuardChurnSpanFormat",
     ):
         require(failures, marker in presenter,
                 f"missing Airspace Guard presentation contract: {marker}")
@@ -193,6 +204,7 @@ def main() -> int:
         "testClearOutcomeUsesTheOtherwiseEmptyRowsForCoverage",
         "testIdentityConflictExplainsIndicatorWithoutClaimingProof",
         "testInvalidSsidBytesUseStableNonInventedIdentifier",
+        "testSsidChurnExplainsIndicatorWithoutClaimingPineap",
     ):
         require(failures, marker in presenter_tests,
                 f"missing Airspace Guard presenter coverage: {marker}")
@@ -209,6 +221,8 @@ def main() -> int:
         "AirspaceGuardIdentityConflict",
         "AirspaceGuardSecurityPairFormat",
         "AirspaceGuardSsidFingerprintFormat",
+        "AirspaceGuardSsidChurn",
+        "AirspaceGuardChurnSpanFormat",
     ):
         require(failures, marker in ui_strings,
                 f"missing EN/RU Airspace Guard copy: {marker}")
@@ -294,6 +308,7 @@ def main() -> int:
     require(
         failures,
         "policy.ssidSecurityConflictEnabled =" in arduino_entry and
+        "policy.ssidChurnEnabled =" in arduino_entry and
         "monitor.identityRetentionComplete" in arduino_entry and
         "monitor.identityProfilesDropped" in arduino_entry,
         "live identity detector is not gated by complete bounded retention",

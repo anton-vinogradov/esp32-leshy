@@ -86,6 +86,31 @@ AirspaceGuardReport makeIdentityFindingReport() {
     return report;
 }
 
+AirspaceGuardReport makeChurnFindingReport() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 1U;
+    report.sourceFramesObserved = 4U;
+    report.framesAvailable = 4U;
+    report.framesInspected = 4U;
+    report.identityAdvertisementFrames = 4U;
+    AirspaceFinding& finding = report.findings[0];
+    finding.kind = AirspaceFindingKind::WifiSsidChurn;
+    finding.confidence = AirspaceConfidence::Medium;
+    finding.detectorVersion = AirspaceFinding::kWifiSsidChurnDetectorVersion;
+    finding.threshold = 4U;
+    finding.observed = 4U;
+    finding.transmitter = kSource;
+    finding.firstUs = 1000000ULL;
+    finding.lastUs = 1300000ULL;
+    finding.evidenceCount = 4U;
+    finding.evidence[0] = {0U, 1000000ULL, 1U, -35};
+    finding.evidence[1] = {1U, 1100000ULL, 6U, -42};
+    finding.evidence[2] = {2U, 1200000ULL, 11U, -48};
+    finding.evidence[3] = {3U, 1300000ULL, 13U, -53};
+    return report;
+}
+
 void testFindingShowsOnlyActionableUserFacts() {
     AirspaceGuardController controller;
     CHECK(controller.load(makeFindingReport()) ==
@@ -171,6 +196,37 @@ void testIdentityConflictExplainsIndicatorWithoutClaimingProof() {
                       "WPA2/3 · CH 11 · -52 DBM") == 0);
     CHECK(std::strcmp(model.rows[2].text.data(),
                       "+200 ms FROM FINDING START") == 0);
+}
+
+void testSsidChurnExplainsIndicatorWithoutClaimingPineap() {
+    AirspaceGuardController controller;
+    CHECK(controller.load(makeChurnFindingReport()) ==
+          AirspaceGuardLoadStatus::Ready);
+    AirspaceGuardUiModel model =
+        presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(model.headline == UiTextId::AirspaceGuardSsidChurn);
+    CHECK(model.note == UiTextId::AirspaceGuardPassiveOnly);
+    CHECK(std::strcmp(model.context.data(),
+                      "MAC 02:11:22:33:44:55") == 0);
+    CHECK(std::strcmp(model.rows[1].text.data(),
+                      "MEDIUM · DETECTOR V1") == 0);
+    CHECK(std::strcmp(model.rows[2].text.data(),
+                      "4 EVENTS · LIMIT 4") == 0);
+    CHECK(std::strcmp(model.rows[3].text.data(),
+                      "ONE BSSID · 0.3 S") == 0);
+
+    CHECK(controller.openSelected());
+    CHECK(controller.next());
+    CHECK(controller.openSelected());
+    model = presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(std::strcmp(model.context.data(),
+                      "MAC 02:11:22:33:44:55") == 0);
+    CHECK(std::strcmp(model.rows[0].text.data(),
+                      "SOURCE FRAME #1") == 0);
+    CHECK(std::strcmp(model.rows[1].text.data(),
+                      "CHANNEL 6 · -42 DBM") == 0);
+    CHECK(std::strcmp(model.rows[2].text.data(),
+                      "+100 ms FROM FINDING START") == 0);
 }
 
 void testInvalidSsidBytesUseStableNonInventedIdentifier() {
@@ -287,6 +343,7 @@ int main() {
     testEvidenceListUsesFourStableTouchRows();
     testEvidenceDetailRetainsExactReference();
     testIdentityConflictExplainsIndicatorWithoutClaimingProof();
+    testSsidChurnExplainsIndicatorWithoutClaimingPineap();
     testInvalidSsidBytesUseStableNonInventedIdentifier();
     testRussianInconclusiveExplainsIncompleteEvidence();
     testEmptyCaptureIsExplicitlyIncomplete();

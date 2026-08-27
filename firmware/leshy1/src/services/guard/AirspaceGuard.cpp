@@ -242,6 +242,8 @@ const char* airspaceFindingKindName(AirspaceFindingKind kind) {
             return "wifi_disconnect_burst";
         case AirspaceFindingKind::WifiSsidSecurityConflict:
             return "wifi_ssid_security_conflict";
+        case AirspaceFindingKind::WifiSsidChurn:
+            return "wifi_ssid_churn";
     }
     return "unknown";
 }
@@ -273,7 +275,11 @@ bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy) {
         policy.disconnectWindowUs >= 100000ULL &&
         policy.disconnectWindowUs <= 10000000ULL &&
         policy.ssidSecurityConflictWindowUs >= 100000ULL &&
-        policy.ssidSecurityConflictWindowUs <= 10000000ULL;
+        policy.ssidSecurityConflictWindowUs <= 10000000ULL &&
+        policy.ssidChurnThreshold >= 3U &&
+        policy.ssidChurnThreshold <= AirspaceFinding::kEvidenceCapacity &&
+        policy.ssidChurnWindowUs >= 100000ULL &&
+        policy.ssidChurnWindowUs <= 10000000ULL;
 }
 
 bool isWifiDisconnectFrameCandidate(const std::uint8_t* payload,
@@ -504,7 +510,7 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
 
     // Disconnect bursts keep first claim on the bounded finding array; a
     // lower-confidence identity indicator must never evict them.
-    if (policy.ssidSecurityConflictEnabled) {
+    if (policy.ssidSecurityConflictEnabled || policy.ssidChurnEnabled) {
         std::uint64_t rereadFailureMask = 0U;
         const auto readIdentity = [&](std::size_t index,
                                       IdentityAdvertisement* output) {
@@ -544,6 +550,7 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
             } else {
                 continue;
             }
+            if (!policy.ssidSecurityConflictEnabled) continue;
             bool networkAlreadyReported = false;
             for (std::size_t findingIndex = 0;
                  findingIndex < report.findingCount; ++findingIndex) {
@@ -614,6 +621,91 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
                 retainEvidence(finding, left);
                 retainEvidence(finding, right);
                 break;
+            }
+        }
+
+        if (policy.ssidChurnEnabled) {
+            for (std::size_t startIndex = 0U;
+                 startIndex < inspectionCount; ++startIndex) {
+                IdentityAdvertisement start{};
+                if (readIdentity(startIndex, &start) !=
+                    IdentityDecode::Advertisement) {
+                    continue;
+                }
+                bool transmitterAlreadyReported = false;
+                for (std::size_t findingIndex = 0U;
+                     findingIndex < report.findingCount; ++findingIndex) {
+                    const AirspaceFinding& existing =
+                        report.findings[findingIndex];
+                    if (existing.kind == AirspaceFindingKind::WifiSsidChurn &&
+                        sameTransmitter(existing.transmitter,
+                                        start.transmitter)) {
+                        transmitterAlreadyReported = true;
+                        break;
+                    }
+                }
+                if (transmitterAlreadyReported) continue;
+
+                std::array<IdentityAdvertisement,
+                           AirspaceFinding::kEvidenceCapacity> unique{};
+                std::size_t uniqueCount = 0U;
+                std::uint64_t lastUs = start.monotonicUs;
+                for (std::size_t eventIndex = 0U;
+                     eventIndex < inspectionCount; ++eventIndex) {
+                    IdentityAdvertisement event{};
+                    if (readIdentity(eventIndex, &event) !=
+                            IdentityDecode::Advertisement ||
+                        !sameTransmitter(event.transmitter,
+                                         start.transmitter) ||
+                        event.monotonicUs < start.monotonicUs ||
+                        event.monotonicUs - start.monotonicUs >
+                            policy.ssidChurnWindowUs) {
+                        continue;
+                    }
+                    bool duplicateName = false;
+                    for (std::size_t index = 0U; index < uniqueCount;
+                         ++index) {
+                        if (sameNetworkName(
+                                unique[index].networkName,
+                                unique[index].networkNameLength,
+                                event.networkName,
+                                event.networkNameLength)) {
+                            duplicateName = true;
+                            break;
+                        }
+                    }
+                    if (duplicateName) continue;
+                    if (uniqueCount < unique.size()) {
+                        unique[uniqueCount++] = event;
+                        if (event.monotonicUs > lastUs) {
+                            lastUs = event.monotonicUs;
+                        }
+                    }
+                }
+                if (uniqueCount < policy.ssidChurnThreshold) continue;
+                if (report.findingCount >= report.findings.size()) {
+                    ++report.findingsDropped;
+                    continue;
+                }
+
+                AirspaceFinding& finding =
+                    report.findings[report.findingCount++];
+                finding = {};
+                finding.kind = AirspaceFindingKind::WifiSsidChurn;
+                // Rapid identity churn is a review indicator, not proof that
+                // the transmitter is PineAP or otherwise malicious.
+                finding.confidence = confidenceFor(
+                    uniqueCount, policy.ssidChurnThreshold);
+                finding.detectorVersion =
+                    AirspaceFinding::kWifiSsidChurnDetectorVersion;
+                finding.threshold = policy.ssidChurnThreshold;
+                finding.observed = static_cast<std::uint16_t>(uniqueCount);
+                finding.transmitter = start.transmitter;
+                finding.firstUs = start.monotonicUs;
+                finding.lastUs = lastUs;
+                for (std::size_t index = 0U; index < uniqueCount; ++index) {
+                    retainEvidence(finding, unique[index]);
+                }
             }
         }
     }
