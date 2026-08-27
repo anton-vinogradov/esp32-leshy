@@ -733,6 +733,23 @@ may reference the same source frames, while complete-retention and cleanup remai
 shared prerequisite. The implementation adds no buffer, task or radio owner; physical
 golden/negative TFT/navigation/cleanup evidence is still open.
 
+Exact `1.0.0-dev.218` adds the source-only BLE half of CAP-048 without creating a
+scanner, task, radio owner or response path. `BleObservationSource` exposes bounded
+normalized passive `Observation` records to the allocation-free detector. A record
+is eligible only when it has a valid BLE identity, address type, timestamp, RSSI,
+payload and exactly one known tracker-compatible marker: Apple Find My continuity,
+Samsung SmartTag service or Tile service. Events group by exact protocol + address
+type + six-byte identity; the default-off policy requires three advertisements in
+ten seconds and keeps up to eight exact source-record/time/RSSI references. A split
+identity, protocol or address type never merges, while ambiguous markers, incomplete
+input, drops and truncation are inconclusive. Confidence describes repeated
+compatible presence only, not ownership or unwanted tracking. The current passive
+stack does not expose advertising channel 37/38/39, so evidence channel is explicitly
+unknown. Until a dedicated channel-free EN/RU presentation and complete live BLE
+retention adapter are implemented, the production controller rejects this finding
+rather than rendering Wi-Fi copy. This checkpoint therefore has no live or physical
+claim and cannot trigger any automatic action.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

@@ -967,6 +967,20 @@ SHA-256 firmware/factory/ELF:
 physical radio не заявляются до HIL; при incomplete identity retention detector
 выключен.
 
+Фундамент BLE tracker-compatible presence Защиты эфира `RB-M178`: exact
+`1.0.0-dev.218` добавляет bounded detector нормализованных observations, но не
+добавляет live adapter, task, radio owner, capture buffer, presentation path или
+automatic response. Static RAM остаётся 228 432 B, linked flash равен 3 336 848 B
+(+100 B). Размеры app/factory/ELF — 3 337 344/3 402 880/22 488 644 B
+(+96/+96/+16 696 B). SHA-256 firmware/factory/ELF:
+`bddb74d5a43b7cd565189163321369a130895558b61ee319c8c74591a69cd38b`/
+`db3e444fc6c262c0064c6ddcf4c845cb1d1dcee366a21d04b8ab8a5e55cc56f0`/
+`7e1bb82c00f233f19a3e10962b6e138aa0774fe23a01b4ea228be71ab3135171`.
+Optimized host stack report показывает 2 320 B для `inspectBle`, меньше текущих
+2 416 B `inspectWifi`. Это review aid, а не Xtensa HIL proof; поскольку live adapter
+и product presentation намеренно отсутствуют, claim по live heap, radio, TFT или
+cleanup не возникает.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

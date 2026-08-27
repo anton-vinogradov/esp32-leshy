@@ -46,14 +46,16 @@ and an unavailable fixture remains a blocker rather than a simulated pass.
 The `1.0.0-dev.210` detector through `1.0.0-dev.213` evidence/UI slices,
 `1.0.0-dev.214` bounded one-adapter live passive Wi-Fi capture, `1.0.0-dev.215`
 complete-evidence SSID/security identity-conflict indicator and `1.0.0-dev.216`
-fail-closed bounded live identity retention, plus the `1.0.0-dev.217` rapid
-visible-name-change indicator for one BSSID, are host/build CAP-048
+fail-closed bounded live identity retention, the `1.0.0-dev.217` rapid
+visible-name-change indicator for one BSSID and the `1.0.0-dev.218` source-only
+BLE tracker-compatible presence detector are host/build CAP-048
 foundations only. Their golden/negative corpus, receive-only guard, strongest-first
 ordering, exact drilldown, non-color-only text, no-clear repaint, explicit capture-loss
-accounting and cleanup-before-publication do not yet satisfy DEMO-S7. The identity
-identity detectors are now enabled only after complete live retention and cleanup; physical
-golden/negative TFT/navigation/cleanup evidence, the remaining detector families and
-their negative corpora are still required.
+accounting and cleanup-before-publication do not yet satisfy DEMO-S7. The Wi-Fi
+identity detectors are enabled only after complete live retention and cleanup; the
+BLE finding is rejected by the production controller until dedicated presentation
+and complete live retention exist. Physical golden/negative TFT/navigation/cleanup
+evidence, the remaining loss detector and their negative corpora are still required.
 
 `DEMO-S2` is accepted by `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 completed 29 public Action/query steps and matched nine

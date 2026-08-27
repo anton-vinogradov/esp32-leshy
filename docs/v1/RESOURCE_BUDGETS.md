@@ -973,6 +973,20 @@ identity decode and 144 B for the ingress key helper. Live heap and physical-rad
 behavior remain unclaimed until HIL; the detector is disabled when identity
 retention is incomplete.
 
+Airspace Guard BLE tracker-compatible presence foundation `RB-M178`: exact
+`1.0.0-dev.218` adds a bounded normalized-observation detector but no live adapter,
+task, radio owner, capture buffer, presentation path or automatic response. Static
+RAM remains 228,432 B and linked flash is 3,336,848 B (+100 B). App/factory/ELF
+sizes are 3,337,344/3,402,880/22,488,644 B (+96/+96/+16,696 B).
+Firmware/factory/ELF SHA-256 are
+`bddb74d5a43b7cd565189163321369a130895558b61ee319c8c74591a69cd38b`/
+`db3e444fc6c262c0064c6ddcf4c845cb1d1dcee366a21d04b8ab8a5e55cc56f0`/
+`7e1bb82c00f233f19a3e10962b6e138aa0774fe23a01b4ea228be71ab3135171`.
+The optimized host stack report is 2,320 B for `inspectBle`, below the current
+2,416 B `inspectWifi`. This is a review aid, not Xtensa HIL proof; because the live
+adapter and product presentation are intentionally absent, no live heap, radio,
+TFT or cleanup claim follows.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

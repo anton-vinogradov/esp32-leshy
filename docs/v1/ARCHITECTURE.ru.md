@@ -814,6 +814,23 @@ exact immutable references frame/time/channel/RSSI. Имена, разделён
 task или radio owner; physical golden/negative evidence TFT/navigation/cleanup
 остаётся открытым.
 
+Exact `1.0.0-dev.218` добавляет source-only BLE половину CAP-048 без создания
+scanner, task, radio owner или response path. `BleObservationSource` передаёт
+allocation-free detector bounded набор нормализованных пассивных `Observation`.
+Record допускается только с valid BLE identity, типом адреса, timestamp, RSSI,
+payload и ровно одним известным tracker-compatible marker: Apple Find My continuity,
+Samsung SmartTag service или Tile service. Events группируются по exact protocol +
+address type + six-byte identity; default-off policy требует три advertisement за
+десять секунд и сохраняет до восьми exact references source-record/time/RSSI. Разные
+identity, protocol или address type никогда не объединяются, а ambiguous markers,
+incomplete input, drops и truncation дают inconclusive. Confidence описывает только
+повторное compatible presence, а не ownership или unwanted tracking. Текущий
+passive stack не сообщает advertising channel 37/38/39, поэтому channel evidence
+явно unknown. До реализации отдельного channel-free presentation EN/RU и полного
+live BLE retention adapter production controller отвергает такой finding вместо
+показа Wi-Fi copy. Поэтому checkpoint не имеет live/physical claim и не может
+запустить automatic action.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;
