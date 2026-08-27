@@ -43,9 +43,10 @@ physical-stop contract WF-05 для каждого admitted active path. Passive
 capture, route и inspection results не подменяют active fixture proof, а unavailable
 fixture остаётся blocker, не simulated pass.
 
-Detector Защиты эфира `1.0.0-dev.210` — только первый host/build foundation
-CAP-048. Его bounded golden/negative corpus и receive-only source guard ещё не
-закрывают DEMO-S7: требуются live capture, пользовательский evidence drilldown,
+Detector `1.0.0-dev.210` и immutable evidence-navigation controller
+`1.0.0-dev.211` — только host/build foundations CAP-048. Их bounded golden/negative
+corpus, receive-only source guard, strongest-first stable ordering и exact drilldown
+contract ещё не закрывают DEMO-S7: требуются live capture, real TFT presentation,
 остальные семейства detectors и physical cleanup evidence.
 
 `DEMO-S2` принят evidence `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.

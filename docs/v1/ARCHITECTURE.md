@@ -647,6 +647,16 @@ driver/platform/TX dependency. This is only the host/build foundation: live Surv
 wiring, BLE and evil-twin/loss indicators, user-facing explanation/evidence views,
 and physical DEMO-S7 remain open.
 
+Exact `1.0.0-dev.211` adds the next UI-independent boundary over an immutable report.
+`AirspaceGuardController` validates the complete report before publication, ranks
+findings once by confidence, evidence-to-threshold strength, recency and stable
+transmitter identity, and opens the strongest result first. Up/Down therefore never
+reorders under the cursor. The bounded path is Finding → Evidence list → exact
+Evidence detail; Back reverses one level. Partial reads, malformed frames, dropped
+findings or truncated inspection remain a visible uncertainty flag. Outcome-only
+clear/inconclusive states cannot open invented evidence, and malformed reports fail
+closed. This still does not render a TFT screen or wire live capture.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

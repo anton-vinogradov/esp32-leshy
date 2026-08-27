@@ -877,6 +877,16 @@ app/factory — 3 318 240/3 383 776 B. SHA-256 firmware/factory/ELF:
 Это только source/build evidence; изменение physical heap budget или cadence HIL не
 заявляется.
 
+Workflow Защиты эфира `RB-M171`: exact `1.0.0-dev.211` добавляет caller-owned
+controller над bounded report. Поскольку production runtime им ещё не владеет, link
+garbage collection сохраняет те же 225 688 B static RAM, 3 317 732 B linked flash и
+3 318 240/3 383 776 B app/factory. SHA-256 firmware/factory/ELF:
+`8b8953c54f8da2fa6564c3f093c26803775946d575ed9f8a0d979e069b522cdf`/
+`8ace219821ac93fbcde5e5c158c89df0d49085e2bfae39f47669d1f9324cb34f`/
+`fd84dac3a3b5e40e19cf5c0532f3306336d73c082841565d42b3bfa1ab28c447`.
+Live wiring обязано заново измерить lifetime controller/report, а не наследовать
+этот zero-growth source/build result.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

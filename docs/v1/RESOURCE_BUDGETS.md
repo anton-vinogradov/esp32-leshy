@@ -882,6 +882,16 @@ app/factory sizes are 3,318,240/3,383,776 B. Firmware/factory/ELF SHA-256 are
 This is source/build evidence only; no physical heap budget or HIL cadence change is
 claimed.
 
+Airspace Guard workflow `RB-M171`: exact `1.0.0-dev.211` adds a caller-owned
+controller over the bounded report. Because no production runtime owns it yet, link
+garbage collection preserves the same 225,688 B static RAM, 3,317,732 B linked flash
+and 3,318,240/3,383,776 B app/factory sizes. Firmware/factory/ELF SHA-256 are
+`8b8953c54f8da2fa6564c3f093c26803775946d575ed9f8a0d979e069b522cdf`/
+`8ace219821ac93fbcde5e5c158c89df0d49085e2bfae39f47669d1f9324cb34f`/
+`fd84dac3a3b5e40e19cf5c0532f3306336d73c082841565d42b3bfa1ab28c447`.
+Live wiring must remeasure the controller/report lifetime rather than inheriting this
+zero-growth source/build result.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

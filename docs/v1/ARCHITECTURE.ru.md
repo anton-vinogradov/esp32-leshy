@@ -728,6 +728,16 @@ clear. Native golden/negative tests и source guard фиксируют эти se
 live wiring Survey, BLE и evil-twin/loss indicators, пользовательские explanation/
 evidence views и physical DEMO-S7 остаются открыты.
 
+Exact `1.0.0-dev.211` добавляет следующую UI-independent boundary над immutable
+report. `AirspaceGuardController` валидирует полный report до publication, один раз
+сортирует находки по confidence, отношению evidence к threshold, recency и stable
+identity transmitter и первым открывает самый доказательный результат. Поэтому
+Up/Down не меняют порядок под курсором. Bounded path: Finding → Evidence list →
+exact Evidence detail; Back возвращает на один уровень. Partial reads, malformed
+frames, dropped findings или truncated inspection остаются видимым uncertainty
+flag. Outcome-only состояния clear/inconclusive не открывают выдуманное evidence, а
+malformed reports fail closed. TFT screen и live capture этим ещё не подключены.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;
