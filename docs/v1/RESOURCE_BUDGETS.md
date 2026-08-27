@@ -856,8 +856,12 @@ app/factory. Firmware/factory/ELF/map SHA-256 are
 `4ed3bdd0cb6f1b4f8990dd89406bc0147b06b27d373f4b25b9fde8fefdbd51db`/
 `38d3cf0242707a13407c3123a207ab0c8e942242336ec396b31ccfc89083d868`/
 `8a8e616323c176c702939813f35f3804a0ae67105f7ced4376f25c1ff51a4198`.
-This is source/build evidence only until one focused physical run proves both sources,
-watchdog health, commit, cold reopen and final cleanup.
+Exact `E-HIL-188` physically accepts this budget: boot heap is invariant at
+153,116/80,316/66,632 B before and after, Wi-Fi accepts 12 and BLE 35 observations
+with zero errors/drops, generation 162→163 commits 3,801 B, cold reopen/export
+recovers all 47 observations and final state is Home/none/lease 0 with safety armed.
+The first exact-flash run and accepted no-flash rerun form one one-flash lineage;
+cadence advances to 5/15.
 
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while

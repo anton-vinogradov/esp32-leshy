@@ -851,8 +851,12 @@ SHA-256 firmware/factory/ELF/map:
 `4ed3bdd0cb6f1b4f8990dd89406bc0147b06b27d373f4b25b9fde8fefdbd51db`/
 `38d3cf0242707a13407c3123a207ab0c8e942242336ec396b31ccfc89083d868`/
 `8a8e616323c176c702939813f35f3804a0ae67105f7ced4376f25c1ff51a4198`.
-Это только source/build evidence, пока один focused physical run не докажет оба
-source, здоровье watchdog, commit, cold reopen и final cleanup.
+Exact `E-HIL-188` физически принимает этот budget: boot heap invariant
+153 116/80 316/66 632 B до и после, Wi-Fi принимает 12 и BLE 35 observations с
+zero errors/drops, generation 162→163 commit-ит 3 801 B, cold reopen/export
+восстанавливает все 47 observations, final state — Home/none/lease 0 с safety armed.
+Первый exact-flash run и принятый no-flash rerun образуют один one-flash lineage;
+cadence двигается до 5/15.
 
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
