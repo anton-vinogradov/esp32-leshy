@@ -254,7 +254,10 @@ class CompanionWebDeltaRunnerTests(unittest.TestCase):
             source.index("read_flash_with_retry("),
             source.index("flash_candidate(args.port"))
         for marker in (
-            '"--allow-host-wifi-change"',
+            '"--allow-dedicated-wifi-change"',
+            '"dedicated_idle_interface_required": True',
+            "snapshot.associated is False",
+            "provide a dedicated idle network interface",
             'parser.add_argument("--wifi-interface")',
             'parser.add_argument("--wifi-service")',
             'parser.add_argument("--softap-mac")',

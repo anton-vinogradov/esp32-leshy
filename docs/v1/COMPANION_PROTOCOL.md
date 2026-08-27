@@ -195,9 +195,12 @@ result plus the public SoftAP MAC, and never returns the resulting SSID or passp
 Start consumes and scrubs the value; stop, HIL end and every failure also scrub it.
 Normal user starts still call the ESP hardware RNG and cannot select this path.
 
-The paired macOS runner requires the exact serial port, Wi-Fi interface, enabled
-network service and expected SoftAP MAC as explicit arguments. It snapshots only power
-and association, joins the derived temporary AP, disables ambient HTTP proxies, walks
+The paired macOS runner requires the exact serial port, a **dedicated idle** Wi-Fi
+interface, its enabled network service and the expected SoftAP MAC as explicit
+arguments. An interface with an SSID, association or IPv4 fingerprint is rejected
+before any network mutation; the Mac's active Wi-Fi is never eligible. On the
+dedicated interface it snapshots only power and association, joins the derived
+temporary AP, disables ambient HTTP proxies, walks
 every page of Session/Target/Compare over HTTP, compares the same pages over native
 USB, and performs a Favorite toggle/restore through two confirmed atomic mutations.
 It never records the entropy, temporary passphrase or prior SSID, refuses to overwrite
@@ -258,9 +261,16 @@ the real Wi-Fi allocation and premature worker-restore defects. The host deliber
 does not join the temporary AP, so no physical HTTP request or USB/Web payload parity is
 claimed by this checkpoint.
 
-`0.182.0-companion-web-http-parity` is currently a host/build candidate. Its
+The 0.182 through 0.195 physical-HTTP candidates remain rejected. The latest exact
+0.195 candidate preserves the proven two-buffer Wi-Fi admission profile and serves a
+deterministic gzip index (6,596 bytes source, 2,790 bytes on wire), but the physical
+request still stopped at 2,048/2,790 bytes. The same attempt then timed out while
+restoring the active Mac link. The board cleanup nevertheless reached Home with no
+lease; no USB/Web parity or mutation claim is accepted. The runner now fail-closes on
+any active host interface and can be resumed only with a dedicated idle adapter or an
+external client that cannot disturb the laptop's network.
+
+`0.195.0-companion-web-gzip-index` is currently a host/build candidate. Its
 one-shot HIL entropy parser, zeroization, scope guards, deterministic credential test
-vector, explicit macOS network capture/restore state machine, proxy-free HTTP client,
-preferred-network collision/removal, full pagination/parity and confirmed
-mutation/restore assertions pass host checks. No board flash or host-network change is
-claimed by the candidate checkpoint.
+vector, dedicated-interface guard, proxy-free HTTP client, full pagination/parity and
+confirmed mutation/restore assertions pass host checks. Physical HTTP remains open.

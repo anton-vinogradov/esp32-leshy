@@ -380,8 +380,9 @@ def main() -> int:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--reuse-installed-from", type=Path)
     parser.add_argument(
-        "--allow-host-wifi-change", action="store_true",
-        help="explicitly authorize one guarded join and exact restoration")
+        "--allow-dedicated-wifi-change", action="store_true",
+        help=("explicitly authorize one guarded join on a dedicated idle "
+              "Wi-Fi interface; the Mac's active network is never eligible"))
     parser.add_argument("--wifi-interface")
     parser.add_argument("--wifi-service")
     parser.add_argument("--softap-mac")
@@ -398,12 +399,12 @@ def main() -> int:
 
     wifi_arguments = (
         args.wifi_interface, args.wifi_service, args.softap_mac)
-    http_exchange_requested = args.allow_host_wifi_change or any(
+    http_exchange_requested = args.allow_dedicated_wifi_change or any(
         value is not None for value in wifi_arguments)
     if http_exchange_requested and not (
-            args.allow_host_wifi_change and all(wifi_arguments)):
+            args.allow_dedicated_wifi_change and all(wifi_arguments)):
         parser.error(
-            "physical HTTP requires --allow-host-wifi-change, "
+            "physical HTTP requires --allow-dedicated-wifi-change, "
             "--wifi-interface, --wifi-service and --softap-mac together")
     if args.web_base_url.rstrip("/") != "http://192.168.4.1":
         parser.error("Web HIL origin must remain the fixed local SoftAP gateway")
@@ -512,6 +513,7 @@ def main() -> int:
     wifi_guard: MacWifiGuard | None = None
     host_wifi: dict[str, Any] = {
         "change_authorized": http_exchange_requested,
+        "dedicated_idle_interface_required": True,
         "interface_explicit": args.wifi_interface is not None,
         "service_explicit": args.wifi_service is not None,
         "snapshot_complete": False,
@@ -859,6 +861,14 @@ def main() -> int:
                 wifi_guard = MacWifiGuard(
                     args.wifi_interface, args.wifi_service)
                 snapshot = wifi_guard.capture()
+                require(
+                    snapshot.ssid is None and
+                    snapshot.associated is False and
+                    snapshot.ipv4_address is None and
+                    snapshot.router is None and
+                    snapshot.subnet_mask is None,
+                    "physical HTTP HIL refuses the Mac's active Wi-Fi; "
+                    "provide a dedicated idle network interface")
                 host_wifi.update({
                     "snapshot_complete": True,
                     "prior_power_on": snapshot.power_on,

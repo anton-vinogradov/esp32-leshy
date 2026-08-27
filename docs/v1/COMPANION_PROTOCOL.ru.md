@@ -197,8 +197,10 @@ passphrase. Start потребляет и очищает значение; Stop,
 очищают. Обычный пользовательский start по-прежнему вызывает hardware RNG ESP и не
 может выбрать этот path.
 
-Парный runner macOS требует явными arguments exact serial port, interface Wi-Fi,
-enabled network service и ожидаемый SoftAP MAC. Он сохраняет только power и
+Парный runner macOS требует явными arguments exact serial port, **отдельный idle**
+interface Wi-Fi, его enabled network service и ожидаемый SoftAP MAC. Interface с SSID,
+association или IPv4 fingerprint отклоняется до любой mutation сети; активный Wi-Fi
+Mac никогда не допускается. На отдельном interface runner сохраняет только power и
 association, подключается к derived temporary AP, отключает ambient HTTP proxies,
 проходит каждую страницу Session/Target/Compare по HTTP, сравнивает те же страницы по
 native USB и выполняет Favorite toggle/restore через две confirmed atomic mutations.
@@ -260,9 +262,17 @@ discovery/Cardputer opens и final lease 0. Два failed precursor остают
 намеренно не подключается к temporary AP, поэтому этот checkpoint не заявляет physical
 HTTP request или parity payload USB/Web.
 
-`0.182.0-companion-web-http-parity` сейчас является host/build candidate. Host checks
+Physical-HTTP candidates 0.182–0.195 остаются отклонёнными. Последний exact candidate
+0.195 сохраняет доказанный admission profile Wi-Fi на двух buffers и отдаёт
+deterministic gzip index (6 596 bytes source, 2 790 bytes on wire), но physical request
+остановился на 2 048/2 790 bytes. Тот же attempt затем получил timeout восстановления
+активного link Mac. Cleanup платы всё равно пришёл в Home без lease; parity USB/Web и
+mutation claim не принимаются. Runner теперь fail-close-ится на любом активном
+interface host и может быть продолжен только с отдельным idle adapter либо внешним
+client, который не способен нарушить сеть ноутбука.
+
+`0.195.0-companion-web-gzip-index` сейчас является host/build candidate. Host checks
 проходят для one-shot parser entropy HIL, zeroization и scope guards, deterministic test
-vector credential, явной state machine capture/restore сети macOS, HTTP client без
-proxy, collision/removal preferred-network, полной pagination/parity и confirmed
-mutation/restore assertions. Candidate checkpoint не заявляет flash board или
-изменение сети host.
+vector credential, guard отдельного interface, HTTP client без proxy, полной
+pagination/parity и confirmed mutation/restore assertions. Physical HTTP остаётся
+открыт.
