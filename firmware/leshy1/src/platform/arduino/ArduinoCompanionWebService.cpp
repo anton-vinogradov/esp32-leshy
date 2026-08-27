@@ -152,8 +152,8 @@ bool ArduinoCompanionWebService::begin(
     init.nvs_enable = 0;
     init.static_rx_buf_num = kStaticRxBuffers;
     init.dynamic_rx_buf_num = kDynamicRxBuffers;
-    init.tx_buf_type = 1;
-    init.static_tx_buf_num = 0;
+    init.tx_buf_type = 0;
+    init.static_tx_buf_num = kStaticTxBuffers;
     init.dynamic_tx_buf_num = kDynamicTxBuffers;
     init.rx_mgmt_buf_type = 1;
     init.rx_mgmt_buf_num = kRxManagementBuffers;

@@ -29,7 +29,9 @@ public:
     static constexpr std::uint64_t kClientDeadlineUs = 3000000ULL;
     static constexpr int kStaticRxBuffers = 2;
     static constexpr int kDynamicRxBuffers = 1;
-    static constexpr int kDynamicTxBuffers = 1;
+    // The pinned ESP-IDF libraries are compiled for static TX buffers.
+    static constexpr int kStaticTxBuffers = 2;
+    static constexpr int kDynamicTxBuffers = 0;
     static constexpr int kRxManagementBuffers = 1;
     static constexpr int kCacheTxBuffers = 1;
     // ESP-IDF rejects values below six during driver initialization.
