@@ -222,6 +222,11 @@ def main() -> int:
             r'\"mutation_merge_status\":\"%s\"' in entry,
             "Targets needs a machine-readable release-test state")
     require(failures,
+            "read_only=False, write_enabled=False" in evidence_runner and
+            "read_only=True, write_enabled=False" not in evidence_runner,
+            "Targets evidence must distinguish a mutation-capable product "
+            "from the list view having no write in flight")
+    require(failures,
             "buildSessionCorrelationReview(" in controller and
             "sessionCorrelationCandidatePending(" in controller and
             "CorrelationDecisionLog* targetsMutationDecisions" in entry and

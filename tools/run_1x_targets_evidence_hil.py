@@ -178,7 +178,11 @@ def main() -> int:
                     compare_available=True,
                     baseline_generation=baseline_generation,
                     current_generation=current_generation,
-                    read_only=True, write_enabled=False,
+                    # Targets is a mutation-capable product (favorite/name/
+                    # tags/notes/correlation/merge).  The list view has no
+                    # write in flight, but it must not claim that the whole
+                    # product is read-only.
+                    read_only=False, write_enabled=False,
                     blocked_write_attempts=0, filesystem_mount_error=0,
                     cleanup_complete=True, lease_mask=13)
             target_count = int(listed["target_count"])

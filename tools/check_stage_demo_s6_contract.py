@@ -60,6 +60,8 @@ def main() -> int:
         '"application_flash_count": 0 if args.reuse_exact_flash else 1',
         '"exact_flash_reused": args.reuse_exact_flash',
         "validate_reused_flash_lineage(",
+        "validate_reused_survey_lineage(",
+        '"reused_survey_lineage": survey_lineage',
         '"host_network_tools_invoked": False',
         '"active_mac_wifi_touched": False',
         '"wifi_softap_started": False',

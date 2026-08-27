@@ -231,6 +231,76 @@ def validate_reused_flash_lineage(
     return retained, failures
 
 
+def validate_reused_survey_lineage(
+        lineage: Path, expected: dict[str, Any], port: str
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any], list[str]]:
+    """Bind two already-passed no-flash Surveys from a failed DEMO run.
+
+    This is deliberately narrower than a generic resume: only the two
+    immutable, successful Survey children may be reused.  Targets and the
+    companion are always rerun by the current committed harness.
+    """
+    failures: list[str] = []
+    root = lineage if lineage.is_dir() else lineage.parent
+    parent_path = root / "run.json" if lineage.is_dir() else lineage
+    baseline_path = root / "baseline-survey/run.json"
+    repeat_path = root / "repeat-survey/run.json"
+    if not all(path.is_file() for path in (
+            parent_path, baseline_path, repeat_path)):
+        return {}, {}, ["reused Survey lineage records missing"]
+    parent = load_json(parent_path)
+    baseline = load_json(baseline_path)
+    repeat = load_json(repeat_path)
+    children = parent.get("children", {})
+    transport = parent.get("transport", {})
+    if not (
+        parent.get("schema") == SCHEMA
+        and parent.get("status") == "failed"
+        and parent.get("candidate") == expected
+        and parent.get("target", {}).get("port") == port
+        and parent.get("installation", {}).get("application_flash_count") == 0
+        and parent.get("installation", {}).get("exact_flash_reused") is True
+        and children.get("baseline-survey", {}).get("exit_code") == 0
+        and children.get("repeat-survey", {}).get("exit_code") == 0
+        and children.get("baseline-survey", {}).get("run_sha256") ==
+            digest(baseline_path)
+        and children.get("repeat-survey", {}).get("run_sha256") ==
+            digest(repeat_path)
+        and transport.get("host_network_tools_invoked") is False
+        and transport.get("active_mac_wifi_touched") is False
+        and transport.get("wifi_softap_started") is False
+    ):
+        failures.append("reused Survey parent/hash/isolation lineage mismatch")
+    failures.extend(_product_failures(
+        baseline, expected, EXPECTED_CID, flashed=False,
+        label="reused baseline"
+    ))
+    failures.extend(_product_failures(
+        repeat, expected, EXPECTED_CID, flashed=False,
+        label="reused repeat"
+    ))
+    baseline_generation = baseline.get("committed", {}).get(
+        "survey_generation")
+    repeat_before = repeat.get("boot_before", {}).get("recovery", {}).get(
+        "generation")
+    repeat_generation = repeat.get("committed", {}).get("survey_generation")
+    if not (
+        isinstance(baseline_generation, int)
+        and repeat_before == baseline_generation
+        and repeat_generation == baseline_generation + 1
+    ):
+        failures.append("reused Survey generations are not contiguous")
+    retained = {
+        "path": str(root),
+        "parent_run_sha256": digest(parent_path),
+        "parent_source_commit": parent.get("source_commit"),
+        "baseline_run_sha256": digest(baseline_path),
+        "repeat_run_sha256": digest(repeat_path),
+        "generations": [baseline_generation, repeat_generation],
+    }
+    return {"baseline-survey": baseline, "repeat-survey": repeat}, retained, failures
+
+
 def validate_children(baseline: dict[str, Any], repeat: dict[str, Any],
                       targets: dict[str, Any], companion: dict[str, Any],
                       expected: dict[str, Any], expected_cid: str,
@@ -343,6 +413,10 @@ def main() -> int:
         "--reused-flash-lineage", type=Path,
         help="failed DEMO-S6 output whose exact flash and clean cleanup are retained",
     )
+    parser.add_argument(
+        "--reuse-surveys-from", type=Path,
+        help="failed DEMO-S6 output with two passed no-flash Survey children",
+    )
     args = parser.parse_args()
     args.firmware = args.firmware.resolve()
     args.elf = args.elf.resolve()
@@ -374,24 +448,41 @@ def main() -> int:
 
     expected = expected_candidate(args)
     flash_lineage: dict[str, Any] = {}
+    survey_lineage: dict[str, Any] = {}
+    reused_runs: dict[str, dict[str, Any]] = {}
     failures: list[str] = []
     if args.reuse_exact_flash:
         flash_lineage, lineage_failures = validate_reused_flash_lineage(
             args.reused_flash_lineage.resolve(), expected, args.port
         )
         failures.extend(lineage_failures)
+    if args.reuse_surveys_from is not None:
+        if not args.reuse_exact_flash:
+            failures.append("reused Surveys require exact-flash reuse")
+        else:
+            reused_runs, survey_lineage, lineage_failures = (
+                validate_reused_survey_lineage(
+                    args.reuse_surveys_from.resolve(), expected, args.port
+                )
+            )
+            failures.extend(lineage_failures)
 
     args.output.mkdir(parents=True)
-    child_specs = [
-        ("baseline-survey", product_command(
-            args, args.output / "baseline-survey", not args.reuse_exact_flash)),
-        ("repeat-survey", product_command(
-            args, args.output / "repeat-survey", False)),
+    child_specs = []
+    if not reused_runs:
+        child_specs.extend([
+            ("baseline-survey", product_command(
+                args, args.output / "baseline-survey",
+                not args.reuse_exact_flash)),
+            ("repeat-survey", product_command(
+                args, args.output / "repeat-survey", False)),
+        ])
+    child_specs.extend([
         ("targets-evidence", targets_command(
             args, args.output / "targets-evidence")),
         ("companion-offline", companion_command(
             args, args.output / "companion-offline")),
-    ]
+    ])
     child_exits: dict[str, int] = {}
     if not failures:
         for name, command in child_specs:
@@ -401,7 +492,7 @@ def main() -> int:
                 failures.append(f"{name}: child exit {exit_code}")
                 break
 
-    runs: dict[str, dict[str, Any]] = {}
+    runs: dict[str, dict[str, Any]] = dict(reused_runs)
     for name, _ in child_specs:
         run_path = args.output / name / "run.json"
         if run_path.is_file():
@@ -412,7 +503,7 @@ def main() -> int:
             failures.append(f"{name}: run.json missing")
 
     summary: dict[str, Any] = {}
-    if not failures and len(runs) == len(child_specs):
+    if not failures and len(runs) == 4:
         summary, validation_failures = validate_children(
             runs["baseline-survey"], runs["repeat-survey"],
             runs["targets-evidence"], runs["companion-offline"],
@@ -444,6 +535,7 @@ def main() -> int:
             "application_flash_count": 0 if args.reuse_exact_flash else 1,
             "exact_flash_reused": args.reuse_exact_flash,
             "reused_flash_lineage": flash_lineage,
+            "reused_survey_lineage": survey_lineage,
         },
         "target": {
             "port": args.port,
@@ -458,14 +550,25 @@ def main() -> int:
         },
         "summary": summary,
         "children": {
-            name: {
+            name: ({
+                "exit_code": 0,
+                "reused": True,
+                "run_sha256": survey_lineage.get(
+                    f"{'baseline' if name == 'baseline-survey' else 'repeat'}_run_sha256",
+                    "",
+                ),
+            } if name in reused_runs else {
                 "exit_code": child_exits.get(name),
+                "reused": False,
                 "run_sha256": (
                     digest(args.output / name / "run.json")
                     if (args.output / name / "run.json").is_file() else ""
                 ),
-            }
-            for name, _ in child_specs
+            })
+            for name in (
+                "baseline-survey", "repeat-survey",
+                "targets-evidence", "companion-offline",
+            )
         },
         "completed_at_utc": datetime.now(timezone.utc).isoformat(),
     }

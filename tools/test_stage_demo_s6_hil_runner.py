@@ -225,6 +225,52 @@ class StageDemoS6RunnerTests(unittest.TestCase):
         self.assertEqual(retained["failure_stage"], "none_accepted_physical_delta")
         self.assertEqual(retained["baseline_run_sha256"], "b" * 64)
 
+    def test_reused_survey_lineage_binds_hashes_and_contiguous_pair(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "baseline-survey").mkdir()
+            (root / "repeat-survey").mkdir()
+            baseline = product(10, 11, flashed=False)
+            repeat = product(11, 12, flashed=False)
+            baseline_path = root / "baseline-survey/run.json"
+            repeat_path = root / "repeat-survey/run.json"
+            baseline_path.write_text(json.dumps(baseline))
+            repeat_path.write_text(json.dumps(repeat))
+            parent = {
+                "schema": MODULE.SCHEMA,
+                "status": "failed",
+                "candidate": EXPECTED.copy(),
+                "source_commit": "b" * 40,
+                "installation": {
+                    "application_flash_count": 0,
+                    "exact_flash_reused": True,
+                },
+                "target": {"port": "/dev/cu.test"},
+                "transport": {
+                    "host_network_tools_invoked": False,
+                    "active_mac_wifi_touched": False,
+                    "wifi_softap_started": False,
+                },
+                "children": {
+                    "baseline-survey": {
+                        "exit_code": 0,
+                        "run_sha256": MODULE.digest(baseline_path),
+                    },
+                    "repeat-survey": {
+                        "exit_code": 0,
+                        "run_sha256": MODULE.digest(repeat_path),
+                    },
+                },
+            }
+            (root / "run.json").write_text(json.dumps(parent))
+            runs, retained, failures = MODULE.validate_reused_survey_lineage(
+                root, EXPECTED, "/dev/cu.test"
+            )
+        self.assertEqual(failures, [])
+        self.assertEqual(set(runs), {"baseline-survey", "repeat-survey"})
+        self.assertEqual(retained["generations"], [11, 12])
+        self.assertEqual(retained["parent_source_commit"], "b" * 40)
+
 
 if __name__ == "__main__":
     unittest.main()
