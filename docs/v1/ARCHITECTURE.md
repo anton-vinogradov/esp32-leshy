@@ -750,6 +750,18 @@ retention adapter are implemented, the production controller rejects this findin
 rather than rendering Wi-Fi copy. This checkpoint therefore has no live or physical
 claim and cannot trigger any automatic action.
 
+Exact `1.0.0-dev.219` closes the controller/presentation boundary without claiming
+a live source. Report validation now distinguishes a Bluetooth identity from a Wi-Fi
+unicast transmitter, keeps the Wi-Fi ten-second ceiling while admitting the BLE
+policy's validated 60-second maximum, and requires a known protocol, address type
+0…3, exact advertisement accounting, complete bounded evidence cardinality and
+channel zero. The EN/RU presentation has its own headline, BLE ID, protocol/window,
+owner-unknown note and source-record detail. It shows only timestamp and RSSI because
+the normalized source does not expose advertising channel; no Wi-Fi frame/channel
+copy remains. This makes imported complete BLE evidence navigable and fail-closed,
+but the product still cannot generate such a report until complete bounded live BLE
+retention and handoff are implemented and physically verified.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

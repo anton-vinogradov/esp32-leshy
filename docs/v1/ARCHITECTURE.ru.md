@@ -831,6 +831,18 @@ live BLE retention adapter production controller отвергает такой f
 показа Wi-Fi copy. Поэтому checkpoint не имеет live/physical claim и не может
 запустить automatic action.
 
+Exact `1.0.0-dev.219` закрывает controller/presentation boundary без заявления live
+source. Validation report теперь отличает Bluetooth identity от Wi-Fi unicast
+transmitter, сохраняет Wi-Fi ceiling десять секунд, но допускает validated BLE
+maximum 60 секунд, и требует известный protocol, address type 0…3, exact accounting
+advertisement, полную bounded cardinality evidence и channel zero. Presentation EN/RU
+имеет собственные headline, BLE ID, protocol/window, note об неизвестном владельце и
+detail source-record. Он показывает только timestamp и RSSI, потому что нормализованный
+source не сообщает advertising channel; копия Wi-Fi frame/channel устранена. Это
+делает imported complete BLE evidence navigable и fail-closed, но product всё ещё не
+может сформировать такой report до реализации и physical verification complete
+bounded live BLE retention/handoff.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

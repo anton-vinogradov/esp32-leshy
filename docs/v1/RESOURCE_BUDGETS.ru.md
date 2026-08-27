@@ -981,6 +981,18 @@ Optimized host stack report показывает 2 320 B для `inspectBle`, м
 и product presentation намеренно отсутствуют, claim по live heap, radio, TFT или
 cleanup не возникает.
 
+Channel-free BLE presentation Защиты эфира `RB-M179`: exact
+`1.0.0-dev.219` добавляет kind-aware controller validation и десять entries catalog
+EN/RU, но не добавляет live adapter, task, radio owner или capture buffer. Static RAM
+остаётся 228 432 B, linked flash равен 3 337 992 B (+1 144 B). Размеры
+app/factory/ELF — 3 338 496/3 404 032/22 491 624 B (+1 152/+1 152/+2 980 B).
+SHA-256 firmware/factory/ELF:
+`2307faece5b5cb9c2061f79bd7acfffdccceecde507149f2053708e6147c523b`/
+`7b119e5f3ee5f11b489a4b3205562b3fe3f58e7df19ff59e178400010e88d949`/
+`c1211e966c67ff72498a3f9febeb79e1b01b50ba7402cfff2d55a03cecddeb0c`.
+Claim по live heap, radio, TFT или cleanup не возникает до bounded BLE
+retention/handoff и physical evidence.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

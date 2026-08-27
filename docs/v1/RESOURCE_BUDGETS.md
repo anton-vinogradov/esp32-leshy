@@ -987,6 +987,18 @@ The optimized host stack report is 2,320 B for `inspectBle`, below the current
 adapter and product presentation are intentionally absent, no live heap, radio,
 TFT or cleanup claim follows.
 
+Airspace Guard channel-free BLE presentation `RB-M179`: exact
+`1.0.0-dev.219` adds kind-aware controller validation and ten EN/RU catalog entries,
+but no live adapter, task, radio owner or capture buffer. Static RAM remains 228,432 B
+and linked flash is 3,337,992 B (+1,144 B). App/factory/ELF sizes are
+3,338,496/3,404,032/22,491,624 B (+1,152/+1,152/+2,980 B).
+Firmware/factory/ELF SHA-256 are
+`2307faece5b5cb9c2061f79bd7acfffdccceecde507149f2053708e6147c523b`/
+`7b119e5f3ee5f11b489a4b3205562b3fe3f58e7df19ff59e178400010e88d949`/
+`c1211e966c67ff72498a3f9febeb79e1b01b50ba7402cfff2d55a03cecddeb0c`.
+No live heap, radio, TFT or cleanup claim follows until bounded BLE retention/handoff
+and physical evidence exist.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
