@@ -439,6 +439,9 @@ def main() -> int:
         for marker in (
             "btStart()",
             "btStop()",
+            "processControllerInitializationAttempted",
+            "prewarmProcessController",
+            "remains scan-idle",
             "observerCommand = opcode == kHciLeSetScanParameters",
             "opcode == kHciLeSetScanEnable",
             "No HCI RF-TX",

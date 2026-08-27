@@ -56,6 +56,8 @@ struct HciObserverState final {
 };
 
 HciObserverState hciObserver;
+bool processControllerInitializationAttempted = false;
+bool processControllerAvailable = false;
 
 struct RawScanContext final {
     std::array<std::array<std::uint8_t, 6>, 128> seenAddresses{};
@@ -596,11 +598,37 @@ void drainReports(RawScanContext* context) {
     }
 }
 
-bool deinitializeController() {
+bool deinitializeControllerAfterFailedBootInit() {
     setAcceptingReports(false);
     clearReportQueue();
     return btStop() &&
         esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE;
+}
+
+bool initializeProcessControllerObserver() {
+    if (processControllerInitializationAttempted) {
+        return processControllerAvailable &&
+            esp_bt_controller_get_status() ==
+                ESP_BT_CONTROLLER_STATUS_ENABLED;
+    }
+    processControllerInitializationAttempted = true;
+    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
+        return false;
+    }
+
+    clearReportQueue();
+    setAcceptingReports(false);
+    // This is the only controller start in the process. It runs during early
+    // boot, before any Wi-Fi lifecycle can fragment the internal heap. The
+    // controller remains scan-idle between bounded receive windows; terminal
+    // paths never repeat the fragile controller init/deinit lifecycle.
+    if (!btStart() ||
+        esp_vhci_host_register_callback(&kHciCallbacks) != ESP_OK) {
+        deinitializeControllerAfterFailedBootInit();
+        return false;
+    }
+    processControllerAvailable = true;
+    return true;
 }
 
 }  // namespace
@@ -621,23 +649,17 @@ const char* boardBleScanStatusName(BoardBleScanStatus status) {
 }
 
 bool BoardBlePassiveScanner::begin() {
-    if (initialized_ ||
-        esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
-        return false;
-    }
+    if (initialized_) return true;
     cleanupComplete_ = false;
     passiveOnly_ = true;
     clearReportQueue();
     setAcceptingReports(false);
 
-    // Use the framework's proven controller lifecycle without initializing the
-    // memory-heavy NimBLE host. sendHciCommand() admits only legacy passive
-    // scan parameters and enable/disable opcodes. No HCI RF-TX operation
-    // (advertising, initiating, connecting, or active scanning) is
-    // representable through this adapter.
-    if (!btStart() ||
-        esp_vhci_host_register_callback(&kHciCallbacks) != ESP_OK) {
-        deinitializeController();
+    // The process-lifetime controller was prewarmed before any Wi-Fi use.
+    // sendHciCommand() admits only legacy passive scan parameters and
+    // enable/disable opcodes. No HCI RF-TX operation (advertising, initiating,
+    // connecting, or active scanning) is representable through this adapter.
+    if (!prewarmProcessController()) {
         cleanupComplete_ = true;
         return false;
     }
@@ -717,16 +739,24 @@ bool BoardBlePassiveScanner::cancelActiveScan() {
     return cancelled;
 }
 
+bool BoardBlePassiveScanner::prewarmProcessController() {
+    return initializeProcessControllerObserver();
+}
+
+bool BoardBlePassiveScanner::processControllerReady() {
+    return processControllerAvailable &&
+        esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED;
+}
+
 bool BoardBlePassiveScanner::end() {
     if (!initialized_) {
         activeScan_ = false;
         return cleanupComplete_;
     }
     bool complete = cancelActiveScan();
-    complete = deinitializeController() && complete;
     initialized_ = false;
     activeScan_ = false;
-    cleanupComplete_ = complete;
+    cleanupComplete_ = complete && processControllerReady();
     return cleanupComplete_;
 }
 

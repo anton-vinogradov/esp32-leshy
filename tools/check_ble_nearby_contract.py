@@ -65,7 +65,8 @@ def main() -> int:
         "bleScanner.begin();",
         "bleStackPrepared && bleScanner.initialized()",
         "BoardBlePassiveScanner::cancelActiveScan();",
-        "controller-only observer before the first Wi-Fi",
+        "process-lifetime controller was initialized during early boot",
+        "BoardBlePassiveScanner::prewarmProcessController()",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -86,6 +87,9 @@ def main() -> int:
     required_adapter = (
         "btStart()",
         "btStop()",
+        "processControllerInitializationAttempted",
+        "prewarmProcessController",
+        "remains scan-idle",
         "observerCommand = opcode == kHciLeSetScanParameters",
         "opcode == kHciLeSetScanEnable",
         "No HCI RF-TX",

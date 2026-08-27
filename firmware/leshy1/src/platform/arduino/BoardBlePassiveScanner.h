@@ -58,6 +58,11 @@ public:
 
     ~BoardBlePassiveScanner() { end(); }
 
+    // Initialize the receive-only Bluetooth controller while the boot heap is
+    // still contiguous. The controller is intentionally process-lifetime;
+    // individual scanner instances only own passive scan windows.
+    static bool prewarmProcessController();
+    static bool processControllerReady();
     bool begin();
     BoardBlePassiveScanResult scan(
         const drivers::ble::BleScanPlan& plan,

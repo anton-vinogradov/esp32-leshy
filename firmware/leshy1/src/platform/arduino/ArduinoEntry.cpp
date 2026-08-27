@@ -760,6 +760,7 @@ leshy1::storage::MediaDiscovery storageDiscovery;
 bool storageDiscoveryReady = false;
 bool surveyDemoReady = false;
 bool libraryDemoReady = false;
+bool bleProcessObserverReady = false;
 const char* lastRuntimeEvent = "idle";
 BootMetrics bootMetrics;
 char runningAppElfSha256[65] = {};
@@ -2962,11 +2963,9 @@ void runProductSurveyWorker(void*) {
         const bool bleStackPrepared =
             (report.activeSourceMask & bleSourceMask) == 0 ||
             bleScanner.begin();
-        // Start the bounded controller-only observer before the first Wi-Fi
-        // lifecycle. Repeated controller initialization after a Wi-Fi scan can
-        // enter the framework's fixed 1024-byte ipc0 stack without sufficient
-        // headroom. It remains scan-idle between source windows and is fully
-        // released by every terminal path below.
+        // The process-lifetime controller was initialized during early boot,
+        // before any Wi-Fi lifecycle. This local adapter only owns bounded
+        // passive scan windows and returns the observer to scan-idle.
         bool pendingScanWindow = false;
         RadioKind pendingScanSource = RadioKind::Wifi;
         std::uint64_t pendingScanStartedUs = 0;
@@ -26911,6 +26910,12 @@ void setup() {
     std::fputc('\n', stdout);
     std::fflush(stdout);
     BoardSdSpiTransport::holdRadioTransmitPathsInactive();
+    // Prewarm the process-lifetime controller before any Wi-Fi or product
+    // allocation. Late controller init can panic inside the framework after a
+    // Wi-Fi lifecycle has consumed or fragmented internal RAM. This observer
+    // remains scan-idle until an explicitly selected passive BLE window.
+    bleProcessObserverReady =
+        BoardBlePassiveScanner::prewarmProcessController();
 
     const bool flashMatches = ESP.getFlashChipSize() == BoardProfile::kExpectedFlashBytes;
     const bool psramMatches = psramFound() == BoardProfile::kExpectedPsram;
@@ -27109,11 +27114,14 @@ void setup() {
             : "capture_worker_or_exact_media_unavailable"});
     inventory.add({
         "radio.ble",
-        productSurveyWorkerReady && productBootRecovery.catalogAdmitted
+        bleProcessObserverReady && productSurveyWorkerReady &&
+                productBootRecovery.catalogAdmitted
             ? CapabilityState::Available : CapabilityState::Declared,
         "esp32_s3_builtin_receive_only",
-        productSurveyWorkerReady && productBootRecovery.catalogAdmitted
-            ? "passive_ble_worker_ready" : "product_worker_or_media_unavailable"});
+        bleProcessObserverReady && productSurveyWorkerReady &&
+                productBootRecovery.catalogAdmitted
+            ? "passive_ble_worker_ready"
+            : "controller_worker_or_media_unavailable"});
     inventory.add({"survey.simulated",
                    surveyDemoReady ? CapabilityState::Available : CapabilityState::Fault,
                    "E-SURVEY-001_golden_trace",
