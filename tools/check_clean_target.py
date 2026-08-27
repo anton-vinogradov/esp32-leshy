@@ -436,28 +436,34 @@ def main() -> int:
     else:
         passive_ble = passive_ble_adapter.read_text(encoding="utf-8")
         for marker in (
-            'activeScan_->setActiveScan(false)',
-            "nullptr, false)",
-            "activeScan_->isScanning()",
+            "parameters.passive = 1",
+            "parameters.filter_duplicates = 0",
+            "ble_gap_disc(",
+            "ble_hs_adv_parse_fields",
             "BoardBleScanStatus::ScanTimedOut",
-            "BoundedAdvertisementCallbacks",
-            "seenAddresses_",
-            "setAdvertisedDeviceCallbacks(&callbacks, true, true)",
+            "RawScanContext",
+            "seenAddresses",
             "validatePassivePlan(plan)",
             "plan.maximumRecords",
-            "activeScan_->clearResults()",
+            "ble_gap_disc_cancel",
             "BLEDevice::deinit(false)",
         ):
             if marker not in passive_ble:
                 errors.append(f"passive BLE adapter is missing: {marker}")
-        if "setActiveScan(true)" in passive_ble:
-            errors.append("passive BLE adapter enables transmitting active scan")
-        if "scanner_->erase(" in passive_ble:
-            errors.append(
-                "passive BLE callback mutates Arduino result storage before insertion"
-            )
-        if "activeScan_->start(plan.durationMs / 1000U, false)" in passive_ble:
-            errors.append("passive BLE adapter uses an unbounded blocking scan")
+        for marker in (
+            "BLEScan",
+            "BLEAdvertisedDevice",
+            "setActiveScan(true)",
+            "startAdvertising",
+            "new BLEAdvertisedDevice",
+            "m_vectorAdvertisedDevices",
+            "std::map",
+            ".getScan()",
+        ):
+            if marker in passive_ble:
+                errors.append(
+                    f"passive BLE adapter contains heap-growing/active path: {marker}"
+                )
 
     if not physical_sd_filesystem.is_file():
         errors.append("explicit guarded SD filesystem adapter is missing")

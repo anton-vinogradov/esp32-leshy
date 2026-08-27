@@ -79,21 +79,29 @@ def main() -> int:
         "!allowReplacement",
     )
     required_adapter = (
-        "setActiveScan(false)",
-        "setAdvertisedDeviceCallbacks(&callbacks, true, true)",
-        "seenAddresses_",
-        "maximumRecords_",
-        "activeScan_->clearResults()",
+        "parameters.passive = 1",
+        "parameters.filter_duplicates = 0",
+        "ble_gap_disc(",
+        "ble_hs_adv_parse_fields",
+        "RawScanContext",
+        "seenAddresses",
+        "maximumRecords",
+        "ble_gap_disc_cancel",
         "populateAdvertisementFacts",
         "knownServiceMask",
         "kMaximumScanAttempts = 2U",
         "result.transientRetries",
     )
     forbidden_adapter = (
+        "BLEScan",
+        "BLEAdvertisedDevice",
         "setActiveScan(true)",
         "BLEAdvertising",
         "startAdvertising",
-        "scanner_->erase(",
+        "new BLEAdvertisedDevice",
+        "m_vectorAdvertisedDevices",
+        "std::map",
+        ".getScan()",
     )
     required_strings = (
         "BleDevicesTitle",

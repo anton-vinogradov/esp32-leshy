@@ -4,8 +4,6 @@
 
 #include "drivers/ble/BlePassiveContract.h"
 
-class BLEScan;
-
 namespace leshy1::platform::arduino {
 
 enum class BleRecordDisposition : std::uint8_t {
@@ -75,7 +73,8 @@ private:
     bool initialized_ = false;
     bool passiveOnly_ = true;
     bool cleanupComplete_ = true;
-    static BLEScan* activeScan_;
+    std::uint8_t ownAddressType_ = 0;
+    static volatile bool activeScan_;
 };
 
 }  // namespace leshy1::platform::arduino
