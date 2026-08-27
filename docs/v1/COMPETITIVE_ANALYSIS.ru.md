@@ -142,11 +142,11 @@ GhostLink, Lua и нативные приложения с разрешения�
 пользовательские результаты, а не написание пунктов меню и не каждый protocol
 toggle.
 
-Вердикт: **CAP-001…CAP-047 образуют цельную ранее замороженную границу, но не
-являются полным перечнем конкурентных функций.** Девять семейств отсутствуют или
-описаны слишком неявно, чтобы заявлять паритет. Review не добавляет их в 1.0
-скрытно: candidate-строки ниже требуют явного решения о границе, а затем обычной
-трассировки `J/PR/CAP/risk/stage`.
+Вердикт: **CAP-001…CAP-047 образовывали цельную ранее замороженную границу, но не
+были полным перечнем конкурентных функций.** Решением от 27 августа восемь из
+девяти найденных семейств приняты как `CAP-048…CAP-055`; каждое получило обычную
+трассировку `J/PR/CAP/risk/stage` и владельца S7. `CF-005 Peer Link` остаётся явно
+отложенной функцией после 1.0, а не скрытым требованием.
 
 | Семейство из официальных документов конкурентов | Текущее покрытие Leshy | Результат аудита |
 |---|---|---|
@@ -173,31 +173,33 @@ toggle.
 | Jammers, широкие flood/spam, credential-harvesting portals и disruptive clone/crash actions | покрытия нет | сознательно отклонено как цель feature-count parity |
 | U2F, игры, декоративные часы и общие QR utilities | покрытия нет | полезно в других продуктах, но не относится к задаче radio observation Leshy |
 
-### Candidate-пробелы, требующие явного решения о scope
+### Найденные пробелы и окончательное решение о scope
 
-| ID | Candidate user outcome | Чем он существенно отличается от существующей строки | Рекомендованное решение |
+| ID | Candidate user outcome | Чем он существенно отличается от существующей строки | Итоговое решение |
 |---|---|---|---|
-| CF-001 | **Защита эфира** пассивно обнаруживает и объясняет deauth/disassociation bursts, признаки PineAP/evil twin, подозрительные BLE tracker/skimmer/drone IDs и loss/jamming indicators; alert всегда открывает source evidence | CAP-042 записывает frames, но не формирует defensive conclusion | добавить в 1.x как RX-only и evidence-backed |
-| CF-002 | **Захват Wi-Fi-аутентификации** распознаёт EAPOL, PMKID и complete/incomplete handshakes, сохраняет focused evidence и экспортирует PCAP плюс `hc22000`; live host streaming остаётся local и bounded | общий PCAP не отвечает пользователю, получено ли пригодное authentication evidence | добавить passive path в 1.x; active provocation допустим только как отдельно принятый Lab action |
-| CF-003 | **Полевой обзор** записывает Wi-Fi AP/station и BLE с GPS track, deduplication, сравнением повторного визита и локальным WiGLE-compatible экспортом | GPS metadata плюс общий CSV не образуют end-to-end wardriving job | добавить в 1.x; direct cloud upload оставить optional/post-1.0 |
-| CF-004 | **BLE Inspector** сохраняет совместимые raw packets и после явного перехода в connected mode перечисляет GATT services/characteristics с provenance | service IDs из advertisements не равны GATT inspection | добавить passive raw Capture; решить, относится ли connected GATT к 1.x или Lab |
-| CF-005 | **Peer Link** безопасно связывает два DIV для remote receiver/source control, evidence transfer и повторяемых two-device test scenarios | нынешний companion связывает host и device, но не позволяет одному DIV проверять другой | добавить после single-device core 1.x, если функция не станет обязательной для automation S5/S8 |
-| CF-006 | **Блокировка устройства** даёт first-run security setup, local PIN/lock, bounded retry/recovery и защищает secrets/saved evidence без нарушения safe capture cleanup | scoped secrets запрещают экспорт, но не закрывают physical UI | добавить до публичного релиза, который хранит credentials или чувствительные captures |
-| CF-007 | **Serial Console** даёт bounded on-device serial monitor/UART bridge и документированный Actions CLI без обхода policy/leases | diagnostics/logs не работают с внешним UART target | оставить Device/Tools P1; raw GPIO control не включать в base product |
-| CF-008 | **Automation/HID** запускает permissioned signed scripts и явно scoped USB/BLE HID или BadUSB-inspection workflows | CAP-039…041 описывают extension contracts, но не исполняемый user outcome | после 1.0, если не будет принят конкретный безопасный user job |
-| CF-009 | **Authorized wireless Lab recipes** дают именованные bounded Wi-Fi/BLE/nRF fixture workflows вместо пустой общей TX-оболочки | CAP-032/033 делают TX безопасным, но не определяют существующие wireless experiments | принимать recipes по одному; никогда не допускать wideband jamming, indiscriminate flood, crash или credential harvest |
+| CF-001 | **Защита эфира** пассивно обнаруживает и объясняет deauth/disassociation bursts, признаки PineAP/evil twin, подозрительные BLE tracker/skimmer/drone IDs и loss/jamming indicators; alert всегда открывает source evidence | CAP-042 записывает frames, но не формирует defensive conclusion | принято как `CAP-048`, `PR-020`, S7; только RX и evidence-backed |
+| CF-002 | **Захват Wi-Fi-аутентификации** распознаёт EAPOL, PMKID и complete/incomplete handshakes, сохраняет focused evidence и экспортирует PCAP плюс `hc22000`; live host streaming остаётся local и bounded | общий PCAP не отвечает пользователю, получено ли пригодное authentication evidence | принято как `CAP-049`, `PR-021`, S7; вне отдельно принятого Lab recipe путь только passive |
+| CF-003 | **Полевой обзор** записывает Wi-Fi AP/station и BLE с GPS track, deduplication, сравнением повторного визита и локальным WiGLE-compatible экспортом | GPS metadata плюс общий CSV не образуют end-to-end wardriving job | принято как `CAP-050`, `PR-022`, S7; direct cloud upload остаётся optional/post-1.0 |
+| CF-004 | **BLE Inspector** сохраняет совместимые raw packets и после явного перехода в connected mode перечисляет GATT services/characteristics с provenance | service IDs из advertisements не равны GATT inspection | принято как `CAP-051`, `PR-023`, S7; connected GATT явный, permissioned и получает отдельный lease |
+| CF-005 | **Peer Link** безопасно связывает два DIV для remote receiver/source control, evidence transfer и повторяемых two-device test scenarios | нынешний companion связывает host и device, но не позволяет одному DIV проверять другой | явно отложено после 1.0; `CAP-*` не резервируется |
+| CF-006 | **Блокировка устройства** даёт first-run security setup, local PIN/lock, bounded retry/recovery и защищает secrets/saved evidence без нарушения safe capture cleanup | scoped secrets запрещают экспорт, но не закрывают physical UI | принято как `CAP-052`, `PR-024`, S7 |
+| CF-007 | **Serial Console** даёт bounded on-device serial monitor/UART bridge и документированный Actions CLI без обхода policy/leases | diagnostics/logs не работают с внешним UART target | принято как `CAP-053`, `PR-025`, S7; raw GPIO control остаётся вне base product |
+| CF-008 | **Automation/HID** запускает permissioned signed scripts и явно scoped USB/BLE HID или BadUSB-inspection workflows | CAP-039…041 описывают extension contracts, но не исполняемый user outcome | принято как `CAP-054`, `PR-026`, S7; defensive inspection пассивна, HID execution явный и scoped |
+| CF-009 | **Authorized wireless Lab recipes** дают именованные bounded Wi-Fi/BLE/nRF fixture workflows вместо пустой общей TX-оболочки | CAP-032/033 делают TX безопасным, но не определяют существующие wireless experiments | принято как `CAP-055`, `PR-027`, S7; каждый recipe принимается отдельно, без jamming, indiscriminate flood, crash и credential harvest |
 
 ### Итог аудита
 
 - **Явно представлены:** полный passive multi-radio foundation, on-device analysis,
   durable evidence, owned-lab пути IR/NFC/Sub-GHz, update, recovery, companion,
   настройки, feedback и extension boundaries.
-- **Слишком неявны и требуют решения по каталогу:** `CF-001…CF-009`.
+- **Приняты в 1.x:** `CF-001…CF-004` и `CF-006…CF-009`, теперь
+  `CAP-048…CAP-055` с владельцем S7.
+- **Явно после 1.0:** `CF-005 Peer Link`.
 - **Сознательно не копируются:** broad disruption, social-engineering credential
   capture, generic LAN attack tooling и функции для отсутствующего железа.
-- **Заявлять полный паритет пока нельзя:** до принятия disposition и трассировки
-  candidates проект может заявлять цельный baseline из 47 capability, но не «все
-  полезные функции конкурентов включены».
+- **Scope claim:** проект теперь имеет трассируемый baseline 1.x из 55 capabilities,
+  покрывающий все принятые полезные семейства конкурентов; это не означает, что все
+  55 уже реализованы или проверены.
 
 Матрица не утверждает отсутствия конкретной функции. Она показывает, что является
 документированной продуктовой опорой каждого проекта.

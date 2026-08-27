@@ -15,6 +15,8 @@ lives in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 | G-004 | Safe work on owned equipment | J-05, J-06 | PR-009, PR-013, NFR-002, NFR-006, NFR-007 | S1, S2, S5, S7, S8 | policy tests + physical TX-stop HIL |
 | G-005 | Reliable offline-first field operation | J-01…J-05 | PR-005, PR-006, PR-010…PR-012, NFR-001…NFR-010 | S2–S8 | endurance, recovery, rollback, accessibility matrix |
 | G-006 | Extension without a new monolith | J-03, J-06 | CR-001, CR-003, CR-009, PR-012, PR-013 | S2, S6, S7 | external sample extension + permission negative tests |
+| G-007 | Evidence-backed defensive field inspection | J-03, J-07 | PR-020…PR-023, NFR-005…NFR-010 | S7, S8 | WF-06 detector/capture/route/GATT matrix |
+| G-008 | Protected and bounded operation of owned equipment | J-05, J-06, J-08 | PR-024…PR-027, NFR-002/003/005…007/010 | S7, S8 | WF-07/08 access, permission, cleanup and physical-stop HIL |
 
 ## Requirement stage coverage
 
@@ -34,6 +36,8 @@ lives in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 | PR-017 | connectivity/secrets service | S2 boundary | S6/S8 |
 | PR-018 | storage maintenance + recovery | S3 atomic contract | S5/S8 |
 | PR-019 | offline enrichment service | S6 | S8 |
+| PR-020…PR-023 | defensive analytics + capture/survey/BLE services | S7 | S8 |
+| PR-024…PR-027 | security + device tools + extensions + safety runtime | S7 | S8 |
 | NFR-001…NFR-006 | kernel/runtime/services | S2 | S4/S8 |
 | NFR-007…NFR-009 | parsers/storage/schema | S3 | S8 |
 | NFR-010 | UI/input/strings | S2 | S8 |
@@ -49,6 +53,7 @@ lives in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 | CAP-032…CAP-037 | PR-013/014, NFR-002/006/008 | DEMO-S7 | S7/S8 |
 | CAP-038…CAP-041 | PR-002/010/012/013, NFR-006 | DEMO-S6 | S7/S8 |
 | CAP-042…CAP-047 | PR-005/007…012/015…019, NFR-005…010 | DEMO-S2/S4 | S5/S8 |
+| CAP-048…CAP-055 | PR-020…PR-027, NFR-002/003/005…010 | DEMO-S7 | S7/S8 |
 
 UX-01…UX-07 close the S2 visual/interaction gate; UX-08 repeats in every
 `DEMO-S2…DEMO-S8`. The complete evidence and retention protocol is defined by
@@ -62,11 +67,11 @@ UX-01…UX-07 close the S2 visual/interaction gate; UX-08 repeats in every
 | Competitive CR-004/009 | detected hardware and resource leases | PR-001, PR-002, PR-009, NFR-006 |
 | Competitive CR-005/007/008 | portability, offline companion, safe updates | PR-007, PR-010, PR-012 |
 | Vision safety principles | passive by default, visible bounded TX | PR-013, NFR-002, NFR-006 |
-| [Capability catalog](CAPABILITY_CATALOG.md) + [product review](CAPABILITY_REVIEW.md) + [UX/UI baseline](UX_UI_BASELINE.md) + [Stage Demo](STAGE_DEMO.md) | complete scope is accepted in S1 as 47 capabilities; UX-01/02 bind IA/states, visual system in S2, feature-complete in S7, release-complete in S8 | `E-GATE-001…003`, `E-HIL-095`, `CAP-001…047`, `PR-001…019`, `UX-01…08`, `DEMO-S2…S8`; S1/S2/S3 done, S4 active |
+| [Capability catalog](CAPABILITY_CATALOG.md) + [product review](CAPABILITY_REVIEW.md) + [UX/UI baseline](UX_UI_BASELINE.md) + [Stage Demo](STAGE_DEMO.md) | initial S1 scope accepted 47 capabilities; the explicit 27 August competitor decision expands the normative boundary to 55, while UX-01/02 bind IA/states, visual system in S2, feature-complete in S7, release-complete in S8 | `E-GATE-001…003`, `E-HIL-095`, `CAP-001…055`, `PR-001…027`, `UX-01…08`, `DEMO-S2…S8`; expansion is planned in S7 and does not rewrite prior evidence |
 | [Hardware envelope](HARDWARE_ENVELOPE.md) + [HIL probe](HIL_PROBE.md) | hardware is main board, detachable RF shield, and explicit external assemblies; capabilities carry state/evidence; contested GPIO is never output-probed ambiguously | refines PR-001/003/009/014; `E-HW-DESIGN-001`, tool build `E-BUILD-002`, physical HIL `HW-T01…HW-T11`; gates S1/S2/S4/S5 |
-| [Reference workflows](REFERENCE_WORKFLOWS.md) | core paths have explicit happy/error/cancel behavior and acceptance IDs `WF-01-A1…A6` and `WF-02-A1…WF-05-A5` | covers J-01…J-06 and PR-001…PR-009/012…014; test ownership spans S2/S3/S6/S7/S8 |
+| [Reference workflows](REFERENCE_WORKFLOWS.md) | core paths have explicit happy/error/cancel behavior and acceptance IDs `WF-01-A1…A6`, `WF-02-A1…WF-05-A5`, and `WF-06…WF-08` | covers J-01…J-08 and PR-001…PR-027; test ownership spans S2/S3/S6/S7/S8 |
 | [Resource budget ledger](RESOURCE_BUDGETS.md) | no-PSRAM envelope, build/runtime measurements, provisional limits, and explicit unknowns are separated | refines NFR-001…006 and constrains S2/S3 targets; `E-BUDGET-001` |
-| [Risk register](RISK_REGISTER.md) | hardware, integrity, safety, dependency, privacy, and scope risks have controls and closure owners | cross-cuts PR-001…PR-019/NFR-001…010; reviewed at every gate |
+| [Risk register](RISK_REGISTER.md) | hardware, integrity, safety, dependency, privacy, and scope risks have controls and closure owners | cross-cuts PR-001…PR-027/NFR-001…010; reviewed at every gate |
 | Clean 1.x measurement target | independent pinned build implements BoardProfile, HardwareInventory→AppCatalog projection, unified five-key display/input with non-color focus, a bounded observable PCF8574 boot probe, compact incremental Left Back / Right-or-OK Enter / Up-Down Select navigation with non-blocking one-event/one-repaint physical dispatch, shared UI/common-state components, one EN/RU catalog with generated Roboto Condensed Medium 16/12 Cyrillic fonts and persistent Language selection, on-device Self-Test, buzzer-safe boot output, storage/runtime contracts, guarded SD persistence, bounded retries/watchdogs, a persistent Core-0 Product Survey worker with UI-owned terminal acknowledgement, localized zero-lease missing-source state, and an isolated inactive-OTA1 LittleFS HIL adapter | `E-BUILD-003…071`, `E-HIL-006…095`, `E-AUTO-022…035`, `E-GATE-002/003`; S2/S3 are closed; exact 0.70 closes LittleFS reset recovery and then `DEMO-S3` with generation 69→70, 29/29 observations and five independent TFT matches; S4 is active, while physical power-cut is its named gate |
 | S4 Survey source plan | UX-S02 projects a bounded user draft from capability states: Plan opens Sources, available Wi-Fi can be toggled, declared BLE stays visible/unavailable, empty real plans cannot Start, and common Left/Right-or-OK/Up-Down Actions retain incremental repaint and cleanup | exact `0.71.0-survey-source-plan`, `E-BUILD-072`, `E-AUTO-036`, `E-HIL-096`, `E-SURVEY-009`; first accepted S4 user slice for PR-002/003/004 and NFR-002/003/010; shared timeline, BLE driver/scheduler/degradation, capture/export, power-cut and endurance remain open |
 | S4 shared source timeline runtime | allocation-free two-source ledger streams scheduled/active/unavailable/fault windows through a bounded FIFO and retains honest per-source duration/duty/accepted/drop/overflow counters; exact worker boundary events and observations drive it, Running UI shows Wi-Fi state/duty, invalid/out-of-order/full transitions fail closed | exact `0.72.0-source-timeline-runtime`, `E-BUILD-073`, `E-AUTO-037`, `E-HIL-097`, `E-SURVEY-010` accept the runtime/visible checkpoint for PR-003 and NFR-003/004; durable drain is accepted separately by exact 0.73, while BLE scheduling/degradation, power-cut and endurance keep CAP-015/DEMO-S4 open |

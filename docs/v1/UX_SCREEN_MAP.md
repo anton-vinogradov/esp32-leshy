@@ -57,7 +57,9 @@ UX-S01 Home
 │  ├─ UX-S02 New Survey: sources, storage, duty-cycle preview
 │  ├─ UX-S03 Running Survey: summary ↔ timeline ↔ list
 │  │  └─ UX-S04 Observation Detail → Target / Radar / Capture
-│  └─ UX-S05 Stop & Commit Result → Session Detail / Export / Home
+│  ├─ UX-S05 Stop & Commit Result → Session Detail / Export / Home
+│  ├─ UX-S29 Airspace Guard: findings → explanation → exact evidence
+│  └─ UX-S31 Field Survey: sources / GPS / revisit / local export
 ├─ Targets
 │  ├─ UX-S06 Target List: search, filter, sort
 │  └─ UX-S07 Target Detail
@@ -68,13 +70,17 @@ UX-S01 Home
 │  ├─ UX-S11 Capture Source: Wi-Fi packets / Sub-GHz / IR / NFC / Screenshot
 │  ├─ UX-S12 Capture Setup: source, bounds, destination
 │  ├─ UX-S13 Capture Running: progress, drops, explicit Stop
-│  └─ UX-S14 Capture Result: raw metadata / derived decode / Save / Export / Lab
+│  ├─ UX-S14 Capture Result: raw metadata / derived decode / Save / Export / Lab
+│  ├─ UX-S30 Wi-Fi Authentication Capture: EAPOL/PMKID/handshake state
+│  └─ UX-S32 BLE Inspector: raw packets / explicit connected GATT
 ├─ Lab
 │  ├─ UX-S18 Scope & Safety Context
 │  ├─ UX-S19 Saved Capture + TX Parameters
 │  ├─ UX-S20 Explicit Confirmation
 │  ├─ UX-S21 Running TX: frequency, power, deadline, permanent Stop
-│  └─ UX-S22 Result / Fault / Source Capture
+│  ├─ UX-S22 Result / Fault / Source Capture
+│  ├─ UX-S35 Automation / HID: package, permissions, target, preview
+│  └─ UX-S36 Wireless Recipes: admitted Wi-Fi / BLE / nRF fixtures
 ├─ Library
 │  ├─ UX-S15 Sessions / Captures / Exports / Screenshots
 │  ├─ UX-S16 Item Detail: integrity, provenance, source/derived data
@@ -85,7 +91,9 @@ UX-S01 Home
    │  ├─ Quick: bounded read-only automatic plan
    │  └─ Full / Guided: scoped preflight → applicable checks → report
    ├─ Diagnostics → UX-S24 Capability / Module Detail / Report
-   └─ About → UX-S27 Version / Profile / Update / Rollback / Recovery
+   ├─ About → UX-S27 Version / Profile / Update / Rollback / Recovery
+   ├─ Lock → UX-S33 Setup / Unlock / Recovery / Protected Scope
+   └─ Serial Console → UX-S34 UART Preview / Running / Save Result
 
 UX-S28 Global dialog layer: unavailable reason, progress, confirm, error, panic.
 ```
@@ -118,21 +126,22 @@ ordinary Back traverses the stack.
 
 | Section | Primary capabilities | Important transitions |
 |---|---|---|
-| Survey | CAP-009…CAP-017, CAP-042 | Observation→Target/Capture/Radar; stopped Session→Library |
+| Survey | CAP-009…CAP-017, CAP-042, CAP-048, CAP-050 | Observation/finding→Target/Capture/Radar/evidence; stopped Session/Field Survey→Library/export |
 | Targets | CAP-018…CAP-022, CAP-044 | Evidence→Observation/Capture; Target→Compare/Radar |
-| Capture | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043 | Result→Library/Export/Lab |
-| Lab | CAP-032…CAP-037 | accepts only a saved immutable Capture; Result links back to source |
+| Capture | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-049, CAP-051 | Result→Library/Export/Lab; GATT requires explicit connected mode |
+| Lab | CAP-032…CAP-037, CAP-054, CAP-055 | accepts only reviewed source/package/recipe; Result links back to source and audit evidence |
 | Library | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import never bypasses parsers |
-| Device | CAP-001…CAP-008, CAP-045…CAP-047 | Diagnostics explains unavailability before task entry |
+| Device | CAP-001…CAP-008, CAP-045…CAP-047, CAP-052, CAP-053 | Diagnostics explains unavailability before task entry; Lock never blocks Stop/recovery; Serial owns one explicit UART lease |
 | Device → Settings | PR-011, NFR-010 | EN/RU switch; immediate application and persistent selection |
-| Device → Self-Test | CAP-001…CAP-047 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
+| Device → Self-Test | CAP-001…CAP-055 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
 
 ## UX-01 acceptance
 
-- Every `CAP-001…CAP-047` has one primary owner and a measurable
+- Every `CAP-001…CAP-055` has one primary owner and a measurable
   entry → success/error/cancel → Back path.
 - WF-01 uses Home→Device→Self-Test/Diagnostics; WF-02 uses UX-S02…S05; WF-03 uses UX-S15…S17;
-  WF-04 uses UX-S06…S10; WF-05 uses UX-S18…S22.
+  WF-04 uses UX-S06…S10; WF-05 uses UX-S18…S22; WF-06 uses UX-S29…S32;
+  WF-07 uses UX-S33/S34; WF-08 uses UX-S35/S36 plus UX-S18…S22.
 - A primary task starts within four transitions from Home. A receiver may be a
   direct top-level job when that is the user's task; band/source selection remains
   a parameter beneath it.

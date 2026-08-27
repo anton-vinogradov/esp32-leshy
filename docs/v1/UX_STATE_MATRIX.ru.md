@@ -43,6 +43,9 @@ EN/RU copy и будущих TFT snapshots; она не означает, что
 | UX-S26 Storage/Backup/Reset | no media/backup даёт reason; factory reset всё равно не default | scan/checksum/restore progress, Cancel по безопасной boundary | write target/bytes/generation видимы | read-only fallback назван | prior generation сохраняется; recovery path показан | scope/schema/checksum/overwrite plan, default Cancel | verify after write/restore; reset показывает recovery entry | Back до commit ничего не меняет; после commit открывает result |
 | UX-S27 Update/Recovery | offline не блокирует SD/USB recovery; no compatible image = reason | download/verify/write bounded с progress | channel/version/signature/slot видимы | beta/rollback state explicit | interrupted update boot/recovery остаётся доступен | version/channel/signature/rollback plan, default Cancel | booted version/hash/provenance + rollback entry | Cancel до publish сохраняет current image; Back не прерывает unsafe boundary |
 | UX-S28 Global Dialog | reason/evidence/next action, без тупика | operation name/progress/Cancel | применяется только к underlying context | impact text обязателен | report ID и safe recovery | destructive/active confirm никогда не preselected | возвращает созданный ID/result | modal Back детерминирован; panic имеет приоритет над modal stack |
+| UX-S29…S32 Defensive inspection | отсутствие finding не error; unavailable detector/GPS/export/GATT имеет exact reason | detector/capture/route/connect start bounded/cancellable | evidence/confidence, auth completion, route facts или selected GATT target видимы | missing location/enrichment/raw support explicit | source evidence сохраняется; active fallback отсутствует | только connected GATT требует explicit target/permission confirm | saved artifact показывает schema/checksum/source/uncertainty | Back останавливает receiver/connection, disconnect-ит и оставляет zero leases |
+| UX-S33/S34 Lock/Serial | locked content скрыт; unavailable recovery/UART имеет remedy | unlock и UART validation bounded | retry state или exact pins/baud/target/lease видимы | transcript/storage не разрешён без explicit selection | bounded denial/overrun/disconnect сначала scrub-ит buffers | PIN change и serial start показывают protected scope/target | unlock или saved transcript/result explicit | Stop/recovery доступны при lock; Serial Back освобождает UART |
+| UX-S35/S36 Automation/Recipes | unsigned/forbidden/incompatible package/recipe disabled с reason | signature/policy/resource/target validation cancellable | permissions, target, ceilings, deadline и output/stop видимы | optional result transport не расширяет permissions | watchdog/policy/fault вызывает idempotent cleanup | target/effects/HID/TX scope имеет default Cancel | audit/evidence result называет package/recipe и stop reason | Cancel-before-confirm ничего не отправляет; Back/panic останавливает output до navigation |
 
 ## Copy и visual evidence для S2
 
@@ -53,7 +56,7 @@ state различим текстом/формой/icon и не зависит �
 
 ## Acceptance UX-02
 
-- Все состояния WF-01…WF-05 представлены строками матрицы; нет error/cancel path,
+- Все состояния WF-01…WF-08 представлены строками матрицы; нет error/cancel path,
   существующего только в prose workflow.
 - Любой Start/Confirm имеет определённые Starting, Error, Cancel и cleanup outcomes.
 - Любой storage mutation сохраняет старый committed generation до нового publish.

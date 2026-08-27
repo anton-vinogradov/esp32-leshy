@@ -15,6 +15,8 @@
 | G-004 | Безопасная работа со своим оборудованием | J-05, J-06 | PR-009, PR-013, NFR-002, NFR-006, NFR-007 | S1, S2, S5, S7, S8 | safety policy tests + physical TX-stop HIL |
 | G-005 | Надёжный offline-first полевой инструмент | J-01…J-05 | PR-005, PR-006, PR-010…PR-012, NFR-001…NFR-010 | S2–S8 | endurance, recovery, update rollback, accessibility matrix |
 | G-006 | Расширяемость без нового монолита | J-03, J-06 | CR-001, CR-003, CR-009, PR-012, PR-013 | S2, S6, S7 | external sample extension + permission negative tests |
+| G-007 | Evidence-backed защитная полевая проверка | J-03, J-07 | PR-020…PR-023, NFR-005…NFR-010 | S7, S8 | WF-06 detector/capture/route/GATT matrix |
+| G-008 | Защищённая bounded работа со своим оборудованием | J-05, J-06, J-08 | PR-024…PR-027, NFR-002/003/005…007/010 | S7, S8 | WF-07/08 access, permission, cleanup и physical-stop HIL |
 
 ## Покрытие требований этапами
 
@@ -34,6 +36,8 @@
 | PR-017 | connectivity/secrets service | S2 boundary | S6/S8 |
 | PR-018 | storage maintenance + recovery | S3 atomic contract | S5/S8 |
 | PR-019 | offline enrichment service | S6 | S8 |
+| PR-020…PR-023 | defensive analytics + capture/survey/BLE services | S7 | S8 |
+| PR-024…PR-027 | security + device tools + extensions + safety runtime | S7 | S8 |
 | NFR-001…NFR-006 | kernel/runtime/services | S2 | S4/S8 |
 | NFR-007…NFR-009 | parsers/storage/schema | S3 | S8 |
 | NFR-010 | UI/input/strings | S2 | S8 |
@@ -49,6 +53,7 @@
 | CAP-032…CAP-037 | PR-013/014, NFR-002/006/008 | DEMO-S7 | S7/S8 |
 | CAP-038…CAP-041 | PR-002/010/012/013, NFR-006 | DEMO-S6 | S7/S8 |
 | CAP-042…CAP-047 | PR-005/007…012/015…019, NFR-005…010 | DEMO-S2/S4 | S5/S8 |
+| CAP-048…CAP-055 | PR-020…PR-027, NFR-002/003/005…010 | DEMO-S7 | S7/S8 |
 
 UX-01…UX-07 закрывают visual/interaction gate S2; UX-08 повторяется в каждом
 `DEMO-S2…DEMO-S8`. Полный protocol и retention evidence задаёт
@@ -62,11 +67,11 @@ UX-01…UX-07 закрывают visual/interaction gate S2; UX-08 повтор�
 | Конкурентный анализ CR-004/009 | detected hardware и resource leases | PR-001, PR-002, PR-009, NFR-006 |
 | Конкурентный анализ CR-005/007/008 | переносимость, offline companion, безопасный update | PR-007, PR-010, PR-012 |
 | Vision safety principles | пассивное по умолчанию, заметный bounded TX | PR-013, NFR-002, NFR-006 |
-| [Каталог возможностей](CAPABILITY_CATALOG.ru.md) + [product review](CAPABILITY_REVIEW.ru.md) + [UX/UI baseline](UX_UI_BASELINE.ru.md) + [Stage Demo](STAGE_DEMO.ru.md) | полный scope принят в S1 как 47 capabilities; UX-01/02 фиксируют IA/states, visual system — в S2, feature-complete — в S7, release-complete — в S8 | `E-GATE-001…003`, `E-HIL-095`, `CAP-001…047`, `PR-001…019`, `UX-01…08`, `DEMO-S2…S8`; S1/S2/S3 done, S4 active |
+| [Каталог возможностей](CAPABILITY_CATALOG.ru.md) + [product review](CAPABILITY_REVIEW.ru.md) + [UX/UI baseline](UX_UI_BASELINE.ru.md) + [Stage Demo](STAGE_DEMO.ru.md) | initial S1 scope принял 47 capabilities; explicit competitor decision 27 августа расширяет нормативную границу до 55, UX-01/02 фиксируют IA/states, visual system — в S2, feature-complete — в S7, release-complete — в S8 | `E-GATE-001…003`, `E-HIL-095`, `CAP-001…055`, `PR-001…027`, `UX-01…08`, `DEMO-S2…S8`; расширение planned в S7 и не переписывает prior evidence |
 | [Hardware envelope](HARDWARE_ENVELOPE.ru.md) + [HIL probe](HIL_PROBE.ru.md) | hardware — это main board, detachable RF shield и явные external assembly; capability имеет state/evidence; конфликтующие GPIO не пробуются output-перебором | уточняет PR-001/003/009/014; `E-HW-DESIGN-001`, tool build `E-BUILD-002`, physical HIL `HW-T01…HW-T11`; gates S1/S2/S4/S5 |
-| [Эталонные сценарии](REFERENCE_WORKFLOWS.ru.md) | основные пути имеют явные happy/error/cancel behavior и acceptance IDs `WF-01-A1…A6` и `WF-02-A1…WF-05-A5` | покрывает J-01…J-06 и PR-001…PR-009/012…014; test ownership распределён по S2/S3/S6/S7/S8 |
+| [Эталонные сценарии](REFERENCE_WORKFLOWS.ru.md) | основные пути имеют явные happy/error/cancel behavior и acceptance IDs `WF-01-A1…A6`, `WF-02-A1…WF-05-A5` и `WF-06…WF-08` | покрывает J-01…J-08 и PR-001…PR-027; test ownership распределён по S2/S3/S6/S7/S8 |
 | [Реестр ресурсных бюджетов](RESOURCE_BUDGETS.ru.md) | no-PSRAM envelope, build/runtime measurements, временные limits и явные unknowns разделены | уточняет NFR-001…006 и ограничивает targets S2/S3; `E-BUDGET-001` |
-| [Реестр рисков](RISK_REGISTER.ru.md) | hardware, integrity, safety, dependency, privacy и scope risks имеют controls и closure owners | пересекает PR-001…PR-019/NFR-001…010; review на каждом gate |
+| [Реестр рисков](RISK_REGISTER.ru.md) | hardware, integrity, safety, dependency, privacy и scope risks имеют controls и closure owners | пересекает PR-001…PR-027/NFR-001…010; review на каждом gate |
 | Clean measurement target 1.x | independent pinned build реализует BoardProfile, projection HardwareInventory→AppCatalog, unified five-key display/input с non-color focus, bounded observable boot probe PCF8574, compact incremental navigation Left Back / Right-or-OK Enter / Up-Down Select с non-blocking physical dispatch «одно событие — один кадр», shared UI/common-state components, единый каталог EN/RU с generated Cyrillic fonts Roboto Condensed Medium 16/12 и persistent Language, Self-Test, buzzer-safe boot, storage/runtime contracts, guarded SD persistence, bounded retries/watchdogs, persistent Core-0 Product Survey worker с UI-owned terminal acknowledgement, localized zero-lease missing-source state и isolated inactive-OTA1 LittleFS HIL adapter | `E-BUILD-003…071`, `E-HIL-006…095`, `E-AUTO-022…035`, `E-GATE-002/003`; S2/S3 закрыты; exact 0.70 закрывает LittleFS reset recovery, затем `DEMO-S3` с generation 69→70, 29/29 observations и пятью independent TFT matches; S4 активен, physical power-cut — его named gate |
 | Source plan Survey S4 | UX-S02 проецирует bounded user draft из capability states: Plan открывает Sources, available Wi-Fi можно переключать, declared BLE остаётся visible/unavailable, пустой real plan не запускается, общие Actions Left/Right-or-OK/Up-Down сохраняют incremental repaint и cleanup | exact `0.71.0-survey-source-plan`, `E-BUILD-072`, `E-AUTO-036`, `E-HIL-096`, `E-SURVEY-009`; первый принятый пользовательский slice S4 для PR-002/003/004 и NFR-002/003/010; shared timeline, BLE driver/scheduler/degradation, capture/export, power-cut и endurance остаются открыты |
 | Runtime общей source timeline S4 | allocation-free ledger двух sources потоково отдаёт окна scheduled/active/unavailable/fault через bounded FIFO и сохраняет честные per-source duration/duty/accepted/drop/overflow counters; exact worker boundary events и observations управляют им, Running UI показывает Wi-Fi state/duty, invalid/out-of-order/full transitions отклоняются fail closed | exact `0.72.0-source-timeline-runtime`, `E-BUILD-073`, `E-AUTO-037`, `E-HIL-097`, `E-SURVEY-010` принимают runtime/visible checkpoint для PR-003 и NFR-003/004; durable drain отдельно принят exact 0.73, а BLE scheduling/degradation, power-cut и endurance сохраняют CAP-015/DEMO-S4 открытыми |

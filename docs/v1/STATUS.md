@@ -20,12 +20,13 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Working source checkpoint:** `1.0.0-dev.209` is source/build/physical accepted. Exact 208 remains retained fail-closed because its resident NimBLE host starves Wi-Fi init and the degraded run later latches the runtime watchdog. Exact 209 makes every source lifecycle disjoint. The full tracked host suite passes; the clean build is 225,688 B static RAM, 3,317,692 B linked flash and 3,318,192/3,383,728 B app/factory. Firmware/app hashes are `63f55328…3bab` / `38d3cf02…d868`; combined Survey generation 162→163 and integrated generations 164/165, all-evidence traversal, canonical offline export and final safety cleanup pass.
 - **HIL cadence:** routine fixes run only the affected scenario plus adjacent negative/cleanup assertions and flash a changed candidate at most once. A full matrix is mandatory at stage end, RC, an unreviewed cross-cutting change, or after 15 accepted deltas. Exact 0.171 completed the last interval checkpoint; accepted exact 0.172, 0.181, offline-only 0.195, post-Web continuity 0.196.2 and combined-Survey `1.0.0-dev.209` are deltas **5/15**. Only retained summaries whose status is `pass` or `pass_*` count; fail-closed precursors do not advance the interval. Delta evidence retains run/source hashes compactly; periodic full checkpoints retain a compact machine-checked matrix and reset the anchor.
 - **Release state:** released `v0.*` remains the frozen PoC line; no 1.x binary has been released. Historic redesign checkpoints through exact 0.207 remain immutable evidence names. The first source-bearing 1.x build is `1.0.0-dev.208`; current candidate is `1.0.0-dev.209`, phase-complete candidates use `1.0.0-rc.N`, and the first stable redesign release is `1.0.0`.
-- **Competitor parity review:** the 27 August official-source audit confirms the
-  accepted `CAP-001…CAP-047` baseline is internally coherent but not a complete
-  competitor-feature inventory. `CF-001…CF-009` cover nine useful or strategically
-  relevant families that are missing or too implicit; none is silently in 1.0 until
-  a scope decision creates normal `J/PR/CAP/risk/stage` traceability. Disruptive,
-  social-engineering and unrelated-hardware features are explicit non-goals. See the
+- **Competitor parity review:** the 27 August official-source audit found nine useful
+  or strategically relevant families beyond the original 47-capability baseline.
+  The explicit product decision accepts all except `CF-005 Peer Link`: eight are now
+  `CAP-048…CAP-055`, `PR-020…PR-027`, `WF-06…WF-08`, with S7 ownership and risks
+  R-020…R-023. Peer Link remains explicitly after 1.0; disruptive,
+  social-engineering and unrelated-hardware features remain non-goals. The accepted
+  1.x boundary is now **55 capabilities**, not an implementation claim. See the
   [feature-level audit](COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 - **Current objective:** close physical HTTP parity through a dedicated client and
   preserve the accepted integrated S6.6 device/offline path; never use the active
@@ -120,13 +121,12 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 ### User functionality status
 
-This is the complete front-page checklist for the accepted 47-capability baseline,
-not a claim that every useful competitor feature is already in scope. `FUNC-NN`
+This is the complete front-page checklist for the accepted 55-capability baseline,
+not a claim that every accepted feature is implemented. `FUNC-NN`
 deliberately mirrors `CAP-0NN` in the [capability catalog](CAPABILITY_CATALOG.md), so
 CI can prove coverage of all accepted capabilities without changing their stable
-identities. The nine `CF-*` candidates remain in the
-[feature-level audit](COMPETITIVE_ANALYSIS.md#candidate-gaps-that-need-an-explicit-scope-decision)
-until a product decision promotes or rejects them. The front-page projection sorts
+identities. The [feature-level audit](COMPETITIVE_ANALYSIS.md#feature-level-parity-audit)
+records the eight promotions and the explicit post-1.0 Peer Link decision. The front-page projection sorts
 rows by first implementation stage and then by stable ID. A `done` row has accepted
 evidence for its stated boundary; `blocked` means its software/UI or conditional path
 awaits the named physical proof.
@@ -181,6 +181,14 @@ awaits the named physical proof.
 | FUNC-45 | One feedback service owns antenna LEDs and buzzer: default 2/255, quiet mode, bounded tones and non-color-only cues | S5 + S6 | `done` |
 | FUNC-46 | Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | `active` |
 | FUNC-47 | Versioned backup/restore and factory reset show scope/preview/checksum and never overwrite raw Capture without confirmation | S8 | `planned` |
+| FUNC-48 | Airspace Guard passively detects/explains suspicious Wi-Fi/BLE conditions and opens exact evidence/uncertainty for every finding | S7 | `planned` |
+| FUNC-49 | Focused Wi-Fi authentication Capture reports EAPOL/PMKID and complete/incomplete handshakes, then exports PCAP and `hc22000` | S7 | `planned` |
+| FUNC-50 | Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, revisit comparison and WiGLE-compatible export | S7 | `planned` |
+| FUNC-51 | BLE Inspector preserves raw compatible packets and enters connected GATT only after explicit target/permission/lease confirmation | S7 | `planned` |
+| FUNC-52 | Device Lock protects secrets/evidence with local PIN, bounded retry and tested recovery without blocking Stop/panic/recovery | S7 | `planned` |
+| FUNC-53 | Device → Serial Console provides a bounded UART bridge and shared Actions CLI under explicit target/configuration/lease | S7 | `planned` |
+| FUNC-54 | Permissioned signed Automation/HID has preview, ceilings, finite runtime, scoped target and passive-by-default BadUSB inspection | S7 | `planned` |
+| FUNC-55 | Authorized wireless Lab ships only named, individually accepted Wi-Fi/BLE/nRF fixture recipes with bounded power/channel/time and physical stop | S7 | `planned` |
 <!-- LESHY-FUNCTIONS:END -->
 
 S6.4 is deliberately split into reviewable user interactions:
@@ -339,7 +347,7 @@ S6.6 integrated-demo preparation is now independently reviewable:
 ## Where we are in the functionality map
 
 The complete high-level scope and stage ownership live in the
-[functionality map](DELIVERY_PLAN.md#product-functionality-map), while all 47 testable
+[functionality map](DELIVERY_PLAN.md#product-functionality-map), while all 55 testable
 items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 
 | Product block | Now | Next qualitative transition |
@@ -349,7 +357,7 @@ items remain in [CAPABILITY_CATALOG.md](CAPABILITY_CATALOG.md).
 | Passive multi-radio and Capture | `done / S4`, refined in S5 — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV, persistent Wi-Fi PCAP, all-available nRF24 and CC1101 live maps, receiver-paced one-pixel waterfall rows, and ambient-calibrated nRF24/CC1101 finders are accepted; Full/Guided checks, endurance and physical power-cut recovery remain the common foundation | use board-02 to close positive known-signal evidence and retain the common observation/storage path |
 | Complete standard ESP32-DIV hardware | `blocked / S5` — the executable product and one-command matrix are ready; the faulty clone cannot provide qualified RF-positive evidence | when the ordered replacement DIV arrives, qualify it read-only and run positive nRF24/Sub-GHz OOK/FSK plus integrated S5.6 Full |
 | Targets, compare and companion | `active / S6.5` — exact 0.165.0 completes the accepted on-device List/Compare/Detail, metadata, correlation decisions and cold-reversible merge/split set with product storage/RF isolation | expose the same versioned records and typed Actions through a scoped local USB/Web companion without direct driver/storage access |
-| Safe Lab and extensions | `ahead / S7` — safety/resource boundaries are accepted, active workflows and SDK are not implemented | feature-complete catalog, permissioned extensions and proven panic/timeout stop |
+| Competitive completeness, device security, Safe Lab and extensions | `ahead / S7` — eight audited additions are accepted and traced; safety/resource boundaries exist, but their user workflows and SDK are not implemented | Airspace Guard, auth Capture, Field Survey, BLE Inspector, Device Lock, Serial Console, permissioned Automation/HID and admitted wireless recipes plus proven panic/timeout stop |
 | Reliability and 1.0 delivery | `ahead / S8` — exact 0.103 proves the main-loop watchdog and exact 0.135 accepts Product Survey preparation/admission plus calibrated Wi-Fi+BLE worker deadline slices; physical hard-stop evidence and release qualification remain open | extend worker deadlines to all remaining workers, signed OTA/rollback/recovery, full HIL/Self-Test, one-hour-budget mixed workload and two green RCs |
 
 In stage terms S0–S4 are closed, S5 is hardware-blocked, S6 implementation is active
@@ -365,7 +373,9 @@ be accepted until the deferred S5 physical predecessor gate is closed.
 - separated the 0.x and 1.x generations;
 - reviewed original ESP32-DIV, GhostESP, Bruce, Marauder, Flipper Zero, and secondary
   references;
-- defined `J-01…J-06`, `PR-001…PR-019`, and `NFR-001…NFR-010`;
+- initially defined `J-01…J-06`, `PR-001…PR-019`, and `NFR-001…NFR-010`; the
+  27 August product decision adds `J-07…J-08` and `PR-020…PR-027` without rewriting
+  the original gate evidence;
 - defined the first vertical outcome as a persisted Survey Session;
 - created the bilingual [`HARDWARE_ENVELOPE`](HARDWARE_ENVELOPE.md) from v2
   schematic/BOM, original firmware, and vendor datasheets;
@@ -380,23 +390,26 @@ be accepted until the deferred S5 physical predecessor gate is closed.
 - retained a private hash-identified 16 MB pre-flash backup and unedited raw HIL logs.
 - after operator confirmation, read NRF #1/#2 and CC1101 identities without TX
   opcodes; NRF #3 remains `unknown`, and physical RF silence is not yet measured.
-- specified `WF-01…WF-05` reference workflows covering J-01…J-06, each with explicit
-  happy/error/cancel paths, measurable acceptance IDs, and planned evidence.
+- specified `WF-01…WF-05` reference workflows for the initial scope and later added
+  `WF-06…WF-08` for J-07/J-08; every workflow has explicit happy/error/cancel paths,
+  measurable acceptance IDs, and planned evidence.
 - created the resource-budget ledger with measured flash/heap evidence, no-PSRAM and
   OTA guardrails, and explicit storage/power/shared-bus unknowns.
 - created risk register R-001…R-017 with controls, closure owners, stage gates, and
   an explicit critical physical-stop risk for any active action.
-- decomposed complete user-facing 1.0 scope into `CAP-001…CAP-047`; UX is controlled
-  through S1 direction and the S2 real-TFT `UX-01…UX-08` baseline, while every
+- decomposed the initial user-facing 1.0 scope into `CAP-001…CAP-047`, then explicitly
+  expanded it to `CAP-001…CAP-055`; UX is controlled through S1 direction and the S2
+  real-TFT `UX-01…UX-08` baseline, while every
   S2…S8 stage closes through a reproducible `DEMO-S*`, not by waiting for final firmware.
 - product review closed six hidden scope gaps: Wi-Fi packet/PCAP Capture, screenshot
   evidence, offline enrichment, safe feedback service, scoped connectivity, and data
   backup/restore; the catalog is accepted as the complete working 1.0 boundary.
-- UX-01 fixed the initial six-domain information architecture, 28 screen contexts,
+- UX-01 fixed the initial six-domain information architecture and 28 screen contexts;
+  the scope expansion adds UX-S29…S36,
   typed Actions, and physical Back/Panic mapping; the S4 exact-0.93 refinement maps
   current implementation into seven executable job entries and keeps future domains
   out of Home. UX-02 defines unavailable/loading/running/degraded/error/
-  confirm/success plus cleanup for every WF-01…WF-05 screen family.
+  confirm/success plus cleanup for every WF-01…WF-08 screen family.
 - accepted ADR-001…ADR-005 for the pinned clean toolchain, fail-closed resource
   policy, atomic versioned storage, one typed Action boundary, and hybrid
   pre-release HIL.

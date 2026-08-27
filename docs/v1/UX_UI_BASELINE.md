@@ -19,7 +19,7 @@ Before S1 closes, the project agrees:
 - the product-first `Survey / Capture / Library / Targets / Lab / Device`
   information architecture; service functions live below the final `Device` entry
   as `Settings / Self-Test / Diagnostics / About` rather than competing on Home;
-- primary J-01…J-06 paths and the home of every `CAP-*`;
+- primary J-01…J-08 paths and the home of every `CAP-*`;
 - common Start/Stop, Select, Back, confirm, cancel, and panic semantics;
 - mandatory path states: unavailable, empty, loading, running, partial/degraded,
   error, confirm, and success;
@@ -62,7 +62,7 @@ serial path.
 | UX-05 | EN/RU content fit | Critical strings fit or have a defined safe abbreviation |
 | UX-06 | Input/accessibility map | All primary actions work with buttons; state is distinguishable without color |
 | UX-07 | Real-TFT evidence | Home, List, Detail, dialog, error/degraded, and running states are captured by UI automation |
-| UX-08 | Usability walkthrough | WF-01…WF-05 run on-board without hidden serial-only actions |
+| UX-08 | Usability walkthrough | WF-01…WF-08 run on-board without hidden serial-only actions |
 
 ## UX-03 visual-token S2 candidate
 

@@ -51,8 +51,8 @@ CONFIGS = (
         source_note=(
             "This front-page snapshot is generated from the authoritative 1.x "
             "documentation; CI rejects it if it drifts. The checklist is complete "
-            "for the accepted 47-capability baseline, while nine competitor-parity "
-            "candidates await an explicit scope decision in the "
+            "for the accepted 55-capability 1.x baseline; the audit accepted eight "
+            "additions and explicitly defers Peer Link until after 1.0 in the "
             "[feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit)."
         ),
         detailed_status="live status and next evidence gate",
@@ -82,8 +82,8 @@ CONFIGS = (
         source_note=(
             "Этот срез главной страницы генерируется из документации-точки-истины "
             "1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline "
-            "из 47 capabilities; девять candidates конкурентного паритета ждут "
-            "явного решения о scope в "
+            "из 55 capabilities; аудит принял восемь additions и явно отложил "
+            "Peer Link до версии после 1.0 в "
             "[пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета)."
         ),
         detailed_status="живой статус и ближайший evidence gate",

@@ -44,6 +44,9 @@ copy, and future TFT snapshots; it does not claim that a state is implemented.
 | UX-S26 Storage/Backup/Reset | no media/backup has reason; factory reset is never default | scan/checksum/restore progress with safe-boundary Cancel | write target/bytes/generation visible | read-only fallback is named | prior generation remains; recovery path shown | scope/schema/checksum/overwrite plan, default Cancel | verify after write/restore; reset exposes recovery entry | pre-commit Back changes nothing; post-commit opens result |
 | UX-S27 Update/Recovery | offline does not block SD/USB recovery; no compatible image has reason | bounded download/verify/write progress | channel/version/signature/slot visible | beta/rollback state explicit | interrupted update boots recovery | version/channel/signature/rollback plan, default Cancel | booted version/hash/provenance + rollback entry | pre-publish Cancel retains current image; Back cannot interrupt unsafe boundary |
 | UX-S28 Global Dialog | reason/evidence/next action, never a dead end | operation/progress/Cancel | applies to underlying context only | impact text required | report ID + safe recovery | destructive/active confirm is never preselected | returns created ID/result | modal Back deterministic; panic outranks modal stack |
+| UX-S29…S32 Defensive inspection | no finding is not an error; unavailable detector/GPS/export/GATT has an exact reason | detector/capture/route/connect start is bounded and cancellable | evidence/confidence, auth completion, route facts or selected GATT target stays visible | missing location/enrichment/raw support is explicit | source evidence is preserved; no active fallback | only connected GATT needs explicit target/permission confirm | saved artifact exposes schema/checksum/source/uncertainty | Back stops receiver/connection, disconnects and leaves zero leases |
+| UX-S33/S34 Lock/Serial | locked content is hidden; unavailable recovery/UART has remedy | unlock and UART validation are bounded | retry state or exact pins/baud/target/lease is visible | no transcript/storage is allowed unless explicitly selected | bounded denial/overrun/disconnect scrubs buffers first | PIN changes and serial start preview protected scope/target | unlock or saved transcript/result is explicit | Stop/recovery remains available while locked; Serial Back releases UART |
+| UX-S35/S36 Automation/Recipes | unsigned/forbidden/incompatible package/recipe is disabled with reason | signature/policy/resource/target validation is cancellable | permissions, target, ceilings, deadline and output/stop stay visible | optional result transport never widens permissions | watchdog/policy/fault invokes idempotent cleanup | target/effects/HID/TX scope defaults to Cancel | audit/evidence result names package/recipe and stop reason | Cancel-before-confirm emits nothing; Back/panic stops output before navigation |
 
 ## Copy and visual evidence for S2
 
@@ -55,7 +58,7 @@ buzzer output.
 
 ## UX-02 acceptance
 
-- Every WF-01…WF-05 state appears in this matrix; no error/cancel path exists only in
+- Every WF-01…WF-08 state appears in this matrix; no error/cancel path exists only in
   workflow prose.
 - Every Start/Confirm defines Starting, Error, Cancel, and cleanup outcomes.
 - Every storage mutation keeps the old committed generation until new publication.

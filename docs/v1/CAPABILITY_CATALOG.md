@@ -2,7 +2,7 @@
 
 *Read in: **English** · [Русский](CAPABILITY_CATALOG.ru.md)*
 
-Document status: **product-reviewed 1.0 scope baseline**, 16 August 2026.
+Document status: **product-reviewed 1.0 scope baseline**, expanded 27 August 2026.
 
 This catalog is the user-facing view of the 1.0 boundary. Normative acceptance
 criteria remain in [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md), while current
@@ -185,12 +185,26 @@ receiver, calibrated range, historical Target tracking or proof of packet traffi
 | CAP-046 | Local Wi-Fi/USB connectivity setup keeps secrets separate, never exports them, and never makes networking a Survey/Library prerequisite | P0 for PR-010/012 | PR-010, PR-012, PR-017 | S2/S6/S8 |
 | CAP-047 | Versioned backup/restore and factory reset show scope/preview/checksum and never overwrite raw Capture without explicit confirmation | P1 | PR-005, PR-010, PR-018, NFR-008/009 | S5/S8 |
 
+## Competitive completeness, device security, and automation
+
+| ID | 1.0 capability | Commitment | Requirements | Ready stage |
+|---|---|---|---|---|
+| CAP-048 | Airspace Guard passively detects and explains suspicious Wi-Fi/BLE conditions; every conclusion opens its source evidence and uncertainty | P1 | J-07, PR-020 | S7 |
+| CAP-049 | Focused Wi-Fi authentication Capture identifies EAPOL/PMKID and complete/incomplete handshakes, then exports immutable PCAP and `hc22000` evidence | P1 | J-03, J-07, PR-015, PR-021 | S7 |
+| CAP-050 | Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, deduplication, revisit comparison, and WiGLE-compatible local export | P1, GPS conditional | J-01, J-07, PR-022 | S7 |
+| CAP-051 | BLE Inspector preserves compatible raw packets and offers an explicit permissioned connected-GATT mode with deterministic disconnect and provenance | P1 | J-02, J-07, PR-023 | S7 |
+| CAP-052 | Device Lock provides local PIN setup, bounded retry/recovery, and protects secrets/evidence without blocking safe cleanup or recovery | P0 before sensitive data ships | J-05, J-08, PR-017, PR-024 | S7 |
+| CAP-053 | Device → Serial Console provides a bounded UART bridge and shared Actions CLI under explicit configuration, permissions, leases, and cleanup | P1 | J-05, J-08, PR-012, PR-025 | S7 |
+| CAP-054 | Automation/HID runs signed permissioned scripts with preview, ceilings, finite runtime and scoped USB/BLE HID; defensive BadUSB inspection is passive by default | P1 | J-08, PR-013, PR-026 | S7 |
+| CAP-055 | Authorized wireless Lab contains only named, individually accepted Wi-Fi/BLE/nRF fixture recipes with bounded region/power/channel/time and physical stop | P0 for any shipped wireless TX | J-06, J-08, PR-013, PR-027 | S7 |
+
 ## Explicitly after 1.0
 
-Cloud accounts and default telemetry, a public executable-app marketplace, broad
-support for unrelated ESP32 boards, hidden/disruptive actions, and attack count as a
-parity metric are not 1.0 commitments. A post-1.0 candidate gets its own user job,
-risk review, and stage proposal; it is not inserted retroactively.
+Authenticated DIV-to-DIV Peer Link, cloud accounts and default telemetry, a public
+executable-app marketplace, broad support for unrelated ESP32 boards,
+hidden/disruptive actions, and attack count as a parity metric are not 1.0
+commitments. A post-1.0 candidate gets its own user job, risk review, and stage
+proposal; it is not inserted retroactively.
 
 ## Completeness gates
 

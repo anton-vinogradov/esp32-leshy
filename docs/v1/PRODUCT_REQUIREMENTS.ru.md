@@ -1,6 +1,6 @@
 # ESP32-Leshy 1.x — требования продукта
 
-Статус документа: **принятый baseline 1.0**, 17 августа 2026 года.
+Статус документа: **принятый baseline 1.0, расширенный product decision**, 27 августа 2026 года.
 
 Этот документ превращает [продуктовую концепцию](VISION.ru.md) и
 [конкурентный анализ](COMPETITIVE_ANALYSIS.ru.md) в проверяемую границу 1.0.0.
@@ -48,6 +48,18 @@ companion дополняет экран устройства, но не явля
 «Когда я исследую собственное устройство, я хочу безопасно воспроизвести сохранённый
 сигнал с видимыми параметрами, таймаутом и мгновенной остановкой».
 
+### J-07. Защитная полевая проверка
+
+«Когда эфир выглядит подозрительно, я хочу пассивно обнаружить и понять событие,
+открыть исходное evidence и сохранить его, не превращая наблюдение в автоматическую
+атаку».
+
+### J-08. Защита и автоматизация своего оборудования
+
+«Когда Leshy хранит чувствительные данные или управляет моим стендом, я хочу
+защитить локальные evidence, явно выбрать serial/BLE target и запускать только
+permissioned bounded automation».
+
 ## Термины продукта
 
 - **Observation** — неизменяемый факт приёма с временем, источником, каналом или
@@ -84,6 +96,14 @@ companion дополняет экран устройства, но не явля
 | PR-017 | Connectivity не нарушает offline-first и границу секретов | Wi-Fi/USB setup хранит credentials отдельно от Sessions/reports/backups; Survey/Library работают без сети; OTA/companion получают только явно выданный scope | P0 для PR-010/012 |
 | PR-018 | Backup/restore и factory reset безопасны для пользовательских данных | До операции показаны scope, schema, checksum и overwrite plan; cancel ничего не меняет; raw Capture не заменяется молча; restore и reset имеют recovery test | P1 |
 | PR-019 | Офлайн-обогащение не подменяет исходные факты | OUI/BLE/protocol database показывает version/provenance; отсутствие или устаревание базы оставляет raw identity доступной и не создаёт ложную корреляцию | P1 |
+| PR-020 | Пассивно обнаруживать подозрительные wireless-состояния и объяснять каждый alert | Защита эфира показывает detector/version/threshold/confidence и открывает exact source evidence; недостаточные данные остаются inconclusive и никогда не запускают active response | P1 |
+| PR-021 | Выделить захват Wi-Fi-аутентификации в законченный passive workflow | EAPOL/PMKID и complete/incomplete handshake state явны; immutable evidence экспортируется в совместимые PCAP и `hc22000` с provenance; active provocation отсутствует вне отдельно принятого Lab recipe | P1 |
+| PR-022 | Дать законченный offline Field Survey | Wi-Fi AP/station и BLE observations дедуплицируются и при наличии GPS связываются с track; сравнение повторного прохода и локальный WiGLE-compatible export сохраняют source IDs/uncertainty и не требуют cloud upload | P1 |
+| PR-023 | Исследовать BLE глубже advertisement summary без скрытого подключения | Совместимые raw packets экспортируются; connected GATT enumeration требует явного mode transition, выбранного target, permission, visible connection state, отдельного lease и детерминированного disconnect/cleanup | P1 |
+| PR-024 | Защищать локальные secrets и evidence через Device Lock | First-run/local PIN setup, bounded retry и документированный recovery не обходят safe cleanup, panic, update recovery или factory reset; locked UI/export не раскрывает protected content | P0 до релиза, хранящего credentials или чувствительные captures |
+| PR-025 | Дать bounded Serial Console и общий Actions CLI | Пользователь явно выбирает UART pins/baud/mode и target; ResourceBroker владеет session; exit/error освобождает её; permissions CLI не шире on-device Actions, raw GPIO control отсутствует | P1 |
+| PR-026 | Запускать permissioned signed automation и явно scoped HID workflows | Signature/version/permissions package, resource ceilings, action preview, finite runtime и cancel/panic обязательны; USB/BLE HID требует подтверждённого target/scope, а BadUSB inspection по умолчанию пассивен | P1 |
+| PR-027 | Поставлять только именованные и отдельно принятые wireless Lab recipes | Каждый Wi-Fi/BLE/nRF recipe объявляет собственный fixture/target, region, channel/frequency, power, duration, expected evidence и hardware stop path; jamming, indiscriminate flood, crash и credential-harvest recipes отклоняются | P0 для любого shipped wireless TX |
 
 ## Системные требования
 
@@ -107,6 +127,10 @@ companion дополняет экран устройства, но не явля
 - независимая от 0.x firmware target для ESP32-DIV v2;
 - Diagnostics, Survey, Targets, Capture/Library и Device settings;
 - пассивные базовые сценарии всех штатных приёмников;
+- Защита эфира, focused Wi-Fi authentication Capture, offline Field Survey и BLE
+  Inspector;
+- Device Lock и bounded Serial Console/Actions CLI;
+- permissioned signed automation/HID и отдельно допускаемые wireless Lab recipes;
 - Wi-Fi packet/PCAP Capture, screenshot evidence и versioned offline enrichment;
 - IR/NFC операции с собственными устройствами и метками, прошедшие SafetyPolicy;
 - SD/LittleFS storage, импорт/экспорт, browser install, OTA/rollback/recovery;
@@ -118,6 +142,7 @@ companion дополняет экран устройства, но не явля
 - поддержка других плат без владельца board profile и HIL target;
 - облачный аккаунт, публичное облачное хранилище или telemetry по умолчанию;
 - магазин исполняемых приложений до стабилизации SDK и threat model;
+- authenticated DIV-to-DIV Peer Link;
 - количество disruptive/attack-функций как критерий паритета;
 - автоматическая корреляция личностей без объяснения и ручного отменяемого решения.
 
@@ -147,7 +172,7 @@ resource envelope платы.
 - [карта аппаратуры](HARDWARE_ENVELOPE.ru.md) подтверждена схемой, кодом 0.x и
   безопасным board-01 HIL; недоступные приборы, вторая плата и optional assemblies
   имеют fail-closed defaults и named S4/S5/S8 evidence вместо вымышленных claims;
-- для J-01…J-06 описаны happy path, cancel/error и критерии приёмки в
+- для J-01…J-08 описаны happy path, cancel/error и критерии приёмки в
   [эталонных сценариях](REFERENCE_WORKFLOWS.ru.md);
 - каждое P0-требование связано с компонентом архитектуры и типом теста;
 - flash/RAM/storage бюджеты измерены, а power/shared-bus limits явно constrained в

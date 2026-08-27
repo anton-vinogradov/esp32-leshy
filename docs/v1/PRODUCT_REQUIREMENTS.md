@@ -1,9 +1,9 @@
 # ESP32-Leshy 1.x product requirements
 
-Document status: **accepted 1.0 baseline**, 17 August 2026.
+Document status: **accepted 1.0 baseline, expanded by product decision**, 27 August 2026.
 
 This document turns the [product vision](VISION.md) and
-[competitive analysis](COMPETITIVE_ANALYSIS.md) into a testable 1.0.0 boundary. It
+[competitive analysis](COMPETITIVE_ANALYSIS.md) into a testable 1.0.0 boundary.
 Wording and acceptance may be refined through governance, while scope and IDs are
 fixed for decision and test traceability.
 
@@ -23,6 +23,10 @@ phone, account, or internet connection.
 - **J-05 Diagnose:** see modules, conflicts, and remediation before an action fails.
 - **J-06 Authorized lab:** reproduce an owned signal with visible parameters, a
   deadline, and immediate physical stop.
+- **J-07 Defensive field inspection:** detect, explain, and preserve evidence of
+  suspicious wireless activity without turning observation into an automatic attack.
+- **J-08 Secure and automate owned equipment:** protect local evidence, inspect an
+  explicitly selected serial/BLE target, and run permissioned bounded automation.
 
 ## Product terms
 
@@ -60,6 +64,14 @@ phone, account, or internet connection.
 | PR-017 | Keep connectivity offline-first and secrets scoped | Wi-Fi/USB setup stores credentials outside Sessions/reports/backups; Survey/Library work without a network; OTA/companion receive only explicitly granted scope | P0 for PR-010/012 |
 | PR-018 | Make backup/restore and factory reset safe for user data | Scope, schema, checksum, and overwrite plan appear before execution; cancel changes nothing; raw Capture is never replaced silently; restore/reset have recovery tests | P1 |
 | PR-019 | Keep offline enrichment subordinate to source facts | OUI/BLE/protocol database exposes version/provenance; missing or stale data leaves raw identity available and never invents correlation | P1 |
+| PR-020 | Detect suspicious wireless conditions passively and explain every alert | Airspace Guard labels detector/version/threshold/confidence and opens exact source evidence; insufficient data remains inconclusive and never triggers an active response | P1 |
+| PR-021 | Capture Wi-Fi authentication evidence as a focused passive workflow | EAPOL/PMKID and complete/incomplete handshake state are explicit; immutable evidence exports compatible PCAP and `hc22000` with provenance; no active provocation occurs outside a separately admitted Lab recipe | P1 |
+| PR-022 | Provide an offline Field Survey workflow | Wi-Fi AP/station and BLE observations are deduplicated and, when GPS is available, bound to a track; revisit comparison and WiGLE-compatible local export preserve source IDs and uncertainty without requiring cloud upload | P1 |
+| PR-023 | Inspect BLE beyond advertisement summaries without hidden connection | Compatible raw packets remain exportable; connected GATT enumeration requires an explicit mode transition, selected target, permission, visible connection state, separate lease, and deterministic disconnect/cleanup | P1 |
+| PR-024 | Protect local secrets and evidence through Device Lock | First-run/local PIN setup, bounded retry and documented recovery cannot bypass safe cleanup, panic, update recovery, or factory reset; locked UI and exports reveal no protected content | P0 before a release stores credentials or sensitive captures |
+| PR-025 | Expose a bounded Serial Console and the shared Actions CLI | User explicitly selects UART pins/baud/mode and target; ResourceBroker owns the session; exit/error releases it; CLI permissions are no broader than on-device Actions and raw GPIO control is absent | P1 |
+| PR-026 | Run permissioned signed automation and explicitly scoped HID workflows | Package signature/version/permissions, resource ceilings, action preview, finite runtime and cancel/panic are mandatory; USB/BLE HID requires a confirmed target/scope, while BadUSB inspection is passive by default | P1 |
+| PR-027 | Ship only named, individually accepted wireless Lab recipes | Every Wi-Fi/BLE/nRF recipe declares owned fixture/target, region, channel/frequency, power, duration, expected evidence and hardware stop path; jamming, indiscriminate flood, crash and credential-harvest recipes are rejected | P0 for any shipped wireless TX |
 
 ## System requirements
 
@@ -80,14 +92,18 @@ phone, account, or internet connection.
 
 In scope: an independent ESP32-DIV v2 build; Diagnostics, Survey, Targets,
 Capture/Library, settings; passive baseline workflows for all standard receivers;
-Wi-Fi packet/PCAP Capture, screenshot evidence, versioned offline enrichment;
-SafetyPolicy-approved IR/NFC work on owned devices; SD/LittleFS storage and portable
-exports; scoped connectivity, safe LED/buzzer feedback, backup/restore/factory reset;
-browser install, OTA/rollback/recovery; EN/RU UI; host, HIL, and endurance gates.
+Airspace Guard, focused Wi-Fi authentication Capture, offline Field Survey, and BLE
+Inspector; Device Lock and bounded Serial Console/Actions CLI; permissioned signed
+automation/HID and individually admitted wireless Lab recipes; Wi-Fi packet/PCAP
+Capture, screenshot evidence, versioned offline enrichment; SafetyPolicy-approved
+IR/NFC work on owned devices; SD/LittleFS storage and portable exports; scoped
+connectivity, safe LED/buzzer feedback, backup/restore/factory reset; browser install,
+OTA/rollback/recovery; EN/RU UI; host, HIL, and endurance gates.
 
 Not required for 1.0.0: other boards without a profile owner and HIL target; cloud
 accounts or default telemetry; an executable app store before SDK/threat-model
-stability; attack-count parity; unexplained or irreversible identity correlation.
+stability; authenticated DIV-to-DIV Peer Link; attack-count parity; unexplained or
+irreversible identity correlation.
 
 ## First vertical slice: Survey Session
 
@@ -112,7 +128,7 @@ data path.
 - the [hardware map](HARDWARE_ENVELOPE.md) is supported by schematic, 0.x code, and
   safe board-01 HIL; unavailable instruments, a second board, and optional assemblies
   have fail-closed defaults plus named S4/S5/S8 evidence instead of invented claims;
-- J-01…J-06 have happy/error/cancel paths in the
+- J-01…J-08 have happy/error/cancel paths in the
   [reference workflows](REFERENCE_WORKFLOWS.md);
 - every P0 traces to an architecture component and test type;
 - flash/RAM/storage budgets are measured, while power/shared-bus limits are explicitly

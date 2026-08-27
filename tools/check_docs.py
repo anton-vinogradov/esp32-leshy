@@ -118,9 +118,9 @@ def main() -> int:
     expected_function_ids = {
         f"FUNC-{int(capability):02d}" for capability in catalog_ids
     }
-    if len(catalog_ids) != 47:
+    if len(catalog_ids) != 55:
         errors.append(
-            f"capability catalog must contain exactly 47 table rows, found {len(catalog_ids)}"
+            f"capability catalog must contain exactly 55 table rows, found {len(catalog_ids)}"
         )
     function_ids_by_language: dict[str, list[str]] = {}
     for language, path in (("EN", V1 / "STATUS.md"), ("RU", V1 / "STATUS.ru.md")):

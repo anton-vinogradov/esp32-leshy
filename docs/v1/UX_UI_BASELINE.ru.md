@@ -20,7 +20,7 @@ Stage Demo.
 - product-first архитектура `Обзор / Захват / Библиотека / Цели / Лаборатория /
   Устройство`; служебные функции находятся под последним пунктом `Устройство` как
   `Настройки / Самопроверка / Диагностика / О системе`, а не конкурируют на Home;
-- основные пути J-01…J-06 и место каждого `CAP-*`;
+- основные пути J-01…J-08 и место каждого `CAP-*`;
 - единая семантика Start/Stop, Select, Back, confirm, cancel и panic;
 - обязательные состояния каждого пути: unavailable, empty, loading, running,
   partial/degraded, error, confirm, success;
@@ -62,7 +62,7 @@ Full/Guided используют обычные Actions и компоненты.
 | UX-05 | EN/RU content fit | Критические строки помещаются или имеют определённое безопасное сокращение |
 | UX-06 | Input/accessibility map | Все основные действия доступны кнопками; состояние различимо без цвета |
 | UX-07 | Real-TFT evidence | Home, List, Detail, dialog, error/degraded и running state сняты через UI automation |
-| UX-08 | Usability walkthrough | WF-01…WF-05 пройдены на board без скрытых serial-only действий |
+| UX-08 | Usability walkthrough | WF-01…WF-08 пройдены на board без скрытых serial-only действий |
 
 ## UX-03 — visual tokens, кандидат S2
 

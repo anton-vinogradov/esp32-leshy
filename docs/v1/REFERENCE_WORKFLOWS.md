@@ -32,6 +32,9 @@ acceptance, and an evidence plan.
 | WF-03 | Reopen and export evidence offline | J-03 | PR-005…PR-007, PR-012; NFR-007…010 | S3 |
 | WF-04 | Investigate, locate, and compare a Target | J-02, J-04 | PR-004, PR-006, PR-008; NFR-002/008…010 | S6 |
 | WF-05 | Run and physically stop an authorized Lab action | J-06 | PR-002, PR-009, PR-013; NFR-002/003/006/010 | S7 |
+| WF-06 | Detect and preserve explained wireless evidence in the field | J-03, J-07 | PR-020…PR-023; NFR-002/005…010 | S7 |
+| WF-07 | Unlock the device and operate an explicit serial target safely | J-05, J-08 | PR-017, PR-024, PR-025; NFR-002/006/010 | S7 |
+| WF-08 | Run permissioned automation or an authorized wireless recipe | J-06, J-08 | PR-013, PR-026, PR-027; NFR-002/003/005…007/010 | S7 |
 
 ## WF-01 — boot, diagnose, decide
 
@@ -196,9 +199,98 @@ active action.
 | WF-05-A4 | Expiry, driver error, and watchdog use the same idempotent stop path; no reboot resumes TX | fault-injection + reboot HIL |
 | WF-05-A5 | Blocked parameters and resource conflicts fail before hardware start with an actionable EN/RU reason | policy/resource/UI tests |
 
+## WF-06 — defensive field inspection
+
+**Precondition:** passive Wi-Fi/BLE reception is available; GPS and connected BLE are
+optional capabilities. No alert authorizes a countermeasure or hidden connection.
+
+**Happy path**
+
+1. Airspace Guard opens the strongest current finding with detector version,
+   threshold, confidence, uncertainty, and exact source frames/observations.
+2. Focused Wi-Fi authentication Capture reports EAPOL/PMKID and complete/incomplete
+   handshake state, then saves immutable PCAP/`hc22000` evidence.
+3. Field Survey deduplicates Wi-Fi AP/station and BLE observations, attaches GPS track
+   when available, compares a revisit, and exports a local WiGLE-compatible artifact.
+4. BLE Inspector preserves compatible raw packets; connected GATT starts only after
+   the user selects a target, reviews permissions, and confirms the mode transition.
+
+**Error path:** insufficient evidence remains inconclusive; missing GPS yields an
+unlocated result; unsupported capture/export or refused GATT connection is explicit.
+No fallback starts active Wi-Fi or connects/pairs to another BLE identity.
+
+**Cancel/back path:** Back stops the current receiver/connection, finalizes only an
+explicitly saved artifact, disconnects GATT, and leaves zero foreground leases.
+
+| Acceptance ID | Observable result | Evidence |
+|---|---|---|
+| WF-06-A1 | Every alert opens exact source evidence and exposes detector version/threshold/confidence; an insufficient fixture stays inconclusive | detector golden/negative tests |
+| WF-06-A2 | Authentication fixtures yield exact complete/incomplete state and schema-valid PCAP/`hc22000` without active provocation | parser/export fixtures + no-TX trace |
+| WF-06-A3 | Field Survey deduplicates a golden revisit and exports matching Wi-Fi/BLE/location facts; no-GPS remains valid and explicit | golden route/export tests |
+| WF-06-A4 | BLE connected mode requires explicit target/permission and always disconnects/releases its lease on Back, timeout, or error | Action/resource integration + HIL |
+| WF-06-A5 | All four paths preserve raw evidence, bounded queues/drop counters, stable navigation, and EN/RU error meaning | schema/UI/resource matrix |
+
+## WF-07 — protected device and bounded serial console
+
+**Precondition:** the owner has configured Device Lock or explicitly chooses to do
+so; an external UART target is owned/authorized and its voltage/pins are known.
+
+**Happy path**
+
+1. Device Lock accepts a local PIN setup or unlock under a bounded retry policy.
+2. Protected captures, secrets, exports, and sensitive settings remain unavailable
+   while locked; safe Stop/panic/cleanup and recovery entry remain available.
+3. Device → Serial Console previews pins, voltage assumption, baud, framing, mode,
+   target, permissions, and conflicting resources before acquiring a UART lease.
+4. The console and Actions CLI use the same bounded Actions; exit releases the UART
+   and stores no transcript unless the user explicitly saves one.
+
+**Error path:** wrong PIN, unavailable recovery material, unsafe UART configuration,
+conflict, overrun, disconnect, or unsupported CLI Action fails with a bounded delay
+and remedy. There is no raw GPIO or policy-bypass fallback.
+
+**Cancel/back path:** cancel changes neither lock state nor target; Back closes the
+console, scrubs unsaved buffers, and releases UART/input/storage ownership.
+
+| Acceptance ID | Observable result | Evidence |
+|---|---|---|
+| WF-07-A1 | Locked fixtures reveal no protected content through UI, logs, companion, backup, or export while Stop/panic/recovery remain usable | access-control matrix |
+| WF-07-A2 | Retry/recovery is bounded, auditable, and cannot be used to bypass update/recovery or safe cleanup | security negative tests |
+| WF-07-A3 | Serial start requires reviewed pins/baud/target and an exclusive lease; Back/error leaves zero UART ownership | Action/resource HIL |
+| WF-07-A4 | Actions CLI and on-device UI produce the same authorization/result for golden and forbidden operations | shared-Action contract tests |
+
+## WF-08 — permissioned automation and wireless Lab recipe
+
+**Precondition:** a signed compatible package or individually admitted recipe exists;
+any active target/fixture is owned and the physical stop path has evidence.
+
+**Happy path**
+
+1. The user reviews package/recipe identity, signature, permissions, target, resource
+   ceilings, expected effects, duration, and output artifact.
+2. Automation executes only declared Actions; HID additionally requires explicit
+   USB/BLE target and scope confirmation. BadUSB inspection is passive by default.
+3. A wireless recipe enters Lab and repeats the WF-05 policy/confirm/deadline/visible
+   TX/physical-stop contract for its exact Wi-Fi/BLE/nRF fixture.
+4. Completion records a bounded audit/evidence result and releases all resources.
+
+**Error path:** unsigned/incompatible package, undeclared permission, exhausted
+budget, missing target, region block, watchdog, or detector failure stops before or
+during the same idempotent cleanup path. Forbidden recipe classes are not loadable.
+
+**Cancel/back path:** cancel before confirm produces no HID/TX. Back/panic during
+execution stops outputs first, then releases leases and reports the reason.
+
+| Acceptance ID | Observable result | Evidence |
+|---|---|---|
+| WF-08-A1 | Unsigned, over-permissioned, incompatible, or over-budget automation fails before an undeclared Action/resource is used | package/policy negative tests |
+| WF-08-A2 | HID requires explicit target/scope and cancel-before-confirm emits no report/input; passive inspection emits none at all | USB/BLE HIL trace |
+| WF-08-A3 | Every wireless recipe maps to its reviewed fixture/region/power/channel/time bounds and inherits WF-05-A1…A5 | recipe manifest tests + RF HIL |
+| WF-08-A4 | Timeout, fault, watchdog, Back, and panic converge on idempotent cleanup with no resumed output after reboot | fault/reboot/physical-stop HIL |
+
 ## S1 review result
 
-The five workflows cover `J-01…J-06`. Their acceptance IDs are specification targets,
+The eight workflows cover `J-01…J-08`. Their acceptance IDs are specification targets,
 not current evidence. S1 can baseline the PRD only after prototype budgets and the
 remaining hardware unknowns are either measured or explicitly constrained. Later
 stages add the test evidence without weakening these paths.

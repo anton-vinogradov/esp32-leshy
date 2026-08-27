@@ -20,13 +20,13 @@
 - **Текущий source checkpoint:** `1.0.0-dev.209` принят на source/build/physical. Exact 208 остаётся retained fail-closed, потому что его resident host NimBLE лишает Wi-Fi памяти для init, а degraded run позже latch-ит runtime watchdog. Exact 209 делает каждый lifecycle source непересекающимся. Полный tracked host suite проходит; clean build занимает 225 688 B static RAM, 3 317 692 B linked flash и 3 318 192/3 383 728 B app/factory. Hashes firmware/app — `63f55328…3bab` / `38d3cf02…d868`; combined Survey generation 162→163 и integrated generations 164/165, all-evidence traversal, canonical offline export и final safety cleanup проходят.
 - **Cadence HIL:** обычная правка запускает только затронутый scenario плюс соседние negative/cleanup assertions и прошивает изменившийся candidate максимум один раз. Full matrix обязателен в конце этапа, на RC, при непроверенном cross-cutting change или после 15 принятых deltas. Exact 0.171 завершил предыдущий interval checkpoint; принятые exact 0.172, 0.181, offline-only 0.195, post-Web continuity 0.196.2 и combined Survey `1.0.0-dev.209` — deltas **5/15**. Считаются только retained summary со status `pass` или `pass_*`; fail-closed precursors не двигают интервал. Delta evidence компактно сохраняет run/source hashes; periodic full checkpoint сохраняет компактную machine-checked matrix и сбрасывает anchor.
 - **Релизный статус:** выпущенная линейка `v0.*` остаётся замороженным PoC; бинарник 1.x ещё не выпускался. Исторические checkpoints редизайна по exact 0.207 включительно сохраняют неизменяемые evidence names. Первая source-bearing сборка 1.x — `1.0.0-dev.208`; текущий candidate — `1.0.0-dev.209`, phase-complete candidates имеют вид `1.0.0-rc.N`, а первый stable релиз редизайна — `1.0.0`.
-- **Review конкурентного паритета:** официальный пофункциональный аудит от 27
-  августа подтверждает, что принятый baseline `CAP-001…CAP-047` внутренне цельный,
-  но не является полным перечнем функций конкурентов. `CF-001…CF-009` описывают
-  девять полезных или стратегически значимых семейств, которых нет или которые
-  слишком неявны; ни одно не попадает скрытно в 1.0 без решения о scope и обычной
-  трассировки `J/PR/CAP/risk/stage`. Disruptive, social-engineering и требующие
-  другого железа функции остаются explicit non-goals. См.
+- **Review конкурентного паритета:** официальный аудит 27 августа нашёл девять
+  полезных или стратегически значимых семейств сверх исходного baseline из 47
+  capabilities. Явным product decision приняты все, кроме `CF-005 Peer Link`:
+  восемь теперь имеют ID `CAP-048…CAP-055`, `PR-020…PR-027`, `WF-06…WF-08`,
+  владельца S7 и risks R-020…R-023. Peer Link явно остаётся после 1.0; disruptive,
+  social-engineering и unrelated-hardware функции — non-goals. Принятая граница
+  1.x теперь содержит **55 capabilities**, но это не claim реализации. См.
   [пофункциональный аудит](COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 - **Главная цель текущего этапа:** закрыть physical HTTP parity через отдельный client
   и сохранять принятым integrated device/offline path S6.6; никогда не затрагивать
@@ -120,14 +120,13 @@
 
 ### Статус пользовательских возможностей
 
-Это полный front-page checklist для принятого baseline из 47 capabilities, а не
-заявление, что в scope уже есть каждая полезная функция конкурентов. `FUNC-NN`
+Это полный front-page checklist для принятого baseline из 55 capabilities, а не
+заявление, что все принятые функции уже реализованы. `FUNC-NN`
 намеренно соответствует `CAP-0NN` в
 [каталоге возможностей](CAPABILITY_CATALOG.ru.md), поэтому CI может доказать
 покрытие всех принятых capability без изменения их стабильных идентификаторов.
-Девять `CF-*` candidates остаются в
-[пофункциональном аудите](COMPETITIVE_ANALYSIS.ru.md#candidate-пробелы-требующие-явного-решения-о-scope),
-пока product decision не повысит или не отклонит их. Проекция на главную сортирует
+[Пофункциональный аудит](COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета)
+фиксирует восемь повышений и явное post-1.0 решение для Peer Link. Проекция на главную сортирует
 строки по первому этапу реализации, а внутри этапа — по стабильному ID. Строка
 `done` имеет принятое evidence в указанной границе; `blocked` означает, что
 software/UI или conditional path ожидают названное physical proof.
@@ -182,6 +181,14 @@ software/UI или conditional path ожидают названное physical p
 | FUNC-45 | Единый feedback service владеет status LED антенн и buzzer: default 2/255, quiet mode, bounded tones и доступные без цвета cues | S5 + S6 | `done` |
 | FUNC-46 | Scoped Wi-Fi/USB setup изолирует secrets, не экспортирует их и не делает сеть условием Survey/Library | S6 + S8 | `active` |
 | FUNC-47 | Versioned backup/restore и factory reset показывают scope/preview/checksum и не перезаписывают raw Capture без confirm | S8 | `planned` |
+| FUNC-48 | Защита эфира пассивно обнаруживает/объясняет подозрительные Wi-Fi/BLE conditions и открывает exact evidence/uncertainty каждой находки | S7 | `planned` |
+| FUNC-49 | Focused Wi-Fi authentication Capture показывает EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует PCAP и `hc22000` | S7 | `planned` |
+| FUNC-50 | Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, revisit comparison и WiGLE-compatible export | S7 | `planned` |
+| FUNC-51 | BLE Inspector сохраняет raw compatible packets и входит в connected GATT только после explicit target/permission/lease confirmation | S7 | `planned` |
+| FUNC-52 | Device Lock защищает secrets/evidence local PIN, bounded retry и tested recovery, не блокируя Stop/panic/recovery | S7 | `planned` |
+| FUNC-53 | Устройство → Serial Console даёт bounded UART bridge и общий Actions CLI с explicit target/configuration/lease | S7 | `planned` |
+| FUNC-54 | Permissioned signed Automation/HID имеет preview, ceilings, finite runtime, scoped target и passive-by-default BadUSB inspection | S7 | `planned` |
+| FUNC-55 | Authorized wireless Lab поставляет только именованные отдельно принятые Wi-Fi/BLE/nRF fixture recipes с bounded power/channel/time и physical stop | S7 | `planned` |
 <!-- LESHY-FUNCTIONS:END -->
 
 S6.4 намеренно разбита на пользовательские interactions, которые можно ревьюить отдельно:
@@ -343,7 +350,7 @@ S6.5 разбита на независимо ревьюимые boundaries comp
 
 Полный верхнеуровневый scope и владельцы этапов зафиксированы в
 [карте функциональности](DELIVERY_PLAN.ru.md#карта-функциональности-продукта), а
-все 47 проверяемых пунктов — в [CAPABILITY_CATALOG.ru.md](CAPABILITY_CATALOG.ru.md).
+все 55 проверяемых пунктов — в [CAPABILITY_CATALOG.ru.md](CAPABILITY_CATALOG.ru.md).
 
 | Блок продукта | Сейчас | Ближайший качественный переход |
 |---|---|---|
@@ -352,7 +359,7 @@ S6.5 разбита на независимо ревьюимые boundaries comp
 | Passive multi-radio и Capture | `готово / S4`, уточнено в S5 — Wi-Fi+BLE Survey, timeline/filter/RSSI, provenance/CSV, persistent Wi-Fi PCAP, all-available live-карты nRF24/CC1101, receiver-paced однопиксельные строки водопадов и ambient-calibrated finder nRF24/CC1101 приняты; Full/Guided checks, endurance и physical power-cut recovery остаются общим фундаментом | закрыть positive known-signal evidence на board-02 и сохранить единый observation/storage path |
 | Всё штатное железо ESP32-DIV | `заблокировано / S5` — исполнимая часть product и one-command matrix готовы; неисправный клон не может дать qualified RF-positive evidence | после прибытия заказанного replacement DIV квалифицировать его read-only и выполнить positive nRF24/Sub-GHz OOK/FSK плюс integrated Full S5.6 |
 | Targets, compare и companion | `в работе / S6.5` — exact 0.165.0 завершает принятый on-device набор List/Compare/Detail, metadata, decisions correlation и cold-reversible merge/split с изоляцией product storage/RF | вывести те же versioned records и typed Actions через scoped local USB/Web companion без direct driver/storage access |
-| Safe Lab и расширения | `впереди / S7` — safety/resource boundaries приняты, active workflows и SDK ещё не реализованы | feature-complete каталог, permissioned extensions и доказанный panic/timeout stop |
+| Конкурентная полнота, защита устройства, Safe Lab и расширения | `впереди / S7` — восемь audited additions приняты и трассированы; safety/resource boundaries существуют, но их user workflows и SDK ещё не реализованы | Защита эфира, auth Capture, Field Survey, BLE Inspector, Device Lock, Serial Console, permissioned Automation/HID, admitted wireless recipes и доказанный panic/timeout stop |
 | Надёжность и доставка 1.0 | `впереди / S8` — exact 0.103 доказывает main-loop watchdog, а exact 0.135 принимает preparation/admission Product Survey плюс калиброванные deadline slices workers Wi-Fi+BLE; physical hard-stop evidence и release qualification остаются открыты | расширить worker deadlines на все остальные workers, signed OTA/rollback/recovery, полный HIL/Self-Test, mixed workload с часовым бюджетом и два зелёных RC |
 
 Итого по этапам: S0–S4 закрыты, S5 аппаратно заблокирован, реализация S6 активна,
@@ -367,7 +374,9 @@ Targets/compare/companion теперь являются активной раб�
 - 0.x отделена от линии 1.x;
 - проанализированы ESP32-DIV original, GhostESP, Bruce, Marauder, Flipper Zero и
   вторичные ориентиры;
-- сформулированы `J-01…J-06`, `PR-001…PR-019`, `NFR-001…NFR-010`;
+- первоначально сформулированы `J-01…J-06`, `PR-001…PR-019`, `NFR-001…NFR-010`;
+  product decision 27 августа добавляет `J-07…J-08` и `PR-020…PR-027`, не
+  переписывая исходное gate evidence;
 - первый вертикальный результат определён как сохраняемая Survey Session;
 - создан двуязычный [`HARDWARE_ENVELOPE`](HARDWARE_ENVELOPE.ru.md) по v2
   schematic/BOM, original firmware и vendor datasheets;
@@ -383,23 +392,26 @@ Targets/compare/companion теперь являются активной раб�
   без редактирования.
 - после operator confirmation прочитаны identity NRF #1/#2 и CC1101 без TX opcodes;
   NRF #3 оставлен `unknown`, отсутствие физического RF event пока не измерено.
-- описаны эталонные сценарии `WF-01…WF-05`, покрывающие J-01…J-06: у каждого есть
-  happy/error/cancel path, измеримые acceptance IDs и план evidence.
+- для initial scope описаны `WF-01…WF-05`, позже для J-07/J-08 добавлены
+  `WF-06…WF-08`; у каждого есть happy/error/cancel path, измеримые acceptance IDs и
+  план evidence.
 - создан реестр ресурсных бюджетов: измеренные flash/heap evidence, no-PSRAM и OTA
   guardrails, а также явные unknowns storage/power/shared bus.
 - создан risk register R-001…R-017 с controls, closure owners, stage gates и явным
   critical physical-stop risk для любого active action.
-- полный пользовательский scope 1.0 разложен на `CAP-001…CAP-047`; UX управляется
-  через S1 direction и S2 real-TFT baseline `UX-01…UX-08`, а каждый этап S2…S8
+- initial пользовательский scope 1.0 разложен на `CAP-001…CAP-047`, затем явно
+  расширен до `CAP-001…CAP-055`; UX управляется через S1 direction и S2 real-TFT
+  baseline `UX-01…UX-08`, а каждый этап S2…S8
   закрывается воспроизводимым `DEMO-S*`, не ожиданием финальной прошивки.
 - product review закрыл шесть скрытых scope gaps: Wi-Fi packet/PCAP Capture,
   screenshot evidence, offline enrichment, safe feedback service, scoped connectivity
   и data backup/restore; каталог принят как полная рабочая граница 1.0.
-- UX-01 зафиксировал исходную шестидоменную information architecture, 28 screen
-  contexts, typed Actions и physical Back/Panic mapping; refinement S4 exact 0.93
+- UX-01 зафиксировал исходную шестидоменную information architecture и 28 screen
+  contexts; расширение scope добавляет UX-S29…S36; typed Actions и physical
+  Back/Panic mapping сохраняются; refinement S4 exact 0.93
   отображает текущую реализацию в семь executable job entries и не показывает
   будущие домены на Home. UX-02 определил unavailable/loading/running/degraded/error/
-  confirm/success и cleanup для всех WF-01…WF-05 screen families.
+  confirm/success и cleanup для всех WF-01…WF-08 screen families.
 - приняты ADR-001…ADR-005: pinned clean toolchain, fail-closed resource policy,
   atomic versioned storage, единая typed Action boundary и hybrid prerelease HIL.
 - для HW-U01…HW-U10 заданы binding fail-closed dispositions: у каждого physical

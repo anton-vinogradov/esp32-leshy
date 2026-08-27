@@ -38,6 +38,10 @@ owns durable risks, controls, triggers, and closure evidence.
 | R-017 | EN/RU or color-only UI hides safety/error meaning or truncates critical controls | M | M | one string catalog/build, snapshot fixtures, standard-button coverage, no color-only state | UI/product; WF snapshots + NFR-010 matrix | open |
 | R-018 | A fatal loop/worker fault leaves software-controlled outputs active or silently reboots into the same unsafe operation | M | critical | permanent panic Task WDT on the main loop; IRAM GPIO2/14/15/47 quiesce; exact-app torn-write-resistant RTC latch; no automatic clear; Safe Mode blocks product workers and normal Actions | safety/platform; exact 0.103 `E-AUTO-068`/`E-HIL-128`/`E-SAFETY-001` accepts the real main-loop watchdog, retained software-reset latch, inactive pads and explicit-clear TFT path; worker heartbeats and independent physical-stop HIL remain closure work | reduced/open |
 | R-019 | Clone/DNP assemblies preserve the enclosure and menu but change module population, shared-radio wiring or RF front ends; board-02 has valid idle rails and its assembled RF carrier clamps shared MISO LOW, while upstream issue #102 independently reports the same all-radio failure shape from interboard faults | H | H | exact assembly profiles; compare BOM/photo/ROM; safe read-only identity and pull characterization before any TX; 23/32 kΩ powered-off comparison rejects a hard short; exact 0.131 changes GPIO13 LOW→HIGH when the carrier is removed; exact 0.132 proves all four CSNs HIGH while reassembled MISO is LOW with zero bus/TX activity; antenna appearance alone authorizes no solder change; board-02 remains RF-fault/no-cross-swap | boards/RF; return/replace carrier/device or physically isolate module MISO/power; require repaired plausible same-image identity before bounded regression | reduced/open |
+| R-020 | Defensive detector or channel/auth analysis presents a false conclusion as a threat or proof | M | H | every conclusion exposes detector/version/threshold/confidence/uncertainty and exact evidence; insufficient fixtures remain inconclusive; no automatic response | analytics/product; WF-06-A1/A2 golden + negative corpora and evidence drilldown | open |
+| R-021 | Authentication frames, precise tracks, lock state/recovery data, or automation transcripts leak sensitive information or lock out the owner | M | H | encrypted/scoped storage, redacted defaults, explicit export selection, bounded retries and tested owner recovery; safe cleanup/recovery never requires unlock | security/storage; PR-021/022/024 privacy, recovery and export matrix | open |
+| R-022 | Connected BLE, UART, CLI, USB/BLE HID or scripts broaden the active interface and bypass target consent, leases, or policy | H | critical | explicit mode/target/permission preview, separate finite leases, least privilege, no raw GPIO, passive inspection default, audit and deterministic disconnect/cleanup | security/runtime; WF-06-A4, WF-07-A3/A4, WF-08-A1/A2 | open |
+| R-023 | A script or wireless recipe runs away, exceeds resource/TX bounds, or smuggles a forbidden disruptive action | M | critical | signed/versioned packages, per-recipe review, resource/time ceilings, SafetySupervisor, watchdog, panic/expiry physical stop and forbidden-class rejection | safety/extensions; WF-08-A1/A3/A4 + independent physical HIL | open |
 
 `critical` is reserved for a safety failure whose prevention takes priority over
 feature delivery; it is intentionally stronger than `high`.
@@ -57,7 +61,8 @@ feature delivery; it is intentionally stronger than `high`.
 - CI enforces pinned builds and RB-02…RB-05.
 - Resource/Action negative tests cover failed start, Back, cancel, expiry, and worker
   crash.
-- Storage fault injection and eight-hour passive endurance close R-006…R-008/010.
+- Storage fault injection and the bounded passive endurance gate (at least 45 minutes
+  and 8 cycles, completed within one hour) close R-006…R-008/010.
 
 ### S5–S8
 
@@ -66,6 +71,8 @@ feature delivery; it is intentionally stronger than `high`.
 - No active action ships until R-009 has independent physical stop evidence.
 - Signed update, rollback, recovery, import fuzzing, privacy, and EN/RU accessibility
   matrices are release gates.
+- S7 cannot close while R-020…R-023 lack negative corpora, privacy/recovery evidence,
+  permission/lease tests, and independent stop evidence for every active interface.
 
 ## Review triggers
 

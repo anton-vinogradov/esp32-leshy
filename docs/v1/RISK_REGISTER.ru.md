@@ -38,6 +38,10 @@
 | R-017 | EN/RU или color-only UI скрывает safety/error meaning или обрезает control | M | M | один string catalog/build, snapshot fixtures, standard-button coverage, no color-only state | UI/product; WF snapshots + NFR-010 matrix | open |
 | R-018 | Fatal fault main loop/worker оставляет software-controlled outputs активными или тихо перезагружается в то же unsafe operation | M | critical | permanent panic Task WDT main loop; IRAM quiesce GPIO2/14/15/47; exact-app torn-write-resistant RTC latch; no automatic clear; Safe Mode блокирует product workers и normal Actions | safety/platform; exact 0.103 `E-AUTO-068`/`E-HIL-128`/`E-SAFETY-001` принимает настоящий main-loop watchdog, retained latch при software reset, inactive pads и TFT path explicit clear; worker heartbeats и independent physical-stop HIL остаются closure work | reduced/open |
 | R-019 | Clone/DNP assembly сохраняет корпус и menu, но меняет module population, shared-radio wiring либо RF front ends; board-02 имеет valid idle rails, а её assembled RF carrier clamps shared MISO LOW; upstream issue #102 независимо сообщает ту же форму all-radio failure из-за interboard faults | H | H | exact assembly profiles; сравнение BOM/photo/ROM; safe read-only identity и pull characterization до любого TX; powered-off comparison 23/32 кОм отвергает hard short; exact 0.131 меняет GPIO13 LOW→HIGH при снятии carrier; exact 0.132 доказывает все четыре CSN HIGH, пока reassembled MISO LOW при zero bus/TX activity; вид antenna не разрешает изменения пайки; board-02 остаётся RF-fault/no-cross-swap | boards/RF; вернуть/заменить carrier/device либо физически изолировать MISO/power modules; потребовать repaired plausible same-image identity до bounded regression | reduced/open |
+| R-020 | Defensive detector или channel/auth analysis показывает false conclusion как угрозу или proof | M | H | каждый вывод показывает detector/version/threshold/confidence/uncertainty и exact evidence; insufficient fixtures остаются inconclusive; automatic response отсутствует | analytics/product; WF-06-A1/A2 golden + negative corpora и evidence drilldown | open |
+| R-021 | Authentication frames, precise tracks, lock state/recovery data или automation transcripts раскрывают sensitive information либо блокируют owner | M | H | encrypted/scoped storage, redacted defaults, explicit export selection, bounded retries и tested owner recovery; safe cleanup/recovery не требует unlock | security/storage; PR-021/022/024 privacy, recovery и export matrix | open |
+| R-022 | Connected BLE, UART, CLI, USB/BLE HID или scripts расширяют active interface и обходят target consent, leases либо policy | H | critical | explicit mode/target/permission preview, отдельные finite leases, least privilege, no raw GPIO, passive inspection default, audit и deterministic disconnect/cleanup | security/runtime; WF-06-A4, WF-07-A3/A4, WF-08-A1/A2 | open |
+| R-023 | Script или wireless recipe выходит из bounds, превышает resource/TX limits либо прячет forbidden disruptive action | M | critical | signed/versioned packages, per-recipe review, resource/time ceilings, SafetySupervisor, watchdog, panic/expiry physical stop и forbidden-class rejection | safety/extensions; WF-08-A1/A3/A4 + independent physical HIL | open |
 
 `critical` используется только для safety failure, предотвращение которого важнее
 feature delivery; это намеренно сильнее `high`.
@@ -57,8 +61,8 @@ feature delivery; это намеренно сильнее `high`.
 - CI проверяет pinned builds и RB-02…RB-05.
 - Resource/Action negative tests покрывают failed start, Back, cancel, expiry и
   worker crash.
-- Storage fault injection и восьмичасовой passive endurance закрывают
-  R-006…R-008/010.
+- Storage fault injection и ограниченный passive endurance gate (не менее 45 минут
+  и 8 циклов, с завершением в пределах одного часа) закрывают R-006…R-008/010.
 
 ### S5–S8
 
@@ -67,6 +71,9 @@ feature delivery; это намеренно сильнее `high`.
 - Active action не выпускается до independent physical stop evidence для R-009.
 - Signed update, rollback, recovery, import fuzzing, privacy и EN/RU accessibility
   matrices входят в release gates.
+- S7 не закрывается, пока R-020…R-023 не имеют negative corpora, privacy/recovery
+  evidence, permission/lease tests и independent stop evidence для каждого active
+  interface.
 
 ## Триггеры review
 

@@ -12,7 +12,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 >
 > Закрыто этапов: 5 из 9.
 
-Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 47 capabilities; девять candidates конкурентного паритета ждут явного решения о scope в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
+Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 55 capabilities; аудит принял восемь additions и явно отложил Peer Link до версии после 1.0 в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Проверенный checkpoint:** exact `1.0.0-dev.209` на firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` теперь физически проходит **integrated device/offline path DEMO-S6** в `E-AUTO-132`/`E-HIL-189`/`E-DEMO-006`. Уже принятые no-flash Survey образуют contiguous generations 164/165 с 52/49 observations; исправленный harness открывает все пять реальных conclusions сравнения и их exact evidence, экспортирует ту же пару в canonical offline USB snapshot 11 882 byte с двумя Sessions, 16 Targets и пятью comparisons и завершает Home/none/lease 0 с safety armed. Дополнительной flash, DUT TX, storage write, serial discovery, доступа к Cardputer, SoftAP, host-network command или изменения активного Wi-Fi Mac нет.
@@ -78,6 +78,14 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Permissioned app descriptor до запуска объявляет capabilities, ресурсы, permissions, safety policy и строки UI | S7 | ⬜ дальше |
 | Versioned decoder/profile packages имеют compatibility gate, integrity/signature и scoped storage | S7 + S8 | ⬜ дальше |
 | SDK, sample extension и simulator trace kit не позволяют обойти ResourceBroker, permissions или Safety Supervisor | S7 | ⬜ дальше |
+| Защита эфира пассивно обнаруживает/объясняет подозрительные Wi-Fi/BLE conditions и открывает exact evidence/uncertainty каждой находки | S7 | ⬜ дальше |
+| Focused Wi-Fi authentication Capture показывает EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует PCAP и `hc22000` | S7 | ⬜ дальше |
+| Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, revisit comparison и WiGLE-compatible export | S7 | ⬜ дальше |
+| BLE Inspector сохраняет raw compatible packets и входит в connected GATT только после explicit target/permission/lease confirmation | S7 | ⬜ дальше |
+| Device Lock защищает secrets/evidence local PIN, bounded retry и tested recovery, не блокируя Stop/panic/recovery | S7 | ⬜ дальше |
+| Устройство → Serial Console даёт bounded UART bridge и общий Actions CLI с explicit target/configuration/lease | S7 | ⬜ дальше |
+| Permissioned signed Automation/HID имеет preview, ceilings, finite runtime, scoped target и passive-by-default BadUSB inspection | S7 | ⬜ дальше |
+| Authorized wireless Lab поставляет только именованные отдельно принятые Wi-Fi/BLE/nRF fixture recipes с bounded power/channel/time и physical stop | S7 | ⬜ дальше |
 | Browser install и Устройство → Обновление: signed stable/beta OTA, rollback и recovery image | S8 | ⬜ дальше |
 | Versioned backup/restore и factory reset показывают scope/preview/checksum и не перезаписывают raw Capture без confirm | S8 | ⬜ дальше |
 
@@ -90,7 +98,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 - ✅ **S4 — Cross-radio passive platform** · готово
 - 🔴 **S5 — Полнота железа ESP32-DIV** · заблокировано
 - 🟡 **S6 — Продуктовые отличия: Targets, compare и companion** · в работе
-- ⬜ **S7 — Безопасная Lab и расширяемость** · дальше
+- ⬜ **S7 — Конкурентная полнота, безопасная Lab и расширяемость** · дальше
 - ⬜ **S8 — Release hardening и 1.0.0** · дальше
 
 [живой статус и ближайший evidence gate](docs/v1/STATUS.ru.md) · [результаты и exit gates этапов](docs/v1/DELIVERY_PLAN.ru.md) · [полная карта функциональности](docs/v1/DELIVERY_PLAN.ru.md#карта-функциональности-продукта)

@@ -9,8 +9,8 @@ Competitor-feature addendum: **27 August 2026**.
 
 ## Inputs and review rules
 
-The review maps [Vision](VISION.md), J-01…J-06 and PR/NFR in the
-[PRD](PRODUCT_REQUIREMENTS.md), WF-01…WF-05, hardware envelope, delivery stages, and
+The review maps [Vision](VISION.md), J-01…J-08 and PR/NFR in the
+[PRD](PRODUCT_REQUIREMENTS.md), WF-01…WF-08, hardware envelope, delivery stages, and
 explicit exclusions to every [catalog](CAPABILITY_CATALOG.md) row.
 
 A 1.0 capability remains only when it has an authorized user outcome, primary IA
@@ -45,28 +45,24 @@ must fail closed when its assembly/evidence is absent.
 
 | Check | Result |
 |---|---|
-| Jobs | J-01…J-06 have capability and WF owners |
-| Requirements | PR-001…PR-019 and NFR-001…NFR-010 appear in stages/traceability; PRD is accepted as baseline 1.0 while verification remains staged |
-| Information architecture | Every CAP-001…CAP-047 has a primary owner under the UX-S01 six-task Home |
+| Jobs | J-01…J-08 have capability and WF owners |
+| Requirements | PR-001…PR-027 and NFR-001…NFR-010 appear in stages/traceability; PRD is accepted as baseline 1.0 while verification remains staged |
+| Information architecture | Every CAP-001…CAP-055 has a primary owner under the UX-S01 task hierarchy |
 | Error/cancel behavior | UX-02 defines unavailable/loading/degraded/error/confirm/success and cleanup for every screen family |
 | Hardware conditionals | RF shield, GPS, PN532, and sound HW-T09 never become unconditional availability |
 | Safety | Passive Capture is separate from Lab; every TX has scope/confirm/deadline/Stop/Panic |
-| Explicit exclusions | Cloud/default telemetry, executable marketplace, broad boards, and attack-count parity remain post-1.0 |
+| Explicit exclusions | Cloud/default telemetry, Peer Link, executable marketplace, broad boards, and attack-count parity remain post-1.0 |
 
 ## Verdict
 
-Product review accepts CAP-001…CAP-047 as the complete working 1.0 boundary. A new
-major capability after this review needs a separate `J/PR/CAP`, risk impact, and
-stage proposal; wording and acceptance may be refined without hidden scope growth.
-
-The later [feature-level competitor audit](COMPETITIVE_ANALYSIS.md#feature-level-parity-audit)
-found nine useful or strategically relevant families (`CF-001…CF-009`) that this
-baseline either leaves implicit or does not contain. Therefore “complete working
-boundary” means complete for the agreed 17 August jobs and requirements, **not**
-complete competitor-feature parity. None of the candidates is silently promoted to
-a `CAP-*`; accepting one requires the same product and safety traceability as any
-other scope change. Deliberately disruptive and unrelated-hardware features remain
-explicit non-goals rather than hidden omissions.
+Product review initially accepted CAP-001…CAP-047. The later
+[feature-level competitor audit](COMPETITIVE_ANALYSIS.md#feature-level-parity-audit)
+found nine useful or strategically relevant families (`CF-001…CF-009`). The explicit
+27 August product decision accepts all except `CF-005 Peer Link`: the eight accepted
+families are now `CAP-048…CAP-055`, `PR-020…PR-027`, and `WF-06…WF-08`, owned by S7.
+The working 1.0 boundary is therefore **55 capabilities**. Peer Link, deliberately
+disruptive features, and unrelated-hardware functions remain explicit post-1.0 or
+non-goals rather than hidden omissions.
 
 Together with constrained hardware/resource evidence, this scope review closes S1
 through `E-GATE-001`. It does not mark capabilities implemented or verified; those

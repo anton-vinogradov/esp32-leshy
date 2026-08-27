@@ -18,7 +18,7 @@ S0 Правила и граница версий
              └─ S4 Cross-radio passive platform
                  └─ S5 Полнота железа ESP32-DIV
                      └─ S6 Targets, compare и companion
-                         └─ S7 Безопасная Lab и расширяемость
+                         └─ S7 Конкурентная полнота, безопасная Lab и расширяемость
                              └─ S8 Надёжность, RC и 1.0.0
 ```
 
@@ -32,7 +32,7 @@ S0 Правила и граница версий
 | S4 | `1.0.0-alpha.3` | единая пассивная сессия нескольких радио |
 | S5 | `1.0.0-alpha.4` | штатное железо ESP32-DIV имеет базовые сценарии |
 | S6 | `1.0.0-beta.1` | появляются основные продуктовые отличия Leshy |
-| S7 | `1.0.0-beta.2` | безопасные активные действия и контракт расширений |
+| S7 | `1.0.0-beta.2` | принятая конкурентная полнота, безопасные active actions и контракт расширений |
 | S8 | `1.0.0-rc.*` → `1.0.0` | подтверждённая полевая надёжность |
 
 Номер версии не закрывает gate автоматически; он лишь маркирует артефакт.
@@ -54,7 +54,7 @@ release matrix, endurance и recovery; крупный feature scope в S8 не �
 ## Карта функциональности продукта
 
 Это человекочитаемый верхнеуровневый индекс всего запланированного продукта 1.0.
-Нормативным проверяемым перечнем всех 47 пунктов `CAP-*` остаётся
+Нормативным проверяемым перечнем всех 55 пунктов `CAP-*` остаётся
 [каталог возможностей](CAPABILITY_CATALOG.ru.md); здесь они сгруппированы по
 пользовательскому результату, и у каждого блока есть этап-владелец. Живой статус
 реализации находится в [STATUS.ru.md](STATUS.ru.md).
@@ -66,7 +66,7 @@ release matrix, endurance и recovery; крупный feature scope в S8 не �
 | Пассивное multi-radio наблюдение и packet Capture | выбираемые Wi-Fi/BLE; совместимые contracts nRF24/CC1101 spectrum; GPS context; общие timeline, filters, RSSI views и capture metadata; отдельный bounded Wi-Fi frame Capture; PCAP и CSV/JSON; видимые degradation/duty; privacy-aware persistence; power-cut recovery и multi-source endurance | S4 |
 | Всё штатное железо ESP32-DIV | IR capture/decode/library и разрешённый replay; PN532 tag/NDEF/dump и разрешённые write/restore; GPS fix/track/time; устойчивые SD/LittleFS browse/import/export; calibration, power, sleep/resume и low-voltage safety | S5 |
 | Targets, сравнение и локальный companion | identities/history/correlation целей, tags и notes; обратимые merge/split; baseline/diff сессий и захватов; localization и GPS map; offline search; локальный Web/USB companion над теми же Actions и schemas | S6 |
-| Безопасная Lab и расширения | явный legal/safety context; контролируемые TX/write paths, indication, timeout и panic stop; permissioned app descriptors и scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension и simulator traces | S7 |
+| Конкурентная полнота, защита устройства, безопасная Lab и расширения | Защита эфира; focused Wi-Fi authentication Capture; offline Field Survey; BLE raw/GATT Inspector; Device Lock; bounded Serial Console/Actions CLI; permissioned signed automation и scoped HID; explicit legal/safety context; отдельно допускаемые Wi-Fi/BLE/nRF recipes; контролируемые TX/write paths, indication, timeout/panic stop; permissioned app descriptors/scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension и simulator traces | S7 |
 | Доверие, восстановление и доставка | stable/beta signed OTA, rollback и recovery; единый release/on-device Self-Test plan; автоматические HIL, screenshots, endurance, fault injection и fuzzing; crash bundle; backup/restore; воспроизводимые binaries, provenance, compatibility и support policy | S8 |
 
 Screenshots, accessibility, privacy, resource budgets, data integrity и fail-closed
@@ -100,7 +100,7 @@ ESP32-DIV, до фиксации реализации.
 
 - карта питания, GPIO, SPI/I2C/UART, памяти и конфликтующих режимов;
 - capability matrix: built-in, optional, detected, mutually exclusive, degraded;
-- 3–5 эталонных сценариев с happy/error/cancel flows;
+- эталонные сценарии с happy/error/cancel flows;
 - измеренные flash/RAM/storage/startup/power бюджеты минимального прототипа;
 - risk register: hardware, safety, data integrity, dependencies, supply variants;
 - PRD 1.0.0 переведён из `draft` в принятый baseline;
@@ -224,14 +224,20 @@ probe → observe/capture → library → inspect/export.
 видит новые/исчезнувшие/изменившиеся цели и открывает исходное доказательство каждого
 вывода на устройстве или локальном companion.
 
-## S7 — Безопасная Lab и расширяемость
+## S7 — Конкурентная полнота, безопасная Lab и расширяемость
 
-**Цель:** разрешить развитие протоколов и контролируемое исследование своего
+**Цель:** реализовать принятые результаты competitor review, защитить чувствительные
+локальные данные и разрешить контролируемое исследование/automation своего
 оборудования без обхода системных гарантий.
 
 Результаты:
 
+- evidence-backed Защита эфира, focused authentication Capture, offline Field Survey
+  и BLE Inspector;
+- Device Lock и bounded Serial Console/Actions CLI;
+- permissioned signed automation и scoped USB/BLE HID;
 - общий Lab context, regulatory policy, TX indication/deadline/panic stop;
+- именованные и отдельно допускаемые Wi-Fi/BLE/nRF fixture recipes;
 - application descriptor: capabilities, resources, permissions, safety, strings;
 - scoped storage и ограниченный driver/action access;
 - decoder/profile packages с проверкой версии и подписи;
@@ -240,8 +246,8 @@ probe → observe/capture → library → inspect/export.
 
 **Exit gate S7:** внешний разработчик создаёт sample extension без изменения kernel;
 extension не может обойти leases/permissions; HIL подтверждает физическую остановку
-каждого включённого TX path при timeout, Back, panic и fault; каталог 1.0
-feature-complete и проходит `DEMO-S7`.
+каждого включённого TX path при timeout, Back, panic и fault; все 55 принятых
+capabilities feature-complete и проходят `DEMO-S7`.
 
 ## S8 — Release hardening и 1.0.0
 
@@ -267,6 +273,6 @@ feature-complete и проходит `DEMO-S7`.
 
 ## После 1.0.0
 
-Следующие board profiles, каталог расширений, новые языки и расширенная аналитика
-начинаются только после отдельного 1.x requirement/stage proposal. Они не могут
-ослабить gates 1.0.0 задним числом.
+Authenticated DIV-to-DIV Peer Link, следующие board profiles, каталог расширений,
+новые языки и расширенная аналитика начинаются только после отдельного 1.x
+requirement/stage proposal. Они не могут ослабить gates 1.0.0 задним числом.

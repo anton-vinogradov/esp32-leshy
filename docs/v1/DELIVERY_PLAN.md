@@ -16,7 +16,7 @@ S0 Governance and version boundary
              └─ S4 Cross-radio passive platform
                  └─ S5 Complete ESP32-DIV hardware
                      └─ S6 Targets, comparison, and companion
-                         └─ S7 Safe Lab and extensibility
+                         └─ S7 Competitive completeness, Safe Lab, and extensibility
                              └─ S8 Reliability, RC, and 1.0.0
 ```
 
@@ -28,7 +28,7 @@ S0 Governance and version boundary
 | S4 | `1.0.0-alpha.3` | one passive multi-radio session |
 | S5 | `1.0.0-alpha.4` | baseline workflows for standard ESP32-DIV hardware |
 | S6 | `1.0.0-beta.1` | Leshy's main product differentiators |
-| S7 | `1.0.0-beta.2` | safe active work and an extension contract |
+| S7 | `1.0.0-beta.2` | accepted competitor completeness, safe active work, and an extension contract |
 | S8 | `1.0.0-rc.*` → `1.0.0` | evidenced field reliability |
 
 A version tag labels an artifact; it never closes a gate by itself.
@@ -51,7 +51,7 @@ the release matrix, endurance, and recovery; S8 does not add major feature scope
 
 This is the readable top-level index of the complete planned 1.0 product. The
 [capability catalog](CAPABILITY_CATALOG.md) remains the normative, testable inventory
-of all 47 `CAP-*` items; this map groups them by user outcome and assigns every group
+of all 55 `CAP-*` items; this map groups them by user outcome and assigns every group
 to the stage that must deliver it. Live completion status belongs in
 [STATUS.md](STATUS.md).
 
@@ -62,7 +62,7 @@ to the stage that must deliver it. Live completion status belongs in
 | Passive multi-radio observation and packet Capture | selectable Wi-Fi/BLE; compatible nRF24/CC1101 spectrum contracts; GPS context; common timeline, filters, RSSI views and capture metadata; dedicated bounded Wi-Fi frame Capture; PCAP plus CSV/JSON; visible degradation/duty; privacy-aware persistence; power-cut recovery and multi-source endurance | S4 |
 | Complete standard ESP32-DIV hardware | IR capture/decode/library and authorized replay; PN532 tag/NDEF/dump and authorized write/restore; GPS fix/track/time; resilient SD/LittleFS browse/import/export; calibration, power, sleep/resume and low-voltage safety | S5 |
 | Targets, comparison and local companion | target identities/history/correlation, tags and notes; reversible merge/split; session/capture baseline and diff; localization and GPS map; offline search; local Web/USB companion over the same Actions and schemas | S6 |
-| Safe Lab and extensions | explicit legal/safety context; controlled TX/write paths, indication, timeout and panic stop; permissioned app descriptors and scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension and simulator traces | S7 |
+| Competitive completeness, device security, Safe Lab and extensions | Airspace Guard; focused Wi-Fi authentication Capture; offline Field Survey; BLE raw/GATT Inspector; Device Lock; bounded Serial Console/Actions CLI; permissioned signed automation and scoped HID; explicit legal/safety context; individually admitted Wi-Fi/BLE/nRF recipes; controlled TX/write paths, indication, timeout and panic stop; permissioned app descriptors/scoped storage; signed/versioned decoders; protocol workbench; SDK, sample extension and simulator traces | S7 |
 | Trust, recovery and distribution | stable/beta signed OTA, rollback and recovery; one release/on-device Self-Test plan; automated HIL, screenshots, endurance, fault injection and fuzzing; crash bundle; backup/restore; reproducible binaries, provenance, compatibility and support policy | S8 |
 
 Screenshots, accessibility, privacy, resource budgets, data integrity and fail-closed
@@ -86,7 +86,7 @@ pass validation.
 **Goal:** prove the product fits real ESP32-DIV constraints before freezing an
 implementation.
 
-Outputs: power/GPIO/bus/memory/mode-conflict map; capability matrix; 3–5 reference
+Outputs: power/GPIO/bus/memory/mode-conflict map; capability matrix; reference
 workflows with happy/error/cancel flows; measured flash/RAM/storage/startup/power
 budgets; risk register; accepted 1.0.0 PRD baseline; evidence-based selection of the
 first Survey source; ADR candidates for toolchain, storage, and resource policy;
@@ -181,19 +181,23 @@ export without an account.
 changed Targets, and opens the source evidence for every conclusion on-device or in
 the local companion.
 
-## S7 — Safe Lab and extensibility
+## S7 — Competitive completeness, Safe Lab, and extensibility
 
-**Goal:** enable protocol growth and controlled research of owned equipment without
-bypassing platform guarantees.
+**Goal:** deliver the accepted competitor-review outcomes, protect sensitive local
+data, and enable controlled research/automation of owned equipment without bypassing
+platform guarantees.
 
-Outputs: Lab context, regulatory policy, TX indication/deadline/panic stop;
+Outputs: evidence-backed Airspace Guard; focused authentication Capture; offline
+Field Survey and BLE Inspector; Device Lock and bounded Serial Console/Actions CLI;
+permissioned signed automation and scoped HID; Lab context, regulatory policy, TX
+indication/deadline/panic stop; named individually admitted Wi-Fi/BLE/nRF recipes;
 application descriptors, permissions, and scoped storage; signed/versioned decoder
 packages; protocol workbench; sample app/decoder, SDK docs, and simulator trace kit.
 
 **Exit gate:** an external developer builds a sample extension without kernel changes;
 extensions cannot bypass leases/permissions; HIL proves physical stop for every
 shipped TX path on timeout, Back, panic, and fault; the 1.0 catalog is
-feature-complete and passes `DEMO-S7`.
+feature-complete across all 55 accepted capabilities and passes `DEMO-S7`.
 
 ## S8 — Release hardening and 1.0.0
 
@@ -212,5 +216,6 @@ requirement is `verified`; `DEMO-S8` passes without adding new feature scope.
 
 ## After 1.0.0
 
-Additional board profiles, extension catalogs, languages, and analytics require a new
-1.x requirement/stage proposal and cannot retroactively weaken the 1.0.0 gates.
+Authenticated DIV-to-DIV Peer Link, additional board profiles, extension catalogs,
+languages, and analytics require a new 1.x requirement/stage proposal and cannot
+retroactively weaken the 1.0.0 gates.

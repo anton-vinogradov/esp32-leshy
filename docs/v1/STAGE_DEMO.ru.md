@@ -34,8 +34,14 @@ automation.
 | DEMO-S4 | Cross-radio passive Session | несколько совместимых receivers → timeline/radar → degradation → reopen/export | общая модель Observation, scheduler/duty cycle и passive stability ≥45 минут/≥8 циклов в часовом release budget |
 | DEMO-S5 | Полнота штатного hardware | Full/Guided preflight → probe каждого present module → observe/capture → Library → inspect/export; approved replay отдельно | аппаратный паритет, optional/degraded behavior, честные N/A/blocked results и recovery/power safety |
 | DEMO-S6 | Targets, compare и companion | baseline Session → повторный проход → diff/Target evidence → local companion export | главные продуктовые отличия и одна Action/schema boundary |
-| DEMO-S7 | Safe Lab и SDK | saved Capture → Lab confirm → bounded TX → timeout/panic; sample extension | feature-complete 1.0, физический stop и расширяемость без обхода policy |
+| DEMO-S7 | Конкурентная полнота, защищённые tools, Safe Lab и SDK | matrix Защита эфира/auth Capture/Field Survey/BLE Inspector → negative paths Lock/Serial → signed automation → admitted wireless recipe → timeout/panic; sample extension | feature-complete всех 55 принятых capabilities, privacy/permission boundaries, physical stop и расширяемость без обхода policy |
 | DEMO-S8 | Release candidate | exact candidate → полный Self-Test plan → mixed field workflow → interrupted update/write → rollback/recovery | одинаковые on-device/release checks, independent oracle, release-complete binary, provenance, endurance и recovery |
+
+`DEMO-S7` — stage matrix, а не один unsafe monolithic run. Он покрывает WF-06…WF-08,
+negative cases R-020…R-023, exact evidence/cleanup для CAP-048…CAP-055 и independent
+physical-stop contract WF-05 для каждого admitted active path. Passive detector,
+capture, route и inspection results не подменяют active fixture proof, а unavailable
+fixture остаётся blocker, не simulated pass.
 
 `DEMO-S2` принят evidence `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 выполнил 29 public Action/query steps и совпал с

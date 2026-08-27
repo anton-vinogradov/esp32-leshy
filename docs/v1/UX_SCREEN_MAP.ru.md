@@ -57,7 +57,9 @@ UX-S01 Home
 │  ├─ UX-S02 New Survey: sources, storage, duty-cycle preview
 │  ├─ UX-S03 Running Survey: summary ↔ timeline ↔ list
 │  │  └─ UX-S04 Observation Detail → Target / Radar / Capture
-│  └─ UX-S05 Stop & Commit Result → Session Detail / Export / Home
+│  ├─ UX-S05 Stop & Commit Result → Session Detail / Export / Home
+│  ├─ UX-S29 Защита эфира: находки → объяснение → exact evidence
+│  └─ UX-S31 Field Survey: sources / GPS / revisit / local export
 ├─ Цели
 │  ├─ UX-S06 Target List: search, filter, sort
 │  └─ UX-S07 Target Detail
@@ -68,13 +70,17 @@ UX-S01 Home
 │  ├─ UX-S11 Capture Source: Wi-Fi packets / Sub-GHz / IR / NFC / Screenshot
 │  ├─ UX-S12 Capture Setup: source, bounds, destination
 │  ├─ UX-S13 Capture Running: progress, drops, explicit Stop
-│  └─ UX-S14 Capture Result: raw metadata / derived decode / Save / Export / Lab
+│  ├─ UX-S14 Capture Result: raw metadata / derived decode / Save / Export / Lab
+│  ├─ UX-S30 Захват Wi-Fi-аутентификации: EAPOL/PMKID/handshake state
+│  └─ UX-S32 BLE Inspector: raw packets / explicit connected GATT
 ├─ Лаборатория
 │  ├─ UX-S18 Scope & Safety Context
 │  ├─ UX-S19 Saved Capture + TX Parameters
 │  ├─ UX-S20 Explicit Confirmation
 │  ├─ UX-S21 Running TX: frequency, power, deadline, permanent Stop
-│  └─ UX-S22 Result / Fault / Source Capture
+│  ├─ UX-S22 Result / Fault / Source Capture
+│  ├─ UX-S35 Automation / HID: package, permissions, target, preview
+│  └─ UX-S36 Wireless Recipes: admitted Wi-Fi / BLE / nRF fixtures
 ├─ Библиотека
 │  ├─ UX-S15 Sessions / Captures / Exports / Screenshots
 │  ├─ UX-S16 Item Detail: integrity, provenance, source/derived data
@@ -85,7 +91,9 @@ UX-S01 Home
    │  ├─ Quick: bounded read-only automatic plan
    │  └─ Full / Guided: scoped preflight → applicable checks → report
    ├─ Диагностика → UX-S24 Capability / Module Detail / Report
-   └─ О системе → UX-S27 Version / Profile / Update / Rollback / Recovery
+   ├─ О системе → UX-S27 Version / Profile / Update / Rollback / Recovery
+   ├─ Блокировка → UX-S33 Setup / Unlock / Recovery / Protected Scope
+   └─ Serial Console → UX-S34 UART Preview / Running / Save Result
 
 UX-S28 Global dialog layer: unavailable reason, progress, confirm, error, panic.
 ```
@@ -118,21 +126,22 @@ action. В активном TX `Back` никогда не открывает con
 
 | Раздел | Primary capabilities | Важные переходы |
 |---|---|---|
-| Обзор | CAP-009…CAP-017, CAP-042 | Observation→Target/Capture/Radar; stopped Session→Library |
+| Обзор | CAP-009…CAP-017, CAP-042, CAP-048, CAP-050 | Observation/finding→Target/Capture/Radar/evidence; stopped Session/Field Survey→Library/export |
 | Цели | CAP-018…CAP-022, CAP-044 | Evidence→Observation/Capture; Target→Compare/Radar |
-| Захват | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043 | Result→Library/Export/Lab |
-| Лаборатория | CAP-032…CAP-037 | принимает только saved immutable Capture; Result возвращает source link |
+| Захват | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-049, CAP-051 | Result→Library/Export/Lab; GATT требует explicit connected mode |
+| Лаборатория | CAP-032…CAP-037, CAP-054, CAP-055 | принимает только reviewed source/package/recipe; Result возвращает source/audit evidence |
 | Библиотека | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import никогда не обходит parser |
-| Устройство | CAP-001…CAP-008, CAP-045…CAP-047 | Diagnostics объясняет недоступность до входа в task |
+| Устройство | CAP-001…CAP-008, CAP-045…CAP-047, CAP-052, CAP-053 | Diagnostics объясняет недоступность до входа; Lock не блокирует Stop/recovery; Serial владеет одним explicit UART lease |
 | Устройство → Настройки | PR-011, NFR-010 | переключение EN/RU; немедленное применение и persistent selection |
-| Устройство → Самопроверка | применимые CAP-001…CAP-047, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
+| Устройство → Самопроверка | применимые CAP-001…CAP-055, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
 
 ## Acceptance UX-01
 
-- Каждая `CAP-001…CAP-047` имеет один primary owner и измеримый путь
+- Каждая `CAP-001…CAP-055` имеет один primary owner и измеримый путь
   entry → success/error/cancel → Back.
 - WF-01 использует Home→Устройство→Самопроверка/Диагностика; WF-02 — UX-S02…S05; WF-03 — UX-S15…S17;
-  WF-04 — UX-S06…S10; WF-05 — UX-S18…S22.
+  WF-04 — UX-S06…S10; WF-05 — UX-S18…S22; WF-06 — UX-S29…S32;
+  WF-07 — UX-S33/S34; WF-08 — UX-S35/S36 плюс UX-S18…S22.
 - Start основной задачи достигается не глубже четырёх переходов от Home. Receiver
   может быть прямой top-level задачей, если именно это нужно пользователю;
   выбор band/source остаётся его параметром.

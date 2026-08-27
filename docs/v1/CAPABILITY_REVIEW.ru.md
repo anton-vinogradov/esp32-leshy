@@ -9,8 +9,8 @@ reviewed; PRD technical baseline принят `E-GATE-001`**.
 
 ## Входы и правила проверки
 
-Review сопоставляет [Vision](VISION.ru.md), J-01…J-06 и PR/NFR из
-[PRD](PRODUCT_REQUIREMENTS.ru.md), WF-01…WF-05, hardware envelope, delivery stages и
+Review сопоставляет [Vision](VISION.ru.md), J-01…J-08 и PR/NFR из
+[PRD](PRODUCT_REQUIREMENTS.ru.md), WF-01…WF-08, hardware envelope, delivery stages и
 явные исключения с каждой строкой [каталога](CAPABILITY_CATALOG.ru.md).
 
 Возможность сохраняется в 1.0, только если у неё есть разрешённый user outcome,
@@ -45,29 +45,24 @@ primary owner в IA, requirement, stage, error/cancel path и проверяем
 
 | Проверка | Результат |
 |---|---|
-| Jobs | J-01…J-06 имеют capabilities и WF owner |
-| Requirements | PR-001…PR-019 и NFR-001…NFR-010 присутствуют в stage/traceability; PRD принят как baseline 1.0, verification остаётся поэтапной |
-| Information architecture | Все CAP-001…CAP-047 имеют primary owner в UX-S01 six-task Home |
+| Jobs | J-01…J-08 имеют capabilities и WF owner |
+| Requirements | PR-001…PR-027 и NFR-001…NFR-010 присутствуют в stage/traceability; PRD принят как baseline 1.0, verification остаётся поэтапной |
+| Information architecture | Все CAP-001…CAP-055 имеют primary owner в task hierarchy UX-S01 |
 | Error/cancel behavior | UX-02 задаёт unavailable/loading/degraded/error/confirm/success и cleanup для каждого screen family |
 | Hardware conditionals | RF shield, GPS, PN532, sound HW-T09 не превращаются в unconditional availability |
 | Safety | Passive Capture отделён от Lab; любой TX имеет scope/confirm/deadline/Stop/Panic |
-| Explicit exclusions | Cloud/default telemetry, executable marketplace, broad boards и attack-count parity остаются после 1.0 |
+| Explicit exclusions | Cloud/default telemetry, Peer Link, executable marketplace, broad boards и attack-count parity остаются после 1.0 |
 
 ## Verdict
 
-Product review принимает CAP-001…CAP-047 как полную рабочую границу 1.0. Новая
-крупная возможность после этого review требует отдельного `J/PR/CAP`, risk impact и
-stage proposal; формулировки и acceptance могут уточняться без скрытого расширения
-scope.
-
-Более поздний [пофункциональный аудит конкурентов](COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета)
-нашёл девять полезных или стратегически значимых семейств (`CF-001…CF-009`), которые
-baseline оставляет неявными или не содержит. Поэтому «полная рабочая граница»
-означает полноту для согласованных 17 августа jobs/requirements, **но не** полный
-competitor-feature parity. Ни один candidate не повышается скрытно до `CAP-*`:
-принятие требует той же product/safety traceability, что и любое изменение scope.
-Сознательно disruptive функции и функции для отсутствующего железа остаются
-explicit non-goals, а не скрытыми пропусками.
+Product review первоначально принял CAP-001…CAP-047. Более поздний
+[пофункциональный аудит конкурентов](COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета)
+нашёл девять полезных или стратегически значимых семейств (`CF-001…CF-009`). Явным
+решением от 27 августа приняты все, кроме `CF-005 Peer Link`: восемь принятых
+семейств теперь имеют ID `CAP-048…CAP-055`, `PR-020…PR-027` и `WF-06…WF-08` с
+владельцем S7. Рабочая граница 1.0 теперь содержит **55 capabilities**. Peer Link,
+сознательно disruptive функции и функции для отсутствующего железа остаются явным
+post-1.0 scope или non-goals, а не скрытыми пропусками.
 
 Scope review вместе с constrained hardware/resource evidence закрывает S1 через
 `E-GATE-001`. Это не объявляет возможности реализованными или verified: такие статусы

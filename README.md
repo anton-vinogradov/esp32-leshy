@@ -12,7 +12,7 @@ ESP32-Leshy 1.x is a from-scratch redesign of the firmware for the
 >
 > Stage gates complete: 5 of 9.
 
-This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the accepted 47-capability baseline, while nine competitor-parity candidates await an explicit scope decision in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
+This front-page snapshot is generated from the authoritative 1.x documentation; CI rejects it if it drifts. The checklist is complete for the accepted 55-capability 1.x baseline; the audit accepted eight additions and explicitly defers Peer Link until after 1.0 in the [feature-level audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit).
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Verified checkpoint:** exact `1.0.0-dev.209` at firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` now physically passes the **integrated DEMO-S6 device/offline path** in `E-AUTO-132`/`E-HIL-189`/`E-DEMO-006`. The already accepted no-flash Surveys form contiguous generations 164/165 with 52/49 observations; the corrected harness opens all five real comparison conclusions and their exact evidence, exports the same pair as a canonical 11,882-byte offline USB snapshot containing two Sessions, 16 Targets and five comparisons, then ends Home/none/lease 0 with safety armed. No additional flash, DUT TX, storage write, serial discovery, Cardputer access, SoftAP, host-network command or active Mac Wi-Fi change occurs.
@@ -78,6 +78,14 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 | Permissioned app descriptor declares capabilities, resources, permissions, safety policy and UI strings before launch | S7 | ⬜ later |
 | Versioned decoder/profile packages have a compatibility gate, integrity/signature and scoped storage | S7 + S8 | ⬜ later |
 | SDK, sample extension and simulator trace kit cannot bypass ResourceBroker, permissions or Safety Supervisor | S7 | ⬜ later |
+| Airspace Guard passively detects/explains suspicious Wi-Fi/BLE conditions and opens exact evidence/uncertainty for every finding | S7 | ⬜ later |
+| Focused Wi-Fi authentication Capture reports EAPOL/PMKID and complete/incomplete handshakes, then exports PCAP and `hc22000` | S7 | ⬜ later |
+| Offline Field Survey joins Wi-Fi AP/station and BLE observations with optional GPS track, revisit comparison and WiGLE-compatible export | S7 | ⬜ later |
+| BLE Inspector preserves raw compatible packets and enters connected GATT only after explicit target/permission/lease confirmation | S7 | ⬜ later |
+| Device Lock protects secrets/evidence with local PIN, bounded retry and tested recovery without blocking Stop/panic/recovery | S7 | ⬜ later |
+| Device → Serial Console provides a bounded UART bridge and shared Actions CLI under explicit target/configuration/lease | S7 | ⬜ later |
+| Permissioned signed Automation/HID has preview, ceilings, finite runtime, scoped target and passive-by-default BadUSB inspection | S7 | ⬜ later |
+| Authorized wireless Lab ships only named, individually accepted Wi-Fi/BLE/nRF fixture recipes with bounded power/channel/time and physical stop | S7 | ⬜ later |
 | Browser install and Device → Update: signed stable/beta OTA, rollback and recovery image | S8 | ⬜ later |
 | Versioned backup/restore and factory reset show scope/preview/checksum and never overwrite raw Capture without confirmation | S8 | ⬜ later |
 
@@ -90,7 +98,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 - ✅ **S4 — Cross-radio passive platform** · complete
 - 🔴 **S5 — Complete ESP32-DIV hardware** · blocked
 - 🟡 **S6 — Product differentiation: Targets, comparison, companion** · in progress
-- ⬜ **S7 — Safe Lab and extensibility** · later
+- ⬜ **S7 — Competitive completeness, Safe Lab, and extensibility** · later
 - ⬜ **S8 — Release hardening and 1.0.0** · later
 
 [live status and next evidence gate](docs/v1/STATUS.md) · [stage outcomes and exit gates](docs/v1/DELIVERY_PLAN.md) · [complete functionality map](docs/v1/DELIVERY_PLAN.md#product-functionality-map)
