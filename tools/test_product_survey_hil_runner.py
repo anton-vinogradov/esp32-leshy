@@ -226,6 +226,35 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         self.assertTrue(cleanup["complete"])
         self.assertEqual(2, len(cleanup["actions"]))
 
+    def test_return_home_after_commit_accepts_nested_result_stack(self) -> None:
+        states = [
+            {
+                "page": "survey", "runtime_owner": "wifi", "lease_mask": 15,
+                "survey_workflow_state": "result", "survey_view": "detail",
+            },
+            {
+                "page": "survey", "runtime_owner": "wifi", "lease_mask": 15,
+                "survey_workflow_state": "setup", "survey_view": "list",
+            },
+            {"page": "home", "runtime_owner": "none", "lease_mask": 0},
+        ]
+        current = {"index": 0}
+
+        def fake_query(*_: Any, **__: Any) -> dict[str, Any]:
+            return states[current["index"]]
+
+        def fake_action(_: Any, name: str) -> dict[str, Any]:
+            self.assertEqual("back", name)
+            current["index"] += 1
+            return states[current["index"]]
+
+        trace: list[dict[str, Any]] = []
+        with patch.object(RUNNER, "query", side_effect=fake_query), patch.object(
+                RUNNER, "action", side_effect=fake_action):
+            final = RUNNER.return_home_after_commit(object(), trace)
+        self.assertEqual("home", final["page"])
+        self.assertEqual(states[1:], trace)
+
     def test_wait_ui_state_times_out_with_last_state(self) -> None:
         with patch.object(RUNNER, "query", return_value={"page": "survey"}), \
                 patch.object(RUNNER.time, "sleep", return_value=None):

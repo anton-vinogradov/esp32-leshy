@@ -482,6 +482,20 @@ def focus_survey_start(device: Any) -> dict[str, Any]:
     raise RuntimeError(f"could not focus public Survey Start row: {state!r}")
 
 
+def return_home_after_commit(device: Any,
+                             trace: list[dict[str, Any]]) -> dict[str, Any]:
+    """Leave the result/list/setup stack without assuming a fixed depth."""
+    state = query(device, b"ui.state", "leshy.ui.v1", "state")
+    for _ in range(4):
+        if (state.get("page") == "home" and
+                state.get("runtime_owner") == "none" and
+                state.get("lease_mask") == 0):
+            return state
+        state = action(device, "back")
+        trace.append(state)
+    raise RuntimeError(f"cannot return Home after commit: {state!r}")
+
+
 def query(device: Any, command: bytes, schema: str, kind: str,
           timeout: float = 5.0) -> dict[str, Any]:
     from capture_1x_ui import read_json
@@ -866,10 +880,7 @@ def main() -> int:
                     captures["committed"] = capture(
                         device, frames, "committed"
                     )
-                    trace.append(action(device, "back"))
-                    final = query(
-                        device, b"ui.state", "leshy.ui.v1", "state"
-                    )
+                    final = return_home_after_commit(device, trace)
                     failures.extend(expect(final, {
                         "page": "home", "runtime_owner": "none", "lease_mask": 0,
                         "survey_product_backend_open": False,
@@ -958,10 +969,7 @@ def main() -> int:
                     captures["committed"] = capture(
                         device, frames, "committed"
                     )
-                    trace.append(action(device, "back"))
-                    final = query(
-                        device, b"ui.state", "leshy.ui.v1", "state"
-                    )
+                    final = return_home_after_commit(device, trace)
                     failures.extend(expect(final, {
                         "page": "home", "runtime_owner": "none", "lease_mask": 0,
                         "survey_product_backend_open": False,
