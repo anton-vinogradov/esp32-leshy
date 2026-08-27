@@ -905,6 +905,17 @@ The app/factory/ELF sizes are 3,319,904/3,385,440/22,332,172 B. Live capture and
 TFT wiring must still remeasure foreground/report lifetime; zero resident-RAM growth
 here is not a physical runtime budget claim.
 
+Airspace Guard TFT integration `RB-M173`: exact `1.0.0-dev.213` gives the production
+runtime one bounded controller/report instance and links the Navigator/TFT adapter.
+Static RAM is 227,696 B and linked flash is 3,326,584 B: +2,008 B RAM and +6,840 B
+linked flash versus dev.212. App/factory/ELF sizes are
+3,326,752/3,392,288/22,385,524 B. Firmware/factory/ELF SHA-256 are
+`8e01268b7c640bee4a9bf36132947b50b74327346a0dab29e610f4737a45b805`/
+`6bb1ab8745c4641a5ff7cdf75b170e4882452aa76405dec3fe2dd1a997c53a7d`/
+`a42ac823d58a5fad3eab452887089270c649281e545b23a8747357cfadbef27f`.
+No live capture buffer, task or radio owner is added; physical heap remains
+unmeasured until the live adapter and one delta HIL are ready.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

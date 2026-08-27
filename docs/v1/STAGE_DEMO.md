@@ -44,12 +44,12 @@ capture, route and inspection results never substitute for an active fixture pro
 and an unavailable fixture remains a blocker rather than a simulated pass.
 
 The `1.0.0-dev.210` detector, `1.0.0-dev.211` immutable evidence-navigation
-controller and `1.0.0-dev.212` bounded EN/RU four-row presentation model are
-host/build CAP-048 foundations only. Their bounded golden/negative corpus,
-receive-only source guard, strongest-first stable ordering, exact drilldown and
-non-color-only text contract do not yet satisfy DEMO-S7: live capture, integration
-with the real TFT renderer, the remaining detector families and physical cleanup
-evidence are still required.
+controller, `1.0.0-dev.212` bounded EN/RU model and `1.0.0-dev.213` production
+Navigator/TFT wiring are host/build CAP-048 foundations only. Their bounded
+golden/negative corpus, receive-only source guard, strongest-first stable ordering,
+exact drilldown, non-color-only text and no-clear evidence repaint do not yet satisfy
+DEMO-S7: live capture/report handoff, physical TFT/navigation evidence, the remaining
+detector families and physical cleanup are still required.
 
 `DEMO-S2` is accepted by `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 completed 29 public Action/query steps and matched nine

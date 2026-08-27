@@ -44,12 +44,12 @@ capture, route и inspection results не подменяют active fixture proo
 fixture остаётся blocker, не simulated pass.
 
 Detector `1.0.0-dev.210`, immutable evidence-navigation controller
-`1.0.0-dev.211` и bounded модель presentation EN/RU на четыре строки
-`1.0.0-dev.212` — только host/build foundations CAP-048. Их bounded golden/negative
-corpus, receive-only source guard, strongest-first stable ordering, exact drilldown и
-контракт текста не только цветом ещё не закрывают DEMO-S7: требуются live capture,
-интеграция с real TFT renderer, остальные семейства detectors и physical cleanup
-evidence.
+`1.0.0-dev.211`, bounded модель EN/RU `1.0.0-dev.212` и production wiring
+Navigator/TFT `1.0.0-dev.213` — только host/build foundations CAP-048. Их bounded
+golden/negative corpus, receive-only source guard, strongest-first stable ordering,
+exact drilldown, контракт текста не только цветом и no-clear repaint evidence ещё не
+закрывают DEMO-S7: требуются live capture/handoff report, physical evidence TFT/
+navigation, остальные семейства detectors и physical cleanup.
 
 `DEMO-S2` принят evidence `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 выполнил 29 public Action/query steps и совпал с

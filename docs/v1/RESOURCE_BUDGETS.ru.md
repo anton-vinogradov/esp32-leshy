@@ -899,6 +899,17 @@ Static RAM остаётся 225 688 B; linked flash равен 3 319 744 B, а �
 wiring всё ещё обязаны заново измерить foreground/report lifetime; zero роста
 resident RAM здесь не является physical runtime budget claim.
 
+TFT integration Защиты эфира `RB-M173`: exact `1.0.0-dev.213` даёт production
+runtime один bounded instance controller/report и линкует adapter Navigator/TFT.
+Static RAM равна 227 696 B, linked flash — 3 326 584 B: +2 008 B RAM и +6 840 B
+linked flash к dev.212. Размеры app/factory/ELF —
+3 326 752/3 392 288/22 385 524 B. SHA-256 firmware/factory/ELF:
+`8e01268b7c640bee4a9bf36132947b50b74327346a0dab29e610f4737a45b805`/
+`6bb1ab8745c4641a5ff7cdf75b170e4882452aa76405dec3fe2dd1a997c53a7d`/
+`a42ac823d58a5fad3eab452887089270c649281e545b23a8747357cfadbef27f`.
+Live capture buffer, task или radio owner не добавлены; physical heap остаётся
+неизмеренным до готовности live adapter и одного delta HIL.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

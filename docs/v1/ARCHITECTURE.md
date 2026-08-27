@@ -668,6 +668,16 @@ inspection coverage, evidence-frame bounds, plausible RSSI and the maximum detec
 window; any contradiction rejects the whole report. This model still is not wired to
 live capture or the TFT renderer, so no user-visible or physical claim follows yet.
 
+Exact `1.0.0-dev.213` wires that immutable model into the existing Wi-Fi product
+Navigator and real TFT renderer. The fifth Wi-Fi task scrolls through the same
+four-row menu geometry, Left/Right/OK and touch preserve the established navigation
+contract, and evidence-list movement repaints only compact content rather than
+clearing the screen. The initial screen loads an explicit empty inconclusive report
+and says that capture has not started; it cannot invent a clean result or evidence.
+The entry path owns no radio, lease, network operation or capture lifecycle. This
+closes source/build TFT integration only; bounded live passive capture and physical
+screen/navigation evidence remain open.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

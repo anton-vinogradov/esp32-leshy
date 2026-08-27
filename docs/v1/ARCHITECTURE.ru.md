@@ -749,6 +749,16 @@ exact inspection coverage, границы evidence frame, правдоподоб
 окно detector; любое противоречие отклоняет весь report. Модель всё ещё не подключена
 к live capture или TFT renderer, поэтому user-visible или physical claim пока нет.
 
+Exact `1.0.0-dev.213` подключает immutable model к существующим Navigator Wi-Fi и
+real TFT renderer. Пятый пункт Wi-Fi прокручивается в той же геометрии четырёх строк,
+Left/Right/OK и touch сохраняют принятый navigation contract, а движение по списку
+evidence перерисовывает только compact content без очистки экрана. Начальный экран
+загружает явный пустой inconclusive report и сообщает, что capture ещё не запущен;
+он не может выдумать clear result или evidence. Entry path не владеет radio, lease,
+network operation или lifecycle capture. Это закрывает только source/build TFT
+integration; bounded live passive capture и physical screen/navigation evidence
+остаются открыты.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;
