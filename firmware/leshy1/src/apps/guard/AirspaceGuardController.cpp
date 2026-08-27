@@ -71,33 +71,75 @@ const char* airspaceGuardLoadStatusName(AirspaceGuardLoadStatus status) {
 
 bool AirspaceGuardController::validateReport(
     const AirspaceGuardReport& report) const {
+    const std::size_t inspectionCapacity =
+        services::guard::AirspaceGuard::kFrameInspectionCapacity;
+    const std::size_t attempted = report.framesAvailable < inspectionCapacity
+        ? report.framesAvailable : inspectionCapacity;
     if (report.findingCount > report.findings.size()) return false;
-    if ((report.status == AirspaceGuardStatus::Finding) !=
-        (report.findingCount != 0U)) {
+    if (report.status == AirspaceGuardStatus::InvalidPolicy) {
+        return report.findingCount == 0U && report.framesAvailable == 0U &&
+            report.framesInspected == 0U && report.disconnectFrames == 0U &&
+            report.malformedFrames == 0U &&
+            report.sourceReadFailures == 0U &&
+            report.findingsDropped == 0U && !report.inspectionTruncated;
+    }
+    if (report.framesInspected > attempted ||
+        report.sourceReadFailures > attempted ||
+        report.framesInspected + report.sourceReadFailures != attempted ||
+        report.disconnectFrames > report.framesInspected ||
+        report.malformedFrames > report.framesInspected ||
+        report.disconnectFrames + report.malformedFrames >
+            report.framesInspected ||
+        report.findingsDropped > report.disconnectFrames ||
+        (report.findingCount == 0U && report.findingsDropped != 0U) ||
+        report.inspectionTruncated !=
+            (report.framesAvailable > inspectionCapacity)) {
         return false;
     }
+    const AirspaceGuardStatus expectedStatus = report.findingCount != 0U
+        ? AirspaceGuardStatus::Finding
+        : (report.framesAvailable == 0U || report.framesInspected == 0U ||
+                   report.sourceReadFailures != 0U ||
+                   report.malformedFrames != 0U || report.inspectionTruncated
+               ? AirspaceGuardStatus::Inconclusive
+               : AirspaceGuardStatus::Clear);
+    if (report.status != expectedStatus) return false;
+    std::size_t reportedDisconnectFrames = 0U;
     for (std::size_t index = 0; index < report.findingCount; ++index) {
         const AirspaceFinding& finding = report.findings[index];
+        for (std::size_t previous = 0; previous < index; ++previous) {
+            if (std::memcmp(finding.transmitter.data(),
+                            report.findings[previous].transmitter.data(),
+                            finding.transmitter.size()) == 0) {
+                return false;
+            }
+        }
         if (finding.detectorVersion == 0U || finding.threshold < 2U ||
             finding.threshold > AirspaceFinding::kEvidenceCapacity ||
             finding.observed < finding.threshold ||
+            finding.observed > inspectionCapacity ||
             finding.evidenceCount == 0U ||
             finding.evidenceCount > finding.evidence.size() ||
             finding.evidenceCount > finding.observed ||
             finding.firstUs == 0U || finding.lastUs < finding.firstUs ||
+            finding.lastUs - finding.firstUs > 10000000ULL ||
             !validTransmitter(finding.transmitter) ||
             static_cast<std::size_t>(finding.deauthenticationFrames) +
                     finding.disassociationFrames !=
                 finding.observed) {
             return false;
         }
+        reportedDisconnectFrames += finding.observed;
+        if (reportedDisconnectFrames > report.disconnectFrames) return false;
         for (std::size_t evidenceIndex = 0;
              evidenceIndex < finding.evidenceCount; ++evidenceIndex) {
             const services::guard::AirspaceEvidenceRef& evidence =
                 finding.evidence[evidenceIndex];
             if (evidence.monotonicUs < finding.firstUs ||
                 evidence.monotonicUs > finding.lastUs ||
-                evidence.channel == 0U || evidence.channel > 14U) {
+                evidence.frameIndex >= attempted ||
+                evidence.channel == 0U || evidence.channel > 14U ||
+                evidence.rssiDbm < -127 || evidence.rssiDbm > 0) {
                 return false;
             }
         }

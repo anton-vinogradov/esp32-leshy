@@ -145,6 +145,18 @@ run_opaque_evidence_check() {
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/airspace_guard_presenter_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/guard/AirspaceGuardController.cpp" \
+    "$repo_dir/firmware/leshy1/src/ui/AirspaceGuardPresenter.cpp" \
+    "$repo_dir/firmware/leshy1/src/ui/UiStrings.cpp" \
+    -o "$test_tmp/airspace_guard_presenter_tests"
+
+"$test_tmp/airspace_guard_presenter_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/target_foundation_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \

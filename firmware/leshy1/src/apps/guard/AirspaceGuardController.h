@@ -47,6 +47,14 @@ public:
     std::size_t findingCount() const { return report_.findingCount; }
     std::size_t findingSelection() const { return findingSelection_; }
     std::size_t evidenceSelection() const { return evidenceSelection_; }
+    std::size_t framesAvailable() const { return report_.framesAvailable; }
+    std::size_t framesInspected() const { return report_.framesInspected; }
+    std::size_t malformedFrames() const { return report_.malformedFrames; }
+    std::size_t sourceReadFailures() const {
+        return report_.sourceReadFailures;
+    }
+    std::size_t findingsDropped() const { return report_.findingsDropped; }
+    bool inspectionTruncated() const { return report_.inspectionTruncated; }
 
     const services::guard::AirspaceFinding* finding(
         std::size_t orderedIndex) const;

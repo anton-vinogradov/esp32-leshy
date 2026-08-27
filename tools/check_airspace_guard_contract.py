@@ -18,6 +18,10 @@ CONTROLLER_SOURCE = (
     ROOT / "firmware/leshy1/src/apps/guard/AirspaceGuardController.cpp"
 )
 CONTROLLER_TEST = ROOT / "tests/native/airspace_guard_controller_tests.cpp"
+PRESENTER_HEADER = ROOT / "firmware/leshy1/src/ui/AirspaceGuardPresenter.h"
+PRESENTER_SOURCE = ROOT / "firmware/leshy1/src/ui/AirspaceGuardPresenter.cpp"
+PRESENTER_TEST = ROOT / "tests/native/airspace_guard_presenter_tests.cpp"
+UI_STRINGS = ROOT / "firmware/leshy1/src/ui/UiStrings.def"
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -34,6 +38,10 @@ def main() -> int:
         controller_header = CONTROLLER_HEADER.read_text(encoding="utf-8")
         controller_source = CONTROLLER_SOURCE.read_text(encoding="utf-8")
         controller_tests = CONTROLLER_TEST.read_text(encoding="utf-8")
+        presenter_header = PRESENTER_HEADER.read_text(encoding="utf-8")
+        presenter_source = PRESENTER_SOURCE.read_text(encoding="utf-8")
+        presenter_tests = PRESENTER_TEST.read_text(encoding="utf-8")
+        ui_strings = UI_STRINGS.read_text(encoding="utf-8")
     except OSError as error:
         print(f"airspace guard contract check failed: {error}", file=sys.stderr)
         return 1
@@ -97,7 +105,9 @@ def main() -> int:
         "testEvidenceDrilldownUsesExactSourceReference",
         "testIncompleteEvidenceRemainsVisibleUncertainty",
         "testClearAndInconclusiveStayOutcomeOnly",
+        "testOutcomeStatusMismatchFailsClosed",
         "testMalformedReportsFailClosed",
+        "testOutOfBoundsEvidenceFailsClosed",
     ):
         require(failures, marker in controller_tests,
                 f"missing Airspace Guard controller coverage: {marker}")
@@ -115,6 +125,54 @@ def main() -> int:
     ):
         require(failures, forbidden not in controller,
                 f"Airspace Guard UI bypasses passive boundary: {forbidden}")
+
+    presenter = presenter_header + presenter_source
+    for marker in (
+        "kVisibleRowCapacity = 4",
+        "AirspaceGuardEvidenceIncomplete",
+        "AirspaceGuardPassiveOnly",
+        "finding->detectorVersion",
+        "finding->threshold",
+        "evidence->frameIndex",
+        "evidence->channel",
+        "evidence->rssiDbm",
+        "controller.inspectionTruncated()",
+    ):
+        require(failures, marker in presenter,
+                f"missing Airspace Guard presentation contract: {marker}")
+    for marker in (
+        "testFindingShowsOnlyActionableUserFacts",
+        "testEvidenceListUsesFourStableTouchRows",
+        "testEvidenceDetailRetainsExactReference",
+        "testRussianInconclusiveExplainsIncompleteEvidence",
+        "testMalformedReportHasNoInventedEvidence",
+        "testDroppedFindingCountReplacesLessImportantMix",
+    ):
+        require(failures, marker in presenter_tests,
+                f"missing Airspace Guard presenter coverage: {marker}")
+    for marker in (
+        "AirspaceGuardTitle",
+        "AirspaceGuardFinding",
+        "AirspaceGuardEvidenceTitle",
+        "AirspaceGuardEvidenceIncomplete",
+        "AirspaceGuardPassiveOnly",
+    ):
+        require(failures, marker in ui_strings,
+                f"missing EN/RU Airspace Guard copy: {marker}")
+    for forbidden in (
+        '#include "drivers/',
+        '#include "platform/',
+        '#include "kernel/',
+        "ResourceBroker",
+        "esp_wifi",
+        "esp_ble",
+        "NimBLE",
+        "sendPacket",
+        "injectFrame",
+        "setTxPower",
+    ):
+        require(failures, forbidden not in presenter,
+                f"Airspace Guard presenter bypasses passive boundary: {forbidden}")
 
     if failures:
         print("airspace guard contract check failed:", file=sys.stderr)
