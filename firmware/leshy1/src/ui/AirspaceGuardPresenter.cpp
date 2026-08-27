@@ -10,6 +10,7 @@ namespace {
 using apps::guard::AirspaceGuardController;
 using apps::guard::AirspaceGuardLoadStatus;
 using apps::guard::AirspaceGuardView;
+using services::guard::AirspaceBleTrackerProtocol;
 using services::guard::AirspaceConfidence;
 using services::guard::AirspaceEvidenceRef;
 using services::guard::AirspaceFinding;
@@ -61,6 +62,20 @@ UiTextId securityText(AirspaceWifiSecurity security) {
             return UiTextId::AirspaceGuardSecurityLegacy;
     }
     return UiTextId::AirspaceGuardSecurityLegacy;
+}
+
+UiTextId bleTrackerProtocolText(AirspaceBleTrackerProtocol protocol) {
+    switch (protocol) {
+        case AirspaceBleTrackerProtocol::FindMy:
+            return UiTextId::AirspaceGuardBleProtocolFindMy;
+        case AirspaceBleTrackerProtocol::SmartTag:
+            return UiTextId::AirspaceGuardBleProtocolSmartTag;
+        case AirspaceBleTrackerProtocol::Tile:
+            return UiTextId::AirspaceGuardBleProtocolTile;
+        case AirspaceBleTrackerProtocol::None:
+            return UiTextId::AirspaceGuardBleProtocolTile;
+    }
+    return UiTextId::AirspaceGuardBleProtocolTile;
 }
 
 bool displayableUtf8(const std::uint8_t* value, std::size_t length) {
@@ -124,6 +139,18 @@ void formatSource(std::array<char, AirspaceGuardUiModel::kContextCapacity>& text
     formatSourceAddress(text, language, finding.transmitter);
 }
 
+void formatBleIdentity(
+    std::array<char, AirspaceGuardUiModel::kContextCapacity>& text,
+    UiLanguage language, const std::array<std::uint8_t, 6>& identity) {
+    formatText(text, language, UiTextId::AirspaceGuardBleIdFormat,
+               static_cast<unsigned>(identity[0]),
+               static_cast<unsigned>(identity[1]),
+               static_cast<unsigned>(identity[2]),
+               static_cast<unsigned>(identity[3]),
+               static_cast<unsigned>(identity[4]),
+               static_cast<unsigned>(identity[5]));
+}
+
 void formatNetworkName(
     std::array<char, AirspaceGuardUiModel::kContextCapacity>& text,
     UiLanguage language, const AirspaceFinding& finding) {
@@ -147,6 +174,8 @@ void formatFindingContext(
     UiLanguage language, const AirspaceFinding& finding) {
     if (finding.kind == AirspaceFindingKind::WifiSsidSecurityConflict) {
         formatNetworkName(text, language, finding);
+    } else if (finding.kind == AirspaceFindingKind::BleTrackerPresence) {
+        formatBleIdentity(text, language, finding.transmitter);
     } else {
         formatSource(text, language, finding);
     }
@@ -156,8 +185,11 @@ void formatEvidenceSource(
     std::array<char, AirspaceGuardUiModel::kContextCapacity>& text,
     UiLanguage language, const AirspaceFinding& finding,
     std::size_t evidenceIndex) {
-    if (finding.kind !=
-        AirspaceFindingKind::WifiSsidSecurityConflict) {
+    if (finding.kind == AirspaceFindingKind::BleTrackerPresence) {
+        formatBleIdentity(text, language, finding.transmitter);
+        return;
+    }
+    if (finding.kind != AirspaceFindingKind::WifiSsidSecurityConflict) {
         formatSource(text, language, finding);
         return;
     }
@@ -270,6 +302,11 @@ AirspaceGuardUiModel presentFinding(const AirspaceGuardController& controller,
         model.headline = UiTextId::AirspaceGuardIdentityConflict;
     } else if (finding->kind == AirspaceFindingKind::WifiSsidChurn) {
         model.headline = UiTextId::AirspaceGuardSsidChurn;
+    } else if (finding->kind == AirspaceFindingKind::BleTrackerPresence) {
+        model.headline = UiTextId::AirspaceGuardBleTrackerPresence;
+        if (!model.evidenceIncomplete) {
+            model.note = UiTextId::AirspaceGuardBlePresenceOnly;
+        }
     }
     formatFindingContext(model.context, language, *finding);
     formatText(model.rows[0].text, language,
@@ -318,6 +355,16 @@ AirspaceGuardUiModel presentFinding(const AirspaceGuardController& controller,
                    UiTextId::AirspaceGuardChurnSpanFormat,
                    static_cast<unsigned>(spanTenths / 10U),
                    static_cast<unsigned>(spanTenths % 10U));
+    } else if (finding->kind == AirspaceFindingKind::BleTrackerPresence) {
+        const std::uint64_t spanTenths =
+            (finding->lastUs - finding->firstUs + 99999ULL) / 100000ULL;
+        formatText(model.rows[3].text, language,
+                   UiTextId::AirspaceGuardBleProtocolSpanFormat,
+                   uiText(language,
+                          bleTrackerProtocolText(
+                              finding->bleTrackerProtocol)),
+                   static_cast<unsigned>(spanTenths / 10U),
+                   static_cast<unsigned>(spanTenths % 10U));
     } else {
         formatText(model.rows[3].text, language,
                    UiTextId::AirspaceGuardDisconnectMixFormat,
@@ -345,6 +392,10 @@ AirspaceGuardUiModel presentEvidenceList(
         model.openable = false;
         return model;
     }
+    if (finding->kind == AirspaceFindingKind::BleTrackerPresence &&
+        !model.evidenceIncomplete) {
+        model.note = UiTextId::AirspaceGuardBlePresenceOnly;
+    }
     formatFindingContext(model.context, language, *finding);
     const std::size_t selection = controller.evidenceSelection();
     const std::size_t first = selection < model.rows.size()
@@ -355,11 +406,18 @@ AirspaceGuardUiModel presentEvidenceList(
     for (std::size_t row = 0; row < model.rowCount; ++row) {
         const std::size_t index = first + row;
         const AirspaceEvidenceRef& evidence = finding->evidence[index];
-        formatText(model.rows[row].text, language,
-                   UiTextId::AirspaceGuardEvidenceRowFormat,
-                   static_cast<unsigned long>(evidence.frameIndex),
-                   static_cast<unsigned>(evidence.channel),
-                   static_cast<int>(evidence.rssiDbm));
+        if (finding->kind == AirspaceFindingKind::BleTrackerPresence) {
+            formatText(model.rows[row].text, language,
+                       UiTextId::AirspaceGuardEvidenceRecordRowFormat,
+                       static_cast<unsigned long>(evidence.frameIndex),
+                       static_cast<int>(evidence.rssiDbm));
+        } else {
+            formatText(model.rows[row].text, language,
+                       UiTextId::AirspaceGuardEvidenceRowFormat,
+                       static_cast<unsigned long>(evidence.frameIndex),
+                       static_cast<unsigned>(evidence.channel),
+                       static_cast<int>(evidence.rssiDbm));
+        }
         model.rows[row].selected = index == selection;
     }
     return model;
@@ -381,10 +439,16 @@ AirspaceGuardUiModel presentEvidenceDetail(
         model.tone = AirspaceGuardUiTone::Error;
         return model;
     }
+    if (finding->kind == AirspaceFindingKind::BleTrackerPresence &&
+        !model.evidenceIncomplete) {
+        model.note = UiTextId::AirspaceGuardBlePresenceOnly;
+    }
     formatEvidenceSource(model.context, language, *finding,
                          controller.evidenceSelection());
     formatText(model.rows[0].text, language,
-               UiTextId::AirspaceGuardFrameFormat,
+               finding->kind == AirspaceFindingKind::BleTrackerPresence
+                   ? UiTextId::AirspaceGuardRecordFormat
+                   : UiTextId::AirspaceGuardFrameFormat,
                static_cast<unsigned long>(evidence->frameIndex));
     if (finding->kind ==
         AirspaceFindingKind::WifiSsidSecurityConflict) {
@@ -404,6 +468,17 @@ AirspaceGuardUiModel presentEvidenceDetail(
         formatText(model.rows[1].text, language,
                    UiTextId::AirspaceGuardChannelSignalFormat,
                    static_cast<unsigned>(evidence->channel),
+                   static_cast<int>(evidence->rssiDbm));
+        formatText(model.rows[2].text, language,
+                   UiTextId::AirspaceGuardFindingOffsetFormat,
+                   static_cast<unsigned long long>(
+                       (evidence->monotonicUs - finding->firstUs) / 1000ULL));
+    } else if (finding->kind == AirspaceFindingKind::BleTrackerPresence) {
+        formatText(model.rows[1].text, language,
+                   UiTextId::AirspaceGuardProtocolSignalFormat,
+                   uiText(language,
+                          bleTrackerProtocolText(
+                              finding->bleTrackerProtocol)),
                    static_cast<int>(evidence->rssiDbm));
         formatText(model.rows[2].text, language,
                    UiTextId::AirspaceGuardFindingOffsetFormat,

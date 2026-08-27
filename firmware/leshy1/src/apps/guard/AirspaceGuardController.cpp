@@ -6,6 +6,7 @@ namespace leshy1::apps::guard {
 
 namespace {
 
+using services::guard::AirspaceBleTrackerProtocol;
 using services::guard::AirspaceConfidence;
 using services::guard::AirspaceFinding;
 using services::guard::AirspaceFindingKind;
@@ -22,8 +23,7 @@ std::uint8_t confidenceRank(AirspaceConfidence confidence) {
     return 0;
 }
 
-bool validTransmitter(const std::array<std::uint8_t, 6>& address) {
-    if ((address[0] & 0x01U) != 0U) return false;
+bool validIdentity(const std::array<std::uint8_t, 6>& address) {
     bool any = false;
     bool allOnes = true;
     for (const std::uint8_t byte : address) {
@@ -31,6 +31,10 @@ bool validTransmitter(const std::array<std::uint8_t, 6>& address) {
         allOnes = allOnes && byte == 0xffU;
     }
     return any && !allOnes;
+}
+
+bool validTransmitter(const std::array<std::uint8_t, 6>& address) {
+    return (address[0] & 0x01U) == 0U && validIdentity(address);
 }
 
 bool emptyTransmitter(const std::array<std::uint8_t, 6>& address) {
@@ -58,6 +62,18 @@ bool validSecurity(AirspaceWifiSecurity security) {
         case AirspaceWifiSecurity::Rsn:
             return true;
         case AirspaceWifiSecurity::Unknown:
+            return false;
+    }
+    return false;
+}
+
+bool validBleTrackerProtocol(AirspaceBleTrackerProtocol protocol) {
+    switch (protocol) {
+        case AirspaceBleTrackerProtocol::FindMy:
+        case AirspaceBleTrackerProtocol::SmartTag:
+        case AirspaceBleTrackerProtocol::Tile:
+            return true;
+        case AirspaceBleTrackerProtocol::None:
             return false;
     }
     return false;
@@ -194,14 +210,16 @@ bool AirspaceGuardController::validateReport(
             finding.evidenceCount > finding.evidence.size() ||
             finding.evidenceCount > finding.observed ||
             finding.firstUs == 0U || finding.lastUs < finding.firstUs ||
-            finding.lastUs - finding.firstUs > 10000000ULL ||
-            !validTransmitter(finding.transmitter)) {
+            (finding.kind == AirspaceFindingKind::BleTrackerPresence
+                 ? !validIdentity(finding.transmitter)
+                 : !validTransmitter(finding.transmitter))) {
             return false;
         }
         switch (finding.kind) {
             case AirspaceFindingKind::WifiDisconnectBurst:
                 if (finding.detectorVersion !=
                         AirspaceFinding::kWifiDisconnectDetectorVersion ||
+                    finding.lastUs - finding.firstUs > 10000000ULL ||
                     !emptyTransmitter(finding.relatedTransmitter) ||
                     finding.networkNameLength != 0U ||
                     finding.primarySecurity != AirspaceWifiSecurity::Unknown ||
@@ -223,6 +241,7 @@ bool AirspaceGuardController::validateReport(
             case AirspaceFindingKind::WifiSsidSecurityConflict:
                 if (finding.detectorVersion !=
                         AirspaceFinding::kWifiIdentityDetectorVersion ||
+                    finding.lastUs - finding.firstUs > 10000000ULL ||
                     finding.confidence != AirspaceConfidence::Medium ||
                     finding.threshold != 2U || finding.observed != 2U ||
                     finding.evidenceCount != 2U ||
@@ -247,6 +266,7 @@ bool AirspaceGuardController::validateReport(
             case AirspaceFindingKind::WifiSsidChurn:
                 if (finding.detectorVersion !=
                         AirspaceFinding::kWifiSsidChurnDetectorVersion ||
+                    finding.lastUs - finding.firstUs > 10000000ULL ||
                     finding.confidence == AirspaceConfidence::Low ||
                     finding.threshold < 3U ||
                     finding.evidenceCount != finding.observed ||
@@ -264,10 +284,25 @@ bool AirspaceGuardController::validateReport(
                 }
                 break;
             case AirspaceFindingKind::BleTrackerPresence:
-                // BLE presentation and channel-free normalized evidence are a
-                // later product slice. Reject them here until that UI contract
-                // is implemented and tested rather than rendering Wi-Fi copy.
-                return false;
+                if (finding.detectorVersion !=
+                        AirspaceFinding::kBleTrackerPresenceDetectorVersion ||
+                    finding.lastUs - finding.firstUs > 60000000ULL ||
+                    finding.confidence == AirspaceConfidence::Low ||
+                    finding.deauthenticationFrames != 0U ||
+                    finding.disassociationFrames != 0U ||
+                    !emptyTransmitter(finding.relatedTransmitter) ||
+                    finding.networkNameLength != 0U ||
+                    finding.primarySecurity != AirspaceWifiSecurity::Unknown ||
+                    finding.relatedSecurity != AirspaceWifiSecurity::Unknown ||
+                    !validBleTrackerProtocol(finding.bleTrackerProtocol) ||
+                    finding.bleAddressType > 3U ||
+                    finding.evidenceCount !=
+                        (finding.observed < finding.evidence.size()
+                             ? finding.observed : finding.evidence.size()) ||
+                    finding.observed > report.bleAdvertisementRecords) {
+                    return false;
+                }
+                break;
             default:
                 return false;
         }
@@ -278,7 +313,9 @@ bool AirspaceGuardController::validateReport(
             if (evidence.monotonicUs < finding.firstUs ||
                 evidence.monotonicUs > finding.lastUs ||
                 evidence.frameIndex >= attempted ||
-                evidence.channel == 0U || evidence.channel > 14U ||
+                (finding.kind == AirspaceFindingKind::BleTrackerPresence
+                     ? evidence.channel != 0U
+                     : (evidence.channel == 0U || evidence.channel > 14U)) ||
                 evidence.rssiDbm < -127 || evidence.rssiDbm > 0) {
                 return false;
             }

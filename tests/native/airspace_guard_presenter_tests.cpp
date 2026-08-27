@@ -111,6 +111,33 @@ AirspaceGuardReport makeChurnFindingReport() {
     return report;
 }
 
+AirspaceGuardReport makeBleTrackerFindingReport() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 1U;
+    report.sourceFramesObserved = 3U;
+    report.framesAvailable = 3U;
+    report.framesInspected = 3U;
+    report.bleAdvertisementRecords = 3U;
+    AirspaceFinding& finding = report.findings[0];
+    finding.kind = AirspaceFindingKind::BleTrackerPresence;
+    finding.confidence = AirspaceConfidence::Medium;
+    finding.detectorVersion =
+        AirspaceFinding::kBleTrackerPresenceDetectorVersion;
+    finding.threshold = 3U;
+    finding.observed = 3U;
+    finding.transmitter = {0xc1, 0x12, 0x23, 0x34, 0x45, 0x56};
+    finding.bleTrackerProtocol = AirspaceBleTrackerProtocol::FindMy;
+    finding.bleAddressType = 1U;
+    finding.firstUs = 1000000ULL;
+    finding.lastUs = 1300000ULL;
+    finding.evidenceCount = 3U;
+    finding.evidence[0] = {0U, 1000000ULL, 0U, -42};
+    finding.evidence[1] = {1U, 1100000ULL, 0U, -48};
+    finding.evidence[2] = {2U, 1300000ULL, 0U, -53};
+    return report;
+}
+
 void testFindingShowsOnlyActionableUserFacts() {
     AirspaceGuardController controller;
     CHECK(controller.load(makeFindingReport()) ==
@@ -229,6 +256,46 @@ void testSsidChurnExplainsIndicatorWithoutClaimingPineap() {
                       "+100 ms FROM FINDING START") == 0);
 }
 
+void testBleTrackerPresenceNeverInventsAChannelOrOwner() {
+    AirspaceGuardController controller;
+    CHECK(controller.load(makeBleTrackerFindingReport()) ==
+          AirspaceGuardLoadStatus::Ready);
+    AirspaceGuardUiModel model =
+        presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(model.headline == UiTextId::AirspaceGuardBleTrackerPresence);
+    CHECK(model.note == UiTextId::AirspaceGuardBlePresenceOnly);
+    CHECK(std::strcmp(model.context.data(),
+                      "BLE ID C1:12:23:34:45:56") == 0);
+    CHECK(std::strcmp(model.rows[1].text.data(),
+                      "MEDIUM · DETECTOR V1") == 0);
+    CHECK(std::strcmp(model.rows[2].text.data(),
+                      "3 EVENTS · LIMIT 3") == 0);
+    CHECK(std::strcmp(model.rows[3].text.data(),
+                      "FIND MY · 0.3 S") == 0);
+
+    CHECK(controller.openSelected());
+    model = presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(std::strcmp(model.rows[0].text.data(), "#0 · -42 DBM") == 0);
+    CHECK(std::strstr(model.rows[0].text.data(), "CH") == nullptr);
+    CHECK(controller.next());
+    CHECK(controller.openSelected());
+    model = presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(std::strcmp(model.rows[0].text.data(),
+                      "SOURCE RECORD #1") == 0);
+    CHECK(std::strcmp(model.rows[1].text.data(),
+                      "FIND MY · -48 DBM") == 0);
+    CHECK(std::strcmp(model.rows[2].text.data(),
+                      "+100 ms FROM FINDING START") == 0);
+
+    CHECK(controller.back());
+    CHECK(controller.back());
+    model = presentAirspaceGuard(controller, UiLanguage::Russian);
+    CHECK(std::strcmp(uiText(UiLanguage::Russian, model.note),
+                      u8"СИГНАЛ · ВЛАДЕЛЕЦ НЕИЗВЕСТЕН") == 0);
+    CHECK(std::strcmp(model.context.data(),
+                      "BLE ID C1:12:23:34:45:56") == 0);
+}
+
 void testInvalidSsidBytesUseStableNonInventedIdentifier() {
     AirspaceGuardReport report = makeIdentityFindingReport();
     report.findings[0].networkName.fill(0U);
@@ -344,6 +411,7 @@ int main() {
     testEvidenceDetailRetainsExactReference();
     testIdentityConflictExplainsIndicatorWithoutClaimingProof();
     testSsidChurnExplainsIndicatorWithoutClaimingPineap();
+    testBleTrackerPresenceNeverInventsAChannelOrOwner();
     testInvalidSsidBytesUseStableNonInventedIdentifier();
     testRussianInconclusiveExplainsIncompleteEvidence();
     testEmptyCaptureIsExplicitlyIncomplete();

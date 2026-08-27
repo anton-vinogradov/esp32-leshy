@@ -168,6 +168,7 @@ def main() -> int:
         "testDifferentDetectorKindsMayReferenceTheSameTransmitter",
         "testSsidChurnReportIsKindAwareAndFailClosed",
         "testIdentityDetectorsMayShareExactSourceEvidence",
+        "testBleTrackerReportUsesChannelFreeKindAwareValidation",
     ):
         require(failures, marker in controller_tests,
                 f"missing Airspace Guard controller coverage: {marker}")
@@ -204,6 +205,11 @@ def main() -> int:
         "networkNameFingerprint",
         "AirspaceGuardSsidChurn",
         "AirspaceGuardChurnSpanFormat",
+        "AirspaceGuardBleTrackerPresence",
+        "AirspaceGuardBlePresenceOnly",
+        "AirspaceGuardEvidenceRecordRowFormat",
+        "AirspaceGuardRecordFormat",
+        "AirspaceGuardProtocolSignalFormat",
     ):
         require(failures, marker in presenter,
                 f"missing Airspace Guard presentation contract: {marker}")
@@ -220,6 +226,7 @@ def main() -> int:
         "testIdentityConflictExplainsIndicatorWithoutClaimingProof",
         "testInvalidSsidBytesUseStableNonInventedIdentifier",
         "testSsidChurnExplainsIndicatorWithoutClaimingPineap",
+        "testBleTrackerPresenceNeverInventsAChannelOrOwner",
     ):
         require(failures, marker in presenter_tests,
                 f"missing Airspace Guard presenter coverage: {marker}")
@@ -238,6 +245,13 @@ def main() -> int:
         "AirspaceGuardSsidFingerprintFormat",
         "AirspaceGuardSsidChurn",
         "AirspaceGuardChurnSpanFormat",
+        "AirspaceGuardBleTrackerPresence",
+        "AirspaceGuardBlePresenceOnly",
+        "AirspaceGuardBleIdFormat",
+        "AirspaceGuardBleProtocolSpanFormat",
+        "AirspaceGuardEvidenceRecordRowFormat",
+        "AirspaceGuardRecordFormat",
+        "AirspaceGuardProtocolSignalFormat",
     ):
         require(failures, marker in ui_strings,
                 f"missing EN/RU Airspace Guard copy: {marker}")

@@ -27,6 +27,8 @@ constexpr std::array<std::uint8_t, 6> kSourceB{
     0x04, 0xaa, 0xbb, 0xcc, 0xdd, 0xee};
 constexpr std::array<std::uint8_t, 6> kSourceC{
     0x06, 0x10, 0x20, 0x30, 0x40, 0x50};
+constexpr std::array<std::uint8_t, 6> kBleIdentity{
+    0xc1, 0x12, 0x23, 0x34, 0x45, 0x56};
 
 AirspaceFinding makeFinding(
     const std::array<std::uint8_t, 6>& source,
@@ -105,6 +107,26 @@ AirspaceFinding makeChurnFinding(
             static_cast<std::uint8_t>(1U + index),
             static_cast<std::int16_t>(-35 - index)};
     }
+    return finding;
+}
+
+AirspaceFinding makeBleTrackerFinding() {
+    AirspaceFinding finding{};
+    finding.kind = AirspaceFindingKind::BleTrackerPresence;
+    finding.confidence = AirspaceConfidence::Medium;
+    finding.detectorVersion =
+        AirspaceFinding::kBleTrackerPresenceDetectorVersion;
+    finding.threshold = 3U;
+    finding.observed = 3U;
+    finding.transmitter = kBleIdentity;
+    finding.bleTrackerProtocol = AirspaceBleTrackerProtocol::FindMy;
+    finding.bleAddressType = 1U;
+    finding.firstUs = 1000000ULL;
+    finding.lastUs = 21000000ULL;
+    finding.evidenceCount = 3U;
+    finding.evidence[0] = {0U, 1000000ULL, 0U, -42};
+    finding.evidence[1] = {1U, 11000000ULL, 0U, -48};
+    finding.evidence[2] = {2U, 21000000ULL, 0U, -53};
     return finding;
 }
 
@@ -431,6 +453,54 @@ void testIdentityDetectorsMayShareExactSourceEvidence() {
     CHECK(controller.findingCount() == 2U);
 }
 
+void testBleTrackerReportUsesChannelFreeKindAwareValidation() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 1U;
+    report.findings[0] = makeBleTrackerFinding();
+    report.sourceFramesObserved = 3U;
+    report.framesAvailable = 3U;
+    report.framesInspected = 3U;
+    report.bleAdvertisementRecords = 3U;
+
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    CHECK(controller.selectedFinding() != nullptr);
+    CHECK(controller.selectedFinding()->transmitter == kBleIdentity);
+    CHECK(controller.openSelected());
+    CHECK(controller.next());
+    CHECK(controller.selectedEvidence()->channel == 0U);
+
+    AirspaceGuardReport invalid = report;
+    invalid.findings[0].bleTrackerProtocol = AirspaceBleTrackerProtocol::None;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].bleAddressType = 4U;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].evidence[0].channel = 37U;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].evidenceCount = 2U;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.bleAdvertisementRecords = 2U;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].lastUs = 61000001ULL;
+    invalid.findings[0].evidence[2].monotonicUs = 61000001ULL;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].primarySecurity = AirspaceWifiSecurity::Open;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+}
+
 void testStableNames() {
     CHECK(std::strcmp(airspaceGuardViewName(AirspaceGuardView::Finding),
                       "finding") == 0);
@@ -453,6 +523,7 @@ int main() {
     testDifferentDetectorKindsMayReferenceTheSameTransmitter();
     testSsidChurnReportIsKindAwareAndFailClosed();
     testIdentityDetectorsMayShareExactSourceEvidence();
+    testBleTrackerReportUsesChannelFreeKindAwareValidation();
     testStableNames();
     std::puts("Airspace Guard controller tests passed");
     return 0;
