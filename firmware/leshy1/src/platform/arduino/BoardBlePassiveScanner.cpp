@@ -5,18 +5,12 @@
 #include <cstdio>
 #include <cstring>
 
-#include <BLEDevice.h>
+#include <esp_bt.h>
+#include <esp_err.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
+#include <freertos/portmacro.h>
 #include <freertos/task.h>
-
-extern "C" {
-#include <host/ble_gap.h>
-#include <host/ble_hs_adv.h>
-#include <host/ble_hs_id.h>
-#include <host/ble_uuid.h>
-#include <nimble/hci_common.h>
-}
 
 namespace leshy1::platform::arduino {
 
@@ -25,6 +19,44 @@ namespace {
 using AdvertisementFacts =
     domain::observations::BleAdvertisementFacts;
 
+constexpr std::uint8_t kHciCommandPacket = 0x01U;
+constexpr std::uint8_t kHciEventPacket = 0x04U;
+constexpr std::uint8_t kHciCommandCompleteEvent = 0x0eU;
+constexpr std::uint8_t kHciCommandStatusEvent = 0x0fU;
+constexpr std::uint8_t kHciLeMetaEvent = 0x3eU;
+constexpr std::uint8_t kHciLeAdvertisingReport = 0x02U;
+constexpr std::uint16_t kHciReset = 0x0c03U;
+constexpr std::uint16_t kHciLeSetScanParameters = 0x200bU;
+constexpr std::uint16_t kHciLeSetScanEnable = 0x200cU;
+constexpr std::uint32_t kHciCommandTimeoutMs = 1000U;
+
+struct RawAdvertisement final {
+    std::array<std::uint8_t, 6> address{};
+    std::array<std::uint8_t, 31> payload{};
+    std::uint8_t addressType = 0;
+    std::uint8_t eventType = 0;
+    std::uint8_t payloadLength = 0;
+    std::int8_t rssiDbm = 0;
+};
+
+struct HciObserverState final {
+    static constexpr std::size_t kQueueCapacity = 64U;
+
+    portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
+    std::array<RawAdvertisement, kQueueCapacity> queue{};
+    std::size_t readIndex = 0;
+    std::size_t writeIndex = 0;
+    std::size_t queued = 0;
+    std::uint16_t queueDrops = 0;
+    bool acceptingReports = false;
+    bool commandInFlight = false;
+    bool commandComplete = false;
+    std::uint16_t expectedOpcode = 0;
+    std::uint8_t commandStatus = 0xffU;
+};
+
+HciObserverState hciObserver;
+
 struct RawScanContext final {
     std::array<std::array<std::uint8_t, 6>, 128> seenAddresses{};
     std::uint16_t seenCount = 0;
@@ -32,12 +64,24 @@ struct RawScanContext final {
     BleRecordVisitor visitor = nullptr;
     void* visitorContext = nullptr;
     BoardBlePassiveScanResult* result = nullptr;
-    volatile bool completionReported = false;
-    volatile int completionReason = 0;
+};
+
+struct UuidCandidates final {
+    const std::uint8_t* uuid16 = nullptr;
+    const std::uint8_t* uuid32 = nullptr;
+    const std::uint8_t* uuid128 = nullptr;
+    const std::uint8_t* service16 = nullptr;
+    const std::uint8_t* service32 = nullptr;
+    const std::uint8_t* service128 = nullptr;
 };
 
 void increment(std::uint16_t* value) {
     if (value != nullptr && *value != UINT16_MAX) ++*value;
+}
+
+std::uint8_t saturatingAdd(std::uint8_t value, std::size_t amount) {
+    return static_cast<std::uint8_t>(std::min<std::size_t>(
+        static_cast<std::size_t>(value) + amount, UINT8_MAX));
 }
 
 std::uint16_t serviceMask(std::uint16_t uuid) {
@@ -76,41 +120,34 @@ std::uint32_t readLittleEndian32(const std::uint8_t* value) {
         (static_cast<std::uint32_t>(value[3]) << 24U);
 }
 
-void retainFirstServiceUuid(const ble_hs_adv_fields& fields,
+void retainFirstServiceUuid(const std::uint8_t* value,
+                            std::size_t width,
                             AdvertisementFacts* facts) {
-    if (facts == nullptr) return;
-    char uuid[BLE_UUID_STR_LEN] = {};
-    if (fields.num_uuids16 != 0U && fields.uuids16 != nullptr) {
+    if (value == nullptr || facts == nullptr) return;
+    char uuid[37] = {};
+    if (width == 2U) {
         std::snprintf(uuid, sizeof(uuid), "%04x",
-                      static_cast<unsigned>(fields.uuids16[0].value));
-    } else if (fields.num_uuids32 != 0U && fields.uuids32 != nullptr) {
+                      static_cast<unsigned>(readLittleEndian16(value)));
+    } else if (width == 4U) {
         std::snprintf(uuid, sizeof(uuid), "%08lx",
-                      static_cast<unsigned long>(fields.uuids32[0].value));
-    } else if (fields.num_uuids128 != 0U && fields.uuids128 != nullptr) {
-        ble_uuid_to_str(&fields.uuids128[0].u, uuid);
-    } else if (fields.svc_data_uuid16 != nullptr &&
-               fields.svc_data_uuid16_len >= 2U) {
-        std::snprintf(uuid, sizeof(uuid), "%04x", static_cast<unsigned>(
-            readLittleEndian16(fields.svc_data_uuid16)));
-    } else if (fields.svc_data_uuid32 != nullptr &&
-               fields.svc_data_uuid32_len >= 4U) {
-        std::snprintf(uuid, sizeof(uuid), "%08lx",
-                      static_cast<unsigned long>(
-                          readLittleEndian32(fields.svc_data_uuid32)));
-    } else if (fields.svc_data_uuid128 != nullptr &&
-               fields.svc_data_uuid128_len >= 16U) {
-        ble_uuid128_t service{};
-        service.u.type = BLE_UUID_TYPE_128;
-        std::copy_n(fields.svc_data_uuid128, sizeof(service.value),
-                    service.value);
-        ble_uuid_to_str(&service.u, uuid);
+                      static_cast<unsigned long>(readLittleEndian32(value)));
+    } else if (width == 16U) {
+        // Bluetooth transmits a 128-bit UUID least-significant octet first.
+        std::snprintf(
+            uuid, sizeof(uuid),
+            "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-"
+            "%02x%02x%02x%02x%02x%02x",
+            value[15], value[14], value[13], value[12],
+            value[11], value[10], value[9], value[8],
+            value[7], value[6], value[5], value[4],
+            value[3], value[2], value[1], value[0]);
     } else {
         return;
     }
 
     std::uint32_t hash = 2166136261UL;
-    for (const char* value = uuid; *value != '\0'; ++value) {
-        hash ^= static_cast<std::uint8_t>(*value);
+    for (const char* character = uuid; *character != '\0'; ++character) {
+        hash ^= static_cast<std::uint8_t>(*character);
         hash *= 16777619UL;
     }
     facts->firstServiceUuidHash = hash;
@@ -129,74 +166,387 @@ void retainFirstServiceUuid(const ble_hs_adv_fields& fields,
         static_cast<std::uint8_t>(visibleLength);
 }
 
-void populateAdvertisementFacts(const ble_gap_disc_desc& source,
-                                const ble_hs_adv_fields* parsed,
-                                AdvertisementFacts* facts) {
-    if (facts == nullptr) return;
+void parseAdvertisementPayload(const RawAdvertisement& source,
+                               const char** name,
+                               std::size_t* nameLength,
+                               AdvertisementFacts* facts) {
+    if (name == nullptr || nameLength == nullptr || facts == nullptr) return;
+    *name = nullptr;
+    *nameLength = 0U;
     *facts = {};
     facts->present = true;
-    facts->addressType = source.addr.type;
-    facts->advertisementType = source.event_type;
+    facts->addressType = source.addressType;
+    facts->advertisementType = source.eventType;
     facts->legacy = true;
-    facts->scannable =
-        source.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND ||
-        source.event_type == BLE_HCI_ADV_RPT_EVTYPE_SCAN_IND;
-    facts->connectable =
-        source.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND ||
-        source.event_type == BLE_HCI_ADV_RPT_EVTYPE_DIR_IND;
-    facts->payloadLength = source.length_data;
-    if (parsed == nullptr) return;
+    facts->scannable = source.eventType == 0U || source.eventType == 2U;
+    facts->connectable = source.eventType == 0U || source.eventType == 1U;
+    facts->payloadLength = source.payloadLength;
 
-    facts->txPowerKnown = parsed->tx_pwr_lvl_is_present != 0U;
-    if (facts->txPowerKnown) facts->txPowerDbm = parsed->tx_pwr_lvl;
-    facts->appearanceKnown = parsed->appearance_is_present != 0U;
-    if (facts->appearanceKnown) facts->appearance = parsed->appearance;
-    facts->manufacturerDataLength = parsed->mfg_data_len;
-    if (parsed->mfg_data != nullptr && parsed->mfg_data_len >= 2U) {
-        facts->companyKnown = true;
-        facts->companyId = readLittleEndian16(parsed->mfg_data);
-        if (facts->companyId == 0x004cU && parsed->mfg_data_len >= 3U) {
-            facts->appleContinuityType = parsed->mfg_data[2];
+    UuidCandidates candidates;
+    bool completeName = false;
+    std::size_t offset = 0U;
+    while (offset < source.payloadLength) {
+        const std::uint8_t fieldLength = source.payload[offset++];
+        if (fieldLength == 0U) break;
+        if (fieldLength > source.payloadLength - offset) break;
+        const std::uint8_t type = source.payload[offset];
+        const std::uint8_t* data = source.payload.data() + offset + 1U;
+        const std::size_t dataLength = fieldLength - 1U;
+
+        switch (type) {
+            case 0x08U:
+            case 0x09U:
+                if (dataLength != 0U &&
+                    (!completeName || type == 0x09U)) {
+                    *name = reinterpret_cast<const char*>(data);
+                    *nameLength = std::min<std::size_t>(
+                        dataLength,
+                        domain::observations::Observation::kLabelCapacity);
+                    completeName = type == 0x09U;
+                }
+                break;
+            case 0x0aU:
+                if (dataLength >= 1U) {
+                    facts->txPowerKnown = true;
+                    facts->txPowerDbm = static_cast<std::int8_t>(data[0]);
+                }
+                break;
+            case 0x19U:
+                if (dataLength >= 2U) {
+                    facts->appearanceKnown = true;
+                    facts->appearance = readLittleEndian16(data);
+                }
+                break;
+            case 0xffU:
+                facts->manufacturerDataLength = static_cast<std::uint8_t>(
+                    std::min<std::size_t>(dataLength, UINT8_MAX));
+                if (dataLength >= 2U) {
+                    facts->companyKnown = true;
+                    facts->companyId = readLittleEndian16(data);
+                    if (facts->companyId == 0x004cU && dataLength >= 3U) {
+                        facts->appleContinuityType = data[2];
+                    }
+                }
+                break;
+            case 0x02U:
+            case 0x03U: {
+                const std::size_t count = dataLength / 2U;
+                facts->serviceUuidCount = saturatingAdd(
+                    facts->serviceUuidCount, count);
+                if (candidates.uuid16 == nullptr && count != 0U) {
+                    candidates.uuid16 = data;
+                }
+                for (std::size_t index = 0U; index < count; ++index) {
+                    facts->knownServiceMask |= serviceMask(
+                        readLittleEndian16(data + index * 2U));
+                }
+                break;
+            }
+            case 0x04U:
+            case 0x05U: {
+                const std::size_t count = dataLength / 4U;
+                facts->serviceUuidCount = saturatingAdd(
+                    facts->serviceUuidCount, count);
+                if (candidates.uuid32 == nullptr && count != 0U) {
+                    candidates.uuid32 = data;
+                }
+                break;
+            }
+            case 0x06U:
+            case 0x07U: {
+                const std::size_t count = dataLength / 16U;
+                facts->serviceUuidCount = saturatingAdd(
+                    facts->serviceUuidCount, count);
+                if (candidates.uuid128 == nullptr && count != 0U) {
+                    candidates.uuid128 = data;
+                }
+                break;
+            }
+            case 0x16U:
+                if (dataLength >= 2U) {
+                    facts->serviceDataCount = saturatingAdd(
+                        facts->serviceDataCount, 1U);
+                    facts->serviceUuidCount = saturatingAdd(
+                        facts->serviceUuidCount, 1U);
+                    facts->knownServiceMask |= serviceMask(
+                        readLittleEndian16(data));
+                    if (candidates.service16 == nullptr) {
+                        candidates.service16 = data;
+                    }
+                }
+                break;
+            case 0x20U:
+                if (dataLength >= 4U) {
+                    facts->serviceDataCount = saturatingAdd(
+                        facts->serviceDataCount, 1U);
+                    facts->serviceUuidCount = saturatingAdd(
+                        facts->serviceUuidCount, 1U);
+                    if (candidates.service32 == nullptr) {
+                        candidates.service32 = data;
+                    }
+                }
+                break;
+            case 0x21U:
+                if (dataLength >= 16U) {
+                    facts->serviceDataCount = saturatingAdd(
+                        facts->serviceDataCount, 1U);
+                    facts->serviceUuidCount = saturatingAdd(
+                        facts->serviceUuidCount, 1U);
+                    if (candidates.service128 == nullptr) {
+                        candidates.service128 = data;
+                    }
+                }
+                break;
+            default:
+                break;
         }
+        offset += fieldLength;
     }
 
-    for (std::uint8_t index = 0; index < parsed->num_uuids16; ++index) {
-        facts->knownServiceMask |= serviceMask(parsed->uuids16[index].value);
+    if (candidates.uuid16 != nullptr) {
+        retainFirstServiceUuid(candidates.uuid16, 2U, facts);
+    } else if (candidates.uuid32 != nullptr) {
+        retainFirstServiceUuid(candidates.uuid32, 4U, facts);
+    } else if (candidates.uuid128 != nullptr) {
+        retainFirstServiceUuid(candidates.uuid128, 16U, facts);
+    } else if (candidates.service16 != nullptr) {
+        retainFirstServiceUuid(candidates.service16, 2U, facts);
+    } else if (candidates.service32 != nullptr) {
+        retainFirstServiceUuid(candidates.service32, 4U, facts);
+    } else if (candidates.service128 != nullptr) {
+        retainFirstServiceUuid(candidates.service128, 16U, facts);
     }
-    if (parsed->svc_data_uuid16 != nullptr &&
-        parsed->svc_data_uuid16_len >= 2U) {
-        facts->knownServiceMask |= serviceMask(
-            readLittleEndian16(parsed->svc_data_uuid16));
-    }
-    const std::uint16_t serviceDataCount =
-        static_cast<std::uint16_t>(
-            parsed->svc_data_uuid16 != nullptr &&
-            parsed->svc_data_uuid16_len >= 2U) +
-        static_cast<std::uint16_t>(
-            parsed->svc_data_uuid32 != nullptr &&
-            parsed->svc_data_uuid32_len >= 4U) +
-        static_cast<std::uint16_t>(
-            parsed->svc_data_uuid128 != nullptr &&
-            parsed->svc_data_uuid128_len >= 16U);
-    facts->serviceDataCount = static_cast<std::uint8_t>(serviceDataCount);
-    const std::uint16_t serviceUuidCount =
-        static_cast<std::uint16_t>(parsed->num_uuids16) +
-        static_cast<std::uint16_t>(parsed->num_uuids32) +
-        static_cast<std::uint16_t>(parsed->num_uuids128) + serviceDataCount;
-    facts->serviceUuidCount = static_cast<std::uint8_t>(
-        std::min<std::uint16_t>(serviceUuidCount, UINT8_MAX));
-    retainFirstServiceUuid(*parsed, facts);
 }
 
-void processAdvertisement(const ble_gap_disc_desc& source,
+void clearReportQueue() {
+    portENTER_CRITICAL(&hciObserver.lock);
+    hciObserver.readIndex = 0U;
+    hciObserver.writeIndex = 0U;
+    hciObserver.queued = 0U;
+    hciObserver.queueDrops = 0U;
+    portEXIT_CRITICAL(&hciObserver.lock);
+}
+
+bool popReport(RawAdvertisement* report) {
+    if (report == nullptr) return false;
+    bool available = false;
+    portENTER_CRITICAL(&hciObserver.lock);
+    if (hciObserver.queued != 0U) {
+        *report = hciObserver.queue[hciObserver.readIndex];
+        hciObserver.readIndex =
+            (hciObserver.readIndex + 1U) % HciObserverState::kQueueCapacity;
+        --hciObserver.queued;
+        available = true;
+    }
+    portEXIT_CRITICAL(&hciObserver.lock);
+    return available;
+}
+
+std::uint16_t takeQueueDrops() {
+    portENTER_CRITICAL(&hciObserver.lock);
+    const std::uint16_t drops = hciObserver.queueDrops;
+    hciObserver.queueDrops = 0U;
+    portEXIT_CRITICAL(&hciObserver.lock);
+    return drops;
+}
+
+void queueReport(const RawAdvertisement& report) {
+    portENTER_CRITICAL(&hciObserver.lock);
+    if (hciObserver.acceptingReports) {
+        if (hciObserver.queued < HciObserverState::kQueueCapacity) {
+            hciObserver.queue[hciObserver.writeIndex] = report;
+            hciObserver.writeIndex =
+                (hciObserver.writeIndex + 1U) %
+                HciObserverState::kQueueCapacity;
+            ++hciObserver.queued;
+        } else if (hciObserver.queueDrops != UINT16_MAX) {
+            ++hciObserver.queueDrops;
+        }
+    }
+    portEXIT_CRITICAL(&hciObserver.lock);
+}
+
+void handleCommandResult(std::uint16_t opcode, std::uint8_t status) {
+    portENTER_CRITICAL(&hciObserver.lock);
+    if (hciObserver.commandInFlight &&
+        hciObserver.expectedOpcode == opcode) {
+        hciObserver.commandStatus = status;
+        hciObserver.commandComplete = true;
+    }
+    portEXIT_CRITICAL(&hciObserver.lock);
+}
+
+void handleLegacyAdvertisingReports(const std::uint8_t* parameters,
+                                    std::size_t length) {
+    if (parameters == nullptr || length < 1U) return;
+    const std::uint8_t reportCount = parameters[0];
+    std::size_t offset = 1U;
+    for (std::uint8_t index = 0U; index < reportCount; ++index) {
+        if (offset + 9U > length) return;
+        RawAdvertisement report;
+        report.eventType = parameters[offset++];
+        report.addressType = parameters[offset++];
+        std::copy_n(parameters + offset, report.address.size(),
+                    report.address.begin());
+        offset += report.address.size();
+        report.payloadLength = parameters[offset++];
+        if (report.payloadLength > report.payload.size() ||
+            offset + report.payloadLength + 1U > length) {
+            return;
+        }
+        std::copy_n(parameters + offset, report.payloadLength,
+                    report.payload.begin());
+        offset += report.payloadLength;
+        report.rssiDbm = static_cast<std::int8_t>(parameters[offset++]);
+        queueReport(report);
+    }
+}
+
+int handleHciReceive(std::uint8_t* packet, std::uint16_t length) {
+    if (packet == nullptr || length < 3U ||
+        packet[0] != kHciEventPacket) {
+        return 0;
+    }
+    const std::uint8_t event = packet[1];
+    const std::size_t parameterLength = packet[2];
+    if (parameterLength + 3U > length) return 0;
+    const std::uint8_t* parameters = packet + 3U;
+    if (event == kHciCommandCompleteEvent && parameterLength >= 4U) {
+        handleCommandResult(readLittleEndian16(parameters + 1U),
+                            parameters[3]);
+    } else if (event == kHciCommandStatusEvent &&
+               parameterLength >= 4U) {
+        handleCommandResult(readLittleEndian16(parameters + 2U),
+                            parameters[0]);
+    } else if (event == kHciLeMetaEvent && parameterLength >= 2U &&
+               parameters[0] == kHciLeAdvertisingReport) {
+        handleLegacyAdvertisingReports(parameters + 1U,
+                                       parameterLength - 1U);
+    }
+    return 0;
+}
+
+void handleHciSendAvailable() {}
+
+const esp_vhci_host_callback_t kHciCallbacks = {
+    handleHciSendAvailable,
+    handleHciReceive,
+};
+
+bool claimCommandSlot(std::uint16_t opcode, std::uint64_t deadlineUs) {
+    while (static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
+        bool claimed = false;
+        portENTER_CRITICAL(&hciObserver.lock);
+        if (!hciObserver.commandInFlight) {
+            hciObserver.commandInFlight = true;
+            hciObserver.commandComplete = false;
+            hciObserver.expectedOpcode = opcode;
+            hciObserver.commandStatus = 0xffU;
+            claimed = true;
+        }
+        portEXIT_CRITICAL(&hciObserver.lock);
+        if (claimed) return true;
+        vTaskDelay(pdMS_TO_TICKS(1U));
+    }
+    return false;
+}
+
+void releaseCommandSlot() {
+    portENTER_CRITICAL(&hciObserver.lock);
+    hciObserver.commandInFlight = false;
+    hciObserver.commandComplete = false;
+    hciObserver.expectedOpcode = 0U;
+    portEXIT_CRITICAL(&hciObserver.lock);
+}
+
+bool sendHciCommand(std::uint16_t opcode,
+                    const std::uint8_t* parameters,
+                    std::size_t parameterLength) {
+    if (parameterLength > 12U) return false;
+    const std::uint64_t deadlineUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) +
+        static_cast<std::uint64_t>(kHciCommandTimeoutMs) * 1000ULL;
+    if (!claimCommandSlot(opcode, deadlineUs)) return false;
+
+    while (!esp_vhci_host_check_send_available() &&
+           static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
+        vTaskDelay(pdMS_TO_TICKS(1U));
+    }
+    if (!esp_vhci_host_check_send_available()) {
+        releaseCommandSlot();
+        return false;
+    }
+
+    std::array<std::uint8_t, 16> packet{};
+    packet[0] = kHciCommandPacket;
+    packet[1] = static_cast<std::uint8_t>(opcode & 0xffU);
+    packet[2] = static_cast<std::uint8_t>(opcode >> 8U);
+    packet[3] = static_cast<std::uint8_t>(parameterLength);
+    if (parameters != nullptr && parameterLength != 0U) {
+        std::copy_n(parameters, parameterLength, packet.begin() + 4U);
+    }
+    esp_vhci_host_send_packet(packet.data(),
+                              static_cast<std::uint16_t>(
+                                  parameterLength + 4U));
+
+    bool complete = false;
+    std::uint8_t status = 0xffU;
+    while (static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
+        portENTER_CRITICAL(&hciObserver.lock);
+        complete = hciObserver.commandComplete;
+        status = hciObserver.commandStatus;
+        portEXIT_CRITICAL(&hciObserver.lock);
+        if (complete) break;
+        vTaskDelay(pdMS_TO_TICKS(1U));
+    }
+    releaseCommandSlot();
+    return complete && status == 0U;
+}
+
+std::uint16_t scanUnits(std::uint16_t milliseconds) {
+    return static_cast<std::uint16_t>(
+        (static_cast<std::uint32_t>(milliseconds) * 1000U) / 625U);
+}
+
+bool configurePassiveScan(const drivers::ble::BleScanPlan& plan) {
+    const std::uint16_t interval = scanUnits(plan.intervalMs);
+    const std::uint16_t window = scanUnits(plan.windowMs);
+    const std::array<std::uint8_t, 7> parameters = {
+        0U,  // passive scan: never transmit scan requests
+        static_cast<std::uint8_t>(interval & 0xffU),
+        static_cast<std::uint8_t>(interval >> 8U),
+        static_cast<std::uint8_t>(window & 0xffU),
+        static_cast<std::uint8_t>(window >> 8U),
+        0U,  // public own-address type; unused by passive scanning
+        0U,  // accept all advertisements
+    };
+    return sendHciCommand(kHciLeSetScanParameters,
+                          parameters.data(), parameters.size());
+}
+
+bool setPassiveScanEnabled(bool enabled) {
+    const std::array<std::uint8_t, 2> parameters = {
+        static_cast<std::uint8_t>(enabled ? 1U : 0U),
+        0U,  // controller duplicate filter disabled; fixed host set owns it
+    };
+    return sendHciCommand(kHciLeSetScanEnable,
+                          parameters.data(), parameters.size());
+}
+
+void setAcceptingReports(bool accepting) {
+    portENTER_CRITICAL(&hciObserver.lock);
+    hciObserver.acceptingReports = accepting;
+    portEXIT_CRITICAL(&hciObserver.lock);
+}
+
+void processAdvertisement(const RawAdvertisement& source,
                           RawScanContext* context) {
     if (context == nullptr || context->result == nullptr ||
         context->visitor == nullptr) {
         return;
     }
     std::array<std::uint8_t, 6> canonicalAddress{};
-    std::reverse_copy(source.addr.val,
-                      source.addr.val + canonicalAddress.size(),
+    std::reverse_copy(source.address.begin(), source.address.end(),
                       canonicalAddress.begin());
     for (std::uint16_t index = 0; index < context->seenCount; ++index) {
         if (context->seenAddresses[index] == canonicalAddress) return;
@@ -212,22 +562,12 @@ void processAdvertisement(const ble_gap_disc_desc& source,
         return;
     }
 
-    ble_hs_adv_fields fields{};
-    const bool parsed = source.data != nullptr &&
-        ble_hs_adv_parse_fields(&fields, source.data,
-                                source.length_data) == 0;
     drivers::ble::BleAdvertisementRecord record;
     record.address = canonicalAddress;
-    record.addressType = source.addr.type;
-    record.rssiDbm = static_cast<std::int16_t>(source.rssi);
-    if (parsed && fields.name != nullptr) {
-        record.name = reinterpret_cast<const char*>(fields.name);
-        record.nameLength = std::min<std::size_t>(
-            fields.name_len,
-            domain::observations::Observation::kLabelCapacity);
-    }
-    populateAdvertisementFacts(source, parsed ? &fields : nullptr,
-                               &record.advertisement);
+    record.addressType = source.addressType;
+    record.rssiDbm = source.rssiDbm;
+    parseAdvertisementPayload(source, &record.name, &record.nameLength,
+                              &record.advertisement);
     increment(&context->result->recordsRead);
     switch (context->visitor(
         record, static_cast<std::uint64_t>(esp_timer_get_time()),
@@ -244,21 +584,30 @@ void processAdvertisement(const ble_gap_disc_desc& source,
     }
 }
 
-int handleGapEvent(ble_gap_event* event, void* argument) {
-    auto* context = static_cast<RawScanContext*>(argument);
-    if (event == nullptr || context == nullptr) return 0;
-    if (event->type == BLE_GAP_EVENT_DISC) {
-        processAdvertisement(event->disc, context);
-    } else if (event->type == BLE_GAP_EVENT_DISC_COMPLETE) {
-        context->completionReason = event->disc_complete.reason;
-        context->completionReported = true;
+void drainReports(RawScanContext* context) {
+    RawAdvertisement report;
+    while (popReport(&report)) processAdvertisement(report, context);
+    const std::uint16_t queueDrops = takeQueueDrops();
+    if (context == nullptr || context->result == nullptr) return;
+    for (std::uint16_t index = 0U; index < queueDrops; ++index) {
+        increment(&context->result->dropped);
     }
-    return 0;
 }
 
-std::uint16_t scanUnits(std::uint16_t milliseconds) {
-    return static_cast<std::uint16_t>(
-        (static_cast<std::uint32_t>(milliseconds) * 1000U) / 625U);
+bool deinitializeController() {
+    setAcceptingReports(false);
+    clearReportQueue();
+    bool complete = true;
+    const esp_bt_controller_status_t status =
+        esp_bt_controller_get_status();
+    if (status == ESP_BT_CONTROLLER_STATUS_ENABLED) {
+        complete = esp_bt_controller_disable() == ESP_OK;
+    }
+    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_INITED) {
+        complete = esp_bt_controller_deinit() == ESP_OK && complete;
+    }
+    return complete &&
+        esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE;
 }
 
 }  // namespace
@@ -279,15 +628,36 @@ const char* boardBleScanStatusName(BoardBleScanStatus status) {
 }
 
 bool BoardBlePassiveScanner::begin() {
-    if (initialized_) return false;
-    cleanupComplete_ = false;
-    passiveOnly_ = true;
-    if (!BLEDevice::init("")) {
-        cleanupComplete_ = true;
+    if (initialized_ ||
+        esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
         return false;
     }
-    if (ble_hs_id_infer_auto(0, &ownAddressType_) != 0) {
-        BLEDevice::deinit(false);
+    cleanupComplete_ = false;
+    passiveOnly_ = true;
+    clearReportQueue();
+    setAcceptingReports(false);
+
+    esp_bt_controller_config_t config =
+        BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+    // The observer needs one legacy scan activity only. Do not reserve the
+    // NimBLE host task, connections, advertising, encryption, DTM, or ACL TX.
+    config.ble_max_act = 1U;
+    config.ble_st_acl_tx_buf_nb = 0U;
+    config.ble_adv_dup_filt_max = 10U;
+    config.normal_adv_size = 10U;
+    config.mesh_adv_size = 0U;
+    config.ble_50_feat_supp = false;
+    config.dtm_en = false;
+    config.enc_en = false;
+    config.connect_en = false;
+    config.scan_en = true;
+    config.adv_en = false;
+
+    if (esp_bt_controller_init(&config) != ESP_OK ||
+        esp_bt_controller_enable(ESP_BT_MODE_BLE) != ESP_OK ||
+        esp_vhci_host_register_callback(&kHciCallbacks) != ESP_OK ||
+        !sendHciCommand(kHciReset, nullptr, 0U)) {
+        deinitializeController();
         cleanupComplete_ = true;
         return false;
     }
@@ -305,17 +675,6 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
         return result;
     }
 
-    ble_gap_disc_params parameters{};
-    parameters.passive = 1;
-    parameters.limited = 0;
-    // Receive every advertisement and deduplicate into a fixed 128-address
-    // array. This preserves later enrichment packets without the Arduino BLE
-    // wrapper's unbounded heap-backed result objects and address map.
-    parameters.filter_duplicates = 0;
-    parameters.filter_policy = BLE_HCI_SCAN_FILT_NO_WL;
-    parameters.itvl = scanUnits(plan.intervalMs);
-    parameters.window = scanUnits(plan.windowMs);
-
     RawScanContext scanContext;
     scanContext.maximumRecords = plan.maximumRecords;
     scanContext.visitor = visitor;
@@ -326,36 +685,36 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
     for (std::uint16_t attempt = 1U;
          attempt <= kMaximumScanAttempts; ++attempt) {
         result.attempts = attempt;
-        scanContext.completionReported = false;
-        scanContext.completionReason = 0;
-        const std::uint64_t attemptStartedUs =
-            static_cast<std::uint64_t>(esp_timer_get_time());
-        activeScan_ = true;
-        const int started = ble_gap_disc(
-            ownAddressType_, static_cast<std::int32_t>(plan.durationMs),
-            &parameters, handleGapEvent, &scanContext);
-        if (started != 0) {
+        clearReportQueue();
+        setAcceptingReports(true);
+        const bool started = configurePassiveScan(plan) &&
+            setPassiveScanEnabled(true);
+        if (!started) {
+            setAcceptingReports(false);
             activeScan_ = false;
             result.status = BoardBleScanStatus::ScannerUnavailable;
         } else {
-            const std::uint64_t deadlineUs = attemptStartedUs +
-                static_cast<std::uint64_t>(
-                    plan.durationMs + kCompletionGraceMs) * 1000ULL;
-            while (!scanContext.completionReported &&
-                   ble_gap_disc_active() != 0 &&
+            activeScan_ = true;
+            const std::uint64_t deadlineUs =
+                static_cast<std::uint64_t>(esp_timer_get_time()) +
+                static_cast<std::uint64_t>(plan.durationMs) * 1000ULL;
+            while (activeScan_ &&
                    static_cast<std::uint64_t>(esp_timer_get_time()) <
                        deadlineUs) {
-                vTaskDelay(pdMS_TO_TICKS(20));
+                drainReports(&scanContext);
+                vTaskDelay(pdMS_TO_TICKS(5U));
             }
-            if (ble_gap_disc_active() != 0) {
-                ble_gap_disc_cancel();
-                result.status = BoardBleScanStatus::ScanTimedOut;
-            } else if (scanContext.completionReported) {
-                result.status = BoardBleScanStatus::Valid;
-            } else {
-                result.status = BoardBleScanStatus::ScannerUnavailable;
-            }
+            drainReports(&scanContext);
+            const bool completedWindow = activeScan_;
+            const bool disabled = completedWindow
+                ? setPassiveScanEnabled(false)
+                : true;
             activeScan_ = false;
+            setAcceptingReports(false);
+            drainReports(&scanContext);
+            result.status = completedWindow && disabled
+                ? BoardBleScanStatus::Valid
+                : BoardBleScanStatus::ScanTimedOut;
         }
         if (result.valid() || attempt == kMaximumScanAttempts) break;
         if (result.status != BoardBleScanStatus::ScannerUnavailable &&
@@ -371,10 +730,11 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
 }
 
 bool BoardBlePassiveScanner::cancelActiveScan() {
-    if (!activeScan_ || ble_gap_disc_active() == 0) return true;
-    const int cancelled = ble_gap_disc_cancel();
+    if (!activeScan_) return true;
+    const bool cancelled = setPassiveScanEnabled(false);
     activeScan_ = false;
-    return cancelled == 0 || cancelled == BLE_HS_EALREADY;
+    setAcceptingReports(false);
+    return cancelled;
 }
 
 bool BoardBlePassiveScanner::end() {
@@ -383,8 +743,7 @@ bool BoardBlePassiveScanner::end() {
         return cleanupComplete_;
     }
     bool complete = cancelActiveScan();
-    complete = complete && ble_gap_disc_active() == 0;
-    BLEDevice::deinit(false);
+    complete = deinitializeController() && complete;
     initialized_ = false;
     activeScan_ = false;
     cleanupComplete_ = complete;

@@ -73,7 +73,6 @@ private:
     bool initialized_ = false;
     bool passiveOnly_ = true;
     bool cleanupComplete_ = true;
-    std::uint8_t ownAddressType_ = 0;
     static volatile bool activeScan_;
 };
 

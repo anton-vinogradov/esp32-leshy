@@ -32,7 +32,7 @@ def main() -> int:
         return 1
 
     require(
-        'LESHY1_VERSION=\\"0.199.0-passive-radio-coexistence\\"'
+        'LESHY1_VERSION=\\"0.200.0-controller-only-ble-observer\\"'
         in platformio,
         "current passive-radio coexistence version is missing", failures)
     require("const esp_err_t error = esp_netif_deinit();" not in service,

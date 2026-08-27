@@ -437,17 +437,23 @@ def main() -> int:
     else:
         passive_ble = passive_ble_adapter.read_text(encoding="utf-8")
         for marker in (
-            "parameters.passive = 1",
-            "parameters.filter_duplicates = 0",
-            "ble_gap_disc(",
-            "ble_hs_adv_parse_fields",
+            "BT_CONTROLLER_INIT_CONFIG_DEFAULT()",
+            "config.ble_max_act = 1U",
+            "config.connect_en = false",
+            "config.scan_en = true",
+            "config.adv_en = false",
+            "esp_vhci_host_register_callback",
+            "kHciLeSetScanParameters",
+            "passive scan: never transmit scan requests",
+            "kHciLeAdvertisingReport",
+            "parseAdvertisementPayload",
             "BoardBleScanStatus::ScanTimedOut",
             "RawScanContext",
             "seenAddresses",
             "validatePassivePlan(plan)",
             "plan.maximumRecords",
-            "ble_gap_disc_cancel",
-            "BLEDevice::deinit(false)",
+            "setPassiveScanEnabled(false)",
+            "esp_bt_controller_deinit()",
         ):
             if marker not in passive_ble:
                 errors.append(f"passive BLE adapter is missing: {marker}")
@@ -460,6 +466,9 @@ def main() -> int:
             "m_vectorAdvertisedDevices",
             "std::map",
             ".getScan()",
+            "BLEDevice::init",
+            "ble_gap_disc(",
+            "nimble_port_init",
         ):
             if marker in passive_ble:
                 errors.append(
