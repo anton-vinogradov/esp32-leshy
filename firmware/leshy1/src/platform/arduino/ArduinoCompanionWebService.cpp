@@ -1,5 +1,6 @@
 #include "ArduinoCompanionWebService.h"
 
+#include <cerrno>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -8,6 +9,7 @@
 #include <esp_heap_caps.h>
 #include <esp_wifi.h>
 #include <esp_wifi_default.h>
+#include <lwip/sockets.h>
 
 #include "services/companion/CompanionWebAdapter.h"
 
@@ -328,40 +330,78 @@ void ArduinoCompanionWebService::resetClient() {
     request_.fill('\0');
     header_.fill('\0');
     response_.fill('\0');
+    responseHeader_.fill('\0');
     requestLength_ = 0;
+    responseBody_ = nullptr;
+    responseHeaderLength_ = 0;
+    responseHeaderOffset_ = 0;
+    responseBodyLength_ = 0;
+    responseBodyOffset_ = 0;
     clientStartedUs_ = 0;
+    responsePending_ = false;
 }
 
 void ArduinoCompanionWebService::sendResponse(
     std::uint16_t status, const char* contentType, const char* body,
     std::size_t bodyLength) {
-    if (!client_ || contentType == nullptr || body == nullptr) return;
-    char headers[256] = {};
+    if (!client_ || responsePending_ || contentType == nullptr ||
+        body == nullptr) {
+        return;
+    }
     const int length = std::snprintf(
-        headers, sizeof(headers),
+        responseHeader_.data(), responseHeader_.size(),
         "HTTP/1.1 %u %s\r\nContent-Type: %s\r\nContent-Length: %u\r\n"
         "Cache-Control: no-store\r\nConnection: close\r\n"
         "X-Content-Type-Options: nosniff\r\n\r\n",
         static_cast<unsigned>(status), httpReason(status), contentType,
         static_cast<unsigned>(bodyLength));
-    if (length <= 0 || static_cast<std::size_t>(length) >= sizeof(headers)) {
+    if (length <= 0 ||
+        static_cast<std::size_t>(length) >= responseHeader_.size()) {
         return;
     }
-    client_.write(reinterpret_cast<const std::uint8_t*>(headers),
-                  static_cast<std::size_t>(length));
-    constexpr std::size_t kChunkBytes = 1024;
-    std::size_t offset = 0;
-    while (offset < bodyLength && client_) {
-        const std::size_t remaining = bodyLength - offset;
-        const std::size_t chunk = remaining < kChunkBytes
-            ? remaining : kChunkBytes;
-        const std::size_t written = client_.write(
-            reinterpret_cast<const std::uint8_t*>(body + offset), chunk);
-        if (written == 0) break;
-        offset += written;
-        yield();
+    responseBody_ = body;
+    responseHeaderLength_ = static_cast<std::size_t>(length);
+    responseHeaderOffset_ = 0;
+    responseBodyLength_ = bodyLength;
+    responseBodyOffset_ = 0;
+    responsePending_ = true;
+}
+
+ArduinoCompanionWebService::DrainResult
+ArduinoCompanionWebService::drainResponse() {
+    if (!responsePending_ || !client_ || client_.fd() < 0) {
+        return DrainResult::Failed;
     }
-    client_.stop();
+    const char* data = nullptr;
+    std::size_t* offset = nullptr;
+    std::size_t length = 0;
+    if (responseHeaderOffset_ < responseHeaderLength_) {
+        data = responseHeader_.data();
+        offset = &responseHeaderOffset_;
+        length = responseHeaderLength_;
+    } else if (responseBodyOffset_ < responseBodyLength_) {
+        data = responseBody_;
+        offset = &responseBodyOffset_;
+        length = responseBodyLength_;
+    } else {
+        return DrainResult::Complete;
+    }
+    const std::size_t remaining = length - *offset;
+    const std::size_t chunk = remaining < kWriteChunkBytes
+        ? remaining : kWriteChunkBytes;
+    const ssize_t written = ::send(
+        client_.fd(), data + *offset, chunk, MSG_DONTWAIT);
+    if (written > 0) {
+        *offset += static_cast<std::size_t>(written);
+        return responseHeaderOffset_ == responseHeaderLength_ &&
+                responseBodyOffset_ == responseBodyLength_
+            ? DrainResult::Complete
+            : DrainResult::Pending;
+    }
+    if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        return DrainResult::Pending;
+    }
+    return DrainResult::Failed;
 }
 
 bool ArduinoCompanionWebService::processRequest(
@@ -373,7 +413,7 @@ bool ArduinoCompanionWebService::processRequest(
     const std::size_t headerLength =
         static_cast<std::size_t>(delimiter - request_.data()) + 4U;
     if (headerLength > kMaximumHeaderBytes) {
-        constexpr char body[] =
+        static constexpr char body[] =
             "{\"schema\":\"leshy.companion.response.v1\",\"kind\":"
             "\"error\",\"request_id\":\"\",\"status\":\"error\","
             "\"reason\":\"headers_too_large\"}\n";
@@ -505,7 +545,7 @@ bool ArduinoCompanionWebService::processRequest(
         &responseLength, context);
     if (!encoded || responseLength == 0 ||
         responseLength > services::companion::kCompanionMaxFrameBytes) {
-        constexpr char error[] =
+        static constexpr char error[] =
             "{\"schema\":\"leshy.companion.response.v1\",\"kind\":"
             "\"error\",\"request_id\":\"\",\"status\":\"error\","
             "\"reason\":\"response_encoding_failed\"}\n";
@@ -538,12 +578,19 @@ bool ArduinoCompanionWebService::poll(
         resetClient();
         return false;
     }
+    if (responsePending_) {
+        const DrainResult result = drainResponse();
+        if (result == DrainResult::Pending) return false;
+        if (result == DrainResult::Failed) ++requestsRejected_;
+        resetClient();
+        return result == DrainResult::Complete;
+    }
     std::size_t reads = 0;
     while (client_.available() > 0 && reads < 384U) {
         const int value = client_.read();
         if (value < 0) break;
         if (requestLength_ >= kRequestCapacity) {
-            constexpr char body[] =
+            static constexpr char body[] =
                 "{\"schema\":\"leshy.companion.response.v1\",\"kind\":"
                 "\"error\",\"request_id\":\"\",\"status\":\"error\","
                 "\"reason\":\"frame_too_large\"}\n";
@@ -551,7 +598,6 @@ bool ArduinoCompanionWebService::poll(
                          services::companion::kCompanionWebJsonContentType,
                          body, sizeof(body) - 1U);
             ++requestsRejected_;
-            resetClient();
             return true;
         }
         request_[requestLength_++] = static_cast<char>(value);
@@ -560,6 +606,13 @@ bool ArduinoCompanionWebService::poll(
     const bool complete = processRequest(
         deviceSessionAuthorized, handler, context);
     if (complete) {
+        if (responsePending_) {
+            const DrainResult result = drainResponse();
+            if (result == DrainResult::Pending) return false;
+            if (result == DrainResult::Failed) ++requestsRejected_;
+            resetClient();
+            return result == DrainResult::Complete;
+        }
         resetClient();
         return true;
     }

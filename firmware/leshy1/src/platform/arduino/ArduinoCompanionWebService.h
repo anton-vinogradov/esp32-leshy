@@ -29,10 +29,8 @@ public:
     static constexpr std::uint64_t kClientDeadlineUs = 3000000ULL;
     static constexpr int kStaticRxBuffers = 2;
     static constexpr int kDynamicRxBuffers = 1;
-    // The pinned ESP-IDF libraries are compiled for static TX buffers. Six
-    // buffers cover the bounded 6.6 KiB index response without stalling the
-    // supervised main loop while the single local client acknowledges it.
-    static constexpr int kStaticTxBuffers = 6;
+    // The pinned ESP-IDF libraries are compiled for static TX buffers.
+    static constexpr int kStaticTxBuffers = 2;
     static constexpr int kDynamicTxBuffers = 0;
     static constexpr int kRxManagementBuffers = 1;
     static constexpr int kCacheTxBuffers = 1;
@@ -40,6 +38,8 @@ public:
     static constexpr int kManagementShortBuffers = 6;
     static constexpr std::uint32_t kApReadyTimeoutMs = 2000;
     static constexpr std::uint32_t kApReadyPollMs = 10;
+    static constexpr std::size_t kResponseHeaderCapacity = 256;
+    static constexpr std::size_t kWriteChunkBytes = 512;
 
     enum class BeginStage : std::uint8_t {
         Idle,
@@ -86,9 +86,16 @@ public:
     static const char* beginStageName(BeginStage stage);
 
 private:
+    enum class DrainResult : std::uint8_t {
+        Pending,
+        Complete,
+        Failed,
+    };
+
     void resetClient();
     void sendResponse(std::uint16_t status, const char* contentType,
                       const char* body, std::size_t bodyLength);
+    DrainResult drainResponse();
     bool processRequest(bool deviceSessionAuthorized,
                         CompanionWebFrameHandler handler, void* context);
     bool cleanupRuntime();
@@ -100,7 +107,13 @@ private:
     std::array<char, kMaximumHeaderBytes + 1U> header_{};
     std::array<char, services::companion::kCompanionMaxFrameBytes + 1U>
         response_{};
+    std::array<char, kResponseHeaderCapacity> responseHeader_{};
     std::size_t requestLength_ = 0;
+    const char* responseBody_ = nullptr;
+    std::size_t responseHeaderLength_ = 0;
+    std::size_t responseHeaderOffset_ = 0;
+    std::size_t responseBodyLength_ = 0;
+    std::size_t responseBodyOffset_ = 0;
     std::uint64_t clientStartedUs_ = 0;
     std::uint32_t requestsHandled_ = 0;
     std::uint32_t requestsRejected_ = 0;
@@ -118,6 +131,7 @@ private:
     bool wifiStarted_ = false;
     bool cleanupComplete_ = true;
     bool active_ = false;
+    bool responsePending_ = false;
 };
 
 }  // namespace leshy1::platform::arduino
