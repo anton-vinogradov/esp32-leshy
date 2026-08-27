@@ -84,15 +84,12 @@ def main() -> int:
         "!allowReplacement",
     )
     required_adapter = (
-        "BT_CONTROLLER_INIT_CONFIG_DEFAULT()",
-        "observerCommand = opcode == kHciReset",
-        "opcode == kHciLeSetScanParameters",
+        "btStart()",
+        "btStop()",
+        "observerCommand = opcode == kHciLeSetScanParameters",
         "opcode == kHciLeSetScanEnable",
         "No HCI RF-TX",
         "esp_vhci_host_register_callback",
-        "waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_INITED)",
-        "waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_ENABLED)",
-        "waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_IDLE)",
         "kHciLeSetScanParameters",
         "passive scan: never transmit scan requests",
         "kHciLeAdvertisingReport",
@@ -118,6 +115,8 @@ def main() -> int:
         "BLEDevice::init",
         "ble_gap_disc(",
         "nimble_port_init",
+        "kHciReset",
+        "esp_bt_controller_init",
     )
     required_strings = (
         "BleDevicesTitle",

@@ -437,15 +437,12 @@ def main() -> int:
     else:
         passive_ble = passive_ble_adapter.read_text(encoding="utf-8")
         for marker in (
-            "BT_CONTROLLER_INIT_CONFIG_DEFAULT()",
-            "observerCommand = opcode == kHciReset",
-            "opcode == kHciLeSetScanParameters",
+            "btStart()",
+            "btStop()",
+            "observerCommand = opcode == kHciLeSetScanParameters",
             "opcode == kHciLeSetScanEnable",
             "No HCI RF-TX",
             "esp_vhci_host_register_callback",
-            "waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_INITED)",
-            "waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_ENABLED)",
-            "waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_IDLE)",
             "kHciLeSetScanParameters",
             "passive scan: never transmit scan requests",
             "kHciLeAdvertisingReport",
@@ -456,7 +453,6 @@ def main() -> int:
             "validatePassivePlan(plan)",
             "plan.maximumRecords",
             "setPassiveScanEnabled(false)",
-            "esp_bt_controller_deinit()",
         ):
             if marker not in passive_ble:
                 errors.append(f"passive BLE adapter is missing: {marker}")
@@ -472,6 +468,8 @@ def main() -> int:
             "BLEDevice::init",
             "ble_gap_disc(",
             "nimble_port_init",
+            "kHciReset",
+            "esp_bt_controller_init",
         ):
             if marker in passive_ble:
                 errors.append(

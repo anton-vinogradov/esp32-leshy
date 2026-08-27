@@ -8,6 +8,7 @@
 #include <esp_bt.h>
 #include <esp_err.h>
 #include <esp_timer.h>
+#include <esp32-hal-bt.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 #include <freertos/task.h>
@@ -25,11 +26,9 @@ constexpr std::uint8_t kHciCommandCompleteEvent = 0x0eU;
 constexpr std::uint8_t kHciCommandStatusEvent = 0x0fU;
 constexpr std::uint8_t kHciLeMetaEvent = 0x3eU;
 constexpr std::uint8_t kHciLeAdvertisingReport = 0x02U;
-constexpr std::uint16_t kHciReset = 0x0c03U;
 constexpr std::uint16_t kHciLeSetScanParameters = 0x200bU;
 constexpr std::uint16_t kHciLeSetScanEnable = 0x200cU;
 constexpr std::uint32_t kHciCommandTimeoutMs = 1000U;
-constexpr std::uint32_t kControllerTransitionTimeoutMs = 1000U;
 
 struct RawAdvertisement final {
     std::array<std::uint8_t, 6> address{};
@@ -463,8 +462,7 @@ void releaseCommandSlot() {
 bool sendHciCommand(std::uint16_t opcode,
                     const std::uint8_t* parameters,
                     std::size_t parameterLength) {
-    const bool observerCommand = opcode == kHciReset ||
-        opcode == kHciLeSetScanParameters ||
+    const bool observerCommand = opcode == kHciLeSetScanParameters ||
         opcode == kHciLeSetScanEnable;
     if (!observerCommand || parameterLength > 12U) return false;
     const std::uint64_t deadlineUs =
@@ -598,33 +596,10 @@ void drainReports(RawScanContext* context) {
     }
 }
 
-bool waitForControllerStatus(esp_bt_controller_status_t expected) {
-    const std::uint64_t deadlineUs =
-        static_cast<std::uint64_t>(esp_timer_get_time()) +
-        static_cast<std::uint64_t>(kControllerTransitionTimeoutMs) * 1000ULL;
-    while (esp_bt_controller_get_status() != expected &&
-           static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
-        vTaskDelay(pdMS_TO_TICKS(1U));
-    }
-    return esp_bt_controller_get_status() == expected;
-}
-
 bool deinitializeController() {
     setAcceptingReports(false);
     clearReportQueue();
-    bool complete = true;
-    const esp_bt_controller_status_t status =
-        esp_bt_controller_get_status();
-    if (status == ESP_BT_CONTROLLER_STATUS_ENABLED) {
-        complete = esp_bt_controller_disable() == ESP_OK &&
-            waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_INITED);
-    }
-    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_INITED) {
-        complete = esp_bt_controller_deinit() == ESP_OK && complete;
-        complete = waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_IDLE) &&
-            complete;
-    }
-    return complete &&
+    return btStop() &&
         esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE;
 }
 
@@ -655,20 +630,13 @@ bool BoardBlePassiveScanner::begin() {
     clearReportQueue();
     setAcceptingReports(false);
 
-    esp_bt_controller_config_t config =
-        BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    // Keep the precompiled Espressif controller's validated matching config.
-    // The memory-heavy NimBLE host is not initialized, and sendHciCommand()
-    // admits only reset and legacy passive-scan control opcodes. No HCI RF-TX
-    // operation (advertising, initiating, connecting, or active scanning) is
+    // Use the framework's proven controller lifecycle without initializing the
+    // memory-heavy NimBLE host. sendHciCommand() admits only legacy passive
+    // scan parameters and enable/disable opcodes. No HCI RF-TX operation
+    // (advertising, initiating, connecting, or active scanning) is
     // representable through this adapter.
-
-    if (esp_bt_controller_init(&config) != ESP_OK ||
-        !waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_INITED) ||
-        esp_bt_controller_enable(ESP_BT_MODE_BLE) != ESP_OK ||
-        !waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_ENABLED) ||
-        esp_vhci_host_register_callback(&kHciCallbacks) != ESP_OK ||
-        !sendHciCommand(kHciReset, nullptr, 0U)) {
+    if (!btStart() ||
+        esp_vhci_host_register_callback(&kHciCallbacks) != ESP_OK) {
         deinitializeController();
         cleanupComplete_ = true;
         return false;
