@@ -5756,11 +5756,12 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         return true;
     }
 
-    // Mount before reserving the large codec buffer. A saturated Wi-Fi visit
-    // can leave enough aggregate heap for both operations but not enough for
-    // FatFs after a 24 KiB contiguous allocation. Session recovery uses the
-    // permanent bounded store workspace, so the target-state buffer is needed
-    // only after the filesystem and exact session pair are already available.
+    // Mount before switching the shared static codec union from Session to
+    // Target state. A completed Local Web visit leaves the process-lifetime
+    // TCP/IP core resident, so a second 24 KiB heap allocation can fail while
+    // FatFs is mounted even after the idle Survey worker has been suspended.
+    // Session recovery completes first; the same static bytes can then hold
+    // the target-state wire without consuming or fragmenting dynamic heap.
     // Both atomic heads, manifests and payload checksums are then validated
     // while mounted; semantic decoding happens after unmount directly into the
     // one long-lived runtime catalog and decision log. After unmount the
@@ -5795,7 +5796,8 @@ bool loadTargetsProduct(const AppMenuItem& item) {
     if (!mounted || !filesystem.readOnlyGuaranteed()) {
         if (filesystem.mounted()) filesystem.end();
         targetsCleanupComplete = filesystem.cleanupComplete();
-        delete targetStateWorkspace;
+        releaseTargetsStoreCodecWorkspace(targetStateWorkspace);
+        targetStateWorkspace = nullptr;
         targetsProductStatus = "readonly_mount_failed";
         lastRuntimeEvent = targetsProductStatus;
         return true;
@@ -5863,8 +5865,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 filesystem.exists(
                     "/leshy/sessions/v1/target-state-head-b.bin");
             if (sessionReady && targetStatePresent) {
-                targetStateWorkspace = new (std::nothrow)
-                    leshy1::storage::TargetDecisionStateStoreWorkspace();
+                targetStateWorkspace = acquireTargetsStoreCodecWorkspace();
                 if (targetStateWorkspace == nullptr) {
                     targetStateAccepted = false;
                     targetsProductStatus = "target_state_workspace_unavailable";
@@ -5915,7 +5916,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 delete merges;
                 delete decisions;
                 delete catalog;
-                delete targetStateWorkspace;
+                releaseTargetsStoreCodecWorkspace(targetStateWorkspace);
                 targetStateWorkspace = nullptr;
                 targetsProductStatus = "workspace_unavailable";
                 lastRuntimeEvent = targetsProductStatus;
@@ -5928,7 +5929,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
                 targetStateWorkspace->stateSize,
                 catalog, decisions, merges);
             loadWatchdog.checkpoint();
-            delete targetStateWorkspace;
+            releaseTargetsStoreCodecWorkspace(targetStateWorkspace);
             targetStateWorkspace = nullptr;
             if (reopened != leshy1::storage::TargetCodecStatus::Valid) {
                 delete merges;
@@ -5947,7 +5948,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
             persistedForLoad = &targetsProductRuntime->workspace.catalog;
             decisionsForLoad = &targetsProductRuntime->workspace.decisions;
         } else {
-            delete targetStateWorkspace;
+            releaseTargetsStoreCodecWorkspace(targetStateWorkspace);
             targetStateWorkspace = nullptr;
             if (!allocateTargetsProduct()) return false;
         }
@@ -5967,7 +5968,7 @@ bool loadTargetsProduct(const AppMenuItem& item) {
         targetsProductStatus =
             leshy1::apps::targets::targetsLoadStatusName(loaded);
     }
-    delete targetStateWorkspace;
+    releaseTargetsStoreCodecWorkspace(targetStateWorkspace);
     lastRuntimeEvent = targetsProductStatus;
     return true;
 }

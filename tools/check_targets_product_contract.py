@@ -96,8 +96,9 @@ def main() -> int:
             "blocks" in load_product and
             "wire workspace is then released before the remaining runtime"
             in load_product and
-            load_product.index("delete targetStateWorkspace;",
-                               load_product.index("reopenTargetState(")) <
+            load_product.index(
+                "releaseTargetsStoreCodecWorkspace(targetStateWorkspace);",
+                load_product.index("reopenTargetState(")) <
                 load_product.index("finishTargetsProductAllocation(",
                                    load_product.index("reopenTargetState(")) and
             "recoverTargetProductStateWire(" in load_product and
@@ -121,8 +122,14 @@ def main() -> int:
     mutation_end = entry.index("bool requestTargetsFavoriteMutation")
     mutation_worker = entry[mutation_start:mutation_end]
     require(failures,
-            load_product.index("TargetDecisionStateStoreWorkspace();") >
+            load_product.index("acquireTargetsStoreCodecWorkspace()") >
                 load_product.index("filesystem.beginReadOnly()") and
+            "new (std::nothrow)\n"
+            "                    leshy1::storage::"
+            "TargetDecisionStateStoreWorkspace();" not in load_product and
+            load_product.count(
+                "releaseTargetsStoreCodecWorkspace(targetStateWorkspace);")
+                >= 4 and
             mutation_worker.index("acquireTargetsStoreCodecWorkspace()") >
                 mutation_worker.index("filesystem.begin()") and
             "shared_codec_unavailable_after_mount" in mutation_worker and

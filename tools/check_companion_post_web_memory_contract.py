@@ -32,9 +32,9 @@ def main() -> int:
         return 1
 
     require(
-        'LESHY1_VERSION=\\"0.196.0-companion-post-web-admission\\"'
+        'LESHY1_VERSION=\\"0.196.1-companion-post-web-shared-codec\\"'
         in platformio,
-        "exact 0.196 version is missing", failures)
+        "exact 0.196.1 version is missing", failures)
     require("const esp_err_t error = esp_netif_deinit();" not in service,
             "unsupported esp_netif_deinit must not be called", failures)
     require("process-lifetime" in service and
@@ -63,6 +63,22 @@ def main() -> int:
                 failures)
         require('post_web_memory_admission_failed' in load_prefix,
                 "failed post-Web admission is not visible", failures)
+        load_body = entry[loader:entry.find(
+            "bool rebuildTargetsProductFromCatalog", loader)]
+        require("targetStateWorkspace = acquireTargetsStoreCodecWorkspace();"
+                in load_body,
+                "post-Web load still allocates a second target codec",
+                failures)
+        require("new (std::nothrow)\n"
+                "                    leshy1::storage::"
+                "TargetDecisionStateStoreWorkspace();" not in load_body,
+                "post-Web load still heap-allocates the target codec",
+                failures)
+        require(load_body.count(
+                    "releaseTargetsStoreCodecWorkspace(targetStateWorkspace);")
+                >= 4,
+                "post-Web load does not release the shared codec on every "
+                "terminal path", failures)
     if release >= 0:
         release_body = entry[release:entry.find(
             "bool finishTargetsProductAllocation", release)]
@@ -75,7 +91,7 @@ def main() -> int:
         return 1
     print(
         "post-Web memory contract passed: unsupported netif deinit avoided; "
-        "sticky core makes Targets and idle Survey worker lifecycle-exclusive"
+        "Targets admits sticky-core memory and reuses the static store codec"
     )
     return 0
 
