@@ -405,7 +405,22 @@ def _opener() -> urllib.request.OpenerDirector:
 def http_get(url: str, timeout: float = 10.0) -> tuple[int, str, bytes]:
     request = urllib.request.Request(url, method="GET")
     with _opener().open(request, timeout=timeout) as response:
-        return response.status, response.headers.get_content_type(), response.read()
+        expected = int(response.headers.get("Content-Length", "0"))
+        body = bytearray()
+        try:
+            while len(body) < expected:
+                chunk = response.read(min(512, expected - len(body)))
+                if not chunk:
+                    break
+                body.extend(chunk)
+        except TimeoutError as error:
+            raise TimeoutError(
+                "HTTP body timed out after "
+                f"{len(body)}/{expected} bytes") from error
+        if len(body) != expected:
+            raise RuntimeError(
+                f"HTTP body closed after {len(body)}/{expected} bytes")
+        return response.status, response.headers.get_content_type(), bytes(body)
 
 
 def http_companion_request(
