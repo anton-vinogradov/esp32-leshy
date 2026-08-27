@@ -39,8 +39,10 @@ public:
     static constexpr std::uint32_t kApReadyTimeoutMs = 2000;
     static constexpr std::uint32_t kApReadyPollMs = 10;
     static constexpr std::size_t kResponseHeaderCapacity = 256;
-    // Exact CONFIG_LWIP_TCP_MSS in the pinned ESP32-S3 Arduino libraries.
-    static constexpr std::size_t kWriteChunkBytes = 1436;
+    // Keep each non-blocking write comfortably inside the two static Wi-Fi
+    // TX buffers, but drain several chunks before returning to the UI loop.
+    static constexpr std::size_t kWriteChunkBytes = 512;
+    static constexpr std::size_t kWriteBurstChunks = 4;
 
     enum class BeginStage : std::uint8_t {
         Idle,

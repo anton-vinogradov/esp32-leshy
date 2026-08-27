@@ -379,44 +379,47 @@ ArduinoCompanionWebService::drainResponse() {
     if (!responsePending_ || !client_ || client_.fd() < 0) {
         return DrainResult::Failed;
     }
-    const char* data = nullptr;
-    std::size_t* offset = nullptr;
-    std::size_t length = 0;
-    if (responseHeaderOffset_ < responseHeaderLength_) {
-        data = responseHeader_.data();
-        offset = &responseHeaderOffset_;
-        length = responseHeaderLength_;
-    } else if (responseBodyOffset_ < responseBodyLength_) {
-        data = responseBody_;
-        offset = &responseBodyOffset_;
-        length = responseBodyLength_;
-    } else {
-        return DrainResult::Complete;
-    }
-    const std::size_t remaining = length - *offset;
-    const std::size_t chunk = remaining < kWriteChunkBytes
-        ? remaining : kWriteChunkBytes;
-    const ssize_t written = ::send(
-        client_.fd(), data + *offset, chunk, MSG_DONTWAIT);
-    if (written > 0) {
-        *offset += static_cast<std::size_t>(written);
-        if (offset == &responseBodyOffset_) {
-            lastResponseBodyBytes_ = responseBodyOffset_;
+    for (std::size_t attempt = 0; attempt < kWriteBurstChunks; ++attempt) {
+        const char* data = nullptr;
+        std::size_t* offset = nullptr;
+        std::size_t length = 0;
+        if (responseHeaderOffset_ < responseHeaderLength_) {
+            data = responseHeader_.data();
+            offset = &responseHeaderOffset_;
+            length = responseHeaderLength_;
+        } else if (responseBodyOffset_ < responseBodyLength_) {
+            data = responseBody_;
+            offset = &responseBodyOffset_;
+            length = responseBodyLength_;
+        } else {
+            return DrainResult::Complete;
         }
-        return responseHeaderOffset_ == responseHeaderLength_ &&
-                responseBodyOffset_ == responseBodyLength_
-            ? DrainResult::Complete
-            : DrainResult::Pending;
-    }
-    if (written < 0) {
-        lastSendErrno_ = errno;
-        if (errno == EAGAIN || errno == EWOULDBLOCK ||
-            errno == ENOBUFS || errno == ENOMEM) {
-            ++sendBackpressureEvents_;
-            return DrainResult::Pending;
+        const std::size_t remaining = length - *offset;
+        const std::size_t chunk = remaining < kWriteChunkBytes
+            ? remaining : kWriteChunkBytes;
+        const ssize_t written = ::send(
+            client_.fd(), data + *offset, chunk, MSG_DONTWAIT);
+        if (written > 0) {
+            *offset += static_cast<std::size_t>(written);
+            if (offset == &responseBodyOffset_) {
+                lastResponseBodyBytes_ = responseBodyOffset_;
+            }
+            continue;
         }
+        if (written < 0) {
+            lastSendErrno_ = errno;
+            if (errno == EAGAIN || errno == EWOULDBLOCK ||
+                errno == ENOBUFS || errno == ENOMEM) {
+                ++sendBackpressureEvents_;
+                return DrainResult::Pending;
+            }
+        }
+        return DrainResult::Failed;
     }
-    return DrainResult::Failed;
+    return responseHeaderOffset_ == responseHeaderLength_ &&
+            responseBodyOffset_ == responseBodyLength_
+        ? DrainResult::Complete
+        : DrainResult::Pending;
 }
 
 bool ArduinoCompanionWebService::processRequest(
