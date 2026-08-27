@@ -125,6 +125,16 @@ run_opaque_evidence_check() {
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/airspace_guard_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/guard/AirspaceGuard.cpp" \
+    -o "$test_tmp/airspace_guard_tests"
+
+"$test_tmp/airspace_guard_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/target_foundation_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/Target.cpp" \
     "$repo_dir/firmware/leshy1/src/domain/targets/TargetCatalog.cpp" \
@@ -385,6 +395,7 @@ python3 "$repo_dir/tools/check_visual_system_acceptance.py"
 python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_companion_protocol_contract.py"
+python3 "$repo_dir/tools/check_airspace_guard_contract.py"
 python3 "$repo_dir/tools/check_companion_post_web_memory_contract.py"
 python3 "$repo_dir/tools/check_companion_post_web_acceptance.py"
 python3 "$repo_dir/tools/check_stage_demo_s6_contract.py"
