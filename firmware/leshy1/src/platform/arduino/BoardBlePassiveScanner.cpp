@@ -2,16 +2,19 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 
-#include <esp_bt.h>
 #include <esp_err.h>
 #include <esp_timer.h>
-#include <esp32-hal-bt.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 #include <freertos/task.h>
+#include <host/ble_gap.h>
+#include <host/ble_hs.h>
+#include <nimble/nimble_port.h>
+#include <nimble/nimble_port_freertos.h>
 
 namespace leshy1::platform::arduino {
 
@@ -20,15 +23,7 @@ namespace {
 using AdvertisementFacts =
     domain::observations::BleAdvertisementFacts;
 
-constexpr std::uint8_t kHciCommandPacket = 0x01U;
-constexpr std::uint8_t kHciEventPacket = 0x04U;
-constexpr std::uint8_t kHciCommandCompleteEvent = 0x0eU;
-constexpr std::uint8_t kHciCommandStatusEvent = 0x0fU;
-constexpr std::uint8_t kHciLeMetaEvent = 0x3eU;
-constexpr std::uint8_t kHciLeAdvertisingReport = 0x02U;
-constexpr std::uint16_t kHciLeSetScanParameters = 0x200bU;
-constexpr std::uint16_t kHciLeSetScanEnable = 0x200cU;
-constexpr std::uint32_t kHciCommandTimeoutMs = 1000U;
+constexpr std::uint32_t kNimbleSyncTimeoutMs = 5000U;
 
 struct RawAdvertisement final {
     std::array<std::uint8_t, 6> address{};
@@ -39,7 +34,7 @@ struct RawAdvertisement final {
     std::int8_t rssiDbm = 0;
 };
 
-struct HciObserverState final {
+struct NimbleObserverState final {
     static constexpr std::size_t kQueueCapacity = 64U;
 
     portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
@@ -49,15 +44,12 @@ struct HciObserverState final {
     std::size_t queued = 0;
     std::uint16_t queueDrops = 0;
     bool acceptingReports = false;
-    bool commandInFlight = false;
-    bool commandComplete = false;
-    std::uint16_t expectedOpcode = 0;
-    std::uint8_t commandStatus = 0xffU;
 };
 
-HciObserverState hciObserver;
+NimbleObserverState nimbleObserver;
 bool processControllerInitializationAttempted = false;
-bool processControllerAvailable = false;
+std::atomic_bool processControllerAvailable{false};
+std::atomic_bool processNimbleSynced{false};
 
 struct RawScanContext final {
     std::array<std::array<std::uint8_t, 6>, 128> seenAddresses{};
@@ -321,190 +313,52 @@ void parseAdvertisementPayload(const RawAdvertisement& source,
 }
 
 void clearReportQueue() {
-    portENTER_CRITICAL(&hciObserver.lock);
-    hciObserver.readIndex = 0U;
-    hciObserver.writeIndex = 0U;
-    hciObserver.queued = 0U;
-    hciObserver.queueDrops = 0U;
-    portEXIT_CRITICAL(&hciObserver.lock);
+    portENTER_CRITICAL(&nimbleObserver.lock);
+    nimbleObserver.readIndex = 0U;
+    nimbleObserver.writeIndex = 0U;
+    nimbleObserver.queued = 0U;
+    nimbleObserver.queueDrops = 0U;
+    portEXIT_CRITICAL(&nimbleObserver.lock);
 }
 
 bool popReport(RawAdvertisement* report) {
     if (report == nullptr) return false;
     bool available = false;
-    portENTER_CRITICAL(&hciObserver.lock);
-    if (hciObserver.queued != 0U) {
-        *report = hciObserver.queue[hciObserver.readIndex];
-        hciObserver.readIndex =
-            (hciObserver.readIndex + 1U) % HciObserverState::kQueueCapacity;
-        --hciObserver.queued;
+    portENTER_CRITICAL(&nimbleObserver.lock);
+    if (nimbleObserver.queued != 0U) {
+        *report = nimbleObserver.queue[nimbleObserver.readIndex];
+        nimbleObserver.readIndex =
+            (nimbleObserver.readIndex + 1U) %
+            NimbleObserverState::kQueueCapacity;
+        --nimbleObserver.queued;
         available = true;
     }
-    portEXIT_CRITICAL(&hciObserver.lock);
+    portEXIT_CRITICAL(&nimbleObserver.lock);
     return available;
 }
 
 std::uint16_t takeQueueDrops() {
-    portENTER_CRITICAL(&hciObserver.lock);
-    const std::uint16_t drops = hciObserver.queueDrops;
-    hciObserver.queueDrops = 0U;
-    portEXIT_CRITICAL(&hciObserver.lock);
+    portENTER_CRITICAL(&nimbleObserver.lock);
+    const std::uint16_t drops = nimbleObserver.queueDrops;
+    nimbleObserver.queueDrops = 0U;
+    portEXIT_CRITICAL(&nimbleObserver.lock);
     return drops;
 }
 
 void queueReport(const RawAdvertisement& report) {
-    portENTER_CRITICAL(&hciObserver.lock);
-    if (hciObserver.acceptingReports) {
-        if (hciObserver.queued < HciObserverState::kQueueCapacity) {
-            hciObserver.queue[hciObserver.writeIndex] = report;
-            hciObserver.writeIndex =
-                (hciObserver.writeIndex + 1U) %
-                HciObserverState::kQueueCapacity;
-            ++hciObserver.queued;
-        } else if (hciObserver.queueDrops != UINT16_MAX) {
-            ++hciObserver.queueDrops;
+    portENTER_CRITICAL(&nimbleObserver.lock);
+    if (nimbleObserver.acceptingReports) {
+        if (nimbleObserver.queued < NimbleObserverState::kQueueCapacity) {
+            nimbleObserver.queue[nimbleObserver.writeIndex] = report;
+            nimbleObserver.writeIndex =
+                (nimbleObserver.writeIndex + 1U) %
+                NimbleObserverState::kQueueCapacity;
+            ++nimbleObserver.queued;
+        } else if (nimbleObserver.queueDrops != UINT16_MAX) {
+            ++nimbleObserver.queueDrops;
         }
     }
-    portEXIT_CRITICAL(&hciObserver.lock);
-}
-
-void handleCommandResult(std::uint16_t opcode, std::uint8_t status) {
-    portENTER_CRITICAL(&hciObserver.lock);
-    if (hciObserver.commandInFlight &&
-        hciObserver.expectedOpcode == opcode) {
-        hciObserver.commandStatus = status;
-        hciObserver.commandComplete = true;
-    }
-    portEXIT_CRITICAL(&hciObserver.lock);
-}
-
-void handleLegacyAdvertisingReports(const std::uint8_t* parameters,
-                                    std::size_t length) {
-    if (parameters == nullptr || length < 1U) return;
-    const std::uint8_t reportCount = parameters[0];
-    std::size_t offset = 1U;
-    for (std::uint8_t index = 0U; index < reportCount; ++index) {
-        if (offset + 9U > length) return;
-        RawAdvertisement report;
-        report.eventType = parameters[offset++];
-        report.addressType = parameters[offset++];
-        std::copy_n(parameters + offset, report.address.size(),
-                    report.address.begin());
-        offset += report.address.size();
-        report.payloadLength = parameters[offset++];
-        if (report.payloadLength > report.payload.size() ||
-            offset + report.payloadLength + 1U > length) {
-            return;
-        }
-        std::copy_n(parameters + offset, report.payloadLength,
-                    report.payload.begin());
-        offset += report.payloadLength;
-        report.rssiDbm = static_cast<std::int8_t>(parameters[offset++]);
-        queueReport(report);
-    }
-}
-
-int handleHciReceive(std::uint8_t* packet, std::uint16_t length) {
-    if (packet == nullptr || length < 3U ||
-        packet[0] != kHciEventPacket) {
-        return 0;
-    }
-    const std::uint8_t event = packet[1];
-    const std::size_t parameterLength = packet[2];
-    if (parameterLength + 3U > length) return 0;
-    const std::uint8_t* parameters = packet + 3U;
-    if (event == kHciCommandCompleteEvent && parameterLength >= 4U) {
-        handleCommandResult(readLittleEndian16(parameters + 1U),
-                            parameters[3]);
-    } else if (event == kHciCommandStatusEvent &&
-               parameterLength >= 4U) {
-        handleCommandResult(readLittleEndian16(parameters + 2U),
-                            parameters[0]);
-    } else if (event == kHciLeMetaEvent && parameterLength >= 2U &&
-               parameters[0] == kHciLeAdvertisingReport) {
-        handleLegacyAdvertisingReports(parameters + 1U,
-                                       parameterLength - 1U);
-    }
-    return 0;
-}
-
-void handleHciSendAvailable() {}
-
-const esp_vhci_host_callback_t kHciCallbacks = {
-    handleHciSendAvailable,
-    handleHciReceive,
-};
-
-bool claimCommandSlot(std::uint16_t opcode, std::uint64_t deadlineUs) {
-    while (static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
-        bool claimed = false;
-        portENTER_CRITICAL(&hciObserver.lock);
-        if (!hciObserver.commandInFlight) {
-            hciObserver.commandInFlight = true;
-            hciObserver.commandComplete = false;
-            hciObserver.expectedOpcode = opcode;
-            hciObserver.commandStatus = 0xffU;
-            claimed = true;
-        }
-        portEXIT_CRITICAL(&hciObserver.lock);
-        if (claimed) return true;
-        vTaskDelay(pdMS_TO_TICKS(1U));
-    }
-    return false;
-}
-
-void releaseCommandSlot() {
-    portENTER_CRITICAL(&hciObserver.lock);
-    hciObserver.commandInFlight = false;
-    hciObserver.commandComplete = false;
-    hciObserver.expectedOpcode = 0U;
-    portEXIT_CRITICAL(&hciObserver.lock);
-}
-
-bool sendHciCommand(std::uint16_t opcode,
-                    const std::uint8_t* parameters,
-                    std::size_t parameterLength) {
-    const bool observerCommand = opcode == kHciLeSetScanParameters ||
-        opcode == kHciLeSetScanEnable;
-    if (!observerCommand || parameterLength > 12U) return false;
-    const std::uint64_t deadlineUs =
-        static_cast<std::uint64_t>(esp_timer_get_time()) +
-        static_cast<std::uint64_t>(kHciCommandTimeoutMs) * 1000ULL;
-    if (!claimCommandSlot(opcode, deadlineUs)) return false;
-
-    while (!esp_vhci_host_check_send_available() &&
-           static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
-        vTaskDelay(pdMS_TO_TICKS(1U));
-    }
-    if (!esp_vhci_host_check_send_available()) {
-        releaseCommandSlot();
-        return false;
-    }
-
-    std::array<std::uint8_t, 16> packet{};
-    packet[0] = kHciCommandPacket;
-    packet[1] = static_cast<std::uint8_t>(opcode & 0xffU);
-    packet[2] = static_cast<std::uint8_t>(opcode >> 8U);
-    packet[3] = static_cast<std::uint8_t>(parameterLength);
-    if (parameters != nullptr && parameterLength != 0U) {
-        std::copy_n(parameters, parameterLength, packet.begin() + 4U);
-    }
-    esp_vhci_host_send_packet(packet.data(),
-                              static_cast<std::uint16_t>(
-                                  parameterLength + 4U));
-
-    bool complete = false;
-    std::uint8_t status = 0xffU;
-    while (static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
-        portENTER_CRITICAL(&hciObserver.lock);
-        complete = hciObserver.commandComplete;
-        status = hciObserver.commandStatus;
-        portEXIT_CRITICAL(&hciObserver.lock);
-        if (complete) break;
-        vTaskDelay(pdMS_TO_TICKS(1U));
-    }
-    releaseCommandSlot();
-    return complete && status == 0U;
+    portEXIT_CRITICAL(&nimbleObserver.lock);
 }
 
 std::uint16_t scanUnits(std::uint16_t milliseconds) {
@@ -512,35 +366,47 @@ std::uint16_t scanUnits(std::uint16_t milliseconds) {
         (static_cast<std::uint32_t>(milliseconds) * 1000U) / 625U);
 }
 
-bool configurePassiveScan(const drivers::ble::BleScanPlan& plan) {
-    const std::uint16_t interval = scanUnits(plan.intervalMs);
-    const std::uint16_t window = scanUnits(plan.windowMs);
-    const std::array<std::uint8_t, 7> parameters = {
-        0U,  // passive scan: never transmit scan requests
-        static_cast<std::uint8_t>(interval & 0xffU),
-        static_cast<std::uint8_t>(interval >> 8U),
-        static_cast<std::uint8_t>(window & 0xffU),
-        static_cast<std::uint8_t>(window >> 8U),
-        0U,  // public own-address type; unused by passive scanning
-        0U,  // accept all advertisements
-    };
-    return sendHciCommand(kHciLeSetScanParameters,
-                          parameters.data(), parameters.size());
-}
-
-bool setPassiveScanEnabled(bool enabled) {
-    const std::array<std::uint8_t, 2> parameters = {
-        static_cast<std::uint8_t>(enabled ? 1U : 0U),
-        0U,  // controller duplicate filter disabled; fixed host set owns it
-    };
-    return sendHciCommand(kHciLeSetScanEnable,
-                          parameters.data(), parameters.size());
-}
-
 void setAcceptingReports(bool accepting) {
-    portENTER_CRITICAL(&hciObserver.lock);
-    hciObserver.acceptingReports = accepting;
-    portEXIT_CRITICAL(&hciObserver.lock);
+    portENTER_CRITICAL(&nimbleObserver.lock);
+    nimbleObserver.acceptingReports = accepting;
+    portEXIT_CRITICAL(&nimbleObserver.lock);
+}
+
+int handleNimbleGapEvent(struct ble_gap_event* event, void*) {
+    if (event == nullptr || event->type != BLE_GAP_EVENT_DISC) return 0;
+    const ble_gap_disc_desc& source = event->disc;
+    RawAdvertisement report;
+    report.addressType = source.addr.type;
+    report.eventType = source.event_type;
+    std::copy_n(source.addr.val, report.address.size(),
+                report.address.begin());
+    report.payloadLength = static_cast<std::uint8_t>(
+        std::min<std::size_t>(source.length_data, report.payload.size()));
+    if (source.data != nullptr && report.payloadLength != 0U) {
+        std::copy_n(source.data, report.payloadLength,
+                    report.payload.begin());
+    }
+    report.rssiDbm = source.rssi;
+    queueReport(report);
+    return 0;
+}
+
+bool startPassiveScan(const drivers::ble::BleScanPlan& plan) {
+    ble_gap_disc_params parameters{};
+    parameters.itvl = scanUnits(plan.intervalMs);
+    parameters.window = scanUnits(plan.windowMs);
+    parameters.filter_policy = 0U;
+    parameters.limited = 0U;
+    parameters.passive = 1U;  // passive scan: never transmit scan requests
+    parameters.filter_duplicates = 0U;
+    parameters.disable_observer_mode = 0U;
+    return ble_gap_disc(BLE_OWN_ADDR_PUBLIC, BLE_HS_FOREVER, &parameters,
+                        handleNimbleGapEvent, nullptr) == 0;
+}
+
+bool stopPassiveScan() {
+    const int result = ble_gap_disc_cancel();
+    return result == 0 || result == BLE_HS_EALREADY;
 }
 
 void processAdvertisement(const RawAdvertisement& source,
@@ -598,35 +464,59 @@ void drainReports(RawScanContext* context) {
     }
 }
 
-bool deinitializeControllerAfterFailedBootInit() {
-    setAcceptingReports(false);
-    clearReportQueue();
-    return btStop() &&
-        esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE;
+void handleNimbleReset(int) {
+    processNimbleSynced = false;
+    processControllerAvailable = false;
+}
+
+void handleNimbleSync() {
+    processNimbleSynced = true;
+}
+
+void runProcessNimbleHost(void*) {
+    nimble_port_run();
+    processNimbleSynced = false;
+    processControllerAvailable = false;
+    nimble_port_freertos_deinit();
 }
 
 bool initializeProcessControllerObserver() {
     if (processControllerInitializationAttempted) {
-        return processControllerAvailable &&
-            esp_bt_controller_get_status() ==
-                ESP_BT_CONTROLLER_STATUS_ENABLED;
+        return processControllerAvailable && processNimbleSynced &&
+            ble_hs_synced();
     }
     processControllerInitializationAttempted = true;
-    if (esp_bt_controller_get_status() != ESP_BT_CONTROLLER_STATUS_IDLE) {
+    clearReportQueue();
+    setAcceptingReports(false);
+
+    // Arduino-ESP32 3.3.9 is built with NimBLE, not Bluedroid. The Arduino
+    // controller-only shortcut enters a lifecycle that crashes on this S3;
+    // nimble_port_init() is the framework's supported controller + transport
+    // bootstrap. Keep one minimal host task process-lifetime and scan-idle
+    // between bounded receive windows. This adapter never calls advertising,
+    // initiating, connecting or active-scan APIs, so no RF-TX operation is
+    // reachable from the product observer.
+    if (nimble_port_init() != ESP_OK) {
         return false;
     }
 
-    clearReportQueue();
-    setAcceptingReports(false);
-    // This is the only controller start in the process. It runs during early
-    // boot, before any Wi-Fi lifecycle can fragment the internal heap. The
-    // controller remains scan-idle between bounded receive windows; terminal
-    // paths never repeat the fragile controller init/deinit lifecycle.
-    if (!btStart() ||
-        esp_vhci_host_register_callback(&kHciCallbacks) != ESP_OK) {
-        deinitializeControllerAfterFailedBootInit();
-        return false;
+    ble_hs_cfg.reset_cb = handleNimbleReset;
+    ble_hs_cfg.sync_cb = handleNimbleSync;
+    ble_hs_cfg.sm_io_cap = BLE_HS_IO_NO_INPUT_OUTPUT;
+    ble_hs_cfg.sm_bonding = 0U;
+    ble_hs_cfg.sm_mitm = 0U;
+    ble_hs_cfg.sm_sc = 0U;
+    processNimbleSynced = false;
+    nimble_port_freertos_init(runProcessNimbleHost);
+
+    const std::uint64_t deadlineUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) +
+        static_cast<std::uint64_t>(kNimbleSyncTimeoutMs) * 1000ULL;
+    while (!processNimbleSynced &&
+           static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
+        vTaskDelay(pdMS_TO_TICKS(1U));
     }
+    if (!processNimbleSynced || !ble_hs_synced()) return false;
     processControllerAvailable = true;
     return true;
 }
@@ -655,10 +545,9 @@ bool BoardBlePassiveScanner::begin() {
     clearReportQueue();
     setAcceptingReports(false);
 
-    // The process-lifetime controller was prewarmed before any Wi-Fi use.
-    // sendHciCommand() admits only legacy passive scan parameters and
-    // enable/disable opcodes. No HCI RF-TX operation (advertising, initiating,
-    // connecting, or active scanning) is representable through this adapter.
+    // The process-lifetime minimal NimBLE observer was prewarmed before any
+    // Wi-Fi use. Only passive ble_gap_disc() is exposed by this adapter; no
+    // advertising, initiating, connecting or active scanning is representable.
     if (!prewarmProcessController()) {
         cleanupComplete_ = true;
         return false;
@@ -689,8 +578,7 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
         result.attempts = attempt;
         clearReportQueue();
         setAcceptingReports(true);
-        const bool started = configurePassiveScan(plan) &&
-            setPassiveScanEnabled(true);
+        const bool started = startPassiveScan(plan);
         if (!started) {
             setAcceptingReports(false);
             activeScan_ = false;
@@ -708,9 +596,7 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
             }
             drainReports(&scanContext);
             const bool completedWindow = activeScan_;
-            const bool disabled = completedWindow
-                ? setPassiveScanEnabled(false)
-                : true;
+            const bool disabled = completedWindow ? stopPassiveScan() : true;
             activeScan_ = false;
             setAcceptingReports(false);
             drainReports(&scanContext);
@@ -733,7 +619,7 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
 
 bool BoardBlePassiveScanner::cancelActiveScan() {
     if (!activeScan_) return true;
-    const bool cancelled = setPassiveScanEnabled(false);
+    const bool cancelled = stopPassiveScan();
     activeScan_ = false;
     setAcceptingReports(false);
     return cancelled;
@@ -744,8 +630,8 @@ bool BoardBlePassiveScanner::prewarmProcessController() {
 }
 
 bool BoardBlePassiveScanner::processControllerReady() {
-    return processControllerAvailable &&
-        esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_ENABLED;
+    return processControllerAvailable && processNimbleSynced &&
+        ble_hs_synced();
 }
 
 bool BoardBlePassiveScanner::end() {

@@ -42,7 +42,7 @@ def main() -> int:
         "wifi_network_catalog_revision",
         "wifiNetworkCatalog.indexOfIdentity(wifiSelectionAnchor)",
         "renderWifiNetworkDetailData()",
-        "renderWifiNetworkRadar(live, signal)",
+        "renderWifiNetworkRadar(live, signal, false)",
         "liveWifiNetworkSignal()",
         "wifiNetworkDetailStaticFieldsDiffer(",
         "wifiOuiDatabase.lookup(",

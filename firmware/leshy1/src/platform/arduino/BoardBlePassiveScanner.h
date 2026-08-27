@@ -58,9 +58,9 @@ public:
 
     ~BoardBlePassiveScanner() { end(); }
 
-    // Initialize the receive-only Bluetooth controller while the boot heap is
-    // still contiguous. The controller is intentionally process-lifetime;
-    // individual scanner instances only own passive scan windows.
+    // Initialize the receive-only minimal NimBLE observer while the boot heap
+    // is still contiguous. Its controller and host task are intentionally
+    // process-lifetime; scanner instances only own passive scan windows.
     static bool prewarmProcessController();
     static bool processControllerReady();
     bool begin();

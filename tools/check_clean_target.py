@@ -437,25 +437,24 @@ def main() -> int:
     else:
         passive_ble = passive_ble_adapter.read_text(encoding="utf-8")
         for marker in (
-            "btStart()",
-            "btStop()",
+            "nimble_port_init()",
+            "nimble_port_freertos_init(runProcessNimbleHost)",
+            "ble_hs_synced()",
             "processControllerInitializationAttempted",
             "prewarmProcessController",
-            "remains scan-idle",
-            "observerCommand = opcode == kHciLeSetScanParameters",
-            "opcode == kHciLeSetScanEnable",
-            "No HCI RF-TX",
-            "esp_vhci_host_register_callback",
-            "kHciLeSetScanParameters",
+            "scan-idle",
+            "parameters.passive = 1U",
             "passive scan: never transmit scan requests",
-            "kHciLeAdvertisingReport",
+            "no RF-TX operation",
+            "ble_gap_disc(BLE_OWN_ADDR_PUBLIC, BLE_HS_FOREVER",
+            "ble_gap_disc_cancel()",
             "parseAdvertisementPayload",
             "BoardBleScanStatus::ScanTimedOut",
             "RawScanContext",
             "seenAddresses",
             "validatePassivePlan(plan)",
             "plan.maximumRecords",
-            "setPassiveScanEnabled(false)",
+            "stopPassiveScan()",
         ):
             if marker not in passive_ble:
                 errors.append(f"passive BLE adapter is missing: {marker}")
@@ -469,10 +468,14 @@ def main() -> int:
             "std::map",
             ".getScan()",
             "BLEDevice::init",
-            "ble_gap_disc(",
-            "nimble_port_init",
+            "btStart()",
+            "btStop()",
+            "esp_vhci_host_register_callback",
+            "esp_vhci_host_send_packet",
             "kHciReset",
             "esp_bt_controller_init",
+            "ble_gap_adv_start",
+            "ble_gap_connect",
         ):
             if marker in passive_ble:
                 errors.append(
