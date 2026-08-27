@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include <esp_err.h>
+#include <esp32-hal-alloc-ble-mem.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
@@ -489,6 +490,10 @@ bool initializeProcessControllerObserver() {
     clearReportQueue();
     setAcceptingReports(false);
 
+    // esp32-hal-alloc-ble-mem.h registers this low-level adapter as a BLE
+    // consumer before initArduino(). Without that constructor marker the core
+    // permanently releases BLE controller memory before setup(), and the
+    // later NimBLE bootstrap enters an invalid controller lifecycle.
     // Arduino-ESP32 3.3.9 is built with NimBLE, not Bluedroid. The Arduino
     // controller-only shortcut enters a lifecycle that crashes on this S3;
     // nimble_port_init() is the framework's supported controller + transport

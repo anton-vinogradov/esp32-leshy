@@ -85,6 +85,8 @@ def main() -> int:
         "!allowReplacement",
     )
     required_adapter = (
+        "#include <esp32-hal-alloc-ble-mem.h>",
+        "registers this low-level adapter as a BLE",
         "nimble_port_init()",
         "nimble_port_freertos_init(runProcessNimbleHost)",
         "ble_hs_synced()",

@@ -437,6 +437,8 @@ def main() -> int:
     else:
         passive_ble = passive_ble_adapter.read_text(encoding="utf-8")
         for marker in (
+            "#include <esp32-hal-alloc-ble-mem.h>",
+            "registers this low-level adapter as a BLE",
             "nimble_port_init()",
             "nimble_port_freertos_init(runProcessNimbleHost)",
             "ble_hs_synced()",
