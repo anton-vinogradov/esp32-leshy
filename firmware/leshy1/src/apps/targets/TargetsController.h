@@ -120,6 +120,12 @@ public:
         const TargetProductBinding& current,
         const domain::targets::TargetCatalog& persisted,
         const domain::targets::CorrelationDecisionLog& decisions);
+    TargetsLoadStatus loadWithAdmissionScratch(
+        const TargetProductBinding& baseline,
+        const TargetProductBinding& current, bool compare,
+        domain::targets::TargetCatalog& scratch,
+        const domain::targets::TargetCatalog* persisted = nullptr,
+        const domain::targets::CorrelationDecisionLog* decisions = nullptr);
     bool next();
     bool previous();
     bool openSelected();
@@ -252,7 +258,9 @@ private:
                                    const domain::targets::TargetCatalog*
                                        persisted = nullptr,
                                    const domain::targets::CorrelationDecisionLog*
-                                       decisions = nullptr);
+                                       decisions = nullptr,
+                                   domain::targets::TargetCatalog*
+                                       admissionScratch = nullptr);
     bool rebuildRows();
     bool rebuildComparisonOrder();
     bool comparisonItemBefore(std::uint8_t left, std::uint8_t right) const;

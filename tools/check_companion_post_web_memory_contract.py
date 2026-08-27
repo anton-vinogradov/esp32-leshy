@@ -32,9 +32,9 @@ def main() -> int:
         return 1
 
     require(
-        'LESHY1_VERSION=\\"0.196.1-companion-post-web-shared-codec\\"'
+        'LESHY1_VERSION=\\"0.196.2-companion-post-web-shared-scratch\\"'
         in platformio,
-        "exact 0.196.1 version is missing", failures)
+        "exact 0.196.2 version is missing", failures)
     require("const esp_err_t error = esp_netif_deinit();" not in service,
             "unsupported esp_netif_deinit must not be called", failures)
     require("process-lifetime" in service and
@@ -79,6 +79,11 @@ def main() -> int:
                 >= 4,
                 "post-Web load does not release the shared codec on every "
                 "terminal path", failures)
+        require("acquireTargetsAdmissionScratch()" in entry and
+                "controller.loadWithAdmissionScratch(" in entry and
+                "releaseTargetsAdmissionScratch(scratch);" in entry,
+                "post-Web admission still heap-allocates its scratch catalog",
+                failures)
     if release >= 0:
         release_body = entry[release:entry.find(
             "bool finishTargetsProductAllocation", release)]
@@ -91,7 +96,7 @@ def main() -> int:
         return 1
     print(
         "post-Web memory contract passed: unsupported netif deinit avoided; "
-        "Targets admits sticky-core memory and reuses the static store codec"
+        "Targets admits sticky-core memory and reuses static codec/scratch RAM"
     )
     return 0
 

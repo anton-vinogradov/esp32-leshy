@@ -682,6 +682,7 @@ leshy1::services::survey::ObservationQueue surveyIngressQueue;
 union TargetsStoreCodecWorkspace final {
     leshy1::storage::SessionStoreWorkspace session;
     leshy1::storage::TargetDecisionStateStoreWorkspace targetDecision;
+    TargetCatalog admissionScratch;
 
     TargetsStoreCodecWorkspace() : session{} {}
     ~TargetsStoreCodecWorkspace() {}
@@ -693,6 +694,8 @@ static_assert(
                 sizeof(leshy1::storage::TargetDecisionStateStoreWorkspace) <
             alignof(TargetsStoreCodecWorkspace),
     "shared store codec workspace must add only the larger member");
+static_assert(sizeof(TargetCatalog) <= sizeof(TargetsStoreCodecWorkspace),
+              "admission scratch must fit the shared store workspace");
 TargetsStoreCodecWorkspace targetsStoreCodecWorkspace;
 bool targetsStoreCodecWorkspaceInUse = false;
 leshy1::storage::SessionStoreWorkspace& sessionStoreWorkspace =
@@ -715,6 +718,26 @@ void releaseTargetsStoreCodecWorkspace(
         return;
     }
     workspace->~TargetDecisionStateStoreWorkspace();
+    new (&targetsStoreCodecWorkspace.session)
+        leshy1::storage::SessionStoreWorkspace();
+    targetsStoreCodecWorkspaceInUse = false;
+}
+
+TargetCatalog* acquireTargetsAdmissionScratch() {
+    if (targetsStoreCodecWorkspaceInUse) return nullptr;
+    sessionStoreWorkspace.~SessionStoreWorkspace();
+    auto* scratch = new (&targetsStoreCodecWorkspace.admissionScratch)
+        TargetCatalog();
+    targetsStoreCodecWorkspaceInUse = true;
+    return scratch;
+}
+
+void releaseTargetsAdmissionScratch(TargetCatalog* scratch) {
+    if (!targetsStoreCodecWorkspaceInUse ||
+        scratch != &targetsStoreCodecWorkspace.admissionScratch) {
+        return;
+    }
+    scratch->~TargetCatalog();
     new (&targetsStoreCodecWorkspace.session)
         leshy1::storage::SessionStoreWorkspace();
     targetsStoreCodecWorkspaceInUse = false;
@@ -5181,15 +5204,15 @@ bool detachTargetsProductState(TargetCatalog*& catalog,
 TargetsLoadStatus loadBoundTargetsProduct(
     TargetsController& controller, const TargetCatalog* persisted = nullptr,
     const CorrelationDecisionLog* decisions = nullptr) {
-    if (targetsComparisonLoaded) {
-        return persisted == nullptr || decisions == nullptr
-            ? controller.load(targetsBaselineBinding, targetsCurrentBinding)
-            : controller.load(targetsBaselineBinding, targetsCurrentBinding,
-                              *persisted, *decisions);
-    }
-    return persisted == nullptr || decisions == nullptr
-        ? controller.load(targetsCurrentBinding)
-        : controller.load(targetsCurrentBinding, *persisted, *decisions);
+    auto* scratch = acquireTargetsAdmissionScratch();
+    if (scratch == nullptr) return TargetsLoadStatus::AdmissionRejected;
+    const TargetsLoadStatus loaded = controller.loadWithAdmissionScratch(
+        targetsComparisonLoaded ? targetsBaselineBinding
+                                : TargetProductBinding{},
+        targetsCurrentBinding, targetsComparisonLoaded, *scratch,
+        persisted, decisions);
+    releaseTargetsAdmissionScratch(scratch);
+    return loaded;
 }
 
 class TargetsLoadWatchdogScope final {

@@ -270,6 +270,19 @@ void pairIsUsefulFirstAndStable() {
     CHECK(controller.view() == TargetsView::Detail);
 }
 
+void callerProvidedAdmissionScratchWorks() {
+    SurveySession current = session(
+        "shared-scratch", 500, {wifi(1, 510, 7, -42)});
+    OwnedTargetsWorkspace workspace;
+    TargetCatalog scratch;
+    TargetsController controller(workspace);
+    CHECK(controller.loadWithAdmissionScratch(
+              {}, {&current, 7}, false, scratch) ==
+          TargetsLoadStatus::Ready);
+    CHECK(controller.size() == 1);
+    CHECK(controller.row(0)->latest.rssiDbm == -42);
+}
+
 void singleSessionStillListsTargets() {
     SurveySession current =
         session("only", 500, {wifi(1, 510, 4, -40)});
@@ -644,6 +657,7 @@ void rejectedCorrelationAtCatalogBoundReopensTruncated() {
 
 int main() {
     pairIsUsefulFirstAndStable();
+    callerProvidedAdmissionScratchWorks();
     singleSessionStillListsTargets();
     rejectedLoadClearsPriorRows();
     denseAirKeepsStrongestAcrossBothVisits();

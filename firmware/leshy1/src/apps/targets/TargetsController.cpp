@@ -417,11 +417,22 @@ TargetsLoadStatus TargetsController::load(
     return loadBindings(baseline, current, true, &persisted, &decisions);
 }
 
+TargetsLoadStatus TargetsController::loadWithAdmissionScratch(
+    const TargetProductBinding& baseline,
+    const TargetProductBinding& current, bool compare,
+    domain::targets::TargetCatalog& scratch,
+    const domain::targets::TargetCatalog* persisted,
+    const domain::targets::CorrelationDecisionLog* decisions) {
+    return loadBindings(
+        baseline, current, compare, persisted, decisions, &scratch);
+}
+
 TargetsLoadStatus TargetsController::loadBindings(
     const TargetProductBinding& baseline,
     const TargetProductBinding& current, bool compare,
     const domain::targets::TargetCatalog* persisted,
-    const domain::targets::CorrelationDecisionLog* decisions) {
+    const domain::targets::CorrelationDecisionLog* decisions,
+    domain::targets::TargetCatalog* admissionScratch) {
     const bool catalogInPlace = persisted == &workspace_.catalog;
     const bool decisionsInPlace = decisions == &workspace_.decisions;
     if ((persisted != nullptr && catalogInPlace != decisionsInPlace) ||
@@ -450,7 +461,10 @@ TargetsLoadStatus TargetsController::loadBindings(
         return status_;
     }
     truncated_ = sourceIdentityCount_ > filter.size;
-    auto* scratch = new (std::nothrow) domain::targets::TargetCatalog();
+    const bool ownsScratch = admissionScratch == nullptr;
+    auto* scratch = ownsScratch
+        ? new (std::nothrow) domain::targets::TargetCatalog()
+        : admissionScratch;
     if (scratch == nullptr) {
         reset();
         status_ = TargetsLoadStatus::AdmissionRejected;
@@ -461,7 +475,7 @@ TargetsLoadStatus TargetsController::loadBindings(
             *baseline.session, baseline.generation, workspace_.catalog,
             *scratch, &filter);
         if (!admittedBaseline.valid()) {
-            delete scratch;
+            if (ownsScratch) delete scratch;
             reset();
             lastAdmission_ = admittedBaseline;
             lastAdmissionStage_ = "baseline";
@@ -480,7 +494,7 @@ TargetsLoadStatus TargetsController::loadBindings(
                 workspace_.decisions, &workspace_.correlations);
         if (correlationStatus !=
             services::targets::SessionCorrelationReviewStatus::Ready) {
-            delete scratch;
+            if (ownsScratch) delete scratch;
             reset();
             status_ = TargetsLoadStatus::EvidenceUnavailable;
             return status_;
@@ -490,7 +504,7 @@ TargetsLoadStatus TargetsController::loadBindings(
     const auto admittedCurrent = services::targets::admitSessionTargets(
         *current.session, current.generation, workspace_.catalog,
         *scratch, &filter);
-    delete scratch;
+    if (ownsScratch) delete scratch;
     if (!admittedCurrent.valid()) {
         reset();
         lastAdmission_ = admittedCurrent;

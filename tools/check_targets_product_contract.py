@@ -139,6 +139,10 @@ def main() -> int:
                 mutation_worker and
             "releaseTargetsStoreCodecWorkspace(workspace)" in mutation_worker and
             "union TargetsStoreCodecWorkspace final" in entry and
+            "TargetCatalog admissionScratch" in entry and
+            "loadWithAdmissionScratch(" in controller and
+            "acquireTargetsAdmissionScratch()" in entry and
+            "releaseTargetsAdmissionScratch(scratch)" in entry and
             "SessionStoreWorkspace& sessionStoreWorkspace" in entry and
             r'\"mutation_heap_largest_before_mount\":%lu' in entry and
             "kTargetsMaximumMountAttempts = 3" in load_product and
