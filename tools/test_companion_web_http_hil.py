@@ -58,13 +58,6 @@ class FakeNetworkSetup:
         self.commands.append(arguments)
         if arguments[0] == "/usr/sbin/ipconfig":
             operation = arguments[1]
-            if operation == "set" and arguments[3] == "DHCP":
-                self.dhcp_requests += 1
-                if self.ssid and self.ssid.startswith("Leshy-"):
-                    self.address = "192.168.4.2"
-                    self.router = self.hil_router
-                    self.subnet = "255.255.255.0"
-                return subprocess.CompletedProcess(arguments, 0, "", "")
             if operation == "getifaddr":
                 value = self.address
             elif operation == "getoption" and arguments[3] == "router":
@@ -80,6 +73,15 @@ class FakeNetworkSetup:
         operation = arguments[1]
         if operation == "-getnetworkserviceenabled":
             output = "Enabled\n"
+        elif operation == "-getinfo":
+            output = "DHCP Configuration\nClient ID: \n"
+        elif operation == "-setdhcp":
+            self.dhcp_requests += 1
+            if self.ssid and self.ssid.startswith("Leshy-"):
+                self.address = "192.168.4.2"
+                self.router = self.hil_router
+                self.subnet = "255.255.255.0"
+            output = ""
         elif operation == "-getairportpower":
             output = f"Wi-Fi Power ({arguments[2]}): {'On' if self.power else 'Off'}\n"
         elif operation == "-getairportnetwork":

@@ -57,6 +57,7 @@ class WifiSnapshot:
     ipv4_address: str | None
     router: str | None
     subnet_mask: str | None
+    dhcp_client_id: str | None
 
     @property
     def associated(self) -> bool:
@@ -150,10 +151,25 @@ class MacWifiGuard:
             ["getoption", self.interface, "subnet_mask"], IPCONFIG)
         return address, router, subnet
 
+    def _dhcp_client_id(self) -> str | None:
+        output = self._run(["-getinfo", self.service], "read DHCP mode")
+        lines = output.splitlines()
+        if not lines or lines[0] != "DHCP Configuration":
+            raise RuntimeError("explicit Wi-Fi service is not in DHCP mode")
+        prefix = "Client ID:"
+        for line in lines:
+            if line.startswith(prefix):
+                value = line[len(prefix):].strip()
+                return value if value else None
+        raise RuntimeError("cannot unambiguously parse DHCP client ID")
+
     def _request_dhcp_lease(self) -> None:
-        result = self._runner([IPCONFIG, "set", self.interface, "DHCP"])
-        if result.returncode != 0:
-            raise RuntimeError("explicit HIL DHCP lease request failed")
+        if self.snapshot is None:
+            raise RuntimeError("Wi-Fi state must be captured before DHCP")
+        client_id = self.snapshot.dhcp_client_id or "Empty"
+        self._run(
+            ["-setdhcp", self.service, client_id],
+            "request HIL DHCP lease")
         self.dhcp_requests += 1
 
     def capture(self) -> WifiSnapshot:
@@ -166,9 +182,10 @@ class MacWifiGuard:
         ssid = self._ssid() if power_on else None
         address, router, subnet = (
             self._link_fingerprint() if power_on else (None, None, None))
+        dhcp_client_id = self._dhcp_client_id()
         self.snapshot = WifiSnapshot(
             self.interface, self.service, power_on, ssid,
-            address, router, subnet)
+            address, router, subnet, dhcp_client_id)
         return self.snapshot
 
     def _wait_for(self, expected_ssid: str) -> None:

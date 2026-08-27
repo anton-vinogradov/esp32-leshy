@@ -518,6 +518,7 @@ def main() -> int:
         "restore_attempted": False,
         "restored": False,
         "prior_ssid_recorded": False,
+        "prior_dhcp_client_id_recorded": False,
         "transient_passphrase_recorded": False,
     }
 
@@ -861,6 +862,9 @@ def main() -> int:
                     "prior_association_present": snapshot.associated,
                     "association_verifier": "dhcp_fingerprint",
                     "prior_link_identity_recorded": False,
+                    "prior_ipv4_mode": "dhcp",
+                    "prior_dhcp_client_id_present":
+                        snapshot.dhcp_client_id is not None,
                 })
                 record["host_wifi"] = host_wifi
                 write_json(args.output / "run.json", record)
