@@ -1,0 +1,170 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "app_elf_sha256": "8b1a0cdaa6ddc0e149285811a39e533cd1b3bc3025715828b88d42c832fb214a",
+    "firmware_bytes": 3360400,
+    "firmware_sha256": "3e0fe72549d8400aa573089f4235e457bd643ee2b0f879a73eb05b94602326a6",
+    "linked_flash_bytes": 3359896,
+    "map_sha256": "761ce2a47cbbb39a7f0523675195b023acabbc7bd9dbe5072791665161334a61",
+    "static_ram_bytes": 223112,
+    "version": "0.195.0-companion-web-gzip-index"
+  },
+  "connection": {
+    "capabilities": [
+      "session.list",
+      "session.detail",
+      "target.list",
+      "target.detail",
+      "target.compare"
+    ],
+    "max_frame_bytes": 512,
+    "protocol": 1,
+    "scopes": [
+      "session.read",
+      "target.read",
+      "target.compare"
+    ],
+    "transport": "usb_serial_ndjson"
+  },
+  "evidence_ids": [
+    "E-BUILD-152",
+    "E-AUTO-124",
+    "E-HIL-182",
+    "E-COMPANION-006"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "firmware_source_commit": "52570c587b34f73a9d35628b554cbac5b76063f8",
+  "framing": {
+    "exact_512": "ok",
+    "invalid_offset": "offset_out_of_range",
+    "mutation_dependency": "scope_dependency_missing",
+    "oversized_513": "frame_too_large",
+    "post_exit": "not_connected",
+    "truncated": "malformed_json",
+    "unknown_field": "unknown_field"
+  },
+  "installation": {
+    "application_flash_count": 0,
+    "exact_flash_reused": true
+  },
+  "known_open_defects": [
+    {
+      "classification": "post_web_runtime_memory_not_fully_reclaimed",
+      "effect": "reopening Targets after the earlier Web HIL can fail read-only mount with ESP_ERR_NO_MEM until device reset",
+      "firmware_failure": true,
+      "resolution": "open; must be fixed and USB-only regressed before S6.5 completion"
+    }
+  ],
+  "media": {
+    "blocked_write_attempts": 0,
+    "boot_recovery_attempts": 1,
+    "boot_recovery_cleanup_complete": true,
+    "boot_recovery_transient_retries": 0,
+    "generation": 161,
+    "mounted_read_only": true,
+    "observations": 59,
+    "physical_write_calls": 0
+  },
+  "offline_snapshot": {
+    "bytes": 11521,
+    "canonical_round_trip": true,
+    "complete_target_details": 16,
+    "counts": {
+      "comparison_items": 7,
+      "sessions": 2,
+      "targets": 16
+    },
+    "deterministic_retry": {
+      "earlier_file_sha256": "487eb2c6efbfd0644f951e5f97b4dc1b549cfec391601693d40ad74bceeee6bc",
+      "earlier_snapshot_id": "29537acfa1b9f0b6a51851ecb8b8b585cf17391c63a13329ed59db5b1eeede89",
+      "matched": true
+    },
+    "file_sha256": "487eb2c6efbfd0644f951e5f97b4dc1b549cfec391601693d40ad74bceeee6bc",
+    "private_payload_retained": false,
+    "schema": "leshy.companion.offline.v1",
+    "snapshot_id": "29537acfa1b9f0b6a51851ecb8b8b585cf17391c63a13329ed59db5b1eeede89"
+  },
+  "physical_cadence": {
+    "accepted_since_full": 3,
+    "full_gate_at": 15
+  },
+  "precursors": [
+    {
+      "checkpoint": "open_targets",
+      "classification": "post_web_runtime_memory_not_fully_reclaimed",
+      "cleanup_complete": true,
+      "firmware_failure": true,
+      "filesystem_mount_error": 257,
+      "reset_regression": {
+        "boot_heap_free": 82892,
+        "boot_run_sha256": "e53dcba708d91258981198d6bf9fd2e13f2f67be39ed12003c0afa4691a60335",
+        "final_lease_mask": 0,
+        "targets_runtime_event": "ready",
+        "ui_run_sha256": "19d8e983244cb20fe05b4f9e70b4ca55ccfeb52b9ed8a16ce0c4b31d753140a0"
+      },
+      "run_sha256": "061ed20c955771b580fb556723bf17f66f1e7bdc6ee4af11263f5ccebd0aeac9"
+    },
+    {
+      "checkpoint": "scope_denial",
+      "classification": "outdated_harness_expectation",
+      "cleanup_complete": true,
+      "firmware_failure": false,
+      "reason": "target.mutate alone correctly returned scope_dependency_missing",
+      "run_sha256": "009b325357f624552805435fa65f61fa5d1e6053cc6c343d9501184820e7cf74"
+    }
+  ],
+  "raw_run_sha256": "d172ebb99bb7fc32f70c23847be3975f8c58c3484a0a5477eaf47e41f1b58e90",
+  "safety_and_final": {
+    "buzzer_inactive": true,
+    "heap_free_after": 82892,
+    "heap_free_before": 82892,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "lease_mask": 0,
+    "nrf_ce_inactive": true,
+    "page": "home",
+    "radio_tx_commands": 0,
+    "runtime_owner": "none",
+    "software_quiesce_complete": true,
+    "storage_write_commands": 0,
+    "targets_released_heap": 82892
+  },
+  "schema": "leshy.hil.companion_offline.acceptance.v1",
+  "search": {
+    "host_covered_fields": [
+      "name",
+      "notes",
+      "tags",
+      "identities"
+    ],
+    "physical_proofs": [
+      {
+        "expected_target_matched": true,
+        "field": "identities",
+        "matches": 1,
+        "query_sha256": "7757ca49f3068b4c4217e31ebf100973514825a197fa515ba371aef8adfee304"
+      },
+      {
+        "expected_target_matched": true,
+        "field": "name",
+        "matches": 10,
+        "query_sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd"
+      }
+    ],
+    "private_queries_retained": false
+  },
+  "status": "pass_offline",
+  "transport": {
+    "active_mac_wifi_touched": false,
+    "cardputer_ports_opened": 0,
+    "network_tools_invoked": false,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "serial_port_discovery_calls": 0
+  },
+  "verification_source_commit": "ad3e63d484700ab174286d38e8e704805f5bd8d9"
+}

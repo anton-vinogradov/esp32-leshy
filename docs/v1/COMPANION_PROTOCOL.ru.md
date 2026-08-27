@@ -305,3 +305,14 @@ client, который не способен нарушить сеть ноут�
 vector credential, guard отдельного interface, HTTP client без proxy, полной
 pagination/parity и confirmed mutation/restore assertions. Physical HTTP остаётся
 открыт.
+
+Тот же exact image 0.195 теперь имеет отдельно принятый offline USB-only result.
+`E-COMPANION-006` обходит все bounded read projections и создаёт canonical snapshot
+`leshy.companion.offline.v1` с 2 Session, 16 полными Target и 7 comparison items.
+Два run сохраняют одинаковый snapshot ID и SHA файла 11 521 byte; local search
+охватывает name, notes, tags и normalized identities. Application flash, network
+tools, изменение Wi-Fi Mac, writes устройства и retention private payload/query не
+происходят. Device-side `library.export` остаётся недоступным. Failed precursor также
+выявляет открытый firmware defect: после прежнего lifecycle Local Web Targets может
+получить fail read-only mount `ESP_ERR_NO_MEM` до reset устройства. Offline
+export/search принят, но reclamation Web memory и physical HTTP parity остаются открыты.

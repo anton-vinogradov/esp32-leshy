@@ -792,6 +792,18 @@ budget. Exact SHA-256 firmware/factory/ELF/map/built-partitions:
 Это только host/build evidence: board не прошивалась, состояние Wi-Fi host не
 менялось, runtime heap повторно не заявляется, physical cadence остаётся 2/15.
 
+Offline checkpoint companion `RB-M166`: exact установленная
+`0.195.0-companion-web-gzip-index` использует 223 112 B static RAM, 3 359 896 B
+linked flash и app image 3 360 400 B; no-flash USB-only gate не добавляет firmware
+memory. Host-owned canonical snapshot занимает 11 521 B и не расходует RAM/storage
+устройства. После чистого reset Targets/export начинает и завершает работу с
+82 892 B free heap и освобождает runtime до того же значения. Retained precursor
+стартовал только с 60 584 B после прежнего Local Web и получил fail read-only mount
+`ESP_ERR_NO_MEM` (257); reset вернул 82 892 B и immediate readiness Targets. Это
+открытый firmware defect lifecycle/reclamation, а не принятый сниженный memory budget.
+Exact `E-HIL-182` принимает только deterministic offline USB snapshot/search, двигает
+cadence до 3/15 и доказывает zero network tools/использования активного Wi-Fi Mac.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

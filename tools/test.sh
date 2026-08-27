@@ -407,6 +407,9 @@ fi
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-companion-web-lifecycle-0.181.json" ]]; then
     python3 "$repo_dir/tools/check_companion_web_lifecycle_acceptance.py"
 fi
+if [[ -f "$repo_dir/tests/hil/evidence/board-01-companion-offline-0.195.json" ]]; then
+    python3 "$repo_dir/tools/check_companion_offline_acceptance.py"
+fi
 if [[ -f "$repo_dir/tests/hil/evidence/board-01-targets-evidence-0.150.json" ]]; then
     python3 "$repo_dir/tools/check_targets_evidence_hil_acceptance.py"
 fi

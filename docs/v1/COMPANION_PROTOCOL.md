@@ -303,3 +303,14 @@ external client that cannot disturb the laptop's network.
 one-shot HIL entropy parser, zeroization, scope guards, deterministic credential test
 vector, dedicated-interface guard, proxy-free HTTP client, full pagination/parity and
 confirmed mutation/restore assertions pass host checks. Physical HTTP remains open.
+
+The same exact 0.195 image now has a separately accepted offline USB-only result.
+`E-COMPANION-006` walks all bounded read projections and creates a canonical
+`leshy.companion.offline.v1` snapshot containing 2 Sessions, 16 complete Targets and
+7 comparison items. Two runs retain the same snapshot ID and 11,521-byte file SHA;
+local search covers name, notes, tags and normalized identities. No application flash,
+network tool, Mac Wi-Fi change, device write or private payload/query retention occurs.
+Device-side `library.export` remains unavailable. A failed precursor also exposes an
+open firmware defect: after an earlier Local Web lifecycle, Targets may fail its
+read-only mount with `ESP_ERR_NO_MEM` until device reset. Offline export/search is
+accepted, but Web memory reclamation and physical HTTP parity remain open.
