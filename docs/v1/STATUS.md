@@ -14,13 +14,13 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 - **Last completed stage:** `S4 — Cross-radio passive platform`.
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Verified checkpoint:** exact `0.196.2-companion-post-web-shared-scratch` at firmware source `7272d237ebb65e4b700ad8c64a32b48fc779ad75` is physically accepted for the **device-only Local Web → Targets → offline USB** continuity boundary in `E-BUILD-153`/`E-AUTO-125`/`E-HIL-183`/`E-COMPANION-007`. One exact application flash starts and stops the DIV SoftAP with zero associated stations, leaves the ESP-IDF network core explicitly process-lifetime, reopens 16 read-only Targets with 7 comparison items, reproduces the accepted 11,521-byte offline snapshot byte-for-byte and restores the Survey worker at Home/none/lease 0. The 24,808-byte state codec and 11,272-byte admission scratch reuse one existing static union, adding zero static RAM. No host network tool runs and active Mac Wi-Fi is untouched.
-- **Next evidence gate:** flash exact `1.0.0-dev.208` once on original board-01, then require successful exact-CID boot catalog admission, one contiguous real Wi-Fi+BLE Survey cycle, save after bounded NimBLE teardown, reboot, reopen the result and finish at Home/none/lease 0. The active laptop Wi-Fi and Cardputer remain prohibited. Physical HTTP parity remains deferred to a dedicated idle adapter or external client, and the physical S5 gate remains postponed, not waived, until the replacement DIV arrives and passes its read-only profile.
+- **Next evidence gate:** flash exact `1.0.0-dev.209` once on original board-01, then require successful exact-CID boot admission, one contiguous real Wi-Fi+BLE Survey cycle with lifecycle-disjoint radio windows, save only after complete BLE teardown, reboot, reopen the result and finish at Home/none/lease 0 with a healthy runtime watchdog. The active laptop Wi-Fi and Cardputer remain prohibited. Physical HTTP parity remains deferred to a dedicated idle adapter or external client, and the physical S5 gate remains postponed, not waived, until the replacement DIV arrives and passes its read-only profile.
 - **Latest accepted physical baseline:** exact `0.196.2-companion-post-web-shared-scratch` combines the accepted 0.181 device-only Local Web lifecycle and 0.195 deterministic offline USB snapshot with proven post-Web Targets continuity. Physical HTTP payload parity is still not claimed.
 - **Accepted physical baselines:** exact `0.171.0-antenna-status-leds` for the restored per-antenna 0.x LED contract and periodic Home/RF/Targets/companion full checkpoint; exact `0.170.0-companion-usb-rx` for bounded read-only native-USB Session/Target/Compare projections; exact `0.160.0-targets-load-memory` for bounded post-Survey persistence decode and foreground allocation; exact `0.156.0-targets-reject-rebuild` for bounded Reject without ownership mutation and cold recovery; exact `0.155.7-targets-shared-codec` for explainable correlation review, bounded Accept and cold decision recovery; exact `0.154.0-targets-notes-edit` for bounded note set/clear and two cold reopens; exact `0.153.0-targets-tags-edit` for bounded on-device Target tag add/remove and two cold reopens; exact `0.152.0-targets-name-edit` for bounded on-device Target naming and cold reopen; exact `0.151.2-targets-favorite-compact` for the first durable on-device Target mutation; exact `0.150.0-targets-evidence` for stable class/signal-sorted comparison rows and exact evidence drilldown; exact `0.149.0-targets-inplace-reset` for the first real on-device Targets/Compare slice; exact `0.145.0-interface-settings` for persisted interface preferences and safe unavailable Sound; exact `0.144.0-full-guided-s5-rx` for the autonomous Full/Guided passive-receiver/artifact half-gate; exact `0.139.0-s5-runtime-complete` for assembly/power/low-voltage/light-sleep and the software-only Sub-GHz Store route; exact `0.138.0-safety-restart-noos` for Product Survey preparation/admission, calibrated Wi-Fi+BLE workers and Wi-Fi/IR Capture Store worker safety; exact `0.129.0-pre-app-watchdog` remains the retained cold Library IR export baseline. Earlier accepted checkpoints remain retained below.
-- **Working source checkpoint:** `1.0.0-dev.208` is the first 1.x source-bearing build and the host/build-verified correction of rejected exact 0.207. A second no-flash diagnosis proves the enrolled SD is physically present and exact-CID readable, while its FAT mount fails with `ESP_ERR_NO_MEM` (257): early process-lifetime NimBLE leaves only 29,576 B free and firmware misleadingly reports `missing_media`. The corrected adapter retains the required Arduino BLE allocation marker but initializes NimBLE only after initial storage admission, then fail-closes terminal handling until `nimble_port_stop()`, host-task exit and `nimble_port_deinit()` complete before FAT commit. Focused contracts pass; the clean production build is 225,688 B static RAM, 3,318,064 B linked flash and 3,318,224/3,383,760 B app/factory. Firmware/app hashes are `1b72d9cc…380f` / `598dc7e8…b09`. No physical 1.x claim is made yet; the accepted baseline remains 0.196.2.
+- **Working source checkpoint:** `1.0.0-dev.209` is the host/build-verified correction of physically rejected exact 208. Exact 208 proves boot exact-CID admission, then BLE runs for six windows while Wi-Fi initialization fails with `ESP_ERR_NO_MEM` (257), because the complete NimBLE host remains resident across the Wi-Fi window; the degraded run later latches `runtime_watchdog` Safe Mode and is retained fail-closed. Exact 209 makes every source lifecycle disjoint: Wi-Fi begin/scan/end completes before BLE begin/scan/full-end, and no radio survives into another source or FAT commit. The full tracked host suite passes; the clean build is 225,688 B static RAM, 3,317,692 B linked flash and 3,318,192/3,383,728 B app/factory. Firmware/app hashes are `63f55328…3bab` / `38d3cf02…d868`. No physical 1.x claim is made yet; the accepted baseline remains 0.196.2.
 - **HIL cadence:** routine fixes run only the affected scenario plus adjacent negative/cleanup assertions and flash a changed candidate at most once. A full matrix is mandatory at stage end, RC, an unreviewed cross-cutting change, or after 15 accepted deltas. Exact 0.171 completed the last interval checkpoint; accepted exact 0.172, 0.181, offline-only 0.195 and post-Web continuity 0.196.2 are deltas **4/15**. Only retained summaries whose status is `pass` or `pass_*` count; fail-closed precursors do not advance the interval. Delta evidence retains run/source hashes compactly; periodic full checkpoints retain a compact machine-checked matrix and reset the anchor.
-- **Release state:** released `v0.*` remains the frozen PoC line; no 1.x binary has been released. Historic redesign checkpoints through exact 0.207 remain immutable evidence names. The first source-bearing 1.x build is `1.0.0-dev.208`, phase-complete candidates use `1.0.0-rc.N`, and the first stable redesign release is `1.0.0`.
-- **Current objective:** physically verify exact `1.0.0-dev.208` and complete the real combined Wi-Fi+BLE Survey boundary required by the integrated S6.6 demo while preserving proven
+- **Release state:** released `v0.*` remains the frozen PoC line; no 1.x binary has been released. Historic redesign checkpoints through exact 0.207 remain immutable evidence names. The first source-bearing 1.x build is `1.0.0-dev.208`; current candidate is `1.0.0-dev.209`, phase-complete candidates use `1.0.0-rc.N`, and the first stable redesign release is `1.0.0`.
+- **Current objective:** physically verify exact `1.0.0-dev.209` and complete the real combined Wi-Fi+BLE Survey boundary required by the integrated S6.6 demo while preserving proven
   Web→Targets→offline-export continuity; never use the active laptop network or
   Cardputer and do not claim the blocked S5 gate.
 - **Immediate boundary:** board-02 is an unqualified N16R8/DNP variant with RF in
@@ -113,41 +113,62 @@ in [DELIVERY_PLAN.md](DELIVERY_PLAN.md); update rules are in
 
 ### User functionality status
 
-This compact list is the front-page view of user value. A `done` row has accepted
-evidence for its stated boundary; `blocked` means its UI/software exists but the
-named physical proof is still unavailable. Detailed requirements remain in the
-[capability catalog](CAPABILITY_CATALOG.md).
+This is the complete front-page user checklist. `FUNC-NN` deliberately mirrors
+`CAP-0NN` in the [capability catalog](CAPABILITY_CATALOG.md), so CI can prove
+coverage of all 47 capabilities without hand-maintained grouping. A `done` row has
+accepted evidence for its stated boundary; `blocked` means its software/UI or
+conditional path awaits the named physical proof.
 
 <!-- LESHY-FUNCTIONS:START -->
 | ID | Functionality | Delivery stage | State |
 |---|---|---|---|
-| FUNC-01 | Home with firmware identity, task-first final menu and full-area pages | S2 | `done` |
-| FUNC-02 | Five-key and touch navigation, stable selection, EN/RU UI and accessible common components | S2 | `done` |
-| FUNC-03 | Device settings: language, brightness, theme, power/sleep and per-antenna status LEDs | S2 + S5.5 | `done` |
-| FUNC-04 | Device service hub: Quick/Full Self-Test, Diagnostics, recovery state and About | S2 + S5.6 | `done` |
-| FUNC-05 | Selectable passive multi-radio Survey, durable timeline and reusable Sessions | S3 + S6.6 | `active` |
-| FUNC-06 | Wi-Fi nearby networks: stable list, SSID/security/channel/vendor facts, hidden-name enrichment and live radar | S4 | `done` |
-| FUNC-07 | Wi-Fi devices: passive client discovery, vendor/type/model/generation facts, directed SSID and live radar | S4 | `done` |
-| FUNC-08 | Wi-Fi channels 1–13: current and mean load, channel boundaries and explainable free-channel recommendation | S4 | `done` |
-| FUNC-09 | Bounded Wi-Fi packet recording, privacy confirmation, PCAP save, cold reopen and export | S4 | `done` |
-| FUNC-10 | Bluetooth nearby devices: strongest-first list, company/service identity details and live radar | S4 | `done` |
-| FUNC-11 | 2.4 GHz nRF24 all-receiver spectrum and receiver-paced one-pixel waterfall | S5.3 | `blocked` |
-| FUNC-12 | 2.4 GHz nRF24 signal finder with background calibration, exact frequency and nearest Wi-Fi channel | S5.3 | `blocked` |
-| FUNC-13 | Sub-GHz spectrum and receiver-paced one-pixel waterfalls for 315/433/868/915 MHz | S5.4 | `blocked` |
-| FUNC-14 | Sub-GHz calibrated frequency finder plus bounded OOK/FSK receive, save, cold reopen and export | S5.4 | `blocked` |
-| FUNC-15 | Infrared receive, NEC decode, save, cold Library reopen and CSV export | S5.2 | `done` |
-| FUNC-16 | Library browsing for Sessions and Captures with offline reopen and integrity status | S4 + S5 | `done` |
-| FUNC-17 | CSV/PCAP/offline snapshot export with exact source-evidence provenance | S4–S6.5 | `done` |
-| FUNC-18 | Targets: stable identity, favorite/name/tags/notes and drill-down to immutable evidence | S6.1 + S6.4 | `done` |
-| FUNC-19 | Explainable cross-radio correlation with review, accept/reject and reversible merge/split | S6.2 + S6.4 | `done` |
-| FUNC-20 | Baseline comparison: new, disappeared and changed Targets with evidence for every conclusion | S6.3 + S6.4 | `done` |
-| FUNC-21 | Scoped local USB companion: browse/search Sessions, Targets and comparisons and export offline | S6.5 | `active` |
-| FUNC-22 | Scoped device-hosted Web companion over the same read-only schemas and Actions | S6.5 | `active` |
-| FUNC-23 | Authorized Lab: bounded transmit/replay, visible TX state, immutable source capture and panic stop | S7 | `planned` |
-| FUNC-24 | Permissioned extensions and optional GPS/NFC hardware profiles | S7 | `planned` |
-| FUNC-25 | Device → Update: signed stable/beta OTA, rollback and recovery | S8 | `planned` |
-| FUNC-26 | Browser install plus encrypted backup/restore of settings and user data | S8 | `planned` |
-| FUNC-27 | Automated real-device screenshots, delta/full HIL and one-hour release qualification | S8 | `planned` |
+| FUNC-01 | Boot probe identifies the board profile, main/RF assembly and every capability state with evidence | S2 + S5 | `active` |
+| FUNC-02 | Capability-driven Home exposes only available jobs and explains disabled/conflicted/fault before launch | S2 | `done` |
+| FUNC-03 | Device → Self-Test/Diagnostics safely checks applicable hardware without TX and exports a report | S2 + S5 | `done` |
+| FUNC-04 | TFT, five keys and touch share Actions, calibration, stable selection and an accessible Back path | S2 | `done` |
+| FUNC-05 | Locally persisted EN/RU language, brightness, theme, quiet/sound and screen behavior | S2 + S5 | `done` |
+| FUNC-06 | Visible power/charge/reset reason, low-voltage safe write and verifiable sleep/resume | S5 | `blocked` |
+| FUNC-07 | Browser install and Device → Update: signed stable/beta OTA, rollback and recovery image | S8 | `planned` |
+| FUNC-08 | Local logs, crash journal and exportable diagnostic bundle without a cloud dependency | S6 + S8 | `active` |
+| FUNC-09 | Explicit Start/Stop creates a bounded multi-radio Survey Session with configuration and provenance | S3 + S6.6 | `active` |
+| FUNC-10 | Passive Wi-Fi scan: networks, hidden-name enrichment, security/channel/vendor facts and normalized Observations | S3 + S4 | `done` |
+| FUNC-11 | Passive BLE scan: strongest-first devices, company/service facts and normalized Observations without active probes | S4 | `done` |
+| FUNC-12 | Three nRF24 receivers: RX-only spectrum, receiver-paced one-pixel waterfall and background-calibrated 2.4 GHz signal finder | S4 + S5.3 | `blocked` |
+| FUNC-13 | CC1101: RX-only Sub-GHz spectrum/activity, one-pixel waterfalls and frequency/RSSI finder for 315/433/868/915 MHz | S4 + S5.4 | `blocked` |
+| FUNC-14 | GPS adds fix, satellites, time and track to a Session only for an explicit compatible assembly | S4 + S5 | `planned` |
+| FUNC-15 | Shared timeline exposes sources, duty cycle, temporary unavailability, degradation and dropped events | S4 + S6.6 | `active` |
+| FUNC-16 | Shared stable List/Detail/filter behavior for Wi-Fi, BLE and other radios with all useful facts | S3 + S4 | `done` |
+| FUNC-17 | Network/device Radar/localize: RSSI history, trend/range and honest proximity limits | S4 + S6 | `active` |
+| FUNC-18 | A Target preserves stable identities, Observation history and links to immutable source evidence | S6.1 + S6.4 | `done` |
+| FUNC-19 | Target name, tags, notes and favorite are bounded edits that survive cold reopen | S6.1 + S6.4 | `done` |
+| FUNC-20 | Explainable correlation shows features/confidence; review, accept/reject and merge/split are reversible | S6.2 + S6.4 | `done` |
+| FUNC-21 | Session baseline/diff shows new, disappeared and changed Targets | S6.3 + S6.4 | `done` |
+| FUNC-22 | Every compare/correlation conclusion opens its exact source evidence | S6.3 + S6.4 | `done` |
+| FUNC-23 | Immutable Capture preserves raw source, time, frequency/channel, RSSI, coordinates and receive settings | S3 + S4 | `done` |
+| FUNC-24 | Session/Capture commits are atomic and recover after reset and controlled power loss | S3 + S5 | `blocked` |
+| FUNC-25 | Library opens Sessions/Captures offline with list/detail/search/filter and visible integrity state | S3 + S6 | `done` |
+| FUNC-26 | Export provides JSON/CSV summaries, PCAP and portable radio formats with exact provenance | S3 + S5 | `active` |
+| FUNC-27 | SD, USB and local-companion import/export uses versioned schemas and a fail-closed parser | S5 + S6 | `active` |
+| FUNC-28 | SD/LittleFS exposes identity, capacity, recovery, integrity and degraded behavior | S3 + S5 | `done` |
+| FUNC-29 | IR receive/decode preserves original and derived data, cold-reopens in Library and exports CSV | S5.2 | `done` |
+| FUNC-30 | Sub-GHz RAW/OOK/FSK Capture preserves pulses, radio parameters and derived decodes | S5.4 | `blocked` |
+| FUNC-31 | PN532 reads tag/NDEF facts and a versioned dump only for an explicit non-conflicting assembly | S5 | `blocked` |
+| FUNC-32 | Separate Lab exposes authorized scope, source, frequency, power, duration and permanently visible TX state | S7 | `planned` |
+| FUNC-33 | Back, timeout, panic, fault or loss of control/telemetry physically stops every TX path | S7 | `planned` |
+| FUNC-34 | IR replay is available only from a selected immutable Capture after preview and explicit confirmation | S7 | `planned` |
+| FUNC-35 | Sub-GHz replay/TX from an immutable Capture passes ResourceBroker, bounds, confirmation, countdown and stop result | S7 | `planned` |
+| FUNC-36 | NFC write/restore of a supported owned tag exposes preview, verify and the original recovery dump | S7, conditional hardware | `planned` |
+| FUNC-37 | Protocol Workbench compares pulses/waveforms, annotates fields and stores a derived decode without changing raw source | S7 | `planned` |
+| FUNC-38 | Scoped local USB/Web companion browses, searches, compares and exports through shared Actions/schemas | S6.5 | `active` |
+| FUNC-39 | Permissioned app descriptor declares capabilities, resources, permissions, safety policy and UI strings before launch | S7 | `planned` |
+| FUNC-40 | Versioned decoder/profile packages have a compatibility gate, integrity/signature and scoped storage | S7 + S8 | `planned` |
+| FUNC-41 | SDK, sample extension and simulator trace kit cannot bypass ResourceBroker, permissions or Safety Supervisor | S7 | `planned` |
+| FUNC-42 | Wi-Fi channel/packet monitor: current/mean load for 1–13, explainable free channel and bounded PCAP with drop counters | S4 | `done` |
+| FUNC-43 | User saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | S5 | `planned` |
+| FUNC-44 | Offline OUI/BLE company/service/protocol profiles enrich facts with version/provenance without replacing raw evidence | S6 | `done` |
+| FUNC-45 | One feedback service owns antenna LEDs and buzzer: default 2/255, quiet mode, bounded tones and non-color-only cues | S5 + S6 | `done` |
+| FUNC-46 | Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | `active` |
+| FUNC-47 | Versioned backup/restore and factory reset show scope/preview/checksum and never overwrite raw Capture without confirmation | S8 | `planned` |
 <!-- LESHY-FUNCTIONS:END -->
 
 S6.4 is deliberately split into reviewable user interactions:
@@ -182,7 +203,7 @@ S6.6 integrated-demo preparation is now independently reviewable:
 | S6.6 slice | State |
 |---|---|
 | One exact flash → baseline Survey → contiguous repeat Survey → open every comparison conclusion → canonical offline USB export → clean Home exit | `accepted by E-AUTO-126 (host/build contract); physical one-command run pending` |
-| Real combined Wi-Fi+BLE product Survey | `host/build correction ready in 1.0.0-dev.208: exact 0.207 is rejected because process-lifetime NimBLE causes FAT ESP_ERR_NO_MEM despite a present exact-CID SD. One changed-candidate delta flash must prove boot admission, combined Survey, commit after BLE teardown, cold reopen and final cleanup` |
+| Real combined Wi-Fi+BLE product Survey | `host/build correction ready in 1.0.0-dev.209: exact 208 is physically rejected because its resident NimBLE host starves Wi-Fi init and the degraded run later latches the runtime watchdog. One changed-candidate delta flash must prove lifecycle-disjoint Wi-Fi/BLE windows, commit, cold reopen, healthy watchdog and final cleanup` |
 | Physical HTTP parity over the same records | `still held by S6.5; requires a dedicated idle adapter or external client and must not use the active laptop Wi-Fi` |
 | S6 exit | `held by the physical integrated-demo run, physical HTTP parity and the deferred S5 predecessor gate` |
 
@@ -1046,6 +1067,8 @@ endurance are explicit `DEMO-S4` criteria.
 | E-BUILD-156 / E-AUTO-129 | host-only exact 0.207 retained NimBLE controller memory | pass at firmware source `63499ca`: the adapter includes Arduino's official `esp32-hal-alloc-ble-mem.h` lifecycle marker, which runs before `initArduino()` and prevents the permanent BLE-memory release that invalidated 0.206. Focused clean-target/BLE contracts require this marker plus the existing passive-only NimBLE APIs; a clean production build is 225,680 B RAM and 3,315,100 B flash with firmware/app hashes `6b8a0c3e…faf2a` / `017ccd91…ecd7` | accepts the narrow lifecycle correction for source/build only. Exact physical controller startup, Wi-Fi coexistence, persistence/reboot and cleanup remain one delta HIL after manual ROM recovery; accepted baseline/cadence remain 0.196.2 and 4/15 |
 | E-HIL-186 | rejected exact 0.207 process-lifetime NimBLE resource lifecycle | fail-closed: one exact flash and a no-flash rerun reach interactive ready without the 0.206 BLE panic, but boot recovery cannot mount FAT. Independent read-only commands prove the enrolled 62,534,975,488-byte SD is present, completes all nine identification commands and returns exact CID `FE34…9CB7`; mount then reports `ESP_ERR_NO_MEM` (257), not absent media. [Compact negative evidence](../../tests/hil/evidence/board-01-product-survey-coexistence-0.207-failed.json) binds both run hashes plus raw identity/mount hashes, zero writes, zero Cardputer opens, zero Mac Wi-Fi changes and Home/none/lease 0 | confirms the BLE allocation marker correction but rejects keeping NimBLE process-lifetime: 29,576 B free is insufficient for FAT and `missing_media` is a misleading collapse. Combined Survey and cadence remain unchanged at baseline 0.196.2 and 4/15 |
 | E-BUILD-157 / E-AUTO-130 | host/build exact `1.0.0-dev.208` bounded NimBLE lifecycle | pass: setup no longer starts BLE before boot storage recovery. Product Survey admits exact-CID FAT first, releases storage, starts one passive-only NimBLE host for the worker run, and refuses terminal commit until scan cancellation, `nimble_port_stop()`, bounded host-task exit and `nimble_port_deinit()` all complete. Source guards forbid process-lifetime BLE plus all advertising/initiating/connecting/active-scan/direct-controller paths. Clean build is 225,688 B RAM, 3,318,064 B linked flash and 3,318,224/3,383,760 B app/factory with firmware/app hashes `1b72d9cc…380f`/`598dc7e8…b09` | accepts source/build only. The reviewed delta scope requires one changed-candidate flash and only the combined Survey plus adjacent boot/commit/reboot/cleanup assertions. No physical 1.x claim or cadence advance is made yet; active Mac Wi-Fi and Cardputer remain prohibited |
+| E-HIL-187 | rejected exact `1.0.0-dev.208` overlapping Wi-Fi/NimBLE resource lifecycle | fail-closed: exact-CID boot recovery succeeds, Product Survey starts both requested sources and BLE completes six windows, but Wi-Fi initialization returns `ESP_ERR_NO_MEM` (257) before its first cycle because NimBLE remains resident. The run stays degraded, does not prove terminal commit/cleanup and later reaches latched `runtime_watchdog` Safe Mode with owner none, lease zero and RF/buzzer outputs quiesced. [Compact negative evidence](../../tests/hil/evidence/board-01-product-survey-coexistence-1.0.0-dev.208-failed.json) binds exact candidate/run/boot/cleanup hashes, 205 accepted BLE reports, bounded timeline drops, exact CID/generation, zero DUT TX, zero Cardputer opens and zero Mac Wi-Fi changes | rejects 208 physical promotion and keeps accepted baseline/cadence at 0.196.2 and 4/15. The failure is not hidden as a partial pass; a second flash is forbidden until the disjoint lifecycle correction passes host regression |
+| E-BUILD-158 / E-AUTO-131 | host/build exact `1.0.0-dev.209` lifecycle-disjoint Product Survey | pass: the worker no longer starts NimBLE outside its own source window. Every Wi-Fi window completes begin/scan/end before every BLE window completes begin/scan/full-end, so no radio survives into another source or FAT commit. Current-source guards forbid the rejected overlapping markers, preserve passive-only BLE safety and require full lifecycle symmetry. The 47-row EN/RU functionality ledger is now an exact checked projection of all normative `CAP-001…CAP-047`. The complete tracked host suite passes; clean build is 225,688 B RAM, 3,317,692 B linked flash and 3,318,192/3,383,728 B app/factory with firmware/app hashes `63f55328…3bab`/`38d3cf02…d868` | accepts source/build/docs only. Reviewed delta scope permits one original-board application flash and requires combined Survey without `ESP_ERR_NO_MEM`, healthy watchdog, commit, cold reopen and final Home/none/lease 0. No physical 1.x claim or cadence advance is made yet; active Mac Wi-Fi and Cardputer remain prohibited |
 
 ## Known uncertainties and risks
 

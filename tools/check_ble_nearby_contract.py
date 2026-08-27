@@ -61,14 +61,18 @@ def main() -> int:
         "bleDeviceVisibleSize()",
         "bleDeviceAt(bleDeviceSelection)",
         "renderRadioSignalCard(",
-        "const bool bleStackPrepared =",
-        "bleScanner.begin();",
-        "bleStackPrepared && bleScanner.initialized()",
+        "if (bleScanner.begin())",
+        ": bleScanner.end();",
         "BoardBlePassiveScanner::cancelActiveScan();",
-        "The complete NimBLE host lifecycle is bounded by this worker run.",
+        "Each radio therefore owns a disjoint scan",
+        "No radio stack survives into the other source's",
         "if (!report.scannerCleanupComplete)",
         'report.status = "scanner_cleanup_failed";',
         "bounded BLE observer is initialized only after this storage release",
+    )
+    forbidden_entry = (
+        "const bool bleStackPrepared =",
+        "bleStackPrepared && bleScanner.initialized()",
     )
     required_catalog = (
         "static constexpr std::size_t kCapacity = 32",
@@ -86,6 +90,12 @@ def main() -> int:
         "bool allowReplacement = true",
         "!allowReplacement",
     )
+    for token in forbidden_entry:
+        if token in entry:
+            raise SystemExit(
+                "BLE source contract retains overlapping Wi-Fi/NimBLE "
+                f"lifecycle: {token}"
+            )
     required_adapter = (
         "#include <esp32-hal-alloc-ble-mem.h>",
         "registers this low-level adapter as a BLE",

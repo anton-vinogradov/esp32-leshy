@@ -14,13 +14,13 @@
 - **Последний закрытый этап:** `S4 — Cross-radio passive platform`.
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Проверенный checkpoint:** exact `0.196.2-companion-post-web-shared-scratch` на firmware source `7272d237ebb65e4b700ad8c64a32b48fc779ad75` физически принят для boundary **device-only Local Web → Targets → offline USB** в `E-BUILD-153`/`E-AUTO-125`/`E-HIL-183`/`E-COMPANION-007`. Одна exact-прошивка запускает и останавливает SoftAP самого DIV при zero associated stations, явно оставляет network core ESP-IDF process-lifetime, повторно открывает 16 read-only Targets и 7 comparison items, byte-for-byte воспроизводит принятый offline snapshot 11 521 byte и восстанавливает Survey worker в Home/none/lease 0. State codec 24 808 byte и admission scratch 11 272 byte переиспользуют один существующий static union, добавляя zero static RAM. Host network tools не запускаются, активный Wi-Fi Mac не затрагивается.
-- **Следующий evidence gate:** один раз прошить exact `1.0.0-dev.208` на original board-01, затем потребовать успешный boot catalog admission exact CID, один непрерывный реальный цикл Survey Wi-Fi+BLE, сохранение после bounded teardown NimBLE, перезагрузку, повторное открытие результата и финал Home/none/lease 0. Активный Wi-Fi ноутбука и Cardputer по-прежнему запрещено затрагивать. Physical HTTP parity остаётся отложенной до отдельного idle adapter или внешнего client, а physical gate S5 — отложенным, но не отменённым, до приезда replacement DIV и прохождения его read-only profile.
+- **Следующий evidence gate:** один раз прошить exact `1.0.0-dev.209` на original board-01, затем потребовать успешный boot admission exact CID, один непрерывный реальный цикл Survey Wi-Fi+BLE с непересекающимися lifecycle окон radio, сохранение только после полного teardown BLE, перезагрузку, повторное открытие результата и финал Home/none/lease 0 со здоровым runtime watchdog. Активный Wi-Fi ноутбука и Cardputer по-прежнему запрещено затрагивать. Physical HTTP parity остаётся отложенной до отдельного idle adapter или внешнего client, а physical gate S5 — отложенным, но не отменённым, до приезда replacement DIV и прохождения его read-only profile.
 - **Последний принятый physical baseline:** exact `0.196.2-companion-post-web-shared-scratch` объединяет принятый device-only lifecycle Local Web 0.181 и deterministic offline USB snapshot 0.195 с доказанной post-Web continuity Targets. Physical HTTP payload parity всё ещё не заявляется.
 - **Принятые physical baselines:** exact `0.171.0-antenna-status-leds` для восстановленного per-antenna LED-контракта 0.x и периодического полного checkpoint Home/RF/Targets/companion; exact `0.170.0-companion-usb-rx` для bounded read-only projections Session/Target/Compare по native USB; exact `0.160.0-targets-load-memory` для bounded post-Survey persistence decode и foreground allocation; exact `0.156.0-targets-reject-rebuild` для bounded Reject без изменения ownership и cold recovery; exact `0.155.7-targets-shared-codec` для объяснимого review correlation, bounded Accept и cold recovery решения; exact `0.154.0-targets-notes-edit` для bounded записи/очистки заметки и двух cold reopen; exact `0.153.0-targets-tags-edit` для bounded добавления/удаления тегов Target и двух cold reopen; exact `0.152.0-targets-name-edit` для bounded on-device имени Target и cold reopen; exact `0.151.2-targets-favorite-compact` для первой durable on-device mutation Target; exact `0.150.0-targets-evidence` для стабильных class/signal-sorted строк compare и exact evidence drilldown; exact `0.149.0-targets-inplace-reset` для первого реального on-device slice Targets/Compare; exact `0.145.0-interface-settings` для сохраняемых настроек интерфейса и безопасно недоступного Звука; exact `0.144.0-full-guided-s5-rx` для автономной половины Full/Guided passive receivers/artifacts; exact `0.139.0-s5-runtime-complete` для assembly/power/low-voltage/light-sleep и software-only path Store Sub-GHz; exact `0.138.0-safety-restart-noos` для preparation/admission Product Survey, калиброванных workers Wi-Fi+BLE и safety paths Wi-Fi/IR Capture Store; exact `0.129.0-pre-app-watchdog` остаётся retained baseline cold Library export IR. Все прежние checkpoints сохранены ниже.
-- **Текущий source checkpoint:** `1.0.0-dev.208` — первая source-bearing сборка 1.x и host/build-verified исправление отклонённого exact 0.207. Вторичная no-flash диагностика доказала: enrolled SD физически присутствует и читается по exact CID, но FAT mount падает с `ESP_ERR_NO_MEM` (257), потому что ранний process-lifetime NimBLE оставляет только 29 576 B свободного heap, а firmware ошибочно сворачивает resource failure в `missing_media`. Исправленный adapter сохраняет обязательный marker Arduino BLE allocation, но запускает NimBLE только после initial storage admission и fail-close-ит terminal handling, пока не завершены `nimble_port_stop()`, выход host task и `nimble_port_deinit()` перед FAT commit. Focused contracts проходят; clean production build занимает 225 688 B static RAM, 3 318 064 B linked flash и 3 318 224/3 383 760 B app/factory. Hashes firmware/app — `1b72d9cc…380f` / `598dc7e8…b09`. Physical claim 1.x пока не делается; принятым baseline остаётся 0.196.2.
+- **Текущий source checkpoint:** `1.0.0-dev.209` — host/build-verified исправление физически отклонённого exact 208. Exact 208 доказывает boot admission exact CID, затем BLE работает шесть окон, а initialization Wi-Fi падает с `ESP_ERR_NO_MEM` (257), потому что полный host NimBLE остаётся resident во время окна Wi-Fi; degraded run позже latch-ит Safe Mode `runtime_watchdog` и сохранён fail-closed. Exact 209 делает каждый lifecycle source непересекающимся: Wi-Fi begin/scan/end полностью завершается до BLE begin/scan/full-end, и ни один radio не доживает до другого source или commit FAT. Полный tracked host suite проходит; clean build занимает 225 688 B static RAM, 3 317 692 B linked flash и 3 318 192/3 383 728 B app/factory. Hashes firmware/app — `63f55328…3bab` / `38d3cf02…d868`. Physical claim 1.x пока не делается; принятым baseline остаётся 0.196.2.
 - **Cadence HIL:** обычная правка запускает только затронутый scenario плюс соседние negative/cleanup assertions и прошивает изменившийся candidate максимум один раз. Full matrix обязателен в конце этапа, на RC, при непроверенном cross-cutting change или после 15 принятых deltas. Exact 0.171 завершил предыдущий interval checkpoint; принятые exact 0.172, 0.181, offline-only 0.195 и post-Web continuity 0.196.2 — deltas **4/15**. Считаются только retained summary со status `pass` или `pass_*`; fail-closed precursors не двигают интервал. Delta evidence компактно сохраняет run/source hashes; periodic full checkpoint сохраняет компактную machine-checked matrix и сбрасывает anchor.
-- **Релизный статус:** выпущенная линейка `v0.*` остаётся замороженным PoC; бинарник 1.x ещё не выпускался. Исторические checkpoints редизайна по exact 0.207 включительно сохраняют неизменяемые evidence names. Первая source-bearing сборка 1.x — `1.0.0-dev.208`, phase-complete candidates имеют вид `1.0.0-rc.N`, а первый stable релиз редизайна — `1.0.0`.
-- **Главная цель текущего этапа:** физически проверить exact `1.0.0-dev.208` и завершить реальную объединённую границу Survey Wi-Fi+BLE, требуемую integrated demo S6.6, сохраняя
+- **Релизный статус:** выпущенная линейка `v0.*` остаётся замороженным PoC; бинарник 1.x ещё не выпускался. Исторические checkpoints редизайна по exact 0.207 включительно сохраняют неизменяемые evidence names. Первая source-bearing сборка 1.x — `1.0.0-dev.208`; текущий candidate — `1.0.0-dev.209`, phase-complete candidates имеют вид `1.0.0-rc.N`, а первый stable релиз редизайна — `1.0.0`.
+- **Главная цель текущего этапа:** физически проверить exact `1.0.0-dev.209` и завершить реальную объединённую границу Survey Wi-Fi+BLE, требуемую integrated demo S6.6, сохраняя
   доказанную continuity Web→Targets→offline-export; никогда не затрагивать активную
   сеть ноутбука или Cardputer и не объявлять gate S5 пройденным.
 - **Ближайшая граница:** board-02 — unqualified N16R8/DNP variant с RF в `fault`.
@@ -112,41 +112,62 @@
 
 ### Статус пользовательских возможностей
 
-Это компактное представление пользовательской ценности для главной страницы.
+Это полный пользовательский чек-лист для главной страницы. Номер `FUNC-NN`
+намеренно соответствует `CAP-0NN` в [каталоге возможностей](CAPABILITY_CATALOG.ru.md),
+поэтому CI может доказать покрытие всех 47 возможностей без ручной группировки.
 Строка `done` имеет принятое evidence в указанной границе; `blocked` означает, что
-UI/software существуют, но названное physical proof пока недоступно. Подробные
-требования остаются в [каталоге возможностей](CAPABILITY_CATALOG.ru.md).
+software/UI или conditional path ожидают названное physical proof.
 
 <!-- LESHY-FUNCTIONS:START -->
 | ID | Возможность | Этап поставки | Состояние |
 |---|---|---|---|
-| FUNC-01 | Home с версией прошивки, финальным task-first меню и страницами на всю полезную площадь | S2 | `done` |
-| FUNC-02 | Навигация пятью клавишами и touch, стабильный выбор, EN/RU UI и доступные общие компоненты | S2 | `done` |
-| FUNC-03 | Настройки устройства: язык, яркость, тема, питание/sleep и status LED каждой антенны | S2 + S5.5 | `done` |
-| FUNC-04 | Сервисный хаб: Быстрая/Полная самопроверка, Диагностика, recovery state и О системе | S2 + S5.6 | `done` |
-| FUNC-05 | Выбираемый пассивный multi-radio Обзор, долговечная timeline и переиспользуемые Сессии | S3 + S6.6 | `active` |
-| FUNC-06 | Сети Wi-Fi рядом: стабильный список, SSID/security/channel/vendor, раскрытие hidden name и live-радар | S4 | `done` |
-| FUNC-07 | Устройства Wi-Fi: пассивные клиенты, vendor/type/model/generation, directed SSID и live-радар | S4 | `done` |
-| FUNC-08 | Каналы Wi-Fi 1–13: текущая и средняя загрузка, границы каналов и объяснимая рекомендация свободного | S4 | `done` |
-| FUNC-09 | Ограниченная запись пакетов Wi-Fi, privacy-confirm, сохранение PCAP, cold reopen и экспорт | S4 | `done` |
-| FUNC-10 | Устройства Bluetooth рядом: strongest-first список, company/service identity и live-радар | S4 | `done` |
-| FUNC-11 | Спектр 2,4 ГГц nRF24 со всех приёмников и receiver-paced однопиксельный водопад | S5.3 | `blocked` |
-| FUNC-12 | Поиск сигнала nRF24 2,4 ГГц с калибровкой фона, точной частотой и ближайшим каналом Wi-Fi | S5.3 | `blocked` |
-| FUNC-13 | Спектр Sub-GHz и receiver-paced однопиксельные водопады 315/433/868/915 МГц | S5.4 | `blocked` |
-| FUNC-14 | Калиброванный поиск частоты Sub-GHz и bounded OOK/FSK приём, сохранение, cold reopen и экспорт | S5.4 | `blocked` |
-| FUNC-15 | Приём ИК, декодирование NEC, сохранение, cold reopen в Библиотеке и экспорт CSV | S5.2 | `done` |
-| FUNC-16 | Библиотека Сессий и Захватов с offline reopen и видимым статусом целостности | S4 + S5 | `done` |
-| FUNC-17 | Экспорт CSV/PCAP/offline snapshot с точным provenance исходного evidence | S4–S6.5 | `done` |
-| FUNC-18 | Цели: стабильная identity, избранное/name/tags/notes и переход к immutable evidence | S6.1 + S6.4 | `done` |
-| FUNC-19 | Объяснимая cross-radio correlation с review, accept/reject и обратимыми merge/split | S6.2 + S6.4 | `done` |
-| FUNC-20 | Сравнение baseline: новые, исчезнувшие и изменившиеся Цели с evidence каждого вывода | S6.3 + S6.4 | `done` |
-| FUNC-21 | Scoped local USB companion: просмотр/поиск Сессий, Целей и сравнений и offline export | S6.5 | `active` |
-| FUNC-22 | Scoped Web companion на самом устройстве над теми же read-only schemas и Actions | S6.5 | `active` |
-| FUNC-23 | Авторизованная Лаборатория: bounded TX/replay, видимый TX, immutable source capture и panic stop | S7 | `planned` |
-| FUNC-24 | Permissioned extensions и optional hardware profiles GPS/NFC | S7 | `planned` |
-| FUNC-25 | Устройство → Обновление: signed stable/beta OTA, rollback и recovery | S8 | `planned` |
-| FUNC-26 | Browser install и зашифрованные backup/restore настроек и пользовательских данных | S8 | `planned` |
-| FUNC-27 | Автоматические скриншоты реального устройства, delta/full HIL и часовая release qualification | S8 | `planned` |
+| FUNC-01 | Boot probe определяет профиль платы, main/RF assembly и доступность каждой capability с evidence | S2 + S5 | `active` |
+| FUNC-02 | Capability-driven Home показывает только доступные задачи и до запуска объясняет disabled/conflicted/fault | S2 | `done` |
+| FUNC-03 | Устройство → Самопроверка/Диагностика безопасно проверяет применимое железо без TX и экспортирует отчёт | S2 + S5 | `done` |
+| FUNC-04 | TFT, пять клавиш и touch используют единые Actions, калибровку, стабильный выбор и доступный Back | S2 | `done` |
+| FUNC-05 | Локально сохраняемые EN/RU, яркость, тема, quiet/sound и поведение экрана | S2 + S5 | `done` |
+| FUNC-06 | Видимые питание/заряд/reset reason, low-voltage safe-write и проверяемые sleep/resume | S5 | `blocked` |
+| FUNC-07 | Browser install и Устройство → Обновление: signed stable/beta OTA, rollback и recovery image | S8 | `planned` |
+| FUNC-08 | Локальные логи, crash journal и экспортируемый diagnostic bundle без облака | S6 + S8 | `active` |
+| FUNC-09 | Явные Start/Stop создают bounded multi-radio Survey Session с конфигурацией и provenance | S3 + S6.6 | `active` |
+| FUNC-10 | Пассивный Wi-Fi scan: сети, hidden-name enrichment, security/channel/vendor facts и нормализованные Observation | S3 + S4 | `done` |
+| FUNC-11 | Пассивный BLE scan: strongest-first устройства, company/services facts и нормализованные Observation без active probe | S4 | `done` |
+| FUNC-12 | Три nRF24: RX-only spectrum, receiver-paced однопиксельный waterfall и калиброванный по фону поиск сигнала 2,4 ГГц | S4 + S5.3 | `blocked` |
+| FUNC-13 | CC1101: RX-only Sub-GHz spectrum/activity, однопиксельные waterfalls и поиск частоты/RSSI 315/433/868/915 МГц | S4 + S5.4 | `blocked` |
+| FUNC-14 | GPS добавляет fix, satellites, time и track к Session только для explicit compatible assembly | S4 + S5 | `planned` |
+| FUNC-15 | Общая timeline показывает источники, duty cycle, временную недоступность, degradation и dropped events | S4 + S6.6 | `active` |
+| FUNC-16 | Общие стабильные List/Detail/filter для Wi-Fi/BLE/других радио с полной полезной информацией | S3 + S4 | `done` |
+| FUNC-17 | Radar/localize для сети или устройства: RSSI history, trend/range и честные пределы оценки близости | S4 + S6 | `active` |
+| FUNC-18 | Цель хранит стабильные identities, историю Observation и ссылки на immutable source evidence | S6.1 + S6.4 | `done` |
+| FUNC-19 | Имя, теги, заметки и избранное Цели редактируются bounded и переживают cold reopen | S6.1 + S6.4 | `done` |
+| FUNC-20 | Explainable correlation показывает признаки/confidence; review, accept/reject и merge/split обратимы | S6.2 + S6.4 | `done` |
+| FUNC-21 | Baseline/diff Сессий показывает новые, исчезнувшие и изменившиеся Цели | S6.3 + S6.4 | `done` |
+| FUNC-22 | Каждый вывод compare/correlation открывает точное исходное evidence | S6.3 + S6.4 | `done` |
+| FUNC-23 | Immutable Capture хранит raw source, время, частоту/канал, RSSI, координаты и настройки приёма | S3 + S4 | `done` |
+| FUNC-24 | Session/Capture сохраняются атомарно и восстанавливаются после reset и controlled power loss | S3 + S5 | `blocked` |
+| FUNC-25 | Библиотека офлайн открывает Сессии/Захваты и поддерживает list/detail/search/filter и integrity state | S3 + S6 | `done` |
+| FUNC-26 | Экспорт JSON/CSV summary, PCAP и переносимых radio formats с точным provenance | S3 + S5 | `active` |
+| FUNC-27 | Import/export через SD, USB и local companion использует versioned schemas и fail-closed parser | S5 + S6 | `active` |
+| FUNC-28 | SD/LittleFS показывают identity, capacity, recovery, integrity и degraded behavior | S3 + S5 | `done` |
+| FUNC-29 | ИК receive/decode сохраняет оригинал и производные данные, cold-reopen-ит их в Библиотеке и экспортирует CSV | S5.2 | `done` |
+| FUNC-30 | Sub-GHz RAW/OOK/FSK Capture сохраняет pulses, radio parameters и производные decode | S5.4 | `blocked` |
+| FUNC-31 | PN532 читает tag/NDEF info и versioned dump только при explicit non-conflicting assembly | S5 | `blocked` |
+| FUNC-32 | Отдельная Лаборатория показывает разрешённый scope, source, frequency, power, duration и постоянно видимый TX state | S7 | `planned` |
+| FUNC-33 | Назад, timeout, panic, fault или потеря control/telemetry физически прекращает каждый TX path | S7 | `planned` |
+| FUNC-34 | IR replay доступен только из выбранного immutable Capture после preview и явного подтверждения | S7 | `planned` |
+| FUNC-35 | Sub-GHz replay/TX из immutable Capture проходит ResourceBroker, bounds, confirm, countdown и stop result | S7 | `planned` |
+| FUNC-36 | NFC write/restore поддерживаемой собственной метки показывает preview, verify и исходный dump для восстановления | S7, conditional hardware | `planned` |
+| FUNC-37 | Protocol Workbench сравнивает pulses/waveforms, аннотирует поля и сохраняет derived decode без изменения raw source | S7 | `planned` |
+| FUNC-38 | Scoped local USB/Web companion просматривает, ищет, сравнивает и экспортирует через общие Actions/schemas | S6.5 | `active` |
+| FUNC-39 | Permissioned app descriptor до запуска объявляет capabilities, ресурсы, permissions, safety policy и строки UI | S7 | `planned` |
+| FUNC-40 | Versioned decoder/profile packages имеют compatibility gate, integrity/signature и scoped storage | S7 + S8 | `planned` |
+| FUNC-41 | SDK, sample extension и simulator trace kit не позволяют обойти ResourceBroker, permissions или Safety Supervisor | S7 | `planned` |
+| FUNC-42 | Wi-Fi channel/packet monitor: текущая/средняя загрузка 1–13, объяснимый свободный канал и bounded PCAP с drop counters | S4 | `done` |
+| FUNC-43 | Пользователь сохраняет screenshot реального TFT с build/state/time provenance и открывает его в Library/export | S5 | `planned` |
+| FUNC-44 | Offline OUI/BLE company/services/protocol profiles обогащают факты с version/provenance, не подменяя raw evidence | S6 | `done` |
+| FUNC-45 | Единый feedback service владеет status LED антенн и buzzer: default 2/255, quiet mode, bounded tones и доступные без цвета cues | S5 + S6 | `done` |
+| FUNC-46 | Scoped Wi-Fi/USB setup изолирует secrets, не экспортирует их и не делает сеть условием Survey/Library | S6 + S8 | `active` |
+| FUNC-47 | Versioned backup/restore и factory reset показывают scope/preview/checksum и не перезаписывают raw Capture без confirm | S8 | `planned` |
 <!-- LESHY-FUNCTIONS:END -->
 
 S6.4 намеренно разбита на пользовательские interactions, которые можно ревьюить отдельно:
@@ -181,7 +202,7 @@ S6.5 разбита на независимо ревьюимые boundaries comp
 | Slice S6.6 | Состояние |
 |---|---|
 | Одна exact-прошивка → baseline Survey → contiguous repeat Survey → открыть каждый conclusion сравнения → canonical offline USB export → чистый выход Home | `принято E-AUTO-126 (host/build contract); physical one-command run ожидается` |
-| Реальный объединённый product Survey Wi-Fi+BLE | `host/build correction готова в 1.0.0-dev.208: exact 0.207 отклонён, потому что process-lifetime NimBLE вызывает FAT ESP_ERR_NO_MEM при физически присутствующей exact-CID SD. Один delta flash изменённого candidate должен доказать boot admission, combined Survey, commit после BLE teardown, cold reopen и final cleanup` |
+| Реальный объединённый product Survey Wi-Fi+BLE | `host/build correction готова в 1.0.0-dev.209: exact 208 физически отклонён, потому что resident host NimBLE лишает Wi-Fi памяти для init, а degraded run позже latch-ит runtime watchdog. Один delta flash изменённого candidate должен доказать непересекающиеся окна Wi-Fi/BLE, commit, cold reopen, здоровый watchdog и final cleanup` |
 | Physical HTTP parity над теми же records | `по-прежнему удерживается S6.5; нужен отдельный idle adapter или внешний client, активный Wi-Fi ноутбука использовать нельзя` |
 | Exit S6 | `удерживается physical integrated-demo run, physical HTTP parity и отложенным predecessor gate S5` |
 
@@ -1044,6 +1065,8 @@ goldens. Управляемый physical power-cut и восьмичасовой
 | E-BUILD-156 / E-AUTO-129 | host-only exact 0.207 с удержанием памяти NimBLE controller | pass на firmware source `63499ca`: adapter включает официальный lifecycle marker Arduino `esp32-hal-alloc-ble-mem.h`, который выполняется до `initArduino()` и предотвращает permanent release памяти BLE, сломавший 0.206. Focused contracts clean-target/BLE требуют marker и прежние passive-only API NimBLE; clean production build занимает 225 680 B RAM и 3 315 100 B flash, hashes firmware/app — `6b8a0c3e…faf2a` / `017ccd91…ecd7` | принимает узкое lifecycle correction только для source/build. Exact physical controller startup, coexistence с Wi-Fi, persistence/reboot и cleanup остаются одним delta HIL после manual ROM recovery; accepted baseline/cadence остаются 0.196.2 и 4/15 |
 | E-HIL-186 | отклонённый exact 0.207 с process-lifetime resource lifecycle NimBLE | fail-closed: один exact flash и no-flash rerun достигают interactive ready без BLE panic 0.206, но boot recovery не может смонтировать FAT. Независимые read-only команды доказывают, что enrolled SD объёмом 62 534 975 488 byte присутствует, завершает все девять identification commands и возвращает exact CID `FE34…9CB7`; mount затем сообщает `ESP_ERR_NO_MEM` (257), а не отсутствие media. [Компактное negative evidence](../../tests/hil/evidence/board-01-product-survey-coexistence-0.207-failed.json) связывает hashes обоих runs и raw identity/mount, zero writes, zero открытий Cardputer, zero изменений Wi-Fi Mac и Home/none/lease 0 | подтверждает correction BLE allocation marker, но отклоняет process-lifetime NimBLE: 29 576 B free недостаточно для FAT, а `missing_media` — ошибочная свёртка. Combined Survey и cadence не меняются: baseline 0.196.2 и 4/15 |
 | E-BUILD-157 / E-AUTO-130 | host/build exact `1.0.0-dev.208` с bounded lifecycle NimBLE | pass: setup больше не запускает BLE до boot storage recovery. Product Survey сначала допускает FAT по exact CID, освобождает storage, запускает один passive-only host NimBLE на время worker run и не допускает terminal commit, пока не завершены cancel scan, `nimble_port_stop()`, bounded выход host task и `nimble_port_deinit()`. Source guards запрещают process-lifetime BLE и все advertising/initiating/connecting/active-scan/direct-controller paths. Clean build занимает 225 688 B RAM, 3 318 064 B linked flash и 3 318 224/3 383 760 B app/factory с hashes firmware/app `1b72d9cc…380f`/`598dc7e8…b09` | принимает только source/build. Reviewed delta scope требует один changed-candidate flash и только combined Survey с соседними assertions boot/commit/reboot/cleanup. Physical claim 1.x и cadence пока не меняются; активный Wi-Fi Mac и Cardputer запрещены |
+| E-HIL-187 | отклонённый exact `1.0.0-dev.208` с перекрывающимся resource lifecycle Wi-Fi/NimBLE | fail-closed: boot recovery exact CID успешен, Product Survey запускает оба requested source и BLE завершает шесть окон, но initialization Wi-Fi возвращает `ESP_ERR_NO_MEM` (257) до первого cycle, потому что NimBLE остаётся resident. Run остаётся degraded, не доказывает terminal commit/cleanup и позже достигает latched Safe Mode `runtime_watchdog` с owner none, lease zero и quiesced RF/buzzer outputs. [Компактное negative evidence](../../tests/hil/evidence/board-01-product-survey-coexistence-1.0.0-dev.208-failed.json) связывает exact candidate/run/boot/cleanup hashes, 205 accepted BLE reports, bounded timeline drops, exact CID/generation, zero DUT TX, zero открытий Cardputer и zero изменений Wi-Fi Mac | отклоняет physical promotion 208 и сохраняет accepted baseline/cadence 0.196.2 и 4/15. Failure не скрывается как partial pass; второй flash запрещён до прохождения host regression correction с disjoint lifecycle |
+| E-BUILD-158 / E-AUTO-131 | host/build exact `1.0.0-dev.209` с lifecycle-disjoint Product Survey | pass: worker больше не запускает NimBLE вне собственного source window. Каждое окно Wi-Fi полностью завершает begin/scan/end до того, как каждое окно BLE завершает begin/scan/full-end, поэтому ни один radio не доживает до другого source или commit FAT. Current-source guards запрещают отклонённые overlapping markers, сохраняют passive-only safety BLE и требуют полную lifecycle symmetry. Ledger функциональности EN/RU из 47 строк теперь является exact checked projection всех нормативных `CAP-001…CAP-047`. Полный tracked host suite проходит; clean build занимает 225 688 B RAM, 3 317 692 B linked flash и 3 318 192/3 383 728 B app/factory с hashes firmware/app `63f55328…3bab`/`38d3cf02…d868` | принимает только source/build/docs. Reviewed delta scope разрешает один application flash оригинальной платы и требует combined Survey без `ESP_ERR_NO_MEM`, healthy watchdog, commit, cold reopen и final Home/none/lease 0. Physical claim 1.x и cadence не меняются; активный Wi-Fi Mac и Cardputer запрещены |
 
 ## Известные неопределённости и риски
 

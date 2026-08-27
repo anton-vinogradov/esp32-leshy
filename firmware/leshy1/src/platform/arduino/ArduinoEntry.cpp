@@ -2959,14 +2959,12 @@ void runProductSurveyWorker(void*) {
         std::uint32_t wifiScanCycles = 0;
         std::uint32_t bleScanCycles = 0;
         bool scanFailed = false;
-        const std::uint8_t bleSourceMask =
-            leshy1::services::survey::sourceMask(RadioKind::Ble);
-        const bool bleStackPrepared =
-            (report.activeSourceMask & bleSourceMask) == 0 ||
-            bleScanner.begin();
-        // The complete NimBLE host lifecycle is bounded by this worker run.
-        // Terminal cleanup must release it before the UI task can reopen FAT
-        // to commit the captured session.
+        // Wi-Fi, NimBLE and FAT all compete for scarce DMA-capable internal
+        // heap on the no-PSRAM DIV. Each radio therefore owns a disjoint scan
+        // window: Wi-Fi is initialized/scanned/deinitialized first, then the
+        // complete NimBLE host/controller lifecycle is initialized, scanned
+        // and deinitialized. No radio stack survives into the other source's
+        // window or into the terminal FAT reopen.
         bool pendingScanWindow = false;
         RadioKind pendingScanSource = RadioKind::Wifi;
         std::uint64_t pendingScanStartedUs = 0;
@@ -3021,7 +3019,7 @@ void runProductSurveyWorker(void*) {
                         wifiScan.driverError = wifiScanner.lastError();
                     }
                 } else {
-                    if (bleStackPrepared && bleScanner.initialized()) {
+                    if (bleScanner.begin()) {
                         heartbeatProductSurveyWorker();
                         bleScan = bleScanner.scan(
                             leshy1::drivers::ble::defaultPassivePlan(),
@@ -3032,12 +3030,10 @@ void runProductSurveyWorker(void*) {
                 heartbeatProductSurveyWorker();
                 const bool sourceCleanup = source == RadioKind::Wifi
                     ? wifiScanner.end()
-                    : BoardBlePassiveScanner::cancelActiveScan();
-                const bool bleQuiescent =
-                    !bleScanner.initialized() ||
-                    BoardBlePassiveScanner::cancelActiveScan();
+                    : bleScanner.end();
                 report.scannerCleanupComplete = sourceCleanup &&
-                    wifiScanner.cleanupComplete() && bleQuiescent;
+                    wifiScanner.cleanupComplete() &&
+                    bleScanner.cleanupComplete();
                 heartbeatProductSurveyWorker();
                 std::uint64_t scanEndedUs =
                     static_cast<std::uint64_t>(esp_timer_get_time());

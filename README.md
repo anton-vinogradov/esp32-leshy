@@ -16,7 +16,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Verified checkpoint:** exact `0.196.2-companion-post-web-shared-scratch` at firmware source `7272d237ebb65e4b700ad8c64a32b48fc779ad75` is physically accepted for the **device-only Local Web → Targets → offline USB** continuity boundary in `E-BUILD-153`/`E-AUTO-125`/`E-HIL-183`/`E-COMPANION-007`. One exact application flash starts and stops the DIV SoftAP with zero associated stations, leaves the ESP-IDF network core explicitly process-lifetime, reopens 16 read-only Targets with 7 comparison items, reproduces the accepted 11,521-byte offline snapshot byte-for-byte and restores the Survey worker at Home/none/lease 0. The 24,808-byte state codec and 11,272-byte admission scratch reuse one existing static union, adding zero static RAM. No host network tool runs and active Mac Wi-Fi is untouched.
-- **Next gate:** flash exact `1.0.0-dev.208` once on original board-01, then require successful exact-CID boot catalog admission, one contiguous real Wi-Fi+BLE Survey cycle, save after bounded NimBLE teardown, reboot, reopen the result and finish at Home/none/lease 0. The active laptop Wi-Fi and Cardputer remain prohibited. Physical HTTP parity remains deferred to a dedicated idle adapter or external client, and the physical S5 gate remains postponed, not waived, until the replacement DIV arrives and passes its read-only profile.
+- **Next gate:** flash exact `1.0.0-dev.209` once on original board-01, then require successful exact-CID boot admission, one contiguous real Wi-Fi+BLE Survey cycle with lifecycle-disjoint radio windows, save only after complete BLE teardown, reboot, reopen the result and finish at Home/none/lease 0 with a healthy runtime watchdog. The active laptop Wi-Fi and Cardputer remain prohibited. Physical HTTP parity remains deferred to a dedicated idle adapter or external client, and the physical S5 gate remains postponed, not waived, until the replacement DIV arrives and passes its read-only profile.
 
 ### Current stage phases
 
@@ -33,33 +33,53 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 | Functionality | Delivery stage | Status |
 |---|---|---|
-| Home with firmware identity, task-first final menu and full-area pages | S2 | ✅ complete |
-| Five-key and touch navigation, stable selection, EN/RU UI and accessible common components | S2 | ✅ complete |
-| Device settings: language, brightness, theme, power/sleep and per-antenna status LEDs | S2 + S5.5 | ✅ complete |
-| Device service hub: Quick/Full Self-Test, Diagnostics, recovery state and About | S2 + S5.6 | ✅ complete |
-| Selectable passive multi-radio Survey, durable timeline and reusable Sessions | S3 + S6.6 | 🟡 in progress |
-| Wi-Fi nearby networks: stable list, SSID/security/channel/vendor facts, hidden-name enrichment and live radar | S4 | ✅ complete |
-| Wi-Fi devices: passive client discovery, vendor/type/model/generation facts, directed SSID and live radar | S4 | ✅ complete |
-| Wi-Fi channels 1–13: current and mean load, channel boundaries and explainable free-channel recommendation | S4 | ✅ complete |
-| Bounded Wi-Fi packet recording, privacy confirmation, PCAP save, cold reopen and export | S4 | ✅ complete |
-| Bluetooth nearby devices: strongest-first list, company/service identity details and live radar | S4 | ✅ complete |
-| 2.4 GHz nRF24 all-receiver spectrum and receiver-paced one-pixel waterfall | S5.3 | 🔴 blocked |
-| 2.4 GHz nRF24 signal finder with background calibration, exact frequency and nearest Wi-Fi channel | S5.3 | 🔴 blocked |
-| Sub-GHz spectrum and receiver-paced one-pixel waterfalls for 315/433/868/915 MHz | S5.4 | 🔴 blocked |
-| Sub-GHz calibrated frequency finder plus bounded OOK/FSK receive, save, cold reopen and export | S5.4 | 🔴 blocked |
-| Infrared receive, NEC decode, save, cold Library reopen and CSV export | S5.2 | ✅ complete |
-| Library browsing for Sessions and Captures with offline reopen and integrity status | S4 + S5 | ✅ complete |
-| CSV/PCAP/offline snapshot export with exact source-evidence provenance | S4–S6.5 | ✅ complete |
-| Targets: stable identity, favorite/name/tags/notes and drill-down to immutable evidence | S6.1 + S6.4 | ✅ complete |
-| Explainable cross-radio correlation with review, accept/reject and reversible merge/split | S6.2 + S6.4 | ✅ complete |
-| Baseline comparison: new, disappeared and changed Targets with evidence for every conclusion | S6.3 + S6.4 | ✅ complete |
-| Scoped local USB companion: browse/search Sessions, Targets and comparisons and export offline | S6.5 | 🟡 in progress |
-| Scoped device-hosted Web companion over the same read-only schemas and Actions | S6.5 | 🟡 in progress |
-| Authorized Lab: bounded transmit/replay, visible TX state, immutable source capture and panic stop | S7 | ⬜ later |
-| Permissioned extensions and optional GPS/NFC hardware profiles | S7 | ⬜ later |
-| Device → Update: signed stable/beta OTA, rollback and recovery | S8 | ⬜ later |
-| Browser install plus encrypted backup/restore of settings and user data | S8 | ⬜ later |
-| Automated real-device screenshots, delta/full HIL and one-hour release qualification | S8 | ⬜ later |
+| Boot probe identifies the board profile, main/RF assembly and every capability state with evidence | S2 + S5 | 🟡 in progress |
+| Capability-driven Home exposes only available jobs and explains disabled/conflicted/fault before launch | S2 | ✅ complete |
+| Device → Self-Test/Diagnostics safely checks applicable hardware without TX and exports a report | S2 + S5 | ✅ complete |
+| TFT, five keys and touch share Actions, calibration, stable selection and an accessible Back path | S2 | ✅ complete |
+| Locally persisted EN/RU language, brightness, theme, quiet/sound and screen behavior | S2 + S5 | ✅ complete |
+| Visible power/charge/reset reason, low-voltage safe write and verifiable sleep/resume | S5 | 🔴 blocked |
+| Browser install and Device → Update: signed stable/beta OTA, rollback and recovery image | S8 | ⬜ later |
+| Local logs, crash journal and exportable diagnostic bundle without a cloud dependency | S6 + S8 | 🟡 in progress |
+| Explicit Start/Stop creates a bounded multi-radio Survey Session with configuration and provenance | S3 + S6.6 | 🟡 in progress |
+| Passive Wi-Fi scan: networks, hidden-name enrichment, security/channel/vendor facts and normalized Observations | S3 + S4 | ✅ complete |
+| Passive BLE scan: strongest-first devices, company/service facts and normalized Observations without active probes | S4 | ✅ complete |
+| Three nRF24 receivers: RX-only spectrum, receiver-paced one-pixel waterfall and background-calibrated 2.4 GHz signal finder | S4 + S5.3 | 🔴 blocked |
+| CC1101: RX-only Sub-GHz spectrum/activity, one-pixel waterfalls and frequency/RSSI finder for 315/433/868/915 MHz | S4 + S5.4 | 🔴 blocked |
+| GPS adds fix, satellites, time and track to a Session only for an explicit compatible assembly | S4 + S5 | ⬜ later |
+| Shared timeline exposes sources, duty cycle, temporary unavailability, degradation and dropped events | S4 + S6.6 | 🟡 in progress |
+| Shared stable List/Detail/filter behavior for Wi-Fi, BLE and other radios with all useful facts | S3 + S4 | ✅ complete |
+| Network/device Radar/localize: RSSI history, trend/range and honest proximity limits | S4 + S6 | 🟡 in progress |
+| A Target preserves stable identities, Observation history and links to immutable source evidence | S6.1 + S6.4 | ✅ complete |
+| Target name, tags, notes and favorite are bounded edits that survive cold reopen | S6.1 + S6.4 | ✅ complete |
+| Explainable correlation shows features/confidence; review, accept/reject and merge/split are reversible | S6.2 + S6.4 | ✅ complete |
+| Session baseline/diff shows new, disappeared and changed Targets | S6.3 + S6.4 | ✅ complete |
+| Every compare/correlation conclusion opens its exact source evidence | S6.3 + S6.4 | ✅ complete |
+| Immutable Capture preserves raw source, time, frequency/channel, RSSI, coordinates and receive settings | S3 + S4 | ✅ complete |
+| Session/Capture commits are atomic and recover after reset and controlled power loss | S3 + S5 | 🔴 blocked |
+| Library opens Sessions/Captures offline with list/detail/search/filter and visible integrity state | S3 + S6 | ✅ complete |
+| Export provides JSON/CSV summaries, PCAP and portable radio formats with exact provenance | S3 + S5 | 🟡 in progress |
+| SD, USB and local-companion import/export uses versioned schemas and a fail-closed parser | S5 + S6 | 🟡 in progress |
+| SD/LittleFS exposes identity, capacity, recovery, integrity and degraded behavior | S3 + S5 | ✅ complete |
+| IR receive/decode preserves original and derived data, cold-reopens in Library and exports CSV | S5.2 | ✅ complete |
+| Sub-GHz RAW/OOK/FSK Capture preserves pulses, radio parameters and derived decodes | S5.4 | 🔴 blocked |
+| PN532 reads tag/NDEF facts and a versioned dump only for an explicit non-conflicting assembly | S5 | 🔴 blocked |
+| Separate Lab exposes authorized scope, source, frequency, power, duration and permanently visible TX state | S7 | ⬜ later |
+| Back, timeout, panic, fault or loss of control/telemetry physically stops every TX path | S7 | ⬜ later |
+| IR replay is available only from a selected immutable Capture after preview and explicit confirmation | S7 | ⬜ later |
+| Sub-GHz replay/TX from an immutable Capture passes ResourceBroker, bounds, confirmation, countdown and stop result | S7 | ⬜ later |
+| NFC write/restore of a supported owned tag exposes preview, verify and the original recovery dump | S7, conditional hardware | ⬜ later |
+| Protocol Workbench compares pulses/waveforms, annotates fields and stores a derived decode without changing raw source | S7 | ⬜ later |
+| Scoped local USB/Web companion browses, searches, compares and exports through shared Actions/schemas | S6.5 | 🟡 in progress |
+| Permissioned app descriptor declares capabilities, resources, permissions, safety policy and UI strings before launch | S7 | ⬜ later |
+| Versioned decoder/profile packages have a compatibility gate, integrity/signature and scoped storage | S7 + S8 | ⬜ later |
+| SDK, sample extension and simulator trace kit cannot bypass ResourceBroker, permissions or Safety Supervisor | S7 | ⬜ later |
+| Wi-Fi channel/packet monitor: current/mean load for 1–13, explainable free channel and bounded PCAP with drop counters | S4 | ✅ complete |
+| User saves a real-TFT screenshot with build/state/time provenance and opens it in Library/export | S5 | ⬜ later |
+| Offline OUI/BLE company/service/protocol profiles enrich facts with version/provenance without replacing raw evidence | S6 | ✅ complete |
+| One feedback service owns antenna LEDs and buzzer: default 2/255, quiet mode, bounded tones and non-color-only cues | S5 + S6 | ✅ complete |
+| Scoped Wi-Fi/USB setup isolates secrets, never exports them and never makes networking a Survey/Library prerequisite | S6 + S8 | 🟡 in progress |
+| Versioned backup/restore and factory reset show scope/preview/checksum and never overwrite raw Capture without confirmation | S8 | ⬜ later |
 
 ### Roadmap
 

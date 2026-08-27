@@ -836,6 +836,24 @@ free heap остаётся следующим delta gate. Hashes firmware/app:
 `1b72d9cc05353ba5f36b815a21af1e5d91224ccae451174508915dbb8858380f`/
 `598dc7e8de07ac2dd8509a7e3e1d2fac154de98c20b27241cb449cd174e1fb09`.
 
+Correction непересекающихся radio `RB-M169`: физически отклонённый exact
+`1.0.0-dev.208` загружается с 153 116 B free heap, largest block 80 316 B и
+minimum 66 632 B, но сохраняет NimBLE resident во время initialization Wi-Fi.
+Поэтому Wi-Fi возвращает `ESP_ERR_NO_MEM` (257) с zero завершённых cycles Wi-Fi,
+тогда как BLE завершает шесть окон и публикует 205 accepted reports. Bounded timeline
+сохраняет 64 и отбрасывает 171 report по заявленной queue policy; это не drops driver
+или storage. Degraded run не доказывает terminal commit и позже latch-ит Safe Mode
+`runtime_watchdog` с owner none, lease zero и quiesced outputs. Candidate
+`1.0.0-dev.209` делает lifecycle каждого radio непересекающимся и использует
+225 688 B static RAM, 3 317 692 B linked flash и 3 318 192/3 383 728 B app/factory.
+SHA-256 firmware/factory/ELF/map:
+`63f55328d23082943945659fb63d55a771d388b427f5eca29dcecd2178aa3bab`/
+`4ed3bdd0cb6f1b4f8990dd89406bc0147b06b27d373f4b25b9fde8fefdbd51db`/
+`38d3cf0242707a13407c3123a207ab0c8e942242336ec396b31ccfc89083d868`/
+`8a8e616323c176c702939813f35f3804a0ae67105f7ced4376f25c1ff51a4198`.
+Это только source/build evidence, пока один focused physical run не докажет оба
+source, здоровье watchdog, commit, cold reopen и final cleanup.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

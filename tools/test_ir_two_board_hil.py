@@ -94,7 +94,7 @@ class IrTwoBoardHilTests(unittest.TestCase):
         self.assertRegex(
             flow.read_version(
                 ROOT / "firmware/leshy1/platformio.ini", "LESHY1_VERSION"),
-            r"^0\.\d+\.\d+[-\w.]*$")
+            r"^\d+\.\d+\.\d+[-\w.]*$")
         self.assertEqual(
             "0.3.0-subghz-safe",
             flow.read_version(

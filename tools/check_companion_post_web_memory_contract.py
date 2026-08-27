@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -32,9 +33,9 @@ def main() -> int:
         return 1
 
     require(
-        'LESHY1_VERSION=\\"0.206.0-minimal-nimble-observer\\"'
-        in platformio,
-        "current passive-radio coexistence version is missing", failures)
+        re.search(r'LESHY1_VERSION=\\"1\.0\.0-dev\.\d+\\"', platformio)
+        is not None,
+        "current 1.x development version is missing", failures)
     require("const esp_err_t error = esp_netif_deinit();" not in service,
             "unsupported esp_netif_deinit must not be called", failures)
     require("process-lifetime" in service and

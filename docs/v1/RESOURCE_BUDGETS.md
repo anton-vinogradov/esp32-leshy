@@ -841,6 +841,24 @@ recovery remains the next delta gate. Firmware/app hashes are
 `1b72d9cc05353ba5f36b815a21af1e5d91224ccae451174508915dbb8858380f`/
 `598dc7e8de07ac2dd8509a7e3e1d2fac154de98c20b27241cb449cd174e1fb09`.
 
+Disjoint-radio correction `RB-M169`: physically rejected exact
+`1.0.0-dev.208` boots with 153,116 B free heap, 80,316 B largest block and
+66,632 B minimum, but keeps NimBLE resident while Wi-Fi attempts initialization.
+Wi-Fi therefore returns `ESP_ERR_NO_MEM` (257) with zero completed Wi-Fi cycles,
+while BLE completes six windows and publishes 205 accepted reports. The bounded
+timeline retains 64 and drops 171 reports by declared queue policy; these are not
+driver or storage drops. The degraded run does not prove terminal commit and later
+latches `runtime_watchdog` Safe Mode with owner none, lease zero and outputs
+quiesced. Candidate `1.0.0-dev.209` makes each radio lifecycle disjoint and uses
+225,688 B static RAM, 3,317,692 B linked flash and 3,318,192/3,383,728 B
+app/factory. Firmware/factory/ELF/map SHA-256 are
+`63f55328d23082943945659fb63d55a771d388b427f5eca29dcecd2178aa3bab`/
+`4ed3bdd0cb6f1b4f8990dd89406bc0147b06b27d373f4b25b9fde8fefdbd51db`/
+`38d3cf0242707a13407c3123a207ab0c8e942242336ec396b31ccfc89083d868`/
+`8a8e616323c176c702939813f35f3804a0ae67105f7ced4376f25c1ff51a4198`.
+This is source/build evidence only until one focused physical run proves both sources,
+watchdog health, commit, cold reopen and final cleanup.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

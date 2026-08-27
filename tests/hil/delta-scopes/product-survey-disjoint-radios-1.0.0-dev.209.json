@@ -1,0 +1,23 @@
+{
+  "schema": "leshy.hil_delta_review.v1",
+  "id": "product-survey-disjoint-radios-1.0.0-dev.209",
+  "rationale": "Correct the physically rejected 1.0.0-dev.208 Wi-Fi plus BLE Product Survey lifecycle without changing schemas, storage format, passive scan plans, UI, radio safety or the accepted 0.196.2 baseline. Exact 208 admitted the enrolled SD, but kept a complete NimBLE host allocated while the Wi-Fi source attempted esp_wifi_init, which failed with ESP_ERR_NO_MEM and later allowed the main runtime watchdog to latch Safe Mode. Exact 209 makes every source window lifecycle-disjoint: Wi-Fi begin/scan/end completes before BLE begin/scan/end, and BLE fully stops, exits and deinitializes before persistence or another source begins.",
+  "reviewed_cross_cutting_sha256": {
+    "firmware/leshy1/platformio.ini": "2030487b2a87f32ee50edc1bc614b09f9f444c91f45811d598f276389ee5d7a9"
+  },
+  "required_host_checks": [
+    "all 47 normative capabilities appear exactly once and in order in both EN and RU front-page functionality ledgers",
+    "Product Survey requires disjoint complete Wi-Fi and BLE source lifecycles and forbids the rejected overlapping marker sequence",
+    "passive BLE contract still forbids advertising, initiating, connecting, active scan and direct controller paths",
+    "clean-target source contract, full tracked host suite and exact production build pass",
+    "the exact 1.0.0-dev.208 failure remains retained fail-closed evidence"
+  ],
+  "required_hil_scenarios": [
+    "one changed-candidate application flash on original board-01 only",
+    "the app-bound 1.0.0-dev.208 safety latch is handled by exact candidate identity and boot reaches armed exact-CID ready state without a manual hidden clear",
+    "at least one contiguous passive Wi-Fi plus BLE Product Survey cycle completes with no ESP_ERR_NO_MEM",
+    "runtime watchdog stays healthy through running, pause, terminal teardown and commit",
+    "cold reboot reopens the exact committed generation",
+    "final Home, owner none, lease zero, zero DUT TX, zero input drops, zero Cardputer opens and zero Mac Wi-Fi changes"
+  ]
+}

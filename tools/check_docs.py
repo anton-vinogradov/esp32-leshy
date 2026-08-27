@@ -106,6 +106,51 @@ def main() -> int:
                 f"RU-only={sorted(ru_ids - en_ids)}"
             )
 
+    # The public functionality status is deliberately one-to-one with the
+    # normative CAP catalog. Aggregated prose previously hid planned functions
+    # from the front page, so fail closed on any missing, duplicated or extra
+    # FUNC row in either language.
+    catalog_ids = set(re.findall(
+        r"^\| CAP-(\d{3}) \|",
+        (V1 / "CAPABILITY_CATALOG.md").read_text(encoding="utf-8"),
+        re.MULTILINE,
+    ))
+    expected_function_ids = {
+        f"FUNC-{int(capability):02d}" for capability in catalog_ids
+    }
+    if len(catalog_ids) != 47:
+        errors.append(
+            f"capability catalog must contain exactly 47 table rows, found {len(catalog_ids)}"
+        )
+    function_ids_by_language: dict[str, list[str]] = {}
+    for language, path in (("EN", V1 / "STATUS.md"), ("RU", V1 / "STATUS.ru.md")):
+        status_text = path.read_text(encoding="utf-8")
+        match = re.search(
+            r"<!-- LESHY-FUNCTIONS:START -->(.*?)"
+            r"<!-- LESHY-FUNCTIONS:END -->",
+            status_text,
+            re.DOTALL,
+        )
+        if match is None:
+            errors.append(f"{language} STATUS is missing the functionality block")
+            continue
+        function_ids = re.findall(
+            r"^\| (FUNC-\d{2}) \|", match.group(1), re.MULTILINE
+        )
+        function_ids_by_language[language] = function_ids
+        duplicates = sorted({item for item in function_ids if function_ids.count(item) > 1})
+        actual = set(function_ids)
+        if duplicates:
+            errors.append(f"{language} STATUS duplicates functionality IDs: {duplicates}")
+        if actual != expected_function_ids:
+            errors.append(
+                f"{language} STATUS capability coverage differs: "
+                f"missing={sorted(expected_function_ids - actual)}, "
+                f"extra={sorted(actual - expected_function_ids)}"
+            )
+    if function_ids_by_language.get("EN") != function_ids_by_language.get("RU"):
+        errors.append("EN/RU functionality row order differs")
+
     active_pattern = re.compile(r"^\| (S\d+) \| `active` \|", re.MULTILINE)
     active_by_language: dict[str, list[str]] = {}
     for language, path in (("EN", V1 / "STATUS.md"), ("RU", V1 / "STATUS.ru.md")):

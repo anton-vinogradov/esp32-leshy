@@ -745,22 +745,26 @@ def main() -> int:
         product_worker_body = entry[product_worker:entry.find(
             "bool initializeProductSurveyWorker()", product_worker
         )]
-        ble_begin = product_worker_body.find("bleScanner.begin();")
-        wifi_begin = product_worker_body.find("if (wifiScanner.begin())")
-        wifi_end = product_worker_body.find("wifiScanner.end()", wifi_begin)
-        ble_end = product_worker_body.find("bleScanner.end()", ble_begin)
-        ble_quiesce = product_worker_body.find(
-            "BoardBlePassiveScanner::cancelActiveScan();", ble_begin
+        disjoint_radio_markers = (
+            "const std::array<RadioKind, 2> schedule{",
+            "RadioKind::Wifi, RadioKind::Ble",
+            "if (wifiScanner.begin())",
+            "if (bleScanner.begin())",
+            "? wifiScanner.end()",
+            ": bleScanner.end();",
+            "No radio stack survives into the other source's",
         )
         if (
-            min(wifi_begin, wifi_end, ble_begin, ble_quiesce, ble_end) < 0
-            or not (ble_begin < wifi_begin < wifi_end < ble_end)
-            or "if (bleScanner.begin())" in product_worker_body
+            any(marker not in product_worker_body
+                for marker in disjoint_radio_markers)
+            or "const bool bleStackPrepared =" in product_worker_body
+            or "bleStackPrepared && bleScanner.initialized()"
+                in product_worker_body
         ):
             errors.append(
-                "product Survey must initialize bounded passive BLE before "
-                "the first Wi-Fi lifecycle, quiesce it between windows and "
-                "release both stacks at the terminal boundary"
+                "product Survey must serialize complete Wi-Fi and NimBLE "
+                "lifecycles in disjoint scan windows and release both before "
+                "the terminal storage boundary"
             )
 
         wifi_adapter = passive_wifi_adapter.read_text(encoding="utf-8")
