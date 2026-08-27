@@ -63,9 +63,15 @@ def main() -> int:
     for marker in (
         "kFrameInspectionCapacity = 64",
         "kEvidenceCapacity = 8",
-        "kDetectorVersion = 1",
+        "kWifiDisconnectDetectorVersion = 1",
         "disconnectBurstThreshold = 4",
         "disconnectWindowUs = 2000000ULL",
+        "ssidSecurityConflictEnabled = false",
+        "ssidSecurityConflictWindowUs = 10000000ULL",
+        "WifiSsidSecurityConflict",
+        "isWifiIdentityAdvertisementCandidate",
+        "kWifiIdentityDetectorVersion = 1",
+        "AirspaceWifiSecurity::Rsn",
         "WifiFrameSource& source",
         "frameIndex = event.frameIndex",
         "DisconnectDecode::Malformed",
@@ -81,8 +87,12 @@ def main() -> int:
         "testDisconnectBurstRetainsExactEvidence",
         "testSourcesAreNeverMergedAndConfidenceIsBounded",
         "testMalformedFailedAndTruncatedEvidenceIsInconclusive",
-        "testIngressClassifierOnlyReservesDisconnectManagementFrames",
+        "testIngressClassifiersStayManagementOnly",
         "testExternalCaptureLossMakesClearEvidenceInconclusive",
+        "testIdentityConflictIsOptInUntilLiveRetentionIsComplete",
+        "testIdentityConflictRetainsTwoExactAdvertisements",
+        "testIdentityDetectorRejectsLookalikesAndMalformedEvidence",
+        "testIdentityParserExcludesCapturedFcsFromInformationElements",
     ):
         require(failures, marker in tests,
                 f"missing Airspace Guard native coverage: {marker}")
@@ -123,6 +133,8 @@ def main() -> int:
         "testOutcomeStatusMismatchFailsClosed",
         "testMalformedReportsFailClosed",
         "testOutOfBoundsEvidenceFailsClosed",
+        "testIdentityConflictReportIsKindAwareAndFailClosed",
+        "testDifferentDetectorKindsMayReferenceTheSameTransmitter",
     ):
         require(failures, marker in controller_tests,
                 f"missing Airspace Guard controller coverage: {marker}")
@@ -154,6 +166,9 @@ def main() -> int:
         "controller.inspectionTruncated()",
         "controller.sourceFramesDropped()",
         "controller.sourceFramesObserved()",
+        "AirspaceGuardIdentityConflict",
+        "AirspaceGuardSecurityPairFormat",
+        "networkNameFingerprint",
     ):
         require(failures, marker in presenter,
                 f"missing Airspace Guard presentation contract: {marker}")
@@ -167,6 +182,8 @@ def main() -> int:
         "testEmptyCaptureIsExplicitlyIncomplete",
         "testCaptureLossIsShownBeforeFindingMix",
         "testClearOutcomeUsesTheOtherwiseEmptyRowsForCoverage",
+        "testIdentityConflictExplainsIndicatorWithoutClaimingProof",
+        "testInvalidSsidBytesUseStableNonInventedIdentifier",
     ):
         require(failures, marker in presenter_tests,
                 f"missing Airspace Guard presenter coverage: {marker}")
@@ -179,6 +196,9 @@ def main() -> int:
         "AirspaceGuardCaptureNotStarted",
         "AirspaceGuardListening",
         "AirspaceGuardCaptureLossFormat",
+        "AirspaceGuardIdentityConflict",
+        "AirspaceGuardSecurityPairFormat",
+        "AirspaceGuardSsidFingerprintFormat",
     ):
         require(failures, marker in ui_strings,
                 f"missing EN/RU Airspace Guard copy: {marker}")
@@ -249,6 +269,12 @@ def main() -> int:
         failures,
         arduino_entry.count("BoardWifiPassiveCapture wifiFrameCapture;") == 1,
         "Airspace Guard must reuse the one existing Wi-Fi adapter",
+    )
+    require(
+        failures,
+        "isWifiIdentityAdvertisementCandidate" not in board_capture and
+        "ssidSecurityConflictEnabled" not in arduino_entry,
+        "live identity detector enabled before bounded complete retention",
     )
 
     if failures:

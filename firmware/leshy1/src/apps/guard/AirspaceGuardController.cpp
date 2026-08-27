@@ -8,8 +8,10 @@ namespace {
 
 using services::guard::AirspaceConfidence;
 using services::guard::AirspaceFinding;
+using services::guard::AirspaceFindingKind;
 using services::guard::AirspaceGuardReport;
 using services::guard::AirspaceGuardStatus;
+using services::guard::AirspaceWifiSecurity;
 
 std::uint8_t confidenceRank(AirspaceConfidence confidence) {
     switch (confidence) {
@@ -29,6 +31,56 @@ bool validTransmitter(const std::array<std::uint8_t, 6>& address) {
         allOnes = allOnes && byte == 0xffU;
     }
     return any && !allOnes;
+}
+
+bool emptyTransmitter(const std::array<std::uint8_t, 6>& address) {
+    for (const std::uint8_t byte : address) {
+        if (byte != 0U) return false;
+    }
+    return true;
+}
+
+bool validConfidence(AirspaceConfidence confidence) {
+    switch (confidence) {
+        case AirspaceConfidence::Low:
+        case AirspaceConfidence::Medium:
+        case AirspaceConfidence::High:
+            return true;
+    }
+    return false;
+}
+
+bool validSecurity(AirspaceWifiSecurity security) {
+    switch (security) {
+        case AirspaceWifiSecurity::Open:
+        case AirspaceWifiSecurity::LegacyPrivacy:
+        case AirspaceWifiSecurity::Wpa:
+        case AirspaceWifiSecurity::Rsn:
+            return true;
+        case AirspaceWifiSecurity::Unknown:
+            return false;
+    }
+    return false;
+}
+
+bool sameNetworkName(const AirspaceFinding& left,
+                     const AirspaceFinding& right) {
+    return left.networkNameLength == right.networkNameLength &&
+        left.networkNameLength != 0U &&
+        std::memcmp(left.networkName.data(), right.networkName.data(),
+                    left.networkNameLength) == 0;
+}
+
+bool duplicateFinding(const AirspaceFinding& left,
+                      const AirspaceFinding& right) {
+    if (left.kind != right.kind) return false;
+    switch (left.kind) {
+        case AirspaceFindingKind::WifiDisconnectBurst:
+            return left.transmitter == right.transmitter;
+        case AirspaceFindingKind::WifiSsidSecurityConflict:
+            return sameNetworkName(left, right);
+    }
+    return true;
 }
 
 bool comesBefore(const AirspaceFinding& left,
@@ -80,6 +132,7 @@ bool AirspaceGuardController::validateReport(
         return report.findingCount == 0U && report.framesAvailable == 0U &&
             report.sourceFramesObserved == 0U &&
             report.framesInspected == 0U && report.disconnectFrames == 0U &&
+            report.identityAdvertisementFrames == 0U &&
             report.malformedFrames == 0U &&
             report.sourceReadFailures == 0U &&
             report.sourceFramesDropped == 0U &&
@@ -91,10 +144,12 @@ bool AirspaceGuardController::validateReport(
         report.sourceReadFailures > attempted ||
         report.framesInspected + report.sourceReadFailures != attempted ||
         report.disconnectFrames > report.framesInspected ||
+        report.identityAdvertisementFrames > report.framesInspected ||
         report.malformedFrames > report.framesInspected ||
-        report.disconnectFrames + report.malformedFrames >
+        report.disconnectFrames + report.identityAdvertisementFrames +
+                report.malformedFrames >
             report.framesInspected ||
-        report.findingsDropped > report.disconnectFrames ||
+        report.findingsDropped > report.framesInspected ||
         (report.findingCount == 0U && report.findingsDropped != 0U) ||
         report.inspectionTruncated !=
             (report.framesAvailable > inspectionCapacity)) {
@@ -112,16 +167,16 @@ bool AirspaceGuardController::validateReport(
                : AirspaceGuardStatus::Clear);
     if (report.status != expectedStatus) return false;
     std::size_t reportedDisconnectFrames = 0U;
+    std::size_t reportedIdentityFrames = 0U;
     for (std::size_t index = 0; index < report.findingCount; ++index) {
         const AirspaceFinding& finding = report.findings[index];
         for (std::size_t previous = 0; previous < index; ++previous) {
-            if (std::memcmp(finding.transmitter.data(),
-                            report.findings[previous].transmitter.data(),
-                            finding.transmitter.size()) == 0) {
+            if (duplicateFinding(finding, report.findings[previous])) {
                 return false;
             }
         }
-        if (finding.detectorVersion == 0U || finding.threshold < 2U ||
+        if (!validConfidence(finding.confidence) ||
+            finding.detectorVersion == 0U || finding.threshold < 2U ||
             finding.threshold > AirspaceFinding::kEvidenceCapacity ||
             finding.observed < finding.threshold ||
             finding.observed > inspectionCapacity ||
@@ -130,14 +185,54 @@ bool AirspaceGuardController::validateReport(
             finding.evidenceCount > finding.observed ||
             finding.firstUs == 0U || finding.lastUs < finding.firstUs ||
             finding.lastUs - finding.firstUs > 10000000ULL ||
-            !validTransmitter(finding.transmitter) ||
-            static_cast<std::size_t>(finding.deauthenticationFrames) +
-                    finding.disassociationFrames !=
-                finding.observed) {
+            !validTransmitter(finding.transmitter)) {
             return false;
         }
-        reportedDisconnectFrames += finding.observed;
-        if (reportedDisconnectFrames > report.disconnectFrames) return false;
+        switch (finding.kind) {
+            case AirspaceFindingKind::WifiDisconnectBurst:
+                if (finding.detectorVersion !=
+                        AirspaceFinding::kWifiDisconnectDetectorVersion ||
+                    !emptyTransmitter(finding.relatedTransmitter) ||
+                    finding.networkNameLength != 0U ||
+                    finding.primarySecurity != AirspaceWifiSecurity::Unknown ||
+                    finding.relatedSecurity != AirspaceWifiSecurity::Unknown ||
+                    static_cast<std::size_t>(
+                        finding.deauthenticationFrames) +
+                            finding.disassociationFrames !=
+                        finding.observed) {
+                    return false;
+                }
+                reportedDisconnectFrames += finding.observed;
+                if (reportedDisconnectFrames > report.disconnectFrames) {
+                    return false;
+                }
+                break;
+            case AirspaceFindingKind::WifiSsidSecurityConflict:
+                if (finding.detectorVersion !=
+                        AirspaceFinding::kWifiIdentityDetectorVersion ||
+                    finding.confidence != AirspaceConfidence::Medium ||
+                    finding.threshold != 2U || finding.observed != 2U ||
+                    finding.evidenceCount != 2U ||
+                    finding.deauthenticationFrames != 0U ||
+                    finding.disassociationFrames != 0U ||
+                    !validTransmitter(finding.relatedTransmitter) ||
+                    finding.transmitter == finding.relatedTransmitter ||
+                    finding.networkNameLength == 0U ||
+                    finding.networkNameLength > finding.networkName.size() ||
+                    !validSecurity(finding.primarySecurity) ||
+                    !validSecurity(finding.relatedSecurity) ||
+                    finding.primarySecurity == finding.relatedSecurity) {
+                    return false;
+                }
+                reportedIdentityFrames += finding.observed;
+                if (reportedIdentityFrames >
+                    report.identityAdvertisementFrames) {
+                    return false;
+                }
+                break;
+            default:
+                return false;
+        }
         for (std::size_t evidenceIndex = 0;
              evidenceIndex < finding.evidenceCount; ++evidenceIndex) {
             const services::guard::AirspaceEvidenceRef& evidence =
@@ -148,6 +243,13 @@ bool AirspaceGuardController::validateReport(
                 evidence.channel == 0U || evidence.channel > 14U ||
                 evidence.rssiDbm < -127 || evidence.rssiDbm > 0) {
                 return false;
+            }
+            for (std::size_t previousEvidence = 0;
+                 previousEvidence < evidenceIndex; ++previousEvidence) {
+                if (finding.evidence[previousEvidence].frameIndex ==
+                    evidence.frameIndex) {
+                    return false;
+                }
             }
         }
     }

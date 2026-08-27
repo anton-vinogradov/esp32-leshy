@@ -24,6 +24,8 @@ using namespace leshy1::ui;
 
 constexpr std::array<std::uint8_t, 6> kSource{
     0x02, 0x11, 0x22, 0x33, 0x44, 0x55};
+constexpr std::array<std::uint8_t, 6> kRelated{
+    0x06, 0xaa, 0xbb, 0xcc, 0xdd, 0xee};
 
 AirspaceGuardReport makeFindingReport(std::size_t evidenceCount = 6U) {
     AirspaceGuardReport report{};
@@ -51,6 +53,36 @@ AirspaceGuardReport makeFindingReport(std::size_t evidenceCount = 6U) {
         evidence.channel = static_cast<std::uint8_t>(1U + index);
         evidence.rssiDbm = static_cast<std::int16_t>(-40 - index);
     }
+    return report;
+}
+
+AirspaceGuardReport makeIdentityFindingReport() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 1U;
+    report.sourceFramesObserved = 4U;
+    report.framesAvailable = 4U;
+    report.framesInspected = 4U;
+    report.identityAdvertisementFrames = 2U;
+    AirspaceFinding& finding = report.findings[0];
+    finding.kind = AirspaceFindingKind::WifiSsidSecurityConflict;
+    finding.confidence = AirspaceConfidence::Medium;
+    finding.detectorVersion = AirspaceFinding::kWifiIdentityDetectorVersion;
+    finding.threshold = 2U;
+    finding.observed = 2U;
+    finding.transmitter = kSource;
+    finding.relatedTransmitter = kRelated;
+    constexpr char kName[] = "Workshop";
+    finding.networkNameLength = sizeof(kName) - 1U;
+    std::memcpy(finding.networkName.data(), kName,
+                finding.networkNameLength);
+    finding.primarySecurity = AirspaceWifiSecurity::Open;
+    finding.relatedSecurity = AirspaceWifiSecurity::Rsn;
+    finding.firstUs = 1000000ULL;
+    finding.lastUs = 1200000ULL;
+    finding.evidenceCount = 2U;
+    finding.evidence[0] = {1U, 1000000ULL, 1U, -35};
+    finding.evidence[1] = {2U, 1200000ULL, 11U, -52};
     return report;
 }
 
@@ -109,6 +141,48 @@ void testEvidenceDetailRetainsExactReference() {
                       "+100 ms FROM BURST START") == 0);
     CHECK(std::strcmp(model.rows[3].text.data(),
                       "HIGH · DETECTOR V1") == 0);
+}
+
+void testIdentityConflictExplainsIndicatorWithoutClaimingProof() {
+    AirspaceGuardController controller;
+    CHECK(controller.load(makeIdentityFindingReport()) ==
+          AirspaceGuardLoadStatus::Ready);
+    AirspaceGuardUiModel model =
+        presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(model.headline == UiTextId::AirspaceGuardIdentityConflict);
+    CHECK(model.note == UiTextId::AirspaceGuardPassiveOnly);
+    CHECK(std::strcmp(model.context.data(), "SSID Workshop") == 0);
+    CHECK(std::strcmp(model.rows[1].text.data(),
+                      "MEDIUM · DETECTOR V1") == 0);
+    CHECK(std::strcmp(model.rows[2].text.data(),
+                      "SECURITY OPEN / WPA2/3") == 0);
+    CHECK(std::strcmp(model.rows[3].text.data(),
+                      "AP 33:44:55 / CC:DD:EE") == 0);
+
+    CHECK(controller.openSelected());
+    CHECK(controller.next());
+    CHECK(controller.openSelected());
+    model = presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(std::strcmp(model.context.data(),
+                      "MAC 06:AA:BB:CC:DD:EE") == 0);
+    CHECK(std::strcmp(model.rows[0].text.data(),
+                      "SOURCE FRAME #2") == 0);
+    CHECK(std::strcmp(model.rows[1].text.data(),
+                      "WPA2/3 · CH 11 · -52 DBM") == 0);
+    CHECK(std::strcmp(model.rows[2].text.data(),
+                      "+200 ms FROM FINDING START") == 0);
+}
+
+void testInvalidSsidBytesUseStableNonInventedIdentifier() {
+    AirspaceGuardReport report = makeIdentityFindingReport();
+    report.findings[0].networkName.fill(0U);
+    report.findings[0].networkName[0] = 0xffU;
+    report.findings[0].networkNameLength = 1U;
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    const AirspaceGuardUiModel model =
+        presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(std::strncmp(model.context.data(), "SSID ID ", 8U) == 0);
 }
 
 void testRussianInconclusiveExplainsIncompleteEvidence() {
@@ -212,6 +286,8 @@ int main() {
     testFindingShowsOnlyActionableUserFacts();
     testEvidenceListUsesFourStableTouchRows();
     testEvidenceDetailRetainsExactReference();
+    testIdentityConflictExplainsIndicatorWithoutClaimingProof();
+    testInvalidSsidBytesUseStableNonInventedIdentifier();
     testRussianInconclusiveExplainsIncompleteEvidence();
     testEmptyCaptureIsExplicitlyIncomplete();
     testClearOutcomeUsesTheOtherwiseEmptyRowsForCoverage();

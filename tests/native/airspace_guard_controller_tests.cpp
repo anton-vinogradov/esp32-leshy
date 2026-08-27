@@ -58,6 +58,33 @@ AirspaceFinding makeFinding(
     return finding;
 }
 
+AirspaceFinding makeIdentityFinding(
+    const std::array<std::uint8_t, 6>& source,
+    const std::array<std::uint8_t, 6>& related,
+    std::uint64_t firstUs = 1000000ULL,
+    std::uint64_t lastUs = 1200000ULL) {
+    AirspaceFinding finding{};
+    finding.kind = AirspaceFindingKind::WifiSsidSecurityConflict;
+    finding.confidence = AirspaceConfidence::Medium;
+    finding.detectorVersion = AirspaceFinding::kWifiIdentityDetectorVersion;
+    finding.threshold = 2U;
+    finding.observed = 2U;
+    finding.transmitter = source;
+    finding.relatedTransmitter = related;
+    constexpr char kName[] = "Workshop";
+    finding.networkNameLength = sizeof(kName) - 1U;
+    std::memcpy(finding.networkName.data(), kName,
+                finding.networkNameLength);
+    finding.primarySecurity = AirspaceWifiSecurity::Open;
+    finding.relatedSecurity = AirspaceWifiSecurity::Rsn;
+    finding.firstUs = firstUs;
+    finding.lastUs = lastUs;
+    finding.evidenceCount = 2U;
+    finding.evidence[0] = {1U, firstUs, 1U, -35};
+    finding.evidence[1] = {2U, lastUs, 11U, -52};
+    return finding;
+}
+
 void setCompleteCounters(AirspaceGuardReport& report,
                          std::size_t frames,
                          std::size_t disconnectFrames) {
@@ -263,6 +290,71 @@ void testOutOfBoundsEvidenceFailsClosed() {
     CHECK(controller.load(report) == AirspaceGuardLoadStatus::InvalidReport);
 }
 
+void testIdentityConflictReportIsKindAwareAndFailClosed() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 1U;
+    report.findings[0] = makeIdentityFinding(kSourceA, kSourceB);
+    report.sourceFramesObserved = 4U;
+    report.framesAvailable = 4U;
+    report.framesInspected = 4U;
+    report.identityAdvertisementFrames = 2U;
+
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    CHECK(controller.selectedFinding() != nullptr);
+    CHECK(controller.selectedFinding()->kind ==
+          AirspaceFindingKind::WifiSsidSecurityConflict);
+
+    AirspaceGuardReport invalid = report;
+    invalid.findings[0].relatedSecurity = AirspaceWifiSecurity::Open;
+    CHECK(controller.load(invalid) ==
+          AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].networkNameLength = 0U;
+    CHECK(controller.load(invalid) ==
+          AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].evidence[1].frameIndex = 1U;
+    CHECK(controller.load(invalid) ==
+          AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.identityAdvertisementFrames = 1U;
+    CHECK(controller.load(invalid) ==
+          AirspaceGuardLoadStatus::InvalidReport);
+}
+
+void testDifferentDetectorKindsMayReferenceTheSameTransmitter() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 2U;
+    report.findings[0] = makeFinding(
+        kSourceA, AirspaceConfidence::Medium, 4U, 4U,
+        1000000ULL, 1300000ULL);
+    report.findings[1] = makeIdentityFinding(
+        kSourceA, kSourceB, 2000000ULL, 2200000ULL);
+    report.findings[1].evidence[0].frameIndex = 4U;
+    report.findings[1].evidence[1].frameIndex = 5U;
+    report.sourceFramesObserved = 16U;
+    report.framesAvailable = 16U;
+    report.framesInspected = 16U;
+    report.disconnectFrames = 4U;
+    report.identityAdvertisementFrames = 2U;
+
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    CHECK(controller.findingCount() == 2U);
+
+    report.findingCount = 3U;
+    report.findings[2] = report.findings[1];
+    report.identityAdvertisementFrames = 4U;
+    CHECK(controller.load(report) ==
+          AirspaceGuardLoadStatus::InvalidReport);
+}
+
 void testStableNames() {
     CHECK(std::strcmp(airspaceGuardViewName(AirspaceGuardView::Finding),
                       "finding") == 0);
@@ -281,6 +373,8 @@ int main() {
     testOutcomeStatusMismatchFailsClosed();
     testMalformedReportsFailClosed();
     testOutOfBoundsEvidenceFailsClosed();
+    testIdentityConflictReportIsKindAwareAndFailClosed();
+    testDifferentDetectorKindsMayReferenceTheSameTransmitter();
     testStableNames();
     std::puts("Airspace Guard controller tests passed");
     return 0;

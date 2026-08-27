@@ -20,6 +20,13 @@ enum class DisconnectDecode : std::uint8_t {
     Malformed,
 };
 
+enum class IdentityDecode : std::uint8_t {
+    NotAdvertisement,
+    IgnoredAdvertisement,
+    Advertisement,
+    Malformed,
+};
+
 struct DisconnectEvent final {
     std::size_t frameIndex = 0;
     std::uint64_t monotonicUs = 0;
@@ -29,9 +36,32 @@ struct DisconnectEvent final {
     std::array<std::uint8_t, 6> transmitter{};
 };
 
+struct IdentityAdvertisement final {
+    std::size_t frameIndex = 0;
+    std::uint64_t monotonicUs = 0;
+    std::int16_t rssiDbm = 0;
+    std::uint8_t channel = 0;
+    std::array<std::uint8_t, 6> transmitter{};
+    std::array<std::uint8_t, AirspaceFinding::kNetworkNameCapacity>
+        networkName{};
+    std::uint8_t networkNameLength = 0;
+    AirspaceWifiSecurity security = AirspaceWifiSecurity::Unknown;
+};
+
 bool sameTransmitter(const std::array<std::uint8_t, 6>& left,
                      const std::array<std::uint8_t, 6>& right) {
     return std::memcmp(left.data(), right.data(), left.size()) == 0;
+}
+
+bool sameNetworkName(
+    const std::array<std::uint8_t,
+                     AirspaceFinding::kNetworkNameCapacity>& left,
+    std::uint8_t leftLength,
+    const std::array<std::uint8_t,
+                     AirspaceFinding::kNetworkNameCapacity>& right,
+    std::uint8_t rightLength) {
+    return leftLength == rightLength && leftLength != 0U &&
+        std::memcmp(left.data(), right.data(), leftLength) == 0;
 }
 
 bool validTransmitter(const std::uint8_t* address) {
@@ -83,6 +113,111 @@ DisconnectDecode decodeDisconnect(const WifiFrameView& frame,
     return DisconnectDecode::Disconnect;
 }
 
+IdentityDecode decodeIdentityAdvertisement(
+    const WifiFrameView& frame, IdentityAdvertisement* output,
+    std::size_t frameIndex) {
+    if (output == nullptr || frame.payload == nullptr ||
+        frame.capturedLength < 2U || frame.monotonicUs == 0U ||
+        frame.channel == 0U || frame.channel > 14U) {
+        return IdentityDecode::Malformed;
+    }
+    if (frame.kind != WifiFrameKind::Management) {
+        return IdentityDecode::NotAdvertisement;
+    }
+    const std::uint16_t frameControl = static_cast<std::uint16_t>(
+        frame.payload[0] | (static_cast<std::uint16_t>(frame.payload[1]) << 8U));
+    const std::uint8_t type = static_cast<std::uint8_t>(
+        (frameControl >> 2U) & 0x03U);
+    const std::uint8_t subtype = static_cast<std::uint8_t>(
+        (frameControl >> 4U) & 0x0fU);
+    if (type != 0U || (subtype != 5U && subtype != 8U)) {
+        return IdentityDecode::NotAdvertisement;
+    }
+    std::size_t payloadLength = frame.capturedLength;
+    if (frame.fcsIncluded) {
+        if (payloadLength < 4U) return IdentityDecode::Malformed;
+        payloadLength -= 4U;
+    }
+    if (payloadLength < 36U ||
+        !validTransmitter(frame.payload + 10U) ||
+        std::memcmp(frame.payload + 10U, frame.payload + 16U, 6U) != 0) {
+        return IdentityDecode::Malformed;
+    }
+
+    IdentityAdvertisement decoded{};
+    decoded.frameIndex = frameIndex;
+    decoded.monotonicUs = frame.monotonicUs;
+    decoded.rssiDbm = frame.rssiDbm;
+    decoded.channel = frame.channel;
+    std::memcpy(decoded.transmitter.data(), frame.payload + 10U,
+                decoded.transmitter.size());
+
+    const std::uint16_t capability = static_cast<std::uint16_t>(
+        frame.payload[34] |
+        (static_cast<std::uint16_t>(frame.payload[35]) << 8U));
+    const bool privacy = (capability & 0x0010U) != 0U;
+    bool ssidSeen = false;
+    bool rsnSeen = false;
+    bool wpaSeen = false;
+    std::size_t offset = 36U;
+    while (offset < payloadLength) {
+        if (payloadLength - offset < 2U) {
+            return IdentityDecode::Malformed;
+        }
+        const std::uint8_t id = frame.payload[offset++];
+        const std::uint8_t length = frame.payload[offset++];
+        if (payloadLength - offset < length) {
+            return IdentityDecode::Malformed;
+        }
+        const std::uint8_t* value = frame.payload + offset;
+        if (id == 0U) {
+            if (ssidSeen || length > decoded.networkName.size()) {
+                return IdentityDecode::Malformed;
+            }
+            ssidSeen = true;
+            decoded.networkNameLength = length;
+            if (length != 0U) {
+                std::memcpy(decoded.networkName.data(), value, length);
+            }
+        } else if (id == 48U) {
+            if (length < 2U) return IdentityDecode::Malformed;
+            rsnSeen = true;
+        } else if (id == 221U && length >= 4U && value[0] == 0x00U &&
+                   value[1] == 0x50U && value[2] == 0xf2U &&
+                   value[3] == 0x01U) {
+            wpaSeen = true;
+        }
+        offset += length;
+    }
+    bool named = false;
+    for (std::size_t index = 0U; index < decoded.networkNameLength; ++index) {
+        named = named || decoded.networkName[index] != 0U;
+    }
+    if (!ssidSeen || !named) {
+        return IdentityDecode::IgnoredAdvertisement;
+    }
+    decoded.security = rsnSeen
+        ? AirspaceWifiSecurity::Rsn
+        : wpaSeen
+            ? AirspaceWifiSecurity::Wpa
+            : privacy
+                ? AirspaceWifiSecurity::LegacyPrivacy
+                : AirspaceWifiSecurity::Open;
+    *output = decoded;
+    return IdentityDecode::Advertisement;
+}
+
+void retainEvidence(AirspaceFinding& finding,
+                    const IdentityAdvertisement& event) {
+    if (finding.evidenceCount >= finding.evidence.size()) return;
+    AirspaceEvidenceRef& evidence =
+        finding.evidence[finding.evidenceCount++];
+    evidence.frameIndex = event.frameIndex;
+    evidence.monotonicUs = event.monotonicUs;
+    evidence.channel = event.channel;
+    evidence.rssiDbm = event.rssiDbm;
+}
+
 AirspaceConfidence confidenceFor(std::size_t observed,
                                  std::size_t threshold) {
     return observed >= threshold * 2U
@@ -105,6 +240,19 @@ const char* airspaceFindingKindName(AirspaceFindingKind kind) {
     switch (kind) {
         case AirspaceFindingKind::WifiDisconnectBurst:
             return "wifi_disconnect_burst";
+        case AirspaceFindingKind::WifiSsidSecurityConflict:
+            return "wifi_ssid_security_conflict";
+    }
+    return "unknown";
+}
+
+const char* airspaceWifiSecurityName(AirspaceWifiSecurity security) {
+    switch (security) {
+        case AirspaceWifiSecurity::Unknown: return "unknown";
+        case AirspaceWifiSecurity::Open: return "open";
+        case AirspaceWifiSecurity::LegacyPrivacy: return "legacy_privacy";
+        case AirspaceWifiSecurity::Wpa: return "wpa";
+        case AirspaceWifiSecurity::Rsn: return "rsn";
     }
     return "unknown";
 }
@@ -123,7 +271,9 @@ bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy) {
         policy.disconnectBurstThreshold <=
             AirspaceFinding::kEvidenceCapacity &&
         policy.disconnectWindowUs >= 100000ULL &&
-        policy.disconnectWindowUs <= 10000000ULL;
+        policy.disconnectWindowUs <= 10000000ULL &&
+        policy.ssidSecurityConflictWindowUs >= 100000ULL &&
+        policy.ssidSecurityConflictWindowUs <= 10000000ULL;
 }
 
 bool isWifiDisconnectFrameCandidate(const std::uint8_t* payload,
@@ -135,6 +285,17 @@ bool isWifiDisconnectFrameCandidate(const std::uint8_t* payload,
     const std::uint8_t subtype = static_cast<std::uint8_t>(
         (frameControl >> 4U) & 0x0fU);
     return type == 0U && (subtype == 10U || subtype == 12U);
+}
+
+bool isWifiIdentityAdvertisementCandidate(const std::uint8_t* payload,
+                                          std::size_t length) {
+    if (payload == nullptr || length < 2U) return false;
+    const std::uint8_t frameControl = payload[0];
+    const std::uint8_t type = static_cast<std::uint8_t>(
+        (frameControl >> 2U) & 0x03U);
+    const std::uint8_t subtype = static_cast<std::uint8_t>(
+        (frameControl >> 4U) & 0x0fU);
+    return type == 0U && (subtype == 5U || subtype == 8U);
 }
 
 AirspaceGuardReport AirspaceGuard::inspectWifi(
@@ -158,106 +319,231 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
             ? report.framesAvailable : kFrameInspectionCapacity;
     report.inspectionTruncated = report.framesAvailable > inspectionCount;
 
-    std::array<DisconnectEvent, kFrameInspectionCapacity> events{};
-    std::size_t eventCount = 0;
-    for (std::size_t index = 0; index < inspectionCount; ++index) {
-        WifiFrameView frame{};
-        if (!source.frameView(index, &frame)) {
-            ++report.sourceReadFailures;
-            continue;
+    std::uint64_t inspectedFrameMask = 0U;
+    {
+        std::array<DisconnectEvent, kFrameInspectionCapacity> events{};
+        std::size_t eventCount = 0;
+        for (std::size_t index = 0; index < inspectionCount; ++index) {
+            WifiFrameView frame{};
+            if (!source.frameView(index, &frame)) {
+                ++report.sourceReadFailures;
+                continue;
+            }
+            ++report.framesInspected;
+            inspectedFrameMask |= 1ULL << index;
+            if (frame.payload == nullptr || frame.capturedLength < 2U ||
+                frame.monotonicUs == 0U || frame.channel == 0U ||
+                frame.channel > 14U) {
+                ++report.malformedFrames;
+                continue;
+            }
+            DisconnectEvent event{};
+            const DisconnectDecode decoded =
+                decodeDisconnect(frame, &event, index);
+            if (decoded == DisconnectDecode::Disconnect) {
+                events[eventCount++] = event;
+                ++report.disconnectFrames;
+            } else if (decoded == DisconnectDecode::Malformed) {
+                ++report.malformedFrames;
+                continue;
+            }
         }
-        ++report.framesInspected;
-        if (frame.payload == nullptr || frame.capturedLength < 2U ||
-            frame.monotonicUs == 0U || frame.channel == 0U ||
-            frame.channel > 14U) {
-            ++report.malformedFrames;
-            continue;
-        }
-        DisconnectEvent event{};
-        const DisconnectDecode decoded = decodeDisconnect(frame, &event, index);
-        if (decoded == DisconnectDecode::Disconnect) {
-            events[eventCount++] = event;
-            ++report.disconnectFrames;
-        } else if (decoded == DisconnectDecode::Malformed) {
-            ++report.malformedFrames;
+
+        for (std::size_t candidate = 0; candidate < eventCount; ++candidate) {
+            bool alreadyReported = false;
+            for (std::size_t findingIndex = 0;
+                 findingIndex < report.findingCount; ++findingIndex) {
+                if (sameTransmitter(report.findings[findingIndex].transmitter,
+                                    events[candidate].transmitter)) {
+                    alreadyReported = true;
+                    break;
+                }
+            }
+            if (alreadyReported) continue;
+
+            std::size_t bestStart = candidate;
+            std::size_t bestCount = 0;
+            for (std::size_t start = 0; start < eventCount; ++start) {
+                if (!sameTransmitter(events[start].transmitter,
+                                     events[candidate].transmitter)) {
+                    continue;
+                }
+                std::size_t count = 0;
+                for (std::size_t index = 0; index < eventCount; ++index) {
+                    if (!sameTransmitter(events[index].transmitter,
+                                         events[candidate].transmitter) ||
+                        events[index].monotonicUs <
+                            events[start].monotonicUs) {
+                        continue;
+                    }
+                    const std::uint64_t elapsed = events[index].monotonicUs -
+                        events[start].monotonicUs;
+                    if (elapsed <= policy.disconnectWindowUs) ++count;
+                }
+                if (count > bestCount) {
+                    bestCount = count;
+                    bestStart = start;
+                }
+            }
+            if (bestCount < policy.disconnectBurstThreshold) continue;
+            if (report.findingCount >= report.findings.size()) {
+                ++report.findingsDropped;
+                continue;
+            }
+
+            AirspaceFinding& finding =
+                report.findings[report.findingCount++];
+            finding = {};
+            finding.kind = AirspaceFindingKind::WifiDisconnectBurst;
+            finding.confidence = confidenceFor(
+                bestCount, policy.disconnectBurstThreshold);
+            finding.detectorVersion = AirspaceFinding::kDetectorVersion;
+            finding.threshold = policy.disconnectBurstThreshold;
+            finding.observed = static_cast<std::uint16_t>(bestCount);
+            finding.transmitter = events[candidate].transmitter;
+            finding.firstUs = events[bestStart].monotonicUs;
+            finding.lastUs = finding.firstUs;
+            for (std::size_t index = 0; index < eventCount; ++index) {
+                const DisconnectEvent& event = events[index];
+                if (!sameTransmitter(event.transmitter,
+                                     finding.transmitter) ||
+                    event.monotonicUs < finding.firstUs ||
+                    event.monotonicUs - finding.firstUs >
+                        policy.disconnectWindowUs) {
+                    continue;
+                }
+                if (event.subtype == DisconnectSubtype::Deauthentication) {
+                    ++finding.deauthenticationFrames;
+                } else {
+                    ++finding.disassociationFrames;
+                }
+                if (event.monotonicUs > finding.lastUs) {
+                    finding.lastUs = event.monotonicUs;
+                }
+                if (finding.evidenceCount < finding.evidence.size()) {
+                    AirspaceEvidenceRef& evidence =
+                        finding.evidence[finding.evidenceCount++];
+                    evidence.frameIndex = event.frameIndex;
+                    evidence.monotonicUs = event.monotonicUs;
+                    evidence.channel = event.channel;
+                    evidence.rssiDbm = event.rssiDbm;
+                }
+            }
         }
     }
 
-    for (std::size_t candidate = 0; candidate < eventCount; ++candidate) {
-        bool alreadyReported = false;
-        for (std::size_t findingIndex = 0;
-             findingIndex < report.findingCount; ++findingIndex) {
-            if (sameTransmitter(report.findings[findingIndex].transmitter,
-                                events[candidate].transmitter)) {
-                alreadyReported = true;
-                break;
+    // Disconnect bursts keep first claim on the bounded finding array; a
+    // lower-confidence identity indicator must never evict them.
+    if (policy.ssidSecurityConflictEnabled) {
+        std::uint64_t rereadFailureMask = 0U;
+        const auto readIdentity = [&](std::size_t index,
+                                      IdentityAdvertisement* output) {
+            const std::uint64_t bit = 1ULL << index;
+            if ((inspectedFrameMask & bit) == 0U) {
+                return IdentityDecode::NotAdvertisement;
             }
-        }
-        if (alreadyReported) continue;
+            WifiFrameView frame{};
+            if (!source.frameView(index, &frame)) {
+                if ((rereadFailureMask & bit) == 0U &&
+                    report.sourceFramesDropped <
+                        report.sourceFramesObserved) {
+                    ++report.sourceFramesDropped;
+                }
+                rereadFailureMask |= bit;
+                return IdentityDecode::NotAdvertisement;
+            }
+            if (frame.payload == nullptr || frame.capturedLength < 2U ||
+                frame.monotonicUs == 0U || frame.channel == 0U ||
+                frame.channel > 14U) {
+                // The first pass already counted this malformed source once.
+                return IdentityDecode::NotAdvertisement;
+            }
+            return decodeIdentityAdvertisement(frame, output, index);
+        };
 
-        std::size_t bestStart = candidate;
-        std::size_t bestCount = 0;
-        for (std::size_t start = 0; start < eventCount; ++start) {
-            if (!sameTransmitter(events[start].transmitter,
-                                 events[candidate].transmitter)) {
+        for (std::size_t leftIndex = 0U;
+             leftIndex < inspectionCount; ++leftIndex) {
+            IdentityAdvertisement left{};
+            const IdentityDecode leftDecoded =
+                readIdentity(leftIndex, &left);
+            if (leftDecoded == IdentityDecode::Advertisement) {
+                ++report.identityAdvertisementFrames;
+            } else if (leftDecoded == IdentityDecode::Malformed) {
+                ++report.malformedFrames;
+                continue;
+            } else {
                 continue;
             }
-            std::size_t count = 0;
-            for (std::size_t index = 0; index < eventCount; ++index) {
-                if (!sameTransmitter(events[index].transmitter,
-                                     events[candidate].transmitter) ||
-                    events[index].monotonicUs < events[start].monotonicUs) {
+            bool networkAlreadyReported = false;
+            for (std::size_t findingIndex = 0;
+                 findingIndex < report.findingCount; ++findingIndex) {
+                const AirspaceFinding& existing =
+                    report.findings[findingIndex];
+                if (existing.kind ==
+                        AirspaceFindingKind::WifiSsidSecurityConflict &&
+                    sameNetworkName(existing.networkName,
+                                    existing.networkNameLength,
+                                    left.networkName,
+                                    left.networkNameLength)) {
+                    networkAlreadyReported = true;
+                    break;
+                }
+            }
+            if (networkAlreadyReported) continue;
+
+            for (std::size_t rightIndex = leftIndex + 1U;
+                 rightIndex < inspectionCount; ++rightIndex) {
+                IdentityAdvertisement right{};
+                if (readIdentity(rightIndex, &right) !=
+                    IdentityDecode::Advertisement) {
                     continue;
                 }
-                const std::uint64_t elapsed =
-                    events[index].monotonicUs - events[start].monotonicUs;
-                if (elapsed <= policy.disconnectWindowUs) ++count;
-            }
-            if (count > bestCount) {
-                bestCount = count;
-                bestStart = start;
-            }
-        }
-        if (bestCount < policy.disconnectBurstThreshold) continue;
-        if (report.findingCount >= report.findings.size()) {
-            ++report.findingsDropped;
-            continue;
-        }
+                if (!sameNetworkName(left.networkName,
+                                     left.networkNameLength,
+                                     right.networkName,
+                                     right.networkNameLength) ||
+                    sameTransmitter(left.transmitter, right.transmitter) ||
+                    left.security == right.security) {
+                    continue;
+                }
+                const std::uint64_t firstUs =
+                    left.monotonicUs < right.monotonicUs
+                        ? left.monotonicUs : right.monotonicUs;
+                const std::uint64_t lastUs =
+                    left.monotonicUs > right.monotonicUs
+                        ? left.monotonicUs : right.monotonicUs;
+                if (lastUs - firstUs >
+                    policy.ssidSecurityConflictWindowUs) {
+                    continue;
+                }
+                if (report.findingCount >= report.findings.size()) {
+                    ++report.findingsDropped;
+                    break;
+                }
 
-        AirspaceFinding& finding = report.findings[report.findingCount++];
-        finding = {};
-        finding.kind = AirspaceFindingKind::WifiDisconnectBurst;
-        finding.confidence = confidenceFor(
-            bestCount, policy.disconnectBurstThreshold);
-        finding.detectorVersion = AirspaceFinding::kDetectorVersion;
-        finding.threshold = policy.disconnectBurstThreshold;
-        finding.observed = static_cast<std::uint16_t>(bestCount);
-        finding.transmitter = events[candidate].transmitter;
-        finding.firstUs = events[bestStart].monotonicUs;
-        finding.lastUs = finding.firstUs;
-        for (std::size_t index = 0; index < eventCount; ++index) {
-            const DisconnectEvent& event = events[index];
-            if (!sameTransmitter(event.transmitter, finding.transmitter) ||
-                event.monotonicUs < finding.firstUs ||
-                event.monotonicUs - finding.firstUs >
-                    policy.disconnectWindowUs) {
-                continue;
-            }
-            if (event.subtype == DisconnectSubtype::Deauthentication) {
-                ++finding.deauthenticationFrames;
-            } else {
-                ++finding.disassociationFrames;
-            }
-            if (event.monotonicUs > finding.lastUs) {
-                finding.lastUs = event.monotonicUs;
-            }
-            if (finding.evidenceCount < finding.evidence.size()) {
-                AirspaceEvidenceRef& evidence =
-                    finding.evidence[finding.evidenceCount++];
-                evidence.frameIndex = event.frameIndex;
-                evidence.monotonicUs = event.monotonicUs;
-                evidence.channel = event.channel;
-                evidence.rssiDbm = event.rssiDbm;
+                AirspaceFinding& finding =
+                    report.findings[report.findingCount++];
+                finding = {};
+                finding.kind =
+                    AirspaceFindingKind::WifiSsidSecurityConflict;
+                // Mixed security for one visible identity is an investigation
+                // indicator, not proof of an impersonating access point.
+                finding.confidence = AirspaceConfidence::Medium;
+                finding.detectorVersion =
+                    AirspaceFinding::kWifiIdentityDetectorVersion;
+                finding.threshold = 2U;
+                finding.observed = 2U;
+                finding.transmitter = left.transmitter;
+                finding.relatedTransmitter = right.transmitter;
+                finding.networkName = left.networkName;
+                finding.networkNameLength = left.networkNameLength;
+                finding.primarySecurity = left.security;
+                finding.relatedSecurity = right.security;
+                finding.firstUs = firstUs;
+                finding.lastUs = lastUs;
+                retainEvidence(finding, left);
+                retainEvidence(finding, right);
+                break;
             }
         }
     }
