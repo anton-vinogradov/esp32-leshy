@@ -81,6 +81,10 @@ bool duplicateFinding(const AirspaceFinding& left,
             return sameNetworkName(left, right);
         case AirspaceFindingKind::WifiSsidChurn:
             return left.transmitter == right.transmitter;
+        case AirspaceFindingKind::BleTrackerPresence:
+            return left.transmitter == right.transmitter &&
+                left.bleTrackerProtocol == right.bleTrackerProtocol &&
+                left.bleAddressType == right.bleAddressType;
     }
     return true;
 }
@@ -135,6 +139,7 @@ bool AirspaceGuardController::validateReport(
             report.sourceFramesObserved == 0U &&
             report.framesInspected == 0U && report.disconnectFrames == 0U &&
             report.identityAdvertisementFrames == 0U &&
+            report.bleAdvertisementRecords == 0U &&
             report.malformedFrames == 0U &&
             report.sourceReadFailures == 0U &&
             report.sourceFramesDropped == 0U &&
@@ -147,9 +152,10 @@ bool AirspaceGuardController::validateReport(
         report.framesInspected + report.sourceReadFailures != attempted ||
         report.disconnectFrames > report.framesInspected ||
         report.identityAdvertisementFrames > report.framesInspected ||
+        report.bleAdvertisementRecords > report.framesInspected ||
         report.malformedFrames > report.framesInspected ||
         report.disconnectFrames + report.identityAdvertisementFrames +
-                report.malformedFrames >
+                report.bleAdvertisementRecords + report.malformedFrames >
             report.framesInspected ||
         report.findingsDropped > report.framesInspected ||
         (report.findingCount == 0U && report.findingsDropped != 0U) ||
@@ -200,6 +206,9 @@ bool AirspaceGuardController::validateReport(
                     finding.networkNameLength != 0U ||
                     finding.primarySecurity != AirspaceWifiSecurity::Unknown ||
                     finding.relatedSecurity != AirspaceWifiSecurity::Unknown ||
+                    finding.bleTrackerProtocol !=
+                        services::guard::AirspaceBleTrackerProtocol::None ||
+                    finding.bleAddressType != 0xffU ||
                     static_cast<std::size_t>(
                         finding.deauthenticationFrames) +
                             finding.disassociationFrames !=
@@ -225,6 +234,9 @@ bool AirspaceGuardController::validateReport(
                     finding.networkNameLength > finding.networkName.size() ||
                     !validSecurity(finding.primarySecurity) ||
                     !validSecurity(finding.relatedSecurity) ||
+                    finding.bleTrackerProtocol !=
+                        services::guard::AirspaceBleTrackerProtocol::None ||
+                    finding.bleAddressType != 0xffU ||
                     finding.primarySecurity == finding.relatedSecurity) {
                     return false;
                 }
@@ -244,10 +256,18 @@ bool AirspaceGuardController::validateReport(
                     finding.networkNameLength != 0U ||
                     finding.primarySecurity != AirspaceWifiSecurity::Unknown ||
                     finding.relatedSecurity != AirspaceWifiSecurity::Unknown ||
+                    finding.bleTrackerProtocol !=
+                        services::guard::AirspaceBleTrackerProtocol::None ||
+                    finding.bleAddressType != 0xffU ||
                     finding.observed > report.identityAdvertisementFrames) {
                     return false;
                 }
                 break;
+            case AirspaceFindingKind::BleTrackerPresence:
+                // BLE presentation and channel-free normalized evidence are a
+                // later product slice. Reject them here until that UI contract
+                // is implemented and tested rather than rendering Wi-Fi copy.
+                return false;
             default:
                 return false;
         }

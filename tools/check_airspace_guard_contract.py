@@ -83,6 +83,16 @@ def main() -> int:
         "wifiIdentityRetentionSlotAvailable",
         "kWifiIdentityDetectorVersion = 1",
         "kWifiSsidChurnDetectorVersion = 1",
+        "BleTrackerPresence",
+        "AirspaceBleTrackerProtocol",
+        "bleAddressType = 0xffU",
+        "kBleTrackerPresenceDetectorVersion = 1",
+        "bleTrackerPresenceEnabled = false",
+        "bleTrackerPresenceThreshold = 3",
+        "bleTrackerPresenceWindowUs = 10000000ULL",
+        "BleObservationSource",
+        "inspectBle(",
+        "channel = 0U",
         "AirspaceWifiSecurity::Rsn",
         "WifiFrameSource& source",
         "frameIndex = event.frameIndex",
@@ -109,6 +119,10 @@ def main() -> int:
         "testIdentityParserExcludesCapturedFcsFromInformationElements",
         "testSsidChurnRetainsDistinctNamesFromOneBssid",
         "testSsidChurnRejectsLookalikesAndIncompleteEvidence",
+        "testBleTrackerPresenceIsOptInAndRetainsExactEvidence",
+        "testBleTrackerPresenceRejectsLookalikesAndStaleEvidence",
+        "testBleTrackerProtocolsRemainDistinct",
+        "testBleTrackerPresenceFailsClosedOnIncompleteEvidence",
     ):
         require(failures, marker in tests,
                 f"missing Airspace Guard native coverage: {marker}")
@@ -125,6 +139,7 @@ def main() -> int:
         "sendPacket",
         "injectFrame",
         "setTxPower",
+        "classifyBleTracker",
     ):
         require(failures, forbidden not in combined,
                 f"Airspace Guard bypasses receive-evidence boundary: {forbidden}")

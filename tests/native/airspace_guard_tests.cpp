@@ -125,10 +125,82 @@ private:
     std::size_t size_ = 0;
 };
 
+struct BleFixtureRecord final {
+    leshy1::domain::observations::Observation observation{};
+    bool readable = true;
+};
+
+class BleFixtureSource final : public BleObservationSource {
+public:
+    static constexpr std::size_t kCapacity = 80;
+
+    void add(const std::array<std::uint8_t, 6>& identity,
+             std::uint64_t monotonicUs,
+             AirspaceBleTrackerProtocol protocol,
+             std::int16_t rssiDbm = -60,
+             std::uint8_t addressType = 1U) {
+        CHECK(size_ < records_.size());
+        auto& record = records_[size_++];
+        record = {};
+        auto& observation = record.observation;
+        observation.radio =
+            leshy1::domain::observations::RadioKind::Ble;
+        observation.monotonicUs = monotonicUs;
+        observation.rssiDbm = rssiDbm;
+        observation.identity = identity;
+        observation.identityLength = observation.identity.size();
+        auto& facts = observation.bleAdvertisement;
+        facts.present = true;
+        facts.addressType = addressType;
+        facts.payloadLength = 18U;
+        switch (protocol) {
+            case AirspaceBleTrackerProtocol::FindMy:
+                facts.companyKnown = true;
+                facts.companyId = 0x004cU;
+                facts.appleContinuityType = 0x12U;
+                break;
+            case AirspaceBleTrackerProtocol::SmartTag:
+                facts.knownServiceMask =
+                    leshy1::domain::observations::BleAdvertisementFacts::
+                        kServiceSmartTag;
+                break;
+            case AirspaceBleTrackerProtocol::Tile:
+                facts.knownServiceMask =
+                    leshy1::domain::observations::BleAdvertisementFacts::
+                        kServiceTile;
+                break;
+            case AirspaceBleTrackerProtocol::None:
+                break;
+        }
+    }
+
+    BleFixtureRecord& mutableAt(std::size_t index) {
+        CHECK(index < size_);
+        return records_[index];
+    }
+
+    std::size_t observationCount() const override { return size_; }
+    bool observationAt(
+        std::size_t index,
+        leshy1::domain::observations::Observation* output) const override {
+        if (output == nullptr || index >= size_ || !records_[index].readable) {
+            return false;
+        }
+        *output = records_[index].observation;
+        return true;
+    }
+
+private:
+    std::array<BleFixtureRecord, kCapacity> records_{};
+    std::size_t size_ = 0U;
+};
+
 constexpr std::array<std::uint8_t, 6> kTransmitterA{
     0x02, 0x11, 0x22, 0x33, 0x44, 0x55};
 constexpr std::array<std::uint8_t, 6> kTransmitterB{
     0x06, 0xaa, 0xbb, 0xcc, 0xdd, 0xee};
+constexpr std::array<std::uint8_t, 6> kTransmitterC{
+    0x72, 0x10, 0x20, 0x30, 0x40, 0x50};
 
 void testPolicyAndEmptyEvidenceFailClosed() {
     AirspaceGuard guard;
@@ -152,6 +224,15 @@ void testPolicyAndEmptyEvidenceFailClosed() {
     CHECK(!validateAirspaceGuardPolicy(invalid));
     invalid = {};
     invalid.ssidChurnWindowUs = 99999ULL;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
+    invalid.bleTrackerPresenceThreshold = 1U;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
+    invalid.bleTrackerPresenceThreshold = 9U;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
+    invalid.bleTrackerPresenceWindowUs = 60000001ULL;
     CHECK(!validateAirspaceGuardPolicy(invalid));
 
     const AirspaceGuardReport report = guard.inspectWifi(empty);
@@ -189,6 +270,12 @@ AirspaceGuardPolicy identityPolicy() {
 AirspaceGuardPolicy churnPolicy() {
     AirspaceGuardPolicy policy{};
     policy.ssidChurnEnabled = true;
+    return policy;
+}
+
+AirspaceGuardPolicy bleTrackerPolicy() {
+    AirspaceGuardPolicy policy{};
+    policy.bleTrackerPresenceEnabled = true;
     return policy;
 }
 
@@ -580,6 +667,173 @@ void testMalformedFailedAndTruncatedEvidenceIsInconclusive() {
     CHECK(truncatedReport.inspectionTruncated);
 }
 
+void testBleTrackerPresenceIsOptInAndRetainsExactEvidence() {
+    BleFixtureSource source;
+    source.add(kTransmitterA, 1000000ULL,
+               AirspaceBleTrackerProtocol::FindMy, -58);
+    source.add(kTransmitterB, 1050000ULL,
+               AirspaceBleTrackerProtocol::None, -72);
+    source.add(kTransmitterA, 1300000ULL,
+               AirspaceBleTrackerProtocol::FindMy, -55);
+    source.add(kTransmitterA, 1600000ULL,
+               AirspaceBleTrackerProtocol::FindMy, -53);
+
+    const AirspaceGuardReport disabled = AirspaceGuard{}.inspectBle(source);
+    CHECK(disabled.status == AirspaceGuardStatus::Clear);
+    CHECK(disabled.bleAdvertisementRecords == 4U);
+    CHECK(disabled.findingCount == 0U);
+
+    const AirspaceGuardReport report =
+        AirspaceGuard{}.inspectBle(source, bleTrackerPolicy());
+    CHECK(report.status == AirspaceGuardStatus::Finding);
+    CHECK(report.sourceFramesObserved == 4U);
+    CHECK(report.framesInspected == 4U);
+    CHECK(report.bleAdvertisementRecords == 4U);
+    CHECK(report.findingCount == 1U);
+    const AirspaceFinding& finding = report.findings[0];
+    CHECK(finding.kind == AirspaceFindingKind::BleTrackerPresence);
+    CHECK(finding.confidence == AirspaceConfidence::Medium);
+    CHECK(finding.detectorVersion ==
+          AirspaceFinding::kBleTrackerPresenceDetectorVersion);
+    CHECK(finding.threshold == 3U);
+    CHECK(finding.observed == 3U);
+    CHECK(finding.transmitter == kTransmitterA);
+    CHECK(finding.bleTrackerProtocol ==
+          AirspaceBleTrackerProtocol::FindMy);
+    CHECK(finding.bleAddressType == 1U);
+    CHECK(finding.firstUs == 1000000ULL);
+    CHECK(finding.lastUs == 1600000ULL);
+    CHECK(finding.evidenceCount == 3U);
+    CHECK(finding.evidence[0].frameIndex == 0U);
+    CHECK(finding.evidence[1].frameIndex == 2U);
+    CHECK(finding.evidence[2].frameIndex == 3U);
+    CHECK(finding.evidence[0].channel == 0U);
+    CHECK(finding.evidence[2].rssiDbm == -53);
+}
+
+void testBleTrackerPresenceRejectsLookalikesAndStaleEvidence() {
+    const AirspaceGuardPolicy policy = bleTrackerPolicy();
+
+    BleFixtureSource belowThreshold;
+    belowThreshold.add(kTransmitterA, 1000000ULL,
+                       AirspaceBleTrackerProtocol::Tile);
+    belowThreshold.add(kTransmitterA, 1200000ULL,
+                       AirspaceBleTrackerProtocol::Tile);
+    CHECK(AirspaceGuard{}.inspectBle(belowThreshold, policy).status ==
+          AirspaceGuardStatus::Clear);
+
+    BleFixtureSource splitIdentities;
+    splitIdentities.add(kTransmitterA, 1000000ULL,
+                        AirspaceBleTrackerProtocol::SmartTag);
+    splitIdentities.add(kTransmitterA, 1100000ULL,
+                        AirspaceBleTrackerProtocol::SmartTag);
+    splitIdentities.add(kTransmitterB, 1200000ULL,
+                        AirspaceBleTrackerProtocol::SmartTag);
+    CHECK(AirspaceGuard{}.inspectBle(splitIdentities, policy).status ==
+          AirspaceGuardStatus::Clear);
+
+    BleFixtureSource splitProtocols;
+    splitProtocols.add(kTransmitterA, 1000000ULL,
+                       AirspaceBleTrackerProtocol::FindMy);
+    splitProtocols.add(kTransmitterA, 1100000ULL,
+                       AirspaceBleTrackerProtocol::SmartTag);
+    splitProtocols.add(kTransmitterA, 1200000ULL,
+                       AirspaceBleTrackerProtocol::Tile);
+    CHECK(AirspaceGuard{}.inspectBle(splitProtocols, policy).status ==
+          AirspaceGuardStatus::Clear);
+
+    BleFixtureSource splitAddressTypes;
+    splitAddressTypes.add(kTransmitterA, 1000000ULL,
+                          AirspaceBleTrackerProtocol::Tile, -60, 0U);
+    splitAddressTypes.add(kTransmitterA, 1100000ULL,
+                          AirspaceBleTrackerProtocol::Tile, -60, 0U);
+    splitAddressTypes.add(kTransmitterA, 1200000ULL,
+                          AirspaceBleTrackerProtocol::Tile, -60, 1U);
+    CHECK(AirspaceGuard{}.inspectBle(splitAddressTypes, policy).status ==
+          AirspaceGuardStatus::Clear);
+
+    BleFixtureSource stale;
+    stale.add(kTransmitterA, 1000000ULL,
+              AirspaceBleTrackerProtocol::FindMy);
+    stale.add(kTransmitterA, 12000000ULL,
+              AirspaceBleTrackerProtocol::FindMy);
+    stale.add(kTransmitterA, 23000000ULL,
+              AirspaceBleTrackerProtocol::FindMy);
+    CHECK(AirspaceGuard{}.inspectBle(stale, policy).status ==
+          AirspaceGuardStatus::Clear);
+}
+
+void testBleTrackerProtocolsRemainDistinct() {
+    AirspaceGuardPolicy policy = bleTrackerPolicy();
+    policy.bleTrackerPresenceThreshold = 2U;
+    BleFixtureSource source;
+    for (std::size_t repeat = 0U; repeat < 2U; ++repeat) {
+        const std::uint64_t time = 1000000ULL + repeat * 100000ULL;
+        source.add(kTransmitterA, time,
+                   AirspaceBleTrackerProtocol::FindMy);
+        source.add(kTransmitterB, time,
+                   AirspaceBleTrackerProtocol::SmartTag);
+        source.add(kTransmitterC, time,
+                   AirspaceBleTrackerProtocol::Tile);
+    }
+    const AirspaceGuardReport report =
+        AirspaceGuard{}.inspectBle(source, policy);
+    CHECK(report.status == AirspaceGuardStatus::Finding);
+    CHECK(report.findingCount == 3U);
+    CHECK(report.findings[0].bleTrackerProtocol ==
+          AirspaceBleTrackerProtocol::FindMy);
+    CHECK(report.findings[1].bleTrackerProtocol ==
+          AirspaceBleTrackerProtocol::SmartTag);
+    CHECK(report.findings[2].bleTrackerProtocol ==
+          AirspaceBleTrackerProtocol::Tile);
+    CHECK(report.findings[0].transmitter == kTransmitterA);
+    CHECK(report.findings[1].transmitter == kTransmitterB);
+    CHECK(report.findings[2].transmitter == kTransmitterC);
+}
+
+void testBleTrackerPresenceFailsClosedOnIncompleteEvidence() {
+    const AirspaceGuardPolicy policy = bleTrackerPolicy();
+
+    BleFixtureSource ambiguous;
+    ambiguous.add(kTransmitterA, 1000000ULL,
+                  AirspaceBleTrackerProtocol::FindMy);
+    ambiguous.mutableAt(0).observation.bleAdvertisement.knownServiceMask |=
+        leshy1::domain::observations::BleAdvertisementFacts::kServiceTile;
+    const AirspaceGuardReport ambiguousReport =
+        AirspaceGuard{}.inspectBle(ambiguous, policy);
+    CHECK(ambiguousReport.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(ambiguousReport.malformedFrames == 1U);
+    CHECK(ambiguousReport.findingCount == 0U);
+
+    BleFixtureSource failed;
+    failed.add(kTransmitterA, 1000000ULL,
+               AirspaceBleTrackerProtocol::Tile);
+    failed.mutableAt(0).readable = false;
+    const AirspaceGuardReport failedReport =
+        AirspaceGuard{}.inspectBle(failed, policy);
+    CHECK(failedReport.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(failedReport.sourceReadFailures == 1U);
+
+    BleFixtureSource dropped;
+    dropped.add(kTransmitterA, 1000000ULL,
+                AirspaceBleTrackerProtocol::None);
+    const AirspaceGuardReport droppedReport =
+        AirspaceGuard{}.inspectBle(dropped, policy, 2U, 3U);
+    CHECK(droppedReport.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(droppedReport.sourceFramesDropped == 2U);
+
+    BleFixtureSource truncated;
+    for (std::size_t index = 0U; index < 65U; ++index) {
+        truncated.add(kTransmitterA, 1000000ULL + index,
+                      AirspaceBleTrackerProtocol::None);
+    }
+    const AirspaceGuardReport truncatedReport =
+        AirspaceGuard{}.inspectBle(truncated, policy);
+    CHECK(truncatedReport.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(truncatedReport.framesInspected == 64U);
+    CHECK(truncatedReport.inspectionTruncated);
+}
+
 void testStableNames() {
     CHECK(std::strcmp(airspaceGuardStatusName(AirspaceGuardStatus::Finding),
                       "finding") == 0);
@@ -592,10 +846,16 @@ void testStableNames() {
     CHECK(std::strcmp(airspaceFindingKindName(
                           AirspaceFindingKind::WifiSsidChurn),
                       "wifi_ssid_churn") == 0);
+    CHECK(std::strcmp(airspaceFindingKindName(
+                          AirspaceFindingKind::BleTrackerPresence),
+                      "ble_tracker_presence") == 0);
     CHECK(std::strcmp(airspaceWifiSecurityName(AirspaceWifiSecurity::Rsn),
                       "rsn") == 0);
     CHECK(std::strcmp(airspaceConfidenceName(AirspaceConfidence::Medium),
                       "medium") == 0);
+    CHECK(std::strcmp(airspaceBleTrackerProtocolName(
+                          AirspaceBleTrackerProtocol::SmartTag),
+                      "smart_tag") == 0);
 }
 
 }  // namespace
@@ -616,6 +876,10 @@ int main() {
     testDisconnectBurstRetainsExactEvidence();
     testSourcesAreNeverMergedAndConfidenceIsBounded();
     testMalformedFailedAndTruncatedEvidenceIsInconclusive();
+    testBleTrackerPresenceIsOptInAndRetainsExactEvidence();
+    testBleTrackerPresenceRejectsLookalikesAndStaleEvidence();
+    testBleTrackerProtocolsRemainDistinct();
+    testBleTrackerPresenceFailsClosedOnIncompleteEvidence();
     testStableNames();
     std::puts("Airspace Guard detector tests passed");
     return 0;

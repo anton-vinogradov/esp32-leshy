@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "domain/captures/WifiFrame.h"
+#include "domain/observations/Observation.h"
 
 namespace leshy1::services::guard {
 
@@ -19,6 +20,7 @@ enum class AirspaceFindingKind : std::uint8_t {
     WifiDisconnectBurst,
     WifiSsidSecurityConflict,
     WifiSsidChurn,
+    BleTrackerPresence,
 };
 
 enum class AirspaceConfidence : std::uint8_t {
@@ -33,6 +35,13 @@ enum class AirspaceWifiSecurity : std::uint8_t {
     LegacyPrivacy,
     Wpa,
     Rsn,
+};
+
+enum class AirspaceBleTrackerProtocol : std::uint8_t {
+    None,
+    FindMy,
+    SmartTag,
+    Tile,
 };
 
 enum class WifiIdentityIngressStatus : std::uint8_t {
@@ -58,6 +67,8 @@ const char* airspaceGuardStatusName(AirspaceGuardStatus status);
 const char* airspaceFindingKindName(AirspaceFindingKind kind);
 const char* airspaceConfidenceName(AirspaceConfidence confidence);
 const char* airspaceWifiSecurityName(AirspaceWifiSecurity security);
+const char* airspaceBleTrackerProtocolName(
+    AirspaceBleTrackerProtocol protocol);
 
 struct AirspaceGuardPolicy final {
     std::uint8_t disconnectBurstThreshold = 4;
@@ -71,6 +82,12 @@ struct AirspaceGuardPolicy final {
     bool ssidChurnEnabled = false;
     std::uint8_t ssidChurnThreshold = 4;
     std::uint64_t ssidChurnWindowUs = 10000000ULL;
+    // BLE tracker-compatible presence is off until a caller proves complete
+    // bounded retention of individual passive advertisements. Repeated
+    // protocol markers establish presence only, never unwanted tracking.
+    bool bleTrackerPresenceEnabled = false;
+    std::uint8_t bleTrackerPresenceThreshold = 3;
+    std::uint64_t bleTrackerPresenceWindowUs = 10000000ULL;
 };
 
 bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy);
@@ -109,6 +126,7 @@ struct AirspaceFinding final {
     static constexpr std::uint16_t kWifiDisconnectDetectorVersion = 1;
     static constexpr std::uint16_t kWifiIdentityDetectorVersion = 1;
     static constexpr std::uint16_t kWifiSsidChurnDetectorVersion = 1;
+    static constexpr std::uint16_t kBleTrackerPresenceDetectorVersion = 1;
     static constexpr std::uint16_t kDetectorVersion =
         kWifiDisconnectDetectorVersion;
 
@@ -125,6 +143,9 @@ struct AirspaceFinding final {
     std::uint8_t networkNameLength = 0;
     AirspaceWifiSecurity primarySecurity = AirspaceWifiSecurity::Unknown;
     AirspaceWifiSecurity relatedSecurity = AirspaceWifiSecurity::Unknown;
+    AirspaceBleTrackerProtocol bleTrackerProtocol =
+        AirspaceBleTrackerProtocol::None;
+    std::uint8_t bleAddressType = 0xffU;
     std::uint64_t firstUs = 0;
     std::uint64_t lastUs = 0;
     std::array<AirspaceEvidenceRef, kEvidenceCapacity> evidence{};
@@ -142,6 +163,7 @@ struct AirspaceGuardReport final {
     std::size_t framesInspected = 0;
     std::size_t disconnectFrames = 0;
     std::size_t identityAdvertisementFrames = 0;
+    std::size_t bleAdvertisementRecords = 0;
     std::size_t malformedFrames = 0;
     std::size_t sourceReadFailures = 0;
     std::size_t sourceFramesDropped = 0;
@@ -149,9 +171,21 @@ struct AirspaceGuardReport final {
     bool inspectionTruncated = false;
 };
 
+// Read-only normalized BLE evidence. A live adapter and imported Session page
+// can implement the same bounded interface without giving the detector any
+// ownership of a radio, platform callback, scan lifecycle or response path.
+class BleObservationSource {
+public:
+    virtual ~BleObservationSource() = default;
+    virtual std::size_t observationCount() const = 0;
+    virtual bool observationAt(
+        std::size_t index,
+        domain::observations::Observation* output) const = 0;
+};
+
 // A bounded, allocation-free, receive-evidence-only detector. It never owns a
 // radio driver or an action path: callers decide when to capture and how to
-// present an indicator, while every finding retains exact source-frame indices.
+// present an indicator, while every finding retains exact source-record indices.
 class AirspaceGuard final {
 public:
     static constexpr std::size_t kFrameInspectionCapacity = 64;
@@ -161,6 +195,12 @@ public:
         const AirspaceGuardPolicy& policy = {},
         std::size_t sourceFramesDropped = 0U,
         std::size_t sourceFramesObserved = 0U) const;
+
+    AirspaceGuardReport inspectBle(
+        const BleObservationSource& source,
+        const AirspaceGuardPolicy& policy = {},
+        std::size_t sourceRecordsDropped = 0U,
+        std::size_t sourceRecordsObserved = 0U) const;
 };
 
 }  // namespace leshy1::services::guard

@@ -8,6 +8,9 @@ namespace {
 
 using domain::captures::WifiFrameKind;
 using domain::captures::WifiFrameView;
+using domain::observations::BleAdvertisementFacts;
+using domain::observations::Observation;
+using domain::observations::RadioKind;
 
 enum class DisconnectSubtype : std::uint8_t {
     Deauthentication,
@@ -48,6 +51,21 @@ struct IdentityAdvertisement final {
     AirspaceWifiSecurity security = AirspaceWifiSecurity::Unknown;
 };
 
+enum class BleObservationDecode : std::uint8_t {
+    Advertisement,
+    TrackerAdvertisement,
+    Malformed,
+};
+
+struct BleTrackerEvent final {
+    std::size_t observationIndex = 0;
+    std::uint64_t monotonicUs = 0;
+    std::int16_t rssiDbm = 0;
+    std::array<std::uint8_t, 6> identity{};
+    AirspaceBleTrackerProtocol protocol = AirspaceBleTrackerProtocol::None;
+    std::uint8_t addressType = 0xffU;
+};
+
 bool sameTransmitter(const std::array<std::uint8_t, 6>& left,
                      const std::array<std::uint8_t, 6>& right) {
     return std::memcmp(left.data(), right.data(), left.size()) == 0;
@@ -73,6 +91,66 @@ bool validTransmitter(const std::uint8_t* address) {
         allOnes = allOnes && address[index] == 0xffU;
     }
     return any && !allOnes;
+}
+
+bool validBleIdentity(const Observation& observation) {
+    if (observation.identityLength != observation.identity.size()) {
+        return false;
+    }
+    bool any = false;
+    bool allOnes = true;
+    for (const std::uint8_t byte : observation.identity) {
+        any = any || byte != 0U;
+        allOnes = allOnes && byte == 0xffU;
+    }
+    return any && !allOnes;
+}
+
+BleObservationDecode decodeBleObservation(
+    const Observation& observation, BleTrackerEvent* output,
+    std::size_t observationIndex) {
+    if (output == nullptr || observation.radio != RadioKind::Ble ||
+        observation.monotonicUs == 0U || observation.rssiDbm < -127 ||
+        observation.rssiDbm > 20 || !validBleIdentity(observation) ||
+        !observation.bleAdvertisement.present ||
+        observation.bleAdvertisement.addressType > 3U) {
+        return BleObservationDecode::Malformed;
+    }
+
+    const BleAdvertisementFacts& facts = observation.bleAdvertisement;
+    const bool findMy = facts.companyKnown && facts.companyId == 0x004cU &&
+        facts.appleContinuityType == 0x12U;
+    const bool smartTag =
+        (facts.knownServiceMask & BleAdvertisementFacts::kServiceSmartTag) !=
+        0U;
+    const bool tile =
+        (facts.knownServiceMask & BleAdvertisementFacts::kServiceTile) != 0U;
+    const std::uint8_t markerCount = static_cast<std::uint8_t>(findMy) +
+        static_cast<std::uint8_t>(smartTag) +
+        static_cast<std::uint8_t>(tile);
+    if (markerCount == 0U) return BleObservationDecode::Advertisement;
+    if (markerCount != 1U || facts.payloadLength == 0U) {
+        return BleObservationDecode::Malformed;
+    }
+
+    *output = {};
+    output->observationIndex = observationIndex;
+    output->monotonicUs = observation.monotonicUs;
+    output->rssiDbm = observation.rssiDbm;
+    output->identity = observation.identity;
+    output->addressType = facts.addressType;
+    output->protocol = findMy
+        ? AirspaceBleTrackerProtocol::FindMy
+        : smartTag ? AirspaceBleTrackerProtocol::SmartTag
+                   : AirspaceBleTrackerProtocol::Tile;
+    return BleObservationDecode::TrackerAdvertisement;
+}
+
+bool sameBleTracker(const BleTrackerEvent& left,
+                    const BleTrackerEvent& right) {
+    return left.protocol == right.protocol &&
+        left.addressType == right.addressType &&
+        left.identity == right.identity;
 }
 
 DisconnectDecode decodeDisconnect(const WifiFrameView& frame,
@@ -244,6 +322,8 @@ const char* airspaceFindingKindName(AirspaceFindingKind kind) {
             return "wifi_ssid_security_conflict";
         case AirspaceFindingKind::WifiSsidChurn:
             return "wifi_ssid_churn";
+        case AirspaceFindingKind::BleTrackerPresence:
+            return "ble_tracker_presence";
     }
     return "unknown";
 }
@@ -255,6 +335,17 @@ const char* airspaceWifiSecurityName(AirspaceWifiSecurity security) {
         case AirspaceWifiSecurity::LegacyPrivacy: return "legacy_privacy";
         case AirspaceWifiSecurity::Wpa: return "wpa";
         case AirspaceWifiSecurity::Rsn: return "rsn";
+    }
+    return "unknown";
+}
+
+const char* airspaceBleTrackerProtocolName(
+    AirspaceBleTrackerProtocol protocol) {
+    switch (protocol) {
+        case AirspaceBleTrackerProtocol::FindMy: return "find_my";
+        case AirspaceBleTrackerProtocol::SmartTag: return "smart_tag";
+        case AirspaceBleTrackerProtocol::Tile: return "tile";
+        case AirspaceBleTrackerProtocol::None: return "none";
     }
     return "unknown";
 }
@@ -279,7 +370,12 @@ bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy) {
         policy.ssidChurnThreshold >= 3U &&
         policy.ssidChurnThreshold <= AirspaceFinding::kEvidenceCapacity &&
         policy.ssidChurnWindowUs >= 100000ULL &&
-        policy.ssidChurnWindowUs <= 10000000ULL;
+        policy.ssidChurnWindowUs <= 10000000ULL &&
+        policy.bleTrackerPresenceThreshold >= 2U &&
+        policy.bleTrackerPresenceThreshold <=
+            AirspaceFinding::kEvidenceCapacity &&
+        policy.bleTrackerPresenceWindowUs >= 100000ULL &&
+        policy.bleTrackerPresenceWindowUs <= 60000000ULL;
 }
 
 bool isWifiDisconnectFrameCandidate(const std::uint8_t* payload,
@@ -705,6 +801,159 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
                 finding.lastUs = lastUs;
                 for (std::size_t index = 0U; index < uniqueCount; ++index) {
                     retainEvidence(finding, unique[index]);
+                }
+            }
+        }
+    }
+
+    if (report.findingCount != 0U) {
+        report.status = AirspaceGuardStatus::Finding;
+    } else if (report.sourceFramesObserved == 0U ||
+               report.framesAvailable == 0U ||
+               report.framesInspected == 0U ||
+               report.sourceReadFailures != 0U ||
+               report.sourceFramesDropped != 0U ||
+               report.malformedFrames != 0U ||
+               report.inspectionTruncated) {
+        report.status = AirspaceGuardStatus::Inconclusive;
+    } else {
+        report.status = AirspaceGuardStatus::Clear;
+    }
+    return report;
+}
+
+AirspaceGuardReport AirspaceGuard::inspectBle(
+    const BleObservationSource& source, const AirspaceGuardPolicy& policy,
+    std::size_t sourceRecordsDropped,
+    std::size_t sourceRecordsObserved) const {
+    AirspaceGuardReport report{};
+    if (!validateAirspaceGuardPolicy(policy)) {
+        report.status = AirspaceGuardStatus::InvalidPolicy;
+        return report;
+    }
+
+    report.sourceFramesDropped = sourceRecordsDropped;
+    report.framesAvailable = source.observationCount();
+    report.sourceFramesObserved = sourceRecordsObserved == 0U
+        ? report.framesAvailable + sourceRecordsDropped
+        : sourceRecordsObserved;
+    const std::size_t inspectionCount =
+        report.framesAvailable < kFrameInspectionCapacity
+            ? report.framesAvailable : kFrameInspectionCapacity;
+    report.inspectionTruncated = report.framesAvailable > inspectionCount;
+
+    std::array<BleTrackerEvent, kFrameInspectionCapacity> trackerEvents{};
+    std::size_t trackerEventCount = 0U;
+    for (std::size_t index = 0U; index < inspectionCount; ++index) {
+        Observation observation{};
+        if (!source.observationAt(index, &observation)) {
+            ++report.sourceReadFailures;
+            continue;
+        }
+        ++report.framesInspected;
+        BleTrackerEvent event{};
+        const BleObservationDecode decoded =
+            decodeBleObservation(observation, &event, index);
+        if (decoded == BleObservationDecode::Malformed) {
+            ++report.malformedFrames;
+            continue;
+        }
+        ++report.bleAdvertisementRecords;
+        if (decoded == BleObservationDecode::TrackerAdvertisement) {
+            trackerEvents[trackerEventCount++] = event;
+        }
+    }
+
+    if (policy.bleTrackerPresenceEnabled) {
+        for (std::size_t candidate = 0U; candidate < trackerEventCount;
+             ++candidate) {
+            bool alreadyReported = false;
+            for (std::size_t findingIndex = 0U;
+                 findingIndex < report.findingCount; ++findingIndex) {
+                const AirspaceFinding& existing =
+                    report.findings[findingIndex];
+                if (existing.kind == AirspaceFindingKind::BleTrackerPresence &&
+                    existing.transmitter == trackerEvents[candidate].identity &&
+                    existing.bleTrackerProtocol ==
+                        trackerEvents[candidate].protocol &&
+                    existing.bleAddressType ==
+                        trackerEvents[candidate].addressType) {
+                    alreadyReported = true;
+                    break;
+                }
+            }
+            if (alreadyReported) continue;
+
+            std::size_t bestStart = candidate;
+            std::size_t bestCount = 0U;
+            for (std::size_t start = 0U; start < trackerEventCount; ++start) {
+                if (!sameBleTracker(trackerEvents[start],
+                                    trackerEvents[candidate])) {
+                    continue;
+                }
+                std::size_t count = 0U;
+                for (std::size_t index = 0U; index < trackerEventCount;
+                     ++index) {
+                    if (!sameBleTracker(trackerEvents[index],
+                                        trackerEvents[candidate]) ||
+                        trackerEvents[index].monotonicUs <
+                            trackerEvents[start].monotonicUs) {
+                        continue;
+                    }
+                    const std::uint64_t elapsed =
+                        trackerEvents[index].monotonicUs -
+                        trackerEvents[start].monotonicUs;
+                    if (elapsed <= policy.bleTrackerPresenceWindowUs) {
+                        ++count;
+                    }
+                }
+                if (count > bestCount) {
+                    bestCount = count;
+                    bestStart = start;
+                }
+            }
+            if (bestCount < policy.bleTrackerPresenceThreshold) continue;
+            if (report.findingCount >= report.findings.size()) {
+                ++report.findingsDropped;
+                continue;
+            }
+
+            AirspaceFinding& finding = report.findings[report.findingCount++];
+            finding = {};
+            finding.kind = AirspaceFindingKind::BleTrackerPresence;
+            // Confidence describes repeated protocol-compatible presence. It
+            // does not identify the owner or prove unwanted tracking.
+            finding.confidence = confidenceFor(
+                bestCount, policy.bleTrackerPresenceThreshold);
+            finding.detectorVersion =
+                AirspaceFinding::kBleTrackerPresenceDetectorVersion;
+            finding.threshold = policy.bleTrackerPresenceThreshold;
+            finding.observed = static_cast<std::uint16_t>(bestCount);
+            finding.transmitter = trackerEvents[candidate].identity;
+            finding.bleTrackerProtocol = trackerEvents[candidate].protocol;
+            finding.bleAddressType = trackerEvents[candidate].addressType;
+            finding.firstUs = trackerEvents[bestStart].monotonicUs;
+            finding.lastUs = finding.firstUs;
+            for (std::size_t index = 0U; index < trackerEventCount; ++index) {
+                const BleTrackerEvent& event = trackerEvents[index];
+                if (!sameBleTracker(event, trackerEvents[candidate]) ||
+                    event.monotonicUs < finding.firstUs ||
+                    event.monotonicUs - finding.firstUs >
+                        policy.bleTrackerPresenceWindowUs) {
+                    continue;
+                }
+                if (event.monotonicUs > finding.lastUs) {
+                    finding.lastUs = event.monotonicUs;
+                }
+                if (finding.evidenceCount < finding.evidence.size()) {
+                    AirspaceEvidenceRef& evidence =
+                        finding.evidence[finding.evidenceCount++];
+                    evidence.frameIndex = event.observationIndex;
+                    evidence.monotonicUs = event.monotonicUs;
+                    // The current passive host stack does not expose which
+                    // advertising channel (37/38/39) received the record.
+                    evidence.channel = 0U;
+                    evidence.rssiDbm = event.rssiDbm;
                 }
             }
         }
