@@ -1433,7 +1433,7 @@ def main() -> int:
             "kStaticTxBuffers = 2",
             "kDynamicTxBuffers = 0",
             "kWriteChunkBytes = 512",
-            "kWriteBurstChunks = 4",
+            "kWriteBurstChunks = 1",
             "attempt < kWriteBurstChunks",
             "MSG_DONTWAIT",
             "responsePending_",

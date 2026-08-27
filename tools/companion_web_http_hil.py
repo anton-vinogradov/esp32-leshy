@@ -457,7 +457,7 @@ def _opener() -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
-def http_get(url: str, timeout: float = 10.0) -> tuple[int, str, bytes]:
+def http_get(url: str, timeout: float = 15.0) -> tuple[int, str, bytes]:
     request = urllib.request.Request(url, method="GET")
     with _opener().open(request, timeout=timeout) as response:
         expected = int(response.headers.get("Content-Length", "0"))

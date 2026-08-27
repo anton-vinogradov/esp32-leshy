@@ -326,7 +326,7 @@ def main() -> int:
     arduino_web = arduino_web_header + arduino_web_source
     for marker in (
         "kMaximumHeaderBytes = 768",
-        "kClientDeadlineUs = 8000000ULL",
+        "kClientDeadlineUs = 12000000ULL",
         "server_(80, 1)",
         "kStaticRxBuffers = 2",
         "kDynamicRxBuffers = 1",
@@ -335,7 +335,7 @@ def main() -> int:
         "init.tx_buf_type = 0",
         "init.static_tx_buf_num = kStaticTxBuffers",
         "kWriteChunkBytes = 512",
-        "kWriteBurstChunks = 4",
+        "kWriteBurstChunks = 1",
         "attempt < kWriteBurstChunks",
         "MSG_DONTWAIT",
         "errno == ENOBUFS",
@@ -464,6 +464,7 @@ def main() -> int:
         'host_wifi["visibility_scans"]',
         'wifi_guard.visibility_confirmed',
         'wifi_guard.corewlan_association_attempts',
+        'record["failure_web_state"]',
         'host_wifi["restored"] is True',
     ):
         require(failures, marker in web_hil,

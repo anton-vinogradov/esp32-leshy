@@ -1167,6 +1167,25 @@ def main() -> int:
                             expected_ssid.encode("ascii")).hexdigest(),
                         "credential_exposed": False,
                     }
+                except Exception:
+                    try:
+                        failed_web = web_state(device)
+                        record["failure_web_state"] = {
+                            key: failed_web.get(key) for key in (
+                                "authorized", "server_active", "generation",
+                                "requests_handled", "requests_rejected",
+                                "tx_backpressure_events", "last_send_errno",
+                                "last_response_body_bytes",
+                                "last_response_body_length",
+                                "associated_stations", "lease_mask",
+                                "safety_state", "safety_latched",
+                            )
+                        }
+                    except Exception as probe_error:
+                        record["failure_web_state_probe_error"] = \
+                            type(probe_error).__name__
+                    write_json(args.output / "run.json", record)
+                    raise
                 finally:
                     expected_passphrase = ""
                     host_wifi["association_attempts"] = (

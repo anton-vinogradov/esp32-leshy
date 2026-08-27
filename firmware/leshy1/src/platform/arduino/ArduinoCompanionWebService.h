@@ -26,7 +26,7 @@ public:
     static constexpr std::size_t kMaximumHeaderBytes = 768;
     static constexpr std::size_t kRequestCapacity =
         kMaximumHeaderBytes + services::companion::kCompanionMaxFrameBytes;
-    static constexpr std::uint64_t kClientDeadlineUs = 8000000ULL;
+    static constexpr std::uint64_t kClientDeadlineUs = 12000000ULL;
     static constexpr int kStaticRxBuffers = 2;
     static constexpr int kDynamicRxBuffers = 1;
     // The pinned ESP-IDF libraries are compiled for static TX buffers.
@@ -39,10 +39,10 @@ public:
     static constexpr std::uint32_t kApReadyTimeoutMs = 2000;
     static constexpr std::uint32_t kApReadyPollMs = 10;
     static constexpr std::size_t kResponseHeaderCapacity = 256;
-    // Keep each non-blocking write comfortably inside the two static Wi-Fi
-    // TX buffers, but drain several chunks before returning to the UI loop.
+    // Keep one non-blocking write comfortably inside the two static Wi-Fi TX
+    // buffers. A larger burst exhausts them before the radio can acknowledge.
     static constexpr std::size_t kWriteChunkBytes = 512;
-    static constexpr std::size_t kWriteBurstChunks = 4;
+    static constexpr std::size_t kWriteBurstChunks = 1;
 
     enum class BeginStage : std::uint8_t {
         Idle,
