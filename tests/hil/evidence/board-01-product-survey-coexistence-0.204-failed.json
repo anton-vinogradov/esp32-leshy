@@ -1,0 +1,50 @@
+{
+  "schema": "leshy.hil.negative_evidence.v1",
+  "status": "failed",
+  "gate_eligible": false,
+  "board": "board-01",
+  "port": "/dev/cu.usbmodem2101",
+  "cardputer_ports_opened": 0,
+  "mac_wifi_changed": false,
+  "boundary": "combined_product_survey_wifi_ble",
+  "accepted_baseline_unchanged": "0.196.2-companion-post-web-shared-scratch",
+  "cadence_accepted_deltas_unchanged": "4/15",
+  "candidate_0_203": {
+    "source": "1db3a09008341d2ca7472799d742787fffa1379a",
+    "version": "0.203.0-controller-only-ble-observer",
+    "firmware_sha256": "8068ad7f31177435e513ec38a7f230c1afc20725081e3aa5f4bc5948185069a2",
+    "app_elf_sha256": "6c276569e2402745b7f707911cefebe629f50df91548a83f6d07c2fa9bc860c5",
+    "run_sha256": "9a35113cb7f79670455cc5fd3ba2992da9ea73090c548450ce9ab3efefd47e26",
+    "coredump_raw_sha256": "7ba7499811e002c6efe78fc36c8fb6c9bf998c010371cf3b873315b661d2cc28",
+    "coredump_elf_sha256": "a251333df8e6a8c4827695c4e7e9055f8f8a8a9deb89326a1c663406ff8440ab",
+    "reset_reason_code_after_panic": 4,
+    "resolved_path": [
+      "semphr_delete_wrapper",
+      "btdm_controller_deinit_internal",
+      "btdm_controller_init",
+      "esp_bt_controller_init",
+      "btStartMode",
+      "btStart",
+      "BoardBlePassiveScanner::begin",
+      "runProductSurveyWorker"
+    ],
+    "outcome": "prepare_time_load_prohibited"
+  },
+  "candidate_0_204": {
+    "source": "fd499d645729fa0bcbb1ffdd31935a221f259eeb",
+    "version": "0.204.0-early-controller-ble-observer",
+    "firmware_sha256": "586f6ead084d4ec51bda81dc623ea6743d0c684828957556f5cf7d24871719d8",
+    "app_elf_sha256": "e3b4076424ff138848abb616e5cf157613c631925558395fdca65ddb85c73648",
+    "run_sha256": "be4936de3c0be4342e994537acc48f1d90c7c618d2e13bddfb109046e85e17c2",
+    "boot_log_sha256": "81dd511d32f8da0803a07a812e4ff491f02a47258e2db279abe6101d6fb9fa95",
+    "identical_boot_panics_observed": 15,
+    "exception": "LoadProhibited",
+    "exception_address": "0x02047d44",
+    "interactive_ready_observed": false,
+    "safe_outputs_configured_before_failure": true,
+    "terminal_zero_lease_proven": false,
+    "outcome": "early_boot_loop"
+  },
+  "diagnosis": "Arduino btStart controller bootstrap is invalid in the current ESP32-S3 configuration; moving it before Wi-Fi does not repair it",
+  "next_gate": "ROM-loader recovery, replacement controller bootstrap, then one exact USB-only delta HIL with contiguous Wi-Fi+BLE Survey cycles, save, reboot, reopen, and Home/none/lease 0"
+}
