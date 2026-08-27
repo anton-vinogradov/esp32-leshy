@@ -193,7 +193,7 @@ def main() -> int:
     print(
         "Companion offline acceptance passed: canonical deterministic USB "
         "snapshot/search, private payload omitted, zero Mac Wi-Fi changes; "
-        "post-Web device-memory defect remains open"
+        "post-Web defect retained here for historical isolation; closed by 0.196.2"
     )
     return 0
 

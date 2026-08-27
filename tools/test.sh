@@ -386,6 +386,7 @@ python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_companion_protocol_contract.py"
 python3 "$repo_dir/tools/check_companion_post_web_memory_contract.py"
+python3 "$repo_dir/tools/check_companion_post_web_acceptance.py"
 python3 "$repo_dir/tools/generate_companion_web_asset.py" --check
 python3 "$repo_dir/tools/check_native_usb_reset_contract.py"
 python3 "$repo_dir/tools/check_platformio_workspace_isolation.py"

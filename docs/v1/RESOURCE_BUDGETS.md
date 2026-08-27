@@ -807,9 +807,27 @@ RAM or storage. After a clean reset, Targets/export starts and finishes with 82,
 free heap and releases back to the same value. A retained precursor began from only
 60,584 B after an earlier Local Web run and failed the read-only mount with
 `ESP_ERR_NO_MEM` (257); reset restored 82,892 B and immediate Targets readiness.
-This is an open firmware lifecycle/reclamation defect, not an accepted lower memory
-budget. Exact `E-HIL-182` accepts only deterministic offline USB snapshot/search,
+This records the then-open firmware lifecycle/reclamation defect, not an accepted
+lower memory budget; `RB-M167` below closes it. Exact `E-HIL-182` accepts only deterministic offline USB snapshot/search,
 advances cadence to 3/15 and proves zero network-tool or active-Mac-Wi-Fi use.
+
+Post-Web continuity checkpoint `RB-M167`: exact
+`0.196.2-companion-post-web-shared-scratch` uses 223,112 B static RAM,
+3,360,064 B linked flash and a 3,360,560 B app image: +0 B static RAM,
++168 B linked flash and +160 B app versus exact 0.195. Session wire codec
+(22,856 B), Target wire codec (24,808 B) and Target admission scratch
+(11,272 B) are mutually exclusive and reuse one existing static union. The pinned
+ESP-IDF cannot deinitialize `esp_netif`, so its network core is an explicit
+process-lifetime allocation rather than falsely reported reclaimed heap. After Web,
+suspending the idle Survey worker raises free heap to 96,624 B before Targets;
+releasing Targets and restoring the worker ends at 75,760 B versus the 82,892 B
+clean-boot start. This accepted difference is the retained network core, while the AP,
+server, authorization, credential and leases are gone. Exact `E-HIL-183` starts/stops
+the device SoftAP with zero clients, reopens 16 Targets and 7 comparison items,
+reproduces the accepted 11,521-byte snapshot, ends Home/none/lease 0 and advances
+cadence to 4/15. Fail-closed 0.196/0.196.1 preserve the duplicate-codec and
+dynamic-scratch allocation boundaries. No host network tool or active Mac Wi-Fi is
+used.
 
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while

@@ -800,9 +800,28 @@ memory. Host-owned canonical snapshot занимает 11 521 B и не расх
 82 892 B free heap и освобождает runtime до того же значения. Retained precursor
 стартовал только с 60 584 B после прежнего Local Web и получил fail read-only mount
 `ESP_ERR_NO_MEM` (257); reset вернул 82 892 B и immediate readiness Targets. Это
-открытый firmware defect lifecycle/reclamation, а не принятый сниженный memory budget.
+фиксирует открытый на тот момент firmware defect lifecycle/reclamation, а не принятый
+сниженный memory budget; `RB-M167` ниже закрывает его.
 Exact `E-HIL-182` принимает только deterministic offline USB snapshot/search, двигает
 cadence до 3/15 и доказывает zero network tools/использования активного Wi-Fi Mac.
+
+Checkpoint post-Web continuity `RB-M167`: exact
+`0.196.2-companion-post-web-shared-scratch` использует 223 112 B static RAM,
+3 360 064 B linked flash и app image 3 360 560 B: +0 B static RAM, +168 B linked
+flash и +160 B app против exact 0.195. Wire codec Session (22 856 B), wire codec
+Target (24 808 B) и admission scratch Target (11 272 B) mutually exclusive и
+переиспользуют один существующий static union. Pinned ESP-IDF не умеет
+деинициализировать `esp_netif`, поэтому его network core явно считается
+process-lifetime allocation, а не ложно заявленным reclaimed heap. После Web
+приостановка idle Survey worker поднимает free heap до 96 624 B перед Targets;
+освобождение Targets и восстановление worker заканчивается на 75 760 B против
+clean-boot start 82 892 B. Эта принятая разница является retained network core, тогда
+как AP, server, authorization, credential и leases удалены. Exact `E-HIL-183`
+запускает/останавливает SoftAP устройства с zero clients, повторно открывает 16 Targets
+и 7 comparison items, воспроизводит принятый snapshot 11 521 byte, заканчивает
+Home/none/lease 0 и продвигает cadence до 4/15. Fail-closed 0.196/0.196.1 сохраняют
+boundaries duplicate codec и dynamic scratch allocation. Host network tools и активный
+Wi-Fi Mac не используются.
 
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как

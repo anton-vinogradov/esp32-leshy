@@ -310,7 +310,18 @@ The same exact 0.195 image now has a separately accepted offline USB-only result
 7 comparison items. Two runs retain the same snapshot ID and 11,521-byte file SHA;
 local search covers name, notes, tags and normalized identities. No application flash,
 network tool, Mac Wi-Fi change, device write or private payload/query retention occurs.
-Device-side `library.export` remains unavailable. A failed precursor also exposes an
-open firmware defect: after an earlier Local Web lifecycle, Targets may fail its
-read-only mount with `ESP_ERR_NO_MEM` until device reset. Offline export/search is
-accepted, but Web memory reclamation and physical HTTP parity remain open.
+Device-side `library.export` remains unavailable. A failed precursor also exposed the
+post-Web defect present at that checkpoint: Targets could fail its read-only mount
+with `ESP_ERR_NO_MEM` until device reset. Offline export/search is accepted.
+
+Exact `0.196.2-companion-post-web-shared-scratch` and `E-COMPANION-007` close that
+reopen defect without using a host network interface. The device-only run starts and
+stops the DIV SoftAP with zero associated stations; Stop removes the server, AP
+driver/netif/event loop, authorization and RAM credential. The pinned ESP-IDF does
+not support `esp_netif` deinitialization, so its network core is explicitly
+process-lifetime. Post-Web Targets therefore suspends the idle Survey worker and
+reuses the existing static Session/Target codec union for the 24,808-byte Target wire
+codec and 11,272-byte admission scratch. It reopens 16 Targets and 7 comparison items,
+reproduces the accepted 11,521-byte snapshot, restores the worker and finishes
+Home/none/lease 0. Physical HTTP payload parity remains deferred to a dedicated
+client; active Mac Wi-Fi is prohibited.

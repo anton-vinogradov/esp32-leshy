@@ -1,0 +1,161 @@
+{
+  "board": {
+    "id": "board-01",
+    "rom_mac": "1c:db:d4:87:90:d4"
+  },
+  "candidate": {
+    "app_elf_sha256": "e62de8246ef55246837271f97737f1aae53357869e2f5f81fc80a9d2711a8764",
+    "firmware_bytes": 3360560,
+    "firmware_sha256": "3bbf0bf64f3f3ea75af1c2ee50ade8ce3c3dbc680e38de662c48d8369ac5e946",
+    "linked_flash_bytes": 3360064,
+    "map_sha256": "5b9d66eb045098ade3e9f64c4dd37049c1a871c9e1d3ace2d6df7785cacd53c2",
+    "static_ram_bytes": 223112,
+    "version": "0.196.2-companion-post-web-shared-scratch"
+  },
+  "evidence_ids": [
+    "E-BUILD-153",
+    "E-AUTO-125",
+    "E-HIL-183",
+    "E-COMPANION-007"
+  ],
+  "exact_cid": "FE343253440000002000000055019CB7",
+  "firmware_source_commit": "7272d237ebb65e4b700ad8c64a32b48fc779ad75",
+  "installation": {
+    "application_flash_count": 1,
+    "exact_flash_reused": false
+  },
+  "memory_contract": {
+    "admission_scratch_bytes": 11272,
+    "esp_netif_deinit_supported": false,
+    "network_core_process_lifetime": true,
+    "session_codec_bytes": 22856,
+    "shared_union_static_ram_added_bytes": 0,
+    "survey_worker_lifecycle_exclusive_after_web": true,
+    "target_codec_bytes": 24808,
+    "target_codec_heap_allocation_removed": true
+  },
+  "offline_regression": {
+    "bytes": 11521,
+    "canonical_round_trip": true,
+    "complete_target_details": 16,
+    "counts": {
+      "comparison_items": 7,
+      "sessions": 2,
+      "targets": 16
+    },
+    "file_sha256": "487eb2c6efbfd0644f951e5f97b4dc1b549cfec391601693d40ad74bceeee6bc",
+    "matched_accepted_0_195_snapshot": true,
+    "private_payload_retained": false,
+    "schema": "leshy.companion.offline.v1",
+    "snapshot_id": "29537acfa1b9f0b6a51851ecb8b8b585cf17391c63a13329ed59db5b1eeede89"
+  },
+  "physical_cadence": {
+    "accepted_since_full": 4,
+    "full_gate_at": 15
+  },
+  "post_web_reopen": {
+    "blocked_write_attempts": 0,
+    "comparison_items": 7,
+    "filesystem_mount_attempts": 1,
+    "filesystem_mount_error": 0,
+    "heap_free_after_targets_release": 75760,
+    "heap_free_before_targets_load": 96624,
+    "identity_attempts": 1,
+    "identity_cleanup_complete": true,
+    "load_watchdog_feeds": 11,
+    "target_state_generation": 17,
+    "targets": 16,
+    "workspace_allocated": true
+  },
+  "precursors": [
+    {
+      "candidate": "0.196.0-companion-post-web-admission",
+      "checkpoint": "open_targets",
+      "classification": "duplicate_target_codec_heap_allocation",
+      "cleanup_complete": true,
+      "final_lease_mask": 0,
+      "heap_free_after_worker_suspend": 96572,
+      "run_sha256": "b85563a1d1215b6039a476e3135a71f2dd51d672cb9b464f454581e68e93fabc",
+      "status": "target_state_workspace_unavailable",
+      "workspace_allocated": false
+    },
+    {
+      "candidate": "0.196.1-companion-post-web-shared-codec",
+      "checkpoint": "open_targets",
+      "classification": "duplicate_admission_scratch_heap_allocation",
+      "cleanup_complete": true,
+      "final_lease_mask": 0,
+      "heap_free_before_admission": 46028,
+      "run_sha256": "668c125c73a18e30201e9b397f6025e0e7916f94e6df1646f1ada7744bbd79c6",
+      "status": "admission_rejected",
+      "target_state_generation": 17,
+      "workspace_allocated": true
+    }
+  ],
+  "raw_run_sha256": "809d7e2234f328a2f4dfdf62d5e12bf85c44801b03aa7eaf5016b6059af77e52",
+  "safety_and_final": {
+    "buzzer_inactive": true,
+    "input_queue_drops": 0,
+    "input_read_errors": 0,
+    "lease_mask": 0,
+    "nrf_ce_inactive": true,
+    "page": "home",
+    "raw_radio_tx_commands": 0,
+    "runtime_owner": "none",
+    "software_quiesce_complete": true,
+    "storage_write_commands": 0,
+    "survey_worker_restored": true
+  },
+  "schema": "leshy.hil.companion_post_web.acceptance.v1",
+  "softap_lifecycle": {
+    "active": {
+      "associated_stations": 0,
+      "credential_exposed_over_diagnostic": false,
+      "credential_persisted": false,
+      "dhcp_server_started": true,
+      "lease_mask": 15,
+      "network_core_ready": true,
+      "server_active": true,
+      "survey_worker_suspended": true,
+      "targets_suspended": true
+    },
+    "final": {
+      "associated_stations": 0,
+      "credential_present": false,
+      "lease_mask": 0,
+      "network_core_ready": true,
+      "server_active": false,
+      "survey_worker_suspended": false
+    },
+    "post_web_targets": {
+      "associated_stations": 0,
+      "lease_mask": 13,
+      "network_core_ready": true,
+      "server_active": false,
+      "survey_worker_suspended": true
+    },
+    "staged_inert": true,
+    "stopped": {
+      "associated_stations": 0,
+      "cleanup_complete": true,
+      "credential_present": false,
+      "dhcp_server_started": false,
+      "lease_mask": 13,
+      "network_core_ready": true,
+      "server_active": false,
+      "survey_worker_suspended": true
+    }
+  },
+  "status": "pass_post_web_reopen",
+  "transport": {
+    "active_mac_wifi_touched": false,
+    "cardputer_ports_opened": 0,
+    "host_network_tools_invoked": false,
+    "opened_ports": [
+      "/dev/cu.usbmodem2101"
+    ],
+    "serial_port_discovery_calls": 0,
+    "softap_associated_stations": 0
+  },
+  "verification_source_commit": "7272d237ebb65e4b700ad8c64a32b48fc779ad75"
+}

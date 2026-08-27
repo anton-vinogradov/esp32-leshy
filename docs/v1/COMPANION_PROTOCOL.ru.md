@@ -313,6 +313,18 @@ pagination/parity и confirmed mutation/restore assertions. Physical HTTP ост
 охватывает name, notes, tags и normalized identities. Application flash, network
 tools, изменение Wi-Fi Mac, writes устройства и retention private payload/query не
 происходят. Device-side `library.export` остаётся недоступным. Failed precursor также
-выявляет открытый firmware defect: после прежнего lifecycle Local Web Targets может
-получить fail read-only mount `ESP_ERR_NO_MEM` до reset устройства. Offline
-export/search принят, но reclamation Web memory и physical HTTP parity остаются открыты.
+выявил дефект post-Web, присутствовавший в том checkpoint: после прежнего lifecycle
+Local Web Targets мог получить fail read-only mount `ESP_ERR_NO_MEM` до reset
+устройства. Offline export/search принят.
+
+Exact `0.196.2-companion-post-web-shared-scratch` и `E-COMPANION-007` закрывают этот
+дефект reopen без использования network interface host. Device-only run запускает и
+останавливает SoftAP DIV с zero associated stations; Stop удаляет server, AP
+driver/netif/event loop, authorization и RAM credential. Pinned ESP-IDF не
+поддерживает деинициализацию `esp_netif`, поэтому его network core явно считается
+process-lifetime. После Web Targets приостанавливает idle Survey worker и
+переиспользует существующий static union codec Session/Target для Target wire codec
+24 808 byte и admission scratch 11 272 byte. Он повторно открывает 16 Targets и 7
+comparison items, воспроизводит принятый snapshot 11 521 byte, восстанавливает worker
+и завершает Home/none/lease 0. Physical HTTP payload parity остаётся отложенной до
+отдельного client; активный Wi-Fi Mac запрещён.
