@@ -29,6 +29,7 @@ constexpr std::uint16_t kHciReset = 0x0c03U;
 constexpr std::uint16_t kHciLeSetScanParameters = 0x200bU;
 constexpr std::uint16_t kHciLeSetScanEnable = 0x200cU;
 constexpr std::uint32_t kHciCommandTimeoutMs = 1000U;
+constexpr std::uint32_t kControllerTransitionTimeoutMs = 1000U;
 
 struct RawAdvertisement final {
     std::array<std::uint8_t, 6> address{};
@@ -597,6 +598,17 @@ void drainReports(RawScanContext* context) {
     }
 }
 
+bool waitForControllerStatus(esp_bt_controller_status_t expected) {
+    const std::uint64_t deadlineUs =
+        static_cast<std::uint64_t>(esp_timer_get_time()) +
+        static_cast<std::uint64_t>(kControllerTransitionTimeoutMs) * 1000ULL;
+    while (esp_bt_controller_get_status() != expected &&
+           static_cast<std::uint64_t>(esp_timer_get_time()) < deadlineUs) {
+        vTaskDelay(pdMS_TO_TICKS(1U));
+    }
+    return esp_bt_controller_get_status() == expected;
+}
+
 bool deinitializeController() {
     setAcceptingReports(false);
     clearReportQueue();
@@ -604,10 +616,13 @@ bool deinitializeController() {
     const esp_bt_controller_status_t status =
         esp_bt_controller_get_status();
     if (status == ESP_BT_CONTROLLER_STATUS_ENABLED) {
-        complete = esp_bt_controller_disable() == ESP_OK;
+        complete = esp_bt_controller_disable() == ESP_OK &&
+            waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_INITED);
     }
     if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_INITED) {
         complete = esp_bt_controller_deinit() == ESP_OK && complete;
+        complete = waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_IDLE) &&
+            complete;
     }
     return complete &&
         esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE;
@@ -649,7 +664,9 @@ bool BoardBlePassiveScanner::begin() {
     // representable through this adapter.
 
     if (esp_bt_controller_init(&config) != ESP_OK ||
+        !waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_INITED) ||
         esp_bt_controller_enable(ESP_BT_MODE_BLE) != ESP_OK ||
+        !waitForControllerStatus(ESP_BT_CONTROLLER_STATUS_ENABLED) ||
         esp_vhci_host_register_callback(&kHciCallbacks) != ESP_OK ||
         !sendHciCommand(kHciReset, nullptr, 0U)) {
         deinitializeController();
