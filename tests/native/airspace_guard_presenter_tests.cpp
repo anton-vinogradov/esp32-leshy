@@ -29,6 +29,7 @@ AirspaceGuardReport makeFindingReport(std::size_t evidenceCount = 6U) {
     AirspaceGuardReport report{};
     report.status = AirspaceGuardStatus::Finding;
     report.findingCount = 1;
+    report.sourceFramesObserved = 20;
     report.framesAvailable = 20;
     report.framesInspected = 20;
     report.disconnectFrames = 6;
@@ -113,6 +114,7 @@ void testEvidenceDetailRetainsExactReference() {
 void testRussianInconclusiveExplainsIncompleteEvidence() {
     AirspaceGuardReport report{};
     report.status = AirspaceGuardStatus::Inconclusive;
+    report.sourceFramesObserved = 65;
     report.framesAvailable = 65;
     report.framesInspected = 63;
     report.sourceReadFailures = 1;
@@ -127,7 +129,7 @@ void testRussianInconclusiveExplainsIncompleteEvidence() {
     CHECK(model.tone == AirspaceGuardUiTone::Caution);
     CHECK(model.evidenceIncomplete);
     CHECK(std::strcmp(model.rows[0].text.data(),
-                      u8"ПРОВЕРЕНО КАДРОВ: 63") == 0);
+                      u8"ПРИНЯТО 65 · ПРОВЕРЕНО 63") == 0);
     CHECK(std::strcmp(model.rows[1].text.data(),
                       u8"НЕ ПРОЧТЕНО 1 · СБОЙ 2") == 0);
     CHECK(std::strcmp(model.rows[2].text.data(),
@@ -146,7 +148,26 @@ void testEmptyCaptureIsExplicitlyIncomplete() {
     CHECK(model.note == UiTextId::AirspaceGuardEvidenceIncomplete);
     CHECK(std::strcmp(model.context.data(), "CAPTURE HAS NOT STARTED") == 0);
     CHECK(model.rowCount == 1);
-    CHECK(std::strcmp(model.rows[0].text.data(), "CHECKED 0 FRAMES") == 0);
+    CHECK(std::strcmp(model.rows[0].text.data(),
+                      "OBSERVED 0 · CHECKED 0") == 0);
+}
+
+void testClearOutcomeUsesTheOtherwiseEmptyRowsForCoverage() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Clear;
+    report.sourceFramesObserved = 314;
+    report.framesAvailable = 1;
+    report.framesInspected = 1;
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    const AirspaceGuardUiModel model =
+        presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(model.headline == UiTextId::AirspaceGuardClear);
+    CHECK(model.rowCount == 2U);
+    CHECK(std::strcmp(model.rows[0].text.data(),
+                      "OBSERVED 314 · CHECKED 1") == 0);
+    CHECK(std::strcmp(model.rows[1].text.data(),
+                      "EVIDENCE KEPT 1") == 0);
 }
 
 void testDroppedFindingCountReplacesLessImportantMix() {
@@ -159,6 +180,17 @@ void testDroppedFindingCountReplacesLessImportantMix() {
     CHECK(model.evidenceIncomplete);
     CHECK(std::strcmp(model.rows[3].text.data(),
                       "FINDINGS OMITTED 1") == 0);
+}
+
+void testCaptureLossIsShownBeforeFindingMix() {
+    AirspaceGuardReport report = makeFindingReport();
+    report.sourceFramesDropped = 3;
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    const AirspaceGuardUiModel model =
+        presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(model.evidenceIncomplete);
+    CHECK(std::strcmp(model.rows[3].text.data(), "CAPTURE LOSS 3") == 0);
 }
 
 void testMalformedReportHasNoInventedEvidence() {
@@ -182,7 +214,9 @@ int main() {
     testEvidenceDetailRetainsExactReference();
     testRussianInconclusiveExplainsIncompleteEvidence();
     testEmptyCaptureIsExplicitlyIncomplete();
+    testClearOutcomeUsesTheOtherwiseEmptyRowsForCoverage();
     testDroppedFindingCountReplacesLessImportantMix();
+    testCaptureLossIsShownBeforeFindingMix();
     testMalformedReportHasNoInventedEvidence();
     std::puts("Airspace Guard presenter tests passed");
     return 0;

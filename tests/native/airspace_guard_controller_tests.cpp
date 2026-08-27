@@ -61,6 +61,7 @@ AirspaceFinding makeFinding(
 void setCompleteCounters(AirspaceGuardReport& report,
                          std::size_t frames,
                          std::size_t disconnectFrames) {
+    report.sourceFramesObserved = frames;
     report.framesAvailable = frames;
     report.framesInspected = frames;
     report.disconnectFrames = disconnectFrames;
@@ -128,9 +129,11 @@ void testIncompleteEvidenceRemainsVisibleUncertainty() {
     report.findings[0] = makeFinding(
         kSourceA, AirspaceConfidence::Medium, 4, 4, 1000000, 1400000);
     report.framesAvailable = 65;
+    report.sourceFramesObserved = 65;
     report.framesInspected = 63;
     report.disconnectFrames = 4;
     report.sourceReadFailures = 1;
+    report.sourceFramesDropped = 2;
     report.inspectionTruncated = true;
 
     AirspaceGuardController controller;
@@ -143,6 +146,7 @@ void testClearAndInconclusiveStayOutcomeOnly() {
     AirspaceGuardController controller;
     AirspaceGuardReport clear{};
     clear.status = AirspaceGuardStatus::Clear;
+    clear.sourceFramesObserved = 1;
     clear.framesAvailable = 1;
     clear.framesInspected = 1;
     CHECK(controller.load(clear) == AirspaceGuardLoadStatus::Ready);
@@ -152,6 +156,7 @@ void testClearAndInconclusiveStayOutcomeOnly() {
 
     AirspaceGuardReport inconclusive{};
     inconclusive.status = AirspaceGuardStatus::Inconclusive;
+    inconclusive.sourceFramesObserved = 1;
     inconclusive.framesAvailable = 1;
     inconclusive.sourceReadFailures = 1;
     CHECK(controller.load(inconclusive) == AirspaceGuardLoadStatus::Ready);
@@ -173,13 +178,25 @@ void testOutcomeStatusMismatchFailsClosed() {
 
     AirspaceGuardReport falseInconclusive{};
     falseInconclusive.status = AirspaceGuardStatus::Inconclusive;
+    falseInconclusive.sourceFramesObserved = 1;
     falseInconclusive.framesAvailable = 1;
     falseInconclusive.framesInspected = 1;
     CHECK(controller.load(falseInconclusive) ==
           AirspaceGuardLoadStatus::InvalidReport);
 
+    AirspaceGuardReport captureLoss{};
+    captureLoss.status = AirspaceGuardStatus::Inconclusive;
+    captureLoss.sourceFramesObserved = 1;
+    captureLoss.framesAvailable = 1;
+    captureLoss.framesInspected = 1;
+    captureLoss.sourceFramesDropped = 1;
+    CHECK(controller.load(captureLoss) == AirspaceGuardLoadStatus::Ready);
+    CHECK(controller.sourceFramesDropped() == 1U);
+    CHECK(controller.evidenceIncomplete());
+
     AirspaceGuardReport invalidPolicyWithEvidence{};
     invalidPolicyWithEvidence.status = AirspaceGuardStatus::InvalidPolicy;
+    invalidPolicyWithEvidence.sourceFramesObserved = 1;
     invalidPolicyWithEvidence.framesAvailable = 1;
     invalidPolicyWithEvidence.framesInspected = 1;
     CHECK(controller.load(invalidPolicyWithEvidence) ==
@@ -187,6 +204,7 @@ void testOutcomeStatusMismatchFailsClosed() {
 
     AirspaceGuardReport omittedWithoutFinding{};
     omittedWithoutFinding.status = AirspaceGuardStatus::Clear;
+    omittedWithoutFinding.sourceFramesObserved = 1;
     omittedWithoutFinding.framesAvailable = 1;
     omittedWithoutFinding.framesInspected = 1;
     omittedWithoutFinding.disconnectFrames = 1;

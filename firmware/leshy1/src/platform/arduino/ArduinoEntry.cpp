@@ -1066,6 +1066,19 @@ const char* wifiProductViewName(WifiProductView view) {
 WifiProductView wifiProductView = WifiProductView::None;
 std::uint8_t wifiProductSelection = 0;
 AirspaceGuardController airspaceGuardController;
+leshy1::services::guard::AirspaceGuard airspaceGuardDetector;
+enum class AirspaceGuardCaptureState : std::uint8_t {
+    Idle,
+    Running,
+    Result,
+    Failed,
+};
+AirspaceGuardCaptureState airspaceGuardCaptureState =
+    AirspaceGuardCaptureState::Idle;
+constexpr std::uint32_t kAirspaceGuardCaptureDurationMs = 10000U;
+constexpr std::uint16_t kAirspaceGuardChannelDwellMs = 120U;
+std::uint64_t nextAirspaceGuardUiRefreshUs = 0;
+bool airspaceGuardResultNeedsContentClear = false;
 WifiNetworkCatalog wifiNetworkCatalog;
 WifiNetworkNavigationOrder wifiNetworkNavigationOrder;
 std::size_t wifiNetworkSelection = 0;
@@ -9524,6 +9537,10 @@ NavigationFooter navigationFooterForCurrentState() {
             return {back, choose, enter};
         }
         if (wifiProductView == WifiProductView::AirspaceGuard) {
+            if (airspaceGuardCaptureState ==
+                AirspaceGuardCaptureState::Running) {
+                return {back, {}, {}};
+            }
             if (airspaceGuardController.view() ==
                 AirspaceGuardView::EvidenceDetail) {
                 return {back, {}, {}};
@@ -9534,7 +9551,8 @@ NavigationFooter navigationFooterForCurrentState() {
                     AirspaceGuardView::EvidenceList) {
                 return {back, choose, enter};
             }
-            return {back, {}, {}};
+            return {back, {},
+                    {NavigationKey::RightAndSelect, UiTextId::NavAgain}};
         }
         if (wifiProductView == WifiProductView::NetworkDetail) {
             return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
@@ -12594,19 +12612,73 @@ void renderAirspaceGuardRow(const AirspaceGuardUiModel& model,
     display.print(model.rows[row].text.data());
 }
 
-void renderAirspaceGuardPage(bool clearContent) {
-    const AirspaceGuardUiModel model = leshy1::ui::presentAirspaceGuard(
-        airspaceGuardController, languageController.active());
-    renderHeader(tr(model.title), clearContent);
-    display.setTextColor(toneColor(airspaceGuardTone(model.tone)),
+void renderAirspaceGuardPage(bool clearContent, bool liveDataOnly = false) {
+    AirspaceGuardUiModel model{};
+    if (airspaceGuardCaptureState == AirspaceGuardCaptureState::Running) {
+        model.headline = UiTextId::AirspaceGuardListening;
+        model.note = UiTextId::AirspaceGuardPassiveOnly;
+        model.tone = AirspaceGuardUiTone::Neutral;
+        const auto capture = wifiFrameCapture.stats();
+        const auto monitor = wifiFrameCapture.airspaceGuardMonitorStats();
+        const std::uint64_t nowUs = static_cast<std::uint64_t>(
+            esp_timer_get_time());
+        const std::uint64_t deadlineUs = capture.startedUs +
+            static_cast<std::uint64_t>(kAirspaceGuardCaptureDurationMs) *
+                1000ULL;
+        const std::uint64_t remainingTenths = nowUs < deadlineUs
+            ? (deadlineUs - nowUs + 99999ULL) / 100000ULL : 0U;
+        std::snprintf(model.context.data(), model.context.size(),
+                      tr(UiTextId::AirspaceGuardChannelFormat),
+                      static_cast<unsigned>(wifiFrameCapture.currentChannel()));
+        std::snprintf(model.rows[0].text.data(), model.rows[0].text.size(),
+                      tr(UiTextId::AirspaceGuardTimeFormat),
+                      static_cast<unsigned>(remainingTenths / 10U),
+                      static_cast<unsigned>(remainingTenths % 10U));
+        std::snprintf(model.rows[1].text.data(), model.rows[1].text.size(),
+                      tr(UiTextId::AirspaceGuardSeenFormat),
+                      static_cast<unsigned long>(monitor.framesReported));
+        std::snprintf(
+            model.rows[2].text.data(), model.rows[2].text.size(),
+            tr(UiTextId::AirspaceGuardDisconnectsFormat),
+            static_cast<unsigned long>(monitor.disconnectFramesRetained));
+        std::snprintf(model.rows[3].text.data(), model.rows[3].text.size(),
+                      tr(UiTextId::AirspaceGuardRetainedFormat),
+                      static_cast<unsigned long>(monitor.framesRetained));
+        model.rowCount = model.rows.size();
+    } else {
+        model = leshy1::ui::presentAirspaceGuard(
+            airspaceGuardController, languageController.active());
+        if (airspaceGuardCaptureState == AirspaceGuardCaptureState::Failed) {
+            std::snprintf(model.context.data(), model.context.size(), "%s",
+                          tr(UiTextId::AirspaceGuardCaptureFailed));
+        }
+    }
+    if (airspaceGuardResultNeedsContentClear) {
+        display.fillRect(Layout::Edge, Layout::ContentTop,
+                         Layout::ContentWidth,
+                         Layout::FooterDividerY - Layout::ContentTop,
                          Palette::Canvas);
-    setUiCursor(UiTextRole::Body, Layout::Edge, 32);
-    display.print(tr(model.headline));
-    display.setTextColor(model.evidenceIncomplete ? Palette::Warning
-                                                  : Palette::TextMuted,
+        airspaceGuardResultNeedsContentClear = false;
+    }
+    if (!liveDataOnly) {
+        renderHeader(tr(model.title), clearContent);
+        display.fillRect(Layout::Edge, 28, Layout::ContentWidth, 56,
                          Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, Layout::Edge, 54);
-    display.print(tr(model.note));
+        display.setTextColor(toneColor(airspaceGuardTone(model.tone)),
+                             Palette::Canvas);
+        setUiCursor(UiTextRole::Body, Layout::Edge, 32);
+        display.print(tr(model.headline));
+        display.setTextColor(model.evidenceIncomplete ? Palette::Warning
+                                                      : Palette::TextMuted,
+                             Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, Layout::Edge, 54);
+        display.print(tr(model.note));
+    } else {
+        // Live cadence repaints only the changing channel/counters. Header,
+        // headline, passive note and footer remain untouched and cannot flash.
+        display.fillRect(Layout::Edge, 67, Layout::ContentWidth, 17,
+                         Palette::Canvas);
+    }
     display.setTextColor(Palette::TextSecondary, Palette::Canvas);
     setUiCursor(UiTextRole::Meta, Layout::Edge, 70);
     display.print(model.context.data());
@@ -19406,20 +19478,110 @@ bool openWifiVisitProduct() {
 }
 
 bool openAirspaceGuardProduct() {
-    // dev.213 only presents an immutable report. Loading an explicit empty
-    // report keeps the product honest until the bounded passive-capture
-    // adapter is wired: no radio mode, lease or network state changes here.
+    wifiFrameCapture.reset();
+    airspaceGuardController.reset();
+    wifiProductView = WifiProductView::AirspaceGuard;
+    std::uint64_t startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    const bool started = wifiFrameCapture.beginAirspaceGuardMonitor(
+        startedUs, kAirspaceGuardCaptureDurationMs,
+        kAirspaceGuardChannelDwellMs);
+    nextAirspaceGuardUiRefreshUs = startedUs + 250000ULL;
+    airspaceGuardResultNeedsContentClear = false;
+    if (started) {
+        airspaceGuardCaptureState = AirspaceGuardCaptureState::Running;
+        lastRuntimeEvent = "airspace_guard_listening";
+        return true;
+    }
     leshy1::services::guard::AirspaceGuardReport report{};
     report.status = leshy1::services::guard::AirspaceGuardStatus::Inconclusive;
-    const bool ready = airspaceGuardController.load(report) ==
-        leshy1::apps::guard::AirspaceGuardLoadStatus::Ready;
-    if (!ready) {
-        lastRuntimeEvent = "airspace_guard_report_rejected";
-        return false;
-    }
-    wifiProductView = WifiProductView::AirspaceGuard;
-    lastRuntimeEvent = "airspace_guard_open";
+    airspaceGuardController.load(report);
+    airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
+    lastRuntimeEvent = "airspace_guard_start_failed";
     return true;
+}
+
+bool stopAirspaceGuardProduct() {
+    std::uint64_t endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (endedUs == 0U) endedUs = 1U;
+    const bool cleanup = wifiFrameCapture.stop(endedUs);
+    wifiFrameCapture.reset();
+    airspaceGuardController.reset();
+    airspaceGuardCaptureState = AirspaceGuardCaptureState::Idle;
+    nextAirspaceGuardUiRefreshUs = 0;
+    airspaceGuardResultNeedsContentClear = false;
+    wifiProductView = WifiProductView::Menu;
+    wifiProductSelection = 4;
+    lastRuntimeEvent = cleanup ? "wifi_menu"
+                               : "airspace_guard_cleanup_failed";
+    return true;
+}
+
+void serviceAirspaceGuardProduct() {
+    if (airspaceGuardCaptureState != AirspaceGuardCaptureState::Running) {
+        return;
+    }
+    const auto before = wifiFrameCapture.stats();
+    if (before.state != WifiFrameCaptureState::Running) return;
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    wifiFrameCapture.service(nowUs);
+    const auto after = wifiFrameCapture.stats();
+    const bool terminal = after.state != WifiFrameCaptureState::Running;
+    const bool captureRoute = uiController.page() == 2 &&
+        wifiProductView == WifiProductView::AirspaceGuard;
+    if (terminal) {
+        const auto monitor = wifiFrameCapture.airspaceGuardMonitorStats();
+        const bool complete = after.state == WifiFrameCaptureState::Complete &&
+            monitor.cleanupComplete && wifiFrameCapture.cleanupComplete();
+        leshy1::services::guard::AirspaceGuardReport report{};
+        if (complete) {
+            const std::size_t dropped =
+                static_cast<std::size_t>(monitor.disconnectFramesDropped) +
+                static_cast<std::size_t>(monitor.invalidFrames);
+            report = airspaceGuardDetector.inspectWifi(
+                wifiFrameCapture.capture(), {}, dropped,
+                static_cast<std::size_t>(monitor.framesReported));
+        } else {
+            report.status =
+                leshy1::services::guard::AirspaceGuardStatus::Inconclusive;
+        }
+        const bool loaded = airspaceGuardController.load(report) ==
+            leshy1::apps::guard::AirspaceGuardLoadStatus::Ready;
+        airspaceGuardCaptureState = loaded && complete
+            ? AirspaceGuardCaptureState::Result
+            : AirspaceGuardCaptureState::Failed;
+        nextAirspaceGuardUiRefreshUs = 0;
+        airspaceGuardResultNeedsContentClear = true;
+        lastRuntimeEvent = loaded && complete
+            ? "airspace_guard_report_ready"
+            : "airspace_guard_capture_failed";
+        if (captureRoute) renderInteractiveScreen(false);
+        return;
+    }
+    if (captureRoute && nowUs >= nextAirspaceGuardUiRefreshUs) {
+        nextAirspaceGuardUiRefreshUs = nowUs + 250000ULL;
+        display.startWrite();
+        renderAirspaceGuardPage(false, true);
+        display.endWrite();
+    }
+}
+
+void quiesceAirspaceGuardOnSafetyStop() {
+    if (airspaceGuardCaptureState != AirspaceGuardCaptureState::Running) {
+        return;
+    }
+    std::uint64_t endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (endedUs == 0U) endedUs = 1U;
+    const bool cleanup = wifiFrameCapture.stop(endedUs);
+    leshy1::services::guard::AirspaceGuardReport report{};
+    report.status = leshy1::services::guard::AirspaceGuardStatus::Inconclusive;
+    airspaceGuardController.load(report);
+    airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
+    nextAirspaceGuardUiRefreshUs = 0;
+    airspaceGuardResultNeedsContentClear = true;
+    lastRuntimeEvent = cleanup ? "airspace_guard_safety_stop"
+                               : "airspace_guard_safety_cleanup_failed";
 }
 
 bool stopWifiChannelsProduct() {
@@ -19586,21 +19748,25 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
         } else if (wifiProductView == WifiProductView::AirspaceGuard) {
             handled = true;
-            if (action == UiAction::Up) {
+            if (airspaceGuardCaptureState ==
+                AirspaceGuardCaptureState::Running) {
+                if (action == UiAction::Back || action == UiAction::Left) {
+                    changed = stopAirspaceGuardProduct();
+                }
+            } else if (action == UiAction::Up) {
                 changed = airspaceGuardController.previous();
             } else if (action == UiAction::Down) {
                 changed = airspaceGuardController.next();
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {
-                changed = airspaceGuardController.openSelected();
+                changed = airspaceGuardController.view() ==
+                        AirspaceGuardView::Outcome
+                    ? openAirspaceGuardProduct()
+                    : airspaceGuardController.openSelected();
             } else if (action == UiAction::Back || action == UiAction::Left) {
                 changed = airspaceGuardController.back();
                 if (!changed) {
-                    airspaceGuardController.reset();
-                    wifiProductView = WifiProductView::Menu;
-                    wifiProductSelection = 4;
-                    lastRuntimeEvent = "wifi_menu";
-                    changed = true;
+                    changed = stopAirspaceGuardProduct();
                 }
             }
         } else if (wifiProductView == WifiProductView::Menu) {
@@ -20876,6 +21042,10 @@ bool applyUiAction(UiAction action, bool render = true) {
                 if (wifiApp) {
                     wifiFrameCapture.reset();
                     airspaceGuardController.reset();
+                    airspaceGuardCaptureState =
+                        AirspaceGuardCaptureState::Idle;
+                    nextAirspaceGuardUiRefreshUs = 0;
+                    airspaceGuardResultNeedsContentClear = false;
                     wifiDeviceCatalog.reset();
                     wifiDeviceNavigationOrder.reset();
                     wifiDeviceSelection = 0;
@@ -27531,10 +27701,12 @@ void loop() {
         ++spectrumLoopCount;
     }
     serviceWorkerDeadlineSupervisor();
+    if (safetySupervisor.latched()) quiesceAirspaceGuardOnSafetyStop();
     if (!safetySupervisor.latched()) {
         serviceProductSurveyWorker();
         serviceWifiDevicesProduct();
         serviceWifiChannelsProduct();
+        serviceAirspaceGuardProduct();
         serviceWifiFrameCapture();
         serviceWifiFrameCapturePersist();
         serviceSubGhzRawCapturePersist();

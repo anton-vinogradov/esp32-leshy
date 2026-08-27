@@ -78,12 +78,16 @@ bool AirspaceGuardController::validateReport(
     if (report.findingCount > report.findings.size()) return false;
     if (report.status == AirspaceGuardStatus::InvalidPolicy) {
         return report.findingCount == 0U && report.framesAvailable == 0U &&
+            report.sourceFramesObserved == 0U &&
             report.framesInspected == 0U && report.disconnectFrames == 0U &&
             report.malformedFrames == 0U &&
             report.sourceReadFailures == 0U &&
+            report.sourceFramesDropped == 0U &&
             report.findingsDropped == 0U && !report.inspectionTruncated;
     }
-    if (report.framesInspected > attempted ||
+    if (report.sourceFramesObserved < report.framesAvailable ||
+        report.sourceFramesDropped > report.sourceFramesObserved ||
+        report.framesInspected > attempted ||
         report.sourceReadFailures > attempted ||
         report.framesInspected + report.sourceReadFailures != attempted ||
         report.disconnectFrames > report.framesInspected ||
@@ -98,8 +102,11 @@ bool AirspaceGuardController::validateReport(
     }
     const AirspaceGuardStatus expectedStatus = report.findingCount != 0U
         ? AirspaceGuardStatus::Finding
-        : (report.framesAvailable == 0U || report.framesInspected == 0U ||
+        : (report.sourceFramesObserved == 0U ||
+                   report.framesAvailable == 0U ||
+                   report.framesInspected == 0U ||
                    report.sourceReadFailures != 0U ||
+                   report.sourceFramesDropped != 0U ||
                    report.malformedFrames != 0U || report.inspectionTruncated
                ? AirspaceGuardStatus::Inconclusive
                : AirspaceGuardStatus::Clear);
@@ -243,8 +250,10 @@ bool AirspaceGuardController::back() {
 }
 
 bool AirspaceGuardController::evidenceIncomplete() const {
-    return report_.framesAvailable == 0U || report_.framesInspected == 0U ||
+    return report_.sourceFramesObserved == 0U ||
+        report_.framesAvailable == 0U || report_.framesInspected == 0U ||
         report_.sourceReadFailures != 0U ||
+        report_.sourceFramesDropped != 0U ||
         report_.malformedFrames != 0U || report_.findingsDropped != 0U ||
         report_.inspectionTruncated;
 }

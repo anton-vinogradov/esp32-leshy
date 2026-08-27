@@ -4,6 +4,8 @@
 #include <esp_timer.h>
 #include <esp_wifi.h>
 
+#include "services/guard/AirspaceGuard.h"
+
 namespace leshy1::platform::arduino {
 
 namespace {
@@ -32,6 +34,29 @@ BoardWifiPassiveCapture* BoardWifiPassiveCapture::active_ = nullptr;
 bool BoardWifiPassiveCapture::begin(
     const apps::capture::WifiFrameCapturePlan& plan,
     std::uint64_t startedUs) {
+    return beginCapture(plan, startedUs, false);
+}
+
+bool BoardWifiPassiveCapture::beginAirspaceGuardMonitor(
+    std::uint64_t startedUs, std::uint32_t durationMs,
+    std::uint16_t channelDwellMs) {
+    apps::capture::WifiFrameCapturePlan plan{};
+    plan.durationMs = durationMs;
+    plan.channelDwellMs = channelDwellMs;
+    plan.maximumFrames = static_cast<std::uint16_t>(
+        apps::capture::WifiFrameCapture::kFrameCapacity);
+    const bool started = beginCapture(plan, startedUs, true);
+    if (!started) {
+        airspaceGuardMonitor_ = false;
+        airspaceGuardStats_.active = false;
+        airspaceGuardStats_.cleanupComplete = cleanupComplete_;
+    }
+    return started;
+}
+
+bool BoardWifiPassiveCapture::beginCapture(
+    const apps::capture::WifiFrameCapturePlan& plan,
+    std::uint64_t startedUs, bool airspaceGuardMonitor) {
     if (initialized_ || started_ || promiscuous_ || active_ != nullptr ||
         !apps::capture::validateWifiFrameCapturePlan(plan)) {
         return false;
@@ -40,6 +65,9 @@ bool BoardWifiPassiveCapture::begin(
     if (!capture_.begin(plan, startedUs)) return false;
     deviceMonitor_ = false;
     channelMonitor_ = false;
+    airspaceGuardMonitor_ = airspaceGuardMonitor;
+    airspaceGuardStats_ = {};
+    airspaceGuardStats_.cleanupComplete = !airspaceGuardMonitor;
     cleanupComplete_ = false;
     lastError_ = 0;
 
@@ -79,9 +107,11 @@ bool BoardWifiPassiveCapture::begin(
     currentChannel_ = plan.channel == 0U ? 1U : plan.channel;
     error = esp_wifi_set_channel(currentChannel_, WIFI_SECOND_CHAN_NONE);
     wifi_promiscuous_filter_t filter{};
-    filter.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT |
-                         WIFI_PROMIS_FILTER_MASK_CTRL |
-                         WIFI_PROMIS_FILTER_MASK_DATA;
+    filter.filter_mask = airspaceGuardMonitor_
+        ? WIFI_PROMIS_FILTER_MASK_MGMT
+        : WIFI_PROMIS_FILTER_MASK_MGMT |
+              WIFI_PROMIS_FILTER_MASK_CTRL |
+              WIFI_PROMIS_FILTER_MASK_DATA;
     if (error == ESP_OK) error = esp_wifi_set_promiscuous_filter(&filter);
     if (error == ESP_OK) error = esp_wifi_set_promiscuous_rx_cb(&receive);
     if (error != ESP_OK) {
@@ -103,6 +133,7 @@ bool BoardWifiPassiveCapture::begin(
         return false;
     }
     promiscuous_ = true;
+    if (airspaceGuardMonitor_) airspaceGuardStats_.active = true;
     channelDwellMs_ = plan.channelDwellMs;
     nextChannelUs_ = startedUs +
         static_cast<std::uint64_t>(plan.channelDwellMs) * 1000ULL;
@@ -125,6 +156,7 @@ bool BoardWifiPassiveCapture::beginDeviceMonitor(
     deviceMonitor_ = true;
     deviceChannelLocked_ = false;
     channelMonitor_ = false;
+    airspaceGuardMonitor_ = false;
     cleanupComplete_ = false;
     lastError_ = 0;
 
@@ -210,6 +242,7 @@ bool BoardWifiPassiveCapture::beginChannelMonitor(
     channelStats_.cleanupComplete = false;
     deviceMonitor_ = false;
     channelMonitor_ = true;
+    airspaceGuardMonitor_ = false;
     cleanupComplete_ = false;
     lastError_ = 0;
 
@@ -301,6 +334,9 @@ bool BoardWifiPassiveCapture::service(std::uint64_t nowUs) {
                 portENTER_CRITICAL(&mux_);
                 if (deviceMonitor_) ++deviceStats_.channelHops;
                 if (channelMonitor_) ++channelStats_.channelHops;
+                if (airspaceGuardMonitor_) {
+                    ++airspaceGuardStats_.channelHops;
+                }
                 portEXIT_CRITICAL(&mux_);
             }
             channelLandedUs_ = nowUs;
@@ -320,7 +356,13 @@ bool BoardWifiPassiveCapture::service(std::uint64_t nowUs) {
                                       ? 1U
                                       : static_cast<std::uint8_t>(
                                             currentChannel_ + 1U);
-        return changeChannel(next, nowUs);
+        const bool changed = changeChannel(next, nowUs);
+        if (changed && airspaceGuardMonitor_) {
+            portENTER_CRITICAL(&mux_);
+            ++airspaceGuardStats_.channelHops;
+            portEXIT_CRITICAL(&mux_);
+        }
+        return changed;
     }
     return false;
 }
@@ -335,6 +377,7 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
     active_ = nullptr;
     const bool wasDeviceMonitor = deviceMonitor_;
     const bool wasChannelMonitor = channelMonitor_;
+    const bool wasAirspaceGuardMonitor = airspaceGuardMonitor_;
     bool complete = true;
     if (promiscuous_) {
         const esp_err_t error = esp_wifi_set_promiscuous(false);
@@ -358,6 +401,7 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
     deviceMonitor_ = false;
     deviceChannelLocked_ = false;
     channelMonitor_ = false;
+    airspaceGuardMonitor_ = false;
     if (wasDeviceMonitor) {
         portENTER_CRITICAL(&mux_);
         deviceStats_.active = false;
@@ -368,6 +412,12 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
         portENTER_CRITICAL(&mux_);
         channelStats_.active = false;
         channelStats_.cleanupComplete = wifiCleanup && complete;
+        portEXIT_CRITICAL(&mux_);
+    }
+    if (wasAirspaceGuardMonitor) {
+        portENTER_CRITICAL(&mux_);
+        airspaceGuardStats_.active = false;
+        airspaceGuardStats_.cleanupComplete = wifiCleanup && complete;
         portEXIT_CRITICAL(&mux_);
     }
     return wifiCleanup && complete;
@@ -383,11 +433,13 @@ void BoardWifiPassiveCapture::reset() {
     deviceQueueSize_ = 0;
     deviceStats_ = {};
     channelStats_ = {};
+    airspaceGuardStats_ = {};
     channelLoad_.reset();
     portEXIT_CRITICAL(&mux_);
     deviceMonitor_ = false;
     deviceChannelLocked_ = false;
     channelMonitor_ = false;
+    airspaceGuardMonitor_ = false;
     currentChannel_ = 0;
     nextChannelUs_ = 0;
     channelLandedUs_ = 0;
@@ -418,6 +470,18 @@ BoardWifiPassiveCapture::channelMonitorStats() const {
     ChannelMonitorStats result = channelStats_;
     result.active = channelMonitor_ && promiscuous_;
     result.cleanupComplete = cleanupComplete_;
+    portEXIT_CRITICAL(&mux_);
+    return result;
+}
+
+BoardWifiPassiveCapture::AirspaceGuardMonitorStats
+BoardWifiPassiveCapture::airspaceGuardMonitorStats() const {
+    portENTER_CRITICAL(&mux_);
+    AirspaceGuardMonitorStats result = airspaceGuardStats_;
+    result.active = airspaceGuardMonitor_ && promiscuous_;
+    result.framesRetained = capture_.stats().framesAccepted;
+    result.cleanupComplete = airspaceGuardMonitor_
+        ? cleanupComplete_ : airspaceGuardStats_.cleanupComplete;
     portEXIT_CRITICAL(&mux_);
     return result;
 }
@@ -524,6 +588,37 @@ void BoardWifiPassiveCapture::accept(void* buffer,
             deviceQueueHead_ = (deviceQueueHead_ + 1U) % deviceQueue_.size();
             ++deviceQueueSize_;
             ++deviceStats_.clientsAccepted;
+        }
+        portEXIT_CRITICAL(&mux_);
+        return;
+    }
+    if (airspaceGuardMonitor_) {
+        const bool disconnectCandidate = receiveValid &&
+            leshy1::services::guard::isWifiDisconnectFrameCandidate(
+                packet->payload, packet->rx_ctrl.sig_len);
+        portENTER_CRITICAL(&mux_);
+        ++airspaceGuardStats_.framesReported;
+        if (!receiveValid || packet->rx_ctrl.channel < 1U ||
+            packet->rx_ctrl.channel > 13U || packet->rx_ctrl.sig_len < 2U) {
+            ++airspaceGuardStats_.invalidFrames;
+        } else if (disconnectCandidate || capture_.size() == 0U) {
+            const std::uint32_t capacityDropsBefore =
+                capture_.stats().framesDroppedCapacity;
+            const bool retained = capture_.append(
+                packet->payload, packet->rx_ctrl.sig_len,
+                static_cast<std::uint64_t>(esp_timer_get_time()),
+                packet->rx_ctrl.rssi, packet->rx_ctrl.channel,
+                WifiFrameKind::Management, true);
+            if (disconnectCandidate) {
+                if (retained) {
+                    ++airspaceGuardStats_.disconnectFramesRetained;
+                } else if (capture_.stats().framesDroppedCapacity >
+                           capacityDropsBefore) {
+                    ++airspaceGuardStats_.disconnectFramesDropped;
+                }
+            }
+        } else {
+            ++airspaceGuardStats_.ignoredFrames;
         }
         portEXIT_CRITICAL(&mux_);
         return;

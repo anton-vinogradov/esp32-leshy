@@ -36,6 +36,12 @@ struct AirspaceGuardPolicy final {
 
 bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy);
 
+// Cheap ingress classifier used by the passive adapter to reserve its bounded
+// evidence buffer for the two management subtypes inspected by the detector.
+// Full structural validation remains the detector's responsibility.
+bool isWifiDisconnectFrameCandidate(const std::uint8_t* payload,
+                                    std::size_t length);
+
 struct AirspaceEvidenceRef final {
     std::size_t frameIndex = 0;
     std::uint64_t monotonicUs = 0;
@@ -67,11 +73,13 @@ struct AirspaceGuardReport final {
     AirspaceGuardStatus status = AirspaceGuardStatus::Inconclusive;
     std::array<AirspaceFinding, kFindingCapacity> findings{};
     std::size_t findingCount = 0;
+    std::size_t sourceFramesObserved = 0;
     std::size_t framesAvailable = 0;
     std::size_t framesInspected = 0;
     std::size_t disconnectFrames = 0;
     std::size_t malformedFrames = 0;
     std::size_t sourceReadFailures = 0;
+    std::size_t sourceFramesDropped = 0;
     std::size_t findingsDropped = 0;
     bool inspectionTruncated = false;
 };
@@ -85,7 +93,9 @@ public:
 
     AirspaceGuardReport inspectWifi(
         const domain::captures::WifiFrameSource& source,
-        const AirspaceGuardPolicy& policy = {}) const;
+        const AirspaceGuardPolicy& policy = {},
+        std::size_t sourceFramesDropped = 0U,
+        std::size_t sourceFramesObserved = 0U) const;
 };
 
 }  // namespace leshy1::services::guard

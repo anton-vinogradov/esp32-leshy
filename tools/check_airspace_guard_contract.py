@@ -25,6 +25,12 @@ UI_STRINGS = ROOT / "firmware/leshy1/src/ui/UiStrings.def"
 ARDUINO_ENTRY = (
     ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
 )
+BOARD_CAPTURE_HEADER = (
+    ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveCapture.h"
+)
+BOARD_CAPTURE_SOURCE = (
+    ROOT / "firmware/leshy1/src/platform/arduino/BoardWifiPassiveCapture.cpp"
+)
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -46,6 +52,9 @@ def main() -> int:
         presenter_tests = PRESENTER_TEST.read_text(encoding="utf-8")
         ui_strings = UI_STRINGS.read_text(encoding="utf-8")
         arduino_entry = ARDUINO_ENTRY.read_text(encoding="utf-8")
+        board_capture = BOARD_CAPTURE_HEADER.read_text(encoding="utf-8") + (
+            BOARD_CAPTURE_SOURCE.read_text(encoding="utf-8")
+        )
     except OSError as error:
         print(f"airspace guard contract check failed: {error}", file=sys.stderr)
         return 1
@@ -72,6 +81,8 @@ def main() -> int:
         "testDisconnectBurstRetainsExactEvidence",
         "testSourcesAreNeverMergedAndConfidenceIsBounded",
         "testMalformedFailedAndTruncatedEvidenceIsInconclusive",
+        "testIngressClassifierOnlyReservesDisconnectManagementFrames",
+        "testExternalCaptureLossMakesClearEvidenceInconclusive",
     ):
         require(failures, marker in tests,
                 f"missing Airspace Guard native coverage: {marker}")
@@ -141,6 +152,8 @@ def main() -> int:
         "evidence->channel",
         "evidence->rssiDbm",
         "controller.inspectionTruncated()",
+        "controller.sourceFramesDropped()",
+        "controller.sourceFramesObserved()",
     ):
         require(failures, marker in presenter,
                 f"missing Airspace Guard presentation contract: {marker}")
@@ -152,6 +165,8 @@ def main() -> int:
         "testMalformedReportHasNoInventedEvidence",
         "testDroppedFindingCountReplacesLessImportantMix",
         "testEmptyCaptureIsExplicitlyIncomplete",
+        "testCaptureLossIsShownBeforeFindingMix",
+        "testClearOutcomeUsesTheOtherwiseEmptyRowsForCoverage",
     ):
         require(failures, marker in presenter_tests,
                 f"missing Airspace Guard presenter coverage: {marker}")
@@ -162,6 +177,8 @@ def main() -> int:
         "AirspaceGuardEvidenceIncomplete",
         "AirspaceGuardPassiveOnly",
         "AirspaceGuardCaptureNotStarted",
+        "AirspaceGuardListening",
+        "AirspaceGuardCaptureLossFormat",
     ):
         require(failures, marker in ui_strings,
                 f"missing EN/RU Airspace Guard copy: {marker}")
@@ -188,6 +205,12 @@ def main() -> int:
         "presentAirspaceGuard",
         "airspaceGuardController.openSelected()",
         "airspaceGuardController.back()",
+        "beginAirspaceGuardMonitor",
+        "serviceAirspaceGuardProduct",
+        "quiesceAirspaceGuardOnSafetyStop",
+        "airspaceGuardDetector.inspectWifi",
+        "kAirspaceGuardCaptureDurationMs = 10000U",
+        "kAirspaceGuardChannelDwellMs = 120U",
     ):
         require(failures, marker in arduino_entry,
                 f"missing Airspace Guard product integration: {marker}")
@@ -199,9 +222,34 @@ def main() -> int:
     for forbidden in (
         "ResourceBroker", "beginDeviceMonitor", "beginChannelMonitor",
         "startProductSurvey", "esp_wifi", "setTxPower", "sendPacket",
+        "injectFrame",
     ):
         require(failures, forbidden not in open_body,
-                f"report-only Airspace Guard entry touches runtime: {forbidden}")
+                f"bounded Airspace Guard flow bypasses passive adapter: {forbidden}")
+
+    for marker in (
+        "AirspaceGuardMonitorStats",
+        "WIFI_PROMIS_FILTER_MASK_MGMT",
+        "isWifiDisconnectFrameCandidate",
+        "disconnectFramesDropped",
+        "capture_.size() == 0U",
+        "airspaceGuardStats_.cleanupComplete",
+        "return stop(nowUs)",
+    ):
+        require(failures, marker in board_capture,
+                f"missing bounded passive adapter contract: {marker}")
+    for forbidden in (
+        "WIFI_MODE_AP", "WIFI_MODE_APSTA", "esp_wifi_connect",
+        "esp_wifi_set_config", "esp_wifi_80211_tx", "setTxPower",
+        "sendPacket", "injectFrame",
+    ):
+        require(failures, forbidden not in board_capture,
+                f"Airspace Guard adapter gained active behavior: {forbidden}")
+    require(
+        failures,
+        arduino_entry.count("BoardWifiPassiveCapture wifiFrameCapture;") == 1,
+        "Airspace Guard must reuse the one existing Wi-Fi adapter",
+    )
 
     if failures:
         print("airspace guard contract check failed:", file=sys.stderr)

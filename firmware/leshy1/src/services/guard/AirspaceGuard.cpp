@@ -126,16 +126,33 @@ bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy) {
         policy.disconnectWindowUs <= 10000000ULL;
 }
 
+bool isWifiDisconnectFrameCandidate(const std::uint8_t* payload,
+                                    std::size_t length) {
+    if (payload == nullptr || length < 2U) return false;
+    const std::uint8_t frameControl = payload[0];
+    const std::uint8_t type = static_cast<std::uint8_t>(
+        (frameControl >> 2U) & 0x03U);
+    const std::uint8_t subtype = static_cast<std::uint8_t>(
+        (frameControl >> 4U) & 0x0fU);
+    return type == 0U && (subtype == 10U || subtype == 12U);
+}
+
 AirspaceGuardReport AirspaceGuard::inspectWifi(
     const domain::captures::WifiFrameSource& source,
-    const AirspaceGuardPolicy& policy) const {
+    const AirspaceGuardPolicy& policy,
+    std::size_t sourceFramesDropped,
+    std::size_t sourceFramesObserved) const {
     AirspaceGuardReport report{};
     if (!validateAirspaceGuardPolicy(policy)) {
         report.status = AirspaceGuardStatus::InvalidPolicy;
         return report;
     }
 
+    report.sourceFramesDropped = sourceFramesDropped;
+
     report.framesAvailable = source.frameCount();
+    report.sourceFramesObserved = sourceFramesObserved == 0U
+        ? report.framesAvailable + sourceFramesDropped : sourceFramesObserved;
     const std::size_t inspectionCount =
         report.framesAvailable < kFrameInspectionCapacity
             ? report.framesAvailable : kFrameInspectionCapacity;
@@ -247,9 +264,11 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
 
     if (report.findingCount != 0U) {
         report.status = AirspaceGuardStatus::Finding;
-    } else if (report.framesAvailable == 0U ||
+    } else if (report.sourceFramesObserved == 0U ||
+               report.framesAvailable == 0U ||
                report.framesInspected == 0U ||
                report.sourceReadFailures != 0U ||
+               report.sourceFramesDropped != 0U ||
                report.malformedFrames != 0U ||
                report.inspectionTruncated) {
         report.status = AirspaceGuardStatus::Inconclusive;

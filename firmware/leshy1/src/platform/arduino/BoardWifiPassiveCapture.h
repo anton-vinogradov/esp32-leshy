@@ -33,6 +33,18 @@ public:
         bool cleanupComplete = true;
     };
 
+    struct AirspaceGuardMonitorStats final {
+        std::uint32_t framesReported = 0;
+        std::uint32_t framesRetained = 0;
+        std::uint32_t disconnectFramesRetained = 0;
+        std::uint32_t disconnectFramesDropped = 0;
+        std::uint32_t invalidFrames = 0;
+        std::uint32_t ignoredFrames = 0;
+        std::uint32_t channelHops = 0;
+        bool active = false;
+        bool cleanupComplete = true;
+    };
+
     ~BoardWifiPassiveCapture() { stop(0); }
 
     bool begin(const apps::capture::WifiFrameCapturePlan& plan,
@@ -41,6 +53,9 @@ public:
                             std::uint16_t channelDwellMs = 120U);
     bool beginChannelMonitor(std::uint64_t startedUs,
                              std::uint16_t channelDwellMs = 120U);
+    bool beginAirspaceGuardMonitor(std::uint64_t startedUs,
+                                   std::uint32_t durationMs = 10000U,
+                                   std::uint16_t channelDwellMs = 120U);
     bool service(std::uint64_t nowUs);
     bool stop(std::uint64_t endedUs);
     void reset();
@@ -48,6 +63,7 @@ public:
     apps::capture::WifiFrameCaptureStats stats() const;
     DeviceMonitorStats deviceMonitorStats() const;
     ChannelMonitorStats channelMonitorStats() const;
+    AirspaceGuardMonitorStats airspaceGuardMonitorStats() const;
     apps::wifi::WifiChannelLoadSnapshot channelLoadSnapshot() const;
     std::uint8_t bestPrimaryChannel() const;
     bool pollDevice(apps::wifi::WifiDeviceObservation* output);
@@ -62,6 +78,8 @@ public:
     int lastError() const { return lastError_; }
 
 private:
+    bool beginCapture(const apps::capture::WifiFrameCapturePlan& plan,
+                      std::uint64_t startedUs, bool airspaceGuardMonitor);
     static void receive(void* buffer, wifi_promiscuous_pkt_type_t type);
     void accept(void* buffer, wifi_promiscuous_pkt_type_t type);
     bool changeChannel(std::uint8_t channel, std::uint64_t nowUs);
@@ -75,6 +93,7 @@ private:
                kDeviceQueueCapacity> deviceQueue_{};
     DeviceMonitorStats deviceStats_{};
     ChannelMonitorStats channelStats_{};
+    AirspaceGuardMonitorStats airspaceGuardStats_{};
     apps::wifi::WifiChannelLoad channelLoad_{};
     std::size_t deviceQueueHead_ = 0;
     std::size_t deviceQueueTail_ = 0;
@@ -82,6 +101,7 @@ private:
     bool deviceMonitor_ = false;
     bool deviceChannelLocked_ = false;
     bool channelMonitor_ = false;
+    bool airspaceGuardMonitor_ = false;
     bool initialized_ = false;
     bool started_ = false;
     bool promiscuous_ = false;

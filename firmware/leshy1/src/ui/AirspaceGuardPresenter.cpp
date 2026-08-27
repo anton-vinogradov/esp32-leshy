@@ -60,6 +60,8 @@ void appendIncompleteRows(const AirspaceGuardController& controller,
     if (model.rowCount < model.rows.size()) {
         formatText(model.rows[model.rowCount++].text, language,
                    UiTextId::AirspaceGuardCoverageFormat,
+                   static_cast<unsigned long>(
+                       controller.sourceFramesObserved()),
                    static_cast<unsigned long>(controller.framesInspected()));
     }
     if (model.rowCount < model.rows.size() &&
@@ -69,6 +71,13 @@ void appendIncompleteRows(const AirspaceGuardController& controller,
                    UiTextId::AirspaceGuardLossFormat,
                    static_cast<unsigned long>(controller.sourceReadFailures()),
                    static_cast<unsigned long>(controller.malformedFrames()));
+    }
+    if (model.rowCount < model.rows.size() &&
+        controller.sourceFramesDropped() != 0U) {
+        formatText(model.rows[model.rowCount++].text, language,
+                   UiTextId::AirspaceGuardCaptureLossFormat,
+                   static_cast<unsigned long>(
+                       controller.sourceFramesDropped()));
     }
     if (model.rowCount < model.rows.size() &&
         controller.findingsDropped() != 0U) {
@@ -94,6 +103,17 @@ AirspaceGuardUiModel presentOutcome(const AirspaceGuardController& controller,
         case AirspaceGuardStatus::Clear:
             model.headline = UiTextId::AirspaceGuardClear;
             model.tone = AirspaceGuardUiTone::Healthy;
+            formatText(model.rows[0].text, language,
+                       UiTextId::AirspaceGuardCoverageFormat,
+                       static_cast<unsigned long>(
+                           controller.sourceFramesObserved()),
+                       static_cast<unsigned long>(
+                           controller.framesInspected()));
+            formatText(model.rows[1].text, language,
+                       UiTextId::AirspaceGuardEvidenceKeptFormat,
+                       static_cast<unsigned long>(
+                           controller.framesAvailable()));
+            model.rowCount = 2U;
             break;
         case AirspaceGuardStatus::Inconclusive:
             model.headline = UiTextId::AirspaceGuardInconclusive;
@@ -146,7 +166,12 @@ AirspaceGuardUiModel presentFinding(const AirspaceGuardController& controller,
                UiTextId::AirspaceGuardObservedFormat,
                static_cast<unsigned>(finding->observed),
                static_cast<unsigned>(finding->threshold));
-    if (controller.findingsDropped() != 0U) {
+    if (controller.sourceFramesDropped() != 0U) {
+        formatText(model.rows[3].text, language,
+                   UiTextId::AirspaceGuardCaptureLossFormat,
+                   static_cast<unsigned long>(
+                       controller.sourceFramesDropped()));
+    } else if (controller.findingsDropped() != 0U) {
         formatText(model.rows[3].text, language,
                    UiTextId::AirspaceGuardDroppedFormat,
                    static_cast<unsigned long>(controller.findingsDropped()));

@@ -104,6 +104,29 @@ void testPolicyAndEmptyEvidenceFailClosed() {
     CHECK(report.findingCount == 0);
 }
 
+void testIngressClassifierOnlyReservesDisconnectManagementFrames() {
+    const std::array<std::uint8_t, 2> deauth{0xc0, 0x00};
+    const std::array<std::uint8_t, 2> disassoc{0xa0, 0x00};
+    const std::array<std::uint8_t, 2> beacon{0x80, 0x00};
+    const std::array<std::uint8_t, 2> data{0x08, 0x00};
+    CHECK(isWifiDisconnectFrameCandidate(deauth.data(), deauth.size()));
+    CHECK(isWifiDisconnectFrameCandidate(disassoc.data(), disassoc.size()));
+    CHECK(!isWifiDisconnectFrameCandidate(beacon.data(), beacon.size()));
+    CHECK(!isWifiDisconnectFrameCandidate(data.data(), data.size()));
+    CHECK(!isWifiDisconnectFrameCandidate(nullptr, 0U));
+    CHECK(!isWifiDisconnectFrameCandidate(deauth.data(), 1U));
+}
+
+void testExternalCaptureLossMakesClearEvidenceInconclusive() {
+    FixtureSource source;
+    source.add(8U, 1000000ULL, kTransmitterA, 1U, -40);
+    AirspaceGuard guard;
+    const AirspaceGuardReport report = guard.inspectWifi(source, {}, 3U);
+    CHECK(report.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(report.sourceFramesDropped == 3U);
+    CHECK(report.framesInspected == 1U);
+}
+
 void testBenignAndSparseDisconnectFramesStayClear() {
     AirspaceGuard guard;
     FixtureSource source;
@@ -214,6 +237,8 @@ void testStableNames() {
 
 int main() {
     testPolicyAndEmptyEvidenceFailClosed();
+    testIngressClassifierOnlyReservesDisconnectManagementFrames();
+    testExternalCaptureLossMakesClearEvidenceInconclusive();
     testBenignAndSparseDisconnectFramesStayClear();
     testDisconnectBurstRetainsExactEvidence();
     testSourcesAreNeverMergedAndConfidenceIsBounded();
