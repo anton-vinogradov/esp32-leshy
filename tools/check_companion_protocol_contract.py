@@ -463,6 +463,7 @@ def main() -> int:
         'host_wifi["dhcp_requests"] = wifi_guard.dhcp_requests',
         'host_wifi["visibility_scans"]',
         'wifi_guard.visibility_confirmed',
+        'wifi_guard.corewlan_association_attempts',
         'host_wifi["restored"] is True',
     ):
         require(failures, marker in web_hil,
@@ -475,6 +476,7 @@ def main() -> int:
         'WIFI_SCAN_SOURCE',
         'WIFI_SCAN_HELPER = "/tmp/leshy-macos-wifi-scan"',
         'self._scan_for_target(ssid)',
+        'self._associate_target(ssid, passphrase)',
         'self.visibility_confirmed',
         'derive_local_credentials',
         '"-getairportpower"',
@@ -499,7 +501,8 @@ def main() -> int:
         "#import <CoreWLAN/CoreWLAN.h>",
         "interfaceWithName:interfaceName",
         "scanForNetworksWithName:expectedName",
-        "return networks.count == 0 ? 1 : 0",
+        "associateToNetwork:network",
+        "return associated && error == nil ? 0 : 3",
     ):
         require(failures, marker in mac_wifi_scan,
                 f"missing targeted CoreWLAN scan boundary: {marker}")

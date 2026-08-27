@@ -5,9 +5,10 @@
 // emits no network identity: callers receive only visible/not-visible status.
 int main(int argc, const char* argv[]) {
     @autoreleasepool {
-        if (argc != 3) return 64;
-        NSString* interfaceName = [NSString stringWithUTF8String:argv[1]];
-        NSString* expectedName = [NSString stringWithUTF8String:argv[2]];
+        if (argc < 4 || argc > 5) return 64;
+        NSString* operation = [NSString stringWithUTF8String:argv[1]];
+        NSString* interfaceName = [NSString stringWithUTF8String:argv[2]];
+        NSString* expectedName = [NSString stringWithUTF8String:argv[3]];
         if (interfaceName.length == 0 || expectedName.length == 0) return 65;
         CWInterface* interface =
             [[CWWiFiClient sharedWiFiClient] interfaceWithName:interfaceName];
@@ -16,6 +17,16 @@ int main(int argc, const char* argv[]) {
         NSSet<CWNetwork*>* networks =
             [interface scanForNetworksWithName:expectedName error:&error];
         if (error != nil || networks == nil) return 2;
-        return networks.count == 0 ? 1 : 0;
+        if (networks.count == 0) return 1;
+        if ([operation isEqualToString:@"scan"] && argc == 4) return 0;
+        if (![operation isEqualToString:@"associate"] || argc != 5) return 64;
+        NSString* passphrase = [NSString stringWithUTF8String:argv[4]];
+        if (passphrase.length < 8) return 65;
+        CWNetwork* network = networks.anyObject;
+        error = nil;
+        BOOL associated = [interface associateToNetwork:network
+                                                password:passphrase
+                                                   error:&error];
+        return associated && error == nil ? 0 : 3;
     }
 }

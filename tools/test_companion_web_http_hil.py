@@ -34,6 +34,7 @@ class FakeNetworkSetup:
         self.defer_hil_dhcp = False
         self.dhcp_requests = 0
         self.scan_visible = True
+        self.corewlan_associate = False
         self.hil_router: str | None = "192.168.4.1"
         self.address = "10.88.88.60" if power and ssid else None
         self.router = "10.88.88.1" if power and ssid else None
@@ -60,8 +61,14 @@ class FakeNetworkSetup:
         if arguments[0] == "/usr/bin/xcrun":
             return subprocess.CompletedProcess(arguments, 0, "", "")
         if arguments[0] == "/tmp/leshy-macos-wifi-scan":
+            if arguments[1] == "associate" and self.corewlan_associate:
+                self.power = True
+                self._select_network(arguments[3])
+                return subprocess.CompletedProcess(arguments, 0, "", "")
             return subprocess.CompletedProcess(
-                arguments, 0 if self.scan_visible else 1, "", "")
+                arguments,
+                0 if arguments[1] == "scan" and self.scan_visible else 1,
+                "", "")
         if arguments[0] == "/usr/sbin/ipconfig":
             operation = arguments[1]
             if operation == "getifaddr":
@@ -162,7 +169,8 @@ class CompanionWebHttpHilTests(unittest.TestCase):
             restore)
         self.assertEqual("Home", snapshot.ssid)
         scans = [command for command in fake.commands
-                 if command[0] == "/tmp/leshy-macos-wifi-scan"]
+                 if command[0] == "/tmp/leshy-macos-wifi-scan" and
+                 command[1] == "scan"]
         self.assertEqual(1, len(scans))
         self.assertEqual("en0", scans[0][-2])
         self.assertEqual("Leshy-8790D5", scans[0][-1])
@@ -182,6 +190,22 @@ class CompanionWebHttpHilTests(unittest.TestCase):
         self.assertEqual("Home", fake.ssid)
         self.assertEqual("10.88.88.60", fake.address)
         self.assertNotIn("Leshy-8790D5", fake.preferred)
+        self.assertTrue(guard.restored)
+
+    def test_corewlan_association_bypasses_flaky_networksetup_join(self) -> None:
+        fake = FakeNetworkSetup(redact_ssid=True)
+        fake.corewlan_associate = True
+        guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=0.01)
+        guard.capture()
+        guard.connect("Leshy-8790D5", "temporary123")
+        self.assertEqual(1, guard.corewlan_association_attempts)
+        self.assertEqual(1, guard.association_attempts)
+        joins = [command for command in fake.commands
+                 if command[0] == "/usr/sbin/networksetup" and
+                 command[1] == "-setairportnetwork" and
+                 len(command) == 5]
+        self.assertEqual([], joins)
+        guard.restore()
         self.assertTrue(guard.restored)
 
     def test_hil_local_link_does_not_require_a_default_router(self) -> None:
@@ -264,7 +288,8 @@ class CompanionWebHttpHilTests(unittest.TestCase):
         guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=2.0)
         guard.capture()
         guard.connect("Leshy-8790D5", "temporary123")
-        self.assertEqual(2, guard.association_attempts)
+        self.assertEqual(3, guard.association_attempts)
+        self.assertEqual(1, guard.corewlan_association_attempts)
         self.assertEqual(1, guard.radio_refreshes)
         self.assertEqual(2, guard.visibility_scans)
         self.assertEqual("192.168.4.2", fake.address)

@@ -103,6 +103,7 @@ class MacWifiGuard:
         self.radio_refreshes = 0
         self.visibility_scans = 0
         self.visibility_confirmed = False
+        self.corewlan_association_attempts = 0
         self._scan_helper_ready = False
         self._mutation_attempted = False
         self._temporary_ssid: str | None = None
@@ -184,8 +185,7 @@ class MacWifiGuard:
             "request HIL DHCP lease")
         self.dhcp_requests += 1
 
-    def _scan_for_target(self, ssid: str) -> bool:
-        self.visibility_scans += 1
+    def _prepare_scan_helper(self) -> bool:
         if not self._scan_helper_ready:
             compiled = self._runner([
                 XCRUN, "clang", "-fobjc-arc",
@@ -196,10 +196,27 @@ class MacWifiGuard:
             if compiled.returncode != 0:
                 return False
             self._scan_helper_ready = True
-        result = self._runner([WIFI_SCAN_HELPER, self.interface, ssid])
+        return True
+
+    def _scan_for_target(self, ssid: str) -> bool:
+        self.visibility_scans += 1
+        if not self._prepare_scan_helper():
+            return False
+        result = self._runner([
+            WIFI_SCAN_HELPER, "scan", self.interface, ssid])
         visible = result.returncode == 0
         self.visibility_confirmed = self.visibility_confirmed or visible
         return visible
+
+    def _associate_target(self, ssid: str, passphrase: str) -> bool:
+        self.corewlan_association_attempts += 1
+        if not self._prepare_scan_helper():
+            return False
+        # The one-shot passphrase exists only in this bounded child process;
+        # neither stdout/stderr nor arguments are copied into HIL evidence.
+        result = self._runner([
+            WIFI_SCAN_HELPER, "associate", self.interface, ssid, passphrase])
+        return result.returncode == 0
 
     def capture(self) -> WifiSnapshot:
         enabled = self._run(
@@ -296,10 +313,20 @@ class MacWifiGuard:
                 ["-setairportpower", self.interface, "on"], "enable power")
         # Force a targeted CoreWLAN scan before asking networksetup to join.
         # The helper returns only a boolean and never emits nearby SSIDs.
-        self._scan_for_target(ssid)
+        visible = self._scan_for_target(ssid)
         deadline = time.monotonic() + self._wait_seconds
         observed = self._link_fingerprint()
         join_reported_failure = False
+        if visible:
+            self.association_attempts += 1
+            if self._associate_target(ssid, passphrase):
+                self._request_dhcp_lease()
+                attempt_deadline = min(deadline, time.monotonic() + 4.0)
+                while time.monotonic() < attempt_deadline:
+                    observed = self._link_fingerprint()
+                    if self._is_hil_fingerprint(observed):
+                        return
+                    time.sleep(0.25)
         while time.monotonic() < deadline:
             self.association_attempts += 1
             join_output = self._run(

@@ -1177,6 +1177,8 @@ def main() -> int:
                         wifi_guard.visibility_scans
                     host_wifi["visibility_confirmed"] = \
                         wifi_guard.visibility_confirmed
+                    host_wifi["corewlan_association_attempts"] = \
+                        wifi_guard.corewlan_association_attempts
                     host_wifi["restore_attempted"] = True
                     try:
                         wifi_guard.restore()
@@ -1343,6 +1345,8 @@ def main() -> int:
             host_wifi["visibility_scans"] = wifi_guard.visibility_scans
             host_wifi["visibility_confirmed"] = \
                 wifi_guard.visibility_confirmed
+            host_wifi["corewlan_association_attempts"] = \
+                wifi_guard.corewlan_association_attempts
             try:
                 wifi_guard.restore()
             except Exception as restore_error:
