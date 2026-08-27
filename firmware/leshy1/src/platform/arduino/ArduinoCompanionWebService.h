@@ -34,6 +34,8 @@ public:
     static constexpr int kCacheTxBuffers = 1;
     // ESP-IDF rejects values below six during driver initialization.
     static constexpr int kManagementShortBuffers = 6;
+    static constexpr std::uint32_t kApReadyTimeoutMs = 2000;
+    static constexpr std::uint32_t kApReadyPollMs = 10;
 
     enum class BeginStage : std::uint8_t {
         Idle,

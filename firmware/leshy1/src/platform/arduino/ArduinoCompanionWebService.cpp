@@ -200,18 +200,39 @@ bool ArduinoCompanionWebService::begin(
     wifiStarted_ = true;
 
     beginStage_ = BeginStage::Dhcp;
-    esp_netif_dhcp_status_t dhcpStatus = ESP_NETIF_DHCP_INIT;
-    error = esp_netif_dhcps_get_status(apNetif_, &dhcpStatus);
-    if (error != ESP_OK) return failBegin(BeginStage::Dhcp, error);
-    if (dhcpStatus != ESP_NETIF_DHCP_STARTED) {
-        error = esp_netif_dhcps_start(apNetif_);
-        if (error != ESP_OK &&
-            error != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED) {
-            return failBegin(BeginStage::Dhcp, error);
+    const std::uint32_t readyStartedMs = millis();
+    esp_err_t readinessError = ESP_ERR_TIMEOUT;
+    bool networkReady = false;
+    while (static_cast<std::uint32_t>(millis() - readyStartedMs) <
+           kApReadyTimeoutMs) {
+        esp_netif_dhcp_status_t dhcpStatus = ESP_NETIF_DHCP_INIT;
+        const esp_err_t statusError =
+            esp_netif_dhcps_get_status(apNetif_, &dhcpStatus);
+        const bool ipReady = apIpv4Ready();
+        if (statusError == ESP_OK && ipReady &&
+            dhcpStatus == ESP_NETIF_DHCP_STARTED) {
+            networkReady = true;
+            readinessError = ESP_OK;
+            break;
         }
+        if (statusError == ESP_OK && ipReady &&
+            dhcpStatus != ESP_NETIF_DHCP_STARTED) {
+            const esp_err_t startError = esp_netif_dhcps_start(apNetif_);
+            if (startError != ESP_OK &&
+                startError != ESP_ERR_ESP_NETIF_DHCP_ALREADY_STARTED &&
+                startError != ESP_ERR_INVALID_STATE) {
+                return failBegin(BeginStage::Dhcp, startError);
+            }
+            readinessError = startError;
+        } else if (statusError != ESP_OK) {
+            readinessError = statusError;
+        }
+        delay(kApReadyPollMs);
     }
-    if (!apIpv4Ready() || !dhcpServerStarted()) {
-        return failBegin(BeginStage::Dhcp, ESP_ERR_INVALID_STATE);
+    if (!networkReady || !apIpv4Ready() || !dhcpServerStarted()) {
+        return failBegin(
+            BeginStage::Dhcp,
+            readinessError == ESP_OK ? ESP_ERR_TIMEOUT : readinessError);
     }
 
     beginStage_ = BeginStage::Server;
