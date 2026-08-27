@@ -135,6 +135,20 @@ void testRussianInconclusiveExplainsIncompleteEvidence() {
     CHECK(model.rowCount == 3);
 }
 
+void testEmptyCaptureIsExplicitlyIncomplete() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Inconclusive;
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    const AirspaceGuardUiModel model =
+        presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(model.evidenceIncomplete);
+    CHECK(model.note == UiTextId::AirspaceGuardEvidenceIncomplete);
+    CHECK(std::strcmp(model.context.data(), "CAPTURE HAS NOT STARTED") == 0);
+    CHECK(model.rowCount == 1);
+    CHECK(std::strcmp(model.rows[0].text.data(), "CHECKED 0 FRAMES") == 0);
+}
+
 void testDroppedFindingCountReplacesLessImportantMix() {
     AirspaceGuardReport report = makeFindingReport();
     report.findingsDropped = 1;
@@ -167,6 +181,7 @@ int main() {
     testEvidenceListUsesFourStableTouchRows();
     testEvidenceDetailRetainsExactReference();
     testRussianInconclusiveExplainsIncompleteEvidence();
+    testEmptyCaptureIsExplicitlyIncomplete();
     testDroppedFindingCountReplacesLessImportantMix();
     testMalformedReportHasNoInventedEvidence();
     std::puts("Airspace Guard presenter tests passed");

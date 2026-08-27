@@ -34,6 +34,7 @@
 
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
+#include "apps/guard/AirspaceGuardController.h"
 #include "apps/capture/RadiotapPcap.h"
 #include "apps/capture/InfraredCapture.h"
 #include "apps/capture/InfraredCsv.h"
@@ -133,6 +134,7 @@
 #include "ui/TouchTargets.h"
 #include "ui/InterfaceSettingsController.h"
 #include "ui/AntennaStatusController.h"
+#include "ui/AirspaceGuardPresenter.h"
 #include "ui/LanguageController.h"
 #include "ui/UiComponents.h"
 #include "ui/UiController.h"
@@ -157,6 +159,8 @@ using leshy1::apps::library::LibraryEntry;
 using leshy1::apps::library::LibraryView;
 using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
+using leshy1::apps::guard::AirspaceGuardController;
+using leshy1::apps::guard::AirspaceGuardView;
 using leshy1::apps::capture::PcapExportResult;
 using leshy1::apps::capture::InfraredCapture;
 using leshy1::apps::capture::InfraredCapturePlan;
@@ -325,6 +329,8 @@ using leshy1::services::survey::SourceWindowReason;
 using leshy1::services::survey::SourceWindowState;
 using leshy1::services::survey::SurveySession;
 using leshy1::ui::UiAction;
+using leshy1::ui::AirspaceGuardUiModel;
+using leshy1::ui::AirspaceGuardUiTone;
 using leshy1::ui::UiController;
 using leshy1::ui::UiLanguage;
 using leshy1::ui::InterfaceSetting;
@@ -1040,6 +1046,7 @@ enum class WifiProductView : std::uint8_t {
     DeviceDetail,
     Channels,
     Visit,
+    AirspaceGuard,
 };
 
 const char* wifiProductViewName(WifiProductView view) {
@@ -1051,12 +1058,14 @@ const char* wifiProductViewName(WifiProductView view) {
         case WifiProductView::DeviceDetail: return "device_detail";
         case WifiProductView::Channels: return "channels";
         case WifiProductView::Visit: return "visit";
+        case WifiProductView::AirspaceGuard: return "airspace_guard";
         case WifiProductView::None:
         default: return "none";
     }
 }
 WifiProductView wifiProductView = WifiProductView::None;
 std::uint8_t wifiProductSelection = 0;
+AirspaceGuardController airspaceGuardController;
 WifiNetworkCatalog wifiNetworkCatalog;
 WifiNetworkNavigationOrder wifiNetworkNavigationOrder;
 std::size_t wifiNetworkSelection = 0;
@@ -9514,6 +9523,19 @@ NavigationFooter navigationFooterForCurrentState() {
         if (wifiProductView == WifiProductView::Menu) {
             return {back, choose, enter};
         }
+        if (wifiProductView == WifiProductView::AirspaceGuard) {
+            if (airspaceGuardController.view() ==
+                AirspaceGuardView::EvidenceDetail) {
+                return {back, {}, {}};
+            }
+            if (airspaceGuardController.view() ==
+                    AirspaceGuardView::Finding ||
+                airspaceGuardController.view() ==
+                    AirspaceGuardView::EvidenceList) {
+                return {back, choose, enter};
+            }
+            return {back, {}, {}};
+        }
         if (wifiProductView == WifiProductView::NetworkDetail) {
             return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
         }
@@ -12472,7 +12494,7 @@ void renderSurveySourceRow(std::uint8_t index) {
                   source->selected ? Tone::Positive : Tone::Muted);
 }
 
-constexpr std::uint8_t kWifiProductTaskCount = 4;
+constexpr std::uint8_t kWifiProductTaskCount = 5;
 
 UiTextId wifiProductLabel(std::uint8_t index) {
     constexpr UiTextId labels[kWifiProductTaskCount] = {
@@ -12480,6 +12502,7 @@ UiTextId wifiProductLabel(std::uint8_t index) {
         UiTextId::WifiMenuDevices,
         UiTextId::WifiMenuChannels,
         UiTextId::WifiMenuVisit,
+        UiTextId::WifiMenuAirspaceGuard,
     };
     return labels[index < kWifiProductTaskCount ? index : 0];
 }
@@ -12490,6 +12513,7 @@ UiTextId wifiProductNote(std::uint8_t index) {
         UiTextId::WifiMenuDevicesNote,
         UiTextId::WifiMenuChannelsNote,
         UiTextId::WifiMenuVisitNote,
+        UiTextId::WifiMenuAirspaceGuardNote,
     };
     return notes[index < kWifiProductTaskCount ? index : 0];
 }
@@ -12497,13 +12521,19 @@ UiTextId wifiProductNote(std::uint8_t index) {
 bool wifiProductTaskReady(std::uint8_t index) {
     // Functions are admitted one at a time. The menu stays truthful while the
     // remaining radio workflows are being implemented and measured.
-    return index <= 3U;
+    return index < kWifiProductTaskCount;
 }
 
-void renderWifiProductRow(std::uint8_t index) {
-    if (index >= kWifiProductTaskCount) return;
+std::uint8_t wifiProductFirstVisible(std::uint8_t selection) {
+    return homeFirstVisible(selection);
+}
+
+void renderWifiProductRow(std::uint8_t index, std::uint8_t firstVisible) {
+    if (index >= kWifiProductTaskCount || index < firstVisible ||
+        index >= firstVisible + kVisibleHomeRows) return;
     const bool ready = wifiProductTaskReady(index);
-    renderMenuRow(Components::homeRow(index), tr(wifiProductLabel(index)),
+    renderMenuRow(Components::homeRow(index - firstVisible),
+                  tr(wifiProductLabel(index)),
                   tr(ready ? wifiProductNote(index) : UiTextId::WifiMenuNext),
                   wifiProductSelection == index, ready,
                   ready ? Tone::Positive : Tone::Muted);
@@ -12511,8 +12541,78 @@ void renderWifiProductRow(std::uint8_t index) {
 
 void renderWifiProductMenu(bool clearContent) {
     renderHeader(tr(UiTextId::WifiMenuTitle), clearContent);
-    for (std::uint8_t index = 0; index < kWifiProductTaskCount; ++index) {
-        renderWifiProductRow(index);
+    const std::uint8_t first = wifiProductFirstVisible(wifiProductSelection);
+    const std::uint8_t end = static_cast<std::uint8_t>(
+        std::min<std::size_t>(kWifiProductTaskCount,
+                              first + kVisibleHomeRows));
+    for (std::uint8_t index = first; index < end; ++index) {
+        renderWifiProductRow(index, first);
+    }
+}
+
+Tone airspaceGuardTone(AirspaceGuardUiTone tone) {
+    switch (tone) {
+        case AirspaceGuardUiTone::Healthy: return Tone::Positive;
+        case AirspaceGuardUiTone::Caution: return Tone::Warning;
+        case AirspaceGuardUiTone::Finding:
+        case AirspaceGuardUiTone::Error: return Tone::Danger;
+        case AirspaceGuardUiTone::Neutral:
+        default: return Tone::Neutral;
+    }
+}
+
+Rect airspaceGuardRowBounds(std::uint8_t row) {
+    constexpr std::int16_t kTop = 88;
+    constexpr std::int16_t kHeight = 44;
+    constexpr std::int16_t kGap = 5;
+    return {Layout::Edge,
+            static_cast<std::int16_t>(kTop + row * (kHeight + kGap)),
+            Layout::ContentWidth, kHeight};
+}
+
+void renderAirspaceGuardRow(const AirspaceGuardUiModel& model,
+                            std::uint8_t row) {
+    const Rect bounds = airspaceGuardRowBounds(row);
+    const bool visible = row < model.rowCount;
+    if (!visible) {
+        display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                         Palette::Canvas);
+        return;
+    }
+    const bool selected = visible && model.rows[row].selected;
+    const std::uint16_t background = selected ? Palette::SurfaceFocus
+                                              : Palette::Surface;
+    display.fillRoundRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                          Layout::Radius, background);
+    renderFocusCue(bounds, selected);
+    display.setTextColor(selected ? Palette::Focus : Palette::TextSecondary,
+                         background);
+    const std::int16_t top = static_cast<std::int16_t>(
+        bounds.y + (bounds.height - kRobotoCondensedBodyAscent -
+                    kRobotoCondensedBodyDescent) / 2);
+    setUiCursor(UiTextRole::Body, bounds.x + kInteractiveRowTextInset, top);
+    display.print(model.rows[row].text.data());
+}
+
+void renderAirspaceGuardPage(bool clearContent) {
+    const AirspaceGuardUiModel model = leshy1::ui::presentAirspaceGuard(
+        airspaceGuardController, languageController.active());
+    renderHeader(tr(model.title), clearContent);
+    display.setTextColor(toneColor(airspaceGuardTone(model.tone)),
+                         Palette::Canvas);
+    setUiCursor(UiTextRole::Body, Layout::Edge, 32);
+    display.print(tr(model.headline));
+    display.setTextColor(model.evidenceIncomplete ? Palette::Warning
+                                                  : Palette::TextMuted,
+                         Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, Layout::Edge, 54);
+    display.print(tr(model.note));
+    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, Layout::Edge, 70);
+    display.print(model.context.data());
+    for (std::uint8_t row = 0;
+         row < AirspaceGuardUiModel::kVisibleRowCapacity; ++row) {
+        renderAirspaceGuardRow(model, row);
     }
 }
 
@@ -13332,6 +13432,10 @@ void renderInventoryPage(bool clearContent) {
     }
     if (wifiProductView == WifiProductView::Menu) {
         renderWifiProductMenu(clearContent);
+        return;
+    }
+    if (wifiProductView == WifiProductView::AirspaceGuard) {
+        renderAirspaceGuardPage(clearContent);
         return;
     }
     if (wifiProductView == WifiProductView::NetworkDetail) {
@@ -14725,6 +14829,9 @@ struct UiRenderSnapshot final {
     std::uint8_t selfTestSelection = 0;
     std::uint8_t wifiProductView = 0;
     std::uint8_t wifiProductSelection = 0;
+    std::uint8_t airspaceGuardView = 0;
+    std::size_t airspaceGuardFindingSelection = 0;
+    std::size_t airspaceGuardEvidenceSelection = 0;
     std::size_t wifiNetworkSelection = 0;
     std::size_t wifiNetworkSize = 0;
     std::uint32_t wifiNetworkRevision = 0;
@@ -14783,6 +14890,9 @@ UiRenderSnapshot captureUiRenderSnapshot() {
         selfTestController.selection(),
         static_cast<std::uint8_t>(wifiProductView),
         wifiProductSelection,
+        static_cast<std::uint8_t>(airspaceGuardController.view()),
+        airspaceGuardController.findingSelection(),
+        airspaceGuardController.evidenceSelection(),
         wifiNetworkSelection,
         wifiNetworkVisibleSize(),
         wifiNetworkCatalog.revision(),
@@ -14950,8 +15060,37 @@ bool renderSelectionDelta() {
         if (renderedUi.wifiProductSelection == wifiProductSelection) {
             return false;
         }
-        renderWifiProductRow(renderedUi.wifiProductSelection);
-        renderWifiProductRow(wifiProductSelection);
+        const std::uint8_t oldFirst = wifiProductFirstVisible(
+            renderedUi.wifiProductSelection);
+        const std::uint8_t currentFirst = wifiProductFirstVisible(
+            wifiProductSelection);
+        if (oldFirst != currentFirst) {
+            renderWifiProductMenu(false);
+            renderNavigationFooter();
+            return true;
+        }
+        renderWifiProductRow(renderedUi.wifiProductSelection, currentFirst);
+        renderWifiProductRow(wifiProductSelection, currentFirst);
+        renderNavigationFooter();
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::AirspaceGuard &&
+        renderedUi.wifiProductView ==
+            static_cast<std::uint8_t>(WifiProductView::AirspaceGuard) &&
+        renderedUi.airspaceGuardView == static_cast<std::uint8_t>(
+            airspaceGuardController.view())) {
+        if (airspaceGuardController.view() !=
+                AirspaceGuardView::EvidenceList ||
+            renderedUi.airspaceGuardEvidenceSelection ==
+                airspaceGuardController.evidenceSelection()) {
+            return false;
+        }
+        // Evidence navigation repaints the compact report content only. The
+        // display is never cleared, so physical-key repeats cannot create a
+        // bright full-screen flash.
+        renderAirspaceGuardPage(false);
         renderNavigationFooter();
         return true;
     }
@@ -19266,6 +19405,23 @@ bool openWifiVisitProduct() {
     return true;
 }
 
+bool openAirspaceGuardProduct() {
+    // dev.213 only presents an immutable report. Loading an explicit empty
+    // report keeps the product honest until the bounded passive-capture
+    // adapter is wired: no radio mode, lease or network state changes here.
+    leshy1::services::guard::AirspaceGuardReport report{};
+    report.status = leshy1::services::guard::AirspaceGuardStatus::Inconclusive;
+    const bool ready = airspaceGuardController.load(report) ==
+        leshy1::apps::guard::AirspaceGuardLoadStatus::Ready;
+    if (!ready) {
+        lastRuntimeEvent = "airspace_guard_report_rejected";
+        return false;
+    }
+    wifiProductView = WifiProductView::AirspaceGuard;
+    lastRuntimeEvent = "airspace_guard_open";
+    return true;
+}
+
 bool stopWifiChannelsProduct() {
     std::uint64_t endedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -19307,6 +19463,9 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (uiController.page() == 2) {
         if (bleProductView == BleProductView::Devices) return true;
         if (wifiProductView == WifiProductView::Menu) return true;
+        if (wifiProductView == WifiProductView::AirspaceGuard &&
+            airspaceGuardController.view() ==
+                AirspaceGuardView::EvidenceList) return true;
         if (wifiProductView == WifiProductView::Networks &&
             surveyWorkflow.state() == SurveyWorkflowState::Running) {
             return true;
@@ -19425,6 +19584,25 @@ bool applyUiAction(UiAction action, bool render = true) {
                     lastRuntimeEvent = "ble_home";
                 }
             }
+        } else if (wifiProductView == WifiProductView::AirspaceGuard) {
+            handled = true;
+            if (action == UiAction::Up) {
+                changed = airspaceGuardController.previous();
+            } else if (action == UiAction::Down) {
+                changed = airspaceGuardController.next();
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                changed = airspaceGuardController.openSelected();
+            } else if (action == UiAction::Back || action == UiAction::Left) {
+                changed = airspaceGuardController.back();
+                if (!changed) {
+                    airspaceGuardController.reset();
+                    wifiProductView = WifiProductView::Menu;
+                    wifiProductSelection = 4;
+                    lastRuntimeEvent = "wifi_menu";
+                    changed = true;
+                }
+            }
         } else if (wifiProductView == WifiProductView::Menu) {
             if (action == UiAction::Up && wifiProductSelection > 0) {
                 handled = true;
@@ -19447,6 +19625,8 @@ bool applyUiAction(UiAction action, bool render = true) {
                     changed = startWifiChannelsProduct();
                 } else if (wifiProductSelection == 3) {
                     changed = openWifiVisitProduct();
+                } else if (wifiProductSelection == 4) {
+                    changed = openAirspaceGuardProduct();
                 }
             } else if (action == UiAction::Select ||
                        action == UiAction::Right) {
@@ -20695,6 +20875,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                 const bool wifiApp = std::strcmp(selected->id, "wifi") == 0;
                 if (wifiApp) {
                     wifiFrameCapture.reset();
+                    airspaceGuardController.reset();
                     wifiDeviceCatalog.reset();
                     wifiDeviceNavigationOrder.reset();
                     wifiDeviceSelection = 0;
@@ -20774,10 +20955,50 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
                     static_cast<std::uint8_t>(bleDeviceSelection)};
         }
         if (wifiProductView == WifiProductView::Menu) {
+            const std::uint8_t first =
+                wifiProductFirstVisible(wifiProductSelection);
             return {leshy1::ui::hitTouchTarget(
-                        TouchTargetLayout::HomeRows, point, 0,
+                        TouchTargetLayout::HomeRows, point, first,
                         kWifiProductTaskCount),
                     wifiProductSelection};
+        }
+        if (wifiProductView == WifiProductView::AirspaceGuard &&
+            (airspaceGuardController.view() == AirspaceGuardView::Finding ||
+             airspaceGuardController.view() ==
+                 AirspaceGuardView::EvidenceList)) {
+            const AirspaceGuardUiModel model =
+                leshy1::ui::presentAirspaceGuard(
+                    airspaceGuardController, languageController.active());
+            if (airspaceGuardController.view() == AirspaceGuardView::Finding) {
+                for (std::uint8_t row = 0; row < model.rowCount; ++row) {
+                    if (leshy1::ui::visual::containsPoint(
+                            airspaceGuardRowBounds(row),
+                            static_cast<std::int16_t>(point.x),
+                            static_cast<std::int16_t>(point.y))) {
+                        // Every finding row describes the same selected burst;
+                        // tapping any of them is the touch equivalent of Enter.
+                        return {{true, 0}, 0};
+                    }
+                }
+                return {};
+            }
+            const std::size_t selection =
+                airspaceGuardController.evidenceSelection();
+            const std::size_t first =
+                selection < AirspaceGuardUiModel::kVisibleRowCapacity
+                    ? 0U
+                    : selection -
+                          AirspaceGuardUiModel::kVisibleRowCapacity + 1U;
+            for (std::uint8_t row = 0; row < model.rowCount; ++row) {
+                if (leshy1::ui::visual::containsPoint(
+                        airspaceGuardRowBounds(row),
+                        static_cast<std::int16_t>(point.x),
+                        static_cast<std::int16_t>(point.y))) {
+                    return {{true, static_cast<std::uint8_t>(first + row)},
+                            static_cast<std::uint8_t>(selection)};
+                }
+            }
+            return {};
         }
         if (wifiProductView == WifiProductView::Networks &&
             surveyWorkflow.state() == SurveyWorkflowState::Running) {

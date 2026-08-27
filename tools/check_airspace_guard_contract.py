@@ -22,6 +22,9 @@ PRESENTER_HEADER = ROOT / "firmware/leshy1/src/ui/AirspaceGuardPresenter.h"
 PRESENTER_SOURCE = ROOT / "firmware/leshy1/src/ui/AirspaceGuardPresenter.cpp"
 PRESENTER_TEST = ROOT / "tests/native/airspace_guard_presenter_tests.cpp"
 UI_STRINGS = ROOT / "firmware/leshy1/src/ui/UiStrings.def"
+ARDUINO_ENTRY = (
+    ROOT / "firmware/leshy1/src/platform/arduino/ArduinoEntry.cpp"
+)
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -42,6 +45,7 @@ def main() -> int:
         presenter_source = PRESENTER_SOURCE.read_text(encoding="utf-8")
         presenter_tests = PRESENTER_TEST.read_text(encoding="utf-8")
         ui_strings = UI_STRINGS.read_text(encoding="utf-8")
+        arduino_entry = ARDUINO_ENTRY.read_text(encoding="utf-8")
     except OSError as error:
         print(f"airspace guard contract check failed: {error}", file=sys.stderr)
         return 1
@@ -147,6 +151,7 @@ def main() -> int:
         "testRussianInconclusiveExplainsIncompleteEvidence",
         "testMalformedReportHasNoInventedEvidence",
         "testDroppedFindingCountReplacesLessImportantMix",
+        "testEmptyCaptureIsExplicitlyIncomplete",
     ):
         require(failures, marker in presenter_tests,
                 f"missing Airspace Guard presenter coverage: {marker}")
@@ -156,6 +161,7 @@ def main() -> int:
         "AirspaceGuardEvidenceTitle",
         "AirspaceGuardEvidenceIncomplete",
         "AirspaceGuardPassiveOnly",
+        "AirspaceGuardCaptureNotStarted",
     ):
         require(failures, marker in ui_strings,
                 f"missing EN/RU Airspace Guard copy: {marker}")
@@ -173,6 +179,29 @@ def main() -> int:
     ):
         require(failures, forbidden not in presenter,
                 f"Airspace Guard presenter bypasses passive boundary: {forbidden}")
+
+    for marker in (
+        "WifiProductView::AirspaceGuard",
+        "UiTextId::WifiMenuAirspaceGuard",
+        "openAirspaceGuardProduct()",
+        "renderAirspaceGuardPage",
+        "presentAirspaceGuard",
+        "airspaceGuardController.openSelected()",
+        "airspaceGuardController.back()",
+    ):
+        require(failures, marker in arduino_entry,
+                f"missing Airspace Guard product integration: {marker}")
+    open_start = arduino_entry.find("bool openAirspaceGuardProduct()")
+    open_end = arduino_entry.find("bool stopWifiChannelsProduct()", open_start)
+    open_body = arduino_entry[open_start:open_end]
+    require(failures, open_start >= 0 and open_end > open_start,
+            "Airspace Guard product entry point is not bounded")
+    for forbidden in (
+        "ResourceBroker", "beginDeviceMonitor", "beginChannelMonitor",
+        "startProductSurvey", "esp_wifi", "setTxPower", "sendPacket",
+    ):
+        require(failures, forbidden not in open_body,
+                f"report-only Airspace Guard entry touches runtime: {forbidden}")
 
     if failures:
         print("airspace guard contract check failed:", file=sys.stderr)

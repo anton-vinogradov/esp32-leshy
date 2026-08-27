@@ -98,6 +98,10 @@ AirspaceGuardUiModel presentOutcome(const AirspaceGuardController& controller,
         case AirspaceGuardStatus::Inconclusive:
             model.headline = UiTextId::AirspaceGuardInconclusive;
             model.tone = AirspaceGuardUiTone::Caution;
+            if (controller.framesAvailable() == 0U) {
+                copyText(model.context, language,
+                         UiTextId::AirspaceGuardCaptureNotStarted);
+            }
             appendIncompleteRows(controller, language, model);
             break;
         case AirspaceGuardStatus::InvalidPolicy:

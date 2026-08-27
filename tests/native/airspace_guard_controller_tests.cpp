@@ -157,6 +157,11 @@ void testClearAndInconclusiveStayOutcomeOnly() {
     CHECK(controller.load(inconclusive) == AirspaceGuardLoadStatus::Ready);
     CHECK(controller.outcome() == AirspaceGuardStatus::Inconclusive);
     CHECK(controller.evidenceIncomplete());
+
+    AirspaceGuardReport empty{};
+    empty.status = AirspaceGuardStatus::Inconclusive;
+    CHECK(controller.load(empty) == AirspaceGuardLoadStatus::Ready);
+    CHECK(controller.evidenceIncomplete());
 }
 
 void testOutcomeStatusMismatchFailsClosed() {

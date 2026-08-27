@@ -243,7 +243,8 @@ bool AirspaceGuardController::back() {
 }
 
 bool AirspaceGuardController::evidenceIncomplete() const {
-    return report_.sourceReadFailures != 0U ||
+    return report_.framesAvailable == 0U || report_.framesInspected == 0U ||
+        report_.sourceReadFailures != 0U ||
         report_.malformedFrames != 0U || report_.findingsDropped != 0U ||
         report_.inspectionTruncated;
 }
