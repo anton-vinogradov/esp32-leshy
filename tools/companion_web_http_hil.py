@@ -88,7 +88,7 @@ class MacWifiGuard:
 
     def __init__(self, interface: str, service: str,
                  runner: CommandRunner = _default_command_runner,
-                 wait_seconds: float = 20.0) -> None:
+                 wait_seconds: float = 60.0) -> None:
         if not interface or not service:
             raise ValueError("explicit Wi-Fi interface and service are required")
         self.interface = interface
@@ -218,6 +218,19 @@ class MacWifiGuard:
             WIFI_SCAN_HELPER, "associate", self.interface, ssid, passphrase])
         return result.returncode == 0
 
+    def _wait_for_hil_lease(
+            self, deadline: float,
+            observed: tuple[str | None, str | None, str | None],
+    ) -> tuple[bool, tuple[str | None, str | None, str | None]]:
+        self._request_dhcp_lease()
+        attempt_deadline = min(deadline, time.monotonic() + 4.0)
+        while time.monotonic() < attempt_deadline:
+            observed = self._link_fingerprint()
+            if self._is_hil_fingerprint(observed):
+                return True, observed
+            time.sleep(0.25)
+        return False, observed
+
     def capture(self) -> WifiSnapshot:
         enabled = self._run(
             ["-getnetworkserviceenabled", self.service],
@@ -320,13 +333,10 @@ class MacWifiGuard:
         if visible:
             self.association_attempts += 1
             if self._associate_target(ssid, passphrase):
-                self._request_dhcp_lease()
-                attempt_deadline = min(deadline, time.monotonic() + 4.0)
-                while time.monotonic() < attempt_deadline:
-                    observed = self._link_fingerprint()
-                    if self._is_hil_fingerprint(observed):
-                        return
-                    time.sleep(0.25)
+                reached, observed = self._wait_for_hil_lease(
+                    deadline, observed)
+                if reached:
+                    return
         while time.monotonic() < deadline:
             self.association_attempts += 1
             join_output = self._run(
@@ -354,22 +364,24 @@ class MacWifiGuard:
                         "refresh Wi-Fi scan on")
                     self.radio_refreshes += 1
                     time.sleep(0.5)
-                    self._scan_for_target(ssid)
+                    if self._scan_for_target(ssid):
+                        self.association_attempts += 1
+                        if self._associate_target(ssid, passphrase):
+                            reached, observed = self._wait_for_hil_lease(
+                                deadline, observed)
+                            if reached:
+                                return
                 if time.monotonic() < deadline:
                     time.sleep(0.25)
                 continue
             # networksetup can finish the 802.11 association without waking
             # IPConfiguration for the new link. Ask the existing DHCP-mode
             # service for a lease; never install a static HIL address.
-            self._request_dhcp_lease()
             # networksetup may need a fresh scan after the AP starts. Retry
             # the join itself instead of merely polling a stale association.
-            attempt_deadline = min(deadline, time.monotonic() + 4.0)
-            while time.monotonic() < attempt_deadline:
-                observed = self._link_fingerprint()
-                if self._is_hil_fingerprint(observed):
-                    return
-                time.sleep(0.25)
+            reached, observed = self._wait_for_hil_lease(deadline, observed)
+            if reached:
+                return
             if time.monotonic() < deadline:
                 time.sleep(0.25)
         raise self._hil_failure(observed, join_reported_failure)
