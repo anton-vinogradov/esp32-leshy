@@ -1430,7 +1430,7 @@ def main() -> int:
         for marker in (
             "kStaticRxBuffers = 2",
             "kDynamicRxBuffers = 1",
-            "kStaticTxBuffers = 2",
+            "kStaticTxBuffers = 4",
             "kDynamicTxBuffers = 0",
             "kWriteChunkBytes = 512",
             "kWriteBurstChunks = 1",

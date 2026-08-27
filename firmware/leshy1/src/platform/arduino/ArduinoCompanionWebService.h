@@ -29,8 +29,10 @@ public:
     static constexpr std::uint64_t kClientDeadlineUs = 12000000ULL;
     static constexpr int kStaticRxBuffers = 2;
     static constexpr int kDynamicRxBuffers = 1;
-    // The pinned ESP-IDF libraries are compiled for static TX buffers.
-    static constexpr int kStaticTxBuffers = 2;
+    // The pinned ESP-IDF libraries are compiled for static TX buffers. Four
+    // buffers give the bounded HTTP response enough acknowledgement headroom
+    // while remaining far below the ESP-IDF default allocation.
+    static constexpr int kStaticTxBuffers = 4;
     static constexpr int kDynamicTxBuffers = 0;
     static constexpr int kRxManagementBuffers = 1;
     static constexpr int kCacheTxBuffers = 1;
@@ -39,8 +41,8 @@ public:
     static constexpr std::uint32_t kApReadyTimeoutMs = 2000;
     static constexpr std::uint32_t kApReadyPollMs = 10;
     static constexpr std::size_t kResponseHeaderCapacity = 256;
-    // Keep one non-blocking write comfortably inside the two static Wi-Fi TX
-    // buffers. A larger burst exhausts them before the radio can acknowledge.
+    // Keep one non-blocking write comfortably inside one static Wi-Fi TX
+    // buffer. A larger burst can exhaust the bounded queue before an ACK.
     static constexpr std::size_t kWriteChunkBytes = 512;
     static constexpr std::size_t kWriteBurstChunks = 1;
 
