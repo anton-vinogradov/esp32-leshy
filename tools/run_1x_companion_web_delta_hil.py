@@ -1163,6 +1163,7 @@ def main() -> int:
                     expected_passphrase = ""
                     host_wifi["association_attempts"] = (
                         wifi_guard.association_attempts)
+                    host_wifi["dhcp_requests"] = wifi_guard.dhcp_requests
                     host_wifi["restore_attempted"] = True
                     try:
                         wifi_guard.restore()
@@ -1306,6 +1307,9 @@ def main() -> int:
         if (wifi_guard is not None and wifi_guard.snapshot is not None and
                 not wifi_guard.restored):
             host_wifi["restore_attempted"] = True
+            host_wifi["association_attempts"] = (
+                wifi_guard.association_attempts)
+            host_wifi["dhcp_requests"] = wifi_guard.dhcp_requests
             try:
                 wifi_guard.restore()
             except Exception as restore_error:

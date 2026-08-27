@@ -90,6 +90,7 @@ class MacWifiGuard:
         self.restored = False
         self.restore_attempted = False
         self.association_attempts = 0
+        self.dhcp_requests = 0
         self._mutation_attempted = False
         self._temporary_ssid: str | None = None
 
@@ -148,6 +149,12 @@ class MacWifiGuard:
         subnet = self._run_optional(
             ["getoption", self.interface, "subnet_mask"], IPCONFIG)
         return address, router, subnet
+
+    def _request_dhcp_lease(self) -> None:
+        result = self._runner([IPCONFIG, "set", self.interface, "DHCP"])
+        if result.returncode != 0:
+            raise RuntimeError("explicit HIL DHCP lease request failed")
+        self.dhcp_requests += 1
 
     def capture(self) -> WifiSnapshot:
         enabled = self._run(
@@ -258,6 +265,10 @@ class MacWifiGuard:
                 if time.monotonic() < deadline:
                     time.sleep(0.25)
                 continue
+            # networksetup can finish the 802.11 association without waking
+            # IPConfiguration for the new link. Ask the existing DHCP-mode
+            # service for a lease; never install a static HIL address.
+            self._request_dhcp_lease()
             # networksetup may need a fresh scan after the AP starts. Retry
             # the join itself instead of merely polling a stale association.
             attempt_deadline = min(deadline, time.monotonic() + 4.0)

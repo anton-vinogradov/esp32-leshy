@@ -267,6 +267,7 @@ class CompanionWebDeltaRunnerTests(unittest.TestCase):
             'wifi_guard.capture()',
             'wifi_guard.connect(',
             'wifi_guard.restore()',
+            'host_wifi["dhcp_requests"] = wifi_guard.dhcp_requests',
             'normalized_pages(web_session_pages)',
             'normalized_pages(web_target_pages)',
             'normalized_pages(web_compare_pages)',

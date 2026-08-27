@@ -31,6 +31,8 @@ class FakeNetworkSetup:
         self.fail_join = False
         self.soft_fail_join = False
         self.soft_failures_remaining = 0
+        self.defer_hil_dhcp = False
+        self.dhcp_requests = 0
         self.hil_router: str | None = "192.168.4.1"
         self.address = "10.88.88.60" if power and ssid else None
         self.router = "10.88.88.1" if power and ssid else None
@@ -41,9 +43,12 @@ class FakeNetworkSetup:
         if ssid is None:
             self.address = self.router = self.subnet = None
         elif ssid.startswith("Leshy-"):
-            self.address = "192.168.4.2"
-            self.router = self.hil_router
-            self.subnet = "255.255.255.0"
+            if self.defer_hil_dhcp:
+                self.address = self.router = self.subnet = None
+            else:
+                self.address = "192.168.4.2"
+                self.router = self.hil_router
+                self.subnet = "255.255.255.0"
         else:
             self.address = "10.88.88.60"
             self.router = "10.88.88.1"
@@ -53,6 +58,13 @@ class FakeNetworkSetup:
         self.commands.append(arguments)
         if arguments[0] == "/usr/sbin/ipconfig":
             operation = arguments[1]
+            if operation == "set" and arguments[3] == "DHCP":
+                self.dhcp_requests += 1
+                if self.ssid and self.ssid.startswith("Leshy-"):
+                    self.address = "192.168.4.2"
+                    self.router = self.hil_router
+                    self.subnet = "255.255.255.0"
+                return subprocess.CompletedProcess(arguments, 0, "", "")
             if operation == "getifaddr":
                 value = self.address
             elif operation == "getoption" and arguments[3] == "router":
@@ -165,6 +177,18 @@ class CompanionWebHttpHilTests(unittest.TestCase):
         guard.connect("Leshy-8790D5", "temporary123")
         self.assertEqual("192.168.4.2", fake.address)
         self.assertIsNone(fake.router)
+        guard.restore()
+        self.assertTrue(guard.restored)
+
+    def test_join_explicitly_requests_a_real_dhcp_lease(self) -> None:
+        fake = FakeNetworkSetup(redact_ssid=True)
+        fake.defer_hil_dhcp = True
+        guard = MacWifiGuard("en0", "Wi-Fi", fake, wait_seconds=0.01)
+        guard.capture()
+        guard.connect("Leshy-8790D5", "temporary123")
+        self.assertEqual("192.168.4.2", fake.address)
+        self.assertEqual(1, fake.dhcp_requests)
+        self.assertEqual(1, guard.dhcp_requests)
         guard.restore()
         self.assertTrue(guard.restored)
 

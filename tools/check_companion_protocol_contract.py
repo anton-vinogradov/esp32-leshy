@@ -445,6 +445,7 @@ def main() -> int:
         '"target.mutation.preview", "web-first-preview"',
         '"target.mutation.confirm", "web-restore-confirm"',
         'assert_atomic_mutation_state(',
+        'host_wifi["dhcp_requests"] = wifi_guard.dhcp_requests',
         'host_wifi["restored"] is True',
     ):
         require(failures, marker in web_hil,
@@ -462,6 +463,8 @@ def main() -> int:
         '"-removepreferredwirelessnetwork"',
         'temporary HIL SSID already exists as a preferred network',
         'self.association_attempts += 1',
+        'self._request_dhcp_lease()',
+        '[IPCONFIG, "set", self.interface, "DHCP"]',
         'self._is_hil_fingerprint(observed)',
         'self._wait_for_disconnected()',
         'urllib.request.ProxyHandler({})',
