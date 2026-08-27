@@ -70,6 +70,20 @@ Stages use `planned`, `active`, `blocked`, `done`, or `reopened`. Only one stage
 be `active`. Requirements use `draft`, `accepted`, `implemented`, `verified`,
 `deferred`, or `rejected`. Implemented without evidence is not verified.
 
+## Firmware versioning
+
+- Released `v0.*` artifacts are the frozen PoC line. Existing internal redesign
+  checkpoints `0.1…0.207` remain immutable evidence identifiers and are never renamed
+  after their bytes have been built or flashed.
+- The next source-bearing redesign build starts the public 1.x namespace as
+  `1.0.0-dev.208`. The `dev.N` suffix is a monotonic engineering checkpoint, not a
+  user release.
+- Phase-complete release candidates use `1.0.0-rc.N`. The first public stable redesign
+  is `1.0.0`; later compatible features increment the minor version and compatible
+  corrections increment the patch version.
+- A version identifies exact immutable bytes. Documentation may explain or reject an
+  artifact, but cannot relabel it retroactively.
+
 ## Definition of Done
 
 Work is complete only when:

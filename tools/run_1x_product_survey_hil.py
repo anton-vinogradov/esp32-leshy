@@ -714,12 +714,14 @@ def main() -> int:
     cleanup_before_reboot: dict[str, Any] = {"attempted": False}
     cleanup_final: dict[str, Any] = {"attempted": False}
     expected_cid = args.expected_cid or ""
+    flash_completed = False
     try:
         shutil.copyfile(args.firmware, candidate)
         firmware_sha = sha256_file(candidate)
         app_identity = app_elf_sha256(candidate)
         if args.flash:
             flash_candidate(args.port, candidate, args.flash_offset, args.flash_baud)
+            flash_completed = True
             # esptool already hard-resets the board. Let that boot finish its SD
             # identification/cleanup before issuing the separately measured reset.
             time.sleep(args.post_flash_settle)
@@ -1035,13 +1037,14 @@ def main() -> int:
         "run_id": run_id,
         "runner_source_sha256": runner_source_sha256,
         "passed": not failures,
-        "gate_eligible": bool(args.flash) and not failures,
+        "gate_eligible": flash_completed and not failures,
         "failures": failures,
         "candidate": {
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
             "version": args.expected_version,
-            "flashed": args.flash,
+            "flash_requested": args.flash,
+            "flashed": flash_completed,
         },
         "expected_cid": expected_cid,
         "boot_before": {"ready": before_ready, "recovery": before_recovery,

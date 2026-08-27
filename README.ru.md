@@ -16,7 +16,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
 - **Проверенный checkpoint:** exact `0.196.2-companion-post-web-shared-scratch` на firmware source `7272d237ebb65e4b700ad8c64a32b48fc779ad75` физически принят для boundary **device-only Local Web → Targets → offline USB** в `E-BUILD-153`/`E-AUTO-125`/`E-HIL-183`/`E-COMPANION-007`. Одна exact-прошивка запускает и останавливает SoftAP самого DIV при zero associated stations, явно оставляет network core ESP-IDF process-lifetime, повторно открывает 16 read-only Targets и 7 comparison items, byte-for-byte воспроизводит принятый offline snapshot 11 521 byte и восстанавливает Survey worker в Home/none/lease 0. State codec 24 808 byte и admission scratch 11 272 byte переиспользуют один существующий static union, добавляя zero static RAM. Host network tools не запускаются, активный Wi-Fi Mac не затрагивается.
-- **Следующий gate:** восстановить board-01 из rejected boot loop 0.204 в ROM loader, прошить host/build-verified `0.206.0-minimal-nimble-observer` и пройти один exact delta HIL, в котором реальный product Survey выполняет непрерывные циклы Wi-Fi+BLE, сохраняется, перезагружается, повторно открывает результат и заканчивает Home/none/lease 0. Тест остаётся только USB: активный Wi-Fi ноутбука и Cardputer запрещено затрагивать. Physical HTTP parity остаётся отложенной до отдельного idle adapter или внешнего client, а physical gate S5 — отложенным, но не отменённым, до приезда replacement DIV и прохождения его read-only profile.
+- **Следующий gate:** выключить board-01, вставить или перевставить enrolled SD-карту, затем переиспользовать уже прошитый exact `0.207.0-retained-nimble-memory` без новой записи. Один USB-only delta HIL обязан завершить один непрерывный реальный цикл Survey Wi-Fi+BLE, сохранить результат, перезагрузиться, повторно открыть его и закончить Home/none/lease 0. Активный Wi-Fi ноутбука и Cardputer по-прежнему запрещено затрагивать. Physical HTTP parity остаётся отложенной до отдельного idle adapter или внешнего client, а physical gate S5 — отложенным, но не отменённым, до приезда replacement DIV и прохождения его read-only profile.
 
 ### Фазы текущего этапа
 
@@ -33,21 +33,33 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 
 | Возможность | Этап поставки | Статус |
 |---|---|---|
-| Home, пять клавиш, touch, EN/RU UI и доступные общие компоненты | S2 | ✅ готово |
-| Хаб «Устройство»: Питание, Настройки, Самопроверка, Диагностика и О системе | S2 | ✅ готово |
-| Постоянное пассивное сканирование и переиспользуемые сессии | S3 + S6.6 | 🟡 в работе |
-| Сети, устройства и каналы Wi-Fi, подробности, радар и захват пакетов | S4 | ✅ готово |
-| Устройства Bluetooth, сведения об identity/vendor и радар | S4 | ✅ готово |
-| Спектр nRF24 2,4 ГГц, однопиксельный водопад и поиск сигнала | S5 | 🔴 заблокировано |
-| Спектр Sub-GHz, однопиксельный водопад, поиск и захват OOK/FSK | S5 | 🔴 заблокировано |
-| Приём и декодирование ИК, сохранение и экспорт через Библиотеку | S5 | ✅ готово |
-| Библиотека, offline reopen, экспорт CSV/PCAP и provenance evidence | S4 + S5 | ✅ готово |
-| Цели, сравнение, evidence, metadata и обратимая correlation | S6.1–S6.4 | ✅ готово |
-| Scoped local companion USB/Web и offline search/export | S6.5 | 🟡 в работе |
-| Авторизованная Лаборатория: bounded TX/replay с panic stop | S7 | ⬜ дальше |
+| Home с версией прошивки, финальным task-first меню и страницами на всю полезную площадь | S2 | ✅ готово |
+| Навигация пятью клавишами и touch, стабильный выбор, EN/RU UI и доступные общие компоненты | S2 | ✅ готово |
+| Настройки устройства: язык, яркость, тема, питание/sleep и status LED каждой антенны | S2 + S5.5 | ✅ готово |
+| Сервисный хаб: Быстрая/Полная самопроверка, Диагностика, recovery state и О системе | S2 + S5.6 | ✅ готово |
+| Выбираемый пассивный multi-radio Обзор, долговечная timeline и переиспользуемые Сессии | S3 + S6.6 | 🟡 в работе |
+| Сети Wi-Fi рядом: стабильный список, SSID/security/channel/vendor, раскрытие hidden name и live-радар | S4 | ✅ готово |
+| Устройства Wi-Fi: пассивные клиенты, vendor/type/model/generation, directed SSID и live-радар | S4 | ✅ готово |
+| Каналы Wi-Fi 1–13: текущая и средняя загрузка, границы каналов и объяснимая рекомендация свободного | S4 | ✅ готово |
+| Ограниченная запись пакетов Wi-Fi, privacy-confirm, сохранение PCAP, cold reopen и экспорт | S4 | ✅ готово |
+| Устройства Bluetooth рядом: strongest-first список, company/service identity и live-радар | S4 | ✅ готово |
+| Спектр 2,4 ГГц nRF24 со всех приёмников и receiver-paced однопиксельный водопад | S5.3 | 🔴 заблокировано |
+| Поиск сигнала nRF24 2,4 ГГц с калибровкой фона, точной частотой и ближайшим каналом Wi-Fi | S5.3 | 🔴 заблокировано |
+| Спектр Sub-GHz и receiver-paced однопиксельные водопады 315/433/868/915 МГц | S5.4 | 🔴 заблокировано |
+| Калиброванный поиск частоты Sub-GHz и bounded OOK/FSK приём, сохранение, cold reopen и экспорт | S5.4 | 🔴 заблокировано |
+| Приём ИК, декодирование NEC, сохранение, cold reopen в Библиотеке и экспорт CSV | S5.2 | ✅ готово |
+| Библиотека Сессий и Захватов с offline reopen и видимым статусом целостности | S4 + S5 | ✅ готово |
+| Экспорт CSV/PCAP/offline snapshot с точным provenance исходного evidence | S4–S6.5 | ✅ готово |
+| Цели: стабильная identity, избранное/name/tags/notes и переход к immutable evidence | S6.1 + S6.4 | ✅ готово |
+| Объяснимая cross-radio correlation с review, accept/reject и обратимыми merge/split | S6.2 + S6.4 | ✅ готово |
+| Сравнение baseline: новые, исчезнувшие и изменившиеся Цели с evidence каждого вывода | S6.3 + S6.4 | ✅ готово |
+| Scoped local USB companion: просмотр/поиск Сессий, Целей и сравнений и offline export | S6.5 | 🟡 в работе |
+| Scoped Web companion на самом устройстве над теми же read-only schemas и Actions | S6.5 | 🟡 в работе |
+| Авторизованная Лаборатория: bounded TX/replay, видимый TX, immutable source capture и panic stop | S7 | ⬜ дальше |
 | Permissioned extensions и optional hardware profiles GPS/NFC | S7 | ⬜ дальше |
 | Устройство → Обновление: signed stable/beta OTA, rollback и recovery | S8 | ⬜ дальше |
-| Browser install, backup/restore и автоматическая часовая release qualification | S8 | ⬜ дальше |
+| Browser install и зашифрованные backup/restore настроек и пользовательских данных | S8 | ⬜ дальше |
+| Автоматические скриншоты реального устройства, delta/full HIL и часовая release qualification | S8 | ⬜ дальше |
 
 ### Роадмап
 
@@ -75,6 +87,11 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
   линейку.
 - **1.x — активный редизайн:** продуктовый анализ, архитектура и новое ядро приложений
   с capabilities/resources находятся в разделе [docs/v1](docs/v1/README.ru.md).
+
+Уже существующие checkpoints редизайна по `0.207` включительно сохраняют свои
+неизменяемые evidence names. Следующая source-bearing сборка — `1.0.0-dev.208`,
+phase-complete candidates имеют вид `1.0.0-rc.N`, а первый stable релиз редизайна —
+`1.0.0`.
 
 ## Что строит 1.x
 

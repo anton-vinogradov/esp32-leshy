@@ -16,7 +16,7 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 - **Current phase:** `S6.5 — local USB/Web companion over shared Actions and schemas`.
 - **Verified checkpoint:** exact `0.196.2-companion-post-web-shared-scratch` at firmware source `7272d237ebb65e4b700ad8c64a32b48fc779ad75` is physically accepted for the **device-only Local Web → Targets → offline USB** continuity boundary in `E-BUILD-153`/`E-AUTO-125`/`E-HIL-183`/`E-COMPANION-007`. One exact application flash starts and stops the DIV SoftAP with zero associated stations, leaves the ESP-IDF network core explicitly process-lifetime, reopens 16 read-only Targets with 7 comparison items, reproduces the accepted 11,521-byte offline snapshot byte-for-byte and restores the Survey worker at Home/none/lease 0. The 24,808-byte state codec and 11,272-byte admission scratch reuse one existing static union, adding zero static RAM. No host network tool runs and active Mac Wi-Fi is untouched.
-- **Next gate:** recover board-01 from the rejected 0.204 boot loop into the ROM loader, flash host/build-verified `0.206.0-minimal-nimble-observer`, and run one exact delta HIL in which the real product Survey completes contiguous Wi-Fi+BLE cycles, saves, reboots, reopens the result and ends at Home/none/lease 0. The test remains USB-only: the active laptop Wi-Fi and Cardputer are prohibited. Physical HTTP parity remains deferred to a dedicated idle adapter or external client, and the physical S5 gate remains postponed, not waived, until the replacement DIV arrives and passes its read-only profile.
+- **Next gate:** power board-01 down, insert or reseat the enrolled SD card, then reuse the already-flashed exact `0.207.0-retained-nimble-memory` without another write. One USB-only delta HIL must complete one contiguous real Wi-Fi+BLE Survey cycle, save, reboot, reopen the result and end at Home/none/lease 0. The active laptop Wi-Fi and Cardputer remain prohibited. Physical HTTP parity remains deferred to a dedicated idle adapter or external client, and the physical S5 gate remains postponed, not waived, until the replacement DIV arrives and passes its read-only profile.
 
 ### Current stage phases
 
@@ -33,21 +33,33 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 
 | Functionality | Delivery stage | Status |
 |---|---|---|
-| Home, five keys, touch, EN/RU UI and accessible common components | S2 | ✅ complete |
-| Device hub: Power, Settings, Self-Test, Diagnostics and About | S2 | ✅ complete |
-| Persistent passive Survey and reusable Sessions | S3 + S6.6 | 🟡 in progress |
-| Wi-Fi networks, devices, channels, details, radar and packet capture | S4 | ✅ complete |
-| Bluetooth devices, identity/vendor details and radar | S4 | ✅ complete |
-| 2.4 GHz nRF24 spectrum, one-pixel waterfall and signal finder | S5 | 🔴 blocked |
-| Sub-GHz spectrum, one-pixel waterfall, finder and OOK/FSK capture | S5 | 🔴 blocked |
-| Infrared receive, decode, save and Library export | S5 | ✅ complete |
-| Library, offline reopen, CSV/PCAP export and evidence provenance | S4 + S5 | ✅ complete |
-| Targets, comparison, evidence, metadata and reversible correlation | S6.1–S6.4 | ✅ complete |
-| Scoped local USB/Web companion and offline search/export | S6.5 | 🟡 in progress |
-| Authorized Lab: bounded transmit/replay with panic stop | S7 | ⬜ later |
+| Home with firmware identity, task-first final menu and full-area pages | S2 | ✅ complete |
+| Five-key and touch navigation, stable selection, EN/RU UI and accessible common components | S2 | ✅ complete |
+| Device settings: language, brightness, theme, power/sleep and per-antenna status LEDs | S2 + S5.5 | ✅ complete |
+| Device service hub: Quick/Full Self-Test, Diagnostics, recovery state and About | S2 + S5.6 | ✅ complete |
+| Selectable passive multi-radio Survey, durable timeline and reusable Sessions | S3 + S6.6 | 🟡 in progress |
+| Wi-Fi nearby networks: stable list, SSID/security/channel/vendor facts, hidden-name enrichment and live radar | S4 | ✅ complete |
+| Wi-Fi devices: passive client discovery, vendor/type/model/generation facts, directed SSID and live radar | S4 | ✅ complete |
+| Wi-Fi channels 1–13: current and mean load, channel boundaries and explainable free-channel recommendation | S4 | ✅ complete |
+| Bounded Wi-Fi packet recording, privacy confirmation, PCAP save, cold reopen and export | S4 | ✅ complete |
+| Bluetooth nearby devices: strongest-first list, company/service identity details and live radar | S4 | ✅ complete |
+| 2.4 GHz nRF24 all-receiver spectrum and receiver-paced one-pixel waterfall | S5.3 | 🔴 blocked |
+| 2.4 GHz nRF24 signal finder with background calibration, exact frequency and nearest Wi-Fi channel | S5.3 | 🔴 blocked |
+| Sub-GHz spectrum and receiver-paced one-pixel waterfalls for 315/433/868/915 MHz | S5.4 | 🔴 blocked |
+| Sub-GHz calibrated frequency finder plus bounded OOK/FSK receive, save, cold reopen and export | S5.4 | 🔴 blocked |
+| Infrared receive, NEC decode, save, cold Library reopen and CSV export | S5.2 | ✅ complete |
+| Library browsing for Sessions and Captures with offline reopen and integrity status | S4 + S5 | ✅ complete |
+| CSV/PCAP/offline snapshot export with exact source-evidence provenance | S4–S6.5 | ✅ complete |
+| Targets: stable identity, favorite/name/tags/notes and drill-down to immutable evidence | S6.1 + S6.4 | ✅ complete |
+| Explainable cross-radio correlation with review, accept/reject and reversible merge/split | S6.2 + S6.4 | ✅ complete |
+| Baseline comparison: new, disappeared and changed Targets with evidence for every conclusion | S6.3 + S6.4 | ✅ complete |
+| Scoped local USB companion: browse/search Sessions, Targets and comparisons and export offline | S6.5 | 🟡 in progress |
+| Scoped device-hosted Web companion over the same read-only schemas and Actions | S6.5 | 🟡 in progress |
+| Authorized Lab: bounded transmit/replay, visible TX state, immutable source capture and panic stop | S7 | ⬜ later |
 | Permissioned extensions and optional GPS/NFC hardware profiles | S7 | ⬜ later |
 | Device → Update: signed stable/beta OTA, rollback and recovery | S8 | ⬜ later |
-| Browser install, backup/restore and automated one-hour release qualification | S8 | ⬜ later |
+| Browser install plus encrypted backup/restore of settings and user data | S8 | ⬜ later |
+| Automated real-device screenshots, delta/full HIL and one-hour release qualification | S8 | ⬜ later |
 
 ### Roadmap
 
@@ -75,6 +87,10 @@ been released yet.
   this line.
 - **1.x — active redesign:** product discovery, architecture, and the new
   capability/resource-aware application runtime live under [docs/v1](docs/v1/README.md).
+
+Existing redesign checkpoints through `0.207` keep their immutable evidence names.
+The next source-bearing build is `1.0.0-dev.208`; phase-complete candidates use
+`1.0.0-rc.N`, and the first stable redesign release is `1.0.0`.
 
 ## What 1.x is building
 

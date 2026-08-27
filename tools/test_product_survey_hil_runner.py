@@ -25,6 +25,17 @@ CID = "FE343253440000002000000055019CB7"
 
 
 class ProductSurveyHilRunnerTests(unittest.TestCase):
+    def test_flash_accounting_requires_completed_write(self) -> None:
+        source = Path(RUNNER.__file__).read_text(encoding="utf-8")
+        self.assertIn("flash_completed = False", source)
+        self.assertIn(
+            "flash_candidate(args.port, candidate, args.flash_offset, args.flash_baud)\n"
+            "            flash_completed = True",
+            source,
+        )
+        self.assertIn('"flashed": flash_completed', source)
+        self.assertNotIn('"flashed": args.flash', source)
+
     def test_boot_acceptance_requires_bounded_input_probe_accounting(self) -> None:
         ready = {
             "version": "test", "app_elf_sha256": "a" * 64,

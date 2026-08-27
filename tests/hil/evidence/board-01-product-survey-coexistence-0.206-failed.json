@@ -1,0 +1,47 @@
+{
+  "schema": "leshy.hil.negative_evidence.v1",
+  "status": "failed",
+  "gate_eligible": false,
+  "board": "board-01",
+  "port": "/dev/cu.usbmodem2101",
+  "rom_mac": "1c:db:d4:87:90:d4",
+  "cardputer_ports_opened": 0,
+  "mac_wifi_changed": false,
+  "boundary": "combined_product_survey_wifi_ble",
+  "accepted_baseline_unchanged": "0.196.2-companion-post-web-shared-scratch",
+  "cadence_accepted_deltas_unchanged": "4/15",
+  "candidate": {
+    "source": "1ef49ef210bca106ca0f34490dba7a2b1101afa9",
+    "version": "0.206.0-minimal-nimble-observer",
+    "firmware_sha256": "78d5919242310a765d3f3b0e9d21739ddbf7b89309da9f382ec5910fc695e282",
+    "app_elf_sha256": "35c4720e66450e463c7800474c371ce277e150a92c298abc794af7208cb0c49b",
+    "run_sha256": "e01e2b2a75f99e300057d49dd8825edb19aa57165da3444ad763556433095831",
+    "boot_log_sha256": "f6c68e2cdca84ba803187010dd13ab7d87ea7b5b11998e3808b39f0283557165",
+    "firmware_write_hash_verified": true,
+    "interactive_ready_observed": false,
+    "terminal_zero_lease_proven": false,
+    "exception": "LoadProhibited",
+    "exception_address": "0x02047d44",
+    "resolved_path": [
+      "vQueueDelete",
+      "semphr_delete_wrapper",
+      "btdm_controller_deinit_internal",
+      "btdm_controller_init",
+      "esp_bt_controller_init",
+      "nimble_port_init",
+      "initializeProcessControllerObserver",
+      "BoardBlePassiveScanner::prewarmProcessController",
+      "setup"
+    ],
+    "outcome": "early_boot_loop"
+  },
+  "diagnosis": "the low-level adapter did not include Arduino's BLE allocation marker, so initArduino permanently released controller memory before setup and nimble_port_init entered an invalid controller lifecycle",
+  "corrective_candidate": {
+    "source": "63499ca",
+    "version": "0.207.0-retained-nimble-memory",
+    "firmware_sha256": "6b8a0c3e1ae1e8dee1b160489f7d970d7a949b8634cca8fd49c945ad9e6faf2a",
+    "app_elf_sha256": "017ccd919a9bfcf19e06a4776a971c7c4d3fde5c23a62b69cf5708a6b9e8ecd7",
+    "physical_state": "not_written_or_flashed; automatic ROM entry failed before write"
+  },
+  "next_gate": "manual ROM-loader recovery, then one exact USB-only 0.207 delta HIL with contiguous Wi-Fi+BLE Survey cycle, save, reboot, reopen, and Home/none/lease 0"
+}
