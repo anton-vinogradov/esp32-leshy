@@ -79,6 +79,14 @@ def main() -> int:
     parser.add_argument("--source-commit", required=True)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument(
+        "--reuse-exact-flash", action="store_true",
+        help="verify and reuse an already flashed exact candidate",
+    )
+    parser.add_argument(
+        "--open-every-evidence", action="store_true",
+        help="open and return from the exact evidence view for every comparison row",
+    )
     args = parser.parse_args()
     for path in (args.firmware, args.elf, args.map):
         if not path.is_file():
@@ -112,6 +120,7 @@ def main() -> int:
     trace: list[dict[str, Any]] = []
     screens: dict[str, Any] = {}
     rows: list[dict[str, Any]] = []
+    evidence_details: list[dict[str, Any]] = []
     cleanup: dict[str, Any] = {"attempted": False}
     record: dict[str, Any] = {
         "schema": SCHEMA,
@@ -130,8 +139,9 @@ def main() -> int:
     write_json(args.output / "run.json", record)
 
     try:
-        flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
-        time.sleep(1.0)
+        if not args.reuse_exact_flash:
+            flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            time.sleep(1.0)
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             synchronize_console(device, 30.0)
             metrics = query(device, b"metrics", "leshy.boot.v1", "ready")
@@ -199,6 +209,28 @@ def main() -> int:
                 previous_rank = rank
                 previous_signal = signal
                 rows.append(compared)
+                if args.open_every_evidence:
+                    trace.append(action(device, "right"))
+                    evidence = query(
+                        device, b"targets.state",
+                        "leshy.targets.product.v1", "state")
+                    require(
+                        evidence, f"comparison evidence {index}",
+                        status="ready", view="compare_detail",
+                        comparison_count=comparison_count,
+                        comparison_selection=index, lease_mask=13)
+                    validate_evidence(
+                        evidence, baseline_generation, current_generation)
+                    evidence_details.append(evidence)
+                    trace.append(action(device, "left"))
+                    returned_row = query(
+                        device, b"targets.state",
+                        "leshy.targets.product.v1", "state")
+                    require(
+                        returned_row, f"comparison return {index}",
+                        status="ready", view="compare",
+                        comparison_count=comparison_count,
+                        comparison_selection=index, lease_mask=13)
                 if index == 0:
                     screens["compare_first"] = capture(
                         device, frames, "targets-evidence-compare-first")
@@ -256,13 +288,15 @@ def main() -> int:
             "exact_cid": EXPECTED_CID,
             "generations": [baseline_generation, current_generation],
             "targets": {"list": listed, "rows": rows, "detail": detail,
+                        "evidence_details": evidence_details,
                         "returned": returned, "released": released},
             "safe_outputs": safe,
             "input": inputs,
             "trace": trace,
             "screens": screens,
             "cleanup": cleanup,
-            "flash_count": 1,
+            "flash_count": 0 if args.reuse_exact_flash else 1,
+            "exact_flash_reused": args.reuse_exact_flash,
             "storage_write_calls": 0,
             "radio_tx_commands": 0,
         })
@@ -287,7 +321,9 @@ def main() -> int:
                            ]}
         record.update({"status": "failed", "error": str(error),
                        "trace": trace, "screens": screens, "rows": rows,
-                       "cleanup": cleanup, "flash_count": 1,
+                       "cleanup": cleanup,
+                       "flash_count": 0 if args.reuse_exact_flash else 1,
+                       "exact_flash_reused": args.reuse_exact_flash,
                        "storage_write_calls": 0,
                        "radio_tx_commands": 0})
         write_json(args.output / "run.json", record)

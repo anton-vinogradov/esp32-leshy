@@ -183,6 +183,16 @@ is explicitly unavailable, the buzzer remains inactive, three TFT states are
 retained and the run ends Home/none/lease 0 with zero TX or input drops. This is a
 cadence-controlled delta and does not replace the final `DEMO-S5` matrix.
 
+`E-AUTO-126` accepts the host/build orchestration contract for `DEMO-S6`. One command
+is constrained to exactly one application flash, records a baseline Survey and one
+contiguous repeat Survey, opens and returns from the evidence view for every
+comparison conclusion, exports the same pair as a canonical offline USB snapshot,
+and proves a clean Home/none/lease-0 exit. The command never requests SoftAP or a host
+network tool, so the active Mac Wi-Fi remains outside the test. This is preparation,
+not physical evidence: the one-command board run is pending, physical HTTP parity
+still requires a dedicated client, and the deferred S5 predecessor gate still holds
+final S6 acceptance.
+
 ## Test cadence within a stage
 
 - **On change:** fast host/static tests and related negative cases. Physical HIL is

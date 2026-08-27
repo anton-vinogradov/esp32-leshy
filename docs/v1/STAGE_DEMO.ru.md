@@ -184,6 +184,15 @@ Exact 0.145 `E-BUILD-145`/`E-HIL-163` дополнительно принима�
 сохранены три TFT state, run заканчивается Home/none/lease 0 с zero TX/input drops.
 Это cadence-controlled delta, а не замена финальной matrix `DEMO-S5`.
 
+`E-AUTO-126` принимает host/build orchestration contract для `DEMO-S6`. Одна команда
+ограничена ровно одной application flash, записывает baseline Survey и одну contiguous
+repeat Survey, открывает и закрывает evidence view каждого conclusion сравнения,
+экспортирует ту же пару как canonical offline USB snapshot и доказывает чистый выход
+Home/none/lease 0. Команда не запрашивает SoftAP или host network tool, поэтому
+активный Wi-Fi Mac остаётся вне теста. Это подготовка, а не physical evidence:
+one-command run на плате ожидается, physical HTTP parity всё ещё требует отдельный
+client, а deferred predecessor gate S5 по-прежнему удерживает final acceptance S6.
+
 ## Ритм тестирования внутри этапа
 
 - **При изменении:** быстрые host/static tests и связанные negative cases. Physical
