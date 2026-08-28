@@ -398,22 +398,62 @@ void testLiveIdentityRetentionKeyIsExactAndFailClosed() {
           WifiIdentityIngressStatus::MalformedAddressing);
 }
 
-void testLiveRetentionPartitionKeepsDisconnectCapacity() {
+void testCompactIdentityRetentionKeepsDetectorCapacity() {
     constexpr std::size_t total = 16U;
-    CHECK(wifiIdentityRetentionSlotAvailable(total, 0U, 0U, 0U));
-    CHECK(wifiIdentityRetentionSlotAvailable(total, 7U, 0U, 7U));
-    CHECK(!wifiIdentityRetentionSlotAvailable(total, 8U, 0U, 7U));
-    CHECK(!wifiIdentityRetentionSlotAvailable(total, 8U, 0U, 8U));
-    CHECK(wifiIdentityRetentionSlotAvailable(total, 10U, 3U, 7U));
-    CHECK(!wifiIdentityRetentionSlotAvailable(total, 11U, 3U, 8U));
-    CHECK(!wifiIdentityRetentionSlotAvailable(7U, 0U, 0U, 0U));
-    CHECK(!wifiIdentityRetentionSlotAvailable(total, 17U, 0U, 0U));
-    CHECK(!wifiIdentityRetentionSlotAvailable(total, 0U, 9U, 0U));
-
     CHECK(wifiDisconnectRetentionSlotAvailable(total, 8U, 0U));
     CHECK(wifiDisconnectRetentionSlotAvailable(total, 15U, 7U));
     CHECK(!wifiDisconnectRetentionSlotAvailable(total, 16U, 7U));
     CHECK(!wifiDisconnectRetentionSlotAvailable(total, 15U, 8U));
+
+    WifiIdentityProjectionRetention retention;
+    CHECK(retention.accept({}, 1U, -50, 1U) ==
+          WifiIdentityLiveRetentionDisposition::Invalid);
+    for (std::size_t index = 0U;
+         index < kWifiIdentityLiveRetentionCapacity; ++index) {
+        WifiIdentityRetentionKey key{};
+        key.transmitter = {0x02U, 0x00U, 0x00U, 0x00U,
+                           static_cast<std::uint8_t>(index >> 8U),
+                           static_cast<std::uint8_t>(index)};
+        const int length = std::snprintf(
+            reinterpret_cast<char*>(key.networkName.data()),
+            key.networkName.size(), "N%02u",
+            static_cast<unsigned>(index));
+        CHECK(length > 0);
+        key.networkNameLength = static_cast<std::uint8_t>(length);
+        key.security = AirspaceWifiSecurity::Rsn;
+        CHECK(retention.accept(key, 1000000ULL + index, -50, 6U) ==
+              WifiIdentityLiveRetentionDisposition::Retained);
+        CHECK(retention.accept(key, 2000000ULL + index, -40, 11U) ==
+              WifiIdentityLiveRetentionDisposition::Duplicate);
+    }
+    CHECK(retention.size() == kWifiIdentityLiveRetentionCapacity);
+
+    WifiIdentityRetentionKey overflow{};
+    overflow.transmitter = {0x02U, 0xaaU, 0xbbU, 0xccU, 0xddU, 0xeeU};
+    overflow.networkName[0] = 'X';
+    overflow.networkNameLength = 1U;
+    overflow.security = AirspaceWifiSecurity::Open;
+    CHECK(retention.accept(overflow, 3000000ULL, -60, 1U) ==
+          WifiIdentityLiveRetentionDisposition::Full);
+
+    WifiFrameView projected{};
+    CHECK(retention.frameView(0U, &projected));
+    CHECK(projected.capturedLength <= kWifiIdentityProjectionCapacity);
+    CHECK(projected.fcsIncluded);
+    CHECK(projected.payload != nullptr);
+    CHECK(!retention.frameView(retention.size(), &projected));
+
+    FixtureSource disconnect;
+    disconnect.add(12U, 500000ULL, kTransmitterB);
+    CompositeWifiFrameSource source(disconnect, retention);
+    CHECK(source.frameCount() ==
+          1U + kWifiIdentityLiveRetentionCapacity);
+    CHECK(source.frameCount() <= AirspaceGuard::kFrameInspectionCapacity);
+    CHECK(source.frameView(0U, &projected));
+    CHECK(projected.payload[0] == 0xc0U);
+    CHECK(source.frameView(1U, &projected));
+    CHECK(projected.payload[0] == 0x80U);
+    CHECK(!source.frameView(source.frameCount(), &projected));
 }
 
 void testElevatedNoiseIsLowConfidenceExactAndOptIn() {
@@ -1119,7 +1159,7 @@ int main() {
     testIngressClassifiersStayManagementOnly();
     testIdentityConflictIsOptInUntilLiveRetentionIsComplete();
     testLiveIdentityRetentionKeyIsExactAndFailClosed();
-    testLiveRetentionPartitionKeepsDisconnectCapacity();
+    testCompactIdentityRetentionKeepsDetectorCapacity();
     testElevatedNoiseIsLowConfidenceExactAndOptIn();
     testElevatedNoiseRejectsWeakSplitStaleAndMalformedEvidence();
     testIdentityConflictRetainsTwoExactAdvertisements();

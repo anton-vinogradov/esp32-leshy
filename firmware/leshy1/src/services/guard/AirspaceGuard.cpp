@@ -684,19 +684,74 @@ bool wifiDisconnectRetentionSlotAvailable(std::size_t totalCapacity,
         retainedFrames < totalCapacity;
 }
 
-bool wifiIdentityRetentionSlotAvailable(std::size_t totalCapacity,
-                                        std::size_t retainedFrames,
-                                        std::size_t disconnectFrames,
-                                        std::size_t identityProfiles) {
-    if (disconnectFrames > kWifiDisconnectLiveRetentionCapacity ||
-        identityProfiles >= kWifiIdentityLiveRetentionCapacity ||
-        retainedFrames > totalCapacity) {
-        return false;
+WifiIdentityLiveRetentionDisposition WifiIdentityProjectionRetention::accept(
+    const WifiIdentityRetentionKey& key, std::uint64_t monotonicUs,
+    std::int16_t rssiDbm, std::uint8_t channel) {
+    std::array<std::uint8_t, kWifiIdentityProjectionCapacity> validation{};
+    if (monotonicUs == 0U || channel == 0U || channel > 13U ||
+        rssiDbm < -127 || rssiDbm > 0 ||
+        writeWifiIdentityRetentionProjection(
+            key, validation.data(), validation.size()) == 0U) {
+        return WifiIdentityLiveRetentionDisposition::Invalid;
     }
-    const std::size_t disconnectReservation =
-        kWifiDisconnectLiveRetentionCapacity - disconnectFrames;
-    return disconnectReservation <= totalCapacity &&
-        retainedFrames < totalCapacity - disconnectReservation;
+    for (std::size_t index = 0U; index < size_; ++index) {
+        if (sameWifiIdentityRetentionKey(observations_[index].key, key)) {
+            return WifiIdentityLiveRetentionDisposition::Duplicate;
+        }
+    }
+    if (size_ >= observations_.size()) {
+        return WifiIdentityLiveRetentionDisposition::Full;
+    }
+    Observation& retained = observations_[size_++];
+    retained.key = key;
+    retained.monotonicUs = monotonicUs;
+    retained.rssiDbm = rssiDbm;
+    retained.channel = channel;
+    return WifiIdentityLiveRetentionDisposition::Retained;
+}
+
+void WifiIdentityProjectionRetention::reset() {
+    observations_.fill(Observation{});
+    projection_.fill(0U);
+    size_ = 0U;
+}
+
+bool WifiIdentityProjectionRetention::frameView(
+    std::size_t index, WifiFrameView* output) const {
+    if (output == nullptr || index >= size_) return false;
+    const Observation& observation = observations_[index];
+    projection_.fill(0U);
+    const std::size_t length = writeWifiIdentityRetentionProjection(
+        observation.key, projection_.data(), projection_.size());
+    if (length == 0U || length > 0xffffU) return false;
+    *output = {};
+    output->monotonicUs = observation.monotonicUs;
+    output->capturedLength = static_cast<std::uint16_t>(length);
+    output->originalLength = output->capturedLength;
+    output->rssiDbm = observation.rssiDbm;
+    output->channel = observation.channel;
+    output->kind = WifiFrameKind::Management;
+    output->fcsIncluded = true;
+    output->payload = projection_.data();
+    return true;
+}
+
+std::size_t CompositeWifiFrameSource::frameCount() const {
+    return first_.frameCount() + second_.frameCount();
+}
+
+std::uint16_t CompositeWifiFrameSource::snapLength() const {
+    const std::uint16_t first = first_.snapLength();
+    const std::uint16_t second = second_.snapLength();
+    return first > second ? first : second;
+}
+
+bool CompositeWifiFrameSource::frameView(
+    std::size_t index, WifiFrameView* output) const {
+    const std::size_t firstCount = first_.frameCount();
+    return index < firstCount
+        ? first_.frameView(index, output)
+        : second_.frameView(index - firstCount, output);
 }
 
 AirspaceGuardReport AirspaceGuard::inspectWifi(

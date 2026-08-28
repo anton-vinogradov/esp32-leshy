@@ -20156,8 +20156,11 @@ __attribute__((noinline)) bool finalizeAirspaceGuardWifiEvidence(
             monitor.identityRetentionComplete;
         policy.ssidChurnEnabled = monitor.identityRetentionComplete;
         policy.elevatedNoiseEnabled = monitor.noiseRetentionComplete;
+        const leshy1::services::guard::CompositeWifiFrameSource source(
+            wifiFrameCapture.capture(),
+            wifiFrameCapture.airspaceGuardIdentitySource());
         airspaceGuardWifiReport = airspaceGuardDetector.inspectWifi(
-            wifiFrameCapture.capture(), policy, dropped,
+            source, policy, dropped,
             static_cast<std::size_t>(monitor.framesReported),
             monitor.noiseSamples.data(),
             static_cast<std::size_t>(monitor.noiseSamplesRetained),

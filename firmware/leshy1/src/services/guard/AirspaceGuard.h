@@ -67,6 +67,13 @@ enum class WifiIdentityIngressStatus : std::uint8_t {
     MalformedElements,
 };
 
+enum class WifiIdentityLiveRetentionDisposition : std::uint8_t {
+    Retained,
+    Duplicate,
+    Invalid,
+    Full,
+};
+
 constexpr bool wifiIdentityIngressMalformed(
     WifiIdentityIngressStatus status) {
     return status == WifiIdentityIngressStatus::MalformedEnvelope ||
@@ -84,7 +91,10 @@ struct WifiIdentityRetentionKey final {
 };
 
 inline constexpr std::size_t kWifiDisconnectLiveRetentionCapacity = 8;
-inline constexpr std::size_t kWifiIdentityLiveRetentionCapacity = 8;
+// The detector inspects at most 64 observations. Reserve eight full-payload
+// slots for disconnect evidence and retain the remaining identity evidence as
+// compact projections rather than 256-byte capture frames.
+inline constexpr std::size_t kWifiIdentityLiveRetentionCapacity = 56;
 inline constexpr std::size_t kWifiIdentityProjectionCapacity = 80;
 inline constexpr std::size_t kWifiNoiseFloorLiveRetentionCapacity = 8;
 inline constexpr std::size_t kBleTrackerLiveRetentionCapacity = 32;
@@ -145,10 +155,55 @@ bool sameWifiIdentityRetentionKey(const WifiIdentityRetentionKey& left,
 bool wifiDisconnectRetentionSlotAvailable(std::size_t totalCapacity,
                                           std::size_t retainedFrames,
                                           std::size_t disconnectFrames);
-bool wifiIdentityRetentionSlotAvailable(std::size_t totalCapacity,
-                                        std::size_t retainedFrames,
-                                        std::size_t disconnectFrames,
-                                        std::size_t identityProfiles);
+
+class WifiIdentityProjectionRetention final
+    : public domain::captures::WifiFrameSource {
+public:
+    WifiIdentityLiveRetentionDisposition accept(
+        const WifiIdentityRetentionKey& key, std::uint64_t monotonicUs,
+        std::int16_t rssiDbm, std::uint8_t channel);
+    void reset();
+
+    std::size_t size() const { return size_; }
+    std::size_t frameCount() const override { return size_; }
+    std::uint16_t snapLength() const override {
+        return static_cast<std::uint16_t>(kWifiIdentityProjectionCapacity);
+    }
+    bool frameView(std::size_t index,
+                   domain::captures::WifiFrameView* output) const override;
+
+private:
+    struct Observation final {
+        WifiIdentityRetentionKey key{};
+        std::uint64_t monotonicUs = 0;
+        std::int16_t rssiDbm = -127;
+        std::uint8_t channel = 0;
+    };
+
+    std::array<Observation, kWifiIdentityLiveRetentionCapacity>
+        observations_{};
+    std::size_t size_ = 0;
+    mutable std::array<std::uint8_t, kWifiIdentityProjectionCapacity>
+        projection_{};
+};
+
+class CompositeWifiFrameSource final
+    : public domain::captures::WifiFrameSource {
+public:
+    CompositeWifiFrameSource(
+        const domain::captures::WifiFrameSource& first,
+        const domain::captures::WifiFrameSource& second)
+        : first_(first), second_(second) {}
+
+    std::size_t frameCount() const override;
+    std::uint16_t snapLength() const override;
+    bool frameView(std::size_t index,
+                   domain::captures::WifiFrameView* output) const override;
+
+private:
+    const domain::captures::WifiFrameSource& first_;
+    const domain::captures::WifiFrameSource& second_;
+};
 constexpr bool isWifiNoiseFloorCandidate(std::int16_t noiseFloorDbm) {
     // Zero and implausibly high/low values are unavailable driver metadata,
     // never RF evidence. Ingress stays broader than the detector policy.

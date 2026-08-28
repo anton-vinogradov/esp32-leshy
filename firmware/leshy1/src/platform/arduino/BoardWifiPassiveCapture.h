@@ -95,6 +95,10 @@ public:
     void unlockDeviceChannel(std::uint64_t nowUs);
     bool deviceChannelLocked() const { return deviceChannelLocked_; }
     const apps::capture::WifiFrameCapture& capture() const { return capture_; }
+    const services::guard::WifiIdentityProjectionRetention&
+    airspaceGuardIdentitySource() const {
+        return airspaceGuardIdentityRetention_;
+    }
     std::uint8_t currentChannel() const { return currentChannel_; }
     bool cleanupComplete() const { return cleanupComplete_; }
     bool nvsDisabled() const { return nvsDisabled_; }
@@ -118,10 +122,8 @@ private:
     DeviceMonitorStats deviceStats_{};
     ChannelMonitorStats channelStats_{};
     AirspaceGuardMonitorStats airspaceGuardStats_{};
-    std::array<services::guard::WifiIdentityRetentionKey,
-               AirspaceGuardMonitorStats::kIdentityRetentionCapacity>
-        airspaceGuardIdentityKeys_{};
-    std::size_t airspaceGuardIdentityKeyCount_ = 0;
+    services::guard::WifiIdentityProjectionRetention
+        airspaceGuardIdentityRetention_{};
     apps::wifi::WifiChannelLoad channelLoad_{};
     std::size_t deviceQueueHead_ = 0;
     std::size_t deviceQueueTail_ = 0;

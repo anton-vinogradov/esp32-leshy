@@ -67,9 +67,7 @@ bool BoardWifiPassiveCapture::beginCapture(
     channelMonitor_ = false;
     airspaceGuardMonitor_ = airspaceGuardMonitor;
     airspaceGuardStats_ = {};
-    airspaceGuardIdentityKeys_.fill(
-        services::guard::WifiIdentityRetentionKey{});
-    airspaceGuardIdentityKeyCount_ = 0U;
+    airspaceGuardIdentityRetention_.reset();
     airspaceGuardStats_.cleanupComplete = !airspaceGuardMonitor;
     cleanupComplete_ = false;
     lastError_ = 0;
@@ -396,7 +394,8 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
         if (complete) {
             if (wasAirspaceGuardMonitor &&
                 airspaceGuardStats_.framesReported != 0U &&
-                capture_.size() == 0U) {
+                capture_.size() == 0U &&
+                airspaceGuardIdentityRetention_.size() == 0U) {
                 std::array<std::uint8_t, 24> coverageProjection{};
                 coverageProjection[0] = 0x40U;
                 capture_.append(
@@ -449,9 +448,7 @@ void BoardWifiPassiveCapture::reset() {
     deviceStats_ = {};
     channelStats_ = {};
     airspaceGuardStats_ = {};
-    airspaceGuardIdentityKeys_.fill(
-        services::guard::WifiIdentityRetentionKey{});
-    airspaceGuardIdentityKeyCount_ = 0U;
+    airspaceGuardIdentityRetention_.reset();
     channelLoad_.reset();
     portEXIT_CRITICAL(&mux_);
     deviceMonitor_ = false;
@@ -497,7 +494,8 @@ BoardWifiPassiveCapture::airspaceGuardMonitorStats() const {
     portENTER_CRITICAL(&mux_);
     AirspaceGuardMonitorStats result = airspaceGuardStats_;
     result.active = airspaceGuardMonitor_ && promiscuous_;
-    result.framesRetained = capture_.stats().framesAccepted;
+    result.framesRetained = capture_.stats().framesAccepted +
+        airspaceGuardIdentityRetention_.size();
     result.cleanupComplete = airspaceGuardMonitor_
         ? cleanupComplete_ : airspaceGuardStats_.cleanupComplete;
     result.identityRetentionComplete = !result.active &&
@@ -627,17 +625,6 @@ void BoardWifiPassiveCapture::accept(void* buffer,
                   &identityKey)
             : leshy1::services::guard::
                   WifiIdentityIngressStatus::NotAdvertisement;
-        std::array<std::uint8_t,
-                   leshy1::services::guard::kWifiIdentityProjectionCapacity>
-            identityProjection{};
-        const std::size_t identityProjectionLength =
-            identityStatus == leshy1::services::guard::
-                    WifiIdentityIngressStatus::RetainableAdvertisement
-                ? leshy1::services::guard::
-                      writeWifiIdentityRetentionProjection(
-                          identityKey, identityProjection.data(),
-                          identityProjection.size())
-                : 0U;
         std::uint64_t receivedUs =
             static_cast<std::uint64_t>(esp_timer_get_time());
         if (receivedUs == 0U) receivedUs = 1U;
@@ -691,41 +678,17 @@ void BoardWifiPassiveCapture::accept(void* buffer,
         } else if (identityStatus == leshy1::services::guard::
                        WifiIdentityIngressStatus::RetainableAdvertisement) {
             ++airspaceGuardStats_.identityAdvertisementsObserved;
-            bool duplicate = false;
-            for (std::size_t index = 0U;
-                 index < airspaceGuardIdentityKeyCount_; ++index) {
-                if (leshy1::services::guard::sameWifiIdentityRetentionKey(
-                        airspaceGuardIdentityKeys_[index], identityKey)) {
-                    duplicate = true;
-                    break;
-                }
-            }
-            if (duplicate) {
-                ++airspaceGuardStats_.identityProfilesDeduplicated;
-                portEXIT_CRITICAL(&mux_);
-                return;
-            }
-            if (identityProjectionLength == 0U ||
-                !leshy1::services::guard::wifiIdentityRetentionSlotAvailable(
-                    apps::capture::WifiFrameCapture::kFrameCapacity,
-                    capture_.size(),
-                    airspaceGuardStats_.disconnectFramesRetained,
-                    airspaceGuardIdentityKeyCount_)) {
-                ++airspaceGuardStats_.identityProfilesDropped;
-                portEXIT_CRITICAL(&mux_);
-                return;
-            }
-            const bool retained = capture_.append(
-                identityProjection.data(),
-                static_cast<std::uint16_t>(identityProjectionLength),
-                receivedUs,
-                packet->rx_ctrl.rssi, packet->rx_ctrl.channel,
-                WifiFrameKind::Management, true);
-            if (retained) {
-                airspaceGuardIdentityKeys_[airspaceGuardIdentityKeyCount_++] =
-                    identityKey;
+            const auto disposition =
+                airspaceGuardIdentityRetention_.accept(
+                    identityKey, receivedUs, packet->rx_ctrl.rssi,
+                    packet->rx_ctrl.channel);
+            if (disposition == leshy1::services::guard::
+                    WifiIdentityLiveRetentionDisposition::Retained) {
                 ++airspaceGuardStats_.identityProfilesRetained;
                 ++airspaceGuardStats_.identityProfilesProjected;
+            } else if (disposition == leshy1::services::guard::
+                           WifiIdentityLiveRetentionDisposition::Duplicate) {
+                ++airspaceGuardStats_.identityProfilesDeduplicated;
             } else {
                 ++airspaceGuardStats_.identityProfilesDropped;
             }
