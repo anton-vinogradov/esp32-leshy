@@ -306,7 +306,8 @@ def cancel_to_menu(device: PassiveSerial,
     stopped = wait_guard_state(
         device,
         lambda value: value.get("capture_state") == "idle" and
-        value.get("ble_worker_control") == 0,
+        value.get("ble_worker_control") == 0 and
+        value.get("survey_queues_released") is False,
         8.0, f"{label} cleanup did not become idle")
     failures = stopped_failures(stopped, label)
     if failures:

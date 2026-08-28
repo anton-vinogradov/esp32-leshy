@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.229.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.230.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -384,6 +384,8 @@ def main() -> int:
         "completedGeneration == event.generation",
         "releaseProductSurveyQueuesForAirspaceGuard()",
         "restoreProductSurveyQueuesAfterAirspaceGuard()",
+        "airspaceGuardSurveyQueueRestorePending",
+        "airspace_guard_queue_restore_retry",
         "airspaceGuardSurveyQueuesReleased",
         "heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)",
         "resetAirspaceGuardWifiReport()",
@@ -510,9 +512,9 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.229"',
+        '"candidate_version": "1.0.0-dev.230"',
         '"full_matrix_required": false',
-        '"cadence_after_acceptance": "7/15"',
+        '"cadence_after_acceptance": "8/15"',
     ):
         require(failures, marker in hil_scope,
                 f"missing Airspace Guard delta scope: {marker}")

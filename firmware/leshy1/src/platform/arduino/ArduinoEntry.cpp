@@ -1782,6 +1782,7 @@ AirspaceGuardBleRetention airspaceGuardBleRetention;
 std::uint32_t productSurveyWorkerOwnedResources = 0;
 bool productSurveyWorkerReady = false;
 bool airspaceGuardSurveyQueuesReleased = false;
+bool airspaceGuardSurveyQueueRestorePending = false;
 std::uint32_t airspaceGuardHeapFreeBeforeQueueRelease = 0;
 std::uint32_t airspaceGuardHeapLargestBeforeQueueRelease = 0;
 std::uint32_t airspaceGuardHeapFreeAfterQueueRelease = 0;
@@ -3603,11 +3604,15 @@ bool releaseProductSurveyQueuesForAirspaceGuard() {
         static_cast<std::uint32_t>(
             heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
     airspaceGuardSurveyQueuesReleased = true;
+    airspaceGuardSurveyQueueRestorePending = false;
     return true;
 }
 
 bool restoreProductSurveyQueuesAfterAirspaceGuard() {
-    if (!airspaceGuardSurveyQueuesReleased) return true;
+    if (!airspaceGuardSurveyQueuesReleased) {
+        airspaceGuardSurveyQueueRestorePending = false;
+        return true;
+    }
     QueueHandle_t events = xQueueCreate(
         kProductSurveyWorkerEventCapacity,
         sizeof(ProductSurveyWorkerEvent));
@@ -3616,12 +3621,12 @@ bool restoreProductSurveyQueuesAfterAirspaceGuard() {
     if (events == nullptr || observations == nullptr) {
         if (events != nullptr) vQueueDelete(events);
         if (observations != nullptr) vQueueDelete(observations);
-        productSurveyWorkerReady = false;
         return false;
     }
     productSurveyWorkerEvents = events;
     productSurveyObservations = observations;
     airspaceGuardSurveyQueuesReleased = false;
+    airspaceGuardSurveyQueueRestorePending = false;
     airspaceGuardHeapFreeAfterQueueRestore =
         static_cast<std::uint32_t>(
             heap_caps_get_free_size(MALLOC_CAP_8BIT));
@@ -20072,7 +20077,8 @@ bool openAirspaceGuardProduct() {
         productSurveyWorkerTaskHandle == nullptr ||
         productSurveyControl() != ProductSurveyWorkerControl::Idle ||
         airspaceGuardBleControl() != AirspaceGuardBleWorkerControl::Idle ||
-        airspaceGuardBleWorkerEvents == nullptr) {
+        airspaceGuardBleWorkerEvents == nullptr ||
+        airspaceGuardSurveyQueueRestorePending) {
         airspaceGuardController.load(airspaceGuardWifiReport);
         airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
         lastRuntimeEvent = "airspace_guard_worker_unavailable";
@@ -20112,18 +20118,24 @@ bool stopAirspaceGuardProduct() {
     std::uint64_t endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     if (endedUs == 0U) endedUs = 1U;
     bool cleanup = true;
+    bool deferQueueRestore = false;
     if (airspaceGuardCaptureState ==
         AirspaceGuardCaptureState::WifiRunning) {
         cleanup = wifiFrameCapture.stop(endedUs);
     } else if (airspaceGuardCaptureState ==
                AirspaceGuardCaptureState::BleRunning) {
-        requestAirspaceGuardBleWorkerCancel();
+        const bool cancelRequested = requestAirspaceGuardBleWorkerCancel();
+        const bool workerIdle = airspaceGuardBleControl() ==
+            AirspaceGuardBleWorkerControl::Idle;
+        cleanup = cancelRequested || workerIdle;
+        deferQueueRestore = cancelRequested && !workerIdle;
+        airspaceGuardSurveyQueueRestorePending = deferQueueRestore;
     }
     ++airspaceGuardGeneration;
     if (airspaceGuardGeneration == 0U) ++airspaceGuardGeneration;
     wifiFrameCapture.reset();
-    const bool queuesRestored =
-        restoreProductSurveyQueuesAfterAirspaceGuard();
+    const bool queuesRestored = deferQueueRestore
+        ? true : restoreProductSurveyQueuesAfterAirspaceGuard();
     cleanup = cleanup && queuesRestored;
     airspaceGuardController.reset();
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Idle;
@@ -20183,6 +20195,13 @@ __attribute__((noinline)) bool finalizeAirspaceGuardWifiEvidence(
 }
 
 void serviceAirspaceGuardProduct() {
+    if (airspaceGuardSurveyQueueRestorePending &&
+        airspaceGuardBleControl() ==
+            AirspaceGuardBleWorkerControl::Idle) {
+        if (!restoreProductSurveyQueuesAfterAirspaceGuard()) {
+            lastRuntimeEvent = "airspace_guard_queue_restore_retry";
+        }
+    }
     const bool captureRoute = uiController.page() == 2 &&
         wifiProductView == WifiProductView::AirspaceGuard;
     if (airspaceGuardCaptureState ==
@@ -20289,13 +20308,19 @@ void quiesceAirspaceGuardOnSafetyStop() {
     std::uint64_t endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     if (endedUs == 0U) endedUs = 1U;
     bool cleanup = true;
+    bool deferQueueRestore = false;
     if (wifiRunning) {
         cleanup = wifiFrameCapture.stop(endedUs);
     } else if (bleRunning) {
-        cleanup = requestAirspaceGuardBleWorkerCancel();
+        const bool cancelRequested = requestAirspaceGuardBleWorkerCancel();
+        const bool workerIdle = airspaceGuardBleControl() ==
+            AirspaceGuardBleWorkerControl::Idle;
+        cleanup = cancelRequested || workerIdle;
+        deferQueueRestore = cancelRequested && !workerIdle;
+        airspaceGuardSurveyQueueRestorePending = deferQueueRestore;
     }
-    const bool queuesRestored =
-        restoreProductSurveyQueuesAfterAirspaceGuard();
+    const bool queuesRestored = deferQueueRestore
+        ? true : restoreProductSurveyQueuesAfterAirspaceGuard();
     ++airspaceGuardGeneration;
     if (airspaceGuardGeneration == 0U) ++airspaceGuardGeneration;
     resetAirspaceGuardWifiReport();
