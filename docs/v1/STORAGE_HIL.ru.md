@@ -317,6 +317,29 @@ cold reopen product generation 68/25. Все шесть попыток закр�
 software-reset matrix ST-HIL-A07. Управляемый physical power-cut намеренно остаётся
 отдельным evidence `DEMO-S4` и не подменяется `esp_restart`.
 
+### Schema 8 provenance authentication capture (foundation host/build)
+
+Exact host/build dev.247 расширяет тот же immutable atomic wire format
+`SessionStore`; второй backend не создаётся. Schema 8 Session/segment и wire 5
+authentication capture сохраняют существующий payload raw frames и добавляют одну
+bounded provenance record: purpose generic/auth, target BSSID, binary-safe SSID
+known/length/bytes и exact accounting reported/accepted/capacity-drop/invalid-drop.
+Channel остаётся частью существующей capture metadata, а не новым provenance field.
+
+Generic raw-frame opener принимает schema 8 без обязательной provenance, а
+authentication opener валидирует её. Read compatibility schema 4 сохраняется.
+Known SSID обязан содержать 1…32 bytes; unknown SSID обязан иметь zero length и
+нулевой buffer. Invalid lengths, inconsistent counters, corruption и fallback на
+прерванной commit boundary fail closed. Tests round-trip, legacy-read, accounting,
+corruption и recovery проходят через существующий atomic path commit/reopen без
+dynamic allocation, dependency radio/platform или TX.
+
+`E-BUILD-175`/`E-AUTO-149` принимают только эту host/build foundation. Product
+persistence/export не подключён, standard artifact serializer не существует, а
+on-device result CAP-049 остаётся volatile/RAM-only/not saved с
+`exportEligibility=NotEvaluated`. Device не прошивался; dev.246 `E-HIL-191` остаётся
+physical baseline, cadence остаётся 11/15.
+
 ## Реализованный и физически проверенный software-reset harness
 
 Version `0.30.0-sd-session-reset-measure` добавляет diagnostic wrapper

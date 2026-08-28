@@ -882,6 +882,36 @@ stale, split, malformed, потерянные по capacity или dropped evide
 incomplete и блокируют следующий handoff Wi-Fi→BLE. Detector не добавляет TX или
 automatic response; physical evidence TFT, cleanup и negative corpus всё ещё нужны.
 
+### Foundation focused Capture Wi-Fi-аутентификации
+
+Exact physical dev.246 доказывает receive-only lifecycle CAP-049, continuity fixed
+target/channel, честный `inconclusive` result, когда ambient traffic не даёт
+EAPOL/PMKID, повторный product FAT/VFS mount и final cleanup. Этот принятый physical
+baseline не меняется. Exact host/build dev.247 добавляет bounded allocation-free
+controller и presentation EN/RU над immutable terminal report. До publication он
+валидирует report, ставит `inconclusive` раньше evidence Full, PMKID и Partial,
+отвергает M2/M3/M4 с полностью нулевым Key MIC, исключает zero-mask peers и открывает
+стабильный path `Результат → Действия → Устройство → Доказательства → Детали`.
+Up/Down двигают внутри одного уровня, Right/OK входят, Left/Back возвращают ровно на
+уровень, а Повтор запрашивает тот же bounded capture снова. Смена tone или selection
+перерисовывает только затронутый content, не очищая static chrome.
+
+Storage boundary расширяет существующий atomic `SessionStore`, а не добавляет
+параллельный backend. Schema 8 Session/segment и wire 5 authentication capture несут
+purpose generic/auth, target BSSID, binary-safe SSID known/length/bytes и exact
+accounting reported/accepted/capacity-drop/invalid-drop. Fixed channel остаётся в
+существующей metadata raw-frame capture. Generic raw-frame open принимает schema 8,
+а чтение schema 4 сохраняется. Validation provenance fail closed при inconsistent
+SSID state, counters, corruption или boundary recovery, без dynamic allocation,
+dependency radio/platform или TX path.
+
+Это foundation, а не claim persistence/export. Product result остаётся
+volatile/RAM-only/not saved, `exportEligibility` равен `NotEvaluated`, persistence и
+export не подключены, standard artifact serializer ещё не существует. Сначала нужен
+physical TFT/navigation regression dev.247 после USB repower оригинального DIV;
+только затем можно реализовать serializer, подключить product save/export и проверить
+их полезным authentication evidence.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

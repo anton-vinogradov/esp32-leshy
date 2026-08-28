@@ -1081,6 +1081,28 @@ receive-only and observes no authentication evidence, so this is a focused mount
 headroom bound, not a CAP-049 completion, Product Survey terminal-commit proof or
 mixed-workload release/endurance budget.
 
+CAP-049 result-navigation and authentication-provenance foundation `RB-M186`: exact
+host/build `1.0.0-dev.247` at source
+`ccb4a3a5351d065e312ca29cf689d3acd9e6d93b` uses 247,016 B static RAM and a
+3,403,120 B linked image (PlatformIO Flash-used report: 3,402,780 B). The
+3,403,280 B application leaves 791,024 B in the OTA
+slot, and internal DIRAM remainder is 11,528 B. Application/factory SHA-256 are
+`b3bb3e3a787ef36aa306d0711a40c0b5b730a02f69fc1d72e4a59315b0435ed1`/
+`186c24fbd831db40dc5b936c6bbd91bee7908cefc38c9aa651fbfd8676c09ff1`;
+ELF/app identity is
+`954a5a80064a951bac6a3f278cdd5e06292d7589871ab132f5cd680e36e9dba4`
+and map SHA-256 is
+`2fd0300e65fb4b4d4c4b2bc0a1f01bb97627e19a65eb7d1f51503b9b82f79ccf`.
+The bounded result controller/presenter and schema-8/segment-8/wire-5 provenance
+foundation add no dynamic allocation, task, radio owner or TX dependency. The full
+host suite passed before independent review found the all-zero Key MIC P1; on this
+exact post-fix source the focused capture/policy ASan+UBSan tests, focused review,
+production build and budget pass. This is a host/build bound only: no device was
+flashed, the accepted physical runtime/heap baseline remains dev.246 `RB-M185`, and
+cadence remains 11/15. Product persistence and export are not wired, the standard
+artifact serializer does not yet exist, and `exportEligibility` remains
+`NotEvaluated`.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

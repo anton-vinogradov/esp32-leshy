@@ -219,6 +219,29 @@ boundary or loss of power. The run also exposed and fixed an oversized loop-stac
 recovery temporary and incorrect nested-directory verification before successful
 Session writes.
 
+### Authentication-capture provenance schema 8 (host/build foundation)
+
+Exact host/build dev.247 extends the same immutable, atomic `SessionStore` wire
+format; it does not create a second backend. Session and segment schema 8 with
+authentication capture wire 5 preserve the existing raw-frame payload and add one
+bounded provenance record: generic/auth purpose, target BSSID, binary-safe SSID
+known/length/bytes and exact reported/accepted/capacity-drop/invalid-drop accounting.
+Channel remains part of existing capture metadata, not a new provenance field.
+
+The generic raw-frame opener accepts schema 8 without requiring provenance, while
+the authentication opener validates it. Schema 4 remains read-compatible. A known
+SSID must contain 1…32 bytes; an unknown SSID must have zero length and a zeroed
+buffer. Invalid lengths, inconsistent counters, corruption and interrupted-boundary
+fallback fail closed. Round-trip, legacy-read, accounting, corruption and recovery
+tests exercise the existing atomic commit/reopen path without dynamic allocation,
+radio/platform dependency or TX.
+
+`E-BUILD-175`/`E-AUTO-149` accept only this host/build foundation. Product
+persistence/export is not wired, no standard artifact serializer exists, and the
+on-device CAP-049 result remains volatile/RAM-only/not saved with
+`exportEligibility=NotEvaluated`. No device was flashed; dev.246 `E-HIL-191` remains
+the physical baseline and cadence remains 11/15.
+
 ## Physical fixture safety
 
 A physical run may use only one of these explicitly selected targets:

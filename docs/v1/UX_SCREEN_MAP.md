@@ -71,7 +71,10 @@ UX-S01 Home
 │  ├─ UX-S12 Capture Setup: source, bounds, destination
 │  ├─ UX-S13 Capture Running: progress, drops, explicit Stop
 │  ├─ UX-S14 Capture Result: raw metadata / derived decode / Save / Export / Lab
-│  ├─ UX-S30 Wi-Fi Authentication Capture: EAPOL/PMKID/handshake state
+│  ├─ UX-S30 Wi-Fi Authentication Capture
+│  │  ├─ Running: remaining time / candidate frames / retained/drop accounting
+│  │  └─ Result → Actions → Peer → Evidence → Detail
+│  │     └─ Repeat: start the same bounded capture again
 │  └─ UX-S32 BLE Inspector: raw packets / explicit connected GATT
 ├─ Lab
 │  ├─ UX-S18 Scope & Safety Context
@@ -128,12 +131,24 @@ ordinary Back traverses the stack.
 |---|---|---|
 | Survey | CAP-009…CAP-017, CAP-042, CAP-048, CAP-050 | Observation/finding→Target/Capture/Radar/evidence; stopped Session/Field Survey→Library/export |
 | Targets | CAP-018…CAP-022, CAP-044 | Evidence→Observation/Capture; Target→Compare/Radar |
-| Capture | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-049, CAP-051 | Result→Library/Export/Lab; GATT requires explicit connected mode |
+| Capture | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-051 | Result→Library/Export/Lab; GATT requires explicit connected mode |
+| Wi-Fi Authentication Capture | CAP-049 | volatile Result→Actions→Peer→Evidence→Detail; Repeat restarts capture; persistence/export is not wired and `exportEligibility` is `NotEvaluated` |
 | Lab | CAP-032…CAP-037, CAP-054, CAP-055 | accepts only reviewed source/package/recipe; Result links back to source and audit evidence |
 | Library | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import never bypasses parsers |
 | Device | CAP-001…CAP-008, CAP-045…CAP-047, CAP-052, CAP-053 | Diagnostics explains unavailability before task entry; Lock never blocks Stop/recovery; Serial owns one explicit UART lease |
 | Device → Settings | PR-011, NFR-010 | EN/RU switch; immediate application and persistent selection |
 | Device → Self-Test | CAP-001…CAP-055 as applicable, PR-009 | Quick/Full use the same versioned checks as release HIL; report→Diagnostics/remedy/export |
+
+Exact host/build dev.247 binds UX-S30 to one stable controller path. On terminal
+results, `inconclusive` has priority over Full, PMKID and Partial evidence; peers with
+no valid message mask are not navigable. Up/Down changes selection only within the
+current level, Right/OK moves inward, Left/Back returns exactly one level, and Repeat
+starts the same bounded receive-only capture. The result explicitly says
+volatile/RAM-only/not saved. It cannot offer Save or Export: product persistence is
+not wired, no standard artifact serializer exists, and export eligibility remains
+`NotEvaluated`. Live/tone/selection updates repaint only changed content, not the
+whole screen. This mapping is host/build only until the exact dev.247 TFT/navigation
+delta passes on the original DIV after USB repower.
 
 ## UX-01 acceptance
 

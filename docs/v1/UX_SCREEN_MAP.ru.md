@@ -71,7 +71,10 @@ UX-S01 Home
 │  ├─ UX-S12 Capture Setup: source, bounds, destination
 │  ├─ UX-S13 Capture Running: progress, drops, explicit Stop
 │  ├─ UX-S14 Capture Result: raw metadata / derived decode / Save / Export / Lab
-│  ├─ UX-S30 Захват Wi-Fi-аутентификации: EAPOL/PMKID/handshake state
+│  ├─ UX-S30 Захват Wi-Fi-аутентификации
+│  │  ├─ Выполняется: remaining time / candidate frames / retained/drop accounting
+│  │  └─ Результат → Действия → Устройство → Доказательства → Детали
+│  │     └─ Повторить: снова запустить тот же bounded capture
 │  └─ UX-S32 BLE Inspector: raw packets / explicit connected GATT
 ├─ Лаборатория
 │  ├─ UX-S18 Scope & Safety Context
@@ -128,12 +131,24 @@ action. В активном TX `Back` никогда не открывает con
 |---|---|---|
 | Обзор | CAP-009…CAP-017, CAP-042, CAP-048, CAP-050 | Observation/finding→Target/Capture/Radar/evidence; stopped Session/Field Survey→Library/export |
 | Цели | CAP-018…CAP-022, CAP-044 | Evidence→Observation/Capture; Target→Compare/Radar |
-| Захват | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-049, CAP-051 | Result→Library/Export/Lab; GATT требует explicit connected mode |
+| Захват | CAP-023, CAP-024, CAP-026…CAP-031, CAP-042, CAP-043, CAP-051 | Result→Library/Export/Lab; GATT требует explicit connected mode |
+| Захват Wi-Fi-аутентификации | CAP-049 | volatile Результат→Действия→Устройство→Доказательства→Детали; Повторить перезапускает capture; persistence/export не подключён, `exportEligibility` равен `NotEvaluated` |
 | Лаборатория | CAP-032…CAP-037, CAP-054, CAP-055 | принимает только reviewed source/package/recipe; Result возвращает source/audit evidence |
 | Библиотека | CAP-025…CAP-031, CAP-038, CAP-043, CAP-047 | item→Compare/Export/Lab; import никогда не обходит parser |
 | Устройство | CAP-001…CAP-008, CAP-045…CAP-047, CAP-052, CAP-053 | Diagnostics объясняет недоступность до входа; Lock не блокирует Stop/recovery; Serial владеет одним explicit UART lease |
 | Устройство → Настройки | PR-011, NFR-010 | переключение EN/RU; немедленное применение и persistent selection |
 | Устройство → Самопроверка | применимые CAP-001…CAP-055, PR-009 | Quick/Full выполняют те же versioned checks, что release HIL; report→Diagnostics/remedy/export |
+
+Exact host/build dev.247 связывает UX-S30 с одним стабильным controller path. В
+terminal result `inconclusive` имеет приоритет над evidence Full, PMKID и Partial;
+peers без valid message mask не участвуют в навигации. Up/Down меняют selection
+только внутри текущего уровня, Right/OK двигают внутрь, Left/Back возвращают ровно на
+уровень, Повторить запускает тот же bounded receive-only capture. Result явно
+сообщает volatile/RAM-only/not saved. Он не предлагает Save или Export: product
+persistence не подключён, standard artifact serializer не существует, export
+eligibility остаётся `NotEvaluated`. Live/tone/selection updates перерисовывают только
+изменённый content, а не весь экран. Эта карта остаётся host/build до physical
+проверки TFT/navigation delta exact dev.247 на оригинальном DIV после USB repower.
 
 ## Acceptance UX-01
 

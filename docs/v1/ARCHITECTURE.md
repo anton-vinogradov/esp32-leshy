@@ -801,6 +801,36 @@ split, malformed, capacity-lost or dropped evidence fails closed as incomplete a
 blocks the subsequent Wi-Fi→BLE handoff. The detector adds no TX or automatic
 response; physical TFT, cleanup and negative-corpus evidence remain required.
 
+### Focused Wi-Fi authentication capture foundation
+
+Exact physical dev.246 proves the receive-only CAP-049 lifecycle, fixed target/channel
+continuity, an honest `inconclusive` result when ambient traffic supplies no
+EAPOL/PMKID, repeated product FAT/VFS mount and final cleanup. That accepted physical
+baseline remains unchanged. Exact host/build dev.247 adds a bounded allocation-free
+controller and EN/RU presentation over the immutable terminal report. It validates
+the report before publication, orders `inconclusive` before Full, PMKID and Partial
+evidence, rejects M2/M3/M4 with an all-zero Key MIC, removes zero-mask peers, and
+exposes the stable path `Result → Actions → Peer → Evidence → Detail`. Up/Down moves
+inside one level, Right/OK enters, Left/Back reverses one level, and Repeat requests
+the same bounded capture again. Tone or selection changes repaint only affected
+content; static chrome is not cleared.
+
+The storage boundary extends the existing atomic `SessionStore`, rather than adding
+a parallel backend. Session and segment schema 8 with authentication capture wire 5
+carry generic/auth purpose, target BSSID, binary-safe SSID known/length/bytes and
+exact reported/accepted/capacity-drop/invalid-drop accounting. Fixed channel remains
+in existing raw-frame capture metadata. Generic raw-frame opening accepts schema 8,
+and schema 4 remains readable. Provenance validation fails closed for inconsistent
+SSID state, counters, corruption or boundary recovery, with no dynamic allocation,
+radio/platform dependency or TX path.
+
+This is foundation, not a persistence/export claim. The product result remains
+volatile/RAM-only/not saved, `exportEligibility` is `NotEvaluated`, persistence and
+export are not wired, and no standard artifact serializer exists yet. Physical
+dev.247 TFT/navigation regression after original-DIV USB repower comes first; only
+then may the serializer and product save/export wiring be implemented and exercised
+with useful authentication evidence.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

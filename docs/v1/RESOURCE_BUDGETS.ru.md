@@ -1074,6 +1074,28 @@ receive-only и не наблюдает authentication evidence, поэтому 
 mount headroom, а не завершение CAP-049, proof terminal commit Product Survey или
 budget mixed-workload release/endurance.
 
+Foundation navigation результата и provenance authentication CAP-049 `RB-M186`:
+exact host/build `1.0.0-dev.247` на source
+`ccb4a3a5351d065e312ca29cf689d3acd9e6d93b` использует 247 016 B static RAM и
+linked image 3 403 120 B (PlatformIO Flash used сообщает 3 402 780 B). Application
+3 403 280 B оставляет 791 024 B в OTA slot,
+остаток internal DIRAM равен 11 528 B. SHA-256 application/factory:
+`b3bb3e3a787ef36aa306d0711a40c0b5b730a02f69fc1d72e4a59315b0435ed1`/
+`186c24fbd831db40dc5b936c6bbd91bee7908cefc38c9aa651fbfd8676c09ff1`;
+identity ELF/app:
+`954a5a80064a951bac6a3f278cdd5e06292d7589871ab132f5cd680e36e9dba4`,
+SHA-256 map:
+`2fd0300e65fb4b4d4c4b2bc0a1f01bb97627e19a65eb7d1f51503b9b82f79ccf`.
+Bounded controller/presenter результата и foundation provenance
+schema-8/segment-8/wire-5 не добавляют dynamic allocation, task, radio owner или TX
+dependency. Full host suite прошёл до того, как независимое review нашло P1 с
+полностью нулевым Key MIC; на этом exact post-fix source проходят focused
+capture/policy ASan+UBSan tests, focused review, production build и budget. Это
+только host/build bound: device не прошивался, принятым physical runtime/heap
+baseline остаётся dev.246 `RB-M185`, cadence остаётся 11/15. Product persistence и
+export не подключены, standard artifact serializer ещё не существует,
+`exportEligibility` остаётся `NotEvaluated`.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты
