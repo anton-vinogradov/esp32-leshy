@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.234.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.235.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -413,6 +413,9 @@ def main() -> int:
             "BLE deduplicated record budget is not bounded at 128")
     require(failures, "kMaximumStreamingRecords = 4096U" in ble_contract,
             "BLE streaming record budget is not bounded at 4096")
+    require(failures,
+            "matchingRepeats >= AirspaceFinding::kEvidenceCapacity" in source,
+            "BLE repeat retention is not bounded per exact tracker")
     open_start = arduino_entry.find("bool openAirspaceGuardProduct()")
     open_end = arduino_entry.find("bool stopWifiChannelsProduct()", open_start)
     open_body = arduino_entry[open_start:open_end]
@@ -547,7 +550,7 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.234"',
+        '"candidate_version": "1.0.0-dev.235"',
         '"full_matrix_required": false',
         '"cadence_after_acceptance": "8/15"',
     ):

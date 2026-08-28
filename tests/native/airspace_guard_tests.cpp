@@ -1075,10 +1075,33 @@ void testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss() {
     CHECK(retention.observationCount() == 0U);
 
     retention.reset();
+    BleFixtureSource redundant;
+    for (std::size_t index = 0U;
+         index < AirspaceFinding::kEvidenceCapacity + 3U; ++index) {
+        redundant.add(kTransmitterA, 1500000ULL + index,
+                      AirspaceBleTrackerProtocol::Tile);
+        const BleLiveRetentionDisposition disposition =
+            retention.accept(redundant.mutableAt(index).observation);
+        CHECK(disposition ==
+              (index < AirspaceFinding::kEvidenceCapacity
+                   ? BleLiveRetentionDisposition::Retained
+                   : BleLiveRetentionDisposition::Ignored));
+    }
+    CHECK(retention.observationCount() ==
+          AirspaceFinding::kEvidenceCapacity);
+    CHECK(retention.stats().advertisementsIgnored == 3U);
+    CHECK(retention.stats().capacityDrops == 0U);
+    CHECK(retention.stats().complete());
+
+    retention.reset();
     BleFixtureSource repeats;
     for (std::size_t index = 0U;
          index < kBleTrackerLiveRetentionCapacity + 1U; ++index) {
-        repeats.add(kTransmitterA, 2000000ULL + index,
+        const std::array<std::uint8_t, 6> uniqueIdentity{
+            0x02U, 0x11U, 0x22U, 0x33U,
+            static_cast<std::uint8_t>(index >> 8U),
+            static_cast<std::uint8_t>(index)};
+        repeats.add(uniqueIdentity, 2000000ULL + index,
                     AirspaceBleTrackerProtocol::Tile);
         const BleLiveRetentionDisposition disposition =
             retention.accept(repeats.mutableAt(index).observation);

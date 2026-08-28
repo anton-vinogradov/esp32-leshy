@@ -319,9 +319,10 @@ struct AirspaceGuardBleRetentionStats final {
 
 // Complete bounded live evidence for the BLE tracker detector. One benign
 // advertisement is retained as coverage until tracker-compatible evidence
-// arrives; it is then replaced so all 32 slots remain available for repeated
-// exact identity/protocol observations. Irrelevant valid advertisements are
-// counted but do not consume detector capacity.
+// arrives; it is then replaced. At most the detector's eight evidence slots
+// are retained per exact identity/protocol/address-type, so redundant repeats
+// cannot starve other tracker candidates. Irrelevant and redundant valid
+// advertisements are counted but do not consume detector capacity.
 class AirspaceGuardBleRetention final : public BleObservationSource {
 public:
     void reset();

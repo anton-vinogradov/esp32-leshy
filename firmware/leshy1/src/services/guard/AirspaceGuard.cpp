@@ -367,6 +367,30 @@ BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
         stats_.trackerAdvertisements = 1U;
         return BleLiveRetentionDisposition::Retained;
     }
+    // A finding can expose at most eight exact evidence references and policy
+    // thresholds cannot exceed that same bound. Retaining further repeats of
+    // an already represented identity/protocol/address-type cannot change
+    // whether it is detected; classify them as accounted redundant ingress so
+    // one loud tracker cannot evict every other candidate from the bounded
+    // live window. New identities still fail closed when total capacity is
+    // exhausted.
+    std::size_t matchingRepeats = 0U;
+    BleTrackerEvent incoming{};
+    if (decodeBleObservation(observation, &incoming, 0U) ==
+            BleObservationDecode::TrackerAdvertisement) {
+        for (std::size_t index = 0U; index < size_; ++index) {
+            BleTrackerEvent retained{};
+            if (decodeBleObservation(records_[index], &retained, index) ==
+                    BleObservationDecode::TrackerAdvertisement &&
+                sameBleTracker(incoming, retained)) {
+                ++matchingRepeats;
+            }
+        }
+    }
+    if (matchingRepeats >= AirspaceFinding::kEvidenceCapacity) {
+        ++stats_.advertisementsIgnored;
+        return BleLiveRetentionDisposition::Ignored;
+    }
     if (size_ >= records_.size()) {
         ++stats_.capacityDrops;
         return BleLiveRetentionDisposition::Full;
