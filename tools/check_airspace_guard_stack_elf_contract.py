@@ -17,6 +17,7 @@ from pathlib import Path
 # dev.223 7,280-byte service frame from returning unnoticed.
 LIMITS = {
     "serviceAirspaceGuardProduct()": 1024,
+    "runProductSurveyWorker(void*)": 6144,
     "finalizeAirspaceGuardWifiEvidence(": 3072,
     "renderAirspaceGuardPage(": 1280,
     "AirspaceGuard::inspectWifi(": 2816,

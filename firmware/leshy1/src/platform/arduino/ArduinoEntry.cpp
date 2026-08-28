@@ -1670,6 +1670,17 @@ struct AirspaceGuardBleWorkerEvent final {
 // task reads this workspace, while the worker copies complete events through
 // the queue, so one static bounded instance preserves ownership and accounting.
 AirspaceGuardBleWorkerEvent airspaceGuardBleEventWorkspace{};
+void resetAirspaceGuardBleEventWorkspace() {
+    // The worker and loop task exchange ownership through the completion-token
+    // queue. Keep the evidence-rich payload in one static workspace so neither
+    // task stack nor the queue storage duplicates its ~2.4-KiB report.
+    std::memset(&airspaceGuardBleEventWorkspace, 0,
+                sizeof(airspaceGuardBleEventWorkspace));
+    airspaceGuardBleEventWorkspace.status = "idle";
+    airspaceGuardBleEventWorkspace.cleanupComplete = true;
+    airspaceGuardBleEventWorkspace.report.status =
+        AirspaceGuardStatus::Inconclusive;
+}
 
 struct ProductSurveyWorkerReport final {
     const char* status = "idle";
@@ -3082,10 +3093,10 @@ BleRecordDisposition retainAirspaceGuardBleRecord(
 }
 
 void runAirspaceGuardBleWorker() {
-    AirspaceGuardBleWorkerEvent event{};
+    auto& event = airspaceGuardBleEventWorkspace;
+    resetAirspaceGuardBleEventWorkspace();
     event.generation = airspaceGuardBleRequestGeneration();
     event.status = "cancelled";
-    event.report.status = AirspaceGuardStatus::Inconclusive;
     if (!transitionAirspaceGuardBleControl(
             AirspaceGuardBleWorkerControl::Requested,
             AirspaceGuardBleWorkerControl::Running)) {
@@ -3095,7 +3106,9 @@ void runAirspaceGuardBleWorker() {
             return;
         }
         if (airspaceGuardBleWorkerEvents != nullptr) {
-            xQueueOverwrite(airspaceGuardBleWorkerEvents, &event);
+            const std::uint32_t completedGeneration = event.generation;
+            xQueueOverwrite(airspaceGuardBleWorkerEvents,
+                            &completedGeneration);
         }
         return;
     }
@@ -3159,7 +3172,12 @@ void runAirspaceGuardBleWorker() {
     airspaceGuardBleWorkerControl = AirspaceGuardBleWorkerControl::Idle;
     portEXIT_CRITICAL(&productSurveyWorkerMux);
     if (airspaceGuardBleWorkerEvents != nullptr) {
-        xQueueOverwrite(airspaceGuardBleWorkerEvents, &event);
+        // Publishing the tiny generation token transfers the already-complete
+        // static payload to the loop task. A new request cannot be admitted
+        // until that task consumes this terminal event.
+        const std::uint32_t completedGeneration = event.generation;
+        xQueueOverwrite(airspaceGuardBleWorkerEvents,
+                        &completedGeneration);
     }
 }
 
@@ -3511,7 +3529,7 @@ bool initializeProductSurveyWorker() {
     productSurveyObservations = xQueueCreate(
         kProductSurveyObservationCapacity, sizeof(Observation));
     airspaceGuardBleWorkerEvents = xQueueCreate(
-        1U, sizeof(AirspaceGuardBleWorkerEvent));
+        1U, sizeof(std::uint32_t));
     if (productSurveyScanStartGate == nullptr ||
         productSurveyWorkerEvents == nullptr ||
         productSurveyObservations == nullptr ||
@@ -20061,10 +20079,13 @@ void serviceAirspaceGuardProduct() {
         wifiProductView == WifiProductView::AirspaceGuard;
     if (airspaceGuardCaptureState ==
         AirspaceGuardCaptureState::BleRunning) {
+        std::uint32_t completedGeneration = 0U;
         auto& event = airspaceGuardBleEventWorkspace;
         if (airspaceGuardBleWorkerEvents != nullptr &&
-            xQueueReceive(airspaceGuardBleWorkerEvents, &event, 0) ==
+            xQueueReceive(airspaceGuardBleWorkerEvents,
+                          &completedGeneration, 0) ==
                 pdTRUE &&
+            completedGeneration == event.generation &&
             event.generation == airspaceGuardGeneration) {
             const bool mergedComplete = event.valid &&
                 event.cleanupComplete &&

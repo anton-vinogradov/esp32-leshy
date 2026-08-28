@@ -1,12 +1,13 @@
 {
   "schema": "leshy.hil.delta_scope.v1",
-  "id": "airspace-guard-1.0.0-dev.224",
-  "candidate_version": "1.0.0-dev.224",
+  "id": "airspace-guard-1.0.0-dev.225",
+  "candidate_version": "1.0.0-dev.225",
   "changed_surfaces": [
     "airspace_guard_low_confidence_elevated_noise_indicator",
     "airspace_guard_read_only_diagnostic_contract",
     "airspace_guard_bounded_incremental_rendering",
-    "airspace_guard_loop_stack_panic_fix_and_exact_elf_gate"
+    "airspace_guard_loop_stack_panic_fix_and_exact_elf_gate",
+    "airspace_guard_single_workspace_and_token_queue_memory_fix"
   ],
   "required_delta_regression": [
     "one_exact_flash_on_board_01",

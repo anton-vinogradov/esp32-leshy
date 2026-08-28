@@ -41,7 +41,7 @@ BLE_CONTRACT_HEADER = (
     ROOT / "firmware/leshy1/src/drivers/ble/BlePassiveContract.h"
 )
 HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.224.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.225.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -371,6 +371,9 @@ def main() -> int:
         "report.wifiNoiseSamplesDropped == 0U",
         "report.wifiNoiseSamplesMalformed == 0U",
         "airspaceGuardBleEventWorkspace",
+        "resetAirspaceGuardBleEventWorkspace()",
+        "1U, sizeof(std::uint32_t)",
+        "completedGeneration == event.generation",
         "resetAirspaceGuardWifiReport()",
         "sizeof(airspaceGuardWifiReport)",
         "No evidence-rich loop-stack copy is needed here",
@@ -476,7 +479,7 @@ def main() -> int:
                 f"missing Airspace Guard HIL contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.224"',
+        '"candidate_version": "1.0.0-dev.225"',
         '"full_matrix_required": false',
         '"cadence_after_acceptance": "6/15"',
     ):
@@ -485,6 +488,7 @@ def main() -> int:
 
     for marker in (
         '"serviceAirspaceGuardProduct()": 1024',
+        '"runProductSurveyWorker(void*)": 6144',
         '"finalizeAirspaceGuardWifiEvidence(": 3072',
         '"renderAirspaceGuardPage(": 1280',
         '"AirspaceGuard::inspectWifi(": 2816',

@@ -87,7 +87,9 @@ def main() -> int:
         "airspaceGuardBleScanPlan()", "scanner.begin()", "scanner.scan(",
         "scanner.end()", "scanner.cleanupComplete()",
         "disarmAirspaceGuardBleWorkerDeadline();",
-        "xQueueOverwrite(airspaceGuardBleWorkerEvents, &event)",
+        "const std::uint32_t completedGeneration = event.generation",
+        "xQueueOverwrite(airspaceGuardBleWorkerEvents,",
+        "&completedGeneration)",
     ), "Airspace Guard BLE worker integration")
     if "xTaskCreate" in guard_worker:
         raise AssertionError(
