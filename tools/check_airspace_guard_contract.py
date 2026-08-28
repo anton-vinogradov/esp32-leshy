@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.230.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.231.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -392,6 +392,7 @@ def main() -> int:
         "sizeof(airspaceGuardWifiReport)",
         "No evidence-rich loop-stack copy is needed here",
         "finalizeAirspaceGuardWifiEvidence(monitor, complete)",
+        "airspace_guard_ble_listening_after_incomplete_wifi",
     ):
         require(failures, marker in arduino_entry,
                 f"missing Airspace Guard product integration: {marker}")
@@ -501,6 +502,7 @@ def main() -> int:
         '"host_wifi_control_calls": 0',
         'fixture_process.terminate()',
         'state.get("ble_records")',
+        '"conclusive_guard_lifecycles"',
     ):
         require(failures, marker in hil_runner,
                 f"missing Airspace Guard HIL contract: {marker}")
@@ -519,7 +521,7 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.230"',
+        '"candidate_version": "1.0.0-dev.231"',
         '"full_matrix_required": false',
         '"cadence_after_acceptance": "8/15"',
     ):

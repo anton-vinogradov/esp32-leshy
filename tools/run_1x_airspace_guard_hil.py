@@ -182,11 +182,25 @@ def running_failures(state: dict[str, Any], stage: str) -> list[str]:
             "wifi_disconnects_dropped": 0,
             "wifi_identity_dropped": 0,
             "wifi_noise_dropped": 0,
-            "wifi_invalid_frames": 0,
-            "wifi_identity_retention_complete": True,
-            "wifi_noise_retention_complete": True,
+            "wifi_receive_invalid_frames": 0,
             "ble_worker_control": 2,
         }, stage))
+        malformed = sum(int(state.get(key, -1)) for key in (
+            "wifi_identity_malformed_envelope",
+            "wifi_identity_malformed_addressing",
+            "wifi_identity_malformed_elements",
+        ))
+        if (malformed < 0 or
+                int(state.get("wifi_invalid_frames", -1)) != malformed):
+            failures.append(
+                f"{stage}.malformed_ingress_accounting: {malformed}")
+        complete = malformed == 0
+        if state.get("wifi_identity_retention_complete") is not complete:
+            failures.append(
+                f"{stage}.identity_retention_complete: {complete}")
+        if state.get("wifi_noise_retention_complete") is not complete:
+            failures.append(
+                f"{stage}.noise_retention_complete: {complete}")
     before = int(state.get("heap_free_before_queue_release", 0))
     after = int(state.get("heap_free_after_queue_release", 0))
     largest_before = int(
@@ -223,13 +237,11 @@ def result_failures(state: dict[str, Any], label: str) -> list[str]:
     failures = expect(state, {
         "capture_state": "result",
         "load_status": "ready",
-        "evidence_incomplete": False,
         "elevated_noise_low_confidence": True,
         "noise_samples_dropped": 0,
         "noise_samples_malformed": 0,
         "malformed_frames": 0,
         "source_read_failures": 0,
-        "source_frames_dropped": 0,
         "findings_dropped": 0,
         "inspection_truncated": False,
         "wifi_capture_state": "complete",
@@ -238,14 +250,8 @@ def result_failures(state: dict[str, Any], label: str) -> list[str]:
         "wifi_monitor_active": False,
         "wifi_disconnects_dropped": 0,
         "wifi_identity_dropped": 0,
-        "wifi_identity_malformed_envelope": 0,
-        "wifi_identity_malformed_addressing": 0,
-        "wifi_identity_malformed_elements": 0,
         "wifi_noise_dropped": 0,
-        "wifi_invalid_frames": 0,
         "wifi_receive_invalid_frames": 0,
-        "wifi_identity_retention_complete": True,
-        "wifi_noise_retention_complete": True,
         "ble_worker_control": 0,
         "ble_worker_ready": True,
         "survey_queues_released": True,
@@ -256,8 +262,32 @@ def result_failures(state: dict[str, Any], label: str) -> list[str]:
         "runtime_owner": "wifi",
         "lease_mask": 15,
     }, label)
-    if state.get("outcome") not in ("clear", "finding"):
-        failures.append(f"{label}.outcome: expected clear or finding")
+    malformed = sum(int(state.get(key, -1)) for key in (
+        "wifi_identity_malformed_envelope",
+        "wifi_identity_malformed_addressing",
+        "wifi_identity_malformed_elements",
+    ))
+    if (malformed < 0 or
+            int(state.get("wifi_invalid_frames", -1)) != malformed):
+        failures.append(
+            f"{label}.malformed_ingress_accounting: {malformed}")
+    if int(state.get("source_frames_dropped", -1)) != malformed:
+        failures.append(
+            f"{label}.external_uncertainty_accounting: {malformed}")
+    complete = malformed == 0
+    if state.get("wifi_identity_retention_complete") is not complete:
+        failures.append(
+            f"{label}.identity_retention_complete: {complete}")
+    if state.get("wifi_noise_retention_complete") is not complete:
+        failures.append(
+            f"{label}.noise_retention_complete: {complete}")
+    if state.get("evidence_incomplete") is complete:
+        failures.append(f"{label}.evidence_incomplete: {not complete}")
+    allowed_outcomes = (("clear", "finding") if complete else
+                        ("inconclusive", "finding"))
+    if state.get("outcome") not in allowed_outcomes:
+        failures.append(
+            f"{label}.outcome: expected one of {allowed_outcomes}")
     for key in ("source_frames_observed", "frames_available",
                 "frames_inspected"):
         if not isinstance(state.get(key), int) or state[key] < 1:
@@ -274,15 +304,6 @@ def result_failures(state: dict[str, Any], label: str) -> list[str]:
     if retained < 0 or projected != retained:
         failures.append(
             f"{label}.identity_projection: {projected} != {retained}")
-    malformed_total = sum(int(state.get(key, -1)) for key in (
-        "wifi_identity_malformed_envelope",
-        "wifi_identity_malformed_addressing",
-        "wifi_identity_malformed_elements",
-        "wifi_receive_invalid_frames",
-    ))
-    if malformed_total != int(state.get("wifi_invalid_frames", -1)):
-        failures.append(
-            f"{label}.invalid_frame_accounting: {malformed_total}")
     noise_observed = int(state.get("noise_samples_observed", -1))
     noise_available = int(state.get("noise_samples_available", -1))
     noise_inspected = int(state.get("noise_samples_inspected", -1))
@@ -292,7 +313,8 @@ def result_failures(state: dict[str, Any], label: str) -> list[str]:
     count = int(state.get("finding_count", -1))
     if mask < 0 or mask & ~ALLOWED_FINDING_MASK:
         failures.append(f"{label}.finding_mask: unsupported bits {mask:#x}")
-    if (count == 0) != (state.get("outcome") == "clear"):
+    if ((state.get("outcome") == "finding" and count == 0) or
+            (state.get("outcome") != "finding" and count != 0)):
         failures.append(f"{label}.finding_count/outcome: inconsistent")
     if mask & ELEVATED_NOISE_FINDING_MASK:
         if state.get("outcome") != "finding" or noise_inspected < 4:
@@ -546,6 +568,14 @@ def main() -> int:
                 finish_to_home(device, trace, "result_second")
                 metrics_after_second = query(
                     device, b"metrics", "leshy.boot.v1", "ready")
+                conclusive_lifecycles = sum(
+                    state.get("capture_state") == "result" and
+                    state.get("evidence_incomplete") is False
+                    for state in (result_first, result_second)
+                )
+                if conclusive_lifecycles < 1:
+                    failures.append(
+                        "two lifecycle gate has no conclusive lifecycle")
 
                 input_state = query(
                     device, b"input.state",
@@ -647,6 +677,11 @@ def main() -> int:
             "wifi_cancel_cleanup_proved": bool(wifi_cancelled),
             "ble_cancel_cleanup_proved": bool(ble_cancelled),
             "two_complete_guard_lifecycles": bool(result_first and result_second),
+            "conclusive_guard_lifecycles": sum(
+                state.get("capture_state") == "result" and
+                state.get("evidence_incomplete") is False
+                for state in (result_first, result_second)
+            ),
             "static_pixels_unchanged_during_live_refresh": (
                 pixel_proof.get("wifi", {}).get("static_changed_pixels") == 0 and
                 pixel_proof.get("ble", {}).get("static_changed_pixels") == 0

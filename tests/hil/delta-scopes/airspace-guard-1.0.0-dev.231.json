@@ -1,0 +1,34 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "airspace-guard-1.0.0-dev.231",
+  "candidate_version": "1.0.0-dev.231",
+  "changed_surfaces": [
+    "airspace_guard_complete_dev230_precursor_chain",
+    "deterministic_bounded_macos_ble_coverage_fixture",
+    "fail_closed_wifi_uncertainty_continues_independent_ble_observation"
+  ],
+  "required_delta_regression": [
+    "one_exact_flash_on_board_01",
+    "automatic_wifi_stage_screenshots_and_static_pixel_proof",
+    "wifi_stage_cancel_and_complete_cleanup",
+    "automatic_ble_stage_screenshots_and_static_pixel_proof",
+    "ble_stage_cancel_then_post_scanner_queue_restore",
+    "two_complete_wifi_plus_ble_lifecycles",
+    "at_least_one_conclusive_complete_lifecycle",
+    "over_the_air_malformed_wifi_ingress_remains_explicit_uncertainty",
+    "explicitly_authorized_macos_ble_name_fixture_is_started_and_stopped",
+    "at_least_one_ble_record_in_each_complete_lifecycle",
+    "zero_host_wifi_control_calls",
+    "all_capture_loss_and_retention_accounting_is_exact",
+    "identity_projection_matches_retained_profiles",
+    "compact_identity_source_and_disconnect_source_fit_detector_capacity",
+    "all_findings_bounded_and_noise_indicator_low_confidence",
+    "passive_receive_only_and_zero_application_tx",
+    "zero_heap_drift_after_warmup",
+    "zero_input_drops_and_final_zero_lease",
+    "zero_product_sd_writes"
+  ],
+  "new_passive_scans_required": true,
+  "full_matrix_required": false,
+  "cadence_after_acceptance": "8/15"
+}

@@ -1128,6 +1128,30 @@ void testCompletedWifiAndBleReportsMergeWithoutInventingEvidence() {
     CHECK(!mergeAirspaceGuardReports(wifi, ble, nullptr));
 }
 
+void testIncompleteWifiStillMergesCompleteBleEvidenceFailClosed() {
+    FixtureSource wifiSource;
+    wifiSource.add(8U, 1000000ULL, kTransmitterB, 6U, -62);
+    const AirspaceGuardReport wifi =
+        AirspaceGuard{}.inspectWifi(wifiSource, {}, 2U, 3U);
+    CHECK(wifi.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(wifi.sourceFramesDropped == 2U);
+
+    BleFixtureSource bleSource;
+    bleSource.add(kTransmitterA, 2000000ULL,
+                  AirspaceBleTrackerProtocol::None, -59, 1U);
+    const AirspaceGuardReport ble = AirspaceGuard{}.inspectBle(
+        bleSource, bleTrackerPolicy());
+    CHECK(ble.status == AirspaceGuardStatus::Clear);
+
+    AirspaceGuardReport merged{};
+    CHECK(mergeAirspaceGuardReports(wifi, ble, &merged));
+    CHECK(merged.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(merged.framesAvailable == 2U);
+    CHECK(merged.framesInspected == 2U);
+    CHECK(merged.bleAdvertisementRecords == 1U);
+    CHECK(merged.sourceFramesDropped == 2U);
+}
+
 void testStableNames() {
     CHECK(std::strcmp(airspaceGuardStatusName(AirspaceGuardStatus::Finding),
                       "finding") == 0);
@@ -1179,6 +1203,7 @@ int main() {
     testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats();
     testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss();
     testCompletedWifiAndBleReportsMergeWithoutInventingEvidence();
+    testIncompleteWifiStillMergesCompleteBleEvidenceFailClosed();
     testStableNames();
     std::puts("Airspace Guard detector tests passed");
     return 0;

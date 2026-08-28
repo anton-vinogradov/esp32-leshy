@@ -20267,7 +20267,11 @@ void serviceAirspaceGuardProduct() {
             finalizeAirspaceGuardWifiEvidence(monitor, complete);
         // The complete Wi-Fi report already occupies the retained merge input.
         // No evidence-rich loop-stack copy is needed here.
-        const bool bleRequested = wifiEvidenceComplete &&
+        // A structurally malformed over-the-air advertisement makes the Wi-Fi
+        // conclusion honestly inconclusive, but it is not a local receiver or
+        // cleanup failure. Continue the independent BLE observation so the
+        // user gets the maximum safe read-only evidence from one bounded run.
+        const bool bleRequested = complete &&
             requestAirspaceGuardBleWorker(airspaceGuardGeneration);
         if (bleRequested) {
             airspaceGuardCaptureState =
@@ -20275,7 +20279,9 @@ void serviceAirspaceGuardProduct() {
             airspaceGuardBleStartedUs = nowUs;
             nextAirspaceGuardUiRefreshUs = nowUs + 250000ULL;
             airspaceGuardResultNeedsContentClear = true;
-            lastRuntimeEvent = "airspace_guard_ble_listening";
+            lastRuntimeEvent = wifiEvidenceComplete
+                ? "airspace_guard_ble_listening"
+                : "airspace_guard_ble_listening_after_incomplete_wifi";
         } else {
             airspaceGuardWifiReport.status =
                 AirspaceGuardStatus::Inconclusive;
