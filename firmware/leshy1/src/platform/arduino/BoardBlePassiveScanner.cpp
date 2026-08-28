@@ -585,6 +585,7 @@ bool initializeProcessControllerObserver() {
 }  // namespace
 
 volatile bool BoardBlePassiveScanner::activeScan_ = false;
+std::atomic_bool BoardBlePassiveScanner::cancelRequested_{false};
 
 const char* boardBleScanStatusName(BoardBleScanStatus status) {
     switch (status) {
@@ -601,6 +602,7 @@ const char* boardBleScanStatusName(BoardBleScanStatus status) {
 
 bool BoardBlePassiveScanner::begin() {
     if (initialized_) return true;
+    cancelRequested_.store(false, std::memory_order_release);
     cleanupComplete_ = false;
     passiveOnly_ = true;
     clearReportQueue();
@@ -638,6 +640,10 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
     for (std::uint16_t attempt = 1U;
          attempt <= kMaximumScanAttempts; ++attempt) {
         result.attempts = attempt;
+        if (cancelRequested_.load(std::memory_order_acquire)) {
+            result.status = BoardBleScanStatus::ScanTimedOut;
+            break;
+        }
         clearReportQueue();
         setAcceptingReports(true);
         const bool started = startPassiveScan(plan);
@@ -651,6 +657,7 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
                 static_cast<std::uint64_t>(esp_timer_get_time()) +
                 static_cast<std::uint64_t>(plan.durationMs) * 1000ULL;
             while (activeScan_ &&
+                   !cancelRequested_.load(std::memory_order_acquire) &&
                    static_cast<std::uint64_t>(esp_timer_get_time()) <
                        deadlineUs) {
                 drainReports(&scanContext);
@@ -662,7 +669,8 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
             activeScan_ = false;
             setAcceptingReports(false);
             drainReports(&scanContext);
-            result.status = completedWindow && disabled
+            result.status = completedWindow && disabled &&
+                    !cancelRequested_.load(std::memory_order_acquire)
                 ? BoardBleScanStatus::Valid
                 : BoardBleScanStatus::ScanTimedOut;
         }
@@ -680,6 +688,7 @@ BoardBlePassiveScanResult BoardBlePassiveScanner::scan(
 }
 
 bool BoardBlePassiveScanner::cancelActiveScan() {
+    cancelRequested_.store(true, std::memory_order_release);
     if (!activeScan_) return true;
     const bool cancelled = stopPassiveScan();
     activeScan_ = false;

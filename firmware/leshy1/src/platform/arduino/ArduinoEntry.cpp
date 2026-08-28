@@ -274,6 +274,12 @@ using leshy1::kernel::safety::WorkerDeadlineSnapshot;
 using leshy1::services::power::PowerSafetyPolicy;
 using leshy1::services::power::PowerTelemetryState;
 using leshy1::services::power::PowerWriteDisposition;
+using leshy1::services::guard::AirspaceGuardBleRetention;
+using leshy1::services::guard::AirspaceGuardBleRetentionStats;
+using leshy1::services::guard::AirspaceGuardPolicy;
+using leshy1::services::guard::AirspaceGuardReport;
+using leshy1::services::guard::AirspaceGuardStatus;
+using leshy1::services::guard::BleLiveRetentionDisposition;
 using leshy1::services::targets::TargetAction;
 using leshy1::services::targets::TargetActionKind;
 using leshy1::services::targets::TargetService;
@@ -1069,15 +1075,25 @@ AirspaceGuardController airspaceGuardController;
 leshy1::services::guard::AirspaceGuard airspaceGuardDetector;
 enum class AirspaceGuardCaptureState : std::uint8_t {
     Idle,
-    Running,
+    WifiRunning,
+    BleRunning,
     Result,
     Failed,
 };
 AirspaceGuardCaptureState airspaceGuardCaptureState =
     AirspaceGuardCaptureState::Idle;
+bool airspaceGuardCaptureRunning() {
+    return airspaceGuardCaptureState ==
+               AirspaceGuardCaptureState::WifiRunning ||
+        airspaceGuardCaptureState ==
+               AirspaceGuardCaptureState::BleRunning;
+}
 constexpr std::uint32_t kAirspaceGuardCaptureDurationMs = 10000U;
 constexpr std::uint16_t kAirspaceGuardChannelDwellMs = 120U;
 std::uint64_t nextAirspaceGuardUiRefreshUs = 0;
+std::uint64_t airspaceGuardBleStartedUs = 0;
+std::uint32_t airspaceGuardGeneration = 0;
+AirspaceGuardReport airspaceGuardWifiReport{};
 bool airspaceGuardResultNeedsContentClear = false;
 WifiNetworkCatalog wifiNetworkCatalog;
 WifiNetworkNavigationOrder wifiNetworkNavigationOrder;
@@ -1611,6 +1627,23 @@ enum class ProductSurveyWorkerEventKind : std::uint8_t {
     Failed,
 };
 
+enum class AirspaceGuardBleWorkerControl : std::uint8_t {
+    Idle,
+    Requested,
+    Running,
+    CancelRequested,
+};
+
+struct AirspaceGuardBleWorkerEvent final {
+    std::uint32_t generation = 0;
+    const char* status = "idle";
+    bool valid = false;
+    bool cleanupComplete = true;
+    BoardBlePassiveScanResult scan{};
+    AirspaceGuardBleRetentionStats retention{};
+    AirspaceGuardReport report{};
+};
+
 struct ProductSurveyWorkerReport final {
     const char* status = "idle";
     bool backendOpen = false;
@@ -1664,6 +1697,7 @@ constexpr UBaseType_t kProductSurveyObservationCapacity =
 constexpr std::uint32_t kProductSurveyScanIntervalMs = 1000;
 constexpr std::uint64_t kProductSurveyPreparationDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kProductSurveyWorkerDeadlineUs = 8000000ULL;
+constexpr std::uint64_t kAirspaceGuardBleWorkerDeadlineUs = 25000000ULL;
 constexpr std::uint64_t kWifiCaptureStoreDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kPulseCaptureStoreDeadlineUs = 8000000ULL;
 constexpr std::uint64_t kTargetsStoreDeadlineUs = 8000000ULL;
@@ -1682,14 +1716,31 @@ static_assert(
         BoardBlePassiveScanner::worstCaseScanDurationUs(
             leshy1::drivers::ble::defaultPassivePlan()),
     "worker deadline must exceed the bounded BLE retry path");
+constexpr leshy1::drivers::ble::BleScanPlan airspaceGuardBleScanPlan() {
+    auto plan = leshy1::drivers::ble::defaultPassivePlan();
+    plan.deduplicateAddresses = false;
+    plan.durationMs = kAirspaceGuardCaptureDurationMs;
+    plan.maximumRecords = 128U;
+    return plan;
+}
+static_assert(
+    kAirspaceGuardBleWorkerDeadlineUs >
+        BoardBlePassiveScanner::worstCaseScanDurationUs(
+            airspaceGuardBleScanPlan()),
+    "Airspace Guard deadline must exceed the bounded BLE retry path");
 QueueHandle_t productSurveyWorkerEvents = nullptr;
 QueueHandle_t productSurveyObservations = nullptr;
+QueueHandle_t airspaceGuardBleWorkerEvents = nullptr;
 StaticSemaphore_t productSurveyScanStartGateStorage{};
 SemaphoreHandle_t productSurveyScanStartGate = nullptr;
 TaskHandle_t productSurveyWorkerTaskHandle = nullptr;
 portMUX_TYPE productSurveyWorkerMux = portMUX_INITIALIZER_UNLOCKED;
 ProductSurveyWorkerControl productSurveyWorkerControl =
     ProductSurveyWorkerControl::Idle;
+AirspaceGuardBleWorkerControl airspaceGuardBleWorkerControl =
+    AirspaceGuardBleWorkerControl::Idle;
+std::uint32_t airspaceGuardBleRequestedGeneration = 0;
+AirspaceGuardBleRetention airspaceGuardBleRetention;
 std::uint32_t productSurveyWorkerOwnedResources = 0;
 bool productSurveyWorkerReady = false;
 bool productSurveyWorkerScanActive = false;
@@ -2051,6 +2102,77 @@ bool transitionProductSurveyControl(ProductSurveyWorkerControl expected,
     return changed;
 }
 
+AirspaceGuardBleWorkerControl airspaceGuardBleControl() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const AirspaceGuardBleWorkerControl control =
+        airspaceGuardBleWorkerControl;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return control;
+}
+
+bool transitionAirspaceGuardBleControl(
+    AirspaceGuardBleWorkerControl expected,
+    AirspaceGuardBleWorkerControl next) {
+    bool changed = false;
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    if (airspaceGuardBleWorkerControl == expected) {
+        airspaceGuardBleWorkerControl = next;
+        changed = true;
+    }
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return changed;
+}
+
+std::uint32_t airspaceGuardBleRequestGeneration() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const std::uint32_t generation = airspaceGuardBleRequestedGeneration;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return generation;
+}
+
+bool requestAirspaceGuardBleWorker(std::uint32_t generation) {
+    if (generation == 0U || !productSurveyWorkerReady ||
+        productSurveyWorkerTaskHandle == nullptr ||
+        airspaceGuardBleWorkerEvents == nullptr ||
+        productSurveyControl() != ProductSurveyWorkerControl::Idle) {
+        return false;
+    }
+    bool requested = false;
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    if (airspaceGuardBleWorkerControl ==
+        AirspaceGuardBleWorkerControl::Idle) {
+        airspaceGuardBleRequestedGeneration = generation;
+        airspaceGuardBleWorkerControl =
+            AirspaceGuardBleWorkerControl::Requested;
+        requested = true;
+    }
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    if (!requested) return false;
+    xQueueReset(airspaceGuardBleWorkerEvents);
+    xTaskNotifyGive(productSurveyWorkerTaskHandle);
+    return true;
+}
+
+bool requestAirspaceGuardBleWorkerCancel() {
+    bool requested = false;
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    if (airspaceGuardBleWorkerControl ==
+            AirspaceGuardBleWorkerControl::Requested ||
+        airspaceGuardBleWorkerControl ==
+            AirspaceGuardBleWorkerControl::Running) {
+        airspaceGuardBleWorkerControl =
+            AirspaceGuardBleWorkerControl::CancelRequested;
+        requested = true;
+    }
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    if (!requested) return false;
+    BoardBlePassiveScanner::cancelActiveScan();
+    if (productSurveyWorkerTaskHandle != nullptr) {
+        xTaskNotifyGive(productSurveyWorkerTaskHandle);
+    }
+    return true;
+}
+
 bool productSurveyStopRequested() {
     const ProductSurveyWorkerControl control = productSurveyControl();
     return control == ProductSurveyWorkerControl::PauseRequested ||
@@ -2187,6 +2309,35 @@ bool disarmProductSurveyWorkerDeadline() {
     portENTER_CRITICAL(&productSurveyWorkerMux);
     const bool disarmed = workerDeadlineSupervisor.disarm(
         SupervisedWorker::ProductSurvey);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return disarmed;
+}
+
+bool armAirspaceGuardBleWorkerDeadline(std::uint64_t nowUs) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed = workerDeadlineSupervisor.arm(
+        SupervisedWorker::AirspaceGuardBle, nowUs,
+        kAirspaceGuardBleWorkerDeadlineUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+bool heartbeatAirspaceGuardBleWorker(std::uint64_t nowUs = 0) {
+    if (nowUs == 0U) {
+        nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs == 0U) nowUs = 1U;
+    }
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool accepted = workerDeadlineSupervisor.heartbeat(
+        SupervisedWorker::AirspaceGuardBle, nowUs);
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return accepted;
+}
+
+bool disarmAirspaceGuardBleWorkerDeadline() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool disarmed = workerDeadlineSupervisor.disarm(
+        SupervisedWorker::AirspaceGuardBle);
     portEXIT_CRITICAL(&productSurveyWorkerMux);
     return disarmed;
 }
@@ -2883,9 +3034,119 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
     return report;
 }
 
+BleRecordDisposition retainAirspaceGuardBleRecord(
+    const BleAdvertisementRecord& record, std::uint64_t monotonicUs,
+    void*) {
+    Observation observation;
+    if (!leshy1::drivers::ble::normalizePassiveRecord(
+            record, monotonicUs, &observation)) {
+        return BleRecordDisposition::Rejected;
+    }
+    switch (airspaceGuardBleRetention.accept(observation)) {
+        case BleLiveRetentionDisposition::Retained:
+        case BleLiveRetentionDisposition::Ignored:
+            return BleRecordDisposition::Accepted;
+        case BleLiveRetentionDisposition::Malformed:
+            return BleRecordDisposition::Rejected;
+        case BleLiveRetentionDisposition::Full:
+            return BleRecordDisposition::Dropped;
+    }
+    return BleRecordDisposition::Rejected;
+}
+
+void runAirspaceGuardBleWorker() {
+    AirspaceGuardBleWorkerEvent event{};
+    event.generation = airspaceGuardBleRequestGeneration();
+    event.status = "cancelled";
+    event.report.status = AirspaceGuardStatus::Inconclusive;
+    if (!transitionAirspaceGuardBleControl(
+            AirspaceGuardBleWorkerControl::Requested,
+            AirspaceGuardBleWorkerControl::Running)) {
+        if (!transitionAirspaceGuardBleControl(
+                AirspaceGuardBleWorkerControl::CancelRequested,
+                AirspaceGuardBleWorkerControl::Idle)) {
+            return;
+        }
+        if (airspaceGuardBleWorkerEvents != nullptr) {
+            xQueueOverwrite(airspaceGuardBleWorkerEvents, &event);
+        }
+        return;
+    }
+
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    const bool supervised = armAirspaceGuardBleWorkerDeadline(startedUs);
+    BoardBlePassiveScanner scanner;
+    airspaceGuardBleRetention.reset();
+    bool begun = false;
+    if (supervised) {
+        heartbeatAirspaceGuardBleWorker();
+        begun = scanner.begin();
+        heartbeatAirspaceGuardBleWorker();
+        if (begun && airspaceGuardBleControl() ==
+                         AirspaceGuardBleWorkerControl::Running) {
+            event.scan = scanner.scan(
+                airspaceGuardBleScanPlan(), retainAirspaceGuardBleRecord,
+                nullptr);
+        }
+    }
+    const bool cleanup = scanner.end();
+    event.cleanupComplete = cleanup && scanner.cleanupComplete();
+    event.retention = airspaceGuardBleRetention.stats();
+    const bool cancelled = airspaceGuardBleControl() ==
+        AirspaceGuardBleWorkerControl::CancelRequested;
+    const bool exactAccounting =
+        event.scan.recordsObserved == event.scan.recordsReported &&
+        event.scan.recordsReported == event.scan.recordsRead &&
+        event.scan.recordsRead == event.scan.accepted &&
+        event.scan.accepted == event.retention.recordsObserved &&
+        event.scan.rejected == 0U && event.scan.dropped == 0U;
+    const bool complete = supervised && begun && !cancelled &&
+        event.scan.valid() && event.cleanupComplete &&
+        event.scan.recordsObserved != 0U && exactAccounting &&
+        event.retention.complete() &&
+        event.retention.recordsRetained ==
+            airspaceGuardBleRetention.observationCount();
+    if (complete) {
+        AirspaceGuardPolicy policy{};
+        policy.bleTrackerPresenceEnabled = true;
+        event.report = airspaceGuardDetector.inspectBle(
+            airspaceGuardBleRetention, policy, 0U,
+            static_cast<std::size_t>(event.scan.recordsObserved));
+        event.valid = event.report.status == AirspaceGuardStatus::Clear ||
+            event.report.status == AirspaceGuardStatus::Finding;
+        event.status = event.valid ? "complete" : "inspection_failed";
+    } else {
+        event.status = cancelled
+            ? "cancelled"
+            : (!supervised ? "supervisor_unavailable"
+                           : (!begun ? "scanner_unavailable"
+                                     : "incomplete_evidence"));
+    }
+    if (supervised) {
+        heartbeatAirspaceGuardBleWorker();
+        disarmAirspaceGuardBleWorkerDeadline();
+    }
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    airspaceGuardBleWorkerControl = AirspaceGuardBleWorkerControl::Idle;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    if (airspaceGuardBleWorkerEvents != nullptr) {
+        xQueueOverwrite(airspaceGuardBleWorkerEvents, &event);
+    }
+}
+
 void runProductSurveyWorker(void*) {
     for (;;) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        const AirspaceGuardBleWorkerControl guardControl =
+            airspaceGuardBleControl();
+        if (guardControl == AirspaceGuardBleWorkerControl::Requested ||
+            guardControl ==
+                AirspaceGuardBleWorkerControl::CancelRequested) {
+            runAirspaceGuardBleWorker();
+            continue;
+        }
         if (productSurveyControl() != ProductSurveyWorkerControl::Starting) {
             continue;
         }
@@ -3222,9 +3483,12 @@ bool initializeProductSurveyWorker() {
         sizeof(ProductSurveyWorkerEvent));
     productSurveyObservations = xQueueCreate(
         kProductSurveyObservationCapacity, sizeof(Observation));
+    airspaceGuardBleWorkerEvents = xQueueCreate(
+        1U, sizeof(AirspaceGuardBleWorkerEvent));
     if (productSurveyScanStartGate == nullptr ||
         productSurveyWorkerEvents == nullptr ||
-        productSurveyObservations == nullptr) {
+        productSurveyObservations == nullptr ||
+        airspaceGuardBleWorkerEvents == nullptr) {
         if (productSurveyWorkerEvents != nullptr) {
             vQueueDelete(productSurveyWorkerEvents);
             productSurveyWorkerEvents = nullptr;
@@ -3232,6 +3496,10 @@ bool initializeProductSurveyWorker() {
         if (productSurveyObservations != nullptr) {
             vQueueDelete(productSurveyObservations);
             productSurveyObservations = nullptr;
+        }
+        if (airspaceGuardBleWorkerEvents != nullptr) {
+            vQueueDelete(airspaceGuardBleWorkerEvents);
+            airspaceGuardBleWorkerEvents = nullptr;
         }
         return false;
     }
@@ -3241,8 +3509,10 @@ bool initializeProductSurveyWorker() {
     if (!started) {
         vQueueDelete(productSurveyWorkerEvents);
         vQueueDelete(productSurveyObservations);
+        vQueueDelete(airspaceGuardBleWorkerEvents);
         productSurveyWorkerEvents = nullptr;
         productSurveyObservations = nullptr;
+        airspaceGuardBleWorkerEvents = nullptr;
         productSurveyScanStartGate = nullptr;
     }
     return started;
@@ -3252,6 +3522,7 @@ bool suspendProductSurveyWorkerForWebCompanion() {
     if (webCompanionSurveyWorkerSuspended) return true;
     if (!productSurveyWorkerReady ||
         productSurveyControl() != ProductSurveyWorkerControl::Idle ||
+        airspaceGuardBleControl() != AirspaceGuardBleWorkerControl::Idle ||
         productSurveyWorkerTaskHandle == nullptr) {
         return false;
     }
@@ -3268,6 +3539,10 @@ bool suspendProductSurveyWorkerForWebCompanion() {
     if (productSurveyObservations != nullptr) {
         vQueueDelete(productSurveyObservations);
         productSurveyObservations = nullptr;
+    }
+    if (airspaceGuardBleWorkerEvents != nullptr) {
+        vQueueDelete(airspaceGuardBleWorkerEvents);
+        airspaceGuardBleWorkerEvents = nullptr;
     }
     productSurveyScanStartGate = nullptr;
     // A task deleted by another task is reclaimed by the idle task. Yield once
@@ -7542,6 +7817,12 @@ void serviceWorkerDeadlineSupervisor() {
         requestTargetsStoreDeadlineCancel();
         targetsMutationState = TargetsMutationState::Failed;
         targetsMutationStatus = "safety_worker_deadline";
+    } else if (worker.lastExpiredWorker ==
+               SupervisedWorker::AirspaceGuardBle) {
+        requestAirspaceGuardBleWorkerCancel();
+        airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
+        nextAirspaceGuardUiRefreshUs = 0;
+        airspaceGuardResultNeedsContentClear = true;
     } else {
         requestProductSurveyWorkerStop(true);
         if (productSurveyScanStartGate != nullptr) {
@@ -9539,8 +9820,7 @@ NavigationFooter navigationFooterForCurrentState() {
             return {back, choose, enter};
         }
         if (wifiProductView == WifiProductView::AirspaceGuard) {
-            if (airspaceGuardCaptureState ==
-                AirspaceGuardCaptureState::Running) {
+            if (airspaceGuardCaptureRunning()) {
                 return {back, {}, {}};
             }
             if (airspaceGuardController.view() ==
@@ -12616,7 +12896,8 @@ void renderAirspaceGuardRow(const AirspaceGuardUiModel& model,
 
 void renderAirspaceGuardPage(bool clearContent, bool liveDataOnly = false) {
     AirspaceGuardUiModel model{};
-    if (airspaceGuardCaptureState == AirspaceGuardCaptureState::Running) {
+    if (airspaceGuardCaptureState ==
+        AirspaceGuardCaptureState::WifiRunning) {
         model.headline = UiTextId::AirspaceGuardListening;
         model.note = UiTextId::AirspaceGuardPassiveOnly;
         model.tone = AirspaceGuardUiTone::Neutral;
@@ -12648,6 +12929,31 @@ void renderAirspaceGuardPage(bool clearContent, bool liveDataOnly = false) {
                       tr(UiTextId::AirspaceGuardRetainedFormat),
                       static_cast<unsigned long>(monitor.framesRetained));
         model.rowCount = model.rows.size();
+    } else if (airspaceGuardCaptureState ==
+               AirspaceGuardCaptureState::BleRunning) {
+        model.headline = UiTextId::AirspaceGuardBleListening;
+        model.note = UiTextId::AirspaceGuardPassiveOnly;
+        model.tone = AirspaceGuardUiTone::Neutral;
+        const std::uint64_t nowUs = static_cast<std::uint64_t>(
+            esp_timer_get_time());
+        const std::uint64_t deadlineUs = airspaceGuardBleStartedUs +
+            static_cast<std::uint64_t>(kAirspaceGuardCaptureDurationMs) *
+                1000ULL;
+        const std::uint64_t remainingTenths = nowUs < deadlineUs
+            ? (deadlineUs - nowUs + 99999ULL) / 100000ULL : 0U;
+        std::snprintf(model.context.data(), model.context.size(),
+                      tr(UiTextId::AirspaceGuardStageFormat), 2U);
+        std::snprintf(model.rows[0].text.data(), model.rows[0].text.size(),
+                      tr(UiTextId::AirspaceGuardTimeFormat),
+                      static_cast<unsigned>(remainingTenths / 10U),
+                      static_cast<unsigned>(remainingTenths % 10U));
+        std::snprintf(model.rows[1].text.data(), model.rows[1].text.size(),
+                      "%s", tr(UiTextId::AirspaceGuardBlePurpose));
+        std::snprintf(model.rows[2].text.data(), model.rows[2].text.size(),
+                      "%s", tr(UiTextId::AirspaceGuardBleNoConnection));
+        std::snprintf(model.rows[3].text.data(), model.rows[3].text.size(),
+                      "%s", tr(UiTextId::AirspaceGuardResultAfterCleanup));
+        model.rowCount = model.rows.size();
     } else {
         model = leshy1::ui::presentAirspaceGuard(
             airspaceGuardController, languageController.active());
@@ -12676,17 +12982,25 @@ void renderAirspaceGuardPage(bool clearContent, bool liveDataOnly = false) {
                              Palette::Canvas);
         setUiCursor(UiTextRole::Meta, Layout::Edge, 54);
         display.print(tr(model.note));
-    } else {
+    } else if (airspaceGuardCaptureState !=
+               AirspaceGuardCaptureState::BleRunning) {
         // Live cadence repaints only the changing channel/counters. Header,
         // headline, passive note and footer remain untouched and cannot flash.
         display.fillRect(Layout::Edge, 67, Layout::ContentWidth, 17,
                          Palette::Canvas);
     }
-    display.setTextColor(Palette::TextSecondary, Palette::Canvas);
-    setUiCursor(UiTextRole::Meta, Layout::Edge, 70);
-    display.print(model.context.data());
-    for (std::uint8_t row = 0;
-         row < AirspaceGuardUiModel::kVisibleRowCapacity; ++row) {
+    if (!liveDataOnly || airspaceGuardCaptureState !=
+            AirspaceGuardCaptureState::BleRunning) {
+        display.setTextColor(Palette::TextSecondary, Palette::Canvas);
+        setUiCursor(UiTextRole::Meta, Layout::Edge, 70);
+        display.print(model.context.data());
+    }
+    const std::uint8_t rowsToRender =
+        liveDataOnly && airspaceGuardCaptureState ==
+                            AirspaceGuardCaptureState::BleRunning
+            ? 1U
+            : AirspaceGuardUiModel::kVisibleRowCapacity;
+    for (std::uint8_t row = 0; row < rowsToRender; ++row) {
         renderAirspaceGuardRow(model, row);
     }
 }
@@ -19484,6 +19798,23 @@ bool openAirspaceGuardProduct() {
     wifiFrameCapture.reset();
     airspaceGuardController.reset();
     wifiProductView = WifiProductView::AirspaceGuard;
+    ++airspaceGuardGeneration;
+    if (airspaceGuardGeneration == 0U) ++airspaceGuardGeneration;
+    airspaceGuardWifiReport = {};
+    airspaceGuardBleStartedUs = 0U;
+    if (!productSurveyWorkerReady ||
+        productSurveyWorkerTaskHandle == nullptr ||
+        productSurveyControl() != ProductSurveyWorkerControl::Idle ||
+        airspaceGuardBleControl() != AirspaceGuardBleWorkerControl::Idle ||
+        airspaceGuardBleWorkerEvents == nullptr) {
+        AirspaceGuardReport report{};
+        report.status = AirspaceGuardStatus::Inconclusive;
+        airspaceGuardController.load(report);
+        airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
+        lastRuntimeEvent = "airspace_guard_worker_unavailable";
+        return true;
+    }
+    xQueueReset(airspaceGuardBleWorkerEvents);
     std::uint64_t startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     if (startedUs == 0U) startedUs = 1U;
     const bool started = wifiFrameCapture.beginAirspaceGuardMonitor(
@@ -19492,12 +19823,13 @@ bool openAirspaceGuardProduct() {
     nextAirspaceGuardUiRefreshUs = startedUs + 250000ULL;
     airspaceGuardResultNeedsContentClear = false;
     if (started) {
-        airspaceGuardCaptureState = AirspaceGuardCaptureState::Running;
+        airspaceGuardCaptureState =
+            AirspaceGuardCaptureState::WifiRunning;
         lastRuntimeEvent = "airspace_guard_listening";
         return true;
     }
-    leshy1::services::guard::AirspaceGuardReport report{};
-    report.status = leshy1::services::guard::AirspaceGuardStatus::Inconclusive;
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Inconclusive;
     airspaceGuardController.load(report);
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
     lastRuntimeEvent = "airspace_guard_start_failed";
@@ -19507,11 +19839,22 @@ bool openAirspaceGuardProduct() {
 bool stopAirspaceGuardProduct() {
     std::uint64_t endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     if (endedUs == 0U) endedUs = 1U;
-    const bool cleanup = wifiFrameCapture.stop(endedUs);
+    bool cleanup = true;
+    if (airspaceGuardCaptureState ==
+        AirspaceGuardCaptureState::WifiRunning) {
+        cleanup = wifiFrameCapture.stop(endedUs);
+    } else if (airspaceGuardCaptureState ==
+               AirspaceGuardCaptureState::BleRunning) {
+        requestAirspaceGuardBleWorkerCancel();
+    }
+    ++airspaceGuardGeneration;
+    if (airspaceGuardGeneration == 0U) ++airspaceGuardGeneration;
     wifiFrameCapture.reset();
     airspaceGuardController.reset();
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Idle;
     nextAirspaceGuardUiRefreshUs = 0;
+    airspaceGuardBleStartedUs = 0;
+    airspaceGuardWifiReport = {};
     airspaceGuardResultNeedsContentClear = false;
     wifiProductView = WifiProductView::Menu;
     wifiProductSelection = 4;
@@ -19521,7 +19864,51 @@ bool stopAirspaceGuardProduct() {
 }
 
 void serviceAirspaceGuardProduct() {
-    if (airspaceGuardCaptureState != AirspaceGuardCaptureState::Running) {
+    const bool captureRoute = uiController.page() == 2 &&
+        wifiProductView == WifiProductView::AirspaceGuard;
+    if (airspaceGuardCaptureState ==
+        AirspaceGuardCaptureState::BleRunning) {
+        AirspaceGuardBleWorkerEvent event{};
+        if (airspaceGuardBleWorkerEvents != nullptr &&
+            xQueueReceive(airspaceGuardBleWorkerEvents, &event, 0) ==
+                pdTRUE &&
+            event.generation == airspaceGuardGeneration) {
+            AirspaceGuardReport merged{};
+            const bool mergedComplete = event.valid &&
+                event.cleanupComplete &&
+                leshy1::services::guard::mergeAirspaceGuardReports(
+                    airspaceGuardWifiReport, event.report, &merged);
+            if (!mergedComplete) {
+                merged = {};
+                merged.status = AirspaceGuardStatus::Inconclusive;
+            }
+            const bool loaded = airspaceGuardController.load(merged) ==
+                leshy1::apps::guard::AirspaceGuardLoadStatus::Ready;
+            airspaceGuardCaptureState = loaded && mergedComplete
+                ? AirspaceGuardCaptureState::Result
+                : AirspaceGuardCaptureState::Failed;
+            nextAirspaceGuardUiRefreshUs = 0;
+            airspaceGuardBleStartedUs = 0;
+            airspaceGuardResultNeedsContentClear = true;
+            lastRuntimeEvent = loaded && mergedComplete
+                ? "airspace_guard_report_ready"
+                : "airspace_guard_ble_failed";
+            if (captureRoute) renderInteractiveScreen(false);
+            return;
+        }
+        std::uint64_t nowUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (nowUs == 0U) nowUs = 1U;
+        if (captureRoute && nowUs >= nextAirspaceGuardUiRefreshUs) {
+            nextAirspaceGuardUiRefreshUs = nowUs + 250000ULL;
+            display.startWrite();
+            renderAirspaceGuardPage(false, true);
+            display.endWrite();
+        }
+        return;
+    }
+    if (airspaceGuardCaptureState !=
+        AirspaceGuardCaptureState::WifiRunning) {
         return;
     }
     const auto before = wifiFrameCapture.stats();
@@ -19531,19 +19918,17 @@ void serviceAirspaceGuardProduct() {
     wifiFrameCapture.service(nowUs);
     const auto after = wifiFrameCapture.stats();
     const bool terminal = after.state != WifiFrameCaptureState::Running;
-    const bool captureRoute = uiController.page() == 2 &&
-        wifiProductView == WifiProductView::AirspaceGuard;
     if (terminal) {
         const auto monitor = wifiFrameCapture.airspaceGuardMonitorStats();
         const bool complete = after.state == WifiFrameCaptureState::Complete &&
             monitor.cleanupComplete && wifiFrameCapture.cleanupComplete();
-        leshy1::services::guard::AirspaceGuardReport report{};
+        AirspaceGuardReport report{};
         if (complete) {
             const std::size_t dropped =
                 static_cast<std::size_t>(monitor.disconnectFramesDropped) +
                 static_cast<std::size_t>(monitor.identityProfilesDropped) +
                 static_cast<std::size_t>(monitor.invalidFrames);
-            leshy1::services::guard::AirspaceGuardPolicy policy{};
+            AirspaceGuardPolicy policy{};
             policy.ssidSecurityConflictEnabled =
                 monitor.identityRetentionComplete;
             policy.ssidChurnEnabled = monitor.identityRetentionComplete;
@@ -19551,19 +19936,31 @@ void serviceAirspaceGuardProduct() {
                 wifiFrameCapture.capture(), policy, dropped,
                 static_cast<std::size_t>(monitor.framesReported));
         } else {
-            report.status =
-                leshy1::services::guard::AirspaceGuardStatus::Inconclusive;
+            report.status = AirspaceGuardStatus::Inconclusive;
         }
-        const bool loaded = airspaceGuardController.load(report) ==
-            leshy1::apps::guard::AirspaceGuardLoadStatus::Ready;
-        airspaceGuardCaptureState = loaded && complete
-            ? AirspaceGuardCaptureState::Result
-            : AirspaceGuardCaptureState::Failed;
-        nextAirspaceGuardUiRefreshUs = 0;
-        airspaceGuardResultNeedsContentClear = true;
-        lastRuntimeEvent = loaded && complete
-            ? "airspace_guard_report_ready"
-            : "airspace_guard_capture_failed";
+        const bool wifiEvidenceComplete = complete &&
+            (report.status == AirspaceGuardStatus::Clear ||
+             report.status == AirspaceGuardStatus::Finding);
+        if (wifiEvidenceComplete) {
+            airspaceGuardWifiReport = report;
+        }
+        const bool bleRequested = wifiEvidenceComplete &&
+            requestAirspaceGuardBleWorker(airspaceGuardGeneration);
+        if (bleRequested) {
+            airspaceGuardCaptureState =
+                AirspaceGuardCaptureState::BleRunning;
+            airspaceGuardBleStartedUs = nowUs;
+            nextAirspaceGuardUiRefreshUs = nowUs + 250000ULL;
+            airspaceGuardResultNeedsContentClear = true;
+            lastRuntimeEvent = "airspace_guard_ble_listening";
+        } else {
+            report.status = AirspaceGuardStatus::Inconclusive;
+            airspaceGuardController.load(report);
+            airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
+            nextAirspaceGuardUiRefreshUs = 0;
+            airspaceGuardResultNeedsContentClear = true;
+            lastRuntimeEvent = "airspace_guard_capture_failed";
+        }
         if (captureRoute) renderInteractiveScreen(false);
         return;
     }
@@ -19576,17 +19973,26 @@ void serviceAirspaceGuardProduct() {
 }
 
 void quiesceAirspaceGuardOnSafetyStop() {
-    if (airspaceGuardCaptureState != AirspaceGuardCaptureState::Running) {
+    if (airspaceGuardCaptureState !=
+            AirspaceGuardCaptureState::WifiRunning &&
+        airspaceGuardCaptureState !=
+            AirspaceGuardCaptureState::BleRunning) {
         return;
     }
     std::uint64_t endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     if (endedUs == 0U) endedUs = 1U;
-    const bool cleanup = wifiFrameCapture.stop(endedUs);
-    leshy1::services::guard::AirspaceGuardReport report{};
-    report.status = leshy1::services::guard::AirspaceGuardStatus::Inconclusive;
+    const bool cleanup = airspaceGuardCaptureState ==
+            AirspaceGuardCaptureState::WifiRunning
+        ? wifiFrameCapture.stop(endedUs)
+        : requestAirspaceGuardBleWorkerCancel();
+    ++airspaceGuardGeneration;
+    if (airspaceGuardGeneration == 0U) ++airspaceGuardGeneration;
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Inconclusive;
     airspaceGuardController.load(report);
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
     nextAirspaceGuardUiRefreshUs = 0;
+    airspaceGuardBleStartedUs = 0;
     airspaceGuardResultNeedsContentClear = true;
     lastRuntimeEvent = cleanup ? "airspace_guard_safety_stop"
                                : "airspace_guard_safety_cleanup_failed";
@@ -19756,8 +20162,7 @@ bool applyUiAction(UiAction action, bool render = true) {
             }
         } else if (wifiProductView == WifiProductView::AirspaceGuard) {
             handled = true;
-            if (airspaceGuardCaptureState ==
-                AirspaceGuardCaptureState::Running) {
+            if (airspaceGuardCaptureRunning()) {
                 if (action == UiAction::Back || action == UiAction::Left) {
                     changed = stopAirspaceGuardProduct();
                 }

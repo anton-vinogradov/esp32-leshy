@@ -27,6 +27,8 @@ def main() -> int:
              "ArduinoEntry.cpp").read_text(encoding="utf-8")
     ble_header = (ROOT / "firmware/leshy1/src/platform/arduino/"
                   "BoardBlePassiveScanner.h").read_text(encoding="utf-8")
+    ble_source = (ROOT / "firmware/leshy1/src/platform/arduino/"
+                  "BoardBlePassiveScanner.cpp").read_text(encoding="utf-8")
     tests = (ROOT / "tests/native/clean_target_tests.cpp").read_text(
         encoding="utf-8")
     ir_runner = (ROOT / "tools/run_1x_infrared_store_deadline_hil.py").read_text(
@@ -39,7 +41,8 @@ def main() -> int:
     require(header, (
         "enum class SupervisedWorker", "ProductSurveyPreparation",
         "ProductSurvey", "WifiCaptureStore", "SubGhzCaptureStore",
-        "InfraredCaptureStore", "TargetsStore", "lastHeartbeatUs",
+        "InfraredCaptureStore", "TargetsStore", "AirspaceGuardBle",
+        "lastHeartbeatUs",
         "deadlineUs", "heartbeatCount", "tripCount", "bool evaluate",
     ), "deadline core API")
     require(core, (
@@ -74,6 +77,21 @@ def main() -> int:
     after_scan = worker.find("heartbeatProductSurveyWorker();", scan_at)
     if before_scan < 0 or after_scan < scan_at:
         raise AssertionError("blocking hardware scan is not heartbeat-bracketed")
+
+    guard_start = entry.index("void runAirspaceGuardBleWorker()")
+    guard_end = entry.index("void runProductSurveyWorker(", guard_start)
+    guard_worker = entry[guard_start:guard_end]
+    require(guard_worker, (
+        "armAirspaceGuardBleWorkerDeadline(startedUs)",
+        "heartbeatAirspaceGuardBleWorker();",
+        "airspaceGuardBleScanPlan()", "scanner.begin()", "scanner.scan(",
+        "scanner.end()", "scanner.cleanupComplete()",
+        "disarmAirspaceGuardBleWorkerDeadline();",
+        "xQueueOverwrite(airspaceGuardBleWorkerEvents, &event)",
+    ), "Airspace Guard BLE worker integration")
+    if "xTaskCreate" in guard_worker:
+        raise AssertionError(
+            "Airspace Guard BLE must reuse the persistent Survey worker")
 
     capture_start = entry.index("void runCaptureStoreWorker(")
     capture_end = entry.index("bool requestWifiFrameCapturePersist()", capture_start)
@@ -153,6 +171,7 @@ def main() -> int:
         "kProductSurveyPreparationDeadlineUs = 8000000ULL",
         "kProductSurveyPreparationDeadlineInjectionMs = 10000",
         "kProductSurveyWorkerDeadlineUs = 8000000ULL",
+        "kAirspaceGuardBleWorkerDeadlineUs = 25000000ULL",
         "kProductSurveyWorkerDeadlineInjectionMs = 10000",
         "kWifiCaptureStoreDeadlineUs = 8000000ULL",
         "kWifiCaptureStoreDeadlineInjectionMs = 10000",
@@ -177,6 +196,8 @@ def main() -> int:
         "requestPulseCaptureStoreDeadlineCancel(",
         "worker.lastExpiredWorker ==\n               SupervisedWorker::TargetsStore",
         "requestTargetsStoreDeadlineCancel();",
+        "worker.lastExpiredWorker ==\n               SupervisedWorker::AirspaceGuardBle",
+        "requestAirspaceGuardBleWorkerCancel();",
         r'\"worker_supervision\":true',
     ), "platform deadline response")
     service_at = entry.index("serviceWorkerDeadlineSupervisor();")
@@ -189,6 +210,7 @@ def main() -> int:
         "SupervisedWorker::SubGhzCaptureStore",
         "SupervisedWorker::InfraredCaptureStore",
         "SupervisedWorker::TargetsStore",
+        "SupervisedWorker::AirspaceGuardBle",
     ), "native deadline matrix")
     require(ir_runner, (
         "safety.capture-ir-store-deadline-test confirm",
@@ -222,7 +244,12 @@ def main() -> int:
     require(ble_header, (
         "kMaximumScanAttempts = 2U", "kCompletionGraceMs = 1000U",
         "kRetryDelayMs = 100U", "worstCaseScanDurationUs",
+        "static std::atomic_bool cancelRequested_",
     ), "bounded BLE scan deadline")
+    require(ble_source, (
+        "cancelRequested_.store(true, std::memory_order_release)",
+        "!cancelRequested_.load(std::memory_order_acquire)",
+    ), "BLE pre-start cancellation latch")
     version = re.search(
         r'LESHY1_VERSION=\\"(\d+)\.(\d+)\.(\d+)[^\\"]*\\"', platform)
     if version is None or tuple(map(int, version.groups())) < (0, 138, 0):
@@ -233,7 +260,8 @@ def main() -> int:
 
     print(
         "worker deadline contract passed: preparation + real Survey/Wi-Fi/"
-        "Sub-GHz/IR Capture and Targets Store heartbeat, 8 s deadlines, "
+        "Sub-GHz/IR Capture, Targets Store and Airspace Guard BLE heartbeat, "
+        "bounded deadlines, "
         "cancel/quiesce/"
         "retained Safe Mode"
     )

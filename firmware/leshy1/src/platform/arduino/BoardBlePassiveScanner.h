@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 
 #include "drivers/ble/BlePassiveContract.h"
@@ -77,6 +78,7 @@ private:
     bool passiveOnly_ = true;
     bool cleanupComplete_ = true;
     static volatile bool activeScan_;
+    static std::atomic_bool cancelRequested_;
 };
 
 }  // namespace leshy1::platform::arduino

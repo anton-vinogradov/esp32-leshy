@@ -16,6 +16,8 @@ const char* supervisedWorkerName(SupervisedWorker worker) {
             return "infrared_capture_store";
         case SupervisedWorker::TargetsStore:
             return "targets_store";
+        case SupervisedWorker::AirspaceGuardBle:
+            return "airspace_guard_ble";
         case SupervisedWorker::None:
         default:
             return "none";

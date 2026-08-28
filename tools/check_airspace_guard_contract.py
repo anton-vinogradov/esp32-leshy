@@ -320,6 +320,17 @@ def main() -> int:
         "serviceAirspaceGuardProduct",
         "quiesceAirspaceGuardOnSafetyStop",
         "airspaceGuardDetector.inspectWifi",
+        "airspaceGuardDetector.inspectBle",
+        "mergeAirspaceGuardReports",
+        "runAirspaceGuardBleWorker",
+        "retainAirspaceGuardBleRecord",
+        "requestAirspaceGuardBleWorker(airspaceGuardGeneration)",
+        "event.generation == airspaceGuardGeneration",
+        "plan.deduplicateAddresses = false",
+        "plan.maximumRecords = 128U",
+        "event.retention.complete()",
+        "scanner.end()",
+        "scanner.cleanupComplete()",
         "kAirspaceGuardCaptureDurationMs = 10000U",
         "kAirspaceGuardChannelDwellMs = 120U",
         "UiTextId::AirspaceGuardEvidenceKindsFormat",
@@ -338,6 +349,20 @@ def main() -> int:
     ):
         require(failures, forbidden not in open_body,
                 f"bounded Airspace Guard flow bypasses passive adapter: {forbidden}")
+
+    ble_worker_start = arduino_entry.find("void runAirspaceGuardBleWorker()")
+    ble_worker_end = arduino_entry.find(
+        "void runProductSurveyWorker(", ble_worker_start)
+    ble_worker = arduino_entry[ble_worker_start:ble_worker_end]
+    require(failures,
+            ble_worker_start >= 0 and ble_worker_end > ble_worker_start,
+            "Airspace Guard BLE worker is not bounded")
+    require(failures, "xTaskCreate" not in ble_worker,
+            "Airspace Guard BLE created a second worker task")
+    require(failures,
+            ble_worker.find("scanner.end()") <
+            ble_worker.rfind("xQueueOverwrite(airspaceGuardBleWorkerEvents"),
+            "Airspace Guard BLE result escaped before scanner cleanup")
 
     for marker in (
         "AirspaceGuardMonitorStats",

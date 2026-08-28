@@ -1880,6 +1880,9 @@ void testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence() {
     CHECK(std::strcmp(
               supervisedWorkerName(SupervisedWorker::TargetsStore),
               "targets_store") == 0);
+    CHECK(std::strcmp(
+              supervisedWorkerName(SupervisedWorker::AirspaceGuardBle),
+              "airspace_guard_ble") == 0);
     CHECK(!supervisor.arm(SupervisedWorker::None, 100, 6000));
     CHECK(!supervisor.arm(SupervisedWorker::ProductSurvey, 0, 6000));
     CHECK(supervisor.arm(SupervisedWorker::ProductSurvey, 100, 6000));
@@ -1919,6 +1922,9 @@ void testWorkerDeadlineSupervisorTripsOnceAndRetainsEvidence() {
                          9000, 6000));
     CHECK(supervisor.heartbeat(SupervisedWorker::InfraredCaptureStore, 9100));
     CHECK(supervisor.disarm(SupervisedWorker::InfraredCaptureStore));
+    CHECK(supervisor.arm(SupervisedWorker::AirspaceGuardBle, 10000, 25000));
+    CHECK(supervisor.heartbeat(SupervisedWorker::AirspaceGuardBle, 10100));
+    CHECK(supervisor.disarm(SupervisedWorker::AirspaceGuardBle));
 }
 
 void testProductStartIdentityRetryStopsBeforeFilesystem() {
