@@ -228,7 +228,7 @@ IdentityDecode decodeIdentityAdvertisement(
         return IdentityDecode::MalformedEnvelope;
     }
     if (!validTransmitter(frame.payload + 10U) ||
-        std::memcmp(frame.payload + 10U, frame.payload + 16U, 6U) != 0) {
+        !validTransmitter(frame.payload + 16U)) {
         return IdentityDecode::MalformedAddressing;
     }
 
@@ -237,7 +237,10 @@ IdentityDecode decodeIdentityAdvertisement(
     decoded.monotonicUs = frame.monotonicUs;
     decoded.rssiDbm = frame.rssiDbm;
     decoded.channel = frame.channel;
-    std::memcpy(decoded.transmitter.data(), frame.payload + 10U,
+    // Identity findings are keyed by BSSID (Address 3), not the physical
+    // transmitter (Address 2). Legal multi-BSSID/P2P advertisements may use a
+    // different transmitter and must not be misclassified as malformed.
+    std::memcpy(decoded.transmitter.data(), frame.payload + 16U,
                 decoded.transmitter.size());
 
     const std::uint16_t capability = static_cast<std::uint16_t>(

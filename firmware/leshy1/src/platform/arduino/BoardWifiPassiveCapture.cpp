@@ -394,6 +394,18 @@ bool BoardWifiPassiveCapture::stop(std::uint64_t endedUs) {
     portENTER_CRITICAL(&mux_);
     if (capture_.stats().state == WifiFrameCaptureState::Running) {
         if (complete) {
+            if (wasAirspaceGuardMonitor &&
+                airspaceGuardStats_.framesReported != 0U &&
+                capture_.size() == 0U) {
+                std::array<std::uint8_t, 24> coverageProjection{};
+                coverageProjection[0] = 0x40U;
+                capture_.append(
+                    coverageProjection.data(), coverageProjection.size(),
+                    endedUs, -127,
+                    currentChannel_ >= 1U && currentChannel_ <= 13U
+                        ? currentChannel_ : 1U,
+                    WifiFrameKind::Management, false);
+            }
             capture_.complete(endedUs);
         } else {
             capture_.fail(lastError_, endedUs);
@@ -729,19 +741,6 @@ void BoardWifiPassiveCapture::accept(void* buffer,
             } else {
                 ++airspaceGuardStats_.identityMalformedElements;
             }
-        } else if (capture_.size() == 0U) {
-            // Keep one bounded proof that the passive callback observed the
-            // management plane. Raw ignored frames may exceed the 256-byte
-            // snap length, so retaining one verbatim would turn an otherwise
-            // valid truncated beacon into invented malformed evidence.
-            std::array<std::uint8_t, 24> coverageProjection{};
-            coverageProjection[0] = 0x40U;  // Probe request, not a finding.
-            const bool retained = capture_.append(
-                coverageProjection.data(), coverageProjection.size(),
-                receivedUs,
-                packet->rx_ctrl.rssi, packet->rx_ctrl.channel,
-                WifiFrameKind::Management, false);
-            if (!retained) ++airspaceGuardStats_.invalidFrames;
         } else {
             ++airspaceGuardStats_.ignoredFrames;
         }

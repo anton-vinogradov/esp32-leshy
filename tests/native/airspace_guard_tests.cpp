@@ -385,8 +385,14 @@ void testLiveIdentityRetentionKeyIsExactAndFailClosed() {
                                    nullptr) ==
           WifiIdentityIngressStatus::MalformedEnvelope);
 
-    first.length = 42U;
-    first.payload[16] ^= 0x02U;
+    first.length = 50U;
+    std::memcpy(first.payload.data() + 16U, kTransmitterB.data(),
+                kTransmitterB.size());
+    CHECK(wifiIdentityRetentionKey(first.payload.data(), first.length, false,
+                                   &firstKey) ==
+          WifiIdentityIngressStatus::RetainableAdvertisement);
+    CHECK(firstKey.transmitter == kTransmitterB);
+    first.payload[16] |= 0x01U;
     CHECK(wifiIdentityRetentionKey(first.payload.data(), first.length, false,
                                    &firstKey) ==
           WifiIdentityIngressStatus::MalformedAddressing);
