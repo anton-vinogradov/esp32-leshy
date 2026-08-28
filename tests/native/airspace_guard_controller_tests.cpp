@@ -566,6 +566,46 @@ void testElevatedNoiseReportCannotInventSourceOrConfidence() {
     CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
 }
 
+void testMergedIndependentInspectionBudgetsRemainLoadable() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Clear;
+    report.sourceFramesObserved =
+        AirspaceGuard::kMergedFrameInspectionCapacity;
+    report.framesAvailable =
+        AirspaceGuard::kMergedFrameInspectionCapacity;
+    report.framesInspected =
+        AirspaceGuard::kMergedFrameInspectionCapacity;
+    report.identityAdvertisementFrames =
+        AirspaceGuard::kFrameInspectionCapacity;
+    report.bleAdvertisementRecords =
+        AirspaceGuard::kFrameInspectionCapacity;
+
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    CHECK(controller.view() == AirspaceGuardView::Outcome);
+    CHECK(controller.outcome() == AirspaceGuardStatus::Clear);
+
+    AirspaceGuardReport invalid = report;
+    ++invalid.sourceFramesObserved;
+    ++invalid.framesAvailable;
+    ++invalid.framesInspected;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    // The wider aggregate allowance must not hide a truncated single-source
+    // report. Its attempted count is still the original 64-record budget.
+    AirspaceGuardReport truncated{};
+    truncated.status = AirspaceGuardStatus::Inconclusive;
+    truncated.sourceFramesObserved =
+        AirspaceGuard::kFrameInspectionCapacity + 1U;
+    truncated.framesAvailable =
+        AirspaceGuard::kFrameInspectionCapacity + 1U;
+    truncated.framesInspected = AirspaceGuard::kFrameInspectionCapacity;
+    truncated.identityAdvertisementFrames =
+        AirspaceGuard::kFrameInspectionCapacity;
+    truncated.inspectionTruncated = true;
+    CHECK(controller.load(truncated) == AirspaceGuardLoadStatus::Ready);
+}
+
 void testStableNames() {
     CHECK(std::strcmp(airspaceGuardViewName(AirspaceGuardView::Finding),
                       "finding") == 0);
@@ -590,6 +630,7 @@ int main() {
     testIdentityDetectorsMayShareExactSourceEvidence();
     testBleTrackerReportUsesChannelFreeKindAwareValidation();
     testElevatedNoiseReportCannotInventSourceOrConfidence();
+    testMergedIndependentInspectionBudgetsRemainLoadable();
     testStableNames();
     std::puts("Airspace Guard controller tests passed");
     return 0;

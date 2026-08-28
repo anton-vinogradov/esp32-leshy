@@ -148,8 +148,21 @@ const char* airspaceGuardLoadStatusName(AirspaceGuardLoadStatus status) {
 
 bool AirspaceGuardController::validateReport(
     const AirspaceGuardReport& report) const {
-    const std::size_t inspectionCapacity =
+    const std::size_t sourceInspectionCapacity =
         services::guard::AirspaceGuard::kFrameInspectionCapacity;
+    // A product result can contain two independently bounded detector
+    // reports. A single-source truncated report still has at most 64 attempted
+    // records, while a merged Wi-Fi + BLE report can legitimately contain up
+    // to 128. Derive that distinction from the already-accounted attempted
+    // count instead of rejecting a dense but complete merged observation.
+    const bool mergedInspectionBudget =
+        report.framesInspected > sourceInspectionCapacity ||
+        (report.framesInspected <= sourceInspectionCapacity &&
+         report.sourceReadFailures >
+             sourceInspectionCapacity - report.framesInspected);
+    const std::size_t inspectionCapacity = mergedInspectionBudget
+        ? services::guard::AirspaceGuard::kMergedFrameInspectionCapacity
+        : sourceInspectionCapacity;
     const std::size_t attempted = report.framesAvailable < inspectionCapacity
         ? report.framesAvailable : inspectionCapacity;
     if (report.findingCount > report.findings.size()) return false;
@@ -227,7 +240,7 @@ bool AirspaceGuardController::validateReport(
             finding.detectorVersion == 0U || finding.threshold < 2U ||
             finding.threshold > AirspaceFinding::kEvidenceCapacity ||
             finding.observed < finding.threshold ||
-            finding.observed > inspectionCapacity ||
+            finding.observed > sourceInspectionCapacity ||
             finding.evidenceCount == 0U ||
             finding.evidenceCount > finding.evidence.size() ||
             finding.evidenceCount > finding.observed ||

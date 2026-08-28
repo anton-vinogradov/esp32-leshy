@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.239.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.240.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -558,12 +558,19 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.239"',
-        '"full_matrix_required": false',
-        '"cadence_after_acceptance": "9/15"',
+        '"candidate_version": "1.0.0-dev.240"',
+        '"full_matrix_required": true',
+        '"cadence_after_acceptance": "10/15"',
     ):
         require(failures, marker in hil_scope,
                 f"missing Airspace Guard delta scope: {marker}")
+    for marker in (
+        "mergedInspectionBudget",
+        "kMergedFrameInspectionCapacity",
+        "testMergedIndependentInspectionBudgetsRemainLoadable",
+    ):
+        require(failures, marker in controller_source + controller_tests,
+                f"missing merged-report controller regression: {marker}")
 
     for marker in (
         '"serviceAirspaceGuardProduct()": 1024',
