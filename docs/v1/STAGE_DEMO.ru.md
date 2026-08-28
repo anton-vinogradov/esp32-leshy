@@ -43,24 +43,21 @@ physical-stop contract WF-05 для каждого admitted active path. Passive
 capture, route и inspection results не подменяют active fixture proof, а unavailable
 fixture остаётся blocker, не simulated pass.
 
-Detector `1.0.0-dev.210` и evidence/UI slices по `1.0.0-dev.213` вместе с bounded
-one-adapter live passive Wi-Fi capture `1.0.0-dev.214`, complete-evidence
-SSID/security identity-conflict indicator `1.0.0-dev.215` и fail-closed bounded live
-identity retention `1.0.0-dev.216`, индикатор быстрой смены видимого имени
-одного BSSID `1.0.0-dev.217`, source-only BLE tracker-compatible presence detector
-`1.0.0-dev.218`, его отдельный channel-free presentation `1.0.0-dev.219`, bounded
-duplicate-preserving retention foundation `1.0.0-dev.220` и supervised sequential
-runtime handoff Wi-Fi→BLE `1.0.0-dev.221`, а также bounded индикатор повышенного
-noise `1.0.0-dev.222` — только host/build
-foundations CAP-048. Их golden/negative corpus, receive-only guard, strongest-first
-ordering, exact drilldown, контракт текста не только цветом, no-clear repaint, явный
-учёт capture loss и publication только после cleanup ещё не закрывают DEMO-S7.
-Wi-Fi identity detectors теперь включаются только после complete live retention и
-cleanup; BLE finding теперь имеет strict kind-aware validation, owner-unknown EN/RU
-evidence, complete bounded retention и fail-closed runtime worker handoff. Noise
-finding всегда имеет Low confidence и никогда не доказывает глушилку или источник.
-Всё ещё нужны consolidated physical golden/negative evidence TFT/navigation/cleanup
-и negative corpora.
+Exact `1.0.0-dev.242` независимо **физически принимает CAP-048 «Защита эфира»**.
+`E-BUILD-173`/`E-AUTO-147`/`E-HIL-190` проводят один exact receive-only candidate
+через conclusive baseline lifecycle (54 BLE records, zero drops) и deterministic
+capacity-loss lifecycle (1 retained и ровно 904 dropped из 905 observed). Loss result
+остаётся явно incomplete и `inconclusive`; оба path сохраняют exact evidence/navigation,
+меняют только content TFT (397 Wi-Fi/215 BLE pixels, static 0), восстанавливают warmed
+heap и завершают Home/none/lease 0. Сохранённые failures dev.239/dev.241, positive
+bundle и acceptance pins независимо проверены по hashes. Это закрывает FUNC-48/CAP-048,
+но не `DEMO-S7`: matrix всё ещё требует CAP-049…CAP-055, их negative/cleanup evidence,
+independent physical-stop contract WF-05 и полный workflow protected tools/extensions.
+
+Тот же exact dev.242 начинает CAP-049 только как host/build foundation
+`E-BUILD-172`/`E-AUTO-146`: bounded fail-closed parser EAPOL M1…M4/PMKID без live
+driver/radio/lease, storage, product UI или export PCAP/`hc22000`. Эти product и
+physical boundaries остаются открыты и пока не могут засчитываться в DEMO-S7.
 
 `DEMO-S2` принят evidence `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 выполнил 29 public Action/query steps и совпал с

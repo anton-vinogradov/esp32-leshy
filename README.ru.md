@@ -15,7 +15,7 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 Этот срез главной страницы генерируется из документации-точки-истины 1.x; CI отклоняет рассинхрон. Checklist полный для принятого baseline из 55 capabilities; аудит принял восемь additions и явно отложил Peer Link до версии после 1.0 в [пофункциональном аудите](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета).
 
 - **Текущая фаза:** `S6.5 — local USB/Web companion над общими Actions и schemas`.
-- **Проверенный checkpoint:** exact `1.0.0-dev.209` на firmware source `e04d98dd3c5e5d494c615e12f2897dc3207272a9` теперь физически проходит **integrated device/offline path DEMO-S6** в `E-AUTO-132`/`E-HIL-189`/`E-DEMO-006`. Уже принятые no-flash Survey образуют contiguous generations 164/165 с 52/49 observations; исправленный harness открывает все пять реальных conclusions сравнения и их exact evidence, экспортирует ту же пару в canonical offline USB snapshot 11 882 byte с двумя Sessions, 16 Targets и пятью comparisons и завершает Home/none/lease 0 с safety armed. Дополнительной flash, DUT TX, storage write, serial discovery, доступа к Cardputer, SoftAP, host-network command или изменения активного Wi-Fi Mac нет.
+- **Проверенный checkpoint:** exact `1.0.0-dev.242` на source `8483f6e1be24724ebf00172323cee253b9b64b39` физически закрывает полную receive-only matrix CAP-048 «Защита эфира» в `E-BUILD-173`/`E-AUTO-147`/`E-HIL-190`/`RB-M184`. Один exact candidate (`firmware 2b4a9fbdfa294bc3e632a6f707b37b3dcbc9151888320dc0ceda607794f21f5e`, embedded app identity `02b27bc09cbb507a621e6a69ae42b41090e50e371ec3c4f4d85c3de1e2116d5d`) проходит complete baseline lifecycle с 54 retained BLE records и zero drops, затем deterministic capacity-loss lifecycle с 1 retained и 904 dropped из 905 observed records. Второй остаётся явно `inconclusive`/incomplete, publication fail closed, cleanup возвращает Home/none/lease 0, а warm heap tuple остаётся invariant 60 540/72 324/25 588 B. Machine-checked proof TFT изменяет 397 Wi-Fi и 215 BLE content pixels при нуле изменений static chrome.
 - **Следующий gate:** закрыть physical HTTP payload parity через отдельный idle adapter или внешний client без затрагивания активного Wi-Fi Mac. Passive inventory host нашёл только активный Wi-Fi interface `en0`; неактивные `en4`/`en6`/`en9` являются Ethernet adapters и не дают изолированного client. Integrated device/offline path S6.6 принят, но final acceptance S6 всё ещё ждёт это proof S6.5 и отложенный physical predecessor gate S5 после приезда replacement DIV и прохождения его read-only profile.
 
 ### Фазы текущего этапа
@@ -78,8 +78,8 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 | Permissioned app descriptor до запуска объявляет capabilities, ресурсы, permissions, safety policy и строки UI | S7 | ⬜ дальше |
 | Versioned decoder/profile packages имеют compatibility gate, integrity/signature и scoped storage | S7 + S8 | ⬜ дальше |
 | SDK, sample extension и simulator trace kit не позволяют обойти ResourceBroker, permissions или Safety Supervisor | S7 | ⬜ дальше |
-| Защита эфира пассивно обнаруживает/объясняет подозрительные Wi-Fi/BLE conditions и открывает exact evidence/uncertainty каждой находки | S7 | 🟡 в работе |
-| Focused Wi-Fi authentication Capture показывает EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует PCAP и `hc22000` | S7 | ⬜ дальше |
+| Защита эфира пассивно обнаруживает/объясняет подозрительные Wi-Fi/BLE conditions и открывает exact evidence/uncertainty каждой находки | S7 | ✅ готово |
+| Focused Wi-Fi authentication Capture показывает EAPOL/PMKID и complete/incomplete handshakes, затем экспортирует PCAP и `hc22000` | S7 | 🟡 в работе |
 | Offline Field Survey объединяет Wi-Fi AP/station и BLE observations с optional GPS track, revisit comparison и WiGLE-compatible export | S7 | ⬜ дальше |
 | BLE Inspector сохраняет raw compatible packets и входит в connected GATT только после explicit target/permission/lease confirmation | S7 | ⬜ дальше |
 | Device Lock защищает secrets/evidence local PIN, bounded retry и tested recovery, не блокируя Stop/panic/recovery | S7 | ⬜ дальше |
@@ -115,8 +115,8 @@ scope и происхождение требований закреплены в
 
 | Режим | Что получает пользователь | Статус 1.x |
 |---|---|---|
-| **Passive audit** | **Защита эфира (CF-001):** RX-only предупреждения о disconnect bursts, конфликтующем twin/PineAP-like поведении, подозрительных BLE tracker/skimmer/drone identifiers и длительном росте шума; каждая находка открывает исходное evidence и uncertainty | 🟡 частично: базовые правила уже проверяются, полный набор S7 ещё не принят |
-| **Passive audit** | **Захват Wi-Fi-аутентификации (CF-002):** различает EAPOL/PMKID и complete/incomplete handshake, сохраняет focused Capture и экспортирует PCAP/`hc22000` | ⬜ запланировано, S7 |
+| **Passive audit** | **Защита эфира (CF-001):** RX-only предупреждения о disconnect bursts, конфликтующем twin/PineAP-like поведении, подозрительных BLE tracker/skimmer/drone identifiers и длительном росте шума; каждая находка открывает исходное evidence и uncertainty | ✅ физически принято в exact `1.0.0-dev.242`; DEMO-S7 остаётся открыт для остальных capabilities S7 |
+| **Passive audit** | **Захват Wi-Fi-аутентификации (CF-002):** различает EAPOL/PMKID и complete/incomplete handshake, сохраняет focused Capture и экспортирует PCAP/`hc22000` | 🟡 active: bounded fail-closed host parser принят в dev.242; live capture, UI, storage/export и physical HIL открыты |
 | **Passive audit** | **Полевой обзор (CF-003):** Wi-Fi AP/station и BLE с deduplication, сравнением повторного визита, optional GPS track и локальным WiGLE-compatible экспортом | ⬜ запланировано, S7; GPS только для подтверждённой сборки |
 | **Passive audit** | **BLE Inspector, приём (CF-004):** сохраняет совместимые raw advertising records с provenance; это не обещание произвольного BLE link-layer sniffing | ⬜ запланировано, S7; фундамент passive BLE scan готов |
 | **Passive audit** | **BadUSB inspection (CF-008):** разбирает подписанный Automation/HID script и показывает target, permissions, действия и пределы без исполнения | ⬜ запланировано, S7 |

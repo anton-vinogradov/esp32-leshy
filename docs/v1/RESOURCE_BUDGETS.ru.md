@@ -1032,6 +1032,29 @@ fail-closed accounting; новый task, radio owner, TX path или dynamic all
 Полный tracked host suite и production build проходят. Runtime heap/stack, radio
 cleanup и timing TFT не заявляются до physical HIL.
 
+Foundation parser захвата аутентификации CAP-049 `RB-M183`: exact
+`1.0.0-dev.242` добавляет allocation-free host parser с жёсткими bounds: 64
+просмотренных immutable Wi-Fi frames, 16 exact evidence references, четыре peers,
+четыре PMKID и report 1 536 B. Malformed, truncated, unread, capacity-lost и
+unsupported input fail closed до publication. `E-BUILD-172`/`E-AUTO-146` принимают
+эти host bounds; claim allocation для live driver, radio/lease, storage, UI или export
+ещё нет. Combined production build использует 244 696 B static RAM и 3 372 276 B
+linked flash, оставляя 13 852 B internal DIRAM. SHA-256 firmware:
+`2b4a9fbdfa294bc3e632a6f707b37b3dcbc9151888320dc0ceda607794f21f5e`, embedded
+app identity: `02b27bc09cbb507a621e6a69ae42b41090e50e371ec3c4f4d85c3de1e2116d5d`.
+
+Полный physical acceptance «Защиты эфира» `RB-M184`: `E-BUILD-173`/`E-AUTO-147`/
+`E-HIL-190` связывают те же exact bytes dev.242 и доказывают, что complete baseline
+и deterministic capacity-loss lifecycles не оставляют утечку warmed working set.
+Свободный heap начинается/восстанавливается на 60 540 B, после release queue растёт
+до 72 324 B и сохраняет largest block 25 588 B. Baseline удерживает 54 BLE records
+с zero drops; injection удерживает 1 и теряет ровно 904 из 905 observed, остаётся
+incomplete/inconclusive и завершает Home/none/lease 0. SHA-256 retained run/index:
+`3c2b372956563009893c060b4ea5fab365b7b6cad057527bb29af6c63e469956`/
+`b728e5430b2de6ba73cccbe12c02b37497b17cdda9e37efea85537717498d766`.
+Это measured runtime bound board-01 для CAP-048, а не claim ресурсов всё ещё
+host-only интеграции CAP-049.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

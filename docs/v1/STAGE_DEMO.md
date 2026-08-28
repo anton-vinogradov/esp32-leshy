@@ -43,25 +43,22 @@ independent physical-stop contract for every admitted active path. Passive detec
 capture, route and inspection results never substitute for an active fixture proof,
 and an unavailable fixture remains a blocker rather than a simulated pass.
 
-The `1.0.0-dev.210` detector through `1.0.0-dev.213` evidence/UI slices,
-`1.0.0-dev.214` bounded one-adapter live passive Wi-Fi capture, `1.0.0-dev.215`
-complete-evidence SSID/security identity-conflict indicator and `1.0.0-dev.216`
-fail-closed bounded live identity retention, the `1.0.0-dev.217` rapid
-visible-name-change indicator for one BSSID, the `1.0.0-dev.218` source-only
-BLE tracker-compatible presence detector and its `1.0.0-dev.219` dedicated
-channel-free presentation, the `1.0.0-dev.220` bounded duplicate-preserving
-retention foundation and the `1.0.0-dev.221` supervised sequential Wi-Fi→BLE
-runtime handoff, plus the `1.0.0-dev.222` bounded elevated-noise indicator, are
-host/build CAP-048
-foundations only. Their golden/negative corpus, receive-only guard, strongest-first
-ordering, exact drilldown, non-color-only text, no-clear repaint, explicit capture-loss
-accounting and cleanup-before-publication do not yet satisfy DEMO-S7. The Wi-Fi
-identity detectors are enabled only after complete live retention and cleanup; the
-BLE finding now has strict kind-aware validation, owner-unknown EN/RU evidence,
-complete bounded retention and a fail-closed runtime worker handoff. The noise
-finding is always Low confidence and never proves a jammer or source. Consolidated
-physical golden/negative TFT/navigation/cleanup evidence and negative corpora are
-still required.
+Exact `1.0.0-dev.242` independently **physically accepts CAP-048 Airspace Guard**.
+`E-BUILD-173`/`E-AUTO-147`/`E-HIL-190` run one exact receive-only candidate through
+a conclusive baseline lifecycle (54 BLE records, zero drops) and deterministic
+capacity-loss lifecycle (1 retained and exactly 904 dropped of 905 observed). The
+loss result stays visibly incomplete and `inconclusive`; both paths preserve exact
+evidence/navigation, change only TFT content (397 Wi-Fi/215 BLE pixels, static 0),
+restore the warmed heap and finish Home/none/lease 0. Retained dev.239/dev.241
+failures plus the positive bundle and acceptance pins are independently hash-checked.
+This closes FUNC-48/CAP-048, not `DEMO-S7`: the matrix still requires CAP-049…CAP-055,
+their negative/cleanup evidence, the independent WF-05 physical-stop contract and
+the complete protected-tool/extension workflow.
+
+The same exact dev.242 also starts CAP-049 only as the host/build foundation
+`E-BUILD-172`/`E-AUTO-146`: a bounded fail-closed EAPOL M1…M4/PMKID parser with no
+live driver/radio/lease, storage, product UI or PCAP/`hc22000` export. Those product
+and physical boundaries remain open and therefore cannot count toward DEMO-S7 yet.
 
 `DEMO-S2` is accepted by `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 completed 29 public Action/query steps and matched nine

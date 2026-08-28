@@ -1038,6 +1038,30 @@ App/factory/ELF sizes are 3,356,912/3,422,448/22,567,052 B
 The complete tracked host suite and production build pass. Runtime heap/stack,
 radio cleanup and TFT timing remain unclaimed until physical HIL.
 
+CAP-049 authentication-capture parser foundation `RB-M183`: exact
+`1.0.0-dev.242` adds an allocation-free host parser with hard bounds of 64 inspected
+immutable Wi-Fi frames, 16 exact evidence references, four peers, four PMKIDs and a
+1,536 B report. Malformed, truncated, unread, capacity-lost and unsupported input
+fails closed before publication. `E-BUILD-172`/`E-AUTO-146` accept these host bounds;
+there is no live driver, radio/lease, storage, UI or export allocation claim yet.
+The combined production build uses 244,696 B static RAM and 3,372,276 B linked flash,
+leaving 13,852 B internal DIRAM. Firmware SHA-256 is
+`2b4a9fbdfa294bc3e632a6f707b37b3dcbc9151888320dc0ceda607794f21f5e` and the
+embedded app identity is
+`02b27bc09cbb507a621e6a69ae42b41090e50e371ec3c4f4d85c3de1e2116d5d`.
+
+Airspace Guard full physical acceptance `RB-M184`: `E-BUILD-173`/`E-AUTO-147`/
+`E-HIL-190` bind the same exact dev.242 bytes and prove that the complete baseline
+and deterministic capacity-loss lifecycles do not leak their warmed working set.
+Free heap starts/restores at 60,540 B, rises to 72,324 B after queue release and keeps
+25,588 B largest block. The baseline retains 54 BLE records with zero drops; injection
+retains 1 and drops exactly 904 of 905 observed, stays incomplete/inconclusive, and
+finishes Home/none/lease 0. The retained run/index SHA-256 are
+`3c2b372956563009893c060b4ea5fab365b7b6cad057527bb29af6c63e469956`/
+`b728e5430b2de6ba73cccbe12c02b37497b17cdda9e37efea85537717498d766`.
+This is a measured board-01 runtime bound for CAP-048, not a resource claim for the
+still host-only CAP-049 integration.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
