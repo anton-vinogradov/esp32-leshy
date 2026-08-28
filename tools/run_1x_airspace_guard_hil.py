@@ -44,6 +44,34 @@ HIL_SESSION_SCHEMA = "leshy.hil.session.v1"
 CAPACITY_DROP_TEST_SCHEMA = "leshy.airspace_guard.capacity_drop_test.v1"
 
 
+def candidate_verification_succeeded(
+        *, fresh_flash_requested: bool, reuse_exact_requested: bool,
+        flash_completed: bool, exact_boot_verified: bool) -> bool:
+    """Admit a candidate only after its exact boot identity is proved."""
+    if fresh_flash_requested == reuse_exact_requested:
+        return False
+    return exact_boot_verified and (
+        reuse_exact_requested or flash_completed)
+
+
+def deterministic_ble_fixture_succeeded(
+        fixture: dict[str, Any]) -> bool:
+    """Require the exact ready state, not merely any fixture output."""
+    states = fixture.get("states")
+    if not isinstance(states, list) or len(states) != 1:
+        return False
+    state = states[0]
+    return (
+        fixture.get("kind") == "macos_corebluetooth" and
+        fixture.get("terminated") is True and
+        isinstance(state, dict) and
+        state.get("schema") == MACOS_BLE_FIXTURE_SCHEMA and
+        state.get("state") == "advertising" and
+        state.get("label") == fixture.get("label") and
+        "error" not in state
+    )
+
+
 def read_only_query(device: PassiveSerial, command: bytes, schema: str,
                     kind: str, timeout: float = 5.0,
                     maximum_attempts: int = 3) -> dict[str, Any]:
@@ -644,6 +672,8 @@ def main() -> int:
     hil_session_end: dict[str, Any] = {}
     capacity_drop_injection: dict[str, Any] = {}
     capacity_drop_clear: dict[str, Any] = {}
+    flash_completed = False
+    candidate_verified = False
     fixture_process: subprocess.Popen[str] | None = None
     fixture_states: list[dict[str, Any]] = []
     external_ble_fixture: dict[str, Any] = {
@@ -680,6 +710,7 @@ def main() -> int:
                     f"external BLE fixture start failed: {fixture_state}")
         if args.flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            flash_completed = True
             time.sleep(0.5)
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             try:
@@ -693,6 +724,11 @@ def main() -> int:
                     app_identity, args.expected_cid))
                 if failures:
                     raise RuntimeError("boot contract failed")
+                candidate_verified = candidate_verification_succeeded(
+                    fresh_flash_requested=args.flash,
+                    reuse_exact_requested=args.reuse_exact_flash,
+                    flash_completed=flash_completed,
+                    exact_boot_verified=True)
                 cleanup_before = robust_cleanup(device)
                 if not cleanup_before.get("complete"):
                     raise RuntimeError("initial Home/zero-lease cleanup failed")
@@ -877,19 +913,20 @@ def main() -> int:
                 if fixture_stderr:
                     external_ble_fixture["stderr"] = fixture_stderr
 
+    passed = candidate_verified and not failures
     result = {
         "schema": RUN_SCHEMA,
         "run_id": run_id,
         "runner_source_sha256": sha256_file(Path(__file__).resolve()),
-        "passed": bool(args.flash or args.reuse_exact_flash) and not failures,
-        "gate_eligible": bool(args.flash or args.reuse_exact_flash) and not failures,
+        "passed": passed,
+        "gate_eligible": passed,
         "failures": failures,
         "candidate": {
             "version": args.expected_version,
             "source_commit": args.source_commit,
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
-            "flashed": True,
+            "flashed": candidate_verified,
             "flash_mode": "fresh" if args.flash else "reuse_exact",
         },
         "expected_cid": args.expected_cid,
@@ -921,18 +958,16 @@ def main() -> int:
         "cleanup_before": cleanup_before,
         "cleanup_after": cleanup_after,
         "scope": {
-            "single_flash": True,
+            "single_flash": candidate_verified,
             "manual_button_presses": 0,
             "screenshots_automatic": True,
-            "passive_receive_only": True,
+            "passive_receive_only": passed,
             "deterministic_ble_fixture": (
-                external_ble_fixture.get("kind") == "macos_corebluetooth" and
-                bool(fixture_states) and
-                external_ble_fixture.get("terminated") is True
+                deterministic_ble_fixture_succeeded(external_ble_fixture)
             ),
             "host_wifi_control_calls": 0,
-            "application_wifi_connect_calls": 0,
-            "application_raw_tx_calls": 0,
+            "application_wifi_connect_calls": 0 if passed else None,
+            "application_raw_tx_calls": 0 if passed else None,
             "wifi_cancel_cleanup_proved": bool(wifi_cancelled),
             "ble_cancel_cleanup_proved": bool(ble_cancelled),
             "two_complete_guard_lifecycles": bool(result_first and result_second),

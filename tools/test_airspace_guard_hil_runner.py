@@ -29,6 +29,8 @@ def load_runner() -> Any:
 
 
 RUNNER = load_runner()
+START_RUNNER_SOURCE = Path(__file__).with_name(
+    "run_1x_airspace_guard_start_regression_hil.py").read_text()
 
 
 def valid_result_state() -> dict[str, Any]:
@@ -102,6 +104,89 @@ def valid_result_state() -> dict[str, Any]:
 
 
 class AirspaceGuardHilRunnerTests(unittest.TestCase):
+    def test_candidate_verification_is_false_before_fixture_or_flash(self) -> None:
+        self.assertFalse(RUNNER.candidate_verification_succeeded(
+            fresh_flash_requested=True, reuse_exact_requested=False,
+            flash_completed=False, exact_boot_verified=False))
+
+    def test_candidate_verification_is_false_after_flash_failure(self) -> None:
+        self.assertFalse(RUNNER.candidate_verification_succeeded(
+            fresh_flash_requested=True, reuse_exact_requested=False,
+            flash_completed=False, exact_boot_verified=True))
+
+    def test_candidate_verification_is_false_after_boot_failure(self) -> None:
+        self.assertFalse(RUNNER.candidate_verification_succeeded(
+            fresh_flash_requested=True, reuse_exact_requested=False,
+            flash_completed=True, exact_boot_verified=False))
+
+    def test_candidate_verification_accepts_fresh_exact_boot(self) -> None:
+        self.assertTrue(RUNNER.candidate_verification_succeeded(
+            fresh_flash_requested=True, reuse_exact_requested=False,
+            flash_completed=True, exact_boot_verified=True))
+
+    def test_candidate_verification_accepts_reuse_only_after_exact_boot(
+            self) -> None:
+        self.assertFalse(RUNNER.candidate_verification_succeeded(
+            fresh_flash_requested=False, reuse_exact_requested=True,
+            flash_completed=False, exact_boot_verified=False))
+        self.assertTrue(RUNNER.candidate_verification_succeeded(
+            fresh_flash_requested=False, reuse_exact_requested=True,
+            flash_completed=False, exact_boot_verified=True))
+
+    def test_both_runners_serialize_only_verified_candidate(self) -> None:
+        full_source = Path(RUNNER.__file__).read_text()
+        for source in (full_source, START_RUNNER_SOURCE):
+            self.assertIn('"flashed": candidate_verified', source)
+            self.assertNotIn('"flashed": True', source)
+            self.assertIn('"single_flash": candidate_verified', source)
+            self.assertIn('"passive_receive_only": passed', source)
+
+    def test_ble_fixture_requires_exact_advertising_state(self) -> None:
+        fixture = {
+            "kind": "macos_corebluetooth",
+            "label": "Keenetic-5070",
+            "terminated": True,
+            "states": [{
+                "schema": RUNNER.MACOS_BLE_FIXTURE_SCHEMA,
+                "state": "advertising",
+                "label": "Keenetic-5070",
+                "pid": 123,
+            }],
+        }
+        self.assertTrue(
+            RUNNER.deterministic_ble_fixture_succeeded(fixture))
+        for field, value in (
+                ("state", "unsupported"),
+                ("schema", "wrong.schema"),
+                ("label", "wrong-label")):
+            with self.subTest(field=field):
+                invalid = {
+                    **fixture,
+                    "states": [{**fixture["states"][0], field: value}],
+                }
+                self.assertFalse(
+                    RUNNER.deterministic_ble_fixture_succeeded(invalid))
+
+    def test_ble_fixture_requires_termination_and_one_state(self) -> None:
+        base = {
+            "kind": "macos_corebluetooth",
+            "label": "Keenetic-5070",
+            "terminated": False,
+            "states": [{
+                "schema": RUNNER.MACOS_BLE_FIXTURE_SCHEMA,
+                "state": "advertising",
+                "label": "Keenetic-5070",
+            }],
+        }
+        self.assertFalse(RUNNER.deterministic_ble_fixture_succeeded(base))
+        self.assertFalse(RUNNER.deterministic_ble_fixture_succeeded({
+            **base, "terminated": True, "states": [],
+        }))
+        self.assertFalse(RUNNER.deterministic_ble_fixture_succeeded({
+            **base, "terminated": True,
+            "states": [base["states"][0], base["states"][0]],
+        }))
+
     def test_complete_result_accounting_passes(self) -> None:
         self.assertEqual([], RUNNER.result_failures(
             valid_result_state(), "complete"))

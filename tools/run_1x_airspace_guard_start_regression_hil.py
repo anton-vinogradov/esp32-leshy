@@ -18,7 +18,9 @@ from esp_app_identity import app_elf_sha256
 from run_1x_airspace_guard_hil import (
     action,
     artifact_manifest,
+    candidate_verification_succeeded,
     cancel_to_menu,
+    deterministic_ble_fixture_succeeded,
     finish_to_home,
     MACOS_BLE_FIXTURE_SCHEMA,
     open_guard,
@@ -113,6 +115,8 @@ def main() -> int:
     final_metrics: dict[str, Any] = {}
     input_state: dict[str, Any] = {}
     safe_outputs: dict[str, Any] = {}
+    flash_completed = False
+    candidate_verified = False
     fixture_process: subprocess.Popen[str] | None = None
     fixture_states: list[dict[str, Any]] = []
     external_ble_fixture: dict[str, Any] = {
@@ -149,6 +153,7 @@ def main() -> int:
                     f"external BLE fixture start failed: {fixture_state}")
         if args.flash:
             flash_candidate(args.port, candidate, 0x10000, args.flash_baud)
+            flash_completed = True
             time.sleep(0.5)
         with PassiveSerial(args.port, 115200, timeout=0.25) as device:
             try:
@@ -162,6 +167,11 @@ def main() -> int:
                     app_identity, args.expected_cid))
                 if failures:
                     raise RuntimeError("boot contract failed")
+                candidate_verified = candidate_verification_succeeded(
+                    fresh_flash_requested=args.flash,
+                    reuse_exact_requested=args.reuse_exact_flash,
+                    flash_completed=flash_completed,
+                    exact_boot_verified=True)
                 cleanup_before = robust_cleanup(device)
                 if not cleanup_before.get("complete"):
                     raise RuntimeError("initial Home/zero-lease cleanup failed")
@@ -256,7 +266,7 @@ def main() -> int:
                 if fixture_stderr:
                     external_ble_fixture["stderr"] = fixture_stderr
 
-    passed = bool(args.flash or args.reuse_exact_flash) and not failures
+    passed = candidate_verified and not failures
     result = {
         "schema": RUN_SCHEMA,
         "run_id": secrets.token_hex(16),
@@ -269,7 +279,7 @@ def main() -> int:
             "source_commit": args.source_commit,
             "firmware_sha256": firmware_sha,
             "app_elf_sha256": app_identity,
-            "flashed": True,
+            "flashed": candidate_verified,
             "flash_mode": "fresh" if args.flash else "reuse_exact",
         },
         "expected_cid": args.expected_cid,
@@ -293,18 +303,16 @@ def main() -> int:
         "scope": {
             "start_regression_only": True,
             "full_lifecycle_gate": False,
-            "single_flash": True,
+            "single_flash": candidate_verified,
             "manual_button_presses": 0,
-            "passive_receive_only": True,
-            "application_wifi_connect_calls": 0,
-            "application_raw_tx_calls": 0,
+            "passive_receive_only": passed,
+            "application_wifi_connect_calls": 0 if passed else None,
+            "application_raw_tx_calls": 0 if passed else None,
             "wifi_cancel_cleanup_proved": bool(wifi_cancelled),
             "terminal_wifi_to_ble_handoff": bool(ble_handoff),
             "complete_wifi_plus_ble_result": bool(ble_result),
             "deterministic_ble_fixture": (
-                external_ble_fixture.get("kind") == "macos_corebluetooth" and
-                bool(fixture_states) and
-                external_ble_fixture.get("terminated") is True
+                deterministic_ble_fixture_succeeded(external_ble_fixture)
             ),
             "host_wifi_control_calls": 0,
             "ble_cancel_cleanup_proved": bool(ble_cancelled),
