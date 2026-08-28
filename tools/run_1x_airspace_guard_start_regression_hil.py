@@ -23,6 +23,7 @@ from run_1x_airspace_guard_hil import (
     robust_cleanup,
     running_failures,
     valid_cid,
+    wait_guard_state,
 )
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_home_hil import stabilized_boot_metrics
@@ -43,6 +44,10 @@ def main() -> int:
     parser.add_argument("--flash", action="store_true")
     parser.add_argument("--reuse-exact-flash", action="store_true")
     parser.add_argument("--flash-baud", type=int, default=460800)
+    parser.add_argument(
+        "--wait-for-ble-handoff", action="store_true",
+        help="wait for terminal Wi-Fi evidence and prove BLE handoff",
+    )
     args = parser.parse_args()
     if not args.firmware.is_file():
         parser.error("--firmware must name an existing app image")
@@ -70,6 +75,8 @@ def main() -> int:
     cleanup_after: dict[str, Any] = {"attempted": False}
     wifi_running: dict[str, Any] = {}
     wifi_cancelled: dict[str, Any] = {}
+    ble_handoff: dict[str, Any] = {}
+    ble_cancelled: dict[str, Any] = {}
     final_home: dict[str, Any] = {}
     final_metrics: dict[str, Any] = {}
     input_state: dict[str, Any] = {}
@@ -101,8 +108,24 @@ def main() -> int:
                     wifi_running, "wifi_running"))
                 if failures:
                     raise RuntimeError("Wi-Fi monitor admission failed")
-                wifi_cancelled = cancel_to_menu(
-                    device, trace, "wifi_cancelled")
+                if args.wait_for_ble_handoff:
+                    ble_handoff = wait_guard_state(
+                        device,
+                        lambda value: value.get("capture_state") in
+                        ("ble_running", "failed"),
+                        18.0, "Wi-Fi terminal handoff did not finish")
+                    if ble_handoff.get("capture_state") != "ble_running":
+                        raise RuntimeError(
+                            f"Wi-Fi evidence did not admit BLE: {ble_handoff!r}")
+                    failures.extend(running_failures(
+                        ble_handoff, "ble_running"))
+                    if failures:
+                        raise RuntimeError("BLE handoff contract failed")
+                    ble_cancelled = cancel_to_menu(
+                        device, trace, "ble_cancelled")
+                else:
+                    wifi_cancelled = cancel_to_menu(
+                        device, trace, "wifi_cancelled")
                 final_home = action(device, "left")
                 trace.append(final_home)
                 require_exact(final_home, {
@@ -164,6 +187,8 @@ def main() -> int:
         "recovery_after": recovery_after,
         "wifi_running": wifi_running,
         "wifi_cancelled": wifi_cancelled,
+        "ble_handoff": ble_handoff,
+        "ble_cancelled": ble_cancelled,
         "final_home": final_home,
         "final_metrics": final_metrics,
         "input": input_state,
@@ -180,6 +205,8 @@ def main() -> int:
             "application_wifi_connect_calls": 0,
             "application_raw_tx_calls": 0,
             "wifi_cancel_cleanup_proved": bool(wifi_cancelled),
+            "terminal_wifi_to_ble_handoff": bool(ble_handoff),
+            "ble_cancel_cleanup_proved": bool(ble_cancelled),
             "storage_write_authorized": False,
         },
     }

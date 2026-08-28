@@ -514,6 +514,9 @@ def main() -> int:
         '"gate_eligible": False',
         '"start_regression_only": True',
         '"full_lifecycle_gate": False',
+        '"--wait-for-ble-handoff"',
+        '"terminal_wifi_to_ble_handoff"',
+        '"ble_cancel_cleanup_proved"',
         '"application_raw_tx_calls": 0',
         '"storage_write_authorized": False',
     ):
