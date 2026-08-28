@@ -405,6 +405,15 @@ public:
         const AirspaceGuardPolicy& policy = {},
         std::size_t sourceRecordsDropped = 0U,
         std::size_t sourceRecordsObserved = 0U) const;
+
+    // Same bounded-stack rule as writeWifiReport(): the worker owns static
+    // event storage and the detector fills it without an aggregate ABI copy.
+    bool writeBleReport(
+        const BleObservationSource& source,
+        const AirspaceGuardPolicy& policy,
+        std::size_t sourceRecordsDropped,
+        std::size_t sourceRecordsObserved,
+        AirspaceGuardReport* output) const;
 };
 
 }  // namespace leshy1::services::guard

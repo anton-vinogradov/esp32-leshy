@@ -1328,9 +1328,23 @@ AirspaceGuardReport AirspaceGuard::inspectBle(
     std::size_t sourceRecordsDropped,
     std::size_t sourceRecordsObserved) const {
     AirspaceGuardReport report{};
+    writeBleReport(source, policy, sourceRecordsDropped,
+                   sourceRecordsObserved, &report);
+    return report;
+}
+
+bool AirspaceGuard::writeBleReport(
+    const BleObservationSource& source, const AirspaceGuardPolicy& policy,
+    std::size_t sourceRecordsDropped,
+    std::size_t sourceRecordsObserved,
+    AirspaceGuardReport* output) const {
+    if (output == nullptr) return false;
+    std::memset(output, 0, sizeof(*output));
+    AirspaceGuardReport& report = *output;
+    report.status = AirspaceGuardStatus::Inconclusive;
     if (!validateAirspaceGuardPolicy(policy)) {
         report.status = AirspaceGuardStatus::InvalidPolicy;
-        return report;
+        return true;
     }
 
     report.sourceFramesDropped = sourceRecordsDropped;
@@ -1473,7 +1487,7 @@ AirspaceGuardReport AirspaceGuard::inspectBle(
     } else {
         report.status = AirspaceGuardStatus::Clear;
     }
-    return report;
+    return true;
 }
 
 }  // namespace leshy1::services::guard

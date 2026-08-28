@@ -3159,11 +3159,13 @@ void runAirspaceGuardBleWorker() {
     if (complete) {
         AirspaceGuardPolicy policy{};
         policy.bleTrackerPresenceEnabled = true;
-        event.report = airspaceGuardDetector.inspectBle(
+        const bool inspected = airspaceGuardDetector.writeBleReport(
             airspaceGuardBleRetention, policy, 0U,
-            static_cast<std::size_t>(event.scan.recordsObserved));
-        event.valid = event.report.status == AirspaceGuardStatus::Clear ||
-            event.report.status == AirspaceGuardStatus::Finding;
+            static_cast<std::size_t>(event.scan.recordsObserved),
+            &event.report);
+        event.valid = inspected &&
+            (event.report.status == AirspaceGuardStatus::Clear ||
+             event.report.status == AirspaceGuardStatus::Finding);
         event.status = event.valid ? "complete" : "inspection_failed";
     } else {
         event.status = cancelled

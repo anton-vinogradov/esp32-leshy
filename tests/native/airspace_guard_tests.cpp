@@ -868,8 +868,9 @@ void testBleTrackerPresenceIsOptInAndRetainsExactEvidence() {
     CHECK(disabled.bleAdvertisementRecords == 4U);
     CHECK(disabled.findingCount == 0U);
 
-    const AirspaceGuardReport report =
-        AirspaceGuard{}.inspectBle(source, bleTrackerPolicy());
+    AirspaceGuardReport report{};
+    CHECK(AirspaceGuard{}.writeBleReport(
+        source, bleTrackerPolicy(), 0U, 0U, &report));
     CHECK(report.status == AirspaceGuardStatus::Finding);
     CHECK(report.sourceFramesObserved == 4U);
     CHECK(report.framesInspected == 4U);
@@ -994,8 +995,9 @@ void testBleTrackerReportRetainsDenseRealWorldFindingSet() {
         }
     }
 
-    const AirspaceGuardReport report =
-        AirspaceGuard{}.inspectBle(source, bleTrackerPolicy());
+    AirspaceGuardReport report{};
+    CHECK(AirspaceGuard{}.writeBleReport(
+        source, bleTrackerPolicy(), 0U, 0U, &report));
     CHECK(report.status == AirspaceGuardStatus::Finding);
     CHECK(report.findingCount == kTrackerCount);
     CHECK(report.findingsDropped == 0U);

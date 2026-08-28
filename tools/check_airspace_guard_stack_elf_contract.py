@@ -21,7 +21,7 @@ LIMITS = {
     "finalizeAirspaceGuardWifiEvidence(": 3072,
     "renderAirspaceGuardPage(": 1280,
     "AirspaceGuard::writeWifiReport(": 2816,
-    "AirspaceGuard::inspectBle(": 2816,
+    "AirspaceGuard::writeBleReport(": 2816,
     "mergeAirspaceGuardReports(": 2560,
     "BoardWifiPassiveCapture::accept(": 512,
 }
@@ -64,6 +64,13 @@ def stack_frames(elf: Path) -> dict[str, int]:
                 f"unsafe Airspace Guard stack frame {label}: "
                 f"{frame} > {limit}")
         frames[label] = frame
+    worker_chain = (frames["runProductSurveyWorker(void*)"] +
+                    frames["AirspaceGuard::writeBleReport("])
+    if worker_chain > 6144:
+        raise ValueError(
+            "unsafe Airspace Guard BLE worker call chain: "
+            f"{worker_chain} > 6144")
+    frames["ble_worker_call_chain"] = worker_chain
     return frames
 
 
