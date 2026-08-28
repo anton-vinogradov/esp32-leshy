@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "apps/auth/WifiAuthenticationCaptureController.h"
 #include "services/auth/WifiAuthenticationCapture.h"
 #include "ui/UiStrings.h"
 
@@ -23,6 +24,10 @@ enum class WifiAuthenticationCaptureUiView : std::uint8_t {
     Running,
     Result,
     Inconclusive,
+    Actions,
+    PeerDetail,
+    EvidenceList,
+    EvidenceDetail,
     Failed,
 };
 
@@ -37,16 +42,34 @@ enum class WifiAuthenticationCaptureUiTone : std::uint8_t {
 // rendered text or taking renderer ownership here.
 enum class WifiAuthenticationCaptureUiMetric : std::uint8_t {
     None,
-    TimeProgressMs,
-    ChannelAndReportedFrames,
+    TimeRemainingSeconds,
+    ChannelAndCandidateFrames,
     RetainedAndDroppedFrames,
-    EapolAndKeyFrames,
+    TerminalAnalysisPending,
     CompleteAndPartialPeers,
-    EapolKeysAndPmkids,
+    PmkidsAndEapolFrames,
+    SelectedPeerMask,
     EvidenceAndSourceFrames,
     LossAndRejectedFrames,
     UncertaintyMask,
+    ActionDetails,
+    ActionRepeat,
+    PeerPosition,
+    PeerMessageMask,
+    PeerState,
+    PeerEvidenceCount,
+    EvidenceListRow,
+    EvidenceMessageAndFrame,
+    EvidenceChannelAndSignal,
+    EvidenceReplayCounter,
+    EvidenceDescriptor,
     FailureCode,
+};
+
+enum class WifiAuthenticationCaptureExportEligibility : std::uint8_t {
+    NotEvaluated,
+    Eligible,
+    Ineligible,
 };
 
 enum class WifiAuthenticationCaptureUiFailure : std::uint8_t {
@@ -62,11 +85,10 @@ struct WifiAuthenticationCaptureLiveProgress final {
     std::uint32_t elapsedMs = 0;
     std::uint32_t durationMs = 0;
     std::uint32_t framesReported = 0;
+    std::uint32_t candidateFrames = 0;
     std::uint32_t framesAccepted = 0;
     std::uint32_t framesDroppedCapacity = 0;
     std::uint32_t framesDroppedInvalid = 0;
-    std::uint32_t eapolFrames = 0;
-    std::uint32_t eapolKeyFrames = 0;
     std::uint8_t channel = 0;
 };
 
@@ -75,6 +97,8 @@ struct WifiAuthenticationCaptureUiInput final {
         WifiAuthenticationCaptureUiPhase::Failed;
     WifiAuthenticationCaptureLiveProgress progress{};
     const services::auth::WifiAuthenticationCaptureReport* report = nullptr;
+    const apps::auth::WifiAuthenticationCaptureController* controller =
+        nullptr;
     WifiAuthenticationCaptureUiFailure failure =
         WifiAuthenticationCaptureUiFailure::None;
     bool cleanupComplete = false;
@@ -86,7 +110,9 @@ struct WifiAuthenticationCaptureUiRow final {
     UiTextId text = UiTextId::WifiAuthFailureInvalid;
     std::uint32_t primary = 0;
     std::uint32_t secondary = 0;
+    std::uint64_t exact = 0;
     bool warning = false;
+    bool selected = false;
 };
 
 // Four fixed rows match the established product touch geometry. The model is
@@ -106,6 +132,8 @@ struct WifiAuthenticationCaptureUiModel final {
     std::size_t rowCount = 0;
     WifiAuthenticationCaptureUiFailure failure =
         WifiAuthenticationCaptureUiFailure::None;
+    WifiAuthenticationCaptureExportEligibility exportEligibility =
+        WifiAuthenticationCaptureExportEligibility::NotEvaluated;
     bool evidenceIncomplete = true;
     bool reportOpenable = false;
     bool cleanupComplete = false;

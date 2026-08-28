@@ -52,3 +52,5 @@ jobs:
         run: pio run -d diagnostics/hil_probe
       - name: Build independent 1.x measurement target
         run: pio run -d firmware/leshy1
+      - name: Enforce 1.x firmware resource budget
+        run: python3 tools/check_1x_build_budget.py

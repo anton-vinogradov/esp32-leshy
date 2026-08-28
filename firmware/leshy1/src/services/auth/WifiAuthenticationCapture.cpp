@@ -15,85 +15,18 @@ static_assert(std::is_trivially_copyable_v<WifiAuthenticationCaptureReport>,
 
 constexpr std::size_t kMacBytes = 6;
 constexpr std::size_t kDataHeaderBytes = 24;
-constexpr std::size_t kFourAddressHeaderBytes = 30;
 constexpr std::size_t kLlcSnapBytes = 8;
-constexpr std::size_t kEapolHeaderBytes = 4;
-constexpr std::size_t kEapolKeyFixedBytes = 95;
-constexpr std::size_t kKeyDataLengthOffset = 93;
-constexpr std::uint16_t kEapolEtherType = 0x888eU;
-constexpr std::uint8_t kEapolKeyPacketType = 3U;
-constexpr std::uint16_t kKeyInfoPairwise = 1U << 3U;
-constexpr std::uint16_t kKeyInfoInstall = 1U << 6U;
-constexpr std::uint16_t kKeyInfoAck = 1U << 7U;
-constexpr std::uint16_t kKeyInfoMic = 1U << 8U;
-constexpr std::uint16_t kKeyInfoSecure = 1U << 9U;
-constexpr std::uint16_t kKeyInfoError = 1U << 10U;
-constexpr std::uint16_t kKeyInfoRequest = 1U << 11U;
-constexpr std::uint16_t kKeyInfoEncrypted = 1U << 12U;
-constexpr std::uint16_t kKeyInfoSmk = 1U << 13U;
-constexpr std::uint16_t kKeyInfoReserved = 3U << 14U;
-constexpr std::uint16_t kKeyInfoRsnKeyIndex = 3U << 4U;
-constexpr std::uint8_t kSupportedDescriptorType = 2U;
-constexpr std::uint8_t kSupportedDescriptorVersion2 = 2U;
-constexpr std::uint8_t kSupportedDescriptorVersion3 = 3U;
 constexpr std::uint8_t kNullDataSubtype = 4U;
 constexpr std::uint8_t kQosNullDataSubtype = 12U;
 constexpr std::array<std::uint8_t, kLlcSnapBytes> kEapolLlcSnap{
     0xaaU, 0xaaU, 0x03U, 0x00U, 0x00U, 0x00U, 0x88U, 0x8eU};
 
-enum class DecodeStatus : std::uint8_t {
-    Ignored,
-    EapolNonKey,
-    UnclassifiedKey,
-    UnsupportedKey,
-    ClassifiedKey,
-    Malformed,
-    Truncated,
-};
-
-struct DecodedKey final {
-    WifiEapolKeyMessage message = WifiEapolKeyMessage::Unknown;
-    std::array<std::uint8_t, kMacBytes> accessPoint{};
-    std::array<std::uint8_t, kMacBytes> station{};
-    std::uint64_t replayCounter = 0;
-    std::uint16_t keyInfo = 0;
-    std::uint8_t eapolVersion = 0;
-    std::uint8_t descriptorType = 0;
-    std::uint8_t descriptorVersion = 0;
-    std::array<std::uint8_t, 32> nonce{};
-    std::array<std::uint8_t, 16> pmkid{};
-    bool hasPmkid = false;
-    bool fromAccessPoint = false;
-};
-
-std::uint16_t readBig16(const std::uint8_t* value) {
-    return static_cast<std::uint16_t>(
-        (static_cast<std::uint16_t>(value[0]) << 8U) |
-        static_cast<std::uint16_t>(value[1]));
-}
-
-std::uint64_t readBig64(const std::uint8_t* value) {
-    std::uint64_t result = 0;
-    for (std::size_t index = 0; index < 8U; ++index) {
-        result = (result << 8U) | value[index];
-    }
-    return result;
-}
+using DecodeStatus = WifiAuthenticationFrameDecodeStatus;
+using DecodedKey = WifiAuthenticationDecodedKeyFrame;
 
 bool sameMac(const std::array<std::uint8_t, kMacBytes>& left,
              const std::array<std::uint8_t, kMacBytes>& right) {
     return left == right;
-}
-
-bool validUnicastMac(const std::array<std::uint8_t, kMacBytes>& address) {
-    if ((address[0] & 1U) != 0U) return false;
-    bool any = false;
-    bool allOnes = true;
-    for (std::uint8_t octet : address) {
-        any = any || octet != 0U;
-        allOnes = allOnes && octet == 0xffU;
-    }
-    return any && !allOnes;
 }
 
 bool bytesMatchPrefix(const std::uint8_t* value, std::size_t valueLength,
@@ -111,198 +44,8 @@ std::array<std::uint8_t, kMacBytes> readMac(const std::uint8_t* value) {
     return result;
 }
 
-WifiEapolKeyMessage classifyKey(std::uint16_t keyInfo) {
-    if ((keyInfo & kKeyInfoPairwise) == 0U ||
-        (keyInfo & (kKeyInfoError | kKeyInfoRequest | kKeyInfoSmk |
-                    kKeyInfoReserved | kKeyInfoRsnKeyIndex)) != 0U) {
-        return WifiEapolKeyMessage::Unknown;
-    }
-    const bool install = (keyInfo & kKeyInfoInstall) != 0U;
-    const bool ack = (keyInfo & kKeyInfoAck) != 0U;
-    const bool mic = (keyInfo & kKeyInfoMic) != 0U;
-    const bool secure = (keyInfo & kKeyInfoSecure) != 0U;
-    if (ack && !mic && !install && !secure) {
-        return WifiEapolKeyMessage::Message1;
-    }
-    if (!ack && mic && !install && !secure) {
-        return WifiEapolKeyMessage::Message2;
-    }
-    if (ack && mic && install && secure) {
-        return WifiEapolKeyMessage::Message3;
-    }
-    if (!ack && mic && !install && secure) {
-        return WifiEapolKeyMessage::Message4;
-    }
-    return WifiEapolKeyMessage::Unknown;
-}
-
-bool findPmkidKde(const std::uint8_t* keyData, std::size_t keyDataLength,
-                  std::array<std::uint8_t, 16>* output, bool* malformed) {
-    if (output == nullptr || malformed == nullptr) return false;
-    std::size_t offset = 0;
-    bool found = false;
-    while (offset < keyDataLength) {
-        if (keyDataLength - offset < 2U) {
-            *malformed = true;
-            return false;
-        }
-        const std::uint8_t elementId = keyData[offset];
-        const std::size_t elementLength = keyData[offset + 1U];
-        offset += 2U;
-        if (elementLength > keyDataLength - offset) {
-            *malformed = true;
-            return false;
-        }
-        const std::uint8_t* element = keyData + offset;
-        if (elementId == 0xddU && elementLength == 20U &&
-            element[0] == 0x00U && element[1] == 0x0fU &&
-            element[2] == 0xacU && element[3] == 0x04U) {
-            std::array<std::uint8_t, 16> candidate{};
-            std::memcpy(candidate.data(), element + 4U, candidate.size());
-            bool any = false;
-            for (std::uint8_t octet : candidate) any = any || octet != 0U;
-            if (!any) {
-                *malformed = true;
-                return false;
-            }
-            if (found && *output != candidate) {
-                *malformed = true;
-                return false;
-            }
-            *output = candidate;
-            found = true;
-        }
-        offset += elementLength;
-    }
-    return found;
-}
-
 DecodeStatus decodeKey(const WifiFrameView& frame, DecodedKey* output) {
-    if (output == nullptr || frame.payload == nullptr ||
-        frame.capturedLength == 0U || frame.originalLength == 0U ||
-        frame.capturedLength > frame.originalLength || frame.monotonicUs == 0U ||
-        frame.channel < 1U || frame.channel > 14U) {
-        return DecodeStatus::Malformed;
-    }
-    if (frame.kind != WifiFrameKind::Data) return DecodeStatus::Ignored;
-    std::size_t payloadLength = frame.capturedLength;
-    if (frame.fcsIncluded) {
-        if (payloadLength < 4U) return DecodeStatus::Malformed;
-        payloadLength -= 4U;
-    }
-    if (payloadLength < kDataHeaderBytes) {
-        return frame.originalLength > frame.capturedLength
-                   ? DecodeStatus::Truncated
-                   : DecodeStatus::Malformed;
-    }
-
-    const std::uint16_t frameControl = static_cast<std::uint16_t>(
-        frame.payload[0] | (static_cast<std::uint16_t>(frame.payload[1]) << 8U));
-    const std::uint8_t type = static_cast<std::uint8_t>(
-        (frameControl >> 2U) & 0x03U);
-    if (type != 2U) return DecodeStatus::Malformed;
-    const std::uint8_t subtype = static_cast<std::uint8_t>(
-        (frameControl >> 4U) & 0x0fU);
-    const bool toDistribution = (frameControl & (1U << 8U)) != 0U;
-    const bool fromDistribution = (frameControl & (1U << 9U)) != 0U;
-    const bool protectedPayload = (frameControl & (1U << 14U)) != 0U;
-    const bool ordered = (frameControl & (1U << 15U)) != 0U;
-    const bool qos = (subtype & 0x08U) != 0U;
-    std::size_t headerLength =
-        toDistribution && fromDistribution ? kFourAddressHeaderBytes
-                                           : kDataHeaderBytes;
-    if (qos) headerLength += 2U;
-    if (qos && ordered) headerLength += 4U;
-    if (payloadLength < headerLength + kLlcSnapBytes) {
-        return frame.originalLength > frame.capturedLength
-                   ? DecodeStatus::Truncated
-                   : DecodeStatus::Malformed;
-    }
-    if (protectedPayload) return DecodeStatus::Ignored;
-
-    const std::uint8_t* llc = frame.payload + headerLength;
-    if (llc[0] != 0xaaU || llc[1] != 0xaaU || llc[2] != 0x03U ||
-        llc[3] != 0x00U || llc[4] != 0x00U || llc[5] != 0x00U ||
-        readBig16(llc + 6U) != kEapolEtherType) {
-        return DecodeStatus::Ignored;
-    }
-    if (toDistribution == fromDistribution) return DecodeStatus::Malformed;
-    if (frame.originalLength > frame.capturedLength) {
-        return DecodeStatus::Truncated;
-    }
-
-    const std::uint8_t* eapol = llc + kLlcSnapBytes;
-    const std::size_t eapolAvailable = payloadLength -
-        headerLength - kLlcSnapBytes;
-    if (eapolAvailable < kEapolHeaderBytes) {
-        return DecodeStatus::Truncated;
-    }
-    output->eapolVersion = eapol[0];
-    if (output->eapolVersion == 0U || output->eapolVersion > 3U) {
-        return DecodeStatus::Malformed;
-    }
-    const std::size_t bodyLength = readBig16(eapol + 2U);
-    if (bodyLength > eapolAvailable - kEapolHeaderBytes) {
-        return DecodeStatus::Truncated;
-    }
-    if (bodyLength != eapolAvailable - kEapolHeaderBytes) {
-        return DecodeStatus::Malformed;
-    }
-    if (eapol[1] != kEapolKeyPacketType) {
-        return DecodeStatus::EapolNonKey;
-    }
-    if (bodyLength < 1U) return DecodeStatus::Malformed;
-
-    const std::uint8_t* key = eapol + kEapolHeaderBytes;
-    output->descriptorType = key[0];
-    if (toDistribution) {
-        output->accessPoint = readMac(frame.payload + 4U);
-        output->station = readMac(frame.payload + 10U);
-    } else {
-        output->station = readMac(frame.payload + 4U);
-        output->accessPoint = readMac(frame.payload + 10U);
-    }
-    if (!validUnicastMac(output->accessPoint) ||
-        !validUnicastMac(output->station) ||
-        sameMac(output->accessPoint, output->station)) {
-        return DecodeStatus::Malformed;
-    }
-    output->fromAccessPoint = fromDistribution;
-
-    // Only the RSN descriptor has the common prefix parsed below. RC4,
-    // legacy WPA and unknown descriptor layouts are retained as unsupported
-    // evidence without guessing their fields.
-    if (output->descriptorType != kSupportedDescriptorType) {
-        return DecodeStatus::UnsupportedKey;
-    }
-    constexpr std::size_t kRsnCommonPrefixBytes = 45U;
-    if (bodyLength < kRsnCommonPrefixBytes) return DecodeStatus::Malformed;
-    output->keyInfo = readBig16(key + 1U);
-    output->descriptorVersion =
-        static_cast<std::uint8_t>(output->keyInfo & 0x07U);
-    output->message = classifyKey(output->keyInfo);
-    output->replayCounter = readBig64(key + 5U);
-    std::memcpy(output->nonce.data(), key + 13U, output->nonce.size());
-    if (output->descriptorVersion != kSupportedDescriptorVersion2 &&
-        output->descriptorVersion != kSupportedDescriptorVersion3) {
-        return DecodeStatus::UnsupportedKey;
-    }
-    if (bodyLength < kEapolKeyFixedBytes) return DecodeStatus::Malformed;
-
-    const std::size_t keyDataLength = readBig16(key + kKeyDataLengthOffset);
-    if (keyDataLength != bodyLength - kEapolKeyFixedBytes) {
-        return DecodeStatus::Malformed;
-    }
-    if ((output->keyInfo & kKeyInfoEncrypted) == 0U && keyDataLength > 0U) {
-        bool malformed = false;
-        output->hasPmkid = findPmkidKde(
-            key + kEapolKeyFixedBytes, keyDataLength, &output->pmkid,
-            &malformed);
-        if (malformed) return DecodeStatus::Malformed;
-    }
-    return output->message == WifiEapolKeyMessage::Unknown
-               ? DecodeStatus::UnclassifiedKey
-               : DecodeStatus::ClassifiedKey;
+    return decodeWifiAuthenticationKeyFrame(frame, output);
 }
 
 WifiAuthenticationPeer* findLatestAttempt(
@@ -517,7 +260,8 @@ void finalizePeers(WifiAuthenticationCaptureReport* report) {
             !peer.authenticatorNonceMismatch &&
             anyNonzero(peer.authenticatorNonce) &&
             anyNonzero(peer.stationNonce) &&
-            peer.descriptorType == kSupportedDescriptorType &&
+            peer.descriptorType ==
+                kWifiAuthenticationSupportedDescriptorType &&
             peer.descriptorVersions[0] == peer.descriptorVersions[1] &&
             peer.descriptorVersions[0] == peer.descriptorVersions[2] &&
             peer.descriptorVersions[0] == peer.descriptorVersions[3];
@@ -569,7 +313,8 @@ WifiAuthenticationIngressDisposition classifyWifiAuthenticationIngress(
     const WifiFrameView& frame,
     const std::array<std::uint8_t, 6>& targetAccessPoint) {
     using Disposition = WifiAuthenticationIngressDisposition;
-    if (!validUnicastMac(targetAccessPoint) || frame.payload == nullptr ||
+    if (!validWifiAuthenticationUnicastMac(targetAccessPoint) ||
+        frame.payload == nullptr ||
         frame.capturedLength == 0U) {
         return Disposition::Invalid;
     }

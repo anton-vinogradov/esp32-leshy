@@ -137,10 +137,23 @@ run_opaque_evidence_check() {
     -Wconversion -Wsign-conversion -Wshadow \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/wifi_authentication_capture_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/auth/WifiAuthenticationFrameDecoder.cpp" \
     "$repo_dir/firmware/leshy1/src/services/auth/WifiAuthenticationCapture.cpp" \
     -o "$test_tmp/wifi_authentication_capture_tests"
 
 "$test_tmp/wifi_authentication_capture_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/wifi_authentication_artifact_policy_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/auth/WifiAuthenticationArtifactPolicy.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/auth/WifiAuthenticationFrameDecoder.cpp" \
+    -o "$test_tmp/wifi_authentication_artifact_policy_tests"
+
+"$test_tmp/wifi_authentication_artifact_policy_tests"
 
 "${CXX:-c++}" \
     -std=c++17 \
@@ -158,10 +171,22 @@ run_opaque_evidence_check() {
     -Wconversion -Wsign-conversion -Wshadow \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/wifi_authentication_capture_presenter_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/auth/WifiAuthenticationCaptureController.cpp" \
     "$repo_dir/firmware/leshy1/src/ui/WifiAuthenticationCapturePresenter.cpp" \
     -o "$test_tmp/wifi_authentication_capture_presenter_tests"
 
 "$test_tmp/wifi_authentication_capture_presenter_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/wifi_authentication_capture_controller_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/apps/auth/WifiAuthenticationCaptureController.cpp" \
+    -o "$test_tmp/wifi_authentication_capture_controller_tests"
+
+"$test_tmp/wifi_authentication_capture_controller_tests"
 
 "${CXX:-c++}" \
     -std=c++17 \
@@ -356,6 +381,20 @@ run_opaque_evidence_check() {
     -o "$test_tmp/session_pair_recovery_tests"
 
 "$test_tmp/session_pair_recovery_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/authentication_capture_storage_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SourceTimeline.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/survey/SurveySession.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/AtomicHead.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/SessionCodec.cpp" \
+    "$repo_dir/firmware/leshy1/src/storage/SessionStore.cpp" \
+    -o "$test_tmp/authentication_capture_storage_tests"
+
+"$test_tmp/authentication_capture_storage_tests"
 
 "${CXX:-c++}" \
     -std=c++17 \
@@ -598,6 +637,8 @@ python3 "$repo_dir/tools/check_observation_browser_acceptance.py"
 python3 "$repo_dir/tools/check_capture_export_acceptance.py"
 run_opaque_evidence_check tools/check_wifi_frame_capture_acceptance.py
 python3 "$repo_dir/tools/check_persistent_wifi_capture_acceptance.py"
+python3 "$repo_dir/tools/check_authentication_capture_storage_contract.py"
+python3 -m unittest "$repo_dir/tools/test_authentication_capture_storage_contract.py"
 python3 "$repo_dir/tools/check_self_test_coverage_acceptance.py"
 python3 "$repo_dir/tools/check_shield_receiver_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_isolated_main_miso_contract.py"

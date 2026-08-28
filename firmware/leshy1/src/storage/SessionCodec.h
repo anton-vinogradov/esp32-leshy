@@ -21,6 +21,9 @@ constexpr std::uint16_t kInfraredRawSessionSchemaVersion = 6;
 // stable Target identity (notably the BLE address type). Versions 1..6 remain
 // readable.
 constexpr std::uint16_t kEnrichedSessionSchemaVersion = 7;
+// Version 8 persists bounded authentication-capture provenance alongside the
+// existing immutable raw Wi-Fi frame block. Versions 1..7 remain readable.
+constexpr std::uint16_t kAuthenticationCaptureSessionSchemaVersion = 8;
 constexpr std::uint16_t kLegacySegmentSchemaVersion = 1;
 constexpr std::uint16_t kTimelineSegmentSchemaVersion = 2;
 constexpr std::uint16_t kSegmentSchemaVersion = 3;
@@ -28,6 +31,7 @@ constexpr std::uint16_t kWifiFrameSegmentSchemaVersion = 4;
 constexpr std::uint16_t kSubGhzRawSegmentSchemaVersion = 5;
 constexpr std::uint16_t kInfraredRawSegmentSchemaVersion = 6;
 constexpr std::uint16_t kEnrichedSegmentSchemaVersion = 7;
+constexpr std::uint16_t kAuthenticationCaptureSegmentSchemaVersion = 8;
 constexpr std::size_t kSessionManifestMaxBytes = 256;
 constexpr std::size_t kObservationRecordMaxBytes = 128;
 constexpr std::size_t kTimelineRecordMaxBytes = 1024;
@@ -42,6 +46,29 @@ struct SessionManifest final {
     std::uint32_t observationCount = 0;
     std::uint32_t segmentLength = 0;
     std::uint32_t segmentCrc32c = 0;
+};
+
+enum class AuthenticationCapturePurpose : std::uint8_t {
+    Generic = 0,
+    Authentication = 1,
+};
+
+// Bounded, binary-safe provenance for a raw Wi-Fi capture. It intentionally
+// lives beside CaptureMetadata so existing generic capture ABI remains stable.
+struct AuthenticationCaptureProvenance final {
+    static constexpr std::size_t kBssidBytes = 6;
+    static constexpr std::size_t kSsidCapacity = 32;
+
+    AuthenticationCapturePurpose purpose =
+        AuthenticationCapturePurpose::Generic;
+    std::array<std::uint8_t, kBssidBytes> targetBssid{};
+    std::array<std::uint8_t, kSsidCapacity> ssid{};
+    std::uint8_t ssidLength = 0;
+    bool ssidKnown = false;
+    std::uint32_t framesReported = 0;
+    std::uint32_t framesAccepted = 0;
+    std::uint32_t framesDroppedCapacity = 0;
+    std::uint32_t framesDroppedInvalid = 0;
 };
 
 enum class SessionCodecStatus : std::uint8_t {
@@ -64,6 +91,11 @@ SessionCodecStatus encodeObservationSegment(const services::survey::SurveySessio
                                             std::size_t* outputSize);
 SessionCodecStatus encodeWifiFrameCaptureSegment(
     const services::survey::SurveySession& session,
+    const domain::captures::WifiFrameSource& frames,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
+SessionCodecStatus encodeAuthenticationCaptureSegment(
+    const services::survey::SurveySession& session,
+    const AuthenticationCaptureProvenance& provenance,
     const domain::captures::WifiFrameSource& frames,
     std::uint8_t* output, std::size_t capacity, std::size_t* outputSize);
 SessionCodecStatus encodeSubGhzRawCaptureSegment(
@@ -109,6 +141,12 @@ private:
 SessionCodecStatus openPersistedWifiFrameCapture(
     const services::survey::SurveySession& session,
     const std::uint8_t* segment, std::size_t segmentSize,
+    PersistedWifiFrameCaptureView* output);
+
+SessionCodecStatus openPersistedAuthenticationCapture(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* segment, std::size_t segmentSize,
+    AuthenticationCaptureProvenance* provenance,
     PersistedWifiFrameCaptureView* output);
 
 class PersistedSubGhzRawCaptureView final

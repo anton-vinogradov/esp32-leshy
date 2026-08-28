@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "domain/captures/WifiFrame.h"
+#include "services/auth/WifiAuthenticationFrameDecoder.h"
 
 namespace leshy1::services::auth {
 
@@ -12,14 +13,6 @@ enum class WifiAuthenticationCaptureOutcome : std::uint8_t {
     Inconclusive,
     Incomplete,
     Complete,
-};
-
-enum class WifiEapolKeyMessage : std::uint8_t {
-    Unknown,
-    Message1,
-    Message2,
-    Message3,
-    Message4,
 };
 
 enum class WifiAuthenticationKeyProfile : std::uint8_t {

@@ -94,6 +94,17 @@ SessionStoreCommitResult commitNextWifiFrameCapture(
     SessionStoreIo& io, SessionStoreWorkspace& workspace,
     const services::survey::SurveySession& session,
     const domain::captures::WifiFrameSource& frames);
+SessionStoreCommitResult commitAuthenticationCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const AuthenticationCaptureProvenance& provenance,
+    const domain::captures::WifiFrameSource& frames,
+    std::uint32_t generation, HeadSlot publishSlot);
+SessionStoreCommitResult commitNextAuthenticationCapture(
+    SessionStoreIo& io, SessionStoreWorkspace& workspace,
+    const services::survey::SurveySession& session,
+    const AuthenticationCaptureProvenance& provenance,
+    const domain::captures::WifiFrameSource& frames);
 SessionStoreCommitResult commitSubGhzRawCapture(
     SessionStoreIo& io, SessionStoreWorkspace& workspace,
     const services::survey::SurveySession& session,

@@ -265,6 +265,105 @@ bool hasNonzero(const std::array<std::uint8_t, 32>& value) {
     return false;
 }
 
+void testSharedDecoderPreservesNonQosQosFcsAndTargetIdentity() {
+    FixtureSource source;
+    FixtureFrame& nonQos = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 5U, kAccessPoint, kStation, &kPmkid);
+    WifiAuthenticationDecodedKeyFrame decoded{};
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(nonQos), &decoded) ==
+          WifiAuthenticationFrameDecodeStatus::ClassifiedKey);
+    CHECK(decoded.message == WifiEapolKeyMessage::Message1);
+    CHECK(decoded.accessPoint == kAccessPoint);
+    CHECK(decoded.station == kStation);
+    CHECK(decoded.replayCounter == 5U);
+    CHECK(decoded.descriptorType == 2U);
+    CHECK(decoded.descriptorVersion == 2U);
+    CHECK(decoded.fromAccessPoint);
+    CHECK(decoded.hasPmkid);
+    CHECK(decoded.pmkid == kPmkid);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(nonQos),
+                                             kOtherAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Ignore);
+
+    FixtureFrame& qos = source.addEapolKey(
+        WifiEapolKeyMessage::Message2, 5U);
+    source.addQosHeader(qos);
+    decoded = {};
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(qos), &decoded) ==
+          WifiAuthenticationFrameDecodeStatus::ClassifiedKey);
+    CHECK(decoded.message == WifiEapolKeyMessage::Message2);
+    CHECK(decoded.accessPoint == kAccessPoint);
+    CHECK(decoded.station == kStation);
+    CHECK(!decoded.fromAccessPoint);
+
+    FixtureFrame& fcs = source.addEapolKey(
+        WifiEapolKeyMessage::Message3, 6U);
+    source.addQosHeader(fcs);
+    source.appendFcs(fcs);
+    decoded = {};
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(fcs), &decoded) ==
+          WifiAuthenticationFrameDecodeStatus::ClassifiedKey);
+    CHECK(decoded.message == WifiEapolKeyMessage::Message3);
+    CHECK(decoded.replayCounter == 6U);
+}
+
+void testSharedDecoderPreservesMalformedAndTruncatedBoundaries() {
+    FixtureSource malformed;
+    FixtureFrame& badVersion = malformed.addEapolKey(
+        WifiEapolKeyMessage::Message1, 10U);
+    badVersion.payload[32U] = 0U;
+    WifiAuthenticationDecodedKeyFrame decoded{};
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(badVersion), &decoded) ==
+          WifiAuthenticationFrameDecodeStatus::Malformed);
+
+    FixtureSource truncated;
+    FixtureFrame& shortFrame = truncated.addEapolKey(
+        WifiEapolKeyMessage::Message1, 11U);
+    shortFrame.capturedLength = 70U;
+    CHECK(shortFrame.originalLength > shortFrame.capturedLength);
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(shortFrame), &decoded) ==
+          WifiAuthenticationFrameDecodeStatus::Truncated);
+
+    FixtureSource ignored;
+    FixtureFrame& management = ignored.addOrdinaryFrame(
+        WifiFrameKind::Management);
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(management), &decoded) ==
+          WifiAuthenticationFrameDecodeStatus::Ignored);
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(management), nullptr) ==
+          WifiAuthenticationFrameDecodeStatus::Malformed);
+}
+
+void testSharedDecoderPreservesDescriptorAndProfileClassification() {
+    FixtureSource unsupportedType;
+    FixtureFrame& legacy = unsupportedType.addEapolKey(
+        WifiEapolKeyMessage::Message1, 20U, kAccessPoint, kStation, nullptr,
+        2U, 1U, 2U);
+    WifiAuthenticationDecodedKeyFrame decoded{};
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(legacy), &decoded) ==
+          WifiAuthenticationFrameDecodeStatus::UnsupportedKey);
+    CHECK(decoded.descriptorType == 1U);
+
+    FixtureSource unsupportedVersion;
+    FixtureFrame& versionOne = unsupportedVersion.addEapolKey(
+        WifiEapolKeyMessage::Message1, 21U, kAccessPoint, kStation, nullptr,
+        2U, 2U, 1U);
+    decoded = {};
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(versionOne), &decoded) ==
+          WifiAuthenticationFrameDecodeStatus::UnsupportedKey);
+    CHECK(decoded.descriptorType == 2U);
+    CHECK(decoded.descriptorVersion == 1U);
+
+    FixtureSource unclassified;
+    FixtureFrame& smk = unclassified.addEapolKey(
+        WifiEapolKeyMessage::Message1, 22U);
+    smk.payload[37U] = static_cast<std::uint8_t>(
+        smk.payload[37U] | 0x20U);
+    decoded = {};
+    CHECK(decodeWifiAuthenticationKeyFrame(viewOf(smk), &decoded) ==
+          WifiAuthenticationFrameDecodeStatus::UnclassifiedKey);
+    CHECK(decoded.message == WifiEapolKeyMessage::Unknown);
+}
+
 void testIngressRetainsTargetNonQosQosAndFcs() {
     FixtureSource source;
     FixtureFrame& nonQos = source.addEapolKey(
@@ -963,6 +1062,9 @@ void testInvalidAccountingAndNullInputFailClosed() {
 }  // namespace
 
 int main() {
+    testSharedDecoderPreservesNonQosQosFcsAndTargetIdentity();
+    testSharedDecoderPreservesMalformedAndTruncatedBoundaries();
+    testSharedDecoderPreservesDescriptorAndProfileClassification();
     testIngressRetainsTargetNonQosQosAndFcs();
     testIngressIgnoresWrongBssidAndNonEapol();
     testIngressIgnoresCompleteNullDataButRetainsTruncation();

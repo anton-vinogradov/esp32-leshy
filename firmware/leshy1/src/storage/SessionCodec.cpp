@@ -23,6 +23,8 @@ constexpr std::uint8_t kSubGhzRawCaptureWireVersion = 3;
 constexpr std::size_t kSubGhzRawCaptureRecordBytes = 88;
 constexpr std::uint8_t kInfraredRawCaptureWireVersion = 4;
 constexpr std::size_t kInfraredRawCaptureRecordBytes = 96;
+constexpr std::uint8_t kAuthenticationCaptureWireVersion = 5;
+constexpr std::size_t kAuthenticationCaptureRecordBytes = 132;
 constexpr std::uint8_t kWifiFrameMagic[4] = {'L', 'W', 'F', 'C'};
 constexpr std::uint8_t kWifiFrameWireVersion = 1;
 constexpr std::size_t kWifiFrameHeaderBytes = 16;
@@ -750,30 +752,139 @@ SessionCodecStatus encodeCaptureRecord(
     return SessionCodecStatus::Valid;
 }
 
+bool allZero(const std::uint8_t* bytes, std::size_t size) {
+    if (bytes == nullptr) return false;
+    for (std::size_t index = 0; index < size; ++index) {
+        if (bytes[index] != 0) return false;
+    }
+    return true;
+}
+
+bool validAuthenticationCaptureProvenance(
+    const AuthenticationCaptureProvenance& provenance,
+    std::uint8_t wifiChannel) {
+    const auto purpose = static_cast<std::uint8_t>(provenance.purpose);
+    if (purpose > static_cast<std::uint8_t>(
+                      AuthenticationCapturePurpose::Authentication) ||
+        provenance.ssidLength > provenance.ssid.size() ||
+        (provenance.ssidKnown && provenance.ssidLength == 0) ||
+        (!provenance.ssidKnown && provenance.ssidLength != 0) ||
+        !allZero(provenance.ssid.data() + provenance.ssidLength,
+                 provenance.ssid.size() - provenance.ssidLength)) {
+        return false;
+    }
+    const std::uint64_t accounted =
+        static_cast<std::uint64_t>(provenance.framesAccepted) +
+        provenance.framesDroppedCapacity + provenance.framesDroppedInvalid;
+    if (accounted != provenance.framesReported) return false;
+    const bool targetPresent = !allZero(provenance.targetBssid.data(),
+                                        provenance.targetBssid.size());
+    if (targetPresent && (provenance.targetBssid[0] & 1U) != 0) return false;
+    if (provenance.purpose ==
+        AuthenticationCapturePurpose::Authentication) {
+        if (wifiChannel == 0 || wifiChannel > 14 ||
+            !targetPresent) {
+            return false;
+        }
+    }
+    return true;
+}
+
+SessionCodecStatus encodeAuthenticationCaptureRecord(
+    const services::survey::CaptureMetadata& metadata,
+    const AuthenticationCaptureProvenance& provenance,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr ||
+        capacity < kAuthenticationCaptureRecordBytes ||
+        !metadata.framePayloadCaptured || metadata.subGhzRawCaptured ||
+        metadata.infraredRawCaptured ||
+        !validAuthenticationCaptureProvenance(provenance,
+                                              metadata.wifiChannel)) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::size_t baseSize = 0;
+    SessionCodecStatus status = encodeCaptureRecord(
+        metadata, output, capacity, &baseSize);
+    if (status != SessionCodecStatus::Valid || baseSize != kCaptureRecordBytes) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    std::memset(output + kCaptureRecordBytes, 0,
+                kAuthenticationCaptureRecordBytes - kCaptureRecordBytes);
+    output[4] = kAuthenticationCaptureWireVersion;
+    output[72] = static_cast<std::uint8_t>(provenance.purpose);
+    output[73] = provenance.ssidKnown ? 1U : 0U;
+    output[74] = provenance.ssidLength;
+    std::memcpy(output + 76, provenance.targetBssid.data(),
+                provenance.targetBssid.size());
+    std::memcpy(output + 82, provenance.ssid.data(), provenance.ssid.size());
+    put32(output + 114, provenance.framesReported);
+    put32(output + 118, provenance.framesAccepted);
+    put32(output + 122, provenance.framesDroppedCapacity);
+    put32(output + 126, provenance.framesDroppedInvalid);
+    *outputSize = kAuthenticationCaptureRecordBytes;
+    return SessionCodecStatus::Valid;
+}
+
+SessionCodecStatus decodeAuthenticationCaptureProvenanceRecord(
+    const std::uint8_t* input, std::size_t size, std::uint8_t wifiChannel,
+    AuthenticationCaptureProvenance* output) {
+    if (input == nullptr || size != kAuthenticationCaptureRecordBytes ||
+        std::memcmp(input, kCaptureMagic, sizeof(kCaptureMagic)) != 0 ||
+        input[4] != kAuthenticationCaptureWireVersion || input[73] > 1U ||
+        input[75] != 0 || input[130] != 0 || input[131] != 0) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    AuthenticationCaptureProvenance provenance;
+    provenance.purpose = static_cast<AuthenticationCapturePurpose>(input[72]);
+    provenance.ssidKnown = input[73] != 0;
+    provenance.ssidLength = input[74];
+    std::memcpy(provenance.targetBssid.data(), input + 76,
+                provenance.targetBssid.size());
+    std::memcpy(provenance.ssid.data(), input + 82,
+                provenance.ssid.size());
+    provenance.framesReported = get32(input + 114);
+    provenance.framesAccepted = get32(input + 118);
+    provenance.framesDroppedCapacity = get32(input + 122);
+    provenance.framesDroppedInvalid = get32(input + 126);
+    if (!validAuthenticationCaptureProvenance(provenance, wifiChannel)) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    if (output != nullptr) *output = provenance;
+    return SessionCodecStatus::Valid;
+}
+
 SessionCodecStatus decodeCaptureRecord(
     const std::uint8_t* input, std::size_t size,
-    services::survey::SurveySession* output) {
+    services::survey::SurveySession* output,
+    AuthenticationCaptureProvenance* provenance = nullptr) {
     if (input == nullptr || output == nullptr ||
         (size != kCaptureRecordBytes &&
          size != kSubGhzRawCaptureRecordBytes &&
-         size != kInfraredRawCaptureRecordBytes) ||
+         size != kInfraredRawCaptureRecordBytes &&
+         size != kAuthenticationCaptureRecordBytes) ||
         std::memcmp(input, kCaptureMagic, sizeof(kCaptureMagic)) != 0 ||
         (input[4] != kCaptureWireVersion &&
          input[4] != kWifiFrameCaptureWireVersion &&
          input[4] != kSubGhzRawCaptureWireVersion &&
-         input[4] != kInfraredRawCaptureWireVersion) || input[7] != 32 ||
+         input[4] != kInfraredRawCaptureWireVersion &&
+         input[4] != kAuthenticationCaptureWireVersion) || input[7] != 32 ||
         (input[6] & static_cast<std::uint8_t>(~kCaptureKnownFlags)) != 0 ||
         input[13] != 0 || input[14] != 0 || input[15] != 0 ||
         input[31] != 0) {
         return SessionCodecStatus::CaptureInvalid;
     }
-    const bool payloadWire = input[4] == kWifiFrameCaptureWireVersion;
+    const bool authenticationWire =
+        input[4] == kAuthenticationCaptureWireVersion;
+    const bool payloadWire = input[4] == kWifiFrameCaptureWireVersion ||
+                             authenticationWire;
     const bool subGhzWire = input[4] == kSubGhzRawCaptureWireVersion;
     const bool infraredWire =
         input[4] == kInfraredRawCaptureWireVersion;
     if ((subGhzWire && size != kSubGhzRawCaptureRecordBytes) ||
         (infraredWire && size != kInfraredRawCaptureRecordBytes) ||
-        (!subGhzWire && !infraredWire && size != kCaptureRecordBytes)) {
+        (authenticationWire && size != kAuthenticationCaptureRecordBytes) ||
+        (!subGhzWire && !infraredWire && !authenticationWire &&
+         size != kCaptureRecordBytes)) {
         return SessionCodecStatus::CaptureInvalid;
     }
     if ((!payloadWire &&
@@ -817,6 +928,15 @@ SessionCodecStatus decodeCaptureRecord(
     metadata.framePayloadBytes = get64(input + 32);
     std::memcpy(metadata.appIdentity.data(), input + 40,
                 metadata.appIdentity.size());
+    AuthenticationCaptureProvenance decodedProvenance;
+    if (authenticationWire) {
+        const SessionCodecStatus provenanceStatus =
+            decodeAuthenticationCaptureProvenanceRecord(
+                input, size, metadata.wifiChannel, &decodedProvenance);
+        if (provenanceStatus != SessionCodecStatus::Valid) {
+            return provenanceStatus;
+        }
+    }
     if (subGhzWire) {
         if (input[83] != 0 || input[78] > static_cast<std::uint8_t>(
                 domain::captures::SubGhzRawModulation::FskAsync) ||
@@ -852,9 +972,14 @@ SessionCodecStatus decodeCaptureRecord(
         metadata.infraredDecode.command = input[86];
         metadata.infraredDecode.rawCode = get32(input + 88);
     }
-    return output->configureCaptureMetadata(metadata) ==
-            services::survey::CaptureMetadataStatus::Configured
-        ? SessionCodecStatus::Valid : SessionCodecStatus::CaptureInvalid;
+    if (output->configureCaptureMetadata(metadata) !=
+        services::survey::CaptureMetadataStatus::Configured) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    if (authenticationWire && provenance != nullptr) {
+        *provenance = decodedProvenance;
+    }
+    return SessionCodecStatus::Valid;
 }
 
 SessionCodecStatus encodeWifiFrameBlock(
@@ -1146,7 +1271,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
         version != kWifiFrameSegmentSchemaVersion &&
         version != kSubGhzRawSegmentSchemaVersion &&
         version != kInfraredRawSegmentSchemaVersion &&
-        version != kEnrichedSegmentSchemaVersion) {
+        version != kEnrichedSegmentSchemaVersion &&
+        version != kAuthenticationCaptureSegmentSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     if ((version == kLegacySegmentSchemaVersion &&
@@ -1161,6 +1287,8 @@ SessionCodecStatus validateSegmentFooter(const std::uint8_t* segment, std::size_
         (version == kInfraredRawSegmentSchemaVersion &&
          decodedAdditionalRecords != 2) ||
         (version == kEnrichedSegmentSchemaVersion &&
+         decodedAdditionalRecords != 2) ||
+        (version == kAuthenticationCaptureSegmentSchemaVersion &&
          decodedAdditionalRecords != 2)) {
         return SessionCodecStatus::Malformed;
     }
@@ -1232,7 +1360,9 @@ SessionCodecStatus openPersistedWifiFrameCapture(
         segment, segmentSize, &recordCount, &bodyLength, &schemaVersion,
         &additionalRecords);
     if (status != SessionCodecStatus::Valid) return status;
-    if (schemaVersion != kWifiFrameSegmentSchemaVersion || recordCount != 0 ||
+    if ((schemaVersion != kWifiFrameSegmentSchemaVersion &&
+         schemaVersion != kAuthenticationCaptureSegmentSchemaVersion) ||
+        recordCount != 0 ||
         additionalRecords != 2 || bodyLength < 16) {
         return SessionCodecStatus::CaptureInvalid;
     }
@@ -1240,10 +1370,21 @@ SessionCodecStatus openPersistedWifiFrameCapture(
     const std::uint32_t captureLength = get32(segment + position);
     const std::uint32_t captureCrc = get32(segment + position + 4);
     position += 8;
-    if (captureLength != kCaptureRecordBytes ||
+    const std::size_t expectedCaptureLength =
+        schemaVersion == kAuthenticationCaptureSegmentSchemaVersion
+            ? kAuthenticationCaptureRecordBytes : kCaptureRecordBytes;
+    if (captureLength != expectedCaptureLength ||
         captureLength > bodyLength - position ||
         captureCrc != crc32c(segment + position, captureLength)) {
         return SessionCodecStatus::ChecksumMismatch;
+    }
+    AuthenticationCaptureProvenance authenticationProvenance;
+    if (schemaVersion == kAuthenticationCaptureSegmentSchemaVersion) {
+        status = decodeAuthenticationCaptureProvenanceRecord(
+            segment + position, captureLength,
+            session.captureMetadata().wifiChannel,
+            &authenticationProvenance);
+        if (status != SessionCodecStatus::Valid) return status;
     }
     position += captureLength;
     if (bodyLength - position < 8) return SessionCodecStatus::BoundsExceeded;
@@ -1261,8 +1402,49 @@ SessionCodecStatus openPersistedWifiFrameCapture(
         session, output->block_, output->blockSize_,
         output->recordOffsets_.data(), output->recordOffsets_.size(),
         &output->count_, &output->snapLength_);
+    if (status == SessionCodecStatus::Valid &&
+        schemaVersion == kAuthenticationCaptureSegmentSchemaVersion &&
+        authenticationProvenance.framesAccepted != output->count_) {
+        status = SessionCodecStatus::CaptureInvalid;
+    }
     if (status != SessionCodecStatus::Valid) output->reset();
     return status;
+}
+
+SessionCodecStatus openPersistedAuthenticationCapture(
+    const services::survey::SurveySession& session,
+    const std::uint8_t* segment, std::size_t segmentSize,
+    AuthenticationCaptureProvenance* provenance,
+    PersistedWifiFrameCaptureView* output) {
+    if (provenance == nullptr || output == nullptr || segment == nullptr ||
+        session.state() != services::survey::SessionState::Stopped) {
+        return SessionCodecStatus::InvalidArgument;
+    }
+    output->reset();
+    std::uint16_t schemaVersion = 0;
+    SessionCodecStatus status = validateSegmentFooter(
+        segment, segmentSize, nullptr, nullptr, &schemaVersion, nullptr);
+    if (status != SessionCodecStatus::Valid) return status;
+    if (schemaVersion != kAuthenticationCaptureSegmentSchemaVersion ||
+        segmentSize < 8 + kAuthenticationCaptureRecordBytes +
+                          kSegmentFooterBytes) {
+        return SessionCodecStatus::UnsupportedSchema;
+    }
+    status = openPersistedWifiFrameCapture(session, segment, segmentSize,
+                                           output);
+    if (status != SessionCodecStatus::Valid) return status;
+    const std::uint32_t captureLength = get32(segment);
+    AuthenticationCaptureProvenance decodedProvenance;
+    status = decodeAuthenticationCaptureProvenanceRecord(
+        segment + 8, captureLength, session.captureMetadata().wifiChannel,
+        &decodedProvenance);
+    if (status != SessionCodecStatus::Valid ||
+        decodedProvenance.framesAccepted != output->frameCount()) {
+        output->reset();
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    *provenance = decodedProvenance;
+    return SessionCodecStatus::Valid;
 }
 
 void PersistedSubGhzRawCaptureView::reset() {
@@ -1536,6 +1718,61 @@ SessionCodecStatus encodeWifiFrameCaptureSegment(
     return SessionCodecStatus::Valid;
 }
 
+SessionCodecStatus encodeAuthenticationCaptureSegment(
+    const services::survey::SurveySession& session,
+    const AuthenticationCaptureProvenance& provenance,
+    const domain::captures::WifiFrameSource& frames,
+    std::uint8_t* output, std::size_t capacity, std::size_t* outputSize) {
+    if (output == nullptr || outputSize == nullptr ||
+        session.state() != services::survey::SessionState::Stopped ||
+        capacity > kSessionSegmentMaxBytes || session.size() != 0 ||
+        session.timeline().present ||
+        !session.captureMetadata().present ||
+        !session.captureMetadata().framePayloadCaptured ||
+        provenance.framesAccepted != frames.frameCount()) {
+        return SessionCodecStatus::CaptureInvalid;
+    }
+    CborWriter writer(output, capacity);
+    std::uint8_t captureRecord[kAuthenticationCaptureRecordBytes] = {};
+    std::size_t captureRecordSize = 0;
+    SessionCodecStatus status = encodeAuthenticationCaptureRecord(
+        session.captureMetadata(), provenance, captureRecord,
+        sizeof(captureRecord), &captureRecordSize);
+    if (status != SessionCodecStatus::Valid) return status;
+    writer.be32(static_cast<std::uint32_t>(captureRecordSize));
+    writer.be32(crc32c(captureRecord, captureRecordSize));
+    writer.raw(captureRecord, captureRecordSize);
+    if (!writer.ok() || writer.size() + 8 > capacity) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    std::size_t frameBlockSize = 0;
+    std::uint8_t* frameBlock = output + writer.size() + 8;
+    status = encodeWifiFrameBlock(
+        session, frames, frameBlock, capacity - writer.size() - 8,
+        &frameBlockSize);
+    if (status != SessionCodecStatus::Valid) return status;
+    writer.be32(static_cast<std::uint32_t>(frameBlockSize));
+    writer.be32(crc32c(frameBlock, frameBlockSize));
+    writer.raw(frameBlock, frameBlockSize);
+    if (!writer.ok() || kSegmentFooterBytes > capacity - writer.size()) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    const std::size_t bodySize = writer.size();
+    std::uint8_t footer[kSegmentFooterBytes] = {};
+    std::memcpy(footer, kSegmentMagic, sizeof(kSegmentMagic));
+    put16(footer + 4, kAuthenticationCaptureSegmentSchemaVersion);
+    put16(footer + 6, 2);
+    put32(footer + 8, 0);
+    put32(footer + 12, static_cast<std::uint32_t>(bodySize));
+    put32(footer + 16, crc32c(output, bodySize));
+    put32(footer + 20, crc32c(footer, 20));
+    if (!writer.raw(footer, sizeof(footer))) {
+        return SessionCodecStatus::BufferTooSmall;
+    }
+    *outputSize = writer.size();
+    return SessionCodecStatus::Valid;
+}
+
 SessionCodecStatus encodeSubGhzRawCaptureSegment(
     const services::survey::SurveySession& session,
     const domain::captures::SubGhzRawSource& pulses,
@@ -1663,7 +1900,11 @@ SessionCodecStatus encodeSessionManifest(const services::survey::SurveySession& 
     CborWriter writer(output, capacity);
     writer.map(8);
     writer.unsignedValue(0);
-    writer.unsignedValue(segmentVersion == kEnrichedSegmentSchemaVersion
+    writer.unsignedValue(
+                         segmentVersion ==
+                                 kAuthenticationCaptureSegmentSchemaVersion
+                             ? kAuthenticationCaptureSessionSchemaVersion
+                         : segmentVersion == kEnrichedSegmentSchemaVersion
                              ? kEnrichedSessionSchemaVersion
                          : segmentVersion == kInfraredRawSegmentSchemaVersion
                              ? kInfraredRawSessionSchemaVersion
@@ -1714,7 +1955,8 @@ SessionCodecStatus decodeSessionManifest(const std::uint8_t* input, std::size_t 
         value != kWifiFrameSessionSchemaVersion &&
         value != kSubGhzRawSessionSchemaVersion &&
         value != kInfraredRawSessionSchemaVersion &&
-        value != kEnrichedSessionSchemaVersion) {
+        value != kEnrichedSessionSchemaVersion &&
+        value != kAuthenticationCaptureSessionSchemaVersion) {
         return SessionCodecStatus::UnsupportedSchema;
     }
     const std::uint16_t decodedSchemaVersion =
@@ -1778,7 +2020,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
                                    &additionalRecords);
     if (status != SessionCodecStatus::Valid) return status;
     const std::uint16_t expectedSegmentVersion =
-        manifest.schemaVersion == kEnrichedSessionSchemaVersion
+        manifest.schemaVersion == kAuthenticationCaptureSessionSchemaVersion
+            ? kAuthenticationCaptureSegmentSchemaVersion
+        : manifest.schemaVersion == kEnrichedSessionSchemaVersion
             ? kEnrichedSegmentSchemaVersion
         : manifest.schemaVersion == kInfraredRawSessionSchemaVersion
             ? kInfraredRawSegmentSchemaVersion
@@ -1792,7 +2036,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         manifest.schemaVersion == kTimelineSessionSchemaVersion
             ? kTimelineSegmentSchemaVersion : expectedSegmentVersion;
     const std::uint16_t expectedAdditionalRecords =
-        manifest.schemaVersion == kEnrichedSessionSchemaVersion
+        manifest.schemaVersion == kAuthenticationCaptureSessionSchemaVersion
+            ? 2
+        : manifest.schemaVersion == kEnrichedSessionSchemaVersion
             ? 2
         : manifest.schemaVersion == kInfraredRawSessionSchemaVersion
             ? 2
@@ -1815,7 +2061,9 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         return SessionCodecStatus::Malformed;
     }
     std::size_t position = 0;
-    if (manifest.schemaVersion == kEnrichedSessionSchemaVersion ||
+    AuthenticationCaptureProvenance authenticationProvenance;
+    if (manifest.schemaVersion == kAuthenticationCaptureSessionSchemaVersion ||
+        manifest.schemaVersion == kEnrichedSessionSchemaVersion ||
         manifest.schemaVersion == kSessionSchemaVersion ||
         manifest.schemaVersion == kInfraredRawSessionSchemaVersion ||
         manifest.schemaVersion == kSubGhzRawSessionSchemaVersion ||
@@ -1828,7 +2076,10 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         const std::uint32_t recordCrc = get32(segment + position + 4);
         position += 8;
         const std::size_t expectedCaptureBytes =
-            manifest.schemaVersion == kInfraredRawSessionSchemaVersion
+            manifest.schemaVersion ==
+                    kAuthenticationCaptureSessionSchemaVersion
+                ? kAuthenticationCaptureRecordBytes
+            : manifest.schemaVersion == kInfraredRawSessionSchemaVersion
                 ? kInfraredRawCaptureRecordBytes
             : manifest.schemaVersion == kSubGhzRawSessionSchemaVersion
                 ? kSubGhzRawCaptureRecordBytes : kCaptureRecordBytes;
@@ -1841,7 +2092,11 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
             output->reset();
             return SessionCodecStatus::ChecksumMismatch;
         }
-        status = decodeCaptureRecord(segment + position, recordLength, output);
+        status = decodeCaptureRecord(
+            segment + position, recordLength, output,
+            manifest.schemaVersion ==
+                    kAuthenticationCaptureSessionSchemaVersion
+                ? &authenticationProvenance : nullptr);
         if (status != SessionCodecStatus::Valid) {
             output->reset();
             return status;
@@ -1881,7 +2136,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         }
         position += recordLength;
     }
-    if (manifest.schemaVersion == kInfraredRawSessionSchemaVersion ||
+    if (manifest.schemaVersion == kAuthenticationCaptureSessionSchemaVersion ||
+        manifest.schemaVersion == kInfraredRawSessionSchemaVersion ||
         manifest.schemaVersion == kWifiFrameSessionSchemaVersion ||
         manifest.schemaVersion == kSubGhzRawSessionSchemaVersion) {
         if (bodyLength - position < 8) {
@@ -1911,6 +2167,7 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
             output->reset();
             return SessionCodecStatus::TimelineInvalid;
         }
+        std::size_t decodedCaptureCount = 0;
         status = manifest.schemaVersion == kInfraredRawSessionSchemaVersion
             ? decodeInfraredRawBlock(*output, segment + position,
                                      recordLength, nullptr)
@@ -1918,8 +2175,14 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
                   ? decodeSubGhzRawBlock(*output, segment + position,
                                          recordLength, nullptr)
                   : decodeWifiFrameBlock(*output, segment + position,
-                                         recordLength, nullptr, 0, nullptr,
-                                         nullptr);
+                                         recordLength, nullptr, 0,
+                                         &decodedCaptureCount, nullptr);
+        if (status == SessionCodecStatus::Valid &&
+            manifest.schemaVersion ==
+                kAuthenticationCaptureSessionSchemaVersion &&
+            authenticationProvenance.framesAccepted != decodedCaptureCount) {
+            status = SessionCodecStatus::CaptureInvalid;
+        }
         if (status != SessionCodecStatus::Valid) {
             output->reset();
             return status;
@@ -1961,7 +2224,8 @@ SessionCodecStatus reopenSession(const std::uint8_t* manifestBytes, std::size_t 
         output->reset();
         return SessionCodecStatus::TrailingData;
     }
-    if (manifest.schemaVersion != kWifiFrameSessionSchemaVersion &&
+    if (manifest.schemaVersion != kAuthenticationCaptureSessionSchemaVersion &&
+        manifest.schemaVersion != kWifiFrameSessionSchemaVersion &&
         manifest.schemaVersion != kSubGhzRawSessionSchemaVersion &&
         manifest.schemaVersion != kInfraredRawSessionSchemaVersion &&
         output->stop(manifest.stoppedUs) != services::survey::SessionStatus::Stopped) {

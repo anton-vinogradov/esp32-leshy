@@ -21,15 +21,18 @@ TEST_SH = ROOT / "tools/test.sh"
 
 UINT32_MAX = 4_294_967_295
 CAP049_ROW_WIDTH = 214
-CAP049_FORMAT_IDS = (
-    "WifiAuthTimeFormat",
-    "WifiAuthChannelFramesFormat",
+CAP049_TWO_UINT32_FORMAT_IDS = (
     "WifiAuthKeptLostFormat",
-    "WifiAuthEapolKeysFormat",
+    "WifiAuthChannelCandidatesFormat",
     "WifiAuthPeersFormat",
-    "WifiAuthKeysPmkidFormat",
+    "WifiAuthPmkidEapolFormat",
     "WifiAuthEvidenceFormat",
     "WifiAuthLossFormat",
+    "WifiAuthPeerPositionFormat",
+)
+CAP049_ONE_UINT32_FORMAT_IDS = (
+    "WifiAuthTimeRemainingFormat",
+    "WifiAuthPeerEvidenceFormat",
 )
 CAP049_RENDERER_FORMAT_IDS = ("WifiAuthSelectedTargetFormat",)
 
@@ -61,9 +64,15 @@ def main() -> int:
         "WifiAuthenticationCaptureUiView::Running",
         "WifiAuthenticationCaptureUiView::Result",
         "WifiAuthenticationCaptureUiView::Inconclusive",
+        "WifiAuthenticationCaptureUiView::Actions",
+        "WifiAuthenticationCaptureUiView::PeerDetail",
+        "WifiAuthenticationCaptureUiView::EvidenceList",
+        "WifiAuthenticationCaptureUiView::EvidenceDetail",
         "WifiAuthenticationCaptureUiView::Failed",
         "CompleteAndPartialPeers",
-        "EapolKeysAndPmkids",
+        "PmkidsAndEapolFrames",
+        "SelectedPeerMask",
+        "TerminalAnalysisPending",
         "LossAndRejectedFrames",
         "ResultBeforeCleanup",
         "ReportRejected",
@@ -71,28 +80,22 @@ def main() -> int:
         "fullScreenClear = false",
         "kVisibleRowCapacity = 4",
         "std::is_trivially_copyable_v",
-        "model.rows[index].text = metricText(metric, primary)",
-        "model.reportOpenable = false",
+        "row.text = metricText(metric, primary)",
+        "model.reportOpenable = controller.reportOpenable()",
+        "WifiAuthenticationCaptureExportEligibility::NotEvaluated",
     ):
         require(failures, marker in combined,
                 f"missing CAP-049 presentation contract: {marker}")
 
     for marker in (
-        "testPreparingDoesNotClaimReceiverIsRunning",
-        "testCancellingDoesNotClaimCleanupIsComplete",
-        "testTransitionStateRejectsInventedLiveProgress",
-        "testRunningUsesFourStableBoundedMetrics",
+        "testPreparingAndCancellingAreHonest",
+        "testRunningUsesHonestCandidateMetrics",
         "testRunningTimerRepaintsOnlyOneRowWithoutClearing",
-        "testCompleteResultShowsHandshakePmkidAndEvidenceCounts",
-        "testIncompleteHandshakeIsAResultNotMissingEvidence",
-        "testLossIsInconclusiveAndShowsExactUncertainty",
-        "testResultBeforeCleanupFailsClosed",
-        "testMalformedReportIsRejectedWithoutPublishingMetrics",
-        "testInvalidRunningAccountingFailsClosed",
-        "testFailureDistinguishesCleanupWithoutInventingRelease",
-        "testStartFailureUsesAUserFacingMessage",
-        "testViewTransitionStillForbidsFullScreenClear",
-        "testPreparingAndCancellingTransitionsStayIncremental",
+        "testHeadlinePriorityAndIndependentCounts",
+        "testInconclusiveShowsExactReason",
+        "testResultActionsPeerAndEvidenceDrilldown",
+        "testPeerToneChangeRepaintsColoredRegionsWithoutClearing",
+        "testFailClosedInputs",
     ):
         require(failures, marker in tests,
                 f"missing CAP-049 presenter native coverage: {marker}")
@@ -104,12 +107,13 @@ def main() -> int:
         "WifiAuthCancellingTitle",
         "WifiAuthCancellingHeadline",
         "WifiAuthCancellingNote",
-        "WifiAuthTimeFormat",
-        "WifiAuthChannelFramesFormat",
+        "WifiAuthTimeRemainingFormat",
+        "WifiAuthChannelCandidatesFormat",
         "WifiAuthKeptLostFormat",
-        "WifiAuthEapolKeysFormat",
         "WifiAuthPeersFormat",
-        "WifiAuthKeysPmkidFormat",
+        "WifiAuthExactAfterStop",
+        "WifiAuthPmkidEapolFormat",
+        "WifiAuthPeerMaskFormat",
         "WifiAuthEvidenceFormat",
         "WifiAuthLossFormat",
         "WifiAuthReasonInvalid",
@@ -125,6 +129,27 @@ def main() -> int:
         "WifiAuthFailureRuntime",
         "WifiAuthFailureCleanup",
         "WifiAuthFailureReport",
+        "WifiAuthFullHandshakeHeadline",
+        "WifiAuthPartialHandshakeHeadline",
+        "WifiAuthPmkidHeadline",
+        "WifiAuthInconclusiveHeadline",
+        "WifiAuthVolatileNote",
+        "WifiAuthActionsHeadline",
+        "WifiAuthActionDetails",
+        "WifiAuthActionRepeat",
+        "WifiAuthPeerTitle",
+        "WifiAuthPeerHeadline",
+        "WifiAuthPeerPositionFormat",
+        "WifiAuthPeerEvidenceFormat",
+        "WifiAuthEvidenceTitle",
+        "WifiAuthEvidenceHeadline",
+        "WifiAuthEvidenceListRowFormat",
+        "WifiAuthEvidenceDetailTitle",
+        "WifiAuthEvidenceDetailHeadline",
+        "WifiAuthEvidenceFrameFormat",
+        "WifiAuthEvidenceSignalFormat",
+        "WifiAuthEvidenceReplayFormat",
+        "WifiAuthEvidenceDescriptorFormat",
     ):
         require(failures, f"LESHY_UI_TEXT({marker}," in strings,
                 f"missing CAP-049 localized UI string: {marker}")
@@ -165,9 +190,6 @@ def main() -> int:
 
     require(failures, "u8\"" not in combined,
             "CAP-049 presenter must use the shared localization catalog")
-    require(failures, "report.evidenceCount != 0U" not in source,
-            "CAP-049 presenter must not promise unavailable evidence navigation")
-
     try:
         meta = parse_glyphs(font, "RobotoCondensedMeta")
         catalog = {entry[0]: entry for entry in parse_catalog()}
@@ -175,7 +197,7 @@ def main() -> int:
         failures.append(f"cannot measure CAP-049 rendered rows: {error}")
         meta = []
         catalog = {}
-    for identifier in CAP049_FORMAT_IDS:
+    for identifier in CAP049_TWO_UINT32_FORMAT_IDS:
         entry = catalog.get(identifier)
         require(failures, entry is not None,
                 f"missing CAP-049 format width contract: {identifier}")
@@ -201,6 +223,29 @@ def main() -> int:
                 failures, width <= CAP049_ROW_WIDTH,
                 f"{identifier}/{language}: UINT32_MAX row is {width}px, "
                 f"exceeds {CAP049_ROW_WIDTH}px")
+    for identifier in CAP049_ONE_UINT32_FORMAT_IDS:
+        entry = catalog.get(identifier)
+        require(failures, entry is not None,
+                f"missing CAP-049 format width contract: {identifier}")
+        if entry is None or not meta:
+            continue
+        _, role, _, english, russian = entry
+        require(failures, role == "Meta",
+                f"{identifier}: numeric row must use Roboto Condensed Meta12")
+        for language, template in (("en", english), ("ru", russian)):
+            require(failures, template.count("%lu") == 1,
+                    f"{identifier}/{language}: expected one uint32 field")
+            if template.count("%lu") != 1:
+                continue
+            try:
+                width = pixel_width(template % UINT32_MAX, meta)
+            except (TypeError, ValueError) as error:
+                failures.append(
+                    f"{identifier}/{language}: cannot render UINT32_MAX: {error}")
+                continue
+            require(failures, width <= CAP049_ROW_WIDTH,
+                    f"{identifier}/{language}: UINT32_MAX row is {width}px, "
+                    f"exceeds {CAP049_ROW_WIDTH}px")
     for identifier in CAP049_RENDERER_FORMAT_IDS:
         entry = catalog.get(identifier)
         require(failures, entry is not None,

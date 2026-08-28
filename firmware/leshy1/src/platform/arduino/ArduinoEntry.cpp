@@ -35,6 +35,7 @@
 #include "apps/library/LibraryController.h"
 #include "apps/library/SessionCatalog.h"
 #include "apps/guard/AirspaceGuardController.h"
+#include "apps/auth/WifiAuthenticationCaptureController.h"
 #include "apps/capture/RadiotapPcap.h"
 #include "apps/capture/InfraredCapture.h"
 #include "apps/capture/InfraredCsv.h"
@@ -163,6 +164,10 @@ using leshy1::apps::library::SessionCatalog;
 using leshy1::apps::library::SessionIntegrity;
 using leshy1::apps::guard::AirspaceGuardController;
 using leshy1::apps::guard::AirspaceGuardView;
+using leshy1::apps::auth::WifiAuthenticationCaptureAction;
+using leshy1::apps::auth::WifiAuthenticationCaptureController;
+using leshy1::apps::auth::WifiAuthenticationCaptureLoadStatus;
+using leshy1::apps::auth::WifiAuthenticationCaptureView;
 using leshy1::apps::capture::PcapExportResult;
 using leshy1::apps::capture::InfraredCapture;
 using leshy1::apps::capture::InfraredCapturePlan;
@@ -1118,6 +1123,7 @@ WifiAuthenticationProductState wifiAuthenticationProductState =
     WifiAuthenticationProductState::Idle;
 WifiAuthenticationTarget wifiAuthenticationTarget{};
 WifiAuthenticationCaptureReport wifiAuthenticationReport{};
+WifiAuthenticationCaptureController wifiAuthenticationController{};
 bool wifiAuthenticationReturnAfterSurveyStop = false;
 bool wifiAuthenticationBackDuringWaitObserved = false;
 bool wifiAuthenticationSafetyCleanupActive = false;
@@ -10453,7 +10459,29 @@ NavigationFooter navigationFooterForCurrentState() {
             return {{NavigationKey::Left, UiTextId::NavList}, {}, enter};
         }
         if (wifiProductView == WifiProductView::AuthenticationCapture) {
-            return {{NavigationKey::Left, UiTextId::NavBack}, {}, {}};
+            if (wifiAuthenticationProductState !=
+                    WifiAuthenticationProductState::Result ||
+                !wifiAuthenticationController.ready()) {
+                return {back, {}, {}};
+            }
+            switch (wifiAuthenticationController.view()) {
+                case WifiAuthenticationCaptureView::Outcome:
+                    return {back, {}, enter};
+                case WifiAuthenticationCaptureView::Actions:
+                    return {back, choose, enter};
+                case WifiAuthenticationCaptureView::PeerDetail:
+                    return {
+                        back,
+                        wifiAuthenticationController.peerCount() > 1U
+                            ? choose : NavigationCell{},
+                        wifiAuthenticationReport.evidenceCount != 0U
+                            ? enter : NavigationCell{}};
+                case WifiAuthenticationCaptureView::EvidenceList:
+                    return {back, choose, enter};
+                case WifiAuthenticationCaptureView::EvidenceDetail:
+                    return {back, {}, {}};
+            }
+            return {back, {}, {}};
         }
         if (wifiProductView == WifiProductView::DeviceDetail) {
             return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
@@ -14454,18 +14482,16 @@ WifiAuthenticationCaptureUiInput wifiAuthenticationCaptureUiInput() {
             ingress.framesInvalid;
         input.progress.framesReported = reported <= UINT32_MAX
             ? static_cast<std::uint32_t>(reported) : UINT32_MAX;
+        input.progress.candidateFrames = ingress.candidates;
         input.progress.framesAccepted = ingress.candidatesAccepted;
         input.progress.framesDroppedCapacity = ingress.candidatesDropped;
         input.progress.framesDroppedInvalid = ingress.framesInvalid;
-        // Ingress has only proven that these are retained target candidates;
-        // exact EAPOL/Key counts exist only after terminal parsing.
-        input.progress.eapolFrames = 0U;
-        input.progress.eapolKeyFrames = 0U;
         input.cleanupComplete = false;
     } else if (wifiAuthenticationProductState ==
                WifiAuthenticationProductState::Result) {
         input.phase = WifiAuthenticationCaptureUiPhase::Report;
         input.report = &wifiAuthenticationReport;
+        input.controller = &wifiAuthenticationController;
         input.cleanupComplete = wifiFrameCapture.cleanupComplete() &&
             ingress.cleanupComplete && !ingress.active;
     } else {
@@ -14503,6 +14529,10 @@ const char* wifiAuthenticationUiViewName(
         case View::Running: return "running";
         case View::Result: return "result";
         case View::Inconclusive: return "inconclusive";
+        case View::Actions: return "actions";
+        case View::PeerDetail: return "peer_detail";
+        case View::EvidenceList: return "evidence_list";
+        case View::EvidenceDetail: return "evidence_detail";
         case View::Failed: return "failed";
     }
     return "failed";
@@ -14542,18 +14572,78 @@ void formatWifiAuthenticationUiRow(
     char* output, std::size_t capacity) {
     if (output == nullptr || capacity == 0U) return;
     switch (row.metric) {
-        case WifiAuthenticationCaptureUiMetric::TimeProgressMs:
-        case WifiAuthenticationCaptureUiMetric::ChannelAndReportedFrames:
+        case WifiAuthenticationCaptureUiMetric::ChannelAndCandidateFrames:
         case WifiAuthenticationCaptureUiMetric::RetainedAndDroppedFrames:
-        case WifiAuthenticationCaptureUiMetric::EapolAndKeyFrames:
         case WifiAuthenticationCaptureUiMetric::CompleteAndPartialPeers:
-        case WifiAuthenticationCaptureUiMetric::EapolKeysAndPmkids:
+        case WifiAuthenticationCaptureUiMetric::PmkidsAndEapolFrames:
         case WifiAuthenticationCaptureUiMetric::EvidenceAndSourceFrames:
         case WifiAuthenticationCaptureUiMetric::LossAndRejectedFrames:
+        case WifiAuthenticationCaptureUiMetric::PeerPosition:
             std::snprintf(output, capacity, tr(row.text),
                           static_cast<unsigned long>(row.primary),
                           static_cast<unsigned long>(row.secondary));
             return;
+        case WifiAuthenticationCaptureUiMetric::TimeRemainingSeconds:
+        case WifiAuthenticationCaptureUiMetric::PeerEvidenceCount:
+            std::snprintf(output, capacity, tr(row.text),
+                          static_cast<unsigned long>(row.primary));
+            return;
+        case WifiAuthenticationCaptureUiMetric::SelectedPeerMask:
+        case WifiAuthenticationCaptureUiMetric::PeerMessageMask:
+            std::snprintf(
+                output, capacity, tr(row.text),
+                (row.primary & 0x01U) != 0U ? '+' : '-',
+                (row.primary & 0x02U) != 0U ? '+' : '-',
+                (row.primary & 0x04U) != 0U ? '+' : '-',
+                (row.primary & 0x08U) != 0U ? '+' : '-');
+            return;
+        case WifiAuthenticationCaptureUiMetric::EvidenceListRow: {
+            const std::uint8_t channel = static_cast<std::uint8_t>(
+                row.secondary & 0xffU);
+            const std::int8_t signal = static_cast<std::int8_t>(
+                (row.secondary >> 8U) & 0xffU);
+            const auto message = static_cast<
+                leshy1::services::auth::WifiEapolKeyMessage>(
+                    (row.secondary >> 16U) & 0xffU);
+            const bool pmkid = (row.secondary & (1UL << 24U)) != 0U;
+            std::snprintf(
+                output, capacity, tr(row.text),
+                pmkid ? "PMKID" :
+                    leshy1::services::auth::wifiEapolKeyMessageName(message),
+                static_cast<unsigned long>(row.primary),
+                static_cast<unsigned>(channel), static_cast<int>(signal));
+            return;
+        }
+        case WifiAuthenticationCaptureUiMetric::EvidenceMessageAndFrame:
+            std::snprintf(
+                output, capacity, tr(row.text),
+                row.exact != 0U ? "PMKID" :
+                    leshy1::services::auth::wifiEapolKeyMessageName(
+                        static_cast<
+                            leshy1::services::auth::WifiEapolKeyMessage>(
+                                row.secondary)),
+                static_cast<unsigned long>(row.primary));
+            return;
+        case WifiAuthenticationCaptureUiMetric::EvidenceChannelAndSignal:
+            std::snprintf(
+                output, capacity, tr(row.text),
+                static_cast<unsigned long>(row.primary),
+                static_cast<long>(static_cast<std::int32_t>(row.secondary)));
+            return;
+        case WifiAuthenticationCaptureUiMetric::EvidenceReplayCounter:
+            std::snprintf(output, capacity, tr(row.text),
+                          static_cast<unsigned long long>(row.exact));
+            return;
+        case WifiAuthenticationCaptureUiMetric::EvidenceDescriptor:
+            std::snprintf(output, capacity, tr(row.text),
+                          static_cast<unsigned long>(row.primary),
+                          static_cast<unsigned long>(row.secondary),
+                          static_cast<unsigned long long>(row.exact));
+            return;
+        case WifiAuthenticationCaptureUiMetric::TerminalAnalysisPending:
+        case WifiAuthenticationCaptureUiMetric::ActionDetails:
+        case WifiAuthenticationCaptureUiMetric::ActionRepeat:
+        case WifiAuthenticationCaptureUiMetric::PeerState:
         case WifiAuthenticationCaptureUiMetric::UncertaintyMask:
         case WifiAuthenticationCaptureUiMetric::FailureCode:
         case WifiAuthenticationCaptureUiMetric::None:
@@ -14596,15 +14686,21 @@ void renderWifiAuthenticationTarget() {
 
 void renderWifiAuthenticationFixedRow(std::uint8_t index,
                                       const char* text, Tone tone,
-                                      UiTextRole role) {
+                                      UiTextRole role,
+                                      bool selected = false) {
     const Rect bounds = Components::metricRow(index);
+    const std::uint16_t background = selected ? Palette::SurfaceFocus
+                                               : Palette::Canvas;
     display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
-                     Palette::Canvas);
+                     background);
+    renderFocusCue(bounds, selected);
     const std::int16_t textHeight = role == UiTextRole::Body
         ? kRobotoCondensedBodyAscent + kRobotoCondensedBodyDescent
         : kRobotoCondensedMetaAscent + kRobotoCondensedMetaDescent;
-    display.setTextColor(toneColor(tone), Palette::Canvas);
-    setUiCursor(role, bounds.x + 2,
+    display.setTextColor(selected ? Palette::Focus : toneColor(tone),
+                         background);
+    setUiCursor(role,
+                bounds.x + (selected ? kInteractiveRowTextInset : 2),
                 bounds.y + (bounds.height - textHeight) / 2);
     display.print(text);
 }
@@ -14667,7 +14763,8 @@ void renderWifiAuthenticationCapture(bool clearContent) {
         renderWifiAuthenticationFixedRow(
             displayRow, line,
             model.rows[index].warning ? Tone::Warning : modelTone,
-            uiTextSpec(model.rows[index].text).role);
+            uiTextSpec(model.rows[index].text).role,
+            model.rows[index].selected);
     }
     if (clearContent ||
         (delta.fixedRegionMask &
@@ -16368,6 +16465,7 @@ bool renderSelectionDelta() {
         // geometry. Repaint only semantic rows; the target/header and footer
         // stay untouched so lifecycle transitions cannot flash the display.
         renderWifiAuthenticationCapture(false);
+        renderNavigationFooter();
         return true;
     }
 
@@ -18481,6 +18579,7 @@ void serviceFullGuidedRfChecks() {
 }
 
 void resetWifiAuthenticationCaptureProduct() {
+    wifiAuthenticationController.reset();
     std::memset(&wifiAuthenticationReport, 0,
                 sizeof(wifiAuthenticationReport));
     wifiAuthenticationTarget = {};
@@ -18532,6 +18631,7 @@ bool requestWifiAuthenticationCaptureFromDetail() {
                 target.accessPoint.begin());
     target.channel = static_cast<std::uint8_t>(network->channel);
     wifiAuthenticationTarget = target;
+    wifiAuthenticationController.reset();
     std::memset(&wifiAuthenticationReport, 0,
                 sizeof(wifiAuthenticationReport));
     wifiAuthenticationReturnAfterSurveyStop = false;
@@ -18592,6 +18692,28 @@ bool beginWifiAuthenticationCaptureAfterSurvey() {
     lastRuntimeEvent = started ? "authentication_capture_running"
                                : "authentication_capture_start_failed";
     return started;
+}
+
+bool repeatWifiAuthenticationCapture() {
+    if (wifiAuthenticationProductState !=
+            WifiAuthenticationProductState::Result ||
+        !wifiAuthenticationController.ready() ||
+        !wifiAuthenticationTargetValid() ||
+        !wifiFrameCapture.cleanupComplete()) {
+        return false;
+    }
+    wifiAuthenticationController.reset();
+    std::memset(&wifiAuthenticationReport, 0,
+                sizeof(wifiAuthenticationReport));
+    wifiAuthenticationFailure = WifiAuthenticationCaptureUiFailure::None;
+    wifiAuthenticationProductState =
+        WifiAuthenticationProductState::WaitingForSurveyStop;
+    ++wifiAuthenticationGeneration;
+    if (wifiAuthenticationGeneration == 0U) {
+        ++wifiAuthenticationGeneration;
+    }
+    lastRuntimeEvent = "authentication_capture_repeat";
+    return beginWifiAuthenticationCaptureAfterSurvey();
 }
 
 bool leaveWifiAuthenticationCapture() {
@@ -18725,10 +18847,13 @@ void serviceWifiAuthenticationCapture() {
         analyzed = leshy1::services::auth::analyzeWifiAuthenticationCapture(
             input, &wifiAuthenticationReport);
     }
-    wifiAuthenticationProductState = analyzed
+    const bool reportLoaded = analyzed &&
+        wifiAuthenticationController.load(wifiAuthenticationReport) ==
+            WifiAuthenticationCaptureLoadStatus::Ready;
+    wifiAuthenticationProductState = reportLoaded
         ? WifiAuthenticationProductState::Result
         : WifiAuthenticationProductState::Failed;
-    wifiAuthenticationFailure = analyzed
+    wifiAuthenticationFailure = reportLoaded
         ? WifiAuthenticationCaptureUiFailure::None
         : (captureQuiescent && accountingValid
                ? WifiAuthenticationCaptureUiFailure::ReportRejected
@@ -18736,8 +18861,8 @@ void serviceWifiAuthenticationCapture() {
                       ? WifiAuthenticationCaptureUiFailure::RuntimeFailed
                       : WifiAuthenticationCaptureUiFailure::
                             ResultBeforeCleanup));
-    lastRuntimeEvent = analyzed ? "authentication_capture_result"
-                                : "authentication_capture_failed";
+    lastRuntimeEvent = reportLoaded ? "authentication_capture_result"
+                                    : "authentication_capture_failed";
     if (wifiProductView == WifiProductView::AuthenticationCapture) {
         renderInteractiveScreen(false);
     }
@@ -22123,8 +22248,28 @@ bool applyUiAction(UiAction action, bool render = true) {
         } else if (wifiProductView ==
                    WifiProductView::AuthenticationCapture) {
             handled = true;
-            if (action == UiAction::Back || action == UiAction::Left) {
-                changed = leaveWifiAuthenticationCapture();
+            const bool terminal = wifiAuthenticationProductState ==
+                WifiAuthenticationProductState::Result &&
+                wifiAuthenticationController.ready();
+            if (terminal && action == UiAction::Up) {
+                changed = wifiAuthenticationController.previous();
+            } else if (terminal && action == UiAction::Down) {
+                changed = wifiAuthenticationController.next();
+            } else if (terminal &&
+                       (action == UiAction::Select ||
+                        action == UiAction::Right)) {
+                if (wifiAuthenticationController.view() ==
+                        WifiAuthenticationCaptureView::Actions &&
+                    wifiAuthenticationController.selectedAction() ==
+                        WifiAuthenticationCaptureAction::Repeat) {
+                    changed = repeatWifiAuthenticationCapture();
+                } else {
+                    changed = wifiAuthenticationController.openSelected();
+                }
+            } else if (action == UiAction::Back ||
+                       action == UiAction::Left) {
+                changed = terminal && wifiAuthenticationController.back()
+                    ? true : leaveWifiAuthenticationCapture();
             }
         } else if (wifiProductView == WifiProductView::NetworkDetail) {
             handled = true;
@@ -23190,6 +23335,45 @@ TouchDispatchTarget touchDispatchTarget(TouchPoint point) {
             }
             return {};
         }
+        if (wifiProductView == WifiProductView::AuthenticationCapture &&
+            wifiAuthenticationProductState ==
+                WifiAuthenticationProductState::Result &&
+            wifiAuthenticationController.ready() &&
+            (wifiAuthenticationController.view() ==
+                 WifiAuthenticationCaptureView::Actions ||
+             wifiAuthenticationController.view() ==
+                 WifiAuthenticationCaptureView::EvidenceList)) {
+            const bool actions = wifiAuthenticationController.view() ==
+                WifiAuthenticationCaptureView::Actions;
+            const std::size_t selection = actions
+                ? wifiAuthenticationController.actionSelection()
+                : wifiAuthenticationController.evidenceSelection();
+            const std::size_t count = actions
+                ? wifiAuthenticationController.actionCount()
+                : wifiAuthenticationController.evidenceCount();
+            const std::size_t first =
+                selection < WifiAuthenticationCaptureUiModel::
+                                kVisibleRowCapacity
+                    ? 0U
+                    : selection -
+                          WifiAuthenticationCaptureUiModel::
+                              kVisibleRowCapacity + 1U;
+            const std::size_t visible = std::min<std::size_t>(
+                count - first,
+                WifiAuthenticationCaptureUiModel::kVisibleRowCapacity);
+            for (std::size_t row = 0U; row < visible; ++row) {
+                if (leshy1::ui::visual::containsPoint(
+                        Components::metricRow(
+                            static_cast<std::uint8_t>(row + 1U)),
+                        static_cast<std::int16_t>(point.x),
+                        static_cast<std::int16_t>(point.y))) {
+                    return {
+                        {true, static_cast<std::uint8_t>(first + row)},
+                        static_cast<std::uint8_t>(selection)};
+                }
+            }
+            return {};
+        }
         if (wifiProductView == WifiProductView::Networks &&
             surveyWorkflow.state() == SurveyWorkflowState::Running) {
             const std::size_t first =
@@ -23434,7 +23618,10 @@ bool dispatchTouchPoint(TouchPoint point, bool synthetic = false) {
         changed = applyUiAction(UiAction::Select, false) || changed;
     }
     lastTouchChanged = changed;
-    if (changed) renderInteractiveScreen(true);
+    const bool authenticationIncremental =
+        uiController.page() == 2 &&
+        wifiProductView == WifiProductView::AuthenticationCapture;
+    if (changed) renderInteractiveScreen(!authenticationIncremental);
     return changed;
 }
 

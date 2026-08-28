@@ -17,6 +17,14 @@ SOURCE = (
     ROOT
     / "firmware/leshy1/src/services/auth/WifiAuthenticationCapture.cpp"
 )
+DECODER_HEADER = (
+    ROOT
+    / "firmware/leshy1/src/services/auth/WifiAuthenticationFrameDecoder.h"
+)
+DECODER_SOURCE = (
+    ROOT
+    / "firmware/leshy1/src/services/auth/WifiAuthenticationFrameDecoder.cpp"
+)
 TEST = ROOT / "tests/native/wifi_authentication_capture_tests.cpp"
 BOARD_HEADER = (
     ROOT
@@ -94,6 +102,8 @@ def main() -> int:
     try:
         header = HEADER.read_text(encoding="utf-8")
         source = SOURCE.read_text(encoding="utf-8")
+        decoder_header = DECODER_HEADER.read_text(encoding="utf-8")
+        decoder_source = DECODER_SOURCE.read_text(encoding="utf-8")
         tests = TEST.read_text(encoding="utf-8")
         board_header = BOARD_HEADER.read_text(encoding="utf-8")
         board_source = BOARD_SOURCE.read_text(encoding="utf-8")
@@ -107,7 +117,7 @@ def main() -> int:
         )
         return 1
 
-    combined = header + source
+    combined = header + source + decoder_header + decoder_source
     for marker in (
         "WifiFrameSource",
         "kSourceFrameInspectionCapacity = 64",
@@ -133,9 +143,9 @@ def main() -> int:
         "bytesMatchPrefix",
         "frameAccessPoint",
         "Disposition::Retain",
-        "kSupportedDescriptorType = 2U",
-        "kSupportedDescriptorVersion2 = 2U",
-        "kSupportedDescriptorVersion3 = 3U",
+        "kWifiAuthenticationSupportedDescriptorType = 2U",
+        "kWifiAuthenticationSupportedDescriptorVersion2 = 2U",
+        "kWifiAuthenticationSupportedDescriptorVersion3 = 3U",
         "keyDataLength != bodyLength - kEapolKeyFixedBytes",
         "messageDirectionIsValid",
         "applyAttemptMessage",
