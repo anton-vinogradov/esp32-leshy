@@ -160,6 +160,7 @@ def running_failures(state: dict[str, Any], stage: str) -> list[str]:
         "runtime_owner": "wifi",
         "lease_mask": 15,
         "ble_worker_ready": True,
+        "survey_queues_released": True,
     }, stage)
     if stage == "wifi_running":
         failures.extend(expect(state, {
@@ -167,6 +168,7 @@ def running_failures(state: dict[str, Any], stage: str) -> list[str]:
             "wifi_monitor_active": True,
             "wifi_cleanup_complete": False,
             "ble_worker_control": 0,
+            "wifi_driver_error": 0,
         }, stage))
     else:
         failures.extend(expect(state, {
@@ -182,6 +184,18 @@ def running_failures(state: dict[str, Any], stage: str) -> list[str]:
             "wifi_noise_retention_complete": True,
             "ble_worker_control": 2,
         }, stage))
+    before = int(state.get("heap_free_before_queue_release", 0))
+    after = int(state.get("heap_free_after_queue_release", 0))
+    largest_before = int(
+        state.get("heap_largest_before_queue_release", 0))
+    largest_after = int(
+        state.get("heap_largest_after_queue_release", 0))
+    if after <= before:
+        failures.append(f"{stage}.queue_release_heap: {before} -> {after}")
+    if largest_after < largest_before:
+        failures.append(
+            f"{stage}.queue_release_largest: "
+            f"{largest_before} -> {largest_after}")
     return failures
 
 
@@ -192,6 +206,7 @@ def stopped_failures(state: dict[str, Any], label: str) -> list[str]:
         "wifi_monitor_active": False,
         "wifi_cleanup_complete": True,
         "ble_worker_control": 0,
+        "survey_queues_released": False,
         "passive_only": True,
         "rx_only": True,
         "application_connect_calls": 0,
@@ -226,6 +241,7 @@ def result_failures(state: dict[str, Any], label: str) -> list[str]:
         "wifi_noise_retention_complete": True,
         "ble_worker_control": 0,
         "ble_worker_ready": True,
+        "survey_queues_released": True,
         "passive_only": True,
         "rx_only": True,
         "application_connect_calls": 0,

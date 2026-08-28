@@ -1781,6 +1781,12 @@ std::uint32_t airspaceGuardBleRequestedGeneration = 0;
 AirspaceGuardBleRetention airspaceGuardBleRetention;
 std::uint32_t productSurveyWorkerOwnedResources = 0;
 bool productSurveyWorkerReady = false;
+bool airspaceGuardSurveyQueuesReleased = false;
+std::uint32_t airspaceGuardHeapFreeBeforeQueueRelease = 0;
+std::uint32_t airspaceGuardHeapLargestBeforeQueueRelease = 0;
+std::uint32_t airspaceGuardHeapFreeAfterQueueRelease = 0;
+std::uint32_t airspaceGuardHeapLargestAfterQueueRelease = 0;
+std::uint32_t airspaceGuardHeapFreeAfterQueueRestore = 0;
 bool productSurveyWorkerScanActive = false;
 bool productSurveySourceUnavailableOnce = false;
 std::uint8_t productSurveyRuntimeUnavailableOnceMask = 0;
@@ -3563,9 +3569,68 @@ bool initializeProductSurveyWorker() {
     return started;
 }
 
+bool releaseProductSurveyQueuesForAirspaceGuard() {
+    if (airspaceGuardSurveyQueuesReleased) return true;
+    if (!productSurveyWorkerReady ||
+        productSurveyControl() != ProductSurveyWorkerControl::Idle ||
+        airspaceGuardBleControl() != AirspaceGuardBleWorkerControl::Idle ||
+        productSurveyWorkerTaskHandle == nullptr ||
+        productSurveyWorkerEvents == nullptr ||
+        productSurveyObservations == nullptr ||
+        airspaceGuardBleWorkerEvents == nullptr) {
+        return false;
+    }
+    airspaceGuardHeapFreeBeforeQueueRelease =
+        static_cast<std::uint32_t>(
+            heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    airspaceGuardHeapLargestBeforeQueueRelease =
+        static_cast<std::uint32_t>(
+            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    // The persistent worker and tiny BLE completion-token queue remain alive.
+    // Only the ordinary Survey payload queues are lifecycle-exclusive with
+    // Airspace Guard, so releasing them cannot race a Survey operation and
+    // gives repeated Wi-Fi driver initialization a contiguous internal-RAM
+    // block without adding a second network path here.
+    vQueueDelete(productSurveyWorkerEvents);
+    vQueueDelete(productSurveyObservations);
+    productSurveyWorkerEvents = nullptr;
+    productSurveyObservations = nullptr;
+    vTaskDelay(1);
+    airspaceGuardHeapFreeAfterQueueRelease =
+        static_cast<std::uint32_t>(
+            heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    airspaceGuardHeapLargestAfterQueueRelease =
+        static_cast<std::uint32_t>(
+            heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    airspaceGuardSurveyQueuesReleased = true;
+    return true;
+}
+
+bool restoreProductSurveyQueuesAfterAirspaceGuard() {
+    if (!airspaceGuardSurveyQueuesReleased) return true;
+    QueueHandle_t events = xQueueCreate(
+        kProductSurveyWorkerEventCapacity,
+        sizeof(ProductSurveyWorkerEvent));
+    QueueHandle_t observations = xQueueCreate(
+        kProductSurveyObservationCapacity, sizeof(Observation));
+    if (events == nullptr || observations == nullptr) {
+        if (events != nullptr) vQueueDelete(events);
+        if (observations != nullptr) vQueueDelete(observations);
+        productSurveyWorkerReady = false;
+        return false;
+    }
+    productSurveyWorkerEvents = events;
+    productSurveyObservations = observations;
+    airspaceGuardSurveyQueuesReleased = false;
+    airspaceGuardHeapFreeAfterQueueRestore =
+        static_cast<std::uint32_t>(
+            heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    return true;
+}
+
 bool suspendProductSurveyWorkerForWebCompanion() {
     if (webCompanionSurveyWorkerSuspended) return true;
-    if (!productSurveyWorkerReady ||
+    if (!productSurveyWorkerReady || airspaceGuardSurveyQueuesReleased ||
         productSurveyControl() != ProductSurveyWorkerControl::Idle ||
         airspaceGuardBleControl() != AirspaceGuardBleWorkerControl::Idle ||
         productSurveyWorkerTaskHandle == nullptr) {
@@ -3637,7 +3702,7 @@ bool failProductSurveyStart(const char* status) {
 bool startProductSurvey() {
     const std::uint64_t actionStartedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
-    if (!productSurveyWorkerReady ||
+    if (!productSurveyWorkerReady || airspaceGuardSurveyQueuesReleased ||
         productSurveyControl() != ProductSurveyWorkerControl::Idle ||
         productSurveyWorkerTaskHandle == nullptr) {
         productSurveyRuntime.status = "worker_unavailable";
@@ -19352,6 +19417,12 @@ void emitAirspaceGuardState(Stream& reply) {
         "\"wifi_identity_retention_complete\":%s,"
         "\"wifi_noise_retention_complete\":%s,"
         "\"ble_worker_control\":%u,\"ble_worker_ready\":%s,"
+        "\"survey_queues_released\":%s,"
+        "\"heap_free_before_queue_release\":%lu,"
+        "\"heap_largest_before_queue_release\":%lu,"
+        "\"heap_free_after_queue_release\":%lu,"
+        "\"heap_largest_after_queue_release\":%lu,"
+        "\"heap_free_after_queue_restore\":%lu,"
         "\"passive_only\":true,\"rx_only\":true,"
         "\"application_connect_calls\":0,"
         "\"application_raw_tx_calls\":0,"
@@ -19414,6 +19485,17 @@ void emitAirspaceGuardState(Stream& reply) {
         monitor.noiseRetentionComplete ? "true" : "false",
         static_cast<unsigned>(workerControl),
         productSurveyWorkerReady ? "true" : "false",
+        airspaceGuardSurveyQueuesReleased ? "true" : "false",
+        static_cast<unsigned long>(
+            airspaceGuardHeapFreeBeforeQueueRelease),
+        static_cast<unsigned long>(
+            airspaceGuardHeapLargestBeforeQueueRelease),
+        static_cast<unsigned long>(
+            airspaceGuardHeapFreeAfterQueueRelease),
+        static_cast<unsigned long>(
+            airspaceGuardHeapLargestAfterQueueRelease),
+        static_cast<unsigned long>(
+            airspaceGuardHeapFreeAfterQueueRestore),
         appRuntime.activeApp(),
         static_cast<unsigned long>(appRuntime.activeResources()));
     if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(line)) {
@@ -19987,6 +20069,12 @@ bool openAirspaceGuardProduct() {
         return true;
     }
     xQueueReset(airspaceGuardBleWorkerEvents);
+    if (!releaseProductSurveyQueuesForAirspaceGuard()) {
+        airspaceGuardController.load(airspaceGuardWifiReport);
+        airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
+        lastRuntimeEvent = "airspace_guard_memory_unavailable";
+        return true;
+    }
     std::uint64_t startedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     if (startedUs == 0U) startedUs = 1U;
     const bool started = wifiFrameCapture.beginAirspaceGuardMonitor(
@@ -20000,9 +20088,13 @@ bool openAirspaceGuardProduct() {
         lastRuntimeEvent = "airspace_guard_listening";
         return true;
     }
+    const bool queuesRestored =
+        restoreProductSurveyQueuesAfterAirspaceGuard();
     airspaceGuardController.load(airspaceGuardWifiReport);
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
-    lastRuntimeEvent = "airspace_guard_start_failed";
+    lastRuntimeEvent = queuesRestored
+        ? "airspace_guard_start_failed"
+        : "airspace_guard_queue_restore_failed";
     return true;
 }
 
@@ -20020,6 +20112,9 @@ bool stopAirspaceGuardProduct() {
     ++airspaceGuardGeneration;
     if (airspaceGuardGeneration == 0U) ++airspaceGuardGeneration;
     wifiFrameCapture.reset();
+    const bool queuesRestored =
+        restoreProductSurveyQueuesAfterAirspaceGuard();
+    cleanup = cleanup && queuesRestored;
     airspaceGuardController.reset();
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Idle;
     nextAirspaceGuardUiRefreshUs = 0;
@@ -20170,18 +20265,24 @@ void serviceAirspaceGuardProduct() {
 }
 
 void quiesceAirspaceGuardOnSafetyStop() {
-    if (airspaceGuardCaptureState !=
-            AirspaceGuardCaptureState::WifiRunning &&
-        airspaceGuardCaptureState !=
-            AirspaceGuardCaptureState::BleRunning) {
+    const bool wifiRunning = airspaceGuardCaptureState ==
+        AirspaceGuardCaptureState::WifiRunning;
+    const bool bleRunning = airspaceGuardCaptureState ==
+        AirspaceGuardCaptureState::BleRunning;
+    if (!wifiRunning && !bleRunning &&
+        !airspaceGuardSurveyQueuesReleased) {
         return;
     }
     std::uint64_t endedUs = static_cast<std::uint64_t>(esp_timer_get_time());
     if (endedUs == 0U) endedUs = 1U;
-    const bool cleanup = airspaceGuardCaptureState ==
-            AirspaceGuardCaptureState::WifiRunning
-        ? wifiFrameCapture.stop(endedUs)
-        : requestAirspaceGuardBleWorkerCancel();
+    bool cleanup = true;
+    if (wifiRunning) {
+        cleanup = wifiFrameCapture.stop(endedUs);
+    } else if (bleRunning) {
+        cleanup = requestAirspaceGuardBleWorkerCancel();
+    }
+    const bool queuesRestored =
+        restoreProductSurveyQueuesAfterAirspaceGuard();
     ++airspaceGuardGeneration;
     if (airspaceGuardGeneration == 0U) ++airspaceGuardGeneration;
     resetAirspaceGuardWifiReport();
@@ -20190,8 +20291,9 @@ void quiesceAirspaceGuardOnSafetyStop() {
     nextAirspaceGuardUiRefreshUs = 0;
     airspaceGuardBleStartedUs = 0;
     airspaceGuardResultNeedsContentClear = true;
-    lastRuntimeEvent = cleanup ? "airspace_guard_safety_stop"
-                               : "airspace_guard_safety_cleanup_failed";
+    lastRuntimeEvent = cleanup && queuesRestored
+        ? "airspace_guard_safety_stop"
+        : "airspace_guard_safety_cleanup_failed";
 }
 
 bool stopWifiChannelsProduct() {
