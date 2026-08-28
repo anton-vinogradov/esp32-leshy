@@ -9,7 +9,10 @@ bool validatePassivePlan(const BleScanPlan& plan) {
            plan.durationMs <= 10000U && plan.durationMs % 1000U == 0U &&
            plan.intervalMs >= 10U && plan.intervalMs <= 10240U &&
            plan.windowMs >= 10U && plan.windowMs <= plan.intervalMs &&
-           plan.maximumRecords > 0U && plan.maximumRecords <= 128U;
+           plan.maximumRecords > 0U &&
+           plan.maximumRecords <= (plan.deduplicateAddresses
+               ? kMaximumDeduplicatedRecords
+               : kMaximumStreamingRecords);
 }
 
 bool normalizePassiveRecord(

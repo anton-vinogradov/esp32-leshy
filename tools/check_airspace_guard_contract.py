@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.233.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.234.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -378,7 +378,8 @@ def main() -> int:
         "requestAirspaceGuardBleWorker(airspaceGuardGeneration)",
         "event.generation == airspaceGuardGeneration",
         "plan.deduplicateAddresses = false",
-        "plan.maximumRecords = 128U",
+        "plan.maximumRecords =",
+        "leshy1::drivers::ble::kMaximumStreamingRecords",
         "event.retention.complete()",
         "scanner.end()",
         "scanner.cleanupComplete()",
@@ -408,6 +409,10 @@ def main() -> int:
     ):
         require(failures, marker in arduino_entry,
                 f"missing Airspace Guard product integration: {marker}")
+    require(failures, "kMaximumDeduplicatedRecords = 128U" in ble_contract,
+            "BLE deduplicated record budget is not bounded at 128")
+    require(failures, "kMaximumStreamingRecords = 4096U" in ble_contract,
+            "BLE streaming record budget is not bounded at 4096")
     open_start = arduino_entry.find("bool openAirspaceGuardProduct()")
     open_end = arduino_entry.find("bool stopWifiChannelsProduct()", open_start)
     open_body = arduino_entry[open_start:open_end]
@@ -542,7 +547,7 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.233"',
+        '"candidate_version": "1.0.0-dev.234"',
         '"full_matrix_required": false',
         '"cadence_after_acceptance": "8/15"',
     ):

@@ -8,6 +8,14 @@
 
 namespace leshy1::drivers::ble {
 
+// Upper bound for a streaming passive scan. The platform adapter processes
+// records as they arrive, so this limits CPU/evidence accounting rather than
+// reserving a matching packet buffer. Product Survey keeps its smaller
+// per-address default while repeat-sensitive detectors may explicitly use the
+// larger bounded budget.
+constexpr std::uint16_t kMaximumDeduplicatedRecords = 128U;
+constexpr std::uint16_t kMaximumStreamingRecords = 4096U;
+
 struct BleScanPlan final {
     bool passive = true;
     // Product Survey keeps one row per address. Defensive evidence capture

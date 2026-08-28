@@ -3241,7 +3241,15 @@ void testBleIngressIsReceiveOnlyBoundedAndNormalizesObservations() {
     plan.windowMs = static_cast<std::uint16_t>(plan.intervalMs + 1U);
     CHECK(!leshy1::drivers::ble::validatePassivePlan(plan));
     plan = leshy1::drivers::ble::defaultPassivePlan();
-    plan.maximumRecords = 129;
+    plan.maximumRecords =
+        leshy1::drivers::ble::kMaximumDeduplicatedRecords + 1U;
+    CHECK(!leshy1::drivers::ble::validatePassivePlan(plan));
+    plan.deduplicateAddresses = false;
+    plan.maximumRecords =
+        leshy1::drivers::ble::kMaximumStreamingRecords;
+    CHECK(leshy1::drivers::ble::validatePassivePlan(plan));
+    plan.maximumRecords = static_cast<std::uint16_t>(
+        leshy1::drivers::ble::kMaximumStreamingRecords + 1U);
     CHECK(!leshy1::drivers::ble::validatePassivePlan(plan));
 
     BleAdvertisementRecord record;

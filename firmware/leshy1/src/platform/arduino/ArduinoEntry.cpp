@@ -1758,7 +1758,8 @@ constexpr leshy1::drivers::ble::BleScanPlan airspaceGuardBleScanPlan() {
     auto plan = leshy1::drivers::ble::defaultPassivePlan();
     plan.deduplicateAddresses = false;
     plan.durationMs = kAirspaceGuardCaptureDurationMs;
-    plan.maximumRecords = 128U;
+    plan.maximumRecords =
+        leshy1::drivers::ble::kMaximumStreamingRecords;
     return plan;
 }
 static_assert(
