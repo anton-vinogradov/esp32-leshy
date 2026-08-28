@@ -138,6 +138,11 @@ public:
                     static_cast<std::uint8_t>(0x40U + index);
             }
         }
+        if (message == WifiEapolKeyMessage::Message2 ||
+            message == WifiEapolKeyMessage::Message3 ||
+            message == WifiEapolKeyMessage::Message4) {
+            frame.payload[keyOffset + 77U] = 0x5aU;
+        }
         offset = keyOffset + 93U;
         const std::size_t keyDataLength = pmkid == nullptr ? 0U : 22U;
         frame.payload[offset++] = static_cast<std::uint8_t>(
@@ -292,6 +297,7 @@ void testSharedDecoderPreservesNonQosQosFcsAndTargetIdentity() {
     CHECK(decodeWifiAuthenticationKeyFrame(viewOf(qos), &decoded) ==
           WifiAuthenticationFrameDecodeStatus::ClassifiedKey);
     CHECK(decoded.message == WifiEapolKeyMessage::Message2);
+    CHECK(decoded.keyMicNonzero);
     CHECK(decoded.accessPoint == kAccessPoint);
     CHECK(decoded.station == kStation);
     CHECK(!decoded.fromAccessPoint);
@@ -362,6 +368,38 @@ void testSharedDecoderPreservesDescriptorAndProfileClassification() {
     CHECK(decodeWifiAuthenticationKeyFrame(viewOf(smk), &decoded) ==
           WifiAuthenticationFrameDecodeStatus::UnclassifiedKey);
     CHECK(decoded.message == WifiEapolKeyMessage::Unknown);
+}
+
+void testClassifiedMicBearingMessagesRequireNonzeroKeyMic() {
+    constexpr std::array<WifiEapolKeyMessage, 3> kMicBearingMessages{
+        WifiEapolKeyMessage::Message2,
+        WifiEapolKeyMessage::Message3,
+        WifiEapolKeyMessage::Message4};
+    constexpr std::size_t kNonQosKeyMicOffset = 24U + 8U + 4U + 77U;
+    for (std::size_t index = 0U; index < kMicBearingMessages.size(); ++index) {
+        FixtureSource source;
+        FixtureFrame& frame = source.addEapolKey(
+            kMicBearingMessages[index], 23U + index);
+        WifiAuthenticationDecodedKeyFrame decoded{};
+        CHECK(decodeWifiAuthenticationKeyFrame(viewOf(frame), &decoded) ==
+              WifiAuthenticationFrameDecodeStatus::ClassifiedKey);
+        CHECK(decoded.keyMicNonzero);
+
+        frame.payload[kNonQosKeyMicOffset] = 0U;
+        CHECK(decodeWifiAuthenticationKeyFrame(viewOf(frame), &decoded) ==
+              WifiAuthenticationFrameDecodeStatus::Malformed);
+        CHECK(!decoded.keyMicNonzero);
+
+        WifiAuthenticationCaptureReport report{};
+        CHECK(analyzeWifiAuthenticationCapture(completeInput(source),
+                                               &report));
+        CHECK(report.outcome ==
+              WifiAuthenticationCaptureOutcome::Inconclusive);
+        CHECK(report.counters.malformedFrames == 1U);
+        CHECK(report.evidenceCount == 0U);
+        CHECK(hasUncertainty(report,
+                             WifiAuthenticationUncertaintyMalformed));
+    }
 }
 
 void testIngressRetainsTargetNonQosQosAndFcs() {
@@ -1065,6 +1103,7 @@ int main() {
     testSharedDecoderPreservesNonQosQosFcsAndTargetIdentity();
     testSharedDecoderPreservesMalformedAndTruncatedBoundaries();
     testSharedDecoderPreservesDescriptorAndProfileClassification();
+    testClassifiedMicBearingMessagesRequireNonzeroKeyMic();
     testIngressRetainsTargetNonQosQosAndFcs();
     testIngressIgnoresWrongBssidAndNonEapol();
     testIngressIgnoresCompleteNullDataButRetainsTruncation();

@@ -21,6 +21,8 @@ constexpr std::size_t kLlcSnapBytes = 8U;
 constexpr std::size_t kEapolHeaderBytes = 4U;
 constexpr std::size_t kEapolKeyFixedBytes = 95U;
 constexpr std::size_t kKeyDataLengthOffset = 93U;
+constexpr std::size_t kKeyMicOffset = 77U;
+constexpr std::size_t kKeyMicBytes = 16U;
 constexpr std::uint16_t kEapolEtherType = 0x888eU;
 constexpr std::uint8_t kEapolKeyPacketType = 3U;
 constexpr std::uint16_t kKeyInfoPairwise = 1U << 3U;
@@ -53,6 +55,14 @@ std::array<std::uint8_t, 6> readMac(const std::uint8_t* value) {
     std::array<std::uint8_t, 6> result{};
     std::memcpy(result.data(), value, result.size());
     return result;
+}
+
+bool anyNonzero(const std::uint8_t* value, std::size_t size) {
+    if (value == nullptr) return false;
+    for (std::size_t index = 0U; index < size; ++index) {
+        if (value[index] != 0U) return true;
+    }
+    return false;
 }
 
 WifiEapolKeyMessage classifyKey(std::uint16_t keyInfo) {
@@ -248,6 +258,14 @@ WifiAuthenticationFrameDecodeStatus decodeWifiAuthenticationKeyFrame(
         return Status::UnsupportedKey;
     }
     if (bodyLength < kEapolKeyFixedBytes) return Status::Malformed;
+    output->keyMicNonzero = anyNonzero(key + kKeyMicOffset, kKeyMicBytes);
+    const bool classifiedMicBearingMessage =
+        output->message == WifiEapolKeyMessage::Message2 ||
+        output->message == WifiEapolKeyMessage::Message3 ||
+        output->message == WifiEapolKeyMessage::Message4;
+    if (classifiedMicBearingMessage && !output->keyMicNonzero) {
+        return Status::Malformed;
+    }
     const std::size_t keyDataLength =
         readBig16(key + kKeyDataLengthOffset);
     if (keyDataLength != bodyLength - kEapolKeyFixedBytes) {

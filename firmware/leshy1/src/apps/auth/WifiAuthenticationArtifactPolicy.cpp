@@ -199,6 +199,8 @@ bool reportShapeValid(const WifiAuthenticationCaptureReport& report,
                     evidence.descriptorType != peer.descriptorType ||
                     evidence.descriptorVersion !=
                         peer.descriptorVersions[messageIndex] ||
+                    (expectedMessage == WifiEapolKeyMessage::Message2 &&
+                     !evidence.keyMicNonzero) ||
                     !supportedDescriptorVersion(
                         peer.descriptorVersions[messageIndex])) {
                     return false;
@@ -322,6 +324,8 @@ bool evidenceMatchesPairMember(
         evidence.station == peer.station && evidence.message == message &&
         evidence.profile == WifiAuthenticationKeyProfile::RsnWpa2 &&
         evidence.replayCounter == replayCounter &&
+        (message != WifiEapolKeyMessage::Message2 ||
+         evidence.keyMicNonzero) &&
         evidence.descriptorType == peer.descriptorType &&
         evidence.descriptorVersion == descriptorVersion &&
         keyInfoMatches(message, evidence.keyInfo);

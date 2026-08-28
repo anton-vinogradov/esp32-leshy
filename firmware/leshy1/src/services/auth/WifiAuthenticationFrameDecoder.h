@@ -33,6 +33,7 @@ struct WifiAuthenticationDecodedKeyFrame final {
     std::array<std::uint8_t, 6> station{};
     std::uint64_t replayCounter = 0;
     std::uint16_t keyInfo = 0;
+    bool keyMicNonzero = false;
     std::uint8_t eapolVersion = 0;
     std::uint8_t descriptorType = 0;
     std::uint8_t descriptorVersion = 0;

@@ -208,11 +208,12 @@ std::uint8_t retainEvidence(
         static_cast<std::uint8_t>(report->evidenceCount);
     WifiAuthenticationEvidence& evidence =
         report->evidence[report->evidenceCount++];
-    evidence.sourceFrameIndex = static_cast<std::uint16_t>(sourceIndex);
+    evidence.sourceFrameIndex = static_cast<std::uint8_t>(sourceIndex);
     evidence.monotonicUs = frame.monotonicUs;
     evidence.replayCounter = decoded.replayCounter;
     evidence.rssiDbm = frame.rssiDbm;
     evidence.keyInfo = decoded.keyInfo;
+    evidence.keyMicNonzero = decoded.keyMicNonzero;
     evidence.channel = frame.channel;
     evidence.message = decoded.message;
     evidence.eapolVersion = decoded.eapolVersion;

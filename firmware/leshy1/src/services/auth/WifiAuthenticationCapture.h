@@ -83,7 +83,8 @@ struct WifiAuthenticationCaptureCounters final {
 struct WifiAuthenticationEvidence final {
     std::uint64_t monotonicUs = 0;
     std::uint64_t replayCounter = 0;
-    std::uint16_t sourceFrameIndex = 0;
+    std::uint8_t sourceFrameIndex = 0;
+    bool keyMicNonzero = false;
     std::int16_t rssiDbm = 0;
     std::uint16_t keyInfo = 0;
     std::uint8_t channel = 0;
@@ -147,7 +148,7 @@ struct WifiAuthenticationCaptureReport final {
 
 static_assert(
     WifiAuthenticationCaptureReport::kSourceFrameInspectionCapacity <=
-        UINT16_MAX,
+        UINT8_MAX,
     "authentication evidence source index is too narrow");
 static_assert(sizeof(WifiAuthenticationCaptureReport) <= 1536U,
               "authentication report exceeds its bounded stack envelope");

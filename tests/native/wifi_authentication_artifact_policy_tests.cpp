@@ -79,7 +79,7 @@ void setAuthenticationCounters(WifiAuthenticationCaptureReport* report,
 }
 
 WifiAuthenticationEvidence evidenceFixture(
-    WifiEapolKeyMessage message, std::uint16_t sourceFrameIndex,
+    WifiEapolKeyMessage message, std::uint8_t sourceFrameIndex,
     std::uint64_t monotonicUs, std::uint64_t replayCounter) {
     WifiAuthenticationEvidence evidence{};
     evidence.monotonicUs = monotonicUs;
@@ -109,6 +109,10 @@ WifiAuthenticationEvidence evidenceFixture(
     evidence.descriptorVersion =
         kWifiAuthenticationSupportedDescriptorVersion2;
     evidence.profile = WifiAuthenticationKeyProfile::RsnWpa2;
+    evidence.keyMicNonzero =
+        message == WifiEapolKeyMessage::Message2 ||
+        message == WifiEapolKeyMessage::Message3 ||
+        message == WifiEapolKeyMessage::Message4;
     evidence.accessPoint = kAccessPoint;
     evidence.station = kStation;
     return evidence;
@@ -392,6 +396,11 @@ void testStrictPairRejectsEveryRequiredInvariant() {
     report = strictPairReport();
     report.evidence[0].keyInfo = kMessage2KeyInfo;
     expectRejectedPair(report);
+
+    report = strictPairReport();
+    report.evidence[1].keyMicNonzero = false;
+    expectRejectedPair(
+        report, WifiAuthenticationStandardArtifactReason::InvalidReport);
 
     report = strictPairReport();
     report.peers[0].authenticatorNonceMismatch = true;
