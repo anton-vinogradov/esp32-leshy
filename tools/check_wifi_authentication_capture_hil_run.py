@@ -14,6 +14,7 @@ from esp_app_identity import app_elf_sha256
 
 
 SCHEMA = "leshy.wifi.authentication_capture_hil.run.v1"
+AUTH_HOLD_SCHEMA = "leshy.wifi.authentication.hil_hold.v1"
 RUNNER = Path(__file__).with_name("run_1x_wifi_authentication_capture_hil.py")
 BOARD_ID = "board-01"
 BOARD_PORT = "/dev/cu.usbmodem2101"
@@ -34,6 +35,15 @@ STATUS_Y0 = 0
 STATUS_Y1 = 26
 CAPTURE_DURATION_MS = 10_000
 CAPTURE_TERMINAL_SLACK_US = 2_500_000
+AUTH_HOLD_TIMEOUT_MS = 1_500
+AUTH_FAILURE_STAGES = frozenset({
+    "admission", "capture_begin", "event_loop_create", "wifi_init",
+    "set_storage", "set_mode", "wifi_start", "set_channel",
+    "set_filter", "set_callback", "enable_promiscuous",
+})
+AUTH_FAILURE_STAGES_BEFORE_HEAP_SNAPSHOT = frozenset({
+    "admission", "capture_begin", "event_loop_create",
+})
 UNCERTAINTY_NO_EVIDENCE = 1 << 7
 UNCERTAINTY_CAPTURE_LOSS = 1 << 2
 UNCERTAINTY_SOURCE_READ = 1 << 3
@@ -76,6 +86,104 @@ def require(failures: list[str], condition: bool, message: str) -> None:
 
 def non_negative_integer(value: object) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def verify_wifi_menu_ready(failures: list[str], state: dict[str, Any]) -> None:
+    require(failures,
+            state.get("page") == "survey" and
+            state.get("wifi_product_view") == "menu" and
+            state.get("runtime_owner") == "wifi" and
+            state.get("lease_mask") == 15 and
+            state.get("survey_workflow_state") == "setup" and
+            state.get("survey_product_backend_open") is False and
+            state.get("survey_product_cleanup_complete") is True and
+            state.get("survey_product_worker_ready") is True and
+            state.get("survey_product_source_active") is False and
+            state.get("survey_product_scan_active") is False,
+            "Wi-Fi menu worker was not quiescent/ready before Networks")
+
+
+def verify_cancel_hold(failures: list[str], hold: dict[str, Any]) -> None:
+    ack = hold.get("ack", {})
+    armed_state = hold.get("armed_state", {})
+    ack_received = hold.get("host_arm_ack_received")
+    require(failures,
+            hold.get("host_arm_action_writes") == 1 and
+            hold.get("host_arm_action_replays") == 0 and
+            isinstance(ack_received, bool),
+            "survey-stop hold mutation was replayed or lacks host accounting")
+    if ack_received is True:
+        require(failures,
+                ack.get("schema") == AUTH_HOLD_SCHEMA and
+                ack.get("kind") == "armed" and
+                ack.get("status") == "armed" and
+                ack.get("armed") is True and
+                ack.get("one_shot") is True and
+                ack.get("replayed") is False and
+                ack.get("timeout_ms") == AUTH_HOLD_TIMEOUT_MS and
+                ack.get("hil_active") is True and
+                ack.get("hardware_touched") is False and
+                ack.get("radio_started") is False and
+                ack.get("storage_mounted") is False and
+                ack.get("storage_written") is False,
+                "survey-stop hold ACK contract mismatch")
+    else:
+        require(failures,
+                isinstance(hold.get("host_arm_ack_error"), str) and
+                bool(hold.get("host_arm_ack_error")),
+                "lost hold ACK has no retained error")
+    require(failures,
+            armed_state.get("survey_terminal_hold_armed") is True,
+            "read-only auth state did not prove the one-shot hold armed")
+    elapsed = hold.get("host_back_after_arm_ms")
+    require(failures,
+            isinstance(elapsed, (int, float)) and
+            not isinstance(elapsed, bool) and
+            0 <= elapsed < AUTH_HOLD_TIMEOUT_MS,
+            "Back was not sent inside the bounded survey-stop hold")
+
+
+def verify_start_failure_diagnostics(
+        failures: list[str], diagnostics: dict[str, Any]) -> None:
+    auth = diagnostics.get("authentication", {})
+    capture = diagnostics.get("capture", {})
+    stage = auth.get("adapter_failure_stage")
+    driver_error = auth.get("adapter_driver_error")
+    heap_free = auth.get("adapter_heap_free_before_init")
+    heap_largest = auth.get("adapter_heap_largest_before_init")
+    failure = auth.get("failure")
+    require(failures,
+            auth.get("state") == "failed" and
+            isinstance(failure, str) and failure != "none",
+            "failed start lacks exact authentication state")
+    require(failures, stage in AUTH_FAILURE_STAGES | {"none"},
+            "failed start lacks exact adapter_failure_stage")
+    require(failures,
+            isinstance(driver_error, int) and
+            not isinstance(driver_error, bool),
+            "failed start lacks adapter_driver_error")
+    require(failures,
+            non_negative_integer(heap_free) and
+            non_negative_integer(heap_largest),
+            "failed start lacks pre-init heap counters")
+    if failure == "start_failed":
+        require(failures,
+                stage in AUTH_FAILURE_STAGES and driver_error != 0,
+                "start_failed lacks exact nonzero adapter stage/error")
+    if (failure == "start_failed" and
+            stage in AUTH_FAILURE_STAGES -
+            AUTH_FAILURE_STAGES_BEFORE_HEAP_SNAPSHOT):
+        require(failures, heap_free > 0 and heap_largest > 0,
+                "post-snapshot failed start retained zero heap")
+    require(failures,
+            capture.get("schema") == "leshy.capture.wifi_frame.v1" and
+            capture.get("kind") == "state" and
+            isinstance(capture.get("driver_error"), int) and
+            not isinstance(capture.get("driver_error"), bool),
+            "failed start lacks exact capture.state driver error")
+    if failure == "start_failed":
+        require(failures, capture.get("driver_error") != 0,
+                "start_failed retained zero capture driver error")
 
 
 def verify_private_target_absent(failures: list[str], value: Any,
@@ -552,6 +660,17 @@ def main() -> int:
         return 1
 
     require(failures, run.get("schema") == SCHEMA, "run schema mismatch")
+    retained_start_failure = run.get("start_failure_diagnostics", {})
+    failed_start_observed = any(
+        isinstance(state, dict) and
+        state.get("state") == "failed"
+        for state in (
+            run.get("auth_requested", {}),
+            run.get("auth_running", {}),
+            run.get("auth_terminal", {})))
+    if failed_start_observed:
+        verify_start_failure_diagnostics(
+            failures, retained_start_failure)
     require(failures, run.get("passed") is True and
             run.get("gate_eligible") is True and run.get("failures") == [],
             "run is not a clean pass")
@@ -597,12 +716,13 @@ def main() -> int:
     verify_boot_and_recovery(
         failures, run, candidate.get("app_elf_sha256"),
         args.expected_version, args.expected_cid)
+    verify_wifi_menu_ready(failures, run.get("wifi_menu_ready", {}))
 
     cancel_list = run.get("cancel_network_list", {})
     cancel_detail_ui = run.get("cancel_network_detail_ui", {})
     cancel_detail = run.get("cancel_network_detail", {})
+    cancel_hold = run.get("cancel_hold", {})
     cancel_requested_ui = run.get("cancel_requested_ui", {})
-    cancel_requested = run.get("cancel_requested", {})
     cancel_back_ui = run.get("cancel_back_ui", {})
     cancel_pending = run.get("cancel_pending", {})
     cancel_terminal_ui = run.get("cancel_terminal_ui", {})
@@ -623,24 +743,15 @@ def main() -> int:
             cancel_detail.get("passive") is True and
             cancel_detail.get("active_probe_allowed") is False,
             "cancel preflight NetworkDetail proof mismatch")
-    cancel_generation = cancel_requested.get("generation")
+    verify_cancel_hold(failures, cancel_hold)
+    cancel_generation = cancel_pending.get("generation")
     require(failures,
             cancel_requested_ui.get("wifi_product_view") ==
                 "authentication_capture" and
             cancel_requested_ui.get("runtime_event") ==
                 "authentication_waiting_for_survey_stop" and
-            cancel_requested.get("state") == "waiting_for_survey_stop" and
-            cancel_requested.get("cancel_pending") is False and
-            cancel_requested.get("back_during_wait_observed") is False and
-            cancel_requested.get("failure") == "none" and
             non_negative_integer(cancel_generation) and cancel_generation != 0,
-            "cancel preflight did not prove waiting_for_survey_stop")
-    verify_presenter(failures, cancel_requested, "cancel_requested")
-    require(failures,
-            cancel_requested.get("target_selected") is True and
-            cancel_requested.get("target_selection_continuity") is True and
-            cancel_requested.get("channel") == cancel_detail.get("channel"),
-            "cancel target does not match locked NetworkDetail")
+            "cancel ACK did not prove waiting_for_survey_stop")
     require(failures,
             cancel_back_ui.get("action") == "left" and
             cancel_back_ui.get("changed") is True,
@@ -668,7 +779,8 @@ def main() -> int:
             cancel_terminal.get("capture_active") is False and
             cancel_terminal.get("capture_cleanup_complete") is True and
             cancel_terminal.get("adapter_cleanup_complete") is True and
-            cancel_terminal.get("survey_worker_deadline_armed") is False,
+            cancel_terminal.get("survey_worker_deadline_armed") is False and
+            cancel_terminal.get("survey_terminal_hold_armed") is False,
             "Back-during-wait did not end in clean Wi-Fi menu state")
     require(failures,
             cancel_capture.get("state") == "idle" and
@@ -725,7 +837,7 @@ def main() -> int:
             "NetworkDetail -> authentication capture transition missing")
     generation = requested.get("generation")
     require(failures,
-            requested.get("state") == "waiting_for_survey_stop" and
+            requested.get("state") in ("waiting_for_survey_stop", "running") and
             requested.get("cancel_pending") is False and
             requested.get("back_during_wait_observed") is False and
             requested.get("failure") == "none" and
@@ -763,11 +875,25 @@ def main() -> int:
                 state.get("capture_active") is active and
                 state.get("capture_cleanup_complete") is cleanup and
                 state.get("adapter_cleanup_complete") is cleanup and
+                state.get("adapter_driver_error") == 0 and
+                state.get("adapter_failure_stage") == "none" and
+                non_negative_integer(
+                    state.get("adapter_heap_free_before_init")) and
+                state.get("adapter_heap_free_before_init", 0) > 0 and
+                non_negative_integer(
+                    state.get("adapter_heap_largest_before_init")) and
+                state.get("adapter_heap_largest_before_init", 0) > 0 and
                 state.get("esp_rf_owned_by_foreground") is True,
                 f"authentication {name} lifecycle mismatch")
         verify_presenter(failures, state, f"auth_{name}")
     require(failures, terminal.get("survey_worker_deadline_armed") is False,
             "terminal survey worker deadline remains armed")
+    require(failures,
+            terminal.get("adapter_heap_free_before_init") ==
+                running.get("adapter_heap_free_before_init") and
+            terminal.get("adapter_heap_largest_before_init") ==
+                running.get("adapter_heap_largest_before_init"),
+            "adapter pre-init heap snapshot changed during capture")
     verify_ingress(failures, terminal)
 
     for name, state, expected_state, cleanup in (
@@ -916,6 +1042,7 @@ def main() -> int:
             scope.get("fixed_channel_continuity") is True and
             scope.get("capture_duration_ms") == CAPTURE_DURATION_MS and
             scope.get("back_during_wait_proven") is True and
+            scope.get("survey_stop_hold_bounded") is True and
             scope.get("generation_advanced_after_cancel") is True and
             isinstance(scope.get("content_changed_pixels"), int) and
             scope.get("content_changed_pixels", 0) > 0 and
@@ -941,6 +1068,10 @@ def main() -> int:
         "private_target_identifiers_retained": False,
     }, "CAP049 privacy declaration mismatch")
     verify_private_target_absent(failures, run)
+    require(failures, run.get("start_failure_diagnostics") == {},
+            "passing run retained unexpected start-failure diagnostics")
+    require(failures, run.get("final_diagnostic_errors") == [],
+            "passing run retained final diagnostic read errors")
     require(failures, run.get("input", {}).get("status") == "ready" and
             run.get("input", {}).get("read_errors") == 0 and
             run.get("input", {}).get("queue_drops") == 0,

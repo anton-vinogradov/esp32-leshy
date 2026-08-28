@@ -1,6 +1,7 @@
 #include "BoardWifiPassiveCapture.h"
 
 #include <esp_event.h>
+#include <esp_heap_caps.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
 #include <freertos/task.h>
@@ -32,10 +33,56 @@ std::uint32_t estimatedFrameAirtimeUs(const wifi_pkt_rx_ctrl_t& control) {
 using apps::capture::WifiFrameCaptureState;
 using apps::capture::WifiFrameKind;
 
+const char* boardWifiPassiveBeginFailureStageName(
+    BoardWifiPassiveBeginFailureStage stage) {
+    switch (stage) {
+        case BoardWifiPassiveBeginFailureStage::None: return "none";
+        case BoardWifiPassiveBeginFailureStage::Admission: return "admission";
+        case BoardWifiPassiveBeginFailureStage::CaptureBegin:
+            return "capture_begin";
+        case BoardWifiPassiveBeginFailureStage::EventLoopCreate:
+            return "event_loop_create";
+        case BoardWifiPassiveBeginFailureStage::WifiInit: return "wifi_init";
+        case BoardWifiPassiveBeginFailureStage::SetStorage:
+            return "set_storage";
+        case BoardWifiPassiveBeginFailureStage::SetMode: return "set_mode";
+        case BoardWifiPassiveBeginFailureStage::WifiStart: return "wifi_start";
+        case BoardWifiPassiveBeginFailureStage::SetChannel:
+            return "set_channel";
+        case BoardWifiPassiveBeginFailureStage::SetFilter: return "set_filter";
+        case BoardWifiPassiveBeginFailureStage::SetCallback:
+            return "set_callback";
+        case BoardWifiPassiveBeginFailureStage::EnablePromiscuous:
+            return "enable_promiscuous";
+    }
+    return "unknown";
+}
+
 BoardWifiPassiveCapture* BoardWifiPassiveCapture::active_ = nullptr;
 portMUX_TYPE BoardWifiPassiveCapture::callbackMux_ =
     portMUX_INITIALIZER_UNLOCKED;
 std::uint32_t BoardWifiPassiveCapture::callbacksInFlight_ = 0U;
+
+void BoardWifiPassiveCapture::resetBeginDiagnostics() {
+    beginDriverError_ = 0;
+    beginFailureStage_ = BoardWifiPassiveBeginFailureStage::None;
+    heapFreeBeforeInit_ = 0;
+    heapLargestBeforeInit_ = 0;
+}
+
+void BoardWifiPassiveCapture::recordBeginFailure(
+    BoardWifiPassiveBeginFailureStage stage, int error) {
+    beginFailureStage_ = stage;
+    beginDriverError_ = error;
+    lastError_ = error;
+}
+
+void BoardWifiPassiveCapture::snapshotHeapBeforeInit() {
+    heapFreeBeforeInit_ = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    heapLargestBeforeInit_ = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+}
 
 bool BoardWifiPassiveCapture::reserveCallbackOwner() {
     bool reserved = false;
@@ -203,13 +250,25 @@ bool BoardWifiPassiveCapture::beginCapture(
     std::uint64_t startedUs, bool airspaceGuardMonitor,
     bool authenticationCapture,
     const std::array<std::uint8_t, 6>* authenticationTarget) {
+    if (initialized_ || started_ || promiscuous_) {
+        return false;
+    }
+    resetBeginDiagnostics();
     if (!apps::capture::validateWifiFrameCapturePlan(plan) ||
-        (authenticationCapture && authenticationTarget == nullptr) ||
-        initialized_ || started_ || promiscuous_ || !reserveCallbackOwner()) {
+        (authenticationCapture && authenticationTarget == nullptr)) {
+        recordBeginFailure(BoardWifiPassiveBeginFailureStage::Admission,
+                           ESP_ERR_INVALID_ARG);
+        return false;
+    }
+    if (!reserveCallbackOwner()) {
+        recordBeginFailure(BoardWifiPassiveBeginFailureStage::Admission,
+                           ESP_ERR_INVALID_STATE);
         return false;
     }
     capture_.reset();
     if (!capture_.begin(plan, startedUs)) {
+        recordBeginFailure(BoardWifiPassiveBeginFailureStage::CaptureBegin,
+                           ESP_ERR_INVALID_ARG);
         releaseFailedBegin();
         return false;
     }
@@ -230,18 +289,19 @@ bool BoardWifiPassiveCapture::beginCapture(
     if (error == ESP_OK) {
         eventLoopOwned_ = true;
     } else if (error != ESP_ERR_INVALID_STATE) {
-        lastError_ = error;
+        recordBeginFailure(
+            BoardWifiPassiveBeginFailureStage::EventLoopCreate, error);
         capture_.fail(error, startedUs);
         cleanupComplete_ = true;
         releaseFailedBegin();
         return false;
     }
 
-    wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
-    init.nvs_enable = 0;
+    snapshotHeapBeforeInit();
+    wifi_init_config_t init = makeBoardWifiPassiveOnlyInitConfig();
     error = esp_wifi_init(&init);
     if (error != ESP_OK) {
-        lastError_ = error;
+        recordBeginFailure(BoardWifiPassiveBeginFailureStage::WifiInit, error);
         capture_.fail(error, startedUs);
         endWifi();
         releaseFailedBegin();
@@ -250,11 +310,25 @@ bool BoardWifiPassiveCapture::beginCapture(
     initialized_ = true;
     nvsDisabled_ = true;
     error = esp_wifi_set_storage(WIFI_STORAGE_RAM);
-    if (error == ESP_OK) volatileStorageOnly_ = true;
-    if (error == ESP_OK) error = esp_wifi_set_mode(WIFI_MODE_STA);
-    if (error == ESP_OK) error = esp_wifi_start();
+    if (error == ESP_OK) {
+        volatileStorageOnly_ = true;
+        error = esp_wifi_set_mode(WIFI_MODE_STA);
+        if (error != ESP_OK) {
+            recordBeginFailure(
+                BoardWifiPassiveBeginFailureStage::SetMode, error);
+        }
+    } else {
+        recordBeginFailure(
+            BoardWifiPassiveBeginFailureStage::SetStorage, error);
+    }
+    if (error == ESP_OK) {
+        error = esp_wifi_start();
+        if (error != ESP_OK) {
+            recordBeginFailure(
+                BoardWifiPassiveBeginFailureStage::WifiStart, error);
+        }
+    }
     if (error != ESP_OK) {
-        lastError_ = error;
         capture_.fail(error, startedUs);
         endWifi();
         releaseFailedBegin();
@@ -264,6 +338,10 @@ bool BoardWifiPassiveCapture::beginCapture(
 
     currentChannel_ = plan.channel == 0U ? 1U : plan.channel;
     error = esp_wifi_set_channel(currentChannel_, WIFI_SECOND_CHAN_NONE);
+    if (error != ESP_OK) {
+        recordBeginFailure(
+            BoardWifiPassiveBeginFailureStage::SetChannel, error);
+    }
     wifi_promiscuous_filter_t filter{};
     filter.filter_mask = authenticationCapture_
         ? WIFI_PROMIS_FILTER_MASK_DATA
@@ -272,10 +350,21 @@ bool BoardWifiPassiveCapture::beginCapture(
                : WIFI_PROMIS_FILTER_MASK_MGMT |
                      WIFI_PROMIS_FILTER_MASK_CTRL |
                      WIFI_PROMIS_FILTER_MASK_DATA);
-    if (error == ESP_OK) error = esp_wifi_set_promiscuous_filter(&filter);
-    if (error == ESP_OK) error = esp_wifi_set_promiscuous_rx_cb(&receive);
+    if (error == ESP_OK) {
+        error = esp_wifi_set_promiscuous_filter(&filter);
+        if (error != ESP_OK) {
+            recordBeginFailure(
+                BoardWifiPassiveBeginFailureStage::SetFilter, error);
+        }
+    }
+    if (error == ESP_OK) {
+        error = esp_wifi_set_promiscuous_rx_cb(&receive);
+        if (error != ESP_OK) {
+            recordBeginFailure(
+                BoardWifiPassiveBeginFailureStage::SetCallback, error);
+        }
+    }
     if (error != ESP_OK) {
-        lastError_ = error;
         capture_.fail(error, startedUs);
         endWifi();
         releaseFailedBegin();
@@ -284,7 +373,8 @@ bool BoardWifiPassiveCapture::beginCapture(
 
     error = esp_wifi_set_promiscuous(true);
     if (error != ESP_OK) {
-        lastError_ = error;
+        recordBeginFailure(
+            BoardWifiPassiveBeginFailureStage::EnablePromiscuous, error);
         portENTER_CRITICAL(&mux_);
         capture_.fail(error, startedUs);
         portEXIT_CRITICAL(&mux_);
@@ -338,8 +428,7 @@ bool BoardWifiPassiveCapture::beginDeviceMonitor(
         return false;
     }
 
-    wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
-    init.nvs_enable = 0;
+    wifi_init_config_t init = makeBoardWifiPassiveOnlyInitConfig();
     error = esp_wifi_init(&init);
     if (error != ESP_OK) {
         lastError_ = error;
@@ -431,8 +520,7 @@ bool BoardWifiPassiveCapture::beginChannelMonitor(
         releaseFailedBegin();
         return false;
     }
-    wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
-    init.nvs_enable = 0;
+    wifi_init_config_t init = makeBoardWifiPassiveOnlyInitConfig();
     error = esp_wifi_init(&init);
     if (error != ESP_OK) {
         lastError_ = error;
@@ -714,6 +802,7 @@ void BoardWifiPassiveCapture::reset() {
     channelLandedUs_ = 0;
     channelDwellMs_ = 0;
     lastError_ = 0;
+    resetBeginDiagnostics();
 }
 
 apps::capture::WifiFrameCaptureStats BoardWifiPassiveCapture::stats() const {

@@ -93,6 +93,171 @@ def terminal_state(outcome: str = "inconclusive") -> dict[str, Any]:
 
 
 class WifiAuthenticationCaptureHilTests(unittest.TestCase):
+    def test_wifi_menu_preflight_requires_quiescent_ready_worker(self) -> None:
+        state = {
+            "page": "survey", "wifi_product_view": "menu",
+            "runtime_owner": "wifi", "lease_mask": 15,
+            "survey_workflow_state": "setup",
+            "survey_product_backend_open": False,
+            "survey_product_cleanup_complete": True,
+            "survey_product_worker_ready": True,
+            "survey_product_source_active": False,
+            "survey_product_scan_active": False,
+        }
+        self.assertTrue(RUNNER.wifi_menu_worker_ready(state))
+        failures: list[str] = []
+        CHECKER.verify_wifi_menu_ready(failures, state)
+        self.assertEqual([], failures)
+        for name, value in (
+                ("survey_product_worker_ready", False),
+                ("survey_product_source_active", True),
+                ("survey_product_cleanup_complete", False),
+                ("survey_product_backend_open", True),
+                ("survey_product_scan_active", True)):
+            with self.subTest(name=name):
+                changed = dict(state)
+                changed[name] = value
+                self.assertFalse(RUNNER.wifi_menu_worker_ready(changed))
+                failures = []
+                CHECKER.verify_wifi_menu_ready(failures, changed)
+                self.assertTrue(failures)
+
+    def test_one_shot_hold_has_exact_non_replayed_bounded_contract(self) -> None:
+        ack = {
+            "schema": RUNNER.AUTH_HOLD_SCHEMA, "kind": "armed",
+            "status": "armed", "armed": True, "one_shot": True,
+            "replayed": False, "timeout_ms": RUNNER.AUTH_HOLD_TIMEOUT_MS,
+            "hil_active": True, "hardware_touched": False,
+            "radio_started": False, "storage_mounted": False,
+            "storage_written": False,
+        }
+        with patch.object(RUNNER, "query", return_value=ack) as mutate, \
+                patch.object(RUNNER, "auth_state", return_value={
+                    "survey_terminal_hold_armed": True,
+                }):
+            hold = RUNNER.arm_authentication_survey_stop_hold(object())
+        self.assertEqual(1, mutate.call_count)
+        self.assertEqual(1, hold["host_arm_action_writes"])
+        self.assertEqual(0, hold["host_arm_action_replays"])
+        hold["host_back_after_arm_ms"] = 20.0
+        failures: list[str] = []
+        CHECKER.verify_cancel_hold(failures, hold)
+        self.assertEqual([], failures)
+
+        replayed = copy.deepcopy(hold)
+        replayed["ack"]["replayed"] = True
+        failures = []
+        CHECKER.verify_cancel_hold(failures, replayed)
+        self.assertTrue(failures)
+        timed_out = copy.deepcopy(hold)
+        timed_out["host_back_after_arm_ms"] = RUNNER.AUTH_HOLD_TIMEOUT_MS
+        failures = []
+        CHECKER.verify_cancel_hold(failures, timed_out)
+        self.assertTrue(failures)
+
+    def test_lost_hold_ack_is_never_replayed_and_requires_state_proof(self) -> None:
+        with patch.object(
+                RUNNER, "query", side_effect=TimeoutError("lost ack")) as mutate, \
+                patch.object(RUNNER, "auth_state", return_value={
+                    "survey_terminal_hold_armed": True,
+                }):
+            hold = RUNNER.arm_authentication_survey_stop_hold(object())
+        self.assertEqual(1, mutate.call_count)
+        self.assertFalse(hold["host_arm_ack_received"])
+        self.assertIn("lost ack", hold["host_arm_ack_error"])
+        hold["host_back_after_arm_ms"] = 10.0
+        failures: list[str] = []
+        CHECKER.verify_cancel_hold(failures, hold)
+        self.assertEqual([], failures)
+
+        with patch.object(RUNNER, "query", side_effect=TimeoutError("lost")), \
+                patch.object(RUNNER, "auth_state", return_value={
+                    "survey_terminal_hold_armed": False,
+                }):
+            with self.assertRaisesRegex(RuntimeError, "was not armed"):
+                RUNNER.arm_authentication_survey_stop_hold(object())
+
+    def test_start_wait_accepts_all_terminal_start_observations(self) -> None:
+        for state in ("running", "result", "failed"):
+            with self.subTest(state=state):
+                self.assertTrue(RUNNER.authentication_start_state({
+                    "state": state,
+                }))
+        self.assertFalse(RUNNER.authentication_start_state({
+            "state": "waiting_for_survey_stop",
+        }))
+
+    def test_start_failure_retains_exact_driver_stage_and_heap(self) -> None:
+        diagnostics = {
+            "authentication": {
+                "state": "failed", "failure": "start_failed",
+                "adapter_failure_stage": "wifi_init",
+                "adapter_driver_error": 257,
+                "adapter_heap_free_before_init": 120000,
+                "adapter_heap_largest_before_init": 60000,
+            },
+            "capture": {
+                "schema": RUNNER.CAPTURE_SCHEMA, "kind": "state",
+                "driver_error": 257,
+            },
+        }
+        self.assertEqual([], RUNNER.start_failure_diagnostic_failures(
+            diagnostics))
+        failures: list[str] = []
+        CHECKER.verify_start_failure_diagnostics(failures, diagnostics)
+        self.assertEqual([], failures)
+
+        for mutation in (
+                {"adapter_failure_stage": "none"},
+                {"adapter_driver_error": None},
+                {"adapter_driver_error": 0},
+                {"adapter_heap_free_before_init": 0}):
+            with self.subTest(mutation=mutation):
+                changed = copy.deepcopy(diagnostics)
+                changed["authentication"].update(mutation)
+                self.assertTrue(
+                    RUNNER.start_failure_diagnostic_failures(changed))
+                failures = []
+                CHECKER.verify_start_failure_diagnostics(failures, changed)
+                self.assertTrue(failures)
+
+        teardown_failure = copy.deepcopy(diagnostics)
+        teardown_failure["authentication"].update({
+            "failure": "result_before_cleanup",
+            "adapter_failure_stage": "none",
+            "adapter_driver_error": 0,
+            "adapter_heap_free_before_init": 0,
+            "adapter_heap_largest_before_init": 0,
+        })
+        teardown_failure["capture"]["driver_error"] = 0
+        self.assertEqual([], RUNNER.start_failure_diagnostic_failures(
+            teardown_failure))
+        failures = []
+        CHECKER.verify_start_failure_diagnostics(
+            failures, teardown_failure)
+        self.assertEqual([], failures)
+
+    def test_final_diagnostics_are_independent_and_best_effort(self) -> None:
+        records = {
+            b"input.state": {"status": "ready"},
+            b"storage.product.boot-recovery": {"status": "admitted"},
+        }
+
+        def read(_device: Any, command: bytes, *_args: Any,
+                 **_kwargs: Any) -> dict[str, Any]:
+            if command == b"hardware.safe-outputs":
+                raise TimeoutError("safe output query timed out")
+            return records[command]
+
+        with patch.object(RUNNER, "read_only_query", side_effect=read):
+            retained, errors = RUNNER.best_effort_final_diagnostics(object())
+        self.assertEqual({
+            "input": {"status": "ready"},
+            "recovery": {"status": "admitted"},
+        }, retained)
+        self.assertEqual(1, len(errors))
+        self.assertIn("safe_outputs", errors[0])
+
     def test_private_target_fields_are_scrubbed_before_retention(self) -> None:
         live = {
             "target_bssid": "00:11:22:33:44:55",

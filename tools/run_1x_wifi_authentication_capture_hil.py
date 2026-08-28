@@ -42,6 +42,8 @@ from run_1x_product_survey_hil import (
 
 RUN_SCHEMA = "leshy.wifi.authentication_capture_hil.run.v1"
 AUTH_SCHEMA = "leshy.wifi.authentication_capture.v1"
+AUTH_HOLD_SCHEMA = "leshy.wifi.authentication.hil_hold.v1"
+AUTH_HOLD_COMMAND = b"wifi.authentication.hil-hold-survey-stop once"
 CAPTURE_SCHEMA = "leshy.capture.wifi_frame.v1"
 UI_SCHEMA = "leshy.ui.v1"
 BOARD_ID = "board-01"
@@ -63,6 +65,15 @@ STATUS_Y0 = 0
 STATUS_Y1 = 26
 CAPTURE_DURATION_MS = 10_000
 CAPTURE_TERMINAL_SLACK_US = 2_500_000
+AUTH_HOLD_TIMEOUT_MS = 1_500
+AUTH_FAILURE_STAGES = frozenset({
+    "admission", "capture_begin", "event_loop_create", "wifi_init",
+    "set_storage", "set_mode", "wifi_start", "set_channel",
+    "set_filter", "set_callback", "enable_promiscuous",
+})
+AUTH_FAILURE_STAGES_BEFORE_HEAP_SNAPSHOT = frozenset({
+    "admission", "capture_begin", "event_loop_create",
+})
 UNCERTAINTY_NO_EVIDENCE = 1 << 7
 UNCERTAINTY_CAPTURE_LOSS = 1 << 2
 UNCERTAINTY_SOURCE_READ = 1 << 3
@@ -261,6 +272,149 @@ def wait_auth_state(device: PassiveSerial,
             return last
         time.sleep(0.05)
     raise TimeoutError(f"{description}: last state {last!r}")
+
+
+def wifi_menu_worker_ready(state: dict[str, Any]) -> bool:
+    """Require a quiescent, reusable survey worker before opening Networks."""
+    return (
+        state.get("page") == "survey" and
+        state.get("wifi_product_view") == "menu" and
+        state.get("runtime_owner") == "wifi" and
+        state.get("lease_mask") == 15 and
+        state.get("survey_workflow_state") == "setup" and
+        state.get("survey_product_backend_open") is False and
+        state.get("survey_product_cleanup_complete") is True and
+        state.get("survey_product_worker_ready") is True and
+        state.get("survey_product_source_active") is False and
+        state.get("survey_product_scan_active") is False
+    )
+
+
+def arm_authentication_survey_stop_hold(
+        device: PassiveSerial) -> dict[str, Any]:
+    """Arm the HIL-only hold exactly once; never replay a lost mutation ACK."""
+    try:
+        ack = query(
+            device, AUTH_HOLD_COMMAND, AUTH_HOLD_SCHEMA, "armed",
+            timeout=5.0)
+        ack_received = True
+        ack_error = ""
+    except TimeoutError as error:
+        ack = {}
+        ack_received = False
+        ack_error = str(error)
+
+    armed_state = auth_state(device)
+    record: dict[str, Any] = {
+        "ack": ack,
+        "armed_state": armed_state,
+        "host_arm_action_writes": 1,
+        "host_arm_action_replays": 0,
+        "host_arm_ack_received": ack_received,
+    }
+    if not ack_received:
+        record["host_arm_ack_error"] = ack_error
+
+    if ack_received:
+        require_exact(ack, {
+            "schema": AUTH_HOLD_SCHEMA,
+            "kind": "armed", "status": "armed",
+            "armed": True, "one_shot": True, "replayed": False,
+            "timeout_ms": AUTH_HOLD_TIMEOUT_MS,
+            "hil_active": True, "hardware_touched": False,
+            "radio_started": False, "storage_mounted": False,
+            "storage_written": False,
+        }, "authentication_hil_hold")
+    if armed_state.get("survey_terminal_hold_armed") is not True:
+        raise RuntimeError(
+            "authentication HIL hold was not armed after the one host write")
+    return record
+
+
+def authentication_start_state(state: dict[str, Any]) -> bool:
+    return state.get("state") in ("running", "result", "failed")
+
+
+def start_failure_diagnostic_failures(
+        diagnostics: dict[str, Any]) -> list[str]:
+    """Validate the minimum retained evidence for a failed adapter start."""
+    failures: list[str] = []
+    auth = diagnostics.get("authentication", {})
+    capture_record = diagnostics.get("capture", {})
+    stage = auth.get("adapter_failure_stage")
+    driver_error = auth.get("adapter_driver_error")
+    heap_free = auth.get("adapter_heap_free_before_init")
+    heap_largest = auth.get("adapter_heap_largest_before_init")
+    failure = auth.get("failure")
+    if (auth.get("state") != "failed" or not isinstance(failure, str) or
+            failure == "none"):
+        failures.append("start_failure.authentication: not a failed state")
+    if stage not in AUTH_FAILURE_STAGES | {"none"}:
+        failures.append(
+            f"start_failure.adapter_failure_stage: {stage!r}")
+    if not isinstance(driver_error, int) or isinstance(driver_error, bool):
+        failures.append("start_failure.adapter_driver_error: missing integer")
+    for name, value in (
+            ("adapter_heap_free_before_init", heap_free),
+            ("adapter_heap_largest_before_init", heap_largest)):
+        if not non_negative_integer(value):
+            failures.append(f"start_failure.{name}: missing counter")
+    if (failure == "start_failed" and
+            (stage not in AUTH_FAILURE_STAGES or driver_error == 0)):
+        failures.append(
+            "start_failure.adapter: start_failed lacks exact stage/error")
+    if (failure == "start_failed" and
+            stage in AUTH_FAILURE_STAGES -
+            AUTH_FAILURE_STAGES_BEFORE_HEAP_SNAPSHOT and
+            (heap_free == 0 or heap_largest == 0)):
+        failures.append(
+            "start_failure.heap: post-snapshot failure retained zero heap")
+    if capture_record.get("schema") != CAPTURE_SCHEMA or \
+            capture_record.get("kind") != "state":
+        failures.append("start_failure.capture: exact capture state missing")
+    capture_error = capture_record.get("driver_error")
+    if not isinstance(capture_error, int) or isinstance(capture_error, bool):
+        failures.append("start_failure.capture.driver_error: missing integer")
+    if failure == "start_failed" and capture_error == 0:
+        failures.append(
+            "start_failure.capture.driver_error: start_failed retained zero")
+    return failures
+
+
+def collect_authentication_failure_diagnostics(
+        device: PassiveSerial,
+        authentication: dict[str, Any]) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {"authentication": authentication}
+    try:
+        diagnostics["capture"] = read_only_query(
+            device, b"capture.state", CAPTURE_SCHEMA, "state",
+            timeout=3.0, maximum_attempts=1)
+    except Exception as error:
+        diagnostics["capture_query_error"] = (
+            f"{type(error).__name__}: {error}")
+    return diagnostics
+
+
+def best_effort_final_diagnostics(
+        device: PassiveSerial) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """Read safety state independently so an earlier failure remains primary."""
+    records: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
+    requests = (
+        ("input", b"input.state", "leshy.input.frontend.v1"),
+        ("safe_outputs", b"hardware.safe-outputs",
+         "leshy.hardware.safe-outputs.v1"),
+        ("recovery", b"storage.product.boot-recovery",
+         "leshy.storage.product_boot_recovery.v1"),
+    )
+    for name, command, schema in requests:
+        try:
+            records[name] = read_only_query(
+                device, command, schema, "state",
+                timeout=2.5, maximum_attempts=1)
+        except Exception as error:
+            errors.append(f"{name}: {type(error).__name__}: {error}")
+    return records, errors
 
 
 def non_negative_integer(value: object) -> bool:
@@ -597,9 +751,11 @@ def main() -> int:
     cleanup_after: dict[str, Any] = {"attempted": False}
     hil_begin: dict[str, Any] = {}
     hil_end: dict[str, Any] = {}
+    wifi_menu_ready_state: dict[str, Any] = {}
     cancel_network_list: dict[str, Any] = {}
     cancel_network_detail_ui: dict[str, Any] = {}
     cancel_network_detail: dict[str, Any] = {}
+    cancel_hold: dict[str, Any] = {}
     cancel_requested_ui: dict[str, Any] = {}
     cancel_requested: dict[str, Any] = {}
     cancel_back_ui: dict[str, Any] = {}
@@ -623,6 +779,8 @@ def main() -> int:
     home_after_back: dict[str, Any] = {}
     input_state: dict[str, Any] = {}
     safe_outputs: dict[str, Any] = {}
+    start_failure_diagnostics: dict[str, Any] = {}
+    final_diagnostic_errors: list[str] = []
     delta: dict[str, int] = {}
     repaint_delta: dict[str, int] = {}
     terminal_repaint_delta: dict[str, int] = {}
@@ -631,6 +789,7 @@ def main() -> int:
     flash_completed = False
     candidate_verified = False
     hil_started = False
+    workflow_completed = False
 
     try:
         if args.flash:
@@ -671,12 +830,17 @@ def main() -> int:
                     "wifi_product_selection": 0, "runtime_owner": "wifi",
                     "lease_mask": 15,
                 }, "wifi_menu")
+                wifi_menu_ready_state = wait_ui_state(
+                    device, wifi_menu_worker_ready, 15.0,
+                    "Wi-Fi menu survey worker did not become quiescent/ready")
                 # First prove the highest-risk lifecycle edge: Back while the
                 # shared survey worker is still stopping must not start a
                 # capture and must return to an entirely quiescent Wi-Fi menu.
                 (cancel_network_list, cancel_network_detail_ui,
                  cancel_network_detail) = enter_network_detail(
                     device, trace, "cancel")
+                hold_armed_at = time.monotonic()
+                cancel_hold = arm_authentication_survey_stop_hold(device)
                 cancel_requested_ui = action(device, "right")
                 trace.append(cancel_requested_ui)
                 require_exact(cancel_requested_ui, {
@@ -684,32 +848,23 @@ def main() -> int:
                     "runtime_event": "authentication_waiting_for_survey_stop",
                     "runtime_owner": "wifi", "lease_mask": 15,
                 }, "cancel_requested_ui")
-                cancel_requested = auth_state(device)
-                require_exact(cancel_requested, {
-                    "view": "authentication_capture",
-                    "state": "waiting_for_survey_stop",
-                    "cancel_pending": False,
-                    "back_during_wait_observed": False,
-                    "failure": "none", "passive": True,
-                    "tx_path": False, "connect_path": False,
-                }, "cancel_requested")
-                failures.extend(presenter_failures(
-                    cancel_requested, "cancel_requested"))
-                cancel_generation = cancel_requested.get("generation")
+                # The acknowledgement above is the waiting-state oracle.  Do
+                # not insert a read here: the worker may legitimately finish
+                # between two serial replies.  The bounded HIL hold makes the
+                # immediately following Back deterministic.
+                cancel_back_ui = action(device, "left")
+                trace.append(cancel_back_ui)
+                cancel_hold["host_back_after_arm_ms"] = (
+                    time.monotonic() - hold_armed_at) * 1000.0
+                if cancel_hold["host_back_after_arm_ms"] >= \
+                        AUTH_HOLD_TIMEOUT_MS:
+                    raise RuntimeError(
+                        "Back did not arrive before the bounded HIL hold timeout")
+                cancel_pending = auth_state(device)
+                cancel_generation = cancel_pending.get("generation")
                 if not non_negative_integer(cancel_generation) or \
                         cancel_generation == 0:
                     raise RuntimeError("cancel lifecycle has no generation")
-                if (cancel_requested.get("target_selected") is not True or
-                        cancel_requested.get(
-                            "target_selection_continuity") is not True or
-                        cancel_requested.get("channel") !=
-                        cancel_network_detail["channel"]):
-                    raise RuntimeError(
-                        "cancel target differs from locked NetworkDetail")
-
-                cancel_back_ui = action(device, "left")
-                trace.append(cancel_back_ui)
-                cancel_pending = auth_state(device)
                 if (cancel_pending.get("generation") != cancel_generation or
                         cancel_pending.get("back_during_wait_observed") is not
                         True):
@@ -743,6 +898,7 @@ def main() -> int:
                     "capture_cleanup_complete": True,
                     "adapter_cleanup_complete": True,
                     "survey_worker_deadline_armed": False,
+                    "survey_terminal_hold_armed": False,
                     "esp_rf_owned_by_foreground": True,
                 }, "cancel_terminal")
                 cancel_capture_terminal = capture_state(device)
@@ -767,14 +923,11 @@ def main() -> int:
                 auth_requested = auth_state(device)
                 require_exact(auth_requested, {
                     "view": "authentication_capture",
-                    "state": "waiting_for_survey_stop",
                     "cancel_pending": False,
                     "back_during_wait_observed": False,
-                    "failure": "none", "passive": True,
+                    "passive": True,
                     "tx_path": False, "connect_path": False,
                 }, "auth_requested")
-                failures.extend(presenter_failures(
-                    auth_requested, "auth_requested"))
                 generation = auth_requested.get("generation")
                 if (not non_negative_integer(generation) or generation == 0 or
                         generation <= cancel_generation):
@@ -789,10 +942,24 @@ def main() -> int:
                     raise RuntimeError(
                         "authentication target channel differs from NetworkDetail")
 
-                auth_running = wait_auth_state(
-                    device,
-                    lambda state: state.get("state") in ("running", "result"),
-                    15.0, "authentication capture did not start")
+                if auth_requested.get("state") == "waiting_for_survey_stop":
+                    failures.extend(presenter_failures(
+                        auth_requested, "auth_requested"))
+                    auth_running = wait_auth_state(
+                        device, authentication_start_state, 15.0,
+                        "authentication capture did not reach a terminal "
+                        "start outcome")
+                else:
+                    auth_running = auth_requested
+                if auth_running.get("state") == "failed":
+                    start_failure_diagnostics = \
+                        collect_authentication_failure_diagnostics(
+                            device, auth_running)
+                    failures.extend(start_failure_diagnostic_failures(
+                        start_failure_diagnostics))
+                    raise RuntimeError(
+                        "authentication capture adapter start failed; exact "
+                        "driver/stage/heap diagnostics retained")
                 if auth_running.get("state") != "running":
                     raise RuntimeError(
                         f"authentication capture skipped running proof: "
@@ -812,8 +979,15 @@ def main() -> int:
                     "capture_state": "running", "capture_active": True,
                     "capture_cleanup_complete": False,
                     "adapter_cleanup_complete": False,
+                    "adapter_driver_error": 0,
+                    "adapter_failure_stage": "none",
                     "esp_rf_owned_by_foreground": True,
                 }, "auth_running")
+                for name in ("adapter_heap_free_before_init",
+                             "adapter_heap_largest_before_init"):
+                    if not non_negative_integer(auth_running.get(name)) or \
+                            auth_running[name] == 0:
+                        failures.append(f"auth_running.{name}: expected > 0")
                 failures.extend(presenter_failures(
                     auth_running, "auth_running"))
                 capture_running = capture_state(device)
@@ -875,6 +1049,11 @@ def main() -> int:
                 host_capture_elapsed_ms = (
                     time.monotonic() - running_observed_at) * 1000.0
                 if auth_terminal.get("state") != "result":
+                    start_failure_diagnostics = \
+                        collect_authentication_failure_diagnostics(
+                            device, auth_terminal)
+                    failures.extend(start_failure_diagnostic_failures(
+                        start_failure_diagnostics))
                     raise RuntimeError(
                         f"authentication capture failed: {auth_terminal!r}")
                 require_exact(auth_terminal, {
@@ -892,9 +1071,18 @@ def main() -> int:
                     "capture_state": "complete", "capture_active": False,
                     "capture_cleanup_complete": True,
                     "adapter_cleanup_complete": True,
+                    "adapter_driver_error": 0,
+                    "adapter_failure_stage": "none",
                     "survey_worker_deadline_armed": False,
                     "esp_rf_owned_by_foreground": True,
                 }, "auth_terminal")
+                for name in ("adapter_heap_free_before_init",
+                             "adapter_heap_largest_before_init"):
+                    if auth_terminal.get(name) != auth_running.get(name) or \
+                            not non_negative_integer(auth_terminal.get(name)) or \
+                            auth_terminal[name] == 0:
+                        failures.append(
+                            f"auth_terminal.{name}: missing/changed snapshot")
                 failures.extend(ingress_accounting_failures(
                     auth_terminal, "auth_terminal"))
                 for name in ("content_repaints", "full_repaints",
@@ -1004,9 +1192,20 @@ def main() -> int:
                         failures.append(f"persistent {name} changed")
                 if recovery_after.get("physical_write_calls") != 0:
                     failures.append("physical SD write observed")
+                workflow_completed = True
             except Exception as error:
                 failures.append(f"workflow: {type(error).__name__}: {error}")
             finally:
+                diagnostics, diagnostic_errors = \
+                    best_effort_final_diagnostics(device)
+                final_diagnostic_errors.extend(diagnostic_errors)
+                if workflow_completed:
+                    failures.extend(
+                        f"final_diagnostics: {error}"
+                        for error in diagnostic_errors)
+                input_state = diagnostics.get("input", input_state)
+                safe_outputs = diagnostics.get("safe_outputs", safe_outputs)
+                recovery_after = diagnostics.get("recovery", recovery_after)
                 try:
                     cleanup_after = robust_cleanup(device)
                     if not cleanup_after.get("complete"):
@@ -1053,9 +1252,11 @@ def main() -> int:
         "recovery_before": recovery_before,
         "recovery_after": recovery_after,
         "hil_session": {"begin": hil_begin, "end": hil_end},
+        "wifi_menu_ready": wifi_menu_ready_state,
         "cancel_network_list": cancel_network_list,
         "cancel_network_detail_ui": cancel_network_detail_ui,
         "cancel_network_detail": cancel_network_detail,
+        "cancel_hold": cancel_hold,
         "cancel_requested_ui": cancel_requested_ui,
         "cancel_requested": cancel_requested,
         "cancel_back_ui": cancel_back_ui,
@@ -1080,6 +1281,8 @@ def main() -> int:
         "host_capture_elapsed_ms": host_capture_elapsed_ms,
         "input": input_state,
         "safe_outputs": safe_outputs,
+        "start_failure_diagnostics": start_failure_diagnostics,
+        "final_diagnostic_errors": final_diagnostic_errors,
         "screens": screens,
         "pixel_delta": delta,
         "repaint_delta": repaint_delta,
@@ -1106,6 +1309,17 @@ def main() -> int:
             "capture_duration_ms": CAPTURE_DURATION_MS,
             "back_during_wait_proven":
                 cancel_terminal.get("back_during_wait_observed") is True,
+            "survey_stop_hold_bounded":
+                (cancel_hold.get("host_arm_action_writes") == 1 and
+                 cancel_hold.get("host_arm_action_replays") == 0 and
+                 cancel_hold.get("armed_state", {}).get(
+                     "survey_terminal_hold_armed") is True and
+                 (cancel_hold.get("host_arm_ack_received") is False or
+                  cancel_hold.get("ack", {}).get("timeout_ms") ==
+                    AUTH_HOLD_TIMEOUT_MS) and
+                 cancel_hold.get("host_back_after_arm_ms", float("inf")) <
+                    AUTH_HOLD_TIMEOUT_MS and
+                 cancel_terminal.get("survey_terminal_hold_armed") is False),
             "generation_advanced_after_cancel":
                 (non_negative_integer(cancel_terminal.get("generation")) and
                  non_negative_integer(auth_terminal.get("generation")) and

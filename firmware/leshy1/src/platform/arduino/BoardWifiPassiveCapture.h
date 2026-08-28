@@ -10,11 +10,30 @@
 #include "apps/capture/WifiFrameCapture.h"
 #include "apps/wifi/WifiChannelLoad.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
+#include "platform/arduino/BoardWifiPassiveInitConfig.h"
 #include "platform/arduino/WifiPassiveCaptureTeardownPolicy.h"
 #include "services/auth/WifiAuthenticationCapture.h"
 #include "services/guard/AirspaceGuard.h"
 
 namespace leshy1::platform::arduino {
+
+enum class BoardWifiPassiveBeginFailureStage : std::uint8_t {
+    None,
+    Admission,
+    CaptureBegin,
+    EventLoopCreate,
+    WifiInit,
+    SetStorage,
+    SetMode,
+    WifiStart,
+    SetChannel,
+    SetFilter,
+    SetCallback,
+    EnablePromiscuous,
+};
+
+const char* boardWifiPassiveBeginFailureStageName(
+    BoardWifiPassiveBeginFailureStage stage);
 
 class BoardWifiPassiveCapture final {
 public:
@@ -122,6 +141,16 @@ public:
     bool nvsDisabled() const { return nvsDisabled_; }
     bool volatileStorageOnly() const { return volatileStorageOnly_; }
     int lastError() const { return lastError_; }
+    int beginDriverError() const { return beginDriverError_; }
+    BoardWifiPassiveBeginFailureStage beginFailureStage() const {
+        return beginFailureStage_;
+    }
+    std::uint32_t heapFreeBeforeInit() const {
+        return heapFreeBeforeInit_;
+    }
+    std::uint32_t heapLargestBeforeInit() const {
+        return heapLargestBeforeInit_;
+    }
 
 private:
     bool beginCapture(const apps::capture::WifiFrameCapturePlan& plan,
@@ -143,6 +172,10 @@ private:
     WifiPassiveTeardownState teardownState(bool callbacksAreQuiescent) const;
     void applyTeardownState(const WifiPassiveTeardownState& state);
     bool endWifi(WifiPassiveTeardownState* teardown = nullptr);
+    void resetBeginDiagnostics();
+    void recordBeginFailure(BoardWifiPassiveBeginFailureStage stage,
+                            int error);
+    void snapshotHeapBeforeInit();
 
     static BoardWifiPassiveCapture* active_;
     static portMUX_TYPE callbackMux_;
@@ -182,6 +215,11 @@ private:
     std::uint64_t channelLandedUs_ = 0;
     std::uint16_t channelDwellMs_ = 0;
     int lastError_ = 0;
+    int beginDriverError_ = 0;
+    BoardWifiPassiveBeginFailureStage beginFailureStage_ =
+        BoardWifiPassiveBeginFailureStage::None;
+    std::uint32_t heapFreeBeforeInit_ = 0;
+    std::uint32_t heapLargestBeforeInit_ = 0;
 };
 
 }  // namespace leshy1::platform::arduino

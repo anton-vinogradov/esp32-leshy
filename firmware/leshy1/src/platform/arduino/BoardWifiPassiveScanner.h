@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "drivers/wifi/WifiPassiveContract.h"
+#include "platform/arduino/BoardWifiPassiveInitConfig.h"
 
 namespace leshy1::platform::arduino {
 
@@ -48,11 +49,16 @@ public:
     // requests. Keep only the driver buffers required to receive management
     // frames. Product Survey also enforces disjoint Wi-Fi/BLE lifetimes on the
     // no-PSRAM DIV, so neither radio stack can starve the other at init.
-    static constexpr int kPassiveStaticRxBuffers = 4;
-    static constexpr int kPassiveDynamicRxBuffers = 8;
-    static constexpr int kPassiveStaticTxBuffers = 0;
-    static constexpr int kPassiveDynamicTxBuffers = 4;
-    static constexpr int kPassiveManagementShortBuffers = 6;
+    static constexpr int kPassiveStaticRxBuffers =
+        BoardWifiPassiveInitProfile::kStaticRxBuffers;
+    static constexpr int kPassiveDynamicRxBuffers =
+        BoardWifiPassiveInitProfile::kDynamicRxBuffers;
+    static constexpr int kPassiveStaticTxBuffers =
+        BoardWifiPassiveInitProfile::kStaticTxBuffers;
+    static constexpr int kPassiveDynamicTxBuffers =
+        BoardWifiPassiveInitProfile::kDynamicTxBuffers;
+    static constexpr int kPassiveManagementShortBuffers =
+        BoardWifiPassiveInitProfile::kManagementShortBuffers;
 
     ~BoardWifiPassiveScanner() { end(); }
 

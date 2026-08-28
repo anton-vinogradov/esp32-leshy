@@ -328,6 +328,7 @@ using leshy1::platform::arduino::BoardSdSpiTransport;
 using leshy1::platform::arduino::BoardWifiPassiveScanner;
 using leshy1::platform::arduino::BoardWifiPassiveCapture;
 using leshy1::platform::arduino::BoardWifiPassiveScanResult;
+using leshy1::platform::arduino::boardWifiPassiveBeginFailureStageName;
 using leshy1::platform::arduino::DisposableOtaLittleFs;
 using leshy1::platform::arduino::WifiRecordDisposition;
 using leshy1::platform::arduino::RamSessionStoreIo;
@@ -1129,6 +1130,36 @@ std::uint32_t wifiAuthenticationGeneration = 0;
 std::uint32_t wifiAuthenticationContentRepaints = 0;
 std::uint32_t wifiAuthenticationFullRepaints = 0;
 std::uint32_t wifiAuthenticationChromeRepaints = 0;
+constexpr std::uint32_t kWifiAuthenticationSurveyTerminalHoldTimeoutMs =
+    1500U;
+bool wifiAuthenticationSurveyTerminalHoldArmed = false;
+std::uint64_t wifiAuthenticationSurveyTerminalHoldDeadlineUs = 0;
+
+void clearWifiAuthenticationSurveyTerminalHold() {
+    wifiAuthenticationSurveyTerminalHoldArmed = false;
+    wifiAuthenticationSurveyTerminalHoldDeadlineUs = 0;
+}
+
+void armWifiAuthenticationSurveyTerminalHoldDeadline() {
+    if (!wifiAuthenticationSurveyTerminalHoldArmed) return;
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    wifiAuthenticationSurveyTerminalHoldDeadlineUs = nowUs +
+        static_cast<std::uint64_t>(
+            kWifiAuthenticationSurveyTerminalHoldTimeoutMs) * 1000ULL;
+}
+
+void expireWifiAuthenticationSurveyTerminalHold() {
+    if (!wifiAuthenticationSurveyTerminalHoldArmed ||
+        wifiAuthenticationSurveyTerminalHoldDeadlineUs == 0U) {
+        return;
+    }
+    const std::uint64_t nowUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs >= wifiAuthenticationSurveyTerminalHoldDeadlineUs) {
+        clearWifiAuthenticationSurveyTerminalHold();
+    }
+}
 AirspaceGuardController airspaceGuardController;
 leshy1::services::guard::AirspaceGuard airspaceGuardDetector;
 enum class AirspaceGuardCaptureState : std::uint8_t {
@@ -5109,9 +5140,28 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
 
 void serviceProductSurveyWorker() {
     if (productSurveyWorkerEvents == nullptr) return;
+    expireWifiAuthenticationSurveyTerminalHold();
     bool render = false;
     ProductSurveyWorkerEvent event;
-    while (xQueueReceive(productSurveyWorkerEvents, &event, 0) == pdTRUE) {
+    while (xQueuePeek(productSurveyWorkerEvents, &event, 0) == pdTRUE) {
+        const bool terminalEvent =
+            event.kind == ProductSurveyWorkerEventKind::Paused ||
+            event.kind == ProductSurveyWorkerEventKind::Stopped ||
+            event.kind == ProductSurveyWorkerEventKind::Cancelled ||
+            event.kind == ProductSurveyWorkerEventKind::Failed;
+        const bool deferCancelledTerminal =
+            wifiAuthenticationSurveyTerminalHoldArmed &&
+            event.kind == ProductSurveyWorkerEventKind::Cancelled &&
+            wifiAuthenticationProductState ==
+                WifiAuthenticationProductState::WaitingForSurveyStop &&
+            !wifiAuthenticationReturnAfterSurveyStop;
+        if (deferCancelledTerminal) break;
+        if (terminalEvent && wifiAuthenticationSurveyTerminalHoldArmed) {
+            clearWifiAuthenticationSurveyTerminalHold();
+        }
+        if (xQueueReceive(productSurveyWorkerEvents, &event, 0) != pdTRUE) {
+            break;
+        }
         applyProductSurveyWorkerReport(event.report);
         if (event.kind != ProductSurveyWorkerEventKind::ScanStarted) {
             productSurveyRuntime.scan = event.scan;
@@ -18282,6 +18332,7 @@ bool requestWifiAuthenticationCaptureFromDetail() {
     }
     wifiAuthenticationProductState =
         WifiAuthenticationProductState::WaitingForSurveyStop;
+    armWifiAuthenticationSurveyTerminalHoldDeadline();
     ++wifiAuthenticationGeneration;
     if (wifiAuthenticationGeneration == 0U) {
         ++wifiAuthenticationGeneration;
@@ -27002,6 +27053,7 @@ void emitHilSessionEnd(Stream& reply, const char* command) {
     if (status == HilSessionStatus::Ended) {
         clearWebCompanionHilEntropy();
         setAirspaceGuardBleCapacityDropInjection(false);
+        clearWifiAuthenticationSurveyTerminalHold();
     }
     char line[256] = {};
     if (status == HilSessionStatus::Ended) {
@@ -28012,6 +28064,39 @@ void emitWifiNetworkDetailState(Stream& reply) {
     reply.println(line);
 }
 
+void emitWifiAuthenticationHilHold(Stream& reply) {
+    expireWifiAuthenticationSurveyTerminalHold();
+    const bool safeState = hilSession.active() &&
+        wifiProductView == WifiProductView::NetworkDetail &&
+        wifiAuthenticationProductState ==
+            WifiAuthenticationProductState::Idle &&
+        productSurveyControl() == ProductSurveyWorkerControl::Running &&
+        std::strcmp(appRuntime.activeApp(), "wifi") == 0;
+    const bool replayed = safeState &&
+        wifiAuthenticationSurveyTerminalHoldArmed;
+    const char* status = safeState ? "armed" : "unsafe_state";
+    if (safeState && !replayed) {
+        wifiAuthenticationSurveyTerminalHoldArmed = true;
+        armWifiAuthenticationSurveyTerminalHoldDeadline();
+    }
+    char line[512] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.wifi.authentication.hil_hold.v1\","
+        "\"kind\":\"%s\",\"status\":\"%s\",\"armed\":%s,"
+        "\"one_shot\":true,\"replayed\":%s,\"timeout_ms\":%lu,"
+        "\"hil_active\":%s,"
+        "\"hardware_touched\":false,\"radio_started\":false,"
+        "\"storage_mounted\":false,\"storage_written\":false}",
+        safeState ? "armed" : "error", status,
+        wifiAuthenticationSurveyTerminalHoldArmed ? "true" : "false",
+        replayed ? "true" : "false",
+        static_cast<unsigned long>(
+            kWifiAuthenticationSurveyTerminalHoldTimeoutMs),
+        hilSession.active() ? "true" : "false");
+    reply.println(line);
+}
+
 void emitWifiAuthenticationCaptureState(Stream& reply) {
     const auto capture = wifiFrameCapture.stats();
     const auto ingress = wifiFrameCapture.authenticationCaptureStats();
@@ -28046,6 +28131,11 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         "\"kind\":\"state\",\"view\":\"%s\",\"state\":\"%s\","
         "\"generation\":%lu,\"cancel_pending\":%s,"
         "\"back_during_wait_observed\":%s,\"failure\":\"%s\","
+        "\"survey_terminal_hold_armed\":%s,"
+        "\"adapter_driver_error\":%ld,"
+        "\"adapter_failure_stage\":\"%s\","
+        "\"adapter_heap_free_before_init\":%lu,"
+        "\"adapter_heap_largest_before_init\":%lu,"
         "\"passive\":true,\"tx_path\":false,\"connect_path\":false,"
         "\"target_selected\":%s,\"target_selection_continuity\":%s,"
         "\"channel\":%u,\"duration_ms\":%lu,"
@@ -28097,6 +28187,12 @@ void emitWifiAuthenticationCaptureState(Stream& reply) {
         wifiAuthenticationReturnAfterSurveyStop ? "true" : "false",
         wifiAuthenticationBackDuringWaitObserved ? "true" : "false",
         wifiAuthenticationUiFailureName(wifiAuthenticationFailure),
+        wifiAuthenticationSurveyTerminalHoldArmed ? "true" : "false",
+        static_cast<long>(wifiFrameCapture.beginDriverError()),
+        boardWifiPassiveBeginFailureStageName(
+            wifiFrameCapture.beginFailureStage()),
+        static_cast<unsigned long>(wifiFrameCapture.heapFreeBeforeInit()),
+        static_cast<unsigned long>(wifiFrameCapture.heapLargestBeforeInit()),
         wifiAuthenticationTargetValid() ? "true" : "false",
         wifiAuthenticationTargetMatchesSelectedDetail() ? "true" : "false",
         static_cast<unsigned>(wifiAuthenticationTarget.channel),
@@ -28832,6 +28928,10 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitCompanionWebState(reply);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
         emitWifiNetworkDetailState(reply);
+    } else if (std::strcmp(
+                   command,
+                   "wifi.authentication.hil-hold-survey-stop once") == 0) {
+        emitWifiAuthenticationHilHold(reply);
     } else if (std::strcmp(command, "wifi.authentication.state") == 0) {
         emitWifiAuthenticationCaptureState(reply);
     } else if (std::strcmp(command, "ble.device.detail") == 0) {
@@ -29517,6 +29617,7 @@ void setup() {
               "\"hil.begin <session-id> <app-elf-sha256>\","
               "\"hil.state\","
               "\"hil.end <session-id>\","
+              "\"wifi.authentication.hil-hold-survey-stop once\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
               "\"power.state\",\"power.low-voltage-test confirm\","
               "\"power.sleep-test confirm\",\"power.sleep-test state\","
