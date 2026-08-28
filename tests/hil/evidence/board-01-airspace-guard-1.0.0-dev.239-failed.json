@@ -1,0 +1,55 @@
+{
+  "board": "board-01",
+  "cadence": {
+    "accepted_deltas_unchanged": "9/15"
+  },
+  "candidate": {
+    "app_elf_sha256": "ff7b5251b2dbff655487bcf99d0e93234bcf365422316109ca808185d56d7433",
+    "failed_full_artifact_index_sha256": "11a0ce7d8b40bc4d52930e0d26b8201d4e735e8446cfef8e9b4459b4eeea18c5",
+    "failed_full_run_sha256": "f5d6a69ee4f90173a163cb3e63c96a81067a0b973a4d4a0129d13be6e336be31",
+    "firmware_sha256": "64d9119237994b75f1827060d51e4fe2c3d2af76c8740adc3726764598d70e61",
+    "fresh_delta_run_sha256": "38f07bf1ebb12bcf2d4ef6ee3c7b8d94152bf5fdcc323e15c0ac35603cfb36ff",
+    "source_commit": "88aa287f22b1311f5712dc81bbfef38350bf487e",
+    "version": "1.0.0-dev.239"
+  },
+  "candidate_rejected": true,
+  "corrective_candidate": {
+    "app_elf_sha256": "32d618dc780e8e56f114186fb2c27c9e7dd217f6eafa5e58a33310524c8a0f81",
+    "firmware_sha256": "48a382c3fa754c133bac81f4e7de262a558cdc397b92c8f4180b3c1bd7141df1",
+    "inspection_budget_records": 128,
+    "runner_source_sha256": "d3876f198bb972a9faae6d3d5330360ccc6bc4e26eafd7f23297cb735b051e8a",
+    "source_commit": "9ccc4b1bf858619ede702145adc84ccab70a0c17",
+    "source_local_ble_records": 64,
+    "source_local_wifi_records": 64,
+    "version": "1.0.0-dev.241"
+  },
+  "expected_cid": "FE343253440000002000000055019CB7",
+  "failure": {
+    "first_ble_retention_dropped": 0,
+    "first_ble_retention_retained": 49,
+    "first_ble_scan_status": "valid",
+    "first_ble_worker_status": "complete",
+    "first_ble_worker_valid": true,
+    "first_capture_state": "failed",
+    "first_findings_dropped": 0,
+    "first_load_status": "invalid_report",
+    "root_cause": "merged_complete_report_above_64_rejected_by_controller_inspection_budget",
+    "second_ble_records": 53,
+    "second_capture_state": "result",
+    "second_findings_dropped": 0,
+    "second_load_status": "ready"
+  },
+  "gate_eligible": false,
+  "port": "/dev/cu.usbmodem2101",
+  "post_failure_cleanup": {
+    "complete": true,
+    "lease_mask": 0,
+    "page": "home",
+    "runtime_owner": "none",
+    "safety_latched": false,
+    "safety_state": "armed"
+  },
+  "rom_mac": "1c:db:d4:87:90:d4",
+  "schema": "leshy.airspace_guard_hil.negative.v1",
+  "status": "failed"
+}

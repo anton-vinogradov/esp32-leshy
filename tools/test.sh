@@ -434,13 +434,11 @@ airspace_guard_positive="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.
 airspace_guard_negative_dev239="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.239-failed.json"
 airspace_guard_negative_dev241="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.241-failed.json"
 airspace_guard_expectations="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.242-acceptance.json"
-if [[ -e "$airspace_guard_expectations" ]]; then
-    python3 "$repo_dir/tools/check_airspace_guard_hil_acceptance.py" \
-        --expectations "$airspace_guard_expectations" \
-        --positive "$airspace_guard_positive" \
-        --negative-dev239 "$airspace_guard_negative_dev239" \
-        --negative-dev241 "$airspace_guard_negative_dev241"
-fi
+python3 "$repo_dir/tools/check_airspace_guard_hil_acceptance.py" \
+    --expectations "$airspace_guard_expectations" \
+    --positive "$airspace_guard_positive" \
+    --negative-dev239 "$airspace_guard_negative_dev239" \
+    --negative-dev241 "$airspace_guard_negative_dev241"
 python3 "$repo_dir/tools/check_companion_post_web_memory_contract.py"
 python3 "$repo_dir/tools/check_companion_post_web_acceptance.py"
 python3 "$repo_dir/tools/check_stage_demo_s6_contract.py"

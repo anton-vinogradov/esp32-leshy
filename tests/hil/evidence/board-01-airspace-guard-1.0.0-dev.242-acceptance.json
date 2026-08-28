@@ -1,0 +1,12 @@
+{
+  "app_elf_sha256": "02b27bc09cbb507a621e6a69ae42b41090e50e371ec3c4f4d85c3de1e2116d5d",
+  "expected_cid": "FE343253440000002000000055019CB7",
+  "firmware_sha256": "2b4a9fbdfa294bc3e632a6f707b37b3dcbc9151888320dc0ceda607794f21f5e",
+  "positive_artifact_index_sha256": "b728e5430b2de6ba73cccbe12c02b37497b17cdda9e37efea85537717498d766",
+  "positive_run_sha256": "3c2b372956563009893c060b4ea5fab365b7b6cad057527bb29af6c63e469956",
+  "run_id": "059ff46419ce86bd9e2f83bcddb32084",
+  "runner_source_sha256": "0d56d3c563aa92d5a36d6d6703347d6029d309d5f031420645c99d60b190fb44",
+  "schema": "leshy.airspace_guard_hil.acceptance_expectations.v1",
+  "source_commit": "8483f6e1be24724ebf00172323cee253b9b64b39",
+  "version": "1.0.0-dev.242"
+}
