@@ -1,0 +1,27 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "airspace-guard-1.0.0-dev.223",
+  "candidate_version": "1.0.0-dev.223",
+  "changed_surfaces": [
+    "airspace_guard_low_confidence_elevated_noise_indicator",
+    "airspace_guard_read_only_diagnostic_contract",
+    "airspace_guard_bounded_incremental_rendering"
+  ],
+  "required_delta_regression": [
+    "one_exact_flash_on_board_01",
+    "automatic_wifi_stage_screenshots_and_static_pixel_proof",
+    "wifi_stage_cancel_and_complete_cleanup",
+    "automatic_ble_stage_screenshots_and_static_pixel_proof",
+    "ble_stage_cancel_and_complete_cleanup",
+    "two_complete_wifi_plus_ble_lifecycles",
+    "all_evidence_accounting_and_retention_complete",
+    "all_findings_bounded_and_noise_indicator_low_confidence",
+    "passive_receive_only_and_zero_application_tx",
+    "zero_heap_drift_after_warmup",
+    "zero_input_drops_and_final_zero_lease",
+    "zero_product_sd_writes"
+  ],
+  "new_passive_scans_required": true,
+  "full_matrix_required": false,
+  "cadence_after_acceptance": "6/15"
+}

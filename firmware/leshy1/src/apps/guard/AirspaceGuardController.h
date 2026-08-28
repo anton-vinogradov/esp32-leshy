@@ -52,6 +52,24 @@ public:
     }
     std::size_t framesAvailable() const { return report_.framesAvailable; }
     std::size_t framesInspected() const { return report_.framesInspected; }
+    std::size_t disconnectFrames() const {
+        return report_.disconnectFrames;
+    }
+    std::size_t identityAdvertisementFrames() const {
+        return report_.identityAdvertisementFrames;
+    }
+    std::size_t bleAdvertisementRecords() const {
+        return report_.bleAdvertisementRecords;
+    }
+    std::size_t wifiNoiseSamplesObserved() const {
+        return report_.wifiNoiseSamplesObserved;
+    }
+    std::size_t wifiNoiseSamplesAvailable() const {
+        return report_.wifiNoiseSamplesAvailable;
+    }
+    std::size_t wifiNoiseSamplesInspected() const {
+        return report_.wifiNoiseSamplesInspected;
+    }
     std::size_t malformedFrames() const { return report_.malformedFrames; }
     std::size_t sourceReadFailures() const {
         return report_.sourceReadFailures;

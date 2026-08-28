@@ -40,6 +40,8 @@ BOARD_BLE_SOURCE = (
 BLE_CONTRACT_HEADER = (
     ROOT / "firmware/leshy1/src/drivers/ble/BlePassiveContract.h"
 )
+HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.223.json"
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -68,6 +70,8 @@ def main() -> int:
             BOARD_BLE_SOURCE.read_text(encoding="utf-8")
         )
         ble_contract = BLE_CONTRACT_HEADER.read_text(encoding="utf-8")
+        hil_runner = HIL_RUNNER.read_text(encoding="utf-8")
+        hil_scope = HIL_SCOPE.read_text(encoding="utf-8")
     except OSError as error:
         print(f"airspace guard contract check failed: {error}", file=sys.stderr)
         return 1
@@ -359,6 +363,8 @@ def main() -> int:
         "kAirspaceGuardCaptureDurationMs = 10000U",
         "kAirspaceGuardChannelDwellMs = 120U",
         "UiTextId::AirspaceGuardEvidenceKindsFormat",
+        "emitAirspaceGuardState",
+        'std::strcmp(command, "airspace.guard.state") == 0',
         "policy.elevatedNoiseEnabled = monitor.noiseRetentionComplete",
         "report.wifiNoiseSamplesDropped == 0U",
         "report.wifiNoiseSamplesMalformed == 0U",
@@ -446,6 +452,29 @@ def main() -> int:
         "noiseRetentionComplete" in board_capture,
         "live noise detector is not gated by complete bounded RX metadata",
     )
+
+    for marker in (
+        'RUN_SCHEMA = "leshy.airspace_guard_hil.run.v1"',
+        'STATE_SCHEMA = "leshy.airspace_guard.v1"',
+        "wifi_cancelled",
+        "ble_cancelled",
+        "two_complete_guard_lifecycles",
+        "static_pixels_unchanged_during_live_refresh",
+        "zero_heap_drift_after_warmup",
+        "absence_of_noise_finding_is_not_absence_of_interference",
+        "application_wifi_connect_calls",
+        "application_raw_tx_calls",
+    ):
+        require(failures, marker in hil_runner,
+                f"missing Airspace Guard HIL contract: {marker}")
+    for marker in (
+        '"schema": "leshy.hil.delta_scope.v1"',
+        '"candidate_version": "1.0.0-dev.223"',
+        '"full_matrix_required": false',
+        '"cadence_after_acceptance": "6/15"',
+    ):
+        require(failures, marker in hil_scope,
+                f"missing Airspace Guard delta scope: {marker}")
 
     if failures:
         print("airspace guard contract check failed:", file=sys.stderr)

@@ -1088,6 +1088,17 @@ bool airspaceGuardCaptureRunning() {
         airspaceGuardCaptureState ==
                AirspaceGuardCaptureState::BleRunning;
 }
+const char* airspaceGuardCaptureStateName(
+    AirspaceGuardCaptureState state) {
+    switch (state) {
+        case AirspaceGuardCaptureState::Idle: return "idle";
+        case AirspaceGuardCaptureState::WifiRunning: return "wifi_running";
+        case AirspaceGuardCaptureState::BleRunning: return "ble_running";
+        case AirspaceGuardCaptureState::Result: return "result";
+        case AirspaceGuardCaptureState::Failed: return "failed";
+    }
+    return "unknown";
+}
 constexpr std::uint32_t kAirspaceGuardCaptureDurationMs = 10000U;
 constexpr std::uint16_t kAirspaceGuardChannelDwellMs = 120U;
 std::uint64_t nextAirspaceGuardUiRefreshUs = 0;
@@ -19251,6 +19262,135 @@ void emitWifiFrameCaptureState(Stream& reply) {
     reply.println(line);
 }
 
+void emitAirspaceGuardState(Stream& reply) {
+    const auto capture = wifiFrameCapture.stats();
+    const auto monitor = wifiFrameCapture.airspaceGuardMonitorStats();
+    std::uint32_t findingMask = 0U;
+    bool elevatedNoiseLowConfidence = true;
+    for (std::size_t index = 0;
+         index < airspaceGuardController.findingCount(); ++index) {
+        const auto* finding = airspaceGuardController.finding(index);
+        if (finding == nullptr) continue;
+        const std::uint8_t kind = static_cast<std::uint8_t>(finding->kind);
+        if (kind < 32U) findingMask |= 1UL << kind;
+        if (finding->kind ==
+                leshy1::services::guard::AirspaceFindingKind::
+                    WifiElevatedNoise &&
+            finding->confidence !=
+                leshy1::services::guard::AirspaceConfidence::Low) {
+            elevatedNoiseLowConfidence = false;
+        }
+    }
+    const auto workerControl = airspaceGuardBleControl();
+    auto& line = diagnosticJson;
+    const int written = std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.airspace_guard.v1\",\"kind\":\"state\","
+        "\"capture_state\":\"%s\",\"generation\":%lu,"
+        "\"view\":\"%s\",\"load_status\":\"%s\","
+        "\"outcome\":\"%s\",\"evidence_incomplete\":%s,"
+        "\"finding_count\":%u,\"finding_mask\":%lu,"
+        "\"finding_selection\":%u,\"evidence_selection\":%u,"
+        "\"elevated_noise_low_confidence\":%s,"
+        "\"source_frames_observed\":%u,\"frames_available\":%u,"
+        "\"frames_inspected\":%u,\"disconnect_frames\":%u,"
+        "\"identity_frames\":%u,\"ble_records\":%u,"
+        "\"noise_samples_observed\":%u,"
+        "\"noise_samples_available\":%u,"
+        "\"noise_samples_inspected\":%u,"
+        "\"noise_samples_dropped\":%u,"
+        "\"noise_samples_malformed\":%u,"
+        "\"malformed_frames\":%u,\"source_read_failures\":%u,"
+        "\"source_frames_dropped\":%u,\"findings_dropped\":%u,"
+        "\"inspection_truncated\":%s,"
+        "\"wifi_capture_state\":\"%s\",\"wifi_driver_error\":%ld,"
+        "\"wifi_cleanup_complete\":%s,\"wifi_monitor_active\":%s,"
+        "\"wifi_frames_reported\":%lu,\"wifi_frames_retained\":%lu,"
+        "\"wifi_disconnects_retained\":%lu,"
+        "\"wifi_disconnects_dropped\":%lu,"
+        "\"wifi_identity_observed\":%lu,"
+        "\"wifi_identity_retained\":%lu,"
+        "\"wifi_identity_deduplicated\":%lu,"
+        "\"wifi_identity_dropped\":%lu,"
+        "\"wifi_noise_observed\":%lu,\"wifi_noise_retained\":%lu,"
+        "\"wifi_noise_dropped\":%lu,\"wifi_invalid_frames\":%lu,"
+        "\"wifi_ignored_frames\":%lu,\"wifi_channel_hops\":%lu,"
+        "\"wifi_identity_retention_complete\":%s,"
+        "\"wifi_noise_retention_complete\":%s,"
+        "\"ble_worker_control\":%u,\"ble_worker_ready\":%s,"
+        "\"passive_only\":true,\"rx_only\":true,"
+        "\"application_connect_calls\":0,"
+        "\"application_raw_tx_calls\":0,"
+        "\"runtime_owner\":\"%s\",\"lease_mask\":%lu}",
+        airspaceGuardCaptureStateName(airspaceGuardCaptureState),
+        static_cast<unsigned long>(airspaceGuardGeneration),
+        leshy1::apps::guard::airspaceGuardViewName(
+            airspaceGuardController.view()),
+        leshy1::apps::guard::airspaceGuardLoadStatusName(
+            airspaceGuardController.loadStatus()),
+        leshy1::services::guard::airspaceGuardStatusName(
+            airspaceGuardController.outcome()),
+        airspaceGuardController.evidenceIncomplete() ? "true" : "false",
+        static_cast<unsigned>(airspaceGuardController.findingCount()),
+        static_cast<unsigned long>(findingMask),
+        static_cast<unsigned>(airspaceGuardController.findingSelection()),
+        static_cast<unsigned>(airspaceGuardController.evidenceSelection()),
+        elevatedNoiseLowConfidence ? "true" : "false",
+        static_cast<unsigned>(airspaceGuardController.sourceFramesObserved()),
+        static_cast<unsigned>(airspaceGuardController.framesAvailable()),
+        static_cast<unsigned>(airspaceGuardController.framesInspected()),
+        static_cast<unsigned>(airspaceGuardController.disconnectFrames()),
+        static_cast<unsigned>(
+            airspaceGuardController.identityAdvertisementFrames()),
+        static_cast<unsigned>(airspaceGuardController.bleAdvertisementRecords()),
+        static_cast<unsigned>(
+            airspaceGuardController.wifiNoiseSamplesObserved()),
+        static_cast<unsigned>(
+            airspaceGuardController.wifiNoiseSamplesAvailable()),
+        static_cast<unsigned>(
+            airspaceGuardController.wifiNoiseSamplesInspected()),
+        static_cast<unsigned>(
+            airspaceGuardController.wifiNoiseSamplesDropped()),
+        static_cast<unsigned>(
+            airspaceGuardController.wifiNoiseSamplesMalformed()),
+        static_cast<unsigned>(airspaceGuardController.malformedFrames()),
+        static_cast<unsigned>(airspaceGuardController.sourceReadFailures()),
+        static_cast<unsigned>(airspaceGuardController.sourceFramesDropped()),
+        static_cast<unsigned>(airspaceGuardController.findingsDropped()),
+        airspaceGuardController.inspectionTruncated() ? "true" : "false",
+        leshy1::apps::capture::wifiFrameCaptureStateName(capture.state),
+        static_cast<long>(capture.driverError),
+        wifiFrameCapture.cleanupComplete() ? "true" : "false",
+        monitor.active ? "true" : "false",
+        static_cast<unsigned long>(monitor.framesReported),
+        static_cast<unsigned long>(monitor.framesRetained),
+        static_cast<unsigned long>(monitor.disconnectFramesRetained),
+        static_cast<unsigned long>(monitor.disconnectFramesDropped),
+        static_cast<unsigned long>(monitor.identityAdvertisementsObserved),
+        static_cast<unsigned long>(monitor.identityProfilesRetained),
+        static_cast<unsigned long>(monitor.identityProfilesDeduplicated),
+        static_cast<unsigned long>(monitor.identityProfilesDropped),
+        static_cast<unsigned long>(monitor.noiseSamplesObserved),
+        static_cast<unsigned long>(monitor.noiseSamplesRetained),
+        static_cast<unsigned long>(monitor.noiseSamplesDropped),
+        static_cast<unsigned long>(monitor.invalidFrames),
+        static_cast<unsigned long>(monitor.ignoredFrames),
+        static_cast<unsigned long>(monitor.channelHops),
+        monitor.identityRetentionComplete ? "true" : "false",
+        monitor.noiseRetentionComplete ? "true" : "false",
+        static_cast<unsigned>(workerControl),
+        productSurveyWorkerReady ? "true" : "false",
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
+    if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(line)) {
+        reply.println(
+            "{\"schema\":\"leshy.airspace_guard.v1\","
+            "\"kind\":\"error\",\"reason\":\"state_overflow\"}");
+        return;
+    }
+    reply.println(line);
+}
+
 struct StreamPcapSink final {
     Stream* stream = nullptr;
 };
@@ -27375,6 +27515,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitSurveyBrowser(reply);
     } else if (std::strcmp(command, "capture.state") == 0) {
         emitWifiFrameCaptureState(reply);
+    } else if (std::strcmp(command, "airspace.guard.state") == 0) {
+        emitAirspaceGuardState(reply);
     } else if (std::strcmp(command, "capture.export.pcap") == 0) {
         emitWifiFrameCapturePcap(reply);
     } else if (std::strcmp(command, "capture.subghz.state") == 0) {
@@ -28065,6 +28207,7 @@ void setup() {
               "\"companion.web.hil-proof\","
               "\"companion.web.state\","
               "\"capture.state\",\"capture.export.pcap\","
+              "\"airspace.guard.state\","
               "\"capture.subghz.state\","
               "\"capture.subghz.export.csv\","
               "\"capture.ir.state\",\"capture.ir.export.csv\","
