@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.241.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.242.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -129,6 +129,8 @@ def main() -> int:
         "BleObservationSource",
         "AirspaceGuardBleRetention",
         "kBleTrackerLiveRetentionCapacity = 64",
+        "configureEffectiveCapacity",
+        "effectiveCapacity_",
         "bleTrackerIngressStatus",
         "mergeAirspaceGuardReports",
         "inspectBle(",
@@ -165,6 +167,7 @@ def main() -> int:
         "testBleTrackerPresenceFailsClosedOnIncompleteEvidence",
         "testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats",
         "testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss",
+        "testLiveBleRetentionEffectiveCapacityUsesRealAdmissionPath",
         "testCompletedWifiAndBleReportsMergeWithoutInventingEvidence",
         "testElevatedNoiseIsLowConfidenceExactAndOptIn",
         "testElevatedNoiseRejectsWeakSplitStaleAndMalformedEvidence",
@@ -558,7 +561,7 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.241"',
+        '"candidate_version": "1.0.0-dev.242"',
         '"full_matrix_required": true',
         '"cadence_after_acceptance": "10/15"',
     ):
@@ -572,6 +575,28 @@ def main() -> int:
     ):
         require(failures, marker in controller_source + controller_tests,
                 f"missing merged-report controller regression: {marker}")
+    for marker in (
+        "event.retention.capacityDrops",
+        "event.capacityDropRequested",
+        "event.capacityDropInjected",
+        '"capacity_drop_not_exercised"',
+        '\\"ble_capacity_drop_requested\\":',
+        '"incomplete_evidence"',
+        "ble_capacity_drops",
+    ):
+        require(failures, marker in arduino_entry + hil_runner,
+                f"missing incomplete BLE evidence contract: {marker}")
+    for marker in (
+        "emitHilSessionState",
+        'std::strcmp(command, "hil.state") == 0',
+        "begin_hil_session",
+        'b"hil.state"',
+        "host_begin_action_replays",
+        "terminal_hil_cleanup",
+        "capacity_drop_clear",
+    ):
+        require(failures, marker in arduino_entry + hil_runner,
+                f"missing lost-ACK-safe Airspace Guard HIL contract: {marker}")
 
     for marker in (
         '"serviceAirspaceGuardProduct()": 1024',

@@ -1,0 +1,27 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "airspace-guard-1.0.0-dev.242",
+  "candidate_version": "1.0.0-dev.242",
+  "changed_surfaces": [
+    "ble_bounded_retention_capacity_loss",
+    "partial_evidence_product_admission",
+    "full_hil_ble_drop_accounting",
+    "dev241_second_lifecycle_capacity_regression"
+  ],
+  "required_delta_regression": [
+    "one_exact_flash_on_board_01",
+    "retained_capacity_loss_returns_visible_incomplete_result",
+    "exact_ble_observed_reported_read_and_drop_accounting",
+    "bounded_retained_records_remain_inspectable",
+    "at_least_one_conclusive_lifecycle",
+    "passive_receive_only_and_zero_application_tx",
+    "clean_terminal_cleanup",
+    "zero_input_drops_and_final_zero_lease",
+    "zero_product_sd_writes",
+    "retained_dev241_full_hil_capacity_failure",
+    "full_phase_hil_after_delta_pass"
+  ],
+  "new_passive_scans_required": true,
+  "full_matrix_required": true,
+  "cadence_after_acceptance": "10/15"
+}

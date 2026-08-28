@@ -134,6 +134,17 @@ run_opaque_evidence_check() {
 "${CXX:-c++}" \
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/wifi_authentication_capture_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/services/auth/WifiAuthenticationCapture.cpp" \
+    -o "$test_tmp/wifi_authentication_capture_tests"
+
+"$test_tmp/wifi_authentication_capture_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/airspace_guard_controller_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/guard/AirspaceGuardController.cpp" \
@@ -418,6 +429,18 @@ python3 "$repo_dir/tools/check_self_test_acceptance.py"
 python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_companion_protocol_contract.py"
 python3 "$repo_dir/tools/check_airspace_guard_contract.py"
+python3 "$repo_dir/tools/check_wifi_authentication_capture_contract.py"
+airspace_guard_positive="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.242"
+airspace_guard_negative_dev239="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.239-failed.json"
+airspace_guard_negative_dev241="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.241-failed.json"
+airspace_guard_expectations="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.242-acceptance.json"
+if [[ -e "$airspace_guard_expectations" ]]; then
+    python3 "$repo_dir/tools/check_airspace_guard_hil_acceptance.py" \
+        --expectations "$airspace_guard_expectations" \
+        --positive "$airspace_guard_positive" \
+        --negative-dev239 "$airspace_guard_negative_dev239" \
+        --negative-dev241 "$airspace_guard_negative_dev241"
+fi
 python3 "$repo_dir/tools/check_companion_post_web_memory_contract.py"
 python3 "$repo_dir/tools/check_companion_post_web_acceptance.py"
 python3 "$repo_dir/tools/check_stage_demo_s6_contract.py"
@@ -592,6 +615,8 @@ python3 "$repo_dir/tools/test_prerelease_hil_runner.py"
 python3 "$repo_dir/tools/test_product_survey_hil_runner.py"
 python3 "$repo_dir/tools/test_product_home_hil_runner.py"
 python3 "$repo_dir/tools/test_airspace_guard_hil_runner.py"
+python3 "$repo_dir/tools/test_airspace_guard_hil_acceptance.py"
+python3 "$repo_dir/tools/test_retain_1x_airspace_guard_hil.py"
 python3 "$repo_dir/tools/test_targets_merge_split_hil_runner.py"
 python3 "$repo_dir/tools/test_companion_offline.py"
 python3 "$repo_dir/tools/test_companion_usb_delta_runner.py"

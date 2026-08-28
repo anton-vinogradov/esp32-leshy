@@ -1150,6 +1150,37 @@ void testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss() {
     CHECK(!retention.stats().complete());
 }
 
+void testLiveBleRetentionEffectiveCapacityUsesRealAdmissionPath() {
+    AirspaceGuardBleRetention retention;
+    retention.reset();
+    CHECK(!retention.configureEffectiveCapacity(0U));
+    CHECK(!retention.configureEffectiveCapacity(
+        kBleTrackerLiveRetentionCapacity + 1U));
+    CHECK(retention.configureEffectiveCapacity(1U));
+
+    BleFixtureSource fixture;
+    fixture.add(kTransmitterA, 1000000ULL,
+                AirspaceBleTrackerProtocol::None);
+    fixture.add(kTransmitterB, 1100000ULL,
+                AirspaceBleTrackerProtocol::None);
+    CHECK(retention.accept(fixture.mutableAt(0).observation) ==
+          BleLiveRetentionDisposition::Retained);
+    CHECK(!retention.configureEffectiveCapacity(2U));
+    CHECK(retention.accept(fixture.mutableAt(1).observation) ==
+          BleLiveRetentionDisposition::Full);
+    CHECK(retention.observationCount() == 1U);
+    CHECK(retention.stats().recordsObserved == 2U);
+    CHECK(retention.stats().validAdvertisements == 2U);
+    CHECK(retention.stats().recordsRetained == 1U);
+    CHECK(retention.stats().advertisementsIgnored == 0U);
+    CHECK(retention.stats().capacityDrops == 1U);
+    CHECK(!retention.stats().complete());
+
+    leshy1::domain::observations::Observation retained{};
+    CHECK(retention.observationAt(0U, &retained));
+    CHECK(retained.identity == kTransmitterA);
+}
+
 void testCompletedWifiAndBleReportsMergeWithoutInventingEvidence() {
     FixtureSource wifiSource;
     wifiSource.add(8U, 1000000ULL, kTransmitterB, 6U, -62);
@@ -1289,6 +1320,7 @@ int main() {
     testBleTrackerPresenceFailsClosedOnIncompleteEvidence();
     testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats();
     testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss();
+    testLiveBleRetentionEffectiveCapacityUsesRealAdmissionPath();
     testCompletedWifiAndBleReportsMergeWithoutInventingEvidence();
     testCompletedWifiAndBleReportsUseIndependentInspectionBudgets();
     testIncompleteWifiStillMergesCompleteBleEvidenceFailClosed();

@@ -1658,6 +1658,8 @@ struct AirspaceGuardBleWorkerEvent final {
     const char* status = "idle";
     bool valid = false;
     bool cleanupComplete = true;
+    bool capacityDropRequested = false;
+    bool capacityDropInjected = false;
     BoardBlePassiveScanResult scan{};
     AirspaceGuardBleRetentionStats retention{};
     AirspaceGuardReport report{};
@@ -1779,6 +1781,7 @@ ProductSurveyWorkerControl productSurveyWorkerControl =
 AirspaceGuardBleWorkerControl airspaceGuardBleWorkerControl =
     AirspaceGuardBleWorkerControl::Idle;
 std::uint32_t airspaceGuardBleRequestedGeneration = 0;
+bool airspaceGuardBleCapacityDropInjectionOnce = false;
 AirspaceGuardBleRetention airspaceGuardBleRetention;
 std::uint32_t productSurveyWorkerOwnedResources = 0;
 bool productSurveyWorkerReady = false;
@@ -2229,6 +2232,27 @@ bool productSurveyStopRequested() {
 bool productSurveyCancelRequested() {
     return productSurveyControl() ==
            ProductSurveyWorkerControl::CancelRequested;
+}
+
+void setAirspaceGuardBleCapacityDropInjection(bool armed) {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    airspaceGuardBleCapacityDropInjectionOnce = armed;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+}
+
+bool airspaceGuardBleCapacityDropInjectionArmed() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool armed = airspaceGuardBleCapacityDropInjectionOnce;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return armed;
+}
+
+bool consumeAirspaceGuardBleCapacityDropInjection() {
+    portENTER_CRITICAL(&productSurveyWorkerMux);
+    const bool injected = airspaceGuardBleCapacityDropInjectionOnce;
+    airspaceGuardBleCapacityDropInjectionOnce = false;
+    portEXIT_CRITICAL(&productSurveyWorkerMux);
+    return injected;
 }
 
 bool productSurveyScanActive() {
@@ -3127,8 +3151,13 @@ void runAirspaceGuardBleWorker() {
     const bool supervised = armAirspaceGuardBleWorkerDeadline(startedUs);
     BoardBlePassiveScanner scanner;
     airspaceGuardBleRetention.reset();
+    event.capacityDropRequested =
+        consumeAirspaceGuardBleCapacityDropInjection();
+    const bool capacityConfigured =
+        !event.capacityDropRequested ||
+        airspaceGuardBleRetention.configureEffectiveCapacity(1U);
     bool begun = false;
-    if (supervised) {
+    if (supervised && capacityConfigured) {
         heartbeatAirspaceGuardBleWorker();
         begun = scanner.begin();
         heartbeatAirspaceGuardBleWorker();
@@ -3142,37 +3171,72 @@ void runAirspaceGuardBleWorker() {
     const bool cleanup = scanner.end();
     event.cleanupComplete = cleanup && scanner.cleanupComplete();
     event.retention = airspaceGuardBleRetention.stats();
+    event.capacityDropInjected = event.capacityDropRequested &&
+        event.retention.capacityDrops != 0U;
     const bool cancelled = airspaceGuardBleControl() ==
         AirspaceGuardBleWorkerControl::CancelRequested;
     const bool exactAccounting =
         event.scan.recordsObserved == event.scan.recordsReported &&
         event.scan.recordsReported == event.scan.recordsRead &&
-        event.scan.recordsRead == event.scan.accepted &&
-        event.scan.accepted == event.retention.recordsObserved &&
-        event.scan.rejected == 0U && event.scan.dropped == 0U;
-    const bool complete = supervised && begun && !cancelled &&
+        event.scan.recordsRead ==
+            event.scan.accepted + event.scan.dropped &&
+        event.scan.recordsRead == event.retention.recordsObserved &&
+        event.scan.rejected == 0U &&
+        event.scan.dropped == event.retention.capacityDrops &&
+        event.retention.malformedRecords == 0U;
+    // Capacity loss is uncertainty, not permission to erase every retained
+    // observation. Preserve the bounded partial report with an exact dropped
+    // count so the UI can say "incomplete evidence" and still show what was
+    // actually observed. Transport/rejection/accounting failures remain hard
+    // failures and never manufacture a report.
+    const bool inspectable = supervised && begun && !cancelled &&
+        capacityConfigured &&
+        (!event.capacityDropRequested || event.capacityDropInjected) &&
         event.scan.valid() && event.cleanupComplete &&
         event.scan.recordsObserved != 0U && exactAccounting &&
-        event.retention.complete() &&
+        event.retention.recordsRetained != 0U &&
         event.retention.recordsRetained ==
             airspaceGuardBleRetention.observationCount();
-    if (complete) {
+    if (inspectable) {
         AirspaceGuardPolicy policy{};
         policy.bleTrackerPresenceEnabled = true;
         const bool inspected = airspaceGuardDetector.writeBleReport(
-            airspaceGuardBleRetention, policy, 0U,
+            airspaceGuardBleRetention, policy,
+            event.retention.capacityDrops,
             static_cast<std::size_t>(event.scan.recordsObserved),
             &event.report);
         event.valid = inspected &&
             (event.report.status == AirspaceGuardStatus::Clear ||
-             event.report.status == AirspaceGuardStatus::Finding);
-        event.status = event.valid ? "complete" : "inspection_failed";
+             event.report.status == AirspaceGuardStatus::Finding ||
+             event.report.status == AirspaceGuardStatus::Inconclusive);
+        event.status = event.valid
+            ? (event.retention.complete() ? "complete"
+                                          : "incomplete_evidence")
+            : "inspection_failed";
     } else {
-        event.status = cancelled
-            ? "cancelled"
-            : (!supervised ? "supervisor_unavailable"
-                           : (!begun ? "scanner_unavailable"
-                                     : "incomplete_evidence"));
+        if (cancelled) {
+            event.status = "cancelled";
+        } else if (!supervised) {
+            event.status = "supervisor_unavailable";
+        } else if (!capacityConfigured) {
+            event.status = "capacity_drop_configuration_failed";
+        } else if (!begun) {
+            event.status = "scanner_unavailable";
+        } else if (!event.scan.valid()) {
+            event.status = "scan_failed";
+        } else if (!event.cleanupComplete) {
+            event.status = "cleanup_failed";
+        } else if (event.scan.rejected != 0U ||
+                   event.retention.malformedRecords != 0U) {
+            event.status = "rejected_ingress";
+        } else if (!exactAccounting) {
+            event.status = "transport_or_queue_loss";
+        } else if (event.capacityDropRequested &&
+                   !event.capacityDropInjected) {
+            event.status = "capacity_drop_not_exercised";
+        } else {
+            event.status = "accounting_failed";
+        }
     }
     if (supervised) {
         heartbeatAirspaceGuardBleWorker();
@@ -19433,6 +19497,8 @@ void emitAirspaceGuardState(Stream& reply) {
         "\"ble_worker_control\":%u,\"ble_worker_ready\":%s,"
         "\"ble_worker_generation\":%lu,\"ble_worker_status\":\"%s\","
         "\"ble_worker_valid\":%s,\"ble_cleanup_complete\":%s,"
+        "\"ble_capacity_drop_requested\":%s,"
+        "\"ble_capacity_drop_injected\":%s,"
         "\"ble_scan_status\":\"%s\",\"ble_scan_attempts\":%u,"
         "\"ble_scan_transient_retries\":%u,"
         "\"ble_scan_observed\":%u,\"ble_scan_reported\":%u,"
@@ -19522,6 +19588,8 @@ void emitAirspaceGuardState(Stream& reply) {
         bleWorkerEvent.status,
         bleWorkerEvent.valid ? "true" : "false",
         bleWorkerEvent.cleanupComplete ? "true" : "false",
+        bleWorkerEvent.capacityDropRequested ? "true" : "false",
+        bleWorkerEvent.capacityDropInjected ? "true" : "false",
         leshy1::platform::arduino::boardBleScanStatusName(
             bleWorkerEvent.scan.status),
         static_cast<unsigned>(bleWorkerEvent.scan.attempts),
@@ -19559,6 +19627,46 @@ void emitAirspaceGuardState(Stream& reply) {
             "\"kind\":\"error\",\"reason\":\"state_overflow\"}");
         return;
     }
+    reply.println(line);
+}
+
+void emitAirspaceGuardCapacityDropTest(Stream& reply,
+                                       const char* command) {
+    const bool arm = std::strcmp(
+        command, "airspace-guard.test-capacity-drop once") == 0;
+    const bool clear = std::strcmp(
+        command, "airspace-guard.test-capacity-drop clear") == 0;
+    const bool workerIdle = airspaceGuardBleControl() ==
+        AirspaceGuardBleWorkerControl::Idle;
+    const bool safeState = hilSession.active() && workerIdle &&
+        airspaceGuardCaptureState == AirspaceGuardCaptureState::Idle &&
+        uiController.isRoot() && !appRuntime.running();
+    const char* status = "invalid_request";
+    if (clear && workerIdle) {
+        setAirspaceGuardBleCapacityDropInjection(false);
+        status = "cleared";
+    } else if (arm && safeState) {
+        setAirspaceGuardBleCapacityDropInjection(true);
+        status = "armed";
+    } else if (arm) {
+        status = "unsafe_state";
+    }
+    char line[448] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.airspace_guard.capacity_drop_test.v1\","
+        "\"kind\":\"state\",\"status\":\"%s\",\"one_shot\":true,"
+        "\"armed\":%s,\"hil_active\":%s,\"worker_idle\":%s,"
+        "\"ui_home\":%s,\"runtime_owner\":\"%s\",\"lease_mask\":%lu,"
+        "\"hardware_touched\":false,\"radio_started\":false,"
+        "\"storage_mounted\":false,\"storage_written\":false}",
+        status,
+        airspaceGuardBleCapacityDropInjectionArmed() ? "true" : "false",
+        hilSession.active() ? "true" : "false",
+        workerIdle ? "true" : "false",
+        uiController.isRoot() ? "true" : "false",
+        appRuntime.activeApp(),
+        static_cast<unsigned long>(appRuntime.activeResources()));
     reply.println(line);
 }
 
@@ -26060,12 +26168,28 @@ void emitHilSessionBegin(Stream& reply, const char* command) {
     reply.println(line);
 }
 
+void emitHilSessionState(Stream& reply) {
+    char line[384] = {};
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.hil.session.v1\",\"kind\":\"state\","
+        "\"status\":\"%s\",\"session_id\":\"%s\",\"active\":%s,"
+        "\"app_elf_sha256\":\"%s\",\"firmware_version\":\"%s\","
+        "\"ui_revision\":%lu}",
+        hilSession.active() ? "active" : "inactive",
+        hilSession.active() ? hilSession.id() : "",
+        hilSession.active() ? "true" : "false", runningAppElfSha256,
+        LESHY1_VERSION, static_cast<unsigned long>(uiController.revision()));
+    reply.println(line);
+}
+
 void emitHilSessionEnd(Stream& reply, const char* command) {
     constexpr const char* prefix = "hil.end ";
     const char* sessionId = command + std::strlen(prefix);
     const HilSessionStatus status = hilSession.end(sessionId);
     if (status == HilSessionStatus::Ended) {
         clearWebCompanionHilEntropy();
+        setAirspaceGuardBleCapacityDropInjection(false);
     }
     char line[256] = {};
     if (status == HilSessionStatus::Ended) {
@@ -27170,6 +27294,7 @@ void emitBleDeviceDetailState(Stream& reply) {
 bool commandAllowedDuringSafetyStop(const char* command) {
     if (command == nullptr) return false;
     return std::strncmp(command, "hil.begin ", 10) == 0 ||
+           std::strcmp(command, "hil.state") == 0 ||
            std::strncmp(command, "hil.end ", 8) == 0 ||
            std::strcmp(command, "metrics") == 0 ||
            std::strcmp(command, "inventory") == 0 ||
@@ -27631,6 +27756,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
     }
     if (std::strncmp(command, "hil.begin ", 10) == 0) {
         emitHilSessionBegin(reply, command);
+    } else if (std::strcmp(command, "hil.state") == 0) {
+        emitHilSessionState(reply);
     } else if (std::strncmp(command, "hil.end ", 8) == 0) {
         emitHilSessionEnd(reply, command);
     } else if (std::strcmp(command, "metrics") == 0) {
@@ -27807,6 +27934,13 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitStorageMountPolicy(reply);
     } else if (std::strcmp(command, "storage.product.boot-recovery") == 0) {
         emitProductBootRecovery(reply);
+    } else if (std::strcmp(
+                   command,
+                   "airspace-guard.test-capacity-drop once") == 0 ||
+               std::strcmp(
+                   command,
+                   "airspace-guard.test-capacity-drop clear") == 0) {
+        emitAirspaceGuardCapacityDropTest(reply, command);
     } else if (std::strcmp(
                    command,
                    "storage.product.boot-watchdog-test confirm") == 0) {
@@ -28413,6 +28547,7 @@ void setup() {
     emitInventory();
     broadcast("{\"schema\":\"leshy.boot.v1\",\"kind\":\"help\",\"commands\":["
               "\"hil.begin <session-id> <app-elf-sha256>\","
+              "\"hil.state\","
               "\"hil.end <session-id>\","
               "\"metrics\",\"inventory\",\"hardware.safe-outputs\",\"ping\","
               "\"power.state\",\"power.low-voltage-test confirm\","
@@ -28452,6 +28587,7 @@ void setup() {
               "\"storage.product.unenroll confirm\","
               "\"survey.product.admission\","
               "\"survey.product.test-source-unavailable once|clear\","
+              "\"airspace-guard.test-capacity-drop once|clear\","
               "\"survey.product.test-runtime-unavailable wifi|ble|clear\","
               "\"storage.littlefs.parity disposable-ota1 <OTA1-SHA256> <run-id>\","
               "\"storage.littlefs.reset disposable-ota1 <OTA1-SHA256> <run-id> <1..6>\","

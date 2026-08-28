@@ -335,6 +335,17 @@ void AirspaceGuardBleRetention::reset() {
     records_.fill(RetainedRecord{});
     stats_ = {};
     size_ = 0U;
+    effectiveCapacity_ = records_.size();
+}
+
+bool AirspaceGuardBleRetention::configureEffectiveCapacity(
+    std::size_t capacity) {
+    if (stats_.recordsObserved != 0U || size_ != 0U || capacity == 0U ||
+        capacity > records_.size()) {
+        return false;
+    }
+    effectiveCapacity_ = capacity;
+    return true;
 }
 
 BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
@@ -348,6 +359,16 @@ BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
     }
 
     ++stats_.validAdvertisements;
+    // A reduced effective capacity is an exact diagnostic hook: once the
+    // bounded window is full, every subsequent valid normalized observation
+    // must take the same Full path as genuine production capacity exhaustion.
+    // This check intentionally precedes coverage/repeat compaction so a benign
+    // deterministic BLE fixture can exercise the admission boundary.
+    if (effectiveCapacity_ < records_.size() &&
+        size_ >= effectiveCapacity_) {
+        ++stats_.capacityDrops;
+        return BleLiveRetentionDisposition::Full;
+    }
     if (ingress == BleTrackerIngressStatus::CoverageAdvertisement) {
         if (size_ == 0U) {
             RetainedRecord& retained = records_[0];
@@ -408,7 +429,7 @@ BleLiveRetentionDisposition AirspaceGuardBleRetention::accept(
         ++stats_.advertisementsIgnored;
         return BleLiveRetentionDisposition::Ignored;
     }
-    if (size_ >= records_.size()) {
+    if (size_ >= effectiveCapacity_) {
         ++stats_.capacityDrops;
         return BleLiveRetentionDisposition::Full;
     }

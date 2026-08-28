@@ -31,7 +31,163 @@ def load_runner() -> Any:
 RUNNER = load_runner()
 
 
+def valid_result_state() -> dict[str, Any]:
+    return {
+        "capture_state": "result",
+        "load_status": "ready",
+        "elevated_noise_low_confidence": True,
+        "noise_samples_dropped": 0,
+        "noise_samples_malformed": 0,
+        "malformed_frames": 0,
+        "source_read_failures": 0,
+        "source_frames_dropped": 0,
+        "findings_dropped": 0,
+        "inspection_truncated": False,
+        "wifi_capture_state": "complete",
+        "wifi_driver_error": 0,
+        "wifi_cleanup_complete": True,
+        "wifi_monitor_active": False,
+        "wifi_disconnects_dropped": 0,
+        "wifi_identity_dropped": 0,
+        "wifi_noise_dropped": 0,
+        "wifi_receive_invalid_frames": 0,
+        "wifi_identity_malformed_envelope": 0,
+        "wifi_identity_malformed_addressing": 0,
+        "wifi_identity_malformed_elements": 0,
+        "wifi_invalid_frames": 0,
+        "wifi_identity_retention_complete": True,
+        "wifi_noise_retention_complete": True,
+        "ble_worker_control": 0,
+        "ble_worker_ready": True,
+        "ble_worker_valid": True,
+        "ble_worker_status": "complete",
+        "ble_cleanup_complete": True,
+        "ble_capacity_drop_requested": False,
+        "ble_capacity_drop_injected": False,
+        "ble_scan_status": "valid",
+        "ble_scan_attempts": 1,
+        "ble_scan_transient_retries": 0,
+        "ble_scan_observed": 10,
+        "ble_scan_reported": 10,
+        "ble_scan_read": 10,
+        "ble_scan_accepted": 10,
+        "ble_scan_rejected": 0,
+        "ble_scan_dropped": 0,
+        "ble_retention_observed": 10,
+        "ble_retention_retained": 4,
+        "ble_retention_dropped": 0,
+        "ble_retention_malformed": 0,
+        "survey_queues_released": True,
+        "passive_only": True,
+        "rx_only": True,
+        "application_connect_calls": 0,
+        "application_raw_tx_calls": 0,
+        "runtime_owner": "wifi",
+        "lease_mask": 15,
+        "evidence_incomplete": False,
+        "outcome": "finding",
+        "source_frames_observed": 14,
+        "wifi_frames_reported": 4,
+        "frames_available": 8,
+        "frames_inspected": 8,
+        "ble_records": 4,
+        "noise_samples_observed": 0,
+        "noise_samples_available": 0,
+        "noise_samples_inspected": 0,
+        "wifi_identity_retained": 4,
+        "wifi_identity_projected": 4,
+        "finding_mask": 16,
+        "finding_count": 1,
+    }
+
+
 class AirspaceGuardHilRunnerTests(unittest.TestCase):
+    def test_complete_result_accounting_passes(self) -> None:
+        self.assertEqual([], RUNNER.result_failures(
+            valid_result_state(), "complete"))
+
+    def test_bounded_ble_capacity_loss_is_visible_not_erased(self) -> None:
+        state = valid_result_state()
+        state.update({
+            "source_frames_dropped": 9,
+            "ble_worker_status": "incomplete_evidence",
+            "ble_scan_accepted": 1,
+            "ble_scan_dropped": 9,
+            "ble_retention_retained": 1,
+            "ble_retention_dropped": 9,
+            "ble_capacity_drop_requested": True,
+            "ble_capacity_drop_injected": True,
+            "evidence_incomplete": True,
+            "frames_available": 5,
+            "frames_inspected": 5,
+            "ble_records": 1,
+        })
+        self.assertEqual([], RUNNER.result_failures(
+            state, "capacity_loss"))
+        self.assertEqual([], RUNNER.exact_capacity_one_failures(
+            state, "capacity_loss"))
+
+    def test_old_natural_capacity_loss_cannot_prove_capacity_one(self) -> None:
+        state = valid_result_state()
+        state.update({
+            "source_frames_dropped": 1,
+            "ble_worker_status": "incomplete_evidence",
+            "ble_scan_accepted": 9,
+            "ble_scan_dropped": 1,
+            "ble_retention_dropped": 1,
+            "ble_capacity_drop_requested": True,
+            "ble_capacity_drop_injected": True,
+            "evidence_incomplete": True,
+        })
+        self.assertEqual([], RUNNER.result_failures(
+            state, "old_natural_capacity_loss"))
+        failures = RUNNER.exact_capacity_one_failures(
+            state, "old_natural_capacity_loss")
+        self.assertTrue(any(
+            "ble_scan_accepted" in failure for failure in failures))
+
+    def test_ble_capacity_loss_must_match_source_uncertainty(self) -> None:
+        state = valid_result_state()
+        state.update({
+            "ble_worker_status": "incomplete_evidence",
+            "ble_scan_accepted": 9,
+            "ble_scan_dropped": 1,
+            "ble_retention_dropped": 1,
+            "ble_capacity_drop_requested": True,
+            "ble_capacity_drop_injected": True,
+            "evidence_incomplete": True,
+        })
+        failures = RUNNER.result_failures(state, "capacity_loss")
+        self.assertTrue(any(
+            "external_uncertainty_accounting" in failure
+            for failure in failures))
+
+    def test_wifi_uncertainty_does_not_change_ble_worker_status(self) -> None:
+        state = valid_result_state()
+        state.update({
+            "wifi_identity_malformed_elements": 1,
+            "wifi_invalid_frames": 1,
+            "source_frames_dropped": 1,
+            "wifi_identity_retention_complete": False,
+            "wifi_noise_retention_complete": False,
+            "evidence_incomplete": True,
+        })
+        self.assertEqual([], RUNNER.result_failures(
+            state, "wifi_uncertainty"))
+
+    def test_transport_and_malformed_fields_are_independent_proofs(self) -> None:
+        for field, value in (
+                ("ble_scan_status", "scan_timed_out"),
+                ("ble_cleanup_complete", False),
+                ("ble_retention_malformed", 1),
+                ("ble_scan_attempts", 3),
+                ("source_frames_observed", 13)):
+            with self.subTest(field=field):
+                state = valid_result_state()
+                state[field] = value
+                self.assertNotEqual([], RUNNER.result_failures(
+                    state, field))
+
     def test_navigation_action_recovers_lost_ack_without_replay(self) -> None:
         device = object()
         recovered = {"page": "survey", "wifi_product_view": "menu"}
@@ -78,6 +234,73 @@ class AirspaceGuardHilRunnerTests(unittest.TestCase):
         self.assertEqual(
             ["lost response"], record["host_transport_transient_errors"])
         synchronize.assert_called_once_with(device, 10.0)
+
+    def test_hil_begin_recovers_lost_ack_without_replay(self) -> None:
+        device = object()
+        state = {
+            "schema": RUNNER.HIL_SESSION_SCHEMA,
+            "kind": "state",
+            "status": "active",
+            "session_id": "1" * 32,
+            "active": True,
+            "app_elf_sha256": "2" * 64,
+            "firmware_version": "1.0.0-dev.242",
+        }
+        with patch.object(
+                RUNNER, "query", side_effect=TimeoutError("lost begin ACK")) \
+                as begin, patch.object(
+                    RUNNER, "read_only_query", return_value=state) as read_state:
+            recovered = RUNNER.begin_hil_session(
+                device, "1" * 32, "2" * 64, "1.0.0-dev.242")
+        begin.assert_called_once()
+        read_state.assert_called_once_with(
+            device, b"hil.state", RUNNER.HIL_SESSION_SCHEMA, "state")
+        self.assertFalse(recovered["host_begin_ack_received"])
+        self.assertEqual(1, recovered["host_begin_action_writes"])
+        self.assertEqual(0, recovered["host_begin_action_replays"])
+
+    def test_hil_end_recovers_lost_ack_from_inactive_state(self) -> None:
+        device = object()
+        active = {
+            "app_elf_sha256": "2" * 64,
+            "session_id": "1" * 32,
+            "active": True,
+        }
+        inactive = {
+            "app_elf_sha256": "2" * 64,
+            "session_id": "",
+            "active": False,
+        }
+        with patch.object(
+                RUNNER, "read_only_query",
+                side_effect=[active, inactive]) as read_state, patch.object(
+                    RUNNER, "query", side_effect=TimeoutError("lost end ACK")) \
+                as end:
+            recovered = RUNNER.end_hil_session(
+                device, "1" * 32, "2" * 64)
+        end.assert_called_once()
+        self.assertEqual(2, read_state.call_count)
+        self.assertFalse(recovered["active"])
+        self.assertFalse(recovered["host_end_ack_received"])
+        self.assertEqual(1, recovered["host_end_action_writes"])
+        self.assertEqual(0, recovered["host_end_action_replays"])
+        self.assertEqual("1" * 32,
+                         recovered["host_end_requested_session_id"])
+
+    def test_terminal_hil_end_runs_even_when_clear_fails(self) -> None:
+        device = object()
+        ended = {"active": False}
+        with patch.object(
+                RUNNER, "query", side_effect=RuntimeError("clear failed")), \
+                patch.object(
+                    RUNNER, "end_hil_session", return_value=ended) as end:
+            cleared, result, errors = RUNNER.terminal_hil_cleanup(
+                device, "1" * 32, "2" * 64)
+        end.assert_called_once_with(device, "1" * 32, "2" * 64)
+        self.assertEqual({}, cleared)
+        self.assertIs(ended, result)
+        self.assertEqual(1, len(errors))
+        self.assertIn("capacity_drop_clear", errors[0])
 
 
 if __name__ == "__main__":

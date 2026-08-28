@@ -333,6 +333,10 @@ struct AirspaceGuardBleRetentionStats final {
 class AirspaceGuardBleRetention final : public BleObservationSource {
 public:
     void reset();
+    // A diagnostic may reduce the live window before the first record arrives
+    // to exercise the real Full admission path. The physical production bound
+    // remains the default and the limit cannot change once a scan has started.
+    bool configureEffectiveCapacity(std::size_t capacity);
     BleLiveRetentionDisposition accept(
         const domain::observations::Observation& observation);
 
@@ -357,6 +361,7 @@ private:
     std::array<RetainedRecord, kBleTrackerLiveRetentionCapacity> records_{};
     AirspaceGuardBleRetentionStats stats_{};
     std::size_t size_ = 0;
+    std::size_t effectiveCapacity_ = kBleTrackerLiveRetentionCapacity;
 };
 
 // Combines independently completed Wi-Fi and BLE reports without erasing the
