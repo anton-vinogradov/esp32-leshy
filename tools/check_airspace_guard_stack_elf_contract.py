@@ -20,7 +20,8 @@ LIMITS = {
     "runProductSurveyWorker(void*)": 6144,
     "finalizeAirspaceGuardWifiEvidence(": 3072,
     "renderAirspaceGuardPage(": 1280,
-    "AirspaceGuard::inspectWifi(": 2816,
+    "AirspaceGuard::writeWifiReport(": 2816,
+    "AirspaceGuard::inspectBle(": 2816,
     "mergeAirspaceGuardReports(": 2560,
     "BoardWifiPassiveCapture::accept(": 512,
 }

@@ -1107,7 +1107,7 @@ std::uint32_t airspaceGuardGeneration = 0;
 AirspaceGuardReport airspaceGuardWifiReport{};
 void resetAirspaceGuardWifiReport() {
     // Only findingCount entries are semantically live. Clearing the aggregate
-    // and restoring its non-zero default status avoids constructing a ~2.3-KiB
+    // and restoring its non-zero default status avoids constructing a ~4.6-KiB
     // temporary AirspaceGuardReport on Arduino's bounded loop stack.
     std::memset(&airspaceGuardWifiReport, 0,
                 sizeof(airspaceGuardWifiReport));
@@ -1673,7 +1673,7 @@ AirspaceGuardBleWorkerEvent airspaceGuardBleEventWorkspace{};
 void resetAirspaceGuardBleEventWorkspace() {
     // The worker and loop task exchange ownership through the completion-token
     // queue. Keep the evidence-rich payload in one static workspace so neither
-    // task stack nor the queue storage duplicates its ~2.4-KiB report.
+    // task stack nor the queue storage duplicates its ~4.6-KiB report.
     std::memset(&airspaceGuardBleEventWorkspace, 0,
                 sizeof(airspaceGuardBleEventWorkspace));
     airspaceGuardBleEventWorkspace.status = "idle";
@@ -20191,10 +20191,8 @@ bool stopAirspaceGuardProduct() {
 __attribute__((noinline)) bool finalizeAirspaceGuardWifiEvidence(
     const BoardWifiPassiveCapture::AirspaceGuardMonitorStats& monitor,
     bool complete) {
-    // inspectWifi() returns one evidence-rich aggregate by value. Keep that
-    // ABI temporary in this bounded leaf frame; if it is allowed back into the
-    // long-lived service frame, merely entering the live Wi-Fi stage can
-    // exhaust Arduino's loop stack before terminal evidence exists.
+    // Write directly into static report storage. A value-returning detector
+    // call would materialize a ~4.6-KiB ABI temporary in this loop-stack frame.
     resetAirspaceGuardWifiReport();
     if (complete) {
         const std::size_t dropped =
@@ -20209,13 +20207,14 @@ __attribute__((noinline)) bool finalizeAirspaceGuardWifiEvidence(
         const leshy1::services::guard::CompositeWifiFrameSource source(
             wifiFrameCapture.capture(),
             wifiFrameCapture.airspaceGuardIdentitySource());
-        airspaceGuardWifiReport = airspaceGuardDetector.inspectWifi(
+        complete = airspaceGuardDetector.writeWifiReport(
             source, policy, dropped,
             static_cast<std::size_t>(monitor.framesReported),
             monitor.noiseSamples.data(),
             static_cast<std::size_t>(monitor.noiseSamplesRetained),
             static_cast<std::size_t>(monitor.noiseSamplesDropped),
-            static_cast<std::size_t>(monitor.noiseSamplesObserved));
+            static_cast<std::size_t>(monitor.noiseSamplesObserved),
+            &airspaceGuardWifiReport);
     } else {
         airspaceGuardWifiReport.status =
             AirspaceGuardStatus::Inconclusive;

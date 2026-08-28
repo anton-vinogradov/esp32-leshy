@@ -453,7 +453,7 @@ bool AirspaceGuardBleRetention::observationAt(
 bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
                                const AirspaceGuardReport& ble,
                                AirspaceGuardReport* output) {
-    if (output == nullptr ||
+    if (output == nullptr || output == &ble ||
         wifi.status == AirspaceGuardStatus::InvalidPolicy ||
         ble.status == AirspaceGuardStatus::InvalidPolicy ||
         wifi.bleAdvertisementRecords != 0U || ble.disconnectFrames != 0U ||
@@ -485,7 +485,11 @@ bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
         }
     }
 
-    AirspaceGuardReport merged{};
+    const std::size_t wifiFindingCount = wifi.findingCount;
+    if (output != &wifi) {
+        *output = wifi;
+    }
+    AirspaceGuardReport& merged = *output;
     merged.sourceFramesObserved =
         wifi.sourceFramesObserved + ble.sourceFramesObserved;
     merged.framesAvailable = wifi.framesAvailable + ble.framesAvailable;
@@ -505,18 +509,14 @@ bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
         wifi.sourceFramesDropped + ble.sourceFramesDropped;
     merged.findingsDropped = wifi.findingsDropped + ble.findingsDropped;
 
-    const auto append = [&](const AirspaceGuardReport& source) {
-        for (std::size_t index = 0U; index < source.findingCount; ++index) {
-            if (merged.findingCount < merged.findings.size()) {
-                merged.findings[merged.findingCount++] =
-                    source.findings[index];
-            } else {
-                ++merged.findingsDropped;
-            }
+    merged.findingCount = wifiFindingCount;
+    for (std::size_t index = 0U; index < ble.findingCount; ++index) {
+        if (merged.findingCount < merged.findings.size()) {
+            merged.findings[merged.findingCount++] = ble.findings[index];
+        } else {
+            ++merged.findingsDropped;
         }
-    };
-    append(wifi);
-    append(ble);
+    }
 
     if (merged.sourceFramesObserved < merged.framesAvailable ||
         merged.framesInspected + merged.sourceReadFailures !=
@@ -538,7 +538,6 @@ bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
                    merged.wifiNoiseSamplesMalformed != 0U
                ? AirspaceGuardStatus::Inconclusive
                : AirspaceGuardStatus::Clear);
-    *output = merged;
     return true;
 }
 
@@ -831,9 +830,29 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
     std::size_t noiseSamplesDropped,
     std::size_t noiseSamplesObserved) const {
     AirspaceGuardReport report{};
+    writeWifiReport(source, policy, sourceFramesDropped,
+                    sourceFramesObserved, noiseSamples, noiseSampleCount,
+                    noiseSamplesDropped, noiseSamplesObserved, &report);
+    return report;
+}
+
+bool AirspaceGuard::writeWifiReport(
+    const domain::captures::WifiFrameSource& source,
+    const AirspaceGuardPolicy& policy,
+    std::size_t sourceFramesDropped,
+    std::size_t sourceFramesObserved,
+    const WifiNoiseFloorSample* noiseSamples,
+    std::size_t noiseSampleCount,
+    std::size_t noiseSamplesDropped,
+    std::size_t noiseSamplesObserved,
+    AirspaceGuardReport* output) const {
+    if (output == nullptr) return false;
+    std::memset(output, 0, sizeof(*output));
+    AirspaceGuardReport& report = *output;
+    report.status = AirspaceGuardStatus::Inconclusive;
     if (!validateAirspaceGuardPolicy(policy)) {
         report.status = AirspaceGuardStatus::InvalidPolicy;
-        return report;
+        return true;
     }
 
     report.sourceFramesDropped = sourceFramesDropped;
@@ -1301,7 +1320,7 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
     } else {
         report.status = AirspaceGuardStatus::Clear;
     }
-    return report;
+    return true;
 }
 
 AirspaceGuardReport AirspaceGuard::inspectBle(

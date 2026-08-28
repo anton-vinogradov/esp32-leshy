@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.237.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.238.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -370,7 +370,7 @@ def main() -> int:
         "beginAirspaceGuardMonitor",
         "serviceAirspaceGuardProduct",
         "quiesceAirspaceGuardOnSafetyStop",
-        "airspaceGuardDetector.inspectWifi",
+        "airspaceGuardDetector.writeWifiReport",
         "airspaceGuardDetector.inspectBle",
         "mergeAirspaceGuardReports",
         "runAirspaceGuardBleWorker",
@@ -558,9 +558,9 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.237"',
+        '"candidate_version": "1.0.0-dev.238"',
         '"full_matrix_required": false',
-        '"cadence_after_acceptance": "8/15"',
+        '"cadence_after_acceptance": "9/15"',
     ):
         require(failures, marker in hil_scope,
                 f"missing Airspace Guard delta scope: {marker}")
@@ -570,7 +570,8 @@ def main() -> int:
         '"runProductSurveyWorker(void*)": 6144',
         '"finalizeAirspaceGuardWifiEvidence(": 3072',
         '"renderAirspaceGuardPage(": 1280',
-        '"AirspaceGuard::inspectWifi(": 2816',
+        '"AirspaceGuard::writeWifiReport(": 2816',
+        '"AirspaceGuard::inspectBle(": 2816',
         '"mergeAirspaceGuardReports(": 2560',
         '"BoardWifiPassiveCapture::accept(": 512',
         '"leshy.airspace_guard_stack_elf.v1"',

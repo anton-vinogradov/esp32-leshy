@@ -976,6 +976,37 @@ void testBleTrackerProtocolsRemainDistinct() {
     CHECK(report.findings[2].transmitter == kTransmitterC);
 }
 
+void testBleTrackerReportRetainsDenseRealWorldFindingSet() {
+    constexpr std::size_t kTrackerCount = 11U;
+    static_assert(AirspaceGuardReport::kFindingCapacity >= kTrackerCount);
+
+    BleFixtureSource source;
+    for (std::size_t tracker = 0U; tracker < kTrackerCount; ++tracker) {
+        const std::array<std::uint8_t, 6> identity{
+            0x02U, 0x35U, 0x46U, 0x57U, 0x68U,
+            static_cast<std::uint8_t>(tracker + 1U)};
+        for (std::size_t repeat = 0U; repeat < 3U; ++repeat) {
+            source.add(
+                identity,
+                1000000ULL + tracker * 10000ULL + repeat * 100000ULL,
+                AirspaceBleTrackerProtocol::FindMy,
+                static_cast<std::int16_t>(-40 - tracker), 1U);
+        }
+    }
+
+    const AirspaceGuardReport report =
+        AirspaceGuard{}.inspectBle(source, bleTrackerPolicy());
+    CHECK(report.status == AirspaceGuardStatus::Finding);
+    CHECK(report.findingCount == kTrackerCount);
+    CHECK(report.findingsDropped == 0U);
+    CHECK(report.framesInspected == kTrackerCount * 3U);
+    for (std::size_t index = 0U; index < kTrackerCount; ++index) {
+        CHECK(report.findings[index].kind ==
+              AirspaceFindingKind::BleTrackerPresence);
+        CHECK(report.findings[index].evidenceCount == 3U);
+    }
+}
+
 void testBleTrackerPresenceFailsClosedOnIncompleteEvidence() {
     const AirspaceGuardPolicy policy = bleTrackerPolicy();
 
@@ -1252,6 +1283,7 @@ int main() {
     testBleTrackerPresenceIsOptInAndRetainsExactEvidence();
     testBleTrackerPresenceRejectsLookalikesAndStaleEvidence();
     testBleTrackerProtocolsRemainDistinct();
+    testBleTrackerReportRetainsDenseRealWorldFindingSet();
     testBleTrackerPresenceFailsClosedOnIncompleteEvidence();
     testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats();
     testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss();

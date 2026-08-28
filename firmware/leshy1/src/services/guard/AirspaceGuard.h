@@ -270,7 +270,11 @@ struct AirspaceFinding final {
 };
 
 struct AirspaceGuardReport final {
-    static constexpr std::size_t kFindingCapacity = 8;
+    // A dense real BLE environment on board-01 produced eleven independent
+    // threshold-qualified tracker identities in one complete 64-record
+    // detector window. Keep enough exact findings for that observed bound
+    // without returning to full-Observation retention or dynamic allocation.
+    static constexpr std::size_t kFindingCapacity = 16;
 
     AirspaceGuardStatus status = AirspaceGuardStatus::Inconclusive;
     std::array<AirspaceFinding, kFindingCapacity> findings{};
@@ -381,6 +385,20 @@ public:
         std::size_t noiseSampleCount = 0U,
         std::size_t noiseSamplesDropped = 0U,
         std::size_t noiseSamplesObserved = 0U) const;
+
+    // Product firmware supplies static report storage so the C++ aggregate
+    // return ABI cannot materialize a multi-kilobyte temporary on Arduino's
+    // bounded loop stack. The value-returning API remains for host callers.
+    bool writeWifiReport(
+        const domain::captures::WifiFrameSource& source,
+        const AirspaceGuardPolicy& policy,
+        std::size_t sourceFramesDropped,
+        std::size_t sourceFramesObserved,
+        const WifiNoiseFloorSample* noiseSamples,
+        std::size_t noiseSampleCount,
+        std::size_t noiseSamplesDropped,
+        std::size_t noiseSamplesObserved,
+        AirspaceGuardReport* output) const;
 
     AirspaceGuardReport inspectBle(
         const BleObservationSource& source,
