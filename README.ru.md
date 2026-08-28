@@ -104,6 +104,47 @@ ESP32-Leshy 1.x — переработанная с нуля прошивка д
 [живой статус и ближайший evidence gate](docs/v1/STATUS.ru.md) · [результаты и exit gates этапов](docs/v1/DELIVERY_PLAN.ru.md) · [полная карта функциональности](docs/v1/DELIVERY_PLAN.ru.md#карта-функциональности-продукта)
 <!-- LESHY-ROADMAP:END -->
 
+## Аудит безопасности и разрешённая Лаборатория
+
+Leshy не прячет security-возможности за общим словом «мультитул». Ниже — принятый
+пользовательский результат, граница его применения и честный текущий статус. Полный
+scope и происхождение требований закреплены в [пофункциональном аудите
+конкурентов](docs/v1/COMPETITIVE_ANALYSIS.ru.md#пофункциональный-аудит-паритета),
+[требованиях продукта](docs/v1/PRODUCT_REQUIREMENTS.ru.md) и [живом
+статусе](docs/v1/STATUS.ru.md).
+
+| Режим | Что получает пользователь | Статус 1.x |
+|---|---|---|
+| **Passive audit** | **Защита эфира (CF-001):** RX-only предупреждения о disconnect bursts, конфликтующем twin/PineAP-like поведении, подозрительных BLE tracker/skimmer/drone identifiers и длительном росте шума; каждая находка открывает исходное evidence и uncertainty | 🟡 частично: базовые правила уже проверяются, полный набор S7 ещё не принят |
+| **Passive audit** | **Захват Wi-Fi-аутентификации (CF-002):** различает EAPOL/PMKID и complete/incomplete handshake, сохраняет focused Capture и экспортирует PCAP/`hc22000` | ⬜ запланировано, S7 |
+| **Passive audit** | **Полевой обзор (CF-003):** Wi-Fi AP/station и BLE с deduplication, сравнением повторного визита, optional GPS track и локальным WiGLE-compatible экспортом | ⬜ запланировано, S7; GPS только для подтверждённой сборки |
+| **Passive audit** | **BLE Inspector, приём (CF-004):** сохраняет совместимые raw advertising records с provenance; это не обещание произвольного BLE link-layer sniffing | ⬜ запланировано, S7; фундамент passive BLE scan готов |
+| **Passive audit** | **BadUSB inspection (CF-008):** разбирает подписанный Automation/HID script и показывает target, permissions, действия и пределы без исполнения | ⬜ запланировано, S7 |
+| **Safe Lab** | **Именованные wireless fixtures (CF-009):** отдельно принятые Wi-Fi/BLE/nRF-рецепты для собственного стенда с выбранными source/target, channel, power/rate, duration, lease и проверяемым Stop | ⬜ запланировано, S7; каждый recipe проходит отдельную safety-приёмку |
+| **Safe Lab** | **Собственные сигналы и метки:** IR replay только из immutable Capture; NFC write/restore с preview, verify и recovery dump; Sub-GHz replay — только после доказанного физического Stop | ⬜ запланировано; NFC зависит от PN532, CC1101 TX сейчас заблокирован |
+| **Active-confirmed** | **BLE Inspector, GATT (CF-004):** подключается только к явно выбранному устройству и перечисляет services/characteristics под отдельными permission и lease | ⬜ запланировано, S7 |
+| **Active-confirmed** | **Блокировка устройства (CF-006):** local PIN, bounded retry/recovery и защита secrets/evidence без блокировки Stop, panic и recovery | ⬜ запланировано, S7 |
+| **Active-confirmed** | **Serial Console (CF-007):** bounded UART monitor/bridge для выбранного внешнего устройства и общий Actions CLI без обхода policy/leases | ⬜ запланировано, S7; произвольный raw GPIO не входит в продукт |
+| **Active-confirmed** | **Automation/HID execution (CF-008):** выполняет только подписанный permissioned script после preview цели, действий, ceilings и конечной длительности | ⬜ запланировано, S7 |
+
+**Аппаратная и safety-граница:** переносимый baseline — 16 MB flash и 0 используемой
+PSRAM; RF shield, GPS и PN532 всегда определяются probe/profile, а не названием платы.
+Три nRF допускают аппаратное снятие `CE`, но ESP32-DIV не умеет независимо
+reset/power-gate CC1101, поэтому его TX/replay запрещён до отдельного physical-stop
+evidence. Для штатной сборки доказана RF-эффективность CC1101 на 433 МГц; программная
+настройка 315/868/915 МГц сама по себе её не доказывает. Подробности:
+[аппаратный envelope](docs/v1/HARDWARE_ENVELOPE.ru.md) и [Safety
+Supervisor](docs/v1/SAFETY_SUPERVISOR.ru.md).
+
+**Явно вне 1.0:** `CF-005 Peer Link` между двумя DIV отложен после 1.0. Jamming,
+неизбирательные flood/spam, crash, credential harvesting и disruptive clone не
+являются целями Leshy. Состав сверялся только с официальными первичными источниками:
+[ESP32-DIV](https://github.com/CiferTech/ESP32-DIV),
+[GhostESP](https://github.com/GhostESP-Revival/GhostESP),
+[Bruce](https://github.com/brucedevices/firmware),
+[ESP32 Marauder](https://github.com/justcallmekoko/ESP32Marauder) и
+[Flipper Zero](https://github.com/flipperdevices/flipperzero-firmware/blob/dev/applications/ReadMe.md).
+
 Выпущенная 0.x остаётся замороженной PoC-линейкой; пользовательский бинарник 1.x
 пока не выпускался.
 

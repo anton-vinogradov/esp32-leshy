@@ -104,6 +104,48 @@ This front-page snapshot is generated from the authoritative 1.x documentation; 
 [live status and next evidence gate](docs/v1/STATUS.md) · [stage outcomes and exit gates](docs/v1/DELIVERY_PLAN.md) · [complete functionality map](docs/v1/DELIVERY_PLAN.md#product-functionality-map)
 <!-- LESHY-ROADMAP:END -->
 
+## Security audit and authorized Lab
+
+Leshy does not hide security capabilities behind the generic word “multitool.” The
+table below names the accepted user outcome, its operating boundary, and its honest
+current status. The complete scope and requirement provenance live in the
+[feature-level competitor
+audit](docs/v1/COMPETITIVE_ANALYSIS.md#feature-level-parity-audit), [product
+requirements](docs/v1/PRODUCT_REQUIREMENTS.md), and [live status](docs/v1/STATUS.md).
+
+| Mode | User outcome | 1.x status |
+|---|---|---|
+| **Passive audit** | **Airspace Guard (CF-001):** RX-only warnings for disconnect bursts, conflicting-twin/PineAP-like behavior, suspicious BLE tracker/skimmer/drone identifiers, and sustained elevated noise; every finding opens its source evidence and uncertainty | 🟡 partial: foundational rules are already verified; the complete S7 rule set is not yet accepted |
+| **Passive audit** | **Wi-Fi authentication Capture (CF-002):** distinguishes EAPOL/PMKID and complete/incomplete handshakes, preserves a focused Capture, and exports PCAP/`hc22000` | ⬜ planned, S7 |
+| **Passive audit** | **Field Survey (CF-003):** Wi-Fi AP/station and BLE observations with deduplication, revisit comparison, an optional GPS track, and local WiGLE-compatible export | ⬜ planned, S7; GPS requires a declared compatible assembly |
+| **Passive audit** | **BLE Inspector, receive path (CF-004):** preserves compatible raw advertising records with provenance; this is not a promise of arbitrary BLE link-layer sniffing | ⬜ planned, S7; the passive BLE-scan foundation is complete |
+| **Passive audit** | **BadUSB inspection (CF-008):** parses a signed Automation/HID script and previews its target, permissions, actions, and bounds without executing it | ⬜ planned, S7 |
+| **Safe Lab** | **Named wireless fixtures (CF-009):** individually accepted Wi-Fi/BLE/nRF recipes for an owned test fixture with selected source/target, channel, power/rate, duration, lease, and a verifiable Stop | ⬜ planned, S7; every recipe has its own safety acceptance |
+| **Safe Lab** | **Owned signals and tags:** IR replay only from an immutable Capture; NFC write/restore with preview, verification, and a recovery dump; Sub-GHz replay only after a physical Stop has been proven | ⬜ planned; NFC requires PN532, and CC1101 TX is currently blocked |
+| **Active-confirmed** | **BLE Inspector, GATT path (CF-004):** connects only to an explicitly selected device and enumerates services/characteristics under separate permission and lease | ⬜ planned, S7 |
+| **Active-confirmed** | **Device Lock (CF-006):** local PIN, bounded retry/recovery, and protection for secrets/evidence without blocking Stop, panic, or recovery | ⬜ planned, S7 |
+| **Active-confirmed** | **Serial Console (CF-007):** bounded UART monitor/bridge for a selected external device and the shared Actions CLI without bypassing policy/leases | ⬜ planned, S7; arbitrary raw GPIO control is outside the product |
+| **Active-confirmed** | **Automation/HID execution (CF-008):** runs only a signed, permissioned script after previewing the target, actions, ceilings, and finite duration | ⬜ planned, S7 |
+
+**Hardware and safety boundary:** the portable baseline is 16 MB flash and 0 usable
+PSRAM; the RF shield, GPS, and PN532 are always established by probe/profile rather
+than a board name. The three nRF paths can be physically disabled through `CE`, but
+ESP32-DIV cannot independently reset or power-gate the CC1101, so its TX/replay path
+remains forbidden until separate physical-stop evidence exists. The stock assembly
+has proven useful CC1101 RF behavior at 433 MHz; software tuning to 315/868/915 MHz
+does not prove physical RF efficiency. See the [hardware
+envelope](docs/v1/HARDWARE_ENVELOPE.md) and [Safety
+Supervisor](docs/v1/SAFETY_SUPERVISOR.md).
+
+**Explicitly outside 1.0:** `CF-005 Peer Link` between two DIVs is deferred until
+after 1.0. Jamming, indiscriminate flood/spam, crash, credential harvesting, and
+disruptive clone workflows are not Leshy goals. The comparison used only official
+primary sources: [ESP32-DIV](https://github.com/CiferTech/ESP32-DIV),
+[GhostESP](https://github.com/GhostESP-Revival/GhostESP),
+[Bruce](https://github.com/brucedevices/firmware), [ESP32
+Marauder](https://github.com/justcallmekoko/ESP32Marauder), and [Flipper
+Zero](https://github.com/flipperdevices/flipperzero-firmware/blob/dev/applications/ReadMe.md).
+
 Released 0.x remains a frozen proof-of-concept line; no user-facing 1.x binary has
 been released yet.
 
