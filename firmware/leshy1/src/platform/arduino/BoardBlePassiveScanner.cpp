@@ -14,6 +14,8 @@
 #include <freertos/task.h>
 #include <host/ble_gap.h>
 #include <host/ble_hs.h>
+#include <host/ble_hs_id.h>
+#include <host/util/util.h>
 #include <nimble/nimble_port.h>
 #include <nimble/nimble_port_freertos.h>
 
@@ -53,6 +55,7 @@ bool processControllerInitialized = false;
 std::atomic_bool processControllerAvailable{false};
 std::atomic_bool processNimbleSynced{false};
 std::atomic_bool processNimbleHostRunning{false};
+std::atomic<std::uint8_t> processOwnAddressType{BLE_OWN_ADDR_PUBLIC};
 
 struct RawScanContext final {
     std::array<std::array<std::uint8_t, 6>, 128> seenAddresses{};
@@ -416,8 +419,9 @@ bool startPassiveScan(const drivers::ble::BleScanPlan& plan) {
     parameters.passive = 1U;  // passive scan: never transmit scan requests
     parameters.filter_duplicates = 0U;
     parameters.disable_observer_mode = 0U;
-    return ble_gap_disc(BLE_OWN_ADDR_PUBLIC, BLE_HS_FOREVER, &parameters,
-                        handleNimbleGapEvent, nullptr) == 0;
+    return ble_gap_disc(
+        processOwnAddressType.load(std::memory_order_acquire),
+        BLE_HS_FOREVER, &parameters, handleNimbleGapEvent, nullptr) == 0;
 }
 
 bool stopPassiveScan() {
@@ -492,7 +496,24 @@ void handleNimbleReset(int) {
 }
 
 void handleNimbleSync() {
-    processNimbleSynced = true;
+    // nimble_port_init() synchronizes the host transport, but it does not
+    // establish an own address. The Arduino BLE wrapper used by the accepted
+    // 0.156 HIL performs this step in BLEDevice::onSync(). Without it the GAP
+    // discovery command can return success while the controller delivers no
+    // advertising reports. Resolve the address before publishing readiness.
+    std::uint8_t ownAddressType = BLE_OWN_ADDR_PUBLIC;
+    const int ensured = ble_hs_util_ensure_addr(0);
+    const int inferred = ensured == 0
+        ? ble_hs_id_infer_auto(0, &ownAddressType)
+        : ensured;
+    if (inferred != 0) {
+        processControllerAvailable.store(false, std::memory_order_release);
+        processNimbleSynced.store(false, std::memory_order_release);
+        return;
+    }
+    processOwnAddressType.store(
+        ownAddressType, std::memory_order_release);
+    processNimbleSynced.store(true, std::memory_order_release);
 }
 
 void runProcessNimbleHost(void*) {
@@ -511,6 +532,8 @@ bool shutdownProcessControllerObserver() {
     clearReportQueue();
     processControllerAvailable = false;
     processNimbleSynced = false;
+    processOwnAddressType.store(
+        BLE_OWN_ADDR_PUBLIC, std::memory_order_release);
     if (!processControllerInitialized) return true;
 
     const bool stopRequested = nimble_port_stop() == ESP_OK;

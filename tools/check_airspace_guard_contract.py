@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.231.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.232.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -196,6 +196,9 @@ def main() -> int:
         "parameters.passive = 1U",
         "parameters.filter_duplicates = 0U",
         "takeReportsObserved",
+        "ble_hs_util_ensure_addr(0)",
+        "ble_hs_id_infer_auto(0, &ownAddressType)",
+        "processOwnAddressType.load(std::memory_order_acquire)",
     ):
         require(failures, marker in board_ble + ble_contract,
                 f"missing complete BLE live-ingress contract: {marker}")
@@ -524,7 +527,7 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.231"',
+        '"candidate_version": "1.0.0-dev.232"',
         '"full_matrix_required": false',
         '"cadence_after_acceptance": "8/15"',
     ):
