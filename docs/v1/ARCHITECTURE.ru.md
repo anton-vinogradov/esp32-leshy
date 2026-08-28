@@ -843,6 +843,20 @@ source не сообщает advertising channel; копия Wi-Fi frame/channel
 может сформировать такой report до реализации и physical verification complete
 bounded live BLE retention/handoff.
 
+Exact `1.0.0-dev.220` закрывает prerequisite bounded live retention, но ещё не
+подключает runtime ownership. `BleScanPlan::deduplicateAddresses` остаётся true для
+Product Survey и выключается только будущим request Защиты эфира, поэтому повторные
+advertisements одной exact BLE identity проходят scanner boundary. Raw callback
+отдельно считает каждый observed report до bounded queue; queue loss, malformed
+normalization или исчерпание retention нельзя скрыть меньшим accepted set.
+`AirspaceGuardBleRetention` использует 32 fixed records: один обычный advertisement
+доказывает benign coverage до появления tracker-compatible record, который заменяет
+его, после чего все slots хранят exact repeated evidence. Независимо complete Wi-Fi и
+BLE reports объединяются только внутри существующей validation boundary в 64 records
+и сохраняют kind-specific source-local indices. Этот checkpoint не добавляет task,
+radio owner или второй BLE stack; runtime handoff обязан переиспользовать существующий
+Survey worker, запускать BLE после cleanup Wi-Fi и оставаться supervised до product claim.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

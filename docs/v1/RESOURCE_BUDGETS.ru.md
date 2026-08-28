@@ -993,6 +993,19 @@ SHA-256 firmware/factory/ELF:
 Claim по live heap, radio, TFT или cleanup не возникает до bounded BLE
 retention/handoff и physical evidence.
 
+Фундамент bounded BLE retention Защиты эфира `RB-M180`: exact
+`1.0.0-dev.220` добавляет один fixed retention object на 32 observations и учёт raw
+reports, но не новый task, stack или radio owner. Product Survey сохраняет default
+address deduplication; только будущий request Защиты эфира сохраняет повторные reports.
+Static RAM остаётся 228 432 B, linked flash равен 3 338 104 B (+112 B).
+Размеры app/factory/ELF — 3 338 608/3 404 144/22 504 576 B
+(+112/+112/+12 952 B). SHA-256 firmware/factory/ELF:
+`fa864011d49d1db7ccf1f3a4dcb62cd6f24a9ec5eb3bbeebecfe3cb4314406b1`/
+`79c2ea1011edfc5dac0e356945d93e7950c0ea982ab97b897539f52b23428617`/
+`02c2a0c653990e03bf262c90dd8e46009c9968fa7363d26f570ff487e2128bdc`.
+Полный tracked host suite и production build проходят. Live worker stack/heap,
+radio cleanup и TFT behavior не заявляются до runtime wiring и HIL.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

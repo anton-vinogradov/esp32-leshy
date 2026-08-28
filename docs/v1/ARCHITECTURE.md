@@ -762,6 +762,20 @@ copy remains. This makes imported complete BLE evidence navigable and fail-close
 but the product still cannot generate such a report until complete bounded live BLE
 retention and handoff are implemented and physically verified.
 
+Exact `1.0.0-dev.220` closes the bounded live-retention prerequisite without yet
+wiring runtime ownership. `BleScanPlan::deduplicateAddresses` remains true for
+Product Survey and is disabled only by the future Airspace Guard request, allowing
+repeated advertisements from one exact BLE identity to survive the scanner boundary.
+The raw callback separately counts every observed report before the bounded queue;
+queue loss, malformed normalization or retention exhaustion therefore cannot be
+hidden by a smaller accepted set. `AirspaceGuardBleRetention` uses 32 fixed records:
+one ordinary advertisement proves benign coverage until a tracker-compatible record
+replaces it, after which all slots retain exact repeated evidence. Independently
+complete Wi-Fi and BLE reports merge only inside the existing 64-record validation
+boundary and preserve kind-specific source-local indices. No task, radio owner or
+second BLE stack is added here; runtime handoff must reuse the existing Survey worker,
+sequence BLE after Wi-Fi cleanup and remain supervised before any product claim.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.

@@ -999,6 +999,19 @@ Firmware/factory/ELF SHA-256 are
 No live heap, radio, TFT or cleanup claim follows until bounded BLE retention/handoff
 and physical evidence exist.
 
+Airspace Guard bounded BLE retention foundation `RB-M180`: exact
+`1.0.0-dev.220` adds one fixed 32-observation retention object and raw-report
+accounting, but no new task, stack or radio owner. Product Survey keeps its default
+address deduplication; only the future guard request preserves repeated reports.
+Static RAM remains 228,432 B and linked flash is 3,338,104 B (+112 B).
+App/factory/ELF sizes are 3,338,608/3,404,144/22,504,576 B
+(+112/+112/+12,952 B). Firmware/factory/ELF SHA-256 are
+`fa864011d49d1db7ccf1f3a4dcb62cd6f24a9ec5eb3bbeebecfe3cb4314406b1`/
+`79c2ea1011edfc5dac0e356945d93e7950c0ea982ab97b897539f52b23428617`/
+`02c2a0c653990e03bf262c90dd8e46009c9968fa7363d26f570ff487e2128bdc`.
+The full tracked host suite and production build pass. Live worker stack/heap,
+radio cleanup and TFT behavior remain unclaimed until runtime wiring and HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
