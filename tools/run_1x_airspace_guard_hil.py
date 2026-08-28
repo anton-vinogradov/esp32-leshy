@@ -18,7 +18,7 @@ from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
 from run_1x_product_home_hil import stabilized_boot_metrics
 from run_1x_product_survey_hil import (
-    action,
+    action as raw_action,
     artifact_manifest,
     best_effort_cleanup,
     boot_failures,
@@ -40,6 +40,49 @@ BLE_LIVE_BOTTOM = 132
 ALLOWED_FINDING_MASK = 0x1F
 ELEVATED_NOISE_FINDING_MASK = 1 << 3
 MACOS_BLE_FIXTURE_SCHEMA = "leshy.hil.macos_ble_name_fixture.v1"
+
+
+def read_only_query(device: PassiveSerial, command: bytes, schema: str,
+                    kind: str, timeout: float = 5.0,
+                    maximum_attempts: int = 3) -> dict[str, Any]:
+    """Recover bounded transport loss without replaying a UI action."""
+    errors: list[str] = []
+    for attempt in range(1, maximum_attempts + 1):
+        try:
+            record = query(device, command, schema, kind, timeout=timeout)
+            record["host_transport_attempts"] = attempt
+            record["host_transport_transient_retries"] = attempt - 1
+            record["host_transport_transient_errors"] = errors
+            return record
+        except TimeoutError as error:
+            if attempt == maximum_attempts:
+                raise
+            errors.append(str(error))
+            device.reset_input_buffer()
+            synchronize_console(device, 10.0)
+    raise RuntimeError("unreachable state-query retry state")
+
+
+def action(device: PassiveSerial, name: str,
+           timeout: float = 15.0) -> dict[str, Any]:
+    """Write one reversible navigation key and recover only a lost reply.
+
+    Replaying a key after a lost acknowledgement can skip a menu item. Query
+    the resulting state instead and let the caller's semantic checkpoint prove
+    whether the one original key took effect.
+    """
+    try:
+        state = raw_action(device, name, timeout=timeout)
+        state["host_navigation_ack_received"] = True
+    except TimeoutError as error:
+        state = read_only_query(
+            device, b"ui.state", "leshy.ui.v1", "state",
+            timeout=5.0, maximum_attempts=3)
+        state["host_navigation_ack_received"] = False
+        state["host_navigation_ack_error"] = str(error)
+    state["host_navigation_action_writes"] = 1
+    state["host_navigation_action_replays"] = 0
+    return state
 
 
 def require_exact(record: dict[str, Any], expected: dict[str, Any],
