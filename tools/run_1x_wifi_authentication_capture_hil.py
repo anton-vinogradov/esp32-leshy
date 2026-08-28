@@ -94,6 +94,25 @@ REPORT_COUNTER_FIELDS = (
     "report_capture_frames_dropped_capacity",
     "report_capture_frames_dropped_invalid",
 )
+FILESYSTEM_MOUNT_TELEMETRY_FIELDS = (
+    "survey_product_filesystem_mount_stage",
+    "survey_product_filesystem_bus_initialize_error",
+    "survey_product_filesystem_mount_error",
+    "survey_product_filesystem_mount_attempts",
+    "survey_product_filesystem_mount_transient_retries",
+    "survey_product_filesystem_mount_last_failure_error",
+    "survey_product_mount_attempts_total",
+    "survey_product_mount_successes_total",
+    "survey_product_filesystem_heap_free_before_bus",
+    "survey_product_filesystem_heap_largest_before_bus",
+    "survey_product_filesystem_heap_free_before_vfs",
+    "survey_product_filesystem_heap_largest_before_vfs",
+    "survey_product_filesystem_drive_available_before_vfs",
+    "survey_product_status",
+    "survey_product_cleanup_complete",
+    "survey_product_backend_open",
+    "survey_product_storage_mounted",
+)
 PRIVATE_TARGET_KEYS = frozenset({
     "target_bssid", "target_identity_hash", "identity_hash",
     "wifi_network_selected_identity_hash", "ssid", "bssid", "target_label",
@@ -148,6 +167,38 @@ def privacy_safe_repr(value: Any) -> str:
 def privacy_safe_exception(error: BaseException) -> str:
     """Retain an exception class, never opaque transport text or raw JSON."""
     return type(error).__name__
+
+
+def filesystem_mount_telemetry(state: dict[str, Any]) -> dict[str, Any]:
+    """Retain only non-identifying ProductSurvey mount diagnostics."""
+    return {
+        name: state[name]
+        for name in FILESYSTEM_MOUNT_TELEMETRY_FIELDS
+        if name in state
+    }
+
+
+def retain_cleanup_mount_telemetry(
+        cleanup: dict[str, Any]) -> dict[str, Any]:
+    """Attach pre/post-cleanup mount facts and scrub all UI identifiers."""
+    retained = scrub_private_target_identifiers(cleanup)
+    telemetry: dict[str, dict[str, Any]] = {}
+    for name in ("initial_state", "final_state"):
+        state = cleanup.get(name)
+        if isinstance(state, dict):
+            telemetry[name] = filesystem_mount_telemetry(state)
+    retained["filesystem_mount_telemetry"] = telemetry
+    return retained
+
+
+class UiStateWaitTimeout(TimeoutError):
+    """A bounded wait failure with an evidence-safe last-state snapshot."""
+
+    def __init__(self, description: str, last_state: dict[str, Any],
+                 transport_errors: list[str]) -> None:
+        super().__init__(description)
+        self.last_state = filesystem_mount_telemetry(last_state)
+        self.transport_errors = list(transport_errors)
 
 
 def finalize_evidence_result(value: dict[str, Any], failures: list[str],
@@ -316,9 +367,7 @@ def wait_ui_state(device: PassiveSerial,
             last["host_wait_transport_errors"] = transport_errors
             return last
         time.sleep(0.05)
-    raise TimeoutError(
-        f"{description}: transport_errors={transport_errors!r}, "
-        f"last state {privacy_safe_repr(last)}")
+    raise UiStateWaitTimeout(description, last, transport_errors)
 
 
 def wifi_menu_quiescent(state: dict[str, Any]) -> bool:
@@ -693,7 +742,9 @@ def home_wifi(device: PassiveSerial,
 def enter_network_detail(
         device: PassiveSerial,
         trace: list[dict[str, Any]],
-        label: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+        label: str,
+        mount_diagnostics: dict[str, Any] | None = None,
+        ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     preparing = action(device, "right")
     trace.append(preparing)
     require_exact(preparing, {
@@ -701,16 +752,36 @@ def enter_network_detail(
         "runtime_owner": "wifi", "lease_mask": 15,
         "survey_product_selected_source_mask": 1,
     }, f"{label}_networks_preparing")
-    network_list = wait_ui_state(
-        device,
-        lambda state: (
-            state.get("wifi_product_view") == "networks" and
-            state.get("survey_workflow_state") == "running" and
-            state.get("survey_product_worker_ready") is True and
-            state.get("wifi_networks_strongest_first") is True and
-            int(state.get("wifi_networks_unique", 0)) >= 1 and
-            int(state.get("survey_product_wifi_scan_cycles", 0)) >= 1
-        ), 45.0, f"{label}: nearby Wi-Fi network did not appear")
+    try:
+        network_list = wait_ui_state(
+            device,
+            lambda state: (
+                state.get("wifi_product_view") == "networks" and
+                state.get("survey_workflow_state") == "running" and
+                state.get("survey_product_worker_ready") is True and
+                state.get("wifi_networks_strongest_first") is True and
+                int(state.get("wifi_networks_unique", 0)) >= 1 and
+                int(state.get("survey_product_wifi_scan_cycles", 0)) >= 1
+            ), 45.0, f"{label}: nearby Wi-Fi network did not appear")
+    except UiStateWaitTimeout as error:
+        if mount_diagnostics is not None:
+            mount_diagnostics[label] = {
+                "completed": False,
+                "last_ui_state": error.last_state,
+                "host_wait_transport_timeouts":
+                    len(error.transport_errors),
+                "host_wait_transport_errors": error.transport_errors,
+            }
+        raise
+    if mount_diagnostics is not None:
+        mount_diagnostics[label] = {
+            "completed": True,
+            "last_ui_state": filesystem_mount_telemetry(network_list),
+            "host_wait_transport_timeouts": network_list.get(
+                "host_wait_transport_timeouts", 0),
+            "host_wait_transport_errors": network_list.get(
+                "host_wait_transport_errors", []),
+        }
     require_exact(network_list, {
         "runtime_owner": "wifi", "lease_mask": 15,
         "survey_product_worker_ready": True,
@@ -721,6 +792,9 @@ def enter_network_detail(
         "survey_product_store_open_attempted": True,
         "survey_product_store_status": "permitted",
         "survey_product_admission_status": "permitted",
+        "survey_product_filesystem_mount_stage": "mounted",
+        "survey_product_filesystem_bus_initialize_error": 0,
+        "survey_product_filesystem_drive_available_before_vfs": True,
         "survey_product_filesystem_mount_error": 0,
         "survey_scan_status": "valid", "survey_scan_dropped": 0,
     }, f"{label}_networks_live")
@@ -734,6 +808,12 @@ def enter_network_detail(
         "survey_product_mount_attempts_total")
     mount_successes_total = network_list.get(
         "survey_product_mount_successes_total")
+    heap_fields = (
+        "survey_product_filesystem_heap_free_before_bus",
+        "survey_product_filesystem_heap_largest_before_bus",
+        "survey_product_filesystem_heap_free_before_vfs",
+        "survey_product_filesystem_heap_largest_before_vfs",
+    )
     if (not isinstance(mount_attempts, int) or
             isinstance(mount_attempts, bool) or
             not 1 <= mount_attempts <= 3 or
@@ -745,7 +825,9 @@ def enter_network_detail(
             not isinstance(mount_successes_total, int) or
             isinstance(mount_successes_total, bool) or
             mount_successes_total < 1 or
-            mount_successes_total > mount_attempts_total):
+            mount_successes_total > mount_attempts_total or
+            any(not non_negative_integer(network_list.get(name)) or
+                network_list[name] == 0 for name in heap_fields)):
         raise RuntimeError(
             f"{label}: invalid filesystem remount accounting: "
             f"{privacy_safe_repr(network_list)}")
@@ -922,6 +1004,7 @@ def main() -> int:
     input_state: dict[str, Any] = {}
     safe_outputs: dict[str, Any] = {}
     start_failure_diagnostics: dict[str, Any] = {}
+    filesystem_mount_diagnostics: dict[str, Any] = {}
     final_diagnostic_errors: list[str] = []
     delta: dict[str, int] = {}
     repaint_delta: dict[str, int] = {}
@@ -980,7 +1063,7 @@ def main() -> int:
                 # capture and must return to an entirely quiescent Wi-Fi menu.
                 (cancel_network_list, cancel_network_detail_ui,
                  cancel_network_detail) = enter_network_detail(
-                    device, trace, "cancel")
+                    device, trace, "cancel", filesystem_mount_diagnostics)
                 hold_pre_arm_state = auth_state(device)
                 hold_armed_at = time.monotonic()
                 cancel_hold = arm_authentication_survey_stop_hold(
@@ -1084,7 +1167,9 @@ def main() -> int:
 
                 # Start a fresh, complete capture lifecycle after cancellation.
                 network_list, network_detail_ui, network_detail = \
-                    enter_network_detail(device, trace, "capture")
+                    enter_network_detail(
+                        device, trace, "capture",
+                        filesystem_mount_diagnostics)
                 second_mount_attempts = network_list[
                     "survey_product_filesystem_mount_attempts"]
                 if (network_list["survey_product_mount_attempts_total"] !=
@@ -1395,7 +1480,8 @@ def main() -> int:
                 safe_outputs = diagnostics.get("safe_outputs", safe_outputs)
                 recovery_after = diagnostics.get("recovery", recovery_after)
                 try:
-                    cleanup_after = robust_cleanup(device)
+                    cleanup_after = retain_cleanup_mount_telemetry(
+                        robust_cleanup(device))
                     if not cleanup_after.get("complete"):
                         failures.append("cleanup_after: Home/zero lease unproven")
                 except Exception as error:
@@ -1470,6 +1556,7 @@ def main() -> int:
         "input": input_state,
         "safe_outputs": safe_outputs,
         "start_failure_diagnostics": start_failure_diagnostics,
+        "filesystem_mount_diagnostics": filesystem_mount_diagnostics,
         "final_diagnostic_errors": final_diagnostic_errors,
         "screens": screens,
         "pixel_delta": delta,

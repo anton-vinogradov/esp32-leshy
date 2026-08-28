@@ -7,6 +7,16 @@
 
 namespace leshy1::platform::arduino {
 
+enum class BoardSdFilesystemMountStage : std::uint8_t {
+    Idle,
+    BusInitializing,
+    VfsMounting,
+    Mounted,
+};
+
+const char* boardSdFilesystemMountStageName(
+    BoardSdFilesystemMountStage stage);
+
 // Explicit writable SD fixture adapter. Callers must hold Storage+RadioSpi and
 // obtain a StorageGuard permit before creating any path. Formatting is disabled.
 class BoardSdFilesystem final {
@@ -35,6 +45,24 @@ public:
     bool readOnlyGuaranteed() const { return readOnlyGuaranteed_; }
     std::uint32_t blockedWriteAttempts() const;
     int mountError() const { return static_cast<int>(mountError_); }
+    BoardSdFilesystemMountStage mountStage() const { return mountStage_; }
+    const char* mountStageName() const {
+        return boardSdFilesystemMountStageName(mountStage_);
+    }
+    int busInitializeError() const {
+        return static_cast<int>(busInitializeError_);
+    }
+    std::uint32_t heapFreeBeforeBus() const { return heapFreeBeforeBus_; }
+    std::uint32_t heapLargestBeforeBus() const {
+        return heapLargestBeforeBus_;
+    }
+    std::uint32_t heapFreeBeforeVfs() const { return heapFreeBeforeVfs_; }
+    std::uint32_t heapLargestBeforeVfs() const {
+        return heapLargestBeforeVfs_;
+    }
+    bool driveAvailableBeforeVfs() const {
+        return driveAvailableBeforeVfs_;
+    }
     std::uint32_t realFrequencyHz() const;
 
 private:
@@ -51,6 +79,14 @@ private:
     bool readOnlyGuaranteed_ = false;
     std::uint32_t blockedWriteAttemptsAfterEnd_ = 0;
     esp_err_t mountError_ = ESP_OK;
+    BoardSdFilesystemMountStage mountStage_ =
+        BoardSdFilesystemMountStage::Idle;
+    esp_err_t busInitializeError_ = ESP_OK;
+    std::uint32_t heapFreeBeforeBus_ = 0;
+    std::uint32_t heapLargestBeforeBus_ = 0;
+    std::uint32_t heapFreeBeforeVfs_ = 0;
+    std::uint32_t heapLargestBeforeVfs_ = 0;
+    bool driveAvailableBeforeVfs_ = false;
 };
 
 }  // namespace leshy1::platform::arduino

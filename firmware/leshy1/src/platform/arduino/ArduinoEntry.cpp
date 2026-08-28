@@ -1687,6 +1687,13 @@ struct ProductSurveyRuntimeState final {
     std::uint8_t filesystemMountTransientRetries = 0;
     int filesystemMountError = 0;
     int filesystemMountLastFailureError = 0;
+    const char* filesystemMountStage = "idle";
+    int filesystemBusInitializeError = 0;
+    std::uint32_t filesystemHeapFreeBeforeBus = 0;
+    std::uint32_t filesystemHeapLargestBeforeBus = 0;
+    std::uint32_t filesystemHeapFreeBeforeVfs = 0;
+    std::uint32_t filesystemHeapLargestBeforeVfs = 0;
+    bool filesystemDriveAvailableBeforeVfs = false;
     leshy1::storage::SdTransportRunStatus identityStatus =
         leshy1::storage::SdTransportRunStatus::InvalidPlan;
     char expectedFingerprint[33] = {};
@@ -1807,6 +1814,13 @@ struct ProductSurveyWorkerReport final {
     std::uint8_t filesystemMountTransientRetries = 0;
     int filesystemMountError = 0;
     int filesystemMountLastFailureError = 0;
+    const char* filesystemMountStage = "idle";
+    int filesystemBusInitializeError = 0;
+    std::uint32_t filesystemHeapFreeBeforeBus = 0;
+    std::uint32_t filesystemHeapLargestBeforeBus = 0;
+    std::uint32_t filesystemHeapFreeBeforeVfs = 0;
+    std::uint32_t filesystemHeapLargestBeforeVfs = 0;
+    bool filesystemDriveAvailableBeforeVfs = false;
     leshy1::storage::SdTransportRunStatus identityStatus =
         leshy1::storage::SdTransportRunStatus::InvalidPlan;
     char expectedFingerprint[33] = {};
@@ -1946,10 +1960,10 @@ std::uint64_t lastUiRenderUs = 0;
 
 struct SdPhysicalEvidenceWorkspace final {
     // UI state is intentionally a single reusable static workspace.  The
-    // network/device passports pushed the bounded schema past 6 KiB; retaining
-    // 7 KiB here avoids both truncation and the historical loop-task stack
-    // panic without allocating per command.
-    char line[7168] = {};
+    // network/device passports and mount diagnostics pushed the bounded schema
+    // past 7 KiB; retaining 7.5 KiB here avoids both truncation and the
+    // historical loop-task stack panic without allocating per command.
+    char line[7680] = {};
     char summaryA[512] = {};
     char summaryB[512] = {};
     char summaryC[512] = {};
@@ -2843,6 +2857,20 @@ void applyProductSurveyWorkerReport(
         report.filesystemMountError;
     productSurveyRuntime.filesystemMountLastFailureError =
         report.filesystemMountLastFailureError;
+    productSurveyRuntime.filesystemMountStage =
+        report.filesystemMountStage;
+    productSurveyRuntime.filesystemBusInitializeError =
+        report.filesystemBusInitializeError;
+    productSurveyRuntime.filesystemHeapFreeBeforeBus =
+        report.filesystemHeapFreeBeforeBus;
+    productSurveyRuntime.filesystemHeapLargestBeforeBus =
+        report.filesystemHeapLargestBeforeBus;
+    productSurveyRuntime.filesystemHeapFreeBeforeVfs =
+        report.filesystemHeapFreeBeforeVfs;
+    productSurveyRuntime.filesystemHeapLargestBeforeVfs =
+        report.filesystemHeapLargestBeforeVfs;
+    productSurveyRuntime.filesystemDriveAvailableBeforeVfs =
+        report.filesystemDriveAvailableBeforeVfs;
     productSurveyRuntime.identityStatus = report.identityStatus;
     std::memcpy(productSurveyRuntime.expectedFingerprint,
                 report.expectedFingerprint,
@@ -3110,6 +3138,20 @@ ProductSurveyWorkerReport prepareProductSurveyWorker(
         filesystemMounted = productSurveyFilesystem.begin();
         recordProductSurveyMountOutcome(filesystemMounted);
         report.filesystemMountError = productSurveyFilesystem.mountError();
+        report.filesystemMountStage =
+            productSurveyFilesystem.mountStageName();
+        report.filesystemBusInitializeError =
+            productSurveyFilesystem.busInitializeError();
+        report.filesystemHeapFreeBeforeBus =
+            productSurveyFilesystem.heapFreeBeforeBus();
+        report.filesystemHeapLargestBeforeBus =
+            productSurveyFilesystem.heapLargestBeforeBus();
+        report.filesystemHeapFreeBeforeVfs =
+            productSurveyFilesystem.heapFreeBeforeVfs();
+        report.filesystemHeapLargestBeforeVfs =
+            productSurveyFilesystem.heapLargestBeforeVfs();
+        report.filesystemDriveAvailableBeforeVfs =
+            productSurveyFilesystem.driveAvailableBeforeVfs();
         if (filesystemMounted) {
             break;
         }
@@ -4085,6 +4127,13 @@ bool reopenProductSurveyBackendForCommit() {
     productSurveyRuntime.filesystemMountTransientRetries = 0;
     productSurveyRuntime.filesystemMountError = 0;
     productSurveyRuntime.filesystemMountLastFailureError = 0;
+    productSurveyRuntime.filesystemMountStage = "idle";
+    productSurveyRuntime.filesystemBusInitializeError = 0;
+    productSurveyRuntime.filesystemHeapFreeBeforeBus = 0;
+    productSurveyRuntime.filesystemHeapLargestBeforeBus = 0;
+    productSurveyRuntime.filesystemHeapFreeBeforeVfs = 0;
+    productSurveyRuntime.filesystemHeapLargestBeforeVfs = 0;
+    productSurveyRuntime.filesystemDriveAvailableBeforeVfs = false;
     bool filesystemMounted = false;
     for (std::uint8_t attempt = 1;
          attempt <=
@@ -4095,6 +4144,20 @@ bool reopenProductSurveyBackendForCommit() {
         recordProductSurveyMountOutcome(filesystemMounted);
         productSurveyRuntime.filesystemMountError =
             productSurveyFilesystem.mountError();
+        productSurveyRuntime.filesystemMountStage =
+            productSurveyFilesystem.mountStageName();
+        productSurveyRuntime.filesystemBusInitializeError =
+            productSurveyFilesystem.busInitializeError();
+        productSurveyRuntime.filesystemHeapFreeBeforeBus =
+            productSurveyFilesystem.heapFreeBeforeBus();
+        productSurveyRuntime.filesystemHeapLargestBeforeBus =
+            productSurveyFilesystem.heapLargestBeforeBus();
+        productSurveyRuntime.filesystemHeapFreeBeforeVfs =
+            productSurveyFilesystem.heapFreeBeforeVfs();
+        productSurveyRuntime.filesystemHeapLargestBeforeVfs =
+            productSurveyFilesystem.heapLargestBeforeVfs();
+        productSurveyRuntime.filesystemDriveAvailableBeforeVfs =
+            productSurveyFilesystem.driveAvailableBeforeVfs();
         if (filesystemMounted) {
             break;
         }
@@ -18988,6 +19051,13 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                       "\"survey_product_identity_transient_retries\":%u,"
                       "\"survey_product_filesystem_mount_error\":%d,"
                       "\"survey_product_filesystem_mount_last_failure_error\":%d,"
+                      "\"survey_product_filesystem_mount_stage\":\"%s\","
+                      "\"survey_product_filesystem_bus_initialize_error\":%d,"
+                      "\"survey_product_filesystem_heap_free_before_bus\":%lu,"
+                      "\"survey_product_filesystem_heap_largest_before_bus\":%lu,"
+                      "\"survey_product_filesystem_heap_free_before_vfs\":%lu,"
+                      "\"survey_product_filesystem_heap_largest_before_vfs\":%lu,"
+                      "\"survey_product_filesystem_drive_available_before_vfs\":%s,"
                       "\"survey_product_filesystem_mount_attempts\":%u,"
                       "\"survey_product_filesystem_mount_transient_retries\":%u,"
                       "\"survey_product_mount_attempts_total\":%lu,"
@@ -19221,6 +19291,18 @@ void emitUiState(Stream& reply, UiAction action, bool changed) {
                           productSurveyRuntime.identityTransientRetries),
                       productSurveyRuntime.filesystemMountError,
                       productSurveyRuntime.filesystemMountLastFailureError,
+                      productSurveyRuntime.filesystemMountStage,
+                      productSurveyRuntime.filesystemBusInitializeError,
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.filesystemHeapFreeBeforeBus),
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.filesystemHeapLargestBeforeBus),
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.filesystemHeapFreeBeforeVfs),
+                      static_cast<unsigned long>(
+                          productSurveyRuntime.filesystemHeapLargestBeforeVfs),
+                      productSurveyRuntime.filesystemDriveAvailableBeforeVfs
+                          ? "true" : "false",
                       static_cast<unsigned>(
                           productSurveyRuntime.filesystemMountAttempts),
                       static_cast<unsigned>(

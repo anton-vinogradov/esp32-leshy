@@ -98,12 +98,23 @@ def verify_product_mount(failures: list[str], state: dict[str, Any],
         "survey_product_filesystem_mount_last_failure_error")
     attempts_total = state.get("survey_product_mount_attempts_total")
     successes_total = state.get("survey_product_mount_successes_total")
+    drive_available = state.get(
+        "survey_product_filesystem_drive_available_before_vfs")
+    heap_fields = (
+        "survey_product_filesystem_heap_free_before_bus",
+        "survey_product_filesystem_heap_largest_before_bus",
+        "survey_product_filesystem_heap_free_before_vfs",
+        "survey_product_filesystem_heap_largest_before_vfs",
+    )
     require(failures,
             state.get("survey_product_backend_open") is False and
             state.get("survey_product_storage_mounted") is False and
             state.get("survey_product_store_open_attempted") is True and
             state.get("survey_product_store_status") == "permitted" and
             state.get("survey_product_admission_status") == "permitted" and
+            state.get("survey_product_filesystem_mount_stage") == "mounted" and
+            state.get("survey_product_filesystem_bus_initialize_error") == 0 and
+            drive_available is True and
             state.get("survey_product_filesystem_mount_error") == 0,
             f"{label}: physical storage was not released after admission")
     require(failures,
@@ -113,7 +124,9 @@ def verify_product_mount(failures: list[str], state: dict[str, Any],
             non_negative_integer(attempts_total) and
             attempts_total >= attempts and
             non_negative_integer(successes_total) and
-            1 <= successes_total <= attempts_total,
+            1 <= successes_total <= attempts_total and
+            all(non_negative_integer(state.get(name)) and state[name] > 0
+                for name in heap_fields),
             f"{label}: bounded filesystem remount accounting mismatch")
 
 

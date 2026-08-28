@@ -5,6 +5,7 @@
 
 #include <driver/sdspi_host.h>
 #include <driver/spi_master.h>
+#include <esp_heap_caps.h>
 #include <esp_vfs_fat.h>
 #include <diskio_impl.h>
 #include <ff.h>
@@ -87,6 +88,19 @@ std::uint64_t fatSectorSize(const FATFS* filesystem) {
 
 }  // namespace
 
+const char* boardSdFilesystemMountStageName(
+    BoardSdFilesystemMountStage stage) {
+    switch (stage) {
+        case BoardSdFilesystemMountStage::Idle: return "idle";
+        case BoardSdFilesystemMountStage::BusInitializing:
+            return "bus_initializing";
+        case BoardSdFilesystemMountStage::VfsMounting:
+            return "vfs_mounting";
+        case BoardSdFilesystemMountStage::Mounted: return "mounted";
+    }
+    return "idle";
+}
+
 bool BoardSdFilesystem::guardSharedChipSelect() {
     if (digitalRead(BoardProfile::kNrfCsPins[2]) == HIGH) return true;
     gpio21StableHigh_ = false;
@@ -108,6 +122,13 @@ bool BoardSdFilesystem::beginWithMode(bool readOnly) {
     readOnlyGuaranteed_ = false;
     blockedWriteAttemptsAfterEnd_ = 0;
     mountError_ = ESP_OK;
+    mountStage_ = BoardSdFilesystemMountStage::Idle;
+    busInitializeError_ = ESP_OK;
+    heapFreeBeforeBus_ = 0;
+    heapLargestBeforeBus_ = 0;
+    heapFreeBeforeVfs_ = 0;
+    heapLargestBeforeVfs_ = 0;
+    driveAvailableBeforeVfs_ = false;
     driveNumber_ = 0xFF;
     BoardSdSpiTransport::holdRadioTransmitPathsInactive();
     pinMode(BoardProfile::kNrfCsPins[0], OUTPUT);
@@ -130,7 +151,15 @@ bool BoardSdFilesystem::beginWithMode(bool readOnly) {
     busConfig.quadwp_io_num = -1;
     busConfig.quadhd_io_num = -1;
     busConfig.max_transfer_sz = 4096;
-    mountError_ = spi_bus_initialize(kSdHost, &busConfig, SPI_DMA_CH_AUTO);
+    heapFreeBeforeBus_ = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    heapLargestBeforeBus_ = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    mountStage_ = BoardSdFilesystemMountStage::BusInitializing;
+    busInitializeError_ =
+        spi_bus_initialize(kSdHost, &busConfig, SPI_DMA_CH_AUTO);
+    mountError_ = busInitializeError_;
     if (mountError_ != ESP_OK) {
         end();
         return false;
@@ -151,6 +180,16 @@ bool BoardSdFilesystem::beginWithMode(bool readOnly) {
     mount.format_if_mount_failed = false;
     mount.max_files = 5;
     mount.disk_status_check_enable = true;
+    heapFreeBeforeVfs_ = static_cast<std::uint32_t>(
+        heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    heapLargestBeforeVfs_ = static_cast<std::uint32_t>(
+        heap_caps_get_largest_free_block(
+            MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    BYTE availableDrive = FF_DRV_NOT_USED;
+    driveAvailableBeforeVfs_ =
+        ff_diskio_get_drive(&availableDrive) == ESP_OK &&
+        availableDrive < FF_VOLUMES;
+    mountStage_ = BoardSdFilesystemMountStage::VfsMounting;
     mountError_ = esp_vfs_fat_sdspi_mount(
         kSdMountPoint, &host, &device, &mount, &card_);
     if (mountError_ != ESP_OK || card_ == nullptr) {
@@ -164,6 +203,7 @@ bool BoardSdFilesystem::beginWithMode(bool readOnly) {
         end();
         return false;
     }
+    mountStage_ = BoardSdFilesystemMountStage::Mounted;
     if (readOnly && !installReadOnlyDiskIo()) {
         mountError_ = ESP_ERR_INVALID_STATE;
         end();

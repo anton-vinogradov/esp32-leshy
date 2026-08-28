@@ -128,6 +128,67 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             ["TimeoutError"],
             actual["host_wait_transport_errors"])
 
+    def test_ui_wait_timeout_retains_only_mount_telemetry(self) -> None:
+        device = MagicMock()
+        preparing = {
+            "schema": RUNNER.UI_SCHEMA, "kind": "state",
+            "ssid": "private-network",
+            "wifi_network_order_hash": 123,
+            "survey_product_filesystem_mount_stage": "vfs_mounting",
+            "survey_product_filesystem_bus_initialize_error": 0,
+            "survey_product_filesystem_drive_available_before_vfs": True,
+            "survey_product_filesystem_heap_free_before_bus": 1000,
+            "survey_product_filesystem_heap_largest_before_bus": 900,
+            "survey_product_filesystem_heap_free_before_vfs": 800,
+            "survey_product_filesystem_heap_largest_before_vfs": 700,
+        }
+        with patch.object(RUNNER, "query", return_value=preparing), \
+                patch.object(RUNNER.time, "monotonic",
+                             side_effect=(0.0, 0.0, 0.0, 2.0)), \
+                patch.object(RUNNER.time, "sleep"):
+            with self.assertRaises(RUNNER.UiStateWaitTimeout) as caught:
+                RUNNER.wait_ui_state(device, lambda _state: False, 1.0,
+                                     "second mount")
+        self.assertEqual("vfs_mounting", caught.exception.last_state[
+            "survey_product_filesystem_mount_stage"])
+        self.assertEqual(0, caught.exception.last_state[
+            "survey_product_filesystem_bus_initialize_error"])
+        self.assertIs(True, caught.exception.last_state[
+            "survey_product_filesystem_drive_available_before_vfs"])
+        self.assertNotIn("ssid", caught.exception.last_state)
+        self.assertNotIn("wifi_network_order_hash",
+                         caught.exception.last_state)
+
+    def test_cleanup_retains_mount_telemetry_without_private_state(self) -> None:
+        cleanup = {
+            "attempted": True,
+            "initial_state": {
+                "ssid": "private-network",
+                "wifi_device_order_hash": 456,
+                "survey_product_filesystem_mount_stage": "vfs_mounting",
+                "survey_product_filesystem_bus_initialize_error": 0,
+                "survey_product_filesystem_drive_available_before_vfs": True,
+                "survey_product_filesystem_heap_free_before_bus": 1000,
+            },
+            "final_state": {
+                "page": "home",
+                "survey_product_filesystem_mount_stage": "mounted",
+                "survey_product_filesystem_heap_free_before_vfs": 800,
+            },
+        }
+        retained = RUNNER.retain_cleanup_mount_telemetry(cleanup)
+        self.assertNotIn("ssid", retained["initial_state"])
+        self.assertNotIn("wifi_device_order_hash", retained["initial_state"])
+        self.assertEqual({
+            "survey_product_filesystem_mount_stage": "vfs_mounting",
+            "survey_product_filesystem_bus_initialize_error": 0,
+            "survey_product_filesystem_drive_available_before_vfs": True,
+            "survey_product_filesystem_heap_free_before_bus": 1000,
+        }, retained["filesystem_mount_telemetry"]["initial_state"])
+        self.assertEqual("mounted", retained[
+            "filesystem_mount_telemetry"]["final_state"][
+                "survey_product_filesystem_mount_stage"])
+
     def test_wifi_menu_preflight_accepts_unsnapshotted_worker_but_quiesces(
             self) -> None:
         state = {
@@ -181,12 +242,19 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
             "survey_product_store_open_attempted": True,
             "survey_product_store_status": "permitted",
             "survey_product_admission_status": "permitted",
+            "survey_product_filesystem_mount_stage": "mounted",
+            "survey_product_filesystem_bus_initialize_error": 0,
+            "survey_product_filesystem_drive_available_before_vfs": True,
             "survey_product_filesystem_mount_error": 0,
             "survey_product_filesystem_mount_last_failure_error": 257,
             "survey_product_filesystem_mount_attempts": 2,
             "survey_product_filesystem_mount_transient_retries": 1,
             "survey_product_mount_attempts_total": 3,
             "survey_product_mount_successes_total": 2,
+            "survey_product_filesystem_heap_free_before_bus": 1000,
+            "survey_product_filesystem_heap_largest_before_bus": 900,
+            "survey_product_filesystem_heap_free_before_vfs": 800,
+            "survey_product_filesystem_heap_largest_before_vfs": 700,
         }
         failures: list[str] = []
         CHECKER.verify_product_mount(failures, state, "valid")
@@ -195,10 +263,17 @@ class WifiAuthenticationCaptureHilTests(unittest.TestCase):
                 ("survey_product_backend_open", True),
                 ("survey_product_storage_mounted", True),
                 ("survey_product_filesystem_mount_error", 257),
+                ("survey_product_filesystem_bus_initialize_error", 257),
+                ("survey_product_filesystem_drive_available_before_vfs", False),
                 ("survey_product_filesystem_mount_last_failure_error", 0),
                 ("survey_product_filesystem_mount_attempts", 4),
                 ("survey_product_filesystem_mount_transient_retries", 0),
-                ("survey_product_mount_successes_total", 4)):
+                ("survey_product_mount_successes_total", 4),
+                ("survey_product_filesystem_mount_stage", "vfs_mounting"),
+                ("survey_product_filesystem_heap_free_before_bus", 0),
+                ("survey_product_filesystem_heap_largest_before_bus", 0),
+                ("survey_product_filesystem_heap_free_before_vfs", 0),
+                ("survey_product_filesystem_heap_largest_before_vfs", 0)):
             with self.subTest(name=name):
                 changed = dict(state)
                 changed[name] = value
