@@ -378,6 +378,11 @@ bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
         ble.status == AirspaceGuardStatus::InvalidPolicy ||
         wifi.bleAdvertisementRecords != 0U || ble.disconnectFrames != 0U ||
         ble.identityAdvertisementFrames != 0U ||
+        ble.wifiNoiseSamplesObserved != 0U ||
+        ble.wifiNoiseSamplesAvailable != 0U ||
+        ble.wifiNoiseSamplesInspected != 0U ||
+        ble.wifiNoiseSamplesDropped != 0U ||
+        ble.wifiNoiseSamplesMalformed != 0U ||
         wifi.findingCount > wifi.findings.size() ||
         ble.findingCount > ble.findings.size() ||
         wifi.inspectionTruncated || ble.inspectionTruncated ||
@@ -408,6 +413,11 @@ bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
     merged.disconnectFrames = wifi.disconnectFrames;
     merged.identityAdvertisementFrames = wifi.identityAdvertisementFrames;
     merged.bleAdvertisementRecords = ble.bleAdvertisementRecords;
+    merged.wifiNoiseSamplesObserved = wifi.wifiNoiseSamplesObserved;
+    merged.wifiNoiseSamplesAvailable = wifi.wifiNoiseSamplesAvailable;
+    merged.wifiNoiseSamplesInspected = wifi.wifiNoiseSamplesInspected;
+    merged.wifiNoiseSamplesDropped = wifi.wifiNoiseSamplesDropped;
+    merged.wifiNoiseSamplesMalformed = wifi.wifiNoiseSamplesMalformed;
     merged.malformedFrames = wifi.malformedFrames + ble.malformedFrames;
     merged.sourceReadFailures =
         wifi.sourceReadFailures + ble.sourceReadFailures;
@@ -432,7 +442,8 @@ bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
         merged.framesInspected + merged.sourceReadFailures !=
             merged.framesAvailable ||
         merged.sourceFramesDropped > merged.sourceFramesObserved ||
-        merged.findingsDropped > merged.framesInspected) {
+        merged.findingsDropped >
+            merged.framesInspected + merged.wifiNoiseSamplesInspected) {
         return false;
     }
     merged.status = merged.findingCount != 0U
@@ -442,7 +453,9 @@ bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
                    merged.framesInspected == 0U ||
                    merged.sourceReadFailures != 0U ||
                    merged.sourceFramesDropped != 0U ||
-                   merged.malformedFrames != 0U
+                   merged.malformedFrames != 0U ||
+                   merged.wifiNoiseSamplesDropped != 0U ||
+                   merged.wifiNoiseSamplesMalformed != 0U
                ? AirspaceGuardStatus::Inconclusive
                : AirspaceGuardStatus::Clear);
     *output = merged;
@@ -467,6 +480,8 @@ const char* airspaceFindingKindName(AirspaceFindingKind kind) {
             return "wifi_ssid_security_conflict";
         case AirspaceFindingKind::WifiSsidChurn:
             return "wifi_ssid_churn";
+        case AirspaceFindingKind::WifiElevatedNoise:
+            return "wifi_elevated_noise";
         case AirspaceFindingKind::BleTrackerPresence:
             return "ble_tracker_presence";
     }
@@ -516,6 +531,13 @@ bool validateAirspaceGuardPolicy(const AirspaceGuardPolicy& policy) {
         policy.ssidChurnThreshold <= AirspaceFinding::kEvidenceCapacity &&
         policy.ssidChurnWindowUs >= 100000ULL &&
         policy.ssidChurnWindowUs <= 10000000ULL &&
+        policy.elevatedNoiseFloorDbm >= -100 &&
+        policy.elevatedNoiseFloorDbm <= -30 &&
+        policy.elevatedNoiseThreshold >= 2U &&
+        policy.elevatedNoiseThreshold <=
+            AirspaceFinding::kEvidenceCapacity &&
+        policy.elevatedNoiseWindowUs >= 100000ULL &&
+        policy.elevatedNoiseWindowUs <= 10000000ULL &&
         policy.bleTrackerPresenceThreshold >= 2U &&
         policy.bleTrackerPresenceThreshold <=
             AirspaceFinding::kEvidenceCapacity &&
@@ -619,7 +641,11 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
     const domain::captures::WifiFrameSource& source,
     const AirspaceGuardPolicy& policy,
     std::size_t sourceFramesDropped,
-    std::size_t sourceFramesObserved) const {
+    std::size_t sourceFramesObserved,
+    const WifiNoiseFloorSample* noiseSamples,
+    std::size_t noiseSampleCount,
+    std::size_t noiseSamplesDropped,
+    std::size_t noiseSamplesObserved) const {
     AirspaceGuardReport report{};
     if (!validateAirspaceGuardPolicy(policy)) {
         report.status = AirspaceGuardStatus::InvalidPolicy;
@@ -631,6 +657,13 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
     report.framesAvailable = source.frameCount();
     report.sourceFramesObserved = sourceFramesObserved == 0U
         ? report.framesAvailable + sourceFramesDropped : sourceFramesObserved;
+    report.wifiNoiseSamplesAvailable = noiseSampleCount;
+    report.wifiNoiseSamplesDropped = noiseSamplesDropped;
+    report.wifiNoiseSamplesObserved = noiseSamplesObserved == 0U
+        ? noiseSampleCount + noiseSamplesDropped : noiseSamplesObserved;
+    if (noiseSampleCount != 0U && noiseSamples == nullptr) {
+        report.wifiNoiseSamplesMalformed = noiseSampleCount;
+    }
     const std::size_t inspectionCount =
         report.framesAvailable < kFrameInspectionCapacity
             ? report.framesAvailable : kFrameInspectionCapacity;
@@ -951,6 +984,124 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
         }
     }
 
+    const auto validNoiseSample = [&](const WifiNoiseFloorSample& sample) {
+        return sample.observationIndex < report.sourceFramesObserved &&
+            sample.monotonicUs != 0U && sample.channel >= 1U &&
+            sample.channel <= 14U && sample.rssiDbm >= -127 &&
+            sample.rssiDbm <= 0 &&
+            isWifiNoiseFloorCandidate(sample.noiseFloorDbm);
+    };
+    if (noiseSamples != nullptr) {
+        for (std::size_t index = 0U; index < noiseSampleCount; ++index) {
+            if (validNoiseSample(noiseSamples[index])) {
+                ++report.wifiNoiseSamplesInspected;
+            } else {
+                ++report.wifiNoiseSamplesMalformed;
+            }
+        }
+    }
+
+    if (policy.elevatedNoiseEnabled && noiseSamples != nullptr) {
+        for (std::size_t candidate = 0U; candidate < noiseSampleCount;
+             ++candidate) {
+            const WifiNoiseFloorSample& first = noiseSamples[candidate];
+            if (!validNoiseSample(first)) continue;
+            if (first.noiseFloorDbm < policy.elevatedNoiseFloorDbm) {
+                continue;
+            }
+
+            bool channelAlreadyReported = false;
+            for (std::size_t findingIndex = 0U;
+                 findingIndex < report.findingCount; ++findingIndex) {
+                const AirspaceFinding& existing =
+                    report.findings[findingIndex];
+                if (existing.kind == AirspaceFindingKind::WifiElevatedNoise &&
+                    existing.evidenceCount != 0U &&
+                    existing.evidence[0].channel == first.channel) {
+                    channelAlreadyReported = true;
+                    break;
+                }
+            }
+            if (channelAlreadyReported) continue;
+
+            std::size_t bestStart = candidate;
+            std::size_t bestCount = 0U;
+            for (std::size_t start = 0U; start < noiseSampleCount; ++start) {
+                const WifiNoiseFloorSample& startSample = noiseSamples[start];
+                if (!validNoiseSample(startSample) ||
+                    startSample.channel != first.channel ||
+                    startSample.noiseFloorDbm <
+                        policy.elevatedNoiseFloorDbm) {
+                    continue;
+                }
+                std::size_t count = 0U;
+                for (std::size_t index = 0U; index < noiseSampleCount;
+                     ++index) {
+                    const WifiNoiseFloorSample& sample = noiseSamples[index];
+                    if (!validNoiseSample(sample) ||
+                        sample.channel != first.channel ||
+                        sample.noiseFloorDbm <
+                            policy.elevatedNoiseFloorDbm ||
+                        sample.monotonicUs < startSample.monotonicUs ||
+                        sample.monotonicUs - startSample.monotonicUs >
+                            policy.elevatedNoiseWindowUs) {
+                        continue;
+                    }
+                    ++count;
+                }
+                if (count > bestCount) {
+                    bestCount = count;
+                    bestStart = start;
+                }
+            }
+            if (bestCount < policy.elevatedNoiseThreshold) continue;
+            if (report.findingCount >= report.findings.size()) {
+                ++report.findingsDropped;
+                continue;
+            }
+
+            const WifiNoiseFloorSample& start = noiseSamples[bestStart];
+            AirspaceFinding& finding =
+                report.findings[report.findingCount++];
+            finding = {};
+            finding.kind = AirspaceFindingKind::WifiElevatedNoise;
+            // Noise-floor elevation cannot identify its cause. Keep confidence
+            // low regardless of sample count and never call this jamming proof.
+            finding.confidence = AirspaceConfidence::Low;
+            finding.detectorVersion =
+                AirspaceFinding::kWifiElevatedNoiseDetectorVersion;
+            finding.threshold = policy.elevatedNoiseThreshold;
+            finding.observed = static_cast<std::uint16_t>(bestCount);
+            finding.noiseFloorThresholdDbm =
+                policy.elevatedNoiseFloorDbm;
+            finding.firstUs = start.monotonicUs;
+            finding.lastUs = finding.firstUs;
+            for (std::size_t index = 0U; index < noiseSampleCount; ++index) {
+                const WifiNoiseFloorSample& sample = noiseSamples[index];
+                if (!validNoiseSample(sample) ||
+                    sample.channel != first.channel ||
+                    sample.noiseFloorDbm < policy.elevatedNoiseFloorDbm ||
+                    sample.monotonicUs < finding.firstUs ||
+                    sample.monotonicUs - finding.firstUs >
+                        policy.elevatedNoiseWindowUs) {
+                    continue;
+                }
+                if (sample.monotonicUs > finding.lastUs) {
+                    finding.lastUs = sample.monotonicUs;
+                }
+                if (finding.evidenceCount < finding.evidence.size()) {
+                    AirspaceEvidenceRef& evidence =
+                        finding.evidence[finding.evidenceCount++];
+                    evidence.frameIndex = sample.observationIndex;
+                    evidence.monotonicUs = sample.monotonicUs;
+                    evidence.channel = sample.channel;
+                    evidence.rssiDbm = sample.rssiDbm;
+                    evidence.noiseFloorDbm = sample.noiseFloorDbm;
+                }
+            }
+        }
+    }
+
     if (report.findingCount != 0U) {
         report.status = AirspaceGuardStatus::Finding;
     } else if (report.sourceFramesObserved == 0U ||
@@ -959,6 +1110,8 @@ AirspaceGuardReport AirspaceGuard::inspectWifi(
                report.sourceReadFailures != 0U ||
                report.sourceFramesDropped != 0U ||
                report.malformedFrames != 0U ||
+               report.wifiNoiseSamplesDropped != 0U ||
+               report.wifiNoiseSamplesMalformed != 0U ||
                report.inspectionTruncated) {
         report.status = AirspaceGuardStatus::Inconclusive;
     } else {

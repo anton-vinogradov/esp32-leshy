@@ -20,6 +20,7 @@ enum class AirspaceFindingKind : std::uint8_t {
     WifiDisconnectBurst,
     WifiSsidSecurityConflict,
     WifiSsidChurn,
+    WifiElevatedNoise,
     BleTrackerPresence,
 };
 
@@ -75,7 +76,9 @@ struct WifiIdentityRetentionKey final {
 
 inline constexpr std::size_t kWifiDisconnectLiveRetentionCapacity = 8;
 inline constexpr std::size_t kWifiIdentityLiveRetentionCapacity = 8;
+inline constexpr std::size_t kWifiNoiseFloorLiveRetentionCapacity = 8;
 inline constexpr std::size_t kBleTrackerLiveRetentionCapacity = 32;
+inline constexpr std::int16_t kWifiNoiseFloorIngressThresholdDbm = -85;
 
 const char* airspaceGuardStatusName(AirspaceGuardStatus status);
 const char* airspaceFindingKindName(AirspaceFindingKind kind);
@@ -96,6 +99,13 @@ struct AirspaceGuardPolicy final {
     bool ssidChurnEnabled = false;
     std::uint8_t ssidChurnThreshold = 4;
     std::uint64_t ssidChurnWindowUs = 10000000ULL;
+    // A raised noise floor is only a low-confidence interference indicator.
+    // It cannot identify a jammer or trigger a response. The live adapter
+    // retains only normalized RX metadata at or above the ingress threshold.
+    bool elevatedNoiseEnabled = false;
+    std::int16_t elevatedNoiseFloorDbm = -75;
+    std::uint8_t elevatedNoiseThreshold = 4;
+    std::uint64_t elevatedNoiseWindowUs = 2000000ULL;
     // BLE tracker-compatible presence is off until a caller proves complete
     // bounded retention of individual passive advertisements. Repeated
     // protocol markers establish presence only, never unwanted tracking.
@@ -126,6 +136,12 @@ bool wifiIdentityRetentionSlotAvailable(std::size_t totalCapacity,
                                         std::size_t retainedFrames,
                                         std::size_t disconnectFrames,
                                         std::size_t identityProfiles);
+constexpr bool isWifiNoiseFloorCandidate(std::int16_t noiseFloorDbm) {
+    // Zero and implausibly high/low values are unavailable driver metadata,
+    // never RF evidence. Ingress stays broader than the detector policy.
+    return noiseFloorDbm >= kWifiNoiseFloorIngressThresholdDbm &&
+        noiseFloorDbm <= -30;
+}
 BleTrackerIngressStatus bleTrackerIngressStatus(
     const domain::observations::Observation& observation);
 
@@ -134,6 +150,18 @@ struct AirspaceEvidenceRef final {
     std::uint64_t monotonicUs = 0;
     std::uint8_t channel = 0;
     std::int16_t rssiDbm = 0;
+    std::int16_t noiseFloorDbm = -127;
+};
+
+// Exact receive metadata for one high-noise packet callback. The observation
+// index is source-local and remains stable in the published report; no payload
+// from a malformed or failed receive is treated as evidence.
+struct WifiNoiseFloorSample final {
+    std::size_t observationIndex = 0;
+    std::uint64_t monotonicUs = 0;
+    std::uint8_t channel = 0;
+    std::int16_t rssiDbm = -127;
+    std::int16_t noiseFloorDbm = -127;
 };
 
 struct AirspaceFinding final {
@@ -142,6 +170,7 @@ struct AirspaceFinding final {
     static constexpr std::uint16_t kWifiDisconnectDetectorVersion = 1;
     static constexpr std::uint16_t kWifiIdentityDetectorVersion = 1;
     static constexpr std::uint16_t kWifiSsidChurnDetectorVersion = 1;
+    static constexpr std::uint16_t kWifiElevatedNoiseDetectorVersion = 1;
     static constexpr std::uint16_t kBleTrackerPresenceDetectorVersion = 1;
     static constexpr std::uint16_t kDetectorVersion =
         kWifiDisconnectDetectorVersion;
@@ -151,6 +180,7 @@ struct AirspaceFinding final {
     std::uint16_t detectorVersion = kDetectorVersion;
     std::uint16_t threshold = 0;
     std::uint16_t observed = 0;
+    std::int16_t noiseFloorThresholdDbm = -127;
     std::uint16_t deauthenticationFrames = 0;
     std::uint16_t disassociationFrames = 0;
     std::array<std::uint8_t, 6> transmitter{};
@@ -180,6 +210,11 @@ struct AirspaceGuardReport final {
     std::size_t disconnectFrames = 0;
     std::size_t identityAdvertisementFrames = 0;
     std::size_t bleAdvertisementRecords = 0;
+    std::size_t wifiNoiseSamplesObserved = 0;
+    std::size_t wifiNoiseSamplesAvailable = 0;
+    std::size_t wifiNoiseSamplesInspected = 0;
+    std::size_t wifiNoiseSamplesDropped = 0;
+    std::size_t wifiNoiseSamplesMalformed = 0;
     std::size_t malformedFrames = 0;
     std::size_t sourceReadFailures = 0;
     std::size_t sourceFramesDropped = 0;
@@ -256,7 +291,11 @@ public:
         const domain::captures::WifiFrameSource& source,
         const AirspaceGuardPolicy& policy = {},
         std::size_t sourceFramesDropped = 0U,
-        std::size_t sourceFramesObserved = 0U) const;
+        std::size_t sourceFramesObserved = 0U,
+        const WifiNoiseFloorSample* noiseSamples = nullptr,
+        std::size_t noiseSampleCount = 0U,
+        std::size_t noiseSamplesDropped = 0U,
+        std::size_t noiseSamplesObserved = 0U) const;
 
     AirspaceGuardReport inspectBle(
         const BleObservationSource& source,

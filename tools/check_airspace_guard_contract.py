@@ -96,6 +96,15 @@ def main() -> int:
         "wifiIdentityRetentionSlotAvailable",
         "kWifiIdentityDetectorVersion = 1",
         "kWifiSsidChurnDetectorVersion = 1",
+        "WifiElevatedNoise",
+        "kWifiElevatedNoiseDetectorVersion = 1",
+        "elevatedNoiseEnabled = false",
+        "elevatedNoiseFloorDbm = -75",
+        "elevatedNoiseThreshold = 4",
+        "elevatedNoiseWindowUs = 2000000ULL",
+        "WifiNoiseFloorSample",
+        "isWifiNoiseFloorCandidate",
+        "noiseFloorDbm = -127",
         "BleTrackerPresence",
         "AirspaceBleTrackerProtocol",
         "bleAddressType = 0xffU",
@@ -143,6 +152,8 @@ def main() -> int:
         "testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats",
         "testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss",
         "testCompletedWifiAndBleReportsMergeWithoutInventingEvidence",
+        "testElevatedNoiseIsLowConfidenceExactAndOptIn",
+        "testElevatedNoiseRejectsWeakSplitStaleAndMalformedEvidence",
     ):
         require(failures, marker in tests,
                 f"missing Airspace Guard native coverage: {marker}")
@@ -207,6 +218,7 @@ def main() -> int:
         "testSsidChurnReportIsKindAwareAndFailClosed",
         "testIdentityDetectorsMayShareExactSourceEvidence",
         "testBleTrackerReportUsesChannelFreeKindAwareValidation",
+        "testElevatedNoiseReportCannotInventSourceOrConfidence",
     ):
         require(failures, marker in controller_tests,
                 f"missing Airspace Guard controller coverage: {marker}")
@@ -248,6 +260,11 @@ def main() -> int:
         "AirspaceGuardEvidenceRecordRowFormat",
         "AirspaceGuardRecordFormat",
         "AirspaceGuardProtocolSignalFormat",
+        "AirspaceGuardElevatedNoise",
+        "AirspaceGuardInterferencePossible",
+        "AirspaceGuardNoiseSpanFormat",
+        "AirspaceGuardNoiseEvidenceRowFormat",
+        "AirspaceGuardNoiseSignalFormat",
     ):
         require(failures, marker in presenter,
                 f"missing Airspace Guard presentation contract: {marker}")
@@ -265,6 +282,7 @@ def main() -> int:
         "testInvalidSsidBytesUseStableNonInventedIdentifier",
         "testSsidChurnExplainsIndicatorWithoutClaimingPineap",
         "testBleTrackerPresenceNeverInventsAChannelOrOwner",
+        "testElevatedNoiseExplainsUncertainInterferenceWithoutInventingSource",
     ):
         require(failures, marker in presenter_tests,
                 f"missing Airspace Guard presenter coverage: {marker}")
@@ -290,6 +308,13 @@ def main() -> int:
         "AirspaceGuardEvidenceRecordRowFormat",
         "AirspaceGuardRecordFormat",
         "AirspaceGuardProtocolSignalFormat",
+        "AirspaceGuardElevatedNoise",
+        "AirspaceGuardInterferencePossible",
+        "AirspaceGuardNoiseSpanFormat",
+        "AirspaceGuardNoiseEvidenceRowFormat",
+        "AirspaceGuardRxSampleFormat",
+        "AirspaceGuardNoiseSignalFormat",
+        "AirspaceGuardNoiseEvidenceLossFormat",
     ):
         require(failures, marker in ui_strings,
                 f"missing EN/RU Airspace Guard copy: {marker}")
@@ -334,6 +359,9 @@ def main() -> int:
         "kAirspaceGuardCaptureDurationMs = 10000U",
         "kAirspaceGuardChannelDwellMs = 120U",
         "UiTextId::AirspaceGuardEvidenceKindsFormat",
+        "policy.elevatedNoiseEnabled = monitor.noiseRetentionComplete",
+        "report.wifiNoiseSamplesDropped == 0U",
+        "report.wifiNoiseSamplesMalformed == 0U",
     ):
         require(failures, marker in arduino_entry,
                 f"missing Airspace Guard product integration: {marker}")
@@ -376,6 +404,10 @@ def main() -> int:
         "identityProfilesDeduplicated",
         "identityProfilesDropped",
         "identityRetentionComplete",
+        "kNoiseRetentionCapacity =",
+        "packet->rx_ctrl.noise_floor",
+        "noiseSamplesDropped",
+        "noiseRetentionComplete",
         "wifiIdentityRetentionKey",
         "sameWifiIdentityRetentionKey",
         "packet->rx_ctrl.sig_len > capture_.plan().snapLength",
@@ -404,6 +436,15 @@ def main() -> int:
         "monitor.identityRetentionComplete" in arduino_entry and
         "monitor.identityProfilesDropped" in arduino_entry,
         "live identity detector is not gated by complete bounded retention",
+    )
+    require(
+        failures,
+        "policy.elevatedNoiseEnabled = monitor.noiseRetentionComplete" in
+            arduino_entry and
+        "isWifiNoiseFloorCandidate" in board_capture and
+        "noiseSamplesDropped" in board_capture and
+        "noiseRetentionComplete" in board_capture,
+        "live noise detector is not gated by complete bounded RX metadata",
     )
 
     if failures:

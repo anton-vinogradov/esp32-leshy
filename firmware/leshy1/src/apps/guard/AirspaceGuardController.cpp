@@ -97,6 +97,9 @@ bool duplicateFinding(const AirspaceFinding& left,
             return sameNetworkName(left, right);
         case AirspaceFindingKind::WifiSsidChurn:
             return left.transmitter == right.transmitter;
+        case AirspaceFindingKind::WifiElevatedNoise:
+            return left.evidenceCount != 0U && right.evidenceCount != 0U &&
+                left.evidence[0].channel == right.evidence[0].channel;
         case AirspaceFindingKind::BleTrackerPresence:
             return left.transmitter == right.transmitter &&
                 left.bleTrackerProtocol == right.bleTrackerProtocol &&
@@ -156,6 +159,11 @@ bool AirspaceGuardController::validateReport(
             report.framesInspected == 0U && report.disconnectFrames == 0U &&
             report.identityAdvertisementFrames == 0U &&
             report.bleAdvertisementRecords == 0U &&
+            report.wifiNoiseSamplesObserved == 0U &&
+            report.wifiNoiseSamplesAvailable == 0U &&
+            report.wifiNoiseSamplesInspected == 0U &&
+            report.wifiNoiseSamplesDropped == 0U &&
+            report.wifiNoiseSamplesMalformed == 0U &&
             report.malformedFrames == 0U &&
             report.sourceReadFailures == 0U &&
             report.sourceFramesDropped == 0U &&
@@ -169,11 +177,22 @@ bool AirspaceGuardController::validateReport(
         report.disconnectFrames > report.framesInspected ||
         report.identityAdvertisementFrames > report.framesInspected ||
         report.bleAdvertisementRecords > report.framesInspected ||
+        report.wifiNoiseSamplesAvailable >
+            services::guard::kWifiNoiseFloorLiveRetentionCapacity ||
+        report.wifiNoiseSamplesObserved <
+            report.wifiNoiseSamplesAvailable +
+                report.wifiNoiseSamplesDropped ||
+        report.wifiNoiseSamplesDropped >
+            report.wifiNoiseSamplesObserved ||
+        report.wifiNoiseSamplesInspected +
+                report.wifiNoiseSamplesMalformed !=
+            report.wifiNoiseSamplesAvailable ||
         report.malformedFrames > report.framesInspected ||
         report.disconnectFrames + report.identityAdvertisementFrames +
                 report.bleAdvertisementRecords + report.malformedFrames >
             report.framesInspected ||
-        report.findingsDropped > report.framesInspected ||
+        report.findingsDropped >
+            report.framesInspected + report.wifiNoiseSamplesInspected ||
         (report.findingCount == 0U && report.findingsDropped != 0U) ||
         report.inspectionTruncated !=
             (report.framesAvailable > inspectionCapacity)) {
@@ -186,7 +205,10 @@ bool AirspaceGuardController::validateReport(
                    report.framesInspected == 0U ||
                    report.sourceReadFailures != 0U ||
                    report.sourceFramesDropped != 0U ||
-                   report.malformedFrames != 0U || report.inspectionTruncated
+                   report.malformedFrames != 0U ||
+                   report.wifiNoiseSamplesDropped != 0U ||
+                   report.wifiNoiseSamplesMalformed != 0U ||
+                   report.inspectionTruncated
                ? AirspaceGuardStatus::Inconclusive
                : AirspaceGuardStatus::Clear);
     if (report.status != expectedStatus) return false;
@@ -212,7 +234,13 @@ bool AirspaceGuardController::validateReport(
             finding.firstUs == 0U || finding.lastUs < finding.firstUs ||
             (finding.kind == AirspaceFindingKind::BleTrackerPresence
                  ? !validIdentity(finding.transmitter)
-                 : !validTransmitter(finding.transmitter))) {
+                 : (finding.kind == AirspaceFindingKind::WifiElevatedNoise
+                        ? !emptyTransmitter(finding.transmitter)
+                        : !validTransmitter(finding.transmitter)))) {
+            return false;
+        }
+        if (finding.kind != AirspaceFindingKind::WifiElevatedNoise &&
+            finding.noiseFloorThresholdDbm != -127) {
             return false;
         }
         switch (finding.kind) {
@@ -283,6 +311,29 @@ bool AirspaceGuardController::validateReport(
                     return false;
                 }
                 break;
+            case AirspaceFindingKind::WifiElevatedNoise:
+                if (finding.detectorVersion !=
+                        AirspaceFinding::kWifiElevatedNoiseDetectorVersion ||
+                    finding.lastUs - finding.firstUs > 10000000ULL ||
+                    finding.confidence != AirspaceConfidence::Low ||
+                    finding.noiseFloorThresholdDbm < -100 ||
+                    finding.noiseFloorThresholdDbm > -30 ||
+                    finding.deauthenticationFrames != 0U ||
+                    finding.disassociationFrames != 0U ||
+                    !emptyTransmitter(finding.relatedTransmitter) ||
+                    finding.networkNameLength != 0U ||
+                    finding.primarySecurity != AirspaceWifiSecurity::Unknown ||
+                    finding.relatedSecurity != AirspaceWifiSecurity::Unknown ||
+                    finding.bleTrackerProtocol !=
+                        services::guard::AirspaceBleTrackerProtocol::None ||
+                    finding.bleAddressType != 0xffU ||
+                    finding.evidenceCount !=
+                        (finding.observed < finding.evidence.size()
+                             ? finding.observed : finding.evidence.size()) ||
+                    finding.observed > report.wifiNoiseSamplesInspected) {
+                    return false;
+                }
+                break;
             case AirspaceFindingKind::BleTrackerPresence:
                 if (finding.detectorVersion !=
                         AirspaceFinding::kBleTrackerPresenceDetectorVersion ||
@@ -312,11 +363,22 @@ bool AirspaceGuardController::validateReport(
                 finding.evidence[evidenceIndex];
             if (evidence.monotonicUs < finding.firstUs ||
                 evidence.monotonicUs > finding.lastUs ||
-                evidence.frameIndex >= attempted ||
+                (finding.kind == AirspaceFindingKind::WifiElevatedNoise
+                     ? evidence.frameIndex >= report.sourceFramesObserved
+                     : evidence.frameIndex >= attempted) ||
                 (finding.kind == AirspaceFindingKind::BleTrackerPresence
                      ? evidence.channel != 0U
                      : (evidence.channel == 0U || evidence.channel > 14U)) ||
-                evidence.rssiDbm < -127 || evidence.rssiDbm > 0) {
+                evidence.rssiDbm < -127 || evidence.rssiDbm > 0 ||
+                (finding.kind == AirspaceFindingKind::WifiElevatedNoise
+                     ? !services::guard::isWifiNoiseFloorCandidate(
+                           evidence.noiseFloorDbm)
+                     : evidence.noiseFloorDbm != -127)) {
+                return false;
+            }
+            if (finding.kind == AirspaceFindingKind::WifiElevatedNoise &&
+                evidence.noiseFloorDbm <
+                    finding.noiseFloorThresholdDbm) {
                 return false;
             }
             for (std::size_t previousEvidence = 0;
@@ -431,7 +493,10 @@ bool AirspaceGuardController::evidenceIncomplete() const {
         report_.framesAvailable == 0U || report_.framesInspected == 0U ||
         report_.sourceReadFailures != 0U ||
         report_.sourceFramesDropped != 0U ||
-        report_.malformedFrames != 0U || report_.findingsDropped != 0U ||
+        report_.malformedFrames != 0U ||
+        report_.wifiNoiseSamplesDropped != 0U ||
+        report_.wifiNoiseSamplesMalformed != 0U ||
+        report_.findingsDropped != 0U ||
         report_.inspectionTruncated;
 }
 

@@ -19932,15 +19932,26 @@ void serviceAirspaceGuardProduct() {
             policy.ssidSecurityConflictEnabled =
                 monitor.identityRetentionComplete;
             policy.ssidChurnEnabled = monitor.identityRetentionComplete;
+            policy.elevatedNoiseEnabled = monitor.noiseRetentionComplete;
             report = airspaceGuardDetector.inspectWifi(
                 wifiFrameCapture.capture(), policy, dropped,
-                static_cast<std::size_t>(monitor.framesReported));
+                static_cast<std::size_t>(monitor.framesReported),
+                monitor.noiseSamples.data(),
+                static_cast<std::size_t>(monitor.noiseSamplesRetained),
+                static_cast<std::size_t>(monitor.noiseSamplesDropped),
+                static_cast<std::size_t>(monitor.noiseSamplesObserved));
         } else {
             report.status = AirspaceGuardStatus::Inconclusive;
         }
         const bool wifiEvidenceComplete = complete &&
             (report.status == AirspaceGuardStatus::Clear ||
-             report.status == AirspaceGuardStatus::Finding);
+             report.status == AirspaceGuardStatus::Finding) &&
+            report.sourceReadFailures == 0U &&
+            report.sourceFramesDropped == 0U &&
+            report.malformedFrames == 0U &&
+            report.wifiNoiseSamplesDropped == 0U &&
+            report.wifiNoiseSamplesMalformed == 0U &&
+            !report.inspectionTruncated && report.findingsDropped == 0U;
         if (wifiEvidenceComplete) {
             airspaceGuardWifiReport = report;
         }

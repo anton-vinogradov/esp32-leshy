@@ -174,6 +174,10 @@ void formatFindingContext(
     UiLanguage language, const AirspaceFinding& finding) {
     if (finding.kind == AirspaceFindingKind::WifiSsidSecurityConflict) {
         formatNetworkName(text, language, finding);
+    } else if (finding.kind == AirspaceFindingKind::WifiElevatedNoise &&
+               finding.evidenceCount != 0U) {
+        formatText(text, language, UiTextId::AirspaceGuardChannelFormat,
+                   static_cast<unsigned>(finding.evidence[0].channel));
     } else if (finding.kind == AirspaceFindingKind::BleTrackerPresence) {
         formatBleIdentity(text, language, finding.transmitter);
     } else {
@@ -187,6 +191,12 @@ void formatEvidenceSource(
     std::size_t evidenceIndex) {
     if (finding.kind == AirspaceFindingKind::BleTrackerPresence) {
         formatBleIdentity(text, language, finding.transmitter);
+        return;
+    }
+    if (finding.kind == AirspaceFindingKind::WifiElevatedNoise) {
+        formatText(text, language, UiTextId::AirspaceGuardChannelFormat,
+                   static_cast<unsigned>(
+                       finding.evidence[evidenceIndex].channel));
         return;
     }
     if (finding.kind != AirspaceFindingKind::WifiSsidSecurityConflict) {
@@ -222,6 +232,16 @@ void appendIncompleteRows(const AirspaceGuardController& controller,
                    UiTextId::AirspaceGuardCaptureLossFormat,
                    static_cast<unsigned long>(
                        controller.sourceFramesDropped()));
+    }
+    if (model.rowCount < model.rows.size() &&
+        (controller.wifiNoiseSamplesDropped() != 0U ||
+         controller.wifiNoiseSamplesMalformed() != 0U)) {
+        formatText(model.rows[model.rowCount++].text, language,
+                   UiTextId::AirspaceGuardNoiseEvidenceLossFormat,
+                   static_cast<unsigned long>(
+                       controller.wifiNoiseSamplesDropped()),
+                   static_cast<unsigned long>(
+                       controller.wifiNoiseSamplesMalformed()));
     }
     if (model.rowCount < model.rows.size() &&
         controller.findingsDropped() != 0U) {
@@ -302,6 +322,11 @@ AirspaceGuardUiModel presentFinding(const AirspaceGuardController& controller,
         model.headline = UiTextId::AirspaceGuardIdentityConflict;
     } else if (finding->kind == AirspaceFindingKind::WifiSsidChurn) {
         model.headline = UiTextId::AirspaceGuardSsidChurn;
+    } else if (finding->kind == AirspaceFindingKind::WifiElevatedNoise) {
+        model.headline = UiTextId::AirspaceGuardElevatedNoise;
+        if (!model.evidenceIncomplete) {
+            model.note = UiTextId::AirspaceGuardInterferencePossible;
+        }
     } else if (finding->kind == AirspaceFindingKind::BleTrackerPresence) {
         model.headline = UiTextId::AirspaceGuardBleTrackerPresence;
         if (!model.evidenceIncomplete) {
@@ -334,6 +359,14 @@ AirspaceGuardUiModel presentFinding(const AirspaceGuardController& controller,
                    UiTextId::AirspaceGuardCaptureLossFormat,
                    static_cast<unsigned long>(
                        controller.sourceFramesDropped()));
+    } else if (controller.wifiNoiseSamplesDropped() != 0U ||
+               controller.wifiNoiseSamplesMalformed() != 0U) {
+        formatText(model.rows[3].text, language,
+                   UiTextId::AirspaceGuardNoiseEvidenceLossFormat,
+                   static_cast<unsigned long>(
+                       controller.wifiNoiseSamplesDropped()),
+                   static_cast<unsigned long>(
+                       controller.wifiNoiseSamplesMalformed()));
     } else if (controller.findingsDropped() != 0U) {
         formatText(model.rows[3].text, language,
                    UiTextId::AirspaceGuardDroppedFormat,
@@ -353,6 +386,14 @@ AirspaceGuardUiModel presentFinding(const AirspaceGuardController& controller,
             (finding->lastUs - finding->firstUs + 99999ULL) / 100000ULL;
         formatText(model.rows[3].text, language,
                    UiTextId::AirspaceGuardChurnSpanFormat,
+                   static_cast<unsigned>(spanTenths / 10U),
+                   static_cast<unsigned>(spanTenths % 10U));
+    } else if (finding->kind == AirspaceFindingKind::WifiElevatedNoise) {
+        const std::uint64_t spanTenths =
+            (finding->lastUs - finding->firstUs + 99999ULL) / 100000ULL;
+        formatText(model.rows[3].text, language,
+                   UiTextId::AirspaceGuardNoiseSpanFormat,
+                   static_cast<int>(finding->noiseFloorThresholdDbm),
                    static_cast<unsigned>(spanTenths / 10U),
                    static_cast<unsigned>(spanTenths % 10U));
     } else if (finding->kind == AirspaceFindingKind::BleTrackerPresence) {
@@ -395,6 +436,9 @@ AirspaceGuardUiModel presentEvidenceList(
     if (finding->kind == AirspaceFindingKind::BleTrackerPresence &&
         !model.evidenceIncomplete) {
         model.note = UiTextId::AirspaceGuardBlePresenceOnly;
+    } else if (finding->kind == AirspaceFindingKind::WifiElevatedNoise &&
+               !model.evidenceIncomplete) {
+        model.note = UiTextId::AirspaceGuardInterferencePossible;
     }
     formatFindingContext(model.context, language, *finding);
     const std::size_t selection = controller.evidenceSelection();
@@ -411,6 +455,12 @@ AirspaceGuardUiModel presentEvidenceList(
                        UiTextId::AirspaceGuardEvidenceRecordRowFormat,
                        static_cast<unsigned long>(evidence.frameIndex),
                        static_cast<int>(evidence.rssiDbm));
+        } else if (finding->kind == AirspaceFindingKind::WifiElevatedNoise) {
+            formatText(model.rows[row].text, language,
+                       UiTextId::AirspaceGuardNoiseEvidenceRowFormat,
+                       static_cast<unsigned long>(evidence.frameIndex),
+                       static_cast<unsigned>(evidence.channel),
+                       static_cast<int>(evidence.noiseFloorDbm));
         } else {
             formatText(model.rows[row].text, language,
                        UiTextId::AirspaceGuardEvidenceRowFormat,
@@ -442,13 +492,18 @@ AirspaceGuardUiModel presentEvidenceDetail(
     if (finding->kind == AirspaceFindingKind::BleTrackerPresence &&
         !model.evidenceIncomplete) {
         model.note = UiTextId::AirspaceGuardBlePresenceOnly;
+    } else if (finding->kind == AirspaceFindingKind::WifiElevatedNoise &&
+               !model.evidenceIncomplete) {
+        model.note = UiTextId::AirspaceGuardInterferencePossible;
     }
     formatEvidenceSource(model.context, language, *finding,
                          controller.evidenceSelection());
     formatText(model.rows[0].text, language,
                finding->kind == AirspaceFindingKind::BleTrackerPresence
                    ? UiTextId::AirspaceGuardRecordFormat
-                   : UiTextId::AirspaceGuardFrameFormat,
+                   : (finding->kind == AirspaceFindingKind::WifiElevatedNoise
+                          ? UiTextId::AirspaceGuardRxSampleFormat
+                          : UiTextId::AirspaceGuardFrameFormat),
                static_cast<unsigned long>(evidence->frameIndex));
     if (finding->kind ==
         AirspaceFindingKind::WifiSsidSecurityConflict) {
@@ -479,6 +534,15 @@ AirspaceGuardUiModel presentEvidenceDetail(
                    uiText(language,
                           bleTrackerProtocolText(
                               finding->bleTrackerProtocol)),
+                   static_cast<int>(evidence->rssiDbm));
+        formatText(model.rows[2].text, language,
+                   UiTextId::AirspaceGuardFindingOffsetFormat,
+                   static_cast<unsigned long long>(
+                       (evidence->monotonicUs - finding->firstUs) / 1000ULL));
+    } else if (finding->kind == AirspaceFindingKind::WifiElevatedNoise) {
+        formatText(model.rows[1].text, language,
+                   UiTextId::AirspaceGuardNoiseSignalFormat,
+                   static_cast<int>(evidence->noiseFloorDbm),
                    static_cast<int>(evidence->rssiDbm));
         formatText(model.rows[2].text, language,
                    UiTextId::AirspaceGuardFindingOffsetFormat,

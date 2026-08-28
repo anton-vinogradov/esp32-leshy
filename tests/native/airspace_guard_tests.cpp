@@ -226,6 +226,18 @@ void testPolicyAndEmptyEvidenceFailClosed() {
     invalid.ssidChurnWindowUs = 99999ULL;
     CHECK(!validateAirspaceGuardPolicy(invalid));
     invalid = {};
+    invalid.elevatedNoiseFloorDbm = -101;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
+    invalid.elevatedNoiseFloorDbm = -29;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
+    invalid.elevatedNoiseThreshold = 1U;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
+    invalid.elevatedNoiseWindowUs = 10000001ULL;
+    CHECK(!validateAirspaceGuardPolicy(invalid));
+    invalid = {};
     invalid.bleTrackerPresenceThreshold = 1U;
     CHECK(!validateAirspaceGuardPolicy(invalid));
     invalid = {};
@@ -271,6 +283,21 @@ AirspaceGuardPolicy churnPolicy() {
     AirspaceGuardPolicy policy{};
     policy.ssidChurnEnabled = true;
     return policy;
+}
+
+AirspaceGuardPolicy noisePolicy() {
+    AirspaceGuardPolicy policy{};
+    policy.elevatedNoiseEnabled = true;
+    return policy;
+}
+
+WifiNoiseFloorSample noiseSample(std::size_t observationIndex,
+                                 std::uint64_t monotonicUs,
+                                 std::uint8_t channel,
+                                 std::int16_t rssiDbm,
+                                 std::int16_t noiseFloorDbm) {
+    return {observationIndex, monotonicUs, channel, rssiDbm,
+            noiseFloorDbm};
 }
 
 AirspaceGuardPolicy bleTrackerPolicy() {
@@ -359,6 +386,96 @@ void testLiveRetentionPartitionKeepsDisconnectCapacity() {
     CHECK(wifiDisconnectRetentionSlotAvailable(total, 15U, 7U));
     CHECK(!wifiDisconnectRetentionSlotAvailable(total, 16U, 7U));
     CHECK(!wifiDisconnectRetentionSlotAvailable(total, 15U, 8U));
+}
+
+void testElevatedNoiseIsLowConfidenceExactAndOptIn() {
+    FixtureSource source;
+    for (std::size_t index = 0U; index < 4U; ++index) {
+        source.add(8U, 1000000ULL + index * 300000ULL, kTransmitterA,
+                   6U, static_cast<std::int16_t>(-45 - index));
+    }
+    const std::array<WifiNoiseFloorSample, 4> samples{
+        noiseSample(0U, 1000000ULL, 6U, -45, -72),
+        noiseSample(1U, 1300000ULL, 6U, -46, -70),
+        noiseSample(2U, 1600000ULL, 6U, -47, -69),
+        noiseSample(3U, 1900000ULL, 6U, -48, -71),
+    };
+
+    const AirspaceGuardReport disabled = AirspaceGuard{}.inspectWifi(
+        source, {}, 0U, source.frameCount(), samples.data(), samples.size(),
+        0U, samples.size());
+    CHECK(disabled.status == AirspaceGuardStatus::Clear);
+    CHECK(disabled.wifiNoiseSamplesInspected == samples.size());
+    CHECK(disabled.findingCount == 0U);
+
+    const AirspaceGuardReport report = AirspaceGuard{}.inspectWifi(
+        source, noisePolicy(), 0U, source.frameCount(), samples.data(),
+        samples.size(), 0U, samples.size());
+    CHECK(report.status == AirspaceGuardStatus::Finding);
+    CHECK(report.wifiNoiseSamplesObserved == samples.size());
+    CHECK(report.wifiNoiseSamplesAvailable == samples.size());
+    CHECK(report.wifiNoiseSamplesInspected == samples.size());
+    CHECK(report.wifiNoiseSamplesDropped == 0U);
+    CHECK(report.wifiNoiseSamplesMalformed == 0U);
+    CHECK(report.findingCount == 1U);
+    const AirspaceFinding& finding = report.findings[0];
+    CHECK(finding.kind == AirspaceFindingKind::WifiElevatedNoise);
+    CHECK(finding.confidence == AirspaceConfidence::Low);
+    CHECK(finding.detectorVersion ==
+          AirspaceFinding::kWifiElevatedNoiseDetectorVersion);
+    CHECK(finding.threshold == 4U);
+    CHECK(finding.observed == 4U);
+    CHECK(finding.noiseFloorThresholdDbm == -75);
+    CHECK((finding.transmitter == std::array<std::uint8_t, 6>{}));
+    CHECK(finding.firstUs == 1000000ULL);
+    CHECK(finding.lastUs == 1900000ULL);
+    CHECK(finding.evidenceCount == 4U);
+    for (std::size_t index = 0U; index < samples.size(); ++index) {
+        CHECK(finding.evidence[index].frameIndex == index);
+        CHECK(finding.evidence[index].channel == 6U);
+        CHECK(finding.evidence[index].rssiDbm == samples[index].rssiDbm);
+        CHECK(finding.evidence[index].noiseFloorDbm ==
+              samples[index].noiseFloorDbm);
+    }
+}
+
+void testElevatedNoiseRejectsWeakSplitStaleAndMalformedEvidence() {
+    FixtureSource source;
+    for (std::size_t index = 0U; index < 8U; ++index) {
+        source.add(8U, 1000000ULL + index * 1000000ULL, kTransmitterA,
+                   6U, -50);
+    }
+    const std::array<WifiNoiseFloorSample, 8> noBurst{
+        noiseSample(0U, 1000000ULL, 6U, -50, -80),
+        noiseSample(1U, 1200000ULL, 6U, -50, -76),
+        noiseSample(2U, 1400000ULL, 1U, -50, -70),
+        noiseSample(3U, 1600000ULL, 1U, -50, -71),
+        noiseSample(4U, 4000000ULL, 1U, -50, -69),
+        noiseSample(5U, 7000000ULL, 1U, -50, -68),
+        noiseSample(6U, 7200000ULL, 11U, -50, -70),
+        noiseSample(7U, 7400000ULL, 11U, -50, -71),
+    };
+    const AirspaceGuardReport clear = AirspaceGuard{}.inspectWifi(
+        source, noisePolicy(), 0U, source.frameCount(), noBurst.data(),
+        noBurst.size(), 0U, noBurst.size());
+    CHECK(clear.status == AirspaceGuardStatus::Clear);
+    CHECK(clear.findingCount == 0U);
+
+    auto malformed = noBurst;
+    malformed[0].channel = 0U;
+    const AirspaceGuardReport bad = AirspaceGuard{}.inspectWifi(
+        source, noisePolicy(), 0U, source.frameCount(), malformed.data(),
+        malformed.size(), 0U, malformed.size());
+    CHECK(bad.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(bad.wifiNoiseSamplesInspected == malformed.size() - 1U);
+    CHECK(bad.wifiNoiseSamplesMalformed == 1U);
+    CHECK(bad.findingCount == 0U);
+
+    const AirspaceGuardReport dropped = AirspaceGuard{}.inspectWifi(
+        source, noisePolicy(), 0U, source.frameCount(), noBurst.data(),
+        noBurst.size(), 1U, noBurst.size() + 1U);
+    CHECK(dropped.status == AirspaceGuardStatus::Inconclusive);
+    CHECK(dropped.wifiNoiseSamplesDropped == 1U);
 }
 
 void testIdentityConflictRetainsTwoExactAdvertisements() {
@@ -975,6 +1092,8 @@ int main() {
     testIdentityConflictIsOptInUntilLiveRetentionIsComplete();
     testLiveIdentityRetentionKeyIsExactAndFailClosed();
     testLiveRetentionPartitionKeepsDisconnectCapacity();
+    testElevatedNoiseIsLowConfidenceExactAndOptIn();
+    testElevatedNoiseRejectsWeakSplitStaleAndMalformedEvidence();
     testIdentityConflictRetainsTwoExactAdvertisements();
     testSsidChurnRetainsDistinctNamesFromOneBssid();
     testSsidChurnRejectsLookalikesAndIncompleteEvidence();

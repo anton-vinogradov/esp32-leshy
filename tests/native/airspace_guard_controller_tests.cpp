@@ -110,6 +110,27 @@ AirspaceFinding makeChurnFinding(
     return finding;
 }
 
+AirspaceFinding makeNoiseFinding(std::uint8_t channel = 6U) {
+    AirspaceFinding finding{};
+    finding.kind = AirspaceFindingKind::WifiElevatedNoise;
+    finding.confidence = AirspaceConfidence::Low;
+    finding.detectorVersion =
+        AirspaceFinding::kWifiElevatedNoiseDetectorVersion;
+    finding.threshold = 4U;
+    finding.observed = 4U;
+    finding.noiseFloorThresholdDbm = -75;
+    finding.firstUs = 1000000ULL;
+    finding.lastUs = 1900000ULL;
+    finding.evidenceCount = 4U;
+    for (std::size_t index = 0U; index < finding.evidenceCount; ++index) {
+        finding.evidence[index] = {
+            index, 1000000ULL + index * 300000ULL, channel,
+            static_cast<std::int16_t>(-45 - index),
+            static_cast<std::int16_t>(-72 + index)};
+    }
+    return finding;
+}
+
 AirspaceFinding makeBleTrackerFinding() {
     AirspaceFinding finding{};
     finding.kind = AirspaceFindingKind::BleTrackerPresence;
@@ -501,6 +522,50 @@ void testBleTrackerReportUsesChannelFreeKindAwareValidation() {
     CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
 }
 
+void testElevatedNoiseReportCannotInventSourceOrConfidence() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 1U;
+    report.findings[0] = makeNoiseFinding();
+    report.sourceFramesObserved = 4U;
+    report.framesAvailable = 4U;
+    report.framesInspected = 4U;
+    report.wifiNoiseSamplesObserved = 4U;
+    report.wifiNoiseSamplesAvailable = 4U;
+    report.wifiNoiseSamplesInspected = 4U;
+
+    AirspaceGuardController controller;
+    CHECK(controller.load(report) == AirspaceGuardLoadStatus::Ready);
+    CHECK(controller.selectedFinding() != nullptr);
+    CHECK(controller.selectedFinding()->kind ==
+          AirspaceFindingKind::WifiElevatedNoise);
+    CHECK((controller.selectedFinding()->transmitter ==
+           std::array<std::uint8_t, 6>{}));
+    CHECK(controller.openSelected());
+    CHECK(controller.selectedEvidence()->noiseFloorDbm == -72);
+
+    AirspaceGuardReport invalid = report;
+    invalid.findings[0].confidence = AirspaceConfidence::Medium;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].transmitter = kSourceA;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].noiseFloorThresholdDbm = -29;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.findings[0].evidence[0].noiseFloorDbm = -80;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+
+    invalid = report;
+    invalid.wifiNoiseSamplesInspected = 3U;
+    invalid.wifiNoiseSamplesMalformed = 1U;
+    CHECK(controller.load(invalid) == AirspaceGuardLoadStatus::InvalidReport);
+}
+
 void testStableNames() {
     CHECK(std::strcmp(airspaceGuardViewName(AirspaceGuardView::Finding),
                       "finding") == 0);
@@ -524,6 +589,7 @@ int main() {
     testSsidChurnReportIsKindAwareAndFailClosed();
     testIdentityDetectorsMayShareExactSourceEvidence();
     testBleTrackerReportUsesChannelFreeKindAwareValidation();
+    testElevatedNoiseReportCannotInventSourceOrConfidence();
     testStableNames();
     std::puts("Airspace Guard controller tests passed");
     return 0;

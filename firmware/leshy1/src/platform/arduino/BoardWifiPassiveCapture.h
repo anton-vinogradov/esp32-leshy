@@ -39,6 +39,8 @@ public:
             services::guard::kWifiDisconnectLiveRetentionCapacity;
         static constexpr std::size_t kIdentityRetentionCapacity =
             services::guard::kWifiIdentityLiveRetentionCapacity;
+        static constexpr std::size_t kNoiseRetentionCapacity =
+            services::guard::kWifiNoiseFloorLiveRetentionCapacity;
 
         std::uint32_t framesReported = 0;
         std::uint32_t framesRetained = 0;
@@ -48,12 +50,18 @@ public:
         std::uint32_t identityProfilesRetained = 0;
         std::uint32_t identityProfilesDeduplicated = 0;
         std::uint32_t identityProfilesDropped = 0;
+        std::array<services::guard::WifiNoiseFloorSample,
+                   kNoiseRetentionCapacity> noiseSamples{};
+        std::uint32_t noiseSamplesObserved = 0;
+        std::uint32_t noiseSamplesRetained = 0;
+        std::uint32_t noiseSamplesDropped = 0;
         std::uint32_t invalidFrames = 0;
         std::uint32_t ignoredFrames = 0;
         std::uint32_t channelHops = 0;
         bool active = false;
         bool cleanupComplete = true;
         bool identityRetentionComplete = false;
+        bool noiseRetentionComplete = false;
     };
 
     ~BoardWifiPassiveCapture() { stop(0); }

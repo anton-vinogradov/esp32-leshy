@@ -111,6 +111,36 @@ AirspaceGuardReport makeChurnFindingReport() {
     return report;
 }
 
+AirspaceGuardReport makeNoiseFindingReport() {
+    AirspaceGuardReport report{};
+    report.status = AirspaceGuardStatus::Finding;
+    report.findingCount = 1U;
+    report.sourceFramesObserved = 4U;
+    report.framesAvailable = 4U;
+    report.framesInspected = 4U;
+    report.wifiNoiseSamplesObserved = 4U;
+    report.wifiNoiseSamplesAvailable = 4U;
+    report.wifiNoiseSamplesInspected = 4U;
+    AirspaceFinding& finding = report.findings[0];
+    finding.kind = AirspaceFindingKind::WifiElevatedNoise;
+    finding.confidence = AirspaceConfidence::Low;
+    finding.detectorVersion =
+        AirspaceFinding::kWifiElevatedNoiseDetectorVersion;
+    finding.threshold = 4U;
+    finding.observed = 4U;
+    finding.noiseFloorThresholdDbm = -75;
+    finding.firstUs = 1000000ULL;
+    finding.lastUs = 1900000ULL;
+    finding.evidenceCount = 4U;
+    for (std::size_t index = 0U; index < finding.evidenceCount; ++index) {
+        finding.evidence[index] = {
+            index, 1000000ULL + index * 300000ULL, 6U,
+            static_cast<std::int16_t>(-45 - index),
+            static_cast<std::int16_t>(-72 + index)};
+    }
+    return report;
+}
+
 AirspaceGuardReport makeBleTrackerFindingReport() {
     AirspaceGuardReport report{};
     report.status = AirspaceGuardStatus::Finding;
@@ -296,6 +326,47 @@ void testBleTrackerPresenceNeverInventsAChannelOrOwner() {
                       "BLE ID C1:12:23:34:45:56") == 0);
 }
 
+void testElevatedNoiseExplainsUncertainInterferenceWithoutInventingSource() {
+    AirspaceGuardController controller;
+    CHECK(controller.load(makeNoiseFindingReport()) ==
+          AirspaceGuardLoadStatus::Ready);
+    AirspaceGuardUiModel model =
+        presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(model.headline == UiTextId::AirspaceGuardElevatedNoise);
+    CHECK(model.note == UiTextId::AirspaceGuardInterferencePossible);
+    CHECK(std::strcmp(model.context.data(), "CHANNEL 6 OF 13") == 0);
+    CHECK(std::strcmp(model.rows[1].text.data(),
+                      "LOW · DETECTOR V1") == 0);
+    CHECK(std::strcmp(model.rows[2].text.data(),
+                      "4 EVENTS · LIMIT 4") == 0);
+    CHECK(std::strcmp(model.rows[3].text.data(),
+                      "NOISE >= -75 DBM · 0.9 S") == 0);
+
+    CHECK(controller.openSelected());
+    model = presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(std::strcmp(model.rows[0].text.data(),
+                      "#0 · CH 6 · NF -72") == 0);
+    CHECK(controller.openSelected());
+    model = presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(std::strcmp(model.rows[0].text.data(), "SOURCE RX #0") == 0);
+    CHECK(std::strcmp(model.rows[1].text.data(),
+                      "NOISE -72 · SIGNAL -45 DBM") == 0);
+
+    model = presentAirspaceGuard(controller, UiLanguage::Russian);
+    CHECK(model.note == UiTextId::AirspaceGuardInterferencePossible);
+    CHECK(std::strcmp(model.context.data(), u8"КАНАЛ 6 ИЗ 13") == 0);
+
+    AirspaceGuardReport incomplete = makeNoiseFindingReport();
+    incomplete.wifiNoiseSamplesObserved = 5U;
+    incomplete.wifiNoiseSamplesDropped = 1U;
+    CHECK(controller.load(incomplete) == AirspaceGuardLoadStatus::Ready);
+    model = presentAirspaceGuard(controller, UiLanguage::English);
+    CHECK(model.evidenceIncomplete);
+    CHECK(model.note == UiTextId::AirspaceGuardEvidenceIncomplete);
+    CHECK(std::strcmp(model.rows[3].text.data(),
+                      "NOISE RX LOST 1 · BAD 0") == 0);
+}
+
 void testInvalidSsidBytesUseStableNonInventedIdentifier() {
     AirspaceGuardReport report = makeIdentityFindingReport();
     report.findings[0].networkName.fill(0U);
@@ -412,6 +483,7 @@ int main() {
     testIdentityConflictExplainsIndicatorWithoutClaimingProof();
     testSsidChurnExplainsIndicatorWithoutClaimingPineap();
     testBleTrackerPresenceNeverInventsAChannelOrOwner();
+    testElevatedNoiseExplainsUncertainInterferenceWithoutInventingSource();
     testInvalidSsidBytesUseStableNonInventedIdentifier();
     testRussianInconclusiveExplainsIncompleteEvidence();
     testEmptyCaptureIsExplicitlyIncomplete();

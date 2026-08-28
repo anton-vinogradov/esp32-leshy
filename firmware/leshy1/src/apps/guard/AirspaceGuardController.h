@@ -60,6 +60,12 @@ public:
         return report_.sourceFramesDropped;
     }
     std::size_t findingsDropped() const { return report_.findingsDropped; }
+    std::size_t wifiNoiseSamplesDropped() const {
+        return report_.wifiNoiseSamplesDropped;
+    }
+    std::size_t wifiNoiseSamplesMalformed() const {
+        return report_.wifiNoiseSamplesMalformed;
+    }
     bool inspectionTruncated() const { return report_.inspectionTruncated; }
 
     const services::guard::AirspaceFinding* finding(

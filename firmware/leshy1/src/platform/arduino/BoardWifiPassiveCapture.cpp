@@ -491,6 +491,9 @@ BoardWifiPassiveCapture::airspaceGuardMonitorStats() const {
     result.identityRetentionComplete = !result.active &&
         result.cleanupComplete && result.identityProfilesDropped == 0U &&
         result.invalidFrames == 0U;
+    result.noiseRetentionComplete = !result.active &&
+        result.cleanupComplete && result.noiseSamplesDropped == 0U &&
+        result.invalidFrames == 0U;
     portEXIT_CRITICAL(&mux_);
     return result;
 }
@@ -617,6 +620,27 @@ void BoardWifiPassiveCapture::accept(void* buffer,
         if (receivedUs == 0U) receivedUs = 1U;
         portENTER_CRITICAL(&mux_);
         ++airspaceGuardStats_.framesReported;
+        if (receiveValid && packet->rx_ctrl.channel >= 1U &&
+            packet->rx_ctrl.channel <= 13U &&
+            packet->rx_ctrl.rssi >= -127 && packet->rx_ctrl.rssi <= 0 &&
+            leshy1::services::guard::isWifiNoiseFloorCandidate(
+                packet->rx_ctrl.noise_floor)) {
+            ++airspaceGuardStats_.noiseSamplesObserved;
+            if (airspaceGuardStats_.noiseSamplesRetained <
+                airspaceGuardStats_.noiseSamples.size()) {
+                auto& sample = airspaceGuardStats_.noiseSamples[
+                    airspaceGuardStats_.noiseSamplesRetained++];
+                sample.observationIndex =
+                    static_cast<std::size_t>(
+                        airspaceGuardStats_.framesReported - 1U);
+                sample.monotonicUs = receivedUs;
+                sample.channel = packet->rx_ctrl.channel;
+                sample.rssiDbm = packet->rx_ctrl.rssi;
+                sample.noiseFloorDbm = packet->rx_ctrl.noise_floor;
+            } else {
+                ++airspaceGuardStats_.noiseSamplesDropped;
+            }
+        }
         if (!receiveValid || packet->rx_ctrl.channel < 1U ||
             packet->rx_ctrl.channel > 13U || packet->rx_ctrl.sig_len < 2U) {
             ++airspaceGuardStats_.invalidFrames;
