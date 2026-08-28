@@ -41,6 +41,9 @@ BLE_CONTRACT_HEADER = (
     ROOT / "firmware/leshy1/src/drivers/ble/BlePassiveContract.h"
 )
 HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
+START_REGRESSION_RUNNER = (
+    ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
+)
 HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.225.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
@@ -72,6 +75,8 @@ def main() -> int:
         )
         ble_contract = BLE_CONTRACT_HEADER.read_text(encoding="utf-8")
         hil_runner = HIL_RUNNER.read_text(encoding="utf-8")
+        start_regression_runner = START_REGRESSION_RUNNER.read_text(
+            encoding="utf-8")
         hil_scope = HIL_SCOPE.read_text(encoding="utf-8")
         stack_checker = STACK_CHECKER.read_text(encoding="utf-8")
     except OSError as error:
@@ -477,6 +482,19 @@ def main() -> int:
     ):
         require(failures, marker in hil_runner,
                 f"missing Airspace Guard HIL contract: {marker}")
+
+    for marker in (
+        '"leshy.airspace_guard_start_regression_hil.run.v1"',
+        "running_failures(",
+        "cancel_to_menu(",
+        '"gate_eligible": False',
+        '"start_regression_only": True',
+        '"full_lifecycle_gate": False',
+        '"application_raw_tx_calls": 0',
+        '"storage_write_authorized": False',
+    ):
+        require(failures, marker in start_regression_runner,
+                f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
         '"candidate_version": "1.0.0-dev.225"',
