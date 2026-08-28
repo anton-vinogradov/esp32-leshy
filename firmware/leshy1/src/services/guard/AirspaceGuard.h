@@ -97,7 +97,10 @@ inline constexpr std::size_t kWifiDisconnectLiveRetentionCapacity = 8;
 inline constexpr std::size_t kWifiIdentityLiveRetentionCapacity = 56;
 inline constexpr std::size_t kWifiIdentityProjectionCapacity = 80;
 inline constexpr std::size_t kWifiNoiseFloorLiveRetentionCapacity = 8;
-inline constexpr std::size_t kBleTrackerLiveRetentionCapacity = 32;
+// The report can surface eight tracker identities with eight exact evidence
+// references each. Match that complete representable set; a 65th retained
+// tracker observation still fails closed rather than being silently omitted.
+inline constexpr std::size_t kBleTrackerLiveRetentionCapacity = 64;
 inline constexpr std::int16_t kWifiNoiseFloorIngressThresholdDbm = -85;
 
 const char* airspaceGuardStatusName(AirspaceGuardStatus status);
@@ -343,8 +346,9 @@ private:
 };
 
 // Combines independently completed Wi-Fi and BLE reports without erasing the
-// source-local evidence index carried by each finding kind. The current live
-// capacities sum to at most the detector's 64-record validation boundary.
+// source-local evidence index carried by each finding kind. Each input has
+// already passed its own 64-record detector boundary; their aggregate may
+// therefore contain up to 128 independently inspected source records.
 bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
                                const AirspaceGuardReport& ble,
                                AirspaceGuardReport* output);
@@ -355,6 +359,8 @@ bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
 class AirspaceGuard final {
 public:
     static constexpr std::size_t kFrameInspectionCapacity = 64;
+    static constexpr std::size_t kMergedFrameInspectionCapacity =
+        kFrameInspectionCapacity * 2U;
 
     AirspaceGuardReport inspectWifi(
         const domain::captures::WifiFrameSource& source,

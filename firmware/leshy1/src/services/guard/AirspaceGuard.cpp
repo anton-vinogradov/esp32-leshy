@@ -426,7 +426,7 @@ bool mergeAirspaceGuardReports(const AirspaceGuardReport& wifi,
         wifi.framesAvailable > AirspaceGuard::kFrameInspectionCapacity ||
         ble.framesAvailable > AirspaceGuard::kFrameInspectionCapacity ||
         wifi.framesAvailable + ble.framesAvailable >
-            AirspaceGuard::kFrameInspectionCapacity) {
+            AirspaceGuard::kMergedFrameInspectionCapacity) {
         return false;
     }
     for (std::size_t index = 0U; index < wifi.findingCount; ++index) {

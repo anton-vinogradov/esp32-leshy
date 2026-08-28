@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.235.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.236.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -128,7 +128,7 @@ def main() -> int:
         "bleTrackerPresenceWindowUs = 10000000ULL",
         "BleObservationSource",
         "AirspaceGuardBleRetention",
-        "kBleTrackerLiveRetentionCapacity = 32",
+        "kBleTrackerLiveRetentionCapacity = 64",
         "bleTrackerIngressStatus",
         "mergeAirspaceGuardReports",
         "inspectBle(",
@@ -416,6 +416,10 @@ def main() -> int:
     require(failures,
             "matchingRepeats >= AirspaceFinding::kEvidenceCapacity" in source,
             "BLE repeat retention is not bounded per exact tracker")
+    require(failures, "kBleTrackerLiveRetentionCapacity = 64" in header,
+            "BLE live retention does not cover 8 findings x 8 evidence")
+    require(failures, "kMergedFrameInspectionCapacity" in source,
+            "merged Wi-Fi/BLE report does not use independent budgets")
     open_start = arduino_entry.find("bool openAirspaceGuardProduct()")
     open_end = arduino_entry.find("bool stopWifiChannelsProduct()", open_start)
     open_body = arduino_entry[open_start:open_end]
@@ -550,7 +554,7 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.235"',
+        '"candidate_version": "1.0.0-dev.236"',
         '"full_matrix_required": false',
         '"cadence_after_acceptance": "8/15"',
     ):

@@ -1151,6 +1151,35 @@ void testCompletedWifiAndBleReportsMergeWithoutInventingEvidence() {
     CHECK(!mergeAirspaceGuardReports(wifi, ble, nullptr));
 }
 
+void testCompletedWifiAndBleReportsUseIndependentInspectionBudgets() {
+    AirspaceGuardReport wifi{};
+    wifi.status = AirspaceGuardStatus::Clear;
+    wifi.sourceFramesObserved = AirspaceGuard::kFrameInspectionCapacity;
+    wifi.framesAvailable = AirspaceGuard::kFrameInspectionCapacity;
+    wifi.framesInspected = AirspaceGuard::kFrameInspectionCapacity;
+
+    AirspaceGuardReport ble{};
+    ble.status = AirspaceGuardStatus::Clear;
+    ble.sourceFramesObserved = AirspaceGuard::kFrameInspectionCapacity;
+    ble.framesAvailable = AirspaceGuard::kFrameInspectionCapacity;
+    ble.framesInspected = AirspaceGuard::kFrameInspectionCapacity;
+    ble.bleAdvertisementRecords = AirspaceGuard::kFrameInspectionCapacity;
+
+    AirspaceGuardReport merged{};
+    CHECK(mergeAirspaceGuardReports(wifi, ble, &merged));
+    CHECK(merged.framesAvailable ==
+          AirspaceGuard::kMergedFrameInspectionCapacity);
+    CHECK(merged.framesInspected ==
+          AirspaceGuard::kMergedFrameInspectionCapacity);
+    CHECK(merged.status == AirspaceGuardStatus::Clear);
+
+    ++ble.sourceFramesObserved;
+    ++ble.framesAvailable;
+    ++ble.framesInspected;
+    ++ble.bleAdvertisementRecords;
+    CHECK(!mergeAirspaceGuardReports(wifi, ble, &merged));
+}
+
 void testIncompleteWifiStillMergesCompleteBleEvidenceFailClosed() {
     FixtureSource wifiSource;
     wifiSource.add(8U, 1000000ULL, kTransmitterB, 6U, -62);
@@ -1226,6 +1255,7 @@ int main() {
     testLiveBleRetentionKeepsCoverageThenAllTrackerRepeats();
     testLiveBleRetentionFailsClosedOnMalformedOrCapacityLoss();
     testCompletedWifiAndBleReportsMergeWithoutInventingEvidence();
+    testCompletedWifiAndBleReportsUseIndependentInspectionBudgets();
     testIncompleteWifiStillMergesCompleteBleEvidenceFailClosed();
     testStableNames();
     std::puts("Airspace Guard detector tests passed");
