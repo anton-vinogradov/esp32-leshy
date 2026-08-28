@@ -60,6 +60,19 @@ The same exact dev.242 also starts CAP-049 only as the host/build foundation
 live driver/radio/lease, storage, product UI or PCAP/`hc22000` export. Those product
 and physical boundaries remain open and therefore cannot count toward DEMO-S7 yet.
 
+Exact dev.246 advances that foundation through a retained physical receive-only
+workflow in `E-BUILD-174`/`E-AUTO-148`/`E-HIL-191`/`RB-M185`. The fail-closed dev.245
+precursor isolated its second same-boot mount to IDF 5.5.4 VFS `ESP_ERR_NO_MEM` while
+the drive and SPI bus remained available; pinning the one serialized direct-FatFs file
+as `max_files=1` reduces contiguous workspace from 29,512 B to 12,968 B. Dev.246 then
+mounts both times on attempt 1/error zero, preserves target/channel, runs the passive
+result UI, changes only live content and exits Home/none/lease 0 without writes,
+connect or TX. Its ambient capture contains no EAPOL/PMKID, so the visible result is
+correctly `inconclusive` and does not close FUNC-49/CAP-049 or `DEMO-S7`. A separate
+Wi-Fi-only Product Survey terminal commit and cold exact-CID recovery remains pending;
+the current mixed-source `running_degraded` attempt cleaned up before commit and is
+not gate evidence.
+
 `DEMO-S2` is accepted by `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 completed 29 public Action/query steps and matched nine
 separately recorded real-TFT goldens with zero mismatches; Quick passed 8/8, safe

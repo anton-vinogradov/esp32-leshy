@@ -453,6 +453,77 @@ def open_product_survey_visit(
     return state
 
 
+def configure_wifi_only_sources(
+        device: Any, state: dict[str, Any],
+        trace: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Leave only Wi-Fi selected through the public Survey setup UI."""
+    if not (
+        state.get("page") == "survey" and
+        state.get("survey_workflow_state") == "setup" and
+        state.get("survey_setup_view") == "plan" and
+        state.get("survey_setup_selection") == 0 and
+        state.get("survey_source_wifi_state") == "available"
+    ):
+        raise RuntimeError(f"cannot configure Wi-Fi-only Survey sources: {state}")
+    if (
+        state.get("survey_source_selected_mask") == 1 and
+        state.get("survey_source_selected_count") == 1 and
+        state.get("survey_source_can_start") is True
+    ):
+        return state
+    if not (
+        state.get("survey_source_ble_state") == "available" and
+        state.get("survey_source_selected_mask") == 3 and
+        state.get("survey_source_selected_count") == 2
+    ):
+        raise RuntimeError(f"unexpected Survey source selection: {state}")
+
+    state = action(device, "select")
+    if trace is not None:
+        trace.append(state)
+    if not (
+        state.get("survey_setup_view") == "sources" and
+        state.get("survey_setup_selection") == 0 and
+        state.get("survey_source_selected_mask") == 3 and
+        state.get("survey_source_selected_count") == 2
+    ):
+        raise RuntimeError(f"cannot open Survey sources: {state}")
+
+    state = action(device, "down")
+    if trace is not None:
+        trace.append(state)
+    if not (
+        state.get("survey_setup_view") == "sources" and
+        state.get("survey_setup_selection") == 1
+    ):
+        raise RuntimeError(f"cannot focus Survey BLE source: {state}")
+
+    state = action(device, "select")
+    if trace is not None:
+        trace.append(state)
+    if not (
+        state.get("survey_setup_view") == "sources" and
+        state.get("survey_setup_selection") == 1 and
+        state.get("survey_source_selected_mask") == 1 and
+        state.get("survey_source_selected_count") == 1 and
+        state.get("survey_source_can_start") is True
+    ):
+        raise RuntimeError(f"cannot disable Survey BLE source: {state}")
+
+    state = action(device, "back")
+    if trace is not None:
+        trace.append(state)
+    if not (
+        state.get("survey_setup_view") == "plan" and
+        state.get("survey_setup_selection") == 0 and
+        state.get("survey_source_selected_mask") == 1 and
+        state.get("survey_source_selected_count") == 1 and
+        state.get("survey_source_can_start") is True
+    ):
+        raise RuntimeError(f"cannot return to Wi-Fi-only Survey plan: {state}")
+    return state
+
+
 def open_latest_library(device: Any,
                         trace: list[dict[str, Any]]) -> dict[str, Any]:
     state = normalize_home(device, trace)
@@ -631,25 +702,58 @@ def capture(
     raise RuntimeError("unreachable framebuffer capture state")
 
 
-def reset_capture(port: str, output: Path, name: str,
-                  seconds: float) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+def reset_capture(
+        port: str, output: Path, name: str, seconds: float,
+        maximum_attempts: int = 1,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     from capture_1x_boot import reset_and_capture_reconnecting
 
-    # Native USB disappears and re-enumerates during reset. Keeping the old
-    # descriptor open can wedge the macOS CDC endpoint until a physical power
-    # cycle, so every current HIL reset must close and reconnect by port name.
-    (raw, ready_marker_ms, usb_disconnects,
-     usb_open_attempts) = reset_and_capture_reconnecting(port, seconds)
-    (output / f"{name}.ndjson").write_bytes(raw)
-    ready, recovery = parse_boot_records(raw)
-    return ready, recovery, {
-        "bytes": len(raw),
-        "sha256": hashlib.sha256(raw).hexdigest(),
-        "first_byte_ms": None,
-        "ready_marker_ms": ready_marker_ms,
-        "usb_disconnects": usb_disconnects,
-        "usb_open_attempts": usb_open_attempts,
-    }
+    if maximum_attempts < 1 or maximum_attempts > 2:
+        raise ValueError("maximum_attempts must be in 1..2")
+    capture_errors: list[str] = []
+    attempt_records: list[dict[str, Any]] = []
+    for attempt in range(1, maximum_attempts + 1):
+        # Native USB disappears and re-enumerates during reset. Keeping the old
+        # descriptor open can wedge the macOS CDC endpoint until a physical
+        # power cycle, so each bounded attempt closes and reconnects by port.
+        (raw, ready_marker_ms, usb_disconnects,
+         usb_open_attempts) = reset_and_capture_reconnecting(port, seconds)
+        if maximum_attempts > 1:
+            (output / f"{name}.attempt-{attempt}.ndjson").write_bytes(raw)
+        ready, recovery = parse_boot_records(raw)
+        attempt_record = {
+            "attempt": attempt,
+            "bytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "first_byte_ms": None,
+            "ready_marker_ms": ready_marker_ms,
+            "usb_disconnects": usb_disconnects,
+            "usb_open_attempts": usb_open_attempts,
+            "ready_present": bool(ready),
+            "recovery_present": bool(recovery),
+        }
+        attempt_records.append(attempt_record)
+        missing_markers = []
+        if not ready:
+            missing_markers.append("ready")
+        if not recovery:
+            missing_markers.append("recovery")
+        if missing_markers:
+            capture_errors.append(
+                f"attempt {attempt}: missing {','.join(missing_markers)} marker(s)"
+            )
+        if not missing_markers or attempt == maximum_attempts:
+            # Preserve the long-standing canonical artifact as the accepted or
+            # final fail-closed attempt while retaining every raw attempt too.
+            (output / f"{name}.ndjson").write_bytes(raw)
+            return ready, recovery, {
+                **attempt_record,
+                "capture_attempts": attempt,
+                "capture_transient_retries": attempt - 1,
+                "capture_errors": capture_errors,
+                "attempt_records": attempt_records,
+            }
+    raise RuntimeError("unreachable reset capture state")
 
 
 def artifact_manifest(output: Path) -> None:
@@ -682,8 +786,15 @@ def main() -> int:
     parser.add_argument(
         "--release-cycle", action="store_true",
         help=(
-            "pause after the first complete Wi-Fi+BLE cycle, capture the stable "
+            "pause after the first complete selected-source cycle, capture the stable "
             "paused state, and commit without a second acquisition cycle"
+        ),
+    )
+    parser.add_argument(
+        "--wifi-only", action="store_true",
+        help=(
+            "disable BLE through the public setup UI and run the Survey with "
+            "the exact Wi-Fi-only source mask"
         ),
     )
     parser.add_argument(
@@ -716,6 +827,7 @@ def main() -> int:
     trace: list[dict[str, Any]] = []
     captures: dict[str, Any] = {}
     setup: dict[str, Any] = {}
+    source_configuration: dict[str, Any] = {}
     start_row: dict[str, Any] = {}
     start_ack: dict[str, Any] = {}
     start_ack_ms = 0.0
@@ -751,7 +863,8 @@ def main() -> int:
             time.sleep(args.post_flash_settle)
 
         before_ready, before_recovery, before_timing = reset_capture(
-            args.port, args.output, "boot-before", args.boot_seconds
+            args.port, args.output, "boot-before", args.boot_seconds,
+            maximum_attempts=2,
         )
         device = PassiveSerial(args.port, 115200, timeout=0.25)
         with device:
@@ -777,6 +890,11 @@ def main() -> int:
                     # The retained Visit route remains owned by Wi-Fi for its
                     # complete setup, running, detail and result lifecycle.
                     failures.extend(setup_failures(setup, "wifi"))
+                    source_configuration = setup
+                    if not failures and args.wifi_only:
+                        source_configuration = configure_wifi_only_sources(
+                            device, setup, trace
+                        )
                     captures["setup"] = capture(device, frames, "setup")
                 if not failures:
                     start_row = focus_survey_start(device)
@@ -788,6 +906,11 @@ def main() -> int:
                         "survey_setup_selection": 2,
                         "survey_source_can_start": True,
                     }, "start_row"))
+                    if args.wifi_only:
+                        failures.extend(expect(start_row, {
+                            "survey_source_selected_mask": 1,
+                            "survey_source_selected_count": 1,
+                        }, "start_row_wifi_only"))
                 if not failures:
                     started = time.monotonic()
                     start_ack = action(device, "select")
@@ -996,7 +1119,8 @@ def main() -> int:
 
         if committed and not failures:
             post_ready, post_recovery, post_timing = reset_capture(
-                args.port, args.output, "boot-after", args.boot_seconds
+                args.port, args.output, "boot-after", args.boot_seconds,
+                maximum_attempts=2,
             )
             generation = int(committed["survey_generation"])
             observations = int(committed["survey_observations"])
@@ -1068,6 +1192,8 @@ def main() -> int:
         "boot_before": {"ready": before_ready, "recovery": before_recovery,
                         "timing": before_timing},
         "setup": setup,
+        "wifi_only": args.wifi_only,
+        "source_configuration": source_configuration,
         "start_row": start_row,
         "start_ack": start_ack,
         "start_ack_ms": start_ack_ms,

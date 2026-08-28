@@ -1055,6 +1055,25 @@ incomplete/inconclusive и завершает Home/none/lease 0. SHA-256 retaine
 Это measured runtime bound board-01 для CAP-048, а не claim ресурсов всё ещё
 host-only интеграции CAP-049.
 
+Acceptance повторного FAT/VFS mount CAP-049 `RB-M185`: exact `1.0.0-dev.246` на
+source `54cf455810c15753220fb2bd0f497381dfabde48` использует application image
+3 395 568 B внутри slot 4 194 304 B, оставляя 798 736 B, и оставляет 11 640 B
+internal DIRAM. SHA-256 firmware/app identity равны
+`8cdd2c01b9e3c8423d665e39b7a0581d0f5039ae4e96fa617fee934dc7ea3b6e`/
+`3c4643e014262722c3ef3ce640e2d9964f0df1431ee49cd897d331291927a221`.
+Fail-closed diagnostic dev.245 доказал, что hardware, initialization SPI и drive
+FatFs всё ещё доступны на втором mount в том же boot: bus error равен нулю, но
+largest internal block 17 396 B не вмещает contiguous VFS workspace IDF 5.5.4
+размером 29 512 B для неиспользуемого `max_files=5`, возвращая error 257 после трёх
+попыток. Продукт использует direct FatFs и ровно один сериализованный `FIL`, поэтому
+dev.246 закрепляет `max_files=1` и уменьшает требуемый workspace до 12 968 B без
+изменения storage schema или concurrency policy. Physical `E-HIL-191` затем завершает
+первый mount при largest block 31 732 B и второй при 17 396 B с первой попытки/error
+zero, доступным drive, final cleanup и lease 0. Retained workflow CAP-049 остаётся
+receive-only и не наблюдает authentication evidence, поэтому это focused bound
+mount headroom, а не завершение CAP-049, proof terminal commit Product Survey или
+budget mixed-workload release/endurance.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

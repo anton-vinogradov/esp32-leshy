@@ -1,0 +1,12 @@
+{
+  "app_elf_sha256": "3c4643e014262722c3ef3ce640e2d9964f0df1431ee49cd897d331291927a221",
+  "expected_cid": "FE343253440000002000000055019CB7",
+  "firmware_sha256": "8cdd2c01b9e3c8423d665e39b7a0581d0f5039ae4e96fa617fee934dc7ea3b6e",
+  "positive_artifact_index_sha256": "2b026a93f6e30a022880a3d9a8b97a1cfaab70df3c454950bed87bda85e875d6",
+  "positive_run_sha256": "8aa8d87f497445c3f62940da58a1fbd451186b28a6a2c79775c9894d6874d036",
+  "run_id": "1848426c80e745d0c193ff9e8a71251f",
+  "runner_source_sha256": "e0db8dcef687439d3dcb7253afaff6fc205bc52e0fd1d3988dcb21c3c45a9fc5",
+  "schema": "leshy.wifi.authentication_capture_hil.acceptance_expectations.v1",
+  "source_commit": "54cf455810c15753220fb2bd0f497381dfabde48",
+  "version": "1.0.0-dev.246"
+}

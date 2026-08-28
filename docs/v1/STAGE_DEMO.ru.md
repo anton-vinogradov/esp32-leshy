@@ -59,6 +59,19 @@ independent physical-stop contract WF-05 и полный workflow protected tool
 driver/radio/lease, storage, product UI или export PCAP/`hc22000`. Эти product и
 physical boundaries остаются открыты и пока не могут засчитываться в DEMO-S7.
 
+Exact dev.246 продвигает foundation через retained physical receive-only workflow в
+`E-BUILD-174`/`E-AUTO-148`/`E-HIL-191`/`RB-M185`. Fail-closed precursor dev.245
+изолировал второй mount в том же boot на VFS `ESP_ERR_NO_MEM` IDF 5.5.4 при всё ещё
+доступных drive и bus SPI; закрепление одного сериализованного direct-FatFs file как
+`max_files=1` уменьшает contiguous workspace с 29 512 B до 12 968 B. Затем dev.246
+выполняет оба mount с первой попытки/error zero, сохраняет target/channel, проходит
+passive result UI, меняет только live content и выходит в Home/none/lease 0 без writes,
+connect или TX. Ambient capture не содержит EAPOL/PMKID, поэтому visible result
+корректно остаётся `inconclusive` и не закрывает FUNC-49/CAP-049 или `DEMO-S7`.
+Отдельный Wi-Fi-only terminal commit Product Survey и cold exact-CID recovery остаётся
+pending; текущая mixed-source попытка `running_degraded` очистилась до commit и не
+является gate evidence.
+
 `DEMO-S2` принят evidence `E-BUILD-060`/`E-AUTO-022`/`E-HIL-082`/`E-GATE-002`.
 Exact committed candidate 0.58 выполнил 29 public Action/query steps и совпал с
 девятью отдельно записанными real-TFT goldens без расхождений; Quick прошёл 8/8,

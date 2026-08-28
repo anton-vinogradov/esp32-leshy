@@ -176,6 +176,72 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         self.assertEqual("x", ready["version"])
         self.assertEqual(3, recovery["generation"])
 
+    def test_reset_capture_retries_first_empty_then_keeps_success(self) -> None:
+        successful_raw = (
+            b'{"schema":"leshy.storage.product_boot_recovery.v1",'
+            b'"kind":"state","generation":166}\n'
+            b'{"schema":"leshy.boot.v1","kind":"ready","version":"x"}\n'
+        )
+        reset_module = types.ModuleType("capture_1x_boot")
+        reset_module.reset_and_capture_reconnecting = unittest.mock.Mock(
+            side_effect=[
+                (b"", None, 1, 2),
+                (successful_raw, 417.5, 1, 1),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+                sys.modules, {"capture_1x_boot": reset_module}):
+            output = Path(directory)
+            ready, recovery, timing = RUNNER.reset_capture(
+                "/dev/test", output, "boot-after", 1.0,
+                maximum_attempts=2,
+            )
+            self.assertEqual(b"", (output / "boot-after.attempt-1.ndjson").read_bytes())
+            self.assertEqual(
+                successful_raw,
+                (output / "boot-after.attempt-2.ndjson").read_bytes(),
+            )
+            self.assertEqual(
+                successful_raw, (output / "boot-after.ndjson").read_bytes()
+            )
+        self.assertEqual("x", ready["version"])
+        self.assertEqual(166, recovery["generation"])
+        self.assertEqual(2, timing["capture_attempts"])
+        self.assertEqual(1, timing["capture_transient_retries"])
+        self.assertEqual(
+            ["attempt 1: missing ready,recovery marker(s)"],
+            timing["capture_errors"],
+        )
+        self.assertEqual(2, len(timing["attempt_records"]))
+        self.assertFalse(timing["attempt_records"][0]["ready_present"])
+        self.assertTrue(timing["attempt_records"][1]["recovery_present"])
+
+    def test_reset_capture_exhausts_two_empty_attempts_fail_closed(self) -> None:
+        reset_module = types.ModuleType("capture_1x_boot")
+        reset_module.reset_and_capture_reconnecting = unittest.mock.Mock(
+            side_effect=[(b"", None, 1, 2), (b"", None, 1, 2)]
+        )
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+                sys.modules, {"capture_1x_boot": reset_module}):
+            output = Path(directory)
+            ready, recovery, timing = RUNNER.reset_capture(
+                "/dev/test", output, "boot-after", 1.0,
+                maximum_attempts=2,
+            )
+            self.assertEqual(b"", (output / "boot-after.ndjson").read_bytes())
+            self.assertTrue((output / "boot-after.attempt-1.ndjson").is_file())
+            self.assertTrue((output / "boot-after.attempt-2.ndjson").is_file())
+        self.assertEqual({}, ready)
+        self.assertEqual({}, recovery)
+        self.assertEqual(2, timing["capture_attempts"])
+        self.assertEqual(1, timing["capture_transient_retries"])
+        self.assertEqual(2, len(timing["capture_errors"]))
+        self.assertEqual(2, len(timing["attempt_records"]))
+        self.assertEqual(
+            2,
+            reset_module.reset_and_capture_reconnecting.call_count,
+        )
+
     def test_cid_autodiscovery_requires_exact_admitted_enrollment(self) -> None:
         recovery = {
             "status": "admitted", "enrolled": True,
@@ -302,6 +368,94 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
                 patch.object(RUNNER, "action", return_value=stuck):
             with self.assertRaisesRegex(RuntimeError, "public Survey Start"):
                 RUNNER.focus_survey_start(object())
+
+    def test_wifi_only_configuration_disables_ble_through_public_ui(self) -> None:
+        states = [
+            {
+                "page": "survey", "survey_workflow_state": "setup",
+                "survey_setup_view": "sources", "survey_setup_selection": 0,
+                "survey_source_wifi_state": "available",
+                "survey_source_ble_state": "available",
+                "survey_source_selected_mask": 3,
+                "survey_source_selected_count": 2,
+                "survey_source_can_start": True,
+            },
+            {
+                "page": "survey", "survey_workflow_state": "setup",
+                "survey_setup_view": "sources", "survey_setup_selection": 1,
+                "survey_source_wifi_state": "available",
+                "survey_source_ble_state": "available",
+                "survey_source_selected_mask": 3,
+                "survey_source_selected_count": 2,
+                "survey_source_can_start": True,
+            },
+            {
+                "page": "survey", "survey_workflow_state": "setup",
+                "survey_setup_view": "sources", "survey_setup_selection": 1,
+                "survey_source_wifi_state": "available",
+                "survey_source_ble_state": "available",
+                "survey_source_selected_mask": 1,
+                "survey_source_selected_count": 1,
+                "survey_source_can_start": True,
+            },
+            {
+                "page": "survey", "survey_workflow_state": "setup",
+                "survey_setup_view": "plan", "survey_setup_selection": 0,
+                "survey_source_wifi_state": "available",
+                "survey_source_ble_state": "available",
+                "survey_source_selected_mask": 1,
+                "survey_source_selected_count": 1,
+                "survey_source_can_start": True,
+            },
+        ]
+        initial = dict(states[0], survey_setup_view="plan")
+        calls: list[str] = []
+
+        def fake_action(_: Any, name: str) -> dict[str, Any]:
+            calls.append(name)
+            return states[len(calls) - 1]
+
+        trace: list[dict[str, Any]] = []
+        with patch.object(RUNNER, "action", side_effect=fake_action):
+            configured = RUNNER.configure_wifi_only_sources(
+                object(), initial, trace
+            )
+        self.assertEqual(["select", "down", "select", "back"], calls)
+        self.assertEqual(states, trace)
+        self.assertEqual(1, configured["survey_source_selected_mask"])
+        self.assertEqual(1, configured["survey_source_selected_count"])
+
+    def test_wifi_only_configuration_accepts_existing_exact_mask(self) -> None:
+        configured = {
+            "page": "survey", "survey_workflow_state": "setup",
+            "survey_setup_view": "plan", "survey_setup_selection": 0,
+            "survey_source_wifi_state": "available",
+            "survey_source_ble_state": "unavailable",
+            "survey_source_selected_mask": 1,
+            "survey_source_selected_count": 1,
+            "survey_source_can_start": True,
+        }
+        trace: list[dict[str, Any]] = []
+        with patch.object(RUNNER, "action") as action_mock:
+            actual = RUNNER.configure_wifi_only_sources(
+                object(), configured, trace
+            )
+        self.assertIs(configured, actual)
+        self.assertEqual([], trace)
+        action_mock.assert_not_called()
+
+    def test_wifi_only_configuration_rejects_ambiguous_source_mask(self) -> None:
+        ambiguous = {
+            "page": "survey", "survey_workflow_state": "setup",
+            "survey_setup_view": "plan", "survey_setup_selection": 0,
+            "survey_source_wifi_state": "available",
+            "survey_source_ble_state": "available",
+            "survey_source_selected_mask": 2,
+            "survey_source_selected_count": 1,
+            "survey_source_can_start": True,
+        }
+        with self.assertRaisesRegex(RuntimeError, "unexpected Survey source"):
+            RUNNER.configure_wifi_only_sources(object(), ambiguous)
 
     def test_current_product_route_opens_wifi_visit(self) -> None:
         home = {

@@ -1062,6 +1062,25 @@ finishes Home/none/lease 0. The retained run/index SHA-256 are
 This is a measured board-01 runtime bound for CAP-048, not a resource claim for the
 still host-only CAP-049 integration.
 
+CAP-049 repeated FAT/VFS mount acceptance `RB-M185`: exact `1.0.0-dev.246` at
+source `54cf455810c15753220fb2bd0f497381dfabde48` uses a 3,395,568 B application
+image inside the 4,194,304 B slot, leaving 798,736 B, and leaves 11,640 B internal
+DIRAM. Firmware/app identity SHA-256 are
+`8cdd2c01b9e3c8423d665e39b7a0581d0f5039ae4e96fa617fee934dc7ea3b6e`/
+`3c4643e014262722c3ef3ce640e2d9964f0df1431ee49cd897d331291927a221`.
+The fail-closed dev.245 diagnostic proved that hardware, SPI initialization and the
+FatFs drive were still available on the second same-boot mount: bus error was zero,
+but the 17,396 B largest internal block could not satisfy IDF 5.5.4's contiguous
+29,512 B VFS workspace for unused `max_files=5`, returning error 257 after three
+attempts. The product uses direct FatFs and exactly one serialized `FIL`, so dev.246
+pins `max_files=1` and reduces the required workspace to 12,968 B without changing
+the storage schema or concurrency policy. Physical `E-HIL-191` then completes the
+first mount at 31,732 B and second at 17,396 B largest block on attempt 1/error zero,
+with drive available, final cleanup and lease 0. The retained CAP-049 workflow is
+receive-only and observes no authentication evidence, so this is a focused mount
+headroom bound, not a CAP-049 completion, Product Survey terminal-commit proof or
+mixed-workload release/endurance budget.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already
