@@ -48,15 +48,15 @@ one-adapter live passive Wi-Fi capture `1.0.0-dev.214`, complete-evidence
 SSID/security identity-conflict indicator `1.0.0-dev.215` и fail-closed bounded live
 identity retention `1.0.0-dev.216`, индикатор быстрой смены видимого имени
 одного BSSID `1.0.0-dev.217`, source-only BLE tracker-compatible presence detector
-`1.0.0-dev.218`, его отдельный channel-free presentation `1.0.0-dev.219` и bounded
-duplicate-preserving retention foundation `1.0.0-dev.220` — только host/build
+`1.0.0-dev.218`, его отдельный channel-free presentation `1.0.0-dev.219`, bounded
+duplicate-preserving retention foundation `1.0.0-dev.220` и supervised sequential
+runtime handoff Wi-Fi→BLE `1.0.0-dev.221` — только host/build
 foundations CAP-048. Их golden/negative corpus, receive-only guard, strongest-first
 ordering, exact drilldown, контракт текста не только цветом, no-clear repaint, явный
 учёт capture loss и publication только после cleanup ещё не закрывают DEMO-S7.
 Wi-Fi identity detectors теперь включаются только после complete live retention и
 cleanup; BLE finding теперь имеет strict kind-aware validation, owner-unknown EN/RU
-evidence и complete bounded retention, но остаётся недоступным до runtime worker
-handoff. Нужны physical
+evidence, complete bounded retention и fail-closed runtime worker handoff. Нужны physical
 golden/negative evidence TFT/navigation/cleanup, оставшийся loss detector и их negative
 corpora.
 

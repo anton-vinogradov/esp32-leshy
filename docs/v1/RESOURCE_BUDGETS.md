@@ -1012,6 +1012,20 @@ App/factory/ELF sizes are 3,338,608/3,404,144/22,504,576 B
 The full tracked host suite and production build pass. Live worker stack/heap,
 radio cleanup and TFT behavior remain unclaimed until runtime wiring and HIL.
 
+Airspace Guard supervised BLE runtime handoff `RB-M181`: exact
+`1.0.0-dev.221` reuses the existing Product Survey worker task, stack and NimBLE
+lifecycle. It adds one fixed 32-observation Airspace Guard workspace and one
+single-result queue, not a second task, BLE stack or radio owner. Static RAM is
+235,424 B (+6,992 B) and linked flash is 3,352,048 B (+13,944 B). The linker
+retains 23,124 B internal DIRAM and reports 71.8% static RAM use. App/factory/ELF
+sizes are 3,352,544/3,418,080/22,544,696 B (+13,936/+13,936/+40,120 B).
+Firmware/factory/ELF SHA-256 are
+`88b0134205b5882c19db3caf7b1494b32de8bd49a1d88a4f90f300a14f202e8e`/
+`109b92a2ec01ea48f2cfa0bf6f24c75bc1ddc717997737557c9edf1ffea4cdf2`/
+`21d12b39c81812b5fa4d2558a55e2e827381f9636316e8c8371558a5a09f00c7`.
+The complete tracked host suite and production build pass. Runtime heap/stack,
+radio cleanup and TFT timing remain unclaimed until physical HIL.
+
 Board-02 adds a physical-variant fact, not usable memory budget. Its ROM reports
 16,777,216 B flash and 8,388,608 B embedded Octal PSRAM on an N16R8 module, while
 the exact compatibility product reports `psramFound=false`. GPIO35/36/37 are already

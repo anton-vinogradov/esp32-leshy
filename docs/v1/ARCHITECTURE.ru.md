@@ -857,6 +857,19 @@ BLE reports объединяются только внутри существу�
 radio owner или второй BLE stack; runtime handoff обязан переиспользовать существующий
 Survey worker, запускать BLE после cleanup Wi-Fi и оставаться supervised до product claim.
 
+Exact `1.0.0-dev.221` закрывает этот runtime handoff на source/build. Защита эфира
+сначала требует complete и очищенный passive Wi-Fi report и только затем отправляет
+duplicate-preserving BLE request существующему Product Survey worker и его единому
+lifecycle NimBLE `begin`/scan/`end`. Request/result queues несут generation token,
+поэтому поздний completion не может изменить более новый экран. Publication требует
+exact равенства observed, reported, read и accepted advertisements, нуля malformed
+или dropped records, complete bounded retention и подтверждённого cleanup. Back,
+safety stop и worker deadline 25 секунд отменяют тот же lifecycle; atomic pre-start
+cancellation latch также покрывает отмену между `begin()` и фактическим scan. Live
+BLE step между сменами состояния перерисовывает только строку elapsed time. Второй
+task, stack или параллельный radio owner не добавляются; physical evidence TFT,
+radio cleanup и negative corpus всё ещё нужны.
+
 - descriptor помечает приложение `Passive`, `Connected`, `Transmit` или `Disruptive`;
 - TX требует отдельного Lab context, видимой частоты/мощности/таймера и подтверждения;
 - запрещённый регионом диапазон блокируется общей regulatory policy;

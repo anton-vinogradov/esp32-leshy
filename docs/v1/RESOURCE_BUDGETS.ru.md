@@ -1006,6 +1006,20 @@ Static RAM остаётся 228 432 B, linked flash равен 3 338 104 B (+112
 Полный tracked host suite и production build проходят. Live worker stack/heap,
 radio cleanup и TFT behavior не заявляются до runtime wiring и HIL.
 
+Supervised BLE runtime handoff Защиты эфира `RB-M181`: exact
+`1.0.0-dev.221` переиспользует существующие task, stack Product Survey worker и
+lifecycle NimBLE. Он добавляет один fixed workspace Защиты эфира на 32 observations
+и одну single-result queue, а не второй task, BLE stack или radio owner. Static RAM
+равна 235 424 B (+6 992 B), linked flash — 3 352 048 B (+13 944 B). Linker
+оставляет 23 124 B internal DIRAM и сообщает 71,8% static RAM. Размеры
+app/factory/ELF — 3 352 544/3 418 080/22 544 696 B
+(+13 936/+13 936/+40 120 B). SHA-256 firmware/factory/ELF:
+`88b0134205b5882c19db3caf7b1494b32de8bd49a1d88a4f90f300a14f202e8e`/
+`109b92a2ec01ea48f2cfa0bf6f24c75bc1ddc717997737557c9edf1ffea4cdf2`/
+`21d12b39c81812b5fa4d2558a55e2e827381f9636316e8c8371558a5a09f00c7`.
+Полный tracked host suite и production build проходят. Runtime heap/stack, radio
+cleanup и timing TFT не заявляются до physical HIL.
+
 Board-02 добавляет physical-variant fact, а не доступный memory budget. ROM сообщает
 16 777 216 B flash и 8 388 608 B встроенной Octal PSRAM на модуле N16R8, тогда как
 exact compatibility product возвращает `psramFound=false`. GPIO35/36/37 уже заняты

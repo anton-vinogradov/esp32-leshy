@@ -776,6 +776,19 @@ boundary and preserve kind-specific source-local indices. No task, radio owner o
 second BLE stack is added here; runtime handoff must reuse the existing Survey worker,
 sequence BLE after Wi-Fi cleanup and remain supervised before any product claim.
 
+Exact `1.0.0-dev.221` closes that source/build runtime handoff. Airspace Guard first
+requires a complete, cleaned-up passive Wi-Fi report and only then submits a
+duplicate-preserving BLE request to the existing Product Survey worker and its one
+NimBLE `begin`/scan/`end` lifecycle. The request/result queues carry a generation
+token so late completion cannot mutate a newer screen. Publication requires exact
+equality of observed, reported, read and accepted advertisements, zero malformed or
+dropped records, complete bounded retention and confirmed cleanup. Back, safety
+stop and a 25-second worker deadline cancel the same lifecycle; an atomic
+pre-start cancellation latch also covers cancellation between `begin()` and the
+actual scan. The live BLE step repaints only its elapsed-time row between state
+changes. This adds no second task, stack or concurrent radio owner; physical TFT,
+radio-cleanup and negative-corpus evidence are still required.
+
 ## 1.x implementation sequence
 
 1. Freeze the board capability/conflict map and reference workflows.
