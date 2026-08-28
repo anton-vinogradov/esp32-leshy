@@ -44,7 +44,7 @@ HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
 START_REGRESSION_RUNNER = (
     ROOT / "tools/run_1x_airspace_guard_start_regression_hil.py"
 )
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.232.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.233.json"
 STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
@@ -209,6 +209,15 @@ def main() -> int:
     ):
         require(failures, forbidden not in board_ble,
                 f"BLE live retention gained an active path: {forbidden}")
+    for marker in (
+        '\\"ble_scan_status\\":',
+        '\\"ble_scan_observed\\":',
+        '\\"ble_retention_observed\\":',
+        "bleWorkerEvent.scan.recordsReported",
+        "bleWorkerEvent.retention.recordsRetained",
+    ):
+        require(failures, marker in arduino_entry,
+                f"missing terminal BLE diagnostics: {marker}")
 
     controller = controller_header + controller_source
     for marker in (
@@ -533,7 +542,7 @@ def main() -> int:
                 f"missing Airspace Guard start-regression contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.232"',
+        '"candidate_version": "1.0.0-dev.233"',
         '"full_matrix_required": false',
         '"cadence_after_acceptance": "8/15"',
     ):

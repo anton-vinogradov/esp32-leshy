@@ -19386,6 +19386,7 @@ void emitAirspaceGuardState(Stream& reply) {
         }
     }
     const auto workerControl = airspaceGuardBleControl();
+    const auto& bleWorkerEvent = airspaceGuardBleEventWorkspace;
     auto& line = diagnosticJson;
     const int written = std::snprintf(
         line, sizeof(line),
@@ -19427,6 +19428,20 @@ void emitAirspaceGuardState(Stream& reply) {
         "\"wifi_identity_retention_complete\":%s,"
         "\"wifi_noise_retention_complete\":%s,"
         "\"ble_worker_control\":%u,\"ble_worker_ready\":%s,"
+        "\"ble_worker_generation\":%lu,\"ble_worker_status\":\"%s\","
+        "\"ble_worker_valid\":%s,\"ble_cleanup_complete\":%s,"
+        "\"ble_scan_status\":\"%s\",\"ble_scan_attempts\":%u,"
+        "\"ble_scan_transient_retries\":%u,"
+        "\"ble_scan_observed\":%u,\"ble_scan_reported\":%u,"
+        "\"ble_scan_read\":%u,\"ble_scan_accepted\":%u,"
+        "\"ble_scan_rejected\":%u,\"ble_scan_dropped\":%u,"
+        "\"ble_retention_observed\":%u,"
+        "\"ble_retention_valid\":%u,"
+        "\"ble_retention_trackers\":%u,"
+        "\"ble_retention_retained\":%u,"
+        "\"ble_retention_ignored\":%u,"
+        "\"ble_retention_malformed\":%u,"
+        "\"ble_retention_dropped\":%u,"
         "\"survey_queues_released\":%s,"
         "\"heap_free_before_queue_release\":%lu,"
         "\"heap_largest_before_queue_release\":%lu,"
@@ -19500,6 +19515,28 @@ void emitAirspaceGuardState(Stream& reply) {
         monitor.noiseRetentionComplete ? "true" : "false",
         static_cast<unsigned>(workerControl),
         productSurveyWorkerReady ? "true" : "false",
+        static_cast<unsigned long>(bleWorkerEvent.generation),
+        bleWorkerEvent.status,
+        bleWorkerEvent.valid ? "true" : "false",
+        bleWorkerEvent.cleanupComplete ? "true" : "false",
+        leshy1::platform::arduino::boardBleScanStatusName(
+            bleWorkerEvent.scan.status),
+        static_cast<unsigned>(bleWorkerEvent.scan.attempts),
+        static_cast<unsigned>(bleWorkerEvent.scan.transientRetries),
+        static_cast<unsigned>(bleWorkerEvent.scan.recordsObserved),
+        static_cast<unsigned>(bleWorkerEvent.scan.recordsReported),
+        static_cast<unsigned>(bleWorkerEvent.scan.recordsRead),
+        static_cast<unsigned>(bleWorkerEvent.scan.accepted),
+        static_cast<unsigned>(bleWorkerEvent.scan.rejected),
+        static_cast<unsigned>(bleWorkerEvent.scan.dropped),
+        static_cast<unsigned>(bleWorkerEvent.retention.recordsObserved),
+        static_cast<unsigned>(bleWorkerEvent.retention.validAdvertisements),
+        static_cast<unsigned>(bleWorkerEvent.retention.trackerAdvertisements),
+        static_cast<unsigned>(bleWorkerEvent.retention.recordsRetained),
+        static_cast<unsigned>(
+            bleWorkerEvent.retention.advertisementsIgnored),
+        static_cast<unsigned>(bleWorkerEvent.retention.malformedRecords),
+        static_cast<unsigned>(bleWorkerEvent.retention.capacityDrops),
         airspaceGuardSurveyQueuesReleased ? "true" : "false",
         static_cast<unsigned long>(
             airspaceGuardHeapFreeBeforeQueueRelease),

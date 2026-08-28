@@ -1,0 +1,24 @@
+{
+  "schema": "leshy.hil.delta_scope.v1",
+  "id": "airspace-guard-1.0.0-dev.233",
+  "candidate_version": "1.0.0-dev.233",
+  "changed_surfaces": [
+    "airspace_guard_dev232_zero_ble_precursor",
+    "retained_terminal_ble_worker_diagnostics",
+    "deterministic_bounded_macos_ble_coverage_fixture"
+  ],
+  "required_delta_regression": [
+    "one_exact_flash_on_board_01",
+    "wifi_terminal_hands_off_to_ble_running",
+    "terminal_ble_worker_status_and_scan_status_are_retained",
+    "terminal_ble_scan_attempts_and_ingress_accounting_are_retained",
+    "explicitly_authorized_macos_ble_name_fixture_is_started_and_stopped",
+    "passive_receive_only_and_zero_application_tx",
+    "clean_terminal_cleanup",
+    "zero_input_drops_and_final_zero_lease",
+    "zero_product_sd_writes"
+  ],
+  "new_passive_scans_required": true,
+  "full_matrix_required": false,
+  "cadence_after_acceptance": "8/15"
+}
