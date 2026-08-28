@@ -41,7 +41,8 @@ BLE_CONTRACT_HEADER = (
     ROOT / "firmware/leshy1/src/drivers/ble/BlePassiveContract.h"
 )
 HIL_RUNNER = ROOT / "tools/run_1x_airspace_guard_hil.py"
-HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.223.json"
+HIL_SCOPE = ROOT / "tests/hil/delta-scopes/airspace-guard-1.0.0-dev.224.json"
+STACK_CHECKER = ROOT / "tools/check_airspace_guard_stack_elf_contract.py"
 
 
 def require(failures: list[str], condition: bool, message: str) -> None:
@@ -72,6 +73,7 @@ def main() -> int:
         ble_contract = BLE_CONTRACT_HEADER.read_text(encoding="utf-8")
         hil_runner = HIL_RUNNER.read_text(encoding="utf-8")
         hil_scope = HIL_SCOPE.read_text(encoding="utf-8")
+        stack_checker = STACK_CHECKER.read_text(encoding="utf-8")
     except OSError as error:
         print(f"airspace guard contract check failed: {error}", file=sys.stderr)
         return 1
@@ -368,6 +370,11 @@ def main() -> int:
         "policy.elevatedNoiseEnabled = monitor.noiseRetentionComplete",
         "report.wifiNoiseSamplesDropped == 0U",
         "report.wifiNoiseSamplesMalformed == 0U",
+        "airspaceGuardBleEventWorkspace",
+        "resetAirspaceGuardWifiReport()",
+        "sizeof(airspaceGuardWifiReport)",
+        "No evidence-rich loop-stack copy is needed here",
+        "finalizeAirspaceGuardWifiEvidence(monitor, complete)",
     ):
         require(failures, marker in arduino_entry,
                 f"missing Airspace Guard product integration: {marker}")
@@ -469,12 +476,23 @@ def main() -> int:
                 f"missing Airspace Guard HIL contract: {marker}")
     for marker in (
         '"schema": "leshy.hil.delta_scope.v1"',
-        '"candidate_version": "1.0.0-dev.223"',
+        '"candidate_version": "1.0.0-dev.224"',
         '"full_matrix_required": false',
         '"cadence_after_acceptance": "6/15"',
     ):
         require(failures, marker in hil_scope,
                 f"missing Airspace Guard delta scope: {marker}")
+
+    for marker in (
+        '"serviceAirspaceGuardProduct()": 1024',
+        '"finalizeAirspaceGuardWifiEvidence(": 3072',
+        '"renderAirspaceGuardPage(": 1280',
+        '"AirspaceGuard::inspectWifi(": 2816',
+        '"mergeAirspaceGuardReports(": 2560',
+        '"leshy.airspace_guard_stack_elf.v1"',
+    ):
+        require(failures, marker in stack_checker,
+                f"missing Airspace Guard stack gate: {marker}")
 
     if failures:
         print("airspace guard contract check failed:", file=sys.stderr)

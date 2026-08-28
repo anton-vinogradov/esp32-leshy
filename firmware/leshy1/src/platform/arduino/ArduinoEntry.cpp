@@ -1105,6 +1105,14 @@ std::uint64_t nextAirspaceGuardUiRefreshUs = 0;
 std::uint64_t airspaceGuardBleStartedUs = 0;
 std::uint32_t airspaceGuardGeneration = 0;
 AirspaceGuardReport airspaceGuardWifiReport{};
+void resetAirspaceGuardWifiReport() {
+    // Only findingCount entries are semantically live. Clearing the aggregate
+    // and restoring its non-zero default status avoids constructing a ~2.3-KiB
+    // temporary AirspaceGuardReport on Arduino's bounded loop stack.
+    std::memset(&airspaceGuardWifiReport, 0,
+                sizeof(airspaceGuardWifiReport));
+    airspaceGuardWifiReport.status = AirspaceGuardStatus::Inconclusive;
+}
 bool airspaceGuardResultNeedsContentClear = false;
 WifiNetworkCatalog wifiNetworkCatalog;
 WifiNetworkNavigationOrder wifiNetworkNavigationOrder;
@@ -1654,6 +1662,14 @@ struct AirspaceGuardBleWorkerEvent final {
     AirspaceGuardBleRetentionStats retention{};
     AirspaceGuardReport report{};
 };
+
+// Queue receive storage must not live on Arduino's bounded 8-KiB loop stack.
+// AirspaceGuardReport is intentionally evidence-rich; dev.223 proved that a
+// local event plus local merge/report temporaries inflated the service frame to
+// 7,280 bytes and corrupted the following critical-section call. Only the loop
+// task reads this workspace, while the worker copies complete events through
+// the queue, so one static bounded instance preserves ownership and accounting.
+AirspaceGuardBleWorkerEvent airspaceGuardBleEventWorkspace{};
 
 struct ProductSurveyWorkerReport final {
     const char* status = "idle";
@@ -19940,16 +19956,14 @@ bool openAirspaceGuardProduct() {
     wifiProductView = WifiProductView::AirspaceGuard;
     ++airspaceGuardGeneration;
     if (airspaceGuardGeneration == 0U) ++airspaceGuardGeneration;
-    airspaceGuardWifiReport = {};
+    resetAirspaceGuardWifiReport();
     airspaceGuardBleStartedUs = 0U;
     if (!productSurveyWorkerReady ||
         productSurveyWorkerTaskHandle == nullptr ||
         productSurveyControl() != ProductSurveyWorkerControl::Idle ||
         airspaceGuardBleControl() != AirspaceGuardBleWorkerControl::Idle ||
         airspaceGuardBleWorkerEvents == nullptr) {
-        AirspaceGuardReport report{};
-        report.status = AirspaceGuardStatus::Inconclusive;
-        airspaceGuardController.load(report);
+        airspaceGuardController.load(airspaceGuardWifiReport);
         airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
         lastRuntimeEvent = "airspace_guard_worker_unavailable";
         return true;
@@ -19968,9 +19982,7 @@ bool openAirspaceGuardProduct() {
         lastRuntimeEvent = "airspace_guard_listening";
         return true;
     }
-    AirspaceGuardReport report{};
-    report.status = AirspaceGuardStatus::Inconclusive;
-    airspaceGuardController.load(report);
+    airspaceGuardController.load(airspaceGuardWifiReport);
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
     lastRuntimeEvent = "airspace_guard_start_failed";
     return true;
@@ -19994,7 +20006,7 @@ bool stopAirspaceGuardProduct() {
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Idle;
     nextAirspaceGuardUiRefreshUs = 0;
     airspaceGuardBleStartedUs = 0;
-    airspaceGuardWifiReport = {};
+    resetAirspaceGuardWifiReport();
     airspaceGuardResultNeedsContentClear = false;
     wifiProductView = WifiProductView::Menu;
     wifiProductSelection = 4;
@@ -20003,26 +20015,67 @@ bool stopAirspaceGuardProduct() {
     return true;
 }
 
+__attribute__((noinline)) bool finalizeAirspaceGuardWifiEvidence(
+    const BoardWifiPassiveCapture::AirspaceGuardMonitorStats& monitor,
+    bool complete) {
+    // inspectWifi() returns one evidence-rich aggregate by value. Keep that
+    // ABI temporary in this bounded leaf frame; if it is allowed back into the
+    // long-lived service frame, merely entering the live Wi-Fi stage can
+    // exhaust Arduino's loop stack before terminal evidence exists.
+    resetAirspaceGuardWifiReport();
+    if (complete) {
+        const std::size_t dropped =
+            static_cast<std::size_t>(monitor.disconnectFramesDropped) +
+            static_cast<std::size_t>(monitor.identityProfilesDropped) +
+            static_cast<std::size_t>(monitor.invalidFrames);
+        AirspaceGuardPolicy policy{};
+        policy.ssidSecurityConflictEnabled =
+            monitor.identityRetentionComplete;
+        policy.ssidChurnEnabled = monitor.identityRetentionComplete;
+        policy.elevatedNoiseEnabled = monitor.noiseRetentionComplete;
+        airspaceGuardWifiReport = airspaceGuardDetector.inspectWifi(
+            wifiFrameCapture.capture(), policy, dropped,
+            static_cast<std::size_t>(monitor.framesReported),
+            monitor.noiseSamples.data(),
+            static_cast<std::size_t>(monitor.noiseSamplesRetained),
+            static_cast<std::size_t>(monitor.noiseSamplesDropped),
+            static_cast<std::size_t>(monitor.noiseSamplesObserved));
+    } else {
+        airspaceGuardWifiReport.status =
+            AirspaceGuardStatus::Inconclusive;
+    }
+    const auto& report = airspaceGuardWifiReport;
+    return complete &&
+        (report.status == AirspaceGuardStatus::Clear ||
+         report.status == AirspaceGuardStatus::Finding) &&
+        report.sourceReadFailures == 0U &&
+        report.sourceFramesDropped == 0U &&
+        report.malformedFrames == 0U &&
+        report.wifiNoiseSamplesDropped == 0U &&
+        report.wifiNoiseSamplesMalformed == 0U &&
+        !report.inspectionTruncated && report.findingsDropped == 0U;
+}
+
 void serviceAirspaceGuardProduct() {
     const bool captureRoute = uiController.page() == 2 &&
         wifiProductView == WifiProductView::AirspaceGuard;
     if (airspaceGuardCaptureState ==
         AirspaceGuardCaptureState::BleRunning) {
-        AirspaceGuardBleWorkerEvent event{};
+        auto& event = airspaceGuardBleEventWorkspace;
         if (airspaceGuardBleWorkerEvents != nullptr &&
             xQueueReceive(airspaceGuardBleWorkerEvents, &event, 0) ==
                 pdTRUE &&
             event.generation == airspaceGuardGeneration) {
-            AirspaceGuardReport merged{};
             const bool mergedComplete = event.valid &&
                 event.cleanupComplete &&
                 leshy1::services::guard::mergeAirspaceGuardReports(
-                    airspaceGuardWifiReport, event.report, &merged);
+                    airspaceGuardWifiReport, event.report,
+                    &airspaceGuardWifiReport);
             if (!mergedComplete) {
-                merged = {};
-                merged.status = AirspaceGuardStatus::Inconclusive;
+                resetAirspaceGuardWifiReport();
             }
-            const bool loaded = airspaceGuardController.load(merged) ==
+            const bool loaded =
+                airspaceGuardController.load(airspaceGuardWifiReport) ==
                 leshy1::apps::guard::AirspaceGuardLoadStatus::Ready;
             airspaceGuardCaptureState = loaded && mergedComplete
                 ? AirspaceGuardCaptureState::Result
@@ -20062,39 +20115,10 @@ void serviceAirspaceGuardProduct() {
         const auto monitor = wifiFrameCapture.airspaceGuardMonitorStats();
         const bool complete = after.state == WifiFrameCaptureState::Complete &&
             monitor.cleanupComplete && wifiFrameCapture.cleanupComplete();
-        AirspaceGuardReport report{};
-        if (complete) {
-            const std::size_t dropped =
-                static_cast<std::size_t>(monitor.disconnectFramesDropped) +
-                static_cast<std::size_t>(monitor.identityProfilesDropped) +
-                static_cast<std::size_t>(monitor.invalidFrames);
-            AirspaceGuardPolicy policy{};
-            policy.ssidSecurityConflictEnabled =
-                monitor.identityRetentionComplete;
-            policy.ssidChurnEnabled = monitor.identityRetentionComplete;
-            policy.elevatedNoiseEnabled = monitor.noiseRetentionComplete;
-            report = airspaceGuardDetector.inspectWifi(
-                wifiFrameCapture.capture(), policy, dropped,
-                static_cast<std::size_t>(monitor.framesReported),
-                monitor.noiseSamples.data(),
-                static_cast<std::size_t>(monitor.noiseSamplesRetained),
-                static_cast<std::size_t>(monitor.noiseSamplesDropped),
-                static_cast<std::size_t>(monitor.noiseSamplesObserved));
-        } else {
-            report.status = AirspaceGuardStatus::Inconclusive;
-        }
-        const bool wifiEvidenceComplete = complete &&
-            (report.status == AirspaceGuardStatus::Clear ||
-             report.status == AirspaceGuardStatus::Finding) &&
-            report.sourceReadFailures == 0U &&
-            report.sourceFramesDropped == 0U &&
-            report.malformedFrames == 0U &&
-            report.wifiNoiseSamplesDropped == 0U &&
-            report.wifiNoiseSamplesMalformed == 0U &&
-            !report.inspectionTruncated && report.findingsDropped == 0U;
-        if (wifiEvidenceComplete) {
-            airspaceGuardWifiReport = report;
-        }
+        const bool wifiEvidenceComplete =
+            finalizeAirspaceGuardWifiEvidence(monitor, complete);
+        // The complete Wi-Fi report already occupies the retained merge input.
+        // No evidence-rich loop-stack copy is needed here.
         const bool bleRequested = wifiEvidenceComplete &&
             requestAirspaceGuardBleWorker(airspaceGuardGeneration);
         if (bleRequested) {
@@ -20105,8 +20129,9 @@ void serviceAirspaceGuardProduct() {
             airspaceGuardResultNeedsContentClear = true;
             lastRuntimeEvent = "airspace_guard_ble_listening";
         } else {
-            report.status = AirspaceGuardStatus::Inconclusive;
-            airspaceGuardController.load(report);
+            airspaceGuardWifiReport.status =
+                AirspaceGuardStatus::Inconclusive;
+            airspaceGuardController.load(airspaceGuardWifiReport);
             airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
             nextAirspaceGuardUiRefreshUs = 0;
             airspaceGuardResultNeedsContentClear = true;
@@ -20138,9 +20163,8 @@ void quiesceAirspaceGuardOnSafetyStop() {
         : requestAirspaceGuardBleWorkerCancel();
     ++airspaceGuardGeneration;
     if (airspaceGuardGeneration == 0U) ++airspaceGuardGeneration;
-    AirspaceGuardReport report{};
-    report.status = AirspaceGuardStatus::Inconclusive;
-    airspaceGuardController.load(report);
+    resetAirspaceGuardWifiReport();
+    airspaceGuardController.load(airspaceGuardWifiReport);
     airspaceGuardCaptureState = AirspaceGuardCaptureState::Failed;
     nextAirspaceGuardUiRefreshUs = 0;
     airspaceGuardBleStartedUs = 0;
