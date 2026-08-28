@@ -100,6 +100,7 @@
 #include "services/companion/CompanionReadAdapter.h"
 #include "services/diagnostics/BootReport.h"
 #include "services/diagnostics/HilSession.h"
+#include "services/auth/WifiAuthenticationCapture.h"
 #include "services/power/PowerSafetyPolicy.h"
 #include "services/targets/CorrelationService.h"
 #include "services/targets/SessionTargetAdmission.h"
@@ -139,6 +140,7 @@
 #include "ui/UiComponents.h"
 #include "ui/UiController.h"
 #include "ui/UiStrings.h"
+#include "ui/WifiAuthenticationCapturePresenter.h"
 #include "ui/VisualTheme.h"
 #include "ui/fonts/RobotoCondensedGfx.h"
 
@@ -280,6 +282,17 @@ using leshy1::services::guard::AirspaceGuardPolicy;
 using leshy1::services::guard::AirspaceGuardReport;
 using leshy1::services::guard::AirspaceGuardStatus;
 using leshy1::services::guard::BleLiveRetentionDisposition;
+using leshy1::services::auth::WifiAuthenticationCaptureInput;
+using leshy1::services::auth::WifiAuthenticationCaptureOutcome;
+using leshy1::services::auth::WifiAuthenticationCaptureReport;
+using leshy1::ui::WifiAuthenticationCaptureLiveProgress;
+using leshy1::ui::WifiAuthenticationCaptureUiFailure;
+using leshy1::ui::WifiAuthenticationCaptureUiInput;
+using leshy1::ui::WifiAuthenticationCaptureUiMetric;
+using leshy1::ui::WifiAuthenticationCaptureUiModel;
+using leshy1::ui::WifiAuthenticationCaptureUiPhase;
+using leshy1::ui::WifiAuthenticationCaptureUiTone;
+using leshy1::ui::uiTextSpec;
 using leshy1::services::targets::TargetAction;
 using leshy1::services::targets::TargetActionKind;
 using leshy1::services::targets::TargetService;
@@ -1048,6 +1061,7 @@ enum class WifiProductView : std::uint8_t {
     Menu,
     Networks,
     NetworkDetail,
+    AuthenticationCapture,
     Devices,
     DeviceDetail,
     Channels,
@@ -1060,6 +1074,8 @@ const char* wifiProductViewName(WifiProductView view) {
         case WifiProductView::Menu: return "menu";
         case WifiProductView::Networks: return "networks";
         case WifiProductView::NetworkDetail: return "network_detail";
+        case WifiProductView::AuthenticationCapture:
+            return "authentication_capture";
         case WifiProductView::Devices: return "devices";
         case WifiProductView::DeviceDetail: return "device_detail";
         case WifiProductView::Channels: return "channels";
@@ -1071,6 +1087,48 @@ const char* wifiProductViewName(WifiProductView view) {
 }
 WifiProductView wifiProductView = WifiProductView::None;
 std::uint8_t wifiProductSelection = 0;
+enum class WifiAuthenticationProductState : std::uint8_t {
+    Idle,
+    WaitingForSurveyStop,
+    Running,
+    Result,
+    Failed,
+};
+
+const char* wifiAuthenticationProductStateName(
+    WifiAuthenticationProductState state) {
+    switch (state) {
+        case WifiAuthenticationProductState::Idle: return "idle";
+        case WifiAuthenticationProductState::WaitingForSurveyStop:
+            return "waiting_for_survey_stop";
+        case WifiAuthenticationProductState::Running: return "running";
+        case WifiAuthenticationProductState::Result: return "result";
+        case WifiAuthenticationProductState::Failed: return "failed";
+    }
+    return "unknown";
+}
+
+struct WifiAuthenticationTarget final {
+    std::array<std::uint8_t, 6> accessPoint{};
+    std::uint8_t channel = 0;
+};
+
+WifiAuthenticationProductState wifiAuthenticationProductState =
+    WifiAuthenticationProductState::Idle;
+WifiAuthenticationTarget wifiAuthenticationTarget{};
+WifiAuthenticationCaptureReport wifiAuthenticationReport{};
+bool wifiAuthenticationReturnAfterSurveyStop = false;
+bool wifiAuthenticationBackDuringWaitObserved = false;
+bool wifiAuthenticationSafetyCleanupActive = false;
+WifiAuthenticationCaptureUiFailure wifiAuthenticationFailure =
+    WifiAuthenticationCaptureUiFailure::None;
+WifiAuthenticationCaptureUiModel wifiAuthenticationRenderedModel{};
+bool wifiAuthenticationRenderedModelValid = false;
+std::uint64_t nextWifiAuthenticationUiRefreshUs = 0;
+std::uint32_t wifiAuthenticationGeneration = 0;
+std::uint32_t wifiAuthenticationContentRepaints = 0;
+std::uint32_t wifiAuthenticationFullRepaints = 0;
+std::uint32_t wifiAuthenticationChromeRepaints = 0;
 AirspaceGuardController airspaceGuardController;
 leshy1::services::guard::AirspaceGuard airspaceGuardDetector;
 enum class AirspaceGuardCaptureState : std::uint8_t {
@@ -1286,6 +1344,16 @@ void resetSpectrumWaterfallTiming() {
 void armSpectrumWaterfallForCurrentReceiver();
 BoardWifiPassiveCapture wifiFrameCapture;
 constexpr WifiFrameCapturePlan kProductWifiFrameCapturePlan{};
+constexpr std::uint32_t kWifiAuthenticationCaptureDurationMs = 10000U;
+constexpr std::uint16_t kWifiAuthenticationCaptureMaximumFrames = 16U;
+constexpr std::uint16_t kWifiAuthenticationCaptureSnapLength = 256U;
+static_assert(
+    kWifiAuthenticationCaptureMaximumFrames <=
+        leshy1::apps::capture::WifiFrameCapture::kFrameCapacity,
+    "authentication capture must fit the one bounded packet buffer");
+
+bool beginWifiAuthenticationCaptureAfterSurvey();
+void serviceWifiAuthenticationCapture();
 std::uint64_t nextCaptureUiRefreshUs = 0;
 enum class CaptureView : std::uint8_t {
     SourceMenu,
@@ -5031,7 +5099,10 @@ void releaseProductSurveyAfterTerminal(const char* status, bool returnHome) {
         uiController.apply(UiAction::Back,
                            static_cast<std::uint8_t>(appCatalog.size()), false);
     }
-    if (!returnToWifiMenu && appRuntime.running()) appRuntime.stop();
+    if (!returnToWifiMenu && appRuntime.running() &&
+        !wifiAuthenticationSafetyCleanupActive) {
+        appRuntime.stop();
+    }
     setProductSurveyControl(ProductSurveyWorkerControl::Idle);
     renderInteractiveScreen();
 }
@@ -5245,10 +5316,81 @@ void serviceProductSurveyWorker() {
             applyProductSurveyTimelineStatus(
                 cancelled, SourceTimelineStatus::Cancelled,
                 "timeline_cancel", event.eventUs);
-            releaseProductSurveyAfterTerminal(
-                timelineCancelled ? "cancelled" : "timeline_cancel_failed",
-                true);
-            render = false;
+            const bool authenticationPending =
+                wifiProductView == WifiProductView::AuthenticationCapture &&
+                wifiAuthenticationProductState ==
+                    WifiAuthenticationProductState::WaitingForSurveyStop;
+            if (!authenticationPending) {
+                // Preserve the ordinary product-survey cancellation path.
+                releaseProductSurveyAfterTerminal(
+                    timelineCancelled ? "cancelled"
+                                      : "timeline_cancel_failed",
+                    true);
+                render = false;
+            } else {
+                if (surveyWorkflow.state() ==
+                        SurveyWorkflowState::Running ||
+                    surveyWorkflow.state() == SurveyWorkflowState::Setup) {
+                    surveyPipeline.cancel();
+                }
+                const bool sourceInactive =
+                    !productSurveyRuntime.sourceActive;
+                const bool backendCleanup = closeProductSurveyBackend();
+                const WorkerDeadlineSnapshot worker =
+                    workerDeadlineSnapshot();
+                const bool surveyQuiescent = timelineCancelled &&
+                    backendCleanup &&
+                    productSurveyRuntime.scannerCleanupComplete &&
+                    productSurveyRuntime.cleanupComplete &&
+                    sourceInactive && !worker.armed;
+                // Do not advertise an idle survey or discard its terminal
+                // timeline until every owned backend and worker is proven
+                // quiescent. A failed teardown must remain visible and must
+                // continue to block a new capture instead of turning Back into
+                // an escape hatch from an active receiver.
+                if (surveyQuiescent) {
+                    productSurveyRuntime.sourceActive = false;
+                    setProductSurveyControl(ProductSurveyWorkerControl::Idle);
+                    surveyPipeline.resetToSetup();
+                    productSurveyTimeline.reset();
+                }
+                if (wifiAuthenticationReturnAfterSurveyStop) {
+                    wifiAuthenticationReturnAfterSurveyStop = false;
+                    if (surveyQuiescent) {
+                        std::memset(&wifiAuthenticationReport, 0,
+                                    sizeof(wifiAuthenticationReport));
+                        wifiAuthenticationTarget = {};
+                        wifiAuthenticationProductState =
+                            WifiAuthenticationProductState::Idle;
+                        wifiProductView = WifiProductView::Menu;
+                        wifiProductSelection = 0;
+                        productSurveyRuntime.status =
+                            "cancelled_for_authentication_back";
+                    } else {
+                        wifiAuthenticationProductState =
+                            WifiAuthenticationProductState::Failed;
+                        wifiAuthenticationFailure =
+                            WifiAuthenticationCaptureUiFailure::
+                                ResultBeforeCleanup;
+                        productSurveyRuntime.status =
+                            "authentication_survey_cleanup_failed";
+                    }
+                    lastRuntimeEvent = productSurveyRuntime.status;
+                } else if (!surveyQuiescent ||
+                           !beginWifiAuthenticationCaptureAfterSurvey()) {
+                    wifiAuthenticationProductState =
+                        WifiAuthenticationProductState::Failed;
+                    wifiAuthenticationFailure = surveyQuiescent
+                        ? WifiAuthenticationCaptureUiFailure::StartFailed
+                        : WifiAuthenticationCaptureUiFailure::
+                              ResultBeforeCleanup;
+                    productSurveyRuntime.status = surveyQuiescent
+                        ? "authentication_capture_start_failed"
+                        : "authentication_survey_cleanup_failed";
+                    lastRuntimeEvent = productSurveyRuntime.status;
+                }
+                render = true;
+            }
         } else {
             const bool windowClosed = closeProductSurveyScanWindow(
                 event, SourceWindowState::Fault,
@@ -8011,9 +8153,30 @@ void serviceWorkerDeadlineSupervisor() {
             xSemaphoreGive(productSurveyScanStartGate);
         }
         productSurveyRuntime.status = "safety_worker_deadline";
-        productSurveyRuntime.sourceActive = false;
     }
-    if (appRuntime.running()) appRuntime.stop();
+    const auto authenticationIngress =
+        wifiFrameCapture.authenticationCaptureStats();
+    const bool authenticationBoardDirty =
+        !wifiFrameCapture.cleanupComplete() ||
+        !authenticationIngress.cleanupComplete ||
+        authenticationIngress.active;
+    const bool authenticationSurveyDirty =
+        productSurveyControl() != ProductSurveyWorkerControl::Idle ||
+        !productSurveyRuntime.identityCleanupComplete ||
+        !productSurveyRuntime.scannerCleanupComplete ||
+        !productSurveyRuntime.cleanupComplete ||
+        productSurveyRuntime.sourceActive || productSurveyScanActive();
+    const bool authenticationCleanupDeferred =
+        wifiAuthenticationProductState ==
+             WifiAuthenticationProductState::WaitingForSurveyStop ||
+         wifiAuthenticationProductState ==
+             WifiAuthenticationProductState::Running ||
+         (wifiAuthenticationProductState ==
+              WifiAuthenticationProductState::Failed &&
+          (authenticationBoardDirty || authenticationSurveyDirty));
+    if (!authenticationCleanupDeferred && appRuntime.running()) {
+        appRuntime.stop();
+    }
     lastRuntimeEvent = "safety_worker_deadline";
     latchSafetyStopInTask(SafetyReason::WorkerDeadline);
     renderInteractiveScreen(true);
@@ -10019,7 +10182,10 @@ NavigationFooter navigationFooterForCurrentState() {
                     {NavigationKey::RightAndSelect, UiTextId::NavAgain}};
         }
         if (wifiProductView == WifiProductView::NetworkDetail) {
-            return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
+            return {{NavigationKey::Left, UiTextId::NavList}, {}, enter};
+        }
+        if (wifiProductView == WifiProductView::AuthenticationCapture) {
+            return {{NavigationKey::Left, UiTextId::NavBack}, {}, {}};
         }
         if (wifiProductView == WifiProductView::DeviceDetail) {
             return {{NavigationKey::Left, UiTextId::NavList}, {}, {}};
@@ -13991,6 +14157,262 @@ void renderCc1101SpectrumPage(bool clearContent) {
     renderCc1101SpectrumAxis();
 }
 
+WifiAuthenticationCaptureUiInput wifiAuthenticationCaptureUiInput() {
+    WifiAuthenticationCaptureUiInput input{};
+    const auto capture = wifiFrameCapture.stats();
+    const auto ingress = wifiFrameCapture.authenticationCaptureStats();
+    if (wifiAuthenticationProductState ==
+        WifiAuthenticationProductState::WaitingForSurveyStop) {
+        input.phase = wifiAuthenticationReturnAfterSurveyStop
+            ? WifiAuthenticationCaptureUiPhase::Cancelling
+            : WifiAuthenticationCaptureUiPhase::Preparing;
+        input.cleanupComplete = false;
+    } else if (wifiAuthenticationProductState ==
+               WifiAuthenticationProductState::Running) {
+        input.phase = WifiAuthenticationCaptureUiPhase::Running;
+        input.progress.durationMs = kWifiAuthenticationCaptureDurationMs;
+        input.progress.channel = wifiAuthenticationTarget.channel;
+        if (capture.startedUs != 0U) {
+            const std::uint64_t nowUs =
+                static_cast<std::uint64_t>(esp_timer_get_time());
+            const std::uint64_t elapsedMs = nowUs > capture.startedUs
+                ? (nowUs - capture.startedUs) / 1000ULL : 0U;
+            input.progress.elapsedMs = static_cast<std::uint32_t>(
+                std::min<std::uint64_t>(
+                    elapsedMs, kWifiAuthenticationCaptureDurationMs));
+        }
+        const std::uint64_t reported =
+            static_cast<std::uint64_t>(ingress.candidates) +
+            ingress.framesInvalid;
+        input.progress.framesReported = reported <= UINT32_MAX
+            ? static_cast<std::uint32_t>(reported) : UINT32_MAX;
+        input.progress.framesAccepted = ingress.candidatesAccepted;
+        input.progress.framesDroppedCapacity = ingress.candidatesDropped;
+        input.progress.framesDroppedInvalid = ingress.framesInvalid;
+        // Ingress has only proven that these are retained target candidates;
+        // exact EAPOL/Key counts exist only after terminal parsing.
+        input.progress.eapolFrames = 0U;
+        input.progress.eapolKeyFrames = 0U;
+        input.cleanupComplete = false;
+    } else if (wifiAuthenticationProductState ==
+               WifiAuthenticationProductState::Result) {
+        input.phase = WifiAuthenticationCaptureUiPhase::Report;
+        input.report = &wifiAuthenticationReport;
+        input.cleanupComplete = wifiFrameCapture.cleanupComplete() &&
+            ingress.cleanupComplete && !ingress.active;
+    } else {
+        input.phase = WifiAuthenticationCaptureUiPhase::Failed;
+        input.failure = wifiAuthenticationFailure ==
+                WifiAuthenticationCaptureUiFailure::None
+            ? WifiAuthenticationCaptureUiFailure::InvalidPresentationInput
+            : wifiAuthenticationFailure;
+        input.cleanupComplete = wifiFrameCapture.cleanupComplete() &&
+            ingress.cleanupComplete && !ingress.active;
+    }
+    return input;
+}
+
+Tone wifiAuthenticationUiTone(WifiAuthenticationCaptureUiTone tone) {
+    switch (tone) {
+        case WifiAuthenticationCaptureUiTone::Positive:
+            return Tone::Positive;
+        case WifiAuthenticationCaptureUiTone::Caution:
+            return Tone::Warning;
+        case WifiAuthenticationCaptureUiTone::Error:
+            return Tone::Danger;
+        case WifiAuthenticationCaptureUiTone::Neutral:
+            return Tone::Neutral;
+    }
+    return Tone::Neutral;
+}
+
+const char* wifiAuthenticationUiViewName(
+    leshy1::ui::WifiAuthenticationCaptureUiView view) {
+    using View = leshy1::ui::WifiAuthenticationCaptureUiView;
+    switch (view) {
+        case View::Preparing: return "preparing";
+        case View::Cancelling: return "cancelling";
+        case View::Running: return "running";
+        case View::Result: return "result";
+        case View::Inconclusive: return "inconclusive";
+        case View::Failed: return "failed";
+    }
+    return "failed";
+}
+
+const char* wifiAuthenticationUiToneName(
+    WifiAuthenticationCaptureUiTone tone) {
+    switch (tone) {
+        case WifiAuthenticationCaptureUiTone::Neutral: return "neutral";
+        case WifiAuthenticationCaptureUiTone::Positive: return "positive";
+        case WifiAuthenticationCaptureUiTone::Caution: return "caution";
+        case WifiAuthenticationCaptureUiTone::Error: return "error";
+    }
+    return "error";
+}
+
+const char* wifiAuthenticationUiFailureName(
+    WifiAuthenticationCaptureUiFailure failure) {
+    switch (failure) {
+        case WifiAuthenticationCaptureUiFailure::None: return "none";
+        case WifiAuthenticationCaptureUiFailure::InvalidPresentationInput:
+            return "invalid_presentation_input";
+        case WifiAuthenticationCaptureUiFailure::StartFailed:
+            return "start_failed";
+        case WifiAuthenticationCaptureUiFailure::RuntimeFailed:
+            return "runtime_failed";
+        case WifiAuthenticationCaptureUiFailure::ResultBeforeCleanup:
+            return "result_before_cleanup";
+        case WifiAuthenticationCaptureUiFailure::ReportRejected:
+            return "report_rejected";
+    }
+    return "invalid_presentation_input";
+}
+
+void formatWifiAuthenticationUiRow(
+    const leshy1::ui::WifiAuthenticationCaptureUiRow& row,
+    char* output, std::size_t capacity) {
+    if (output == nullptr || capacity == 0U) return;
+    switch (row.metric) {
+        case WifiAuthenticationCaptureUiMetric::TimeProgressMs:
+        case WifiAuthenticationCaptureUiMetric::ChannelAndReportedFrames:
+        case WifiAuthenticationCaptureUiMetric::RetainedAndDroppedFrames:
+        case WifiAuthenticationCaptureUiMetric::EapolAndKeyFrames:
+        case WifiAuthenticationCaptureUiMetric::CompleteAndPartialPeers:
+        case WifiAuthenticationCaptureUiMetric::EapolKeysAndPmkids:
+        case WifiAuthenticationCaptureUiMetric::EvidenceAndSourceFrames:
+        case WifiAuthenticationCaptureUiMetric::LossAndRejectedFrames:
+            std::snprintf(output, capacity, tr(row.text),
+                          static_cast<unsigned long>(row.primary),
+                          static_cast<unsigned long>(row.secondary));
+            return;
+        case WifiAuthenticationCaptureUiMetric::UncertaintyMask:
+        case WifiAuthenticationCaptureUiMetric::FailureCode:
+        case WifiAuthenticationCaptureUiMetric::None:
+            std::snprintf(output, capacity, "%s", tr(row.text));
+            return;
+    }
+}
+
+void renderWifiAuthenticationHeaderRegions(
+    const WifiAuthenticationCaptureUiModel& model) {
+    const Rect title = Components::title();
+    display.fillRect(title.x, title.y, title.width, title.height,
+                     Palette::Header);
+    display.setTextColor(toneColor(wifiAuthenticationUiTone(model.tone)),
+                         Palette::Header);
+    setUiCursor(UiTextRole::Meta, title.x, title.y);
+    display.print(tr(model.title));
+
+    const Rect header = Components::header();
+    const std::int16_t statusX = title.x + title.width;
+    display.fillRect(statusX, header.y,
+                     header.width - statusX, header.height,
+                     Palette::Header);
+    renderHeaderStatus();
+}
+
+void renderWifiAuthenticationTarget() {
+    constexpr Rect target{Layout::Edge, Layout::HeaderHeight + 3,
+                          Layout::ContentWidth, 16};
+    display.fillRect(target.x, target.y, target.width, target.height,
+                     Palette::Canvas);
+    char line[48] = {};
+    std::snprintf(line, sizeof(line),
+                  tr(UiTextId::WifiAuthSelectedTargetFormat),
+                  static_cast<unsigned>(wifiAuthenticationTarget.channel));
+    display.setTextColor(Palette::TextMuted, Palette::Canvas);
+    setUiCursor(UiTextRole::Meta, target.x + 2, target.y);
+    display.print(line);
+}
+
+void renderWifiAuthenticationFixedRow(std::uint8_t index,
+                                      const char* text, Tone tone,
+                                      UiTextRole role) {
+    const Rect bounds = Components::metricRow(index);
+    display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                     Palette::Canvas);
+    const std::int16_t textHeight = role == UiTextRole::Body
+        ? kRobotoCondensedBodyAscent + kRobotoCondensedBodyDescent
+        : kRobotoCondensedMetaAscent + kRobotoCondensedMetaDescent;
+    display.setTextColor(toneColor(tone), Palette::Canvas);
+    setUiCursor(role, bounds.x + 2,
+                bounds.y + (bounds.height - textHeight) / 2);
+    display.print(text);
+}
+
+void renderWifiAuthenticationCapture(bool clearContent) {
+    const WifiAuthenticationCaptureUiModel model =
+        leshy1::ui::presentWifiAuthenticationCapture(
+            wifiAuthenticationCaptureUiInput());
+    const auto delta = wifiAuthenticationRenderedModelValid && !clearContent
+        ? leshy1::ui::diffWifiAuthenticationCaptureUi(
+              wifiAuthenticationRenderedModel, model)
+        : leshy1::ui::WifiAuthenticationCaptureUiDelta{
+              static_cast<std::uint8_t>(
+                  leshy1::ui::kWifiAuthenticationTitleRegion |
+                  leshy1::ui::kWifiAuthenticationHeadlineRegion |
+                  leshy1::ui::kWifiAuthenticationNoteRegion),
+              0x0fU, false};
+    if (clearContent) {
+        renderHeader("", clearContent);
+        renderWifiAuthenticationTarget();
+        ++wifiAuthenticationFullRepaints;
+    }
+    if (clearContent ||
+        (delta.fixedRegionMask &
+         leshy1::ui::kWifiAuthenticationTitleRegion) != 0U) {
+        renderWifiAuthenticationHeaderRegions(model);
+        ++wifiAuthenticationChromeRepaints;
+    }
+    const std::uint8_t contentFixedRegions = static_cast<std::uint8_t>(
+        leshy1::ui::kWifiAuthenticationHeadlineRegion |
+        leshy1::ui::kWifiAuthenticationNoteRegion);
+    if (clearContent || delta.rowMask != 0U ||
+        (delta.fixedRegionMask & contentFixedRegions) != 0U) {
+        ++wifiAuthenticationContentRepaints;
+    }
+    const Tone modelTone = wifiAuthenticationUiTone(model.tone);
+    if (clearContent ||
+        (delta.fixedRegionMask &
+         leshy1::ui::kWifiAuthenticationHeadlineRegion) != 0U) {
+        renderWifiAuthenticationFixedRow(
+            0U, tr(model.headline), modelTone,
+            uiTextSpec(model.headline).role);
+    }
+    for (std::size_t index = 0; index < model.rows.size(); ++index) {
+        if (!clearContent &&
+            (delta.rowMask & (1U << index)) == 0U) {
+            continue;
+        }
+        const std::uint8_t displayRow =
+            static_cast<std::uint8_t>(index + 1U);
+        const Rect bounds = Components::metricRow(displayRow);
+        if (index >= model.rowCount) {
+            display.fillRect(bounds.x, bounds.y, bounds.width, bounds.height,
+                             Palette::Canvas);
+            continue;
+        }
+        char line[80] = {};
+        formatWifiAuthenticationUiRow(model.rows[index], line,
+                                      sizeof(line));
+        renderWifiAuthenticationFixedRow(
+            displayRow, line,
+            model.rows[index].warning ? Tone::Warning : modelTone,
+            uiTextSpec(model.rows[index].text).role);
+    }
+    if (clearContent ||
+        (delta.fixedRegionMask &
+         leshy1::ui::kWifiAuthenticationNoteRegion) != 0U) {
+        renderWifiAuthenticationFixedRow(
+            5U, tr(model.note),
+            model.evidenceIncomplete ? Tone::Warning : Tone::Muted,
+            uiTextSpec(model.note).role);
+    }
+    wifiAuthenticationRenderedModel = model;
+    wifiAuthenticationRenderedModelValid = true;
+}
+
 void renderInventoryPage(bool clearContent) {
     char line[96] = {};
     if (bleProductView == BleProductView::DeviceDetail) {
@@ -14007,6 +14429,10 @@ void renderInventoryPage(bool clearContent) {
     }
     if (wifiProductView == WifiProductView::AirspaceGuard) {
         renderAirspaceGuardPage(clearContent);
+        return;
+    }
+    if (wifiProductView == WifiProductView::AuthenticationCapture) {
+        renderWifiAuthenticationCapture(clearContent);
         return;
     }
     if (wifiProductView == WifiProductView::NetworkDetail) {
@@ -15663,6 +16089,17 @@ bool renderSelectionDelta() {
         // bright full-screen flash.
         renderAirspaceGuardPage(false);
         renderNavigationFooter();
+        return true;
+    }
+
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::AuthenticationCapture &&
+        renderedUi.wifiProductView == static_cast<std::uint8_t>(
+            WifiProductView::AuthenticationCapture)) {
+        // Preparing, running, cancelling and terminal states share fixed
+        // geometry. Repaint only semantic rows; the target/header and footer
+        // stay untouched so lifecycle transitions cannot flash the display.
+        renderWifiAuthenticationCapture(false);
         return true;
     }
 
@@ -17775,6 +18212,268 @@ void serviceFullGuidedRfChecks() {
     }
 }
 
+void resetWifiAuthenticationCaptureProduct() {
+    std::memset(&wifiAuthenticationReport, 0,
+                sizeof(wifiAuthenticationReport));
+    wifiAuthenticationTarget = {};
+    wifiAuthenticationReturnAfterSurveyStop = false;
+    wifiAuthenticationBackDuringWaitObserved = false;
+    wifiAuthenticationFailure = WifiAuthenticationCaptureUiFailure::None;
+    wifiAuthenticationRenderedModel = {};
+    wifiAuthenticationRenderedModelValid = false;
+    nextWifiAuthenticationUiRefreshUs = 0;
+    wifiAuthenticationProductState = WifiAuthenticationProductState::Idle;
+}
+
+bool wifiAuthenticationTargetValid() {
+    if (wifiAuthenticationTarget.channel < 1U ||
+        wifiAuthenticationTarget.channel > 13U) {
+        return false;
+    }
+    if ((wifiAuthenticationTarget.accessPoint[0] & 0x01U) != 0U) {
+        return false;
+    }
+    for (const std::uint8_t octet :
+         wifiAuthenticationTarget.accessPoint) {
+        if (octet != 0U) return true;
+    }
+    return false;
+}
+
+bool wifiAuthenticationTargetMatchesSelectedDetail() {
+    return wifiAuthenticationTargetValid() &&
+        wifiNetworkDetail.identityLength ==
+            wifiAuthenticationTarget.accessPoint.size() &&
+        wifiNetworkDetail.channel == wifiAuthenticationTarget.channel &&
+        std::equal(wifiAuthenticationTarget.accessPoint.begin(),
+                   wifiAuthenticationTarget.accessPoint.end(),
+                   wifiNetworkDetail.identity.begin());
+}
+
+bool requestWifiAuthenticationCaptureFromDetail() {
+    const Observation* network = liveWifiNetworkDetail();
+    if (network == nullptr || network->identityLength != 6U ||
+        network->channel < 1U || network->channel > 13U) {
+        wifiAuthenticationProductState =
+            WifiAuthenticationProductState::Idle;
+        lastRuntimeEvent = "authentication_target_invalid";
+        return false;
+    }
+    WifiAuthenticationTarget target{};
+    std::copy_n(network->identity.begin(), target.accessPoint.size(),
+                target.accessPoint.begin());
+    target.channel = static_cast<std::uint8_t>(network->channel);
+    wifiAuthenticationTarget = target;
+    std::memset(&wifiAuthenticationReport, 0,
+                sizeof(wifiAuthenticationReport));
+    wifiAuthenticationReturnAfterSurveyStop = false;
+    wifiAuthenticationBackDuringWaitObserved = false;
+    wifiAuthenticationFailure = WifiAuthenticationCaptureUiFailure::None;
+    wifiAuthenticationContentRepaints = 0;
+    wifiAuthenticationFullRepaints = 0;
+    wifiAuthenticationChromeRepaints = 0;
+    if (!wifiAuthenticationTargetValid() ||
+        !requestProductSurveyWorkerStop(true)) {
+        wifiAuthenticationTarget = {};
+        wifiAuthenticationProductState =
+            WifiAuthenticationProductState::Idle;
+        lastRuntimeEvent = "authentication_survey_stop_unavailable";
+        return false;
+    }
+    wifiAuthenticationProductState =
+        WifiAuthenticationProductState::WaitingForSurveyStop;
+    ++wifiAuthenticationGeneration;
+    if (wifiAuthenticationGeneration == 0U) {
+        ++wifiAuthenticationGeneration;
+    }
+    wifiProductView = WifiProductView::AuthenticationCapture;
+    lastRuntimeEvent = "authentication_waiting_for_survey_stop";
+    return true;
+}
+
+bool beginWifiAuthenticationCaptureAfterSurvey() {
+    if (wifiAuthenticationProductState !=
+            WifiAuthenticationProductState::WaitingForSurveyStop ||
+        !wifiAuthenticationTargetValid() ||
+        resourceBroker.ownerOf(Resource::EspRf) !=
+            AppRuntime::kForegroundOwner ||
+        std::strcmp(appRuntime.activeApp(), "wifi") != 0) {
+        return false;
+    }
+    wifiFrameCapture.reset();
+    WifiFrameCapturePlan plan{};
+    plan.channel = wifiAuthenticationTarget.channel;
+    plan.durationMs = kWifiAuthenticationCaptureDurationMs;
+    plan.channelDwellMs = 120U;
+    plan.snapLength = kWifiAuthenticationCaptureSnapLength;
+    plan.maximumFrames = kWifiAuthenticationCaptureMaximumFrames;
+    std::uint64_t startedUs =
+        static_cast<std::uint64_t>(esp_timer_get_time());
+    if (startedUs == 0U) startedUs = 1U;
+    const bool started = wifiFrameCapture.beginAuthenticationCapture(
+        plan, wifiAuthenticationTarget.accessPoint, startedUs);
+    wifiAuthenticationProductState = started
+        ? WifiAuthenticationProductState::Running
+        : WifiAuthenticationProductState::Failed;
+    wifiAuthenticationFailure = started
+        ? WifiAuthenticationCaptureUiFailure::None
+        : WifiAuthenticationCaptureUiFailure::StartFailed;
+    wifiAuthenticationRenderedModelValid = false;
+    nextWifiAuthenticationUiRefreshUs = startedUs + 500000ULL;
+    lastRuntimeEvent = started ? "authentication_capture_running"
+                               : "authentication_capture_start_failed";
+    return started;
+}
+
+bool leaveWifiAuthenticationCapture() {
+    if (wifiAuthenticationProductState ==
+        WifiAuthenticationProductState::WaitingForSurveyStop) {
+        wifiAuthenticationReturnAfterSurveyStop = true;
+        wifiAuthenticationBackDuringWaitObserved = true;
+        lastRuntimeEvent = "authentication_back_waiting_for_survey_stop";
+        return true;
+    }
+    if (wifiAuthenticationProductState ==
+            WifiAuthenticationProductState::Failed &&
+        wifiAuthenticationFailure ==
+            WifiAuthenticationCaptureUiFailure::ResultBeforeCleanup &&
+        productSurveyControl() != ProductSurveyWorkerControl::Idle) {
+        const WorkerDeadlineSnapshot worker = workerDeadlineSnapshot();
+        const bool timelineTerminal =
+            productSurveyTimeline.state() ==
+                SourceTimelineState::Cancelled;
+        const leshy1::platform::arduino::
+            WifiAuthenticationSurveyTeardownState surveyTeardown{
+                timelineTerminal,
+                productSurveyRuntime.timelineHealthy,
+                productSurveyRuntime.identityCleanupComplete,
+                productSurveyRuntime.scannerCleanupComplete,
+                productSurveyRuntime.sourceActive,
+                productSurveyScanActive(),
+                worker.armed,
+            };
+        const bool backendClosePermitted =
+            leshy1::platform::arduino::
+                wifiAuthenticationSurveyBackendClosePermitted(
+                    surveyTeardown);
+        const bool backendCleanup = backendClosePermitted &&
+            closeProductSurveyBackend();
+        const bool surveyQuiescent = backendClosePermitted &&
+            backendCleanup && productSurveyRuntime.cleanupComplete;
+        if (!surveyQuiescent) {
+            productSurveyRuntime.status =
+                "authentication_survey_cleanup_failed";
+            lastRuntimeEvent = productSurveyRuntime.status;
+            return true;
+        }
+        setProductSurveyControl(ProductSurveyWorkerControl::Idle);
+        surveyPipeline.resetToSetup();
+        productSurveyTimeline.reset();
+    }
+    const auto capture = wifiFrameCapture.stats();
+    const auto ingress = wifiFrameCapture.authenticationCaptureStats();
+    if (capture.state == WifiFrameCaptureState::Running ||
+        ingress.active || !wifiFrameCapture.cleanupComplete() ||
+        !ingress.cleanupComplete) {
+        std::uint64_t endedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (endedUs == 0U) endedUs = 1U;
+        if (!wifiFrameCapture.stop(endedUs) ||
+            !wifiFrameCapture.cleanupComplete()) {
+            wifiAuthenticationProductState =
+                WifiAuthenticationProductState::Failed;
+            wifiAuthenticationFailure =
+                WifiAuthenticationCaptureUiFailure::ResultBeforeCleanup;
+            lastRuntimeEvent = "authentication_capture_cleanup_failed";
+            return true;
+        }
+    }
+    wifiFrameCapture.reset();
+    resetWifiAuthenticationCaptureProduct();
+    surveyPipeline.resetToSetup();
+    wifiProductView = WifiProductView::Menu;
+    wifiProductSelection = 0;
+    lastRuntimeEvent = "wifi_menu";
+    return true;
+}
+
+void serviceWifiAuthenticationCapture() {
+    if (wifiAuthenticationProductState !=
+        WifiAuthenticationProductState::Running) {
+        return;
+    }
+    const auto before = wifiFrameCapture.stats();
+    if (before.state != WifiFrameCaptureState::Running) {
+        wifiAuthenticationProductState =
+            WifiAuthenticationProductState::Failed;
+        wifiAuthenticationFailure =
+            WifiAuthenticationCaptureUiFailure::RuntimeFailed;
+        lastRuntimeEvent = "authentication_capture_state_lost";
+        if (wifiProductView == WifiProductView::AuthenticationCapture) {
+            renderInteractiveScreen(false);
+        }
+        return;
+    }
+    std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
+    if (nowUs == 0U) nowUs = 1U;
+    wifiFrameCapture.service(nowUs);
+    const auto capture = wifiFrameCapture.stats();
+    if (capture.state == WifiFrameCaptureState::Running) {
+        if (wifiProductView == WifiProductView::AuthenticationCapture &&
+            nowUs >= nextWifiAuthenticationUiRefreshUs) {
+            nextWifiAuthenticationUiRefreshUs = nowUs + 500000ULL;
+            display.startWrite();
+            renderWifiAuthenticationCapture(false);
+            display.endWrite();
+        }
+        return;
+    }
+
+    const auto ingress = wifiFrameCapture.authenticationCaptureStats();
+    const bool captureQuiescent =
+        capture.state == WifiFrameCaptureState::Complete &&
+        wifiFrameCapture.cleanupComplete() && ingress.cleanupComplete &&
+        !ingress.active;
+    const std::uint64_t reported =
+        static_cast<std::uint64_t>(ingress.candidates) +
+        ingress.framesInvalid;
+    const std::uint64_t accounted =
+        static_cast<std::uint64_t>(ingress.candidatesAccepted) +
+        ingress.candidatesDropped + ingress.framesInvalid;
+    const bool accountingValid = reported <= UINT32_MAX &&
+        accounted == reported &&
+        capture.framesReported == ingress.candidates &&
+        capture.framesAccepted == ingress.candidatesAccepted;
+    bool analyzed = false;
+    if (captureQuiescent && accountingValid) {
+        WifiAuthenticationCaptureInput input{};
+        input.source = &wifiFrameCapture.capture();
+        input.captureComplete = true;
+        input.framesReported = static_cast<std::uint32_t>(reported);
+        input.framesAccepted = ingress.candidatesAccepted;
+        input.framesDroppedCapacity = ingress.candidatesDropped;
+        input.framesDroppedInvalid = ingress.framesInvalid;
+        analyzed = leshy1::services::auth::analyzeWifiAuthenticationCapture(
+            input, &wifiAuthenticationReport);
+    }
+    wifiAuthenticationProductState = analyzed
+        ? WifiAuthenticationProductState::Result
+        : WifiAuthenticationProductState::Failed;
+    wifiAuthenticationFailure = analyzed
+        ? WifiAuthenticationCaptureUiFailure::None
+        : (captureQuiescent && accountingValid
+               ? WifiAuthenticationCaptureUiFailure::ReportRejected
+               : (captureQuiescent
+                      ? WifiAuthenticationCaptureUiFailure::RuntimeFailed
+                      : WifiAuthenticationCaptureUiFailure::
+                            ResultBeforeCleanup));
+    lastRuntimeEvent = analyzed ? "authentication_capture_result"
+                                : "authentication_capture_failed";
+    if (wifiProductView == WifiProductView::AuthenticationCapture) {
+        renderInteractiveScreen(false);
+    }
+}
+
 void releaseWifiFrameCaptureRfLease() {
     // The separate Capture app releases RF immediately after a bounded
     // recording; the Wi-Fi menu no longer duplicates this workflow.
@@ -17819,6 +18518,10 @@ bool stopWifiFrameCapture() {
 }
 
 void serviceWifiFrameCapture() {
+    if (wifiAuthenticationProductState ==
+        WifiAuthenticationProductState::Running) {
+        return;
+    }
     const auto before = wifiFrameCapture.stats();
     if (before.state != WifiFrameCaptureState::Running) return;
     std::uint64_t nowUs = static_cast<std::uint64_t>(esp_timer_get_time());
@@ -20487,6 +21190,101 @@ void quiesceAirspaceGuardOnSafetyStop() {
         : "airspace_guard_safety_cleanup_failed";
 }
 
+void quiesceWifiAuthenticationOnSafetyStop() {
+    const bool waitingForSurvey = wifiAuthenticationProductState ==
+        WifiAuthenticationProductState::WaitingForSurveyStop;
+    const bool running = wifiAuthenticationProductState ==
+        WifiAuthenticationProductState::Running;
+    const auto initialIngress =
+        wifiFrameCapture.authenticationCaptureStats();
+    const bool boardDirty = !wifiFrameCapture.cleanupComplete() ||
+        !initialIngress.cleanupComplete || initialIngress.active;
+    const WorkerDeadlineSnapshot initialWorker = workerDeadlineSnapshot();
+    const bool surveyDirty =
+        productSurveyControl() != ProductSurveyWorkerControl::Idle ||
+        !productSurveyRuntime.identityCleanupComplete ||
+        !productSurveyRuntime.scannerCleanupComplete ||
+        !productSurveyRuntime.cleanupComplete ||
+        productSurveyRuntime.sourceActive || productSurveyScanActive() ||
+        initialWorker.armed;
+    const bool failedCleanup = wifiAuthenticationProductState ==
+            WifiAuthenticationProductState::Failed &&
+        (boardDirty || surveyDirty);
+    if (!waitingForSurvey && !running && !failedCleanup) return;
+
+    bool surveyCleanup = true;
+    if (waitingForSurvey || surveyDirty) {
+        const ProductSurveyWorkerControl control = productSurveyControl();
+        if (control == ProductSurveyWorkerControl::Starting ||
+            control == ProductSurveyWorkerControl::Running) {
+            requestProductSurveyWorkerStop(true);
+        }
+        // Reuse the ordinary terminal consumer, but force its Back branch so
+        // a cancelled survey can never start authentication after the latch.
+        wifiAuthenticationReturnAfterSurveyStop = true;
+        wifiAuthenticationSafetyCleanupActive = true;
+        serviceProductSurveyWorker();
+        wifiAuthenticationSafetyCleanupActive = false;
+        const WorkerDeadlineSnapshot worker = workerDeadlineSnapshot();
+        const bool terminalOrAlreadyReleased =
+            productSurveyTimeline.state() ==
+                SourceTimelineState::Cancelled ||
+            productSurveyControl() == ProductSurveyWorkerControl::Idle;
+        const leshy1::platform::arduino::
+            WifiAuthenticationSurveyTeardownState surveyTeardown{
+                terminalOrAlreadyReleased,
+                productSurveyRuntime.timelineHealthy,
+                productSurveyRuntime.identityCleanupComplete,
+                productSurveyRuntime.scannerCleanupComplete,
+                productSurveyRuntime.sourceActive,
+                productSurveyScanActive(),
+                worker.armed,
+            };
+        const bool backendClosePermitted =
+            leshy1::platform::arduino::
+                wifiAuthenticationSurveyBackendClosePermitted(
+                    surveyTeardown);
+        const bool backendCleanup = backendClosePermitted &&
+            closeProductSurveyBackend();
+        surveyCleanup = backendClosePermitted && backendCleanup &&
+            productSurveyRuntime.cleanupComplete;
+        if (surveyCleanup) {
+            setProductSurveyControl(ProductSurveyWorkerControl::Idle);
+            surveyPipeline.resetToSetup();
+            productSurveyTimeline.reset();
+        }
+    }
+
+    const auto ingress = wifiFrameCapture.authenticationCaptureStats();
+    bool cleanup = surveyCleanup && wifiFrameCapture.cleanupComplete() &&
+        ingress.cleanupComplete && !ingress.active;
+    if (!cleanup) {
+        std::uint64_t endedUs =
+            static_cast<std::uint64_t>(esp_timer_get_time());
+        if (endedUs == 0U) endedUs = 1U;
+        const bool captureCleanup = wifiFrameCapture.stop(endedUs) &&
+            wifiFrameCapture.cleanupComplete();
+        cleanup = surveyCleanup && captureCleanup;
+    }
+
+    // Release the foreground RF lease only after the receiver has proven
+    // exact quiescence. If a worker-deadline path already stopped the app this
+    // remains idempotent; any inconsistent retained lease keeps the product in
+    // ResultBeforeCleanup for a later bounded retry.
+    if (cleanup && appRuntime.running()) appRuntime.stop();
+    const bool runtimeReleased = cleanup && !appRuntime.running() &&
+        appRuntime.activeResources() == 0U;
+
+    wifiAuthenticationProductState = WifiAuthenticationProductState::Failed;
+    wifiAuthenticationFailure = runtimeReleased
+        ? WifiAuthenticationCaptureUiFailure::RuntimeFailed
+        : WifiAuthenticationCaptureUiFailure::ResultBeforeCleanup;
+    nextWifiAuthenticationUiRefreshUs = 0U;
+    lastRuntimeEvent = runtimeReleased
+        ? "authentication_safety_stop"
+        : "authentication_safety_cleanup_failed";
+}
+
 bool stopWifiChannelsProduct() {
     std::uint64_t endedUs =
         static_cast<std::uint64_t>(esp_timer_get_time());
@@ -20521,6 +21319,10 @@ bool selectionCanRepaintInPlace(UiAction action) {
     if (uiController.page() == 5 &&
         (action == UiAction::Up || action == UiAction::Down ||
          action == UiAction::Select || action == UiAction::Right)) {
+        return true;
+    }
+    if (uiController.page() == 2 &&
+        wifiProductView == WifiProductView::AuthenticationCapture) {
         return true;
     }
     if (action != UiAction::Up && action != UiAction::Down) return false;
@@ -21012,12 +21814,21 @@ bool applyUiAction(UiAction action, bool render = true) {
             wifiProductSelection = 0;
             lastRuntimeEvent = "wifi_menu";
             changed = true;
+        } else if (wifiProductView ==
+                   WifiProductView::AuthenticationCapture) {
+            handled = true;
+            if (action == UiAction::Back || action == UiAction::Left) {
+                changed = leaveWifiAuthenticationCapture();
+            }
         } else if (wifiProductView == WifiProductView::NetworkDetail) {
             handled = true;
             if (action == UiAction::Back || action == UiAction::Left) {
                 wifiProductView = WifiProductView::Networks;
                 lastRuntimeEvent = "wifi_networks";
                 changed = true;
+            } else if (action == UiAction::Select ||
+                       action == UiAction::Right) {
+                changed = requestWifiAuthenticationCaptureFromDetail();
             }
         } else if (wifiProductView == WifiProductView::DeviceDetail) {
             handled = true;
@@ -21943,6 +22754,7 @@ bool applyUiAction(UiAction action, bool render = true) {
                 const bool wifiApp = std::strcmp(selected->id, "wifi") == 0;
                 if (wifiApp) {
                     wifiFrameCapture.reset();
+                    resetWifiAuthenticationCaptureProduct();
                     airspaceGuardController.reset();
                     airspaceGuardCaptureState =
                         AirspaceGuardCaptureState::Idle;
@@ -27200,6 +28012,160 @@ void emitWifiNetworkDetailState(Stream& reply) {
     reply.println(line);
 }
 
+void emitWifiAuthenticationCaptureState(Stream& reply) {
+    const auto capture = wifiFrameCapture.stats();
+    const auto ingress = wifiFrameCapture.authenticationCaptureStats();
+    const WorkerDeadlineSnapshot worker = workerDeadlineSnapshot();
+    const WifiAuthenticationCaptureUiModel presenter =
+        leshy1::ui::presentWifiAuthenticationCapture(
+            wifiAuthenticationCaptureUiInput());
+    const auto& counters = wifiAuthenticationReport.counters;
+    std::size_t completePeers = 0;
+    for (std::size_t index = 0;
+         index < wifiAuthenticationReport.peerCount; ++index) {
+        if (wifiAuthenticationReport.peers[index].complete) {
+            ++completePeers;
+        }
+    }
+    const std::uint64_t analysisReported =
+        static_cast<std::uint64_t>(ingress.candidates) +
+        ingress.framesInvalid;
+    const std::uint64_t analysisAccounted =
+        static_cast<std::uint64_t>(ingress.candidatesAccepted) +
+        ingress.candidatesDropped + ingress.framesInvalid;
+    const bool analysisAccountingValid =
+        analysisReported <= UINT32_MAX &&
+        analysisAccounted == analysisReported &&
+        capture.framesReported == ingress.candidates &&
+        capture.framesAccepted == ingress.candidatesAccepted;
+    auto& line = diagnosticJson;
+    line[0] = '\0';
+    std::snprintf(
+        line, sizeof(line),
+        "{\"schema\":\"leshy.wifi.authentication_capture.v1\","
+        "\"kind\":\"state\",\"view\":\"%s\",\"state\":\"%s\","
+        "\"generation\":%lu,\"cancel_pending\":%s,"
+        "\"back_during_wait_observed\":%s,\"failure\":\"%s\","
+        "\"passive\":true,\"tx_path\":false,\"connect_path\":false,"
+        "\"target_selected\":%s,\"target_selection_continuity\":%s,"
+        "\"channel\":%u,\"duration_ms\":%lu,"
+        "\"maximum_frames\":%u,\"snap_length\":%u,"
+        "\"capture_state\":\"%s\",\"frames_reported\":%lu,"
+        "\"frames_accepted\":%lu,\"frames_dropped_capacity\":%lu,"
+        "\"frames_dropped_invalid\":%lu,\"frames_observed\":%lu,"
+        "\"frames_ignored\":%lu,\"ingress_invalid\":%lu,"
+        "\"candidates\":%lu,\"candidates_accepted\":%lu,"
+        "\"candidates_dropped\":%lu,\"capture_active\":%s,"
+        "\"analysis_frames_reported\":%llu,"
+        "\"analysis_frames_accepted\":%lu,"
+        "\"analysis_dropped_capacity\":%lu,"
+        "\"analysis_dropped_invalid\":%lu,"
+        "\"analysis_accounting_valid\":%s,"
+        "\"capture_cleanup_complete\":%s,"
+        "\"adapter_cleanup_complete\":%s,"
+        "\"presenter_view\":\"%s\",\"presenter_tone\":\"%s\","
+        "\"presenter_evidence_incomplete\":%s,"
+        "\"presenter_report_openable\":%s,"
+        "\"presenter_cleanup_complete\":%s,"
+        "\"presenter_row_count\":%u,"
+        "\"source_frames\":%lu,\"frames_read\":%lu,"
+        "\"data_frames\":%lu,\"analysis_frames_ignored\":%lu,"
+        "\"eapol_frames\":%lu,\"eapol_key_frames\":%lu,"
+        "\"classified_key_frames\":%lu,"
+        "\"unclassified_key_frames\":%lu,"
+        "\"unsupported_key_frames\":%lu,"
+        "\"sequence_rejected\":%lu,\"malformed_frames\":%lu,"
+        "\"truncated_frames\":%lu,\"source_read_failures\":%lu,"
+        "\"evidence_dropped\":%lu,\"peers_dropped\":%lu,"
+        "\"pmkids_dropped\":%lu,"
+        "\"report_capture_frames_reported\":%lu,"
+        "\"report_capture_frames_accepted\":%lu,"
+        "\"report_capture_frames_dropped_capacity\":%lu,"
+        "\"report_capture_frames_dropped_invalid\":%lu,"
+        "\"outcome\":\"%s\",\"uncertainty\":%u,"
+        "\"evidence\":%u,\"peers\":%u,\"complete_peers\":%u,"
+        "\"pmkids\":%u,"
+        "\"content_repaints\":%lu,\"full_repaints\":%lu,"
+        "\"chrome_repaints\":%lu,"
+        "\"survey_worker_deadline_armed\":%s,"
+        "\"esp_rf_owned_by_foreground\":%s,"
+        "\"read_only_query\":true}",
+        wifiProductViewName(wifiProductView),
+        wifiAuthenticationProductStateName(
+            wifiAuthenticationProductState),
+        static_cast<unsigned long>(wifiAuthenticationGeneration),
+        wifiAuthenticationReturnAfterSurveyStop ? "true" : "false",
+        wifiAuthenticationBackDuringWaitObserved ? "true" : "false",
+        wifiAuthenticationUiFailureName(wifiAuthenticationFailure),
+        wifiAuthenticationTargetValid() ? "true" : "false",
+        wifiAuthenticationTargetMatchesSelectedDetail() ? "true" : "false",
+        static_cast<unsigned>(wifiAuthenticationTarget.channel),
+        static_cast<unsigned long>(kWifiAuthenticationCaptureDurationMs),
+        static_cast<unsigned>(kWifiAuthenticationCaptureMaximumFrames),
+        static_cast<unsigned>(kWifiAuthenticationCaptureSnapLength),
+        leshy1::apps::capture::wifiFrameCaptureStateName(capture.state),
+        static_cast<unsigned long>(capture.framesReported),
+        static_cast<unsigned long>(capture.framesAccepted),
+        static_cast<unsigned long>(capture.framesDroppedCapacity),
+        static_cast<unsigned long>(capture.framesDroppedInvalid),
+        static_cast<unsigned long>(ingress.framesObserved),
+        static_cast<unsigned long>(ingress.framesIgnored),
+        static_cast<unsigned long>(ingress.framesInvalid),
+        static_cast<unsigned long>(ingress.candidates),
+        static_cast<unsigned long>(ingress.candidatesAccepted),
+        static_cast<unsigned long>(ingress.candidatesDropped),
+        ingress.active ? "true" : "false",
+        static_cast<unsigned long long>(analysisReported),
+        static_cast<unsigned long>(ingress.candidatesAccepted),
+        static_cast<unsigned long>(ingress.candidatesDropped),
+        static_cast<unsigned long>(ingress.framesInvalid),
+        analysisAccountingValid ? "true" : "false",
+        wifiFrameCapture.cleanupComplete() ? "true" : "false",
+        ingress.cleanupComplete ? "true" : "false",
+        wifiAuthenticationUiViewName(presenter.view),
+        wifiAuthenticationUiToneName(presenter.tone),
+        presenter.evidenceIncomplete ? "true" : "false",
+        presenter.reportOpenable ? "true" : "false",
+        presenter.cleanupComplete ? "true" : "false",
+        static_cast<unsigned>(presenter.rowCount),
+        static_cast<unsigned long>(counters.sourceFrames),
+        static_cast<unsigned long>(counters.framesRead),
+        static_cast<unsigned long>(counters.dataFrames),
+        static_cast<unsigned long>(counters.framesIgnored),
+        static_cast<unsigned long>(counters.eapolFrames),
+        static_cast<unsigned long>(counters.eapolKeyFrames),
+        static_cast<unsigned long>(counters.classifiedKeyFrames),
+        static_cast<unsigned long>(counters.unclassifiedKeyFrames),
+        static_cast<unsigned long>(counters.unsupportedKeyFrames),
+        static_cast<unsigned long>(counters.sequenceRejected),
+        static_cast<unsigned long>(counters.malformedFrames),
+        static_cast<unsigned long>(counters.truncatedFrames),
+        static_cast<unsigned long>(counters.sourceReadFailures),
+        static_cast<unsigned long>(counters.evidenceDropped),
+        static_cast<unsigned long>(counters.peersDropped),
+        static_cast<unsigned long>(counters.pmkidsDropped),
+        static_cast<unsigned long>(counters.captureFramesReported),
+        static_cast<unsigned long>(counters.captureFramesAccepted),
+        static_cast<unsigned long>(
+            counters.captureFramesDroppedCapacity),
+        static_cast<unsigned long>(counters.captureFramesDroppedInvalid),
+        leshy1::services::auth::wifiAuthenticationCaptureOutcomeName(
+            wifiAuthenticationReport.outcome),
+        static_cast<unsigned>(wifiAuthenticationReport.uncertainty),
+        static_cast<unsigned>(wifiAuthenticationReport.evidenceCount),
+        static_cast<unsigned>(wifiAuthenticationReport.peerCount),
+        static_cast<unsigned>(completePeers),
+        static_cast<unsigned>(wifiAuthenticationReport.pmkidCount),
+        static_cast<unsigned long>(wifiAuthenticationContentRepaints),
+        static_cast<unsigned long>(wifiAuthenticationFullRepaints),
+        static_cast<unsigned long>(wifiAuthenticationChromeRepaints),
+        worker.armed ? "true" : "false",
+        resourceBroker.ownerOf(Resource::EspRf) ==
+                AppRuntime::kForegroundOwner
+            ? "true" : "false");
+    reply.println(line);
+}
+
 void emitBleDeviceDetailState(Stream& reply) {
     const std::size_t catalogIndex =
         bleDeviceCatalog.indexOfIdentity(bleDeviceDetail);
@@ -27866,6 +28832,8 @@ void handleCommand(Stream& reply, char* command, std::size_t capacity,
         emitCompanionWebState(reply);
     } else if (std::strcmp(command, "wifi.network.detail") == 0) {
         emitWifiNetworkDetailState(reply);
+    } else if (std::strcmp(command, "wifi.authentication.state") == 0) {
+        emitWifiAuthenticationCaptureState(reply);
     } else if (std::strcmp(command, "ble.device.detail") == 0) {
         emitBleDeviceDetailState(reply);
     } else if (std::strcmp(command, "survey.browser") == 0) {
@@ -28568,6 +29536,7 @@ void setup() {
               "\"capture.subghz.test-fixture fixed-rx-only\","
               "\"ui.state\",\"ui.key <action>\",\"survey.browser\","
               "\"wifi.network.detail\","
+              "\"wifi.authentication.state\","
               "\"companion.web.hil-seed <32-hex-entropy>\","
               "\"companion.web.hil-proof\","
               "\"companion.web.state\","
@@ -28634,12 +29603,16 @@ void loop() {
         ++spectrumLoopCount;
     }
     serviceWorkerDeadlineSupervisor();
-    if (safetySupervisor.latched()) quiesceAirspaceGuardOnSafetyStop();
+    if (safetySupervisor.latched()) {
+        quiesceAirspaceGuardOnSafetyStop();
+        quiesceWifiAuthenticationOnSafetyStop();
+    }
     if (!safetySupervisor.latched()) {
         serviceProductSurveyWorker();
         serviceWifiDevicesProduct();
         serviceWifiChannelsProduct();
         serviceAirspaceGuardProduct();
+        serviceWifiAuthenticationCapture();
         serviceWifiFrameCapture();
         serviceWifiFrameCapturePersist();
         serviceSubGhzRawCapturePersist();

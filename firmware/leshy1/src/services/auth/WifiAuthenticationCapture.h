@@ -27,6 +27,17 @@ enum class WifiAuthenticationKeyProfile : std::uint8_t {
     RsnWpa2,
 };
 
+// A live capture adapter uses this bounded classification before copying a
+// frame into its one retained packet buffer. Invalid means that the frame (or
+// target) cannot be interpreted safely enough to make a target decision.
+// Retain includes target EAPOL candidates that are malformed, truncated, or
+// unsupported so the terminal analyzer can report uncertainty fail closed.
+enum class WifiAuthenticationIngressDisposition : std::uint8_t {
+    Ignore,
+    Retain,
+    Invalid,
+};
+
 enum WifiAuthenticationUncertainty : std::uint16_t {
     WifiAuthenticationUncertaintyNone = 0,
     WifiAuthenticationUncertaintyInvalidInput = 1U << 0U,
@@ -147,6 +158,12 @@ static_assert(
     "authentication evidence source index is too narrow");
 static_assert(sizeof(WifiAuthenticationCaptureReport) <= 1536U,
               "authentication report exceeds its bounded stack envelope");
+
+// Classifies one borrowed frame without allocation or radio/driver access.
+// Only infrastructure data frames for targetAccessPoint can be retained.
+WifiAuthenticationIngressDisposition classifyWifiAuthenticationIngress(
+    const domain::captures::WifiFrameView& frame,
+    const std::array<std::uint8_t, 6>& targetAccessPoint);
 
 // Reads a bounded immutable source and never owns a radio, driver, lease, storage,
 // or response path. A successful call may still produce Inconclusive when the

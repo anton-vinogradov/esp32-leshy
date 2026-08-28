@@ -36,6 +36,10 @@ constexpr std::uint16_t kKeyInfoRsnKeyIndex = 3U << 4U;
 constexpr std::uint8_t kSupportedDescriptorType = 2U;
 constexpr std::uint8_t kSupportedDescriptorVersion2 = 2U;
 constexpr std::uint8_t kSupportedDescriptorVersion3 = 3U;
+constexpr std::uint8_t kNullDataSubtype = 4U;
+constexpr std::uint8_t kQosNullDataSubtype = 12U;
+constexpr std::array<std::uint8_t, kLlcSnapBytes> kEapolLlcSnap{
+    0xaaU, 0xaaU, 0x03U, 0x00U, 0x00U, 0x00U, 0x88U, 0x8eU};
 
 enum class DecodeStatus : std::uint8_t {
     Ignored,
@@ -90,6 +94,15 @@ bool validUnicastMac(const std::array<std::uint8_t, kMacBytes>& address) {
         allOnes = allOnes && octet == 0xffU;
     }
     return any && !allOnes;
+}
+
+bool bytesMatchPrefix(const std::uint8_t* value, std::size_t valueLength,
+                      const std::array<std::uint8_t, kLlcSnapBytes>& expected) {
+    if (value == nullptr || valueLength > expected.size()) return false;
+    for (std::size_t index = 0; index < valueLength; ++index) {
+        if (value[index] != expected[index]) return false;
+    }
+    return true;
 }
 
 std::array<std::uint8_t, kMacBytes> readMac(const std::uint8_t* value) {
@@ -550,6 +563,76 @@ const char* wifiEapolKeyMessageName(WifiEapolKeyMessage message) {
         case WifiEapolKeyMessage::Message4: return "message_4";
     }
     return "unknown";
+}
+
+WifiAuthenticationIngressDisposition classifyWifiAuthenticationIngress(
+    const WifiFrameView& frame,
+    const std::array<std::uint8_t, 6>& targetAccessPoint) {
+    using Disposition = WifiAuthenticationIngressDisposition;
+    if (!validUnicastMac(targetAccessPoint) || frame.payload == nullptr ||
+        frame.capturedLength == 0U) {
+        return Disposition::Invalid;
+    }
+    if (frame.kind != WifiFrameKind::Data) return Disposition::Ignore;
+
+    std::size_t payloadLength = frame.capturedLength;
+    if (frame.fcsIncluded) {
+        if (payloadLength < 4U) return Disposition::Invalid;
+        payloadLength -= 4U;
+    }
+    if (payloadLength < kDataHeaderBytes) return Disposition::Invalid;
+
+    const std::uint16_t frameControl = static_cast<std::uint16_t>(
+        frame.payload[0] |
+        (static_cast<std::uint16_t>(frame.payload[1]) << 8U));
+    const std::uint8_t type = static_cast<std::uint8_t>(
+        (frameControl >> 2U) & 0x03U);
+    if (type != 2U) return Disposition::Invalid;
+    const bool toDistribution = (frameControl & (1U << 8U)) != 0U;
+    const bool fromDistribution = (frameControl & (1U << 9U)) != 0U;
+    if (toDistribution == fromDistribution) return Disposition::Ignore;
+
+    const std::array<std::uint8_t, kMacBytes> frameAccessPoint = readMac(
+        frame.payload + (toDistribution ? 4U : 10U));
+    if (!sameMac(frameAccessPoint, targetAccessPoint)) {
+        return Disposition::Ignore;
+    }
+
+    // Once the target AP is proven, preserve malformed metadata and a partial
+    // matching EAPOL envelope for the terminal analyzer. Dropping it here could
+    // turn capture loss into a false clean/no-evidence result.
+    if (frame.originalLength == 0U ||
+        frame.capturedLength > frame.originalLength ||
+        frame.monotonicUs == 0U || frame.channel < 1U || frame.channel > 14U) {
+        return Disposition::Retain;
+    }
+    const bool protectedPayload = (frameControl & (1U << 14U)) != 0U;
+    if (protectedPayload) return Disposition::Ignore;
+
+    const std::uint8_t subtype = static_cast<std::uint8_t>(
+        (frameControl >> 4U) & 0x0fU);
+    const bool qos = (subtype & 0x08U) != 0U;
+    const bool ordered = (frameControl & (1U << 15U)) != 0U;
+    std::size_t headerLength = kDataHeaderBytes;
+    if (qos) headerLength += 2U;
+    if (qos && ordered) headerLength += 4U;
+
+    const bool noDataSubtype = subtype == kNullDataSubtype ||
+        subtype == kQosNullDataSubtype;
+    if (noDataSubtype) {
+        const bool complete = frame.originalLength == frame.capturedLength &&
+            payloadLength == headerLength;
+        return complete ? Disposition::Ignore : Disposition::Retain;
+    }
+    if (payloadLength < headerLength) return Disposition::Retain;
+
+    const std::size_t llcAvailable = std::min(
+        payloadLength - headerLength, kEapolLlcSnap.size());
+    const std::uint8_t* llc = frame.payload + headerLength;
+    if (!bytesMatchPrefix(llc, llcAvailable, kEapolLlcSnap)) {
+        return Disposition::Ignore;
+    }
+    return Disposition::Retain;
 }
 
 bool analyzeWifiAuthenticationCapture(

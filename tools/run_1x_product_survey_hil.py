@@ -10,7 +10,7 @@ import secrets
 import shutil
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from esp_app_identity import app_elf_sha256
 from run_1x_prerelease_hil import flash_candidate, sha256_file, write_json
@@ -558,7 +558,10 @@ def best_effort_cleanup(device: Any, timeout: float = 20.0) -> dict[str, Any]:
     return cleanup
 
 
-def _capture_once(device: Any, output: Path, name: str) -> dict[str, Any]:
+def _capture_once(
+        device: Any, output: Path, name: str,
+        record_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     from capture_1x_ui import read_json, rgb565be_to_png
 
     device.write(b"ui.capture\n")
@@ -588,6 +591,10 @@ def _capture_once(device: Any, output: Path, name: str) -> dict[str, Any]:
         "rgb565_sha256": hashlib.sha256(raw).hexdigest(),
         "png_sha256": hashlib.sha256(png).hexdigest(),
     }
+    if record_transform is not None:
+        record = record_transform(record)
+        if not isinstance(record, dict):
+            raise TypeError("framebuffer capture record transform must return a dict")
     write_json(output / f"{name}.json", record)
     return record
 
@@ -598,15 +605,18 @@ def synchronize_capture_console(device: Any) -> None:
     synchronize_console(device, 10.0)
 
 
-def capture(device: Any, output: Path, name: str,
-            maximum_attempts: int = 2) -> dict[str, Any]:
+def capture(
+        device: Any, output: Path, name: str, maximum_attempts: int = 2,
+        record_transform: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Capture one framebuffer with one bounded USB transport retry."""
     if maximum_attempts < 1:
         raise ValueError("maximum_attempts must be positive")
     transient_errors: list[str] = []
     for attempt in range(1, maximum_attempts + 1):
         try:
-            record = _capture_once(device, output, name)
+            record = _capture_once(
+                device, output, name, record_transform=record_transform)
             record["transport_attempts"] = attempt
             record["transport_transient_retries"] = attempt - 1
             record["transport_transient_errors"] = transient_errors

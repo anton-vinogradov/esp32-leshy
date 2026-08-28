@@ -145,6 +145,27 @@ run_opaque_evidence_check() {
 "${CXX:-c++}" \
     -std=c++17 \
     -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/wifi_passive_capture_teardown_policy_tests.cpp" \
+    -o "$test_tmp/wifi_passive_capture_teardown_policy_tests"
+
+"$test_tmp/wifi_passive_capture_teardown_policy_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
+    -Wconversion -Wsign-conversion -Wshadow \
+    -I"$repo_dir/firmware/leshy1/src" \
+    "$repo_dir/tests/native/wifi_authentication_capture_presenter_tests.cpp" \
+    "$repo_dir/firmware/leshy1/src/ui/WifiAuthenticationCapturePresenter.cpp" \
+    -o "$test_tmp/wifi_authentication_capture_presenter_tests"
+
+"$test_tmp/wifi_authentication_capture_presenter_tests"
+
+"${CXX:-c++}" \
+    -std=c++17 \
+    -Wall -Wextra -Werror -pedantic \
     -I"$repo_dir/firmware/leshy1/src" \
     "$repo_dir/tests/native/airspace_guard_controller_tests.cpp" \
     "$repo_dir/firmware/leshy1/src/apps/guard/AirspaceGuardController.cpp" \
@@ -430,6 +451,26 @@ python3 "$repo_dir/tools/check_targets_product_contract.py"
 python3 "$repo_dir/tools/check_companion_protocol_contract.py"
 python3 "$repo_dir/tools/check_airspace_guard_contract.py"
 python3 "$repo_dir/tools/check_wifi_authentication_capture_contract.py"
+python3 "$repo_dir/tools/check_wifi_authentication_capture_presenter_contract.py"
+wifi_auth_capture_positive="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-capture-1.0.0-dev.243"
+wifi_auth_capture_expectations="$repo_dir/tests/hil/evidence/board-01-wifi-authentication-capture-1.0.0-dev.243-acceptance.json"
+if [[ -e "$wifi_auth_capture_positive" || -L "$wifi_auth_capture_positive" || \
+      -e "$wifi_auth_capture_expectations" || -L "$wifi_auth_capture_expectations" ]]; then
+    if [[ -L "$wifi_auth_capture_positive" || \
+          -L "$wifi_auth_capture_expectations" || \
+          ! -d "$wifi_auth_capture_positive" || \
+          ! -f "$wifi_auth_capture_expectations" ]]; then
+        echo "FAIL: CAP049 retained evidence is partial, symlinked, or has the wrong type; a regular bundle directory and acceptance JSON are required" >&2
+        exit 1
+    fi
+    python3 "$repo_dir/tools/check_wifi_authentication_capture_hil_acceptance.py" \
+        --expectations "$wifi_auth_capture_expectations" \
+        --positive "$wifi_auth_capture_positive" \
+        --expected-source-commit "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_commit"])' "$wifi_auth_capture_expectations")" \
+        --expected-firmware-sha256 "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["firmware_sha256"])' "$wifi_auth_capture_expectations")" \
+        --expected-app-elf-sha256 "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["app_elf_sha256"])' "$wifi_auth_capture_expectations")" \
+        --expected-runner-sha256 "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["runner_source_sha256"])' "$wifi_auth_capture_expectations")"
+fi
 airspace_guard_positive="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.242"
 airspace_guard_negative_dev239="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.239-failed.json"
 airspace_guard_negative_dev241="$repo_dir/tests/hil/evidence/board-01-airspace-guard-1.0.0-dev.241-failed.json"
@@ -615,6 +656,8 @@ python3 "$repo_dir/tools/test_product_home_hil_runner.py"
 python3 "$repo_dir/tools/test_airspace_guard_hil_runner.py"
 python3 "$repo_dir/tools/test_airspace_guard_hil_acceptance.py"
 python3 "$repo_dir/tools/test_retain_1x_airspace_guard_hil.py"
+python3 "$repo_dir/tools/test_wifi_authentication_capture_hil.py"
+python3 "$repo_dir/tools/test_retain_1x_wifi_authentication_capture_hil.py"
 python3 "$repo_dir/tools/test_targets_merge_split_hil_runner.py"
 python3 "$repo_dir/tools/test_companion_offline.py"
 python3 "$repo_dir/tools/test_companion_usb_delta_runner.py"

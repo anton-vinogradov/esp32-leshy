@@ -10,6 +10,8 @@
 #include "apps/capture/WifiFrameCapture.h"
 #include "apps/wifi/WifiChannelLoad.h"
 #include "apps/wifi/WifiDeviceCatalog.h"
+#include "platform/arduino/WifiPassiveCaptureTeardownPolicy.h"
+#include "services/auth/WifiAuthenticationCapture.h"
 #include "services/guard/AirspaceGuard.h"
 
 namespace leshy1::platform::arduino {
@@ -69,6 +71,17 @@ public:
         bool noiseRetentionComplete = false;
     };
 
+    struct AuthenticationCaptureStats final {
+        std::uint32_t framesObserved = 0;
+        std::uint32_t framesIgnored = 0;
+        std::uint32_t framesInvalid = 0;
+        std::uint32_t candidates = 0;
+        std::uint32_t candidatesAccepted = 0;
+        std::uint32_t candidatesDropped = 0;
+        bool active = false;
+        bool cleanupComplete = true;
+    };
+
     ~BoardWifiPassiveCapture() { stop(0); }
 
     bool begin(const apps::capture::WifiFrameCapturePlan& plan,
@@ -80,6 +93,10 @@ public:
     bool beginAirspaceGuardMonitor(std::uint64_t startedUs,
                                    std::uint32_t durationMs = 10000U,
                                    std::uint16_t channelDwellMs = 120U);
+    bool beginAuthenticationCapture(
+        const apps::capture::WifiFrameCapturePlan& plan,
+        const std::array<std::uint8_t, 6>& targetAccessPoint,
+        std::uint64_t startedUs);
     bool service(std::uint64_t nowUs);
     bool stop(std::uint64_t endedUs);
     void reset();
@@ -88,6 +105,7 @@ public:
     DeviceMonitorStats deviceMonitorStats() const;
     ChannelMonitorStats channelMonitorStats() const;
     AirspaceGuardMonitorStats airspaceGuardMonitorStats() const;
+    AuthenticationCaptureStats authenticationCaptureStats() const;
     apps::wifi::WifiChannelLoadSnapshot channelLoadSnapshot() const;
     std::uint8_t bestPrimaryChannel() const;
     bool pollDevice(apps::wifi::WifiDeviceObservation* output);
@@ -107,13 +125,28 @@ public:
 
 private:
     bool beginCapture(const apps::capture::WifiFrameCapturePlan& plan,
-                      std::uint64_t startedUs, bool airspaceGuardMonitor);
+                      std::uint64_t startedUs, bool airspaceGuardMonitor,
+                      bool authenticationCapture = false,
+                      const std::array<std::uint8_t, 6>*
+                          authenticationTarget = nullptr);
     static void receive(void* buffer, wifi_promiscuous_pkt_type_t type);
-    void accept(void* buffer, wifi_promiscuous_pkt_type_t type);
+    void accept(void* buffer, wifi_promiscuous_pkt_type_t type,
+                std::uint32_t generation);
+    bool reserveCallbackOwner();
+    void releaseCallbackOwner();
+    void openCallbackAdmission();
+    void closeCallbackAdmission();
+    bool waitForCallbackQuiescence();
+    bool callbacksQuiescent() const;
+    void releaseFailedBegin();
     bool changeChannel(std::uint8_t channel, std::uint64_t nowUs);
-    bool endWifi();
+    WifiPassiveTeardownState teardownState(bool callbacksAreQuiescent) const;
+    void applyTeardownState(const WifiPassiveTeardownState& state);
+    bool endWifi(WifiPassiveTeardownState* teardown = nullptr);
 
     static BoardWifiPassiveCapture* active_;
+    static portMUX_TYPE callbackMux_;
+    static std::uint32_t callbacksInFlight_;
     mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
     apps::capture::WifiFrameCapture capture_{};
     static constexpr std::size_t kDeviceQueueCapacity = 64;
@@ -122,6 +155,8 @@ private:
     DeviceMonitorStats deviceStats_{};
     ChannelMonitorStats channelStats_{};
     AirspaceGuardMonitorStats airspaceGuardStats_{};
+    AuthenticationCaptureStats authenticationStats_{};
+    std::array<std::uint8_t, 6> authenticationTarget_{};
     services::guard::WifiIdentityProjectionRetention
         airspaceGuardIdentityRetention_{};
     apps::wifi::WifiChannelLoad channelLoad_{};
@@ -132,6 +167,7 @@ private:
     bool deviceChannelLocked_ = false;
     bool channelMonitor_ = false;
     bool airspaceGuardMonitor_ = false;
+    bool authenticationCapture_ = false;
     bool initialized_ = false;
     bool started_ = false;
     bool promiscuous_ = false;
@@ -139,6 +175,8 @@ private:
     bool cleanupComplete_ = true;
     bool nvsDisabled_ = false;
     bool volatileStorageOnly_ = false;
+    std::uint32_t callbackGeneration_ = 0;
+    bool callbackAdmissionOpen_ = false;
     std::uint8_t currentChannel_ = 0;
     std::uint64_t nextChannelUs_ = 0;
     std::uint64_t channelLandedUs_ = 0;

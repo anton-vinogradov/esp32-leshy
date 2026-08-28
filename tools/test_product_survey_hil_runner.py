@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from typing import Any
@@ -376,6 +378,45 @@ class ProductSurveyHilRunnerTests(unittest.TestCase):
         self.assertEqual(["short frame"], record["transport_transient_errors"])
         self.assertEqual(1, device.resets)
         synchronize.assert_called_once_with(device)
+
+    def test_capture_transform_failure_precedes_json_sidecar_write(self) -> None:
+        class Device:
+            def __init__(self) -> None:
+                self.frame = bytearray(b"\x00\x01")
+
+            def write(self, _value: bytes) -> None:
+                pass
+
+            def flush(self) -> None:
+                pass
+
+            def read(self, size: int) -> bytes:
+                value = bytes(self.frame[:size])
+                del self.frame[:size]
+                return value
+
+        capture_module = types.ModuleType("capture_1x_ui")
+        records = iter((
+            {"bytes": 2, "width": 1, "height": 1, "revision": 7},
+            {"revision": 7},
+        ))
+        capture_module.read_json = lambda *_args, **_kwargs: next(records)
+        capture_module.rgb565be_to_png = lambda *_args, **_kwargs: b"png"
+
+        def reject_private_record(record: dict[str, Any]) -> dict[str, Any]:
+            self.assertEqual("private-network", record["state"]["ssid"])
+            raise RuntimeError("synthetic sanitizer crash")
+
+        with tempfile.TemporaryDirectory() as directory, patch.dict(
+                sys.modules, {"capture_1x_ui": capture_module}), patch.object(
+                    RUNNER, "query",
+                    return_value={"revision": 7, "ssid": "private-network"}):
+            output = Path(directory)
+            with self.assertRaisesRegex(RuntimeError, "sanitizer crash"):
+                RUNNER._capture_once(
+                    Device(), output, "screen",
+                    record_transform=reject_private_record)
+            self.assertFalse((output / "screen.json").exists())
 
 
 if __name__ == "__main__":

@@ -29,6 +29,8 @@ constexpr std::array<std::uint8_t, 6> kStation{
     0x06U, 0xaaU, 0xbbU, 0xccU, 0xddU, 0xeeU};
 constexpr std::array<std::uint8_t, 6> kOtherStation{
     0x0aU, 0xaaU, 0xbbU, 0xccU, 0xddU, 0xefU};
+constexpr std::array<std::uint8_t, 6> kOtherAccessPoint{
+    0x0eU, 0x11U, 0x22U, 0x33U, 0x44U, 0x66U};
 constexpr std::array<std::uint8_t, 16> kPmkid{
     0x00U, 0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U,
     0x08U, 0x09U, 0x0aU, 0x0bU, 0x0cU, 0x0dU, 0x0eU, 0x0fU};
@@ -238,6 +240,19 @@ WifiAuthenticationCaptureInput completeInput(const FixtureSource& source) {
     return input;
 }
 
+WifiFrameView viewOf(const FixtureFrame& frame) {
+    WifiFrameView view{};
+    view.monotonicUs = frame.monotonicUs;
+    view.capturedLength = frame.capturedLength;
+    view.originalLength = frame.originalLength;
+    view.rssiDbm = frame.rssiDbm;
+    view.channel = frame.channel;
+    view.kind = frame.kind;
+    view.fcsIncluded = frame.fcsIncluded;
+    view.payload = frame.payload.data();
+    return view;
+}
+
 bool hasUncertainty(const WifiAuthenticationCaptureReport& report,
                     WifiAuthenticationUncertainty uncertainty) {
     return (report.uncertainty & static_cast<std::uint16_t>(uncertainty)) != 0U;
@@ -248,6 +263,218 @@ bool hasNonzero(const std::array<std::uint8_t, 32>& value) {
         if (octet != 0U) return true;
     }
     return false;
+}
+
+void testIngressRetainsTargetNonQosQosAndFcs() {
+    FixtureSource source;
+    FixtureFrame& nonQos = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 1U);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(nonQos), kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& qos = source.addEapolKey(
+        WifiEapolKeyMessage::Message2, 1U);
+    source.addQosHeader(qos);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(qos), kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& fcs = source.addEapolKey(
+        WifiEapolKeyMessage::Message3, 2U);
+    source.appendFcs(fcs);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(fcs), kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& qosFcs = source.addEapolKey(
+        WifiEapolKeyMessage::Message4, 2U);
+    source.addQosHeader(qosFcs);
+    source.appendFcs(qosFcs);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(qosFcs), kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+}
+
+void testIngressIgnoresWrongBssidAndNonEapol() {
+    FixtureSource source;
+    FixtureFrame& wrongTarget = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 3U);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(wrongTarget),
+                                             kOtherAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Ignore);
+
+    FixtureFrame& nonEapol = source.addEapolKey(
+        WifiEapolKeyMessage::Message2, 3U);
+    nonEapol.payload[31U] = 0x00U;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(nonEapol), kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Ignore);
+
+    FixtureFrame& protectedFrame = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 4U);
+    protectedFrame.payload[1U] = static_cast<std::uint8_t>(
+        protectedFrame.payload[1U] | 0x40U);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(protectedFrame),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Ignore);
+
+    FixtureFrame& management = source.addOrdinaryFrame(
+        WifiFrameKind::Management);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(management), kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Ignore);
+}
+
+void testIngressIgnoresCompleteNullDataButRetainsTruncation() {
+    FixtureSource source;
+
+    FixtureFrame& completeNull = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 5U);
+    completeNull.payload[0U] = 0x48U;
+    completeNull.capturedLength = 24U;
+    completeNull.originalLength = completeNull.capturedLength;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(completeNull),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Ignore);
+
+    FixtureFrame& completeQosNull = source.addEapolKey(
+        WifiEapolKeyMessage::Message2, 5U);
+    source.addQosHeader(completeQosNull);
+    completeQosNull.payload[0U] = 0xc8U;
+    completeQosNull.capturedLength = 26U;
+    completeQosNull.originalLength = completeQosNull.capturedLength;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(completeQosNull),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Ignore);
+
+    FixtureFrame& completeNullWithFcs = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 6U);
+    completeNullWithFcs.payload[0U] = 0x48U;
+    completeNullWithFcs.capturedLength = 24U;
+    completeNullWithFcs.originalLength = completeNullWithFcs.capturedLength;
+    source.appendFcs(completeNullWithFcs);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(completeNullWithFcs),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Ignore);
+
+    FixtureFrame& truncatedNull = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 7U);
+    truncatedNull.payload[0U] = 0x48U;
+    truncatedNull.capturedLength = 24U;
+    CHECK(truncatedNull.originalLength > truncatedNull.capturedLength);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(truncatedNull),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& truncatedQosNull = source.addEapolKey(
+        WifiEapolKeyMessage::Message2, 7U);
+    source.addQosHeader(truncatedQosNull);
+    truncatedQosNull.payload[0U] = 0xc8U;
+    truncatedQosNull.capturedLength = 25U;
+    CHECK(truncatedQosNull.originalLength > truncatedQosNull.capturedLength);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(truncatedQosNull),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& malformedCompleteQosNull = source.addEapolKey(
+        WifiEapolKeyMessage::Message2, 8U);
+    malformedCompleteQosNull.payload[0U] = 0xc8U;
+    malformedCompleteQosNull.capturedLength = 24U;
+    malformedCompleteQosNull.originalLength =
+        malformedCompleteQosNull.capturedLength;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(malformedCompleteQosNull),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& completeHeaderOnlyData = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 9U);
+    completeHeaderOnlyData.capturedLength = 24U;
+    completeHeaderOnlyData.originalLength =
+        completeHeaderOnlyData.capturedLength;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(completeHeaderOnlyData),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+}
+
+void testIngressRetainsProvableTargetFailuresFailClosed() {
+    FixtureSource source;
+    FixtureFrame& truncated = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 5U);
+    truncated.capturedLength = 28U;
+    CHECK(truncated.originalLength > truncated.capturedLength);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(truncated), kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& headerOnly = source.addEapolKey(
+        WifiEapolKeyMessage::Message2, 5U);
+    headerOnly.capturedLength = 24U;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(headerOnly), kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& malformedMetadata = source.addEapolKey(
+        WifiEapolKeyMessage::Message3, 6U);
+    malformedMetadata.originalLength = 0U;
+    malformedMetadata.monotonicUs = 0U;
+    malformedMetadata.channel = 0U;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(malformedMetadata),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& malformedStation = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 7U);
+    malformedStation.payload[4U] = 0x01U;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(malformedStation),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& malformedEapol = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 8U);
+    malformedEapol.payload[32U] = 0U;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(malformedEapol),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+
+    FixtureFrame& unsupportedDescriptor = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 9U, kAccessPoint, kStation, nullptr,
+        2U, 0xfeU, 2U);
+    CHECK(classifyWifiAuthenticationIngress(viewOf(unsupportedDescriptor),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Retain);
+}
+
+void testIngressRejectsUnidentifiableMalformedFrames() {
+    FixtureSource source;
+    FixtureFrame& shortFrame = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 10U);
+    shortFrame.capturedLength = 20U;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(shortFrame), kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Invalid);
+
+    FixtureFrame& wrongFrameControl = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 11U);
+    wrongFrameControl.payload[0U] = 0x00U;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(wrongFrameControl),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Invalid);
+
+    FixtureFrame& ambiguousDirection = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 12U);
+    ambiguousDirection.payload[1U] = 0x00U;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(ambiguousDirection),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Ignore);
+
+    FixtureFrame& malformedFcs = source.addEapolKey(
+        WifiEapolKeyMessage::Message1, 13U);
+    malformedFcs.capturedLength = 3U;
+    malformedFcs.originalLength = 3U;
+    malformedFcs.fcsIncluded = true;
+    CHECK(classifyWifiAuthenticationIngress(viewOf(malformedFcs),
+                                             kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Invalid);
+
+    WifiFrameView nullFrame{};
+    CHECK(classifyWifiAuthenticationIngress(nullFrame, kAccessPoint) ==
+          WifiAuthenticationIngressDisposition::Invalid);
+    constexpr std::array<std::uint8_t, 6> kInvalidTarget{};
+    CHECK(classifyWifiAuthenticationIngress(viewOf(shortFrame),
+                                             kInvalidTarget) ==
+          WifiAuthenticationIngressDisposition::Invalid);
 }
 
 void testCompleteHandshakeAndPmkidRetainExactEvidence() {
@@ -736,6 +963,11 @@ void testInvalidAccountingAndNullInputFailClosed() {
 }  // namespace
 
 int main() {
+    testIngressRetainsTargetNonQosQosAndFcs();
+    testIngressIgnoresWrongBssidAndNonEapol();
+    testIngressIgnoresCompleteNullDataButRetainsTruncation();
+    testIngressRetainsProvableTargetFailuresFailClosed();
+    testIngressRejectsUnidentifiableMalformedFrames();
     testCompleteHandshakeAndPmkidRetainExactEvidence();
     testIncompleteHandshakeIsExplicitAndPeersNeverMerge();
     testReplayMismatchCannotBecomeComplete();
